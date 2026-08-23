@@ -25,4 +25,6 @@ namespace PS::JsonHelpers {
 
     void ParseJsonFileInPath(const std::filesystem::path& path, const std::function<void(const nlohmann::json&)>& callback);
     void ParseJsonFilesInPath(const std::filesystem::path& path, const std::function<void(const nlohmann::json&)>& callback);
+    void ParseJsonFilesInPath(const std::filesystem::path& path,
+        const std::function<void(const nlohmann::json&, const std::filesystem::path&)>& callback);
 }

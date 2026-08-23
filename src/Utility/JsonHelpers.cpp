@@ -158,4 +158,31 @@ namespace PS::JsonHelpers {
             }
         }
     }
+
+    void ParseJsonFilesInPath(const std::filesystem::path& path,
+        const std::function<void(const nlohmann::json&, const std::filesystem::path&)>& callback)
+    {
+        if (!fs::is_directory(path))
+        {
+            return;
+        }
+
+        for (const auto& file : fs::directory_iterator(path))
+        {
+            try
+            {
+                const auto filePath = file.path();
+                if (filePath.has_extension())
+                {
+                    ParseJsonFileInPath(filePath, [&](const nlohmann::json& data) {
+                        callback(data, filePath);
+                    });
+                }
+            }
+            catch (const std::exception& e)
+            {
+                throw std::runtime_error(std::format("Failed parsing mod file {} - {}.\n", file.path().string(), e.what()));
+            }
+        }
+    }
 }
