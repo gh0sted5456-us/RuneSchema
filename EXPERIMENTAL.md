@@ -8,6 +8,7 @@ This branch is the community testing line for changes that have not been merged 
 - A manually editable `RuneSchema/mods/mods.txt` with deterministic ordering and `1`/`0` enable states.
 - Load-order checkboxes and Up/Down controls that save back to `mods.txt`.
 - Optional compatibility reports, expanded JSON schemas, and FModel snippet generation.
+- Optional `PersistenceID` and `InternalName` fields in generated asset schemas and FModel asset drafts.
 - Centralized normalization for FModel numeric export suffixes such as `.0`.
 - `Scale` support for persistent Actor spawns and AI spawned by `AISpawnPoint` entries.
 - Optional, independent `DropIncreasePercent` support for known live-instance `ItemsToDrop` layouts.
@@ -28,6 +29,12 @@ This branch is the community testing line for changes that have not been merged 
 ```
 
 Here, the actor is twice normal size and supported drop counts are multiplied by `1.5`. Drop scaling is experimental and only affects `ItemsToDrop` on the actor or the known item-drop, split-drop, and destruction-drop components.
+
+## Optional asset identity fields
+
+Generated schemas and FModel drafts for asset files expose `PersistenceID` and `InternalName` as optional peer properties beneath the asset target. They are not wrapped in a `Properties` object. Omitting either field preserves the loaded asset's current value; explicit values must be unique and remain stable once saves reference the content.
+
+Identity fields remain filtered from Blueprint and nested-structure suggestions, where blindly copying them would be unsafe.
 
 ## Distribution
 

@@ -20,22 +20,29 @@ using namespace RC::Unreal;
 namespace fs = std::filesystem;
 
 namespace PS::JsonSchemaGenerator {
-    bool IsUnsafePropertyName(const RC::StringType& Name)
+    bool IsIdentityPropertyName(const RC::StringType& Name)
+    {
+        return Name == TEXT("PersistenceID") || Name == TEXT("InternalName");
+    }
+
+    bool IsUnsafePropertyName(const RC::StringType& Name, bool AllowIdentityProperties = false)
     {
         static const std::unordered_set<RC::StringType> UnsafeNames = {
-            TEXT("PersistenceID"),
-            TEXT("InternalName"),
             TEXT("RootComponent"),
             TEXT("UberGraphFrame"),
             TEXT("BlueprintCreatedComponents"),
             TEXT("InstanceComponents")
         };
-        return UnsafeNames.contains(Name)
+        return (!AllowIdentityProperties && IsIdentityPropertyName(Name))
+            || UnsafeNames.contains(Name)
             || Name.ends_with(TEXT("Guid"))
             || Name.ends_with(TEXT("GUID"));
     }
 
-    void ParsePropertyInfo(FProperty* Property, nlohmann::ordered_json& Json);
+    void ParsePropertyInfo(
+        FProperty* Property,
+        nlohmann::ordered_json& Json,
+        bool AllowIdentityProperties = false);
 
     void ParseEnumPropertyInfo(FEnumProperty* Property, nlohmann::ordered_json& Json)
     {
@@ -157,9 +164,12 @@ namespace PS::JsonSchemaGenerator {
         }
     }
 
-    void ParsePropertyInfo(FProperty* Property, nlohmann::ordered_json& Json)
+    void ParsePropertyInfo(
+        FProperty* Property,
+        nlohmann::ordered_json& Json,
+        bool AllowIdentityProperties)
     {
-        if (!Property || IsUnsafePropertyName(Property->GetName()))
+        if (!Property || IsUnsafePropertyName(Property->GetName(), AllowIdentityProperties))
         {
             return;
         }
@@ -204,6 +214,17 @@ namespace PS::JsonSchemaGenerator {
         {
             JsonProperty["$ref"] = "../utility.schema.json#/definitions/ObjectReference";
         }
+
+        if (Property->GetName() == TEXT("PersistenceID"))
+        {
+            JsonProperty["description"] =
+                "Optional persistent registry identity. Omit to preserve the existing value; explicit values must be unique and remain stable.";
+        }
+        else if (Property->GetName() == TEXT("InternalName"))
+        {
+            JsonProperty["description"] =
+                "Optional internal content name. Omit to preserve the existing value; explicit values must be unique and remain stable.";
+        }
     }
 
     std::string SafeSchemaFileName(const RC::StringType& Name)
@@ -219,7 +240,7 @@ namespace PS::JsonSchemaGenerator {
         return value;
     }
 
-    nlohmann::ordered_json BuildObjectSchema(UClass* Class)
+    nlohmann::ordered_json BuildObjectSchema(UClass* Class, bool AllowIdentityProperties = false)
     {
         nlohmann::ordered_json schema = {
             { "$schema", "http://json-schema.org/draft-07/schema#" },
@@ -234,7 +255,7 @@ namespace PS::JsonSchemaGenerator {
 
         for (FProperty* Property : TFieldRange<FProperty>(Class, EFieldIterationFlags::IncludeSuper))
         {
-            ParsePropertyInfo(Property, schema["properties"]);
+            ParsePropertyInfo(Property, schema["properties"], AllowIdentityProperties);
         }
         return schema;
     }
@@ -279,7 +300,7 @@ namespace PS::JsonSchemaGenerator {
             if (generatedClasses.insert(className).second)
             {
                 std::ofstream output(assetSchemaPath / fileName);
-                output << BuildObjectSchema(objectClass).dump(2);
+                output << BuildObjectSchema(objectClass, true).dump(2);
             }
 
             index["properties"][RC::to_string(Object->GetPathName())] = {
