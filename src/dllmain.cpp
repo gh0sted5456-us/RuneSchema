@@ -27,7 +27,7 @@ public:
         ModName = STR("RuneSchema");
         ModVersion = STR("0.6.3 Experimental");
         ModDescription = STR("Experimental RuneSchema build with mod management and extended spawn controls.");
-        ModAuthors = STR("Okaetsu (PalSchema), Snorkles (RuneSchema), Jonesing4Space (additional features)");
+        ModAuthors = STR("Okaetsu (PalSchema), Snorkles (RuneSchema), Jonesing4Space (additional features), RSDW Modding Community");
 
         auto config = PS::PSConfig::Get();
         config->Load();
@@ -130,6 +130,12 @@ public:
         ImGui::Text("Tooling: %s", PS::PSConfig::Get()->IsToolingEnabled() ? "Enabled" : "Disabled");
         ImGui::Text("Configuration: %s", (root / "config" / "config.json").string().c_str());
         ImGui::Text("Mods: %s", modsPath.string().c_str());
+
+        ImGui::SeparatorText("Credits");
+        ImGui::TextWrapped("Okaetsu - PalSchema creator");
+        ImGui::TextWrapped("Snorkles - RuneSchema creator");
+        ImGui::TextWrapped("Jonesing4Space - Additional features");
+        ImGui::TextWrapped("RSDW Modding Community - Testing, research, and community support");
 
         ImGui::SeparatorText("Design");
         if (ImGui::Button("Refresh Status")) refresh_ui_cache();
