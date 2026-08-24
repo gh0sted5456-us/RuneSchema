@@ -325,7 +325,12 @@ namespace DragonWilds {
 
     RC::StringType PropertyHelper::GetTextAsString(const RC::Unreal::FText& Text)
     {
-        return Text.ToString();
+        if (!Text.Data)
+        {
+            return {};
+        }
+
+        return RC::StringType(*Text.Data->GetDisplayString());
     }
 
     void PropertyHelper::SetClassPropertyValueFromJsonValue(void* Data, RC::Unreal::FClassProperty* Property, const nlohmann::json& Value)

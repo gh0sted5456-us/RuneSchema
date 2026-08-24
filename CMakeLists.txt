@@ -10,7 +10,7 @@ include(FetchContent)
 FetchContent_Declare(
     UE4SS
     GIT_REPOSITORY https://github.com/UE4SS-RE/RE-UE4SS.git
-    GIT_TAG a1e7f571c789f63f3de6773d056be6f778c14dc8
+    GIT_TAG 0bfec09e
 )
 FetchContent_MakeAvailable(UE4SS)
 
