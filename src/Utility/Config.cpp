@@ -187,12 +187,19 @@ namespace PS {
                     schemaTypes != tooling->end() && schemaTypes->is_object())
                 {
                     auto& settings = m_settings.tooling.schemaTypes;
+                    settings.utility = schemaTypes->value("utility", settings.utility);
                     settings.assets = schemaTypes->value("assets", settings.assets);
                     settings.blueprints = schemaTypes->value("blueprints", settings.blueprints);
-                    settings.recipes = schemaTypes->value("recipes", settings.recipes);
-                    settings.journals = schemaTypes->value("journals", settings.journals);
-                    settings.tables = schemaTypes->value("tables", settings.tables);
+                    settings.buildings = schemaTypes->value("buildings", settings.buildings);
+                    settings.courses = schemaTypes->value("courses", settings.courses);
                     settings.enums = schemaTypes->value("enums", settings.enums);
+                    settings.journal = schemaTypes->value(
+                        "journal", schemaTypes->value("journals", settings.journal));
+                    settings.raw = schemaTypes->value(
+                        "raw", schemaTypes->value("tables", settings.raw));
+                    settings.recipes = schemaTypes->value("recipes", settings.recipes);
+                    settings.spawns = schemaTypes->value("spawns", settings.spawns);
+                    settings.strings = schemaTypes->value("strings", settings.strings);
                 }
 
                 if (auto modsTxt = tooling->find("modsTxt"); modsTxt != tooling->end() && modsTxt->is_object())
@@ -265,12 +272,19 @@ namespace PS {
             tooling["enableSchemaGeneration"] = m_settings.tooling.enableSchemaGeneration;
             tooling["enableFModelSnippetGenerator"] = m_settings.tooling.enableFModelSnippetGenerator;
             auto& schemaTypes = tooling["schemaTypes"];
+            schemaTypes.erase("journals");
+            schemaTypes.erase("tables");
+            schemaTypes["utility"] = m_settings.tooling.schemaTypes.utility;
             schemaTypes["assets"] = m_settings.tooling.schemaTypes.assets;
             schemaTypes["blueprints"] = m_settings.tooling.schemaTypes.blueprints;
-            schemaTypes["recipes"] = m_settings.tooling.schemaTypes.recipes;
-            schemaTypes["journals"] = m_settings.tooling.schemaTypes.journals;
-            schemaTypes["tables"] = m_settings.tooling.schemaTypes.tables;
+            schemaTypes["buildings"] = m_settings.tooling.schemaTypes.buildings;
+            schemaTypes["courses"] = m_settings.tooling.schemaTypes.courses;
             schemaTypes["enums"] = m_settings.tooling.schemaTypes.enums;
+            schemaTypes["journal"] = m_settings.tooling.schemaTypes.journal;
+            schemaTypes["raw"] = m_settings.tooling.schemaTypes.raw;
+            schemaTypes["recipes"] = m_settings.tooling.schemaTypes.recipes;
+            schemaTypes["spawns"] = m_settings.tooling.schemaTypes.spawns;
+            schemaTypes["strings"] = m_settings.tooling.schemaTypes.strings;
             auto& modsTxt = tooling["modsTxt"];
             modsTxt["enabled"] = m_settings.tooling.modsTxt.enabled;
             modsTxt["autoCreate"] = m_settings.tooling.modsTxt.autoCreate;

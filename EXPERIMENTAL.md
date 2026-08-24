@@ -86,18 +86,23 @@ The Settings page groups related options into compact collapsible sections. The 
   },
   "tooling": {
     "schemaTypes": {
+      "utility": true,
       "assets": true,
       "blueprints": true,
+      "buildings": true,
+      "courses": true,
+      "enums": true,
+      "journal": true,
+      "raw": true,
       "recipes": true,
-      "journals": true,
-      "tables": true,
-      "enums": true
+      "spawns": true,
+      "strings": true
     }
   }
 }
 ```
 
-Spawn limits reject invalid or excessive values during mod loading. Schema category switches only control which authoring schemas are generated; they do not disable the matching RuneSchema loaders. Existing configuration files remain compatible, and missing fields use the defaults shown above.
+Spawn limits reject invalid or excessive values during mod loading. Schema category switches cover the shared utility schema and every JSON loader folder: `assets`, `blueprints`, `buildings`, `courses`, `enums`, `journal`, `raw`, `recipes`, `spawns`, and `strings`. They only control which authoring schemas are generated; they do not disable the matching RuneSchema loaders. Existing `journals` and `tables` configuration keys remain accepted as aliases for `journal` and `raw`, and missing fields use the defaults shown above.
 
 ## Distribution
 

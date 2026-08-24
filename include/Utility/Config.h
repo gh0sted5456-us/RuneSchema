@@ -37,12 +37,17 @@ namespace PS {
     };
 
     struct SchemaTypeSettings {
+        bool utility = true;
         bool assets = true;
         bool blueprints = true;
-        bool recipes = true;
-        bool journals = true;
-        bool tables = true;
+        bool buildings = true;
+        bool courses = true;
         bool enums = true;
+        bool journal = true;
+        bool raw = true;
+        bool recipes = true;
+        bool spawns = true;
+        bool strings = true;
     };
 
     struct ToolingSettings {
