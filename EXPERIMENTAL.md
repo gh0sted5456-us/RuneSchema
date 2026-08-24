@@ -36,33 +36,11 @@ Generated schemas and FModel drafts for asset files expose `PersistenceID` and `
 
 Identity fields remain filtered from Blueprint and nested-structure suggestions, where blindly copying them would be unsafe.
 
-## Optional recipe identity fields
-
-Recipe JSON may include `PersistenceID` and `InternalName` either directly in the recipe body or inside its `Properties` object. Missing, `null`, empty, or whitespace-only fields use the default values: a newly created recipe uses its recipe key, while an existing recipe preserves its loaded identity.
-
-Explicit non-empty values are applied as reflected recipe properties. RuneSchema emits one-time warnings when an existing identity changes or another loaded recipe already uses the requested value. The generated `recipes.schema.json` exposes both optional fields and documents these defaults.
-
-```json
-{
-  "RECIPE_Gravetide_Staff": {
-    "PersistenceID": "",
-    "InternalName": "",
-    "Properties": {
-      "SkillXPAwardedOnCraft": 25
-    }
-  }
-}
-```
-
-In this example, both blank fields resolve to `RECIPE_Gravetide_Staff`. Authors may replace either blank with a unique, stable explicit value.
-
-Blueprint identity suggestions remain filtered. Courses continue to use their required `Id` as both runtime identity values.
-
 ## Distribution
 
 Compiled builds are published as prereleases in this fork's GitHub Releases section. Build output and local RuneSchema configuration are intentionally excluded from Git history.
 
-Installation, flavor selection, and compatibility details are maintained in the [Dragonwilds Sync modder documentation](https://gh0sted5456-us.github.io/Dragonwilds-Sync-Web/for-modders.html#runeschema-flavors).
+Installation, flavor selection, and compatibility details are maintained in the [Dragonwilds Sync modder documentation](https://gh0sted5456-us.github.io/Dragonwilds-Sync-Web/for-modders.html?build=b4a5199#runeschema-flavors).
 
 This is a community experimental variant based on RuneSchema. Questions and experimental-build bug reports belong in the [Dragonwilds Sync issue tracker](https://github.com/gh0sted5456-us/Dragonwilds-Sync/issues), not the official RuneSchema support channels.
 
