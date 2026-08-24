@@ -10,6 +10,7 @@
 #include "SDK/Classes/TSoftObjectPtr.h"
 #include "SDK/Structs/FSoftObjectPath.h"
 #include "SDK/Helper/PropertyHelper.h"
+#include "SDK/Helper/IdentityOverride.h"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
 #include "Utility/ObjectPath.h"
@@ -131,9 +132,14 @@ namespace DragonWilds {
             return;
         }
 
+        auto identityResult = IdentityOverride::Apply(
+            object, pendingAsset.Properties, pendingAsset.Target);
+        outResult.PropertiesWritten += identityResult.Written;
+        outResult.ErrorCount += identityResult.Rejected;
+
         for (auto& [propertyName, propertyValue] : pendingAsset.Properties.items())
         {
-            if (propertyName == "$Append")
+            if (propertyName == "$Append" || IdentityOverride::IsIdentityProperty(propertyName))
             {
                 continue;
             }

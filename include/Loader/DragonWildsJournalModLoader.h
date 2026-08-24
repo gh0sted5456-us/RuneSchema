@@ -58,7 +58,7 @@ namespace DragonWilds {
         LoadResult ApplyAll();
         RC::Unreal::UObject* ResolveOrCreate(const JournalDef& def);
         RC::Unreal::UClass* ResolveEntryClass(const nlohmann::json& body) const;
-        void ApplyProperties(RC::Unreal::UObject* entry, const nlohmann::json& body);
+        int ApplyProperties(RC::Unreal::UObject* entry, const nlohmann::json& body);
         bool Place(RC::Unreal::UObject* entry, const JournalDef& def);
         void RegisterEntry(RC::Unreal::UObject* entry);
         void RegisterHooks();

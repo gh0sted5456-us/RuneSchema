@@ -17,6 +17,7 @@
 #include "SDK/Structs/FSoftObjectPtr.h"
 #include "SDK/Structs/FSoftObjectPath.h"
 #include "SDK/Helper/PropertyHelper.h"
+#include "SDK/Helper/IdentityOverride.h"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
 #include "Loader/DragonWildsRecipeModLoader.h"
@@ -410,6 +411,10 @@ namespace DragonWilds {
 
     void DragonWildsRecipeModLoader::ApplyProperties(UObject* recipe, const nlohmann::json& body, LoadResult& result)
     {
+        auto identityResult = IdentityOverride::Apply(
+            recipe, body, recipe->GetName(), true);
+        result.ErrorCount += identityResult.Rejected;
+
         const nlohmann::json* properties = &body;
         if (body.contains("Properties") && body.at("Properties").is_object())
         {
@@ -419,7 +424,8 @@ namespace DragonWilds {
         auto* recipeClass = recipe->GetClassPrivate();
         for (auto& [propertyName, propertyValue] : properties->items())
         {
-            if (propertyName == "AddTo" || propertyName == "Properties" || propertyName == "Unlock")
+            if (propertyName == "AddTo" || propertyName == "Properties" || propertyName == "Unlock"
+                || IdentityOverride::IsIdentityProperty(propertyName))
             {
                 continue;
             }

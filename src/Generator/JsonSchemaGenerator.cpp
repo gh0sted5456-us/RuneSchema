@@ -20,22 +20,29 @@ using namespace RC::Unreal;
 namespace fs = std::filesystem;
 
 namespace PS::JsonSchemaGenerator {
-    bool IsUnsafePropertyName(const RC::StringType& Name)
+    bool IsIdentityPropertyName(const RC::StringType& Name)
+    {
+        return Name == TEXT("PersistenceID") || Name == TEXT("InternalName");
+    }
+
+    bool IsUnsafePropertyName(const RC::StringType& Name, bool AllowIdentityProperties = false)
     {
         static const std::unordered_set<RC::StringType> UnsafeNames = {
-            TEXT("PersistenceID"),
-            TEXT("InternalName"),
             TEXT("RootComponent"),
             TEXT("UberGraphFrame"),
             TEXT("BlueprintCreatedComponents"),
             TEXT("InstanceComponents")
         };
-        return UnsafeNames.contains(Name)
+        return (!AllowIdentityProperties && IsIdentityPropertyName(Name))
+            || UnsafeNames.contains(Name)
             || Name.ends_with(TEXT("Guid"))
             || Name.ends_with(TEXT("GUID"));
     }
 
-    void ParsePropertyInfo(FProperty* Property, nlohmann::ordered_json& Json);
+    void ParsePropertyInfo(
+        FProperty* Property,
+        nlohmann::ordered_json& Json,
+        bool AllowIdentityProperties = false);
 
     void ParseEnumPropertyInfo(FEnumProperty* Property, nlohmann::ordered_json& Json)
     {
@@ -157,9 +164,12 @@ namespace PS::JsonSchemaGenerator {
         }
     }
 
-    void ParsePropertyInfo(FProperty* Property, nlohmann::ordered_json& Json)
+    void ParsePropertyInfo(
+        FProperty* Property,
+        nlohmann::ordered_json& Json,
+        bool AllowIdentityProperties)
     {
-        if (!Property || IsUnsafePropertyName(Property->GetName()))
+        if (!Property || IsUnsafePropertyName(Property->GetName(), AllowIdentityProperties))
         {
             return;
         }
@@ -204,6 +214,14 @@ namespace PS::JsonSchemaGenerator {
         {
             JsonProperty["$ref"] = "../utility.schema.json#/definitions/ObjectReference";
         }
+
+        if (IsIdentityPropertyName(Property->GetName()))
+        {
+            JsonProperty["type"] = nlohmann::json::array({ "string", "null" });
+            JsonProperty["description"] = Property->GetName() == TEXT("PersistenceID")
+                ? "Optional persistent registry identity. Omitted, null, empty, and whitespace-only values preserve the loaded value or the new entry's key. Explicit values must be unique and stable."
+                : "Optional internal registry name. Omitted, null, empty, and whitespace-only values preserve the loaded value or the new entry's key. Explicit values must be unique and stable.";
+        }
     }
 
     std::string SafeSchemaFileName(const RC::StringType& Name)
@@ -219,7 +237,7 @@ namespace PS::JsonSchemaGenerator {
         return value;
     }
 
-    nlohmann::ordered_json BuildObjectSchema(UClass* Class)
+    nlohmann::ordered_json BuildObjectSchema(UClass* Class, bool AllowIdentityProperties = false)
     {
         nlohmann::ordered_json schema = {
             { "$schema", "http://json-schema.org/draft-07/schema#" },
@@ -234,7 +252,7 @@ namespace PS::JsonSchemaGenerator {
 
         for (FProperty* Property : TFieldRange<FProperty>(Class, EFieldIterationFlags::IncludeSuper))
         {
-            ParsePropertyInfo(Property, schema["properties"]);
+            ParsePropertyInfo(Property, schema["properties"], AllowIdentityProperties);
         }
         return schema;
     }
@@ -279,7 +297,7 @@ namespace PS::JsonSchemaGenerator {
             if (generatedClasses.insert(className).second)
             {
                 std::ofstream output(assetSchemaPath / fileName);
-                output << BuildObjectSchema(objectClass).dump(2);
+                output << BuildObjectSchema(objectClass, true).dump(2);
             }
 
             index["properties"][RC::to_string(Object->GetPathName())] = {
@@ -343,6 +361,87 @@ namespace PS::JsonSchemaGenerator {
         std::ofstream output(DestinationPath / "blueprints.schema.json");
         output << index.dump(2);
         PS::Log<LogLevel::Normal>(STR("Finished generating blueprint schemas ({} classes).\n"), generated);
+    }
+
+    void GenerateRecipeSchema(const fs::path& DestinationPath)
+    {
+        auto* recipeClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr, nullptr, TEXT("/Script/Dominion.RecipeData"), false);
+        if (!recipeClass)
+        {
+            PS::Log<LogLevel::Warning>(STR("RecipeData was unavailable; recipes.schema.json was not generated.\n"));
+            return;
+        }
+
+        auto recipeProperties = BuildObjectSchema(recipeClass, true);
+        recipeProperties.erase("$schema");
+        auto recipeBody = recipeProperties;
+        recipeBody["description"] =
+            "RuneSchema recipe body. RecipeData properties may be direct or nested inside Properties; top-level identity fields take precedence.";
+        recipeBody["properties"]["Properties"] = recipeProperties;
+        recipeBody["properties"]["Unlock"] = {
+            { "type", "boolean" },
+            { "description", "Unlock the recipe when RuneSchema applies it." }
+        };
+        recipeBody["properties"]["AddTo"] = {
+            { "type", "array" },
+            { "description", "Optional crafting-table placement records." },
+            { "items", { { "type", "object" }, { "additionalProperties", true } } }
+        };
+
+        nlohmann::ordered_json schema = {
+            { "$schema", "http://json-schema.org/draft-07/schema#" },
+            { "title", "RuneSchema recipes" },
+            { "description", "Each property name is a recipe key or existing recipe asset path." },
+            { "type", "object" },
+            { "additionalProperties", recipeBody }
+        };
+
+        std::ofstream output(DestinationPath / "recipes.schema.json");
+        output << schema.dump(2);
+        PS::Log<LogLevel::Normal>(STR("Finished generating recipes.schema.json.\n"));
+    }
+
+    void GenerateJournalSchema(const fs::path& DestinationPath)
+    {
+        auto* journalClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr, nullptr, TEXT("/Script/Dominion.JournalEntryData"), false);
+        if (!journalClass)
+        {
+            PS::Log<LogLevel::Warning>(STR("JournalEntryData was unavailable; journal.schema.json was not generated.\n"));
+            return;
+        }
+
+        auto journalBody = BuildObjectSchema(journalClass, true);
+        journalBody.erase("$schema");
+        journalBody["description"] =
+            "RuneSchema journal entry body. Identity fields are optional top-level peers.";
+        journalBody["properties"]["Type"] = {
+            { "type", "string" },
+            { "enum", { "Lore", "People", "Place", "Treasure", "World", "Recipe" } },
+            { "description", "Class used when creating a new journal entry." }
+        };
+        journalBody["properties"]["Unlock"] = {
+            { "type", "boolean" },
+            { "description", "Unlock the journal entry when RuneSchema applies it." }
+        };
+        journalBody["properties"]["AddTo"] = {
+            { "type", "object" },
+            { "description", "Required journal subcategory placement record." },
+            { "additionalProperties", true }
+        };
+
+        nlohmann::ordered_json schema = {
+            { "$schema", "http://json-schema.org/draft-07/schema#" },
+            { "title", "RuneSchema journal entries" },
+            { "description", "Each property name is a journal key or existing journal asset path." },
+            { "type", "object" },
+            { "additionalProperties", journalBody }
+        };
+
+        std::ofstream output(DestinationPath / "journal.schema.json");
+        output << schema.dump(2);
+        PS::Log<LogLevel::Normal>(STR("Finished generating journal.schema.json.\n"));
     }
 
     void GenerateEnumSchema(const fs::path& DestinationPath)
@@ -508,6 +607,8 @@ namespace PS::JsonSchemaGenerator {
         GenerateRawSchemas(SchemaPath);
         GenerateAssetSchemas(SchemaPath);
         GenerateBlueprintSchemas(SchemaPath);
+        GenerateRecipeSchema(SchemaPath);
+        GenerateJournalSchema(SchemaPath);
 
         PS::Log<LogLevel::Normal>(STR("Finished generating all schema files. All done!\n"));
     }

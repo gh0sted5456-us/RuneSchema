@@ -24,6 +24,7 @@
 #include "SDK/Structs/FSoftObjectPath.h"
 #include "SDK/Structs/FSoftObjectPtr.h"
 #include "SDK/Helper/PropertyHelper.h"
+#include "SDK/Helper/IdentityOverride.h"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
 #include "Loader/DragonWildsJournalModLoader.h"
@@ -225,7 +226,7 @@ namespace DragonWilds {
                     continue;
                 }
 
-                ApplyProperties(entry, def.Body);
+                result.ErrorCount += ApplyProperties(entry, def.Body);
                 RegisterEntry(entry);
                 if (Place(entry, def))
                 {
@@ -356,13 +357,16 @@ namespace DragonWilds {
         return entry;
     }
 
-    void DragonWildsJournalModLoader::ApplyProperties(UObject* entry, const nlohmann::json& body)
+    int DragonWildsJournalModLoader::ApplyProperties(UObject* entry, const nlohmann::json& body)
     {
         m_pendingRecipeReferences.erase(entry);
 
+        auto identityResult = IdentityOverride::Apply(entry, body, entry->GetName());
+
         for (auto& [name, value] : body.items())
         {
-            if (name == "Type" || name == "AddTo" || name == "Unlock")
+            if (name == "Type" || name == "AddTo" || name == "Unlock"
+                || IdentityOverride::IsIdentityProperty(name))
             {
                 continue;
             }
@@ -439,6 +443,8 @@ namespace DragonWilds {
                 throw std::runtime_error("journal Image could not be loaded; check the cooked asset path and container mount");
             }
         }
+
+        return identityResult.Rejected;
     }
 
     bool DragonWildsJournalModLoader::Place(UObject* entry, const JournalDef& def)

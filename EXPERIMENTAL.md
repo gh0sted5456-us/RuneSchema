@@ -1,6 +1,6 @@
-# RuneSchema 0.6.2 Experimental
+# RuneSchema 0.6.3 Experimental
 
-This branch is the community testing line for changes that have not been merged into the official RuneSchema release. It is based on the upstream `main` branch and identifies itself at runtime as `0.6.2 Experimental`.
+This branch is the community testing line for changes that have not been merged into the official RuneSchema release. It is based on the upstream `main` branch and identifies itself at runtime as `0.6.3 Experimental`.
 
 ## Highlights
 
@@ -11,6 +11,40 @@ This branch is the community testing line for changes that have not been merged 
 - Centralized normalization for FModel numeric export suffixes such as `.0`.
 - `Scale` support for persistent Actor spawns and AI spawned by `AISpawnPoint` entries.
 - Optional, independent `DropIncreasePercent` support for known live-instance `ItemsToDrop` layouts.
+- Optional, registry-aware `PersistenceID` and `InternalName` overrides for asset, recipe, and journal files.
+
+## Optional identity overrides
+
+`PersistenceID` and `InternalName` can be supplied at the top level of supported asset, recipe, and journal entries. Omitting them—or setting them to `null`, `""`, or whitespace—preserves the existing/default identity. Recipe identity fields may also be placed inside `Properties`, although top-level values take precedence.
+
+Identity values must be unique. RuneSchema rejects collisions and synchronizes the live persistence/internal-name lookup maps when an override is accepted. The feature performs work only while mod files are loading; it adds no polling or per-frame tick.
+
+The loader directory remains singular: journal entries belong under `RuneSchema/mods/<mod name>/journal/`.
+
+Asset entry:
+
+```json
+{
+  "/Game/Mods/Example/DA_Example.DA_Example": {
+    "PersistenceID": "example-item-v1",
+    "InternalName": "example_item"
+  }
+}
+```
+
+New recipe or journal entry:
+
+```json
+{
+  "ExampleEntry": {
+    "PersistenceID": "example-entry-v1",
+    "InternalName": "example_entry",
+    "Properties": {}
+  }
+}
+```
+
+For journals, omit `Properties` and place the normal journal fields beside the two identity fields.
 
 ## Independent size and drop controls
 
