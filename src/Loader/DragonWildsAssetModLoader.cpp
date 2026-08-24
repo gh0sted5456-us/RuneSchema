@@ -133,7 +133,7 @@ namespace DragonWilds {
         }
 
         auto identityResult = IdentityOverride::Apply(
-            object, pendingAsset.Properties, pendingAsset.Target);
+            object, pendingAsset.Properties, pendingAsset.Target, IdentityOverrideTarget::Asset);
         outResult.PropertiesWritten += identityResult.Written;
         outResult.ErrorCount += identityResult.Rejected;
 

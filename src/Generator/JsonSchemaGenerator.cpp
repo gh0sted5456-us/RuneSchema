@@ -11,6 +11,7 @@
 #include "Unreal/UObjectGlobals.hpp"
 #include "nlohmann/json.hpp"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
+#include "Utility/Config.h"
 #include "Utility/Logging.h"
 #include "Generator/JsonSchemaGenerator.h"
 
@@ -603,12 +604,13 @@ namespace PS::JsonSchemaGenerator {
         std::filesystem::create_directories(SchemaPath);
 
         GenerateUtilitySchema(SchemaPath);
-        GenerateEnumSchema(SchemaPath);
-        GenerateRawSchemas(SchemaPath);
-        GenerateAssetSchemas(SchemaPath);
-        GenerateBlueprintSchemas(SchemaPath);
-        GenerateRecipeSchema(SchemaPath);
-        GenerateJournalSchema(SchemaPath);
+        const auto& types = PS::PSConfig::Get()->GetSchemaTypeSettings();
+        if (types.enums) GenerateEnumSchema(SchemaPath);
+        if (types.tables) GenerateRawSchemas(SchemaPath);
+        if (types.assets) GenerateAssetSchemas(SchemaPath);
+        if (types.blueprints) GenerateBlueprintSchemas(SchemaPath);
+        if (types.recipes) GenerateRecipeSchema(SchemaPath);
+        if (types.journals) GenerateJournalSchema(SchemaPath);
 
         PS::Log<LogLevel::Normal>(STR("Finished generating all schema files. All done!\n"));
     }

@@ -412,7 +412,7 @@ namespace DragonWilds {
     void DragonWildsRecipeModLoader::ApplyProperties(UObject* recipe, const nlohmann::json& body, LoadResult& result)
     {
         auto identityResult = IdentityOverride::Apply(
-            recipe, body, recipe->GetName(), true);
+            recipe, body, recipe->GetName(), IdentityOverrideTarget::Recipe, true);
         result.ErrorCount += identityResult.Rejected;
 
         const nlohmann::json* properties = &body;

@@ -361,7 +361,8 @@ namespace DragonWilds {
     {
         m_pendingRecipeReferences.erase(entry);
 
-        auto identityResult = IdentityOverride::Apply(entry, body, entry->GetName());
+        auto identityResult = IdentityOverride::Apply(
+            entry, body, entry->GetName(), IdentityOverrideTarget::Journal);
 
         for (auto& [name, value] : body.items())
         {

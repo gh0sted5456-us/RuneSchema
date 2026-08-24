@@ -14,6 +14,7 @@
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Structs/Custom/FManagedValue.h"
 #include "SDK/Structs/Custom/FScriptMapHelper.h"
+#include "Utility/Config.h"
 #include "Utility/Logging.h"
 
 using namespace RC;
@@ -300,10 +301,28 @@ namespace DragonWilds {
         UObject* object,
         const nlohmann::json& body,
         const RC::StringType& context,
+        IdentityOverrideTarget target,
         bool allowPropertiesContainer)
     {
         IdentityOverrideResult result{};
         if (!object || !body.is_object())
+        {
+            return result;
+        }
+
+        const auto& settings = PS::PSConfig::Get()->GetIdentityOverrideSettings();
+        const bool targetEnabled = target == IdentityOverrideTarget::Asset ? settings.assets
+            : target == IdentityOverrideTarget::Recipe ? settings.recipes
+            : settings.journals;
+        if (!settings.enabled || !targetEnabled)
+        {
+            return result;
+        }
+
+        const bool identityDeclared = FindRequestedValue(
+            body, "PersistenceID", allowPropertiesContainer)
+            || FindRequestedValue(body, "InternalName", allowPropertiesContainer);
+        if (!identityDeclared)
         {
             return result;
         }
@@ -403,6 +422,22 @@ namespace DragonWilds {
             }
         }
 
+        if (settings.dryRun)
+        {
+            for (const auto& field : fields)
+            {
+                if (!field.Requested || !field.Changed)
+                {
+                    continue;
+                }
+                PS::Log<LogLevel::Normal>(
+                    STR("{}: dry run would change {} from '{}' to '{}'.\n"),
+                    context, field.PropertyName, *field.Original, *field.Final);
+                result.Previewed++;
+            }
+            return result;
+        }
+
         bool changed = false;
         for (auto& field : fields)
         {
@@ -412,6 +447,11 @@ namespace DragonWilds {
             }
             field.Property->SetPropertyValue(
                 field.Property->ContainerPtrToValuePtr<void>(object), field.Final);
+            if (settings.logChanges)
+            {
+                PS::Log<LogLevel::Normal>(STR("{}: changed {} from '{}' to '{}'.\n"),
+                    context, field.PropertyName, *field.Original, *field.Final);
+            }
             changed = true;
             result.Written++;
         }
@@ -419,8 +459,11 @@ namespace DragonWilds {
         if (changed)
         {
             SynchronizeRegistry(registry, object, fields[0], fields[1]);
-            PS::Log<LogLevel::Normal>(STR("{}: applied {} registry-aware identity override{}.\n"),
-                context, result.Written, result.Written == 1 ? STR("") : STR("s"));
+            if (settings.logChanges)
+            {
+                PS::Log<LogLevel::Normal>(STR("{}: applied {} registry-aware identity override{}.\n"),
+                    context, result.Written, result.Written == 1 ? STR("") : STR("s"));
+            }
         }
         return result;
     }

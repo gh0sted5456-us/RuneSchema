@@ -12,12 +12,15 @@ This branch is the community testing line for changes that have not been merged 
 - `Scale` support for persistent Actor spawns and AI spawned by `AISpawnPoint` entries.
 - Optional, independent `DropIncreasePercent` support for known live-instance `ItemsToDrop` layouts.
 - Optional, registry-aware `PersistenceID` and `InternalName` overrides for asset, recipe, and journal files.
+- Runtime controls for identity categories, identity dry runs, spawn limits, and generated schema categories.
 
 ## Optional identity overrides
 
 `PersistenceID` and `InternalName` can be supplied at the top level of supported asset, recipe, and journal entries. Omitting them—or setting them to `null`, `""`, or whitespace—preserves the existing/default identity. Recipe identity fields may also be placed inside `Properties`, although top-level values take precedence.
 
 Identity values must be unique. RuneSchema rejects collisions and synchronizes the live persistence/internal-name lookup maps when an override is accepted. The feature performs work only while mod files are loading; it adds no polling or per-frame tick.
+
+Identity overrides can be enabled globally or separately for assets, recipes, and journals. `dryRun` validates requested identities and reports the changes without writing them. `logChanges` controls successful-change messages; collision warnings are never suppressed.
 
 The loader directory remains singular: journal entries belong under `RuneSchema/mods/<mod name>/journal/`.
 
@@ -62,6 +65,39 @@ For journals, omit `Properties` and place the normal journal fields beside the t
 ```
 
 Here, the actor is twice normal size and supported drop counts are multiplied by `1.5`. Drop scaling is experimental and only affects `ItemsToDrop` on the actor or the known item-drop, split-drop, and destruction-drop components.
+
+## Configuration controls
+
+The Settings page groups related options into compact collapsible sections. The same settings remain manually editable in `RuneSchema/config/config.json`:
+
+```json
+{
+  "identityOverrides": {
+    "enabled": true,
+    "assets": true,
+    "recipes": true,
+    "journals": true,
+    "dryRun": false,
+    "logChanges": true
+  },
+  "spawnSafety": {
+    "maxScale": 10.0,
+    "maxDropIncreasePercent": 500.0
+  },
+  "tooling": {
+    "schemaTypes": {
+      "assets": true,
+      "blueprints": true,
+      "recipes": true,
+      "journals": true,
+      "tables": true,
+      "enums": true
+    }
+  }
+}
+```
+
+Spawn limits reject invalid or excessive values during mod loading. Schema category switches only control which authoring schemas are generated; they do not disable the matching RuneSchema loaders. Existing configuration files remain compatible, and missing fields use the defaults shown above.
 
 ## Distribution
 
