@@ -14,20 +14,14 @@ namespace fs = std::filesystem;
 
 namespace {
     const std::unordered_set<std::string> UnsafeProperties = {
-        "RootComponent", "UberGraphFrame",
+        "PersistenceID", "InternalName", "RootComponent", "UberGraphFrame",
         "BlueprintCreatedComponents", "InstanceComponents",
         "SimpleConstructionScript", "UberGraphFunction"
     };
 
-    bool IsIdentityProperty(const std::string& name)
+    bool IsUnsafe(const std::string& name)
     {
-        return name == "PersistenceID" || name == "InternalName";
-    }
-
-    bool IsUnsafe(const std::string& name, bool allowIdentityProperties = false)
-    {
-        return (!allowIdentityProperties && IsIdentityProperty(name))
-            || UnsafeProperties.contains(name)
+        return UnsafeProperties.contains(name)
             || name.ends_with("Guid") || name.ends_with("GUID");
     }
 
@@ -51,16 +45,14 @@ namespace {
         return value;
     }
 
-    nlohmann::ordered_json SafeProperties(
-        const nlohmann::json& properties,
-        bool allowIdentityProperties = false)
+    nlohmann::ordered_json SafeProperties(const nlohmann::json& properties)
     {
         nlohmann::ordered_json result = nlohmann::ordered_json::object();
         if (!properties.is_object()) return result;
 
         for (const auto& [name, value] : properties.items())
         {
-            if (!IsUnsafe(name, allowIdentityProperties)) result[name] = SanitizeValue(value);
+            if (!IsUnsafe(name)) result[name] = SanitizeValue(value);
         }
         return result;
     }
@@ -143,7 +135,7 @@ namespace {
             auto package = RC::to_generic_string(asset->at("Package").get<std::string>());
             auto name = RC::to_generic_string(asset->value("Name", ""));
             auto target = PS::ObjectPath::Normalize(package, name);
-            snippet[RC::to_string(target)] = SafeProperties(asset->at("Properties"), true);
+            snippet[RC::to_string(target)] = SafeProperties(asset->at("Properties"));
         }
 
         std::ofstream output(outputPath, std::ios::trunc);
