@@ -1,6 +1,8 @@
 #include <algorithm>
+#include <cctype>
 #include <vector>
 #include "Unreal/CoreUObject/UObject/Class.hpp"
+#include "Unreal/CoreUObject/UObject/FStrProperty.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
 #include "Unreal/UFunctionStructs.hpp"
 #include "Unreal/UObject.hpp"
@@ -38,6 +40,74 @@ namespace DragonWilds {
     static bool WantsUnlock(const nlohmann::json& body)
     {
         return body.contains("Unlock") && body.at("Unlock").is_boolean() && body.at("Unlock").get<bool>();
+    }
+
+    static bool IsRecipeIdentityProperty(const std::string& propertyName)
+    {
+        return propertyName == "PersistenceID" || propertyName == "InternalName";
+    }
+
+    static bool IsBlankRecipeIdentity(const nlohmann::json& value)
+    {
+        if (value.is_null())
+        {
+            return true;
+        }
+        if (!value.is_string())
+        {
+            return false;
+        }
+
+        const auto& text = value.get_ref<const std::string&>();
+        return std::all_of(text.begin(), text.end(), [](unsigned char character) {
+            return std::isspace(character) != 0;
+        });
+    }
+
+    static RC::StringType ReadRecipeIdentity(UObject* recipe, const RC::StringType& propertyName)
+    {
+        if (!recipe)
+        {
+            return {};
+        }
+
+        auto* property = CastField<FStrProperty>(
+            PropertyHelper::GetPropertyByName(recipe->GetClassPrivate(), propertyName));
+        if (!property)
+        {
+            return {};
+        }
+
+        auto value = property->GetPropertyValue(property->ContainerPtrToValuePtr<void>(recipe));
+        return value.GetCharArray().Num() > 1 ? RC::StringType(*value) : RC::StringType{};
+    }
+
+    static UObject* FindRecipeIdentityCollision(
+        UClass* recipeClass,
+        UObject* recipe,
+        const RC::StringType& propertyName,
+        const RC::StringType& proposedValue)
+    {
+        if (!recipeClass || proposedValue.empty())
+        {
+            return nullptr;
+        }
+
+        TArray<UObject*> recipes;
+        UECustom::UObjectGlobals::GetObjectsOfClass(recipeClass, recipes, true);
+        for (auto* candidate : recipes)
+        {
+            if (!candidate || candidate == recipe
+                || candidate->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject | RF_ArchetypeObject)))
+            {
+                continue;
+            }
+            if (ReadRecipeIdentity(candidate, propertyName) == proposedValue)
+            {
+                return candidate;
+            }
+        }
+        return nullptr;
     }
 
     static void AddRecipeUnlocks(UObject* progressComponent, const std::vector<UObject*>& recipes)
@@ -247,7 +317,7 @@ namespace DragonWilds {
                 continue;
             }
 
-            ApplyProperties(recipe, def.Body, result);
+            ApplyProperties(recipe, def, created, result);
             m_propsApplied.insert(def.Key);
 
             if (created)
@@ -408,12 +478,25 @@ namespace DragonWilds {
         return recipe;
     }
 
-    void DragonWildsRecipeModLoader::ApplyProperties(UObject* recipe, const nlohmann::json& body, LoadResult& result)
+    void DragonWildsRecipeModLoader::ApplyProperties(
+        UObject* recipe,
+        const RecipeDef& def,
+        bool created,
+        LoadResult& result)
     {
-        const nlohmann::json* properties = &body;
-        if (body.contains("Properties") && body.at("Properties").is_object())
+        nlohmann::json effectiveProperties;
+        const nlohmann::json* properties = &def.Body;
+        if (def.Body.contains("Properties") && def.Body.at("Properties").is_object())
         {
-            properties = &body.at("Properties");
+            effectiveProperties = def.Body.at("Properties");
+            for (const auto* identityName : { "PersistenceID", "InternalName" })
+            {
+                if (def.Body.contains(identityName))
+                {
+                    effectiveProperties[identityName] = def.Body.at(identityName);
+                }
+            }
+            properties = &effectiveProperties;
         }
 
         auto* recipeClass = recipe->GetClassPrivate();
@@ -421,6 +504,21 @@ namespace DragonWilds {
         {
             if (propertyName == "AddTo" || propertyName == "Properties" || propertyName == "Unlock")
             {
+                continue;
+            }
+
+            const bool identityProperty = IsRecipeIdentityProperty(propertyName);
+            if (identityProperty && IsBlankRecipeIdentity(propertyValue))
+            {
+                PS::Log<LogLevel::Verbose>(STR("Recipe '{}': blank {} uses the default value.\n"),
+                    def.Key, RC::to_generic_string(propertyName));
+                continue;
+            }
+            if (identityProperty && !propertyValue.is_string())
+            {
+                PS::Log<LogLevel::Warning>(STR("Recipe '{}': {} must be a string; preserving the default value.\n"),
+                    def.Key, RC::to_generic_string(propertyName));
+                result.ErrorCount++;
                 continue;
             }
 
@@ -432,6 +530,23 @@ namespace DragonWilds {
                     propertyNameWide, recipe->GetName());
                 result.ErrorCount++;
                 continue;
+            }
+
+            if (identityProperty)
+            {
+                const auto currentValue = ReadRecipeIdentity(recipe, propertyNameWide);
+                const auto proposedValue = RC::to_generic_string(propertyValue.get<std::string>());
+                if (!created && !currentValue.empty() && currentValue != proposedValue)
+                {
+                    PS::Log<LogLevel::Warning>(STR("Recipe '{}': changing {} from '{}' to '{}' can break saved references.\n"),
+                        def.Key, propertyNameWide, currentValue, proposedValue);
+                }
+                if (auto* collision = FindRecipeIdentityCollision(
+                    m_recipeClass, recipe, propertyNameWide, proposedValue))
+                {
+                    PS::Log<LogLevel::Warning>(STR("Recipe '{}': {} '{}' is already used by '{}'.\n"),
+                        def.Key, propertyNameWide, proposedValue, collision->GetName());
+                }
             }
 
             try
