@@ -26,7 +26,7 @@ public:
         ModName = STR("RuneSchema");
         ModVersion = STR("0.6.2 Experimental");
         ModDescription = STR("Experimental RuneSchema build with mod management and extended spawn controls.");
-        ModAuthors = STR("Okaetsu");
+        ModAuthors = STR("Okaetsu (PalSchema), Snorkles (RuneSchema), Jonesing4Space (additional features)");
 
         auto config = PS::PSConfig::Get();
         config->Load();
