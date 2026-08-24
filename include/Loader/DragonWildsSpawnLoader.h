@@ -1,5 +1,6 @@
 #pragma once
 
+#include <unordered_set>
 #include <vector>
 #include "Unreal/Hooks.hpp"
 #include "Unreal/Rotator.hpp"
@@ -34,6 +35,8 @@ namespace DragonWilds {
             RC::StringType EntryId;
             RC::Unreal::FVector Location{};
             RC::Unreal::FRotator Rotation{};
+            RC::Unreal::FVector Scale{1.0, 1.0, 1.0};
+            double DropMultiplier = 1.0;
             float RemoveRadius = 500.0f;
             nlohmann::json Properties;
             bool bExistsInWorld = false;
@@ -60,8 +63,11 @@ namespace DragonWilds {
         std::vector<UECustom::FBox> m_pendingCellBounds;
         RC::Unreal::UFunction* m_onLevelShownFunction = nullptr;
         int32_t m_onLevelShownCallbackId = 0;
+        RC::Unreal::UFunction* m_aiScaleFunction = nullptr;
+        int32_t m_aiScaleCallbackId = 0;
         RC::Unreal::Hook::GlobalCallbackId m_spawnTickCallbackId = RC::Unreal::Hook::ERROR_ID;
         bool m_processingSpawns = false;
+        std::unordered_set<RC::Unreal::UObject*> m_dropScaledActors;
 
         void LoadSpawns(const nlohmann::json& data, const RC::StringType& modName);
         void RegisterSpawn(const nlohmann::json& value, const RC::StringType& modName);
@@ -73,10 +79,14 @@ namespace DragonWilds {
         void DumpAIClasses();
 
         bool SetupWorldReadyHook();
+        void SetupAIScaleHook();
+        void ApplyAIScale(RC::Unreal::UObject* character);
+        void ApplyDropMultiplier(RC::Unreal::UObject* actor, double multiplier);
+        int ApplyDropMultiplierToObject(RC::Unreal::UObject* object, double multiplier);
         bool SetupSpawnTick();
         bool IsWorldStillLoaded(RC::Unreal::UWorld* world);
         void OnCellShown(RC::Unreal::UObject* cellObject);
-        bool HasLiveSpawnedAI(RC::Unreal::UWorld* world, const RC::Unreal::FGuid& spawnPointId);
+        bool HasLiveSpawnedAI(RC::Unreal::UWorld* world, SpawnInfo& spawn);
         void TryProcessSpawns(RC::Unreal::UWorld* world, const std::vector<UECustom::FBox>* bounds, const wchar_t* trigger);
         void ProcessSpawns(RC::Unreal::UWorld* world, const std::vector<UECustom::FBox>* bounds);
         void ProcessAISpawnPointEntry(RC::Unreal::UWorld* world, SpawnInfo& spawn);

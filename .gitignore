@@ -1,0 +1,29 @@
+# CMake and IDE output
+build/
+build-*/
+out/
+.vs/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# Compiled artifacts
+*.dll
+*.exe
+*.exp
+*.ilk
+*.lib
+*.obj
+*.pdb
+
+# Local packaging and runtime data
+dist/
+RuneSchema/mods/
+RuneSchema/config/
+
+# Editor and operating-system files
+.vscode/
+*.user
+*.suo
+.DS_Store
+Thumbs.db

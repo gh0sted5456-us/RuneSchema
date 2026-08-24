@@ -1,4 +1,6 @@
 #include <fstream>
+#include <cctype>
+#include <unordered_set>
 #include "UE4SSProgram.hpp"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
@@ -18,7 +20,29 @@ using namespace RC::Unreal;
 namespace fs = std::filesystem;
 
 namespace PS::JsonSchemaGenerator {
-    void ParsePropertyInfo(FProperty* Property, nlohmann::ordered_json& Json);
+    bool IsIdentityPropertyName(const RC::StringType& Name)
+    {
+        return Name == TEXT("PersistenceID") || Name == TEXT("InternalName");
+    }
+
+    bool IsUnsafePropertyName(const RC::StringType& Name, bool AllowIdentityProperties = false)
+    {
+        static const std::unordered_set<RC::StringType> UnsafeNames = {
+            TEXT("RootComponent"),
+            TEXT("UberGraphFrame"),
+            TEXT("BlueprintCreatedComponents"),
+            TEXT("InstanceComponents")
+        };
+        return (!AllowIdentityProperties && IsIdentityPropertyName(Name))
+            || UnsafeNames.contains(Name)
+            || Name.ends_with(TEXT("Guid"))
+            || Name.ends_with(TEXT("GUID"));
+    }
+
+    void ParsePropertyInfo(
+        FProperty* Property,
+        nlohmann::ordered_json& Json,
+        bool AllowIdentityProperties = false);
 
     void ParseEnumPropertyInfo(FEnumProperty* Property, nlohmann::ordered_json& Json)
     {
@@ -140,8 +164,16 @@ namespace PS::JsonSchemaGenerator {
         }
     }
 
-    void ParsePropertyInfo(FProperty* Property, nlohmann::ordered_json& Json)
+    void ParsePropertyInfo(
+        FProperty* Property,
+        nlohmann::ordered_json& Json,
+        bool AllowIdentityProperties)
     {
+        if (!Property || IsUnsafePropertyName(Property->GetName(), AllowIdentityProperties))
+        {
+            return;
+        }
+
         auto PropertyName = RC::to_string(Property->GetName());
         Json[PropertyName] = nlohmann::ordered_json::object();
         nlohmann::ordered_json& JsonProperty = Json[PropertyName];
@@ -182,6 +214,215 @@ namespace PS::JsonSchemaGenerator {
         {
             JsonProperty["$ref"] = "../utility.schema.json#/definitions/ObjectReference";
         }
+
+        if (Property->GetName() == TEXT("PersistenceID"))
+        {
+            JsonProperty["description"] =
+                "Optional persistent registry identity. Omit to preserve the existing value; explicit values must be unique and remain stable.";
+        }
+        else if (Property->GetName() == TEXT("InternalName"))
+        {
+            JsonProperty["description"] =
+                "Optional internal content name. Omit to preserve the existing value; explicit values must be unique and remain stable.";
+        }
+    }
+
+    std::string SafeSchemaFileName(const RC::StringType& Name)
+    {
+        auto value = RC::to_string(Name);
+        for (auto& character : value)
+        {
+            if (!std::isalnum(static_cast<unsigned char>(character)) && character != '-' && character != '_')
+            {
+                character = '_';
+            }
+        }
+        return value;
+    }
+
+    nlohmann::ordered_json BuildObjectSchema(UClass* Class, bool AllowIdentityProperties = false)
+    {
+        nlohmann::ordered_json schema = {
+            { "$schema", "http://json-schema.org/draft-07/schema#" },
+            { "type", "object" },
+            { "properties", nlohmann::ordered_json::object() },
+            { "additionalProperties", true }
+        };
+        if (!Class)
+        {
+            return schema;
+        }
+
+        for (FProperty* Property : TFieldRange<FProperty>(Class, EFieldIterationFlags::IncludeSuper))
+        {
+            ParsePropertyInfo(Property, schema["properties"], AllowIdentityProperties);
+        }
+        return schema;
+    }
+
+    void GenerateAssetSchemas(const fs::path& DestinationPath)
+    {
+        auto assetSchemaPath = DestinationPath / "assets";
+        fs::create_directories(assetSchemaPath);
+        nlohmann::ordered_json index = {
+            { "$schema", "http://json-schema.org/draft-07/schema#" },
+            { "type", "object" },
+            { "properties", nlohmann::ordered_json::object() },
+            { "additionalProperties", { { "type", "object" } } }
+        };
+
+        auto* dataAssetClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr, nullptr, TEXT("/Script/Engine.DataAsset"), false);
+        auto* curveClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr, nullptr, TEXT("/Script/Engine.CurveBase"), false);
+        if (!dataAssetClass || !curveClass)
+        {
+            return;
+        }
+
+        std::unordered_set<RC::StringType> generatedClasses;
+        std::size_t targetCount = 0;
+        UObjectGlobals::ForEachUObject([&](UObject* Object, int32_t, int32_t) -> LoopAction {
+            if (!Object || Object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject | RF_ArchetypeObject))
+                || (!Object->IsA(dataAssetClass) && !Object->IsA(curveClass)))
+            {
+                return LoopAction::Continue;
+            }
+
+            auto* objectClass = Object->GetClassPrivate();
+            if (!objectClass)
+            {
+                return LoopAction::Continue;
+            }
+
+            auto className = objectClass->GetName();
+            auto fileName = SafeSchemaFileName(className) + ".schema.json";
+            if (generatedClasses.insert(className).second)
+            {
+                std::ofstream output(assetSchemaPath / fileName);
+                output << BuildObjectSchema(objectClass, true).dump(2);
+            }
+
+            index["properties"][RC::to_string(Object->GetPathName())] = {
+                { "$ref", std::format("assets/{}", fileName) }
+            };
+            ++targetCount;
+            return LoopAction::Continue;
+        });
+
+        std::ofstream output(DestinationPath / "assets.schema.json");
+        output << index.dump(2);
+        PS::Log<LogLevel::Normal>(STR("Finished generating asset schemas ({} targets, {} classes).\n"),
+            targetCount, generatedClasses.size());
+    }
+
+    void GenerateBlueprintSchemas(const fs::path& DestinationPath)
+    {
+        auto blueprintSchemaPath = DestinationPath / "blueprints";
+        fs::create_directories(blueprintSchemaPath);
+        nlohmann::ordered_json index = {
+            { "$schema", "http://json-schema.org/draft-07/schema#" },
+            { "type", "object" },
+            { "properties", nlohmann::ordered_json::object() },
+            { "additionalProperties", { { "type", "object" } } }
+        };
+
+        auto* blueprintClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr, nullptr, TEXT("/Script/Engine.BlueprintGeneratedClass"), false);
+        if (!blueprintClass)
+        {
+            return;
+        }
+
+        std::size_t generated = 0;
+        UObjectGlobals::ForEachUObject([&](UObject* Object, int32_t, int32_t) -> LoopAction {
+            if (!Object || !Object->IsA(blueprintClass))
+            {
+                return LoopAction::Continue;
+            }
+
+            auto* generatedClass = static_cast<UClass*>(Object);
+            auto className = generatedClass->GetName();
+            auto fileName = SafeSchemaFileName(generatedClass->GetPathName()) + ".schema.json";
+            std::ofstream output(blueprintSchemaPath / fileName);
+            output << BuildObjectSchema(generatedClass).dump(2);
+
+            auto reference = nlohmann::ordered_json{
+                { "$ref", std::format("blueprints/{}", fileName) }
+            };
+            index["properties"][RC::to_string(className)] = reference;
+            auto path = generatedClass->GetPathName();
+            auto dot = path.find_last_of(TEXT('.'));
+            if (dot != RC::StringType::npos)
+            {
+                index["properties"][RC::to_string(path.substr(0, dot))] = reference;
+            }
+            ++generated;
+            return LoopAction::Continue;
+        });
+
+        std::ofstream output(DestinationPath / "blueprints.schema.json");
+        output << index.dump(2);
+        PS::Log<LogLevel::Normal>(STR("Finished generating blueprint schemas ({} classes).\n"), generated);
+    }
+
+    void GenerateRecipeSchema(const fs::path& DestinationPath)
+    {
+        auto* recipeClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr, nullptr, TEXT("/Script/Dominion.RecipeData"), false);
+        if (!recipeClass)
+        {
+            PS::Log<LogLevel::Warning>(STR("RecipeData was unavailable; recipes.schema.json was not generated.\n"));
+            return;
+        }
+
+        auto recipeProperties = BuildObjectSchema(recipeClass, true);
+        recipeProperties.erase("$schema");
+        auto recipeBody = recipeProperties;
+        recipeBody["description"] =
+            "RuneSchema recipe body. RecipeData fields may be written directly or inside Properties.";
+        recipeBody["properties"]["Properties"] = recipeProperties;
+        recipeBody["properties"]["Unlock"] = {
+            { "type", "boolean" },
+            { "description", "Unlock this recipe for the player when RuneSchema applies it." }
+        };
+        recipeBody["properties"]["AddTo"] = {
+            { "type", "array" },
+            { "description", "Optional crafting-table placement records." },
+            { "items", { { "type", "object" }, { "additionalProperties", true } } }
+        };
+
+        const auto identityDescription = [](const char* propertyName) {
+            return std::format(
+                "Optional recipe {}. Missing, null, empty, or whitespace-only values use the default: "
+                "the recipe key for a newly created recipe, or the loaded value for an existing recipe. "
+                "Explicit values must be unique and remain stable.", propertyName);
+        };
+        for (auto* container : { &recipeBody["properties"], &recipeBody["properties"]["Properties"]["properties"] })
+        {
+            if (container->contains("PersistenceID"))
+            {
+                (*container)["PersistenceID"]["description"] = identityDescription("persistent registry identity");
+                (*container)["PersistenceID"]["type"] = { "string", "null" };
+            }
+            if (container->contains("InternalName"))
+            {
+                (*container)["InternalName"]["description"] = identityDescription("internal content name");
+                (*container)["InternalName"]["type"] = { "string", "null" };
+            }
+        }
+
+        nlohmann::ordered_json schema = {
+            { "$schema", "http://json-schema.org/draft-07/schema#" },
+            { "title", "RuneSchema recipes" },
+            { "description", "Each property name is a recipe key or existing recipe asset path." },
+            { "type", "object" },
+            { "additionalProperties", recipeBody }
+        };
+
+        std::ofstream output(DestinationPath / "recipes.schema.json");
+        output << schema.dump(2);
+        PS::Log<LogLevel::Normal>(STR("Finished generating recipes.schema.json.\n"));
     }
 
     void GenerateEnumSchema(const fs::path& DestinationPath)
@@ -345,6 +586,9 @@ namespace PS::JsonSchemaGenerator {
         GenerateUtilitySchema(SchemaPath);
         GenerateEnumSchema(SchemaPath);
         GenerateRawSchemas(SchemaPath);
+        GenerateAssetSchemas(SchemaPath);
+        GenerateBlueprintSchemas(SchemaPath);
+        GenerateRecipeSchema(SchemaPath);
 
         PS::Log<LogLevel::Normal>(STR("Finished generating all schema files. All done!\n"));
     }

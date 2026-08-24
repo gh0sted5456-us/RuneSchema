@@ -15,6 +15,7 @@
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/DragonWildsSignatures.h"
 #include "Utility/Logging.h"
+#include "Utility/ObjectPath.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -60,44 +61,9 @@ namespace {
             }
         }
 
-        if (!objectPath.empty() && !objectName.empty())
-        {
-            auto slash = objectPath.find_last_of(TEXT('/'));
-            auto dot = objectPath.find_last_of(TEXT('.'));
-            if (dot == RC::StringType::npos || (slash != RC::StringType::npos && dot < slash))
-            {
-                objectPath += TEXT(".") + objectName;
-            }
-            else
-            {
-                auto suffix = objectPath.substr(dot + 1);
-                auto numericSuffix = !suffix.empty()
-                    && std::all_of(suffix.begin(), suffix.end(), [](auto character) {
-                        return character >= TEXT('0') && character <= TEXT('9');
-                    });
-                if (numericSuffix)
-                {
-                    objectPath = objectPath.substr(0, dot + 1) + objectName;
-                }
-            }
-        }
-
-        if (classReference && !objectPath.empty() && !objectPath.ends_with(TEXT("_C")))
-        {
-            auto slash = objectPath.find_last_of(TEXT('/'));
-            auto dot = objectPath.find_last_of(TEXT('.'));
-            if (dot == RC::StringType::npos || (slash != RC::StringType::npos && dot < slash))
-            {
-                auto assetName = objectPath.substr(slash + 1);
-                objectPath += TEXT(".") + assetName + TEXT("_C");
-            }
-            else
-            {
-                objectPath += TEXT("_C");
-            }
-        }
-
-        return objectPath;
+        return objectPath.empty()
+            ? objectPath
+            : PS::ObjectPath::Normalize(objectPath, objectName, classReference);
     }
 }
 
@@ -359,12 +325,7 @@ namespace DragonWilds {
 
     RC::StringType PropertyHelper::GetTextAsString(const RC::Unreal::FText& Text)
     {
-        if (!Text.Data)
-        {
-            return {};
-        }
-
-        return RC::StringType(*Text.Data->GetDisplayString());
+        return Text.ToString();
     }
 
     void PropertyHelper::SetClassPropertyValueFromJsonValue(void* Data, RC::Unreal::FClassProperty* Property, const nlohmann::json& Value)
@@ -468,32 +429,9 @@ namespace DragonWilds {
                 }
             }
 
-            if (!objectPath.empty() && !objectName.empty())
+            if (!objectPath.empty())
             {
-                auto slash = objectPath.find_last_of(TEXT('/'));
-                auto dot = objectPath.find_last_of(TEXT('.'));
-                if (dot == RC::StringType::npos || (slash != RC::StringType::npos && dot < slash))
-                {
-                    objectPath += TEXT(".") + objectName;
-                }
-                else
-                {
-                    auto suffix = objectPath.substr(dot + 1);
-                    bool numericSuffix = !suffix.empty();
-                    for (auto character : suffix)
-                    {
-                        if (character < TEXT('0') || character > TEXT('9'))
-                        {
-                            numericSuffix = false;
-                            break;
-                        }
-                    }
-
-                    if (numericSuffix)
-                    {
-                        objectPath = objectPath.substr(0, dot + 1) + objectName;
-                    }
-                }
+                objectPath = PS::ObjectPath::Normalize(objectPath, objectName);
             }
 
             UObject* referencedObject = nullptr;

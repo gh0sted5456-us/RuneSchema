@@ -24,6 +24,8 @@
 #include "Loader/DragonWildsCourseLoader.h"
 #include "Loader/DragonWildsSpawnLoader.h"
 #include "Loader/DragonWildsStringModLoader.h"
+#include "Loader/ModLoadOrder.h"
+#include "Loader/CompatibilityReporter.h"
 #include "Loader/DragonWildsMainLoader.h"
 #include "Misc/FileWatchWrapper.h"
 
@@ -123,6 +125,10 @@ namespace DragonWilds {
 
         std::advance(it, 1);
         auto folderType = it->string();
+        if (folderType == "config")
+        {
+            return;
+        }
 
         std::ifstream f(filePath);
         if (f.peek() == std::ifstream::traits_type::eof()) {
@@ -221,16 +227,40 @@ namespace DragonWilds {
     void DragonWildsMainLoader::IterateModsFolder(const std::function<void(const std::filesystem::path&, const RC::StringType&)>& callback)
     {
         static auto modsPath = fs::path(UE4SSProgram::get_program().get_working_directory()) / "Mods" / "RuneSchema" / "mods";
-        if (fs::exists(modsPath))
+        if (!fs::exists(modsPath))
         {
-            for (const auto& entry : fs::directory_iterator(modsPath)) {
-                if (entry.is_directory())
-                {
-                    auto& path = entry.path();
-                    auto folderName = path.stem().native();
-                    callback(entry.path(), folderName);
-                }
+            return;
+        }
+
+        // fs::directory_iterator's order is filesystem-defined, not a deliberate
+        // load order, so it's only used here to discover which mod folders exist.
+        // ModLoadOrder::Resolve() is what actually decides load order, driven by a
+        // `mods.txt` file inside the mods folder (mirroring UE4SS's own mods.txt):
+        // mods are loaded top-to-bottom, new folders are appended automatically,
+        // and a mod can be disabled by setting its entry to `Name : 0` without
+        // removing its folder.
+        std::vector<RC::StringType> discoveredModNames;
+        for (const auto& entry : fs::directory_iterator(modsPath))
+        {
+            if (entry.is_directory())
+            {
+                // Folder names may legitimately contain dots (for example a
+                // version suffix). stem() treats the final portion as a file
+                // extension and truncates it, so preserve the exact name.
+                discoveredModNames.push_back(entry.path().filename().native());
             }
+        }
+        auto orderedModNames = ModLoadOrder::Resolve(modsPath, discoveredModNames);
+
+        if (!m_compatibilityReportGenerated)
+        {
+            CompatibilityReporter::Generate(modsPath, orderedModNames);
+            m_compatibilityReportGenerated = true;
+        }
+
+        for (const auto& modName : orderedModNames)
+        {
+            callback(modsPath / modName, modName);
         }
     }
 
@@ -436,7 +466,7 @@ namespace DragonWilds {
             }
 
             auto folderType = entry.path().filename().string();
-            if (folderType == "paks")
+            if (folderType == "paks" || folderType == "config")
             {
                 continue;
             }

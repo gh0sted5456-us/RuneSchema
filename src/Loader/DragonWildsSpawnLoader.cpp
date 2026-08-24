@@ -1,5 +1,7 @@
 #include <algorithm>
+#include <cmath>
 #include <cstring>
+#include <limits>
 #include <vector>
 #include "Unreal/AActor.hpp"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
@@ -14,8 +16,10 @@
 #include "SDK/Classes/TSoftObjectPtr.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
+#include "SDK/Structs/Custom/FScriptArrayHelper.h"
 #include "SDK/Structs/FSoftObjectPath.h"
 #include "Utility/JsonHelpers.h"
+#include "Utility/Config.h"
 #include "Utility/Logging.h"
 #include "Loader/DragonWildsSpawnLoader.h"
 
@@ -152,6 +156,10 @@ namespace DragonWilds {
         {
             m_onLevelShownFunction->UnregisterHook(m_onLevelShownCallbackId);
         }
+        if (m_aiScaleFunction && m_aiScaleCallbackId != 0)
+        {
+            m_aiScaleFunction->UnregisterHook(m_aiScaleCallbackId);
+        }
         if (m_spawnTickCallbackId != Hook::ERROR_ID)
         {
             Hook::UnregisterCallback(m_spawnTickCallbackId);
@@ -209,6 +217,7 @@ namespace DragonWilds {
 
     bool DragonWildsSpawnLoader::OnInitialize()
     {
+        SetupAIScaleHook();
         return SetupWorldReadyHook() && SetupSpawnTick();
     }
 
@@ -253,6 +262,38 @@ namespace DragonWilds {
             PS::JsonHelpers::ParseRotator(value, "Rotation", spawn.Rotation);
         }
 
+        if (PS::JsonHelpers::FieldExists(value, "Scale"))
+        {
+            const auto& scale = value.at("Scale");
+            if (scale.is_number())
+            {
+                const auto uniformScale = scale.get<double>();
+                spawn.Scale = FVector(uniformScale, uniformScale, uniformScale);
+            }
+            else
+            {
+                PS::JsonHelpers::ParseVector(value, "Scale", spawn.Scale);
+            }
+            if (spawn.Scale.X() <= 0.0 || spawn.Scale.Y() <= 0.0 || spawn.Scale.Z() <= 0.0)
+            {
+                throw std::runtime_error("Scale components must be greater than zero");
+            }
+        }
+
+        if (PS::JsonHelpers::FieldExists(value, "DropIncreasePercent"))
+        {
+            const auto& percent = value.at("DropIncreasePercent");
+            if (!percent.is_number())
+            {
+                throw std::runtime_error("DropIncreasePercent must be a number");
+            }
+            const auto percentValue = percent.get<double>();
+            if (!std::isfinite(percentValue) || percentValue < 0.0)
+            {
+                throw std::runtime_error("DropIncreasePercent must be finite and at least zero");
+            }
+            spawn.DropMultiplier = 1.0 + percentValue / 100.0;
+        }
         std::string type;
         PS::JsonHelpers::ParseString(value, "Type", type);
         if (type == "AISpawnPoint")
@@ -563,6 +604,145 @@ namespace DragonWilds {
         return m_onLevelShownCallbackId != 0;
     }
 
+    void DragonWildsSpawnLoader::SetupAIScaleHook()
+    {
+        m_aiScaleFunction = UECustom::UObjectGlobals::StaticFindObject<UFunction*>(
+            nullptr, nullptr, TEXT("/Script/Dominion.DominionAICharacter:SetAILocomotion"));
+        if (!m_aiScaleFunction)
+        {
+            PS::Log<LogLevel::Warning>(
+                STR("Unable to hook DominionAICharacter.SetAILocomotion; AI Scale will apply during world processing.\n"));
+            return;
+        }
+
+        m_aiScaleCallbackId = m_aiScaleFunction->RegisterPostHook(
+            [this](UnrealScriptFunctionCallableContext& context, void*) {
+                ApplyAIScale(context.Context);
+            });
+        if (m_aiScaleCallbackId == 0)
+        {
+            PS::Log<LogLevel::Warning>(
+                STR("Unable to register the AI Scale hook; AI Scale will apply during world processing.\n"));
+        }
+    }
+
+    void DragonWildsSpawnLoader::ApplyAIScale(UObject* character)
+    {
+        auto* aiBaseClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr, nullptr, TEXT("/Script/Dominion.DominionAICharacter"));
+        if (!character || !aiBaseClass || !character->IsA(aiBaseClass))
+        {
+            return;
+        }
+
+        auto* spawnInfoProperty = PropertyHelper::GetPropertyByName<FStructProperty>(aiBaseClass, TEXT("SpawnInfo"));
+        auto* spawnInfoStruct = spawnInfoProperty ? spawnInfoProperty->GetStruct().Get() : nullptr;
+        auto* sourceIdProperty = spawnInfoStruct
+            ? PropertyHelper::GetPropertyByName(spawnInfoStruct, TEXT("SpawnSourceId")) : nullptr;
+        if (!spawnInfoProperty || !sourceIdProperty || sourceIdProperty->GetSize() != sizeof(FGuid))
+        {
+            return;
+        }
+
+        FGuid sourceId{};
+        auto* data = reinterpret_cast<uint8*>(character)
+            + spawnInfoProperty->GetOffset_Internal() + sourceIdProperty->GetOffset_Internal();
+        std::memcpy(&sourceId, data, sizeof(sourceId));
+        const auto spawn = std::find_if(m_spawns.begin(), m_spawns.end(), [&](const SpawnInfo& entry) {
+            return entry.Type == ESpawnEntryType::AISpawnPoint
+                && std::memcmp(&entry.StableId, &sourceId, sizeof(sourceId)) == 0;
+        });
+        if (spawn != m_spawns.end())
+        {
+            auto* actor = static_cast<AActor*>(character);
+            actor->SetActorScale3D(spawn->Scale);
+            ApplyDropMultiplier(actor, spawn->DropMultiplier);
+        }
+    }
+
+    int DragonWildsSpawnLoader::ApplyDropMultiplierToObject(UObject* object, double multiplier)
+    {
+        if (!object || multiplier <= 1.0)
+        {
+            return 0;
+        }
+
+        auto* arrayProperty = PropertyHelper::GetPropertyByName<FArrayProperty>(
+            object->GetClassPrivate(), TEXT("ItemsToDrop"));
+        auto* structProperty = arrayProperty
+            ? CastField<FStructProperty>(arrayProperty->GetInner()) : nullptr;
+        auto* itemStruct = structProperty ? structProperty->GetStruct().Get() : nullptr;
+        auto* minProperty = itemStruct ? CastField<FNumericProperty>(
+            PropertyHelper::GetPropertyByName(itemStruct, TEXT("MinToDrop"))) : nullptr;
+        auto* maxProperty = itemStruct ? CastField<FNumericProperty>(
+            PropertyHelper::GetPropertyByName(itemStruct, TEXT("MaxToDrop"))) : nullptr;
+        if (!arrayProperty || !structProperty || !minProperty || !maxProperty
+            || !minProperty->IsInteger() || !maxProperty->IsInteger())
+        {
+            return 0;
+        }
+
+        auto multiply = [multiplier](FNumericProperty* property, void* container) {
+            auto* valueAddress = property->ContainerPtrToValuePtr<void>(container);
+            const auto oldValue = property->GetSignedIntPropertyValue(valueAddress);
+            if (oldValue <= 0)
+            {
+                return;
+            }
+
+            const auto scaled = std::ceil(static_cast<double>(oldValue) * multiplier);
+            const auto capped = std::min(
+                scaled, static_cast<double>(std::numeric_limits<int32>::max()));
+            property->SetIntPropertyValue(valueAddress, static_cast<int64>(capped));
+        };
+
+        auto* array = arrayProperty->ContainerPtrToValuePtr<FScriptArray>(object);
+        UECustom::FScriptArrayHelper helper(array, arrayProperty);
+        int adjusted = 0;
+        helper.ForEachElement([&](void* element) {
+            multiply(minProperty, element);
+            multiply(maxProperty, element);
+            adjusted++;
+        });
+        return adjusted;
+    }
+
+    void DragonWildsSpawnLoader::ApplyDropMultiplier(UObject* actor, double multiplier)
+    {
+        if (!PS::PSConfig::Get()->IsExperimentalDropScalingEnabled()
+            || !actor || multiplier <= 1.0
+            || m_dropScaledActors.contains(actor))
+        {
+            return;
+        }
+
+        int adjusted = ApplyDropMultiplierToObject(actor, multiplier);
+        for (const auto* componentName : {
+            TEXT("ItemDropComponent"),
+            TEXT("ItemDropOnSplitComponent"),
+            TEXT("ItemDropOnDestructionComponent") })
+        {
+            auto* componentProperty = PropertyHelper::GetPropertyByName<FObjectProperty>(
+                actor->GetClassPrivate(), componentName);
+            if (!componentProperty)
+            {
+                continue;
+            }
+
+            auto* address = componentProperty->ContainerPtrToValuePtr<void>(actor);
+            auto* component = address ? *reinterpret_cast<UObject**>(address) : nullptr;
+            adjusted += ApplyDropMultiplierToObject(component, multiplier);
+        }
+
+        if (adjusted > 0)
+        {
+            m_dropScaledActors.insert(actor);
+            PS::Log<LogLevel::Verbose>(
+                STR("Applied {:.2f}x drop scaling to {} item-drop row(s) on {}.\n"),
+                multiplier, adjusted, actor->GetClassPrivate()->GetName());
+        }
+    }
+
     bool DragonWildsSpawnLoader::SetupSpawnTick()
     {
         Hook::FCallbackOptions options{};
@@ -620,7 +800,7 @@ namespace DragonWilds {
         m_pendingCellBounds.push_back(*bounds);
     }
 
-    bool DragonWildsSpawnLoader::HasLiveSpawnedAI(UWorld* world, const FGuid& spawnPointId)
+    bool DragonWildsSpawnLoader::HasLiveSpawnedAI(UWorld* world, SpawnInfo& spawn)
     {
         auto* aiBaseClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
             nullptr, nullptr, TEXT("/Script/Dominion.DominionAICharacter"));
@@ -654,8 +834,11 @@ namespace DragonWilds {
             auto* data = reinterpret_cast<uint8*>(object)
                 + spawnInfoProperty->GetOffset_Internal() + sourceIdProperty->GetOffset_Internal();
             std::memcpy(&sourceId, data, sizeof(sourceId));
-            if (std::memcmp(&sourceId, &spawnPointId, sizeof(sourceId)) == 0)
+            if (std::memcmp(&sourceId, &spawn.StableId, sizeof(sourceId)) == 0)
             {
+                auto* actor = static_cast<AActor*>(object);
+                actor->SetActorScale3D(spawn.Scale);
+                ApplyDropMultiplier(actor, spawn.DropMultiplier);
                 return true;
             }
         }
@@ -783,6 +966,7 @@ namespace DragonWilds {
             {
                 if (world != m_readyWorld)
                 {
+                    m_dropScaledActors.clear();
                     for (auto& spawn : m_spawns)
                     {
                         spawn.bExistsInWorld = false;
@@ -871,7 +1055,7 @@ namespace DragonWilds {
 
     void DragonWildsSpawnLoader::ProcessAISpawnPointEntry(UWorld* world, SpawnInfo& spawn)
     {
-        if (HasLiveSpawnedAI(world, spawn.StableId))
+        if (HasLiveSpawnedAI(world, spawn))
         {
             spawn.bExistsInWorld = true;
             return;
@@ -910,7 +1094,8 @@ namespace DragonWilds {
             needsRecreate = dx * dx + dy * dy + dz * dz > 50.0 * 50.0;
             if (!needsRecreate)
             {
-                existing->SetActorScale3D(FVector(1.0, 1.0, 1.0));
+                existing->SetActorScale3D(spawn.Scale);
+                ApplyDropMultiplier(existing, spawn.DropMultiplier);
                 spawn.bExistsInWorld = true;
                 return;
             }
@@ -997,6 +1182,7 @@ namespace DragonWilds {
                 SetGuidProperty(spawned, TEXT("Guid"), spawn.StableId);
                 ApplyEntryProperties(spawned, spawn.Properties);
             });
+        actor->SetActorScale3D(spawn.Scale);
 
         spawn.bExistsInWorld = true;
         PS::Log<LogLevel::Verbose>(STR("Spawned {} at {} {} {}\n"), actor->GetClassPrivate()->GetName(),
@@ -1016,6 +1202,8 @@ namespace DragonWilds {
                 SetGuidProperty(spawned, TEXT("SpudGuid"), spawn.StableId);
                 ApplyEntryProperties(spawned, spawn.Properties);
             }, ESpawnActorScaleMethod::OverrideRootScale);
+        actor->SetActorScale3D(spawn.Scale);
+        ApplyDropMultiplier(actor, spawn.DropMultiplier);
 
         spawn.bExistsInWorld = true;
         PS::Log<LogLevel::Verbose>(STR("Spawned actor '{}' ({}) at {} {} {}\n"), spawn.EntryId,

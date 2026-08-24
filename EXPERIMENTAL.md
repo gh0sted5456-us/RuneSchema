@@ -1,0 +1,71 @@
+# RuneSchema 0.6.2 Experimental
+
+This branch is the community testing line for changes that have not been merged into the official RuneSchema release. It is based on the upstream `main` branch and identifies itself at runtime as `0.6.2 Experimental`.
+
+## Highlights
+
+- An expanded UE4SS RuneSchema control panel with Overview, Settings, Generators, Load Order, and Compatibility pages.
+- A manually editable `RuneSchema/mods/mods.txt` with deterministic ordering and `1`/`0` enable states.
+- Load-order checkboxes and Up/Down controls that save back to `mods.txt`.
+- Optional compatibility reports, expanded JSON schemas, and FModel snippet generation.
+- Optional `PersistenceID` and `InternalName` fields in generated asset schemas and FModel asset drafts.
+- Centralized normalization for FModel numeric export suffixes such as `.0`.
+- `Scale` support for persistent Actor spawns and AI spawned by `AISpawnPoint` entries.
+- Optional, independent `DropIncreasePercent` support for known live-instance `ItemsToDrop` layouts.
+
+## Independent size and drop controls
+
+`Scale` changes size only. Drops remain unchanged unless `DropIncreasePercent` is explicitly present and `enableExperimentalDropScaling` is enabled in `config/config.json`.
+
+```json
+{
+  "Type": "Actor",
+  "Id": "ExampleResource",
+  "Class": "/Game/Example/BP_Resource.BP_Resource_C",
+  "Location": { "X": 0, "Y": 0, "Z": 0 },
+  "Scale": 2.0,
+  "DropIncreasePercent": 50
+}
+```
+
+Here, the actor is twice normal size and supported drop counts are multiplied by `1.5`. Drop scaling is experimental and only affects `ItemsToDrop` on the actor or the known item-drop, split-drop, and destruction-drop components.
+
+## Optional asset identity fields
+
+Generated schemas and FModel drafts for asset files expose `PersistenceID` and `InternalName` as optional peer properties beneath the asset target. They are not wrapped in a `Properties` object. Omitting either field preserves the loaded asset's current value; explicit values must be unique and remain stable once saves reference the content.
+
+Identity fields remain filtered from Blueprint and nested-structure suggestions, where blindly copying them would be unsafe.
+
+## Optional recipe identity fields
+
+Recipe JSON may include `PersistenceID` and `InternalName` either directly in the recipe body or inside its `Properties` object. Missing, `null`, empty, or whitespace-only fields use the default values: a newly created recipe uses its recipe key, while an existing recipe preserves its loaded identity.
+
+Explicit non-empty values are applied as reflected recipe properties. RuneSchema emits one-time warnings when an existing identity changes or another loaded recipe already uses the requested value. The generated `recipes.schema.json` exposes both optional fields and documents these defaults.
+
+```json
+{
+  "RECIPE_Gravetide_Staff": {
+    "PersistenceID": "",
+    "InternalName": "",
+    "Properties": {
+      "SkillXPAwardedOnCraft": 25
+    }
+  }
+}
+```
+
+In this example, both blank fields resolve to `RECIPE_Gravetide_Staff`. Authors may replace either blank with a unique, stable explicit value.
+
+Blueprint identity suggestions remain filtered. Courses continue to use their required `Id` as both runtime identity values.
+
+## Distribution
+
+Compiled builds are published as prereleases in this fork's GitHub Releases section. Build output and local RuneSchema configuration are intentionally excluded from Git history.
+
+Installation, flavor selection, and compatibility details are maintained in the [Dragonwilds Sync modder documentation](https://gh0sted5456-us.github.io/Dragonwilds-Sync-Web/for-modders.html#runeschema-flavors).
+
+This is a community experimental variant based on RuneSchema. Questions and experimental-build bug reports belong in the [Dragonwilds Sync issue tracker](https://github.com/gh0sted5456-us/Dragonwilds-Sync/issues), not the official RuneSchema support channels.
+
+## Contributing upstream
+
+Keep experimental work on this branch or a branch based on it. Stable, reviewable pieces can be proposed to the official repository through focused pull requests.

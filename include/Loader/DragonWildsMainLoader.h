@@ -80,6 +80,7 @@ namespace DragonWilds {
         static void OnGameInstanceInit(RC::Unreal::UObject* This);
 
         bool m_hasInit = false;
+        bool m_compatibilityReportGenerated = false;
 
         static inline std::vector<std::function<void(RC::Unreal::UDataTable*)>> DatatableSerializeCallbacks;
         static inline std::vector<std::function<void(RC::Unreal::UObject*)>> GameInstanceInitCallbacks;

@@ -101,7 +101,7 @@ namespace DragonWilds {
                 if (entry.is_directory())
                 {
                     auto& path = entry.path();
-                    auto folderName = path.stem().native();
+                    auto folderName = path.filename().native();
                     callback(entry.path(), folderName);
                 }
             }

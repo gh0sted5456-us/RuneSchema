@@ -12,6 +12,7 @@
 #include "SDK/Helper/PropertyHelper.h"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
+#include "Utility/ObjectPath.h"
 #include "Loader/DragonWildsAssetModLoader.h"
 
 using namespace RC;
@@ -314,15 +315,7 @@ namespace DragonWilds {
             return TEXT("");
         }
 
-        auto slash = target.find_last_of(TEXT('/'));
-        auto dot = target.find(TEXT('.'), slash == RC::StringType::npos ? 0 : slash + 1);
-        if (dot != RC::StringType::npos)
-        {
-            return target;
-        }
-
-        auto assetName = target.substr(slash + 1);
-        return std::format(TEXT("{}.{}"), target, assetName);
+        return PS::ObjectPath::Normalize(target);
     }
 
     bool DragonWildsAssetModLoader::IsSupportedTarget(UObject* object) const
