@@ -62,7 +62,7 @@ namespace DragonWilds {
 
         RC::Unreal::UObject* ResolveOrCreate(const RecipeDef& def, bool& outCreated);
 
-        void ApplyProperties(RC::Unreal::UObject* recipe, const RecipeDef& def, bool created, LoadResult& result);
+        void ApplyProperties(RC::Unreal::UObject* recipe, const nlohmann::json& body, LoadResult& result);
         std::vector<Placement> ParsePlacements(const nlohmann::json& body);
         bool Place(RC::Unreal::UObject* recipe, const Placement& placement, RC::Unreal::UDataTable* datatable);
         bool PlaceInCategory(RC::Unreal::UObject* recipe, RC::Unreal::UScriptStruct* rowStruct, RC::Unreal::uint8* row, const RC::StringType& categoryLabel);

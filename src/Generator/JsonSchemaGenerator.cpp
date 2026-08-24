@@ -366,65 +366,6 @@ namespace PS::JsonSchemaGenerator {
         PS::Log<LogLevel::Normal>(STR("Finished generating blueprint schemas ({} classes).\n"), generated);
     }
 
-    void GenerateRecipeSchema(const fs::path& DestinationPath)
-    {
-        auto* recipeClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
-            nullptr, nullptr, TEXT("/Script/Dominion.RecipeData"), false);
-        if (!recipeClass)
-        {
-            PS::Log<LogLevel::Warning>(STR("RecipeData was unavailable; recipes.schema.json was not generated.\n"));
-            return;
-        }
-
-        auto recipeProperties = BuildObjectSchema(recipeClass, true);
-        recipeProperties.erase("$schema");
-        auto recipeBody = recipeProperties;
-        recipeBody["description"] =
-            "RuneSchema recipe body. RecipeData fields may be written directly or inside Properties.";
-        recipeBody["properties"]["Properties"] = recipeProperties;
-        recipeBody["properties"]["Unlock"] = {
-            { "type", "boolean" },
-            { "description", "Unlock this recipe for the player when RuneSchema applies it." }
-        };
-        recipeBody["properties"]["AddTo"] = {
-            { "type", "array" },
-            { "description", "Optional crafting-table placement records." },
-            { "items", { { "type", "object" }, { "additionalProperties", true } } }
-        };
-
-        const auto identityDescription = [](const char* propertyName) {
-            return std::format(
-                "Optional recipe {}. Missing, null, empty, or whitespace-only values use the default: "
-                "the recipe key for a newly created recipe, or the loaded value for an existing recipe. "
-                "Explicit values must be unique and remain stable.", propertyName);
-        };
-        for (auto* container : { &recipeBody["properties"], &recipeBody["properties"]["Properties"]["properties"] })
-        {
-            if (container->contains("PersistenceID"))
-            {
-                (*container)["PersistenceID"]["description"] = identityDescription("persistent registry identity");
-                (*container)["PersistenceID"]["type"] = { "string", "null" };
-            }
-            if (container->contains("InternalName"))
-            {
-                (*container)["InternalName"]["description"] = identityDescription("internal content name");
-                (*container)["InternalName"]["type"] = { "string", "null" };
-            }
-        }
-
-        nlohmann::ordered_json schema = {
-            { "$schema", "http://json-schema.org/draft-07/schema#" },
-            { "title", "RuneSchema recipes" },
-            { "description", "Each property name is a recipe key or existing recipe asset path." },
-            { "type", "object" },
-            { "additionalProperties", recipeBody }
-        };
-
-        std::ofstream output(DestinationPath / "recipes.schema.json");
-        output << schema.dump(2);
-        PS::Log<LogLevel::Normal>(STR("Finished generating recipes.schema.json.\n"));
-    }
-
     void GenerateEnumSchema(const fs::path& DestinationPath)
     {
         nlohmann::ordered_json EnumJson;
@@ -588,7 +529,6 @@ namespace PS::JsonSchemaGenerator {
         GenerateRawSchemas(SchemaPath);
         GenerateAssetSchemas(SchemaPath);
         GenerateBlueprintSchemas(SchemaPath);
-        GenerateRecipeSchema(SchemaPath);
 
         PS::Log<LogLevel::Normal>(STR("Finished generating all schema files. All done!\n"));
     }
