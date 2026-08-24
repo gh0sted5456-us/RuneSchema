@@ -1,6 +1,6 @@
-# RuneSchema 0.6.3 Experimental
+# RuneSchema 0.6.2 Experimental
 
-This branch is the community testing line for changes that have not been merged into the official RuneSchema release. It is based on the upstream `main` branch and identifies itself at runtime as `0.6.3 Experimental`.
+This branch is the community testing line for changes that have not been merged into the official RuneSchema release. It is based on the upstream `main` branch and identifies itself at runtime as `0.6.2 Experimental`.
 
 ## Highlights
 

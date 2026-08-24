@@ -24,7 +24,7 @@ public:
     RuneSchema() : CppUserModBase()
     {
         ModName = STR("RuneSchema");
-        ModVersion = STR("0.6.3 Experimental");
+        ModVersion = STR("0.6.2 Experimental");
         ModDescription = STR("Experimental RuneSchema build with mod management and extended spawn controls.");
         ModAuthors = STR("Okaetsu");
 
@@ -124,7 +124,7 @@ public:
         const auto modsPath = root / "mods";
 
         ImGui::SeparatorText("Status");
-        ImGui::Text("RuneSchema %s", "0.6.3 Experimental");
+        ImGui::Text("RuneSchema %s", "0.6.2 Experimental");
         ImGui::Text("Detected mod folders: %zu", m_cachedModCount);
         ImGui::Text("Tooling: %s", PS::PSConfig::Get()->IsToolingEnabled() ? "Enabled" : "Disabled");
         ImGui::Text("Configuration: %s", (root / "config" / "config.json").string().c_str());
