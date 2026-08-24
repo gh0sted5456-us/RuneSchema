@@ -67,6 +67,8 @@ Here, the actor is twice normal size and supported drop counts are multiplied by
 
 Compiled builds are published as prereleases in this fork's GitHub Releases section. Build output and local RuneSchema configuration are intentionally excluded from Git history.
 
+The matching UE4SS archive retains the official RuneSchema 0.6.0 pin (`3.0.1-941-g0bfec09e`). For the current Dragonwilds Unreal Engine 5.6 build, its packaged settings enable early scanning and explicitly set engine version 5.6; this prevents RuneSchema from initializing before required UE4SS functions are available.
+
 Installation, flavor selection, and compatibility details are maintained in the [Dragonwilds Sync modder documentation](https://gh0sted5456-us.github.io/Dragonwilds-Sync-Web/for-modders.html?build=b4a5199#runeschema-flavors).
 
 This is a community experimental variant based on RuneSchema. Questions and experimental-build bug reports belong in the [Dragonwilds Sync issue tracker](https://github.com/gh0sted5456-us/Dragonwilds-Sync/issues), not the official RuneSchema support channels.
