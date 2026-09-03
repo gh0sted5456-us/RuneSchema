@@ -11,7 +11,6 @@
 #include "Unreal/UObjectGlobals.hpp"
 #include "nlohmann/json.hpp"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
-#include "Utility/Config.h"
 #include "Utility/Logging.h"
 #include "Generator/JsonSchemaGenerator.h"
 
@@ -21,29 +20,22 @@ using namespace RC::Unreal;
 namespace fs = std::filesystem;
 
 namespace PS::JsonSchemaGenerator {
-    bool IsIdentityPropertyName(const RC::StringType& Name)
-    {
-        return Name == TEXT("PersistenceID") || Name == TEXT("InternalName");
-    }
-
-    bool IsUnsafePropertyName(const RC::StringType& Name, bool AllowIdentityProperties = false)
+    bool IsUnsafePropertyName(const RC::StringType& Name)
     {
         static const std::unordered_set<RC::StringType> UnsafeNames = {
+            TEXT("PersistenceID"),
+            TEXT("InternalName"),
             TEXT("RootComponent"),
             TEXT("UberGraphFrame"),
             TEXT("BlueprintCreatedComponents"),
             TEXT("InstanceComponents")
         };
-        return (!AllowIdentityProperties && IsIdentityPropertyName(Name))
-            || UnsafeNames.contains(Name)
+        return UnsafeNames.contains(Name)
             || Name.ends_with(TEXT("Guid"))
             || Name.ends_with(TEXT("GUID"));
     }
 
-    void ParsePropertyInfo(
-        FProperty* Property,
-        nlohmann::ordered_json& Json,
-        bool AllowIdentityProperties = false);
+    void ParsePropertyInfo(FProperty* Property, nlohmann::ordered_json& Json);
 
     void ParseEnumPropertyInfo(FEnumProperty* Property, nlohmann::ordered_json& Json)
     {
@@ -165,12 +157,9 @@ namespace PS::JsonSchemaGenerator {
         }
     }
 
-    void ParsePropertyInfo(
-        FProperty* Property,
-        nlohmann::ordered_json& Json,
-        bool AllowIdentityProperties)
+    void ParsePropertyInfo(FProperty* Property, nlohmann::ordered_json& Json)
     {
-        if (!Property || IsUnsafePropertyName(Property->GetName(), AllowIdentityProperties))
+        if (!Property || IsUnsafePropertyName(Property->GetName()))
         {
             return;
         }
@@ -215,14 +204,6 @@ namespace PS::JsonSchemaGenerator {
         {
             JsonProperty["$ref"] = "../utility.schema.json#/definitions/ObjectReference";
         }
-
-        if (IsIdentityPropertyName(Property->GetName()))
-        {
-            JsonProperty["type"] = nlohmann::json::array({ "string", "null" });
-            JsonProperty["description"] = Property->GetName() == TEXT("PersistenceID")
-                ? "Optional persistent registry identity. Omitted, null, empty, and whitespace-only values preserve the loaded value or the new entry's key. Explicit values must be unique and stable."
-                : "Optional internal registry name. Omitted, null, empty, and whitespace-only values preserve the loaded value or the new entry's key. Explicit values must be unique and stable.";
-        }
     }
 
     std::string SafeSchemaFileName(const RC::StringType& Name)
@@ -238,7 +219,7 @@ namespace PS::JsonSchemaGenerator {
         return value;
     }
 
-    nlohmann::ordered_json BuildObjectSchema(UClass* Class, bool AllowIdentityProperties = false)
+    nlohmann::ordered_json BuildObjectSchema(UClass* Class)
     {
         nlohmann::ordered_json schema = {
             { "$schema", "http://json-schema.org/draft-07/schema#" },
@@ -253,7 +234,7 @@ namespace PS::JsonSchemaGenerator {
 
         for (FProperty* Property : TFieldRange<FProperty>(Class, EFieldIterationFlags::IncludeSuper))
         {
-            ParsePropertyInfo(Property, schema["properties"], AllowIdentityProperties);
+            ParsePropertyInfo(Property, schema["properties"]);
         }
         return schema;
     }
@@ -298,7 +279,7 @@ namespace PS::JsonSchemaGenerator {
             if (generatedClasses.insert(className).second)
             {
                 std::ofstream output(assetSchemaPath / fileName);
-                output << BuildObjectSchema(objectClass, true).dump(2);
+                output << BuildObjectSchema(objectClass).dump(2);
             }
 
             index["properties"][RC::to_string(Object->GetPathName())] = {
@@ -364,336 +345,10 @@ namespace PS::JsonSchemaGenerator {
         PS::Log<LogLevel::Normal>(STR("Finished generating blueprint schemas ({} classes).\n"), generated);
     }
 
-    void GenerateRecipeSchema(const fs::path& DestinationPath)
-    {
-        auto* recipeClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
-            nullptr, nullptr, TEXT("/Script/Dominion.RecipeData"), false);
-        if (!recipeClass)
-        {
-            PS::Log<LogLevel::Warning>(STR("RecipeData was unavailable; recipes.schema.json was not generated.\n"));
-            return;
-        }
-
-        auto recipeProperties = BuildObjectSchema(recipeClass, true);
-        recipeProperties.erase("$schema");
-        auto recipeBody = recipeProperties;
-        recipeBody["description"] =
-            "RuneSchema recipe body. RecipeData properties may be direct or nested inside Properties; top-level identity fields take precedence.";
-        recipeBody["properties"]["Properties"] = recipeProperties;
-        recipeBody["properties"]["Unlock"] = {
-            { "type", "boolean" },
-            { "description", "Unlock the recipe when RuneSchema applies it." }
-        };
-        recipeBody["properties"]["AddTo"] = {
-            { "type", "array" },
-            { "description", "Optional crafting-table placement records." },
-            { "items", { { "type", "object" }, { "additionalProperties", true } } }
-        };
-
-        nlohmann::ordered_json schema = {
-            { "$schema", "http://json-schema.org/draft-07/schema#" },
-            { "title", "RuneSchema recipes" },
-            { "description", "Each property name is a recipe key or existing recipe asset path." },
-            { "type", "object" },
-            { "additionalProperties", recipeBody }
-        };
-
-        std::ofstream output(DestinationPath / "recipes.schema.json");
-        output << schema.dump(2);
-        PS::Log<LogLevel::Normal>(STR("Finished generating recipes.schema.json.\n"));
-    }
-
-    void GenerateJournalSchema(const fs::path& DestinationPath)
-    {
-        auto* journalClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
-            nullptr, nullptr, TEXT("/Script/Dominion.JournalEntryData"), false);
-        if (!journalClass)
-        {
-            PS::Log<LogLevel::Warning>(STR("JournalEntryData was unavailable; journal.schema.json was not generated.\n"));
-            return;
-        }
-
-        auto journalBody = BuildObjectSchema(journalClass, true);
-        journalBody.erase("$schema");
-        journalBody["description"] =
-            "RuneSchema journal entry body. Identity fields are optional top-level peers.";
-        journalBody["properties"]["Type"] = {
-            { "type", "string" },
-            { "enum", { "Lore", "People", "Place", "Treasure", "World", "Recipe" } },
-            { "description", "Class used when creating a new journal entry." }
-        };
-        journalBody["properties"]["Unlock"] = {
-            { "type", "boolean" },
-            { "description", "Unlock the journal entry when RuneSchema applies it." }
-        };
-        journalBody["properties"]["AddTo"] = {
-            { "type", "object" },
-            { "description", "Required journal subcategory placement record." },
-            { "additionalProperties", true }
-        };
-
-        nlohmann::ordered_json schema = {
-            { "$schema", "http://json-schema.org/draft-07/schema#" },
-            { "title", "RuneSchema journal entries" },
-            { "description", "Each property name is a journal key or existing journal asset path." },
-            { "type", "object" },
-            { "additionalProperties", journalBody }
-        };
-
-        std::ofstream output(DestinationPath / "journal.schema.json");
-        output << schema.dump(2);
-        PS::Log<LogLevel::Normal>(STR("Finished generating journal.schema.json.\n"));
-    }
-
-    void GenerateBuildingSchema(const fs::path& DestinationPath)
-    {
-        auto schema = nlohmann::ordered_json::parse(R"json({
-          "$schema": "http://json-schema.org/draft-07/schema#",
-          "title": "RuneSchema buildings",
-          "description": "Each non-$ property defines a building available to the buildings loader.",
-          "type": "object",
-          "properties": { "$schema": { "type": "string" } },
-          "additionalProperties": {
-            "type": "object",
-            "required": ["Asset"],
-            "properties": {
-              "Asset": { "type": "string", "pattern": "^/", "description": "Cooked building asset path." },
-              "Properties": { "type": "object", "description": "Optional property overrides applied to the building data." },
-              "Requirements": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "required": ["ItemData", "Amount"],
-                  "properties": {
-                    "ItemData": { "type": "string", "pattern": "^/" },
-                    "Amount": { "type": "integer", "minimum": 1 }
-                  }
-                }
-              },
-              "Unlock": { "type": "boolean" },
-              "AddTo": {
-                "type": "object",
-                "required": ["Collection"],
-                "properties": {
-                  "Collection": { "type": "string" },
-                  "PageIndex": { "type": "integer" }
-                }
-              }
-            }
-          }
-        })json");
-        std::ofstream output(DestinationPath / "buildings.schema.json");
-        output << schema.dump(2);
-        PS::Log<LogLevel::Normal>(STR("Finished generating buildings.schema.json.\n"));
-    }
-
-    void GenerateCourseSchema(const fs::path& DestinationPath)
-    {
-        auto schema = nlohmann::ordered_json::parse(R"json({
-          "$schema": "http://json-schema.org/draft-07/schema#",
-          "title": "RuneSchema agility courses",
-          "definitions": {
-            "Vector": {
-              "type": "object",
-              "required": ["X", "Y", "Z"],
-              "properties": { "X": {"type":"number"}, "Y": {"type":"number"}, "Z": {"type":"number"} }
-            },
-            "Rotator": {
-              "type": "object",
-              "required": ["Pitch", "Yaw", "Roll"],
-              "properties": { "Pitch": {"type":"number"}, "Yaw": {"type":"number"}, "Roll": {"type":"number"} }
-            },
-            "Location": {
-              "oneOf": [
-                { "$ref": "#/definitions/Vector" },
-                { "type": "array", "minItems": 3, "maxItems": 3, "items": {"type":"number"} },
-                { "type": "object", "required": ["Location"], "properties": { "Location": {"$ref":"#/definitions/Vector"}, "XP":{"type":"integer"}, "Stamina":{"type":"number"} } }
-              ]
-            },
-            "Reward": {
-              "oneOf": [
-                { "type": "integer" },
-                {
-                  "type": "object",
-                  "properties": {
-                    "XP": {"type":"integer"},
-                    "Recipes": {"type":"array", "items":{"type":"string", "pattern":"^/"}},
-                    "Buildings": {"type":"array", "items":{"type":"string", "pattern":"^/"}},
-                    "Items": {
-                      "type": "array",
-                      "items": {
-                        "oneOf": [
-                          {"type":"string", "pattern":"^/"},
-                          {"type":"object", "required":["Path"], "properties":{"Path":{"type":"string", "pattern":"^/"}, "Count":{"type":"integer", "minimum":1}}}
-                        ]
-                      }
-                    }
-                  }
-                }
-              ]
-            },
-            "Medal": {
-              "type": "object",
-              "properties": {
-                "TimeSeconds": {"type":"integer", "minimum":0},
-                "FirstTime": {"$ref":"#/definitions/Reward"},
-                "Repeat": {"$ref":"#/definitions/Reward"},
-                "FirstTimeXP": {"type":"integer"},
-                "RepeatXP": {"type":"integer"}
-              }
-            },
-            "Course": {
-              "type": "object",
-              "required": ["Id", "StarterLocation", "Orbs"],
-              "properties": {
-                "Id": {"type":"string", "minLength":1},
-                "DisplayName": {"type":"string"},
-                "MinSkillLevel": {"type":"integer"},
-                "OrbXP": {"type":"integer"},
-                "RequiredSkills": {"type":"array", "items":{"type":"string", "pattern":"^/"}},
-                "StarterLocation": {"$ref":"#/definitions/Vector"},
-                "StarterRotation": {"$ref":"#/definitions/Rotator"},
-                "StartLocation": {"$ref":"#/definitions/Vector"},
-                "StartRotation": {"$ref":"#/definitions/Rotator"},
-                "Orbs": {"type":"array", "minItems":1, "items":{"$ref":"#/definitions/Location"}},
-                "StaminaOrbs": {"type":"array", "items":{"$ref":"#/definitions/Location"}},
-                "Props": {
-                  "type": "array",
-                  "items": {"type":"object", "required":["ClassPath","Location"], "properties":{"ClassPath":{"type":"string", "pattern":"^/"}, "Location":{"$ref":"#/definitions/Vector"}, "Rotation":{"$ref":"#/definitions/Rotator"}}}
-                },
-                "Zone": {"type":"object", "properties":{"Padding":{"type":"number"}, "Points":{"type":"array", "items":{"type":"array", "minItems":2, "maxItems":3, "items":{"type":"number"}}}}},
-                "Gold": {"$ref":"#/definitions/Medal"},
-                "Silver": {"$ref":"#/definitions/Medal"},
-                "Bronze": {"$ref":"#/definitions/Medal"},
-                "NoMedal": {"$ref":"#/definitions/Reward"},
-                "NoMedalXP": {"type":"integer"},
-                "Reward": {"$ref":"#/definitions/Reward"},
-                "FirstTimeReward": {"$ref":"#/definitions/Reward"}
-              }
-            }
-          },
-          "oneOf": [
-            { "$ref": "#/definitions/Course" },
-            { "type": "array", "items": {"$ref":"#/definitions/Course"} }
-          ]
-        })json");
-        std::ofstream output(DestinationPath / "courses.schema.json");
-        output << schema.dump(2);
-        PS::Log<LogLevel::Normal>(STR("Finished generating courses.schema.json.\n"));
-    }
-
-    void GenerateSpawnSchema(const fs::path& DestinationPath)
-    {
-        auto schema = nlohmann::ordered_json::parse(R"json({
-          "$schema": "http://json-schema.org/draft-07/schema#",
-          "title": "RuneSchema spawns",
-          "definitions": {
-            "Vector": {"type":"object", "required":["X","Y","Z"], "properties":{"X":{"type":"number"},"Y":{"type":"number"},"Z":{"type":"number"}}},
-            "Rotator": {"type":"object", "required":["Pitch","Yaw","Roll"], "properties":{"Pitch":{"type":"number"},"Yaw":{"type":"number"},"Roll":{"type":"number"}}},
-            "Scale": {"oneOf":[{"type":"number", "exclusiveMinimum":0},{"$ref":"#/definitions/Vector"}]},
-            "Common": {
-              "type": "object",
-              "required": ["Type", "Location"],
-              "properties": {
-                "Type": {"enum":["AISpawnPoint","Actor","RemoveActor"]},
-                "Location": {"$ref":"#/definitions/Vector"},
-                "Rotation": {"$ref":"#/definitions/Rotator"},
-                "Scale": {"$ref":"#/definitions/Scale"},
-                "DropIncreasePercent": {"type":"number", "minimum":0},
-                "Properties": {"type":"object"}
-              }
-            }
-          },
-          "oneOf": [
-            {
-              "type": "object",
-              "required": ["$dumpAIClasses"],
-              "properties": { "$dumpAIClasses": {"const":true} },
-              "additionalProperties": false
-            },
-            {
-              "type": "array",
-              "items": {
-                "oneOf": [
-              {
-                "title": "AI spawn point",
-                "allOf": [
-                  {"$ref":"#/definitions/Common"},
-                  {"type":"object", "required":["AIClass"], "properties":{
-                    "Type":{"const":"AISpawnPoint"}, "AIClass":{"type":"string", "pattern":"^/"},
-                    "PowerLevel":{"type":"integer"}, "Mandatory":{"type":"boolean"}, "Respawn":{"type":"boolean"},
-                    "RespawnDuration":{}, "AmbientBehaviour":{}, "DespawnBehaviour":{}, "RequiresActivation":{"type":"boolean"},
-                    "IgnoreNavmeshRequirement":{"type":"boolean"}, "RoamRadius":{"type":"number"}, "RoamMaxZTolerance":{"type":"number"},
-                    "RoamGoalQueryType":{}, "SentryRadius":{"type":"number"}, "HearingRange":{"type":"number"}, "HearingZRange":{"type":"number"},
-                    "IdleAnimTag":{"type":"string"}, "Tags":{"type":"array", "items":{"type":"string"}},
-                    "MinSpawnDistance":{"type":"number"}, "MaxSpawnDistance":{"type":"number"},
-                    "Variants":{"type":"array", "minItems":1, "items":{"type":"object", "required":["AIClass"], "properties":{"AIClass":{"type":"string", "pattern":"^/"}, "WorldProgressTag":{"type":"string"}, "WorldProgressValue":{"type":"number"}}}}
-                  }}
-                ]
-              },
-              {
-                "title": "Persistent actor",
-                "allOf": [
-                  {"$ref":"#/definitions/Common"},
-                  {"type":"object", "required":["Id","Class"], "properties":{"Type":{"const":"Actor"}, "Id":{"type":"string", "minLength":1}, "Class":{"type":"string", "pattern":"^/"}}}
-                ]
-              },
-              {
-                "title": "Remove actor",
-                "allOf": [
-                  {"$ref":"#/definitions/Common"},
-                  {"type":"object", "required":["Class"], "properties":{"Type":{"const":"RemoveActor"}, "Class":{"type":"string", "pattern":"^/"}, "Radius":{"type":"number", "exclusiveMinimum":0}}}
-                ]
-              }
-                ]
-              }
-            }
-          ]
-        })json");
-        std::ofstream output(DestinationPath / "spawns.schema.json");
-        output << schema.dump(2);
-        PS::Log<LogLevel::Normal>(STR("Finished generating spawns.schema.json.\n"));
-    }
-
-    void GenerateStringSchema(const fs::path& DestinationPath)
-    {
-        auto schema = nlohmann::ordered_json::parse(R"json({
-          "$schema": "http://json-schema.org/draft-07/schema#",
-          "title": "RuneSchema string replacements",
-          "description": "Top-level strings are global replacements. Objects group replacements by string-table name.",
-          "definitions": {
-            "Replacement": {
-              "oneOf": [
-                {"type":"string", "minLength":1},
-                {"type":"array", "items":{"type":"string"}, "minItems":1}
-              ]
-            },
-            "ScopedReplacements": {
-              "type":"object",
-              "additionalProperties":{"$ref":"#/definitions/Replacement"}
-            }
-          },
-          "type": "object",
-          "additionalProperties": {
-            "oneOf": [
-              {"$ref":"#/definitions/Replacement"},
-              {"$ref":"#/definitions/ScopedReplacements"}
-            ]
-          }
-        })json");
-        std::ofstream output(DestinationPath / "strings.schema.json");
-        output << schema.dump(2);
-        PS::Log<LogLevel::Normal>(STR("Finished generating strings.schema.json.\n"));
-    }
-
     void GenerateEnumSchema(const fs::path& DestinationPath)
     {
         nlohmann::ordered_json EnumJson;
         EnumJson["$schema"] = "http://json-schema.org/draft-07/schema#";
-        EnumJson["title"] = "RuneSchema enum extensions";
-        EnumJson["type"] = "object";
-        EnumJson["properties"] = nlohmann::ordered_json::object();
-        EnumJson["properties"]["$schema"] = { { "type", "string" } };
         EnumJson["definitions"] = nlohmann::ordered_json::object();
 
         std::vector<UObject*> EnumObjects;
@@ -727,17 +382,7 @@ namespace PS::JsonSchemaGenerator {
             }
 
             EnumJson["definitions"][EnumName] = Definition;
-            EnumJson["properties"][EnumName] = {
-                { "type", "array" },
-                { "description", "Unscoped enum values to append to this loaded enum." },
-                { "items", {
-                    { "type", "string" },
-                    { "pattern", "^[^:]+$" }
-                }}
-            };
         }
-
-        EnumJson["additionalProperties"] = false;
 
         std::ofstream OutputFile(DestinationPath / "enums.schema.json");
         OutputFile << EnumJson.dump(2);
@@ -858,18 +503,11 @@ namespace PS::JsonSchemaGenerator {
         auto SchemaPath = fs::path(UE4SSProgram::get_program().get_working_directory()) / "Mods" / "RuneSchema" / "schemas";
         std::filesystem::create_directories(SchemaPath);
 
-        const auto& types = PS::PSConfig::Get()->GetSchemaTypeSettings();
-        if (types.utility) GenerateUtilitySchema(SchemaPath);
-        if (types.enums) GenerateEnumSchema(SchemaPath);
-        if (types.raw) GenerateRawSchemas(SchemaPath);
-        if (types.assets) GenerateAssetSchemas(SchemaPath);
-        if (types.blueprints) GenerateBlueprintSchemas(SchemaPath);
-        if (types.buildings) GenerateBuildingSchema(SchemaPath);
-        if (types.courses) GenerateCourseSchema(SchemaPath);
-        if (types.recipes) GenerateRecipeSchema(SchemaPath);
-        if (types.journal) GenerateJournalSchema(SchemaPath);
-        if (types.spawns) GenerateSpawnSchema(SchemaPath);
-        if (types.strings) GenerateStringSchema(SchemaPath);
+        GenerateUtilitySchema(SchemaPath);
+        GenerateEnumSchema(SchemaPath);
+        GenerateRawSchemas(SchemaPath);
+        GenerateAssetSchemas(SchemaPath);
+        GenerateBlueprintSchemas(SchemaPath);
 
         PS::Log<LogLevel::Normal>(STR("Finished generating all schema files. All done!\n"));
     }

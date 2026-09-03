@@ -1,5 +1,4 @@
 #include <atomic>
-#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <vector>
@@ -25,9 +24,9 @@ public:
     RuneSchema() : CppUserModBase()
     {
         ModName = STR("RuneSchema");
-        ModVersion = STR("0.6.3 Experimental");
+        ModVersion = STR("0.6.2 Experimental");
         ModDescription = STR("Experimental RuneSchema build with mod management and extended spawn controls.");
-        ModAuthors = STR("Okaetsu (PalSchema), Snorkles (RuneSchema), Jonesing4Space (additional features), RSDW Modding Community");
+        ModAuthors = STR("Okaetsu (PalSchema), Snorkles (RuneSchema), Jonesing4Space (additional features)");
 
         auto config = PS::PSConfig::Get();
         config->Load();
@@ -125,17 +124,11 @@ public:
         const auto modsPath = root / "mods";
 
         ImGui::SeparatorText("Status");
-        ImGui::Text("RuneSchema %s", "0.6.3 Experimental");
+        ImGui::Text("RuneSchema %s", "0.6.2 Experimental");
         ImGui::Text("Detected mod folders: %zu", m_cachedModCount);
         ImGui::Text("Tooling: %s", PS::PSConfig::Get()->IsToolingEnabled() ? "Enabled" : "Disabled");
         ImGui::Text("Configuration: %s", (root / "config" / "config.json").string().c_str());
         ImGui::Text("Mods: %s", modsPath.string().c_str());
-
-        ImGui::SeparatorText("Credits");
-        ImGui::TextWrapped("Okaetsu - PalSchema creator");
-        ImGui::TextWrapped("Snorkles - RuneSchema creator");
-        ImGui::TextWrapped("Jonesing4Space - Additional features");
-        ImGui::TextWrapped("RSDW Modding Community - Testing, research, and community support");
 
         ImGui::SeparatorText("Design");
         if (ImGui::Button("Refresh Status")) refresh_ui_cache();
@@ -152,121 +145,37 @@ public:
         auto& settings = config->GetSettings();
         bool changed = false;
 
-        if (ImGui::CollapsingHeader("Runtime and Spawn Safety", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            changed |= ImGui::Checkbox("Automatic reload", &settings.enableAutoReload);
-            ImGui::SameLine();
-            changed |= ImGui::Checkbox("Debug logging", &settings.enableDebugLogging);
-            changed |= ImGui::Checkbox(
-                "Enable explicit drop increases",
-                &settings.enableExperimentalDropScaling);
+        ImGui::SeparatorText("Runtime");
+        changed |= ImGui::Checkbox("Automatic reload", &settings.enableAutoReload);
+        changed |= ImGui::Checkbox("Debug logging", &settings.enableDebugLogging);
+        changed |= ImGui::Checkbox(
+            "Experimental spawn drop scaling",
+            &settings.enableExperimentalDropScaling);
+        ImGui::TextWrapped(
+            "When enabled, an explicit DropIncreasePercent multiplies supported MinToDrop/MaxToDrop rows. Scale changes size only. Restart after changing this setting.");
 
-            ImGui::TextUnformatted("Maximum scale");
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(110.0f);
-            changed |= ImGui::InputDouble(
-                "##MaximumScale", &settings.spawnSafety.maxScale, 0.5, 1.0, "%.2f");
-            ImGui::SameLine();
-            ImGui::TextUnformatted("Maximum drop increase (%)");
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(110.0f);
-            changed |= ImGui::InputDouble(
-                "##MaximumDropIncrease", &settings.spawnSafety.maxDropIncreasePercent,
-                25.0, 100.0, "%.0f");
-            ImGui::TextWrapped(
-                "Spawn entries above either limit are rejected. Scale and DropIncreasePercent remain independent.");
-        }
+        ImGui::SeparatorText("Tooling");
+        changed |= ImGui::Checkbox("Enable tooling", &settings.tooling.enabled);
+        changed |= ImGui::Checkbox("Enable JSON schema generation", &settings.tooling.enableSchemaGeneration);
+        changed |= ImGui::Checkbox("Enable FModel snippet generator", &settings.tooling.enableFModelSnippetGenerator);
 
-        if (ImGui::CollapsingHeader("Identity Overrides", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            auto& identity = settings.identityOverrides;
-            changed |= ImGui::Checkbox("Enable identity overrides", &identity.enabled);
-            ImGui::BeginDisabled(!identity.enabled);
-            changed |= ImGui::Checkbox("Assets", &identity.assets);
-            ImGui::SameLine();
-            changed |= ImGui::Checkbox("Recipes", &identity.recipes);
-            ImGui::SameLine();
-            changed |= ImGui::Checkbox("Journals", &identity.journals);
-            changed |= ImGui::Checkbox("Dry run (validate and log only)", &identity.dryRun);
-            ImGui::SameLine();
-            changed |= ImGui::Checkbox("Log applied changes", &identity.logChanges);
-            ImGui::EndDisabled();
-            ImGui::TextWrapped(
-                "Blank fields preserve defaults. Duplicate identities are always rejected and cannot be enabled here.");
-        }
-
-        if (ImGui::CollapsingHeader("Authoring Tools", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            changed |= ImGui::Checkbox("Enable tooling", &settings.tooling.enabled);
-            ImGui::BeginDisabled(!settings.tooling.enabled);
-            changed |= ImGui::Checkbox(
-                "JSON schema generation", &settings.tooling.enableSchemaGeneration);
-            ImGui::SameLine();
-            changed |= ImGui::Checkbox(
-                "FModel snippets", &settings.tooling.enableFModelSnippetGenerator);
-
-            ImGui::BeginDisabled(!settings.tooling.enableSchemaGeneration);
-            ImGui::TextUnformatted("Schema output:");
-            ImGui::SameLine();
-            auto& schema = settings.tooling.schemaTypes;
-            changed |= ImGui::Checkbox("Utility", &schema.utility);
-            ImGui::SameLine();
-            changed |= ImGui::Checkbox("Assets##Schema", &schema.assets);
-            ImGui::SameLine();
-            changed |= ImGui::Checkbox("Blueprints##Schema", &schema.blueprints);
-            ImGui::SameLine();
-            changed |= ImGui::Checkbox("Buildings##Schema", &schema.buildings);
-            changed |= ImGui::Checkbox("Courses##Schema", &schema.courses);
-            ImGui::SameLine();
-            changed |= ImGui::Checkbox("Enums##Schema", &schema.enums);
-            ImGui::SameLine();
-            changed |= ImGui::Checkbox("Journal##Schema", &schema.journal);
-            ImGui::SameLine();
-            changed |= ImGui::Checkbox("Raw (/raw)##Schema", &schema.raw);
-            changed |= ImGui::Checkbox("Recipes##Schema", &schema.recipes);
-            ImGui::SameLine();
-            changed |= ImGui::Checkbox("Spawns##Schema", &schema.spawns);
-            ImGui::SameLine();
-            changed |= ImGui::Checkbox("Strings##Schema", &schema.strings);
-            ImGui::EndDisabled();
-            ImGui::EndDisabled();
-        }
-
-        if (ImGui::CollapsingHeader("Load Order File", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            auto& modsTxt = settings.tooling.modsTxt;
-            changed |= ImGui::Checkbox("Enable mods.txt", &modsTxt.enabled);
-            ImGui::BeginDisabled(!settings.tooling.enabled || !modsTxt.enabled);
-            changed |= ImGui::Checkbox("Create automatically", &modsTxt.autoCreate);
-            ImGui::SameLine();
-            changed |= ImGui::Checkbox("Reconcile folders", &modsTxt.reconcileFolders);
-            changed |= ImGui::Checkbox("Preserve comments", &modsTxt.preserveComments);
-            ImGui::SameLine();
-            changed |= ImGui::Checkbox("Require 0 or 1", &modsTxt.strictValues);
-            ImGui::EndDisabled();
-        }
+        ImGui::SeparatorText("mods.txt");
+        auto& modsTxt = settings.tooling.modsTxt;
+        changed |= ImGui::Checkbox("Enable load-order file", &modsTxt.enabled);
+        changed |= ImGui::Checkbox("Create mods.txt automatically", &modsTxt.autoCreate);
+        changed |= ImGui::Checkbox("Reconcile folders", &modsTxt.reconcileFolders);
+        changed |= ImGui::Checkbox("Preserve comments", &modsTxt.preserveComments);
+        changed |= ImGui::Checkbox("Require 0 or 1 values", &modsTxt.strictValues);
 
         if (changed) m_configDirty = true;
-        ImGui::Separator();
         if (ImGui::Button("Save Settings"))
         {
-            if (!std::isfinite(settings.spawnSafety.maxScale)
-                || settings.spawnSafety.maxScale <= 0.0)
-            {
-                settings.spawnSafety.maxScale = 10.0;
-            }
-            if (!std::isfinite(settings.spawnSafety.maxDropIncreasePercent)
-                || settings.spawnSafety.maxDropIncreasePercent < 0.0)
-            {
-                settings.spawnSafety.maxDropIncreasePercent = 500.0;
-            }
             config->Save();
             m_configDirty = false;
         }
         ImGui::SameLine();
         ImGui::TextUnformatted(m_configDirty ? "Unsaved" : "Saved");
-        ImGui::TextWrapped(
-            "Identity, spawn, loader, and automatic-reload changes are safest after a restart.");
+        ImGui::TextWrapped("Most switches apply immediately. Loader initialization and automatic reload changes are safest after a restart.");
     }
 
     auto render_generators() -> void

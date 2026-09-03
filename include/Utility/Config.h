@@ -22,41 +22,12 @@ namespace PS {
         bool warnArrayReplacement = true;
     };
 
-    struct IdentityOverrideSettings {
-        bool enabled = true;
-        bool assets = true;
-        bool recipes = true;
-        bool journals = true;
-        bool dryRun = false;
-        bool logChanges = true;
-    };
-
-    struct SpawnSafetySettings {
-        double maxScale = 10.0;
-        double maxDropIncreasePercent = 500.0;
-    };
-
-    struct SchemaTypeSettings {
-        bool utility = true;
-        bool assets = true;
-        bool blueprints = true;
-        bool buildings = true;
-        bool courses = true;
-        bool enums = true;
-        bool journal = true;
-        bool raw = true;
-        bool recipes = true;
-        bool spawns = true;
-        bool strings = true;
-    };
-
     struct ToolingSettings {
         bool enabled = true;
         ModsTxtSettings modsTxt;
         CompatibilityReportSettings compatibilityReports;
         bool enableSchemaGeneration = true;
         bool enableFModelSnippetGenerator = false;
-        SchemaTypeSettings schemaTypes;
     };
 
     struct PSConfigSettings {
@@ -64,8 +35,6 @@ namespace PS {
         bool enableAutoReload = false;
         bool enableDebugLogging = false;
         bool enableExperimentalDropScaling = false;
-        IdentityOverrideSettings identityOverrides;
-        SpawnSafetySettings spawnSafety;
         ToolingSettings tooling;
     };
 
@@ -81,10 +50,6 @@ namespace PS {
 
         bool IsExperimentalDropScalingEnabled();
 
-        const IdentityOverrideSettings& GetIdentityOverrideSettings() const;
-
-        const SpawnSafetySettings& GetSpawnSafetySettings() const;
-
         bool IsSchemaGenerationEnabled();
 
         bool IsFModelSnippetGeneratorEnabled();
@@ -94,8 +59,6 @@ namespace PS {
         const ModsTxtSettings& GetModsTxtSettings() const;
 
         const CompatibilityReportSettings& GetCompatibilityReportSettings() const;
-
-        const SchemaTypeSettings& GetSchemaTypeSettings() const;
 
         PSConfigSettings& GetSettings();
 

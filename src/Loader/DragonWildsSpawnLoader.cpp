@@ -1,7 +1,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
-#include <format>
 #include <limits>
 #include <vector>
 #include "Unreal/AActor.hpp"
@@ -256,7 +255,6 @@ namespace DragonWilds {
 
         SpawnInfo spawn{};
         spawn.ModName = modName;
-        const auto& spawnSafety = PS::PSConfig::Get()->GetSpawnSafetySettings();
         PS::JsonHelpers::ParseVector(value, "Location", spawn.Location);
 
         if (PS::JsonHelpers::FieldExists(value, "Rotation"))
@@ -276,19 +274,9 @@ namespace DragonWilds {
             {
                 PS::JsonHelpers::ParseVector(value, "Scale", spawn.Scale);
             }
-            if (!std::isfinite(spawn.Scale.X()) || !std::isfinite(spawn.Scale.Y())
-                || !std::isfinite(spawn.Scale.Z()) || spawn.Scale.X() <= 0.0
-                || spawn.Scale.Y() <= 0.0 || spawn.Scale.Z() <= 0.0)
+            if (spawn.Scale.X() <= 0.0 || spawn.Scale.Y() <= 0.0 || spawn.Scale.Z() <= 0.0)
             {
-                throw std::runtime_error("Scale components must be finite and greater than zero");
-            }
-            if (spawn.Scale.X() > spawnSafety.maxScale
-                || spawn.Scale.Y() > spawnSafety.maxScale
-                || spawn.Scale.Z() > spawnSafety.maxScale)
-            {
-                throw std::runtime_error(std::format(
-                    "Scale exceeds configured spawnSafety.maxScale ({})",
-                    spawnSafety.maxScale));
+                throw std::runtime_error("Scale components must be greater than zero");
             }
         }
 
@@ -303,12 +291,6 @@ namespace DragonWilds {
             if (!std::isfinite(percentValue) || percentValue < 0.0)
             {
                 throw std::runtime_error("DropIncreasePercent must be finite and at least zero");
-            }
-            if (percentValue > spawnSafety.maxDropIncreasePercent)
-            {
-                throw std::runtime_error(std::format(
-                    "DropIncreasePercent exceeds configured spawnSafety.maxDropIncreasePercent ({})",
-                    spawnSafety.maxDropIncreasePercent));
             }
             spawn.DropMultiplier = 1.0 + percentValue / 100.0;
         }
