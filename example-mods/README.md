@@ -1,4 +1,4 @@
-# RuneSchema 0.6.2 extended-authoring examples
+# RuneSchema 0.6.1E extended-authoring examples
 
 Copy a selected example folder into `RuneSchema/mods`. Each example README is a
 complete field guide for its loader and includes use cases and testing notes.
@@ -9,6 +9,9 @@ complete field guide for its loader and includes use cases and testing notes.
   operation, appearance field/source/fallback, range, conflict, and party use case.
 - `NamedSpawnShowcase`: every field accepted by the retained 0.6.2 `/spawns`
   loader, including per-instance `DisplayName`.
+- `DawnveilPaladinSet`: a four-piece cloned equipment set combining Paladin plate,
+  a Shadowscale hood, a Saradominist cloak, private wearable ratings, Armour Bench
+  recipes, and a native equipment-safe gameplay effect.
 
 ## Settings and deterministic mod order
 

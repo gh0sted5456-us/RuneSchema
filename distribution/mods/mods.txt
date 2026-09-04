@@ -4,3 +4,4 @@
 RuneschemaCapes : 0
 FourPlayerProfiles : 0
 NamedSpawnShowcase : 0
+DawnveilPaladinSet : 0

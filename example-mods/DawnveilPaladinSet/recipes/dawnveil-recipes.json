@@ -1,0 +1,70 @@
+{
+  "RECIPE_RS_Dawnveil_Hood": {
+    "AddTo": [{"Table":"DT_CraftingStationsDataTable","Row":"ArmourBench","Category":"Dawnveil Paladin Set"}],
+    "Properties": {
+      "ItemsConsumed": [
+        {"ItemData":"/Game/Gameplay/Items/Resources/Metal/ITEM_Resources_IronBar.ITEM_Resources_IronBar","Count":6},
+        {"ItemData":"/Game/Gameplay/Items/Resources/Textiles/ITEM_Resources_Leather_Hard.ITEM_Resources_Leather_Hard","Count":4},
+        {"ItemData":"/Game/Gameplay/Items/Resources/Magic/ITEM_Resources_VaultShard.ITEM_Resources_VaultShard","Count":2}
+      ],
+      "ItemsCreated": [{"ItemData":"/Game/Mods/DawnveilPaladinSet/ITEM_RS_Dawnveil_Hood.ITEM_RS_Dawnveil_Hood","Count":1}],
+      "ExtraItemsCreated": [],
+      "AudioTag": {"TagName":"Audio.Metal.Armour"},
+      "SkillUsedToCraft": {"ObjectName":"SkillData'SKILL_Artisan'","ObjectPath":"/Game/Gameplay/Character/Player/Skills/SKILL_Artisan.1"},
+      "SkillXPAwardedOnCraft": 300,
+      "OnCraftXpEvent": {"DataTable":{"ObjectName":"DataTable'DT_XPEvents_Crafting'","ObjectPath":"/Game/Gameplay/Progress/XPEventTables/DT_XPEvents_Crafting.0"},"RowName":"Craft_Smithing_Forge_Tier4"},
+      "bIgnoreNotification": true
+    }
+  },
+  "RECIPE_RS_Dawnveil_Body": {
+    "AddTo": [{"Table":"DT_CraftingStationsDataTable","Row":"ArmourBench","Category":"Dawnveil Paladin Set"}],
+    "Properties": {
+      "ItemsConsumed": [
+        {"ItemData":"/Game/Gameplay/Items/Resources/Metal/ITEM_Resources_IronBar.ITEM_Resources_IronBar","Count":14},
+        {"ItemData":"/Game/Gameplay/Items/Resources/Textiles/ITEM_Resources_Leather_Hard.ITEM_Resources_Leather_Hard","Count":8},
+        {"ItemData":"/Game/Gameplay/Items/Resources/Magic/ITEM_Resources_VaultShard.ITEM_Resources_VaultShard","Count":4}
+      ],
+      "ItemsCreated": [{"ItemData":"/Game/Mods/DawnveilPaladinSet/ITEM_RS_Dawnveil_Body.ITEM_RS_Dawnveil_Body","Count":1}],
+      "ExtraItemsCreated": [],
+      "AudioTag": {"TagName":"Audio.Metal.Armour"},
+      "SkillUsedToCraft": {"ObjectName":"SkillData'SKILL_Artisan'","ObjectPath":"/Game/Gameplay/Character/Player/Skills/SKILL_Artisan.1"},
+      "SkillXPAwardedOnCraft": 450,
+      "OnCraftXpEvent": {"DataTable":{"ObjectName":"DataTable'DT_XPEvents_Crafting'","ObjectPath":"/Game/Gameplay/Progress/XPEventTables/DT_XPEvents_Crafting.0"},"RowName":"Craft_Smithing_Forge_Tier4"},
+      "bIgnoreNotification": true
+    }
+  },
+  "RECIPE_RS_Dawnveil_Legs": {
+    "AddTo": [{"Table":"DT_CraftingStationsDataTable","Row":"ArmourBench","Category":"Dawnveil Paladin Set"}],
+    "Properties": {
+      "ItemsConsumed": [
+        {"ItemData":"/Game/Gameplay/Items/Resources/Metal/ITEM_Resources_IronBar.ITEM_Resources_IronBar","Count":8},
+        {"ItemData":"/Game/Gameplay/Items/Resources/Textiles/ITEM_Resources_Leather_Hard.ITEM_Resources_Leather_Hard","Count":6},
+        {"ItemData":"/Game/Gameplay/Items/Resources/Magic/ITEM_Resources_VaultShard.ITEM_Resources_VaultShard","Count":3}
+      ],
+      "ItemsCreated": [{"ItemData":"/Game/Mods/DawnveilPaladinSet/ITEM_RS_Dawnveil_Legs.ITEM_RS_Dawnveil_Legs","Count":1}],
+      "ExtraItemsCreated": [],
+      "AudioTag": {"TagName":"Audio.Metal.Armour"},
+      "SkillUsedToCraft": {"ObjectName":"SkillData'SKILL_Artisan'","ObjectPath":"/Game/Gameplay/Character/Player/Skills/SKILL_Artisan.1"},
+      "SkillXPAwardedOnCraft": 350,
+      "OnCraftXpEvent": {"DataTable":{"ObjectName":"DataTable'DT_XPEvents_Crafting'","ObjectPath":"/Game/Gameplay/Progress/XPEventTables/DT_XPEvents_Crafting.0"},"RowName":"Craft_Smithing_Forge_Tier4"},
+      "bIgnoreNotification": true
+    }
+  },
+  "RECIPE_RS_Dawnveil_Cloak": {
+    "AddTo": [{"Table":"DT_CraftingStationsDataTable","Row":"ArmourBench","Category":"Dawnveil Paladin Set"}],
+    "Properties": {
+      "ItemsConsumed": [
+        {"ItemData":"/Game/Gameplay/Items/Resources/Textiles/ITEM_Resources_Cloth_Padded.ITEM_Resources_Cloth_Padded","Count":6},
+        {"ItemData":"/Game/Gameplay/Items/Resources/Textiles/ITEM_Resources_Leather_Hard.ITEM_Resources_Leather_Hard","Count":4},
+        {"ItemData":"/Game/Gameplay/Items/Resources/Magic/ITEM_Resources_VaultShard.ITEM_Resources_VaultShard","Count":5}
+      ],
+      "ItemsCreated": [{"ItemData":"/Game/Mods/DawnveilPaladinSet/ITEM_RS_Dawnveil_Cloak.ITEM_RS_Dawnveil_Cloak","Count":1}],
+      "ExtraItemsCreated": [],
+      "AudioTag": {"TagName":"Audio.Cloth"},
+      "SkillUsedToCraft": {"ObjectName":"SkillData'SKILL_Artisan'","ObjectPath":"/Game/Gameplay/Character/Player/Skills/SKILL_Artisan.1"},
+      "SkillXPAwardedOnCraft": 400,
+      "OnCraftXpEvent": {"DataTable":{"ObjectName":"DataTable'DT_XPEvents_Crafting'","ObjectPath":"/Game/Gameplay/Progress/XPEventTables/DT_XPEvents_Crafting.0"},"RowName":"Craft_Smithing_Forge_Tier4"},
+      "bIgnoreNotification": true
+    }
+  }
+}
