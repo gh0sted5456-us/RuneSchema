@@ -18,7 +18,7 @@
       "AssetPathName": "/Game/Art/UI/Icons/Icons_Capes_Armour_weapons/T_icon_Shadowscale_Hood.T_icon_Shadowscale_Hood",
       "SubPathString": ""
     },
-    "PowerLevel": 5,
+    "PowerLevel": 10,
     "BaseDurability": 1600,
     "WearableEquipmentDataTableRowHandle": {
       "DataTable": {
@@ -35,7 +35,7 @@
     "bSoftDeleted": false,
     "Name": "Dawnveil Paladin Plate",
     "FlavourText": "White plate darkened at the joints, made for knights who keep watch beyond the firelight.",
-    "PowerLevel": 5,
+    "PowerLevel": 10,
     "BaseDurability": 1800,
     "WearableEquipmentDataTableRowHandle": {
       "DataTable": {
@@ -52,7 +52,7 @@
     "bSoftDeleted": false,
     "Name": "Dawnveil Paladin Greaves",
     "FlavourText": "Heavy greaves lined with quiet cloth for a sentinel who must arrive unheard.",
-    "PowerLevel": 5,
+    "PowerLevel": 10,
     "BaseDurability": 1700,
     "WearableEquipmentDataTableRowHandle": {
       "DataTable": {
@@ -69,7 +69,7 @@
     "bSoftDeleted": false,
     "Name": "Dawnveil Oathcloak",
     "FlavourText": "Its pale weave marks a promise: hold the line when the last light fails.",
-    "PowerLevel": 5,
+    "PowerLevel": 10,
     "BaseDurability": 1500,
     "GrantedEffects": [
       {
@@ -79,10 +79,20 @@
     ],
     "BuffDatas": [
       {
-        "Title": "Dawnveil Discipline",
-        "Description": "Blocking costs 33% less stamina while the oathcloak is equipped.",
+        "Title": {
+          "Namespace": "RuneSchema.DawnveilPaladinSet",
+          "Key": "DawnveilDiscipline.Title",
+          "SourceString": "Dawnveil Discipline",
+          "LocalizedString": "Dawnveil Discipline"
+        },
+        "Description": {
+          "Namespace": "RuneSchema.DawnveilPaladinSet",
+          "Key": "DawnveilDiscipline.Description",
+          "SourceString": "Blocking costs 33% less stamina while the oathcloak is equipped.",
+          "LocalizedString": "Blocking costs 33% less stamina while the oathcloak is equipped."
+        },
         "BuffIcon": {
-          "AssetPathName": "",
+          "AssetPathName": "/Game/Art/UI/Icons/Resources_ConceptArt/T_Icon_Amulet_of_Defense.T_Icon_Amulet_of_Defense",
           "SubPathString": ""
         }
       }
@@ -94,5 +104,67 @@
       },
       "RowName": "RS_Dawnveil_Cloak"
     }
+  },
+  "/Game/Mods/DawnveilPaladinSet/ITEM_RS_Dawnveil_Sword.ITEM_RS_Dawnveil_Sword": {
+    "$Clone": "/Game/Gameplay/Character/Player/Equipment/Held/Sword/ITEM_Sword_Steel.ITEM_Sword_Steel",
+    "PersistenceID": "RhEo11XcE0qtw6NYbym2BQ",
+    "InternalName": "rs_dawnveil_oathsword",
+    "bSoftDeleted": false,
+    "Name": "Dawnveil Oathsword",
+    "FlavourText": "A bright steel blade carried by sentinels who swear their vows at dusk.",
+    "PowerLevel": 10,
+    "DamageMultiplier": 8.5,
+    "BlockingDamageNegation": 60.0,
+    "CriticalHitChanceIncrease": 0.05,
+    "BaseDurability": 1800
+  },
+  "/Game/Mods/DawnveilPaladinSet/ITEM_RS_Dawnveil_Shield.ITEM_RS_Dawnveil_Shield": {
+    "$Clone": "/Game/Gameplay/Character/Player/Equipment/Held/Shield/ITEM_Shield_Steel.ITEM_Shield_Steel",
+    "PersistenceID": "ftoHtpj6KUqadrX7Qtf9gg",
+    "InternalName": "rs_dawnveil_aegis",
+    "bSoftDeleted": false,
+    "Name": "Dawnveil Aegis",
+    "FlavourText": "A broad shield polished pale enough to catch the final glimmer of day.",
+    "PowerLevel": 10,
+    "BlockingDamageNegation": 72.0,
+    "AdditionalDamageMultiplier": -2.5,
+    "BaseDurability": 2000
+  },
+  "/Game/Mods/DawnveilPaladinSet/ITEM_RS_Dawnveil_Staff.ITEM_RS_Dawnveil_Staff": {
+    "$Clone": "/Game/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Battlestaff.ITEM_Staff_Battlestaff",
+    "PersistenceID": "kJcezu_mQU2szP4M-_CMfQ",
+    "InternalName": "rs_dawnveil_luminary_staff",
+    "bSoftDeleted": false,
+    "Name": "Dawnveil Luminary Staff",
+    "FlavourText": "A blightwood focus crowned with a shard that remembers the light beyond the veil.",
+    "PowerLevel": 10,
+    "DamageMultiplier": 7.25,
+    "BaseDurability": 1750,
+    "GrantedEffects": [
+      {
+        "ObjectName": "BlueprintGeneratedClass'GE_Trinket_IncreaseMagicDamage_AmuletOfMagic_C'",
+        "ObjectPath": "/Game/Gameplay/GameplayEffects/Trinkets/GE_Trinket_IncreaseMagicDamage_AmuletOfMagic.0"
+      }
+    ],
+    "BuffDatas": [
+      {
+        "Title": {
+          "Namespace": "RuneSchema.DawnveilPaladinSet",
+          "Key": "LuminaryFocus.Title",
+          "SourceString": "Luminary Focus",
+          "LocalizedString": "Luminary Focus"
+        },
+        "Description": {
+          "Namespace": "RuneSchema.DawnveilPaladinSet",
+          "Key": "LuminaryFocus.Description",
+          "SourceString": "Staff attacks deal 12.5% more magic damage.",
+          "LocalizedString": "Staff attacks deal 12.5% more magic damage."
+        },
+        "BuffIcon": {
+          "AssetPathName": "/Game/Art/UI/Icons/Resources_ConceptArt/T_Icon_Amulet_of_Magic.T_Icon_Amulet_of_Magic",
+          "SubPathString": ""
+        }
+      }
+    ]
   }
 }
