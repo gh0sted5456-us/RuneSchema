@@ -21,6 +21,7 @@ namespace PS {
 }
 
 namespace DragonWilds {
+    class DragonWildsSpawnLoader;
     class DragonWildsStringModLoader;
     class DragonWildsBuildingModLoader;
 
@@ -38,6 +39,7 @@ namespace DragonWilds {
 
         DragonWildsStringModLoader* m_stringLoader = nullptr;
         DragonWildsBuildingModLoader* m_buildingLoader = nullptr;
+        DragonWildsSpawnLoader* m_spawnLoader = nullptr;
 
         std::unique_ptr<PS::FileWatchWrapper> m_fileWatcher;
 

@@ -24,13 +24,18 @@ Base: `220a7e4417325cf78b0c43cabc10ae166e522e5e` (the frozen 0.6.2 Experimental.
 - Temporary generated item identities and their later configuration/UI controls.
 - Content-ownership preflight and later global runtime registries.
 
-## `/players` finding
+## `/players`
 
-The handoff does not contain a separable player loader. `/players` is embedded in the later `DragonWildsSpawnLoader` and depends on its replacement runtime cadence, controller discovery, appearance-table resolution, attribute baselines, inventory/quest helpers, and configuration system. It cannot be copied into the frozen loader without either a substantial independent extraction or importing unrelated later runtime code. It is therefore not included in this surgical asset backport.
+- `/players` is integrated into the existing 0.6.2 spawn/runtime loader and its engine tick; no later spawn, quest, event, inventory, dialogue, or NPC runtime was imported.
+- Rules are re-evaluated once per second, so players joining later and replacement pawns created on respawn receive their rules.
+- `PlayerName`, `PlayerNames`, `PlayerGuid`, and `PlayerGuids` selectors are supported.
+- `*` selects all connected players. `*1`, `*2`, and subsequent numbered wildcards select stable first-seen connection slots for the current process rather than controller-enumeration order.
+- Scale and absolute `MaxHealth`/`BaseHealth` use the native actor and health APIs. Other reflected pawn fields are written through the existing 0.6.2 property helper; unsupported fields fail safely and remain pending.
+- A rule is applied once to each pawn instance, preventing repeated multiplication while naturally reapplying after respawn.
 
 ## Verification
 
 - Configured against pinned UE4SS commit `0bfec09e` using Visual Studio 18/MSVC 19.51 and Windows SDK 10.0.26100.
 - Built successfully with configuration `Game__Shipping__Win64`.
 - Output: `RuneSchema.dll`.
-- Runtime game validation is still required for native item registration, clone persistence across restart, deterministic multi-mod patch ordering, and consumable-pack soft references.
+- Runtime game validation is still required for player join/respawn ordering, native item registration, clone persistence across restart, deterministic multi-mod patch ordering, and consumable-pack soft references.

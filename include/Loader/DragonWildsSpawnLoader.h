@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unordered_set>
+#include <unordered_map>
 #include <vector>
 #include "Unreal/Hooks.hpp"
 #include "Unreal/Rotator.hpp"
@@ -50,6 +51,11 @@ namespace DragonWilds {
 
         ~DragonWildsSpawnLoader() override;
 
+        // /players is owned by the 0.6.2 spawn/runtime loader because it
+        // already owns the world-ready hook and recurring engine tick.
+        void LoadPlayerRules(const std::filesystem::path& loaderPath,
+            const RC::StringType& modName, bool replaceExisting = false);
+
     protected:
         virtual void OnLoad(const std::filesystem::path& loaderPath, const RC::StringType& modName, const EEngineLifecyclePhase& engineLifecyclePhase) override final;
         virtual void OnAutoReload(const RC::StringType& modName, const std::filesystem::path& modFilePath) override final;
@@ -57,6 +63,15 @@ namespace DragonWilds {
         virtual bool CanInitialize(const EEngineLifecyclePhase& engineLifecyclePhase) override final;
         virtual bool OnInitialize() override final;
     private:
+        struct PlayerRule {
+            RC::StringType ModName;
+            std::vector<std::string> Names;
+            std::vector<std::string> Guids;
+            std::vector<std::size_t> LoadSlots;
+            bool AllPlayers = false;
+            nlohmann::json Adjustments;
+        };
+
         std::vector<SpawnInfo> m_spawns;
         RC::Unreal::UWorld* m_readyWorld = nullptr;
         RC::Unreal::UWorld* m_pendingWorld = nullptr;
@@ -68,6 +83,11 @@ namespace DragonWilds {
         RC::Unreal::Hook::GlobalCallbackId m_spawnTickCallbackId = RC::Unreal::Hook::ERROR_ID;
         bool m_processingSpawns = false;
         std::unordered_set<RC::Unreal::UObject*> m_dropScaledActors;
+        std::vector<PlayerRule> m_playerRules;
+        std::unordered_map<RC::Unreal::UObject*, RC::Unreal::FVector> m_playerBaseScales;
+        std::unordered_set<std::string> m_appliedPlayerRules;
+        std::vector<std::string> m_playerLoadOrder;
+        double m_playerRuleTickAccumulator = 0.0;
 
         void LoadSpawns(const nlohmann::json& data, const RC::StringType& modName);
         void RegisterSpawn(const nlohmann::json& value, const RC::StringType& modName);
@@ -96,5 +116,10 @@ namespace DragonWilds {
         RC::Unreal::AActor* FindActorByStableId(RC::Unreal::UWorld* world, const RC::Unreal::FGuid& stableId);
         void CreateSpawn(RC::Unreal::UWorld* world, SpawnInfo& spawn);
         void CreateActor(RC::Unreal::UWorld* world, SpawnInfo& spawn);
+        void ApplyPlayerRules();
+        bool ApplyPlayerRule(RC::Unreal::UObject* controller,
+            const PlayerRule& rule, std::string& result);
+        std::string GetPlayerName(RC::Unreal::UObject* controller) const;
+        std::string GetPlayerGuid(RC::Unreal::UObject* controller) const;
     };
 }

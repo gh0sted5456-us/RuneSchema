@@ -178,8 +178,19 @@ namespace DragonWilds {
                     try
                     {
                         bool handled = false;
+                        if (pendingAutoReload.FolderType == "players" && m_spawnLoader)
+                        {
+                            m_spawnLoader->LoadPlayerRules(
+                                pendingAutoReload.FilePath.parent_path(),
+                                pendingAutoReload.ModName, true);
+                            PS::Log<LogLevel::Normal>(
+                                STR("Auto-reloaded /players for mod {}\n"),
+                                pendingAutoReload.ModName);
+                            handled = true;
+                        }
                         for (auto& loader : m_loaders)
                         {
+                            if (handled) break;
                             if (loader->GetModFolderType() == pendingAutoReload.FolderType)
                             {
                                 loader->AutoReload(pendingAutoReload.ModName, pendingAutoReload.FilePath);
@@ -353,6 +364,7 @@ namespace DragonWilds {
         RegisterLoader(std::move(buildingModLoader));
 
         auto spawnLoader = std::make_unique<DragonWildsSpawnLoader>();
+        m_spawnLoader = spawnLoader.get();
         RegisterLoader(std::move(spawnLoader));
 
         auto courseLoader = std::make_unique<DragonWildsCourseLoader>();
@@ -448,6 +460,12 @@ namespace DragonWilds {
                 {
                     loader->Load(modPath, modName, engineLifecyclePhase);
                 }
+
+                if (engineLifecyclePhase == EEngineLifecyclePhase::PostEngineInit
+                    && m_spawnLoader && fs::is_directory(modPath / "players"))
+                {
+                    m_spawnLoader->LoadPlayerRules(modPath / "players", modName);
+                }
             }
             catch (const std::exception& e)
             {
@@ -466,7 +484,8 @@ namespace DragonWilds {
             }
 
             auto folderType = entry.path().filename().string();
-            if (folderType == "paks" || folderType == "config")
+            if (folderType == "paks" || folderType == "config"
+                || folderType == "players")
             {
                 continue;
             }

@@ -2,6 +2,8 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <cctype>
+#include <format>
 #include <vector>
 #include "Unreal/AActor.hpp"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
@@ -750,7 +752,13 @@ namespace DragonWilds {
         options.HookName = TEXT("DragonWildsSpawnCreate");
 
         m_spawnTickCallbackId = Hook::RegisterEngineTickPostCallback(
-            [this](Hook::TCallbackIterationData<void>&, UEngine*, float, bool) {
+            [this](Hook::TCallbackIterationData<void>&, UEngine*, float deltaSeconds, bool) {
+                m_playerRuleTickAccumulator += deltaSeconds;
+                if (m_playerRuleTickAccumulator >= 1.0)
+                {
+                    m_playerRuleTickAccumulator = 0.0;
+                    ApplyPlayerRules();
+                }
                 if (!m_pendingWorld)
                 {
                     return;
@@ -1208,5 +1216,289 @@ namespace DragonWilds {
         spawn.bExistsInWorld = true;
         PS::Log<LogLevel::Verbose>(STR("Spawned actor '{}' ({}) at {} {} {}\n"), spawn.EntryId,
             actor->GetClassPrivate()->GetName(), spawn.Location.X(), spawn.Location.Y(), spawn.Location.Z());
+    }
+
+    void DragonWildsSpawnLoader::LoadPlayerRules(const fs::path& loaderPath,
+        const RC::StringType& modName, bool replaceExisting)
+    {
+        if (replaceExisting)
+        {
+            std::erase_if(m_playerRules,
+                [&](const PlayerRule& rule) { return rule.ModName == modName; });
+            m_appliedPlayerRules.clear();
+        }
+
+        PS::JsonHelpers::ParseJsonFilesInPath(loaderPath,
+            [&](const nlohmann::json& data) {
+                if (!data.is_array())
+                    throw std::runtime_error("players JSON root must be an array");
+                for (const auto& value : data)
+                {
+                    if (!value.is_object())
+                        throw std::runtime_error("each players entry must be an object");
+                    PlayerRule rule;
+                    rule.ModName = modName;
+                    rule.Adjustments = value;
+
+                    const auto addName = [&](const nlohmann::json& name) {
+                        if (!name.is_string())
+                            throw std::runtime_error("player selectors must be strings");
+                        auto text = name.get<std::string>();
+                        if (text == "*") rule.AllPlayers = true;
+                        else if (text.size() > 1 && text.front() == '*')
+                        {
+                            const auto digits = text.substr(1);
+                            if (!std::all_of(digits.begin(), digits.end(),
+                                [](unsigned char c) { return std::isdigit(c) != 0; }))
+                                throw std::runtime_error(
+                                    "numbered player wildcard must be *1, *2, and so on");
+                            const auto slot = std::stoull(digits);
+                            if (slot == 0 || slot > 9999)
+                                throw std::runtime_error(
+                                    "numbered player wildcard must be between *1 and *9999");
+                            rule.LoadSlots.push_back(static_cast<std::size_t>(slot));
+                        }
+                        else if (!text.empty()) rule.Names.push_back(std::move(text));
+                    };
+                    if (value.contains("PlayerName")) addName(value.at("PlayerName"));
+                    if (value.contains("PlayerNames"))
+                    {
+                        if (!value.at("PlayerNames").is_array())
+                            throw std::runtime_error("PlayerNames must be an array");
+                        for (const auto& name : value.at("PlayerNames")) addName(name);
+                    }
+                    const auto addGuid = [&](const nlohmann::json& guid) {
+                        if (!guid.is_string())
+                            throw std::runtime_error("player GUID selectors must be strings");
+                        auto text = guid.get<std::string>();
+                        if (!text.empty()) rule.Guids.push_back(std::move(text));
+                    };
+                    if (value.contains("PlayerGuid")) addGuid(value.at("PlayerGuid"));
+                    if (value.contains("PlayerGuids"))
+                    {
+                        if (!value.at("PlayerGuids").is_array())
+                            throw std::runtime_error("PlayerGuids must be an array");
+                        for (const auto& guid : value.at("PlayerGuids")) addGuid(guid);
+                    }
+                    if (!rule.AllPlayers && rule.Names.empty() && rule.Guids.empty()
+                        && rule.LoadSlots.empty())
+                        throw std::runtime_error(
+                            "a players entry requires PlayerName(s) or PlayerGuid(s)");
+
+                    rule.Adjustments.erase("PlayerName");
+                    rule.Adjustments.erase("PlayerNames");
+                    rule.Adjustments.erase("PlayerGuid");
+                    rule.Adjustments.erase("PlayerGuids");
+                    if (rule.Adjustments.empty())
+                        throw std::runtime_error(
+                            "a players entry requires at least one adjustment field");
+                    if (rule.Adjustments.contains("Scale"))
+                    {
+                        const auto scale = rule.Adjustments.at("Scale");
+                        if (!scale.is_number() || !std::isfinite(scale.get<double>())
+                            || scale.get<double>() < 0.25 || scale.get<double>() > 3.0)
+                            throw std::runtime_error("Scale must be between 0.25 and 3.0");
+                    }
+                    for (const auto* field : {"MaxHealth", "BaseHealth"})
+                    {
+                        if (!rule.Adjustments.contains(field)) continue;
+                        const auto amount = rule.Adjustments.at(field);
+                        if (!amount.is_number() || !std::isfinite(amount.get<double>())
+                            || amount.get<double>() < 1.0 || amount.get<double>() > 1000000.0)
+                            throw std::runtime_error(std::string(field)
+                                + " must be between 1 and 1000000");
+                    }
+                    m_playerRules.push_back(std::move(rule));
+                }
+            });
+        PS::Log<LogLevel::Normal>(
+            STR("Loaded persistent player rules for {} from /players.\n"), modName);
+    }
+
+    std::string DragonWildsSpawnLoader::GetPlayerName(UObject* controller) const
+    {
+        try
+        {
+            auto* statePointer = PropertyHelper::GetValuePtrByPropertyNameInChain<
+                TObjectPtr<UObject>>(controller, TEXT("PlayerState"));
+            auto* state = statePointer ? statePointer->Get() : nullptr;
+            if (!state) return {};
+            auto call = ActorHelper::FunctionCall(
+                state, STR("/Script/Engine.PlayerState:GetPlayerName"));
+            call.Invoke();
+            const auto name = call.Result<FString>();
+            return name.GetCharArray().Num() > 1
+                ? RC::to_string(RC::StringType(*name)) : std::string{};
+        }
+        catch (...) { return {}; }
+    }
+
+    std::string DragonWildsSpawnLoader::GetPlayerGuid(UObject* controller) const
+    {
+        try
+        {
+            auto call = ActorHelper::FunctionCall(controller,
+                STR("/Script/Dominion.DominionPlayerControllerBase:GetCharacterGuid"));
+            call.Invoke();
+            FGuid guid{};
+            call.MoveResult(&guid, sizeof(guid));
+            uint32 lanes[4]{};
+            std::memcpy(lanes, &guid, sizeof(lanes));
+            if (lanes[0] == 0 && lanes[1] == 0 && lanes[2] == 0 && lanes[3] == 0)
+                return {};
+            return std::format("{:08X}{:08X}{:08X}{:08X}",
+                lanes[0], lanes[1], lanes[2], lanes[3]);
+        }
+        catch (...) { return {}; }
+    }
+
+    bool DragonWildsSpawnLoader::ApplyPlayerRule(UObject* controller,
+        const PlayerRule& rule, std::string& result)
+    {
+        auto pawnCall = ActorHelper::FunctionCall(
+            controller, STR("/Script/Engine.Controller:K2_GetPawn"));
+        pawnCall.Invoke();
+        auto* pawn = pawnCall.Result<UObject*>();
+        if (!pawn) { result = "player has no active pawn"; return false; }
+
+        auto changes = rule.Adjustments;
+        if (changes.contains("Scale"))
+        {
+            const auto [it, inserted] = m_playerBaseScales.try_emplace(
+                pawn, static_cast<AActor*>(pawn)->GetActorScale3D());
+            const auto multiplier = changes.at("Scale").get<double>();
+            static_cast<AActor*>(pawn)->SetActorScale3D(FVector(
+                it->second.X() * multiplier,
+                it->second.Y() * multiplier,
+                it->second.Z() * multiplier));
+            changes.erase("Scale");
+        }
+
+        const char* healthField = changes.contains("MaxHealth") ? "MaxHealth"
+            : changes.contains("BaseHealth") ? "BaseHealth" : nullptr;
+        if (healthField)
+        {
+            UObject* health = nullptr;
+            try
+            {
+                auto call = ActorHelper::FunctionCall(pawn,
+                    STR("/Script/Dominion.DominionPlayerCharacter:GetHealthComponent"));
+                call.Invoke();
+                health = call.Result<UObject*>();
+            }
+            catch (...) {}
+            if (!health)
+            {
+                result = "player health component is unavailable";
+                return false;
+            }
+            auto modify = ActorHelper::FunctionCall(health,
+                STR("/Script/Dominion.HealthComponent:ModifyMaxHealth"));
+            const auto requestedHealth = static_cast<float>(
+                changes.at(healthField).get<double>());
+            modify.Arg(STR("NewMaxHealth"), requestedHealth).Invoke();
+            changes.erase("MaxHealth");
+            changes.erase("BaseHealth");
+        }
+
+        auto* pawnClass = pawn->GetClassPrivate();
+        for (const auto& [name, value] : changes.items())
+        {
+            if (name.starts_with("$")) continue;
+            auto* property = PropertyHelper::GetPropertyByName(
+                pawnClass, RC::to_generic_string(name));
+            if (!property)
+            {
+                result = "unsupported player adjustment field: " + name;
+                return false;
+            }
+            PropertyHelper::CopyJsonValueToContainer(pawn, property, value);
+        }
+        result = "adjustments applied";
+        return true;
+    }
+
+    void DragonWildsSpawnLoader::ApplyPlayerRules()
+    {
+        if (m_playerRules.empty()) return;
+        auto* controllerClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr, nullptr, TEXT("/Script/Dominion.DominionPlayerController"));
+        if (!controllerClass) return;
+        TArray<UObject*> controllers;
+        UECustom::UObjectGlobals::GetObjectsOfClass(controllerClass, controllers, true);
+        // Record stable first-seen slots before evaluating any numbered rules.
+        // Prefer the character GUID; fall back to the player name until a GUID
+        // becomes available.
+        for (auto* controller : controllers)
+        {
+            if (!controller || controller->HasAnyFlags(static_cast<EObjectFlags>(
+                RF_ClassDefaultObject | RF_ArchetypeObject))) continue;
+            const auto guid = GetPlayerGuid(controller);
+            const auto name = GetPlayerName(controller);
+            const auto identity = !guid.empty() ? "guid:" + guid : "name:" + name;
+            if (!name.empty() && std::find(m_playerLoadOrder.begin(),
+                m_playerLoadOrder.end(), identity) == m_playerLoadOrder.end())
+                m_playerLoadOrder.push_back(identity);
+        }
+        for (auto* controller : controllers)
+        {
+            if (!controller || controller->HasAnyFlags(static_cast<EObjectFlags>(
+                RF_ClassDefaultObject | RF_ArchetypeObject))) continue;
+            const auto name = GetPlayerName(controller);
+            const auto guid = GetPlayerGuid(controller);
+            for (std::size_t index = 0; index < m_playerRules.size(); ++index)
+            {
+                const auto& rule = m_playerRules[index];
+                const auto normalizeGuid = [](std::string value) {
+                    std::erase_if(value, [](unsigned char c) { return !std::isxdigit(c); });
+                    std::transform(value.begin(), value.end(), value.begin(),
+                        [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+                    return value;
+                };
+                const auto equalIgnoringCase = [](std::string left, std::string right) {
+                    std::transform(left.begin(), left.end(), left.begin(),
+                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                    std::transform(right.begin(), right.end(), right.begin(),
+                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                    return left == right;
+                };
+                const bool selected = rule.AllPlayers
+                    || std::any_of(rule.Names.begin(), rule.Names.end(),
+                        [&](const auto& value) { return equalIgnoringCase(value, name); })
+                    || std::any_of(rule.LoadSlots.begin(), rule.LoadSlots.end(),
+                        [&](std::size_t slot) {
+                            if (slot == 0 || slot > m_playerLoadOrder.size()) return false;
+                            const auto& identity = m_playerLoadOrder[slot - 1];
+                            return identity == "guid:" + guid || identity == "name:" + name;
+                        })
+                    || std::any_of(rule.Guids.begin(), rule.Guids.end(), [&](const auto& value) {
+                        return normalizeGuid(value) == normalizeGuid(guid);
+                    });
+                if (!selected) continue;
+                auto pawnCall = ActorHelper::FunctionCall(
+                    controller, STR("/Script/Engine.Controller:K2_GetPawn"));
+                pawnCall.Invoke();
+                auto* pawn = pawnCall.Result<UObject*>();
+                if (!pawn) continue;
+                const auto key = std::to_string(reinterpret_cast<std::uintptr_t>(pawn))
+                    + ":" + std::to_string(index);
+                if (m_appliedPlayerRules.contains(key)) continue;
+                std::string result;
+                if (ApplyPlayerRule(controller, rule, result))
+                {
+                    m_appliedPlayerRules.insert(key);
+                    PS::Log<LogLevel::Normal>(
+                        STR("Applied /players rule from '{}' to '{}'.\n"),
+                        rule.ModName, PS::ToWideSafe(name.c_str()));
+                }
+                else
+                {
+                    PS::Log<LogLevel::Warning>(
+                        STR("/players rule from '{}' for '{}' is pending: {}.\n"),
+                        rule.ModName, PS::ToWideSafe(name.c_str()),
+                        PS::ToWideSafe(result.c_str()));
+                }
+            }
+        }
     }
 }
