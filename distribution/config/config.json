@@ -1,0 +1,25 @@
+{
+    "languageOverride": "",
+    "enableAutoReload": false,
+    "enableDebugLogging": false,
+    "enableExperimentalDropScaling": false,
+    "tooling": {
+        "enabled": true,
+        "enableSchemaGeneration": true,
+        "enableFModelSnippetGenerator": false,
+        "modsTxt": {
+            "enabled": true,
+            "autoCreate": true,
+            "reconcileFolders": true,
+            "preserveComments": true,
+            "strictValues": true
+        },
+        "compatibilityReports": {
+            "enabled": true,
+            "writeFile": true,
+            "warnSameTarget": true,
+            "warnSameProperty": true,
+            "warnArrayReplacement": true
+        }
+    }
+}

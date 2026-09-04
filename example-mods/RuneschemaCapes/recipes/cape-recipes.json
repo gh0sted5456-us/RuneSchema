@@ -1,0 +1,42 @@
+{
+  "RECIPE_RS_Cape_Bulwark": {
+    "AddTo": [{"Table":"DT_CraftingStationsDataTable","Row":"MysticForge","Category":"Armour/Cape"}],
+    "Properties": {"ItemsConsumed":[{"ItemData":"/DowdunReach/Gameplay/Items/Textiles/ITEM_Resources_Cloth_Mystic.ITEM_Resources_Cloth_Mystic","Count":3}],"ItemsCreated":[{"ItemData":{"ObjectName":"WearableEquipmentData'ITEM_RS_Cape_Bulwark'","ObjectPath":"/Game/Mods/RuneschemaCapes/ITEM_RS_Cape_Bulwark.ITEM_RS_Cape_Bulwark"},"Count":1}],"ExtraItemsCreated":[],"bIgnoreNotification":true}
+  },
+  "RECIPE_RS_Cape_Duelist": {
+    "AddTo": [{"Table":"DT_CraftingStationsDataTable","Row":"MysticForge","Category":"Armour/Cape"}],
+    "Properties": {"ItemsConsumed":[{"ItemData":"/DowdunReach/Gameplay/Items/Textiles/ITEM_Resources_Cloth_Mystic.ITEM_Resources_Cloth_Mystic","Count":3}],"ItemsCreated":[{"ItemData":{"ObjectName":"WearableEquipmentData'ITEM_RS_Cape_Duelist'","ObjectPath":"/Game/Mods/RuneschemaCapes/ITEM_RS_Cape_Duelist.ITEM_RS_Cape_Duelist"},"Count":1}],"ExtraItemsCreated":[],"bIgnoreNotification":true}
+  },
+  "RECIPE_RS_Cape_Archer": {
+    "AddTo": [{"Table":"DT_CraftingStationsDataTable","Row":"MysticForge","Category":"Armour/Cape"}],
+    "Properties": {"ItemsConsumed":[{"ItemData":"/DowdunReach/Gameplay/Items/Textiles/ITEM_Resources_Cloth_Mystic.ITEM_Resources_Cloth_Mystic","Count":3}],"ItemsCreated":[{"ItemData":{"ObjectName":"WearableEquipmentData'ITEM_RS_Cape_Archer'","ObjectPath":"/Game/Mods/RuneschemaCapes/ITEM_RS_Cape_Archer.ITEM_RS_Cape_Archer"},"Count":1}],"ExtraItemsCreated":[],"bIgnoreNotification":true}
+  },
+  "RECIPE_RS_Cape_Arcanist": {
+    "AddTo": [{"Table":"DT_CraftingStationsDataTable","Row":"MysticForge","Category":"Armour/Cape"}],
+    "Properties": {"ItemsConsumed":[{"ItemData":"/DowdunReach/Gameplay/Items/Textiles/ITEM_Resources_Cloth_Mystic.ITEM_Resources_Cloth_Mystic","Count":4}],"ItemsCreated":[{"ItemData":{"ObjectName":"WearableEquipmentData'ITEM_RS_Cape_Arcanist'","ObjectPath":"/Game/Mods/RuneschemaCapes/ITEM_RS_Cape_Arcanist.ITEM_RS_Cape_Arcanist"},"Count":1}],"ExtraItemsCreated":[],"bIgnoreNotification":true}
+  },
+  "RECIPE_RS_Cape_Warden": {
+    "AddTo": [{"Table":"DT_CraftingStationsDataTable","Row":"MysticForge","Category":"Armour/Cape"}],
+    "Properties": {"ItemsConsumed":[{"ItemData":"/DowdunReach/Gameplay/Items/Textiles/ITEM_Resources_Cloth_Mystic.ITEM_Resources_Cloth_Mystic","Count":5}],"ItemsCreated":[{"ItemData":{"ObjectName":"WearableEquipmentData'ITEM_RS_Cape_Warden'","ObjectPath":"/Game/Mods/RuneschemaCapes/ITEM_RS_Cape_Warden.ITEM_RS_Cape_Warden"},"Count":1}],"ExtraItemsCreated":[],"bIgnoreNotification":true}
+  },
+  "RECIPE_RS_Cape_Stormguard": {
+    "AddTo": [{"Table":"DT_CraftingStationsDataTable","Row":"MysticForge","Category":"Armour/Cape"}],
+    "Properties": {"ItemsConsumed":[{"ItemData":"/DowdunReach/Gameplay/Items/Textiles/ITEM_Resources_Cloth_Mystic.ITEM_Resources_Cloth_Mystic","Count":4}],"ItemsCreated":[{"ItemData":{"ObjectName":"WearableEquipmentData'ITEM_RS_Cape_Stormguard'","ObjectPath":"/Game/Mods/RuneschemaCapes/ITEM_RS_Cape_Stormguard.ITEM_RS_Cape_Stormguard"},"Count":1}],"ExtraItemsCreated":[],"bIgnoreNotification":true}
+  },
+  "RECIPE_RS_Cape_Spellward": {
+    "AddTo": [{"Table":"DT_CraftingStationsDataTable","Row":"MysticForge","Category":"Armour/Cape"}],
+    "Properties": {"ItemsConsumed":[{"ItemData":"/DowdunReach/Gameplay/Items/Textiles/ITEM_Resources_Cloth_Mystic.ITEM_Resources_Cloth_Mystic","Count":5}],"ItemsCreated":[{"ItemData":{"ObjectName":"WearableEquipmentData'ITEM_RS_Cape_Spellward'","ObjectPath":"/Game/Mods/RuneschemaCapes/ITEM_RS_Cape_Spellward.ITEM_RS_Cape_Spellward"},"Count":1}],"ExtraItemsCreated":[],"bIgnoreNotification":true}
+  },
+  "RECIPE_RS_Cape_Vital": {
+    "AddTo": [{"Table":"DT_CraftingStationsDataTable","Row":"MysticForge","Category":"Armour/Cape"}],
+    "Properties": {"ItemsConsumed":[{"ItemData":"/DowdunReach/Gameplay/Items/Textiles/ITEM_Resources_Cloth_Mystic.ITEM_Resources_Cloth_Mystic","Count":5}],"ItemsCreated":[{"ItemData":{"ObjectName":"WearableEquipmentData'ITEM_RS_Cape_Vital'","ObjectPath":"/Game/Mods/RuneschemaCapes/ITEM_RS_Cape_Vital.ITEM_RS_Cape_Vital"},"Count":1}],"ExtraItemsCreated":[],"bIgnoreNotification":true}
+  },
+  "RECIPE_RS_Cape_Versatile": {
+    "AddTo": [{"Table":"DT_CraftingStationsDataTable","Row":"MysticForge","Category":"Armour/Cape"}],
+    "Properties": {"ItemsConsumed":[{"ItemData":"/DowdunReach/Gameplay/Items/Textiles/ITEM_Resources_Cloth_Mystic.ITEM_Resources_Cloth_Mystic","Count":6}],"ItemsCreated":[{"ItemData":{"ObjectName":"WearableEquipmentData'ITEM_RS_Cape_Versatile'","ObjectPath":"/Game/Mods/RuneschemaCapes/ITEM_RS_Cape_Versatile.ITEM_RS_Cape_Versatile"},"Count":1}],"ExtraItemsCreated":[],"bIgnoreNotification":true}
+  },
+  "RECIPE_RS_Cape_Aegis": {
+    "AddTo": [{"Table":"DT_CraftingStationsDataTable","Row":"MysticForge","Category":"Armour/Cape"}],
+    "Properties": {"ItemsConsumed":[{"ItemData":"/DowdunReach/Gameplay/Items/Textiles/ITEM_Resources_Cloth_Mystic.ITEM_Resources_Cloth_Mystic","Count":8}],"ItemsCreated":[{"ItemData":{"ObjectName":"WearableEquipmentData'ITEM_RS_Cape_Aegis'","ObjectPath":"/Game/Mods/RuneschemaCapes/ITEM_RS_Cape_Aegis.ITEM_RS_Cape_Aegis"},"Count":1}],"ExtraItemsCreated":[],"bIgnoreNotification":true}
+  }
+}

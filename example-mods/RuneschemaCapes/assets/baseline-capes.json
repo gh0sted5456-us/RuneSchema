@@ -1,0 +1,92 @@
+{
+  "/Game/Mods/RuneschemaCapes/ITEM_RS_Cape_Bulwark.ITEM_RS_Cape_Bulwark": {
+    "$Clone": "/Game/Gameplay/Character/Player/Equipment/Cape/ITEM_Cape_Adventurers_White.ITEM_Cape_Adventurers_White",
+    "PersistenceID": "h5H8Eg8sJUyuTt8LXjgylQ",
+    "InternalName": "rs_cape_bulwark",
+    "bSoftDeleted": false,
+    "Name": "Bulwark Pathfinder Cape",
+    "FlavourText": "A road-worn mantle reinforced for those who stand their ground.",
+    "WearableEquipmentDataTableRowHandle": {"DataTable":{"ObjectName":"DataTable'DT_WearableEquipment'","ObjectPath":"/Game/Gameplay/Character/Player/Equipment/DT_WearableEquipment.0"},"RowName":"RS_Cape_Bulwark"}
+  },
+  "/Game/Mods/RuneschemaCapes/ITEM_RS_Cape_Duelist.ITEM_RS_Cape_Duelist": {
+    "$Clone": "/Game/Gameplay/Character/Player/Equipment/Cape/ITEM_Cape_Adventurers_White.ITEM_Cape_Adventurers_White",
+    "PersistenceID": "NQZcxfLAv0aYlYZuW6X9AA",
+    "InternalName": "rs_cape_duelist",
+    "bSoftDeleted": false,
+    "Name": "Duelist's White Pennant",
+    "FlavourText": "Its clean hem dares an opponent to land the first blow.",
+    "WearableEquipmentDataTableRowHandle": {"DataTable":{"ObjectName":"DataTable'DT_WearableEquipment'","ObjectPath":"/Game/Gameplay/Character/Player/Equipment/DT_WearableEquipment.0"},"RowName":"RS_Cape_Duelist"}
+  },
+  "/Game/Mods/RuneschemaCapes/ITEM_RS_Cape_Archer.ITEM_RS_Cape_Archer": {
+    "$Clone": "/Game/Gameplay/Character/Player/Equipment/Cape/ITEM_Cape_Adventurers_White.ITEM_Cape_Adventurers_White",
+    "PersistenceID": "zofQltJ4Q0mqZu7L0KrNng",
+    "InternalName": "rs_cape_archer",
+    "bSoftDeleted": false,
+    "Name": "Farshot Ranger Cape",
+    "FlavourText": "Cut narrow so no fold can foul a bowstring.",
+    "WearableEquipmentDataTableRowHandle": {"DataTable":{"ObjectName":"DataTable'DT_WearableEquipment'","ObjectPath":"/Game/Gameplay/Character/Player/Equipment/DT_WearableEquipment.0"},"RowName":"RS_Cape_Archer"}
+  },
+  "/Game/Mods/RuneschemaCapes/ITEM_RS_Cape_Arcanist.ITEM_RS_Cape_Arcanist": {
+    "$Clone": "/Game/Gameplay/Character/Player/Equipment/Cape/ITEM_Cape_Adventurers_White.ITEM_Cape_Adventurers_White",
+    "PersistenceID": "_ZcdFG0o8kmwFnWRfhtYbw",
+    "InternalName": "rs_cape_arcanist",
+    "bSoftDeleted": false,
+    "Name": "Arcanist's Pale Shroud",
+    "FlavourText": "The cloth prickles when old magic stirs nearby.",
+    "WearableEquipmentDataTableRowHandle": {"DataTable":{"ObjectName":"DataTable'DT_WearableEquipment'","ObjectPath":"/Game/Gameplay/Character/Player/Equipment/DT_WearableEquipment.0"},"RowName":"RS_Cape_Arcanist"}
+  },
+  "/Game/Mods/RuneschemaCapes/ITEM_RS_Cape_Warden.ITEM_RS_Cape_Warden": {
+    "$Clone": "/Game/Gameplay/Character/Player/Equipment/Cape/ITEM_Cape_Adventurers_White.ITEM_Cape_Adventurers_White",
+    "PersistenceID": "dwBisAAU1ECy_y-m41UUHA",
+    "InternalName": "rs_cape_warden",
+    "bSoftDeleted": false,
+    "Name": "Warden of Ashenfall Cape",
+    "FlavourText": "A promise worn across the shoulders: none pass unchallenged.",
+    "WearableEquipmentDataTableRowHandle": {"DataTable":{"ObjectName":"DataTable'DT_WearableEquipment'","ObjectPath":"/Game/Gameplay/Character/Player/Equipment/DT_WearableEquipment.0"},"RowName":"RS_Cape_Warden"}
+  },
+  "/Game/Mods/RuneschemaCapes/ITEM_RS_Cape_Stormguard.ITEM_RS_Cape_Stormguard": {
+    "$Clone": "/Game/Gameplay/Character/Player/Equipment/Cape/ITEM_Cape_Adventurers_White.ITEM_Cape_Adventurers_White",
+    "PersistenceID": "AGNsZH5DQkOh_MTL6Ivh4w",
+    "InternalName": "rs_cape_stormguard",
+    "bSoftDeleted": false,
+    "Name": "Stormguard Traveller Cape",
+    "FlavourText": "Rain beads upon it, and distant thunder sounds almost friendly.",
+    "WearableEquipmentDataTableRowHandle": {"DataTable":{"ObjectName":"DataTable'DT_WearableEquipment'","ObjectPath":"/Game/Gameplay/Character/Player/Equipment/DT_WearableEquipment.0"},"RowName":"RS_Cape_Stormguard"}
+  },
+  "/Game/Mods/RuneschemaCapes/ITEM_RS_Cape_Spellward.ITEM_RS_Cape_Spellward": {
+    "$Clone": "/Game/Gameplay/Character/Player/Equipment/Cape/ITEM_Cape_Adventurers_White.ITEM_Cape_Adventurers_White",
+    "PersistenceID": "D6v7FDLwfky8-FvXjB4rEA",
+    "InternalName": "rs_cape_spellward",
+    "bSoftDeleted": false,
+    "Name": "Spellward Explorer Cape",
+    "FlavourText": "Fine silver thread turns hostile sorcery aside.",
+    "WearableEquipmentDataTableRowHandle": {"DataTable":{"ObjectName":"DataTable'DT_WearableEquipment'","ObjectPath":"/Game/Gameplay/Character/Player/Equipment/DT_WearableEquipment.0"},"RowName":"RS_Cape_Spellward"}
+  },
+  "/Game/Mods/RuneschemaCapes/ITEM_RS_Cape_Vital.ITEM_RS_Cape_Vital": {
+    "$Clone": "/Game/Gameplay/Character/Player/Equipment/Cape/ITEM_Cape_Adventurers_White.ITEM_Cape_Adventurers_White",
+    "PersistenceID": "mtqJ8m8sIUWxEXwUGhsMXQ",
+    "InternalName": "rs_cape_vital",
+    "bSoftDeleted": false,
+    "Name": "Heartwood Vanguard Cape",
+    "FlavourText": "Its woven sigil steadies the pulse in desperate battles.",
+    "WearableEquipmentDataTableRowHandle": {"DataTable":{"ObjectName":"DataTable'DT_WearableEquipment'","ObjectPath":"/Game/Gameplay/Character/Player/Equipment/DT_WearableEquipment.0"},"RowName":"RS_Cape_Vital"}
+  },
+  "/Game/Mods/RuneschemaCapes/ITEM_RS_Cape_Versatile.ITEM_RS_Cape_Versatile": {
+    "$Clone": "/Game/Gameplay/Character/Player/Equipment/Cape/ITEM_Cape_Adventurers_White.ITEM_Cape_Adventurers_White",
+    "PersistenceID": "j7jgDWozCU-yGy7qizaUfQ",
+    "InternalName": "rs_cape_versatile",
+    "bSoftDeleted": false,
+    "Name": "Wayfarer's Balanced Cape",
+    "FlavourText": "No single danger was chosen when every road held a threat.",
+    "WearableEquipmentDataTableRowHandle": {"DataTable":{"ObjectName":"DataTable'DT_WearableEquipment'","ObjectPath":"/Game/Gameplay/Character/Player/Equipment/DT_WearableEquipment.0"},"RowName":"RS_Cape_Versatile"}
+  },
+  "/Game/Mods/RuneschemaCapes/ITEM_RS_Cape_Aegis.ITEM_RS_Cape_Aegis": {
+    "$Clone": "/Game/Gameplay/Character/Player/Equipment/Cape/ITEM_Cape_Adventurers_White.ITEM_Cape_Adventurers_White",
+    "PersistenceID": "WNMEl_BlOUm4Sag6q8kRcg",
+    "InternalName": "rs_cape_aegis",
+    "bSoftDeleted": false,
+    "Name": "Aegis of the White Road",
+    "FlavourText": "The last and finest of ten cloaks made for an impossible expedition.",
+    "WearableEquipmentDataTableRowHandle": {"DataTable":{"ObjectName":"DataTable'DT_WearableEquipment'","ObjectPath":"/Game/Gameplay/Character/Player/Equipment/DT_WearableEquipment.0"},"RowName":"RS_Cape_Aegis"}
+  }
+}
