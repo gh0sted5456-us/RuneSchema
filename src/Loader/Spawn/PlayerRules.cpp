@@ -1410,7 +1410,7 @@ namespace DragonWilds {
                 + std::to_string(effectiveScale) + "|" + std::to_string(rule.Distance)
                 + "|" + (rule.ShowSelf ? "self" : "no-self")
                 + "|" + (rule.ShowOthers ? "others" : "no-others")
-                + "|centered-square-v2";
+                + "|centered-square-v3";
             if (const auto applied = m_nameplateAppliedActors.find(pawn);
                 applied != m_nameplateAppliedActors.end()
                 && applied->second.Actor.Get() == widget
@@ -1487,17 +1487,32 @@ namespace DragonWilds {
             {
                 PropertyHelper::CopyJsonValueToContainer(iconSlot, layout,
                     nlohmann::json{
-                        {"Offsets", {{"Left", 0.0}, {"Top", 0.0},
+                        {"Offsets", {{"Left", 250.0}, {"Top", 25.0},
                             {"Right", 64.0}, {"Bottom", 64.0}}},
                         {"Anchors", {
-                            {"Minimum", {{"X", 0.5}, {"Y", 0.5}}},
-                            {"Maximum", {{"X", 0.5}, {"Y", 0.5}}}}},
+                            {"Minimum", {{"X", 0.0}, {"Y", 0.0}}},
+                            {"Maximum", {{"X", 0.0}, {"Y", 0.0}}}}},
                         {"Alignment", {{"X", 0.5}, {"Y", 0.5}}}
                     });
             }
             if (auto* autoSize = PropertyHelper::GetPropertyByName(
                     iconSlot->GetClassPrivate(), TEXT("bAutoSize")))
                 PropertyHelper::CopyJsonValueToContainer(iconSlot, autoSize, false);
+
+            // Canvas slot field writes alone do not always invalidate Slate's cached
+            // layout. Use the public UMG setters as well so the live slot is centered.
+            ActorHelper::FunctionCall(iconSlot,
+                STR("/Script/UMG.CanvasPanelSlot:SetPosition"))
+                .Arg(TEXT("Position"), FVector2D(250.0, 25.0)).Invoke();
+            ActorHelper::FunctionCall(iconSlot,
+                STR("/Script/UMG.CanvasPanelSlot:SetSize"))
+                .Arg(TEXT("Size"), FVector2D(64.0, 64.0)).Invoke();
+            ActorHelper::FunctionCall(iconSlot,
+                STR("/Script/UMG.CanvasPanelSlot:SetAlignment"))
+                .Arg(TEXT("InAlignment"), FVector2D(0.5, 0.5)).Invoke();
+            ActorHelper::FunctionCall(iconSlot,
+                STR("/Script/UMG.CanvasPanelSlot:SetAutoSize"))
+                .Arg(TEXT("InbAutoSize"), false).Invoke();
 
             auto setBrush = ActorHelper::FunctionCall(icon,
                 STR("/Script/UMG.Image:SetBrushFromTexture"));

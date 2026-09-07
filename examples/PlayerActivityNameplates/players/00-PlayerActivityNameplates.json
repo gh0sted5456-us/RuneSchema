@@ -9,28 +9,28 @@
       "Server": "Yes",
       "States": {
         "Attack": {
-          "Icon": "/Game/Art/UI/Skills/2025/Skill_Tree_Icons/T_Icon_SkillTree_Attack.T_Icon_SkillTree_Attack",
-          "Scale": 0.75,
+          "Icon": "/Game/Art/UI/Skills/Icons/T_Notification_Skill_Attack.T_Notification_Skill_Attack",
+          "Scale": 0.9,
           "InactivitySeconds": 2.0
         },
         "Ranged": {
-          "Icon": "/Game/Art/UI/Skills/2025/Skill_Tree_Icons/T_Icon_SkillTree_Ranged.T_Icon_SkillTree_Ranged",
-          "Scale": 0.75,
+          "Icon": "/Game/Art/UI/Skills/Icons/T_Notification_Skill_Ranged.T_Notification_Skill_Ranged",
+          "Scale": 0.9,
           "InactivitySeconds": 2.0
         },
         "Magic": {
-          "Icon": "/Game/Art/UI/Skills/2025/Skill_Tree_Icons/T_Icon_SkillTree_Magic.T_Icon_SkillTree_Magic",
-          "Scale": 0.75,
+          "Icon": "/Game/Art/UI/Skills/Icons/T_Notification_Skill_Magic.T_Notification_Skill_Magic",
+          "Scale": 0.9,
           "InactivitySeconds": 2.5
         },
         "Woodcutting": {
-          "Icon": "/Game/Art/UI/Skills/2025/Skill_Tree_Icons/T_Icon_SkillTree_Woodcutting.T_Icon_SkillTree_Woodcutting",
-          "Scale": 0.75,
+          "Icon": "/Game/Art/UI/Skills/Icons/T_Notification_Skill_Woodcutting.T_Notification_Skill_Woodcutting",
+          "Scale": 0.9,
           "InactivitySeconds": 2.0
         },
         "Mining": {
-          "Icon": "/Game/Art/UI/Skills/2025/Skill_Tree_Icons/T_Icon_SkillTree_Mining.T_Icon_SkillTree_Mining",
-          "Scale": 0.75,
+          "Icon": "/Game/Art/UI/Skills/Icons/T_Notification_Skill_Mining.T_Notification_Skill_Mining",
+          "Scale": 0.9,
           "InactivitySeconds": 2.0
         },
         "Dead": {
