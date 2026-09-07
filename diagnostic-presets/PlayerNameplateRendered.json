@@ -1,0 +1,32 @@
+{
+  "Name": "PlayerNameplateRendered",
+  "PropertyCaptures": [
+    {
+      "Root": "Player",
+      "Path": ["BP_Player_Nameplate", "*"]
+    },
+    {
+      "Root": "Player",
+      "Path": ["BP_Player_Nameplate", "Widget", "*"]
+    },
+    {
+      "Root": "Player",
+      "Path": ["BP_Player_Nameplate", "Widget", "WidgetTree", "*"]
+    },
+    {
+      "Root": "Player",
+      "Path": ["BP_Player_Nameplate", "Widget", "WidgetTree", "RootWidget", "*"]
+    },
+    {
+      "Root": "Player",
+      "Path": ["BP_Player_Nameplate", "Widget", "WidgetTree", "AllWidgets"]
+    }
+  ],
+  "CaptureLimits": {
+    "FollowObjectReferences": true,
+    "MaxDepth": 8,
+    "MaxEntries": 512,
+    "MaxNodes": 32768,
+    "MaxSparseSlots": 8192
+  }
+}

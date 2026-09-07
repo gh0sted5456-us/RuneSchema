@@ -1,0 +1,81 @@
+{
+  "Name": "PlayerDeathRespawnState",
+  "PropertyCaptures": [
+    {
+      "Root": "Player",
+      "Path": [
+        "BP_Components_Health",
+        "*"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "BP_Components_PlayerRespawn",
+        "*"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "BP_Components_PlayerDamage",
+        "*"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "BP_Components_PlayerGameplayEffects",
+        "*"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "BP_Components_PlayerTrackedStatusEffects",
+        "*"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "BP_Components_PlayerAttributesComponent",
+        "*"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "BP_Player_Nameplate",
+        "*"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "PlayerState",
+        "*"
+      ]
+    },
+    {
+      "Root": "Controller",
+      "Path": [
+        "DeathInputMode"
+      ]
+    },
+    {
+      "Root": "Controller",
+      "Path": [
+        "PlayerState",
+        "*"
+      ]
+    }
+  ],
+  "CaptureLimits": {
+    "FollowObjectReferences": true,
+    "MaxDepth": 6,
+    "MaxEntries": 256,
+    "MaxNodes": 16384,
+    "MaxSparseSlots": 8192
+  }
+}

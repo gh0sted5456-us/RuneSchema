@@ -1,0 +1,9 @@
+{
+  "Name": "PlayerDeathFunctions",
+  "Objects": [
+    "/Game/Gameplay/Character/Components/BP_Components_Health.BP_Components_Health_C",
+    "/Game/Gameplay/Character/Components/BP_Components_PlayerDamage.BP_Components_PlayerDamage_C",
+    "/Game/Gameplay/Character/Components/BP_Components_PlayerRespawn.BP_Components_PlayerRespawn_C"
+  ],
+  "IncludePlayer": true
+}

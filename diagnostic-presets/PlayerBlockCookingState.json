@@ -1,0 +1,19 @@
+{
+  "Name": "PlayerBlockCookingState",
+  "PropertyCaptures": [
+    { "Root": "Player", "Path": ["GameplayTagsComponent", "*"] },
+    { "Root": "Player", "Path": ["BP_Components_PlayerBlocking", "*"] },
+    { "Root": "Player", "Path": ["BP_Components_InteractionDetector", "*"] },
+    { "Root": "Player", "Path": ["BP_Components_InteractionManager", "*"] },
+    { "Root": "Controller", "Path": ["CurrentCraftingStation"] },
+    { "Root": "Controller", "Path": ["CraftingMenuInputMode"] },
+    { "Root": "Controller", "Path": ["BuildInteractionComponent", "*"] }
+  ],
+  "CaptureLimits": {
+    "FollowObjectReferences": false,
+    "MaxDepth": 5,
+    "MaxEntries": 256,
+    "MaxNodes": 12288,
+    "MaxSparseSlots": 4096
+  }
+}

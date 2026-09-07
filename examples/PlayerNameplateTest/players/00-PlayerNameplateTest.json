@@ -1,0 +1,38 @@
+[
+  {
+    "Id": "default-player-badge",
+    "PlayerName": "*",
+    "Nameplate": {
+      "Mode": "Name",
+      "Distance": 2500,
+      "Client": "Yes",
+      "Server": "Yes",
+      "States": {
+        "Dead": {
+          "Icon": "/Engine/EngineResources/WhiteSquareTexture.WhiteSquareTexture",
+          "Scale": 1.5,
+          "InactivitySeconds": 3.0
+        }
+      }
+    }
+  },
+  {
+    "Id": "first-player-role-badge",
+    "PlayerName": "*1",
+    "Nameplate": {
+      "Mode": "Icon",
+      "Icon": "/Engine/EngineResources/WhiteSquareTexture.WhiteSquareTexture",
+      "Scale": 0.6,
+      "Distance": 2500,
+      "Client": "Yes",
+      "Server": "Yes",
+      "States": {
+        "Dead": {
+          "Icon": "/Engine/EngineResources/WhiteSquareTexture.WhiteSquareTexture",
+          "Scale": 1.5,
+          "InactivitySeconds": 3.0
+        }
+      }
+    }
+  }
+]

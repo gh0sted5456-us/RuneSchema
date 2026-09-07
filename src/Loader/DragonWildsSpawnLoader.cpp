@@ -10,6 +10,7 @@ using namespace DragonWilds::SpawnRuntime;
 #include <cctype>
 #include <format>
 #include <fstream>
+#include <functional>
 #include <sstream>
 #include <vector>
 #include "Unreal/AActor.hpp"
@@ -290,6 +291,19 @@ namespace DragonWilds {
         if (m_playerPawnStateFunction && m_playerPawnStateCallbackId != 0)
         {
             m_playerPawnStateFunction->UnregisterHook(m_playerPawnStateCallbackId);
+        }
+        if (m_playerTagsChangedFunction && m_playerTagsChangedCallbackId != 0)
+        {
+            m_playerTagsChangedFunction->UnregisterHook(m_playerTagsChangedCallbackId);
+        }
+        if (m_playerDamageReceivedFunction && m_playerDamageReceivedCallbackId != 0)
+        {
+            m_playerDamageReceivedFunction->UnregisterHook(m_playerDamageReceivedCallbackId);
+        }
+        for (const auto& hook : m_playerActivityHooks)
+        {
+            if (hook.Function && hook.CallbackId != 0)
+                hook.Function->UnregisterHook(hook.CallbackId);
         }
         if (m_spawnTickCallbackId != Hook::ERROR_ID)
         {
@@ -1112,6 +1126,64 @@ namespace DragonWilds {
                 });
         }
 
+        m_playerTagsChangedFunction = UECustom::UObjectGlobals::StaticFindObject<UFunction*>(
+            nullptr, nullptr,
+            TEXT("/Script/Dominion.DominionPlayerCharacter:HandleGameplayEffectTagsChanged"));
+        if (m_playerTagsChangedFunction)
+        {
+            m_playerTagsChangedCallbackId = m_playerTagsChangedFunction->RegisterPostHook(
+                [this](UnrealScriptFunctionCallableContext& context, void*) {
+                    ApplyClientPlayerVisualRules(context.Context, true);
+                });
+        }
+
+        m_playerDamageReceivedFunction = UECustom::UObjectGlobals::StaticFindObject<UFunction*>(
+            nullptr, nullptr,
+            TEXT("/Game/Gameplay/Character/Components/BP_Components_PlayerDamage."
+                "BP_Components_PlayerDamage_C:BP_OnAnyDamageReceived"));
+        if (m_playerDamageReceivedFunction)
+        {
+            m_playerDamageReceivedCallbackId = m_playerDamageReceivedFunction->RegisterPostHook(
+                [this](UnrealScriptFunctionCallableContext& context, void*) {
+                    UObject* pawn = nullptr;
+                    try
+                    {
+                        pawn = ActorHelper::GetObjectRef(
+                            context.Context, TEXT("PlayerCharacter"));
+                    }
+                    catch (...) {}
+                    if (!pawn && context.Context)
+                        pawn = context.Context->GetOuterPrivate();
+                    ApplyClientPlayerVisualRules(pawn, true);
+                });
+        }
+
+        const auto registerActivityHook = [this](const TCHAR* functionPath,
+            const std::function<std::string(UObject*)>& classify) {
+            auto* function = UECustom::UObjectGlobals::StaticFindObject<UFunction*>(
+                nullptr, nullptr, functionPath);
+            if (!function) return false;
+            const auto callbackId = function->RegisterPostHook(
+                [this, classify](UnrealScriptFunctionCallableContext& context, void*) {
+                    try
+                    {
+                        const auto state = classify(context.Context);
+                        if (!state.empty())
+                            SetPlayerNameplateActivity(context.Context, state);
+                    }
+                    catch (...) {}
+                });
+            if (callbackId == 0) return false;
+            m_playerActivityHooks.push_back({function, callbackId});
+            return true;
+        };
+        const bool attackActivity = registerActivityHook(
+            TEXT("/Script/Dominion.PlayerAttackComponent:Multicast_PerformAttackOnSimulatedProxies"),
+            [this](UObject* source) { return ClassifyPlayerAttackActivity(source); });
+        const bool magicActivity = registerActivityHook(
+            TEXT("/Script/Dominion.PlayerMagicComponent:Multicast_SendPayloadForSpellCasting"),
+            [](UObject*) { return std::string("Magic"); });
+
         if (m_playerPostLoginCallbackId == 0 && m_playerClientRestartCallbackId == 0
             && m_playerPawnStateCallbackId == 0)
         {
@@ -1122,9 +1194,11 @@ namespace DragonWilds {
 
         PS::Log<LogLevel::Verbose>(
             STR("/players is event-driven (PostLogin={}, ClientRestart={}, "
-                "OnRep_PlayerState={}); periodic player scanning is disabled.\n"),
+                "OnRep_PlayerState={}, TagsChanged={}, PlayerDamage={}, "
+                "AttackActivity={}, MagicActivity={}); periodic player action scanning is disabled.\n"),
             m_playerPostLoginCallbackId != 0, m_playerClientRestartCallbackId != 0,
-            m_playerPawnStateCallbackId != 0);
+            m_playerPawnStateCallbackId != 0, m_playerTagsChangedCallbackId != 0,
+            m_playerDamageReceivedCallbackId != 0, attackActivity, magicActivity);
     }
 
     UObject* ResolveAIHealthComponent(UObject* character)
@@ -1718,6 +1792,7 @@ namespace DragonWilds {
             [this](Hook::TCallbackIterationData<void>&, UEngine*, float deltaSeconds, bool) {
                 PlayerGhost::Flush();
                 RetryPendingAINames(deltaSeconds);
+                RefreshPlayerNameplates(deltaSeconds);
                 if (!m_pendingWorld)
                 {
                     return;

@@ -132,6 +132,24 @@ namespace DragonWilds {
             bool HasFallback = false;
         };
 
+        struct PlayerNameplateStateRule {
+            bool Configured = false;
+            std::string Icon;
+            double Scale = 1.0;
+            double InactivitySeconds = 0.0;
+        };
+
+        struct PlayerNameplateRule {
+            bool Configured = false;
+            std::string Mode = "Name";
+            std::string Icon;
+            double Scale = 1.0;
+            double Distance = 2500.0;
+            bool ShowSelf = false;
+            bool ShowOthers = true;
+            std::unordered_map<std::string, PlayerNameplateStateRule> States;
+        };
+
         struct AppearanceSource {
             std::unordered_map<std::string, std::string> Tables;
             std::unordered_map<std::string, std::string> FallbackRows;
@@ -207,6 +225,7 @@ namespace DragonWilds {
             std::vector<PlayerAttributeMultiplier> AttributeMultipliers;
             std::vector<PlayerAttributeEdit> Attributes;
             std::vector<PlayerAppearanceSelection> Appearance;
+            PlayerNameplateRule Nameplate;
             nlohmann::json VisualEffect;
             double ScaleMultiplier = 1.0;
             double HealthMultiplier = 1.0;
@@ -259,6 +278,15 @@ namespace DragonWilds {
         int32_t m_playerClientRestartCallbackId = 0;
         RC::Unreal::UFunction* m_playerPawnStateFunction = nullptr;
         int32_t m_playerPawnStateCallbackId = 0;
+        RC::Unreal::UFunction* m_playerTagsChangedFunction = nullptr;
+        int32_t m_playerTagsChangedCallbackId = 0;
+        RC::Unreal::UFunction* m_playerDamageReceivedFunction = nullptr;
+        int32_t m_playerDamageReceivedCallbackId = 0;
+        struct PlayerActivityHook {
+            RC::Unreal::UFunction* Function = nullptr;
+            int32_t CallbackId = 0;
+        };
+        std::vector<PlayerActivityHook> m_playerActivityHooks;
         RC::Unreal::Hook::GlobalCallbackId m_spawnTickCallbackId = RC::Unreal::Hook::ERROR_ID;
         bool m_processingSpawns = false;
         std::unordered_set<RC::Unreal::UObject*> m_dropScaledActors;
@@ -283,7 +311,15 @@ namespace DragonWilds {
         std::unordered_set<std::string> m_reportedPlayerRuleApplications;
         std::unordered_set<std::string> m_reportedAppearanceNoOps;
         struct AppliedVisual { RC::Unreal::FWeakObjectPtr Actor; std::string Signature; };
+        struct ActiveNameplateState {
+            RC::Unreal::FWeakObjectPtr Actor;
+            std::string State;
+            double RemainingSeconds = 0.0;
+        };
         std::unordered_map<RC::Unreal::UObject*, AppliedVisual> m_visualEffectAppliedActors;
+        std::unordered_map<RC::Unreal::UObject*, AppliedVisual> m_nameplateAppliedActors;
+        std::unordered_map<RC::Unreal::UObject*, ActiveNameplateState> m_activeNameplateStates;
+        double m_nameplateRefreshElapsed = 0.0;
         std::unordered_map<std::string,GhostMaterials::Set> m_sharedSpawnVisuals;
         std::vector<RC::Unreal::UObject*> m_rootedVisualEffectMaterials;
         std::size_t m_reportedNewSpawns = 0;
@@ -343,7 +379,16 @@ namespace DragonWilds {
         void LoadNativeRespawnState();
         bool SaveNativeRespawnState(std::string& error);
         void ApplyPlayerRules();
-        void ApplyClientPlayerVisualRules(RC::Unreal::UObject* pawn);
+        void ApplyClientPlayerVisualRules(RC::Unreal::UObject* pawn,
+            bool nameplatesOnly = false);
+        void RefreshPlayerNameplates(double deltaSeconds);
+        void SetPlayerNameplateActivity(RC::Unreal::UObject* source,
+            const std::string& state);
+        RC::Unreal::UObject* ResolvePlayerPawnFromActivity(
+            RC::Unreal::UObject* source);
+        std::string ClassifyPlayerAttackActivity(RC::Unreal::UObject* source);
+        bool ApplyPlayerNameplate(RC::Unreal::UObject* pawn,
+            const PlayerNameplateRule& rule, const RC::StringType& context);
         bool AdjustRuntimePlayerRule(const std::string& targetPlayerName,
             const PlayerRule& rule, std::string& result,
             const std::string& targetPlayerGuid = {});

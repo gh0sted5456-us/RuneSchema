@@ -43,6 +43,7 @@ namespace DragonWilds {
             nlohmann::json Requirements;
             Placement Target;
             bool Unlock = true;
+            bool Clone = false;
         };
 
         struct LoadResult {
@@ -65,6 +66,7 @@ namespace DragonWilds {
         };
 
         void ReadDefinitions(const nlohmann::json& data, const RC::StringType& modName);
+        void ApplyPatch(const nlohmann::json& patch, const RC::StringType& modName);
         void ApplyDefinitions();
         RC::Unreal::UObject* LoadBuilding(
             const BuildingDefinition& definition, LoadResult& result);
@@ -89,6 +91,8 @@ namespace DragonWilds {
         RC::Unreal::UObject* FindBuildingSubsystem(
             RC::Unreal::UObject* worldContext = nullptr) const;
         RC::Unreal::UObject* LoadObject(const RC::StringType& path) const;
+        RC::Unreal::UObject* CloneBuilding(const RC::StringType& sourcePath,
+            const RC::StringType& owner, const RC::StringType& key);
         static RC::StringType Identity(
             const RC::StringType& owner, const RC::StringType& key);
 
@@ -102,6 +106,7 @@ namespace DragonWilds {
         std::unordered_set<RC::StringType> m_applied;
         std::unordered_set<RC::StringType> m_unlocks;
         std::vector<RC::Unreal::UObject*> m_retiredBuildings;
+        std::vector<RC::Unreal::UObject*> m_createdBuildings;
         NativeRegistrySnapshot m_nativeRegistrySnapshot;
         std::filesystem::path m_worldManifestPath;
         bool m_hooksRegistered = false;

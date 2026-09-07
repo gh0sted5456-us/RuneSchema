@@ -1,0 +1,44 @@
+[
+  {
+    "Id": "player-activity-nameplates",
+    "PlayerName": "*",
+    "Nameplate": {
+      "Mode": "Name",
+      "Distance": 2500,
+      "Client": "Yes",
+      "Server": "Yes",
+      "States": {
+        "Attack": {
+          "Icon": "/Game/Art/UI/Skills/2025/Skill_Tree_Icons/T_Icon_SkillTree_Attack.T_Icon_SkillTree_Attack",
+          "Scale": 0.75,
+          "InactivitySeconds": 2.0
+        },
+        "Ranged": {
+          "Icon": "/Game/Art/UI/Skills/2025/Skill_Tree_Icons/T_Icon_SkillTree_Ranged.T_Icon_SkillTree_Ranged",
+          "Scale": 0.75,
+          "InactivitySeconds": 2.0
+        },
+        "Magic": {
+          "Icon": "/Game/Art/UI/Skills/2025/Skill_Tree_Icons/T_Icon_SkillTree_Magic.T_Icon_SkillTree_Magic",
+          "Scale": 0.75,
+          "InactivitySeconds": 2.5
+        },
+        "Woodcutting": {
+          "Icon": "/Game/Art/UI/Skills/2025/Skill_Tree_Icons/T_Icon_SkillTree_Woodcutting.T_Icon_SkillTree_Woodcutting",
+          "Scale": 0.75,
+          "InactivitySeconds": 2.0
+        },
+        "Mining": {
+          "Icon": "/Game/Art/UI/Skills/2025/Skill_Tree_Icons/T_Icon_SkillTree_Mining.T_Icon_SkillTree_Mining",
+          "Scale": 0.75,
+          "InactivitySeconds": 2.0
+        },
+        "Dead": {
+          "Icon": "/Game/Art/UI/Icons/Chinchompa_undeadShovel_ZombieAxe/T_Icon_Spectral_Chinchompa_Skull.T_Icon_Spectral_Chinchompa_Skull",
+          "Scale": 0.9,
+          "InactivitySeconds": 2.0
+        }
+      }
+    }
+  }
+]

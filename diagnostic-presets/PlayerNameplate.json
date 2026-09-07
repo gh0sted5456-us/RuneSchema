@@ -1,0 +1,76 @@
+{
+  "Name": "PlayerNameplate",
+  "PropertyCaptures": [
+    {
+      "Root": "Player",
+      "Path": [
+        "BP_Player_Nameplate",
+        "WidgetClass"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "BP_Player_Nameplate",
+        "Widget"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "BP_Player_Nameplate",
+        "DrawSize"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "BP_Player_Nameplate",
+        "CurrentDrawSize"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "BP_Player_Nameplate",
+        "DistanceFromPlayerToShow"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "BP_Player_Nameplate",
+        "bHiddenInGame"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "BP_Player_Nameplate",
+        "Widget",
+        "PlayerNameTextBlock"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "PlayerState",
+        "*"
+      ]
+    },
+    {
+      "Root": "Controller",
+      "Path": [
+        "PlayerState",
+        "*"
+      ]
+    }
+  ],
+  "CaptureLimits": {
+    "FollowObjectReferences": true,
+    "MaxDepth": 6,
+    "MaxEntries": 160,
+    "MaxNodes": 8192,
+    "MaxSparseSlots": 4096
+  }
+}

@@ -217,6 +217,11 @@ namespace DragonWilds {
     void DragonWildsBuildingModLoader::ReadDefinitions(
         const nlohmann::json& data, const RC::StringType& modName)
     {
+        if (data.is_array())
+        {
+            for (const auto& entry : data) ReadDefinitions(entry, modName);
+            return;
+        }
         if (!data.is_object())
         {
             PS::Log<LogLevel::Error>(
@@ -231,6 +236,12 @@ namespace DragonWilds {
                 continue;
             }
 
+            if (key == "$Patch")
+            {
+                ApplyPatch(data, modName);
+                break;
+            }
+
             if (!body.is_object())
             {
                 PS::Log<LogLevel::Error>(
@@ -239,10 +250,12 @@ namespace DragonWilds {
                 continue;
             }
 
-            if (!body.contains("Asset") || !body.at("Asset").is_string())
+            const bool hasAsset = body.contains("Asset") && body.at("Asset").is_string();
+            const bool hasClone = body.contains("$Clone") && body.at("$Clone").is_string();
+            if (hasAsset == hasClone)
             {
                 PS::Log<LogLevel::Error>(
-                    STR("{}: Building '{}' requires a cooked 'Asset' path.\n"),
+                    STR("{}: Building '{}' requires exactly one string 'Asset' or '$Clone' path.\n"),
                     modName, RC::to_generic_string(key));
                 continue;
             }
@@ -250,8 +263,9 @@ namespace DragonWilds {
             BuildingDefinition definition{};
             definition.Owner = modName;
             definition.Key = RC::to_generic_string(key);
-            definition.AssetPath =
-                RC::to_generic_string(body.at("Asset").get<std::string>());
+            definition.Clone = hasClone;
+            definition.AssetPath = RC::to_generic_string(
+                body.at(hasClone ? "$Clone" : "Asset").get<std::string>());
 
             if (body.contains("Properties"))
             {
@@ -367,6 +381,85 @@ namespace DragonWilds {
         }
     }
 
+    void DragonWildsBuildingModLoader::ApplyPatch(
+        const nlohmann::json& patch, const RC::StringType& modName)
+    {
+        if (!patch.contains("$Patch") || !patch.at("$Patch").is_string()
+            || !patch.contains("$Target") || !patch.at("$Target").is_object())
+        {
+            PS::Log<LogLevel::Error>(STR("{}: Building '$Patch' requires a string identity and object '$Target'.\n"), modName);
+            return;
+        }
+
+        auto target = RC::to_generic_string(patch.at("$Patch").get<std::string>());
+        const auto separator = target.find(TEXT(':'));
+        const auto targetOwner = separator == RC::StringType::npos
+            ? modName : target.substr(0, separator);
+        const auto targetKey = separator == RC::StringType::npos
+            ? target : target.substr(separator + 1);
+        const auto displayTarget = targetOwner + TEXT(":") + targetKey;
+
+        auto existing = std::find_if(m_definitions.begin(), m_definitions.end(),
+            [&](const BuildingDefinition& definition) {
+                return definition.Owner == targetOwner && definition.Key == targetKey;
+            });
+        if (existing == m_definitions.end())
+        {
+            PS::Log<LogLevel::Error>(STR("{}: Building patch target '{}' was not found.\n"), modName, displayTarget);
+            return;
+        }
+
+        const auto& body = patch.at("$Target");
+        for (const auto& [name, value] : body.items())
+        {
+            if (name == "Properties")
+            {
+                if (!value.is_object())
+                {
+                    PS::Log<LogLevel::Error>(STR("{}: Building patch '{}.Properties' must be an object.\n"), modName, displayTarget);
+                    return;
+                }
+                if (!existing->Properties.is_object()) existing->Properties = nlohmann::json::object();
+                for (const auto& [property, propertyValue] : value.items())
+                    existing->Properties[property] = propertyValue;
+            }
+            else if (name == "Requirements")
+            {
+                if (!value.is_array())
+                {
+                    PS::Log<LogLevel::Error>(STR("{}: Building patch '{}.Requirements' must be an array.\n"), modName, displayTarget);
+                    return;
+                }
+                existing->Requirements = value;
+            }
+            else if (name == "Unlock")
+            {
+                if (!value.is_boolean())
+                {
+                    PS::Log<LogLevel::Error>(STR("{}: Building patch '{}.Unlock' must be boolean.\n"), modName, displayTarget);
+                    return;
+                }
+                existing->Unlock = value.get<bool>();
+            }
+            else if (name == "AddTo")
+            {
+                if (!value.is_object() || !value.contains("Collection") || !value.at("Collection").is_string())
+                {
+                    PS::Log<LogLevel::Error>(STR("{}: Building patch '{}.AddTo' requires a Collection string.\n"), modName, displayTarget);
+                    return;
+                }
+                existing->Target.Collection = RC::to_generic_string(value.at("Collection").get<std::string>());
+                if (value.contains("PageIndex")) existing->Target.PageIndex = value.at("PageIndex").get<int32>();
+            }
+            else
+            {
+                PS::Log<LogLevel::Error>(STR("{}: Building patch '{}' cannot change '{}'.\n"), modName, displayTarget, RC::to_generic_string(name));
+                return;
+            }
+        }
+        m_applied.erase(Identity(existing->Owner, existing->Key));
+    }
+
     void DragonWildsBuildingModLoader::ApplyDefinitions()
     {
         if (!m_catalogue)
@@ -461,7 +554,9 @@ namespace DragonWilds {
             return found->second;
         }
 
-        auto* building = LoadObject(definition.AssetPath);
+        auto* building = definition.Clone
+            ? CloneBuilding(definition.AssetPath, definition.Owner, definition.Key)
+            : LoadObject(definition.AssetPath);
         if (!building || !building->IsA(m_buildingPieceClass))
         {
             PS::Log<LogLevel::Error>(
@@ -474,6 +569,44 @@ namespace DragonWilds {
         building->SetRootSet();
         m_buildings.emplace(identity, building);
         return building;
+    }
+
+    UObject* DragonWildsBuildingModLoader::CloneBuilding(
+        const RC::StringType& sourcePath, const RC::StringType& owner, const RC::StringType& key)
+    {
+        auto* source = LoadObject(sourcePath);
+        if (!source || !source->GetClassPrivate()) return nullptr;
+        auto* transientPackage = UECustom::UObjectGlobals::StaticFindObject(
+            nullptr, nullptr, TEXT("/Engine/Transient"), false);
+        if (!transientPackage) return nullptr;
+
+        static uint32 sequence = 0;
+        const auto name = std::format(STR("RuneSchemaBuilding_{}_{}"), key, ++sequence);
+        FStaticConstructObjectParameters params(source->GetClassPrivate(), transientPackage);
+        params.Name = FName(name, FNAME_Add);
+        params.SetFlags = static_cast<EObjectFlags>(RF_Public | RF_Standalone | RF_Transactional);
+        auto* created = UObjectGlobals::StaticConstructObject<UObject*>(params);
+        if (!created) return nullptr;
+
+        for (auto* property : TFieldRange<FProperty>(source->GetClassPrivate(), EFieldIterationFlags::Default))
+        {
+            if (property) property->CopyCompleteValue_InContainer(created, source);
+        }
+
+        const auto stableIdentity = std::format(STR("RuneSchema:{}:{}"), owner, key);
+        for (const auto* field : { TEXT("PersistenceID"), TEXT("InternalName") })
+        {
+            if (auto* property = PropertyHelper::GetPropertyByName(
+                    created->GetClassPrivate(), field))
+            {
+                PropertyHelper::CopyJsonValueToContainer(created, property,
+                    RC::to_string(stableIdentity));
+            }
+        }
+        created->SetRootSet();
+        m_createdBuildings.push_back(created);
+        PS::Log<LogLevel::Verbose>(STR("{}: cloned building '{}' as '{}'.\n"), owner, sourcePath, created->GetPathName());
+        return created;
     }
 
     void DragonWildsBuildingModLoader::ApplyProperties(

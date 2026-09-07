@@ -1,0 +1,6 @@
+# Dragonwilds Sync ID v1
+Schema: DragonwildsSync.ID.v1
+ModId: PlayerNameplateTest
+Name: PlayerNameplateTest
+RuntimeRole: both
+HOTLOAD = NO

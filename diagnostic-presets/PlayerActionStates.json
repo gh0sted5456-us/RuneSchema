@@ -1,0 +1,26 @@
+{
+  "Name": "PlayerActionStates",
+  "PropertyCaptures": [
+    { "Root": "Player", "Path": ["BP_Components_PlayerActionPerformer", "*"] },
+    { "Root": "Player", "Path": ["BP_Components_PlayerAnimationManager", "*"] },
+    { "Root": "Player", "Path": ["BP_Components_PlayerBlocking", "*"] },
+    { "Root": "Player", "Path": ["BP_Components_PlayerCombatMode", "*"] },
+    { "Root": "Player", "Path": ["BP_Components_PlayerMeleeAttack", "*"] },
+    { "Root": "Player", "Path": ["BP_Components_PlayerRangedAttack", "*"] },
+    { "Root": "Player", "Path": ["BP_Components_PlayerCombatMagic", "*"] },
+    { "Root": "Player", "Path": ["BP_Components_PlayerUtilityMagic", "*"] },
+    { "Root": "Player", "Path": ["BP_Components_PlayerEmotes", "*"] },
+    { "Root": "Player", "Path": ["BP_Components_InteractionDetector", "*"] },
+    { "Root": "Player", "Path": ["BP_Components_InteractionManager", "*"] },
+    { "Root": "Player", "Path": ["BP_Components_PlayerGameplayEffects", "*"] },
+    { "Root": "Player", "Path": ["BP_Components_PlayerTrackedStatusEffects", "*"] },
+    { "Root": "Player", "Path": ["PlayerState", "PrivilegeComponent", "*"] }
+  ],
+  "CaptureLimits": {
+    "FollowObjectReferences": false,
+    "MaxDepth": 5,
+    "MaxEntries": 256,
+    "MaxNodes": 16384,
+    "MaxSparseSlots": 4096
+  }
+}

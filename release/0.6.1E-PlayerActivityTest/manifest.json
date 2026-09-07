@@ -1,0 +1,27 @@
+[
+  {
+    "path": "PlayerActivityNameplates.zip",
+    "bytes": 1849,
+    "sha256": "6CD46EC05CA004B07AE437F7C2B548399337E4C07210987200D3523C2D1EFA73"
+  },
+  {
+    "path": "RuneSchema 0.6.1E Player Activity Test.zip",
+    "bytes": 1374253,
+    "sha256": "282811034CB4E0F5FB490F6D6A6F4AAD03DB43CEBF9433A22B1D8729908E3447"
+  },
+  {
+    "path": "RuneSchema-0.6.1E-PlayerActivityTest-SOURCE.zip",
+    "bytes": 453535,
+    "sha256": "F78F74BD9C4C94DAAC3BEACC3C8E08A51F4061891CE263CF4C0B726D072C397E"
+  },
+  {
+    "path": "RuneSchema-0.6.1E-PlayerActivityTest-SYMBOLS.zip",
+    "bytes": 10369775,
+    "sha256": "4265E862B8861A8CDD991177AC22AE3D82BD2EE73BC931D56E7AF8808A60ECB4"
+  },
+  {
+    "path": "RuneSchema-Authoring-Guide.md",
+    "bytes": 53238,
+    "sha256": "A733C4C1A4FC8CA4875EE4D27BD7DB9371155536FA4156D1D7645EBBBFFDB989"
+  }
+]

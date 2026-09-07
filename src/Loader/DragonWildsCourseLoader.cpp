@@ -50,6 +50,17 @@ namespace {
         };
     }
 
+    void MergeJsonObject(nlohmann::json& target, const nlohmann::json& patch)
+    {
+        for (const auto& [key, value] : patch.items())
+        {
+            if (value.is_object() && target.contains(key) && target.at(key).is_object())
+                MergeJsonObject(target[key], value);
+            else
+                target[key] = value;
+        }
+    }
+
 }
 
 namespace DragonWilds {
@@ -114,12 +125,61 @@ namespace DragonWilds {
         {
             for (const auto& value : data)
             {
-                RegisterCourse(value, modName);
+                if (value.is_object() && value.contains("$Patch")) ApplyPatch(value, modName);
+                else RegisterCourse(value, modName);
             }
             return;
         }
 
+        if (data.is_object() && data.contains("$Patch"))
+        {
+            ApplyPatch(data, modName);
+            return;
+        }
+
         RegisterCourse(data, modName);
+    }
+
+    void DragonWildsCourseLoader::ApplyPatch(
+        const nlohmann::json& patch, const RC::StringType& modName)
+    {
+        if (!patch.at("$Patch").is_string()
+            || !patch.contains("$Target") || !patch.at("$Target").is_object())
+        {
+            PS::Log<LogLevel::Error>(STR("{}: Course '$Patch' requires a string identity and object '$Target'.\n"), modName);
+            return;
+        }
+
+        auto target = RC::to_generic_string(patch.at("$Patch").get<std::string>());
+        auto separator = target.find(TEXT(':'));
+        const auto targetId = separator == RC::StringType::npos
+            ? target : target.substr(separator + 1);
+        const auto targetMod = separator == RC::StringType::npos
+            ? RC::StringType{} : target.substr(0, separator);
+
+        auto found = std::find_if(m_courses.begin(), m_courses.end(), [&](const CourseInfo& course) {
+            return course.Id == targetId && (targetMod.empty() || course.ModName == targetMod);
+        });
+        if (found == m_courses.end())
+        {
+            PS::Log<LogLevel::Error>(STR("{}: Course patch target '{}' was not found.\n"), modName, target);
+            return;
+        }
+
+        if (patch.at("$Target").contains("Id"))
+        {
+            PS::Log<LogLevel::Error>(STR("{}: Course patch '{}' cannot change Id.\n"), modName, target);
+            return;
+        }
+
+        auto merged = found->Source;
+        MergeJsonObject(merged, patch.at("$Target"));
+        const auto original = *found;
+        m_courses.erase(found);
+        const auto count = m_courses.size();
+        RegisterCourse(merged, original.ModName);
+        if (m_courses.size() == count)
+            m_courses.push_back(original);
     }
 
     void DragonWildsCourseLoader::RegisterCourse(const nlohmann::json& value, const RC::StringType& modName)
@@ -281,6 +341,7 @@ namespace DragonWilds {
 
             CourseInfo course{};
             course.ModName = modName;
+            course.Source = value;
             course.Id = readString(value, "Id", {});
             if (course.Id.empty())
             {
