@@ -1,0 +1,25 @@
+{
+  "Name": "Anima07SpellGraph",
+  "PropertyCaptures": [
+    {
+      "Root": "Player",
+      "Path": [
+        "PlayerCombatMagicComponent",
+        "EquippedMagicAmmoToPrimaryStarterSpell"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "PlayerCombatMagicComponent",
+        "EquippedMagicAmmoToSecondaryStarterSpell"
+      ]
+    }
+  ],
+  "CaptureLimits": {
+    "FollowObjectReferences": true,
+    "MaxDepth": 6,
+    "MaxEntries": 128,
+    "MaxNodes": 8192
+  }
+}

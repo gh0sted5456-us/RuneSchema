@@ -34,20 +34,7 @@ namespace UECustom {
         Add(ValuePtr.GetData());
     }
 
-    bool FScriptArrayHelper::RemoveAtIndex(RC::Unreal::int32 Index)
-    {
-        auto ElementSize = GetElementSize();
-        auto ElementAlignment = GetMinAlignment();
 
-        if (!ScriptArray->IsValidIndex(Index))
-        {
-            return false;
-        }
-
-        ScriptArray->Remove(Index, 1, ElementSize, ElementAlignment);
-
-        return true;
-    }
 
     void FScriptArrayHelper::Empty()
     {
@@ -64,24 +51,7 @@ namespace UECustom {
         ScriptArray->Empty(0, ElementSize, ElementAlignment);
     }
 
-    void FScriptArrayHelper::ExpandForIndex(RC::Unreal::int32 Index)
-    {
-        if (Index < ScriptArray->Num())
-        {
-            return;
-        }
 
-        const auto ElementSize = GetElementSize();
-        const auto Count = Index - ScriptArray->Num() + 1;
-        const auto FirstIndex = ScriptArray->Add(
-            Count, ElementSize, GetMinAlignment());
-        auto* Data = static_cast<uint8*>(ScriptArray->GetData());
-        auto* Inner = GetInner();
-        for (int32 Offset = 0; Offset < Count; ++Offset)
-        {
-            Inner->InitializeValue(Data + (FirstIndex + Offset) * ElementSize);
-        }
-    }
 
     void FScriptArrayHelper::InitializeValue(UECustom::FManagedValue& OutValuePtr)
     {

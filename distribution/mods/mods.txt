@@ -1,7 +1,0 @@
-# RuneSchema 0.6.1E deterministic mod order
-# One folder per line. 1 enables it; 0 disables it.
-# Included demonstrations are disabled by default. Change 0 to 1 to test one.
-DawnveilPaladinSet : 0
-RuneschemaCapes : 0
-FourPlayerProfiles : 0
-NamedSpawnShowcase : 0

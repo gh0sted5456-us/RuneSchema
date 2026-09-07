@@ -10,6 +10,8 @@ namespace DragonWilds {
         FManagedStruct(RC::Unreal::UScriptStruct* Struct);
 
         ~FManagedStruct();
+        FManagedStruct(const FManagedStruct&) = delete;
+        FManagedStruct& operator=(const FManagedStruct&) = delete;
 
         void* GetData();
     private:

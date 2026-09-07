@@ -2,7 +2,6 @@
 #include "Unreal/Engine/UDataTable.hpp"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
-#include "UE4SSProgram.hpp"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -24,7 +23,7 @@ namespace DragonWilds {
         m_datatableRegistry = &datatableRegistry;
 
         m_datatableSerializeCallbackId = m_datatableRegistry->RegisterDatatableSerializeCallback([&](RC::Unreal::UDataTable* datatable) {
-            OnDatatableSerialized(datatable);
+            if (HasInitialized()) OnDatatableSerialized(datatable);
         });
     }
 
@@ -40,7 +39,7 @@ namespace DragonWilds {
 
     void DragonWildsModLoaderBase::AutoReload(const std::filesystem::path::string_type& modName, const std::filesystem::path& modFilePath)
     {
-        OnAutoReload(modName, modFilePath);
+        if (HasInitialized()) OnAutoReload(modName, modFilePath);
     }
 
     void DragonWildsModLoaderBase::Load(const fs::path& modPath, const RC::StringType& modName, const EEngineLifecyclePhase& engineLifecyclePhase)
@@ -59,27 +58,24 @@ namespace DragonWilds {
         OnLoad(loaderPath, modName, engineLifecyclePhase);
     }
 
+    void DragonWildsModLoaderBase::FinalizeLoad(const EEngineLifecyclePhase& phase)
+    {
+        if (HasInitialized()) OnFinalizeLoad(phase);
+    }
+
 	void DragonWildsModLoaderBase::Initialize(const EEngineLifecyclePhase& engineLifecyclePhase) {
+        if (!PS::PSConfig::Get()->IsLoaderEnabled(m_modFolderType)) return;
         if (!CanInitialize(engineLifecyclePhase))
         {
             return;
         }
 
         Initialize_Internal();
-
-        std::lock_guard<std::mutex> guard(m_mutex);
-
-        if (!HasInitialized())
-        {
-            return;
-        }
-
-        PostInitialize();
     }
 
-    const bool& DragonWildsModLoaderBase::HasInitialized() const
+    bool DragonWildsModLoaderBase::HasInitialized() const
     {
-        return m_hasInitialized;
+        return m_hasInitialized.load(std::memory_order_acquire);
     }
 
     const std::string& DragonWildsModLoaderBase::GetModFolderType()
@@ -90,22 +86,6 @@ namespace DragonWilds {
     void DragonWildsModLoaderBase::SetDisplayName(const RC::StringType& displayName)
     {
         m_displayName = displayName;
-    }
-
-    void DragonWildsModLoaderBase::IterateModsFolder(const std::function<void(const std::filesystem::path&, const RC::StringType&)>& callback)
-    {
-        static auto modsPath = fs::path(UE4SSProgram::get_program().get_working_directory()) / "Mods" / "RuneSchema" / "mods";
-        if (fs::exists(modsPath))
-        {
-            for (const auto& entry : fs::directory_iterator(modsPath)) {
-                if (entry.is_directory())
-                {
-                    auto& path = entry.path();
-                    auto folderName = path.filename().native();
-                    callback(entry.path(), folderName);
-                }
-            }
-        }
     }
 
     RC::Unreal::UDataTable* DragonWildsModLoaderBase::TryGetDatatableByName(const std::string& name)
@@ -140,7 +120,8 @@ namespace DragonWilds {
 
     void DragonWildsModLoaderBase::OnAutoReload(const std::filesystem::path::string_type& modName, const std::filesystem::path& modFilePath) {}
 
-    void DragonWildsModLoaderBase::PostInitialize() {}
+    void DragonWildsModLoaderBase::OnFinalizeLoad(const EEngineLifecyclePhase&) {}
+
 
     void DragonWildsModLoaderBase::OnDatatableSerialized(RC::Unreal::UDataTable* datatable) {}
 

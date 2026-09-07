@@ -1,11 +1,13 @@
 #pragma once
 
 #include <vector>
+#include <atomic>
 #include <functional>
 #include "Loader/DragonWildsModLoaderBase.h"
 #include "Misc/DragonWildsDataRegistrar.h"
 #include "SDK/Classes/Custom/UDataTableStore.h"
 #include "safetyhook.hpp"
+#include "Utility/UnrealReadinessGate.h"
 
 namespace RC::Unreal {
     class AGameModeBase;
@@ -65,7 +67,7 @@ namespace DragonWilds {
 
         void SetupAlternativePakPathReader();
 
-        void InitCore();
+        bool InitCore();
 
         void RegisterLoader(std::unique_ptr<DragonWildsModLoaderBase> newLoader);
 
@@ -81,12 +83,12 @@ namespace DragonWilds {
 
         static void OnGameInstanceInit(RC::Unreal::UObject* This);
 
-        bool m_hasInit = false;
-        bool m_compatibilityReportGenerated = false;
+        PS::UnrealReadinessGate<RC::Unreal::UDataTable*> m_readiness;
+        bool m_orderResolved = false;
+        std::vector<RC::StringType> m_orderedMods;
 
         static inline std::vector<std::function<void(RC::Unreal::UDataTable*)>> DatatableSerializeCallbacks;
         static inline std::vector<std::function<void(RC::Unreal::UObject*)>> GameInstanceInitCallbacks;
-        static inline std::vector<std::function<void()>> GetPakFoldersCallback;
 
         static inline SafetyHookInline DatatableSerialize_Hook;
         static inline SafetyHookInline GameInstanceInit_Hook;

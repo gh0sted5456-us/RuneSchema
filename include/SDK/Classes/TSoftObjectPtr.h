@@ -27,11 +27,6 @@ namespace UECustom {
         {
             return SoftObjectPtr;
         }
-
-        void SetResolvedObject(RC::Unreal::UObject* Object)
-        {
-            SoftObjectPtr.WeakPtr = RC::Unreal::FWeakObjectPtr(Object);
-        }
     private:
         FSoftObjectPtr SoftObjectPtr;
     };

@@ -1,5 +1,4 @@
 #include "Misc/FileWatchWrapper.h"
-#include "UE4SSProgram.hpp"
 
 namespace fs = std::filesystem;
 
@@ -15,7 +14,12 @@ namespace PS {
 
     FileWatchWrapper::~FileWatchWrapper()
     {
-        m_fileWatcher->removeWatch(m_fileWatchId);
+        if (m_fileWatcher) {
+            m_fileWatcher->removeWatch(m_fileWatchId);
+            // Join before destroying the listener.
+            m_fileWatcher.reset();
+        }
+        m_updateListener.reset();
     }
 
     void FileWatchWrapper::Watch()

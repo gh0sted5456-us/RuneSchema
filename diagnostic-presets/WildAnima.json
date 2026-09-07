@@ -1,0 +1,9 @@
+{
+  "Name": "WildAnima",
+  "Objects": [
+    "/Game/Gameplay/Items/Resources/Magic/ITEM_Resources_WildAnima.ITEM_Resources_WildAnima",
+    "/Game/Gameplay/Items/Resources/Magic/ITEM_Rune_Air.ITEM_Rune_Air"
+  ],
+  "ControllerProperties": ["InventoryComponent", "InventoryController", "PersonalInventoryComponent"],
+  "IncludeControllerComponents": true
+}

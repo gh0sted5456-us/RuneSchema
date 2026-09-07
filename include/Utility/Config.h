@@ -2,32 +2,50 @@
 
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include "nlohmann/json.hpp"
 
 namespace PS {
-    struct ModsTxtSettings {
+    struct LoadOrderSettings {
         bool enabled = true;
         bool autoCreate = true;
         bool reconcileFolders = true;
         bool preserveComments = true;
         bool strictValues = true;
+        bool deterministicFallback = true;
     };
 
-    struct CompatibilityReportSettings {
-        bool enabled = true;
-        bool writeFile = true;
-        bool warnSameTarget = true;
-        bool warnSameProperty = true;
-        bool warnArrayReplacement = true;
+    struct RoutineNotificationSettings {
+        bool modLoading = true;
+        bool assets = true;
+        bool raw = true;
+        bool recipes = true;
+        bool journal = true;
+        bool spawns = true;
+        bool players = true;
+        bool patches = true;
     };
 
-    struct ToolingSettings {
-        bool enabled = true;
-        ModsTxtSettings modsTxt;
-        CompatibilityReportSettings compatibilityReports;
-        bool enableSchemaGeneration = true;
-        bool enableFModelSnippetGenerator = false;
+    struct LoaderActivationSettings {
+        bool equipment = true;
+        bool blueprints = true;
+        bool assets = true;
+        bool recipes = true;
+        bool journal = true;
+        bool raw = true;
+        bool enums = true;
+        bool strings = true;
+        bool buildings = true;
+        bool spawns = true;
+        bool courses = true;
+        bool players = true;
+    };
+
+    struct SpawnBehaviorSettings {
+        bool enableNativeRoaming = true;
+        double defaultRoamRadius = 800.0;
+        double defaultRoamMaxZTolerance = 200.0;
     };
 
     struct PSConfigSettings {
@@ -35,40 +53,39 @@ namespace PS {
         bool enableAutoReload = false;
         bool enableDebugLogging = false;
         bool enableExperimentalDropScaling = false;
-        ToolingSettings tooling;
+        LoadOrderSettings loadOrder{};
+        RoutineNotificationSettings notifications{};
+        LoaderActivationSettings loaders{};
+        SpawnBehaviorSettings spawnBehavior{};
     };
 
     class PSConfig {
     public:
         static PSConfig* Get();
     public:
-        std::string GetLanguageOverride();
-
         bool IsAutoReloadEnabled();
 
         bool IsDebugLoggingEnabled();
 
         bool IsExperimentalDropScalingEnabled();
 
-        bool IsSchemaGenerationEnabled();
+        const LoadOrderSettings& GetLoadOrderSettings();
 
-        bool IsFModelSnippetGeneratorEnabled();
+        bool IsLoaderEnabled(const std::string& loaderName) const;
 
-        bool IsToolingEnabled() const;
+        bool IsRoutineNotificationEnabled(std::string_view channel) const;
 
-        const ModsTxtSettings& GetModsTxtSettings() const;
+        PSConfigSettings& GetMutableSettings();
 
-        const CompatibilityReportSettings& GetCompatibilityReportSettings() const;
-
-        PSConfigSettings& GetSettings();
-
-        void Load();
+        const PSConfigSettings& GetSettings() const;
 
         void Save();
 
+        void Load();
+    private:
         static std::filesystem::path GetConfigPath();
+
     private:
         PSConfigSettings m_settings;
-        nlohmann::json m_rawSettings = nlohmann::json::object();
     };
 }

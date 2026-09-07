@@ -5,5 +5,4 @@ namespace DragonWilds::UnrealOffsets {
 
     void InitializeGMalloc();
 
-    void ApplyMemberVariableLayout();
 }

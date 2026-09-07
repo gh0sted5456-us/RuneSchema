@@ -1,0 +1,51 @@
+{
+  "Name": "FrontendCharacterPreview",
+  "PropertyCaptures": [
+    {
+      "Root": "/Game/Maps/L_FrontEnd.L_FrontEnd:PersistentLevel.BP_PlayerCharacterPreview_C_1",
+      "Path": ["*"]
+    },
+    {
+      "Root": "/Game/Maps/L_FrontEnd.L_FrontEnd:PersistentLevel.BP_PlayerCharacterPreview_C_1",
+      "Path": ["OutfitInventory", "*"]
+    },
+    {
+      "Root": "/Game/Maps/L_FrontEnd.L_FrontEnd:PersistentLevel.BP_PlayerCharacterPreview_C_1",
+      "Path": ["OutfitHelmet", "*"]
+    },
+    {
+      "Root": "/Game/Maps/L_FrontEnd.L_FrontEnd:PersistentLevel.BP_PlayerCharacterPreview_C_1",
+      "Path": ["OutfitBody", "*"]
+    },
+    {
+      "Root": "/Game/Maps/L_FrontEnd.L_FrontEnd:PersistentLevel.BP_PlayerCharacterPreview_C_1",
+      "Path": ["OutfitLegs", "*"]
+    },
+    {
+      "Root": "/Game/Maps/L_FrontEnd.L_FrontEnd:PersistentLevel.BP_PlayerCharacterPreview_C_1",
+      "Path": ["OutfitCape", "*"]
+    },
+    {
+      "Root": "/Game/Maps/L_FrontEnd.L_FrontEnd:PersistentLevel.BP_PlayerCharacterPreview_C_1",
+      "Path": ["HeadEquipment", "*"]
+    },
+    {
+      "Root": "/Game/Maps/L_FrontEnd.L_FrontEnd:PersistentLevel.BP_PlayerCharacterPreview_C_1",
+      "Path": ["BodyEquipment", "*"]
+    },
+    {
+      "Root": "/Game/Maps/L_FrontEnd.L_FrontEnd:PersistentLevel.BP_PlayerCharacterPreview_C_1",
+      "Path": ["LegsEquipment", "*"]
+    },
+    {
+      "Root": "/Game/Maps/L_FrontEnd.L_FrontEnd:PersistentLevel.BP_PlayerCharacterPreview_C_1",
+      "Path": ["CapeEquipment", "*"]
+    }
+  ],
+  "CaptureLimits": {
+    "MaxDepth": 4,
+    "MaxEntries": 128,
+    "MaxNodes": 4096,
+    "FollowObjectReferences": false
+  }
+}

@@ -5,9 +5,9 @@ namespace UECustom {
     public:
         FManagedValue() {};
 
-        FManagedValue(void* InData);
-
         ~FManagedValue();
+        FManagedValue(const FManagedValue&) = delete;
+        FManagedValue& operator=(const FManagedValue&) = delete;
 
         void Copy(void* InData);
 

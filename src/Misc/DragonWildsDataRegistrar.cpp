@@ -89,13 +89,21 @@ namespace DragonWilds {
         return true;
     }
 
+    void DragonWildsDataRegistrar::Shutdown()
+    {
+        if (m_gameStateHook != Hook::ERROR_ID) Hook::UnregisterCallback(m_gameStateHook);
+        m_gameStateHook = Hook::ERROR_ID;
+        for (const auto& [function, id] : m_functionHooks) if (function && id) function->UnregisterHook(id);
+        m_functionHooks.clear();
+    }
+
     void DragonWildsDataRegistrar::InstallHooks()
     {
         Hook::FCallbackOptions options{};
         options.OwnerModName = TEXT("RuneSchema");
         options.HookName = TEXT("DataRegistrarInitGameState");
 
-        Hook::RegisterInitGameStatePostCallback(
+        m_gameStateHook = Hook::RegisterInitGameStatePostCallback(
             [this](Hook::TCallbackIterationData<void>&, AGameModeBase*) {
                 RegisterAll();
             }, options);
@@ -109,9 +117,10 @@ namespace DragonWilds {
                 continue;
             }
 
-            function->RegisterPreHook([](UnrealScriptFunctionCallableContext& context, void* customData) {
+            const auto id = function->RegisterPreHook([](UnrealScriptFunctionCallableContext& context, void* customData) {
                 static_cast<DragonWildsDataRegistrar*>(customData)->RegisterAll();
             }, this);
+            m_functionHooks.emplace_back(function, id);
         }
     }
 

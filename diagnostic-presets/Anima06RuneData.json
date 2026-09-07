@@ -1,0 +1,33 @@
+{
+  "Name": "Anima06RuneData",
+  "PropertyCaptures": [
+    {
+      "Root": "/Game/Gameplay/Items/Resources/Magic/ITEM_Rune_Air.ITEM_Rune_Air",
+      "Path": [
+        "*"
+      ]
+    },
+    {
+      "Root": "/Game/Gameplay/Items/Resources/Magic/ITEM_Rune_Water.ITEM_Rune_Water",
+      "Path": [
+        "*"
+      ]
+    },
+    {
+      "Root": "/Game/Gameplay/Items/Resources/Magic/ITEM_Rune_Fire.ITEM_Rune_Fire",
+      "Path": [
+        "*"
+      ]
+    },
+    {
+      "Root": "/Game/Gameplay/UtilityMagic/PerkSpells/Windstep/USD_Windstep.USD_Windstep:SpellModule_CostItems_0",
+      "Path": [
+        "*"
+      ]
+    }
+  ],
+  "CaptureLimits": {
+    "MaxEntries": 128,
+    "MaxNodes": 4096
+  }
+}

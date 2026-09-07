@@ -767,8 +767,7 @@ namespace DragonWilds {
                 });
 
             auto findCourseComponent = [](AActor* actor) -> UObject* {
-                // Native orb classes use AgilityCourseComponent. The exported course
-                // wall/arrow blueprints name the same component AgilityCourse.
+                // Native orbs use AgilityCourseComponent; walls/arrows use AgilityCourse.
                 for (const auto* name : { STR("AgilityCourseComponent"), STR("AgilityCourse") })
                 {
                     if (PropertyHelper::GetPropertyByName(actor->GetClassPrivate(), name))

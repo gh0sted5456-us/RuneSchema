@@ -14,9 +14,6 @@ namespace RC::Unreal {
 }
 
 namespace DragonWilds::ActorHelper {
-    // Converts export-index paths copied from tools such as FModel
-    // (/Game/Path/Asset.0) to Unreal's canonical object path
-    // (/Game/Path/Asset.Asset). Canonical paths pass through unchanged.
     RC::StringType NormalizeObjectPath(const RC::StringType& Path);
 
     RC::Unreal::UObject* ResolveObject(const RC::StringType& Path);
@@ -33,16 +30,11 @@ namespace DragonWilds::ActorHelper {
                                    const RC::Unreal::FRotator& Rotation,
                                    const std::function<void(RC::Unreal::AActor*)>& Configure = {},
                                    RC::Unreal::ESpawnActorScaleMethod ScaleMethod =
-                                       RC::Unreal::ESpawnActorScaleMethod::MultiplyWithRoot,
-                                   RC::Unreal::UObject* WorldContext = nullptr,
-                                   RC::Unreal::AActor* Owner = nullptr,
-                                   bool UseAdjustedCollision = false);
+                                       RC::Unreal::ESpawnActorScaleMethod::MultiplyWithRoot);
 
     void DestroyActor(RC::Unreal::AActor* Actor);
 
     RC::Unreal::FVector GetActorLocation(RC::Unreal::AActor* Actor);
-
-    RC::Unreal::FRotator GetActorRotation(RC::Unreal::AActor* Actor);
 
     RC::Unreal::UObject* ConstructTransientObject(RC::Unreal::UClass* ObjectClass, const RC::StringType& Name);
 
@@ -57,7 +49,6 @@ namespace DragonWilds::ActorHelper {
     class FunctionCall {
     public:
         FunctionCall(RC::Unreal::UObject* Self, const RC::StringType& FunctionPath);
-        FunctionCall(RC::Unreal::UObject* Self, RC::Unreal::UFunction* Function);
 
         template <typename T>
         FunctionCall& Arg(const RC::CharType* Name, const T& Value)
@@ -68,19 +59,9 @@ namespace DragonWilds::ActorHelper {
 
         FunctionCall& SoftObjectArg(const RC::CharType* Name, RC::Unreal::UObject* Value);
 
-        // Imports text through the live FTextProperty metadata instead of copying
-        // RuneSchema's compiled FText layout across the reflected function boundary.
-        FunctionCall& TextArg(const RC::CharType* Name, const RC::StringType& Value);
-
         FunctionCall& FirstNumericArg(double Value);
 
         void Invoke();
-
-        void DestroyArg(const RC::CharType* Name);
-
-        void ForEachObjectSetArg(
-            const RC::CharType* Name,
-            const std::function<void(RC::Unreal::UObject*)>& Callback);
 
         template <typename T>
         T Result()
@@ -93,10 +74,6 @@ namespace DragonWilds::ActorHelper {
         void MoveResult(void* Out, size_t Size);
 
         double NumericResult();
-
-        RC::StringType EnumResultName();
-
-        int64_t EnumResultValue();
 
     private:
         void Write(const RC::CharType* Name, const void* Data, size_t Size);

@@ -14,11 +14,7 @@ namespace UECustom {
 
         void Add(UECustom::FManagedValue& ValuePtr);
 
-        bool RemoveAtIndex(RC::Unreal::int32 Index);
-
         void Empty();
-
-        void ExpandForIndex(RC::Unreal::int32 Index);
 
         void InitializeValue(UECustom::FManagedValue& OutValuePtr);
 

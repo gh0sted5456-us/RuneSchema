@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <string>
 #include <mutex>
+#include "Utility/OrderedCallbacks.h"
 #include "Unreal/Core/HAL/Platform.hpp"
 
 namespace RC::Unreal {
@@ -25,12 +26,10 @@ namespace UECustom {
 
         void Add(RC::Unreal::UDataTable* datatable);
 
-        void Initialize();
     private:
         std::mutex m_mutex;
+        std::recursive_mutex m_dispatchMutex;
         std::unordered_map<std::string, RC::Unreal::UDataTable*> m_datatableMap;
-        std::unordered_map<DatatableSerializeCallbackId, DatatableSerializeCallback> m_callbackMap;
-
-        static DatatableSerializeCallbackId GenerateDatatableSerializeCallbackId();
+        PS::OrderedCallbacks<DatatableSerializeCallback> m_callbacks;
     };
 }

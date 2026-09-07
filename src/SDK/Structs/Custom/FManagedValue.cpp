@@ -5,10 +5,6 @@ using namespace RC;
 using namespace RC::Unreal;
 
 namespace UECustom {
-    FManagedValue::FManagedValue(void* InData) : Data(InData)
-    {
-    }
-
     FManagedValue::~FManagedValue()
     {
         FMemory::Free(Data);

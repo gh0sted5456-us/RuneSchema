@@ -3,10 +3,12 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <vector>
+#include "Unreal/FWeakObjectPtr.hpp"
 #include "Unreal/Hooks.hpp"
 #include "Unreal/Rotator.hpp"
 #include "Unreal/UnrealCoreStructs.hpp"
 #include "Loader/DragonWildsModLoaderBase.h"
+#include "Loader/Spawn/GhostMaterials.h"
 #include "SDK/Structs/FBox.h"
 #include "nlohmann/json.hpp"
 
@@ -36,10 +38,13 @@ namespace DragonWilds {
             ESpawnEntryType Type = ESpawnEntryType::AISpawnPoint;
             RC::StringType ModName;
             RC::StringType ClassPath;
+            RC::StringType AIClassPath;
             RC::StringType EntryId;
             std::string DisplayName;
+            std::string BossName;
             std::string LootRow;
             RC::Unreal::FVector Location{};
+            RC::Unreal::FVector AuthoredLocation{};
             RC::Unreal::FRotator Rotation{};
             RC::Unreal::FVector Scale{1.0, 1.0, 1.0};
             double DropMultiplier = 1.0;
@@ -49,8 +54,16 @@ namespace DragonWilds {
             nlohmann::json Properties;
             nlohmann::json CharacterProperties;
             nlohmann::json ComponentProperties;
+            nlohmann::json VisualEffect;
+            std::string PersistentPlacementKey;
+            bool bUseNativeRespawn = false;
             bool bExistsInWorld = false;
             bool bSpawnFailed = false;
+            bool bGroundToSurface = false;
+            bool bGroundingResolved = true;
+            double GroundZOffset = 0.0;
+            double GroundTraceAbove = 5000.0;
+            double GroundTraceBelow = 10000.0;
             RC::Unreal::FGuid StableId{};
             RC::Unreal::FGuid LegacyId{};
         };
@@ -60,10 +73,9 @@ namespace DragonWilds {
 
         ~DragonWildsSpawnLoader() override;
 
-        // /players is owned by the 0.6.2 spawn/runtime loader because it
-        // already owns the world-ready hook and recurring engine tick.
         void LoadPlayerRules(const std::filesystem::path& loaderPath,
             const RC::StringType& modName, bool replaceExisting = false);
+        void FinalizePlayerRules();
         void ClearAppearanceSources();
         void RegisterAppearanceSource(const std::filesystem::path& modPath,
             const RC::StringType& modName);
@@ -74,6 +86,7 @@ namespace DragonWilds {
 
         virtual bool CanInitialize(const EEngineLifecyclePhase& engineLifecyclePhase) override final;
         virtual bool OnInitialize() override final;
+        void OnFinalizeLoad(const EEngineLifecyclePhase& engineLifecyclePhase) override final;
     private:
         struct PlayerNumericBaseline {
             RC::Unreal::UObject* Object = nullptr;
@@ -194,6 +207,7 @@ namespace DragonWilds {
             std::vector<PlayerAttributeMultiplier> AttributeMultipliers;
             std::vector<PlayerAttributeEdit> Attributes;
             std::vector<PlayerAppearanceSelection> Appearance;
+            nlohmann::json VisualEffect;
             double ScaleMultiplier = 1.0;
             double HealthMultiplier = 1.0;
             double MaxHealth = 100.0;
@@ -221,7 +235,15 @@ namespace DragonWilds {
             std::string Guid;
         };
 
+        struct LiveAIBinding {
+            RC::Unreal::FWeakObjectPtr Actor;
+            RC::Unreal::FGuid SpawnId{};
+        };
+
         std::vector<SpawnInfo> m_spawns;
+        struct OwnedJsonDocument { RC::StringType ModName; nlohmann::json Document; };
+        std::vector<OwnedJsonDocument> m_spawnDocuments;
+        std::vector<OwnedJsonDocument> m_playerDocuments;
         RC::Unreal::UWorld* m_readyWorld = nullptr;
         RC::Unreal::UWorld* m_pendingWorld = nullptr;
         std::vector<UECustom::FBox> m_pendingCellBounds;
@@ -229,6 +251,14 @@ namespace DragonWilds {
         int32_t m_onLevelShownCallbackId = 0;
         RC::Unreal::UFunction* m_aiScaleFunction = nullptr;
         int32_t m_aiScaleCallbackId = 0;
+        RC::Unreal::UFunction* m_healthBarSetTextFunction = nullptr;
+        int32_t m_healthBarSetTextCallbackId = 0;
+        RC::Unreal::UFunction* m_playerPostLoginFunction = nullptr;
+        int32_t m_playerPostLoginCallbackId = 0;
+        RC::Unreal::UFunction* m_playerClientRestartFunction = nullptr;
+        int32_t m_playerClientRestartCallbackId = 0;
+        RC::Unreal::UFunction* m_playerPawnStateFunction = nullptr;
+        int32_t m_playerPawnStateCallbackId = 0;
         RC::Unreal::Hook::GlobalCallbackId m_spawnTickCallbackId = RC::Unreal::Hook::ERROR_ID;
         bool m_processingSpawns = false;
         std::unordered_set<RC::Unreal::UObject*> m_dropScaledActors;
@@ -236,18 +266,33 @@ namespace DragonWilds {
         std::unordered_set<RC::Unreal::UObject*> m_lootRowWarningActors;
         std::unordered_set<RC::Unreal::UObject*> m_combatScaledActors;
         std::unordered_set<RC::Unreal::UObject*> m_characterPropertiesAppliedActors;
+        std::unordered_set<RC::Unreal::UObject*> m_customNamedAIActors;
+        std::unordered_set<RC::Unreal::UObject*> m_customNameWarningActors;
+        std::unordered_map<RC::Unreal::UObject*, int> m_aiNameRetryAttempts;
+        std::vector<LiveAIBinding> m_liveAIBindings;
+        double m_aiNameRetryAccumulator = 0.0;
+        bool m_applyingHealthBarName = false;
+        std::unordered_set<std::string> m_placedNativeRespawnActors;
+        bool m_nativeRespawnStateLoaded = false;
         std::vector<PlayerRule> m_playerRules;
         std::vector<PlayerAdjustmentState> m_playerAdjustments;
-        std::vector<PlayerLoadOrderEntry> m_playerLoadOrder;
         std::unordered_map<std::string, AppearanceSource> m_appearanceSources;
         std::vector<AppearanceProvenance> m_appearanceProvenance;
         bool m_appearanceProvenanceLoaded = false;
         std::unordered_set<std::string> m_reportedPlayerRuleFailures;
         std::unordered_set<std::string> m_reportedPlayerRuleApplications;
         std::unordered_set<std::string> m_reportedAppearanceNoOps;
-        double m_playerRuleTickAccumulator = 0.0;
+        struct AppliedVisual { RC::Unreal::FWeakObjectPtr Actor; std::string Signature; };
+        std::unordered_map<RC::Unreal::UObject*, AppliedVisual> m_visualEffectAppliedActors;
+        std::unordered_map<std::string,GhostMaterials::Set> m_sharedSpawnVisuals;
+        std::vector<RC::Unreal::UObject*> m_rootedVisualEffectMaterials;
+        std::size_t m_reportedNewSpawns = 0;
+        std::size_t m_reportedAlteredSpawns = 0;
+        std::size_t m_reportedSpawnErrors = 0;
 
         void LoadSpawns(const nlohmann::json& data, const RC::StringType& modName);
+        void ParsePlayerRulesDocument(const nlohmann::json& data,
+            const RC::StringType& modName);
         void RegisterSpawn(const nlohmann::json& value, const RC::StringType& modName);
         void RegisterAISpawnPoint(SpawnInfo& spawn, const nlohmann::json& value);
         void RegisterAISpawnVariants(SpawnInfo& spawn, const nlohmann::json& variants, RC::Unreal::UClass* aiBaseClass);
@@ -258,9 +303,17 @@ namespace DragonWilds {
 
         bool SetupWorldReadyHook();
         void SetupAIScaleHook();
+        void SetupAIBindingHooks();
+        void SetupPlayerJoinHooks();
         void ApplyAIScale(RC::Unreal::UObject* character);
+        SpawnInfo* ResolveAISpawnForCharacter(RC::Unreal::UObject* character);
+        RC::Unreal::UObject* ResolveAINameTextBlock(
+            RC::Unreal::UObject* character, bool bossName = false);
+        void OnHealthBarTextSet(RC::Unreal::UObject* textBlock);
         void ApplyAIDisplayName(RC::Unreal::UObject* character,
-            const std::string& displayName);
+            const std::string& displayName,
+            const std::string& bossName = {});
+        void RetryPendingAINames(double deltaSeconds);
         void ApplyAILootRow(RC::Unreal::UObject* character,
             const std::string& lootRow);
         void ApplyCombatMultipliers(RC::Unreal::UObject* character,
@@ -268,6 +321,9 @@ namespace DragonWilds {
         void ApplyAIProperties(RC::Unreal::UObject* character,
             const nlohmann::json& characterProperties,
             const nlohmann::json& componentProperties);
+        bool ApplyVisualEffect(RC::Unreal::UObject* actor,
+            const nlohmann::json& visualEffect,
+            const RC::StringType& context);
         void ApplyDropMultiplier(RC::Unreal::UObject* actor, double multiplier);
         int ApplyDropMultiplierToObject(RC::Unreal::UObject* object, double multiplier);
         bool SetupSpawnTick();
@@ -279,14 +335,17 @@ namespace DragonWilds {
         void ProcessAISpawnPointEntry(RC::Unreal::UWorld* world, SpawnInfo& spawn);
         void ProcessActorEntry(RC::Unreal::UWorld* world, SpawnInfo& spawn);
         void ProcessRemoveActorEntry(RC::Unreal::UWorld* world, SpawnInfo& spawn);
+        void ResolveGroundedLocation(RC::Unreal::UWorld* world, SpawnInfo& spawn);
         void CleanupOrphanedActors(RC::Unreal::UWorld* world);
         RC::Unreal::AActor* FindActorByStableId(RC::Unreal::UWorld* world, const RC::Unreal::FGuid& stableId);
         void CreateSpawn(RC::Unreal::UWorld* world, SpawnInfo& spawn);
         void CreateActor(RC::Unreal::UWorld* world, SpawnInfo& spawn);
+        void LoadNativeRespawnState();
+        bool SaveNativeRespawnState(std::string& error);
         void ApplyPlayerRules();
+        void ApplyClientPlayerVisualRules(RC::Unreal::UObject* pawn);
         bool AdjustRuntimePlayerRule(const std::string& targetPlayerName,
             const PlayerRule& rule, std::string& result,
-            bool requireRuntimeSpawning,
             const std::string& targetPlayerGuid = {});
         RC::Unreal::UObject* FindPlayerControllerByName(
             const RC::StringType& playerName, bool& ambiguous);
@@ -310,5 +369,6 @@ namespace DragonWilds {
             const std::string& rowName, bool& changed,
             RC::Unreal::UObject** customization, std::string& error);
         static std::filesystem::path GetAppearanceProvenancePath();
+        static std::filesystem::path GetNativeRespawnStatePath();
     };
 }

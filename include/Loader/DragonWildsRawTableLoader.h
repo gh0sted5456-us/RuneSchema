@@ -19,13 +19,13 @@ namespace DragonWilds {
             int SuccessfulAdditions = 0;
             int SuccessfulDeletions = 0;
             int ErrorCount = 0;
+            int Patched = 0;
         };
 	public:
 		DragonWildsRawTableLoader();
 
-		~DragonWildsRawTableLoader();
+		~DragonWildsRawTableLoader() = default;
 
-		void Initialize();
 
         void Apply(const RC::StringType& datatableName, RC::Unreal::UDataTable* datatable);
 
@@ -35,12 +35,17 @@ namespace DragonWilds {
     protected:
         virtual void OnLoad(const std::filesystem::path& loaderPath, const RC::StringType& modName, const EEngineLifecyclePhase& engineLifecyclePhase) override final;
         virtual void OnAutoReload(const RC::StringType& modName, const std::filesystem::path& modFilePath) override final;
+        void OnFinalizeLoad(const EEngineLifecyclePhase& engineLifecyclePhase) override final;
 
         virtual bool CanInitialize(const EEngineLifecyclePhase& engineLifecyclePhase) override final;
         virtual bool OnInitialize() override final;
         virtual void OnDatatableSerialized(RC::Unreal::UDataTable* datatable) override final;
     private:
         std::unordered_map<RC::StringType, std::vector<nlohmann::json>> m_tableDataMap;
+        struct PendingPatch { std::string Table; std::string Row; nlohmann::json Changes; RC::StringType ModName; };
+        std::vector<PendingPatch> m_pendingPatches;
+        void LoadDocument(const nlohmann::json& data, const RC::StringType& modName);
+        void ReloadDocument(const nlohmann::json& data, const RC::StringType& modName);
 
         void HandleFilters(RC::Unreal::UDataTable* datatable, const nlohmann::json& data, LoadResult& outResult);
 

@@ -1,0 +1,19 @@
+{
+  "Name": "Anima05RuneMaps",
+  "PropertyCaptures": [
+    {
+      "Root": "Player",
+      "Path": [
+        "PlayerCombatMagicComponent",
+        "EquippedMagicAmmoToPrimaryStarterSpell"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "PlayerCombatMagicComponent",
+        "EquippedMagicAmmoToSecondaryStarterSpell"
+      ]
+    }
+  ]
+}

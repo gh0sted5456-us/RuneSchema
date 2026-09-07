@@ -1,0 +1,32 @@
+{
+  "Name": "AppearanceMaterials",
+  "PropertyCaptures": [
+    {
+      "Root": "Player",
+      "Path": [
+        "BodyMesh",
+        "OverrideMaterials"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "OutfitBodyMesh",
+        "OverrideMaterials"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "OutfitCapeMesh",
+        "OverrideMaterials"
+      ]
+    }
+  ],
+  "CaptureLimits": {
+    "FollowObjectReferences": true,
+    "MaxDepth": 5,
+    "MaxEntries": 128,
+    "MaxNodes": 8192
+  }
+}

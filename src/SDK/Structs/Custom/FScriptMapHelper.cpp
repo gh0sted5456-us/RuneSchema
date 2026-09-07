@@ -1,5 +1,8 @@
 #include "SDK/Structs/Custom/FScriptMapHelper.h"
 #include <Unreal/CoreUObject/UObject/UnrealType.hpp>
+#include <algorithm>
+#include <cstdint>
+#include <stdexcept>
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -65,7 +68,7 @@ namespace UECustom {
         void* KeyPtrToUpdate = PairPtrToUpdate;
         void* ValuePtrToUpdate = static_cast<uint8*>(PairPtrToUpdate) + MapLayout.ValueOffset;
 
-        for (auto Index = 0; Index < Num; ++Index)
+        for (auto Index = 0; Index < ScriptMap->GetMaxIndex(); ++Index)
         {
             if (!ScriptMap->IsValidIndex(Index)) {
                 continue;
@@ -95,7 +98,7 @@ namespace UECustom {
             throw std::runtime_error("Failed to remove TMap entry due to invalid ScriptMap.");
         }
 
-        for (auto Index = 0; Index < Num; ++Index)
+        for (auto Index = 0; Index < ScriptMap->GetMaxIndex(); ++Index)
         {
             if (!ScriptMap->IsValidIndex(Index)) {
                 continue;
@@ -116,7 +119,17 @@ namespace UECustom {
 
     void FScriptMapHelper::InitializePair(UECustom::FManagedValue& PairPtr)
     {
-        uint8* Pair = static_cast<uint8*>(FMemory::Malloc(KeyProperty->GetElementSize() + ValueProperty->GetElementSize()));
+        // Allocate the padded map layout, not key size + value size.
+        const auto size = MapLayout.SetLayout.Size;
+        const auto alignment = std::max(KeyProperty->GetMinAlignment(), ValueProperty->GetMinAlignment());
+        if (KeyProperty->GetSize() <= 0 || ValueProperty->GetSize() <= 0
+            || MapLayout.ValueOffset < KeyProperty->GetSize()
+            || static_cast<int64_t>(MapLayout.ValueOffset) + ValueProperty->GetSize() > size
+            || alignment <= 0 || (alignment & (alignment - 1)))
+            throw std::runtime_error("Invalid reflected map pair layout");
+        uint8* Pair = static_cast<uint8*>(FMemory::Malloc(size, alignment));
+        if (!Pair) throw std::bad_alloc();
+        PairPtr.Copy(Pair);
 
         void* KeyPtr = Pair;
         KeyProperty->InitializeValue(KeyPtr);
@@ -124,7 +137,6 @@ namespace UECustom {
         void* ValuePtr = Pair + MapLayout.ValueOffset;
         ValueProperty->InitializeValue(ValuePtr);
 
-        PairPtr.Copy(Pair);
     }
 
     void FScriptMapHelper::ForEachPair(const std::function<void(void*, void*)> Callback)

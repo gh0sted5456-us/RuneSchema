@@ -1,25 +1,42 @@
 {
-    "languageOverride": "",
-    "enableAutoReload": false,
-    "enableDebugLogging": false,
-    "enableExperimentalDropScaling": false,
-    "tooling": {
-        "enabled": true,
-        "enableSchemaGeneration": true,
-        "enableFModelSnippetGenerator": false,
-        "modsTxt": {
-            "enabled": true,
-            "autoCreate": true,
-            "reconcileFolders": true,
-            "preserveComments": true,
-            "strictValues": true
-        },
-        "compatibilityReports": {
-            "enabled": true,
-            "writeFile": true,
-            "warnSameTarget": true,
-            "warnSameProperty": true,
-            "warnArrayReplacement": true
-        }
-    }
+  "languageOverride": "",
+  "enableAutoReload": false,
+  "enableDebugLogging": false,
+  "enableExperimentalDropScaling": false,
+  "loadOrder": {
+    "enabled": true,
+    "autoCreate": true,
+    "reconcileFolders": true,
+    "preserveComments": true,
+    "strictValues": true,
+    "deterministicFallback": true
+  },
+  "notifications": {
+    "modLoading": true,
+    "assets": true,
+    "raw": true,
+    "recipes": true,
+    "journal": true,
+    "spawns": true,
+    "players": true,
+    "patches": true
+  },
+  "loaders": {
+    "blueprints": true,
+    "assets": true,
+    "recipes": true,
+    "journal": true,
+    "raw": true,
+    "enums": true,
+    "strings": true,
+    "buildings": true,
+    "spawns": true,
+    "courses": true,
+    "players": true
+  },
+  "spawnBehavior": {
+    "enableNativeRoaming": true,
+    "defaultRoamRadius": 800.0,
+    "defaultRoamMaxZTolerance": 200.0
+  }
 }

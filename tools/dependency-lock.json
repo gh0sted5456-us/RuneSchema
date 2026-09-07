@@ -1,0 +1,52 @@
+[
+  {
+    "path": "C:/rs062-feature/_deps/safetyhook-src",
+    "files": 30,
+    "treeSha256": "840fc27ab5fb8f63b47a44fa1b022a0c0da9563fe462c5184d25f543a9b20313"
+  },
+  {
+    "path": "C:/rs062-feature/_deps/efsw-src",
+    "files": 64,
+    "treeSha256": "9b6045662c05176317c8024ef82a9d6bf69dfca5537702eec7aedc3c2a724959"
+  },
+  {
+    "path": "C:/rs062-feature/_deps/fmt-src",
+    "files": 70,
+    "treeSha256": "ddfda6fdd1b35c7c6401811693bc99452addae2b007e6673ae36788c71347be4"
+  },
+  {
+    "path": "C:/rs062-feature/_deps/imgui-src",
+    "files": 86,
+    "treeSha256": "58c8040396ffd067220df363e389000b54c0670439bf7f90f8b617d49e9c21cb"
+  },
+  {
+    "path": "C:/rs062-feature/_deps/imguitextedit-src",
+    "files": 2,
+    "treeSha256": "2dfa673ff8969d2067a62b412ca4ce1e5e067051bd209c680c338e8da5c02e99"
+  },
+  {
+    "path": "C:/rs062-feature/_deps/zydis-src",
+    "files": 106,
+    "treeSha256": "388b5350c5a0be884e607d737ea92bf97208dae98334e2ee8bb42ec943d45fe1"
+  },
+  {
+    "path": "C:/rs062-feature/_deps/nlohmann_json-src",
+    "files": 456,
+    "treeSha256": "6de7a1bdb0bf3feaaae12cfb2507b0e3cfee78ce715b673f9321d2e4e454c2c7"
+  },
+  {
+    "path": "C:/rs062-feature/_deps/glaze-src",
+    "files": 296,
+    "treeSha256": "1100a4746802aee3a95ce4d1069db8ff54f79a2e2251e7d57ff9b94d2c6f83c8"
+  },
+  {
+    "path": "C:/rs062-feature/_deps/ue4ss-src",
+    "files": 2876,
+    "treeSha256": "0cc9f762c1aa8fa36140c665deab98e347251e91ca66de493a33cbfa64a0f4be"
+  },
+  {
+    "path": "C:/rs062-feature/_deps/zydis-build",
+    "files": 0,
+    "treeSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+]

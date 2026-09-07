@@ -12,6 +12,7 @@
 #include "Utility/Logging.h"
 #include "Utility/JsonHelpers.h"
 #include "Loader/DragonWildsRawTableLoader.h"
+#include "Core/JsonPatchDirective.h"
 #include "Loader/WildcardFilter/WildcardFilters.h"
 
 using namespace RC;
@@ -25,7 +26,6 @@ namespace DragonWilds {
         SetDisplayName(TEXT("Raw Table Loader"));
     }
 
-    DragonWildsRawTableLoader::~DragonWildsRawTableLoader() {}
 
     void DragonWildsRawTableLoader::Apply(const RC::StringType& tableName, RC::Unreal::UDataTable* datatable)
     {
@@ -39,9 +39,10 @@ namespace DragonWilds {
                 Apply(data, datatable, result);
             }
 
-            PS::Log<LogLevel::Normal>(STR("{}: {} rows updated, {} rows added, {} rows deleted, {} error{}.\n"),
+            PS::RoutineLog("raw", STR("{}: {} rows updated, {} rows added, {} rows deleted, {} error{}.\n"),
                 datatable->GetName(), result.SuccessfulModifications, result.SuccessfulAdditions,
                 result.SuccessfulDeletions, result.ErrorCount, result.ErrorCount > 1 || result.ErrorCount == 0 ? STR("s") : STR(""));
+            if (result.Patched) PS::RoutineLog("patches", STR("{} $Patch: {} updated.\n"), datatable->GetName(), result.Patched);
         }
     }
 
@@ -83,13 +84,24 @@ namespace DragonWilds {
             }
 
             auto row = datatable->FindRowUnchecked(rowKeyName);
+            const bool patchOnly = dataRow.is_object() && dataRow.value("$PatchOnly", false);
             if (!row)
             {
+                if (patchOnly)
+                {
+                    outResult.ErrorCount++;
+                    PS::Log<LogLevel::Error>(STR("Raw $Patch target '{}:{}' was not found; no row was created.\n"),
+                        datatable->GetName(), rowKeyName.ToString());
+                    continue;
+                }
                 AddRow(datatable, rowKeyName, dataRow, outResult);
                 continue;
             }
-
-            EditRow(datatable, rowKeyName, row, dataRow, outResult);
+            auto effective = dataRow;
+            if (patchOnly) effective.erase("$PatchOnly");
+            const auto priorErrors = outResult.ErrorCount;
+            EditRow(datatable, rowKeyName, row, effective, outResult);
+            if (patchOnly && outResult.ErrorCount == priorErrors) ++outResult.Patched;
         }
     }
 
@@ -101,6 +113,32 @@ namespace DragonWilds {
         }
 
         PS::JsonHelpers::ParseJsonFilesInPath(loaderPath, [&](const nlohmann::json& data) {
+            LoadDocument(data, modName);
+        });
+    }
+
+    void DragonWildsRawTableLoader::LoadDocument(const nlohmann::json& data, const RC::StringType& modName)
+    {
+        if (data.is_array()) { for (const auto& entry : data) LoadDocument(entry, modName); return; }
+            try
+            {
+                static constexpr std::array<std::string_view, 0> noProtected{};
+                if (const auto patch = JsonPatchDirective::Parse(data, noProtected, "raw"))
+                {
+                    const auto colon = patch->Reference.find(':');
+                    if (colon == std::string::npos || colon == 0 || colon + 1 == patch->Reference.size())
+                        throw std::runtime_error("raw $Patch identity must be DataTable:RowName");
+                    m_pendingPatches.push_back({patch->Reference.substr(0, colon),
+                        patch->Reference.substr(colon + 1), patch->Changes, modName});
+                    return;
+                }
+            }
+            catch (const std::exception& error)
+            {
+                PS::Log<LogLevel::Error>(STR("Raw patch from {}: {}. Skipping.\n"),
+                    modName, PS::ToWideSafe(error.what()));
+                return;
+            }
             for (auto& [Key, Value] : data.items())
             {
                 if (Key.starts_with("$"))
@@ -110,12 +148,45 @@ namespace DragonWilds {
 
                 AddToTableDataMap(Key, Value);
             }
-        });
+    }
+
+    void DragonWildsRawTableLoader::OnFinalizeLoad(const EEngineLifecyclePhase& phase)
+    {
+        if (phase != EEngineLifecyclePhase::PostEngineInit) return;
+        for (auto& patch : m_pendingPatches)
+        {
+            patch.Changes["$PatchOnly"] = true;
+            AddToTableDataMap(patch.Table,
+                nlohmann::json{{patch.Row, std::move(patch.Changes)}});
+            PS::Log<LogLevel::Verbose>(STR("{} queued raw patch '{}:{}'.\n"),
+                patch.ModName, RC::to_generic_string(patch.Table),
+                RC::to_generic_string(patch.Row));
+        }
+        m_pendingPatches.clear();
     }
 
     void DragonWildsRawTableLoader::OnAutoReload(const RC::StringType& modName, const std::filesystem::path& modFilePath)
     {
         PS::JsonHelpers::ParseJsonFileInPath(modFilePath, [&](const nlohmann::json& data) {
+            ReloadDocument(data, modName);
+        });
+    }
+
+    void DragonWildsRawTableLoader::ReloadDocument(const nlohmann::json& data, const RC::StringType& modName)
+    {
+        if (data.is_array()) { for (const auto& entry : data) ReloadDocument(entry, modName); return; }
+        static constexpr std::array<std::string_view, 0> noProtected{};
+        if (const auto patch = JsonPatchDirective::Parse(data, noProtected, "raw"))
+        {
+            const auto colon = patch->Reference.find(':');
+            if (colon == std::string::npos || colon == 0 || colon + 1 == patch->Reference.size())
+                throw std::runtime_error("raw $Patch identity must be DataTable:RowName");
+            auto changes = patch->Changes;
+            changes["$PatchOnly"] = true;
+            ReloadDocument(nlohmann::json{{patch->Reference.substr(0, colon),
+                {{patch->Reference.substr(colon + 1), changes}}}}, modName);
+            return;
+        }
             for (auto& [key, value] : data.items())
             {
                 if (key.starts_with("$"))
@@ -135,11 +206,11 @@ namespace DragonWilds {
                 LoadResult result;
                 Apply(value, datatable, result);
 
-                PS::Log<LogLevel::Normal>(STR("{}: {} rows updated, {} rows added, {} rows deleted, {} error{}.\n"),
+                PS::RoutineLog("raw", STR("{}: {} rows updated, {} rows added, {} rows deleted, {} error{}.\n"),
                     name, result.SuccessfulModifications, result.SuccessfulAdditions,
                     result.SuccessfulDeletions, result.ErrorCount, result.ErrorCount > 1 || result.ErrorCount == 0 ? STR("s") : STR(""));
+            if (result.Patched) PS::RoutineLog("patches", STR("{} $Patch: {} updated.\n"), datatable->GetName(), result.Patched);
             }
-        });
     }
 
     bool DragonWildsRawTableLoader::CanInitialize(const EEngineLifecyclePhase& engineLifecyclePhase)

@@ -1,0 +1,141 @@
+{
+  "Name": "AppearanceState",
+  "PropertyCaptures": [
+    {
+      "Root": "Player",
+      "Path": [
+        "PlayerEquipmentComponent",
+        "CurrentCapeWearable"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "PlayerEquipmentComponent",
+        "HeldEquipmentActorLeft"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "PlayerEquipmentComponent",
+        "HeldEquipmentActorRight"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "VisibleMeshes"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "BodyMesh",
+        "bVisible"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "BodyMesh",
+        "bHiddenInGame"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "BodyMesh",
+        "OverlayMaterial"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "BodyMesh",
+        "OverrideMaterials"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "OutfitBodyMesh",
+        "bVisible"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "OutfitBodyMesh",
+        "bHiddenInGame"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "OutfitBodyMesh",
+        "OverlayMaterial"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "OutfitBodyMesh",
+        "OverrideMaterials"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "OutfitCapeMesh",
+        "bVisible"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "OutfitCapeMesh",
+        "bHiddenInGame"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "OutfitCapeMesh",
+        "OverlayMaterial"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "OutfitCapeMesh",
+        "OverrideMaterials"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "EquipmentMaterialComponent",
+        "EquipmentMeshDataToMaterialsToHide"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "GameplayEffectsComponent",
+        "ReplicatedInstances"
+      ]
+    },
+    {
+      "Root": "Player",
+      "Path": [
+        "GameplayEffectsComponent",
+        "NonReplicatedInstances"
+      ]
+    }
+  ],
+  "CaptureLimits": {
+    "MaxEntries": 128,
+    "MaxNodes": 8192
+  }
+}

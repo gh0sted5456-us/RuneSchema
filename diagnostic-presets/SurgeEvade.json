@@ -1,0 +1,10 @@
+{
+  "Name": "SurgeEvade",
+  "Objects": [
+    "/Game/Gameplay/UtilityMagic/PerkSpells/Surge/USD_Surge.USD_Surge",
+    "/Script/Dominion.PlayerEvadeComponent",
+    "/Script/Dominion.PlayerEquipmentComponent"
+  ],
+  "IncludePlayer": true,
+  "IncludeControllerComponents": true
+}

@@ -6,7 +6,6 @@
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
 #include "Unreal/Property/FEnumProperty.hpp"
-#include "Unreal/Property/FTextProperty.hpp"
 #include "Unreal/Transform.hpp"
 #include "Unreal/UFunctionStructs.hpp"
 #include "Unreal/UObject.hpp"
@@ -71,10 +70,7 @@ namespace DragonWilds::ActorHelper {
 
     StringType NormalizeObjectPath(const StringType& Path)
     {
-        if (Path.empty())
-        {
-            return Path;
-        }
+        if (Path.empty()) return Path;
 
         StringType normalized = Path;
         const auto slash = normalized.find_last_of(STR("/\\"));
@@ -85,8 +81,6 @@ namespace DragonWilds::ActorHelper {
             return normalized;
         }
 
-        // FModel appends the package export index (normally `.0`). It is not
-        // the Unreal object name and cannot be resolved as a soft object path.
         for (size_t index = dot + 1; index < normalized.size(); ++index)
         {
             if (normalized[index] < static_cast<CharType>('0')
@@ -117,32 +111,8 @@ namespace DragonWilds::ActorHelper {
 
     UClass* ResolveClass(const StringType& Path)
     {
-        // Do not short-circuit through StaticFindObject here. Blueprint-generated
-        // classes can be unloaded and their object slots reused while the stale name
-        // lookup still succeeds. The soft-class loader performs Unreal's authoritative
-        // resolve/reload path and avoids handing callers a recycled non-class object.
-        auto softClass = UECustom::TSoftClassPtr<UObject>(UECustom::FSoftObjectPath(Path));
-        if (auto* loadedClass = UECustom::UKismetSystemLibrary::LoadClassAsset_Blocking(softClass))
-        {
-            return loadedClass;
-        }
-
-        // Some cooked Blueprint-generated classes cannot be reloaded directly after
-        // their package has been collected. Loading the owning Blueprint object first
-        // recreates its GeneratedClass, which can then be resolved by its stable _C path.
-        constexpr StringViewType generatedClassSuffix = STR("_C");
-        if (Path.size() > generatedClassSuffix.size()
-            && Path.ends_with(generatedClassSuffix))
-        {
-            const auto blueprintPath = Path.substr(0, Path.size() - generatedClassSuffix.size());
-            if (ResolveObject(blueprintPath))
-            {
-                return UECustom::UObjectGlobals::StaticFindObject<UClass*>(
-                    nullptr, nullptr, Path.c_str(), false);
-            }
-        }
-
-        return nullptr;
+        auto* found = ResolveObject(Path);
+        return found && found->IsA<UClass>() ? static_cast<UClass*>(found) : nullptr;
     }
 
     bool IsAbstract(UClass* Class)
@@ -163,10 +133,7 @@ namespace DragonWilds::ActorHelper {
                        const FVector& Location,
                        const FRotator& Rotation,
                        const std::function<void(AActor*)>& Configure,
-                       ESpawnActorScaleMethod ScaleMethod,
-                       UObject* WorldContext,
-                       AActor* Owner,
-                       bool UseAdjustedCollision)
+                       ESpawnActorScaleMethod ScaleMethod)
     {
         if (!World || !ActorClass)
         {
@@ -175,11 +142,9 @@ namespace DragonWilds::ActorHelper {
 
         auto transform = FTransform(Rotation, Location, FVector(1.0, 1.0, 1.0));
 
-        UObject* worldContext = WorldContext ? WorldContext : World;
-        AActor* owner = Owner;
-        auto collision = UseAdjustedCollision
-            ? static_cast<ESpawnActorCollisionHandlingMethod>(2)
-            : ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+        UObject* worldContext = World;
+        AActor* owner = nullptr;
+        auto collision = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
         auto begin = FunctionCall(GetDefaultObject(TEXT("/Script/Engine.Default__GameplayStatics")),
                                   STR("/Script/Engine.GameplayStatics:BeginDeferredActorSpawnFromClass"));
         begin.Arg(STR("WorldContextObject"), worldContext)
@@ -233,13 +198,6 @@ namespace DragonWilds::ActorHelper {
         auto call = FunctionCall(Actor, STR("/Script/Engine.Actor:K2_GetActorLocation"));
         call.Invoke();
         return call.Result<FVector>();
-    }
-
-    FRotator GetActorRotation(AActor* Actor)
-    {
-        auto call = FunctionCall(Actor, STR("/Script/Engine.Actor:K2_GetActorRotation"));
-        call.Invoke();
-        return call.Result<FRotator>();
     }
 
     UObject* ConstructTransientObject(UClass* ObjectClass, const StringType& Name)
@@ -327,16 +285,6 @@ namespace DragonWilds::ActorHelper {
         m_params.assign(m_function->GetParmsSize(), 0);
     }
 
-    FunctionCall::FunctionCall(UObject* Self, UFunction* Function)
-        : m_self(Self), m_function(Function)
-    {
-        if (!m_self)
-            throw std::runtime_error("Tried to call a function on a null object");
-        if (!m_function)
-            throw std::runtime_error("Tried to call an unavailable function");
-        m_params.assign(m_function->GetParmsSize(), 0);
-    }
-
     void FunctionCall::Write(const CharType* Name, const void* Data, size_t Size)
     {
         auto* property = m_function->FindProperty(FName(Name, FNAME_Find));
@@ -366,35 +314,10 @@ namespace DragonWilds::ActorHelper {
         return *this;
     }
 
-    FunctionCall& FunctionCall::TextArg(const CharType* Name, const StringType& Value)
-    {
-        auto* property = CastField<FTextProperty>(
-            m_function->FindProperty(FName(Name, FNAME_Find)));
-        if (!property || property->GetOffset_Internal() < 0
-            || static_cast<size_t>(property->GetOffset_Internal())
-                + static_cast<size_t>(property->GetElementSize()) > m_params.size())
-        {
-            throw std::runtime_error(std::format(
-                "Parameter '{}' is not a compatible live FText parameter",
-                RC::to_string(StringType(Name))));
-        }
-
-        auto* destination = m_params.data() + property->GetOffset_Internal();
-        property->InitializeValue(destination);
-        if (!property->ImportText_Direct(Value.c_str(), destination, m_self, 0, nullptr))
-        {
-            property->DestroyValue(destination);
-            std::memset(destination, 0, static_cast<size_t>(property->GetElementSize()));
-            throw std::runtime_error(std::format(
-                "Parameter '{}' could not import live FText",
-                RC::to_string(StringType(Name))));
-        }
-        return *this;
-    }
-
     FunctionCall& FunctionCall::FirstNumericArg(double Value)
     {
-        for (auto* property = m_function->GetPropertyLink(); property; property = property->GetPropertyLinkNext())
+        for (auto* property = m_function->GetPropertyLink(); property;
+             property = property->GetPropertyLinkNext())
         {
             if (auto* enumProperty = CastField<FEnumProperty>(property);
                 enumProperty && property != m_function->GetReturnProperty())
@@ -402,16 +325,19 @@ namespace DragonWilds::ActorHelper {
                 auto* underlying = enumProperty->GetUnderlyingProperty();
                 auto* address = enumProperty->ContainerPtrToValuePtr<void>(m_params.data());
                 if (!underlying || !address) continue;
-                underlying->SetIntPropertyValue(
-                    address, static_cast<int64>(std::llround(Value)));
+                underlying->SetIntPropertyValue(address, static_cast<int64>(std::llround(Value)));
                 return *this;
             }
+
             auto* numeric = CastField<FNumericProperty>(property);
             if (!numeric || property == m_function->GetReturnProperty()) continue;
             auto* address = numeric->ContainerPtrToValuePtr<void>(m_params.data());
-            if (numeric->IsFloatingPoint()) numeric->SetFloatingPointPropertyValue(address, Value);
-            else if (numeric->IsInteger()) numeric->SetIntPropertyValue(address, static_cast<int64>(std::llround(Value)));
-            else continue;
+            if (numeric->IsFloatingPoint())
+                numeric->SetFloatingPointPropertyValue(address, Value);
+            else if (numeric->IsInteger())
+                numeric->SetIntPropertyValue(address, static_cast<int64>(std::llround(Value)));
+            else
+                continue;
             return *this;
         }
         throw std::runtime_error("Function has no numeric or enum input parameter");
@@ -420,49 +346,6 @@ namespace DragonWilds::ActorHelper {
     void FunctionCall::Invoke()
     {
         m_self->ProcessEvent(m_function, m_params.data());
-    }
-
-    void FunctionCall::DestroyArg(const CharType* Name)
-    {
-        auto* property = m_function->FindProperty(FName(Name, FNAME_Find));
-        if (!property || property->GetOffset_Internal() < 0
-            || static_cast<size_t>(property->GetOffset_Internal())
-                + static_cast<size_t>(property->GetElementSize()) > m_params.size())
-        {
-            throw std::runtime_error(std::format("Parameter '{}' did not match the live function layout",
-                RC::to_string(StringType(Name))));
-        }
-
-        auto* value = m_params.data() + property->GetOffset_Internal();
-        property->DestroyValue(value);
-        std::memset(value, 0, static_cast<size_t>(property->GetElementSize()));
-    }
-
-    void FunctionCall::ForEachObjectSetArg(
-        const CharType* Name,
-        const std::function<void(UObject*)>& Callback)
-    {
-        auto* setProperty = CastField<FSetProperty>(m_function->FindProperty(FName(Name, FNAME_Find)));
-        if (!setProperty || !CastField<FObjectProperty>(setProperty->GetElementProp())
-            || setProperty->GetOffset_Internal() < 0
-            || static_cast<size_t>(setProperty->GetOffset_Internal())
-                + static_cast<size_t>(setProperty->GetElementSize()) > m_params.size())
-        {
-            throw std::runtime_error(std::format("Parameter '{}' is not an object set",
-                RC::to_string(StringType(Name))));
-        }
-
-        auto* set = reinterpret_cast<FScriptSet*>(m_params.data() + setProperty->GetOffset_Internal());
-        const auto layout = FScriptSet::GetScriptLayout(
-            setProperty->GetElementProp()->GetSize(),
-            setProperty->GetElementProp()->GetMinAlignment());
-        for (int32 index = 0; index < set->GetMaxIndex(); ++index)
-        {
-            if (!set->IsValidIndex(index)) continue;
-            auto* element = set->GetData(index, layout);
-            auto* object = element ? *reinterpret_cast<UObject**>(element) : nullptr;
-            if (object) Callback(object);
-        }
     }
 
     void FunctionCall::ReadReturn(void* Out, size_t Size)
@@ -491,53 +374,8 @@ namespace DragonWilds::ActorHelper {
         if (!property) throw std::runtime_error("Function has no numeric return value");
         auto* address = property->ContainerPtrToValuePtr<void>(m_params.data());
         if (property->IsFloatingPoint()) return property->GetFloatingPointPropertyValue(address);
-        if (property->IsInteger()) return static_cast<double>(property->GetSignedIntPropertyValue(address));
+        if (property->IsInteger())
+            return static_cast<double>(property->GetSignedIntPropertyValue(address));
         throw std::runtime_error("Function return value is not a supported numeric type");
-    }
-
-    StringType FunctionCall::EnumResultName()
-    {
-        auto* property = m_function->GetReturnProperty();
-        auto* address = property
-            ? property->ContainerPtrToValuePtr<void>(m_params.data()) : nullptr;
-        if (auto* enumProperty = CastField<FEnumProperty>(property))
-        {
-            auto* underlying = enumProperty->GetUnderlyingProperty();
-            UEnum* enumObject = enumProperty->GetEnum();
-            if (!address || !underlying || !enumObject)
-                throw std::runtime_error("Function enum return metadata was invalid");
-            return enumObject->GetNameByValue(
-                underlying->GetSignedIntPropertyValue(address)).ToString();
-        }
-        if (auto* numeric = CastField<FNumericProperty>(property); numeric && numeric->IsEnum())
-        {
-            UEnum* enumObject = numeric->GetIntPropertyEnum();
-            if (!address || !enumObject)
-                throw std::runtime_error("Function byte-enum return metadata was invalid");
-            return enumObject->GetNameByValue(
-                numeric->GetSignedIntPropertyValue(address)).ToString();
-        }
-        throw std::runtime_error("Function has no enum return value");
-    }
-
-    int64_t FunctionCall::EnumResultValue()
-    {
-        auto* property = m_function->GetReturnProperty();
-        auto* address = property
-            ? property->ContainerPtrToValuePtr<void>(m_params.data()) : nullptr;
-        if (auto* enumProperty = CastField<FEnumProperty>(property))
-        {
-            auto* underlying = enumProperty->GetUnderlyingProperty();
-            if (!address || !underlying)
-                throw std::runtime_error("Function enum return metadata was invalid");
-            return underlying->GetSignedIntPropertyValue(address);
-        }
-        if (auto* numeric = CastField<FNumericProperty>(property); numeric && numeric->IsEnum())
-        {
-            if (!address)
-                throw std::runtime_error("Function byte-enum return metadata was invalid");
-            return numeric->GetSignedIntPropertyValue(address);
-        }
-        throw std::runtime_error("Function has no enum return value");
     }
 }

@@ -13,10 +13,9 @@
 #include "SDK/Structs/Custom/FScriptMapHelper.h"
 #include "SDK/Structs/Custom/FScriptArrayHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
+#include "SDK/Helper/ArrayFieldPatch.h"
 #include "SDK/DragonWildsSignatures.h"
 #include "Utility/Logging.h"
-#include "Utility/ObjectPath.h"
-#include "Utility/RuntimeObjectResolver.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -62,9 +61,44 @@ namespace {
             }
         }
 
-        return objectPath.empty()
-            ? objectPath
-            : PS::ObjectPath::Normalize(objectPath, objectName, classReference);
+        if (!objectPath.empty() && !objectName.empty())
+        {
+            auto slash = objectPath.find_last_of(TEXT('/'));
+            auto dot = objectPath.find_last_of(TEXT('.'));
+            if (dot == RC::StringType::npos || (slash != RC::StringType::npos && dot < slash))
+            {
+                objectPath += TEXT(".") + objectName;
+            }
+            else
+            {
+                auto suffix = objectPath.substr(dot + 1);
+                auto numericSuffix = !suffix.empty()
+                    && std::all_of(suffix.begin(), suffix.end(), [](auto character) {
+                        return character >= TEXT('0') && character <= TEXT('9');
+                    });
+                if (numericSuffix)
+                {
+                    objectPath = objectPath.substr(0, dot + 1) + objectName;
+                }
+            }
+        }
+
+        if (classReference && !objectPath.empty() && !objectPath.ends_with(TEXT("_C")))
+        {
+            auto slash = objectPath.find_last_of(TEXT('/'));
+            auto dot = objectPath.find_last_of(TEXT('.'));
+            if (dot == RC::StringType::npos || (slash != RC::StringType::npos && dot < slash))
+            {
+                auto assetName = objectPath.substr(slash + 1);
+                objectPath += TEXT(".") + assetName + TEXT("_C");
+            }
+            else
+            {
+                objectPath += TEXT("_C");
+            }
+        }
+
+        return objectPath;
     }
 }
 
@@ -435,9 +469,32 @@ namespace DragonWilds {
                 }
             }
 
-            if (!objectPath.empty())
+            if (!objectPath.empty() && !objectName.empty())
             {
-                objectPath = PS::ObjectPath::Normalize(objectPath, objectName);
+                auto slash = objectPath.find_last_of(TEXT('/'));
+                auto dot = objectPath.find_last_of(TEXT('.'));
+                if (dot == RC::StringType::npos || (slash != RC::StringType::npos && dot < slash))
+                {
+                    objectPath += TEXT(".") + objectName;
+                }
+                else
+                {
+                    auto suffix = objectPath.substr(dot + 1);
+                    bool numericSuffix = !suffix.empty();
+                    for (auto character : suffix)
+                    {
+                        if (character < TEXT('0') || character > TEXT('9'))
+                        {
+                            numericSuffix = false;
+                            break;
+                        }
+                    }
+
+                    if (numericSuffix)
+                    {
+                        objectPath = objectPath.substr(0, dot + 1) + objectName;
+                    }
+                }
             }
 
             UObject* referencedObject = nullptr;
@@ -464,11 +521,6 @@ namespace DragonWilds {
                     return LoopAction::Continue;
                 });
             }
-
-            if (!referencedObject && !objectPath.empty())
-                referencedObject = PS::TryResolveRuntimeObjectFallback(objectPath);
-            if (!referencedObject && !objectName.empty())
-                referencedObject = PS::TryResolveRuntimeObjectFallback(objectName);
 
             if (!referencedObject)
             {
@@ -555,22 +607,6 @@ namespace DragonWilds {
         auto PackagePath = GetReferencePath(Value, false);
 
         *Destination = UECustom::TSoftObjectPtr<UObject>(UECustom::FSoftObjectPath(PackagePath));
-
-        if (!PackagePath.empty())
-        {
-            auto* resolved = UECustom::UObjectGlobals::StaticFindObject(
-                nullptr, nullptr, PackagePath.c_str(), false);
-            if (resolved)
-            {
-                Destination->SetResolvedObject(resolved);
-            }
-            else if (auto* runtime = PS::TryResolveRuntimeObjectFallback(PackagePath))
-            {
-                *Destination = UECustom::TSoftObjectPtr<UObject>(
-                    UECustom::FSoftObjectPath(runtime->GetPathName()));
-                Destination->SetResolvedObject(runtime);
-            }
-        }
     }
 
     void PropertyHelper::SetStructPropertyValueFromJsonValue(void* Data, RC::Unreal::FStructProperty* Property, const nlohmann::json& Value)
@@ -626,6 +662,11 @@ namespace DragonWilds {
 
     void PropertyHelper::SetArrayPropertyValueFromJsonValue(void* Data, RC::Unreal::FArrayProperty* Property, const nlohmann::json& Value)
     {
+        if (Value.is_object() && Value.contains("$Patch"))
+        {
+            PatchArrayFields(Data, Property, Value);
+            return;
+        }
         ValidateJsonValueType(Property, Value);
 
         auto ParsedValue = Value.get<nlohmann::json>();

@@ -1094,7 +1094,6 @@ namespace DragonWilds {
             std::memcpy(&object, key, sizeof(object));
             reverseKeys.push_back(object);
         });
-        // Remove backwards because Unreal maps retain sparse slots.
         for (auto iterator = reverseKeys.rbegin(); iterator != reverseKeys.rend(); ++iterator)
         {
             auto* object = *iterator;
@@ -1860,7 +1859,6 @@ namespace DragonWilds {
                 UObject* object = nullptr; std::memcpy(&object, key, sizeof(object));
                 keys.push_back(object);
             });
-            // Remove backwards because Unreal maps retain sparse slots.
             for (auto iterator = keys.rbegin(); iterator != keys.rend(); ++iterator)
             {
                 auto* key = *iterator;

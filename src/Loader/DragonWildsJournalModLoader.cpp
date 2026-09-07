@@ -27,6 +27,7 @@
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
 #include "Loader/DragonWildsJournalModLoader.h"
+#include "Core/JsonPatchDirective.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -126,9 +127,10 @@ namespace DragonWilds {
             PS::JsonHelpers::ParseJsonFilesInPath(loaderPath,
                 [this](const nlohmann::json& data) { QueueData(data); });
         }
-        else if (phase == EEngineLifecyclePhase::GameInstanceInit)
+        else if (phase == EEngineLifecyclePhase::GameInstanceInit && !m_initialJournalApplied)
         {
-            ApplyAll();
+            ApplyPendingPatches();
+            m_initialJournalApplied = ApplyAll().ErrorCount == 0;
         }
     }
 
@@ -196,6 +198,21 @@ namespace DragonWilds {
             }
 
             auto wideKey = RC::to_generic_string(key);
+            try
+            {
+                static constexpr std::array<std::string_view, 1> protectedIdentity{"PersistenceID"};
+                if (const auto patch = JsonPatchDirective::Parse(body, protectedIdentity, "journal"))
+                {
+                    m_pendingPatches.push_back({patch->Reference, patch->Changes});
+                    continue;
+                }
+            }
+            catch (const std::exception& error)
+            {
+                PS::Log<LogLevel::Error>(STR("Journal patch '{}': {}. Skipping.\n"),
+                    wideKey, PS::ToWideSafe(error.what()));
+                continue;
+            }
             auto found = std::find_if(m_defs.begin(), m_defs.end(),
                 [&](const JournalDef& def) { return def.Key == wideKey; });
             JournalDef replacement{ wideKey, body };
@@ -208,6 +225,32 @@ namespace DragonWilds {
                 *found = std::move(replacement);
             }
         }
+    }
+
+    void DragonWildsJournalModLoader::ApplyPendingPatches()
+    {
+        size_t updated = 0, errors = 0;
+        for (const auto& patch : m_pendingPatches)
+        {
+            auto key = patch.Reference;
+            if (const auto colon = key.find(':'); colon != std::string::npos) key = key.substr(colon + 1);
+            const auto wideKey = RC::to_generic_string(key);
+            auto found = std::find_if(m_defs.begin(), m_defs.end(),
+                [&](const JournalDef& def) { return def.Key == wideKey; });
+            if (found == m_defs.end())
+            {
+                PS::Log<LogLevel::Error>(STR("Journal $Patch target '{}' was not loaded; no entry was created.\n"), wideKey);
+                ++errors;
+                continue;
+            }
+            JsonPatchDirective::Directive directive{patch.Reference, patch.Changes};
+            const auto stats = JsonPatchDirective::Apply(found->Body, directive, true);
+            ++updated;
+            PS::Log<LogLevel::Verbose>( STR("Patched journal entry '{}' ({} fields overwritten).\n"),
+                found->Key, stats.FieldsOverwritten);
+        }
+        if (updated || errors) PS::RoutineLog("patches", STR("Journal $Patch: {} updated, {} errors.\n"), updated, errors);
+        m_pendingPatches.clear();
     }
 
     DragonWildsJournalModLoader::LoadResult DragonWildsJournalModLoader::ApplyAll()
@@ -259,7 +302,7 @@ namespace DragonWilds {
             }
             else
             {
-                PS::Log<LogLevel::Normal>(STR("Journal: {} entries ready, {} placements, 0 errors.\n"),
+                PS::RoutineLog("journal", STR("Journal: {} entries ready, {} placements, 0 errors.\n"),
                     result.EntriesReady, result.Placements);
             }
         }

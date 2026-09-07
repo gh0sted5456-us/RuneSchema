@@ -1,7 +1,16 @@
-https://unskippablecutscene.github.io/RuneSchema-Docs/
+# RuneSchema 0.6.1E
 
-## Experimental branch
+**UE4SS-Stack Limit Fix Dependent**
 
-Version 0.6.1E is the extended community authoring edition, built from the stable 0.6.2 runtime baseline. It adds deterministic mod loading and the expanded `/assets`, `/players`, and `/spawns` authoring features while retaining the established loaders. Compiled test builds are distributed separately from the repository.
+RuneSchema 0.6.1E is released by Jonesing4Space. It extends RuneSchema 0.6.0 by Snorkles, which is based on PalSchema by Okaetsu.
 
-RuneSchema 0.6.1E is released by Jonesing4Space. RuneSchema 0.6.0 was created by Snorkles and is based on Okaetsu's PalSchema.
+- [Mod folders and cooked packs](docs/PAKS.md)
+- [Authoring appearance](docs/APPEARANCE.md)
+- [Field patches](docs/PATCHING.md)
+- [Equipment behaviors](docs/EQUIPMENT.md)
+- [Tools](docs/TOOLS.md), [presets](docs/PRESETS.md) and [traces](docs/TRACING.md)
+- [Implementation constraints](docs/IMPLEMENTATION.md)
+- [Building and binary size](docs/BUILDING.md)
+- [Loading efficiency and validation](docs/LOADING.md)
+
+RuneSchema requires the matching StackFix1 UE4SS host build supplied with this release. Replace host and mod DLLs only with the game closed. Existing config and active mods are preserved.

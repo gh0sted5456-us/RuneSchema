@@ -1,0 +1,23 @@
+{
+  "Name": "RocksplosionDamage",
+  "PropertyCaptures": [
+    {
+      "Root": "/Game/Gameplay/UtilityMagic/PerkSpells/Rocksplosion/BP_Magic_Rocksplosion.BP_Magic_Rocksplosion_C:DelayedDamageInfliction_GEN_VARIABLE",
+      "Path": [
+        "*"
+      ]
+    },
+    {
+      "Root": "/Game/Gameplay/UtilityMagic/PerkSpells/Rocksplosion/BP_Magic_Rocksplosion.BP_Magic_Rocksplosion_C:DelayedDamageInflictionUpgraded_GEN_VARIABLE",
+      "Path": [
+        "*"
+      ]
+    }
+  ],
+  "CaptureLimits": {
+    "FollowObjectReferences": true,
+    "MaxDepth": 5,
+    "MaxEntries": 128,
+    "MaxNodes": 4096
+  }
+}

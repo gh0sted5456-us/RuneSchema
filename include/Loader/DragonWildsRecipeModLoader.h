@@ -1,4 +1,5 @@
 #pragma once
+namespace RC::Unreal { class UFunction; }
 
 #include <string>
 #include <unordered_map>
@@ -49,15 +50,18 @@ namespace DragonWilds {
         virtual void OnDatatableSerialized(RC::Unreal::UDataTable* datatable) override final;
     private:
         std::vector<RecipeDef> m_recipeDefs;
+        struct PendingPatch { RC::StringType ModName; std::string Reference; nlohmann::json Changes; };
+        std::vector<PendingPatch> m_pendingPatches;
         std::unordered_map<RC::StringType, RC::Unreal::UObject*> m_recipes;
         std::unordered_set<RC::StringType> m_unlock;
         std::unordered_set<RC::StringType> m_propsApplied;
-        std::unordered_set<RC::StringType> m_invalidRecipes;
         RC::Unreal::UClass* m_recipeClass = nullptr;
         RC::Unreal::UClass* m_progressComponentClass = nullptr;
+        std::vector<std::pair<RC::Unreal::UFunction*, int32_t>> m_functionHooks;
         bool m_hooksActive = false;
 
         void QueueData(const nlohmann::json& data, const RC::StringType& modName);
+        void ApplyPendingPatches();
         void ApplyAll();
         void PlaceForTable(RC::Unreal::UDataTable* datatable);
 

@@ -1,7 +1,5 @@
 #include <fstream>
-#include <cctype>
-#include <unordered_set>
-#include "UE4SSProgram.hpp"
+#include "Runtime/HostServices.h"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
 #include "Unreal/CoreUObject/UObject/FStrProperty.hpp"
@@ -20,21 +18,6 @@ using namespace RC::Unreal;
 namespace fs = std::filesystem;
 
 namespace PS::JsonSchemaGenerator {
-    bool IsUnsafePropertyName(const RC::StringType& Name)
-    {
-        static const std::unordered_set<RC::StringType> UnsafeNames = {
-            TEXT("PersistenceID"),
-            TEXT("InternalName"),
-            TEXT("RootComponent"),
-            TEXT("UberGraphFrame"),
-            TEXT("BlueprintCreatedComponents"),
-            TEXT("InstanceComponents")
-        };
-        return UnsafeNames.contains(Name)
-            || Name.ends_with(TEXT("Guid"))
-            || Name.ends_with(TEXT("GUID"));
-    }
-
     void ParsePropertyInfo(FProperty* Property, nlohmann::ordered_json& Json);
 
     void ParseEnumPropertyInfo(FEnumProperty* Property, nlohmann::ordered_json& Json)
@@ -124,10 +107,33 @@ namespace PS::JsonSchemaGenerator {
         Json["oneOf"].push_back(ArrayJson);
         Json["oneOf"].push_back({
             { "type", "object" },
+            { "not", {{"required", {"$Patch"}}} },
             { "properties", {
                 { "Items", ArrayJson }
             }},
         });
+        if (CastField<FStructProperty>(Property->GetInner()))
+        {
+            nlohmann::ordered_json fields = {
+                {"type", "object"}, {"minProperties", 1}
+            };
+            Json["oneOf"].push_back({
+                {"type", "object"}, {"additionalProperties", false},
+                {"required", {"$Patch"}},
+                {"properties", {{"$Patch", {
+                    {"type", "array"}, {"minItems", 1},
+                    {"items", {
+                        {"type", "object"}, {"additionalProperties", false},
+                        {"required", {"$Target"}},
+                        {"oneOf", {{{"required", {"$Index"}}}, {{"required", {"$Match"}}}}},
+                        {"properties", {
+                            {"$Index", {{"type", "integer"}, {"minimum", 0}, {"maximum", 2147483647}}},
+                            {"$Match", fields}, {"$Target", fields}
+                        }}
+                    }}
+                }}}}
+            });
+        }
     }
 
     void ParseMapPropertyInfo(FMapProperty* Property, nlohmann::ordered_json& Json)
@@ -159,11 +165,6 @@ namespace PS::JsonSchemaGenerator {
 
     void ParsePropertyInfo(FProperty* Property, nlohmann::ordered_json& Json)
     {
-        if (!Property || IsUnsafePropertyName(Property->GetName()))
-        {
-            return;
-        }
-
         auto PropertyName = RC::to_string(Property->GetName());
         Json[PropertyName] = nlohmann::ordered_json::object();
         nlohmann::ordered_json& JsonProperty = Json[PropertyName];
@@ -204,145 +205,6 @@ namespace PS::JsonSchemaGenerator {
         {
             JsonProperty["$ref"] = "../utility.schema.json#/definitions/ObjectReference";
         }
-    }
-
-    std::string SafeSchemaFileName(const RC::StringType& Name)
-    {
-        auto value = RC::to_string(Name);
-        for (auto& character : value)
-        {
-            if (!std::isalnum(static_cast<unsigned char>(character)) && character != '-' && character != '_')
-            {
-                character = '_';
-            }
-        }
-        return value;
-    }
-
-    nlohmann::ordered_json BuildObjectSchema(UClass* Class)
-    {
-        nlohmann::ordered_json schema = {
-            { "$schema", "http://json-schema.org/draft-07/schema#" },
-            { "type", "object" },
-            { "properties", nlohmann::ordered_json::object() },
-            { "additionalProperties", true }
-        };
-        if (!Class)
-        {
-            return schema;
-        }
-
-        for (FProperty* Property : TFieldRange<FProperty>(Class, EFieldIterationFlags::IncludeSuper))
-        {
-            ParsePropertyInfo(Property, schema["properties"]);
-        }
-        return schema;
-    }
-
-    void GenerateAssetSchemas(const fs::path& DestinationPath)
-    {
-        auto assetSchemaPath = DestinationPath / "assets";
-        fs::create_directories(assetSchemaPath);
-        nlohmann::ordered_json index = {
-            { "$schema", "http://json-schema.org/draft-07/schema#" },
-            { "type", "object" },
-            { "properties", nlohmann::ordered_json::object() },
-            { "additionalProperties", { { "type", "object" } } }
-        };
-
-        auto* dataAssetClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
-            nullptr, nullptr, TEXT("/Script/Engine.DataAsset"), false);
-        auto* curveClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
-            nullptr, nullptr, TEXT("/Script/Engine.CurveBase"), false);
-        if (!dataAssetClass || !curveClass)
-        {
-            return;
-        }
-
-        std::unordered_set<RC::StringType> generatedClasses;
-        std::size_t targetCount = 0;
-        UObjectGlobals::ForEachUObject([&](UObject* Object, int32_t, int32_t) -> LoopAction {
-            if (!Object || Object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject | RF_ArchetypeObject))
-                || (!Object->IsA(dataAssetClass) && !Object->IsA(curveClass)))
-            {
-                return LoopAction::Continue;
-            }
-
-            auto* objectClass = Object->GetClassPrivate();
-            if (!objectClass)
-            {
-                return LoopAction::Continue;
-            }
-
-            auto className = objectClass->GetName();
-            auto fileName = SafeSchemaFileName(className) + ".schema.json";
-            if (generatedClasses.insert(className).second)
-            {
-                std::ofstream output(assetSchemaPath / fileName);
-                output << BuildObjectSchema(objectClass).dump(2);
-            }
-
-            index["properties"][RC::to_string(Object->GetPathName())] = {
-                { "$ref", std::format("assets/{}", fileName) }
-            };
-            ++targetCount;
-            return LoopAction::Continue;
-        });
-
-        std::ofstream output(DestinationPath / "assets.schema.json");
-        output << index.dump(2);
-        PS::Log<LogLevel::Normal>(STR("Finished generating asset schemas ({} targets, {} classes).\n"),
-            targetCount, generatedClasses.size());
-    }
-
-    void GenerateBlueprintSchemas(const fs::path& DestinationPath)
-    {
-        auto blueprintSchemaPath = DestinationPath / "blueprints";
-        fs::create_directories(blueprintSchemaPath);
-        nlohmann::ordered_json index = {
-            { "$schema", "http://json-schema.org/draft-07/schema#" },
-            { "type", "object" },
-            { "properties", nlohmann::ordered_json::object() },
-            { "additionalProperties", { { "type", "object" } } }
-        };
-
-        auto* blueprintClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
-            nullptr, nullptr, TEXT("/Script/Engine.BlueprintGeneratedClass"), false);
-        if (!blueprintClass)
-        {
-            return;
-        }
-
-        std::size_t generated = 0;
-        UObjectGlobals::ForEachUObject([&](UObject* Object, int32_t, int32_t) -> LoopAction {
-            if (!Object || !Object->IsA(blueprintClass))
-            {
-                return LoopAction::Continue;
-            }
-
-            auto* generatedClass = static_cast<UClass*>(Object);
-            auto className = generatedClass->GetName();
-            auto fileName = SafeSchemaFileName(generatedClass->GetPathName()) + ".schema.json";
-            std::ofstream output(blueprintSchemaPath / fileName);
-            output << BuildObjectSchema(generatedClass).dump(2);
-
-            auto reference = nlohmann::ordered_json{
-                { "$ref", std::format("blueprints/{}", fileName) }
-            };
-            index["properties"][RC::to_string(className)] = reference;
-            auto path = generatedClass->GetPathName();
-            auto dot = path.find_last_of(TEXT('.'));
-            if (dot != RC::StringType::npos)
-            {
-                index["properties"][RC::to_string(path.substr(0, dot))] = reference;
-            }
-            ++generated;
-            return LoopAction::Continue;
-        });
-
-        std::ofstream output(DestinationPath / "blueprints.schema.json");
-        output << index.dump(2);
-        PS::Log<LogLevel::Normal>(STR("Finished generating blueprint schemas ({} classes).\n"), generated);
     }
 
     void GenerateEnumSchema(const fs::path& DestinationPath)
@@ -500,14 +362,12 @@ namespace PS::JsonSchemaGenerator {
     {
         PS::Log<LogLevel::Normal>(STR("Beginning generation of schema files, please wait a moment...\n"));
 
-        auto SchemaPath = fs::path(UE4SSProgram::get_program().get_working_directory()) / "Mods" / "RuneSchema" / "schemas";
+        auto SchemaPath = fs::path(PS::HostServices::WorkingDirectory()) / "Mods" / "RuneSchema" / "schemas";
         std::filesystem::create_directories(SchemaPath);
 
         GenerateUtilitySchema(SchemaPath);
         GenerateEnumSchema(SchemaPath);
         GenerateRawSchemas(SchemaPath);
-        GenerateAssetSchemas(SchemaPath);
-        GenerateBlueprintSchemas(SchemaPath);
 
         PS::Log<LogLevel::Normal>(STR("Finished generating all schema files. All done!\n"));
     }

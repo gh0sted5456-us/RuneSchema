@@ -38,7 +38,10 @@ namespace DragonWilds {
         bool OnInitialize() override final;
 
     private:
+        bool m_initialJournalApplied = false;
         std::vector<JournalDef> m_defs;
+        struct PendingPatch { std::string Reference; nlohmann::json Changes; };
+        std::vector<PendingPatch> m_pendingPatches;
         std::unordered_map<RC::StringType, RC::Unreal::UObject*> m_entries;
         std::unordered_map<RC::Unreal::UObject*, RC::StringType> m_pendingRecipeReferences;
         std::unordered_set<RC::StringType> m_unlock;
@@ -55,6 +58,7 @@ namespace DragonWilds {
         bool m_hooksActive = false;
 
         void QueueData(const nlohmann::json& data);
+        void ApplyPendingPatches();
         LoadResult ApplyAll();
         RC::Unreal::UObject* ResolveOrCreate(const JournalDef& def);
         RC::Unreal::UClass* ResolveEntryClass(const nlohmann::json& body) const;

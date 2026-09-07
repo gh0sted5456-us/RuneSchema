@@ -1,20 +1,27 @@
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <fstream>
 #include <filesystem>
 #include <mutex>
 #include <vector>
 #include <Unreal/CoreUObject/UObject/Class.hpp>
+#include "Unreal/UObjectGlobals.hpp"
+#include "Unreal/UObjectArray.hpp"
+#include "Unreal/UnrealInitializer.hpp"
+#include <unordered_map>
 #include "Unreal/Engine/UDataTable.hpp"
 #include "Unreal/Hooks.hpp"
 #include "Utility/Config.h"
-#include "Utility/RuntimeObjectResolver.h"
 #include "Utility/Logging.h"
+#include "Utility/StartupTrace.h"
+#include "Utility/InlineHook.h"
+#include "Utility/ModFolderLayout.h"
 #include "SDK/Helper/Memory.h"
 #include "SDK/DragonWildsSignatures.h"
 #include "SDK/StaticClassStorage.h"
 #include "SDK/UnrealOffsets.h"
-#include "UE4SSProgram.hpp"
+#include "Runtime/HostServices.h"
 #include "Loader/DragonWildsRawTableLoader.h"
 #include "Loader/DragonWildsAssetModLoader.h"
 #include "Loader/DragonWildsBlueprintModLoader.h"
@@ -25,9 +32,9 @@
 #include "Loader/DragonWildsCourseLoader.h"
 #include "Loader/DragonWildsSpawnLoader.h"
 #include "Loader/DragonWildsStringModLoader.h"
-#include "Loader/ModLoadOrder.h"
-#include "Loader/CompatibilityReporter.h"
+#include "Loader/DragonWildsEquipmentLoader.h"
 #include "Loader/DragonWildsMainLoader.h"
+#include "Loader/ModLoadOrder.h"
 #include "Misc/FileWatchWrapper.h"
 
 using namespace RC;
@@ -47,7 +54,7 @@ namespace
     std::mutex AutoReloadMutex;
     std::vector<PendingAutoReload> PendingAutoReloads;
     RC::Unreal::Hook::GlobalCallbackId AutoReloadCallbackId = RC::Unreal::Hook::ERROR_ID;
-    bool AutoReloadCallbackActive = false;
+    std::atomic<bool> AutoReloadWorkPending{false};
 
     bool IsReloadableJsonFile(const fs::path& filePath)
     {
@@ -62,36 +69,42 @@ namespace
 
 namespace DragonWilds {
     DragonWildsMainLoader::DragonWildsMainLoader() {
+        PS::StartupTrace::Begin(GetModsPath().parent_path() / "diagnostics");
+        PS::StartupTrace::Mark("construct loaders begin");
         CreateLoaders();
+        PS::StartupTrace::Mark("construct loaders complete");
     }
 
     DragonWildsMainLoader::~DragonWildsMainLoader()
     {
-        auto expected1 = DatatableSerialize_Hook.disable();
+        // Stop the watcher before destroying its consumers.
+        PS::StartupTrace::Mark("shutdown begin");
+        m_fileWatcher.reset();
         DatatableSerialize_Hook = {};
 
-        auto expected2 = GameInstanceInit_Hook.disable();
         GameInstanceInit_Hook = {};
 
-        auto expected4 = GetPakFolders_Hook.disable();
         GetPakFolders_Hook = {};
 
         DatatableSerializeCallbacks.clear();
         GameInstanceInitCallbacks.clear();
-        GetPakFoldersCallback.clear();
+        m_dataRegistrar.Shutdown();
 
-        if (AutoReloadCallbackActive && AutoReloadCallbackId != Hook::ERROR_ID)
+        if (AutoReloadCallbackId != Hook::ERROR_ID)
         {
             Hook::UnregisterCallback(AutoReloadCallbackId);
         }
 
-        AutoReloadCallbackActive = false;
+        AutoReloadWorkPending.store(false);
         AutoReloadCallbackId = Hook::ERROR_ID;
 
         {
             std::scoped_lock lock{AutoReloadMutex};
             PendingAutoReloads.clear();
         }
+        // Loaders must die before their registry.
+        m_loaders.clear();
+        PS::StartupTrace::Mark("shutdown complete");
 
     }
 
@@ -103,6 +116,9 @@ namespace DragonWilds {
 
     void DragonWildsMainLoader::Initialize()
 	{
+        m_readiness.MarkUnrealReady();
+        HookGameInstanceInit();
+        PS::StartupTrace::Mark("UE4SS readiness published; awaiting engine lifecycle event");
         SetupAutoReload();
 	}
 
@@ -126,10 +142,6 @@ namespace DragonWilds {
 
         std::advance(it, 1);
         auto folderType = it->string();
-        if (folderType == "config")
-        {
-            return;
-        }
 
         std::ifstream f(filePath);
         if (f.peek() == std::ifstream::traits_type::eof()) {
@@ -137,7 +149,6 @@ namespace DragonWilds {
         }
         f.close();
 
-        bool shouldRegisterCallback = false;
         {
             std::scoped_lock lock{AutoReloadMutex};
 
@@ -156,18 +167,147 @@ namespace DragonWilds {
                 PendingAutoReloads.push_back({ filePath, folderType, modName });
             }
 
-            shouldRegisterCallback = !AutoReloadCallbackActive;
-            AutoReloadCallbackActive = true;
+            AutoReloadWorkPending.store(true, std::memory_order_release);
         }
 
-        if (!shouldRegisterCallback) return;
+    }
+
+    void DragonWildsMainLoader::IterateModsFolder(const std::function<void(const std::filesystem::path&, const RC::StringType&)>& callback)
+    {
+        const auto modsPath = GetModsPath();
+        if (!m_orderResolved) {
+            std::vector<RC::StringType> discovered;
+            if (fs::exists(modsPath))
+                for (const auto& entry : fs::directory_iterator(modsPath))
+                    if (entry.is_directory()) discovered.push_back(entry.path().filename().native());
+            m_orderedMods = ModLoadOrder::Resolve(modsPath, discovered);
+            m_orderResolved = true;
+            for (const auto& name : m_orderedMods)
+                PS::StartupTrace::Mark("mod order: " + RC::to_string(name));
+        }
+        for (const auto& folderName : m_orderedMods) callback(modsPath / folderName, folderName);
+    }
+
+    void DragonWildsMainLoader::SetupPostEngineInitLoaders()
+    {
+        PS::StartupTrace::Mark("PostEngineInit begin");
+        InitializeMods(EEngineLifecyclePhase::PostEngineInit);
+        LoadMods(EEngineLifecyclePhase::PostEngineInit);
+        PS::StartupTrace::Mark("PostEngineInit complete");
+    }
+
+    void DragonWildsMainLoader::SetupGameInstanceInitLoaders()
+    {
+        PS::StartupTrace::Mark("GameInstanceInit loaders begin");
+        InitializeMods(EEngineLifecyclePhase::GameInstanceInit);
+        LoadMods(EEngineLifecyclePhase::GameInstanceInit);
+
+        if (m_buildingLoader)
+        {
+            m_buildingLoader->ActivateWorldRegistration();
+        }
+
+        if (m_stringLoader)
+        {
+            m_stringLoader->ApplyPending();
+        }
+
+        PS::StartupTrace::Mark("data registrar begin");
+        m_dataRegistrar.Initialize();
+        PS::StartupTrace::Mark("GameInstanceInit loaders complete (deferred world work may remain)");
+    }
+
+    void DragonWildsMainLoader::HookDatatableSerialize()
+    {
+        auto DatatableSerializeFuncPtr = DragonWilds::SignatureManager::GetSignature("UDataTable::Serialize");
+        if (!DatatableSerializeFuncPtr)
+        {
+            PS::Log<LogLevel::Error>(STR("Unable to initialize RuneSchema core, signature for UDataTable::Serialize is outdated.\n"));
+            return;
+        }
+
+        DatatableSerializeCallbacks.push_back([&](RC::Unreal::UDataTable* datatable) {
+            if (m_readiness.Observe(datatable)) m_datatableRegistry.Add(datatable);
+            else if (m_readiness.IsUnrealReady() && IsInGameThreadRaw()) InitCore();
+        });
+
+        if (!PS::InstallInlineHook(DatatableSerialize_Hook, reinterpret_cast<void*>(DatatableSerializeFuncPtr), reinterpret_cast<void*>(OnDataTableSerialized))) {
+            DatatableSerializeCallbacks.clear();
+            PS::StartupTrace::Mark("ERROR DataTable hook installation");
+            PS::Log<LogLevel::Error>(STR("Unable to install DataTable serialization hook.\n"));
+            return;
+        }
+        PS::Log<LogLevel::Verbose>(STR("Core pre-initialized.\n"));
+    }
+
+    void DragonWildsMainLoader::HookGameInstanceInit()
+    {
+        auto VTable = DragonWilds::GetVTablePtrByClassPath(TEXT("/Script/Engine.GameInstance"));
+        if (!VTable)
+        {
+            PS::Log<LogLevel::Error>(STR("Something went wrong with getting VTable pointer for GameInstance."));
+            return;
+        }
+
+        void* GameInstanceInitPtr = DragonWilds::GetVirtualFunctionFromVTable(VTable, 90);
+        PS::Log<LogLevel::Verbose>(STR("Found GameInstance::Init: {}\n"), GameInstanceInitPtr);
+
+        GameInstanceInitCallbacks.push_back([&](UObject* Instance) {
+            if (InitCore()) SetupGameInstanceInitLoaders();
+        });
+
+        if (!PS::InstallInlineHook(GameInstanceInit_Hook, GameInstanceInitPtr, reinterpret_cast<void*>(OnGameInstanceInit))) {
+            GameInstanceInitCallbacks.clear();
+            PS::StartupTrace::Mark("ERROR GameInstance hook installation");
+            PS::Log<LogLevel::Error>(STR("Unable to install GameInstance initialization hook.\n"));
+        }
+    }
+
+    void DragonWildsMainLoader::CreateLoaders()
+    {
+        RegisterLoader(std::make_unique<DragonWildsEquipmentLoader>());
+        RegisterLoader(std::make_unique<DragonWildsEnumLoader>());
+
+        RegisterLoader(std::make_unique<DragonWildsRawTableLoader>());
+
+        RegisterLoader(std::make_unique<DragonWildsAssetModLoader>());
+
+        RegisterLoader(std::make_unique<DragonWildsBlueprintModLoader>());
+
+        RegisterLoader(std::make_unique<DragonWildsRecipeModLoader>());
+
+        RegisterLoader(std::make_unique<DragonWildsJournalModLoader>());
+
+        auto buildingModLoader = std::make_unique<DragonWildsBuildingModLoader>();
+        m_buildingLoader = buildingModLoader.get();
+        RegisterLoader(std::move(buildingModLoader));
+
+        auto spawnLoader = std::make_unique<DragonWildsSpawnLoader>();
+        m_spawnLoader = spawnLoader.get();
+        RegisterLoader(std::move(spawnLoader));
+
+        RegisterLoader(std::make_unique<DragonWildsCourseLoader>());
+
+        auto stringModLoader = std::make_unique<DragonWildsStringModLoader>();
+        m_stringLoader = stringModLoader.get();
+        RegisterLoader(std::move(stringModLoader));
+
+    }
+
+    void DragonWildsMainLoader::SetupAutoReload()
+    {
+        auto config = PS::PSConfig::Get();
+        if (!config->IsAutoReloadEnabled()) return;
+
+        PS::Log<LogLevel::Normal>(STR("Auto-reload is enabled.\n"));
 
         Hook::FCallbackOptions options{};
         options.OwnerModName = TEXT("RuneSchema");
         options.HookName = TEXT("DragonWildsAutoReload");
 
         AutoReloadCallbackId = Hook::RegisterEngineTickPostCallback(
-            [this](Hook::TCallbackIterationData<void>& callbackData, UEngine*, float, bool) {
+            [this](Hook::TCallbackIterationData<void>&, UEngine*, float, bool) {
+                if (!AutoReloadWorkPending.exchange(false, std::memory_order_acq_rel)) return;
                 std::vector<PendingAutoReload> pendingAutoReloads;
                 {
                     std::scoped_lock lock{AutoReloadMutex};
@@ -178,12 +318,15 @@ namespace DragonWilds {
                 {
                     try
                     {
+                        if (std::find(m_orderedMods.begin(), m_orderedMods.end(), pendingAutoReload.ModName) == m_orderedMods.end()) continue;
+                        if (!PS::PSConfig::Get()->IsLoaderEnabled(pendingAutoReload.FolderType)) continue;
                         bool handled = false;
                         if (pendingAutoReload.FolderType == "players" && m_spawnLoader)
                         {
                             m_spawnLoader->LoadPlayerRules(
                                 pendingAutoReload.FilePath.parent_path(),
                                 pendingAutoReload.ModName, true);
+                            m_spawnLoader->FinalizePlayerRules();
                             PS::Log<LogLevel::Normal>(
                                 STR("Auto-reloaded /players for mod {}\n"),
                                 pendingAutoReload.ModName);
@@ -214,180 +357,15 @@ namespace DragonWilds {
                     }
                 }
 
-                {
-                    std::scoped_lock lock{AutoReloadMutex};
-                    if (!PendingAutoReloads.empty())
-                    {
-                        return;
-                    }
-                }
-
-                AutoReloadCallbackActive = false;
-                AutoReloadCallbackId = Hook::ERROR_ID;
-                callbackData.RemoveSelf();
             },
             options);
 
         if (AutoReloadCallbackId == Hook::ERROR_ID)
         {
-            AutoReloadCallbackActive = false;
+
             PS::Log<LogLevel::Error>(STR("Failed to register auto-reload engine tick callback.\n"));
             return;
         }
-    }
-
-    void DragonWildsMainLoader::IterateModsFolder(const std::function<void(const std::filesystem::path&, const RC::StringType&)>& callback)
-    {
-        static auto modsPath = fs::path(UE4SSProgram::get_program().get_working_directory()) / "Mods" / "RuneSchema" / "mods";
-        if (!fs::exists(modsPath))
-        {
-            return;
-        }
-
-        // fs::directory_iterator's order is filesystem-defined, not a deliberate
-        // load order, so it's only used here to discover which mod folders exist.
-        // ModLoadOrder::Resolve() is what actually decides load order, driven by a
-        // `mods.txt` file inside the mods folder (mirroring UE4SS's own mods.txt):
-        // mods are loaded top-to-bottom, new folders are appended automatically,
-        // and a mod can be disabled by setting its entry to `Name : 0` without
-        // removing its folder.
-        std::vector<RC::StringType> discoveredModNames;
-        for (const auto& entry : fs::directory_iterator(modsPath))
-        {
-            if (entry.is_directory())
-            {
-                // Folder names may legitimately contain dots (for example a
-                // version suffix). stem() treats the final portion as a file
-                // extension and truncates it, so preserve the exact name.
-                discoveredModNames.push_back(entry.path().filename().native());
-            }
-        }
-        auto orderedModNames = ModLoadOrder::Resolve(modsPath, discoveredModNames);
-
-        if (!m_compatibilityReportGenerated)
-        {
-            CompatibilityReporter::Generate(modsPath, orderedModNames);
-            m_compatibilityReportGenerated = true;
-        }
-
-        for (const auto& modName : orderedModNames)
-        {
-            callback(modsPath / modName, modName);
-        }
-    }
-
-    void DragonWildsMainLoader::SetupPostEngineInitLoaders()
-    {
-        InitializeMods(EEngineLifecyclePhase::PostEngineInit);
-        LoadMods(EEngineLifecyclePhase::PostEngineInit);
-    }
-
-    void DragonWildsMainLoader::SetupGameInstanceInitLoaders()
-    {
-        InitializeMods(EEngineLifecyclePhase::GameInstanceInit);
-        LoadMods(EEngineLifecyclePhase::GameInstanceInit);
-
-        if (m_buildingLoader)
-        {
-            m_buildingLoader->ActivateWorldRegistration();
-        }
-
-        if (m_stringLoader)
-        {
-            m_stringLoader->ApplyPending();
-        }
-
-        m_dataRegistrar.Initialize();
-    }
-
-    void DragonWildsMainLoader::HookDatatableSerialize()
-    {
-        auto DatatableSerializeFuncPtr = DragonWilds::SignatureManager::GetSignature("UDataTable::Serialize");
-        if (!DatatableSerializeFuncPtr)
-        {
-            PS::Log<LogLevel::Error>(STR("Unable to initialize RuneSchema core, signature for UDataTable::Serialize is outdated.\n"));
-            return;
-        }
-
-        DatatableSerialize_Hook = safetyhook::create_inline(reinterpret_cast<void*>(DatatableSerializeFuncPtr),
-            OnDataTableSerialized);
-
-        DatatableSerializeCallbacks.push_back([&](RC::Unreal::UDataTable* datatable) {
-            InitCore();
-            m_datatableRegistry.Add(datatable);
-        });
-
-        PS::Log<LogLevel::Verbose>(STR("Core pre-initialized.\n"));
-    }
-
-    void DragonWildsMainLoader::HookGameInstanceInit()
-    {
-        auto VTable = DragonWilds::GetVTablePtrByClassPath(TEXT("/Script/Engine.GameInstance"));
-        if (!VTable)
-        {
-            PS::Log<LogLevel::Error>(STR("Something went wrong with getting VTable pointer for GameInstance."));
-            return;
-        }
-
-        void* GameInstanceInitPtr = DragonWilds::GetVirtualFunctionFromVTable(VTable, 90);
-        PS::Log<LogLevel::Verbose>(STR("Found GameInstance::Init: {}\n"), GameInstanceInitPtr);
-
-        GameInstanceInitCallbacks.push_back([&](UObject* Instance) {
-            SetupGameInstanceInitLoaders();
-        });
-
-        GameInstanceInit_Hook = safetyhook::create_inline(GameInstanceInitPtr,
-            reinterpret_cast<void*>(OnGameInstanceInit));
-    }
-
-    void DragonWildsMainLoader::CreateLoaders()
-    {
-        auto enumLoader = std::make_unique<DragonWildsEnumLoader>();
-        RegisterLoader(std::move(enumLoader));
-
-        auto rawTableModLoader = std::make_unique<DragonWildsRawTableLoader>();
-        RegisterLoader(std::move(rawTableModLoader));
-
-        auto assetModLoader = std::make_unique<DragonWildsAssetModLoader>();
-        auto* assetModLoaderPtr = assetModLoader.get();
-        PS::SetRuntimeObjectResolverFallback(
-            [assetModLoaderPtr](const RC::StringType& authoredPath) {
-                return assetModLoaderPtr->FindCreatedAssetByAuthoringPath(authoredPath);
-            });
-        RegisterLoader(std::move(assetModLoader));
-
-        auto blueprintModLoader = std::make_unique<DragonWildsBlueprintModLoader>();
-        RegisterLoader(std::move(blueprintModLoader));
-
-        auto recipeModLoader = std::make_unique<DragonWildsRecipeModLoader>();
-        RegisterLoader(std::move(recipeModLoader));
-
-        auto journalModLoader = std::make_unique<DragonWildsJournalModLoader>();
-        RegisterLoader(std::move(journalModLoader));
-
-        auto buildingModLoader = std::make_unique<DragonWildsBuildingModLoader>();
-        m_buildingLoader = buildingModLoader.get();
-        RegisterLoader(std::move(buildingModLoader));
-
-        auto spawnLoader = std::make_unique<DragonWildsSpawnLoader>();
-        m_spawnLoader = spawnLoader.get();
-        RegisterLoader(std::move(spawnLoader));
-
-        auto courseLoader = std::make_unique<DragonWildsCourseLoader>();
-        RegisterLoader(std::move(courseLoader));
-
-        auto stringModLoader = std::make_unique<DragonWildsStringModLoader>();
-        m_stringLoader = stringModLoader.get();
-        RegisterLoader(std::move(stringModLoader));
-
-    }
-
-    void DragonWildsMainLoader::SetupAutoReload()
-    {
-        auto config = PS::PSConfig::Get();
-        if (!config->IsAutoReloadEnabled()) return;
-
-        PS::Log<LogLevel::Normal>(STR("Auto-reload is enabled.\n"));
 
         auto modsPath = GetModsPath();
 
@@ -409,8 +387,10 @@ namespace DragonWilds {
         auto GetPakFolders_Address = DragonWilds::SignatureManager::GetSignature("FPakPlatformFile::GetPakFolders");
         if (GetPakFolders_Address)
         {
-            GetPakFolders_Hook = safetyhook::create_inline(reinterpret_cast<void*>(GetPakFolders_Address),
-                GetPakFolders);
+            if (!PS::InstallInlineHook(GetPakFolders_Hook, reinterpret_cast<void*>(GetPakFolders_Address), reinterpret_cast<void*>(GetPakFolders))) {
+                PS::StartupTrace::Mark("ERROR pak hook installation");
+                PS::Log<LogLevel::Error>(STR("Unable to install additional pak-folder hook.\n"));
+            }
         }
         else
         {
@@ -418,19 +398,64 @@ namespace DragonWilds {
         }
     }
 
-    void DragonWildsMainLoader::InitCore()
+    bool DragonWildsMainLoader::InitCore()
     {
-        if (m_hasInit) return;
-        m_hasInit = true;
-
-        PS::Log<LogLevel::Verbose>(STR("Initializing Static Class Storage...\n"));
-        DragonWilds::StaticClassStorage::Initialize();
-
-        SetupPostEngineInitLoaders();
-
-        HookGameInstanceInit();
-
-        PS::Log<LogLevel::Verbose>(STR("Initialized Core\n"));
+        using Gate = PS::UnrealReadinessGate<UDataTable*>;
+        const auto begin = m_readiness.Begin();
+        if (begin == Gate::BeginResult::Wait) return m_readiness.IsActive();
+        if (begin == Gate::BeginResult::Overflow) {
+            PS::Log<LogLevel::Error>(STR("Early table queue exceeded 4096 entries; loader initialization stopped.\n"));
+            return false;
+        }
+        try {
+            PS::StartupTrace::Mark("InitCore after UE4SS readiness begin");
+            DragonWilds::StaticClassStorage::Initialize();
+            SetupPostEngineInitLoaders();
+            auto pending = m_readiness.Complete();
+            if (!m_readiness.IsActive()) throw std::runtime_error("Early table queue overflowed during initialization");
+            // Serial zero is valid for live objects, but UE4SS weak pointers reject it.
+            struct ReplayIdentity { int32_t Index = -1; int32_t Serial = 0; };
+            std::unordered_map<const void*, ReplayIdentity> live;
+            for (auto* table : pending) live.emplace(table, ReplayIdentity{});
+            if (!live.empty()) {
+                size_t remaining = live.size();
+                UObjectGlobals::ForEachUObject([&](UObject* object, int32_t, int32_t) -> LoopAction {
+                    const auto found = live.find(object);
+                    if (found != live.end() && found->second.Index < 0 && object->IsA(UDataTable::StaticClass())) {
+                        const auto index = object->GetInternalIndex();
+                        auto* item = FUObjectArray::IndexToObject(index);
+                        if (item && item->GetUObject() == object && item->IsValid(false)) {
+                            found->second = {index, item->GetSerialNumber()};
+                            if (--remaining == 0) return LoopAction::Break;
+                        }
+                    }
+                    return LoopAction::Continue;
+                });
+            }
+            size_t replayed = 0, zeroSerial = 0;
+            for (auto* address : pending) {
+                const auto identity = live.at(address);
+                if (identity.Index < 0) continue;
+                auto* item = FUObjectArray::IndexToObject(identity.Index);
+                if (!item || item->GetUObject() != address ||
+                    item->GetSerialNumber() != identity.Serial || !item->IsValid(false)) continue;
+                m_datatableRegistry.Add(static_cast<UDataTable*>(item->GetUObject()));
+                ++replayed;
+                if (identity.Serial == 0) ++zeroSerial;
+            }
+            PS::Log<LogLevel::Normal>(STR("Early DataTable replay: {}/{} restored ({} with zero serial).\n"),
+                replayed, pending.size(), zeroSerial);
+            if (replayed != pending.size())
+                PS::Log<LogLevel::Warning>(STR("Early DataTable replay skipped {} expired or changed object identities.\n"),
+                    pending.size() - replayed);
+            PS::StartupTrace::Mark("early table replay: " + std::to_string(replayed) + "/" + std::to_string(pending.size()));
+            PS::StartupTrace::Mark("InitCore complete");
+            return true;
+        } catch (const std::exception& error) {
+            m_readiness.Fail();
+            PS::Log<LogLevel::Error>(STR("Readiness-gated initialization failed: {}\n"), PS::ToWideSafe(error.what()));
+            return false;
+        }
     }
 
     void DragonWildsMainLoader::RegisterLoader(std::unique_ptr<DragonWildsModLoaderBase> newLoader)
@@ -445,33 +470,43 @@ namespace DragonWilds {
     {
         for (auto& loader : m_loaders)
         {
-            loader->Initialize(engineLifecyclePhase);
+            PS::StartupTrace::Mark("initialize loader: " + loader->GetModFolderType());
+            try { loader->Initialize(engineLifecyclePhase); }
+            catch (const std::exception& e) {
+                PS::StartupTrace::Mark("ERROR initialize: " + loader->GetModFolderType());
+                PS::Log<LogLevel::Error>(STR("Loader {} initialization failed: {}\n"), RC::to_generic_string(loader->GetModFolderType()), PS::ToWideSafe(e.what()));
+            }
         }
     }
 
     void DragonWildsMainLoader::LoadMods(EEngineLifecyclePhase engineLifecyclePhase)
     {
-        // Register every enabled appearance source before parsing any /players
-        // rule so cross-mod Source references do not depend on mods.txt position.
-        if (engineLifecyclePhase == EEngineLifecyclePhase::PostEngineInit && m_spawnLoader)
+        if (engineLifecyclePhase == EEngineLifecyclePhase::PostEngineInit && m_spawnLoader
+            && PS::PSConfig::Get()->IsLoaderEnabled("players"))
         {
             m_spawnLoader->ClearAppearanceSources();
             IterateModsFolder([&](const fs::path& modPath,
-                const fs::path::string_type& modName) {
-                try { m_spawnLoader->RegisterAppearanceSource(modPath, modName); }
-                catch (const std::exception& error)
+                const fs::path::string_type& modName)
+            {
+                try
+                {
+                    m_spawnLoader->RegisterAppearanceSource(modPath, modName);
+                }
+                catch (const std::exception& e)
                 {
                     PS::Log<LogLevel::Error>(
-                        STR("Appearance source '{}' was disabled safely: {}\n"),
-                        modName, PS::ToWideSafe(error.what()));
+                        STR("Appearance source '{}' was rejected safely: {}\n"),
+                        modName, PS::ToWideSafe(e.what()));
                 }
             });
         }
+
         IterateModsFolder([&](const fs::path& modPath, const fs::path::string_type& modName)
         {
             try
             {
-                PS::Log<RC::LogLevel::Normal>(STR("Loading mod: {}\n"), modName);
+                PS::StartupTrace::Mark("load mod: " + RC::to_string(modName));
+                PS::Log<LogLevel::Verbose>(STR("Loading mod: {}\n"), modName);
 
                 if (engineLifecyclePhase == EEngineLifecyclePhase::PostEngineInit)
                 {
@@ -480,13 +515,11 @@ namespace DragonWilds {
 
                 for (auto& loader : m_loaders)
                 {
-                    loader->Load(modPath, modName, engineLifecyclePhase);
-                }
-
-                if (engineLifecyclePhase == EEngineLifecyclePhase::PostEngineInit
-                    && m_spawnLoader && fs::is_directory(modPath / "players"))
-                {
-                    m_spawnLoader->LoadPlayerRules(modPath / "players", modName);
+                    try { loader->Load(modPath, modName, engineLifecyclePhase); }
+                    catch (const std::exception& e) {
+                        PS::StartupTrace::Mark("ERROR load " + RC::to_string(modName) + "/" + loader->GetModFolderType());
+                        PS::Log<LogLevel::Error>(STR("Failed to load {}/{}: {}\n"), modName, RC::to_generic_string(loader->GetModFolderType()), PS::ToWideSafe(e.what()));
+                    }
                 }
             }
             catch (const std::exception& e)
@@ -494,6 +527,37 @@ namespace DragonWilds {
                 PS::Log<LogLevel::Error>(STR("Failed to load mod {} - {}\n"), modName, PS::ToWideSafe(e.what()));
             }
         });
+
+        for (auto& loader : m_loaders) {
+            PS::StartupTrace::Mark("finalize loader: " + loader->GetModFolderType());
+            try { loader->FinalizeLoad(engineLifecyclePhase); }
+            catch (const std::exception& e) {
+                PS::StartupTrace::Mark("ERROR finalize: " + loader->GetModFolderType());
+                PS::Log<LogLevel::Error>(STR("Loader {} finalization failed: {}\n"), RC::to_generic_string(loader->GetModFolderType()), PS::ToWideSafe(e.what()));
+            }
+        }
+
+        if (engineLifecyclePhase == EEngineLifecyclePhase::PostEngineInit && m_spawnLoader
+            && PS::PSConfig::Get()->IsLoaderEnabled("players"))
+        {
+            IterateModsFolder([&](const fs::path& modPath,
+                const fs::path::string_type& modName)
+            {
+                const auto playersPath = modPath / "players";
+                if (!fs::is_directory(playersPath)) return;
+                try
+                {
+                    m_spawnLoader->LoadPlayerRules(playersPath, modName);
+                }
+                catch (const std::exception& e)
+                {
+                    PS::Log<LogLevel::Error>(
+                        STR("Failed to load /players for mod {} - {}\n"),
+                        modName, PS::ToWideSafe(e.what()));
+                }
+            });
+            m_spawnLoader->FinalizePlayerRules();
+        }
     }
 
     void DragonWildsMainLoader::WarnAboutUnknownFolders(const fs::path& modPath, const RC::StringType& modName)
@@ -506,8 +570,7 @@ namespace DragonWilds {
             }
 
             auto folderType = entry.path().filename().string();
-            if (folderType == "paks" || folderType == "config"
-                || folderType == "players")
+            if (folderType == PS::ModFolderLayout::PakDirectory || folderType == "players")
             {
                 continue;
             }
@@ -519,21 +582,15 @@ namespace DragonWilds {
                 continue;
             }
 
-            auto hasPakContent = false;
-            for (const auto& file : fs::recursive_directory_iterator(entry.path()))
+            std::error_code error;
+            if (PS::ModFolderLayout::ContainsLegacyPakContent(entry.path(), error))
             {
-                auto extension = file.path().extension().string();
-                std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) {
-                    return static_cast<char>(std::tolower(c));
-                });
-                if (extension == ".pak" || extension == ".utoc" || extension == ".ucas" || extension == ".sig")
-                {
-                    hasPakContent = true;
-                    break;
-                }
+                continue;
             }
-            if (hasPakContent)
+            if (error)
             {
+                PS::Log<LogLevel::Warning>(STR("{}: could not inspect folder '{}': {}\n"),
+                    modName, RC::to_generic_string(folderType), PS::ToWideSafe(error.message().c_str()));
                 continue;
             }
 
@@ -547,20 +604,19 @@ namespace DragonWilds {
                 knownFolders += RC::to_generic_string(loader->GetModFolderType());
             }
 
-            PS::Log<LogLevel::Warning>(STR("{}: folder '{}' does not match any loader ({} or paks); its files will be ignored.\n"),
+            PS::Log<LogLevel::Warning>(STR("{}: unknown folder '{}'. JSON folders: {}, players. Put cooked packs in paks/<pack-name>/.\n"),
                 modName, RC::to_generic_string(folderType), knownFolders);
         }
     }
 
     std::filesystem::path DragonWildsMainLoader::GetModsPath()
     {
-        static auto modsPath = fs::path(UE4SSProgram::get_program().get_working_directory()) / "Mods" / "RuneSchema" / "mods";
+        static auto modsPath = fs::path(PS::HostServices::WorkingDirectory()) / "Mods" / "RuneSchema" / "mods";
         return modsPath;
     }
 
     void DragonWildsMainLoader::GetPakFolders(const TCHAR* CmdLine, TArray<FString>* OutPakFolders)
     {
-        PS::Log<LogLevel::Verbose>(STR("Calling original FPakPlatformFile::GetPakFolders...\n"));
         GetPakFolders_Hook.call(CmdLine, OutPakFolders);
 
         try
@@ -574,12 +630,9 @@ namespace DragonWilds {
             return;
         }
 
-        PS::Log<LogLevel::Verbose>(STR("Preparing to add extra .pak read directory...\n"));
         auto ModsFolderPath = GetModsPath();
         auto AbsolutePath = ModsFolderPath.native();
         auto AbsolutePathWithSuffix = std::format(STR("{}/"), RC::to_generic_string(AbsolutePath));
-
-        PS::Log<LogLevel::Verbose>(STR("Setting extra .pak read directory to {}\n"), AbsolutePathWithSuffix);
 
         OutPakFolders->Add(FString(AbsolutePathWithSuffix.c_str()));
 

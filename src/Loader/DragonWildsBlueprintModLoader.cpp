@@ -8,6 +8,7 @@
 #include "SDK/Helper/PropertyHelper.h"
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
+#include "Utility/InlineHook.h"
 #include "Utility/JsonHelpers.h"
 #include "Loader/DragonWildsBlueprintModLoader.h"
 #include "SDK/Classes/KismetSystemLibrary.h"
@@ -15,6 +16,8 @@
 #include "SDK/Classes/Custom/UBlueprintGeneratedClass.h"
 #include "SDK/Classes/Custom/UInheritableComponentHandler.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
+#include "Core/JsonPatchDirective.h"
+#include "Loader/Spawn/RuntimeSupport.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -27,15 +30,19 @@ namespace DragonWilds {
 
     DragonWildsBlueprintModLoader::~DragonWildsBlueprintModLoader()
     {
-        auto expectedPostLoad = PostLoadHook.disable();
-        PostLoadHook = {};
-        PostLoadCallback = nullptr;
+        ResetHooks();
+        ActorInitializedObserver = nullptr;
 
-        auto expectedPostInit = PostInitComponentsHook.disable();
-        PostInitComponentsHook = {};
-        PostInitComponentsCallback = nullptr;
+        for (auto* material : m_ghostRoots)
+            if (material && material->IsRootSet()) material->ClearRootSet();
 
         m_modsMap.clear();
+    }
+
+    void DragonWildsBlueprintModLoader::SetActorInitializedObserver(
+        std::function<void(AActor*)> observer)
+    {
+        ActorInitializedObserver = std::move(observer);
     }
 
     void DragonWildsBlueprintModLoader::OnLoad(const std::filesystem::path& loaderPath, const RC::StringType& modName, const EEngineLifecyclePhase& engineLifecyclePhase)
@@ -57,6 +64,13 @@ namespace DragonWilds {
     void DragonWildsBlueprintModLoader::OnAutoReload(const std::filesystem::path::string_type& modName, const std::filesystem::path& modFilePath)
     {
         PS::JsonHelpers::ParseJsonFileInPath(modFilePath, [&](const nlohmann::json& data) {
+            const auto isPatch = [](const nlohmann::json& item) {
+                return item.is_object() && (item.contains("$Patch") || item.contains("$Target"));
+            };
+            if (isPatch(data) || std::any_of(data.begin(), data.end(), isPatch)) {
+                PS::Log<LogLevel::Warning>(STR("Blueprint $Patch rules changed in {}. Restart the game to reload rules and existing actors.\n"), modName);
+                return;
+            }
             LoadUnsafe(data);
         });
     }
@@ -73,19 +87,41 @@ namespace DragonWilds {
 
     bool DragonWildsBlueprintModLoader::OnInitialize()
     {
-        if (!HookPostLoad())
+        // Require both hooks before enabling writes.
+        HooksReady.store(false, std::memory_order_release);
+        try
         {
-            PS::Log<LogLevel::Error>(TEXT("Cannot hook UBlueprintGeneratedClass::PostLoad which means blueprint mods will not function properly.\n"));
-            return false;
-        }
+            if (!HookPostLoad())
+            {
+                ResetHooks();
+                PS::Log<LogLevel::Error>(TEXT("Cannot hook UBlueprintGeneratedClass::PostLoad which means blueprint mods will not function properly.\n"));
+                return false;
+            }
 
-        if (!HookPostInitComponents())
+            if (!HookPostInitComponents())
+            {
+                ResetHooks();
+                PS::Log<LogLevel::Error>(TEXT("Cannot hook AActor::PostInitComponents which means blueprint mods will not function properly.\n"));
+                return false;
+            }
+
+            HooksReady.store(true, std::memory_order_release);
+            return true;
+        }
+        catch (...)
         {
-            PS::Log<LogLevel::Error>(TEXT("Cannot hook AActor::PostInitComponents which means blueprint mods will not function properly.\n"));
-            return false;
+            ResetHooks();
+            throw;
         }
+    }
 
-        return true;
+    void DragonWildsBlueprintModLoader::ResetHooks()
+    {
+        HooksReady.store(false, std::memory_order_release);
+        PostInitComponentsHook = {};
+        PostLoadHook = {};
+        PostInitComponentsCallback = nullptr;
+        PostLoadCallback = nullptr;
     }
 
     bool DragonWildsBlueprintModLoader::HookPostLoad()
@@ -104,10 +140,8 @@ namespace DragonWilds {
             ModifyObject(actorClass->GetClassDefaultObject());
         };
 
-        PostLoadHook = safetyhook::create_inline(postloadPtr,
+        return PS::InstallInlineHook(PostLoadHook, postloadPtr,
             reinterpret_cast<void*>(PostLoad));
-
-        return true;
     }
 
     bool DragonWildsBlueprintModLoader::HookPostInitComponents()
@@ -161,16 +195,27 @@ namespace DragonWilds {
                     }
                 }
             }
+
+            if (ActorInitializedObserver)
+            {
+                ActorInitializedObserver(self);
+            }
+            ApplyBlueprintVisualEffect(self);
         };
 
-        PostInitComponentsHook = safetyhook::create_inline(postInitCompsPtr,
+        return PS::InstallInlineHook(PostInitComponentsHook, postInitCompsPtr,
             reinterpret_cast<void*>(PostInitComponents));
-
-        return true;
     }
 
     void DragonWildsBlueprintModLoader::LoadSafe(const nlohmann::json& data)
     {
+        if (data.is_array()) { for (const auto& entry : data) LoadSafe(entry); return; }
+        static constexpr std::array<std::string_view, 0> noProtected{};
+        if (const auto patch = JsonPatchDirective::Parse(data, noProtected, "blueprint"))
+        {
+            m_pendingBlueprintPatches.push_back({{patch->Reference, patch->Changes}});
+            return;
+        }
         for (auto& [assetName, assetData] : data.items())
         {
             if (assetName.starts_with("$"))
@@ -179,6 +224,11 @@ namespace DragonWilds {
             }
 
             auto assetNameWide = RC::to_generic_string(assetName);
+            if (const auto patch = JsonPatchDirective::Parse(assetData, noProtected, "blueprint"))
+            {
+                m_pendingBlueprintPatches.push_back({{patch->Reference, patch->Changes}});
+                continue;
+            }
             if (!assetNameWide.starts_with(TEXT("/Game/")))
             {
                 auto assetFName = FName(assetNameWide, FNAME_Add);
@@ -196,15 +246,18 @@ namespace DragonWilds {
                     m_modsMap.emplace(assetFName, newModContainer);
                 }
 
-                PS::Log<LogLevel::Normal>(STR("Loaded changes to {}\n"), assetNameWide);
+                PS::Log<LogLevel::Verbose>(STR("Loaded changes to {}\n"), assetNameWide);
             }
         }
     }
 
     void DragonWildsBlueprintModLoader::LoadUnsafe(const nlohmann::json& data)
     {
+        if (data.is_array()) { for (const auto& entry : data) LoadUnsafe(entry); return; }
+        if (data.contains("$Patch") || data.contains("$Target")) return;
         for (auto& [assetName, assetData] : data.items())
         {
+            if (assetData.is_object() && (assetData.contains("$Patch") || assetData.contains("$Target"))) continue;
             auto assetNameWide = RC::to_generic_string(assetName);
             if (assetNameWide.starts_with(TEXT("/Game/")))
             {
@@ -222,21 +275,11 @@ namespace DragonWilds {
 
                 auto& defaultObject = static_cast<UClass*>(asset)->GetClassDefaultObject();
                 ApplyData(assetData, defaultObject.Get(), true);
+                ApplyDeferredPatches(defaultObject.Get());
 
-                PS::Log<RC::LogLevel::Normal>(TEXT("Applied changes to {}\n"), static_cast<UClass*>(asset)->GetNamePrivate().ToString());
+                PS::Log<RC::LogLevel::Verbose>(TEXT("Applied changes to {}\n"), static_cast<UClass*>(asset)->GetNamePrivate().ToString());
             }
         }
-    }
-
-    std::vector<DragonWildsBlueprintMod>& DragonWildsBlueprintModLoader::GetModsForBlueprint(const RC::Unreal::FName& name)
-    {
-        auto it = m_modsMap.find(name);
-        if (it != m_modsMap.end())
-        {
-            return it->second;
-        }
-
-        throw std::runtime_error(RC::fmt("Failed to get mods for this blueprint. Affected mod name: %S", name.ToString().c_str()));
     }
 
     void DragonWildsBlueprintModLoader::ModifyObject(RC::Unreal::UObject* object)
@@ -251,14 +294,11 @@ namespace DragonWilds {
 
         auto& objectName = objectClass->GetNamePrivate();
 
-        if (!m_modsMap.contains(objectName))
+        for (const auto key : {objectName, FName(objectClass->GetPathName(), FNAME_Find)})
         {
-            return;
-        }
-
-        auto& mods = GetModsForBlueprint(objectName);
-        for (auto& mod : mods)
-        {
+          const auto found = m_modsMap.find(key);
+          if (found == m_modsMap.end()) continue;
+          for (auto& mod : found->second) {
             try
             {
                 ApplyMod(mod, object);
@@ -267,7 +307,9 @@ namespace DragonWilds {
             {
                 PS::Log<RC::LogLevel::Error>(TEXT("Failed modifying blueprint '{}', {}\n"), objectName.ToString(), PS::ToWideSafe(e.what()));
             }
+          }
         }
+        ApplyDeferredPatches(object);
     }
 
     void DragonWildsBlueprintModLoader::ApplyMod(const DragonWildsBlueprintMod& mod, UObject* object)
@@ -294,7 +336,7 @@ namespace DragonWilds {
 
         for (auto& [propertyName, propertyValue] : data.items())
         {
-            if (propertyName == "$Append")
+            if (propertyName == "$Append" || propertyName == "$VisualEffect")
             {
                 continue;
             }
@@ -490,7 +532,7 @@ namespace DragonWilds {
     {
         PostLoadHook.call(self);
 
-        if (!PostLoadCallback)
+        if (!HooksReady.load(std::memory_order_acquire) || !PostLoadCallback)
         {
             return;
         }
@@ -502,7 +544,7 @@ namespace DragonWilds {
     {
         PostInitComponentsHook.call(self);
 
-        if (!PostInitComponentsCallback)
+        if (!HooksReady.load(std::memory_order_acquire) || !PostInitComponentsCallback)
         {
             return;
         }

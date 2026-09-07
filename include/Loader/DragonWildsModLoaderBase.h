@@ -4,6 +4,7 @@
 #include "SDK/Classes/Custom/UDataTableStore.h"
 #include "nlohmann/json.hpp"
 #include <string>
+#include <atomic>
 
 namespace RC::Unreal {
 	class UDataTable;
@@ -28,10 +29,11 @@ namespace DragonWilds {
         void Setup();
         void AutoReload(const RC::StringType& modName, const std::filesystem::path& modFilePath);
         void Load(const std::filesystem::path& modPath, const RC::StringType& modName, const EEngineLifecyclePhase& engineLifecyclePhase);
+        void FinalizeLoad(const EEngineLifecyclePhase& engineLifecyclePhase);
 
 		void Initialize(const EEngineLifecyclePhase& engineLifecyclePhase);
 
-        const bool& HasInitialized() const;
+        bool HasInitialized() const;
 
         const std::string& GetModFolderType();
     protected:
@@ -39,7 +41,6 @@ namespace DragonWilds {
 
         void SetDisplayName(const RC::StringType& displayName);
 
-        void IterateModsFolder(const std::function<void(const std::filesystem::path&, const RC::StringType&)>& callback);
 
         RC::Unreal::UDataTable* TryGetDatatableByName(const std::string& name);
 
@@ -48,12 +49,12 @@ namespace DragonWilds {
         virtual void OnSetup();
         virtual void OnLoad(const std::filesystem::path& loaderPath, const RC::StringType& modName, const EEngineLifecyclePhase& engineLifecyclePhase);
         virtual void OnAutoReload(const RC::StringType& modName, const std::filesystem::path& modFilePath);
+        virtual void OnFinalizeLoad(const EEngineLifecyclePhase& engineLifecyclePhase);
 
         virtual bool CanInitialize(const EEngineLifecyclePhase& engineLifecyclePhase) = 0;
 
         virtual bool OnInitialize() = 0;
 
-        virtual void PostInitialize();
 
         virtual void OnDatatableSerialized(RC::Unreal::UDataTable* datatable);
     private:
@@ -62,7 +63,7 @@ namespace DragonWilds {
         std::string m_modFolderType = "";
         RC::StringType m_displayName = TEXT("Unknown Loader");
         UECustom::UDataTableRegistry* m_datatableRegistry = nullptr;
-        bool m_hasInitialized = false;
+        std::atomic<bool> m_hasInitialized{false};
         std::mutex m_mutex;
 
         UECustom::DatatableSerializeCallbackId m_datatableSerializeCallbackId{};

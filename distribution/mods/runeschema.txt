@@ -1,0 +1,15 @@
+; RuneSchema 0.6.1E mod order - loaded top to bottom.
+; Use 1 to enable and 0 to disable without deleting a folder.
+BronzeSwordIronAppearance : 1
+CloneCapeProof : 1
+DawnveilPaladinSet : 1
+FourPlayerProfiles : 1
+NamedResourceNodeShowcase : 1
+NamedSkeletonGroundingTest : 1
+NamedSpawnShowcase : 1
+RuneschemaCapes : 1
+ShadowPaladinSet : 1
+SimplePaladinProof : 1
+ZogreSpawnLifecycleTest : 1
+GhostVisualEffectsTest : 1
+ZZ_PatchProof : 1

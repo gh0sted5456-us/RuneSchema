@@ -20,6 +20,7 @@
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
 #include "Loader/DragonWildsRecipeModLoader.h"
+#include "Core/JsonPatchDirective.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -115,6 +116,7 @@ namespace DragonWilds {
 
     DragonWildsRecipeModLoader::~DragonWildsRecipeModLoader()
     {
+        for (const auto& [function, id] : m_functionHooks) if (function && id) function->UnregisterHook(id);
     }
 
     void DragonWildsRecipeModLoader::OnLoad(const std::filesystem::path& loaderPath, const RC::StringType& modName, const EEngineLifecyclePhase& engineLifecyclePhase)
@@ -127,6 +129,7 @@ namespace DragonWilds {
         }
         else if (engineLifecyclePhase == EEngineLifecyclePhase::GameInstanceInit)
         {
+            ApplyPendingPatches();
             ApplyAll();
         }
     }
@@ -205,6 +208,22 @@ namespace DragonWilds {
                 continue;
             }
 
+            try
+            {
+                static constexpr std::array<std::string_view, 1> protectedIdentity{"InternalName"};
+                if (const auto patch = JsonPatchDirective::Parse(body, protectedIdentity, "recipe"))
+                {
+                    m_pendingPatches.push_back({modName, patch->Reference, patch->Changes});
+                    continue;
+                }
+            }
+            catch (const std::exception& error)
+            {
+                PS::Log<LogLevel::Error>(STR("Recipe patch '{}': {}. Skipping.\n"),
+                    keyWide, PS::ToWideSafe(error.what()));
+                continue;
+            }
+
             RecipeDef def{ keyWide, body, ParsePlacements(body) };
 
             auto existing = std::find_if(m_recipeDefs.begin(), m_recipeDefs.end(),
@@ -219,8 +238,37 @@ namespace DragonWilds {
             }
 
             m_propsApplied.erase(keyWide);
-            m_invalidRecipes.erase(keyWide);
         }
+    }
+
+    void DragonWildsRecipeModLoader::ApplyPendingPatches()
+    {
+        size_t updated = 0, errors = 0;
+        for (const auto& patch : m_pendingPatches)
+        {
+            auto key = patch.Reference;
+            if (const auto colon = key.find(':'); colon != std::string::npos) key = key.substr(colon + 1);
+            const auto wideKey = RC::to_generic_string(key);
+            auto found = std::find_if(m_recipeDefs.begin(), m_recipeDefs.end(),
+                [&](const RecipeDef& def) { return def.Key == wideKey; });
+            if (found == m_recipeDefs.end())
+            {
+                PS::Log<LogLevel::Error>(STR("{}: recipe $Patch target '{}' was not loaded; no recipe was created.\n"),
+                    patch.ModName, RC::to_generic_string(patch.Reference));
+                ++errors;
+                continue;
+            }
+            JsonPatchDirective::Directive directive{patch.Reference, patch.Changes};
+            const auto stats = JsonPatchDirective::Apply(found->Body, directive, true);
+            found->Placements = ParsePlacements(found->Body);
+            m_propsApplied.erase(found->Key);
+            ++updated;
+            PS::Log<LogLevel::Verbose>( STR("{} patched recipe '{}' ({} fields, {} merged array rows, {} appended array rows).\n"),
+                patch.ModName, found->Key, stats.FieldsOverwritten,
+                stats.ArrayEntriesMerged, stats.ArrayEntriesAppended);
+        }
+        if (updated || errors) PS::RoutineLog("patches", STR("Recipes $Patch: {} updated, {} errors.\n"), updated, errors);
+        m_pendingPatches.clear();
     }
 
     void DragonWildsRecipeModLoader::ApplyAll()
@@ -248,16 +296,7 @@ namespace DragonWilds {
                 continue;
             }
 
-            const auto errorsBefore = result.ErrorCount;
             ApplyProperties(recipe, def.Body, result);
-            if (result.ErrorCount != errorsBefore)
-            {
-                m_invalidRecipes.insert(def.Key);
-                m_unlock.erase(def.Key);
-                PS::Log<LogLevel::Error>(
-                    STR("Recipe '{}' was disabled because required properties failed; it will not be placed or unlocked.\n"),
-                    def.Key);
-            }
             m_propsApplied.insert(def.Key);
 
             if (created)
@@ -267,13 +306,13 @@ namespace DragonWilds {
             else
             {
                 result.Edited++;
-                PS::Log<LogLevel::Normal>(STR("Modified Recipe '{}'\n"), def.Key);
+                PS::Log<LogLevel::Verbose>(STR("Modified Recipe '{}'\n"), def.Key);
             }
         }
 
         if (result.Created || result.Edited || result.ErrorCount)
         {
-            PS::Log<LogLevel::Normal>(STR("Recipes: {} created, {} edited, {} error{}.\n"),
+            PS::RoutineLog("recipes", STR("Recipes: {} created, {} edited, {} error{}.\n"),
                 result.Created, result.Edited, result.ErrorCount, result.ErrorCount == 1 ? STR("") : STR("s"));
         }
 
@@ -281,7 +320,6 @@ namespace DragonWilds {
 
         for (auto& def : m_recipeDefs)
         {
-            if (m_invalidRecipes.contains(def.Key)) continue;
             auto it = m_recipes.find(def.Key);
             if (it == m_recipes.end() || !it->second)
             {
@@ -293,7 +331,7 @@ namespace DragonWilds {
                 auto* datatable = TryGetDatatableByName(placement.Table);
                 if (datatable && Place(it->second, placement, datatable))
                 {
-                    PS::Log<LogLevel::Normal>(STR("Placed Recipe '{}' into {}.{}\n"),
+                    PS::Log<LogLevel::Verbose>(STR("Placed Recipe '{}' into {}.{}\n"),
                         it->second->GetName(), RC::to_generic_string(placement.Table), placement.Row);
                 }
             }
@@ -307,7 +345,6 @@ namespace DragonWilds {
         int placed = 0;
         for (auto& def : m_recipeDefs)
         {
-            if (m_invalidRecipes.contains(def.Key)) continue;
             auto it = m_recipes.find(def.Key);
             if (it == m_recipes.end() || !it->second)
             {
@@ -406,7 +443,7 @@ namespace DragonWilds {
             }
         }
 
-        PS::Log<LogLevel::Normal>(STR("Created Recipe '{}'\n"), def.Key);
+        PS::Log<LogLevel::Verbose>(STR("Created Recipe '{}'\n"), def.Key);
 
         if (WantsUnlock(def.Body)
             || std::any_of(def.Placements.begin(), def.Placements.end(),
@@ -608,10 +645,7 @@ namespace DragonWilds {
 
         auto* soft = reinterpret_cast<UECustom::FSoftObjectPtr*>(value.GetData());
         soft->ObjectID = recipeID;
-        // Do not manually seed WeakPtr here. On this UE4SS/game build the
-        // FWeakObjectPtr(UObject*) constructor dereferences unavailable weak
-        // object-array state during GameInstance initialization. The rooted
-        // recipe's soft path is sufficient and resolves normally after startup.
+        soft->WeakPtr = FWeakObjectPtr(recipe);
         helper.Add(value);
         return true;
     }
@@ -679,9 +713,10 @@ namespace DragonWilds {
                 continue;
             }
 
-            function->RegisterPostHook([this](UnrealScriptFunctionCallableContext& context, void*) {
+            const auto id = function->RegisterPostHook([this](UnrealScriptFunctionCallableContext& context, void*) {
                 ApplyUnlocks(context.Context);
             });
+            m_functionHooks.emplace_back(function, id);
         }
 
         if (auto* serverCraftFunction = UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr, nullptr, ServerCraftRecipePath))
@@ -693,7 +728,7 @@ namespace DragonWilds {
             }
             else
             {
-                serverCraftFunction->RegisterPreHook([this, recipeProperty](UnrealScriptFunctionCallableContext& context, void*) {
+                const auto id = serverCraftFunction->RegisterPreHook([this, recipeProperty](UnrealScriptFunctionCallableContext& context, void*) {
                     if (!context.TheStack.Locals())
                     {
                         return;
@@ -721,6 +756,7 @@ namespace DragonWilds {
                         AddRecipeUnlocks(progressComponent, one);
                     }
                 });
+                m_functionHooks.emplace_back(serverCraftFunction, id);
             }
         }
         else
