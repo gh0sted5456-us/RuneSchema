@@ -1482,6 +1482,25 @@ namespace DragonWilds {
 
             if (!iconSlot)
                 throw std::runtime_error("the nameplate icon canvas slot was unavailable");
+
+            // Apply the texture before touching layout so a reflected layout mismatch
+            // can never leave UMG's default white image behind.
+            auto setBrush = ActorHelper::FunctionCall(icon,
+                STR("/Script/UMG.Image:SetBrushFromTexture"));
+            setBrush.Arg(TEXT("Texture"), texture)
+                .Arg(TEXT("bMatchSize"), false).Invoke();
+            auto* renderTransform = PropertyHelper::GetPropertyByName(
+                icon->GetClassPrivate(), TEXT("RenderTransform"));
+            if (!renderTransform)
+                throw std::runtime_error("the nameplate icon RenderTransform was unavailable");
+            PropertyHelper::CopyJsonValueToContainer(icon, renderTransform,
+                nlohmann::json{
+                    {"Translation", {{"X", 0.0}, {"Y", 0.0}}},
+                    {"Scale", {{"X", effectiveScale}, {"Y", effectiveScale}}},
+                    {"Shear", {{"X", 0.0}, {"Y", 0.0}}},
+                    {"Angle", 0.0}
+                });
+
             if (auto* layout = PropertyHelper::GetPropertyByName(
                     iconSlot->GetClassPrivate(), TEXT("LayoutData")))
             {
@@ -1503,10 +1522,10 @@ namespace DragonWilds {
             // layout. Use the public UMG setters as well so the live slot is centered.
             ActorHelper::FunctionCall(iconSlot,
                 STR("/Script/UMG.CanvasPanelSlot:SetPosition"))
-                .Arg(TEXT("Position"), FVector2D(250.0, 25.0)).Invoke();
+                .Arg(TEXT("InPosition"), FVector2D(250.0, 25.0)).Invoke();
             ActorHelper::FunctionCall(iconSlot,
                 STR("/Script/UMG.CanvasPanelSlot:SetSize"))
-                .Arg(TEXT("Size"), FVector2D(64.0, 64.0)).Invoke();
+                .Arg(TEXT("InSize"), FVector2D(64.0, 64.0)).Invoke();
             ActorHelper::FunctionCall(iconSlot,
                 STR("/Script/UMG.CanvasPanelSlot:SetAlignment"))
                 .Arg(TEXT("InAlignment"), FVector2D(0.5, 0.5)).Invoke();
@@ -1514,21 +1533,6 @@ namespace DragonWilds {
                 STR("/Script/UMG.CanvasPanelSlot:SetAutoSize"))
                 .Arg(TEXT("InbAutoSize"), false).Invoke();
 
-            auto setBrush = ActorHelper::FunctionCall(icon,
-                STR("/Script/UMG.Image:SetBrushFromTexture"));
-            setBrush.Arg(TEXT("Texture"), texture)
-                .Arg(TEXT("bMatchSize"), false).Invoke();
-            auto* renderTransform = PropertyHelper::GetPropertyByName(
-                icon->GetClassPrivate(), TEXT("RenderTransform"));
-            if (!renderTransform)
-                throw std::runtime_error("the nameplate icon RenderTransform was unavailable");
-            PropertyHelper::CopyJsonValueToContainer(icon, renderTransform,
-                nlohmann::json{
-                    {"Translation", {{"X", 0.0}, {"Y", 0.0}}},
-                    {"Scale", {{"X", effectiveScale}, {"Y", effectiveScale}}},
-                    {"Shear", {{"X", 0.0}, {"Y", 0.0}}},
-                    {"Angle", 0.0}
-                });
             setVisibility(text, 1);
             setVisibility(icon, 4);
             m_nameplateAppliedActors.insert_or_assign(pawn,

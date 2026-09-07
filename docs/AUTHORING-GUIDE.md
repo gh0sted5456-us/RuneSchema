@@ -1062,6 +1062,11 @@ respawn. For an activity, it is the display period started or renewed by each
 matching game event. Values from `0` through `3600` are accepted. The default is
 `0` for `Dead` and `2` seconds for activity states.
 
+To make an event icon vanish completely after a delay, set the base `Mode` to
+`Hidden` and put the delay on that state, such as `"InactivitySeconds": 5`.
+With base mode `Name`, the same five-second delay restores the player's name;
+with base mode `Icon`, it restores the persistent role icon instead.
+
 The base `Mode`, `Icon`, and `Scale` are the player's persistent identity badge,
 not another activity state. This makes it suitable for ordinary-player, host,
 moderator, admin, clan, or other role icons. Use an `AllPlayers` rule for the

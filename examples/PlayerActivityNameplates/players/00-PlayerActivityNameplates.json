@@ -3,7 +3,7 @@
     "Id": "player-activity-nameplates",
     "PlayerName": "*",
     "Nameplate": {
-      "Mode": "Name",
+      "Mode": "Hidden",
       "Distance": 2500,
       "Client": "Yes",
       "Server": "Yes",
@@ -11,32 +11,32 @@
         "Attack": {
           "Icon": "/Game/Art/UI/Skills/Icons/T_Notification_Skill_Attack.T_Notification_Skill_Attack",
           "Scale": 0.9,
-          "InactivitySeconds": 2.0
+          "InactivitySeconds": 5.0
         },
         "Ranged": {
           "Icon": "/Game/Art/UI/Skills/Icons/T_Notification_Skill_Ranged.T_Notification_Skill_Ranged",
           "Scale": 0.9,
-          "InactivitySeconds": 2.0
+          "InactivitySeconds": 5.0
         },
         "Magic": {
           "Icon": "/Game/Art/UI/Skills/Icons/T_Notification_Skill_Magic.T_Notification_Skill_Magic",
           "Scale": 0.9,
-          "InactivitySeconds": 2.5
+          "InactivitySeconds": 5.0
         },
         "Woodcutting": {
           "Icon": "/Game/Art/UI/Skills/Icons/T_Notification_Skill_Woodcutting.T_Notification_Skill_Woodcutting",
           "Scale": 0.9,
-          "InactivitySeconds": 2.0
+          "InactivitySeconds": 5.0
         },
         "Mining": {
           "Icon": "/Game/Art/UI/Skills/Icons/T_Notification_Skill_Mining.T_Notification_Skill_Mining",
           "Scale": 0.9,
-          "InactivitySeconds": 2.0
+          "InactivitySeconds": 5.0
         },
         "Dead": {
           "Icon": "/Game/Art/UI/Icons/Chinchompa_undeadShovel_ZombieAxe/T_Icon_Spectral_Chinchompa_Skull.T_Icon_Spectral_Chinchompa_Skull",
           "Scale": 0.9,
-          "InactivitySeconds": 2.0
+          "InactivitySeconds": 5.0
         }
       }
     }
