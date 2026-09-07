@@ -1409,7 +1409,8 @@ namespace DragonWilds {
             const auto signature = effectiveMode + "|" + effectiveIcon + "|"
                 + std::to_string(effectiveScale) + "|" + std::to_string(rule.Distance)
                 + "|" + (rule.ShowSelf ? "self" : "no-self")
-                + "|" + (rule.ShowOthers ? "others" : "no-others");
+                + "|" + (rule.ShowOthers ? "others" : "no-others")
+                + "|centered-square-v2";
             if (const auto applied = m_nameplateAppliedActors.find(pawn);
                 applied != m_nameplateAppliedActors.end()
                 && applied->second.Actor.Get() == widget
@@ -1429,12 +1430,15 @@ namespace DragonWilds {
 
             auto* widgetTree = ActorHelper::GetObjectRef(widget, TEXT("WidgetTree"));
             UObject* icon = nullptr;
+            UObject* iconSlot = nullptr;
             if (widgetTree)
             {
                 const auto iconPath = widgetTree->GetPathName()
                     + TEXT(".RuneSchemaNameplateIcon");
                 icon = UECustom::UObjectGlobals::StaticFindObject(
                     nullptr, nullptr, iconPath.c_str(), false);
+                if (icon)
+                    iconSlot = ActorHelper::GetObjectRef(icon, TEXT("Slot"));
             }
 
             if (effectiveMode != "Icon")
@@ -1471,28 +1475,34 @@ namespace DragonWilds {
                 auto addChild = ActorHelper::FunctionCall(root,
                     STR("/Script/UMG.PanelWidget:AddChild"));
                 addChild.Arg(TEXT("Content"), icon).Invoke();
-                auto* slot = addChild.Result<UObject*>();
-                if (!slot)
+                iconSlot = addChild.Result<UObject*>();
+                if (!iconSlot)
                     throw std::runtime_error("failed to add the nameplate icon to its canvas");
-                if (auto* layout = PropertyHelper::GetPropertyByName(
-                        slot->GetClassPrivate(), TEXT("LayoutData")))
-                {
-                    PropertyHelper::CopyJsonValueToContainer(slot, layout,
-                        nlohmann::json{
-                            {"Offsets", {{"Left", 250.0}, {"Top", 25.0},
-                                {"Right", 50.0}, {"Bottom", 50.0}}},
-                            {"Anchors", {
-                                {"Minimum", {{"X", 0.0}, {"Y", 0.0}}},
-                                {"Maximum", {{"X", 0.0}, {"Y", 0.0}}}}},
-                            {"Alignment", {{"X", 0.5}, {"Y", 0.5}}}
-                        });
-                }
             }
+
+            if (!iconSlot)
+                throw std::runtime_error("the nameplate icon canvas slot was unavailable");
+            if (auto* layout = PropertyHelper::GetPropertyByName(
+                    iconSlot->GetClassPrivate(), TEXT("LayoutData")))
+            {
+                PropertyHelper::CopyJsonValueToContainer(iconSlot, layout,
+                    nlohmann::json{
+                        {"Offsets", {{"Left", 0.0}, {"Top", 0.0},
+                            {"Right", 64.0}, {"Bottom", 64.0}}},
+                        {"Anchors", {
+                            {"Minimum", {{"X", 0.5}, {"Y", 0.5}}},
+                            {"Maximum", {{"X", 0.5}, {"Y", 0.5}}}}},
+                        {"Alignment", {{"X", 0.5}, {"Y", 0.5}}}
+                    });
+            }
+            if (auto* autoSize = PropertyHelper::GetPropertyByName(
+                    iconSlot->GetClassPrivate(), TEXT("bAutoSize")))
+                PropertyHelper::CopyJsonValueToContainer(iconSlot, autoSize, false);
 
             auto setBrush = ActorHelper::FunctionCall(icon,
                 STR("/Script/UMG.Image:SetBrushFromTexture"));
             setBrush.Arg(TEXT("Texture"), texture)
-                .Arg(TEXT("bMatchSize"), true).Invoke();
+                .Arg(TEXT("bMatchSize"), false).Invoke();
             auto* renderTransform = PropertyHelper::GetPropertyByName(
                 icon->GetClassPrivate(), TEXT("RenderTransform"));
             if (!renderTransform)
