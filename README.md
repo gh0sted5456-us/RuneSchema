@@ -5,6 +5,7 @@
 RuneSchema 0.6.1E is released by Jonesing4Space. It extends RuneSchema 0.6.0 by Snorkles, which is based on PalSchema by Okaetsu.
 
 - [Mod folders and cooked packs](docs/PAKS.md)
+- [Full authoring guide](docs/AUTHORING-GUIDE.md)
 - [Authoring appearance](docs/APPEARANCE.md)
 - [Field patches](docs/PATCHING.md)
 - [Equipment behaviors](docs/EQUIPMENT.md)
