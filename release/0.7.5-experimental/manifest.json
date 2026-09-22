@@ -1,0 +1,17 @@
+{
+  "version": "0.7.5",
+  "channel": "experimental",
+  "branch": "Release",
+  "artifacts": [
+    {
+      "storefront": "Steam/GOG",
+      "file": "RuneSchema-0.7.5-Steam-GOG.zip",
+      "sha256": "415BC094100F845245B1C9EAAF100A000F46B13DC25A5649C7C62140B021DA19"
+    },
+    {
+      "storefront": "Game Pass/WinGDK",
+      "file": "RuneSchema-0.7.5-GamePass-WinGDK.zip",
+      "sha256": "7F48E3B07B52E892A3B5E115C1911B483C8BBF3DA8F21B72FA1AA771108120EE"
+    }
+  ]
+}
