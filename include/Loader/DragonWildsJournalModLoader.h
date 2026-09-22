@@ -19,6 +19,7 @@ namespace DragonWilds {
         struct JournalDef {
             RC::StringType Key;
             nlohmann::json Body;
+            RC::StringType Owner;
         };
 
         struct LoadResult {
@@ -28,54 +29,56 @@ namespace DragonWilds {
         };
 
     public:
-        DragonWildsJournalModLoader();
+        explicit DragonWildsJournalModLoader(bool loreOnly = false);
+        bool OpenLoreForPlayer(RC::Unreal::UObject* controller,const std::string& reference);
 
     protected:
         void OnLoad(const std::filesystem::path& loaderPath, const RC::StringType& modName,
             const EEngineLifecyclePhase& engineLifecyclePhase) override final;
         void OnAutoReload(const RC::StringType& modName, const std::filesystem::path& modFilePath) override final;
+        void OnFinalizeLoad(const EEngineLifecyclePhase& phase) override final;
         bool CanInitialize(const EEngineLifecyclePhase& engineLifecyclePhase) override final;
         bool OnInitialize() override final;
 
     private:
+        bool m_loreOnly = false;
         bool m_initialJournalApplied = false;
         std::vector<JournalDef> m_defs;
-        struct PendingPatch { std::string Reference; nlohmann::json Changes; };
+        struct PendingPatch { std::string Reference; nlohmann::json Changes; RC::StringType Owner; };
         std::vector<PendingPatch> m_pendingPatches;
-        std::unordered_map<RC::StringType, RC::Unreal::UObject*> m_entries;
-        std::unordered_map<RC::Unreal::UObject*, RC::StringType> m_pendingRecipeReferences;
+        struct EntryHandle {
+            RC::Unreal::UObject* Object=nullptr;
+            int32_t Index=-1;
+            mutable int32_t Serial=0;
+            RC::StringType Path;
+            explicit EntryHandle(RC::Unreal::UObject* object);
+            RC::Unreal::UObject* Get() const;
+        };
+        std::unordered_map<RC::StringType, EntryHandle> m_entries;
+        std::unordered_set<RC::StringType> m_rejectedEntries;
         std::unordered_set<RC::StringType> m_unlock;
         std::unordered_set<RC::Unreal::UObject*> m_createdEntries;
-        std::unordered_set<std::string> m_ownedIds;
-        std::unordered_set<std::string> m_knownIds;
-        bool m_knownIdsValid = false;
-        bool m_saveGuardActive = false;
+        std::unordered_map<std::string,std::string> m_ownedIds;
         RC::Unreal::UClass* m_baseEntryClass = nullptr;
         RC::Unreal::UClass* m_noBiomeSubCategoryClass = nullptr;
-        RC::Unreal::UClass* m_byBiomeSubCategoryClass = nullptr;
         RC::Unreal::UClass* m_journalComponentClass = nullptr;
         RC::Unreal::UClass* m_journalSubsystemClass = nullptr;
         bool m_hooksActive = false;
 
-        void QueueData(const nlohmann::json& data);
+        void QueueData(const nlohmann::json& data, const RC::StringType& modName);
         void ApplyPendingPatches();
         LoadResult ApplyAll();
         RC::Unreal::UObject* ResolveOrCreate(const JournalDef& def);
         RC::Unreal::UClass* ResolveEntryClass(const nlohmann::json& body) const;
         void ApplyProperties(RC::Unreal::UObject* entry, const nlohmann::json& body);
         bool Place(RC::Unreal::UObject* entry, const JournalDef& def);
-        void RegisterEntry(RC::Unreal::UObject* entry);
+        void RegisterEntry(RC::Unreal::UObject* entry,const RC::StringType& owner);
         void RegisterHooks();
-        void ResolvePendingRecipeReferences();
         void UnlockEntries(RC::Unreal::UObject* journalComponent);
         RC::Unreal::UObject* FindJournalComponent();
         RC::Unreal::UObject* FindJournalSubsystem();
 
-        void TrackOwnedId(RC::Unreal::UObject* entry, const RC::Unreal::FString& persistenceId);
-        void SnapshotRegistryIds();
-        void InstallSaveGuard();
-        void StripUnusableIdsFromCharacterSaves();
-        bool StripUnusableIdsFromCharacterSave(const std::filesystem::path& savePath);
-        static std::filesystem::path GetCharacterSaveDirectory();
+        void TrackOwnedId(RC::Unreal::UObject* entry, const RC::Unreal::FString& persistenceId,const RC::StringType& owner);
+        void InstallNativePersistence();
     };
 }

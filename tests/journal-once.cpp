@@ -26,7 +26,8 @@ struct DragonWildsJournalModLoader {
         else if (phase == EEngineLifecyclePhase::GameInstanceInit && !m_initialJournalApplied)
         {
             ApplyPendingPatches();
-            m_initialJournalApplied = ApplyAll().ErrorCount == 0;
+            ApplyAll();
+            m_initialJournalApplied = true;
         }
     }
 
@@ -36,6 +37,6 @@ for(int i=0;i<6;++i)x.OnLoad({},"",EEngineLifecyclePhase::PostEngineInit);
 assert(x.queued==6&&x.applied==0);
 for(int i=0;i<6;++i)x.OnLoad({},"",EEngineLifecyclePhase::GameInstanceInit);
 assert(x.applied==1&&x.patchCalls==1);
-DragonWildsJournalModLoader y;y.errors=1;y.OnLoad({},"",EEngineLifecyclePhase::GameInstanceInit);assert(!y.m_initialJournalApplied);
-y.errors=0;y.OnLoad({},"",EEngineLifecyclePhase::GameInstanceInit);assert(y.m_initialJournalApplied&&y.applied==2);
-std::cout<<"PASS production journal dispatch: queue all files, one successful application, retain retry after error\n";}
+DragonWildsJournalModLoader y;y.errors=1;y.OnLoad({},"",EEngineLifecyclePhase::GameInstanceInit);assert(y.m_initialJournalApplied);
+y.errors=0;y.OnLoad({},"",EEngineLifecyclePhase::GameInstanceInit);assert(y.m_initialJournalApplied&&y.applied==1);
+std::cout<<"PASS journal dispatch model: queue all files, complete one pass even with invalid definitions\n";}

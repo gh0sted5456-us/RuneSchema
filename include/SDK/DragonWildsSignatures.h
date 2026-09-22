@@ -3,11 +3,13 @@
 #include <filesystem>
 #include <unordered_map>
 #include <string>
+#include <initializer_list>
 
 namespace DragonWilds {
     class SignatureManager {
     public:
         static void Initialize();
+        static void InitializeOnly(std::initializer_list<const char*> names);
         
         static void* GetSignature(const std::string& ClassAndFunction);
     private:

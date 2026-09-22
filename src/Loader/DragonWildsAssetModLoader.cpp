@@ -1,5 +1,25 @@
+#include "Loader/HelpyDependencyOrder.h"
+#include "Generator/HelpyStatKey.h"
+#include "Generator/HelpyPropertyValue.h"
+#include "Generator/QuickMenuDecorations.h"
+#include "SDK/Structs/Custom/FManagedStruct.h"
+#include "Runtime/AuthoredFile.h"
+#include "Runtime/HelpyBundlePublish.h"
+#include "Loader/AssetAuthoringMetadata.h"
+#include "Generator/ClonePresentation.h"
+#include "SDK/Helper/CookedAssetLookup.h"
+#include "SDK/Helper/ItemAppearanceMetadata.h"
+#include "SDK/Structs/FSoftObjectPtr.h"
+#include "Unreal/Property/FTextProperty.hpp"
+#include "Unreal/Property/FEnumProperty.hpp"
+#include <memory>
+#include <set>
 #include <algorithm>
+#include "Loader/AssetProvenance.h"
+#include "Utility/AssetAliases.h"
+#include "Loader/ItemIdentity.h"
 #include <cctype>
+#include <cmath>
 #include <cstring>
 #include <map>
 #include <string_view>
@@ -37,18 +57,7 @@ namespace
         return !out.empty();
     }
 
-    bool IsCanonicalPersistenceId(std::string_view value)
-    {
-        if (value.size() != 22) return false;
-        for (const auto character : value)
-        {
-            const auto byte = static_cast<unsigned char>(character);
-            if (!std::isalnum(byte) && character != '-' && character != '_')
-                return false;
-        }
-        const auto last = value.back();
-        return last == 'A' || last == 'Q' || last == 'g' || last == 'w';
-    }
+    using DragonWilds::IsCanonicalPersistenceId;
 
     std::string SanitizePackageSegment(std::string_view value,
         std::string_view fallback)
@@ -69,6 +78,46 @@ namespace
         while (!result.empty() && result.back() == '_') result.pop_back();
         if (result.empty()) result.assign(fallback);
         return result;
+    }
+
+    bool IsUnlockableAssetField(std::string_view name)
+    {
+        return name == "RecipesToUnlock"
+            || name == "BuildingPieceToUnlock";
+    }
+
+    void ValidateDominionSpheres(const nlohmann::json& definitions)
+    {
+        if (!definitions.is_object() || definitions.empty() || definitions.size() > 32)
+            throw std::runtime_error("$DominionSpheres requires 1..32 named subobjects");
+        for (const auto& [path, body] : definitions.items())
+        {
+            if (path.empty() || path.size() > 512)
+                throw std::runtime_error("Dominion sphere subobject path length is invalid");
+            bool segmentStart = true;
+            for (const auto character : path)
+            {
+                const auto byte = static_cast<unsigned char>(character);
+                if (character == '.')
+                {
+                    if (segmentStart) throw std::runtime_error("Dominion sphere subobject path has an empty segment");
+                    segmentStart = true;
+                }
+                else
+                {
+                    if (!std::isalnum(byte) && character != '_')
+                        throw std::runtime_error("Dominion sphere subobject path contains an invalid character");
+                    segmentStart = false;
+                }
+            }
+            if (segmentStart) throw std::runtime_error("Dominion sphere subobject path has an empty segment");
+            if (!body.is_object() || body.size() != 1 || !body.contains("Radius")
+                || !body.at("Radius").is_number())
+                throw std::runtime_error("Dominion sphere entry requires only numeric Radius");
+            const auto radius = body.at("Radius").get<double>();
+            if (!std::isfinite(radius) || radius <= 0.0 || radius > 100000.0)
+                throw std::runtime_error("Dominion sphere Radius must be greater than 0 and at most 100000 cm");
+        }
     }
 
     void ClearItemIdentity(UObject* object, UClass* objectClass)
@@ -119,15 +168,20 @@ namespace DragonWilds {
     DragonWildsAssetModLoader::DragonWildsAssetModLoader() : DragonWildsModLoaderBase("assets")
     {
         SetDisplayName(TEXT("Asset Mod Loader"));
+        AuthoringInstance=this;
     }
 
     DragonWildsAssetModLoader::~DragonWildsAssetModLoader()
     {
+        if(AuthoringInstance==this)AuthoringInstance=nullptr;
         std::scoped_lock lock{m_mutex};
         m_pendingAssets.clear();
         m_pendingPatches.clear();
         m_createdAssetsByTarget.clear();
+        PS::AssetAliases::Clear();
         m_createdAssets.clear();
+        PS::AssetProvenance::Clear();
+        PS::AssetMetadata::Clear();
     }
 
     void DragonWildsAssetModLoader::OnLoad(const std::filesystem::path& loaderPath, const RC::StringType& modName, const EEngineLifecyclePhase& engineLifecyclePhase)
@@ -148,6 +202,14 @@ namespace DragonWilds {
 
     void DragonWildsAssetModLoader::OnAutoReload(const std::filesystem::path::string_type& modName, const std::filesystem::path& modFilePath)
     {
+        // A live authoring transaction has already applied this exact file.
+        // Reapplying it could mutate an inventory item during a watcher callback.
+        {
+            std::scoped_lock lock{m_mutex};
+            if(m_toolAssetFiles.contains(modFilePath.lexically_normal())) {
+                PS::Log<LogLevel::Warning>(TEXT("Live-authored asset changes require restart: {}\n"),modFilePath.wstring());return;
+            }
+        }
         PS::JsonHelpers::ParseJsonFileInPath(modFilePath, [&](const nlohmann::json& data) {
             QueueData(data, modName);
         });
@@ -202,10 +264,16 @@ namespace DragonWilds {
             return;
         }
 
+        PS::AssetMetadata::Declaration documentMetadata;
+        try { documentMetadata=PS::AssetMetadata::Read(data); }
+        catch(const std::exception& e) {
+            PS::Log<LogLevel::Error>(STR("Asset file metadata from {}: {}. File skipped.\n"),modName,PS::ToWideSafe(e.what()));
+            return;
+        }
         std::scoped_lock lock{m_mutex};
         for (auto& [target, properties] : data.items())
         {
-            if (target.starts_with("$"))
+            if (target.starts_with("$") || PS::AssetMetadata::IsKey(target))
             {
                 continue;
             }
@@ -220,8 +288,10 @@ namespace DragonWilds {
             nlohmann::json normalizedProperties = properties;
             std::string effectiveTarget = target;
             bool isPatch = false;
+            auto metadata=documentMetadata;
             try
             {
+                metadata=PS::AssetMetadata::Merge(metadata,PS::AssetMetadata::Read(properties));
                 static constexpr std::array<std::string_view, 2> protectedIdentity{
                     "PersistenceID", "InternalName"};
                 if (const auto patch = JsonPatchDirective::Parse(
@@ -230,6 +300,7 @@ namespace DragonWilds {
                     effectiveTarget = patch->Reference;
                     normalizedProperties = patch->Changes;
                     isPatch = true;
+                    metadata=PS::AssetMetadata::Merge(metadata,PS::AssetMetadata::Read(normalizedProperties));
                 }
             }
             catch (const std::exception& error)
@@ -239,6 +310,7 @@ namespace DragonWilds {
                 continue;
             }
 
+            normalizedProperties.erase("Modded");normalizedProperties.erase("RuneSchema");
             if (normalizedProperties.contains("$clone") || normalizedProperties.contains("$CloneFrom"))
             {
                 PS::Log<LogLevel::Error>(STR("Target '{}': use the exact case-sensitive $Clone directive. Skipping.\n"),
@@ -253,14 +325,31 @@ namespace DragonWilds {
                     RC::to_generic_string(target));
                 continue;
             }
+            try
+            {
+                if (normalizedProperties.contains("$DominionSpheres"))
+                {
+                    if (normalizedProperties.contains("$Clone"))
+                        throw std::runtime_error("$DominionSpheres cannot be combined with $Clone");
+                    ValidateDominionSpheres(normalizedProperties.at("$DominionSpheres"));
+                }
+            }
+            catch (const std::exception& error)
+            {
+                PS::Log<LogLevel::Error>(STR("Target '{}': {}. Skipping.\n"),
+                    RC::to_generic_string(target), PS::ToWideSafe(error.what()));
+                continue;
+            }
 
             auto targetWide = RC::to_generic_string(effectiveTarget);
             auto pending = PendingAsset{
                 targetWide,
                 NormalizeObjectPath(targetWide),
                 modName,
-                std::move(normalizedProperties), isPatch
+                std::move(normalizedProperties), isPatch,metadata,true
             };
+            if (isPatch) WarnPatchConflicts(m_patchConflicts, "assets:" + RC::to_string(pending.ObjectPath),
+                pending.Properties, RC::to_string(modName), false);
             (isPatch ? m_pendingPatches : m_pendingAssets).push_back(std::move(pending));
         }
     }
@@ -295,10 +384,18 @@ namespace DragonWilds {
             return;
         }
 
+        const auto errorsBefore = outResult.ErrorCount;
+        const auto writesBefore = outResult.PropertiesWritten;
         for (auto& [propertyName, propertyValue] : pendingAsset.Properties.items())
         {
-            if (propertyName == "$Append" || propertyName == "$Clone")
+            if (propertyName == "$Append" || propertyName == "$Clone" || propertyName == "$InheritEquipmentStats" || PS::AssetMetadata::IsKey(propertyName))
             {
+                continue;
+            }
+
+            if (propertyName == "$DominionSpheres")
+            {
+                ApplyDominionSpheres(object, propertyValue, outResult);
                 continue;
             }
 
@@ -330,6 +427,9 @@ namespace DragonWilds {
             {
                 PropertyHelper::CopyJsonValueToContainer(object, property, propertyValue);
                 outResult.PropertiesWritten++;
+                if (IsUnlockableAssetField(propertyName))
+                    PS::Log<LogLevel::Verbose>(STR("[{}] Applied unlockable asset field '{}'.\n"),
+                        object->GetName(), propertyNameWide);
             }
             catch (const std::exception& e)
             {
@@ -342,6 +442,65 @@ namespace DragonWilds {
         if (pendingAsset.Properties.contains("$Append"))
         {
             AppendProperties(object, objectClass, pendingAsset.Properties.at("$Append"), outResult);
+        }
+        // Metadata is recorded only against an object actually handled by this loader.
+        // A native field-write failure cannot grant new clone permissions.
+        if(outResult.ErrorCount==errorsBefore) {
+            try {PS::AssetMetadata::Record(object,pendingAsset.Metadata,RC::to_string(pendingAsset.ModName),pendingAsset.InstalledDefinition);}
+            catch(const std::exception& e){++outResult.ErrorCount;PS::Log<LogLevel::Error>(STR("Asset metadata: {}\n"),PS::ToWideSafe(e.what()));}
+        }
+        if (outResult.ErrorCount > errorsBefore) {
+            PS::Log<LogLevel::Error>(STR("[{}] Asset edit incomplete: {} successful field writes, {} errors. Changes are not rolled back; inspect field errors and restart after correcting the mod.\n"),
+                object->GetPathName(), outResult.PropertiesWritten - writesBefore,
+                outResult.ErrorCount - errorsBefore);
+        }
+    }
+
+    void DragonWildsAssetModLoader::ApplyDominionSpheres(UObject* owner,
+        const nlohmann::json& definitions, LoadResult& outResult)
+    {
+        ValidateDominionSpheres(definitions);
+        auto* sphereClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr, nullptr, TEXT("/Script/Dominion.DominionShape_Sphere"), false);
+        if (!sphereClass) throw std::runtime_error("DominionShape_Sphere class is unavailable");
+
+        for (const auto& [path, body] : definitions.items())
+        {
+            UObject* current = owner;
+            size_t begin = 0;
+            while (begin < path.size())
+            {
+                const auto end = path.find('.', begin);
+                const auto segment = path.substr(begin, end == std::string::npos ? path.size() - begin : end - begin);
+                const FName wanted(RC::to_generic_string(segment), FNAME_Add);
+                UObject* found = nullptr;
+                UObjectGlobals::ForEachUObject([&](UObject* candidate, int32_t, int32_t) -> LoopAction {
+                    if (!candidate || candidate->GetOuterPrivate() != current || candidate->GetFName() != wanted
+                        || candidate->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed | RF_FinishDestroyed)))
+                        return LoopAction::Continue;
+                    if (found && found != candidate)
+                        throw std::runtime_error("Dominion sphere subobject path is ambiguous: " + path);
+                    found = candidate;
+                    return LoopAction::Continue;
+                });
+                if (!found) throw std::runtime_error("Dominion sphere subobject was not found: " + path);
+                current = found;
+                if (end == std::string::npos) break;
+                begin = end + 1;
+            }
+            if (!current || !current->IsA(sphereClass))
+                throw std::runtime_error("Dominion sphere target has the wrong class: " + path);
+            auto* radius = CastField<FFloatProperty>(
+                PropertyHelper::GetPropertyByName(current->GetClassPrivate(), TEXT("Radius")));
+            if (!radius || radius->GetArrayDim() != 1 || radius->GetElementSize() != sizeof(float))
+                throw std::runtime_error("DominionShape_Sphere Radius layout changed");
+            const auto requested = body.at("Radius").get<double>();
+            PropertyHelper::CopyJsonValueToContainer(current, radius, body.at("Radius"));
+            const auto written = radius->GetFloatingPointPropertyValue(
+                radius->ContainerPtrToValuePtr<void>(current));
+            if (!std::isfinite(written) || std::abs(written - requested) > 0.001)
+                throw std::runtime_error("DominionShape_Sphere Radius did not match after update");
+            ++outResult.PropertiesWritten;
         }
     }
 
@@ -402,6 +561,32 @@ namespace DragonWilds {
         std::map<RC::StringType, BatchResult> batchResults;
         std::scoped_lock lock{m_mutex};
 
+        // Helpy may clone another installed runtime item. Its parent must be
+        // created/registered first even when JSON filenames put the child first.
+        std::vector<PS::HelpyDependencies::Node> dependencies;
+        dependencies.reserve(m_pendingAssets.size());
+        for(const auto& pending:m_pendingAssets) {
+            PS::HelpyDependencies::Node node;
+            if(pending.Properties.contains("$Clone")) {
+                node.source=RC::to_string(NormalizeObjectPath(RC::to_generic_string(pending.Properties.at("$Clone").get<std::string>())));
+                node.aliases.push_back(RC::to_string(pending.ObjectPath));
+                std::string internal;
+                if(ReadRequiredString(pending.Properties,"InternalName",internal)) {
+                    const auto name=SanitizePackageSegment(internal,"ITEM_RS_Unnamed");
+                    node.aliases.push_back("/Game/RuneSchema/"+SanitizePackageSegment(RC::to_string(pending.ModName),"UnnamedMod")+"/Items/"+name+"."+name);
+                }
+            }
+            dependencies.push_back(std::move(node));
+        }
+        const auto order=PS::HelpyDependencies::Order(dependencies);
+        for(const auto i:order.blocked) {
+            const auto& pending=m_pendingAssets[i];++batchResults[pending.ModName].ErrorCount;
+            PS::Log<LogLevel::Error>(STR("Clone '{}' has a cyclic clone-source dependency; skipped without changing unrelated definitions.\n"),pending.Target);
+        }
+        std::vector<PendingAsset> sorted;sorted.reserve(order.ordered.size());
+        for(const auto i:order.ordered)sorted.push_back(std::move(m_pendingAssets[i]));
+        m_pendingAssets=std::move(sorted);
+
         UObject* itemSubsystem = nullptr;
         bool subsystemSearched = false;
         PS::ConsumeQueue(m_pendingAssets, [&](PendingAsset& pending)
@@ -451,8 +636,20 @@ namespace DragonWilds {
 
             LoadResult result{};
             Apply(object, *it, result);
-            if (isClone && !RegisterCreatedItem(object, *it, itemSubsystem))
-                result.ErrorCount++;
+            const bool registered=!isClone || (result.ErrorCount==0 && RegisterCreatedItem(object, *it, itemSubsystem));
+            if (!registered) result.ErrorCount++;
+            if(isClone && registered && result.ErrorCount==0) {
+                try {
+                    const auto authored=NormalizeObjectPath(it->Target);
+                    if(!authored.empty() && authored.front()==TEXT('/'))
+                        PS::AssetAliases::Add(authored,object->GetPathName());
+                }catch(const std::exception& error) {
+                    ++result.ErrorCount;
+                    PS::Log<LogLevel::Error>(STR("Clone alias '{}': {}\n"),it->Target,PS::ToWideSafe(error.what()));
+                }
+            }
+            if (isClone) PS::AssetProvenance::Record(object,it->Properties.at("$Clone").get<std::string>(),
+                RC::to_string(it->ModName),createdNow,registered,result.ErrorCount,it->Properties);
 
             auto& batchResult = batchResults[it->ModName];
             if (isClone) {
@@ -466,6 +663,7 @@ namespace DragonWilds {
             return true;
         });
 
+        PS::AssetProvenance::Flush();
         for (auto& [modName, result] : batchResults)
         {
             if (result.Created || result.ClonesUpdated)
@@ -512,8 +710,9 @@ namespace DragonWilds {
         }
 
         UObject* found = nullptr;
+        const FName targetName(pendingAsset.Target,FNAME_Add);
         UObjectGlobals::ForEachUObject([&](UObject* object, int32_t, int32_t) -> LoopAction {
-            if (object && object->GetName() == pendingAsset.Target && IsSupportedTarget(object))
+            if (object && object->GetFName() == targetName && IsSupportedTarget(object))
             {
                 found = object;
                 return LoopAction::Break;
@@ -562,8 +761,9 @@ namespace DragonWilds {
         if (sourcePath.empty())
             throw std::runtime_error("$Clone source must be a full baked object path");
 
-        auto* source = UECustom::UObjectGlobals::StaticFindObject(
-            nullptr, nullptr, sourcePath.c_str(), false);
+        UObject* source=nullptr;
+        if(const auto known=m_createdAssetsByTarget.find(sourcePath);known!=m_createdAssetsByTarget.end())source=known->second;
+        if(!source)source=UECustom::UObjectGlobals::StaticFindObject(nullptr,nullptr,sourcePath.c_str(),false);
         if (!source)
         {
             auto soft = UECustom::TSoftObjectPtr<UObject>(
@@ -574,6 +774,11 @@ namespace DragonWilds {
             throw std::runtime_error("$Clone source baked asset could not be loaded");
         if (!m_itemDataClass || !source->IsA(m_itemDataClass))
             throw std::runtime_error("$Clone source must derive from ItemData");
+        if(!IsReadyForPatch(source)||PS::AssetMetadata::IsIncomplete(source))
+            throw std::runtime_error("$Clone source is not ready or has incomplete authored files");
+        const auto sourceOrigin=PS::AssetProvenance::Lookup(source);
+        if(sourceOrigin.is_object()&&!sourceOrigin.value("Registered",false))
+            throw std::runtime_error("$Clone runtime source has not completed registration");
 
         const auto runtimePath = RC::to_generic_string(
             "/Game/RuneSchema/" + SanitizePackageSegment(
@@ -617,22 +822,38 @@ namespace DragonWilds {
         if (!created)
             throw std::runtime_error("Dragonwilds refused to construct the clone");
 
+        // Establish ownership at the creation site, including assets created by JSON loaders.
+        // Do not wait for item registration to allocate a weak-reference serial.
+        PS::AssetProvenance::Record(created,pendingAsset.Properties.at("$Clone").get<std::string>(),
+            RC::to_string(pendingAsset.ModName),true,false,0,pendingAsset.Properties);
+
         constexpr std::uint64_t unsafeFlags =
             CPF_Transient | CPF_DuplicateTransient | CPF_NonPIEDuplicateTransient
             | CPF_InstancedReference | CPF_ContainsInstancedReference
             | CPF_Deprecated | CPF_EditorOnly;
         std::size_t copied = 0;
+        RC::StringType inheritedUnlockFields;
         for (auto* property : TFieldRange<FProperty>(
                  source->GetClassPrivate(), EFieldIterationFlags::Default))
         {
             if (!property || property->HasAnyPropertyFlags(unsafeFlags)) continue;
             property->CopyCompleteValue_InContainer(created, source);
             ++copied;
+            if (IsUnlockableAssetField(RC::to_string(property->GetName()))) {
+                if (!inheritedUnlockFields.empty()) inheritedUnlockFields += TEXT(", ");
+                inheritedUnlockFields += property->GetName();
+            }
         }
 
         ClearItemIdentity(created, created->GetClassPrivate());
 
-        // Use the clone InternalName as its stats row; preserve the source table.
+        if (!inheritedUnlockFields.empty())
+            PS::Log<LogLevel::Verbose>(STR("{}: clone inherited unlockable field(s): {}. Explicit asset fields can replace them.\n"),
+                pendingAsset.ModName, inheritedUnlockFields);
+
+        // Existing mods keep their prior row-name policy. Live authored clones
+        // opt in to inheriting the original row and never create a dangling row.
+        if (!pendingAsset.Properties.value("$InheritEquipmentStats",false))
         if (auto* rowHandle = PropertyHelper::GetPropertyByName(
                 created->GetClassPrivate(),
                 TEXT("WearableEquipmentDataTableRowHandle")))
@@ -646,7 +867,6 @@ namespace DragonWilds {
         m_createdAssets.push_back(created);
         m_createdAssetsByTarget[pendingAsset.Target] = created;
         m_createdAssetsByTarget[runtimePath] = created;
-
         PS::Log<LogLevel::Verbose>(
             STR("{}: cloned baked item '{}' to new runtime item '{}' using {} reflected properties.\n"),
             pendingAsset.ModName, source->GetPathName(), runtimePath, copied);
@@ -756,3 +976,5 @@ namespace DragonWilds {
             && !object->HasAnyFlags(RF_FinishDestroyed);
     }
 }
+
+#include "LiveCloneAuthoring.inl"

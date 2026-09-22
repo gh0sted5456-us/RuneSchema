@@ -1,11 +1,16 @@
+#include "Utility/NativeFunctionHook.h"
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <cwctype>
 #include <fstream>
 #include <limits>
+#include <memory>
+#include <mutex>
+#include <safetyhook.hpp>
 #include <vector>
 #include <Windows.h>
 #include "Unreal/CoreUObject/UObject/Class.hpp"
@@ -14,6 +19,7 @@
 #include "Unreal/Hooks.hpp"
 #include "Unreal/UFunctionStructs.hpp"
 #include "Unreal/UObject.hpp"
+#include "Unreal/UObjectArray.hpp"
 #include "Unreal/UObjectGlobals.hpp"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Classes/KismetSystemLibrary.h"
@@ -24,15 +30,49 @@
 #include "SDK/Structs/FSoftObjectPath.h"
 #include "SDK/Structs/FSoftObjectPtr.h"
 #include "SDK/Helper/PropertyHelper.h"
+#include "SDK/Helper/ActorHelper.h"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
 #include "Loader/DragonWildsJournalModLoader.h"
+#include "Loader/JournalPlayerAccess.h"
+#include "Loader/JournalSaveOwnership.h"
+#include "Runtime/HostServices.h"
 #include "Core/JsonPatchDirective.h"
+#include "Core/JournalPlacement.h"
+#include "Unreal/Property/FTextProperty.hpp"
+#include "Unreal/Core/HAL/UnrealMemory.hpp"
+#include "Unreal/Engine/UDataTable.hpp"
+#include "Loader/JournalNativeContract.h"
+#include "Loader/JournalPersistenceContract.h"
+#include "Loader/JournalJsonFieldContract.h"
+#include "Generator/NativeCallResolver.h"
+#include "Loader/QuestNativeRegistry.h"
 
 using namespace RC;
 using namespace RC::Unreal;
 
 namespace DragonWilds {
+    #include "JournalJsonBridge.inl"
+    #include "JournalPersistence.inl"
+    #include "JournalLorePresentation.inl"
+    DragonWildsJournalModLoader::EntryHandle::EntryHandle(UObject* object):Object(object) {
+        auto* slot=object?FUObjectArray::IndexToObject(object->GetInternalIndex()):nullptr;
+        if(!slot || slot->GetUObject()!=object || !slot->IsValid(false) || !slot->IsRootSet())
+            throw std::runtime_error("Journal cache requires a live rooted entry");
+        Index=object->GetInternalIndex();Serial=slot->GetSerialNumber();Path=object->GetPathName();
+    }
+    UObject* DragonWildsJournalModLoader::EntryHandle::Get() const {
+        auto* slot=Index<0?nullptr:FUObjectArray::IndexToObject(Index);
+        if(!slot || slot->GetUObject()!=Object || !slot->IsValid(false) || !slot->IsRootSet())return nullptr;
+        const auto current=slot->GetSerialNumber();
+        if(current<0 || Serial<0 || (Serial!=0 && Serial!=current) || Object->GetPathName()!=Path
+            || Object->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed)))return nullptr;
+        // A continuously rooted runtime asset can acquire its first serial later.
+        Serial=current;
+        return Object;
+    }
+    #include "JournalGroupPlacement.inl"
+    #include "JournalHierarchy.inl"
     namespace {
         constexpr const TCHAR* EntryClassPaths[] = {
             TEXT("/Script/Dominion.JournalEntryKnowLoreData"),
@@ -50,7 +90,6 @@ namespace DragonWilds {
         constexpr const TCHAR* ItemDataClassPath = TEXT("/Script/Dominion.ItemData");
         constexpr const TCHAR* DataTableClassPath = TEXT("/Script/Engine.DataTable");
 
-        constexpr const char* JournalSaveLists[] = { "UnlockedEntries", "UnreadEntries" };
 
 
         RC::StringType ReadString(const nlohmann::json& value, const char* key)
@@ -83,16 +122,20 @@ namespace DragonWilds {
 
             TArray<UObject*> objects;
             UECustom::UObjectGlobals::GetObjectsOfClass(objectClass, objects, true);
+            UObject* match = nullptr;
+            const FName targetName(name,FNAME_Add);
             for (auto* object : objects)
             {
-                if (object && object->GetName() == name
+                if (object && object->GetFName() == targetName
                     && !object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject | RF_ArchetypeObject)))
                 {
-                    return object;
+                    if (match && match != object)
+                        throw std::runtime_error("Ambiguous journal reference; use the full asset path: " + RC::to_string(name));
+                    match = object;
                 }
             }
 
-            return nullptr;
+            return match;
         }
 
         UObject* ResolveSoftReference(const TCHAR* classPath, const RC::StringType& reference)
@@ -100,45 +143,58 @@ namespace DragonWilds {
             if (reference.starts_with(TEXT("/")))
             {
                 UECustom::TSoftObjectPtr<UObject> soft{ UECustom::FSoftObjectPath(reference) };
-                return UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
+                auto* target = UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
+                auto* expected = UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr, nullptr, classPath);
+                if (target && (!expected || !target->IsA(expected)))
+                    throw std::runtime_error("Journal reference has the wrong asset class: " + RC::to_string(reference));
+                return target;
             }
             return FindObjectByClassAndName(classPath, reference);
         }
 
         void SetLiveSoftReference(UObject* owner, FProperty* property, UObject* target)
         {
+            auto* reference = CastField<FSoftObjectProperty>(property);
+            if (!reference || reference->GetArrayDim() != 1
+                || reference->GetElementSize() != sizeof(UECustom::FSoftObjectPtr)
+                || !target || !reference->GetPropertyClass()
+                || !target->IsA(reference->GetPropertyClass().Get()))
+                throw std::runtime_error("Journal soft reference does not match the live property contract");
             auto* soft = static_cast<UECustom::FSoftObjectPtr*>(property->ContainerPtrToValuePtr<void>(owner));
             soft->ObjectID = UECustom::FSoftObjectPath(target->GetPathName());
-            soft->WeakPtr = FWeakObjectPtr(target);
         }
     }
 
-    DragonWildsJournalModLoader::DragonWildsJournalModLoader()
-        : DragonWildsModLoaderBase("journal")
+    DragonWildsJournalModLoader::DragonWildsJournalModLoader(bool loreOnly)
+        : DragonWildsModLoaderBase(loreOnly ? "lore" : "journal"), m_loreOnly(loreOnly)
     {
-        SetDisplayName(TEXT("Journal Loader"));
+        SetDisplayName(loreOnly ? TEXT("Lore Loader") : TEXT("Journal Loader"));
     }
 
     void DragonWildsJournalModLoader::OnLoad(const std::filesystem::path& loaderPath,
-        const RC::StringType&, const EEngineLifecyclePhase& phase)
+        const RC::StringType& modName, const EEngineLifecyclePhase& phase)
     {
         if (phase == EEngineLifecyclePhase::PostEngineInit)
         {
             PS::JsonHelpers::ParseJsonFilesInPath(loaderPath,
-                [this](const nlohmann::json& data) { QueueData(data); });
-        }
-        else if (phase == EEngineLifecyclePhase::GameInstanceInit && !m_initialJournalApplied)
-        {
-            ApplyPendingPatches();
-            m_initialJournalApplied = ApplyAll().ErrorCount == 0;
+                [&](const nlohmann::json& data) { QueueData(data, modName); });
         }
     }
 
-    void DragonWildsJournalModLoader::OnAutoReload(const RC::StringType&,
+    void DragonWildsJournalModLoader::OnFinalizeLoad(const EEngineLifecyclePhase& phase)
+    {
+        if (phase == EEngineLifecyclePhase::GameInstanceInit && !m_initialJournalApplied)
+        {
+            ApplyPendingPatches();
+            ApplyAll();
+        }
+    }
+
+    void DragonWildsJournalModLoader::OnAutoReload(const RC::StringType& modName,
         const std::filesystem::path& modFilePath)
     {
         PS::JsonHelpers::ParseJsonFileInPath(modFilePath,
-            [this](const nlohmann::json& data) { QueueData(data); });
+            [&](const nlohmann::json& data) { QueueData(data, modName); });
         ApplyAll();
         if (auto* component = FindJournalComponent())
         {
@@ -157,14 +213,12 @@ namespace DragonWilds {
             nullptr, nullptr, TEXT("/Script/Dominion.JournalEntryData"));
         m_noBiomeSubCategoryClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
             nullptr, nullptr, TEXT("/Script/Dominion.JournalSubCategoryNoBiomeData"));
-        m_byBiomeSubCategoryClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
-            nullptr, nullptr, TEXT("/Script/Dominion.JournalSubCategoryByBiomeData"));
         m_journalComponentClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
             nullptr, nullptr, TEXT("/Script/Dominion.JournalComponent"));
         m_journalSubsystemClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
             nullptr, nullptr, TEXT("/Script/Dominion.JournalSubsystem"));
 
-        if (!m_baseEntryClass || !m_noBiomeSubCategoryClass || !m_byBiomeSubCategoryClass
+        if (!m_baseEntryClass || !m_noBiomeSubCategoryClass
             || !m_journalComponentClass || !m_journalSubsystemClass)
         {
             PS::Log<LogLevel::Error>(STR("Unable to initialize {}, required Dominion journal classes were not found.\n"),
@@ -175,7 +229,7 @@ namespace DragonWilds {
         return true;
     }
 
-    void DragonWildsJournalModLoader::QueueData(const nlohmann::json& data)
+    void DragonWildsJournalModLoader::QueueData(const nlohmann::json& data, const RC::StringType& modName)
     {
         if (!data.is_object())
         {
@@ -203,7 +257,7 @@ namespace DragonWilds {
                 static constexpr std::array<std::string_view, 1> protectedIdentity{"PersistenceID"};
                 if (const auto patch = JsonPatchDirective::Parse(body, protectedIdentity, "journal"))
                 {
-                    m_pendingPatches.push_back({patch->Reference, patch->Changes});
+                    m_pendingPatches.push_back({patch->Reference, patch->Changes, modName});
                     continue;
                 }
             }
@@ -215,7 +269,12 @@ namespace DragonWilds {
             }
             auto found = std::find_if(m_defs.begin(), m_defs.end(),
                 [&](const JournalDef& def) { return def.Key == wideKey; });
-            JournalDef replacement{ wideKey, body };
+            if(found!=m_defs.end() && !wideKey.starts_with(TEXT("/")) && found->Owner!=modName) {
+                PS::Log<LogLevel::Error>(STR("Journal '{}' is already owned by '{}'; duplicate from '{}' rejected.\n"),wideKey,found->Owner,modName);
+                continue;
+            }
+            JournalDef replacement{ wideKey, body, modName };
+            m_rejectedEntries.erase(wideKey);
             if (found == m_defs.end())
             {
                 m_defs.push_back(std::move(replacement));
@@ -244,7 +303,9 @@ namespace DragonWilds {
                 continue;
             }
             JsonPatchDirective::Directive directive{patch.Reference, patch.Changes};
+            m_rejectedEntries.erase(wideKey);
             const auto stats = JsonPatchDirective::Apply(found->Body, directive, true);
+            WarnPatchConflicts(m_patchConflicts, "journal:" + key, patch.Changes, RC::to_string(patch.Owner));
             ++updated;
             PS::Log<LogLevel::Verbose>( STR("Patched journal entry '{}' ({} fields overwritten).\n"),
                 found->Key, stats.FieldsOverwritten);
@@ -259,8 +320,13 @@ namespace DragonWilds {
 
         for (auto& def : m_defs)
         {
+            if (m_rejectedEntries.contains(def.Key)) continue;
             try
             {
+                if (def.Body.contains("AddTo"))
+                    PS::JournalPlacement::Parse(def.Body.at("AddTo"), RC::to_string(def.Key));
+                else if (!def.Key.starts_with(TEXT("/")))
+                    throw std::runtime_error("New journal entries require AddTo");
                 auto* entry = ResolveOrCreate(def);
                 if (!entry)
                 {
@@ -269,11 +335,11 @@ namespace DragonWilds {
                 }
 
                 ApplyProperties(entry, def.Body);
-                RegisterEntry(entry);
-                if (Place(entry, def))
-                {
-                    result.Placements++;
-                }
+                RegisterEntry(entry,def.Owner);
+                if (def.Body.contains("AddTo")) {
+                    if (Place(entry, def)) ++result.Placements;
+                } else if (m_createdEntries.contains(entry))
+                    throw std::runtime_error("New journal entries require AddTo");
 
                 if (ReadBool(def.Body, "Unlock", true))
                 {
@@ -288,6 +354,8 @@ namespace DragonWilds {
             }
             catch (const std::exception& e)
             {
+                m_rejectedEntries.insert(def.Key);
+                m_unlock.erase(def.Key);
                 result.ErrorCount++;
                 PS::Log<LogLevel::Error>(STR("[{}] {}\n"), def.Key, PS::ToWideSafe(e.what()));
             }
@@ -306,9 +374,9 @@ namespace DragonWilds {
                     result.EntriesReady, result.Placements);
             }
         }
+        InstallNativePersistence();
         RegisterHooks();
-        SnapshotRegistryIds();
-        InstallSaveGuard();
+        m_initialJournalApplied = true;
         return result;
     }
 
@@ -348,7 +416,9 @@ namespace DragonWilds {
     {
         if (auto found = m_entries.find(def.Key); found != m_entries.end())
         {
-            return found->second;
+            auto* entry = found->second.Get();
+            if (!entry) throw std::runtime_error("Cached journal entry is no longer live; skipping until definitions are reloaded");
+            return entry;
         }
 
         if (def.Key.starts_with(TEXT("/")))
@@ -364,7 +434,7 @@ namespace DragonWilds {
                 throw std::runtime_error("cooked journal entry was not found or had the wrong class");
             }
             entry->SetRootSet();
-            m_entries.emplace(def.Key, entry);
+            m_entries.emplace(def.Key, EntryHandle(entry));
             return entry;
         }
 
@@ -375,6 +445,8 @@ namespace DragonWilds {
         {
             throw std::runtime_error("entry class or transient package was unavailable");
         }
+        if (UECustom::UObjectGlobals::StaticFindObject(nullptr, transientPackage, def.Key.c_str(), false))
+            throw std::runtime_error("Journal entry ID is already in use; journal and lore must use distinct IDs");
 
         FStaticConstructObjectParameters params(entryClass, transientPackage);
         params.Name = FName(def.Key, FNAME_Add);
@@ -395,14 +467,40 @@ namespace DragonWilds {
         }
 
         m_createdEntries.insert(entry);
-        m_entries.emplace(def.Key, entry);
+        m_entries.emplace(def.Key, EntryHandle(entry));
         return entry;
     }
 
     void DragonWildsJournalModLoader::ApplyProperties(UObject* entry, const nlohmann::json& body)
     {
-        m_pendingRecipeReferences.erase(entry);
+        if (body.contains("Type")) {
+            auto* expected = ResolveEntryClass(body);
+            if (!expected || !entry->IsA(expected))
+                throw std::runtime_error("Type cannot change the class of an existing journal entry");
+        }
+        if (m_loreOnly) {
+            auto* loreClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr, nullptr, EntryClassPaths[0]);
+            if (!loreClass || !entry->IsA(loreClass))
+                throw std::runtime_error("The lore loader accepts only Lore journal entries");
+        }
 
+        struct PropertyRollback {
+            UObject* entry;
+            std::vector<std::unique_ptr<JournalFieldCopy>> fields;
+            bool committed = false;
+            ~PropertyRollback() {
+                if (!committed) for (auto& field : fields)
+                    field->Commit(field->property->ContainerPtrToValuePtr<void>(entry));
+            }
+        } rollback{entry};
+        std::unordered_set<FProperty*> saved;
+        auto preserve = [&](const RC::StringType& name) {
+            auto* field = PropertyHelper::GetPropertyByName(entry->GetClassPrivate(), name);
+            if (field && saved.insert(field).second)
+                rollback.fields.push_back(std::make_unique<JournalFieldCopy>(field, field->ContainerPtrToValuePtr<void>(entry)));
+        };
+        for (const auto& [name, unused] : body.items()) preserve(RC::to_generic_string(name));
+        for (const auto* name : {TEXT("ItemData"), TEXT("RecipeData"), TEXT("Image"), TEXT("JournalItemData")}) preserve(name);
         for (auto& [name, value] : body.items())
         {
             if (name == "Type" || name == "AddTo" || name == "Unlock")
@@ -425,15 +523,11 @@ namespace DragonWilds {
                 if (recipe)
                 {
                     SetLiveSoftReference(entry, property, recipe);
-                    m_pendingRecipeReferences.erase(entry);
-                }
-                else if (!reference.starts_with(TEXT("/")))
-                {
-                    m_pendingRecipeReferences[entry] = reference;
                 }
                 else
                 {
-                    throw std::runtime_error("RecipeData cooked asset path could not be loaded.");
+                    throw std::runtime_error("RecipeData '" + RC::to_string(reference)
+                        + "' could not be resolved; define that /recipes key or use a valid cooked RecipeData path.");
                 }
             }
             else if (name == "ItemData" && value.is_string())
@@ -455,16 +549,30 @@ namespace DragonWilds {
                     throw std::runtime_error("StationTableRowHandle requires DataTable and RowName.");
                 }
 
-                auto* table = FindObjectByClassAndName(DataTableClassPath, tableName);
+                auto* table = ResolveSoftReference(DataTableClassPath, tableName);
                 if (!table)
                 {
                     throw std::runtime_error(std::format("Data table '{}' was not loaded.",
                         RC::to_string(tableName)));
                 }
 
-                auto* rowHandle = property->ContainerPtrToValuePtr<uint8>(entry);
-                std::memcpy(rowHandle, &table, sizeof(table));
-                *reinterpret_cast<FName*>(rowHandle + sizeof(table)) = FName(rowName, FNAME_Add);
+                auto* dataTable = static_cast<UDataTable*>(table);
+                auto* rowType = dataTable->GetRowStruct().Get();
+                if (!rowType || rowType->GetPathName() != TEXT("/Script/Dominion.CraftingStationDataTableRow"))
+                    throw std::runtime_error("Journal recipe station requires a CraftingStationDataTableRow table");
+                const FName row(rowName, FNAME_Add);
+                if (!dataTable->FindRowUnchecked(row))
+                    throw std::runtime_error("Journal recipe station row was not found: " + RC::to_string(rowName));
+                auto* handle = CastField<FStructProperty>(property);
+                auto* type = handle ? handle->GetStruct().Get() : nullptr;
+                auto* tableField = type ? CastField<FObjectPropertyBase>(PropertyHelper::GetPropertyByName(type, TEXT("DataTable"))) : nullptr;
+                auto* rowField = type ? CastField<FNameProperty>(PropertyHelper::GetPropertyByName(type, TEXT("RowName"))) : nullptr;
+                if (!type || type->GetPathName() != TEXT("/Script/Engine.DataTableRowHandle")
+                    || !tableField || tableField->GetSize() != sizeof(table) || !rowField)
+                    throw std::runtime_error("Journal station row handle does not match the live property contract");
+                auto* destination = property->ContainerPtrToValuePtr<void>(entry);
+                std::memcpy(tableField->ContainerPtrToValuePtr<void>(destination), &table, sizeof(table));
+                rowField->SetPropertyValue(rowField->ContainerPtrToValuePtr<void>(destination), row);
             }
             else
             {
@@ -472,16 +580,61 @@ namespace DragonWilds {
             }
         }
 
-        auto imagePath = ReadString(body, "Image");
-        if (!imagePath.empty())
-        {
-            UECustom::TSoftObjectPtr<UObject> softImage{ UECustom::FSoftObjectPath(imagePath) };
-            auto* image = UECustom::UKismetSystemLibrary::LoadAsset_Blocking(softImage);
-            if (!image)
-            {
-                throw std::runtime_error("journal Image could not be loaded; check the cooked asset path and container mount");
+        auto resolveField = [&](const TCHAR* name, bool required) -> UObject* {
+            auto* field = CastField<FSoftObjectProperty>(PropertyHelper::GetPropertyByName(entry->GetClassPrivate(), name));
+            if (!field || field->GetSize() != sizeof(UECustom::FSoftObjectPtr))
+                throw std::runtime_error("Journal reference property layout changed: " + RC::to_string(name));
+            auto* reference = field->ContainerPtrToValuePtr<UECustom::FSoftObjectPtr>(entry);
+            if (reference->ObjectID.GetAssetFName() == NAME_None) {
+                if (required) throw std::runtime_error("Journal entry requires " + RC::to_string(name));
+                return nullptr;
             }
+            UECustom::TSoftObjectPtr<UObject> soft{reference->ObjectID};
+            auto* target = UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
+            if (!target) throw std::runtime_error("Journal asset could not be loaded: " + RC::to_string(name));
+            SetLiveSoftReference(entry, field, target);
+            return target;
+        };
+        resolveField(TEXT("Image"), false);
+        resolveField(TEXT("JournalItemData"), false);
+        auto* recipeClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr, nullptr, EntryClassPaths[5]);
+        if (recipeClass && entry->IsA(recipeClass)) {
+            auto* recipe = resolveField(TEXT("RecipeData"), true);
+            auto* item = resolveField(TEXT("ItemData"), false);
+            auto* outputs = CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(recipe->GetClassPrivate(), TEXT("ItemsCreated")));
+            auto* output = outputs ? CastField<FStructProperty>(outputs->GetInner()) : nullptr;
+            auto* itemField = output && output->GetStruct() ? CastField<FObjectPropertyBase>(
+                PropertyHelper::GetPropertyByName(output->GetStruct().Get(), TEXT("ItemData"))) : nullptr;
+            if (!outputs || !itemField || itemField->GetSize() != sizeof(UObject*))
+                throw std::runtime_error("Recipe ItemsCreated contract is unavailable");
+            std::unordered_set<UObject*> created;
+            UECustom::FScriptArrayHelper items(outputs->ContainerPtrToValuePtr<FScriptArray>(recipe), outputs);
+            items.ForEachElement([&](void* value) {
+                UObject* target{}; std::memcpy(&target, itemField->ContainerPtrToValuePtr<void>(value), sizeof(target));
+                if (target) created.insert(target);
+            });
+            if (!item && created.size() == 1) {
+                item = *created.begin();
+                SetLiveSoftReference(entry, PropertyHelper::GetPropertyByName(entry->GetClassPrivate(), TEXT("ItemData")), item);
+            }
+            if (!item || !created.contains(item))
+                throw std::runtime_error("Journal ItemData must identify a recipe output; specify it for multi-output recipes");
+            auto* handle = CastField<FStructProperty>(PropertyHelper::GetPropertyByName(entry->GetClassPrivate(), TEXT("StationTableRowHandle")));
+            auto* type = handle ? handle->GetStruct().Get() : nullptr;
+            auto* tableField = type ? CastField<FObjectPropertyBase>(PropertyHelper::GetPropertyByName(type, TEXT("DataTable"))) : nullptr;
+            auto* rowField = type ? CastField<FNameProperty>(PropertyHelper::GetPropertyByName(type, TEXT("RowName"))) : nullptr;
+            if (!handle || !tableField || tableField->GetSize() != sizeof(UObject*) || !rowField)
+                throw std::runtime_error("Journal recipe station handle is unavailable");
+            auto* data = handle->ContainerPtrToValuePtr<void>(entry);
+            UObject* table{}; std::memcpy(&table, tableField->ContainerPtrToValuePtr<void>(data), sizeof(table));
+            auto* expected = UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr, nullptr, DataTableClassPath);
+            auto* station = table && expected && table->IsA(expected) ? static_cast<UDataTable*>(table) : nullptr;
+            if (!station || !station->GetRowStruct()
+                || station->GetRowStruct()->GetPathName() != TEXT("/Script/Dominion.CraftingStationDataTableRow")
+                || !station->FindRowUnchecked(rowField->GetPropertyValue(rowField->ContainerPtrToValuePtr<void>(data))))
+                throw std::runtime_error("Recipe journal requires a valid StationTableRowHandle (crafting-station table and row)");
         }
+        rollback.committed = true;
     }
 
     bool DragonWildsJournalModLoader::Place(UObject* entry, const JournalDef& def)
@@ -491,8 +644,9 @@ namespace DragonWilds {
             throw std::runtime_error("AddTo object is required");
         }
         const auto& addTo = def.Body.at("AddTo");
-        auto path = ReadString(addTo, "SubCategory");
-        auto keyString = ReadString(addTo, "Key");
+        const auto placement=PS::JournalPlacement::Parse(addTo,RC::to_string(def.Key));
+        auto path = RC::to_generic_string(placement.SubCategory);
+        auto keyString = RC::to_generic_string(placement.Key);
         if (path.empty())
         {
             throw std::runtime_error("AddTo.SubCategory is required.");
@@ -502,8 +656,30 @@ namespace DragonWilds {
             keyString = def.Key;
         }
 
-        UECustom::TSoftObjectPtr<UObject> softSubCategory{ UECustom::FSoftObjectPath(path) };
-        auto* subCategory = UECustom::UKismetSystemLibrary::LoadAsset_Blocking(softSubCategory);
+        UObject* subCategory=nullptr;
+        if(path.starts_with(TEXT("/"))) {
+            UECustom::TSoftObjectPtr<UObject> softSubCategory{ UECustom::FSoftObjectPath(path) };
+            subCategory=UECustom::UKismetSystemLibrary::LoadAsset_Blocking(softSubCategory);
+        } else {
+            auto* categoryClass=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Dominion.JournalSubCategoryData"));
+            if(!categoryClass)throw std::runtime_error("Journal category class unavailable");
+            auto normalize=[](RC::StringType value) {
+                std::transform(value.begin(),value.end(),value.begin(),[](auto c){return static_cast<TCHAR>(std::towlower(c));});return value;
+            };
+            const auto wanted=normalize(path);
+            TArray<UObject*> categories;UECustom::UObjectGlobals::GetObjectsOfClass(categoryClass,categories,true);
+            for(auto* candidate:categories) {
+                if(!candidate || candidate->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject)))continue;
+                bool matches=normalize(candidate->GetName())==wanted;
+                auto* name=CastField<FTextProperty>(PropertyHelper::GetPropertyByName(candidate->GetClassPrivate(),TEXT("Name")));
+                if(name)matches=matches || normalize(PropertyHelper::GetTextAsString(name->GetPropertyValue(name->ContainerPtrToValuePtr<void>(candidate))))==wanted;
+                auto* internal=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(candidate->GetClassPrivate(),TEXT("InternalName")));
+                if(internal)matches=matches || normalize(RC::StringType(**internal->ContainerPtrToValuePtr<FString>(candidate)))==wanted;
+                if(!matches)continue;
+                if(subCategory && subCategory!=candidate)throw std::runtime_error("Journal category name is ambiguous; use its full asset path");
+                subCategory=candidate;
+            }
+        }
         if (!subCategory)
         {
             throw std::runtime_error(std::format("AddTo.SubCategory could not be loaded: {}", RC::to_string(path)));
@@ -511,8 +687,20 @@ namespace DragonWilds {
 
         FMapProperty* dataMapProperty = nullptr;
         void* dataMap = nullptr;
+        const auto hierarchy = PrepareJournalHierarchy(FindJournalSubsystem(), subCategory,
+            FName(keyString, FNAME_Add), placement.TargetGroup
+                ? FName(RC::to_generic_string(placement.TargetGroup->Id), FNAME_Add) : FName());
+        if(subCategory->GetClassPrivate()->GetPathName()==TEXT("/Script/Dominion.JournalSubCategoryByGroupData"))
+        {
+            const bool changed = PlaceJournalGroup(subCategory,entry,placement);
+            hierarchy.Publish(entry);
+            return changed;
+        }
         if (subCategory->IsA(m_noBiomeSubCategoryClass))
         {
+            if(placement.TargetGroup)throw std::runtime_error("This journal category does not support groups");
+            if (addTo.contains("Biome"))
+                throw std::runtime_error("AddTo.Biome cannot be applied to a non-biome journal subcategory; entry was not placed.");
             auto* dataProperty = CastField<FStructProperty>(
                 PropertyHelper::GetPropertyByName(subCategory->GetClassPrivate(), TEXT("Data")));
             if (!dataProperty || !dataProperty->GetStruct())
@@ -524,48 +712,11 @@ namespace DragonWilds {
             dataMap = dataMapProperty ? dataMapProperty->ContainerPtrToValuePtr<void>(
                 dataProperty->ContainerPtrToValuePtr<void>(subCategory)) : nullptr;
         }
-        else if (subCategory->IsA(m_byBiomeSubCategoryClass))
-        {
-            auto biomeName = ReadString(addTo, "Biome");
-            uint8 biome = 1;
-            if (biomeName == TEXT("NotSet")) biome = 0;
-            else if (biomeName.empty() || biomeName == TEXT("Ghornfell")) biome = 1;
-            else if (biomeName == TEXT("DowdunReach")) biome = 2;
-            else if (biomeName == TEXT("Fellhollow")) biome = 3;
-            else if (biomeName == TEXT("Brynmoor")) biome = 4;
-            else if (biomeName == TEXT("UmbralSands")) biome = 5;
-            else
-            {
-                throw std::runtime_error("AddTo.Biome must be NotSet, Ghornfell, DowdunReach, Fellhollow, Brynmoor, or UmbralSands.");
-            }
-
-            auto* outerProperty = CastField<FMapProperty>(
-                PropertyHelper::GetPropertyByName(subCategory->GetClassPrivate(), TEXT("DataByBiome")));
-            auto* containerProperty = outerProperty
-                ? CastField<FStructProperty>(const_cast<FProperty*>(outerProperty->GetValueProp())) : nullptr;
-            if (!outerProperty || !containerProperty || !containerProperty->GetStruct())
-            {
-                throw std::runtime_error("Subcategory DataByBiome layout was invalid.");
-            }
-
-            dataMapProperty = CastField<FMapProperty>(
-                PropertyHelper::GetPropertyByName(containerProperty->GetStruct().Get(), TEXT("DataMap")));
-            UECustom::FScriptMapHelper outer(outerProperty,
-                outerProperty->ContainerPtrToValuePtr<void>(subCategory));
-            outer.ForEachPair([&](void* biomePtr, void* containerPtr) {
-                if (*static_cast<uint8*>(biomePtr) == biome && dataMapProperty)
-                {
-                    dataMap = dataMapProperty->ContainerPtrToValuePtr<void>(containerPtr);
-                }
-            });
-            if (!dataMap)
-            {
-                throw std::runtime_error("Requested biome was not present in the journal subcategory.");
-            }
-        }
         else
         {
-            throw std::runtime_error("Target was not a supported journal subcategory.");
+            throw std::runtime_error(std::format(
+                "Unsupported journal subcategory '{}' (class '{}'). Entry was not placed.",
+                RC::to_string(path), RC::to_string(subCategory->GetClassPrivate()->GetPathName())));
         }
 
         if (!dataMapProperty || !dataMap)
@@ -583,10 +734,10 @@ namespace DragonWilds {
             alreadyPresent = true;
             auto* soft = static_cast<UECustom::FSoftObjectPtr*>(valuePtr);
             soft->ObjectID = UECustom::FSoftObjectPath(entry->GetPathName());
-            soft->WeakPtr = FWeakObjectPtr(entry);
         });
         if (alreadyPresent)
         {
+            hierarchy.Publish(entry);
             return false;
         }
 
@@ -595,9 +746,9 @@ namespace DragonWilds {
         *static_cast<FName*>(map.GetKeyPtr(pair.GetData())) = key;
         auto* soft = static_cast<UECustom::FSoftObjectPtr*>(map.GetValuePtr(pair.GetData()));
         soft->ObjectID = UECustom::FSoftObjectPath(entry->GetPathName());
-        soft->WeakPtr = FWeakObjectPtr(entry);
         map.Add(pair);
         map.Rehash();
+        hierarchy.Publish(entry);
         return true;
     }
 
@@ -605,102 +756,35 @@ namespace DragonWilds {
     {
         TArray<UObject*> objects;
         UECustom::UObjectGlobals::GetObjectsOfClass(m_journalSubsystemClass, objects, true);
+        UObject* selected=nullptr;
         for (auto* object : objects)
         {
-            if (object && !object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject | RF_ArchetypeObject)))
-                return object;
+            if (!object || object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject | RF_ArchetypeObject | RF_BeginDestroyed | RF_FinishDestroyed)))continue;
+            if(selected)throw std::runtime_error("Journal subsystem is ambiguous; registration refused");
+            selected=object;
         }
-        return nullptr;
+        return selected;
     }
 
-    void DragonWildsJournalModLoader::RegisterEntry(UObject* entry)
+    void DragonWildsJournalModLoader::RegisterEntry(UObject* entry,const RC::StringType& owner)
     {
         auto* subsystem = FindJournalSubsystem();
         if (!subsystem)
         {
             throw std::runtime_error("Journal subsystem was unavailable.");
         }
-        auto* subsystemClass = subsystem->GetClassPrivate();
-
         auto* persistenceProperty = CastField<FStrProperty>(
             PropertyHelper::GetPropertyByName(entry->GetClassPrivate(), TEXT("PersistenceID")));
-        auto* internalProperty = CastField<FStrProperty>(
-            PropertyHelper::GetPropertyByName(entry->GetClassPrivate(), TEXT("InternalName")));
-        if (!persistenceProperty || !internalProperty)
-        {
-            throw std::runtime_error("Journal identity properties were unavailable.");
-        }
-        auto persistenceId = persistenceProperty->GetPropertyValue(
+        if(!persistenceProperty || persistenceProperty->GetArrayDim()!=1)
+            throw std::runtime_error("Journal persistence identity field changed");
+        const auto& persistenceId = persistenceProperty->GetPropertyValue(
             persistenceProperty->ContainerPtrToValuePtr<void>(entry));
-        auto internalName = internalProperty->GetPropertyValue(
-            internalProperty->ContainerPtrToValuePtr<void>(entry));
-        TrackOwnedId(entry, persistenceId);
-
-        auto addStringMap = [&](const TCHAR* propertyName, const FString& key) {
-            auto* property = CastField<FMapProperty>(PropertyHelper::GetPropertyByName(subsystemClass, propertyName));
-            if (!property)
-            {
-                throw std::runtime_error(std::format("Journal registry '{}' was unavailable.",
-                    RC::to_string(propertyName)));
-            }
-            UECustom::FScriptMapHelper map(property, property->ContainerPtrToValuePtr<void>(subsystem));
-            bool found = false;
-            map.ForEachPair([&](void* keyPtr, void*) { if (*static_cast<FString*>(keyPtr) == key) found = true; });
-            if (found)
-            {
-                return;
-            }
-            UECustom::FManagedValue pair;
-            map.InitializePair(pair);
-            *static_cast<FString*>(map.GetKeyPtr(pair.GetData())) = key;
-            std::memcpy(map.GetValuePtr(pair.GetData()), &entry, sizeof(entry));
-            map.Add(pair);
-            map.Rehash();
-        };
-        addStringMap(TEXT("PersistenceIDToDataMap"), persistenceId);
-        addStringMap(TEXT("InternalNameToDataMap"), internalName);
-
-        auto* reverseProperty = CastField<FMapProperty>(
-            PropertyHelper::GetPropertyByName(subsystemClass, TEXT("DataToNetIdMap")));
-        auto* arrayProperty = CastField<FArrayProperty>(
-            PropertyHelper::GetPropertyByName(subsystemClass, TEXT("NetIdToData")));
-        if (!reverseProperty || !arrayProperty)
-        {
-            throw std::runtime_error("Journal network registry was unavailable.");
+        try {
+            QuestRegistry::NativeRegistry::RegisterJournal(subsystem,subsystem->GetOuterPrivate(),entry);
+        } catch(const std::exception& error) {
+            throw std::runtime_error(std::string("Journal registry: ")+error.what());
         }
-
-        UECustom::FScriptMapHelper reverse(reverseProperty,
-            reverseProperty->ContainerPtrToValuePtr<void>(subsystem));
-        bool hasNetId = false;
-        reverse.ForEachPair([&](void* keyPtr, void*) {
-            UObject* existing = nullptr;
-            std::memcpy(&existing, keyPtr, sizeof(existing));
-            if (existing == entry) hasNetId = true;
-        });
-        if (hasNetId)
-        {
-            return;
-        }
-
-        auto* array = arrayProperty->ContainerPtrToValuePtr<FScriptArray>(subsystem);
-        if (array->Num() >= std::numeric_limits<uint16>::max())
-        {
-            throw std::runtime_error("Journal network registry exhausted its uint16 IDs.");
-        }
-        uint16 netId = static_cast<uint16>(array->Num());
-
-        UECustom::FScriptArrayHelper arrayHelper(array, arrayProperty);
-        UECustom::FManagedValue arrayValue;
-        arrayHelper.InitializeValue(arrayValue);
-        std::memcpy(arrayValue.GetData(), &entry, sizeof(entry));
-        arrayHelper.Add(arrayValue);
-
-        UECustom::FManagedValue reversePair;
-        reverse.InitializePair(reversePair);
-        std::memcpy(reverse.GetKeyPtr(reversePair.GetData()), &entry, sizeof(entry));
-        std::memcpy(reverse.GetValuePtr(reversePair.GetData()), &netId, sizeof(netId));
-        reverse.Add(reversePair);
-        reverse.Rehash();
+        TrackOwnedId(entry, persistenceId,owner);
     }
 
     void DragonWildsJournalModLoader::RegisterHooks()
@@ -716,87 +800,70 @@ namespace DragonWilds {
             PS::Log<LogLevel::Error>(STR("Journal persistence event was not found; custom entries cannot be unlocked safely.\n"));
             return;
         }
-        function->RegisterPostHook([this](UnrealScriptFunctionCallableContext& context, void*) {
-            UnlockEntries(context.Context);
-        });
-        m_hooksActive = true;
-    }
-
-    void DragonWildsJournalModLoader::ResolvePendingRecipeReferences()
-    {
-        for (auto it = m_pendingRecipeReferences.begin(); it != m_pendingRecipeReferences.end();)
-        {
-            auto* recipe = FindObjectByClassAndName(RecipeDataClassPath, it->second);
-            auto* property = it->first
-                ? PropertyHelper::GetPropertyByName(it->first->GetClassPrivate(), TEXT("RecipeData")) : nullptr;
-            if (!recipe || !property)
-            {
-                auto reference = it->second;
-                it = m_pendingRecipeReferences.erase(it);
-                PS::Log<LogLevel::Error>(STR("Journal RecipeData '{}' could not be resolved after content loading completed.\n"),
-                    reference);
-                continue;
-            }
-
-            SetLiveSoftReference(it->first, property, recipe);
-            it = m_pendingRecipeReferences.erase(it);
+        size_t parameterCount=0;
+        bool valid=function->GetParmsSize()==32 && !function->GetReturnProperty();
+        for(auto* field:TFieldRange<FProperty>(function,EFieldIterationFlags::Default)) {
+            if(!field->HasAnyPropertyFlags(CPF_Parm))continue;
+            ++parameterCount;
+            const auto name=field->GetName();
+            const int offset=name==TEXT("InUnlockedEntries")?0:name==TEXT("InUnreadEntries")?16:-1;
+            auto* array=CastField<FArrayProperty>(field);
+            auto* inner=array?CastField<FStructProperty>(array->GetInner()):nullptr;
+            auto* type=inner?inner->GetStruct().Get():nullptr;
+            auto* netId=type?CastField<FUInt16Property>(PropertyHelper::GetPropertyByName(type,TEXT("NetId"))):nullptr;
+            valid=valid && offset>=0 && field->GetOffset_Internal()==offset
+                && field->GetElementSize()==16 && field->GetArrayDim()==1
+                && type && type->GetPathName()==TEXT("/Script/Dominion.DominionDataAssetNetId")
+                && inner->GetElementSize()==2 && inner->GetArrayDim()==1 && type->GetStructureSize()==2
+                && netId && netId->GetOffset_Internal()==0 && netId->GetElementSize()==2 && netId->GetArrayDim()==1;
         }
+        if(!valid || parameterCount!=2) {
+            PS::Log<LogLevel::Error>(STR("Journal persistence event layout changed; unlock hook was not installed.\n"));
+            return;
+        }
+        const auto hookId=PS::RegisterNativePostHook(function, [this](UnrealScriptFunctionCallableContext& context, void*) {
+            try {UnlockEntries(context.Context);}
+            catch(const std::exception& error) {
+                PS::Log<LogLevel::Error>(STR("Journal persistence unlock failed: {}\n"),PS::ToWideSafe(error.what()));
+            }
+            catch(...) {PS::Log<LogLevel::Error>(STR("Journal persistence unlock failed with an unknown exception.\n"));}
+        });
+        if(!hookId) {
+            PS::Log<LogLevel::Error>(STR("Journal persistence hook registration failed; custom unlock delivery is unavailable.\n"));
+            return;
+        }
+        m_hooksActive = true;
     }
 
     void DragonWildsJournalModLoader::UnlockEntries(UObject* journalComponent)
     {
-        ResolvePendingRecipeReferences();
         if (!journalComponent || !journalComponent->IsA(m_journalComponentClass))
         {
             PS::Log<LogLevel::Error>(STR("Journal persistence event supplied an invalid component.\n"));
             return;
         }
 
-        auto* componentClass = journalComponent->GetClassPrivate();
-        auto* unlockedProperty = CastField<FArrayProperty>(
-            PropertyHelper::GetPropertyByName(componentClass, TEXT("UnlockedJournalEntries")));
-        auto* unreadProperty = CastField<FArrayProperty>(
-            PropertyHelper::GetPropertyByName(componentClass, TEXT("UnreadJournalEntries")));
-        if (!unlockedProperty || !unreadProperty)
-        {
-            PS::Log<LogLevel::Error>(STR("Journal component unlock arrays were unavailable.\n"));
-            return;
-        }
-
-        auto ensureInArray = [&](FArrayProperty* property, UObject* entry) {
-            auto* array = property->ContainerPtrToValuePtr<FScriptArray>(journalComponent);
-            UECustom::FScriptArrayHelper helper(array, property);
-            bool found = false;
-            helper.ForEachElement([&](void* valuePtr) {
-                UObject* value = nullptr;
-                std::memcpy(&value, valuePtr, sizeof(value));
-                if (value == entry)
-                {
-                    found = true;
-                }
-            });
-
-            if (!found)
-            {
-                UECustom::FManagedValue value;
-                helper.InitializeValue(value);
-                std::memcpy(value.GetData(), &entry, sizeof(entry));
-                helper.Add(value);
-            }
-        };
-
+        size_t added=0,unavailable=0;
         for (auto& key : m_unlock)
         {
             auto found = m_entries.find(key);
-            if (found == m_entries.end() || !found->second)
+            if (found == m_entries.end())
             {
+                ++unavailable;
                 continue;
             }
 
-            UObject* entry = found->second;
-            ensureInArray(unlockedProperty, entry);
-            ensureInArray(unreadProperty, entry);
+            UObject* entry = found->second.Get();
+            if (!entry) {++unavailable;continue;}
+            try {
+                if(JournalPlayerAccess::EnsureUnlocked(journalComponent,entry))++added;
+            }catch(const std::exception& error) {
+                ++unavailable;
+                PS::Log<LogLevel::Error>(STR("Journal unlock '{}': {}\n"),key,PS::ToWideSafe(error.what()));
+            }
         }
+        if(added)PS::Log<LogLevel::Verbose>(STR("Journal unlock: {} entries added to '{}'. UI visibility still depends on category placement.\n"),added,journalComponent->GetPathName());
+        if(unavailable)PS::Log<LogLevel::Warning>(STR("Journal unlock: {} requested entries unavailable; asset placement does not confirm player unlock.\n"),unavailable);
     }
 
     UObject* DragonWildsJournalModLoader::FindJournalComponent()
@@ -811,229 +878,20 @@ namespace DragonWilds {
         return nullptr;
     }
 
-    void DragonWildsJournalModLoader::TrackOwnedId(UObject* entry, const FString& persistenceId)
+    void DragonWildsJournalModLoader::TrackOwnedId(UObject* entry, const FString& persistenceId,const RC::StringType& owner)
     {
         if (!m_createdEntries.contains(entry) || persistenceId.GetCharArray().Num() <= 1)
         {
             return;
         }
 
-        m_ownedIds.insert(RC::to_string(RC::StringType(*persistenceId)));
+        const auto id=RC::to_string(RC::StringType(*persistenceId)),mod=RC::to_string(owner);
+        const auto [found,added]=m_ownedIds.emplace(id,mod);
+        if(!added && found->second!=mod)throw std::runtime_error("Journal persistence ownership transfer refused");
     }
 
-    void DragonWildsJournalModLoader::SnapshotRegistryIds()
+    void DragonWildsJournalModLoader::InstallNativePersistence()
     {
-        auto* subsystem = FindJournalSubsystem();
-        auto* idMapProperty = subsystem ? CastField<FMapProperty>(
-            PropertyHelper::GetPropertyByName(subsystem->GetClassPrivate(), TEXT("PersistenceIDToDataMap"))) : nullptr;
-        if (!idMapProperty)
-        {
-            return;
-        }
-
-        std::unordered_set<std::string> known;
-        UECustom::FScriptMapHelper idMap(idMapProperty, idMapProperty->ContainerPtrToValuePtr<void>(subsystem));
-        idMap.ForEachPair([&](void* keyPtr, void*) {
-            auto* key = static_cast<FString*>(keyPtr);
-            if (key->GetCharArray().Num() > 1)
-            {
-                known.insert(RC::to_string(RC::StringType(**key)));
-            }
-        });
-
-        if (known.size() < 500)
-        {
-            PS::Log<LogLevel::Warning>(STR("Journal registry looks incomplete ({} ids); leaving orphaned save ids alone.\n"),
-                known.size());
-            return;
-        }
-
-        m_knownIds = std::move(known);
-        m_knownIdsValid = true;
-    }
-
-    std::filesystem::path DragonWildsJournalModLoader::GetCharacterSaveDirectory()
-    {
-        auto* localAppData = std::getenv("LOCALAPPDATA");
-        if (!localAppData)
-        {
-            return {};
-        }
-
-        return std::filesystem::path(localAppData) / "RSDragonwilds" / "Saved" / "SaveCharacters";
-    }
-
-
-    void DragonWildsJournalModLoader::InstallSaveGuard()
-    {
-        if (m_saveGuardActive || m_ownedIds.empty())
-        {
-            return;
-        }
-
-        Hook::FCallbackOptions options{};
-        options.OwnerModName = TEXT("RuneSchema");
-        options.HookName = TEXT("JournalSaveGuard");
-
-        auto callbackId = Hook::RegisterLoadMapPreCallback(
-            [this](Hook::TCallbackIterationData<bool>&, UEngine*, FWorldContext&, FURL, UPendingNetGame*, FString&) {
-                try
-                {
-                    StripUnusableIdsFromCharacterSaves();
-                }
-                catch (const std::exception& e)
-                {
-                    PS::Log<LogLevel::Error>(STR("Journal save guard failed: {}\n"), PS::ToWideSafe(e.what()));
-                }
-            }, options);
-
-        if (callbackId == Hook::ERROR_ID)
-        {
-            PS::Log<LogLevel::Error>(STR("Journal save guard could not be installed; custom journal ids will stay in the profile and block the next login.\n"));
-            return;
-        }
-
-        m_saveGuardActive = true;
-    }
-
-    void DragonWildsJournalModLoader::StripUnusableIdsFromCharacterSaves()
-    {
-        auto saveDir = GetCharacterSaveDirectory();
-        if (!std::filesystem::is_directory(saveDir))
-        {
-            PS::Log<LogLevel::Verbose>(STR("No character save folder here; the journal id sweep stays idle.\n"));
-            return;
-        }
-
-        for (auto& entry : std::filesystem::directory_iterator(saveDir))
-        {
-            if (!entry.is_regular_file() || entry.path().extension() != ".json")
-            {
-                continue;
-            }
-
-            try
-            {
-                StripUnusableIdsFromCharacterSave(entry.path());
-            }
-            catch (const std::exception& e)
-            {
-                PS::Log<LogLevel::Error>(STR("Failed cleaning journal ids from '{}': {}\n"),
-                    entry.path().filename().wstring(), PS::ToWideSafe(e.what()));
-            }
-        }
-    }
-
-    bool DragonWildsJournalModLoader::StripUnusableIdsFromCharacterSave(const std::filesystem::path& savePath)
-    {
-        std::ifstream in(savePath, std::ios::binary);
-        if (!in)
-        {
-            return false;
-        }
-        std::string bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-        in.close();
-
-        bool isUtf16 = bytes.size() >= 2
-            && static_cast<unsigned char>(bytes[0]) == 0xFF && static_cast<unsigned char>(bytes[1]) == 0xFE;
-        if (isUtf16)
-        {
-            std::wstring wide((bytes.size() - 2) / sizeof(wchar_t), L'\0');
-            std::memcpy(wide.data(), bytes.data() + 2, wide.size() * sizeof(wchar_t));
-
-            auto utf8Length = WideCharToMultiByte(CP_UTF8, 0, wide.data(), static_cast<int>(wide.size()), nullptr, 0, nullptr, nullptr);
-            std::string utf8(utf8Length, '\0');
-            WideCharToMultiByte(CP_UTF8, 0, wide.data(), static_cast<int>(wide.size()), utf8.data(), utf8Length, nullptr, nullptr);
-            bytes = std::move(utf8);
-        }
-
-        auto save = nlohmann::json::parse(bytes);
-        if (!save.contains("GameProgress") || !save["GameProgress"].is_object())
-        {
-            return false;
-        }
-
-        auto& progress = save["GameProgress"];
-        if (!progress.contains("Journal") || !progress["Journal"].is_object())
-        {
-            return false;
-        }
-
-        auto& journal = progress["Journal"];
-        int removed = 0;
-        int orphans = 0;
-        for (auto* listName : JournalSaveLists)
-        {
-            if (!journal.contains(listName) || !journal[listName].is_array())
-            {
-                continue;
-            }
-
-            auto& list = journal[listName];
-            for (auto it = list.begin(); it != list.end();)
-            {
-                if (!it->is_string())
-                {
-                    ++it;
-                    continue;
-                }
-
-                auto id = it->get<std::string>();
-                bool isOurs = m_ownedIds.contains(id);
-                bool isOrphan = m_knownIdsValid && !m_knownIds.contains(id);
-                if (!isOurs && !isOrphan)
-                {
-                    ++it;
-                    continue;
-                }
-
-                it = list.erase(it);
-                removed++;
-                orphans += isOurs ? 0 : 1;
-            }
-        }
-
-        if (removed == 0)
-        {
-            return false;
-        }
-        auto serialized = save.dump(1, '\t', false, nlohmann::json::error_handler_t::replace);
-
-        if (isUtf16)
-        {
-            auto wideLength = MultiByteToWideChar(CP_UTF8, 0, serialized.data(), static_cast<int>(serialized.size()), nullptr, 0);
-            std::wstring wide(wideLength, L'\0');
-            MultiByteToWideChar(CP_UTF8, 0, serialized.data(), static_cast<int>(serialized.size()), wide.data(), wideLength);
-
-            std::string encoded;
-            encoded.reserve(2 + wide.size() * sizeof(wchar_t));
-            encoded.push_back('\xFF');
-            encoded.push_back('\xFE');
-            encoded.append(reinterpret_cast<const char*>(wide.data()), wide.size() * sizeof(wchar_t));
-            serialized = std::move(encoded);
-        }
-
-        auto stagingPath = savePath;
-        stagingPath += ".runeschema_tmp";
-        {
-            std::ofstream out(stagingPath, std::ios::binary | std::ios::trunc);
-            if (!out)
-            {
-                PS::Log<LogLevel::Error>(STR("Could not stage the cleaned save for '{}'; leaving it untouched.\n"),
-                    savePath.filename().wstring());
-                return false;
-            }
-            out << serialized;
-        }
-        std::filesystem::rename(stagingPath, savePath);
-
-        PS::Log<LogLevel::Verbose>(STR("Removed {} journal entr{} the profile could not load from '{}'.\n"),
-            removed, removed == 1 ? STR("y") : STR("ies"), savePath.filename().wstring());
-        if (orphans > 0)
-        {
-            PS::Log<LogLevel::Warning>(STR("Dropped {} journal entr{} from '{}' that no journal entry answers to any more.\n"),
-                orphans, orphans == 1 ? STR("y") : STR("ies"), savePath.filename().wstring());
-        }
-        return true;
+        JournalPersistence::Install(this, JournalSave::Owners(m_ownedIds.begin(),m_ownedIds.end()), m_journalComponentClass);
     }
 }

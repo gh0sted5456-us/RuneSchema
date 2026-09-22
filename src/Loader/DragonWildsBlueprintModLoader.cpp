@@ -1,4 +1,5 @@
 #include <regex>
+#include <Windows.h>
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
 #include "Unreal/UObject.hpp"
@@ -23,6 +24,20 @@ using namespace RC;
 using namespace RC::Unreal;
 
 namespace DragonWilds {
+    namespace {
+        template<class Layout> void* ResolveLifecycle(uintptr_t** vtable,const Layout& layout,const TCHAR* name) {
+            const auto slot=layout.find(name);
+            if(!vtable || slot==layout.end() || slot->second%sizeof(void*) || slot->second>8192)
+                throw std::runtime_error("Blueprint lifecycle metadata unavailable: "+RC::to_string(name));
+            auto* target=GetVirtualFunctionFromVTable(vtable,slot->second/sizeof(void*));
+            MEMORY_BASIC_INFORMATION memory{};
+            if(!target || !VirtualQuery(target,&memory,sizeof(memory)) || memory.State!=MEM_COMMIT
+                || (memory.Protect&(PAGE_GUARD|PAGE_NOACCESS))
+                || !(memory.Protect&(PAGE_EXECUTE|PAGE_EXECUTE_READ|PAGE_EXECUTE_READWRITE|PAGE_EXECUTE_WRITECOPY)))
+                throw std::runtime_error("Blueprint lifecycle target is not executable: "+RC::to_string(name));
+            return target;
+        }
+    }
     DragonWildsBlueprintModLoader::DragonWildsBlueprintModLoader() : DragonWildsModLoaderBase("blueprints")
     {
         SetDisplayName(TEXT("Blueprint Mod Loader"));
@@ -30,13 +45,22 @@ namespace DragonWilds {
 
     DragonWildsBlueprintModLoader::~DragonWildsBlueprintModLoader()
     {
+        if (m_worldTeardownCallbackId != Hook::ERROR_ID)
+            Hook::UnregisterCallback(m_worldTeardownCallbackId);
         ResetHooks();
         ActorInitializedObserver = nullptr;
+        ActorInitializedObservers.clear();
 
-        for (auto* material : m_ghostRoots)
-            if (material && material->IsRootSet()) material->ClearRootSet();
-
+        ClearWorldVisualEffects();
         m_modsMap.clear();
+    }
+
+    void DragonWildsBlueprintModLoader::ClearWorldVisualEffects()
+    {
+        for (const auto& ref : m_ghostRoots)
+            if (auto* material=ref.Get()) if (material->IsRootSet()) material->ClearRootSet();
+        m_ghostRoots.clear();
+        m_ghostMaterials.clear();
     }
 
     void DragonWildsBlueprintModLoader::SetActorInitializedObserver(
@@ -45,12 +69,28 @@ namespace DragonWilds {
         ActorInitializedObserver = std::move(observer);
     }
 
+    uint64_t DragonWildsBlueprintModLoader::RegisterActorInitializedObserver(
+        std::function<void(AActor*)> observer)
+    {
+        const auto observerId = NextActorObserverId++;
+        ActorInitializedObservers.emplace(observerId, std::move(observer));
+        return observerId;
+    }
+
+    void DragonWildsBlueprintModLoader::UnregisterActorInitializedObserver(uint64_t observerId)
+    {
+        if (observerId != 0)
+        {
+            ActorInitializedObservers.erase(observerId);
+        }
+    }
+
     void DragonWildsBlueprintModLoader::OnLoad(const std::filesystem::path& loaderPath, const RC::StringType& modName, const EEngineLifecyclePhase& engineLifecyclePhase)
     {
         if (engineLifecyclePhase == EEngineLifecyclePhase::PostEngineInit)
         {
             PS::JsonHelpers::ParseJsonFilesInPath(loaderPath, [&](const nlohmann::json& data) {
-                LoadSafe(data);
+                LoadSafe(data, modName);
             });
         }
         else if (engineLifecyclePhase == EEngineLifecyclePhase::GameInstanceInit)
@@ -106,6 +146,16 @@ namespace DragonWilds {
             }
 
             HooksReady.store(true, std::memory_order_release);
+            Hook::FCallbackOptions options{};
+            options.OwnerModName = TEXT("RuneSchema");
+            options.HookName = TEXT("BlueprintGhostWorldTeardown");
+            m_worldTeardownCallbackId = Hook::RegisterInitGameStatePreCallback(
+                [this](Hook::TCallbackIterationData<void>&, AGameModeBase*) {
+                    ClearWorldVisualEffects();
+                }, options);
+            if (m_worldTeardownCallbackId == Hook::ERROR_ID)
+                PS::Log<LogLevel::Warning>(
+                    TEXT("Blueprint ghost world-teardown cleanup could not be registered.\n"));
             return true;
         }
         catch (...)
@@ -133,7 +183,7 @@ namespace DragonWilds {
             return false;
         }
 
-        void* postloadPtr = DragonWilds::GetVirtualFunctionFromVTable(vtable, 19);
+        void* postloadPtr = ResolveLifecycle(vtable,UObject::VTableLayoutMap,TEXT("PostLoad"));
         PS::Log<LogLevel::Verbose>(TEXT("Found UBlueprintGeneratedClass::PostLoad: {}\n"), postloadPtr);
 
         PostLoadCallback = [&](UClass* actorClass) {
@@ -153,7 +203,7 @@ namespace DragonWilds {
             return false;
         }
 
-        void* postInitCompsPtr = DragonWilds::GetVirtualFunctionFromVTable(vtable, 169);
+        void* postInitCompsPtr = ResolveLifecycle(vtable,AActor::VTableLayoutMap,TEXT("PostInitializeComponents"));
         PS::Log<LogLevel::Verbose>(TEXT("Found AActor::PostInitializeComponents: {}\n"), postInitCompsPtr);
 
         PostInitComponentsCallback = [&](AActor* self) {
@@ -200,6 +250,13 @@ namespace DragonWilds {
             {
                 ActorInitializedObserver(self);
             }
+            for (const auto& [observerId, observer] : ActorInitializedObservers)
+            {
+                if (observer)
+                {
+                    observer(self);
+                }
+            }
             ApplyBlueprintVisualEffect(self);
         };
 
@@ -207,13 +264,14 @@ namespace DragonWilds {
             reinterpret_cast<void*>(PostInitComponents));
     }
 
-    void DragonWildsBlueprintModLoader::LoadSafe(const nlohmann::json& data)
+    void DragonWildsBlueprintModLoader::LoadSafe(const nlohmann::json& data, const RC::StringType& modName)
     {
-        if (data.is_array()) { for (const auto& entry : data) LoadSafe(entry); return; }
+        if (data.is_array()) { for (const auto& entry : data) LoadSafe(entry, modName); return; }
         static constexpr std::array<std::string_view, 0> noProtected{};
         if (const auto patch = JsonPatchDirective::Parse(data, noProtected, "blueprint"))
         {
             m_pendingBlueprintPatches.push_back({{patch->Reference, patch->Changes}});
+            WarnPatchConflicts(m_patchConflicts, "blueprints:" + patch->Reference, patch->Changes, RC::to_string(modName), false);
             return;
         }
         for (auto& [assetName, assetData] : data.items())
@@ -227,6 +285,7 @@ namespace DragonWilds {
             if (const auto patch = JsonPatchDirective::Parse(assetData, noProtected, "blueprint"))
             {
                 m_pendingBlueprintPatches.push_back({{patch->Reference, patch->Changes}});
+                WarnPatchConflicts(m_patchConflicts, "blueprints:" + patch->Reference, patch->Changes, RC::to_string(modName), false);
                 continue;
             }
             if (!assetNameWide.starts_with(TEXT("/Game/")))
@@ -451,6 +510,7 @@ namespace DragonWilds {
         }
 
         auto componentFullName = std::format(TEXT("{}_GEN_VARIABLE"), componentName);
+        const FName componentFullFName(componentFullName,FNAME_Add);
         UObject* inheritableComponent = nullptr;
 
         auto inheritableComponentHandler = bpClass->GetInheritableComponentHandler();
@@ -461,7 +521,7 @@ namespace DragonWilds {
             {
                 if (record.ComponentTemplate.Get() == nullptr) continue;
 
-                if (record.ComponentTemplate.Get()->GetName() == componentFullName)
+                if (record.ComponentTemplate.Get()->GetFName() == componentFullFName)
                 {
                     inheritableComponent = record.ComponentTemplate.Get();
                     break;
@@ -487,6 +547,7 @@ namespace DragonWilds {
         }
 
         UObject* nodeComponent = nullptr;
+        const FName componentFName(componentName,FNAME_Add);
 
         auto& nodes = simpleConstructionScript->GetAllNodes();
         for (auto& nodeElement : nodes)
@@ -497,7 +558,7 @@ namespace DragonWilds {
                 continue;
             }
 
-            if (nodeComponentTemplate->GetName() == componentName)
+            if (nodeComponentTemplate->GetFName() == componentFName)
             {
                 nodeComponent = nodeComponentTemplate;
                 break;

@@ -1,0 +1,331 @@
+{
+  "Id": "null_forge",
+  "Entry": "hello",
+  "Nodes": {
+    "hello": {
+      "Text": "Welcome! I'm NuLL. I wanted to forge a new career, but my references were all cast iron.",
+      "Choices": [
+        {
+          "Id": "work",
+          "Text": "Need supplies?",
+          "Next": "work"
+        },
+        {
+          "Id": "jokes",
+          "Text": "How is the blacksmithing going?",
+          "Next": "joke_1"
+        },
+        {
+          "Id": "shop",
+          "Text": "Show me your inventory.",
+          "VendorID": "null_armory"
+        },
+        {
+          "Id": "bye",
+          "Text": "Goodbye.",
+          "End": true
+        }
+      ]
+    },
+    "work": {
+      "Text": "Bring three bronze bars. Grumble has a stone-restitution job that pays Soul Fragments; my forge supplies cost those. A little trade cycle. I'd call it a steel, but that would be the wrong alloy.",
+      "Choices": [
+        {
+          "Id": "accept",
+          "Text": "I'll bring three bronze bars.",
+          "RequirementUnlock": {"Quest": {"Id": "null_forge_supplies", "States": ["NotStarted"]}},
+          "Quest": {
+            "Id": "null_forge_supplies",
+            "Action": "Accept"
+          },
+          "Next": "accepted"
+        },
+        {
+          "Id": "turnin",
+          "Text": "Here are the bronze bars.",
+          "RequirementUnlock": {"Quest": {"Id": "null_forge_supplies", "States": ["Active"], "ObjectivesComplete": true}},
+          "Quest": {
+            "Id": "null_forge_supplies",
+            "Action": "TurnIn"
+          },
+          "Next": "paid"
+        },
+        {
+          "Id": "repeat",
+          "Text": "Need another bronze delivery?",
+          "RequirementUnlock": {"Quest": {"Id": "null_forge_supplies", "States": ["Completed"], "RepeatReady": true}},
+          "Quest": {
+            "Id": "null_forge_supplies",
+            "Action": "Accept"
+          },
+          "Next": "accepted"
+        },
+        {
+          "Id": "back",
+          "Text": "Back.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "accepted": {
+      "Text": "Excellent. This partnership has real metal. Grumble waits at X 41435, Y 172509. Mind his temper: he has a chip on his boulder.",
+      "Choices": [
+        {
+          "Id": "back",
+          "Text": "Back.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "paid": {
+      "Text": "Thank you! That's another order hammered out. Grumble always needs more stone, and I'll always need more bars. Our business model is positively ore-dinary.",
+      "Choices": [
+        {
+          "Id": "back",
+          "Text": "Back.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "joke_1": {
+      "Text": "I tried stand-up comedy at the anvil. Every joke fell flat.",
+      "Choices": [
+        {
+          "Id": "next",
+          "Text": "One more. I can take it.",
+          "Next": "joke_2"
+        },
+        {
+          "Id": "stop",
+          "Text": "Please stop hammering that joke.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "joke_2": {
+      "Text": "My furnace and I broke up. There just wasn't a spark.",
+      "Choices": [
+        {
+          "Id": "next",
+          "Text": "One more. I can take it.",
+          "Next": "joke_3"
+        },
+        {
+          "Id": "stop",
+          "Text": "Please stop hammering that joke.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "joke_3": {
+      "Text": "I made a belt from spare swords. A complete waist of steel.",
+      "Choices": [
+        {
+          "Id": "next",
+          "Text": "One more. I can take it.",
+          "Next": "joke_4"
+        },
+        {
+          "Id": "stop",
+          "Text": "Please stop hammering that joke.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "joke_4": {
+      "Text": "I asked the hammer for advice. It told me to nail the basics.",
+      "Choices": [
+        {
+          "Id": "next",
+          "Text": "One more. I can take it.",
+          "Next": "joke_5"
+        },
+        {
+          "Id": "stop",
+          "Text": "Please stop hammering that joke.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "joke_5": {
+      "Text": "My apprentice quit to become a miner. He wanted a deeper career.",
+      "Choices": [
+        {
+          "Id": "next",
+          "Text": "One more. I can take it.",
+          "Next": "joke_6"
+        },
+        {
+          "Id": "stop",
+          "Text": "Please stop hammering that joke.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "joke_6": {
+      "Text": "The ore complained about its job. I told it to smelt with it.",
+      "Choices": [
+        {
+          "Id": "next",
+          "Text": "One more. I can take it.",
+          "Next": "joke_7"
+        },
+        {
+          "Id": "stop",
+          "Text": "Please stop hammering that joke.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "joke_7": {
+      "Text": "I opened a school for anvils. Heavy subjects, very few dropouts.",
+      "Choices": [
+        {
+          "Id": "next",
+          "Text": "One more. I can take it.",
+          "Next": "joke_8"
+        },
+        {
+          "Id": "stop",
+          "Text": "Please stop hammering that joke.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "joke_8": {
+      "Text": "Never argue with a blacksmith. We always have a point to forge.",
+      "Choices": [
+        {
+          "Id": "next",
+          "Text": "One more. I can take it.",
+          "Next": "joke_9"
+        },
+        {
+          "Id": "stop",
+          "Text": "Please stop hammering that joke.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "joke_9": {
+      "Text": "I forged a friendship with Granite. It's been rock-solid.",
+      "Choices": [
+        {
+          "Id": "next",
+          "Text": "One more. I can take it.",
+          "Next": "joke_10"
+        },
+        {
+          "Id": "stop",
+          "Text": "Please stop hammering that joke.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "joke_10": {
+      "Text": "I named my shop NuLL and Void. The warranty writes itself.",
+      "Choices": [
+        {
+          "Id": "next",
+          "Text": "One more. I can take it.",
+          "Next": "joke_11"
+        },
+        {
+          "Id": "stop",
+          "Text": "Please stop hammering that joke.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "joke_11": {
+      "Text": "I tried forging a calendar. All I made were weak days.",
+      "Choices": [
+        {
+          "Id": "next",
+          "Text": "One more. I can take it.",
+          "Next": "joke_12"
+        },
+        {
+          "Id": "stop",
+          "Text": "Please stop hammering that joke.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "joke_12": {
+      "Text": "My prices are fair. My puns are a separate crime.",
+      "Choices": [
+        {
+          "Id": "next",
+          "Text": "One more. I can take it.",
+          "Next": "joke_13"
+        },
+        {
+          "Id": "stop",
+          "Text": "Please stop hammering that joke.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "joke_13": {
+      "Text": "The sword asked for a raise. I said it already had an edge.",
+      "Choices": [
+        {
+          "Id": "next",
+          "Text": "One more. I can take it.",
+          "Next": "joke_14"
+        },
+        {
+          "Id": "stop",
+          "Text": "Please stop hammering that joke.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "joke_14": {
+      "Text": "I wanted to make gold jokes, but all the good ones argon.",
+      "Choices": [
+        {
+          "Id": "next",
+          "Text": "One more. I can take it.",
+          "Next": "joke_15"
+        },
+        {
+          "Id": "stop",
+          "Text": "Please stop hammering that joke.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "joke_15": {
+      "Text": "My goblin accountant counts in rocks. His estimates are boulder than mine.",
+      "Choices": [
+        {
+          "Id": "next",
+          "Text": "One more. I can take it.",
+          "Next": "joke_16"
+        },
+        {
+          "Id": "stop",
+          "Text": "Please stop hammering that joke.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "joke_16": {
+      "Text": "Thank you for listening. Most customers bolt before I get to the nuts.",
+      "Choices": [
+        {
+          "Id": "next",
+          "Text": "Back to business.",
+          "Next": "hello"
+        },
+        {
+          "Id": "stop",
+          "Text": "Please stop hammering that joke.",
+          "Next": "hello"
+        }
+      ]
+    }
+  }
+}

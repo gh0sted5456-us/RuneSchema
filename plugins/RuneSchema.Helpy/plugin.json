@@ -1,0 +1,20 @@
+{
+  "SchemaVersion": 1,
+  "Id": "RuneSchema.Helpy",
+  "Version": "0.7.0",
+  "BuiltForRuneSchema": "0.7.0",
+  "EntryPoint": "RuneSchema.Helpy.dll",
+  "ConsoleMessage": "Helpy is ready. Use the configured hotkey to open it.",
+  "Capabilities": [
+    "helpy.navigation",
+    "helpy.item-lab",
+    "helpy.recipe-studio",
+    "helpy.journal-quests",
+    "authoring.live-preview",
+    "authoring.export"
+  ],
+  "CookedObjects": [
+    "/RuneSchema/UI/Icons/Badges/T_Badge_Runeschema",
+    "/RuneSchema/UI/Icons/Badges/T_Badge_Ue4ss"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "Id": "mortimer_village_book",
+  "Type": "Prop",
+  "Multiplayer": true,
+  "DisplayName": "The Village Ledger",
+  "Mesh": "/Game/Art/Env/Props/Gameplay_Props/Lore_Book/SM_Lore_Book_01.SM_Lore_Book_01",
+  "LoreID": "rs_mortimer_village_ledger",
+  "Location": [ 41835, 172709, "$" ],
+  "Rotation": {"Pitch": 0, "Yaw": -174.3, "Roll": 0},
+  "Scale": 2,
+  "EnableCollision": true,
+  "VisualEffect": {
+    "Type": "Ghost Glow",
+    "Overlay": true,
+    "BodyMaterial": true,
+    "MainColor": {
+      "R": 0.45,
+      "G": 0.15,
+      "B": 0.95,
+      "A": 1.0
+    },
+    "SecondaryColor": {
+      "R": 0.08,
+      "G": 0.55,
+      "B": 0.85,
+      "A": 1.0
+    }
+  },
+  "MeshCollision": "Native",
+  "Map": { "Enabled": false },
+  "OverheadIcon": { "Enabled": false }
+}

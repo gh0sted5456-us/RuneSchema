@@ -1,0 +1,59 @@
+{
+ "Id":"mortimer_collection","Entry":"introduction","Nodes":{
+  "introduction":{"Text":"Mortimer. I used to live in the village, before the goblins wiped it out. Back then I kept the burial records. Now I am in them. Please don't stare at the height; bringing yourself back is not an exact science.","Choices":[
+   {"Id":"village","Text":"What happened to your village?","Next":"village"},
+   {"Id":"accept","Text":"Do you need my help?","RequirementUnlock": {"Quest": {"Id":"mortimer_debtors","States":["NotStarted"]}},"Quest":{"Id":"mortimer_debtors","Action":"Accept"},"Event":{"Id":"mortimer_scattered_debtors","Action":"Start"},"End":true},
+   {"Id":"business","Text":"About your unfinished business...","RequirementUnlock": {"Quest": {"Id":"mortimer_debtors","States":["Active","Completed"]}},"Next":"hello"},
+   {"Id":"bye","Text":"I'll leave you in peace.","End":true}
+  ]},
+  "village":{"Text":"The goblins came before dawn. We thought the bell would bring help. It only told them where everyone was hiding. By sunrise there was no village left to defend, and no one left to bury the dead.","Choices":[
+   {"Id":"survived","Text":"How did you survive?","Next":"returned"},
+   {"Id":"sorry","Text":"I'm sorry, Mortimer.","Next":"remembered"},
+   {"Id":"back","Text":"Let's talk about something else.","Next":"introduction"}
+  ]},
+  "returned":{"Text":"I didn't. I had spent years copying forbidden rites into the margins of my ledger. Apparently death did not appreciate the paperwork. I woke beneath the ashes, far too tall, with a gift I had never wanted to use on my neighbours.","Choices":[
+   {"Id":"neighbours","Text":"Did you try to bring them back?","Next":"remembered"},
+   {"Id":"help","Text":"Tell me how I can help.","Next":"hello"},
+   {"Id":"daylight","Text":"Does daylight trouble you?","WhenTimeOfDay":"Day","Next":"daylight"},
+   {"Id":"back","Text":"Back.","Next":"introduction"}
+  ]},
+  "remembered":{"Text":"I tried. Bodies returned; the people I knew did not. I call them debtors because saying their names still hurts. Help me put my mistakes to rest. Their coins will help mark the graves. The village deserves to be remembered for more than its last morning.","Choices":[
+   {"Id":"help","Text":"I'll hear what needs doing.","Next":"hello"},
+   {"Id":"night","Text":"The dead seem restless tonight.","WhenTimeOfDay":"Night","Next":"night_watch"},
+   {"Id":"back","Text":"Tell me about yourself again.","Next":"introduction"},
+   {"Id":"bye","Text":"I'll return when I'm ready.","End":true}
+  ]},
+  "daylight":{"Text":"It makes the stitching easier to see, which is rude but useful. The dead do not fear daylight. We merely object to its confidence.","Choices":[
+   {"Id":"back","Text":"Back to your story.","Next":"returned"},
+   {"Id":"bye","Text":"I'll leave you to it.","End":true}
+  ]},
+  "night_watch":{"Text":"They remember more after dusk. Not enough to speak, but enough to look toward home. That is why NuLL's fire burns only at night.","Choices":[
+   {"Id":"back","Text":"Back to your unfinished business.","Next":"remembered"},
+   {"Id":"bye","Text":"I'll watch the fire.","End":true}
+  ]},
+  "hello":{"Text":"Mortimer, necromancer and collections officer. My clients keep insisting they are dead. As excuses go, it lacks spirit.","Choices":[
+   {"Id":"active","Text":"About the three debtors...","RequirementUnlock": {"Quest": {"Id":"mortimer_debtors","States":["Active"],"Stage":"collections"}},"Next":"debtors"},
+   {"Id":"giant","Text":"What about your largest account?","RequirementUnlock": {"Quest": {"Id":"mortimer_debtors","States":["Active"],"Stage":"compound_interest"}},"Next":"giant"},
+   {"Id":"turnin","Text":"Every account is settled.","RequirementUnlock": {"Quest": {"Id":"mortimer_debtors","States":["Active"],"ObjectivesComplete":true}},"Quest":{"Id":"mortimer_debtors","Action":"TurnIn"},"Next":"settled"},
+   {"Id":"bye","Text":"About your past, or goodbye...","Next":"introduction"}
+  ]},
+  "debtors":{"Text":"Three debtors, three marked areas. Keep each debtor inside its own circle when you settle the account. If interrupted, I can summon replacements; your credited accounts remain settled.","Choices":[
+   {"Id":"summon","Text":"Summon the debtors.","RequirementUnlock": {"Quest": {"Id":"mortimer_debtors","States":["Active"],"Stage":"collections","ObjectivesComplete":false}},"Event":{"Id":"mortimer_scattered_debtors","Action":"Start"},"End":true},
+   {"Id":"cancel","Text":"Dismiss this encounter.","RequirementUnlock": {"Quest": {"Id":"mortimer_debtors","States":["Active"],"Stage":"collections"}},"Event":{"Id":"mortimer_scattered_debtors","Action":"Cancel"},"End":true},
+   {"Id":"abandon","Text":"Abandon this collection.","RequirementUnlock": {"Quest": {"Id":"mortimer_debtors","States":["Active"],"Stage":"collections"}},"Quest":{"Id":"mortimer_debtors","Action":"Abandon"},"Event":{"Id":"mortimer_scattered_debtors","Action":"Cancel"},"End":true},
+   {"Id":"back","Text":"Back.","Next":"hello"}
+  ]},
+  "giant":{"Text":"Compound Interest has grown four times larger. I told him to watch his figures. He ate the accountant. Defeat him, collect his gold, then return to me.","Choices":[
+   {"Id":"summon","Text":"Summon Compound Interest.","RequirementUnlock": {"Quest": {"Id":"mortimer_debtors","States":["Active"],"Stage":"compound_interest","ObjectivesComplete":false}},"Event":{"Id":"mortimer_giant_debtor","Action":"Start"},"End":true},
+   {"Id":"turnin","Text":"The liability has been liquidated.","RequirementUnlock": {"Quest": {"Id":"mortimer_debtors","States":["Active"],"ObjectivesComplete":true}},"Quest":{"Id":"mortimer_debtors","Action":"TurnIn"},"Next":"settled"},
+   {"Id":"back","Text":"Other business.","Next":"giant_options"}
+  ]},
+  "giant_options":{"Text":"An account can be postponed, but never escaped. Except through that conveniently labelled goodbye option.","Choices":[
+   {"Id":"cancel","Text":"Dismiss the giant encounter.","RequirementUnlock": {"Quest": {"Id":"mortimer_debtors","States":["Active"],"Stage":"compound_interest"}},"Event":{"Id":"mortimer_giant_debtor","Action":"Cancel"},"End":true},
+   {"Id":"abandon","Text":"Abandon Mortimer's collection.","RequirementUnlock": {"Quest": {"Id":"mortimer_debtors","States":["Active"],"Stage":"compound_interest"}},"Quest":{"Id":"mortimer_debtors","Action":"Abandon"},"Event":{"Id":"mortimer_giant_debtor","Action":"Cancel"},"End":true},
+   {"Id":"back","Text":"Back to the giant.","Next":"giant"},
+   {"Id":"bye","Text":"Goodbye.","End":true}
+  ]},
+  "settled":{"Text":"Five silver coins for your trouble. The floating banker near NuLL may have an interest in your success. Unfortunately, interest is his entire personality.","Choices":[{"Id":"bye","Text":"I'll ask him.","End":true}]}
+ }
+}

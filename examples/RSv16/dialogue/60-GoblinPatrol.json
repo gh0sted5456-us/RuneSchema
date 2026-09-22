@@ -1,0 +1,35 @@
+{
+  "Id": "patrol_captain",
+  "Entry": "start",
+  "Nodes": {
+    "start": {
+      "Text": "What do you need?",
+      "Choices": [
+        {
+          "Id": "progress",
+          "Text": "How is the patrol?",
+          "Next": "active",
+          "RequirementUnlock": {
+            "Quest": {
+              "Id": "goblin_patrol",
+              "States": ["Active"],
+              "ObjectivesComplete": false
+            }
+          }
+        },
+        {
+          "Id": "leave",
+          "Text": "Nothing right now.",
+          "End": true
+        }
+      ]
+    },
+    "active": {
+      "Text": "The goblins are still out there.",
+      "Choices": [
+        {"Id": "bye", "Text": "I will handle it.", "End": true}
+      ]
+    }
+  }
+}
+

@@ -1,0 +1,58 @@
+R3v7 verification — actually executed
+===================================
+Basis: R3v6 F2 Cleanup Direct Override Hotfix 1, modified in this task.
+
+GCC 14.2 / C++23 / -Wall -Wextra -Werror -pedantic:
+- F2ModelTests: PASS, 23,712 assertions. Includes 10,000 generated IDs and looped cases.
+- F2BrowserTests: PASS, 4,138 assertions. Includes card/page enumeration across 0..73 items.
+- F2PreferenceFileTests: PASS, 22 assertions against the actual portable preference I/O.
+- Cooked-package policy: PASS, 31 assertions; shipped function with UObject stand-ins.
+- Default-object pointer guard: original expression rejected as negative control;
+  patched guard passed seven cases with TObjectPtr stand-ins.
+
+Clang 17 with AddressSanitizer + UndefinedBehaviorSanitizer:
+The same suites and assertion counts passed with no sanitizer report.
+Compiler runs and exact outputs are in gcc-v7.log and clang-sanitizers-v7.log.
+These counts are assertions/iterations, not independent in-game scenarios.
+
+Other checks:
+- 10,000 generated persistence identifiers round-tripped to 16 bytes and back.
+- 49 static source-integration assertions passed (source-checks-v7.json).
+- Main and source-picker offline layout renders were inspected. They use schematic
+  icon placeholders and a local comparison font; they are not engine screenshots.
+- ZIP integrity, source checksums, baseline diff, and merge-preservation checks are
+  recorded in packaging-v7.json. No BAT is included in the archive.
+
+Browser cases include:
+- 12-card paging, partial last page, first/last and keyboard navigation;
+- global filtering before paging, filter reset and catalogue shrink;
+- shared item/source/appearance card geometry;
+- independent favorite click targets and absence of queued mutations;
+- exact-path favorite identity, duplicate names, missing item placeholders;
+- cooked-only/compatible-donor restrictions surviving Favorites;
+- correct badge reference constants, 24x24 drawing and 36x36 click target;
+- runtime vs cooked-mod vs other packaged/unknown origin policy;
+- masterwork marker, category markers and missing-texture fallbacks in source wiring;
+- visible session-only preference warnings and versionless header.
+
+Actual portable file-I/O tests cover:
+- missing file, initial write, replacement, staged readback;
+- failed verification preserves the prior file;
+- conflicting staging and simultaneous writers do not overwrite another staging file;
+- 1 MiB boundary/oversize rejection;
+- symlink and dangling-symlink rejection, directory preservation, own-staging cleanup.
+These execute the POSIX implementation. They do not exercise MoveFileExW or real
+Windows handle semantics. The JSON codec still uses the project's pinned nlohmann
+3.11.3 dependency and was source-reviewed, not compiled in these isolated tests.
+
+NOT EXECUTED:
+- Full Windows/MSVC/UE4SS compilation or linking.
+- Actual engine reflection, garbage collection, texture loading, native input/rendering.
+- Complete AI/resource census of the user's mounted installation.
+- Live clone creation, grant, equipped item behavior or save/world transition tests.
+- Dedicated-server/multiplayer tests (live cloning remains single-player-only).
+
+Reproduce the portable checks, optionally, on a POSIX development environment:
+  python verification/run_portable_tests.py --compiler g++
+  python verification/run_portable_tests.py --compiler clang++ --sanitize
+These are not required by, and are never invoked by, Build RuneSchema.bat.

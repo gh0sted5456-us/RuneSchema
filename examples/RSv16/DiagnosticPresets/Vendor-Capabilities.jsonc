@@ -1,0 +1,25 @@
+{
+  "Name": "Vendor-Capabilities",
+  "Objects": [
+    "/Game/Gameplay/World/Vendors/DT_VendorDataTable.DT_VendorDataTable",
+    "/Script/Dominion.CraftingStationDataTableRow",
+    "/Script/Dominion.CraftingStationComponent"
+  ],
+  "PropertyCaptures": [
+    { "Root": "Selected", "Path": ["CraftingDataRowHandle"], "Optional": true },
+    { "Root": "Selected", "Path": ["bIsVendor"], "Optional": true },
+    { "Root": "Selected", "Path": ["bHaveRepairOption"], "Optional": true },
+    { "Root": "Selected", "Path": ["bHaveMasterworkOption"], "Optional": true },
+    { "Root": "Selected", "Path": ["bHasVendorLevelReputationThresholds"], "Optional": true },
+    { "Root": "Selected", "Path": ["VendorHeaderImage"], "Optional": true },
+    { "Root": "Selected", "Path": ["CachedLabeledRecipes"], "Optional": true },
+    { "Root": "Selected", "Path": ["ValidRecipes"], "Optional": true }
+  ],
+  "CaptureLimits": {
+    "MaxDepth": 8,
+    "MaxEntries": 256,
+    "MaxNodes": 8192,
+    "MaxSparseSlots": 4096,
+    "FollowObjectReferences": false
+  }
+}

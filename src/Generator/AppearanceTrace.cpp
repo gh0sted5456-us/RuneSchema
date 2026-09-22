@@ -1,5 +1,6 @@
 #include "Generator/AppearanceTrace.h"
 #include "Generator/AppearanceTraceContract.h"
+#include "Generator/AppearanceSignatures.h"
 #include <Windows.h>
 #include "Loader/AppearanceEvents.h"
 #include <atomic>
@@ -63,8 +64,8 @@ nlohmann::json Stop() {
         {"note","Routine returns do not prove asynchronous work is complete. Address tokens are never dereferenced by callbacks."}};
     for (size_t i=0;i<count;++i) {
         const auto& event=events[i];
-        result["events"].push_back({{"sequence",i},{"elapsedMs",event.elapsed},{"site",Sites[event.site].name},
-            {"rva",Sites[event.site].rva},{"threadId",event.thread},{"parameterIndex",event.parameter}});
+        result["events"].push_back({{"sequence",i},{"elapsedMs",event.elapsed},{"site",AppearanceSignatures::Definitions[event.site].name},
+            {"rva",DragonWilds::AppearanceEvents::ResolvedRva(event.site)},{"threadId",event.thread},{"parameterIndex",event.parameter}});
     }
     session=false;
     return result;

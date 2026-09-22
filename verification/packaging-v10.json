@@ -1,0 +1,13 @@
+{
+  "version": "R3v10 Hotfix 1",
+  "source_files": 52,
+  "changed_production_files": [
+    "raw/include/Generator/LoaderSchemas.h"
+  ],
+  "unchanged_production_files": 51,
+  "bat_included": false,
+  "compiled_binaries_included": false,
+  "simulated_merge": "passed; existing BAT, core file, and settings preserved",
+  "source_checksums": "verified",
+  "zip_crc": "verified after archive creation; see external verification report"
+}

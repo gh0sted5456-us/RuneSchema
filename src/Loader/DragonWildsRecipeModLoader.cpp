@@ -1,3 +1,5 @@
+#include "Utility/NativeFunctionHook.h"
+#include "SDK/WeakObjectHandle.h"
 #include <algorithm>
 #include <vector>
 #include "Unreal/CoreUObject/UObject/Class.hpp"
@@ -7,7 +9,8 @@
 #include "Unreal/UObjectGlobals.hpp"
 #include "Unreal/Engine/UDataTable.hpp"
 #include "Unreal/FText.hpp"
-#include "Unreal/FWeakObjectPtr.hpp"
+#include "Unreal/Property/FTextProperty.hpp"
+#include "Unreal/UObjectArray.hpp"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Classes/KismetSystemLibrary.h"
 #include "SDK/Classes/TSoftObjectPtr.h"
@@ -20,6 +23,9 @@
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
 #include "Loader/DragonWildsRecipeModLoader.h"
+#include "Loader/VendorCategoryText.h"
+#include "Loader/VendorCategoryLabel.h"
+#include "Loader/RecipeUnlockPolicy.h"
 #include "Core/JsonPatchDirective.h"
 
 using namespace RC;
@@ -38,7 +44,7 @@ namespace DragonWilds {
 
     static bool WantsUnlock(const nlohmann::json& body)
     {
-        return body.contains("Unlock") && body.at("Unlock").is_boolean() && body.at("Unlock").get<bool>();
+        return PS::RecipeUnlockPolicy::Automatic(body);
     }
 
     static void AddRecipeUnlocks(UObject* progressComponent, const std::vector<UObject*>& recipes)
@@ -117,6 +123,134 @@ namespace DragonWilds {
     DragonWildsRecipeModLoader::~DragonWildsRecipeModLoader()
     {
         for (const auto& [function, id] : m_functionHooks) if (function && id) function->UnregisterHook(id);
+        for (const auto& [key, owner] : m_vendorRecipeOwners) {
+            if (auto* recipe=LiveRecipe(key))recipe->ClearRootSet();
+        }
+    }
+
+    UObject* DragonWildsRecipeModLoader::LiveRecipe(const RC::StringType& key) const
+    {
+        auto found=m_recipes.find(key);
+        if(found==m_recipes.end())return nullptr;
+        if(!m_vendorRecipeOwners.contains(key))return found->second;
+        auto lease=m_vendorRecipeLeases.find(key);
+        if(lease==m_vendorRecipeLeases.end() || lease->second.Index<0)return nullptr;
+        auto* slot=FUObjectArray::IndexToObject(lease->second.Index);
+        if(!slot || slot->GetUObject()!=found->second || !slot->IsRootSet() || !slot->IsValid(false))return nullptr;
+        auto* recipe=slot->GetUObject();
+        return recipe && recipe->GetPathName()==lease->second.Path && recipe->IsA(m_recipeClass)?recipe:nullptr;
+    }
+
+    UObject* DragonWildsRecipeModLoader::EnsureVendorRecipe(const std::string& owner,
+        const std::string& identity, const nlohmann::json& properties)
+    {
+        if (!m_recipeClass || !m_progressComponentClass)
+            throw std::runtime_error("Vendor offers require the initialized /recipes loader");
+        const auto key=RC::to_generic_string("RSVendor_"+identity);
+        if(auto owned=m_vendorRecipeOwners.find(key);owned!=m_vendorRecipeOwners.end() && owned->second!=owner)
+            throw std::runtime_error("Vendor recipe ownership collision; existing recipe preserved");
+        UObject* recipe=nullptr;
+        if (auto cached=m_recipes.find(key);cached!=m_recipes.end()) {
+            auto tracked=m_vendorRecipeOwners.find(key);
+            if (tracked==m_vendorRecipeOwners.end() || tracked->second!=owner)
+                throw std::runtime_error("Vendor recipe identity collision; existing recipe preserved");
+            recipe=LiveRecipe(key);
+            if(!recipe) {
+                m_recipes.erase(cached);
+                m_vendorRecipeLeases.erase(key);
+                m_propsApplied.erase(key);
+            }
+        }
+        if(!recipe) {
+            if(std::any_of(m_recipeDefs.begin(),m_recipeDefs.end(),[&](const auto& def){return def.Key==key;}))
+                throw std::runtime_error("Vendor recipe conflicts with an authored recipe definition");
+            auto* package=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,TEXT("/Engine/Transient"));
+            if (!package)throw std::runtime_error("Transient package unavailable for vendor recipe");
+            const auto objectName=RC::to_generic_string(VendorOffers::RecipeObjectName(identity));
+            const auto path=RC::StringType(TEXT("/Engine/Transient."))+objectName;
+            if (UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,path.c_str()))
+                throw std::runtime_error("Vendor runtime recipe name collision; existing object preserved");
+            FStaticConstructObjectParameters params(m_recipeClass,package);
+            params.Name=FName(objectName,FNAME_Add);
+            params.SetFlags=static_cast<EObjectFlags>(RF_Public|RF_Transient);
+            recipe=UObjectGlobals::StaticConstructObject<UObject*>(params);
+            if(!recipe)throw std::runtime_error("Failed to construct vendor RecipeData");
+            ++m_recipeRevision;
+            recipe->SetRootSet();
+            // Retain ownership even if a field write fails. A bounded vendor
+            // retry repairs this same object instead of leaking new recipes.
+            m_recipes.emplace(key,recipe);
+            m_vendorRecipeOwners.emplace(key,owner);
+            m_vendorRecipeLeases.insert_or_assign(key,RecipeLease{recipe->GetInternalIndex(),recipe->GetPathName()});
+        }
+        {
+            m_propsApplied.erase(key);
+            m_unlock.erase(key);
+            auto values=properties;
+            values["InternalName"]=RC::to_string(key);
+            values["PersistenceID"]=identity;
+            for(const auto& [name,value]:values.items()) {
+                auto* property=PropertyHelper::GetPropertyByName(m_recipeClass,RC::to_generic_string(name));
+                if(!property)throw std::runtime_error("Vendor RecipeData field unavailable: "+name);
+                PropertyHelper::CopyJsonValueToContainer(recipe,property,value);
+            }
+        }
+        m_propsApplied.insert(key);
+        m_unlock.insert(key);
+        RegisterHooks();
+        if(auto* progress=FindProgressComponent())ApplyUnlocks(progress);
+        return recipe;
+    }
+
+    nlohmann::json DragonWildsRecipeModLoader::PrepareStoreForPlayer(
+        const std::string& owner, const nlohmann::json& items, UObject* controller)
+    {
+        if(!controller || !items.is_array() || items.size()>128)
+            throw std::runtime_error("Invalid store availability request");
+        auto* progressField=CastField<FObjectPropertyBase>(PropertyHelper::GetPropertyByName(controller->GetClassPrivate(),TEXT("ProgressComponent")));
+        auto* progress=progressField?progressField->GetObjectPropertyValue(progressField->ContainerPtrToValuePtr<void>(controller)):nullptr;
+        if(!progress || !m_progressComponentClass || !progress->IsA(m_progressComponentClass)
+            || progress->GetWorld()!=controller->GetWorld())
+            throw std::runtime_error("Current shop player has no valid world-owned ProgressComponent");
+        std::vector<UObject*> recipes;
+        nlohmann::json skipped=nlohmann::json::array();
+        size_t index=0;
+        for(const auto& item:items) {
+            const auto slot=item.value("_RecipeSlot",std::to_string(index++));
+            const auto key=RC::to_generic_string("RSVendor_"+VendorOffers::Identity(owner,slot));
+            const auto found=m_recipes.find(key);
+            const auto owned=m_vendorRecipeOwners.find(key);
+            if(found==m_recipes.end() || owned==m_vendorRecipeOwners.end() || owned->second!=owner+":"+slot
+                || !m_propsApplied.contains(key) || !LiveRecipe(key)) {
+                skipped.push_back(RC::to_string(key));
+                continue;
+            }
+            recipes.push_back(found->second);
+        }
+        nlohmann::json report={{"ExpectedOffers",recipes.size()},{"ProgressComponent",RC::to_string(progress->GetPathName())},{"Sets",nlohmann::json::object()}};
+        report["RequestedOffers"]=items.size();report["SkippedOffers"]=std::move(skipped);
+        report["Recipes"]=nlohmann::json::array();
+        for(auto* recipe:recipes)report["Recipes"].push_back({{"Path",RC::to_string(recipe->GetPathName())},{"ObjectIndex",recipe->GetInternalIndex()}});
+        report["RuntimeRecipeCreations"]=m_recipeRevision;
+        std::vector<std::pair<const TCHAR*,FSetProperty*>> sets;
+        for(const auto* name:{TEXT("RecipesUnlocked"),TEXT("RecipesUnlockedThatShouldNotPersist")}) {
+            auto* property=CastField<FSetProperty>(PropertyHelper::GetPropertyByName(progress->GetClassPrivate(),name));
+            auto* element=property?CastField<FObjectPropertyBase>(property->GetElementProp()):nullptr;
+            if(!property || property->GetArrayDim()!=1 || !element || element->GetElementSize()!=sizeof(UObject*)
+                || !element->GetPropertyClass().Get() || !m_recipeClass->IsChildOf(element->GetPropertyClass().Get()))
+                throw std::runtime_error("Unsupported recipe availability set layout");
+            sets.emplace_back(name,property);
+        }
+        for(const auto& [name,property]:sets) {
+            UECustom::FScriptSetHelper helper(property,property->ContainerPtrToValuePtr<void>(progress));
+            size_t before=0,after=0;
+            for(auto* recipe:recipes)if(helper.Contains(&recipe))++before;
+            for(auto* recipe:recipes)helper.Add(&recipe);
+            for(auto* recipe:recipes)if(helper.Contains(&recipe))++after;
+            report["Sets"][RC::to_string(name)]={{"Before",before},{"After",after}};
+            if(after!=recipes.size())throw std::runtime_error("Store recipe availability verification failed");
+        }
+        return report;
     }
 
     void DragonWildsRecipeModLoader::OnLoad(const std::filesystem::path& loaderPath, const RC::StringType& modName, const EEngineLifecyclePhase& engineLifecyclePhase)
@@ -136,6 +270,8 @@ namespace DragonWilds {
 
     void DragonWildsRecipeModLoader::OnAutoReload(const RC::StringType& modName, const std::filesystem::path& modFilePath)
     {
+        struct ReloadGuard { bool& Flag; ~ReloadGuard() { Flag=false; } } guard{m_autoReloading};
+        m_autoReloading=true;
         PS::JsonHelpers::ParseJsonFileInPath(modFilePath, [&](const nlohmann::json& data) {
             QueueData(data, modName);
         });
@@ -200,6 +336,8 @@ namespace DragonWilds {
             {
                 continue;
             }
+            if (recipeKey.starts_with("RSVendor_") || recipeKey.starts_with("RSMerchant_"))
+                throw std::runtime_error("RSVendor_ recipe identities are reserved for generated /vendors offers");
 
             auto keyWide = RC::to_generic_string(recipeKey);
             if (keyWide.empty() || !body.is_object())
@@ -210,6 +348,22 @@ namespace DragonWilds {
 
             try
             {
+                if (body.contains("VendorID") || body.contains("RuneSchemaVendors") || body.contains("VanillaVendors")) {
+                    if(m_autoReloading)throw std::runtime_error("Store recipes require a restart; live reload was not applied");
+                    auto offer=NpcCatalog::ParseStoreOffer(RC::to_string(modName),recipeKey,body);
+                    for(const auto& existing:m_storeOffers)
+                        if(existing.Mod==offer.Mod && existing.Id==offer.Id)
+                            throw std::runtime_error("Duplicate store recipe: "+recipeKey);
+                    auto placements=NpcCatalog::VanillaTargets(body);
+                    if(!placements.empty()) {
+                        for(auto& placement:placements)placement["Category"]=VendorOffers::Category(body);
+                        nlohmann::json native={{"Properties",VendorOffers::Properties(body)},{"Unlock",true},{"AddTo",placements}};
+                        const auto identity=RC::to_generic_string("RSMerchant_"+VendorOffers::Identity(offer.Mod,offer.Id));
+                        m_recipeDefs.push_back({identity,native,ParsePlacements(native)});
+                    }
+                    m_storeOffers.push_back(std::move(offer));
+                    continue;
+                }
                 static constexpr std::array<std::string_view, 1> protectedIdentity{"InternalName"};
                 if (const auto patch = JsonPatchDirective::Parse(body, protectedIdentity, "recipe"))
                 {
@@ -224,6 +378,11 @@ namespace DragonWilds {
                 continue;
             }
 
+            try { WantsUnlock(body); }
+            catch (const std::exception& error) {
+                PS::Log<LogLevel::Error>(STR("Recipe '{}': {}. Skipping.\n"), keyWide, PS::ToWideSafe(error.what()));
+                continue;
+            }
             RecipeDef def{ keyWide, body, ParsePlacements(body) };
 
             auto existing = std::find_if(m_recipeDefs.begin(), m_recipeDefs.end(),
@@ -259,7 +418,15 @@ namespace DragonWilds {
                 continue;
             }
             JsonPatchDirective::Directive directive{patch.Reference, patch.Changes};
-            const auto stats = JsonPatchDirective::Apply(found->Body, directive, true);
+            auto patchedBody = found->Body;
+            const auto stats = JsonPatchDirective::Apply(patchedBody, directive, true);
+            try { WantsUnlock(patchedBody); }
+            catch (const std::exception& error) {
+                PS::Log<LogLevel::Error>(STR("Recipe patch rejected: {}\n"), PS::ToWideSafe(error.what()));
+                ++errors; continue;
+            }
+            found->Body = std::move(patchedBody);
+            WarnPatchConflicts(m_patchConflicts, "recipes:" + key, patch.Changes, RC::to_string(patch.ModName));
             found->Placements = ParsePlacements(found->Body);
             m_propsApplied.erase(found->Key);
             ++updated;
@@ -269,6 +436,18 @@ namespace DragonWilds {
         }
         if (updated || errors) PS::RoutineLog("patches", STR("Recipes $Patch: {} updated, {} errors.\n"), updated, errors);
         m_pendingPatches.clear();
+    }
+
+    void DragonWildsRecipeModLoader::PrepareReferences()
+    {
+        if (!m_recipeClass || !m_progressComponentClass) return;
+        ApplyPendingPatches();
+        for (const auto& def : m_recipeDefs) {
+            try { bool created = false; ResolveOrCreate(def, created); }
+            catch (const std::exception& error) {
+                PS::Log<LogLevel::Error>(STR("Recipe reference '{}' unavailable: {}\n"), def.Key, PS::ToWideSafe(error.what()));
+            }
+        }
     }
 
     void DragonWildsRecipeModLoader::ApplyAll()
@@ -282,6 +461,9 @@ namespace DragonWilds {
 
         for (auto& def : m_recipeDefs)
         {
+            // Controls future automatic grants only; never revoke learned/save progress.
+            if (WantsUnlock(def.Body)) m_unlock.insert(def.Key);
+            else m_unlock.erase(def.Key);
             if (m_propsApplied.find(def.Key) != m_propsApplied.end())
             {
                 continue;
@@ -402,9 +584,10 @@ namespace DragonWilds {
 
         TArray<UObject*> recipes;
         UECustom::UObjectGlobals::GetObjectsOfClass(m_recipeClass, recipes, true);
+        const FName recipeName(def.Key,FNAME_Add);
         for (auto* candidate : recipes)
         {
-            if (candidate && candidate->GetName() == def.Key
+            if (candidate && candidate->GetFName() == recipeName
                 && !candidate->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject)))
             {
                 candidate->SetRootSet();
@@ -445,9 +628,7 @@ namespace DragonWilds {
 
         PS::Log<LogLevel::Verbose>(STR("Created Recipe '{}'\n"), def.Key);
 
-        if (WantsUnlock(def.Body)
-            || std::any_of(def.Placements.begin(), def.Placements.end(),
-                [](const Placement& placement) { return !placement.Category.empty(); }))
+        if (WantsUnlock(def.Body))
         {
             m_unlock.insert(def.Key);
         }
@@ -577,7 +758,8 @@ namespace DragonWilds {
             return false;
         }
 
-        auto* labelProp = PropertyHelper::GetPropertyByName(categoryProp->GetStruct().Get(), TEXT("Label"));
+        auto* labelProp = CastField<FTextProperty>(
+            PropertyHelper::GetPropertyByName(categoryProp->GetStruct().Get(), TEXT("Label")));
         auto* collectionProp = CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(categoryProp->GetStruct().Get(), TEXT("Collection")));
         if (!labelProp || !collectionProp || !CastField<FSoftObjectProperty>(collectionProp->GetInner()))
         {
@@ -593,6 +775,15 @@ namespace DragonWilds {
 
         auto* labeledArray = labeledProp->ContainerPtrToValuePtr<FScriptArray>(row);
         auto categorySize = categoryProp->GetElementSize();
+        if (labeledProp->GetArrayDim() != 1 || categoryProp->GetArrayDim() != 1
+            || categorySize <= 0 || labeledArray->Num() < 0
+            || (labeledArray->Num() && !labeledArray->GetData()))
+            throw std::runtime_error("Vendor category: invalid LabeledRecipes array layout");
+        for (auto* field : {static_cast<FProperty*>(labelProp), static_cast<FProperty*>(collectionProp)})
+            if (field->GetArrayDim() != 1 || field->GetOffset_Internal() < 0
+                || field->GetElementSize() <= 0 || field->GetOffset_Internal() > categorySize
+                || field->GetElementSize() > categorySize - field->GetOffset_Internal())
+                throw std::runtime_error("Vendor category: label/collection is outside its reflected struct");
 
         int32 categoryIndex = -1;
         if (labeledArray->GetData())
@@ -600,8 +791,8 @@ namespace DragonWilds {
             auto* data = static_cast<uint8*>(labeledArray->GetData());
             for (int32 i = 0; i < labeledArray->Num(); ++i)
             {
-                auto* label = labelProp->ContainerPtrToValuePtr<FText>(data + i * categorySize);
-                if (label && PropertyHelper::GetTextAsString(*label) == categoryLabel)
+                const auto label = VendorCategoryText::Read(data + i * categorySize, labelProp);
+                if (label == RC::to_string(categoryLabel))
                 {
                     categoryIndex = i;
                     break;
@@ -614,12 +805,14 @@ namespace DragonWilds {
             UECustom::FScriptArrayHelper helper(labeledArray, labeledProp);
             UECustom::FManagedValue value;
             helper.InitializeValue(value);
-            PropertyHelper::CopyJsonValueToContainer(value.GetData(), labelProp, RC::to_string(categoryLabel));
+            VendorCategoryText::Write(value.GetData(), labelProp, RC::to_string(categoryLabel));
             categoryIndex = labeledArray->Num();
             helper.Add(value);
         }
 
         auto* categoryData = static_cast<uint8*>(labeledArray->GetData()) + categoryIndex * categorySize;
+        VendorCategoryLabel::RequireExact(RC::to_string(categoryLabel),
+            VendorCategoryText::Read(categoryData, labelProp));
         auto* collectionArray = collectionProp->ContainerPtrToValuePtr<FScriptArray>(categoryData);
         auto collectionElementSize = collectionProp->GetInner()->GetElementSize();
 
@@ -630,9 +823,12 @@ namespace DragonWilds {
             for (int32 i = 0; i < collectionArray->Num(); ++i)
             {
                 auto* soft = reinterpret_cast<UECustom::FSoftObjectPtr*>(data + i * collectionElementSize);
-                if (soft->WeakPtr.Get() == recipe
-                    || (soft->ObjectID.AssetPath.GetPackageName() == recipeID.AssetPath.GetPackageName()
-                        && soft->ObjectID.AssetPath.GetAssetName() == recipeID.AssetPath.GetAssetName()))
+                // A soft-object reference is identified by its asset path.  Do not touch
+                // the cached weak pointer here: during GameInstance initialization UE may
+                // still be constructing the cloned recipe, and resolving/caching that weak
+                // handle can enter UE4SS with an object slot that is not live yet.
+                if (soft->ObjectID.AssetPath.GetPackageName() == recipeID.AssetPath.GetPackageName()
+                    && soft->ObjectID.AssetPath.GetAssetName() == recipeID.AssetPath.GetAssetName())
                 {
                     return false;
                 }
@@ -645,7 +841,6 @@ namespace DragonWilds {
 
         auto* soft = reinterpret_cast<UECustom::FSoftObjectPtr*>(value.GetData());
         soft->ObjectID = recipeID;
-        soft->WeakPtr = FWeakObjectPtr(recipe);
         helper.Add(value);
         return true;
     }
@@ -674,7 +869,7 @@ namespace DragonWilds {
                     return false;
                 }
 
-                if (!replaces.empty() && existing && existing->GetName() == replaces)
+                if (!replaces.empty() && existing && existing->GetFName() == FName(replaces,FNAME_Add))
                 {
                     UObject* recipePtr = recipe;
                     FMemory::Memcpy(data + i * elementSize, &recipePtr, sizeof(recipePtr));
@@ -713,7 +908,7 @@ namespace DragonWilds {
                 continue;
             }
 
-            const auto id = function->RegisterPostHook([this](UnrealScriptFunctionCallableContext& context, void*) {
+            const auto id = PS::RegisterNativePostHook(function, [this](UnrealScriptFunctionCallableContext& context, void*) {
                 ApplyUnlocks(context.Context);
             });
             m_functionHooks.emplace_back(function, id);
@@ -728,7 +923,7 @@ namespace DragonWilds {
             }
             else
             {
-                const auto id = serverCraftFunction->RegisterPreHook([this, recipeProperty](UnrealScriptFunctionCallableContext& context, void*) {
+                const auto id = PS::RegisterNativePreHook(serverCraftFunction, [this, recipeProperty](UnrealScriptFunctionCallableContext& context, void*) {
                     if (!context.TheStack.Locals())
                     {
                         return;
@@ -777,11 +972,7 @@ namespace DragonWilds {
         std::vector<UObject*> recipes;
         for (auto& key : m_unlock)
         {
-            auto it = m_recipes.find(key);
-            if (it != m_recipes.end() && it->second)
-            {
-                recipes.push_back(it->second);
-            }
+            if(auto* recipe=LiveRecipe(key))recipes.push_back(recipe);
         }
 
         AddRecipeUnlocks(progressComponent, recipes);

@@ -1,0 +1,242 @@
+{
+  "baseline_zip_sha256": "2479f2042ca6317db3e825be304d35740ab54a3768790d66268e9e985211f571",
+  "modified": [
+    "raw/include/Runtime/F2CatalogStore.h",
+    "raw/include/Runtime/F2PreferenceFile.h",
+    "raw/src/Loader/QuickMenuCatalog.inl"
+  ],
+  "added": [
+    "raw/include/Runtime/F2CacheMigration.h"
+  ],
+  "unchanged": [
+    "raw/include/Generator/AuthoringPolicy.h",
+    "raw/include/Generator/ClonePresentation.h",
+    "raw/include/Generator/F2BundledPaths.h",
+    "raw/include/Generator/F2CatalogPlan.h",
+    "raw/include/Generator/F2ReferenceTree.h",
+    "raw/include/Generator/ItemCatalogMetadata.h",
+    "raw/include/Generator/ItemCloneRequest.h",
+    "raw/include/Generator/LoaderSchemas.h",
+    "raw/include/Generator/QuickMenuCatalogRules.h",
+    "raw/include/Generator/QuickMenuDecorations.h",
+    "raw/include/Generator/QuickMenuSpawnRequest.h",
+    "raw/include/Generator/QuickMenuUI.h",
+    "raw/include/Generator/SpawnToolsPanel.h",
+    "raw/include/Generator/ToolRequest.h",
+    "raw/include/Loader/DragonWildsAssetModLoader.h",
+    "raw/include/Loader/DragonWildsSpawnLoader.h",
+    "raw/include/Runtime/AuthoredFile.h",
+    "raw/include/Runtime/F2FavoriteStore.h",
+    "raw/include/Runtime/F2ReferenceIndex.h",
+    "raw/include/SDK/Helper/CookedAssetLookup.h",
+    "raw/include/SDK/Helper/ItemAppearanceMetadata.h",
+    "raw/src/Generator/AssetSearch.cpp",
+    "raw/src/Generator/InGameQuickMenu.cpp",
+    "raw/src/Loader/AssetProvenance.cpp",
+    "raw/src/Loader/DragonWildsAssetModLoader.cpp",
+    "raw/src/Loader/DragonWildsSpawnLoader.cpp",
+    "raw/src/Loader/LiveCloneAuthoring.inl",
+    "raw/src/Loader/SpawnTools.inl",
+    "raw/src/Runtime/F2ReferenceIndex.cpp"
+  ],
+  "sources": [
+    {
+      "path": "raw/include/Generator/AuthoringPolicy.h",
+      "status": "unchanged",
+      "sha256": "54152905a2d0411a385e9c9796e2c608466c3cae8cd2bd2216d09b0a26aa80a9",
+      "baseline_sha256": "54152905a2d0411a385e9c9796e2c608466c3cae8cd2bd2216d09b0a26aa80a9"
+    },
+    {
+      "path": "raw/include/Generator/ClonePresentation.h",
+      "status": "unchanged",
+      "sha256": "49494fbd601df1f5835997dec6f14b330eeed93480a4c45381c58f0bf1deb563",
+      "baseline_sha256": "49494fbd601df1f5835997dec6f14b330eeed93480a4c45381c58f0bf1deb563"
+    },
+    {
+      "path": "raw/include/Generator/F2BundledPaths.h",
+      "status": "unchanged",
+      "sha256": "820d5bed5305f24456dbbe0866d2c9f8f5f8304127dbc7b99bdfdacb011d48c8",
+      "baseline_sha256": "820d5bed5305f24456dbbe0866d2c9f8f5f8304127dbc7b99bdfdacb011d48c8"
+    },
+    {
+      "path": "raw/include/Generator/F2CatalogPlan.h",
+      "status": "unchanged",
+      "sha256": "a8ce88c391e14ca204001a9d1129a8e86a578b85453f589c78ec46e912cdfa42",
+      "baseline_sha256": "a8ce88c391e14ca204001a9d1129a8e86a578b85453f589c78ec46e912cdfa42"
+    },
+    {
+      "path": "raw/include/Generator/F2ReferenceTree.h",
+      "status": "unchanged",
+      "sha256": "f00875f2c8300f7f68d2446983ee5831fd7599e4b6ac9d17e44360be9e87e358",
+      "baseline_sha256": "f00875f2c8300f7f68d2446983ee5831fd7599e4b6ac9d17e44360be9e87e358"
+    },
+    {
+      "path": "raw/include/Generator/ItemCatalogMetadata.h",
+      "status": "unchanged",
+      "sha256": "21026dc77acdddb464ec4edeced712abe50f11b796417bac28f8d687ad4bb96f",
+      "baseline_sha256": "21026dc77acdddb464ec4edeced712abe50f11b796417bac28f8d687ad4bb96f"
+    },
+    {
+      "path": "raw/include/Generator/ItemCloneRequest.h",
+      "status": "unchanged",
+      "sha256": "8f06d115207c3f78098e50f1ae8fcdd33982d5f1ec84ce423cc90e8d60891a88",
+      "baseline_sha256": "8f06d115207c3f78098e50f1ae8fcdd33982d5f1ec84ce423cc90e8d60891a88"
+    },
+    {
+      "path": "raw/include/Generator/LoaderSchemas.h",
+      "status": "unchanged",
+      "sha256": "60ddc31080047b2d1542b59a4d9104c7f1c9223ee1834b350e4106d6fe23a12e",
+      "baseline_sha256": "60ddc31080047b2d1542b59a4d9104c7f1c9223ee1834b350e4106d6fe23a12e"
+    },
+    {
+      "path": "raw/include/Generator/QuickMenuCatalogRules.h",
+      "status": "unchanged",
+      "sha256": "89cfc7081d3c43dfcc7084aafe4ab82f05ac8f5dd0d7d631514f4eadcb02356e",
+      "baseline_sha256": "89cfc7081d3c43dfcc7084aafe4ab82f05ac8f5dd0d7d631514f4eadcb02356e"
+    },
+    {
+      "path": "raw/include/Generator/QuickMenuDecorations.h",
+      "status": "unchanged",
+      "sha256": "5d0d5d2ea41deae0a07e1b9d9029067d1a4b52eebb179a52401695408979c71d",
+      "baseline_sha256": "5d0d5d2ea41deae0a07e1b9d9029067d1a4b52eebb179a52401695408979c71d"
+    },
+    {
+      "path": "raw/include/Generator/QuickMenuSpawnRequest.h",
+      "status": "unchanged",
+      "sha256": "16b933d8e011cd90e44961f1881989df19a708c15aa507faeae991a9f1c0080a",
+      "baseline_sha256": "16b933d8e011cd90e44961f1881989df19a708c15aa507faeae991a9f1c0080a"
+    },
+    {
+      "path": "raw/include/Generator/QuickMenuUI.h",
+      "status": "unchanged",
+      "sha256": "e0964ea7ced4e9f4fa9deb5fd2b098f7f788788836a515b296bd8af2a156e018",
+      "baseline_sha256": "e0964ea7ced4e9f4fa9deb5fd2b098f7f788788836a515b296bd8af2a156e018"
+    },
+    {
+      "path": "raw/include/Generator/SpawnToolsPanel.h",
+      "status": "unchanged",
+      "sha256": "ef0e8b65600e1176990521ed97c2f4456651e1b21291c65054bfd9fcc4722fec",
+      "baseline_sha256": "ef0e8b65600e1176990521ed97c2f4456651e1b21291c65054bfd9fcc4722fec"
+    },
+    {
+      "path": "raw/include/Generator/ToolRequest.h",
+      "status": "unchanged",
+      "sha256": "8ebfb3506aee5b6b32f69712329b3fab3991d5e08418f416a1638edabe3401c3",
+      "baseline_sha256": "8ebfb3506aee5b6b32f69712329b3fab3991d5e08418f416a1638edabe3401c3"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsAssetModLoader.h",
+      "status": "unchanged",
+      "sha256": "932f99c15d17b1746ee47bdd07ba16c4a3f169ef31d54a820b5b918d62e7e9ee",
+      "baseline_sha256": "932f99c15d17b1746ee47bdd07ba16c4a3f169ef31d54a820b5b918d62e7e9ee"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsSpawnLoader.h",
+      "status": "unchanged",
+      "sha256": "3707db0ce203bbd3beb5e17396e970fc1245907bff3582d94cf99657cbf4079a",
+      "baseline_sha256": "3707db0ce203bbd3beb5e17396e970fc1245907bff3582d94cf99657cbf4079a"
+    },
+    {
+      "path": "raw/include/Runtime/AuthoredFile.h",
+      "status": "unchanged",
+      "sha256": "1c3b9f15613ce9e99f64ef343312e44c7694e33227874de7b85d65bab16b93ba",
+      "baseline_sha256": "1c3b9f15613ce9e99f64ef343312e44c7694e33227874de7b85d65bab16b93ba"
+    },
+    {
+      "path": "raw/include/Runtime/F2CacheMigration.h",
+      "status": "added",
+      "sha256": "f109a46aec7ce59ced8e6afc41ff8224988bc34e8881ff1fa1a0b4bdef71e98d",
+      "baseline_sha256": null
+    },
+    {
+      "path": "raw/include/Runtime/F2CatalogStore.h",
+      "status": "modified",
+      "sha256": "ff0dcf17def639a5f5c8f2a6980c39567f6c2ceb90d5eb8853e4fd074c479de9",
+      "baseline_sha256": "13e7c8b036291b238728013b6bde6cea46320407448c3f9e6c56b1dfb8d73dad"
+    },
+    {
+      "path": "raw/include/Runtime/F2FavoriteStore.h",
+      "status": "unchanged",
+      "sha256": "d5ea23eaf96ba246642e44f61b5f4e0d89abd69de5a81d6b00e92aa7d50b4e4f",
+      "baseline_sha256": "d5ea23eaf96ba246642e44f61b5f4e0d89abd69de5a81d6b00e92aa7d50b4e4f"
+    },
+    {
+      "path": "raw/include/Runtime/F2PreferenceFile.h",
+      "status": "modified",
+      "sha256": "06be80c180290d9b6c5d7156d502b37722e37b686ceaf5992930bdde830b8e9f",
+      "baseline_sha256": "9770240ad2add7a40240b02fc2cfa2889ecfbb2cb7505cb71158b344adee8683"
+    },
+    {
+      "path": "raw/include/Runtime/F2ReferenceIndex.h",
+      "status": "unchanged",
+      "sha256": "ac27336c664fbebd6664d608fba3ab16a216d39d5fd8aef9e7d930357ebe00c8",
+      "baseline_sha256": "ac27336c664fbebd6664d608fba3ab16a216d39d5fd8aef9e7d930357ebe00c8"
+    },
+    {
+      "path": "raw/include/SDK/Helper/CookedAssetLookup.h",
+      "status": "unchanged",
+      "sha256": "c7daaf6a68887007916e803d474a2e8b3f1f2a7cb1d9289a213e956bd06a0b93",
+      "baseline_sha256": "c7daaf6a68887007916e803d474a2e8b3f1f2a7cb1d9289a213e956bd06a0b93"
+    },
+    {
+      "path": "raw/include/SDK/Helper/ItemAppearanceMetadata.h",
+      "status": "unchanged",
+      "sha256": "bdd3440c72654e0864d49d84b6dbb3669245dd03b62bab8a5395d669fb104a6f",
+      "baseline_sha256": "bdd3440c72654e0864d49d84b6dbb3669245dd03b62bab8a5395d669fb104a6f"
+    },
+    {
+      "path": "raw/src/Generator/AssetSearch.cpp",
+      "status": "unchanged",
+      "sha256": "07a7c6e1f14f937215465a72bb98af77a58d0e70d58069e96678cc03cd686344",
+      "baseline_sha256": "07a7c6e1f14f937215465a72bb98af77a58d0e70d58069e96678cc03cd686344"
+    },
+    {
+      "path": "raw/src/Generator/InGameQuickMenu.cpp",
+      "status": "unchanged",
+      "sha256": "10da0aec48677d601c45c11c7e9ef63e47aa4050d0e1e6d133adbd86642cc37d",
+      "baseline_sha256": "10da0aec48677d601c45c11c7e9ef63e47aa4050d0e1e6d133adbd86642cc37d"
+    },
+    {
+      "path": "raw/src/Loader/AssetProvenance.cpp",
+      "status": "unchanged",
+      "sha256": "a948d883f209f2ec80d5433a4f7f88639a4bac2fd16938440cb01fca5c555fa9",
+      "baseline_sha256": "a948d883f209f2ec80d5433a4f7f88639a4bac2fd16938440cb01fca5c555fa9"
+    },
+    {
+      "path": "raw/src/Loader/DragonWildsAssetModLoader.cpp",
+      "status": "unchanged",
+      "sha256": "c6fa5671a652ddbe775cd314c680bb9cc79a0f48243180a742b92a334efb5b4e",
+      "baseline_sha256": "c6fa5671a652ddbe775cd314c680bb9cc79a0f48243180a742b92a334efb5b4e"
+    },
+    {
+      "path": "raw/src/Loader/DragonWildsSpawnLoader.cpp",
+      "status": "unchanged",
+      "sha256": "c2e3d4e0a200fd3ea79e584b74a5888775e3893f9345a99018240347cdf97d09",
+      "baseline_sha256": "c2e3d4e0a200fd3ea79e584b74a5888775e3893f9345a99018240347cdf97d09"
+    },
+    {
+      "path": "raw/src/Loader/LiveCloneAuthoring.inl",
+      "status": "unchanged",
+      "sha256": "82e06e2e8c51bffba6385a38ebb0e038d2d165db72da6cd3473af537b10388c5",
+      "baseline_sha256": "82e06e2e8c51bffba6385a38ebb0e038d2d165db72da6cd3473af537b10388c5"
+    },
+    {
+      "path": "raw/src/Loader/QuickMenuCatalog.inl",
+      "status": "modified",
+      "sha256": "e751330faff8b4ce1fca0bcb16777208c7b83effca0a44066e7dc28cf4cd371a",
+      "baseline_sha256": "b61f659c1f06421e37dd10db2a308300fd0f10c8a8b3e209ce351b85c3d27d5b"
+    },
+    {
+      "path": "raw/src/Loader/SpawnTools.inl",
+      "status": "unchanged",
+      "sha256": "ad197cfff7e06aa9e8b5a2cd8c4b503b80ef6c9aded28ff98464d2faf549b5cd",
+      "baseline_sha256": "ad197cfff7e06aa9e8b5a2cd8c4b503b80ef6c9aded28ff98464d2faf549b5cd"
+    },
+    {
+      "path": "raw/src/Runtime/F2ReferenceIndex.cpp",
+      "status": "unchanged",
+      "sha256": "97d5038016ffb8b968ee9608b53024ff8272d5df9d99490baad374cd7040c38e",
+      "baseline_sha256": "97d5038016ffb8b968ee9608b53024ff8272d5df9d99490baad374cd7040c38e"
+    }
+  ]
+}

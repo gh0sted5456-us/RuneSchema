@@ -1,0 +1,100 @@
+RuneSchema Helpy R3v9 — verification actually performed
+=====================================================
+Candidate source overlay. NOT a native Windows/UE4SS build or an in-game test.
+
+Toolchain/flags
+---------------
+GCC / Clang, C++23, -Wall -Wextra -Werror -pedantic -pthread.
+Clang additionally: -fsanitize=address,undefined -fno-omit-frame-pointer -g.
+Exact compiler version strings are in toolchains-v9.txt.
+
+Portable suites (PASS under both compilers)
+------------------------------------------
+F2ModelTests:             24,372 assertions (includes 10,000 generated IDs).
+F2BrowserTests:            4,182 assertions (includes paging iterations).
+F2PreferenceFileTests:        28 actual POSIX file-I/O assertions.
+F2IndexTests:               648 traversal/plan/limit/policy assertions.
+F2ProgressTests:             18 UI model/progress assertions.
+F2CacheMigrationTests:       66 real POSIX file-I/O cases with injected validator.
+HelpyV9Tests:               315 policy, typed input, draft, filter, dependency,
+                               publication failure and migration assertions.
+
+Other portable checks
+---------------------
+10,000 unique sampled 22-character PersistenceIDs round-tripped to 128 bits.
+Default-object pointer: original expression fails as a negative control;
+  corrected expression passes seven cases with TObjectPtr stand-ins.
+Cooked-package guard: 31 shipped-function assertions with UObject stand-ins.
+Provenance identity: 12 cases with native weak-object/slot behaviour mocked.
+Metadata registry: 14 checks compile the shipped AssetAuthoringMetadata.cpp
+  against a UObject/weak-handle adapter, not Unreal.
+No sanitizer findings in the successful Clang runs.
+Counts are assertions/iterations, not independent in-game scenarios.
+
+The new tests include every Boolean reference-download policy combination;
+cache-present reuse; failed-initial-attempt suppression; explicit update;
+hotkey round trips and release handling even when the panel is closed;
+text escaping/Unicode and numeric input limits; per-draft identity and edit
+isolation; cooked/runtime permission boundaries; combined type/source/Favorites
+filters; field popup state; journal seeding/independent edits; companion intent
+and required destinations; create-only migration of a file with spaces; stable
+runtime parent ordering, cycle isolation and a 2,048-node chain; and staged
+publication fault injection. File commits in the publication coordinator test
+are stand-ins, not actual Windows multi-file transactions.
+
+Static wiring checks (not compilation)
+-------------------------------------
+79 retained/updated integration checks.
+27 owner-settings/cache/Favorites migration checks.
+55 new Helpy native/source-wiring checks.
+JSON outputs: source-checks-v9.json, source-checks-v9-settings.json,
+source-checks-v9-helpy.json. Passing string checks do not validate Unreal ABI.
+
+Execution notes
+---------------
+GCC ran through verification/run_portable_tests.py successfully.
+Clang suites were split across tool calls due to execution-time limits.
+An initial split-run orchestration attempted check_identifiers.py in a new
+temporary directory without the earlier ids.txt. This was a harness mistake,
+not a production/test assertion failure. F2ModelTests and the ID checker were
+then rerun together in the same temporary directory and both passed.
+The final Clang log therefore includes two successful F2ModelTests executions;
+assertions are not added twice in the totals above. Earlier development fixture
+and layout corrections are not described as native compiler validation.
+
+Layout
+------
+10 offline captures execute the shipped UI model with fixture data: item grid,
+type/source filters, main editor, property picker, multiline text editor,
+companions, recipe rows, drafts and settings. Horizontal text extents were
+checked using the comparison font and no out-of-panel text remained in those
+captures. Main editor, text editor, companion/recipe, drafts, settings and main
+grid were visually inspected. Popup hit bounds are also covered by the tests.
+These use placeholder icons and DejaVu Sans available in the container; they
+are not game output. No font is included. Images are in verification/layouts.
+
+Packaging
+---------
+See packaging-v9.json for source count, ZIP member/digest verification, safe
+relative paths and merge-preservation checks. SHA256-v9-raw.txt and
+source-manifest-v9.json list the exact source bytes and baseline differences.
+The ZIP has no BAT, DLL, default user settings, generated content-mod JSON,
+font, credential or test executable. It is a cumulative raw/ merge overlay.
+
+NOT RUN / NOT PROVEN
+-------------------
+- Full MSVC Windows/UE4SS compilation, linking or deployment.
+- Production nlohmann JSON codecs or schema generator compilation.
+- Real Windows HTTP, file replacement, keyboard callbacks or message hooks.
+- Actual Unreal reflection, GC/weak handles, object copying or registration.
+- Actual DataTable row insertion/readback/rollback or native texture validation.
+- Live journal/recipe placement, hot-reload behaviour or complete bundle reload.
+- Save/reload, equipped/stored/dropped temporary clone behaviour.
+- Dedicated-server/multiplayer (live cloning remains single-player-only).
+- Complete census of the user's installed NPC, AI and resource definitions.
+- Persistent transaction quarantine after a partly published bundle/restart.
+
+Reproduce optional portable checks on POSIX with Python + C++23 compiler:
+  python verification/run_portable_tests.py --compiler g++
+  python verification/run_portable_tests.py --compiler clang++ --sanitize
+The user's Build RuneSchema.bat never invokes these tests and is unchanged.

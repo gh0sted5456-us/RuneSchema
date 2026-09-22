@@ -40,11 +40,12 @@ namespace PS {
             auto config = PS::PSConfig::Get();
             if (!config->IsDebugLoggingEnabled()) return;
 
-            auto formatted_log = std::format(STR("[RuneSchema] [debug] {}"), content);
-            RC::Output::send<optional_arg>(formatted_log, std::forward<FmtArgs>(fmt_args)...);
+            auto formatted_log = std::format(STR("[RuneSchema] [diagnostic] {}"), content);
+            RC::Output::send<RC::LogLevel::Normal>(formatted_log, std::forward<FmtArgs>(fmt_args)...);
         }
         else
         {
+            if (!PS::PSConfig::Get()->IsDebugLoggingEnabled()) return;
             auto formatted_log = std::format(STR("[RuneSchema] {}"), content);
             RC::Output::send<optional_arg>(formatted_log, std::forward<FmtArgs>(fmt_args)...);
         }

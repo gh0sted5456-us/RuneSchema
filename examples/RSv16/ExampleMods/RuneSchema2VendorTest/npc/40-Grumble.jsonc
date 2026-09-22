@@ -1,0 +1,27 @@
+{
+  "Id": "grumble_stone_debt",
+  "Multiplayer": true,
+  "Type": "AI",
+  "DisplayName": "Grumble, Collector of Grievances",
+  "VisualSource": "/Game/Gameplay/AI/GoblinFaction/MeleeGoblin/BP_AI_MeleeGoblin_Character.BP_AI_MeleeGoblin_Character_C",
+  "IdleAnimation": "/Game/Art/Animation/NPC_Goblin/Idle/A_MED_Goblin_Suspicious_Idle_Breathe.A_MED_Goblin_Suspicious_Idle_Breathe",
+  "DialogueID": "grumble_retribution",
+  "VendorID": "null_armory",
+  "QuestID": "grumble_stone_retribution",
+  "Location": [
+    39638,
+    171857,
+    "$"
+  ],
+  "Rotation": {"Pitch": 0, "Yaw": -137.7, "Roll": 0},
+  "Scale": 1.6,
+  "EnableCollision": true,
+  "MeshCollision": "Pawn",
+  "Map": {
+    "Enabled": true,
+    "ShowName": false
+  },
+  "OverheadIcon": {
+    "Enabled": true
+  }
+}

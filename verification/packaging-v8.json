@@ -1,0 +1,15 @@
+{
+  "baseline": "RuneSchema.7-Native-Input-R3v7-F2-Badges-Favorites-Direct-Override.zip",
+  "raw_files": 32,
+  "added": 9,
+  "modified": 12,
+  "unchanged": 11,
+  "checks": {
+    "all_baseline_raw_paths_retained": true,
+    "case_insensitive_paths_unique": true,
+    "no_bat_or_dll": true,
+    "simulated_merge_preserves_bat": true,
+    "simulated_merge_preserves_unrelated_file": true,
+    "merged_source_checksums_match": true
+  }
+}

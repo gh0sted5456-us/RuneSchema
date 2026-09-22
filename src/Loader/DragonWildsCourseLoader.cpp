@@ -1,4 +1,5 @@
 #include <algorithm>
+#include "Loader/UniqueTarget.h"
 #include <limits>
 #include "Unreal/AActor.hpp"
 #include "Unreal/AGameModeBase.hpp"
@@ -48,6 +49,17 @@ namespace {
             { "Minutes", (totalSeconds % 3600) / 60 },
             { "Seconds", totalSeconds % 60 },
         };
+    }
+
+    void MergeJsonObject(nlohmann::json& target, const nlohmann::json& patch)
+    {
+        for (const auto& [key, value] : patch.items())
+        {
+            if (value.is_object() && target.contains(key) && target.at(key).is_object())
+                MergeJsonObject(target[key], value);
+            else
+                target[key] = value;
+        }
     }
 
 }
@@ -114,12 +126,80 @@ namespace DragonWilds {
         {
             for (const auto& value : data)
             {
-                RegisterCourse(value, modName);
+                if (value.is_object() && value.contains("$Patch")) ApplyPatch(value, modName);
+                else RegisterCourse(value, modName);
             }
             return;
         }
 
+        if (data.is_object() && data.contains("$Patch"))
+        {
+            ApplyPatch(data, modName);
+            return;
+        }
+
         RegisterCourse(data, modName);
+    }
+
+    void DragonWildsCourseLoader::ApplyPatch(
+        const nlohmann::json& patch, const RC::StringType& modName)
+    {
+        if (!patch.at("$Patch").is_string()
+            || !patch.contains("$Target") || !patch.at("$Target").is_object())
+        {
+            PS::Log<LogLevel::Error>(STR("{}: Course '$Patch' requires a string identity and object '$Target'.\n"), modName);
+            return;
+        }
+
+        auto target = RC::to_generic_string(patch.at("$Patch").get<std::string>());
+        auto separator = target.find(TEXT(':'));
+        const auto targetId = separator == RC::StringType::npos
+            ? target : target.substr(separator + 1);
+        const auto targetMod = separator == RC::StringType::npos
+            ? RC::StringType{} : target.substr(0, separator);
+
+        const auto matches = [&](const CourseInfo& course) {
+            return course.Id == targetId && (targetMod.empty() || course.ModName == targetMod);
+        };
+        if (targetId.empty() || (separator != RC::StringType::npos && targetMod.empty())) {
+            PS::Log<LogLevel::Error>(STR("{}: Course target '{}' is invalid; use Id or ModName:Id.\n"), modName, target);
+            return;
+        }
+        auto found = m_courses.end();
+        try {
+            found = FindUniqueTarget(m_courses.begin(), m_courses.end(), matches);
+        } catch (const std::runtime_error&) {
+            PS::Log<LogLevel::Error>(STR("{}: Course target '{}' is ambiguous; use a unique ModName:Id.\n"), modName, target);
+            return;
+        }
+        if (found == m_courses.end())
+        {
+            PS::Log<LogLevel::Error>(STR("{}: Course patch target '{}' was not found.\n"), modName, target);
+            return;
+        }
+
+        if (patch.at("$Target").contains("Id"))
+        {
+            PS::Log<LogLevel::Error>(STR("{}: Course patch '{}' cannot change Id.\n"), modName, target);
+            return;
+        }
+
+        auto merged = found->Source;
+        MergeJsonObject(merged, patch.at("$Target"));
+        const auto original = *found;
+        m_courses.erase(found);
+        const auto count = m_courses.size();
+        try {
+            RegisterCourse(merged, original.ModName);
+        } catch (...) {
+            m_courses.push_back(original);
+            throw;
+        }
+        if (m_courses.size() == count)
+            m_courses.push_back(original);
+        else
+            WarnPatchConflicts(m_patchConflicts, "courses:" + RC::to_string(original.ModName) + ":" + RC::to_string(original.Id),
+                patch.at("$Target"), RC::to_string(modName), false);
     }
 
     void DragonWildsCourseLoader::RegisterCourse(const nlohmann::json& value, const RC::StringType& modName)
@@ -281,6 +361,7 @@ namespace DragonWilds {
 
             CourseInfo course{};
             course.ModName = modName;
+            course.Source = value;
             course.Id = readString(value, "Id", {});
             if (course.Id.empty())
             {

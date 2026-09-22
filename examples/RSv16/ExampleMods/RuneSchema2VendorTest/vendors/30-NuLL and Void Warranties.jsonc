@@ -1,0 +1,251 @@
+{
+  "Id": "null_armory",
+  "MerchantName": "NuLL and Void Warranties",
+  "VendorHeaderImage": "/Game/Mods/RuneSchema/UI/Icons/Banners/VI_Blacksmith.VI_Blacksmith",
+  "Repairable": true,
+  "Masterworkable": true,
+  "CategoryRules": [
+    { "Category": "Vault", "MinPowerLevel": 5 },
+    { "Category": "Staves", "TimeOfDay": "Night" }
+  ],
+  "Items": [
+    {
+      "Category": "Dawnveil",
+      "Item": "/Game/Mods/DawnveilPaladinSet/ITEM_RS_Dawnveil_Body.ITEM_RS_Dawnveil_Body",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 40,
+      "Count": 1
+    },
+    {
+      "Category": "Dawnveil",
+      "Item": "/Game/Mods/DawnveilPaladinSet/ITEM_RS_Dawnveil_Legs.ITEM_RS_Dawnveil_Legs",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 35,
+      "Count": 1
+    },
+    {
+      "Category": "Dawnveil",
+      "Item": "/Game/Mods/DawnveilPaladinSet/ITEM_RS_Dawnveil_Sword.ITEM_RS_Dawnveil_Sword",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 45,
+      "Count": 1
+    },
+    {
+      "Category": "Dawnveil",
+      "Item": "/Game/Mods/DawnveilPaladinSet/ITEM_RS_Dawnveil_Shield.ITEM_RS_Dawnveil_Shield",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 35,
+      "Count": 1
+    },
+    {
+      "Category": "Forge Supplies",
+      "Item": "/Game/Gameplay/Items/Resources/Metal/ITEM_Resources_BronzeBar.ITEM_Resources_BronzeBar",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 2,
+      "Count": 5
+    },
+    {
+      "Category": "Forge Supplies",
+      "Item": "/Game/Gameplay/Items/Resources/Metal/ITEM_Resources_IronBar.ITEM_Resources_IronBar",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 4,
+      "Count": 5
+    },
+    {
+      "Category": "Forge Supplies",
+      "Item": "/Game/Gameplay/Items/Resources/Metal/ITEM_Resources_SteelBar.ITEM_Resources_SteelBar",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 8,
+      "Count": 5
+    },
+    {
+      "Category": "Forge Supplies",
+      "Item": "/Game/Gameplay/Items/Resources/Metal/ITEM_Resources_IronOre.ITEM_Resources_IronOre",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 2,
+      "Count": 10
+    },
+    {
+      "Category": "Forge Supplies",
+      "Item": "/Game/Gameplay/Items/Resources/Mineral/ITEM_Resources_Coal.ITEM_Resources_Coal",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 2,
+      "Count": 10
+    },
+    {
+      "Category": "Vault",
+      "Item": "/Game/Gameplay/Character/Player/Equipment/Held/Pickaxe/ITEM_Pickaxe_Iron.ITEM_Pickaxe_Iron",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 10,
+      "Count": 1
+    },
+    {
+      "Category": "Vault",
+      "Item": "/Game/Gameplay/Character/Player/Equipment/Held/Pickaxe/ITEM_Pickaxe_Steel.ITEM_Pickaxe_Steel",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 20,
+      "Count": 1
+    },
+    {
+      "Category": "Vault",
+      "Item": "/Game/Gameplay/Character/Player/Equipment/Held/GreatSword/ITEM_GreatSword_Steel.ITEM_GreatSword_Steel",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 25,
+      "Count": 1
+    },
+    {
+      "Category": "Vault",
+      "Item": "/Game/Gameplay/Character/Player/Equipment/Body/ITEM_Armour_T5_Body_Steel.ITEM_Armour_T5_Body_Steel",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 20,
+      "Count": 1
+    },
+    {
+      "Category": "Vault",
+      "Item": "/Game/Gameplay/Character/Player/Equipment/Legs/ITEM_Armour_T5_Legs_Steel.ITEM_Armour_T5_Legs_Steel",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 15,
+      "Count": 1
+    },
+    {
+      "Category": "Vault",
+      "Item": "/Game/Mods/DawnveilPaladinSet/ITEM_RS_Dawnveil_Hood.ITEM_RS_Dawnveil_Hood",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 30,
+      "Count": 1
+    },
+    {
+      "Category": "Staves",
+      "Item": "/DowdunReach/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Air.ITEM_Staff_Air",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 30,
+      "Count": 1
+    },
+    {
+      "Category": "Staves",
+      "Item": "/DowdunReach/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Bedrock.ITEM_Staff_Bedrock",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 30,
+      "Count": 1
+    },
+    {
+      "Category": "Staves",
+      "Item": "/DowdunReach/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Earth.ITEM_Staff_Earth",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 30,
+      "Count": 1
+    },
+    {
+      "Category": "Staves",
+      "Item": "/DowdunReach/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Fire.ITEM_Staff_Fire",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 30,
+      "Count": 1
+    },
+    {
+      "Category": "Staves",
+      "Item": "/DowdunReach/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Lightning.ITEM_Staff_Lightning",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 30,
+      "Count": 1
+    },
+    {
+      "Category": "Staves",
+      "Item": "/DowdunReach/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Meteor.ITEM_Staff_Meteor",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 30,
+      "Count": 1
+    },
+    {
+      "Category": "Staves",
+      "Item": "/DowdunReach/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Nature.ITEM_Staff_Nature",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 30,
+      "Count": 1
+    },
+    {
+      "Category": "Staves",
+      "Item": "/DowdunReach/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Necrotic.ITEM_Staff_Necrotic",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 30,
+      "Count": 1
+    },
+    {
+      "Category": "Staves",
+      "Item": "/DowdunReach/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Poison.ITEM_Staff_Poison",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 30,
+      "Count": 1
+    },
+    {
+      "Category": "Staves",
+      "Item": "/DowdunReach/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Ruin.ITEM_Staff_Ruin",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 30,
+      "Count": 1
+    },
+    {
+      "Category": "Staves",
+      "Item": "/DowdunReach/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Undead.ITEM_Staff_Undead",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 30,
+      "Count": 1
+    },
+    {
+      "Category": "Staves",
+      "Item": "/DowdunReach/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Void.ITEM_Staff_Void",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 30,
+      "Count": 1
+    },
+    {
+      "Category": "Runes",
+      "Item": "/Game/Gameplay/Items/Resources/Magic/ITEM_Rune_Air.ITEM_Rune_Air",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 1,
+      "Count": 50
+    },
+    {
+      "Category": "Runes",
+      "Item": "/Game/Gameplay/Items/Resources/Magic/ITEM_Rune_Astral.ITEM_Rune_Astral",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 1,
+      "Count": 50
+    },
+    {
+      "Category": "Runes",
+      "Item": "/Game/Gameplay/Items/Resources/Magic/ITEM_Rune_Earth.ITEM_Rune_Earth",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 1,
+      "Count": 50
+    },
+    {
+      "Category": "Runes",
+      "Item": "/Game/Gameplay/Items/Resources/Magic/ITEM_Rune_Fire.ITEM_Rune_Fire",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 1,
+      "Count": 50
+    },
+    {
+      "Category": "Runes",
+      "Item": "/Game/Gameplay/Items/Resources/Magic/ITEM_Rune_Law.ITEM_Rune_Law",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 1,
+      "Count": 50
+    },
+    {
+      "Category": "Runes",
+      "Item": "/Game/Gameplay/Items/Resources/Magic/ITEM_Rune_Nature.ITEM_Rune_Nature",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 1,
+      "Count": 50
+    },
+    {
+      "Category": "Runes",
+      "Item": "/Game/Gameplay/Items/Resources/Magic/ITEM_Rune_Water.ITEM_Rune_Water",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 1,
+      "Count": 50
+    }
+  ]
+}

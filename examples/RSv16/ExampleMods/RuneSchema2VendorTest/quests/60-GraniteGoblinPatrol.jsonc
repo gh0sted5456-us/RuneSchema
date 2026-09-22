@@ -1,0 +1,33 @@
+// Event-scoped patrol: each kill must come from Grumble's named goblin waves
+// and occur inside the active search area.
+{
+  "Id":"granite_goblin_patrol",
+  "PersistenceID":"xBicTfzWYkeOCtOLKtSRFQ",
+  "Repeatable":true,
+  "Title":"Granite's Goblin Patrol",
+  "Description":"Ask Grumble to summon the goblin patrol, defeat all five enemies in the marked area, then return to Granite the Interminable.",
+  "Completion":"ReturnToNPC",
+  "Category":"Task",
+  "Stages":[{
+    "Id":"patrol",
+    "Objectives":[{
+      "Id":"goblin_kills",
+      "Type":"Kill",
+      "Text":"Defeat all five members of Grumble's goblin patrol in the marked area.",
+      "AIClasses":[
+        "/Game/Gameplay/AI/GoblinFaction/MeleeGoblin/BP_AI_MeleeGoblin_Character.BP_AI_MeleeGoblin_Character_C",
+        "/Game/Gameplay/AI/GoblinFaction/RangedGoblin/BP_AI_RangedGoblin_Character.BP_AI_RangedGoblin_Character_C",
+        "/Game/Gameplay/AI/GoblinFaction/ShieldGoblin/BP_AI_ShieldGoblin_Character.BP_AI_ShieldGoblin_Character_C"
+      ],
+      "IncludeDerived":true,
+      "EventID":"grumble_goblin_waves",
+      "Count":5,
+      "ProgressText":"Kill {remaining} more members of Grumble's goblin patrol.",
+      "CompleteText":"The goblin patrol is defeated. Return to Granite.",
+      "AnnounceProgress":true,
+      "Location":[42250,174375,-4163],
+      "RadiusMeters":300
+    }]
+  }],
+  "Reward":{"Item":"/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment","Count":50}
+}

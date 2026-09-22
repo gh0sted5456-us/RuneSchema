@@ -1,3 +1,4 @@
+#include "Utility/NativeFunctionHook.h"
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -19,6 +20,7 @@
 #include "SDK/Helper/PropertyHelper.h"
 #include "Utility/Logging.h"
 #include "Misc/DragonWildsDataRegistrar.h"
+#include "Core/SaveRegistrySnapshot.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -44,6 +46,7 @@ namespace DragonWilds {
 
     void DragonWildsDataRegistrar::Initialize()
     {
+        PS::SaveCleanup::PublishRegistry({});
         if (!m_initialized)
         {
             if (!ResolveBindings())
@@ -61,6 +64,16 @@ namespace DragonWilds {
         {
             m_savesCleaned = true;
             CleanSaves();
+        }
+        else {
+            PS::SaveCleanup::RegistrySnapshot snapshot;
+            bool valid=true;
+            for(auto& [dataClass,subsystemClass]:m_bindings) {
+                const auto name=RC::to_string(dataClass->GetName());
+                if(name=="ItemData")valid=ReadKnownIds(subsystemClass,snapshot.Items) && valid;
+                if(name=="RecipeData")valid=ReadKnownIds(subsystemClass,snapshot.Recipes) && valid;
+            }
+            if(valid)PS::SaveCleanup::PublishRegistry(std::move(snapshot));
         }
     }
 
@@ -117,7 +130,7 @@ namespace DragonWilds {
                 continue;
             }
 
-            const auto id = function->RegisterPreHook([](UnrealScriptFunctionCallableContext& context, void* customData) {
+            const auto id = PS::RegisterNativePreHook(function, [](UnrealScriptFunctionCallableContext& context, void* customData) {
                 static_cast<DragonWildsDataRegistrar*>(customData)->RegisterAll();
             }, this);
             m_functionHooks.emplace_back(function, id);
@@ -305,6 +318,7 @@ namespace DragonWilds {
         }
 
         auto* localAppData = std::getenv("LOCALAPPDATA");
+        PS::SaveCleanup::PublishRegistry({knownItems,knownRecipes});
         if (!localAppData)
         {
             return;

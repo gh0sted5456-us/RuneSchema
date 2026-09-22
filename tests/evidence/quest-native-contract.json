@@ -1,0 +1,3538 @@
+{
+  "errors": [],
+  "objects": [
+    {
+      "fields": [
+        {
+          "arrayDim": 1,
+          "elementSize": 16,
+          "flags": 4503599627436053,
+          "name": "QuestName",
+          "offset": 96,
+          "type": "FText"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 16,
+          "flags": 4503599627436053,
+          "name": "QuestDescription",
+          "offset": 112,
+          "type": "FText"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 1,
+          "flags": 6755469234340373,
+          "name": "QuestRegion",
+          "offset": 128,
+          "type": "EQuestRegion"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 1,
+          "flags": 6755469234340373,
+          "name": "bIsMainQuest",
+          "offset": 129,
+          "type": "bool"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 1,
+          "flags": 6755469234340373,
+          "name": "bHideInQuestList",
+          "offset": 130,
+          "type": "bool"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 1,
+          "flags": 6755469234340373,
+          "name": "bIsTaskQuest",
+          "offset": 131,
+          "type": "bool"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 80,
+          "flags": 4503599627436053,
+          "name": "ObjectiveTexts",
+          "offset": 136,
+          "type": "TMap"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 16,
+          "flags": 6755399441121813,
+          "name": "LinkedActivityID",
+          "offset": 216,
+          "type": "FString"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 4,
+          "flags": 6755469234340373,
+          "name": "ActivityProgressOnCompletion",
+          "offset": 232,
+          "type": "int32"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 1,
+          "flags": 6755469234340353,
+          "name": "bReactsToLightningHit",
+          "offset": 236,
+          "type": "bool"
+        }
+      ],
+      "functions": [
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234274944,
+              "name": "EntryPoint",
+              "offset": 0,
+              "type": "int32"
+            }
+          ],
+          "functionFlags": 134350848,
+          "parameterSize": 4,
+          "referencedStructs": [],
+          "type": "/Script/CoreUObject.Object:ExecuteUbergraph"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "flags": 6755399441057664,
+              "name": "ReturnValue",
+              "offset": 0,
+              "type": "FString"
+            }
+          ],
+          "functionFlags": 1409418241,
+          "parameterSize": 16,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.DominionDataAsset:GetPersistenceID"
+        }
+      ],
+      "hierarchy": [
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "flags": 4503599627436053,
+              "name": "QuestName",
+              "offset": 96,
+              "type": "FText"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "flags": 4503599627436053,
+              "name": "QuestDescription",
+              "offset": 112,
+              "type": "FText"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234340373,
+              "name": "QuestRegion",
+              "offset": 128,
+              "type": "EQuestRegion"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234340373,
+              "name": "bIsMainQuest",
+              "offset": 129,
+              "type": "bool"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234340373,
+              "name": "bHideInQuestList",
+              "offset": 130,
+              "type": "bool"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234340373,
+              "name": "bIsTaskQuest",
+              "offset": 131,
+              "type": "bool"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 80,
+              "flags": 4503599627436053,
+              "name": "ObjectiveTexts",
+              "offset": 136,
+              "type": "TMap"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "flags": 6755399441121813,
+              "name": "LinkedActivityID",
+              "offset": 216,
+              "type": "FString"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234340373,
+              "name": "ActivityProgressOnCompletion",
+              "offset": 232,
+              "type": "int32"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234340353,
+              "name": "bReactsToLightningHit",
+              "offset": 236,
+              "type": "bool"
+            }
+          ],
+          "type": "/Script/Dominion.QuestData"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "flags": 11268894673273365,
+              "name": "PersistenceID",
+              "offset": 48,
+              "type": "FString"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "flags": 11268894673142293,
+              "name": "InternalName",
+              "offset": 64,
+              "type": "FString"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 20266268116451841,
+              "name": "bSoftDeleted",
+              "offset": 80,
+              "type": "bool"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 93449760987480577,
+              "name": "MigrationDataAsset",
+              "offset": 88,
+              "type": "TObjectPtr<UDominionDataAsset>"
+            }
+          ],
+          "type": "/Script/Dominion.DominionDataAsset"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 21393266461114880,
+              "name": "NativeClass",
+              "offset": 40,
+              "type": "TSubclassOf<UDataAsset>"
+            }
+          ],
+          "type": "/Script/Engine.DataAsset"
+        },
+        {
+          "fields": [],
+          "type": "/Script/CoreUObject.Object"
+        }
+      ],
+      "type": "/Script/Dominion.QuestData"
+    },
+    {
+      "fields": [
+        {
+          "arrayDim": 1,
+          "elementSize": 16,
+          "flags": 4503599896330752,
+          "name": "OnQuestStateChangedDynamic",
+          "offset": 200,
+          "type": "FOnQuestStateChangedDynamic"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 16,
+          "elementType": "FQuestProgress",
+          "flags": 9015995347763712,
+          "name": "Quests",
+          "offset": 312,
+          "type": "TArray"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 8,
+          "flags": 84451357825696256,
+          "name": "TrackedSecondaryQuest",
+          "offset": 328,
+          "type": "TObjectPtr<UQuestData>"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 16,
+          "elementType": "FQuestProgressCatchup",
+          "flags": 9015995347829249,
+          "name": "QuestCatchupConfigs",
+          "offset": 336,
+          "type": "TArray"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 16,
+          "elementType": "FLocationVisibilityTracker",
+          "flags": 18014402804449824,
+          "name": "VisibilityTrackers",
+          "offset": 352,
+          "type": "TArray"
+        }
+      ],
+      "functions": [
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234274944,
+              "name": "EntryPoint",
+              "offset": 0,
+              "type": "int32"
+            }
+          ],
+          "functionFlags": 134350848,
+          "parameterSize": 4,
+          "referencedStructs": [],
+          "type": "/Script/CoreUObject.Object:ExecuteUbergraph"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "bReset",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:Activate"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533120,
+              "name": "PrerequisiteActor",
+              "offset": 0,
+              "type": "AActor*"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:AddTickPrerequisiteActor"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468161057408,
+              "name": "PrerequisiteComponent",
+              "offset": 0,
+              "type": "UActorComponent*"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:AddTickPrerequisiteComponent"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755469234274944,
+              "name": "Tag",
+              "offset": 0,
+              "type": "FName"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 8,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 1409418243,
+          "parameterSize": 9,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:ComponentHasTag"
+        },
+        {
+          "fields": [],
+          "functionFlags": 67240962,
+          "parameterSize": 0,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:Deactivate"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 0,
+              "type": "float"
+            }
+          ],
+          "functionFlags": 1409418243,
+          "parameterSize": 4,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:GetComponentTickInterval"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160534400,
+              "name": "ReturnValue",
+              "offset": 0,
+              "type": "AActor*"
+            }
+          ],
+          "functionFlags": 1409418241,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:GetOwner"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 1409418241,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:IsActive"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 1409418241,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:IsBeingDestroyed"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 1409418242,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:IsComponentTickEnabled"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533120,
+              "name": "Object",
+              "offset": 0,
+              "type": "UObject*"
+            }
+          ],
+          "functionFlags": 67240963,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:K2_DestroyComponent"
+        },
+        {
+          "fields": [],
+          "functionFlags": 132098,
+          "parameterSize": 0,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:OnRep_IsActive"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234274944,
+              "name": "DeltaSeconds",
+              "offset": 0,
+              "type": "float"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234274944,
+              "name": "SimSeconds",
+              "offset": 4,
+              "type": "float"
+            }
+          ],
+          "functionFlags": 134350850,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:ReceiveAsyncPhysicsTick"
+        },
+        {
+          "fields": [],
+          "functionFlags": 134350850,
+          "parameterSize": 0,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:ReceiveBeginPlay"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "EndPlayReason",
+              "offset": 0,
+              "type": "TEnumAsByte<EEndPlayReason::Type>"
+            }
+          ],
+          "functionFlags": 134350850,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:ReceiveEndPlay"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234274944,
+              "name": "DeltaSeconds",
+              "offset": 0,
+              "type": "float"
+            }
+          ],
+          "functionFlags": 134350850,
+          "parameterSize": 4,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:ReceiveTick"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533120,
+              "name": "PrerequisiteActor",
+              "offset": 0,
+              "type": "AActor*"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:RemoveTickPrerequisiteActor"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468161057408,
+              "name": "PrerequisiteComponent",
+              "offset": 0,
+              "type": "UActorComponent*"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:RemoveTickPrerequisiteComponent"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "bNewActive",
+              "offset": 0,
+              "type": "bool"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "bReset",
+              "offset": 1,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 2,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetActive"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "bNewAutoActivate",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetAutoActivate"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "bEnabled",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetComponentTickEnabled"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234274944,
+              "name": "TickInterval",
+              "offset": 0,
+              "type": "float"
+            }
+          ],
+          "functionFlags": 67240963,
+          "parameterSize": 4,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetComponentTickInterval"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234274944,
+              "name": "TickInterval",
+              "offset": 0,
+              "type": "float"
+            }
+          ],
+          "functionFlags": 67240963,
+          "parameterSize": 4,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetComponentTickIntervalAndCooldown"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "ShouldReplicate",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 67240963,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetIsReplicated"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "bTickableWhenPaused",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 67240963,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetTickableWhenPaused"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "NewTickGroup",
+              "offset": 0,
+              "type": "TEnumAsByte<ETickingGroup>"
+            }
+          ],
+          "functionFlags": 67240963,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetTickGroup"
+        },
+        {
+          "fields": [],
+          "functionFlags": 67240962,
+          "parameterSize": 0,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:ToggleActive"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533122,
+              "name": "QuestData",
+              "offset": 0,
+              "type": "UQuestData*"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "QuestState",
+              "offset": 8,
+              "type": "EQuestState"
+            }
+          ],
+          "functionFlags": 134350848,
+          "parameterSize": 9,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.QuestProgressComponent:BP_OnQuestStateChanged"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533122,
+              "name": "QuestData",
+              "offset": 0,
+              "type": "UQuestData*"
+            }
+          ],
+          "functionFlags": 17042625,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.QuestProgressComponent:Client_NotifyTrackedQuestLoaded"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "elementType": "FQuestProgress",
+              "flags": 4503599761588866,
+              "name": "UpdatedQuests",
+              "offset": 0,
+              "type": "TArray"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274946,
+              "name": "bFromLoadedState",
+              "offset": 16,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 17304768,
+          "parameterSize": 17,
+          "referencedStructs": [
+            {
+              "fields": [
+                {
+                  "arrayDim": 1,
+                  "elementSize": 8,
+                  "flags": 79938962105303552,
+                  "name": "Data",
+                  "offset": 0,
+                  "type": "TObjectPtr<UQuestData>"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 1,
+                  "flags": 6755469234274816,
+                  "name": "State",
+                  "offset": 8,
+                  "type": "EQuestState"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 8,
+                  "flags": 6755469234274816,
+                  "name": "CurrentObjective",
+                  "offset": 12,
+                  "type": "FName"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 16,
+                  "elementType": "FQuestInt",
+                  "flags": 4503599627371008,
+                  "name": "QuestInts",
+                  "offset": 24,
+                  "type": "TArray"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 16,
+                  "elementType": "FQuestBool",
+                  "flags": 4503599627371008,
+                  "name": "QuestBools",
+                  "offset": 40,
+                  "type": "TArray"
+                }
+              ],
+              "type": "/Script/Dominion.QuestProgress"
+            }
+          ],
+          "type": "/Script/Dominion.QuestProgressComponent:Client_OnQuestsUpdated"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 56,
+              "flags": 4503599761588354,
+              "name": "OldQuest",
+              "offset": 0,
+              "struct": "/Script/Dominion.QuestProgress",
+              "type": "FQuestProgress"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 56,
+              "flags": 4503599761588354,
+              "name": "UpdatedQuest",
+              "offset": 56,
+              "struct": "/Script/Dominion.QuestProgress",
+              "type": "FQuestProgress"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274946,
+              "name": "bSendNotification",
+              "offset": 112,
+              "type": "bool"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274946,
+              "name": "bNewlyGiven",
+              "offset": 113,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 17304768,
+          "parameterSize": 114,
+          "referencedStructs": [
+            {
+              "fields": [
+                {
+                  "arrayDim": 1,
+                  "elementSize": 8,
+                  "flags": 79938962105303552,
+                  "name": "Data",
+                  "offset": 0,
+                  "type": "TObjectPtr<UQuestData>"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 1,
+                  "flags": 6755469234274816,
+                  "name": "State",
+                  "offset": 8,
+                  "type": "EQuestState"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 8,
+                  "flags": 6755469234274816,
+                  "name": "CurrentObjective",
+                  "offset": 12,
+                  "type": "FName"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 16,
+                  "elementType": "FQuestInt",
+                  "flags": 4503599627371008,
+                  "name": "QuestInts",
+                  "offset": 24,
+                  "type": "TArray"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 16,
+                  "elementType": "FQuestBool",
+                  "flags": 4503599627371008,
+                  "name": "QuestBools",
+                  "offset": 40,
+                  "type": "TArray"
+                }
+              ],
+              "type": "/Script/Dominion.QuestProgress"
+            },
+            {
+              "fields": [
+                {
+                  "arrayDim": 1,
+                  "elementSize": 8,
+                  "flags": 79938962105303552,
+                  "name": "Data",
+                  "offset": 0,
+                  "type": "TObjectPtr<UQuestData>"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 1,
+                  "flags": 6755469234274816,
+                  "name": "State",
+                  "offset": 8,
+                  "type": "EQuestState"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 8,
+                  "flags": 6755469234274816,
+                  "name": "CurrentObjective",
+                  "offset": 12,
+                  "type": "FName"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 16,
+                  "elementType": "FQuestInt",
+                  "flags": 4503599627371008,
+                  "name": "QuestInts",
+                  "offset": 24,
+                  "type": "TArray"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 16,
+                  "elementType": "FQuestBool",
+                  "flags": 4503599627371008,
+                  "name": "QuestBools",
+                  "offset": 40,
+                  "type": "TArray"
+                }
+              ],
+              "type": "/Script/Dominion.QuestProgress"
+            }
+          ],
+          "type": "/Script/Dominion.QuestProgressComponent:Client_OnQuestUpdated"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533122,
+              "name": "QuestData",
+              "offset": 0,
+              "type": "UQuestData*"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "bSilent",
+              "offset": 8,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 67240965,
+          "parameterSize": 9,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.QuestProgressComponent:CompleteQuest"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533122,
+              "name": "QuestData",
+              "offset": 0,
+              "type": "UQuestData*"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "flags": 4503599627370880,
+              "name": "ObjectiveTextResult",
+              "offset": 8,
+              "type": "FText"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 24,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 1413612545,
+          "parameterSize": 25,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.QuestProgressComponent:GetCurrentObjectiveText"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533122,
+              "name": "QuestData",
+              "offset": 0,
+              "type": "UQuestData*"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755469368492930,
+              "name": "ObjectiveName",
+              "offset": 8,
+              "type": "FName"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "flags": 4503599627370880,
+              "name": "ObjectiveTextResult",
+              "offset": 16,
+              "type": "FText"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 32,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 1413612545,
+          "parameterSize": 33,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.QuestProgressComponent:GetObjectiveText"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533122,
+              "name": "QuestData",
+              "offset": 0,
+              "type": "UQuestData*"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755469368492930,
+              "name": "QuestBoolName",
+              "offset": 8,
+              "type": "FName"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 16,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 1413612545,
+          "parameterSize": 17,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.QuestProgressComponent:GetQuestBool"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533122,
+              "name": "QuestData",
+              "offset": 0,
+              "type": "UQuestData*"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755469368492930,
+              "name": "QuestIntName",
+              "offset": 8,
+              "type": "FName"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 16,
+              "type": "int32"
+            }
+          ],
+          "functionFlags": 1413612545,
+          "parameterSize": 20,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.QuestProgressComponent:GetQuestInt"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533122,
+              "name": "QuestData",
+              "offset": 0,
+              "type": "UQuestData*"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 8,
+              "type": "EQuestState"
+            }
+          ],
+          "functionFlags": 1409418241,
+          "parameterSize": 9,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.QuestProgressComponent:GetQuestState"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533122,
+              "name": "QuestData",
+              "offset": 0,
+              "type": "UQuestData*"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "bSilent",
+              "offset": 8,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 67240965,
+          "parameterSize": 9,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.QuestProgressComponent:GiveQuest"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533122,
+              "name": "QuestData",
+              "offset": 0,
+              "type": "UQuestData*"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755469368492930,
+              "name": "ObjectiveName",
+              "offset": 8,
+              "type": "FName"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 16,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 1413612545,
+          "parameterSize": 17,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.QuestProgressComponent:HasObjectiveText"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533122,
+              "name": "QuestData",
+              "offset": 0,
+              "type": "UQuestData*"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755469368492930,
+              "name": "QuestBoolName",
+              "offset": 8,
+              "type": "FName"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 16,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 1413612545,
+          "parameterSize": 17,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.QuestProgressComponent:HasQuestBool"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533122,
+              "name": "QuestData",
+              "offset": 0,
+              "type": "UQuestData*"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755469368492930,
+              "name": "QuestIntName",
+              "offset": 8,
+              "type": "FName"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 16,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 1413612545,
+          "parameterSize": 17,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.QuestProgressComponent:HasQuestInt"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533122,
+              "name": "QuestData",
+              "offset": 0,
+              "type": "UQuestData*"
+            }
+          ],
+          "functionFlags": 67240965,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.QuestProgressComponent:InitQuest"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533122,
+              "name": "QuestData",
+              "offset": 0,
+              "type": "UQuestData*"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 8,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 1409418245,
+          "parameterSize": 9,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.QuestProgressComponent:IsQuestInitialized"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533120,
+              "name": "OldPawn",
+              "offset": 0,
+              "type": "APawn*"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533120,
+              "name": "NewPawn",
+              "offset": 8,
+              "type": "APawn*"
+            }
+          ],
+          "functionFlags": 525313,
+          "parameterSize": 16,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.QuestProgressComponent:OnPossessedPawnChanged"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "elementType": "FQuestProgress",
+              "flags": 4503599761589122,
+              "name": "UpdatedQuests",
+              "offset": 0,
+              "type": "TArray"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274946,
+              "name": "bFromLoadedState",
+              "offset": 16,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 4719617,
+          "parameterSize": 17,
+          "referencedStructs": [
+            {
+              "fields": [
+                {
+                  "arrayDim": 1,
+                  "elementSize": 8,
+                  "flags": 79938962105303552,
+                  "name": "Data",
+                  "offset": 0,
+                  "type": "TObjectPtr<UQuestData>"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 1,
+                  "flags": 6755469234274816,
+                  "name": "State",
+                  "offset": 8,
+                  "type": "EQuestState"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 8,
+                  "flags": 6755469234274816,
+                  "name": "CurrentObjective",
+                  "offset": 12,
+                  "type": "FName"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 16,
+                  "elementType": "FQuestInt",
+                  "flags": 4503599627371008,
+                  "name": "QuestInts",
+                  "offset": 24,
+                  "type": "TArray"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 16,
+                  "elementType": "FQuestBool",
+                  "flags": 4503599627371008,
+                  "name": "QuestBools",
+                  "offset": 40,
+                  "type": "TArray"
+                }
+              ],
+              "type": "/Script/Dominion.QuestProgress"
+            }
+          ],
+          "type": "/Script/Dominion.QuestProgressComponent:OnQuestsUpdated"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 56,
+              "flags": 4503599761588610,
+              "name": "OldQuestState",
+              "offset": 0,
+              "struct": "/Script/Dominion.QuestProgress",
+              "type": "FQuestProgress"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 56,
+              "flags": 4503599761588610,
+              "name": "UpdatedQuest",
+              "offset": 56,
+              "struct": "/Script/Dominion.QuestProgress",
+              "type": "FQuestProgress"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274946,
+              "name": "bSendNotification",
+              "offset": 112,
+              "type": "bool"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274946,
+              "name": "bNewlyGiven",
+              "offset": 113,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 4719617,
+          "parameterSize": 114,
+          "referencedStructs": [
+            {
+              "fields": [
+                {
+                  "arrayDim": 1,
+                  "elementSize": 8,
+                  "flags": 79938962105303552,
+                  "name": "Data",
+                  "offset": 0,
+                  "type": "TObjectPtr<UQuestData>"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 1,
+                  "flags": 6755469234274816,
+                  "name": "State",
+                  "offset": 8,
+                  "type": "EQuestState"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 8,
+                  "flags": 6755469234274816,
+                  "name": "CurrentObjective",
+                  "offset": 12,
+                  "type": "FName"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 16,
+                  "elementType": "FQuestInt",
+                  "flags": 4503599627371008,
+                  "name": "QuestInts",
+                  "offset": 24,
+                  "type": "TArray"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 16,
+                  "elementType": "FQuestBool",
+                  "flags": 4503599627371008,
+                  "name": "QuestBools",
+                  "offset": 40,
+                  "type": "TArray"
+                }
+              ],
+              "type": "/Script/Dominion.QuestProgress"
+            },
+            {
+              "fields": [
+                {
+                  "arrayDim": 1,
+                  "elementSize": 8,
+                  "flags": 79938962105303552,
+                  "name": "Data",
+                  "offset": 0,
+                  "type": "TObjectPtr<UQuestData>"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 1,
+                  "flags": 6755469234274816,
+                  "name": "State",
+                  "offset": 8,
+                  "type": "EQuestState"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 8,
+                  "flags": 6755469234274816,
+                  "name": "CurrentObjective",
+                  "offset": 12,
+                  "type": "FName"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 16,
+                  "elementType": "FQuestInt",
+                  "flags": 4503599627371008,
+                  "name": "QuestInts",
+                  "offset": 24,
+                  "type": "TArray"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 16,
+                  "elementType": "FQuestBool",
+                  "flags": 4503599627371008,
+                  "name": "QuestBools",
+                  "offset": 40,
+                  "type": "TArray"
+                }
+              ],
+              "type": "/Script/Dominion.QuestProgress"
+            }
+          ],
+          "type": "/Script/Dominion.QuestProgressComponent:OnQuestUpdated"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "elementType": "FLocationVisibilityTracker",
+              "flags": 4503599627371136,
+              "name": "OldVisibilityTrackers",
+              "offset": 0,
+              "type": "TArray"
+            }
+          ],
+          "functionFlags": 263169,
+          "parameterSize": 16,
+          "referencedStructs": [
+            {
+              "fields": [
+                {
+                  "arrayDim": 1,
+                  "elementSize": 8,
+                  "flags": 6755469234274816,
+                  "name": "LocationName",
+                  "offset": 0,
+                  "type": "FName"
+                },
+                {
+                  "arrayDim": 1,
+                  "elementSize": 1,
+                  "flags": 6755469234274816,
+                  "name": "bLocationVisibility",
+                  "offset": 8,
+                  "type": "bool"
+                }
+              ],
+              "type": "/Script/Dominion.LocationVisibilityTracker"
+            }
+          ],
+          "type": "/Script/Dominion.QuestProgressComponent:OnRep_VisibilityTrackers"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533122,
+              "name": "QuestData",
+              "offset": 0,
+              "type": "UQuestData*"
+            }
+          ],
+          "functionFlags": 2362561,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.QuestProgressComponent:Server_NotifyQuestTracked"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533122,
+              "name": "QuestData",
+              "offset": 0,
+              "type": "UQuestData*"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755469234274944,
+              "name": "QuestBoolName",
+              "offset": 8,
+              "type": "FName"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "bBoolValue",
+              "offset": 16,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 67240961,
+          "parameterSize": 17,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.QuestProgressComponent:SetQuestBool"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533122,
+              "name": "QuestData",
+              "offset": 0,
+              "type": "UQuestData*"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755469234274944,
+              "name": "QuestIntName",
+              "offset": 8,
+              "type": "FName"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234274944,
+              "name": "IntValue",
+              "offset": 16,
+              "type": "int32"
+            }
+          ],
+          "functionFlags": 67240961,
+          "parameterSize": 20,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.QuestProgressComponent:SetQuestInt"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533122,
+              "name": "QuestData",
+              "offset": 0,
+              "type": "UQuestData*"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755469368492930,
+              "name": "ObjectiveName",
+              "offset": 8,
+              "type": "FName"
+            }
+          ],
+          "functionFlags": 71435265,
+          "parameterSize": 16,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.QuestProgressComponent:SetQuestObjective"
+        }
+      ],
+      "hierarchy": [
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "flags": 4503599896330752,
+              "name": "OnQuestStateChangedDynamic",
+              "offset": 200,
+              "type": "FOnQuestStateChangedDynamic"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "elementType": "FQuestProgress",
+              "flags": 9015995347763712,
+              "name": "Quests",
+              "offset": 312,
+              "type": "TArray"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 84451357825696256,
+              "name": "TrackedSecondaryQuest",
+              "offset": 328,
+              "type": "TObjectPtr<UQuestData>"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "elementType": "FQuestProgressCatchup",
+              "flags": 9015995347829249,
+              "name": "QuestCatchupConfigs",
+              "offset": 336,
+              "type": "TArray"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "elementType": "FLocationVisibilityTracker",
+              "flags": 18014402804449824,
+              "name": "VisibilityTrackers",
+              "offset": 352,
+              "type": "TArray"
+            }
+          ],
+          "type": "/Script/Dominion.QuestProgressComponent"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 48,
+              "flags": 4503599627436033,
+              "name": "PrimaryComponentTick",
+              "offset": 64,
+              "struct": "/Script/Engine.ActorComponentTickFunction",
+              "type": "FActorComponentTickFunction"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "elementType": "FName",
+              "flags": 4503599627371013,
+              "name": "ComponentTags",
+              "offset": 112,
+              "type": "TArray"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "elementType": "TObjectPtr<UAssetUserData>",
+              "flags": 82204437094859273,
+              "name": "AssetUserData",
+              "offset": 128,
+              "type": "TArray"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 20266268116386304,
+              "name": "UCSSerializationIndex",
+              "offset": 148,
+              "type": "int32"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 11267863880925184,
+              "name": "bNetAddressable",
+              "offset": 156,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 11272261927518229,
+              "name": "bReplicateUsingRegisteredSubObjectList",
+              "offset": 156,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 20266267042709557,
+              "name": "bReplicates",
+              "offset": 156,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755468160532501,
+              "name": "bAutoActivate",
+              "offset": 158,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 20266271337619488,
+              "name": "bIsActive",
+              "offset": 158,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755468160598017,
+              "name": "bEditableWhenInherited",
+              "offset": 158,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 11272261927452673,
+              "name": "bCanEverAffectNavigation",
+              "offset": 158,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755468160532501,
+              "name": "bIsEditorOnly",
+              "offset": 159,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274816,
+              "name": "CreationMethod",
+              "offset": 185,
+              "type": "EComponentCreationMethod"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 4503668615806976,
+              "name": "OnComponentActivated",
+              "offset": 186,
+              "type": "FActorComponentActivatedSignature"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 4503668615806976,
+              "name": "OnComponentDeactivated",
+              "offset": 187,
+              "type": "FActorComponentDeactivateSignature"
+            }
+          ],
+          "type": "/Script/Engine.ActorComponent"
+        },
+        {
+          "fields": [],
+          "type": "/Script/CoreUObject.Object"
+        }
+      ],
+      "type": "/Script/Dominion.QuestProgressComponent"
+    },
+    {
+      "fields": [
+        {
+          "arrayDim": 1,
+          "elementSize": 24,
+          "flags": 20266268116451841,
+          "name": "NavigationSeedLookupExtents",
+          "offset": 192,
+          "struct": "/Script/CoreUObject.Vector",
+          "type": "FVector"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 4,
+          "flags": 20266268116451841,
+          "name": "MaxNumAttemptsToDetermineWaveSpawnLocation",
+          "offset": 216,
+          "type": "uint32"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 4,
+          "flags": 20266268116451841,
+          "name": "MaxNumAttemptsToDetermineAISpawnTransform",
+          "offset": 220,
+          "type": "uint32"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 4,
+          "flags": 20266268116451841,
+          "name": "MinTimeBetweenAttemptsToDetermineWaveSpawnLocation",
+          "offset": 224,
+          "type": "float"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 8,
+          "flags": 93449760987423232,
+          "name": "AiDirector",
+          "offset": 232,
+          "type": "TObjectPtr<AAiDirector>"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 8,
+          "flags": 93449760987423232,
+          "name": "OwningWorldEvent",
+          "offset": 240,
+          "type": "TObjectPtr<AWorldEvent>"
+        }
+      ],
+      "functions": [
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234274944,
+              "name": "EntryPoint",
+              "offset": 0,
+              "type": "int32"
+            }
+          ],
+          "functionFlags": 134350848,
+          "parameterSize": 4,
+          "referencedStructs": [],
+          "type": "/Script/CoreUObject.Object:ExecuteUbergraph"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "bReset",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:Activate"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533120,
+              "name": "PrerequisiteActor",
+              "offset": 0,
+              "type": "AActor*"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:AddTickPrerequisiteActor"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468161057408,
+              "name": "PrerequisiteComponent",
+              "offset": 0,
+              "type": "UActorComponent*"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:AddTickPrerequisiteComponent"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755469234274944,
+              "name": "Tag",
+              "offset": 0,
+              "type": "FName"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 8,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 1409418243,
+          "parameterSize": 9,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:ComponentHasTag"
+        },
+        {
+          "fields": [],
+          "functionFlags": 67240962,
+          "parameterSize": 0,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:Deactivate"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 0,
+              "type": "float"
+            }
+          ],
+          "functionFlags": 1409418243,
+          "parameterSize": 4,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:GetComponentTickInterval"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160534400,
+              "name": "ReturnValue",
+              "offset": 0,
+              "type": "AActor*"
+            }
+          ],
+          "functionFlags": 1409418241,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:GetOwner"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 1409418241,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:IsActive"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 1409418241,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:IsBeingDestroyed"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 1409418242,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:IsComponentTickEnabled"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533120,
+              "name": "Object",
+              "offset": 0,
+              "type": "UObject*"
+            }
+          ],
+          "functionFlags": 67240963,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:K2_DestroyComponent"
+        },
+        {
+          "fields": [],
+          "functionFlags": 132098,
+          "parameterSize": 0,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:OnRep_IsActive"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234274944,
+              "name": "DeltaSeconds",
+              "offset": 0,
+              "type": "float"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234274944,
+              "name": "SimSeconds",
+              "offset": 4,
+              "type": "float"
+            }
+          ],
+          "functionFlags": 134350850,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:ReceiveAsyncPhysicsTick"
+        },
+        {
+          "fields": [],
+          "functionFlags": 134350850,
+          "parameterSize": 0,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:ReceiveBeginPlay"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "EndPlayReason",
+              "offset": 0,
+              "type": "TEnumAsByte<EEndPlayReason::Type>"
+            }
+          ],
+          "functionFlags": 134350850,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:ReceiveEndPlay"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234274944,
+              "name": "DeltaSeconds",
+              "offset": 0,
+              "type": "float"
+            }
+          ],
+          "functionFlags": 134350850,
+          "parameterSize": 4,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:ReceiveTick"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533120,
+              "name": "PrerequisiteActor",
+              "offset": 0,
+              "type": "AActor*"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:RemoveTickPrerequisiteActor"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468161057408,
+              "name": "PrerequisiteComponent",
+              "offset": 0,
+              "type": "UActorComponent*"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:RemoveTickPrerequisiteComponent"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "bNewActive",
+              "offset": 0,
+              "type": "bool"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "bReset",
+              "offset": 1,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 2,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetActive"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "bNewAutoActivate",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetAutoActivate"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "bEnabled",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetComponentTickEnabled"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234274944,
+              "name": "TickInterval",
+              "offset": 0,
+              "type": "float"
+            }
+          ],
+          "functionFlags": 67240963,
+          "parameterSize": 4,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetComponentTickInterval"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234274944,
+              "name": "TickInterval",
+              "offset": 0,
+              "type": "float"
+            }
+          ],
+          "functionFlags": 67240963,
+          "parameterSize": 4,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetComponentTickIntervalAndCooldown"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "ShouldReplicate",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 67240963,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetIsReplicated"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "bTickableWhenPaused",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 67240963,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetTickableWhenPaused"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "NewTickGroup",
+              "offset": 0,
+              "type": "TEnumAsByte<ETickingGroup>"
+            }
+          ],
+          "functionFlags": 67240963,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetTickGroup"
+        },
+        {
+          "fields": [],
+          "functionFlags": 67240962,
+          "parameterSize": 0,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:ToggleActive"
+        }
+      ],
+      "hierarchy": [
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 24,
+              "flags": 20266268116451841,
+              "name": "NavigationSeedLookupExtents",
+              "offset": 192,
+              "struct": "/Script/CoreUObject.Vector",
+              "type": "FVector"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 20266268116451841,
+              "name": "MaxNumAttemptsToDetermineWaveSpawnLocation",
+              "offset": 216,
+              "type": "uint32"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 20266268116451841,
+              "name": "MaxNumAttemptsToDetermineAISpawnTransform",
+              "offset": 220,
+              "type": "uint32"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 20266268116451841,
+              "name": "MinTimeBetweenAttemptsToDetermineWaveSpawnLocation",
+              "offset": 224,
+              "type": "float"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 93449760987423232,
+              "name": "AiDirector",
+              "offset": 232,
+              "type": "TObjectPtr<AAiDirector>"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 93449760987423232,
+              "name": "OwningWorldEvent",
+              "offset": 240,
+              "type": "TObjectPtr<AWorldEvent>"
+            }
+          ],
+          "type": "/Script/Dominion.WorldEventAIWaveSpawnComponent"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 48,
+              "flags": 4503599627436033,
+              "name": "PrimaryComponentTick",
+              "offset": 64,
+              "struct": "/Script/Engine.ActorComponentTickFunction",
+              "type": "FActorComponentTickFunction"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "elementType": "FName",
+              "flags": 4503599627371013,
+              "name": "ComponentTags",
+              "offset": 112,
+              "type": "TArray"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "elementType": "TObjectPtr<UAssetUserData>",
+              "flags": 82204437094859273,
+              "name": "AssetUserData",
+              "offset": 128,
+              "type": "TArray"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 20266268116386304,
+              "name": "UCSSerializationIndex",
+              "offset": 148,
+              "type": "int32"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 11267863880925184,
+              "name": "bNetAddressable",
+              "offset": 156,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 11272261927518229,
+              "name": "bReplicateUsingRegisteredSubObjectList",
+              "offset": 156,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 20266267042709557,
+              "name": "bReplicates",
+              "offset": 156,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755468160532501,
+              "name": "bAutoActivate",
+              "offset": 158,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 20266271337619488,
+              "name": "bIsActive",
+              "offset": 158,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755468160598017,
+              "name": "bEditableWhenInherited",
+              "offset": 158,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 11272261927452673,
+              "name": "bCanEverAffectNavigation",
+              "offset": 158,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755468160532501,
+              "name": "bIsEditorOnly",
+              "offset": 159,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274816,
+              "name": "CreationMethod",
+              "offset": 185,
+              "type": "EComponentCreationMethod"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 4503668615806976,
+              "name": "OnComponentActivated",
+              "offset": 186,
+              "type": "FActorComponentActivatedSignature"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 4503668615806976,
+              "name": "OnComponentDeactivated",
+              "offset": 187,
+              "type": "FActorComponentDeactivateSignature"
+            }
+          ],
+          "type": "/Script/Engine.ActorComponent"
+        },
+        {
+          "fields": [],
+          "type": "/Script/CoreUObject.Object"
+        }
+      ],
+      "type": "/Script/Dominion.WorldEventAIWaveSpawnComponent"
+    },
+    {
+      "fields": [
+        {
+          "arrayDim": 1,
+          "elementSize": 4,
+          "flags": 11267864954667525,
+          "name": "DespawnTime",
+          "offset": 216,
+          "type": "float"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 8,
+          "flags": 12393763787768325,
+          "name": "DeathAIAction",
+          "offset": 224,
+          "type": "TSubclassOf<UDominionAIAction>"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 16,
+          "elementType": "FDropMeshComponentConfig",
+          "flags": 9015995347829269,
+          "name": "MeshesToDropOnDeath",
+          "offset": 232,
+          "type": "TArray"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 4,
+          "flags": 11267864954733061,
+          "name": "DropMeshesOnDeathDelay",
+          "offset": 248,
+          "type": "float"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 16,
+          "elementType": "FComponentReference",
+          "flags": 9015995347829269,
+          "name": "ComponentReferencesToHideOnDroppingMeshes",
+          "offset": 256,
+          "type": "TArray"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 16,
+          "elementType": "FComponentReference",
+          "flags": 9015995347829269,
+          "name": "ComponentReferencesToDeactivateOnDeath",
+          "offset": 272,
+          "type": "TArray"
+        },
+        {
+          "arrayDim": 1,
+          "elementSize": 1,
+          "flags": 20266268116386336,
+          "name": "bShouldSpawnVfxOnEndPlay",
+          "offset": 304,
+          "type": "bool"
+        }
+      ],
+      "functions": [
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234274944,
+              "name": "EntryPoint",
+              "offset": 0,
+              "type": "int32"
+            }
+          ],
+          "functionFlags": 134350848,
+          "parameterSize": 4,
+          "referencedStructs": [],
+          "type": "/Script/CoreUObject.Object:ExecuteUbergraph"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "bReset",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:Activate"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533120,
+              "name": "PrerequisiteActor",
+              "offset": 0,
+              "type": "AActor*"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:AddTickPrerequisiteActor"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468161057408,
+              "name": "PrerequisiteComponent",
+              "offset": 0,
+              "type": "UActorComponent*"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:AddTickPrerequisiteComponent"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755469234274944,
+              "name": "Tag",
+              "offset": 0,
+              "type": "FName"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 8,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 1409418243,
+          "parameterSize": 9,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:ComponentHasTag"
+        },
+        {
+          "fields": [],
+          "functionFlags": 67240962,
+          "parameterSize": 0,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:Deactivate"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 0,
+              "type": "float"
+            }
+          ],
+          "functionFlags": 1409418243,
+          "parameterSize": 4,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:GetComponentTickInterval"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160534400,
+              "name": "ReturnValue",
+              "offset": 0,
+              "type": "AActor*"
+            }
+          ],
+          "functionFlags": 1409418241,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:GetOwner"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 1409418241,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:IsActive"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 1409418241,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:IsBeingDestroyed"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 1409418242,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:IsComponentTickEnabled"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533120,
+              "name": "Object",
+              "offset": 0,
+              "type": "UObject*"
+            }
+          ],
+          "functionFlags": 67240963,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:K2_DestroyComponent"
+        },
+        {
+          "fields": [],
+          "functionFlags": 132098,
+          "parameterSize": 0,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:OnRep_IsActive"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234274944,
+              "name": "DeltaSeconds",
+              "offset": 0,
+              "type": "float"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234274944,
+              "name": "SimSeconds",
+              "offset": 4,
+              "type": "float"
+            }
+          ],
+          "functionFlags": 134350850,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:ReceiveAsyncPhysicsTick"
+        },
+        {
+          "fields": [],
+          "functionFlags": 134350850,
+          "parameterSize": 0,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:ReceiveBeginPlay"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "EndPlayReason",
+              "offset": 0,
+              "type": "TEnumAsByte<EEndPlayReason::Type>"
+            }
+          ],
+          "functionFlags": 134350850,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:ReceiveEndPlay"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234274944,
+              "name": "DeltaSeconds",
+              "offset": 0,
+              "type": "float"
+            }
+          ],
+          "functionFlags": 134350850,
+          "parameterSize": 4,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:ReceiveTick"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468160533120,
+              "name": "PrerequisiteActor",
+              "offset": 0,
+              "type": "AActor*"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:RemoveTickPrerequisiteActor"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 6755468161057408,
+              "name": "PrerequisiteComponent",
+              "offset": 0,
+              "type": "UActorComponent*"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 8,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:RemoveTickPrerequisiteComponent"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "bNewActive",
+              "offset": 0,
+              "type": "bool"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "bReset",
+              "offset": 1,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 2,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetActive"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "bNewAutoActivate",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetAutoActivate"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "bEnabled",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 67240962,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetComponentTickEnabled"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234274944,
+              "name": "TickInterval",
+              "offset": 0,
+              "type": "float"
+            }
+          ],
+          "functionFlags": 67240963,
+          "parameterSize": 4,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetComponentTickInterval"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 6755469234274944,
+              "name": "TickInterval",
+              "offset": 0,
+              "type": "float"
+            }
+          ],
+          "functionFlags": 67240963,
+          "parameterSize": 4,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetComponentTickIntervalAndCooldown"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "ShouldReplicate",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 67240963,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetIsReplicated"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "bTickableWhenPaused",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 67240963,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetTickableWhenPaused"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274944,
+              "name": "NewTickGroup",
+              "offset": 0,
+              "type": "TEnumAsByte<ETickingGroup>"
+            }
+          ],
+          "functionFlags": 67240963,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:SetTickGroup"
+        },
+        {
+          "fields": [],
+          "functionFlags": 67240962,
+          "parameterSize": 0,
+          "referencedStructs": [],
+          "type": "/Script/Engine.ActorComponent:ToggleActive"
+        },
+        {
+          "fields": [],
+          "functionFlags": 134351872,
+          "parameterSize": 0,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.DeathComponent:OnHandleDeath"
+        },
+        {
+          "fields": [],
+          "functionFlags": 263169,
+          "parameterSize": 0,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.AiDeathComponent:Despawn"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234276224,
+              "name": "ReturnValue",
+              "offset": 0,
+              "type": "bool"
+            }
+          ],
+          "functionFlags": 1409418241,
+          "parameterSize": 1,
+          "referencedStructs": [],
+          "type": "/Script/Dominion.AiDeathComponent:GetShouldSpawnVfxOnEndPlay"
+        }
+      ],
+      "hierarchy": [
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 11267864954667525,
+              "name": "DespawnTime",
+              "offset": 216,
+              "type": "float"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 12393763787768325,
+              "name": "DeathAIAction",
+              "offset": 224,
+              "type": "TSubclassOf<UDominionAIAction>"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "elementType": "FDropMeshComponentConfig",
+              "flags": 9015995347829269,
+              "name": "MeshesToDropOnDeath",
+              "offset": 232,
+              "type": "TArray"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 11267864954733061,
+              "name": "DropMeshesOnDeathDelay",
+              "offset": 248,
+              "type": "float"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "elementType": "FComponentReference",
+              "flags": 9015995347829269,
+              "name": "ComponentReferencesToHideOnDroppingMeshes",
+              "offset": 256,
+              "type": "TArray"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "elementType": "FComponentReference",
+              "flags": 9015995347829269,
+              "name": "ComponentReferencesToDeactivateOnDeath",
+              "offset": 272,
+              "type": "TArray"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 20266268116386336,
+              "name": "bShouldSpawnVfxOnEndPlay",
+              "offset": 304,
+              "type": "bool"
+            }
+          ],
+          "type": "/Script/Dominion.AiDeathComponent"
+        },
+        {
+          "fields": [],
+          "type": "/Script/Dominion.DeathComponent"
+        },
+        {
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 48,
+              "flags": 4503599627436033,
+              "name": "PrimaryComponentTick",
+              "offset": 64,
+              "struct": "/Script/Engine.ActorComponentTickFunction",
+              "type": "FActorComponentTickFunction"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "elementType": "FName",
+              "flags": 4503599627371013,
+              "name": "ComponentTags",
+              "offset": 112,
+              "type": "TArray"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "elementType": "TObjectPtr<UAssetUserData>",
+              "flags": 82204437094859273,
+              "name": "AssetUserData",
+              "offset": 128,
+              "type": "TArray"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 20266268116386304,
+              "name": "UCSSerializationIndex",
+              "offset": 148,
+              "type": "int32"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 11267863880925184,
+              "name": "bNetAddressable",
+              "offset": 156,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 11272261927518229,
+              "name": "bReplicateUsingRegisteredSubObjectList",
+              "offset": 156,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 20266267042709557,
+              "name": "bReplicates",
+              "offset": 156,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755468160532501,
+              "name": "bAutoActivate",
+              "offset": 158,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 20266271337619488,
+              "name": "bIsActive",
+              "offset": 158,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755468160598017,
+              "name": "bEditableWhenInherited",
+              "offset": 158,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 11272261927452673,
+              "name": "bCanEverAffectNavigation",
+              "offset": 158,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755468160532501,
+              "name": "bIsEditorOnly",
+              "offset": 159,
+              "type": "uint8"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274816,
+              "name": "CreationMethod",
+              "offset": 185,
+              "type": "EComponentCreationMethod"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 4503668615806976,
+              "name": "OnComponentActivated",
+              "offset": 186,
+              "type": "FActorComponentActivatedSignature"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 4503668615806976,
+              "name": "OnComponentDeactivated",
+              "offset": 187,
+              "type": "FActorComponentDeactivateSignature"
+            }
+          ],
+          "type": "/Script/Engine.ActorComponent"
+        },
+        {
+          "fields": [],
+          "type": "/Script/CoreUObject.Object"
+        }
+      ],
+      "type": "/Script/Dominion.AiDeathComponent"
+    },
+    {
+      "class": "/Game/Gameplay/Character/Components/BP_Components_QuestProgress.BP_Components_QuestProgress_C",
+      "configuration": {
+        "ComponentTags": {
+          "count": 0,
+          "entries": [],
+          "truncated": false
+        }
+      },
+      "hierarchy": [
+        {
+          "class": "/Game/Gameplay/Character/Components/BP_Components_QuestProgress.BP_Components_QuestProgress_C",
+          "fields": []
+        },
+        {
+          "class": "/Script/Dominion.QuestProgressComponent",
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "flags": 4503599896330752,
+              "name": "OnQuestStateChangedDynamic",
+              "offset": 200,
+              "type": "FOnQuestStateChangedDynamic"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "elementType": "FQuestProgress",
+              "flags": 9015995347763712,
+              "name": "Quests",
+              "offset": 312,
+              "type": "TArray"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 8,
+              "flags": 84451357825696256,
+              "name": "TrackedSecondaryQuest",
+              "objectReference": true,
+              "offset": 328,
+              "type": "TObjectPtr<UQuestData>",
+              "value": "/Game/Gameplay/Quests/FTUEQuests/Quest_FTUE_Farming.Quest_FTUE_Farming"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "elementType": "FQuestProgressCatchup",
+              "flags": 9015995347829249,
+              "name": "QuestCatchupConfigs",
+              "offset": 336,
+              "type": "TArray"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "elementType": "FLocationVisibilityTracker",
+              "flags": 18014402804449824,
+              "name": "VisibilityTrackers",
+              "offset": 352,
+              "type": "TArray"
+            }
+          ]
+        },
+        {
+          "class": "/Script/Engine.ActorComponent",
+          "fields": [
+            {
+              "arrayDim": 1,
+              "elementSize": 48,
+              "flags": 4503599627436033,
+              "name": "PrimaryComponentTick",
+              "offset": 64,
+              "struct": "/Script/Engine.ActorComponentTickFunction",
+              "type": "FActorComponentTickFunction"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "elementType": "FName",
+              "flags": 4503599627371013,
+              "name": "ComponentTags",
+              "offset": 112,
+              "type": "TArray"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 16,
+              "elementType": "TObjectPtr<UAssetUserData>",
+              "flags": 82204437094859273,
+              "name": "AssetUserData",
+              "offset": 128,
+              "type": "TArray"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 4,
+              "flags": 20266268116386304,
+              "name": "UCSSerializationIndex",
+              "offset": 148,
+              "type": "int32",
+              "value": 0
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 11267863880925184,
+              "name": "bNetAddressable",
+              "offset": 156,
+              "type": "uint8",
+              "value": true
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 11272261927518229,
+              "name": "bReplicateUsingRegisteredSubObjectList",
+              "offset": 156,
+              "type": "uint8",
+              "value": false
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 20266267042709557,
+              "name": "bReplicates",
+              "offset": 156,
+              "type": "uint8",
+              "value": true
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755468160532501,
+              "name": "bAutoActivate",
+              "offset": 158,
+              "type": "uint8",
+              "value": false
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 20266271337619488,
+              "name": "bIsActive",
+              "offset": 158,
+              "type": "uint8",
+              "value": false
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755468160598017,
+              "name": "bEditableWhenInherited",
+              "offset": 158,
+              "type": "uint8",
+              "value": true
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 11272261927452673,
+              "name": "bCanEverAffectNavigation",
+              "offset": 158,
+              "type": "uint8",
+              "value": false
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755468160532501,
+              "name": "bIsEditorOnly",
+              "offset": 159,
+              "type": "uint8",
+              "value": false
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 6755469234274816,
+              "name": "CreationMethod",
+              "offset": 185,
+              "type": "EComponentCreationMethod"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 4503668615806976,
+              "name": "OnComponentActivated",
+              "offset": 186,
+              "type": "FActorComponentActivatedSignature"
+            },
+            {
+              "arrayDim": 1,
+              "elementSize": 1,
+              "flags": 4503668615806976,
+              "name": "OnComponentDeactivated",
+              "offset": 187,
+              "type": "FActorComponentDeactivateSignature"
+            }
+          ]
+        },
+        {
+          "class": "/Script/CoreUObject.Object",
+          "fields": []
+        }
+      ],
+      "path": "/Game/Maps/World/L_World.L_World:PersistentLevel.BP_PlayerController_C_2147480539.BP_Components_QuestProgress"
+    }
+  ],
+  "preset": {
+    "ControllerProperties": [
+      "QuestProgressComponent"
+    ],
+    "Name": "QuestEventRuntimeContract",
+    "Objects": [
+      "/Script/Dominion.QuestData",
+      "/Script/Dominion.QuestProgressComponent",
+      "/Script/Dominion.WorldEventAIWaveSpawnComponent",
+      "/Script/Dominion.AiDeathComponent"
+    ]
+  }
+}

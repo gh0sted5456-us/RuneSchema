@@ -8,6 +8,7 @@
 #include "SDK/Classes/Custom/UDataTableStore.h"
 #include "safetyhook.hpp"
 #include "Utility/UnrealReadinessGate.h"
+#include "Runtime/RegistryBridge.h"
 
 namespace RC::Unreal {
     class AGameModeBase;
@@ -48,6 +49,7 @@ namespace DragonWilds {
         UECustom::UDataTableRegistry m_datatableRegistry;
 
         DragonWildsDataRegistrar m_dataRegistrar;
+        PS::Network::RegistryBridge m_registryBridge;
 
         void AutoReload(const std::filesystem::path& filePath);
 

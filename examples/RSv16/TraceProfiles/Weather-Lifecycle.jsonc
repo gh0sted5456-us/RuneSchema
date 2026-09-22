@@ -1,0 +1,41 @@
+{
+  // First use Weather-Control-Invocation for the Tool's Kit player/controller call.
+  // Then select a live weather actor or volume, load this profile, start the Object
+  // Trace, set a clearly different weather in Tool's Kit, restore/clear it, stop,
+  // and export. The two exports establish both invocation and world-state lifecycle.
+  "Version": 1,
+  "Name": "Weather-Lifecycle",
+  "Description": "Captures weather actor/volume query, override, replication and restore state while RSDW Tool's Kit changes weather.",
+  "Trace": {
+    "Seconds": 60,
+    "MaxEvents": 4096,
+    "Categories": 31,
+    "IncludeAny": [
+      "GetWeatherAtLocation",
+      "SetWeather",
+      "WeatherType",
+      "WeatherState",
+      "CurrentWeather",
+      "SwitchableWeatherVolume",
+      "RegionSpecificGlobalWeather",
+      "OverrideWeather",
+      "RestoreWeather",
+      "ResetWeather",
+      "ClearWeather"
+    ],
+    "SuppressTicks": true,
+    "TraceSelectedObject": true,
+    "CaptureParameters": true,
+    "EventCaptures": [
+      { "Root": "Target", "Path": ["WeatherState"] },
+      { "Root": "Target", "Path": ["WeatherType"] },
+      { "Root": "Target", "Path": ["CurrentWeather"] },
+      { "Root": "Target", "Path": ["Priority"] },
+      { "Root": "Target", "Path": ["bEnabled"] }
+    ]
+  },
+  "Export": {
+    "Name": "Weather-Lifecycle",
+    "Jsonc": false
+  }
+}

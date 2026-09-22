@@ -38,13 +38,16 @@ namespace DragonWilds {
         }
         return entries;
     }
-    void ModLoadOrder::Save(const fs::path& path, const std::vector<ModOrderEntry>& entries) {
+    bool ModLoadOrder::Save(const fs::path& path, const std::vector<ModOrderEntry>& entries) {
         std::ofstream file(path, std::ios::trunc);
-        if (!file) { PS::Log<RC::LogLevel::Error>(STR("Failed to write runeschema.txt.\n")); return; }
-        file << "; RuneSchema mod order - loaded top to bottom.\n; Use 1 to enable and 0 to disable.\n";
+        if (!file) { PS::Log<RC::LogLevel::Error>(STR("Failed to write runeschema.txt.\n")); return false; }
+        file << "; RuneSchema mod order - loaded top to bottom.\n"
+                "; Use 1 to enable and 0 to disable.\n"
+                "; AA_ and ZZ_ folders are enabled implicitly when omitted. Add one here only to override it.\n";
         for (const auto& e : entries) file << Narrow(e.Name) << " : " << (e.Enabled ? 1 : 0) << '\n';
+        return static_cast<bool>(file);
     }
-    void ModLoadOrder::SavePreservingComments(const fs::path& path, const std::vector<ModOrderEntry>& entries) {
+    bool ModLoadOrder::SavePreservingComments(const fs::path& path, const std::vector<ModOrderEntry>& entries) {
         std::vector<std::string> comments; std::ifstream input(path); std::string line;
         while (std::getline(input, line)) {
             auto text = Trim(PS::ToWideSafe(line.c_str()));
@@ -52,9 +55,10 @@ namespace DragonWilds {
                 comments.push_back(line);
         }
         std::ofstream output(path, std::ios::trunc);
-        if (!output) { PS::Log<RC::LogLevel::Error>(STR("Failed to write runeschema.txt.\n")); return; }
+        if (!output) { PS::Log<RC::LogLevel::Error>(STR("Failed to write runeschema.txt.\n")); return false; }
         for (const auto& c : comments) output << c << '\n';
         for (const auto& e : entries) output << Narrow(e.Name) << " : " << (e.Enabled ? 1 : 0) << '\n';
+        return static_cast<bool>(output);
     }
     std::vector<RC::StringType> ModLoadOrder::Resolve(const fs::path& mods, const std::vector<RC::StringType>& discovered) {
         auto sorted = discovered; std::sort(sorted.begin(), sorted.end());
@@ -75,12 +79,24 @@ namespace DragonWilds {
         entries.erase(std::remove_if(entries.begin(), entries.end(), [&](const auto& e) { return !present.contains(e.Name); }), entries.end());
         bool changed = entries.size() != before;
         std::unordered_set<RC::StringType> known; for (const auto& e : entries) known.insert(e.Name);
-        for (const auto& name : sorted) if (known.insert(name).second) { entries.push_back({name, true}); changed = true; }
+        for (const auto& name : sorted) {
+            if (!ModOrderPolicy::ShouldAutoPersist(name) || !known.insert(name).second) continue;
+            entries.push_back({name, true});
+            changed = true;
+        }
         changed = ModOrderPolicy::Apply(entries, [](const auto& e) -> const auto& { return e.Name; }) || changed;
         if (!existed || (settings.reconcileFolders && changed))
             settings.preserveComments && existed ? SavePreservingComments(path, entries) : Save(path, entries);
+        auto resolved = entries;
+        known.clear();
+        for (const auto& entry : resolved) known.insert(entry.Name);
+        for (const auto& name : sorted) {
+            if (ModOrderPolicy::IsImplicit(name) && known.insert(name).second)
+                resolved.push_back({name, true});
+        }
+        ModOrderPolicy::Apply(resolved, [](const auto& e) -> const auto& { return e.Name; });
         std::vector<RC::StringType> result;
-        for (const auto& e : entries) {
+        for (const auto& e : resolved) {
             if (e.Enabled) result.push_back(e.Name);
             else PS::Log<RC::LogLevel::Normal>(STR("Skipping mod '{}' (disabled in runeschema.txt).\n"), e.Name);
         }

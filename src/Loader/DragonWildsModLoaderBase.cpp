@@ -55,7 +55,15 @@ namespace DragonWilds {
             return;
         }
 
-        OnLoad(loaderPath, modName, engineLifecyclePhase);
+        try {OnLoad(loaderPath, modName, engineLifecyclePhase);}
+        catch(const std::exception& error) {
+            PS::Log<LogLevel::Error>(STR("Loader '/{}' rejected mod '{}' at '{}'; unrelated mods/loaders continue: {}.\n"),
+                RC::to_generic_string(m_modFolderType),modName,loaderPath.native(),PS::ToWideSafe(error.what()));
+        }
+        catch(...) {
+            PS::Log<LogLevel::Error>(STR("Loader '/{}' rejected mod '{}' at '{}' with an unknown error; unrelated mods/loaders continue.\n"),
+                RC::to_generic_string(m_modFolderType),modName,loaderPath.native());
+        }
     }
 
     void DragonWildsModLoaderBase::FinalizeLoad(const EEngineLifecyclePhase& phase)

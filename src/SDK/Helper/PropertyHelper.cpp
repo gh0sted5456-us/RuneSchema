@@ -16,6 +16,8 @@
 #include "SDK/Helper/ArrayFieldPatch.h"
 #include "SDK/DragonWildsSignatures.h"
 #include "Utility/Logging.h"
+#include "Loader/DefinitionRegistry.h"
+#include "Loader/VirtualDefinitionId.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -360,12 +362,7 @@ namespace DragonWilds {
 
     RC::StringType PropertyHelper::GetTextAsString(const RC::Unreal::FText& Text)
     {
-        if (!Text.Data)
-        {
-            return {};
-        }
-
-        return RC::StringType(*Text.Data->GetDisplayString());
+        return Text.ToString();
     }
 
     void PropertyHelper::SetClassPropertyValueFromJsonValue(void* Data, RC::Unreal::FClassProperty* Property, const nlohmann::json& Value)
@@ -387,13 +384,23 @@ namespace DragonWilds {
 
         auto PropertyName = GetPropertyNameAsUTF8String(Property);
 
-        auto classPath = GetReferencePath(Value, true);
+        auto classPath = GetReferencePath(Value, false);
         if (classPath.empty())
         {
             throw std::runtime_error(std::format("Property {} was supplied an empty class reference", PropertyName));
         }
 
-        auto* classObject = UECustom::UObjectGlobals::StaticFindObject(
+        UClass* resolvedClass=nullptr;
+        if(VirtualDefinitionId::IsCanonical(RC::to_string(classPath))) {
+            const auto id=RC::to_string(classPath);
+            const auto found=DefinitionRegistry::Effects.find(id);
+            if(found==DefinitionRegistry::Effects.end())throw std::runtime_error("Unknown effect definition: "+id);
+            resolvedClass=found->second;
+        } else {
+            classPath=GetReferencePath(Value,true);
+        }
+
+        auto* classObject = resolvedClass ? static_cast<UObject*>(resolvedClass) : UECustom::UObjectGlobals::StaticFindObject(
             nullptr, nullptr, classPath.c_str(), false);
         if (!classObject)
         {
@@ -412,7 +419,10 @@ namespace DragonWilds {
             throw std::runtime_error(std::format("Class property {} had an unexpected element size", PropertyName));
         }
 
-        auto* resolvedClass = static_cast<UClass*>(classObject);
+        resolvedClass = static_cast<UClass*>(classObject);
+        auto* expected=Property->GetMetaClass().Get();
+        if(expected && !resolvedClass->IsChildOf(expected))
+            throw std::runtime_error(std::format("Effect class is incompatible with property {}",PropertyName));
         FMemory::Memcpy(Data, &resolvedClass, sizeof(resolvedClass));
     }
 
@@ -498,7 +508,16 @@ namespace DragonWilds {
             }
 
             UObject* referencedObject = nullptr;
-            if (!objectPath.empty())
+            if(DragonWilds::VirtualDefinitionId::IsCanonical(RC::to_string(objectPath))) {
+                const auto id=RC::to_string(objectPath);
+                const auto found=DefinitionRegistry::Effects.find(id);
+                if(found==DefinitionRegistry::Effects.end())throw std::runtime_error("Unknown effect definition: "+id);
+                referencedObject=found->second;
+                auto* expected=Property->GetPropertyClass().Get();
+                if(!referencedObject || !expected || !referencedObject->IsA(expected))
+                    throw std::runtime_error("Effect definition type is incompatible with property: "+GetPropertyNameAsUTF8String(Property));
+            }
+            if (!referencedObject && !objectPath.empty())
             {
                 referencedObject = UECustom::UObjectGlobals::StaticFindObject(
                     nullptr, nullptr, objectPath.c_str(), false);
@@ -512,8 +531,9 @@ namespace DragonWilds {
 
             if (!referencedObject && !objectName.empty())
             {
+                const FName targetName(objectName,FNAME_Add);
                 UObjectGlobals::ForEachUObject([&](UObject* object, int32_t, int32_t) -> LoopAction {
-                    if (object && object->GetName() == objectName)
+                    if (object && object->GetFName() == targetName)
                     {
                         referencedObject = object;
                         return LoopAction::Break;
@@ -576,12 +596,22 @@ namespace DragonWilds {
 
         ValidateJsonValueType(Property, Value);
 
-        auto String = GetReferencePath(Value, true);
+        auto String = GetReferencePath(Value, false);
         if (String.empty())
         {
             throw std::runtime_error(std::format("Property {} was supplied an empty soft class reference",
                 GetPropertyNameAsUTF8String(Property)));
         }
+
+        if(VirtualDefinitionId::IsCanonical(RC::to_string(String))) {
+            const auto id=RC::to_string(String);
+            const auto found=DefinitionRegistry::Effects.find(id);
+            if(found==DefinitionRegistry::Effects.end())throw std::runtime_error("Unknown effect definition: "+id);
+            auto* expected=Property->GetMetaClass().Get();
+            if(!found->second || (expected && !found->second->IsChildOf(expected)))
+                throw std::runtime_error("Incompatible soft effect class reference: "+id);
+            String=found->second->GetPathName();
+        } else String=GetReferencePath(Value,true);
 
         *Destination = UECustom::TSoftClassPtr<UClass>(UECustom::FSoftObjectPath(String));
     }
@@ -605,6 +635,14 @@ namespace DragonWilds {
         ValidateJsonValueType(Property, Value);
 
         auto PackagePath = GetReferencePath(Value, false);
+        if(VirtualDefinitionId::IsCanonical(RC::to_string(PackagePath))) {
+            const auto id=RC::to_string(PackagePath);
+            const auto found=DefinitionRegistry::Effects.find(id);
+            if(found==DefinitionRegistry::Effects.end())throw std::runtime_error("Unknown effect definition: "+id);
+            auto* expected=Property->GetPropertyClass().Get();
+            if(!found->second || !expected || !found->second->IsA(expected))throw std::runtime_error("Incompatible soft effect reference: "+id);
+            PackagePath=found->second->GetPathName();
+        }
 
         *Destination = UECustom::TSoftObjectPtr<UObject>(UECustom::FSoftObjectPath(PackagePath));
     }
@@ -835,10 +873,15 @@ namespace DragonWilds {
 
     RC::Unreal::FProperty* PropertyHelper::GetPropertyByName(RC::Unreal::UClass* Class, const RC::StringType& PropertyName)
     {
+        if (!Class) return nullptr;
         FProperty* Property = nullptr;
+        const FName PropertyFName(PropertyName, FNAME_Add);
         for (FProperty* It = Class->GetPropertyLink(); It != nullptr; It = It->GetPropertyLinkNext())
         {
-            if (It->GetName() == PropertyName)
+            // Compare the reflected name value directly. UE4SS experimental
+            // hosts changed their internal field-name string conversion path;
+            // materializing a temporary string here can cross that private ABI.
+            if (It->GetFName() == PropertyFName)
             {
                 Property = It;
             }
@@ -933,6 +976,7 @@ namespace DragonWilds {
 
     bool PropertyHelper::IsPropertyA(RC::Unreal::FField* Field, RC::Unreal::FFieldClass* FieldClass)
     {
+        if (!Field || !FieldClass) return false;
         using IsA_Signature = bool(*)(FField*, FFieldClass*);
         static IsA_Signature IsA_Internal = nullptr;
 
@@ -945,7 +989,11 @@ namespace DragonWilds {
 
         if (!IsA_Internal)
         {
-            PS::Log<LogLevel::Error>(STR("Failed to call FField::IsA because function address was invalid.\n"));
+            static bool Reported = false;
+            if (!Reported) {
+                Reported = true;
+                PS::Log<LogLevel::Error>(STR("Failed to call FField::IsA because function address was invalid.\n"));
+            }
             return false;
         }
 

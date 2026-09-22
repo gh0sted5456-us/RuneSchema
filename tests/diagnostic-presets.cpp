@@ -3,7 +3,7 @@
 #include <filesystem>
 #include <fstream>
 using nlohmann::json;
-int main(int argc, char** argv) {
+int main(int argc, char** argv) try {
     int checks = 0;
     auto check = [&](const json& preset, bool valid, bool extended = false) {
         bool accepted = true;
@@ -12,6 +12,9 @@ int main(int argc, char** argv) {
         ++checks;
     };
     check({{"Name","PlayerMagic"},{"IncludePlayer",true}},true);
+    for (const auto& delay : {json(0), json(5), json(30), json(-1), json(31), json(1.5), json(true), json("5")})
+        check({{"Name","DelayedPlayer"},{"IncludePlayer",true},{"CaptureDelaySeconds",delay}},
+            delay.is_number_integer() && delay >= 0 && delay <= 30);
     check({{"Name","AirRune"},{"Objects",{"/Game/Items/Rune.Rune"}}},true);
     check({{"Name","Inventory"},{"ControllerProperties",{"InventoryComponent"}}},true);
     check({{"Name","../escape"},{"IncludePlayer",true}},false);
@@ -30,6 +33,8 @@ int main(int argc, char** argv) {
     const json focused={{"Name","Scope"},{"PropertyCaptures",json::array({{{"Root","Player"},{"Path",{"PlayerCombatMagicComponent","*"}}}})}};
     check(focused,true);
     auto selected=focused; selected["PropertyCaptures"][0]["Root"]="Selected"; check(selected,true);
+    auto optional=selected;optional["PropertyCaptures"][0]["Optional"]=true;check(optional,true);
+    optional["PropertyCaptures"][0]["Optional"]="yes";check(optional,false);
     auto changed=focused;
     changed["CaptureLimits"]={{"MaxDepth",8},{"MaxEntries",512},{"MaxNodes",16384},{"MaxSparseSlots",16384},{"FollowObjectReferences",true}};
     check(changed,true);
@@ -55,12 +60,19 @@ int main(int argc, char** argv) {
     if (argc == 2) {
         unsigned count=0;
         for (const auto& entry:std::filesystem::directory_iterator(argv[1])) {
-            if (entry.path().extension()!=".json") continue;
+            const auto extension=entry.path().extension();
+            if (extension!=".json" && extension!=".jsonc") continue;
             if (entry.file_size()>16383) throw std::runtime_error("Oversized preset file");
             std::ifstream stream(entry.path());
-            PS::InspectionTools::ValidatePreset(json::parse(stream));
+            try { PS::InspectionTools::ValidatePreset(json::parse(stream,nullptr,true,true)); }
+            catch (const std::exception& error) {
+                throw std::runtime_error(entry.path().string() + ": " + error.what());
+            }
             ++count;
         }
         std::cout<<count<<" actual preset files validated\n";
     }
+} catch (const std::exception& error) {
+    std::cerr << error.what() << '\n';
+    return 1;
 }

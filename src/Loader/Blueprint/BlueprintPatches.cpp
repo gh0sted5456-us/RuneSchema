@@ -1,4 +1,5 @@
 #include "SDK/Classes/Custom/UObjectGlobals.h"
+#include "SDK/WeakObjectHandle.h"
 #include "Loader/DragonWildsBlueprintModLoader.h"
 #include "Loader/PlayerGhost.h"
 #include "Core/JsonLoadOrderMerge.h"
@@ -106,14 +107,14 @@ namespace DragonWilds {
                     auto materials = GhostMaterials::Create(owner, effect, m_ghostRoots);
                     for (auto* material : {materials.Overlay, materials.Body}) {
                         if (material && !material->IsRootSet()) {
-                            m_ghostRoots.push_back(material);
+                            m_ghostRoots.emplace_back(PS::WeakObject(material));
                             material->SetRootSet();
                         }
                     }
                     found = m_ghostMaterials.emplace(signature, materials).first;
                 } catch (...) {
                     while (m_ghostRoots.size() > before) {
-                        m_ghostRoots.back()->ClearRootSet();
+                        if(auto* material=m_ghostRoots.back().Get())material->ClearRootSet();
                         m_ghostRoots.pop_back();
                     }
                     throw;

@@ -1,0 +1,45 @@
+{
+  // Select the local player or its DominionGameplayEffectsComponent. Start the
+  // Object Trace, activate the buddy-pak effect, let it settle, remove/expire it,
+  // then stop and export. Repeat on a listen host and a dedicated-server client.
+  "Version": 1,
+  "Name": "Dedicated-Effect-Activation",
+  "Description": "Captures gameplay-effect application, replicated status state and presentation calls for a standalone-versus-dedicated comparison.",
+  "Trace": {
+    "Seconds": 60,
+    "MaxEvents": 4096,
+    "Categories": 31,
+    "IncludeAny": [
+      "DominionSpell",
+      "SpellModule",
+      "SpawnVFX",
+      "SpawnActor",
+      "GameplayEffect",
+      "StatusEffect",
+      "GameplayCue",
+      "IsActionAllowedToStart",
+      "Spell_Casting",
+      "SpawnFollower",
+      "FollowerComponent",
+      "RaiseUndead",
+      "undead_secondary",
+      "OnRep_"
+    ],
+    "SuppressTicks": true,
+    "TraceSelectedObject": true,
+    "CaptureParameters": true,
+    "EventCaptures": [
+      { "Root": "Target", "Path": ["AuthorityInstances"] },
+      { "Root": "Target", "Path": ["GameplayEffectsComponent"] },
+      { "Root": "Target", "Path": ["TrackedStatusEffectsComponent"] }
+      ,{ "Root": "Target", "Path": ["CurrentSpell"] }
+      ,{ "Root": "Target", "Path": ["SpellData"] }
+      ,{ "Root": "Target", "Path": ["CurrentAction"] }
+      ,{ "Root": "Target", "Path": ["FollowerComponent"] }
+    ]
+  },
+  "Export": {
+    "Name": "Dedicated-Effect-Activation",
+    "Jsonc": false
+  }
+}

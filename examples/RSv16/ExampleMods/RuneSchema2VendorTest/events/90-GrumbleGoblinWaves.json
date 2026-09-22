@@ -1,0 +1,19 @@
+{
+  "Id":"grumble_goblin_waves",
+  "TimeoutSeconds":600,
+  "Scope":"Participant",
+  "Area":{"Location":[42250,174250,-4163],"RadiusMeters":80,"Visibility":"Auto"},
+  "Messages":{
+    "Started":"Grumble's collection crew is approaching.",
+    "WaveStarted":"Collection wave {wave} of {waves} has arrived.",
+    "BossStarted":"The chief debt collector has arrived.",
+    "Completed":"Grumble's collection crew has been defeated.",
+    "Failed":"The collection crew encounter ended without completion.",
+    "Cancelled":"Grumble called off the collection crew."
+  },
+  "Waves":[
+    [{"SpawnID":"grumble_pebble_pilferer","Location":[42000,174000,"$"]},{"SpawnID":"grumble_pebble_pilferer","Location":[42500,174000,"$"]}],
+    [{"SpawnID":"grumble_gravel_grifter","Location":[42000,174500,"$"]},{"SpawnID":"grumble_gravel_grifter","Location":[42500,174500,"$"]}],
+    [{"SpawnID":"grumble_debt_collector","Location":[42250,174750,"$"]}]
+  ]
+}

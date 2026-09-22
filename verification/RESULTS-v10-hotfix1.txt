@@ -1,0 +1,54 @@
+R3v10 Hotfix 1 — LoaderSchemas.h C2059 repair
+================================================
+Baseline: RuneSchema.7-R3v10-Helpy-NPCs-Resources-Direct-Override.zip
+
+CAUSE
+The authorFlag JSON initializer at original LoaderSchemas.h line 387 had
+8 opening braces and 7 closing braces before its semicolon. This header is
+included by multiple compilation units, explaining the repeated error.
+
+PRODUCTION CHANGE
+Only raw/include/Generator/LoaderSchemas.h is modified. The authorFlag
+initializer is properly closed and formatted across lines 387–395. Its Boolean
+and case-insensitive Yes/No/True/False string branches and pattern are unchanged.
+The remaining 51 production files are byte-for-byte identical to R3v10.
+
+VALIDATION ACTUALLY PERFORMED FOR THIS HOTFIX
+- GCC 14.2 and Clang 17 parse the complete patched LoaderSchemas.h with
+  -std=c++23 -Wall -Wextra -Werror -pedantic -fsyntax-only.
+- Both reject a negative-control copy missing the enclosing brace, with an
+  expected-closing-brace diagnostic at the authorFlag statement.
+- These syntax checks use DECLARATIONS-ONLY nlohmann/json stand-ins and
+  schema-constant stand-ins for LoaderCapabilities and HumanNpc/HumanPose.
+  They check C++ grammar, not actual nlohmann initialization behavior, schema
+  validation, engine ABI or runtime behavior. The real pinned dependency was
+  unavailable in the container. The checker accepts --json-include for local
+  testing with an actual nlohmann/json.hpp installation.
+- The retained GCC portable UI/policy/file-I/O suites and static wiring checks
+  were rerun. The combined invocation reached its execution time limit after
+  the Helpy source-wiring checks; the remaining NPC wiring check and new schema
+  syntax check were then executed separately and passed. See gcc-v10-hotfix1.log.
+- Clang was used for the new header syntax/negative-control check only in this
+  hotfix. Old v10 sanitizer logs are historical, not new hotfix sanitizer runs.
+- Only the authorFlag declaration differs in the production header; content
+  before and after it matches the original byte-for-byte.
+- All 52 production-file hashes verified, ZIP CRC check passed, and a simulated
+  direct merge preserved an existing build BAT and unrelated project files.
+
+NOT PERFORMED
+Full Windows/MSVC/UE4SS build, actual nlohmann/Unreal dependency compilation,
+linking, generated-schema validation and in-game testing. The actual
+JsonSchemaGenerator.cpp, InspectionTools.cpp and AssetSearch.cpp translation
+units were not compiled here. Rebuild locally to verify the real toolchain.
+
+REPRODUCE THE NEW SYNTAX CHECK (OPTIONAL)
+  python verification/check_loader_schema_syntax.py --compiler g++
+  python verification/check_loader_schema_syntax.py --compiler clang++
+With a real dependency already available locally:
+  python verification/check_loader_schema_syntax.py --compiler g++ --json-include PATH_TO_INCLUDE_DIRECTORY
+The include directory must contain nlohmann/json.hpp. Schema-constant stand-ins
+are still used. This command performs no downloads and does not modify the BAT.
+
+SCOPE
+No gameplay, NPC cleanup, item authoring, cache, Favorites, UI or hotkey behavior
+is changed by this hotfix. No new settings, art, compiled DLL or BAT is included.

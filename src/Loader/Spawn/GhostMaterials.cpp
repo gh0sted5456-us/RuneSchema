@@ -1,4 +1,5 @@
 #include "Loader/Spawn/GhostMaterials.h"
+#include "SDK/WeakObjectHandle.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
@@ -6,6 +7,7 @@
 #include "Utility/Logging.h"
 #include <unordered_set>
 #include <stdexcept>
+#include <type_traits>
 using namespace RC;
 using namespace RC::Unreal;
 namespace DragonWilds::GhostMaterials {
@@ -17,7 +19,8 @@ bool CanRender(UObject* context) {
     call.Arg(TEXT("WorldContextObject"),context).Invoke();
     return !call.Result<bool>();
 }
-Set Create(UObject* actor, const nlohmann::json& visualEffect, std::vector<UObject*>& roots) {
+template<class Roots>
+Set CreateMaterials(UObject* actor, const nlohmann::json& visualEffect, Roots& roots) {
             constexpr auto ghostMaterialPath =
                 "/Game/Materials/Character/M_VFX_Ghost_Overlay."
                 "M_VFX_Ghost_Overlay";
@@ -58,7 +61,10 @@ Set Create(UObject* actor, const nlohmann::json& visualEffect, std::vector<UObje
                     };
                     if (hasMain) setColor(mainParameter, visualEffect.at("MainColor"));
                     if (hasSecondary) setColor(secondaryParameter, visualEffect.at("SecondaryColor"));
-                    roots.push_back(dynamic);
+                    if constexpr(std::is_same_v<typename Roots::value_type,PS::WeakObjectHandle>)
+                        roots.emplace_back(PS::WeakObject(dynamic));
+                    else
+                        roots.emplace_back(dynamic);
                 }
                 catch (...)
                 {
@@ -82,6 +88,12 @@ Set Create(UObject* actor, const nlohmann::json& visualEffect, std::vector<UObje
                 body = createTintedMaterial(parent, TEXT("Color A"), TEXT("Color B"));
             }
 return {overlay, body};
+}
+Set Create(UObject* actor,const nlohmann::json& effect,std::vector<PS::WeakObjectHandle>& roots) {
+    return CreateMaterials(actor,effect,roots);
+}
+Set Create(UObject* actor,const nlohmann::json& effect,std::vector<UObject*>& roots) {
+    return CreateMaterials(actor,effect,roots);
 }
 bool Apply(UObject* actor, const Set& materials, const RC::StringType& context) {
 if (!actor) return false;

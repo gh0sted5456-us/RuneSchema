@@ -1,0 +1,20 @@
+{
+  "SchemaVersion": 1,
+  "Id": "RuneSchema.Networking",
+  "Version": "0.7.0",
+  "BuiltForRuneSchema": "0.7.0",
+  "ConsoleMessage": "Networking bridge content is available.",
+  "Capabilities": [
+    "bridge.registry",
+    "bridge.world",
+    "bridge.identity",
+    "presentation.dialogue-cue",
+    "presentation.registry",
+    "presentation.world-state"
+  ],
+  "CookedObjects": [
+    "/RuneSchema/Networking/BPC_RuneSchemaRegistryBridge",
+    "/RuneSchema/Networking/BPC_RuneSchemaWorldBridge",
+    "/RuneSchema/Networking/BPC_RuneSchemaIdentity"
+  ]
+}

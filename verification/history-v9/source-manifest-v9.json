@@ -1,0 +1,344 @@
+{
+  "baseline": "R3v8.1-Settings-Cache-Direct-Override",
+  "generated_utc": "2026-09-19T08:01:22.266002+00:00",
+  "source_count": 47,
+  "files": [
+    {
+      "path": "raw/include/Generator/AuthoringPolicy.h",
+      "sha256": "e164c985407dbeca30d5e2acc9210c1ffc0044a0ed0b1a7db0a84c02916027a7",
+      "bytes": 2768,
+      "baseline_sha256": "54152905a2d0411a385e9c9796e2c608466c3cae8cd2bd2216d09b0a26aa80a9",
+      "status": "changed"
+    },
+    {
+      "path": "raw/include/Generator/ClonePresentation.h",
+      "sha256": "49494fbd601df1f5835997dec6f14b330eeed93480a4c45381c58f0bf1deb563",
+      "bytes": 2865,
+      "baseline_sha256": "49494fbd601df1f5835997dec6f14b330eeed93480a4c45381c58f0bf1deb563",
+      "status": "unchanged"
+    },
+    {
+      "path": "raw/include/Generator/F2BundledPaths.h",
+      "sha256": "820d5bed5305f24456dbbe0866d2c9f8f5f8304127dbc7b99bdfdacb011d48c8",
+      "bytes": 13115,
+      "baseline_sha256": "820d5bed5305f24456dbbe0866d2c9f8f5f8304127dbc7b99bdfdacb011d48c8",
+      "status": "unchanged"
+    },
+    {
+      "path": "raw/include/Generator/F2CatalogPlan.h",
+      "sha256": "e9a7fc9f236d027a08e7cfd5d7d2e3e887d4e44258e25cbc0f9c8f13e1ab4805",
+      "bytes": 6955,
+      "baseline_sha256": "a8ce88c391e14ca204001a9d1129a8e86a578b85453f589c78ec46e912cdfa42",
+      "status": "changed"
+    },
+    {
+      "path": "raw/include/Generator/F2ReferenceTree.h",
+      "sha256": "f00875f2c8300f7f68d2446983ee5831fd7599e4b6ac9d17e44360be9e87e358",
+      "bytes": 3671,
+      "baseline_sha256": "f00875f2c8300f7f68d2446983ee5831fd7599e4b6ac9d17e44360be9e87e358",
+      "status": "unchanged"
+    },
+    {
+      "path": "raw/include/Generator/HelpyHotkeys.h",
+      "sha256": "9cef37db2414bac875fb9e2b719fce03a18f2700a5f72c2c1230343819bf96bc",
+      "bytes": 1531,
+      "baseline_sha256": null,
+      "status": "new"
+    },
+    {
+      "path": "raw/include/Generator/HelpyItemFilters.h",
+      "sha256": "d0eea0870ac1652ab7ea94d66398f884a4c94f36d615d5fcfcb20de992509912",
+      "bytes": 3019,
+      "baseline_sha256": null,
+      "status": "new"
+    },
+    {
+      "path": "raw/include/Generator/HelpyPropertyValue.h",
+      "sha256": "9eab230d1ba50471797e04a90082dd85eb030ece066c9851d795011bf21936d3",
+      "bytes": 5324,
+      "baseline_sha256": null,
+      "status": "new"
+    },
+    {
+      "path": "raw/include/Generator/HelpyReferencePolicy.h",
+      "sha256": "9b222dc628be1f64778b85c82b19dbf378c4513ba5d5dc2d88c7d840f01bfd4c",
+      "bytes": 403,
+      "baseline_sha256": null,
+      "status": "new"
+    },
+    {
+      "path": "raw/include/Generator/HelpyStatKey.h",
+      "sha256": "f41f93b78a69c39216a8c0ab4fd9a86949c8b20fe2907d10b5739eb537246ec2",
+      "bytes": 1006,
+      "baseline_sha256": null,
+      "status": "new"
+    },
+    {
+      "path": "raw/include/Generator/ItemCatalogMetadata.h",
+      "sha256": "21026dc77acdddb464ec4edeced712abe50f11b796417bac28f8d687ad4bb96f",
+      "bytes": 260,
+      "baseline_sha256": "21026dc77acdddb464ec4edeced712abe50f11b796417bac28f8d687ad4bb96f",
+      "status": "unchanged"
+    },
+    {
+      "path": "raw/include/Generator/ItemCloneRequest.h",
+      "sha256": "8f06d115207c3f78098e50f1ae8fcdd33982d5f1ec84ce423cc90e8d60891a88",
+      "bytes": 2861,
+      "baseline_sha256": "8f06d115207c3f78098e50f1ae8fcdd33982d5f1ec84ce423cc90e8d60891a88",
+      "status": "unchanged"
+    },
+    {
+      "path": "raw/include/Generator/LoaderSchemas.h",
+      "sha256": "a3ec0825e076adf6e8c342299eeaa304a2aba0d5c3523c414ea99b35645c0fa8",
+      "bytes": 42618,
+      "baseline_sha256": "60ddc31080047b2d1542b59a4d9104c7f1c9223ee1834b350e4106d6fe23a12e",
+      "status": "changed"
+    },
+    {
+      "path": "raw/include/Generator/QuickMenuCatalogRules.h",
+      "sha256": "89cfc7081d3c43dfcc7084aafe4ab82f05ac8f5dd0d7d631514f4eadcb02356e",
+      "bytes": 2757,
+      "baseline_sha256": "89cfc7081d3c43dfcc7084aafe4ab82f05ac8f5dd0d7d631514f4eadcb02356e",
+      "status": "unchanged"
+    },
+    {
+      "path": "raw/include/Generator/QuickMenuDecorations.h",
+      "sha256": "5d0d5d2ea41deae0a07e1b9d9029067d1a4b52eebb179a52401695408979c71d",
+      "bytes": 4142,
+      "baseline_sha256": "5d0d5d2ea41deae0a07e1b9d9029067d1a4b52eebb179a52401695408979c71d",
+      "status": "unchanged"
+    },
+    {
+      "path": "raw/include/Generator/QuickMenuSpawnRequest.h",
+      "sha256": "16b933d8e011cd90e44961f1881989df19a708c15aa507faeae991a9f1c0080a",
+      "bytes": 2076,
+      "baseline_sha256": "16b933d8e011cd90e44961f1881989df19a708c15aa507faeae991a9f1c0080a",
+      "status": "unchanged"
+    },
+    {
+      "path": "raw/include/Generator/QuickMenuUI.h",
+      "sha256": "ff0643dcad92bf1dcb6b789abaa588f266f7ffc2ae39c681b065059d299eccdc",
+      "bytes": 94769,
+      "baseline_sha256": "e0964ea7ced4e9f4fa9deb5fd2b098f7f788788836a515b296bd8af2a156e018",
+      "status": "changed"
+    },
+    {
+      "path": "raw/include/Generator/SpawnToolsPanel.h",
+      "sha256": "f3952ad6ee96e0a6c38f3041635502a6e8f318e383d9f82419d4818a78caccee",
+      "bytes": 29104,
+      "baseline_sha256": "ef0e8b65600e1176990521ed97c2f4456651e1b21291c65054bfd9fcc4722fec",
+      "status": "changed"
+    },
+    {
+      "path": "raw/include/Generator/ToolRequest.h",
+      "sha256": "8ebfb3506aee5b6b32f69712329b3fab3991d5e08418f416a1638edabe3401c3",
+      "bytes": 7225,
+      "baseline_sha256": "8ebfb3506aee5b6b32f69712329b3fab3991d5e08418f416a1638edabe3401c3",
+      "status": "unchanged"
+    },
+    {
+      "path": "raw/include/Loader/AssetAuthoringMetadata.h",
+      "sha256": "2a40fed49caaa4b3325ccc3076d4724930c6fab2b5af2033204ffd2cc64c851f",
+      "bytes": 2311,
+      "baseline_sha256": null,
+      "status": "new"
+    },
+    {
+      "path": "raw/include/Loader/AssetClonePolicy.h",
+      "sha256": "6ca71820885301c43df7342e9c148cd6abd37cabdec1f209cab8822d5a02249e",
+      "bytes": 1876,
+      "baseline_sha256": null,
+      "status": "new"
+    },
+    {
+      "path": "raw/include/Loader/AssetMetadataRegistry.h",
+      "sha256": "64cc222abc0759cccbd688c99aa83ee9054b5373aa1acc7004c960fff18a3f38",
+      "bytes": 667,
+      "baseline_sha256": null,
+      "status": "new"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsAssetModLoader.h",
+      "sha256": "441f7804bc2aae7d3e4a966b41caced3f11a47fa180670ee81c92a0e24e1a4d4",
+      "bytes": 3480,
+      "baseline_sha256": "932f99c15d17b1746ee47bdd07ba16c4a3f169ef31d54a820b5b918d62e7e9ee",
+      "status": "changed"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsSpawnLoader.h",
+      "sha256": "3707db0ce203bbd3beb5e17396e970fc1245907bff3582d94cf99657cbf4079a",
+      "bytes": 25689,
+      "baseline_sha256": "3707db0ce203bbd3beb5e17396e970fc1245907bff3582d94cf99657cbf4079a",
+      "status": "unchanged"
+    },
+    {
+      "path": "raw/include/Loader/HelpyDependencyOrder.h",
+      "sha256": "17c515c3230bbd91771bc80923dacd2e705b56f1192426676c2f97771567bd47",
+      "bytes": 1840,
+      "baseline_sha256": null,
+      "status": "new"
+    },
+    {
+      "path": "raw/include/Runtime/AuthoredFile.h",
+      "sha256": "95798c55ac20a5c69e62d07fb517f440bfbf12d30425f5d901b2e8e1f9ab1942",
+      "bytes": 3105,
+      "baseline_sha256": "1c3b9f15613ce9e99f64ef343312e44c7694e33227874de7b85d65bab16b93ba",
+      "status": "changed"
+    },
+    {
+      "path": "raw/include/Runtime/F2CacheMigration.h",
+      "sha256": "f109a46aec7ce59ced8e6afc41ff8224988bc34e8881ff1fa1a0b4bdef71e98d",
+      "bytes": 1663,
+      "baseline_sha256": "f109a46aec7ce59ced8e6afc41ff8224988bc34e8881ff1fa1a0b4bdef71e98d",
+      "status": "unchanged"
+    },
+    {
+      "path": "raw/include/Runtime/F2CatalogStore.h",
+      "sha256": "74e50076f4790b3cbfeab04b68c017655a28f81cc7e926f6f5aa51a2aedf593d",
+      "bytes": 6772,
+      "baseline_sha256": "ff0dcf17def639a5f5c8f2a6980c39567f6c2ceb90d5eb8853e4fd074c479de9",
+      "status": "changed"
+    },
+    {
+      "path": "raw/include/Runtime/F2FavoriteStore.h",
+      "sha256": "25ca41dd34c2f12236454199f0bc24bedd82a9eeab011a6b1eabe127367d58d2",
+      "bytes": 2974,
+      "baseline_sha256": "d5ea23eaf96ba246642e44f61b5f4e0d89abd69de5a81d6b00e92aa7d50b4e4f",
+      "status": "changed"
+    },
+    {
+      "path": "raw/include/Runtime/F2PreferenceFile.h",
+      "sha256": "06be80c180290d9b6c5d7156d502b37722e37b686ceaf5992930bdde830b8e9f",
+      "bytes": 4540,
+      "baseline_sha256": "06be80c180290d9b6c5d7156d502b37722e37b686ceaf5992930bdde830b8e9f",
+      "status": "unchanged"
+    },
+    {
+      "path": "raw/include/Runtime/F2ReferenceIndex.h",
+      "sha256": "ac27336c664fbebd6664d608fba3ab16a216d39d5fd8aef9e7d930357ebe00c8",
+      "bytes": 757,
+      "baseline_sha256": "ac27336c664fbebd6664d608fba3ab16a216d39d5fd8aef9e7d930357ebe00c8",
+      "status": "unchanged"
+    },
+    {
+      "path": "raw/include/Runtime/HelpyBundlePublish.h",
+      "sha256": "76eea37b4687b10cdb86502fef4313b74713e22fef823c3224533cad1fb0e394",
+      "bytes": 810,
+      "baseline_sha256": null,
+      "status": "new"
+    },
+    {
+      "path": "raw/include/Runtime/HelpySettings.h",
+      "sha256": "a47a5295e31fec632094e684fd5677dc64a6fef4e779af8569c20551c79fb46d",
+      "bytes": 2676,
+      "baseline_sha256": null,
+      "status": "new"
+    },
+    {
+      "path": "raw/include/SDK/Helper/CookedAssetLookup.h",
+      "sha256": "c7daaf6a68887007916e803d474a2e8b3f1f2a7cb1d9289a213e956bd06a0b93",
+      "bytes": 6667,
+      "baseline_sha256": "c7daaf6a68887007916e803d474a2e8b3f1f2a7cb1d9289a213e956bd06a0b93",
+      "status": "unchanged"
+    },
+    {
+      "path": "raw/include/SDK/Helper/ItemAppearanceMetadata.h",
+      "sha256": "bdd3440c72654e0864d49d84b6dbb3669245dd03b62bab8a5395d669fb104a6f",
+      "bytes": 1628,
+      "baseline_sha256": "bdd3440c72654e0864d49d84b6dbb3669245dd03b62bab8a5395d669fb104a6f",
+      "status": "unchanged"
+    },
+    {
+      "path": "raw/src/Generator/AssetSearch.cpp",
+      "sha256": "9551776fc35104f94637df4fb17a7e46cffaf616e73406266180ef77852fe998",
+      "bytes": 25903,
+      "baseline_sha256": "07a7c6e1f14f937215465a72bb98af77a58d0e70d58069e96678cc03cd686344",
+      "status": "changed"
+    },
+    {
+      "path": "raw/src/Generator/InGameQuickMenu.cpp",
+      "sha256": "4270703d293ac7ede81c43003e470742078c31ae654504b0e69e31038691cabc",
+      "bytes": 64689,
+      "baseline_sha256": "10da0aec48677d601c45c11c7e9ef63e47aa4050d0e1e6d133adbd86642cc37d",
+      "status": "changed"
+    },
+    {
+      "path": "raw/src/Loader/AssetAuthoringMetadata.cpp",
+      "sha256": "c03fcc7b2aad4a8150fd0467b05214fe8c831e106c23edfdcded09466c31198e",
+      "bytes": 2438,
+      "baseline_sha256": null,
+      "status": "new"
+    },
+    {
+      "path": "raw/src/Loader/AssetProvenance.cpp",
+      "sha256": "a948d883f209f2ec80d5433a4f7f88639a4bac2fd16938440cb01fca5c555fa9",
+      "bytes": 5400,
+      "baseline_sha256": "a948d883f209f2ec80d5433a4f7f88639a4bac2fd16938440cb01fca5c555fa9",
+      "status": "unchanged"
+    },
+    {
+      "path": "raw/src/Loader/DragonWildsAssetModLoader.cpp",
+      "sha256": "cd8d482c22d3295ba93280c7e6e05e0f15b06cb4cdda53e4e4a514b432ec3772",
+      "bytes": 43792,
+      "baseline_sha256": "c6fa5671a652ddbe775cd314c680bb9cc79a0f48243180a742b92a334efb5b4e",
+      "status": "changed"
+    },
+    {
+      "path": "raw/src/Loader/DragonWildsSpawnLoader.cpp",
+      "sha256": "f4d70d2cab9aaeb7c846538f8b831eef5f11f1d38e654f282c148f70cf815abf",
+      "bytes": 146848,
+      "baseline_sha256": "c2e3d4e0a200fd3ea79e584b74a5888775e3893f9345a99018240347cdf97d09",
+      "status": "changed"
+    },
+    {
+      "path": "raw/src/Loader/HelpyItemCompanions.inl",
+      "sha256": "fa7d9bd0e01758483c7ce27040c165f8bcba3c1112b831fe22005e648dc80f87",
+      "bytes": 15819,
+      "baseline_sha256": null,
+      "status": "new"
+    },
+    {
+      "path": "raw/src/Loader/LiveCloneAuthoring.inl",
+      "sha256": "e5e4cb4eb38b11fec6640f84247423153351506cf3989e8006a0f261b6c5af85",
+      "bytes": 44329,
+      "baseline_sha256": "82e06e2e8c51bffba6385a38ebb0e038d2d165db72da6cd3473af537b10388c5",
+      "status": "changed"
+    },
+    {
+      "path": "raw/src/Loader/QuickMenuCatalog.inl",
+      "sha256": "1c9174ea480d2d32a2c443f0c4406c7e5f4423051cc96c69e5c5d1122061d3fc",
+      "bytes": 29130,
+      "baseline_sha256": "e751330faff8b4ce1fca0bcb16777208c7b83effca0a44066e7dc28cf4cd371a",
+      "status": "changed"
+    },
+    {
+      "path": "raw/src/Loader/SpawnTools.inl",
+      "sha256": "7374216fb0f9a1a2417950cf67ac7300a7dc3e36ed66d6de5da5a1eaa657427c",
+      "bytes": 61087,
+      "baseline_sha256": "ad197cfff7e06aa9e8b5a2cd8c4b503b80ef6c9aded28ff98464d2faf549b5cd",
+      "status": "changed"
+    },
+    {
+      "path": "raw/src/Runtime/F2ReferenceIndex.cpp",
+      "sha256": "97d5038016ffb8b968ee9608b53024ff8272d5df9d99490baad374cd7040c38e",
+      "bytes": 6703,
+      "baseline_sha256": "97d5038016ffb8b968ee9608b53024ff8272d5df9d99490baad374cd7040c38e",
+      "status": "unchanged"
+    },
+    {
+      "path": "raw/src/dllmain.cpp",
+      "sha256": "6ef5fb255c378eb17bf2b0a76f00f010a6b149aed8bec0760211911e15069d89",
+      "bytes": 43680,
+      "baseline_sha256": "3c8e8027941c0c7a3079b5f34f79374cd49a77a19044822810523e5835263720",
+      "status": "changed"
+    }
+  ],
+  "additional_baseline_sources": [
+    {
+      "target": "raw/src/dllmain.cpp",
+      "origin": "R3v4 Google Drive raw/src/dllmain.cpp",
+      "bytes": 43412,
+      "sha256": "3c8e8027941c0c7a3079b5f34f79374cd49a77a19044822810523e5835263720"
+    }
+  ]
+}

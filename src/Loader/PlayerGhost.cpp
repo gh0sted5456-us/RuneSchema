@@ -6,7 +6,8 @@
 #include "SDK/Helper/ActorHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
-#include "Unreal/FWeakObjectPtr.hpp"
+#include "SDK/WeakObjectHandle.h"
+#include "SDK/WeakObjectHandle.h"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
 #include "Unreal/Hooks.hpp"
@@ -14,6 +15,8 @@
 #include "Utility/Logging.h"
 #include "Utility/EngineCleanupLifetime.h"
 #include "Loader/PreparedVisualEffect.h"
+#include "Loader/NiagaraAttachment.h"
+#include "Loader/VisualEffectLifetime.h"
 #include <Windows.h>
 #include <array>
 #include <atomic>
@@ -22,6 +25,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <optional>
 
 using namespace RC;
@@ -31,12 +35,14 @@ namespace {
 PS::EngineCleanupLifetime engineCleanup;
 UObject* Ref(UObject* object,const TCHAR* name) {
     if(!object) return nullptr;
-    auto* property=CastField<FObjectProperty>(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),name));
-    return property && property->GetArrayDim()==1 && property->GetElementSize()==sizeof(UObject*)
+    auto* property=CastField<FObjectPropertyBase>(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),name));
+    return property && property->GetArrayDim()==1 && property->GetOffset_Internal()>=0
+        && property->GetElementSize()>0
+        && static_cast<int64_t>(property->GetOffset_Internal())+property->GetElementSize()<=object->GetClassPrivate()->GetPropertiesSize()
         ? property->GetObjectPropertyValue(property->ContainerPtrToValuePtr<void>(object)):nullptr;
 }
 struct Lease {
-    FWeakObjectPtr object; bool owned;
+    PS::WeakObjectHandle object; bool owned;
     explicit Lease(UObject* value):object(value),owned(!value->IsRootSet()) { if(owned)value->SetRootSet(); }
     ~Lease() { engineCleanup.Run([&] {
         if(owned)if(auto* value=object.Get())if(value->IsRootSet())value->ClearRootSet();
@@ -53,31 +59,37 @@ Material Pin(UObject* value) {
 UObject* Get(const Material& material) { return material?material->object.Get():nullptr; }
 struct Visual {
     GhostMaterials::Set ghost{};
+    nlohmann::json value;
     Material overlayLease;
-    std::vector<UObject*> roots;
+    std::vector<PS::WeakObjectHandle> roots;
     ~Visual() { engineCleanup.Run([&] {
-        for(auto* root:roots)if(root && root->IsRootSet())root->ClearRootSet();
+        for(const auto& ref:roots)if(auto* root=ref.Get())if(root->IsRootSet())root->ClearRootSet();
     }); }
 };
 using VisualPtr=std::shared_ptr<Visual>;
-struct MeshState { FWeakObjectPtr mesh; Material overlay; std::vector<Material> materials; VisualPtr applied; };
+struct MeshState { PS::WeakObjectHandle mesh; Material overlay; std::vector<Material> materials; std::vector<PS::WeakObjectHandle> niagara; VisualPtr applied; };
 struct State {
-    FWeakObjectPtr player,equipment,customization,cpd;
+    PS::WeakObjectHandle player,equipment,customization,cpd;
     bool preview{};
-    std::array<FWeakObjectPtr,4> previewItems{};
+    std::string previewDiagnostic;
     PreparedVisualEffect effect;
+    PreparedVisualEffect temporaryEffect;
+    double temporarySeconds = 0.0;
+    std::string temporaryKey;
+    bool temporaryConsumed = false;
+    PreparedVisualEffect armorTest;
+    uint8_t armorTestSlots{0x0f};
+    size_t armorTestMeshes{};
     std::unordered_map<std::string,std::weak_ptr<Visual>> palette;
     std::vector<MeshState> meshes;
 };
 std::unordered_map<RC::StringType,PreparedVisualEffect> itemEffects;
 enum class PreviewSlot : uint8_t { Head, Body, Legs, Cape, Unknown };
 std::unordered_map<RC::StringType,PreviewSlot> itemSlots;
-UFunction* previewSetOutfitFunction{};
-int32 previewSetOutfitCallback{};
-Hook::GlobalCallbackId previewLoadMapCallback=Hook::ERROR_ID;
 Hook::GlobalCallbackId previewBeginPlayCallback=Hook::ERROR_ID;
-FWeakObjectPtr previewActor;
-bool previewBindPending{};
+Hook::GlobalCallbackId previewTickCallback=Hook::ERROR_ID;
+PS::WeakObjectHandle previewActor;
+bool previewHookWarning{};
 
 PreviewSlot InferPreviewSlot(std::string_view hint) {
     std::string path(hint);
@@ -94,8 +106,11 @@ VisualPtr MakeVisual(State& state,const PreparedVisualEffect& effect) {
     auto& entry=state.palette[effect.key];
     if(auto visual=entry.lock())return visual;
     auto visual=std::make_shared<Visual>();
-    visual->ghost=GhostMaterials::Create(state.player.Get(),effect.value,visual->roots);
-    visual->overlayLease=Pin(visual->ghost.Overlay);
+    visual->value=effect.value;
+    if(effect.value.value("Type",std::string("Ghost"))=="Ghost") {
+        visual->ghost=GhostMaterials::Create(state.player.Get(),effect.value,visual->roots);
+        visual->overlayLease=Pin(visual->ghost.Overlay);
+    }
     entry=visual;return visual;
 }
 std::vector<std::unique_ptr<State>> states;
@@ -104,7 +119,7 @@ std::array<uintptr_t,128> dirtyTokens{};
 size_t dirtyCount{}; bool overflow{};
 std::atomic<bool> pending{false};
 bool refreshing{};
-void TrackPreview(UObject* preview,const std::array<UObject*,4>& items);
+void TrackPreview(UObject* preview);
 
 std::array<UObject*,4> PreviewItems(UObject* preview) {
     constexpr const TCHAR* equipment[]{TEXT("HeadEquipment"),TEXT("BodyEquipment"),
@@ -124,90 +139,60 @@ bool IsDedicatedProcess() {
     return dedicated;
 }
 
-void UnbindPreviewOutfit() {
-    if(previewSetOutfitFunction && previewSetOutfitCallback)
-        previewSetOutfitFunction->UnregisterHook(previewSetOutfitCallback);
-    previewSetOutfitFunction=nullptr;previewSetOutfitCallback=0;
-}
-
 void ReleasePreviewLifecycle() {
-    UnbindPreviewOutfit();
-    if(previewLoadMapCallback!=Hook::ERROR_ID)Hook::UnregisterCallback(previewLoadMapCallback);
     if(previewBeginPlayCallback!=Hook::ERROR_ID)Hook::UnregisterCallback(previewBeginPlayCallback);
-    previewLoadMapCallback=Hook::ERROR_ID;previewBeginPlayCallback=Hook::ERROR_ID;
-    previewActor={};previewBindPending=false;
+    if(previewTickCallback!=Hook::ERROR_ID)Hook::UnregisterCallback(previewTickCallback);
+    previewBeginPlayCallback=Hook::ERROR_ID;
+    previewTickCallback=Hook::ERROR_ID;
+    previewActor.Reset();
 }
 
-void BindPreviewOutfit() {
-    previewBindPending=false;
-    if(itemSlots.empty() || previewSetOutfitFunction)return;
-    auto* function=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,
-        TEXT("/Game/Maps/L_FrontEnd.L_FrontEnd_New_C:SetOutfit"));
-    if(!function)return;
-    FArrayProperty* itemsField{};
-    for(auto* property:TFieldRange<FProperty>(function,EFieldIterationFlags::None))
-        if(property && property->GetName()==TEXT("ItemDatas")) {
-            itemsField=CastField<FArrayProperty>(property);break;
-        }
-    auto* itemInner=itemsField?CastField<FObjectProperty>(itemsField->GetInner()):nullptr;
-    if(!itemInner || itemInner->GetElementSize()!=sizeof(UObject*))return;
-    const auto id=function->RegisterPostHook(
-        [itemsField,itemInner](UnrealScriptFunctionCallableContext& context,void*) {
-            try {
-                auto* preview=previewActor.Get();
-                if(!preview)preview=Ref(context.Context,
-                    TEXT("BP_PlayerCharacterPreview_C_1_SetOutfit_MERGED_RefProperty"));
-                auto* locals=context.TheStack.Locals();
-                auto* values=locals?itemsField->ContainerPtrToValuePtr<FScriptArray>(locals):nullptr;
-                if(!preview || !values || values->Num()<0 || values->Num()>16
-                    || (values->Num() && !values->GetData()))return;
-                std::array<UObject*,4> slotted{};
-                for(int32 i=0;i<values->Num();++i) {
-                    auto* item=itemInner->GetObjectPropertyValue(
-                        static_cast<uint8*>(values->GetData())+i*sizeof(UObject*));
-                    if(!item)continue;
-                    const auto found=itemSlots.find(item->GetPathName());
-                    if(found==itemSlots.end())continue;
-                    const auto slot=static_cast<size_t>(found->second);
-                    if(slot<slotted.size())slotted[slot]=item;
-                }
-                TrackPreview(preview,slotted);
-            } catch(const std::exception& error) {
-                PS::Log<LogLevel::Warning>(TEXT("Character preview visual refresh skipped: {}\n"),
-                    PS::ToWideSafe(error.what()));
-            }
-        });
-    if(!id)return;
-    previewSetOutfitFunction=function;previewSetOutfitCallback=id;
-    if(auto* preview=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,
-        TEXT("/Game/Maps/L_FrontEnd.L_FrontEnd:PersistentLevel.BP_PlayerCharacterPreview_C_1")))
-        TrackPreview(preview,PreviewItems(preview));
-    PS::Log<LogLevel::Verbose>(TEXT("Equipment visuals attached to the character preview outfit event.\n"));
+bool IsMenuPreview(UObject* actor) {
+    if (!actor || actor->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject | RF_ArchetypeObject))) return false;
+    const bool previewClass=actor->GetClassPrivate()
+        && actor->GetClassPrivate()->GetNamePrivate()==FName(TEXT("BP_PlayerCharacterPreview_C"),FNAME_Add);
+    return previewClass
+        && actor->GetPathName().find(TEXT("/Game/Maps/L_FrontEnd."))!=RC::StringType::npos;
 }
 
 void EnsurePreviewLifecycle() {
     Hook::FCallbackOptions options{};
     options.OwnerModName=TEXT("RuneSchema");
-    if(previewLoadMapCallback==Hook::ERROR_ID) {
-        options.HookName=TEXT("EquipmentVisualPreviewMapChange");
-        previewLoadMapCallback=Hook::RegisterLoadMapPreCallback(
-            [](Hook::TCallbackIterationData<bool>&,UEngine*,FWorldContext&,FURL,UPendingNetGame*,FString&) {
-                UnbindPreviewOutfit();previewActor={};previewBindPending=true;
-            },options);
-    }
     if(previewBeginPlayCallback==Hook::ERROR_ID) {
         options.HookName=TEXT("EquipmentVisualPreviewBeginPlay");
         previewBeginPlayCallback=Hook::RegisterBeginPlayPostCallback(
             [](Hook::TCallbackIterationData<void>&,AActor* actor) {
+                if(AppearanceEvents::Unavailable())return;
                 try {
-                    static const FName previewName(TEXT("BP_PlayerCharacterPreview_C"),FNAME_Add);
-                    if(!actor || !actor->GetClassPrivate()
-                        || actor->GetClassPrivate()->GetNamePrivate()!=previewName)return;
-                    previewActor=actor;
-                    TrackPreview(actor,PreviewItems(actor));
+                    if(!IsMenuPreview(actor))return;
+                    previewActor=PS::WeakObject(actor);
+                    TrackPreview(actor);
                 } catch(const std::exception& error) {
                     PS::Log<LogLevel::Warning>(TEXT("Character preview begin-play refresh skipped: {}\n"),
                         PS::ToWideSafe(error.what()));
+                }
+            },options);
+    }
+    if(previewTickCallback==Hook::ERROR_ID) {
+        options.HookName=TEXT("EquipmentVisualPreviewTick");
+        previewTickCallback=Hook::RegisterEngineTickPostCallback(
+            [](Hook::TCallbackIterationData<void>&,UEngine*,float,bool) {
+                static unsigned cadence{};
+                if(AppearanceEvents::Unavailable())return;
+                if(++cadence%4!=0)return;
+                try {
+                auto* preview=previewActor.Get();
+                if(!preview)preview=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,
+                    TEXT("/Game/Maps/L_FrontEnd.L_FrontEnd:PersistentLevel.BP_PlayerCharacterPreview_C_1"));
+                if(preview) {
+                    previewActor=PS::WeakObject(preview);
+                    TrackPreview(preview);
+                }
+                } catch(const std::exception& error) {
+                        if(AppearanceEvents::Unavailable() && previewHookWarning)return;
+                        if(AppearanceEvents::Unavailable())previewHookWarning=true;
+                        PS::Log<LogLevel::Warning>(TEXT("Character preview visual retry skipped: {}\n"),
+                            PS::ToWideSafe(error.what()));
                 }
             },options);
     }
@@ -255,8 +240,11 @@ public:
     }
 };
 void SetOverlayMaterial(UObject* mesh,UObject* material) {
-    auto call=ActorHelper::FunctionCall(mesh,TEXT("/Script/Engine.MeshComponent:SetOverlayMaterial"));
-    call.Arg(TEXT("NewOverlayMaterial"),material).Invoke();
+    // SetOverlayMaterial can resolve to a reflected UFunction with no callable
+    // native implementation during world teardown/re-entry. Write the live
+    // object property directly, as GhostMaterials does, to avoid ProcessEvent
+    // dispatching through a null function pointer.
+    ActorHelper::SetObjectRef(mesh,TEXT("OverlayMaterial"),material);
 }
 void RestoreMesh(MeshState& saved) {
     if(!saved.applied)return;
@@ -269,13 +257,21 @@ void RestoreMesh(MeshState& saved) {
             if(materials.Read(static_cast<int32>(i))==ghost.Body)
                 materials.Write(static_cast<int32>(i),Get(saved.materials[i]));
     }
+    for(const auto& component:saved.niagara) {
+        try { NiagaraAttachment::Destroy(component.Get()); }
+        catch(const std::exception& error) {
+            PS::Log<LogLevel::Verbose>(TEXT("Niagara cleanup skipped: {}\n"),
+                PS::ToWideSafe(error.what()));
+        }
+    }
+    saved.niagara.clear();
 }
 void Restore(State& state) { for(auto& saved:state.meshes)RestoreMesh(saved); }
 void Refresh(State& state) {
     auto* player=state.player.Get();if(!player)return;
-    state.equipment=Ref(player,state.preview?TEXT("BP_EquipmentMaterialComponent"):TEXT("PlayerEquipmentComponent"));
-    state.customization=state.preview?nullptr:Ref(player,TEXT("PlayerCustomizationComponent"));
-    state.cpd=state.preview?nullptr:Ref(player,TEXT("CPDManager"));
+    state.equipment=PS::WeakObject(Ref(player,state.preview?TEXT("BP_EquipmentMaterialComponent"):TEXT("PlayerEquipmentComponent")));
+    state.customization=PS::WeakObject(state.preview?nullptr:Ref(player,TEXT("PlayerCustomizationComponent")));
+    state.cpd=PS::WeakObject(state.preview?nullptr:Ref(player,TEXT("CPDManager")));
     const bool stealth=!state.preview && Stealth(player);
     if(stealth) { Restore(state);return; }
     struct Desired { UObject* mesh; VisualPtr visual; };
@@ -283,11 +279,12 @@ void Refresh(State& state) {
     auto* skinned=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Engine.SkinnedMeshComponent"));
     auto* statik=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Engine.StaticMeshComponent"));
     const auto add=[&](UObject* mesh,const VisualPtr& visual) {
-        if(!mesh || !visual)return;
-        if((!skinned || !mesh->IsA(skinned)) && (!statik || !mesh->IsA(statik)))return;
+        if(!mesh || !visual)return false;
+        if((!skinned || !mesh->IsA(skinned)) && (!statik || !mesh->IsA(statik)))return false;
         auto it=std::find_if(meshes.begin(),meshes.end(),[&](auto& value){return value.mesh==mesh;});
-        if(it!=meshes.end()) { it->visual=visual;return; }
-        if(meshes.size()<64)meshes.push_back({mesh,visual});
+        if(it!=meshes.end()) { it->visual=visual;return true; }
+        if(meshes.size()<64) { meshes.push_back({mesh,visual});return true; }
+        return false;
     };
     auto* type=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Engine.MeshComponent"));
     const auto collect=[&](UObject* actor,const VisualPtr& visual) {
@@ -296,9 +293,10 @@ void Refresh(State& state) {
         call.Arg(TEXT("ComponentClass"),type).Invoke();TArray<UObject*> values;
         call.MoveResult(&values,sizeof(values));for(auto* mesh:values)add(mesh,visual);
     };
-    if(!state.effect.value.empty()) {
-        auto visual=MakeVisual(state,state.effect);
-        if(PlayerMeshOnly(state.effect.value)) { add(Ref(player,TEXT("BodyMesh")),visual);add(Ref(player,TEXT("HeadMesh")),visual); }
+    const auto& playerEffect = state.temporarySeconds > 0.0 ? state.temporaryEffect : state.effect;
+    if(!playerEffect.value.empty()) {
+        auto visual=MakeVisual(state,playerEffect);
+        if(PlayerMeshOnly(playerEffect.value)) { add(Ref(player,TEXT("BodyMesh")),visual);add(Ref(player,TEXT("HeadMesh")),visual); }
         else {
             collect(player,visual);
             collect(Ref(state.equipment.Get(),TEXT("HeldEquipmentActorLeft")),visual);
@@ -312,16 +310,36 @@ void Refresh(State& state) {
     };
     if(state.preview) {
         constexpr const TCHAR* meshes[]{TEXT("OutfitHelmet"),TEXT("OutfitBody"),TEXT("OutfitLegs"),TEXT("OutfitCape")};
-        for(size_t i=0;i<state.previewItems.size();++i)
-            if(auto visual=itemVisual(state.previewItems[i].Get()))add(Ref(player,meshes[i]),visual);
+        std::string diagnostic;
+        const auto items=PreviewItems(player);
+        for(size_t i=0;i<items.size();++i) {
+            auto* item=items[i];
+            auto* mesh=Ref(player,meshes[i]);
+            auto visual=itemVisual(item);
+            if(visual)add(mesh,visual);
+            diagnostic+=RC::to_string(meshes[i])+": item="+(item?RC::to_string(item->GetPathName()):"none")
+                +", effect="+(visual?"matched":"none")+", mesh="+(mesh?"present":"none")+"; ";
+        }
+        if(diagnostic!=state.previewDiagnostic) {
+            state.previewDiagnostic=diagnostic;
+            PS::Log<LogLevel::Verbose>(TEXT("Character preview equipment: {}\n"),PS::ToWideSafe(diagnostic.c_str()));
+        }
     } else {
         constexpr const TCHAR* worn[][2]{
             {TEXT("CurrentHeadWearable"),TEXT("OutfitHeadMesh")},
             {TEXT("CurrentBodyWearable"),TEXT("OutfitBodyMesh")},
             {TEXT("CurrentLegsWearable"),TEXT("OutfitLegsMesh")},
             {TEXT("CurrentCapeWearable"),TEXT("OutfitCapeMesh")}};
-        for(const auto& pair:worn)if(auto visual=itemVisual(Ref(state.equipment.Get(),pair[0])))
-            add(Ref(state.equipment.Get(),pair[1]),visual);
+        state.armorTestMeshes=0;
+        const auto armorVisual=state.armorTest.value.empty()?VisualPtr{}:MakeVisual(state,state.armorTest);
+        for(size_t slot=0;slot<std::size(worn);++slot) {
+            const auto& pair=worn[slot];
+            auto* item=Ref(state.equipment.Get(),pair[0]);
+            auto* mesh=Ref(state.equipment.Get(),pair[1]);
+            if(item && armorVisual && (state.armorTestSlots&(1u<<slot))) {
+                if(add(mesh,armorVisual))++state.armorTestMeshes;
+            } else if(auto visual=itemVisual(item))add(mesh,visual);
+        }
         for(auto* name:{TEXT("HeldEquipmentActorLeft"),TEXT("HeldEquipmentActorRight")}) {
             auto* held=Ref(state.equipment.Get(),name);
             if(auto visual=itemVisual(Ref(held,TEXT("HeldEquipmentData"))))collect(held,visual);
@@ -338,7 +356,7 @@ void Refresh(State& state) {
         auto* mesh=desired.mesh;
         const auto& ghost=desired.visual->ghost;
         auto found=std::find_if(state.meshes.begin(),state.meshes.end(),[&](auto& s){return s.mesh.Get()==mesh;});
-        if(found==state.meshes.end()) { state.meshes.push_back({FWeakObjectPtr(mesh),{}, {},{}});found=std::prev(state.meshes.end()); }
+        if(found==state.meshes.end()) { state.meshes.push_back({PS::WeakObject(mesh),{}, {},{},{}});found=std::prev(state.meshes.end()); }
         auto& saved=*found;
         if(saved.applied!=desired.visual) {
             RestoreMesh(saved);
@@ -357,10 +375,16 @@ void Refresh(State& state) {
             }
         }
         if(ghost.Overlay && overlay!=ghost.Overlay)SetOverlayMaterial(mesh,ghost.Overlay);
+        std::erase_if(saved.niagara,[](const auto& value){return !value.Get();});
+        if(saved.niagara.empty()
+            && desired.visual->value.value("Type",std::string("Ghost"))=="Niagara") {
+            if(auto* component=NiagaraAttachment::Attach(state.player.Get(),mesh,desired.visual->value))
+                saved.niagara.emplace_back(PS::WeakObject(component));
+        }
     }
     std::erase_if(state.palette,[](auto& entry){return entry.second.expired();});
 }
-void TrackPreview(UObject* preview,const std::array<UObject*,4>& items) {
+void TrackPreview(UObject* preview) {
     if(!preview || !GhostMaterials::CanRender(preview))return;
     auto found=std::find_if(states.begin(),states.end(),[&](auto& state) {
         return state->preview && state->player.Get()==preview;
@@ -368,28 +392,33 @@ void TrackPreview(UObject* preview,const std::array<UObject*,4>& items) {
     if(found==states.end()) {
         std::erase_if(states,[](auto& state){return !state->player.Get();});
         if(states.size()>=16)throw std::runtime_error("Player ghost limit reached");
-        auto state=std::make_unique<State>();state->player=preview;state->preview=true;
-        for(size_t i=0;i<items.size();++i)state->previewItems[i]=items[i];
+        auto state=std::make_unique<State>();state->player=PS::WeakObject(preview);state->preview=true;
         AppearanceEvents::Subscribe(AppearanceEvents::Consumer::Ghost,Dirty);
-        try { Refresh(*state);states.push_back(std::move(state)); }
+        try {
+            Refresh(*state);
+            PS::Log<LogLevel::Verbose>(TEXT("Character preview visuals: {} ({} affected meshes).\n"),
+                preview->GetPathName(), state->meshes.size());
+            states.push_back(std::move(state));
+        }
         catch(...) {
             try { Restore(*state); } catch(...) {}
             if(states.empty())AppearanceEvents::Unsubscribe(AppearanceEvents::Consumer::Ghost);
             throw;
         }
     } else {
-        for(size_t i=0;i<items.size();++i)(*found)->previewItems[i]=items[i];
         Refresh(**found);
     }
 }
 }
 bool Apply(UObject* player,const nlohmann::json& effect) {
+    if(effect.value("Type",std::string("Ghost"))=="Niagara"
+        && !NiagaraAttachment::CanRenderLocally())return true;
     if(!GhostMaterials::CanRender(player))return false;
     auto found=std::find_if(states.begin(),states.end(),[&](auto& s){return s->player.Get()==player;});
     if(found!=states.end()) { (*found)->effect=PreparedVisualEffect(effect);Refresh(**found);return true; }
     std::erase_if(states,[](auto& s){return !s->player.Get();});
     if(states.size()>=16)throw std::runtime_error("Player ghost limit reached");
-    auto state=std::make_unique<State>();state->player=player;state->effect=PreparedVisualEffect(effect);
+    auto state=std::make_unique<State>();state->player=PS::WeakObject(player);state->effect=PreparedVisualEffect(effect);
     AppearanceEvents::Subscribe(AppearanceEvents::Consumer::Ghost,Dirty);
     try {
         Refresh(*state);states.push_back(std::move(state));return true;
@@ -399,11 +428,92 @@ bool Apply(UObject* player,const nlohmann::json& effect) {
         throw;
     }
 }
+bool IsDead(UObject* player) {
+    if (!player) return true;
+    auto* damage = Ref(player, TEXT("BP_Components_PlayerDamage"));
+    auto* fatal = damage ? CastField<FStructProperty>(PropertyHelper::GetPropertyByName(damage->GetClassPrivate(), TEXT("FatalDamageInfo"))) : nullptr;
+    auto* field = fatal && fatal->GetStruct() ? CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(fatal->GetStruct().Get(), TEXT("bIsSet"))) : nullptr;
+    return !field || field->GetPropertyValue(field->ContainerPtrToValuePtr<void>(fatal->ContainerPtrToValuePtr<void>(damage)));
+}
+bool ApplyTimed(UObject* player, const nlohmann::json& effect, double seconds, bool restart) {
+    if (!std::isfinite(seconds) || seconds <= 0.0 || seconds > 300.0 || IsDead(player)) return false;
+    auto found = std::find_if(states.begin(),states.end(),[&](const auto& state){return state->player.Get()==player;});
+    if (found == states.end()) {
+        if (!Apply(player, nlohmann::json::object())) return false;
+        found = std::find_if(states.begin(),states.end(),[&](const auto& state){return state->player.Get()==player;});
+    }
+    if (found == states.end()) return false;
+    auto& state = **found;
+    PreparedVisualEffect prepared(effect);
+    if (!restart && state.temporaryConsumed && state.temporaryKey==prepared.key) return true;
+    if (!restart && state.temporarySeconds > 0.0 && state.temporaryKey==prepared.key) return true;
+    state.temporaryEffect = std::move(prepared);
+    state.temporaryKey = state.temporaryEffect.key;
+    state.temporaryConsumed = true;
+    state.temporarySeconds = seconds;
+    try { Refresh(state); }
+    catch (...) { state.temporarySeconds=0.0; state.temporaryEffect={}; Restore(state); throw; }
+    return true;
+}
+void TickTimed(double deltaSeconds) {
+    if (!std::isfinite(deltaSeconds) || deltaSeconds < 0.0) return;
+    for (auto& state : states) {
+        auto* player = state->player.Get();
+        bool refresh=false;
+        if(state->temporarySeconds>0.0) {
+            state->temporarySeconds = !player || IsDead(player) ? 0.0 : std::max(0.0, state->temporarySeconds-deltaSeconds);
+            if(state->temporarySeconds==0.0)refresh=true;
+        }
+        if (refresh) {
+            state->temporaryEffect = {};
+            try { if (player) Refresh(*state); }
+            catch (const std::exception& error) { PS::Log<LogLevel::Warning>(TEXT("Timed appearance cleanup failed: {}\n"),PS::ToWideSafe(error.what())); }
+        }
+    }
+}
 bool HasItemRules() { return !itemEffects.empty(); }
 void TrackEquipment(UObject* player) {
     if(!player || itemEffects.empty())return;
     for(auto& state:states)if(state->player.Get()==player) { Refresh(*state);return; }
     Apply(player,nlohmann::json::object());
+}
+size_t ApplyArmorTest(UObject* player,const nlohmann::json& value,uint8_t slots) {
+    if(!player || !GhostMaterials::CanRender(player))return 0;
+    if(!slots || (slots&0xf0))throw std::runtime_error("Armor test slot mask is invalid");
+    auto effect=SpawnRuntime::ValidateVisualEffect(value);
+    if(effect.value("Type",std::string{})!="Niagara")
+        throw std::runtime_error("Armor test requires a Niagara visual effect");
+    if(effect.contains("Target"))effect.erase("Target");
+    auto found=std::find_if(states.begin(),states.end(),[&](auto& state) {
+        return !state->preview && state->player.Get()==player;
+    });
+    if(found==states.end()) {
+        std::erase_if(states,[](auto& state){return !state->player.Get();});
+        if(states.size()>=16)throw std::runtime_error("Player visual state limit reached");
+        auto state=std::make_unique<State>();
+        state->player=PS::WeakObject(player);state->armorTest=PreparedVisualEffect(std::move(effect));
+        state->armorTestSlots=slots;
+        AppearanceEvents::Subscribe(AppearanceEvents::Consumer::Ghost,Dirty);
+        try {
+            Refresh(*state);
+            const auto count=state->armorTestMeshes;
+            states.push_back(std::move(state));return count;
+        } catch(...) {
+            try { Restore(*state); } catch(...) {}
+            if(states.empty())AppearanceEvents::Unsubscribe(AppearanceEvents::Consumer::Ghost);
+            throw;
+        }
+    }
+    (*found)->armorTest=PreparedVisualEffect(std::move(effect));
+    (*found)->armorTestSlots=slots;
+    Refresh(**found);return (*found)->armorTestMeshes;
+}
+void ClearArmorTest() {
+    for(auto& state:states)if(!state->preview && !state->armorTest.value.empty()) {
+        state->armorTest={};state->armorTestMeshes=0;
+        if(state->player.Get())Refresh(*state);
+        else Restore(*state);
+    }
 }
 void SetItemEffect(UObject* item,const nlohmann::json& value,std::string_view sourceHint) {
     auto* equipmentType=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Dominion.EquipmentData"));
@@ -411,22 +521,29 @@ void SetItemEffect(UObject* item,const nlohmann::json& value,std::string_view so
         throw std::runtime_error("$VisualEffect requires an EquipmentData asset (armor, cape or held equipment)");
     auto effect=value;
     if(!effect.is_null()) {
-        if(effect.contains("Target"))throw std::runtime_error("Equipment $VisualEffect targets its own mesh; omit Target");
         effect=SpawnRuntime::ValidateVisualEffect(effect);
+        const auto lifetime=ParseVisualEffectLifetime(effect,"Equip",{"Equip"});
+        if(lifetime.IsFinite())
+            throw std::runtime_error("Equipment $VisualEffect.DurationSeconds supports only 'INFINITE'");
+        if(effect.contains("Target")) {
+            if(effect.at("Target")!="ItemMesh")
+                throw std::runtime_error("Equipment $VisualEffect.Target must be ItemMesh or omitted");
+            effect.erase("Target");
+        }
         if(itemEffects.size()>=256 && !itemEffects.contains(item->GetPathName()))
             throw std::runtime_error("Equipment ghost rule limit reached (256)");
         const auto slot=InferPreviewSlot(sourceHint.empty()?RC::to_string(item->GetPathName()):sourceHint);
+        effect=VisualEffectStyle(std::move(effect));
         itemEffects.insert_or_assign(item->GetPathName(),PreparedVisualEffect(std::move(effect)));
         if(slot!=PreviewSlot::Unknown && !IsDedicatedProcess()) {
             itemSlots.insert_or_assign(item->GetPathName(),slot);
-            EnsurePreviewLifecycle();previewBindPending=true;
+            EnsurePreviewLifecycle();
         } else itemSlots.erase(item->GetPathName());
     } else { itemEffects.erase(item->GetPathName());itemSlots.erase(item->GetPathName()); }
     if(itemSlots.empty())ReleasePreviewLifecycle();
     std::lock_guard lock(queueMutex);overflow=true;pending.store(true,std::memory_order_release);
 }
 void Flush() {
-    if(previewBindPending)BindPreviewOutfit();
     if(refreshing || !pending.exchange(false,std::memory_order_acq_rel))return;
     std::array<uintptr_t,128> tokens{};size_t count;bool all;
     { std::lock_guard lock(queueMutex);tokens=dirtyTokens;count=dirtyCount;all=overflow;dirtyCount=0;overflow=false; }
@@ -435,7 +552,7 @@ void Flush() {
     std::erase_if(states,[](auto& state){return !state->player.Get();});
     if(states.empty())AppearanceEvents::Unsubscribe(AppearanceEvents::Consumer::Ghost);
     for(auto& state:states) {
-        const auto matches=[&](const FWeakObjectPtr& ref) {
+        const auto matches=[&](const PS::WeakObjectHandle& ref) {
             const auto token=reinterpret_cast<uintptr_t>(ref.Get());
             return token && std::find(tokens.begin(),tokens.begin()+count,token)!=tokens.begin()+count;
         };
@@ -446,10 +563,17 @@ void Flush() {
     }
     std::erase_if(materialPool,[](auto& entry){return entry.second.expired();});
 }
-void Clear() {
+void ClearWorld() {
     AppearanceEvents::Unsubscribe(AppearanceEvents::Consumer::Ghost);
-    ReleasePreviewLifecycle();
-    states.clear();materialPool.clear();itemSlots.clear();
+    previewActor.Reset();
+    for(auto& state:states)Restore(*state);
+    states.clear();materialPool.clear();
     std::lock_guard lock(queueMutex);dirtyCount=0;overflow=false;pending.store(false);
+}
+void Clear() {
+    ClearWorld();
+    ReleasePreviewLifecycle();
+    itemEffects.clear();
+    itemSlots.clear();
 }
 }

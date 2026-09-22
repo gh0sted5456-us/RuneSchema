@@ -20,6 +20,7 @@
 #include "SDK/Structs/Custom/FScriptSetHelper.h"
 #include "SDK/Structs/FSoftObjectPath.h"
 #include "Utility/Logging.h"
+#include "Utility/AssetAliases.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -97,7 +98,7 @@ namespace DragonWilds::ActorHelper {
 
     UObject* ResolveObject(const StringType& Path)
     {
-        const auto normalizedPath = NormalizeObjectPath(Path);
+        const auto normalizedPath = PS::AssetAliases::Resolve(NormalizeObjectPath(Path));
         if (auto* found = UECustom::UObjectGlobals::StaticFindObject<UObject*>(
                 nullptr, nullptr, normalizedPath.c_str(), false))
         {
@@ -162,6 +163,7 @@ namespace DragonWilds::ActorHelper {
                 RC::to_string(ActorClass->GetName())));
         }
 
+        try {
         if (Configure)
         {
             Configure(actor);
@@ -181,6 +183,10 @@ namespace DragonWilds::ActorHelper {
         }
 
         return spawned;
+        } catch (...) {
+            try { DestroyActor(actor); } catch (...) {}
+            throw;
+        }
     }
 
     void DestroyActor(AActor* Actor)
@@ -191,6 +197,32 @@ namespace DragonWilds::ActorHelper {
         }
 
         FunctionCall(Actor, STR("/Script/Engine.Actor:K2_DestroyActor")).Invoke();
+    }
+
+    void DestroyComponent(UObject* Component)
+    {
+        if(!Component)return;
+        auto* type=ResolveClass(STR("/Script/Engine.ActorComponent"));
+        if(!type || !Component->IsA(type))throw std::runtime_error("Cleanup target is not an ActorComponent");
+        const auto validate=[](const TCHAR* path,const TCHAR* name,bool returns) {
+            auto* fn=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,path,false);
+            auto* field=fn?CastField<FObjectProperty>(fn->FindProperty(FName(name,FNAME_Find))):nullptr;
+            if(!fn || !field || fn->GetParmsSize()!=sizeof(UObject*) || field->GetElementSize()!=sizeof(UObject*)
+                || field->GetArrayDim()!=1 || field->GetOffset_Internal()!=0 || !field->HasAnyPropertyFlags(CPF_Parm)
+                || (returns ? fn->GetReturnProperty()!=field : fn->GetReturnProperty()!=nullptr))
+                throw std::runtime_error("Component cleanup object parameter contract changed");
+            size_t count=0;
+            for(auto* p:TFieldRange<FProperty>(fn,EFieldIterationFlags::Default))if(p->HasAnyPropertyFlags(CPF_Parm))++count;
+            if(count!=1)throw std::runtime_error("Component cleanup parameter count changed");
+        };
+        validate(TEXT("/Script/Engine.ActorComponent:GetOwner"),TEXT("ReturnValue"),true);
+        FunctionCall ownerCall(Component,STR("/Script/Engine.ActorComponent:GetOwner"));
+        ownerCall.Invoke();
+        auto* owner=ownerCall.Result<UObject*>();
+        if(!owner || !IsActorClass(owner->GetClassPrivate()) || owner->GetWorld()!=Component->GetWorld())
+            throw std::runtime_error("Component cleanup owner is unavailable");
+        validate(TEXT("/Script/Engine.ActorComponent:K2_DestroyComponent"),TEXT("Object"),false);
+        FunctionCall(Component,STR("/Script/Engine.ActorComponent:K2_DestroyComponent")).Arg(STR("Object"),owner).Invoke();
     }
 
     FVector GetActorLocation(AActor* Actor)
@@ -285,6 +317,26 @@ namespace DragonWilds::ActorHelper {
         m_params.assign(m_function->GetParmsSize(), 0);
     }
 
+    FunctionCall::FunctionCall(UObject* Self, UFunction* Function)
+        : m_self(Self), m_function(Function)
+    {
+        if (!m_self || !m_function)
+            throw std::runtime_error("Tried to call a null object or function");
+        const auto size = static_cast<size_t>(m_function->GetParmsSize());
+        if (size > 65535)
+            throw std::runtime_error("Function parameter buffer is outside the supported range");
+        m_params.assign(size, 0);
+    }
+
+    FunctionCall::~FunctionCall()
+    {
+        for (auto it = m_initialized.rbegin(); it != m_initialized.rend(); ++it)
+        {
+            try { (*it)->DestroyValue_InContainer(m_params.data()); }
+            catch (...) {}
+        }
+    }
+
     void FunctionCall::Write(const CharType* Name, const void* Data, size_t Size)
     {
         auto* property = m_function->FindProperty(FName(Name, FNAME_Find));
@@ -311,6 +363,56 @@ namespace DragonWilds::ActorHelper {
         MakeSoftObjectRef(Value, soft.data(), size);
 
         Write(Name, soft.data(), size);
+        return *this;
+    }
+
+    FunctionCall& FunctionCall::JsonArg(const CharType* Name, const nlohmann::json& Value)
+    {
+        auto* property = m_function->FindProperty(FName(Name, FNAME_Find));
+        if (!property || property == m_function->GetReturnProperty()
+            || property->GetOffset_Internal() < 0
+            || static_cast<size_t>(property->GetOffset_Internal())
+                + static_cast<size_t>(property->GetElementSize()) > m_params.size())
+        {
+            throw std::runtime_error(std::format("Parameter '{}' did not match the live function layout",
+                RC::to_string(StringType(Name))));
+        }
+
+        property->InitializeValue_InContainer(m_params.data());
+        m_initialized.push_back(property);
+        PropertyHelper::CopyJsonValueToContainer(m_params.data(), property, Value);
+        return *this;
+    }
+
+    FunctionCall& FunctionCall::ArrayArg(const CharType* Name, FProperty* SourceProperty,
+                                         const void* SourceValue)
+    {
+        auto* destination = CastField<FArrayProperty>(
+            m_function->FindProperty(FName(Name, FNAME_Find)));
+        auto* source = CastField<FArrayProperty>(SourceProperty);
+        if (!destination || !source || !SourceValue
+            || destination->GetOffset_Internal() < 0
+            || static_cast<size_t>(destination->GetOffset_Internal())
+                + static_cast<size_t>(destination->GetElementSize()) > m_params.size()
+            || destination->GetInner()->GetClass() != source->GetInner()->GetClass()
+            || destination->GetInner()->GetElementSize() != source->GetInner()->GetElementSize())
+        {
+            throw std::runtime_error(std::format(
+                "Array parameter '{}' did not match the live source layout",
+                RC::to_string(StringType(Name))));
+        }
+
+        if (auto* destinationStruct = CastField<FStructProperty>(destination->GetInner()))
+        {
+            auto* sourceStruct = CastField<FStructProperty>(source->GetInner());
+            if (!sourceStruct || destinationStruct->GetStruct() != sourceStruct->GetStruct())
+                throw std::runtime_error("Array parameter struct type changed");
+        }
+
+        destination->InitializeValue_InContainer(m_params.data());
+        m_initialized.push_back(destination);
+        destination->CopyCompleteValue(
+            destination->ContainerPtrToValuePtr<void>(m_params.data()), SourceValue);
         return *this;
     }
 

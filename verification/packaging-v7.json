@@ -1,0 +1,19 @@
+{
+  "baseline": "RuneSchema.7-Native-Input-R3v6-F2-Cleanup-Direct-Override-Hotfix1.zip",
+  "new_archive": "RuneSchema.7-Native-Input-R3v7-F2-Badges-Favorites-Direct-Override.zip",
+  "source_files": 23,
+  "baseline_changes": {
+    "new": 3,
+    "modified": 8,
+    "unchanged": 12
+  },
+  "contains_bat": false,
+  "contains_compiled_binary": false,
+  "contains_artwork": false,
+  "simulated_merge_preserved_bat": true,
+  "simulated_merge_preserved_unrelated_source": true,
+  "all_new_source_hashes_verified": true,
+  "safe_relative_archive_paths": true,
+  "zip_crc_test_passed": true,
+  "native_windows_build_executed": false
+}

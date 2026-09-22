@@ -4,6 +4,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_set>
+#include <vector>
 #include "nlohmann/json.hpp"
 
 namespace PS {
@@ -16,30 +17,29 @@ namespace PS {
         bool deterministicFallback = true;
     };
 
-    struct RoutineNotificationSettings {
-        bool modLoading = true;
-        bool assets = true;
-        bool raw = true;
-        bool recipes = true;
-        bool journal = true;
-        bool spawns = true;
-        bool players = true;
-        bool patches = true;
-    };
-
     struct LoaderActivationSettings {
-        bool equipment = true;
-        bool blueprints = true;
         bool assets = true;
-        bool recipes = true;
-        bool journal = true;
-        bool raw = true;
-        bool enums = true;
-        bool strings = true;
+        bool blueprints = true;
         bool buildings = true;
-        bool spawns = true;
         bool courses = true;
+        bool dialogue = true;
+        bool effects = true;
+        bool enums = true;
+        bool equipment = true;
+        bool events = true;
+        bool journal = true;
+        bool lore = true;
+        bool nameplates = true;
+        bool niagara = true;
+        bool npc = true;
         bool players = true;
+        bool quests = true;
+        bool registry = true;
+        bool raw = true;
+        bool recipes = true;
+        bool spawns = true;
+        bool strings = true;
+        bool vendors = true;
     };
 
     struct SpawnBehaviorSettings {
@@ -48,15 +48,48 @@ namespace PS {
         double defaultRoamMaxZTolerance = 200.0;
     };
 
+    struct NpcDiagnosticSettings {
+        bool statusExport = false;
+        bool interactionTraceExport = false;
+    };
+
+    struct PluginSettings {
+        // "normal" logs compatibility notices normally, "quiet" emits them
+        // only with advanced logging, and "off" suppresses them.
+        std::string compatibilityNotices = "quiet";
+    };
+
+    struct HelpyAuthoritySettings {
+        // Client Helpy requests are always server-executed and independently
+        // validated. Permanent authoring/export operations are never accepted.
+        bool allowClientItemGrants = false;
+        bool allowClientTemporarySpawns = false;
+        int maximumItemCount = 100;
+        int maximumSpawnCount = 5;
+        int maximumNpcDurationSeconds = 300;
+        // Empty lists deny remote Helpy mutations. GUIDs are preferred;
+        // exact names are an explicit compatibility fallback.
+        std::vector<std::string> permittedPlayerGuids{};
+        std::vector<std::string> permittedPlayerNames{};
+    };
+
     struct PSConfigSettings {
-        std::string languageOverride = "";
         bool enableAutoReload = false;
-        bool enableDebugLogging = false;
+        // Logging detail and advanced authoring/diagnostic facilities are
+        // independent. Core loaders and network bridges are never gated here.
+        bool advancedLogging = false;
+        bool authoringTools = true;
+        // Retained JSON name for compatibility. This now means heavyweight
+        // diagnostics/full catalog work, never ordinary mod authoring.
+        bool advancedRuntime = false;
+        bool colorCodeLoaderAnnotations = true;
         bool enableExperimentalDropScaling = false;
         LoadOrderSettings loadOrder{};
-        RoutineNotificationSettings notifications{};
         LoaderActivationSettings loaders{};
         SpawnBehaviorSettings spawnBehavior{};
+        NpcDiagnosticSettings npcDiagnostics{};
+        PluginSettings plugins{};
+        HelpyAuthoritySettings helpyAuthority{};
     };
 
     class PSConfig {
@@ -79,13 +112,16 @@ namespace PS {
 
         const PSConfigSettings& GetSettings() const;
 
-        void Save();
+        bool Save();
+        const std::string& GetStatus() const { return m_status; }
 
         void Load();
     private:
-        static std::filesystem::path GetConfigPath();
+        static std::filesystem::path GetSettingsPath();
 
     private:
         PSConfigSettings m_settings;
+        std::string m_status;
+        bool m_preserveOriginal = false;
     };
 }

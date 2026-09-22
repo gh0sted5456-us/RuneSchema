@@ -57,6 +57,7 @@ namespace {
 }
 
 namespace DragonWilds::JsonLoadOrderMerge {
+    std::optional<std::string> LineItemIdentity(const nlohmann::json& value) { return StableId(value); }
     MergeStats Apply(nlohmann::json& earlier, const nlohmann::json& later, bool mergeLineItems) {
         MergeStats stats{};
         if (!mergeLineItems) {

@@ -2,12 +2,14 @@
 
 #include <functional>
 #include <vector>
+#include "nlohmann/json_fwd.hpp"
 #include "Unreal/AActor.hpp"
 #include "Unreal/Rotator.hpp"
 #include "Unreal/UnrealCoreStructs.hpp"
 
 namespace RC::Unreal {
     class UClass;
+    class FProperty;
     class UFunction;
     class UObject;
     class UWorld;
@@ -33,6 +35,7 @@ namespace DragonWilds::ActorHelper {
                                        RC::Unreal::ESpawnActorScaleMethod::MultiplyWithRoot);
 
     void DestroyActor(RC::Unreal::AActor* Actor);
+    void DestroyComponent(RC::Unreal::UObject* Component);
 
     RC::Unreal::FVector GetActorLocation(RC::Unreal::AActor* Actor);
 
@@ -49,6 +52,10 @@ namespace DragonWilds::ActorHelper {
     class FunctionCall {
     public:
         FunctionCall(RC::Unreal::UObject* Self, const RC::StringType& FunctionPath);
+        FunctionCall(RC::Unreal::UObject* Self, RC::Unreal::UFunction* Function);
+        ~FunctionCall();
+        FunctionCall(const FunctionCall&) = delete;
+        FunctionCall& operator=(const FunctionCall&) = delete;
 
         template <typename T>
         FunctionCall& Arg(const RC::CharType* Name, const T& Value)
@@ -58,6 +65,15 @@ namespace DragonWilds::ActorHelper {
         }
 
         FunctionCall& SoftObjectArg(const RC::CharType* Name, RC::Unreal::UObject* Value);
+        FunctionCall& JsonArg(const RC::CharType* Name, const nlohmann::json& Value);
+
+        // Reflected containers cannot be passed with the scalar Arg helper. A
+        // byte copy aliases the source allocation and lets ProcessEvent or its
+        // parameter cleanup corrupt live game state. This method owns a deep
+        // reflected copy for the duration of the call.
+        FunctionCall& ArrayArg(const RC::CharType* Name,
+                               RC::Unreal::FProperty* SourceProperty,
+                               const void* SourceValue);
 
         FunctionCall& FirstNumericArg(double Value);
 
@@ -82,5 +98,6 @@ namespace DragonWilds::ActorHelper {
         RC::Unreal::UObject* m_self = nullptr;
         RC::Unreal::UFunction* m_function = nullptr;
         std::vector<uint8_t> m_params;
+        std::vector<RC::Unreal::FProperty*> m_initialized;
     };
 }

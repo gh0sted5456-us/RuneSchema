@@ -73,6 +73,7 @@ namespace DragonWilds {
             Medal Silver;
             Medal Bronze;
             Reward NoMedal;
+            nlohmann::json Source;
         };
 
         struct RuntimeProp {
@@ -112,6 +113,7 @@ namespace DragonWilds {
 
         void LoadCourses(const nlohmann::json& data, const RC::StringType& modName);
         void RegisterCourse(const nlohmann::json& value, const RC::StringType& modName);
+        void ApplyPatch(const nlohmann::json& patch, const RC::StringType& modName);
 
         bool SetupWorldReadyHook();
         void StartBuildTick();

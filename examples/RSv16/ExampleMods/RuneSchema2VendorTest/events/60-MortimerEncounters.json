@@ -1,0 +1,9 @@
+[
+  {"Id":"mortimer_scattered_debtors","TimeoutSeconds":900,"Waves":[[
+    {"SpawnID":"rs_mortimer_west","Location":[38835,173509,"$+250"]},
+    {"SpawnID":"rs_mortimer_east","Location":[44835,173509,"$+250"]},
+    {"SpawnID":"rs_mortimer_north","Location":[41835,178509,"$+250"]}
+  ]]},
+  {"Id":"mortimer_giant_debtor","TimeoutSeconds":900,"Waves":[[{"SpawnID":"rs_mortimer_giant","Location":[43135,174509,"$+350"]}]]},
+  {"Id":"quantum_ghost_rematch","TimeoutSeconds":900,"TimeOfDay":"Night","Waves":[[{"SpawnID":"rs_quantum_ghost_giant","Location":[19150,187550,"$+350"]}]]}
+]

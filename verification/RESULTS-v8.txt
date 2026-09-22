@@ -1,0 +1,69 @@
+R3v8 verification — executed versus not executed
+================================================
+Basis: the R3v7 cumulative direct-override ZIP provided in this conversation.
+
+Executed with GCC 14.2, C++23, -Wall -Wextra -Werror -pedantic:
+  F2ModelTests                 PASS: 23,770 assertions, including looped ID cases.
+  F2BrowserTests               PASS: 4,163 assertions.
+  F2PreferenceFileTests        PASS: 28 POSIX file-I/O assertions.
+  F2IndexTests                 PASS: 648 path-plan/reference/policy assertions.
+  F2ProgressTests              PASS: 18 UI progress/Refresh assertions.
+  Identifier check            PASS: 10,000 generated IDs round-trip to 16 bytes.
+  Default object pointer      PASS: original expression fails negative control;
+                              corrected expression passes seven stand-in cases.
+  Cooked asset policy         PASS: 31 assertions with UObject stand-ins.
+  Provenance identity         PASS: 12 assertions using the baseline's actual
+                              WeakObjectHandle plus mocked native object slots.
+  Static source integration   PASS: 79 checks (not native compilation).
+
+The same suites passed under Clang 17 with AddressSanitizer and
+UndefinedBehaviorSanitizer, with no sanitizer report in the completed run.
+Counts are assertions/iterations, not independent in-game scenarios.
+See gcc-v8.log and clang-sanitizers-v8.log for actual output.
+
+New exercised cases include:
+- explicit page navigation; mouse wheel does not change item/source/AI pages;
+- 12 placards, global filters, missing/stale entries, Favorites independence;
+- 680-wide hit bounds, centered five-digit quantity, icon-only header;
+- determinate candidate progress, unknown-total indicator, zero total, clamps;
+- progress remains visible while selecting a clone source;
+- case-insensitive path deduplication and prefix boundary checks;
+- canonical base-game versus independent plugin mount conversion;
+- nested reference-tree traversal, optional absent plugin folders;
+- truncated recursive responses re-fetched through shallow subtrees;
+- failed reference traversal cannot replace a caller's previous index;
+- candidate count limits, late results, search priority/clear and long paths;
+- native bSoftDeleted spelling and missing-string display fallback;
+- cache-sized file readback, failed writes retaining the old bytes;
+- original zero-serial provenance failure as a negative control;
+- later weak references, expired/invalid/reused slots and cleared identity.
+
+Offline layout checks:
+RenderLayout.cpp executes the shipped UI model and writes drawing commands.
+render_layout.py renders them with placeholder art and a local comparison font.
+Main indexed page, discovery indicator and source picker were inspected.
+No horizontal text-bound violation was found in those three fixture renders.
+No font files or badge artwork are included in this archive.
+
+NOT executed / not established:
+- Full Windows/MSVC/UE4SS build or DLL link.
+- Production nlohmann JSON codecs or WinHTTP transport compilation/execution.
+- Real Windows handle semantics or MoveFileExW behavior.
+- Real engine reflection, native asset loads, garbage collection or Canvas output.
+- Public-reference HTTP request sequence from inside Dragonwilds.
+- Complete census/classification of the user's actual mounted AI/resources/items.
+- Live item-clone registration/grants, equipment behavior, save/reload/world travel.
+- Multiplayer/dedicated-server tests (live cloning remains single-player-only).
+
+The source was also reviewed for the fixed public HTTPS host, explicit worker
+shutdown, cancellation/world-generation handling, cached paths not retaining
+availability/registration, and creation-based rather than ID-prefix attribution.
+Static checks enforce this wiring but cannot prove runtime semantics.
+
+Packaging checks are recorded in packaging-v8.json and the source manifest.
+All source files have SHA-256 entries. The ZIP contains no BAT or compiled DLL.
+These tests never run automatically from the user's Build RuneSchema.bat.
+
+Reproduce optional author-side portable checks in a POSIX environment:
+  python verification/run_portable_tests.py --compiler g++
+  python verification/run_portable_tests.py --compiler clang++ --sanitize

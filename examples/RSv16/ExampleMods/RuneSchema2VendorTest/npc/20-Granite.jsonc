@@ -1,0 +1,32 @@
+// Neutral stone visual, not a mineable resource. Keep Id stable when moving it.
+// Scale 3; Z is ground plus a small burial offset for the authored mesh pivot.
+{
+  "Id": "granite_interminable",
+  "Multiplayer": true,
+  "Type": "Resource",
+  "DisplayName": "Granite the Interminable",
+  "DialogueID": "granite_story",
+  "VendorID": "granite_armory",
+  "QuestID": "granite_goblin_patrol",
+  "Mesh": "/Game/Art/Item/Resources/Stone_Boulder_01v2/SM_Stone_Boulder_01v2.SM_Stone_Boulder_01v2",
+  "Location": [
+    17150,
+    186450,
+    "$+60"
+  ],
+  "Rotation": {"Pitch": 0, "Yaw": 0, "Roll": 0},
+  "Scale": 3,
+  "EnableCollision": true,
+  "MeshCollision": "Pawn",
+  "Map": {
+    "Enabled": true,
+    "Icon": "/Game/Art/UI/Map/T_Map_Secondary_Quest_Icon_NPC.T_Map_Secondary_Quest_Icon_NPC"
+  },
+  "OverheadIcon": {
+    "Enabled": true,
+    "Icon": "/Game/Art/UI/Map/T_Map_Secondary_Quest_Icon_NPC.T_Map_Secondary_Quest_Icon_NPC",
+    "Height": 175,
+    "Scale": 0.25,
+    "Distance": 5000
+  }
+}

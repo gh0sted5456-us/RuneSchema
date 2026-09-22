@@ -1,0 +1,6 @@
+# Dragonwilds Sync ID v1
+Schema: DragonwildsSync.ID.v1
+ModId: RuneSchema2VendorTest
+Name: RuneSchema 2 Neutral Cow NPC Test
+RuntimeRole: both
+HOTLOAD = NO

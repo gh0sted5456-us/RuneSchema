@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cctype>
 #include <fstream>
@@ -10,6 +11,7 @@
 #include "Unreal/UObjectArray.hpp"
 #include "Unreal/UnrealInitializer.hpp"
 #include <unordered_map>
+#include <unordered_set>
 #include "Unreal/Engine/UDataTable.hpp"
 #include "Unreal/Hooks.hpp"
 #include "Utility/Config.h"
@@ -22,9 +24,15 @@
 #include "SDK/StaticClassStorage.h"
 #include "SDK/UnrealOffsets.h"
 #include "Runtime/HostServices.h"
+#include "Runtime/PluginCatalog.h"
 #include "Loader/DragonWildsRawTableLoader.h"
 #include "Loader/DragonWildsAssetModLoader.h"
 #include "Loader/DragonWildsBlueprintModLoader.h"
+#include "Loader/DragonWildsVendorLoader.h"
+#include "Loader/DragonWildsDialogueLoader.h"
+#include "Loader/DragonWildsNpcLoader.h"
+#include "Loader/DragonWildsQuestLoader.h"
+#include "Loader/DragonWildsEventLoader.h"
 #include "Loader/DragonWildsEnumLoader.h"
 #include "Loader/DragonWildsRecipeModLoader.h"
 #include "Loader/DragonWildsJournalModLoader.h"
@@ -33,6 +41,9 @@
 #include "Loader/DragonWildsSpawnLoader.h"
 #include "Loader/DragonWildsStringModLoader.h"
 #include "Loader/DragonWildsEquipmentLoader.h"
+#include "Loader/DragonWildsGameplayEffectLoader.h"
+#include "Loader/DragonWildsNiagaraLoader.h"
+#include "Loader/DragonWildsRegistryLoader.h"
 #include "Loader/DragonWildsMainLoader.h"
 #include "Loader/ModLoadOrder.h"
 #include "Misc/FileWatchWrapper.h"
@@ -69,7 +80,7 @@ namespace
 
 namespace DragonWilds {
     DragonWildsMainLoader::DragonWildsMainLoader() {
-        PS::StartupTrace::Begin(GetModsPath().parent_path() / "diagnostics");
+        PS::StartupTrace::Begin(PS::HostServices::ExportsDirectory() / "startup");
         PS::StartupTrace::Mark("construct loaders begin");
         CreateLoaders();
         PS::StartupTrace::Mark("construct loaders complete");
@@ -88,6 +99,7 @@ namespace DragonWilds {
 
         DatatableSerializeCallbacks.clear();
         GameInstanceInitCallbacks.clear();
+        m_registryBridge.Stop();
         m_dataRegistrar.Shutdown();
 
         if (AutoReloadCallbackId != Hook::ERROR_ID)
@@ -214,6 +226,7 @@ namespace DragonWilds {
 
         PS::StartupTrace::Mark("data registrar begin");
         m_dataRegistrar.Initialize();
+        m_registryBridge.Start();
         PS::StartupTrace::Mark("GameInstanceInit loaders complete (deferred world work may remain)");
     }
 
@@ -265,7 +278,10 @@ namespace DragonWilds {
 
     void DragonWildsMainLoader::CreateLoaders()
     {
+        RegisterLoader(std::make_unique<DragonWildsRegistryLoader>(m_registryBridge));
         RegisterLoader(std::make_unique<DragonWildsEquipmentLoader>());
+        RegisterLoader(std::make_unique<DragonWildsGameplayEffectLoader>());
+        RegisterLoader(std::make_unique<DragonWildsNiagaraLoader>());
         RegisterLoader(std::make_unique<DragonWildsEnumLoader>());
 
         RegisterLoader(std::make_unique<DragonWildsRawTableLoader>());
@@ -274,9 +290,32 @@ namespace DragonWilds {
 
         RegisterLoader(std::make_unique<DragonWildsBlueprintModLoader>());
 
-        RegisterLoader(std::make_unique<DragonWildsRecipeModLoader>());
+        auto recipes = std::make_unique<DragonWildsRecipeModLoader>();
+        auto* recipeService = recipes.get();
+        RegisterLoader(std::move(recipes));
+        auto npcs=std::make_unique<DragonWildsNpcLoader>(recipeService);
+        auto* npcService=npcs.get();
+        m_registryBridge.QuestControl=[npcService](RC::Unreal::UObject* player,const std::string& quest,
+            const std::string& action,const std::string& payload){
+            return npcService->HandleNetworkQuestControl(player,quest,action,payload);
+        };
+        m_registryBridge.ClientNotification=[npcService](RC::Unreal::UObject* player,const std::string& channel,
+            const std::string& entity,const std::string& payload){
+            npcService->HandleNetworkNotification(player,channel,entity,payload);
+        };
+        npcService->PublishWorldState=[this](const std::string& instance,const std::string& record){
+            (void)m_registryBridge.UpsertWorldInstance(instance,record);
+        };
+        RegisterLoader(std::move(npcs));
+        RegisterLoader(std::make_unique<DragonWildsVendorLoader>(npcService));
+        RegisterLoader(std::make_unique<DragonWildsDialogueLoader>(npcService));
+        RegisterLoader(std::make_unique<DragonWildsQuestLoader>(npcService));
+        RegisterLoader(std::make_unique<DragonWildsEventLoader>(npcService));
 
         RegisterLoader(std::make_unique<DragonWildsJournalModLoader>());
+        auto loreLoader=std::make_unique<DragonWildsJournalModLoader>(true);
+        npcService->OpenLore=[service=loreLoader.get()](RC::Unreal::UObject* controller,const std::string& entry){return service->OpenLoreForPlayer(controller,entry);};
+        RegisterLoader(std::move(loreLoader));
 
         auto buildingModLoader = std::make_unique<DragonWildsBuildingModLoader>();
         m_buildingLoader = buildingModLoader.get();
@@ -284,6 +323,26 @@ namespace DragonWilds {
 
         auto spawnLoader = std::make_unique<DragonWildsSpawnLoader>();
         m_spawnLoader = spawnLoader.get();
+        m_spawnLoader->ForwardHelpyAuthority=[this](const std::string& action,const std::string& payload){
+            return m_registryBridge.RequestAuthority(action,payload);
+        };
+        m_spawnLoader->IsQuestCompleted=[npcService](RC::Unreal::UWorld* world,const std::string& quest){
+            return npcService->IsQuestCompleted(world,quest);
+        };
+        m_registryBridge.AuthorityChannel=[service=m_spawnLoader](RC::Unreal::UObject* player,const std::string& channel,
+            const std::string&,const std::string& action,const std::string& payload){
+            if(channel!="helpy.authority")throw std::runtime_error("Unsupported RuneSchema authority channel");
+            return service->HandleNetworkHelpyAuthority(player,action,payload);
+        };
+        m_spawnLoader->PublishEventIdentity=[npcService](RC::Unreal::AActor* actor,const std::string& payload){npcService->PublishEventIdentity(actor,payload);};
+        npcService->PresentEventIdentity=[service=m_spawnLoader](RC::Unreal::AActor* actor,const std::string& payload){return service->PresentEventIdentity(actor,payload);};
+        m_spawnLoader->PresentEventState=[npcService](RC::Unreal::AActor* actor,const std::string& event){npcService->ObserveClientEvent(actor,event);};
+        npcService->EventService().SpawnManifest=[service=m_spawnLoader](const std::string& key){return service->EventSpawnManifest(key);};
+        npcService->EventService().Validate=[service=m_spawnLoader](const std::string& key){
+            if(!service->HasInitialized())throw std::runtime_error("Spawn loader is disabled or not ready");
+            service->ValidateEventSpawn(key);
+        };
+        npcService->EventService().Spawn=[service=m_spawnLoader](const std::string& key,const std::string& event,RC::Unreal::UWorld* world,const RC::Unreal::FVector& position){return service->SpawnEventAI(key,world,position,false,0,event);};
         RegisterLoader(std::move(spawnLoader));
 
         RegisterLoader(std::make_unique<DragonWildsCourseLoader>());
@@ -329,6 +388,21 @@ namespace DragonWilds {
                             m_spawnLoader->FinalizePlayerRules();
                             PS::Log<LogLevel::Normal>(
                                 STR("Auto-reloaded /players for mod {}\n"),
+                                pendingAutoReload.ModName);
+                            handled = true;
+                        }
+                        if (pendingAutoReload.FolderType == "nameplates" && m_spawnLoader)
+                        {
+                            const auto modPath = pendingAutoReload.FilePath.parent_path().parent_path();
+                            m_spawnLoader->LoadNameplateDefinitions(
+                                pendingAutoReload.FilePath.parent_path(), pendingAutoReload.ModName, true);
+                            m_spawnLoader->FinalizeNameplateDefinitions();
+                            const auto playersPath = modPath / "players";
+                            if (fs::is_directory(playersPath))
+                                m_spawnLoader->LoadPlayerRules(playersPath, pendingAutoReload.ModName, true);
+                            m_spawnLoader->FinalizePlayerRules();
+                            PS::Log<LogLevel::Normal>(
+                                STR("Auto-reloaded /nameplates for mod {}\n"),
                                 pendingAutoReload.ModName);
                             handled = true;
                         }
@@ -481,6 +555,23 @@ namespace DragonWilds {
 
     void DragonWildsMainLoader::LoadMods(EEngineLifecyclePhase engineLifecyclePhase)
     {
+        if (engineLifecyclePhase == EEngineLifecyclePhase::GameInstanceInit
+            && PS::PSConfig::Get()->IsLoaderEnabled("recipes")) {
+            for (auto& loader : m_loaders) if (loader->GetModFolderType() == "recipes")
+                static_cast<DragonWildsRecipeModLoader*>(loader.get())->PrepareReferences();
+        }
+        // Definitions must exist before any mod's property or appearance consumers.
+        if(engineLifecyclePhase==EEngineLifecyclePhase::PostEngineInit) {
+            for(auto& loader:m_loaders) {
+                const auto& kind=loader->GetModFolderType();
+                if(kind!="effects" && kind!="niagara")continue;
+                IterateModsFolder([&](const fs::path& path,const fs::path::string_type& owner) {
+                    try { loader->Load(path,owner,engineLifecyclePhase); }
+                    catch(const std::exception& e) { PS::Log<LogLevel::Error>(TEXT("{} definitions rejected: {}\n"),owner,PS::ToWideSafe(e.what())); }
+                });
+                loader->FinalizeLoad(engineLifecyclePhase);
+            }
+        }
         if (engineLifecyclePhase == EEngineLifecyclePhase::PostEngineInit && m_spawnLoader
             && PS::PSConfig::Get()->IsLoaderEnabled("players"))
         {
@@ -515,11 +606,17 @@ namespace DragonWilds {
 
                 for (auto& loader : m_loaders)
                 {
+                    if(loader->GetModFolderType()=="effects" || loader->GetModFolderType()=="niagara")continue;
+                    const auto loaderKind = loader->GetModFolderType();
+                    PS::StartupTrace::Mark("load loader begin: " + RC::to_string(modName)
+                        + "/" + loaderKind);
                     try { loader->Load(modPath, modName, engineLifecyclePhase); }
                     catch (const std::exception& e) {
-                        PS::StartupTrace::Mark("ERROR load " + RC::to_string(modName) + "/" + loader->GetModFolderType());
-                        PS::Log<LogLevel::Error>(STR("Failed to load {}/{}: {}\n"), modName, RC::to_generic_string(loader->GetModFolderType()), PS::ToWideSafe(e.what()));
+                        PS::StartupTrace::Mark("ERROR load " + RC::to_string(modName) + "/" + loaderKind);
+                        PS::Log<LogLevel::Error>(STR("Failed to load {}/{}: {}\n"), modName, RC::to_generic_string(loaderKind), PS::ToWideSafe(e.what()));
                     }
+                    PS::StartupTrace::Mark("load loader end: " + RC::to_string(modName)
+                        + "/" + loaderKind);
                 }
             }
             catch (const std::exception& e)
@@ -540,6 +637,15 @@ namespace DragonWilds {
         if (engineLifecyclePhase == EEngineLifecyclePhase::PostEngineInit && m_spawnLoader
             && PS::PSConfig::Get()->IsLoaderEnabled("players"))
         {
+            if (PS::PSConfig::Get()->IsLoaderEnabled("nameplates"))
+            {
+                IterateModsFolder([&](const fs::path& modPath, const fs::path::string_type& modName) {
+                    const auto nameplatesPath = modPath / "nameplates";
+                    if (fs::is_directory(nameplatesPath))
+                        m_spawnLoader->LoadNameplateDefinitions(nameplatesPath, modName);
+                });
+                m_spawnLoader->FinalizeNameplateDefinitions();
+            }
             IterateModsFolder([&](const fs::path& modPath,
                 const fs::path::string_type& modName)
             {
@@ -570,7 +676,7 @@ namespace DragonWilds {
             }
 
             auto folderType = entry.path().filename().string();
-            if (folderType == PS::ModFolderLayout::PakDirectory || folderType == "players")
+            if (folderType == PS::ModFolderLayout::PakDirectory || folderType == "players" || folderType == "nameplates")
             {
                 continue;
             }
@@ -604,7 +710,7 @@ namespace DragonWilds {
                 knownFolders += RC::to_generic_string(loader->GetModFolderType());
             }
 
-            PS::Log<LogLevel::Warning>(STR("{}: unknown folder '{}'. JSON folders: {}, players. Put cooked packs in paks/<pack-name>/.\n"),
+            PS::Log<LogLevel::Warning>(STR("{}: unknown folder '{}'. JSON folders: {}, players, nameplates. Put cooked packs in paks/<pack-name>/.\n"),
                 modName, RC::to_generic_string(folderType), knownFolders);
         }
     }
@@ -626,17 +732,38 @@ namespace DragonWilds {
         catch (const std::exception& e)
         {
             PS::Log<LogLevel::Error>(STR("Failed to initialize GMalloc early: {}\n"), PS::ToWideSafe(e.what()));
-            PS::Log<LogLevel::Error>(STR("RuneSchema won't be able to load paks from the RuneSchema/mods folder.\n"));
+            PS::Log<LogLevel::Error>(STR("RuneSchema won't be able to load paks from RuneSchema/plugins or RuneSchema/mods.\n"));
             return;
         }
 
-        auto ModsFolderPath = GetModsPath();
-        auto AbsolutePath = ModsFolderPath.native();
-        auto AbsolutePathWithSuffix = std::format(STR("{}/"), RC::to_generic_string(AbsolutePath));
-
-        OutPakFolders->Add(FString(AbsolutePathWithSuffix.c_str()));
-
-        PS::Log<LogLevel::Verbose>(STR("Added extra .pak read directory at {}\n"), AbsolutePathWithSuffix);
+        const auto runeSchemaRoot=fs::path(PS::HostServices::WorkingDirectory())/"Mods"/"RuneSchema";
+        std::vector<fs::path> pakRoots;
+        try {
+            for(const auto& plugin:PS::PluginCatalog::Discover(runeSchemaRoot/"plugins")) {
+                if(!plugin.Enabled)continue;
+                for(const auto& package:PS::PluginCatalog::PakDirectories(plugin))pakRoots.push_back(package);
+            }
+        } catch(const std::exception& error) {
+            PS::Log<LogLevel::Error>(STR("Plugin pak order rejected; using the plugin root fallback: {}\n"),PS::ToWideSafe(error.what()));
+            pakRoots.push_back(runeSchemaRoot/"plugins");
+        }
+        const auto modsRoot=GetModsPath();std::vector<RC::StringType> discovered;
+        if(fs::is_directory(modsRoot))for(const auto& entry:fs::directory_iterator(modsRoot))
+            if(entry.is_directory()&&!entry.is_symlink())discovered.push_back(entry.path().filename().native());
+        try {for(const auto& name:ModLoadOrder::Resolve(modsRoot,discovered))pakRoots.push_back(modsRoot/name);}
+        catch(const std::exception& error) {
+            PS::Log<LogLevel::Error>(STR("Mod pak order rejected; using the mods root fallback: {}\n"),PS::ToWideSafe(error.what()));
+            pakRoots.push_back(modsRoot);
+        }
+        std::unordered_set<std::wstring> registered;
+        for (const auto& pakRoot : pakRoots) {
+            if(!fs::is_directory(pakRoot))continue;
+            const auto canonical=fs::weakly_canonical(pakRoot).wstring();if(!registered.emplace(canonical).second)continue;
+            const auto absolute = pakRoot.native();
+            const auto withSuffix = std::format(STR("{}/"), RC::to_generic_string(absolute));
+            OutPakFolders->Add(FString(withSuffix.c_str()));
+            PS::Log<LogLevel::Verbose>(STR("Added ordered RuneSchema .pak read directory at {}\n"), withSuffix);
+        }
     }
 
     void DragonWildsMainLoader::OnDataTableSerialized(RC::Unreal::UDataTable* This, RC::Unreal::FArchive* Archive)

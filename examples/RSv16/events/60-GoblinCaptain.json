@@ -1,0 +1,15 @@
+{
+  "Id": "goblin_captain",
+  "Scope": "Participant",
+  "HealthStages": [
+    {"Percent": 75, "Message": "You will not pass!", "SpawnID": "goblin_boss"},
+    {"Percent": 25, "Message": "The captain is faltering!", "SpawnID": "goblin_boss"}
+  ],
+  "Waves": [
+    [
+      {"SpawnID": "goblin_boss", "Location": [0, 0, "$+5"]},
+      {"SpawnID": "goblin_guard", "Location": [300, 0, 0], "GroundOffset": 5}
+    ]
+  ]
+}
+

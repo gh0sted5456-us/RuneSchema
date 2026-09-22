@@ -1,0 +1,491 @@
+{
+  "Reference": "76c9fd547cc2cc6ebf7773d61d5cacf69a939b12",
+  "Count": 97,
+  "Entries": [
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_BM_Sapling_Ash_01.BP_BM_Sapling_Ash_01_C",
+      "Name": "BP_BM_Sapling_Ash_01",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_BM_Sapling_Ash_01_Small.BP_BM_Sapling_Ash_01_Small_C",
+      "Name": "BP_BM_Sapling_Ash_01_Small",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_BM_Sapling_Ash_02.BP_BM_Sapling_Ash_02_C",
+      "Name": "BP_BM_Sapling_Ash_02",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_BM_Sapling_Oak_01.BP_BM_Sapling_Oak_01_C",
+      "Name": "BP_BM_Sapling_Oak_01",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_BM_Sapling_Oak_01_Small.BP_BM_Sapling_Oak_01_Small_C",
+      "Name": "BP_BM_Sapling_Oak_01_Small",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_BM_Sapling_Oak_02.BP_BM_Sapling_Oak_02_C",
+      "Name": "BP_BM_Sapling_Oak_02",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_BM_Sapling_Willow_01.BP_BM_Sapling_Willow_01_C",
+      "Name": "BP_BM_Sapling_Willow_01",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_BM_Sapling_Willow_01_Small.BP_BM_Sapling_Willow_01_Small_C",
+      "Name": "BP_BM_Sapling_Willow_01_Small",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_BM_Sapling_Willow_02.BP_BM_Sapling_Willow_02_C",
+      "Name": "BP_BM_Sapling_Willow_02",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_BM_Tree_Ash_01.BP_BM_Tree_Ash_01_C",
+      "Name": "BP_BM_Tree_Ash_01",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_BM_Tree_Ash_02.BP_BM_Tree_Ash_02_C",
+      "Name": "BP_BM_Tree_Ash_02",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_BM_Tree_Ash_03.BP_BM_Tree_Ash_03_C",
+      "Name": "BP_BM_Tree_Ash_03",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_BM_Tree_Oak_01.BP_BM_Tree_Oak_01_C",
+      "Name": "BP_BM_Tree_Oak_01",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_BM_Tree_Oak_02.BP_BM_Tree_Oak_02_C",
+      "Name": "BP_BM_Tree_Oak_02",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_BlightwoodRoot.BP_BlightwoodRoot_C",
+      "Name": "BP_BlightwoodRoot",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_DR_Sapling_Maple_01.BP_DR_Sapling_Maple_01_C",
+      "Name": "BP_DR_Sapling_Maple_01",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_DR_Sapling_Maple_02.BP_DR_Sapling_Maple_02_C",
+      "Name": "BP_DR_Sapling_Maple_02",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_DR_Sapling_Maple_Small_01.BP_DR_Sapling_Maple_Small_01_C",
+      "Name": "BP_DR_Sapling_Maple_Small_01",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_DR_Sapling_Maple_Small_02.BP_DR_Sapling_Maple_Small_02_C",
+      "Name": "BP_DR_Sapling_Maple_Small_02",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_DR_Tree_Maple_01.BP_DR_Tree_Maple_01_C",
+      "Name": "BP_DR_Tree_Maple_01",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_DR_Tree_Maple_02.BP_DR_Tree_Maple_02_C",
+      "Name": "BP_DR_Tree_Maple_02",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_DR_Tree_Maple_04.BP_DR_Tree_Maple_04_C",
+      "Name": "BP_DR_Tree_Maple_04",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_DR_Tree_Maple_05.BP_DR_Tree_Maple_05_C",
+      "Name": "BP_DR_Tree_Maple_05",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_ElderWood.BP_ElderWood_C",
+      "Name": "BP_ElderWood",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_FH_Sapling_Ash_01.BP_FH_Sapling_Ash_01_C",
+      "Name": "BP_FH_Sapling_Ash_01",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_FH_Sapling_Ash_02.BP_FH_Sapling_Ash_02_C",
+      "Name": "BP_FH_Sapling_Ash_02",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_FH_Sapling_Oak_01.BP_FH_Sapling_Oak_01_C",
+      "Name": "BP_FH_Sapling_Oak_01",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_FH_Sapling_Oak_01_Small.BP_FH_Sapling_Oak_01_Small_C",
+      "Name": "BP_FH_Sapling_Oak_01_Small",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_FH_Tree_Ash_01.BP_FH_Tree_Ash_01_C",
+      "Name": "BP_FH_Tree_Ash_01",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_FH_Tree_Ash_02.BP_FH_Tree_Ash_02_C",
+      "Name": "BP_FH_Tree_Ash_02",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_FH_Tree_Ash_03.BP_FH_Tree_Ash_03_C",
+      "Name": "BP_FH_Tree_Ash_03",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_FH_Tree_Ash_Bare_01.BP_FH_Tree_Ash_Bare_01_C",
+      "Name": "BP_FH_Tree_Ash_Bare_01",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_FH_Tree_Ash_Bare_02.BP_FH_Tree_Ash_Bare_02_C",
+      "Name": "BP_FH_Tree_Ash_Bare_02",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_FH_Tree_Ash_Bare_03.BP_FH_Tree_Ash_Bare_03_C",
+      "Name": "BP_FH_Tree_Ash_Bare_03",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_FH_Tree_Oak_01.BP_FH_Tree_Oak_01_C",
+      "Name": "BP_FH_Tree_Oak_01",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_FH_Tree_Oak_02.BP_FH_Tree_Oak_02_C",
+      "Name": "BP_FH_Tree_Oak_02",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_FH_Tree_Willow_01.BP_FH_Tree_Willow_01_C",
+      "Name": "BP_FH_Tree_Willow_01",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_FH_Tree_Willow_02.BP_FH_Tree_Willow_02_C",
+      "Name": "BP_FH_Tree_Willow_02",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Trees/BP_FH_Tree_Willow_03.BP_FH_Tree_Willow_03_C",
+      "Name": "BP_FH_Tree_Willow_03",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Rocks/BP_MiningRock_AviskCrystal.BP_MiningRock_AviskCrystal_C",
+      "Name": "BP_MiningRock_AviskCrystal",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Rocks/BP_MiningRock_Base.BP_MiningRock_Base_C",
+      "Name": "BP_MiningRock_Base",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Rocks/BP_MiningRock_Dragon_Tooth.BP_MiningRock_Dragon_Tooth_C",
+      "Name": "BP_MiningRock_Dragon_Tooth",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Rocks/BP_MiningRock_Granite.BP_MiningRock_Granite_C",
+      "Name": "BP_MiningRock_Granite",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Rocks/BP_OreNode_Sandstone.BP_OreNode_Sandstone_C",
+      "Name": "BP_OreNode_Sandstone",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Rocks/BP_OreNode_Stone.BP_OreNode_Stone_C",
+      "Name": "BP_OreNode_Stone",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/BP_OreNode_Base.BP_OreNode_Base_C",
+      "Name": "BP_OreNode_Base",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/BP_OreNode_Iron.BP_OreNode_Iron_C",
+      "Name": "BP_OreNode_Iron",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Blurite/BP_OreNode_Bluerite_Medium_A1.BP_OreNode_Bluerite_Medium_A1_C",
+      "Name": "BP_OreNode_Bluerite_Medium_A1",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Blurite/BP_OreNode_Blurite_Large_A1.BP_OreNode_Blurite_Large_A1_C",
+      "Name": "BP_OreNode_Blurite_Large_A1",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Blurite/BP_OreNode_Blurite_Medium_A2.BP_OreNode_Blurite_Medium_A2_C",
+      "Name": "BP_OreNode_Blurite_Medium_A2",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Clay/BP_OreNode_Clay_Large_A1.BP_OreNode_Clay_Large_A1_C",
+      "Name": "BP_OreNode_Clay_Large_A1",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Clay/BP_OreNode_Clay_Large_A2.BP_OreNode_Clay_Large_A2_C",
+      "Name": "BP_OreNode_Clay_Large_A2",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Clay/BP_OreNode_Clay_Large_A3.BP_OreNode_Clay_Large_A3_C",
+      "Name": "BP_OreNode_Clay_Large_A3",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Clay/BP_OreNode_Clay_Large_B1.BP_OreNode_Clay_Large_B1_C",
+      "Name": "BP_OreNode_Clay_Large_B1",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Clay/BP_OreNode_Clay_Large_B2.BP_OreNode_Clay_Large_B2_C",
+      "Name": "BP_OreNode_Clay_Large_B2",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Clay/BP_OreNode_Clay_Large_B3.BP_OreNode_Clay_Large_B3_C",
+      "Name": "BP_OreNode_Clay_Large_B3",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Clay/BP_OreNode_Clay_Medium_A1.BP_OreNode_Clay_Medium_A1_C",
+      "Name": "BP_OreNode_Clay_Medium_A1",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Clay/BP_OreNode_Clay_Medium_A2.BP_OreNode_Clay_Medium_A2_C",
+      "Name": "BP_OreNode_Clay_Medium_A2",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Clay/BP_OreNode_Clay_Medium_A3.BP_OreNode_Clay_Medium_A3_C",
+      "Name": "BP_OreNode_Clay_Medium_A3",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Clay/BP_OreNode_Clay_Medium_B1.BP_OreNode_Clay_Medium_B1_C",
+      "Name": "BP_OreNode_Clay_Medium_B1",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Clay/BP_OreNode_Clay_Medium_B2.BP_OreNode_Clay_Medium_B2_C",
+      "Name": "BP_OreNode_Clay_Medium_B2",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Clay/BP_OreNode_Clay_Medium_B3.BP_OreNode_Clay_Medium_B3_C",
+      "Name": "BP_OreNode_Clay_Medium_B3",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Clay/BP_OreNode_Clay_Medium_C1.BP_OreNode_Clay_Medium_C1_C",
+      "Name": "BP_OreNode_Clay_Medium_C1",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Clay/BP_OreNode_Clay_Medium_C2.BP_OreNode_Clay_Medium_C2_C",
+      "Name": "BP_OreNode_Clay_Medium_C2",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Clay/BP_OreNode_Clay_Medium_C3.BP_OreNode_Clay_Medium_C3_C",
+      "Name": "BP_OreNode_Clay_Medium_C3",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Coal/BP_OreNode_Coal_Large_A1.BP_OreNode_Coal_Large_A1_C",
+      "Name": "BP_OreNode_Coal_Large_A1",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Coal/BP_OreNode_Coal_Medium_A1.BP_OreNode_Coal_Medium_A1_C",
+      "Name": "BP_OreNode_Coal_Medium_A1",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Copper/BP_OreNode_Copper_Large_A1.BP_OreNode_Copper_Large_A1_C",
+      "Name": "BP_OreNode_Copper_Large_A1",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Copper/BP_OreNode_Copper_Large_A2.BP_OreNode_Copper_Large_A2_C",
+      "Name": "BP_OreNode_Copper_Large_A2",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Copper/BP_OreNode_Copper_Large_A3.BP_OreNode_Copper_Large_A3_C",
+      "Name": "BP_OreNode_Copper_Large_A3",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Copper/BP_OreNode_Copper_Large_B1.BP_OreNode_Copper_Large_B1_C",
+      "Name": "BP_OreNode_Copper_Large_B1",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Copper/BP_OreNode_Copper_Large_B2.BP_OreNode_Copper_Large_B2_C",
+      "Name": "BP_OreNode_Copper_Large_B2",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Copper/BP_OreNode_Copper_Large_B3.BP_OreNode_Copper_Large_B3_C",
+      "Name": "BP_OreNode_Copper_Large_B3",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Copper/BP_OreNode_Copper_Medium_A1.BP_OreNode_Copper_Medium_A1_C",
+      "Name": "BP_OreNode_Copper_Medium_A1",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Copper/BP_OreNode_Copper_Medium_A2.BP_OreNode_Copper_Medium_A2_C",
+      "Name": "BP_OreNode_Copper_Medium_A2",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Copper/BP_OreNode_Copper_Medium_A3.BP_OreNode_Copper_Medium_A3_C",
+      "Name": "BP_OreNode_Copper_Medium_A3",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Copper/BP_OreNode_Copper_Medium_B1.BP_OreNode_Copper_Medium_B1_C",
+      "Name": "BP_OreNode_Copper_Medium_B1",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Copper/BP_OreNode_Copper_Medium_B2.BP_OreNode_Copper_Medium_B2_C",
+      "Name": "BP_OreNode_Copper_Medium_B2",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/World/Mining/Ores/Copper/BP_OreNode_Copper_Medium_B3.BP_OreNode_Copper_Medium_B3_C",
+      "Name": "BP_OreNode_Copper_Medium_B3",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/DowdunReach/Gameplay/World/Trees/Maple/BP_FellableTree_Maple.BP_FellableTree_Maple_C",
+      "Name": "BP_FellableTree_Maple",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/DowdunReach/Gameplay/World/Trees/Maple/BP_FelledTree_Maple.BP_FelledTree_Maple_C",
+      "Name": "BP_FelledTree_Maple",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/DowdunReach/Gameplay/World/Trees/Maple/BP_Log_Maple.BP_Log_Maple_C",
+      "Name": "BP_Log_Maple",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/DowdunReach/Gameplay/World/Trees/Maple/BP_SplittableLog_Maple.BP_SplittableLog_Maple_C",
+      "Name": "BP_SplittableLog_Maple",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/ScornedWilderness/Gameplay/World/Trees/BP_SW_Tree_MagicTree_01.BP_SW_Tree_MagicTree_01_C",
+      "Name": "BP_SW_Tree_MagicTree_01",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/ScornedWilderness/Gameplay/World/Trees/MagicTree/BP_FellableTree_MagicTree.BP_FellableTree_MagicTree_C",
+      "Name": "BP_FellableTree_MagicTree",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/ScornedWilderness/Gameplay/World/Trees/MagicTree/BP_FelledTree_MagicTree.BP_FelledTree_MagicTree_C",
+      "Name": "BP_FelledTree_MagicTree",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/ScornedWilderness/Gameplay/World/Trees/MagicTree/BP_Log_MagicTree.BP_Log_MagicTree_C",
+      "Name": "BP_Log_MagicTree",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/ScornedWilderness/Gameplay/World/Trees/MagicTree/BP_SplittableLog_MagicTree.BP_SplittableLog_MagicTree_C",
+      "Name": "BP_SplittableLog_MagicTree",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/UmbralSands/Gameplay/World/Mining/Adamantite/BP_OreNode_Adamantite_Large_A1.BP_OreNode_Adamantite_Large_A1_C",
+      "Name": "BP_OreNode_Adamantite_Large_A1",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/UmbralSands/Gameplay/World/Mining/Adamantite/BP_OreNode_Adamantite_Medium_A1.BP_OreNode_Adamantite_Medium_A1_C",
+      "Name": "BP_OreNode_Adamantite_Medium_A1",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/UmbralSands/Gameplay/World/Mining/BP_OreNode_Gypsum.BP_OreNode_Gypsum_C",
+      "Name": "BP_OreNode_Gypsum",
+      "Kind": "Resource"
+    },
+    {
+      "Path": "/Game/Gameplay/Character/Player/Equipment/Head/ITEM_Armour_Head_ChefsHat.ITEM_Armour_Head_ChefsHat",
+      "Name": "ITEM_Armour_Head_ChefsHat",
+      "Kind": "Item"
+    },
+    {
+      "Path": "/Game/Gameplay/Character/Player/Equipment/Held/Sword/ITEM_Sword_Bronze.ITEM_Sword_Bronze",
+      "Name": "ITEM_Sword_Bronze",
+      "Kind": "Item"
+    },
+    {
+      "Path": "/Game/Gameplay/Character/Player/Equipment/Held/Sword/ITEM_Sword_Iron.ITEM_Sword_Iron",
+      "Name": "ITEM_Sword_Iron",
+      "Kind": "Item"
+    },
+    {
+      "Path": "/Game/Gameplay/Character/Player/Equipment/Held/Sword/ITEM_Sword_Steel.ITEM_Sword_Steel",
+      "Name": "ITEM_Sword_Steel",
+      "Kind": "Item"
+    },
+    {
+      "Path": "/Game/Gameplay/Character/Player/Equipment/Held/Sword/ITEM_Sword_Training.ITEM_Sword_Training",
+      "Name": "ITEM_Sword_Training",
+      "Kind": "Item"
+    },
+    {
+      "Path": "/Game/Gameplay/AI/BP_DominionAICharacter.BP_DominionAICharacter_C",
+      "Name": "BP_DominionAICharacter",
+      "Kind": "Enemy"
+    }
+  ]
+}

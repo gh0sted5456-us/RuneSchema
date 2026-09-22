@@ -1,0 +1,10 @@
+PASS: 23712 assertions; generated 10000 identifiers; all UI modal bounds checked.
+PASS: 4138 F2 browser, badge, favorite and pagination assertions.
+PASS: 22 actual portable preference-file I/O assertions (POSIX branch).
+PASS: 10,000 unique, canonical 22-character identifiers round-tripped to 128 bits.
+PASS: original auto* = TObjectPtr expression rejected (negative control).
+PASS: 7 guard cases; raw pointer type, identity, null, lifecycle flags, single retrieval and unchanged metadata.
+PASS: obsolete numeric-property include removed; UnrealType include retained.
+Scope: C++ stand-ins, not real UE4SS/MSVC or in-game validation.
+PASS: 31 shipped cooked-package policy assertions using UObject stand-ins.
+PASS: 49 static integration checks; not native compilation.

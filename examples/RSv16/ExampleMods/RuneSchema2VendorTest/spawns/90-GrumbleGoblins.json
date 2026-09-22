@@ -1,0 +1,5 @@
+[
+  {"Id":"grumble_pebble_pilferer","Type":"AISpawnPoint","EventOnly":true,"AIClass":"/Game/Gameplay/AI/GoblinFaction/MeleeGoblin/BP_AI_MeleeGoblin_Character.BP_AI_MeleeGoblin_Character_C","DisplayName":"Pebble Pilferer","Scale":1.0},
+  {"Id":"grumble_gravel_grifter","Type":"AISpawnPoint","EventOnly":true,"AIClass":"/Game/Gameplay/AI/GoblinFaction/RangedGoblin/BP_AI_RangedGoblin_Character.BP_AI_RangedGoblin_Character_C","DisplayName":"Gravel Grifter","Scale":1.0},
+  {"Id":"grumble_debt_collector","Type":"AISpawnPoint","EventOnly":true,"AIClass":"/Game/Gameplay/AI/GoblinFaction/ShieldGoblin/BP_AI_ShieldGoblin_Character.BP_AI_ShieldGoblin_Character_C","DisplayName":"Grumble's Debt Collector","Scale":1.6}
+]

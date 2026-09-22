@@ -1,0 +1,30 @@
+{
+  "version": "R3v10",
+  "basis": "R3v9 cumulative overlay plus existing project NPC loader source and header",
+  "source_files": 52,
+  "source_comparison": {
+    "unchanged_v9": 37,
+    "modified_v9": 10,
+    "modified_existing_project": 2,
+    "new": 3
+  },
+  "all_current_source_checksums_verified": true,
+  "merge_simulation": {
+    "preserved_existing_bat": true,
+    "preserved_unrelated_source": true,
+    "preserved_existing_cmake": true,
+    "preserved_settings_and_favorites": true,
+    "all_patch_sources_applied": true
+  },
+  "package_checks": {
+    "no_bat_or_dll": true,
+    "no_defaults_for_installed_settings_or_mods": true,
+    "no_font_or_test_binary": true,
+    "safe_unique_relative_zip_paths": true,
+    "no_symlinks": true,
+    "crc_integrity_verified": true,
+    "zip_bytes_match_working_files": true
+  },
+  "native_windows_or_game_tested": false,
+  "note": "Packaging validates artifact integrity and merge behavior only. It is not a native compilation or runtime test."
+}

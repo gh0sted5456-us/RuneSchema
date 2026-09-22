@@ -1,0 +1,676 @@
+// Forty mandatory story chapters. Leaving restarts the story; only reward completion persists.
+// Completion uses the existing per-character one-time reward receipt. No repeat sword grants.
+{
+  "Id": "granite_story",
+  "Entry": "greeting",
+  "CompletedEntry": "after",
+  "Completion": {
+    "Flag": "granite_story_heard",
+    "Item": "/Game/RuneSchema/RuneSchema2VendorTest/Items/rs_granites_last_word.rs_granites_last_word",
+    "Count": 1
+  },
+  "Nodes": {
+    "greeting": {
+      "Text": "Welcome to my patch of ground. I have forty chapters of history, an armory for patient listeners, and a goblin problem for someone with legs.",
+      "Choices": [
+        {"Id":"story","Text":"Tell me your story.","Next":"chapter_01"},
+        {"Id":"patrol","Text":"Tell me about the goblins.","Next":"goblin_greeting"},
+        {"Id":"leave","Text":"Another time.","End":true}
+      ]
+    },
+    "goblin_greeting": {
+      "Text": "Defeat five goblins inside the marked 300-metre search area, then return to me for fifty Soul Fragments. Only your credited kills after accepting count.",
+      "Choices": [
+        {"Id":"accept","Text":"I'll take the patrol.","RequirementUnlock":{"Quest":{"Id":"granite_goblin_patrol","States":["NotStarted"]}},"Next":"goblin_accepted","Quest":{"Id":"granite_goblin_patrol","Action":"Accept"}},
+        {"Id":"turnin","Text":"The patrol is complete.","RequirementUnlock":{"Quest":{"Id":"granite_goblin_patrol","States":["Active"],"ObjectivesComplete":true}},"Next":"goblin_rewarded","Quest":{"Id":"granite_goblin_patrol","Action":"TurnIn"}},
+        {"Id":"repeat","Text":"Register another patrol.","RequirementUnlock":{"Quest":{"Id":"granite_goblin_patrol","States":["Completed"],"RepeatReady":true}},"Next":"goblin_accepted","Quest":{"Id":"granite_goblin_patrol","Action":"Accept"}},
+        {"Id":"leave","Text":"I'll return later.","End":true}
+      ]
+    },
+    "goblin_accepted": {
+      "Text":"Your patrol is registered. Follow the quest's marked area and return after five confirmed goblin kills.",
+      "Choices":[{"Id":"leave","Text":"I'll get started.","End":true}]
+    },
+    "goblin_rewarded": {
+      "Text":"Five goblins have stopped interrupting my contemplation. Here are your fifty Soul Fragments.",
+      "Choices":[{"Id":"leave","Text":"Thank you, Granite.","End":true}]
+    },
+    "chapter_01": {
+      "Text": "1/40 — At last, someone with ears. I am Granite the Interminable, senior boulder and acting chair of the Geological Society of This Particular Patch of Ground. Before we discuss my sword, you must hear my entire account. It begins before there was a patch.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_02"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_02": {
+      "Text": "2/40 — There was pressure. Tremendous pressure. No deadlines, though. Humans have invented a much less pleasant version of pressure. My pressure came with excellent mineral benefits.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_03"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_03": {
+      "Text": "3/40 — I was magma once. Very energetic. Always going places. Most of those places were also magma, which limited the conversation considerably.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_04"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_04": {
+      "Text": "4/40 — Cooling was my first hobby. I became extremely good at it. At one point I cooled for eleven thousand consecutive years without taking a break. Your applause is unnecessary, but appreciated.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_05"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_05": {
+      "Text": "5/40 — My first crystal was called Gerald. Gerald occupied a small cavity near what I now consider my left shoulder. We disagreed about feldspar. Neither of us knew what a shoulder was yet.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Somehow, I still want to hear more.",
+          "Next": "chapter_06"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_06": {
+      "Text": "6/40 — Gerald insisted we were destined to become a mountain. I felt a respectable wall would be enough. Ambition is difficult to measure when your entire social circle is trapped inside you.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_07"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_07": {
+      "Text": "7/40 — We became a mountain. Gerald was unbearable about it. Every sunrise: 'Notice anything particularly mountainous about our situation?' Every sunset: exactly the same question.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_08"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_08": {
+      "Text": "8/40 — A river arrived and requested passage. We declined. It submitted the request again. And again. After several million years, it had developed a persuasive argument called a valley.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_09"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_09": {
+      "Text": "9/40 — The mountain years ended with a loud crack. I do not wish to assign blame, but Gerald had been expanding in the afternoon heat. We have not spoken since the separation.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_10"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_10": {
+      "Text": "10/40 — I rolled downhill. This was the most eventful eight seconds of my life. I still include them on applications that ask about leadership experience.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Somehow, I still want to hear more.",
+          "Next": "chapter_11"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_11": {
+      "Text": "11/40 — At the bottom I met a pebble called Susan. Susan believed she was an egg. Out of respect, I sat quietly beside her for seven centuries. Nothing hatched, but she appreciated the company.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_12"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_12": {
+      "Text": "12/40 — Winter taught me patience. Summer taught me slightly warmer patience. Autumn was useful because leaves gave me something to count. Spring mostly undid my counting.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_13"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_13": {
+      "Text": "13/40 — A glacier passed through. Lovely fellow, terrible spatial awareness. He moved me several miles without asking, then insisted it was a complimentary relocation service.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_14"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_14": {
+      "Text": "14/40 — On that journey I saw another boulder. We exchanged a meaningful silence. I have treasured our correspondence ever since. He still hasn't written back, which is perfectly in character.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_15"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_15": {
+      "Text": "15/40 — Eventually the ice melted. There was no apology. There was, however, a puddle. I accepted the puddle as compensation, and it promptly evaporated.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Somehow, I still want to hear more.",
+          "Next": "chapter_16"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_16": {
+      "Text": "16/40 — A tree grew beside me. We shared shade, rain, and the burden of being mistaken for scenery. The tree never interrupted. An outstanding conversationalist.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_17"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_17": {
+      "Text": "17/40 — When that tree fell, I kept its secret: it had never understood birds. All that flapping for a place to sit! It considered this a failure of basic planning.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_18"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_18": {
+      "Text": "18/40 — My first visitor was a beetle. He crossed my entire surface without a permit. I considered charging a toll, but he had already left and I lacked an accounts department.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_19"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_19": {
+      "Text": "19/40 — Then came moss. Moss is not merely a plant. Moss is a tenant who paints every room green and tells visitors it owns the building.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_20"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_20": {
+      "Text": "20/40 — I named the moss Reginald. Reginald spread. Soon there were several Reginalds, all claiming to be the original. This is why my society no longer permits honorary titles.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Somehow, I still want to hear more.",
+          "Next": "chapter_21"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_21": {
+      "Text": "21/40 — A thunderstorm struck the ridge. For one glorious instant I was warm again. I shouted 'I remember magma!' Nobody heard, because I was still a normal rock at the time.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_22"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_22": {
+      "Text": "22/40 — You may wonder when I learned to speak. So do I. One morning a wizard kicked me, hurt his toe, and demanded an explanation. I supplied one. He disliked the explanation more than the injury.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_23"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_23": {
+      "Text": "23/40 — The wizard named me Granite. I pointed out that he had not conducted a proper mineral survey. He said accuracy was expensive and he had already spent the budget on his hat.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_24"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_24": {
+      "Text": "24/40 — He offered me legs. I refused. After the glacier incident, I had become suspicious of transportation presented as a gift.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_25"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_25": {
+      "Text": "25/40 — Instead he offered me wisdom. I asked whether it came with a warranty. He left. I acquired wisdom anyway: always ask about the warranty.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Somehow, I still want to hear more.",
+          "Next": "chapter_26"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_26": {
+      "Text": "26/40 — Years later, Jonesy visited. She listened to the short version of this story, which was then fourteen hours long. She suggested editing. I have forgiven her, mostly.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_27"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_27": {
+      "Text": "27/40 — Jonesy also introduced me to cabbages. Extraordinary objects. Round, quiet, layered, and frequently mistaken for something more interesting. We have much in common.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_28"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_28": {
+      "Text": "28/40 — I resolved to grow one. This proved difficult. I had no hands, no soil of my own, and a tendency to interpret 'water regularly' on a geological timescale.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_29"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_29": {
+      "Text": "29/40 — The cabbage merchant offered professional advice. It said 'moo.' I recorded this carefully. The second consultation cost another 'moo.' Such consistency deserves respect.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_30"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_30": {
+      "Text": "30/40 — At this point a warrior arrived carrying a magnificent greatsword. He said he sought an immovable opponent. I informed him he had found an unpaid consultant.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Somehow, I still want to hear more.",
+          "Next": "chapter_31"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_31": {
+      "Text": "31/40 — He swung once. The sword rang like a bell. He swung twice. I recommended a pickaxe. He declined on grounds of dignity.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_32"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_32": {
+      "Text": "32/40 — On his third swing the hilt slipped. The sword lodged beneath me. He attempted to retrieve it, then remembered a pressing appointment elsewhere. He has been remarkably punctual at staying elsewhere.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_33"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_33": {
+      "Text": "33/40 — The wizard returned to inspect the sword. He said it needed a modest enchantment. I asked him to define modest. Unfortunately, he had already begun.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_34"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_34": {
+      "Text": "34/40 — He multiplied its strength by a hundred. I asked whether that was safe. He said it was safe for whoever was holding the correct end, which did not answer all of my concerns.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_35"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_35": {
+      "Text": "35/40 — I named it Granite's Last Word. This was intended as a joke about ending arguments. Several arguments ended during the naming ceremony, including one with a fence.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Somehow, I still want to hear more.",
+          "Next": "chapter_36"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_36": {
+      "Text": "36/40 — Owning a sword while lacking arms is mostly an administrative burden. I have maintained a meticulous inventory: one sword, no arms. The audit has never found a discrepancy.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_37"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_37": {
+      "Text": "37/40 — I considered giving it to the cow. Jonesy explained that cows should not have greatswords. I asked whether cows should have shops. She changed the subject.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_38"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_38": {
+      "Text": "38/40 — So I waited for a listener with patience, sufficient inventory space, and preferably hands. You satisfy at least two of those criteria. We will let the inventory determine the third.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_39"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_39": {
+      "Text": "39/40 — Before the conclusion, a clarification: the sword is yours once, not once per conversation. Repeating my story does not cause a new warrior to lose another sword beneath me.",
+      "Choices": [
+        {
+          "Id": "continue",
+          "Text": "Go on.",
+          "Next": "chapter_40"
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "chapter_40": {
+      "Text": "40/40 — There is also a special cabbage offer at the nearby shop. The merchant will accept this very sword for one cabbage. One. The exchange consumes the sword. Please understand how profoundly terrible that bargain is.",
+      "Choices": [
+        {
+          "Id": "accept_sword",
+          "Text": "I heard it all. Give me Granite's Last Word.",
+          "Next": "rewarded",
+          "Complete": true
+        },
+        {
+          "Id": "leave",
+          "Text": "I need a break. I'll restart the story another time.",
+          "End": true
+        }
+      ]
+    },
+    "rewarded": {
+      "Text": "Your first sword is a gift for listening. Jonesy has arranged a supply of equally unreasonable copies: 100 Soul Fragments each. My armory is now open to you. The cow still offers one cabbage for one of these swords.",
+      "Choices": [
+        {
+          "Id": "farewell",
+          "Text": "Farewell, Granite.",
+          "End": true
+        },
+        {
+          "Id": "shop",
+          "Text": "Open your armory. What do additional swords cost?",
+          "VendorID": "granite_armory"
+        }
+      ]
+    },
+    "after": {
+      "Text": "Welcome back, patient listener! Your free sword was a one-time reward. My armory sells additional swords for 100 Soul Fragments each. You may also hear the story again; it will not award another free sword.",
+      "Choices": [
+        {"Id":"patrol","Text":"About that goblin patrol...","Next":"goblin_greeting"},
+        {
+          "Id": "repeat",
+          "Text": "Yes. All forty chapters again.",
+          "Next": "chapter_01"
+        },
+        {
+          "Id": "shop",
+          "Text": "Open your armory.",
+          "VendorID": "granite_armory"
+        },
+        {
+          "Id": "leave",
+          "Text": "Not today.",
+          "End": true
+        }
+      ]
+    }
+  }
+}

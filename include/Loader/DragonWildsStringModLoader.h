@@ -25,14 +25,16 @@ namespace DragonWilds {
     private:
         struct Replacement {
             std::wstring To;
+            RC::StringType Owner;
             bool Matched = false;
         };
 
         using ReplacementMap = std::unordered_map<std::wstring, Replacement>;
 
-        void LoadStrings(const nlohmann::json& data);
+        void LoadStrings(const nlohmann::json& data, const RC::StringType& modName);
 
-        void AddEntry(ReplacementMap& target, const std::wstring& source, const std::wstring& replacement);
+        void AddEntry(ReplacementMap& target, const std::wstring& source, const std::wstring& replacement,
+            const RC::StringType& modName, const std::wstring& scope);
 
         void ReportMissing();
 
@@ -41,7 +43,6 @@ namespace DragonWilds {
 
         std::unordered_map<std::wstring, ReplacementMap> m_scoped;
 
-        size_t m_conflictCount = 0;
         size_t m_passCount = 0;
         bool m_hooked = false;
         bool m_reportedMissing = false;

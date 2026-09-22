@@ -98,4 +98,28 @@ namespace PS::JsonHelpers {
             }
         }
     }
+
+    void ParseJsonFilesInPathIsolated(const std::filesystem::path& path,
+        const std::function<void(const nlohmann::json&)>& callback,
+        const std::function<void(const std::filesystem::path&, const std::string&)>& onError)
+    {
+        if (!fs::is_directory(path)) return;
+        std::vector<fs::path> files;
+        for (const auto& file : fs::directory_iterator(path))
+            if (file.is_regular_file() && file.path().has_extension()) files.push_back(file.path());
+        std::sort(files.begin(), files.end());
+        for (const auto& filePath : files)
+        {
+            try { ParseJsonFileInPath(filePath, callback); }
+            catch (const std::exception& error)
+            {
+                if (onError) onError(filePath, error.what());
+            }
+            catch (...)
+            {
+                if (onError) onError(filePath, "unknown JSON or definition error");
+            }
+        }
+    }
+
 }

@@ -1,0 +1,42 @@
+R3v6 F2 VERIFICATION
+
+Executed in the authoring environment:
+- GCC 14.2, C++23, -Wall -Wextra -Wpedantic -Werror: PASS, 23,555 assertions.
+- Clang 17, C++23, AddressSanitizer + UndefinedBehaviorSanitizer, same warnings:
+  PASS, 23,555 assertions; no sanitizer report.
+- 10,000 generated identifiers: unique within the sample, correct RS7/mod prefix,
+  22 characters, decoded to 16 bytes and re-encoded without alteration.
+- Six offline layout renders inspected. These use placeholder icons and a local
+  comparison font; they are NOT engine screenshots and are not shipped as art.
+- Source/packaging checks: CastField hotfix retained; on-disk registry query and
+  partial-scan reporting present; cooked-source/donor/reference checks wired;
+  held-actor category checks wired; independent inventory-icon control retained.
+
+Test coverage: ID generation/validation, search/filter membership, all fixture
+rows reachable by scrolling, source/donor compatibility, independent icon vs
+appearance requests, direct mesh selection, modal bounds/Back behaviour, managed
+identity fields, basic-vs-advanced override precedence, duplicate-create guard,
+temporary-mode blocking and pending-source state. Fixtures contain 41 items,
+103 AI, 103 resources, 33 mesh-data assets and 31 coverage issues.
+
+Limits: These are portable model tests and source checks, NOT 23,555 independent
+in-game scenarios. Unreal-facing code and JSON request/runtime integration were
+reviewed but were not compiled against the Windows UE4SS target here. No full
+DLL build, live inventory test, world switch, dedicated-server test or save/load
+validation was performed.
+
+Optional reproduction (not required by Build RuneSchema.bat):
+From this verification directory, with an appropriate GCC or Clang installation:
+  g++ -std=c++23 -O2 -Wall -Wextra -Wpedantic -Werror -I../raw/include F2ModelTests.cpp -o f2-model-tests
+  ./f2-model-tests
+  python check_identifiers.py
+The test creates ids.txt and *.draws in its working directory.
+For sanitizers, add -fsanitize=address,undefined -fno-omit-frame-pointer using Clang.
+
+Source references used for the feature-specific checks (not a full schema audit):
+RSDWArchive/RSDWArchive commit 76c9fd547cc2cc6ebf7773d61d5cacf69a939b12
+1.0.0.2/json/RSDragonwilds/Content/Gameplay/Character/Player/Equipment/
+  Head/ITEM_Armour_Head_ChefsHat.json
+  Held/Sword/ITEM_Sword_Bronze.json
+Baseline: R3v5 Direct Override Hotfix1 plus the corresponding R3v4
+AssetSearch.cpp, QuickMenuCatalog.inl and QuickMenuCatalogRules.h source files.

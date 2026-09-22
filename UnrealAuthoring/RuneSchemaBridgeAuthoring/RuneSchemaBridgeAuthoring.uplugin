@@ -1,0 +1,17 @@
+{
+  "FileVersion": 3,
+  "Version": 2,
+  "VersionName": "2.0",
+  "FriendlyName": "RuneSchema Bridge Authoring",
+  "Description": "Editor-only one-shot migration and authoring support for RuneSchema cooked network bridge Blueprints.",
+  "Category": "RuneSchema",
+  "CanContainContent": false,
+  "EnabledByDefault": true,
+  "Modules": [
+    {
+      "Name": "RuneSchemaBridgeAuthoring",
+      "Type": "Editor",
+      "LoadingPhase": "PostEngineInit"
+    }
+  ]
+}

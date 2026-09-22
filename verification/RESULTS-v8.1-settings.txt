@@ -1,0 +1,79 @@
+RuneSchema F2 R3v8.1 — settings/cache storage verification
+========================================================
+Base: RuneSchema.7-Native-Input-R3v8-Refresh-Cache-Direct-Override.zip
+This is a cumulative source overlay, not a full repository or compiled DLL.
+
+Production delta from v8
+------------------------
+Modified: raw/include/Runtime/F2CatalogStore.h
+Modified: raw/include/Runtime/F2PreferenceFile.h
+Modified: raw/src/Loader/QuickMenuCatalog.inl
+Added:    raw/include/Runtime/F2CacheMigration.h
+The other 29 original source files are byte-for-byte unchanged (33 total).
+No BAT, CMake file, DLL, actual cache file, user settings, or badge artwork is
+included as a replacement. The overlay cannot reset a user's existing settings.
+
+Actual executed portable runs
+------------------------------
+GCC 14.2, C++23, -Wall -Wextra -Werror -pedantic -pthread:
+  F2ModelTests:              PASS, 23,770 assertions
+  F2BrowserTests:            PASS, 4,163 assertions
+  F2PreferenceFileTests:     PASS, 28 POSIX file-I/O assertions
+  F2IndexTests:              PASS, 648 assertions
+  F2ProgressTests:           PASS, 18 assertions
+  F2CacheMigrationTests:     PASS, 66 POSIX migration/file-I/O assertions
+  Identifier encoding:      PASS, 10,000 generated IDs round-tripped
+  Default-object guard:     PASS, 7 cases plus old-expression negative control
+  Cooked eligibility:       PASS, 31 assertions with UObject stand-ins
+  Provenance identity:      PASS, 12 assertions with native-slot stand-ins
+  Existing integration:     PASS, 79 static source checks
+  Settings path wiring:     PASS, 26 static source checks
+
+The same suites/counts passed with Clang 17 and AddressSanitizer plus
+UndefinedBehaviorSanitizer (-fsanitize=address,undefined). No sanitizer report.
+Compiler logs are gcc-v8.1-settings.log and clang-sanitizers-v8.1-settings.log.
+Counts include assertions/iterations; they are not independent engine scenarios.
+
+Migration test coverage
+-----------------------
+Tests compile the actual new F2CacheMigration.h and actual F2PreferenceFile.h.
+They use real temporary directories/files on the POSIX branch. They verify:
+- no folders/files created when neither current nor legacy cache exists;
+- staged copy, byte readback, old copy retained, repeat migration skipped;
+- current-copy precedence, even when legacy is invalid or a dangling symlink;
+- independent catalogue/reference migration and no nested content-mod settings;
+- untouched user configuration, Favorites, authored assets and authored spawns;
+- failed injected validation/readback, oversize limits, regular-file/path errors;
+- symlink/dangling-symlink rejection and non-destructive directory handling;
+- competing .pending file, concurrent copies, destination-created-mid-copy race;
+- normal subsequent updates still replace only the settings-folder cache.
+
+The migration validator in these tests is injected, not the production JSON
+codec. Production parsing/DecodeEntries wiring was source-reviewed and checked
+statically, NOT compiled here. Windows CreateFileW/MoveFileExW behavior, real
+HostServices/UE4SS paths, full JSON integration and in-game migration are NOT
+executed by these tests. The new create-only Windows path deliberately omits
+MOVEFILE_REPLACE_EXISTING; this has not been tested against the Windows kernel.
+
+Unchanged behavior
+------------------
+No UI rendering code changed, so no new rendering claims or screenshots are
+made. Existing layout PNGs are offline v8 renders, not current game screenshots.
+Refresh/progress/paging, badge paths, runtime attribution, native asset checks,
+per-player features, network defaults and authored-mod destinations are unchanged.
+The older schema audit remains out of scope.
+
+Packaging
+---------
+SHA256-v8.1-raw.txt and source-manifest-v8.1-settings.json list all 33 source files.
+The ZIP was reopened, CRC-checked and compared byte-for-byte with these sources.
+A simulated merge preserved a build-BAT sentinel, unrelated source, user settings,
+and authored-mod files. packaging-v8.1-settings.json records the result.
+
+NOT EXECUTED: full Windows/MSVC/UE4SS build/link; real HTTP transport; engine
+reflection/loading/rendering/GC; native JSON cache integration; live cloning,
+save/reload, world transitions, or multiplayer testing.
+
+Optional reproducibility (POSIX environment, never invoked by the build BAT):
+  python verification/run_portable_tests.py --compiler g++
+  python verification/run_portable_tests.py --compiler clang++ --sanitize

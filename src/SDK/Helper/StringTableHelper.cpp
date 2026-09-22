@@ -124,7 +124,7 @@ namespace {
 }
 
 namespace DragonWilds::StringTableHelper {
-    void ForEachEntry(const std::function<void(UObject*, FString&)>& callback)
+    void ForEachEntry(const std::function<void(UObject*, FString&)>& callback,size_t maxTables,size_t maxSlots)
     {
         auto* StringTableClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
             nullptr, nullptr, STR("/Script/Engine.StringTable"));
@@ -136,6 +136,8 @@ namespace DragonWilds::StringTableHelper {
 
         TArray<UObject*> Assets{};
         UECustom::UObjectGlobals::GetObjectsOfClass(StringTableClass, Assets, true);
+        if(static_cast<size_t>(Assets.Num())>maxTables)throw std::runtime_error("String-table search exceeds table limit.");
+        size_t visitedSlots=0;
 
         for (int32 AssetIndex = 0; AssetIndex < Assets.Num(); ++AssetIndex)
         {
@@ -166,6 +168,10 @@ namespace DragonWilds::StringTableHelper {
             auto* Sparse = Table + StringTableKeysToEntriesOffset;
             auto* Elements = *reinterpret_cast<uint8_t* const*>(Sparse);
             const int32_t ElementCount = *reinterpret_cast<const int32_t*>(Sparse + 8);
+            if(ElementCount>0) {
+                if(static_cast<size_t>(ElementCount)>maxSlots-visitedSlots)throw std::runtime_error("String-table search exceeds entry limit.");
+                visitedSlots+=ElementCount;
+            }
 
             auto* FlagsBase = Sparse + SparseArrayFlagsOffset;
             auto* SecondaryFlags = *reinterpret_cast<uint32_t* const*>(FlagsBase + BitArraySecondaryOffset);

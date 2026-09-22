@@ -1,0 +1,34 @@
+RSv17 Hotfix 2 verification — 2026-09-19
+
+PASS  Native MSVC Game__Shipping__Win64 build
+PASS  4,212 portable Helpy/F2 assertions
+PASS  101 static integration checks
+PASS  23 real JSON mailbox assertions
+PASS  Configuration defaults and JSON round-trip test, including enableHelpy
+PASS  UPX 5.2.1 --best --lzma integrity test
+PASS  Focused MSVC quest reward, quest definition, NPC catalogue, journal placement, and loader-schema tests (/W4 /WX)
+PASS  21-loader runtime/schema/report coverage verifier
+PASS  Spawn Location array/object $-grounding regression tests
+PASS  Vendor capability preset: 46 validation checks and 1 packaged JSONC preset
+PASS  Vendor interaction trace: 1 packaged JSONC profile
+PASS  Runtime layout, generated loader-schema, and trace-profile tests
+
+COMPRESSED RELEASE DLL
+C:\RuneSchema\Output\RuneSchema\dlls\main.dll
+1750528 bytes
+SHA-256 2e21f970c9e1ec574dfae600aee429de388e8da58d1761d14d40ffdb1ba7beba
+
+STANDARD DLL
+C:\RuneSchema\Output\RuneSchema\dlls\main-standard.dll
+6200832 bytes
+SHA-256 c3a6a8208c7bedd781e8fe75d526a2dd063aa32000ad28704bbcfc00ff23829e
+
+SIGNATURE
+Not requested; RUNESCHEMA_SIGN_CERT_SHA1 was not configured.
+
+Runtime acceptance remains pending. Use a disposable or backed-up save when
+testing item patches, recipe exports, and quest-linked temporary NPCs.
+
+DESKTOP RELEASE ZIP
+C:\Users\user\Desktop\RuneSchema 7 Testing\RuneSchema-RSv17-Hotfix-2-Item-Authoring-NPC-Filters-2026-09-19.zip
+SHA-256 is recorded after final archive creation and may change when this file is embedded.

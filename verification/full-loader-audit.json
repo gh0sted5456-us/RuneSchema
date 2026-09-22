@@ -1,0 +1,1969 @@
+{
+  "authority": "Fresh local FModel export; RSDW is a prior-export path cross-check only.",
+  "rsdw_commit": "76c9fd547cc2cc6ebf7773d61d5cacf69a939b12",
+  "inventory": {
+    "fresh_json_files": 72121,
+    "rsdw_json_files": 72158,
+    "fresh_only": [
+      "Content/Maps/World/L_World.json",
+      "Content/ShaderArchive-Global-PCD3D_SM5-PCD3D_SM5.json",
+      "Content/ShaderArchive-Global-PCD3D_SM6-PCD3D_SM6.json",
+      "Content/ShaderArchive-Global-SF_VULKAN_SM5-VULKAN_SM5.json",
+      "Content/ShaderArchive-RSDragonwilds-PCD3D_SM5-PCD3D_SM5.json",
+      "Content/ShaderArchive-RSDragonwilds-PCD3D_SM6-PCD3D_SM6.json",
+      "Content/ShaderArchive-RSDragonwilds-SF_VULKAN_SM5-VULKAN_SM5.json"
+    ],
+    "rsdw_only": [
+      "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Mining/DA_BaseBuilding_Decoration_Material_Processed_Blurite_Bar_Single_DerivedData.json",
+      "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Mining/DA_BaseBuilding_Decoration_Material_Processed_Bronze_Bar_Single_DerivedData.json",
+      "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Mining/DA_BaseBuilding_Decoration_Material_Processed_Gold_Bar_Single_DerivedData.json",
+      "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Mining/DA_BaseBuilding_Decoration_Material_Processed_Iron_Bar_Single_DerivedData.json",
+      "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Mining/DA_BaseBuilding_Decoration_Material_Processed_Silver_Bar_Single_DerivedData.json",
+      "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Cloth_Coarse_Bin_01_DerivedData.json",
+      "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Cloth_Coarse_Pile_DerivedData.json",
+      "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Cloth_Coarse_Single_DerivedData.json",
+      "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Cloth_Padded_Bin_01_DerivedData.json",
+      "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Cloth_Padded_Pile_DerivedData.json",
+      "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Cloth_Padded_Single_DerivedData.json",
+      "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Cloth_Wool_Bin_01_DerivedData.json",
+      "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Cloth_Wool_Pile_DerivedData.json",
+      "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Cloth_Wool_Single_DerivedData.json",
+      "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Textile_TextileKit_DerivedData.json",
+      "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Thread_Coarse_Bin_01_DerivedData.json",
+      "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Thread_Coarse_Pile_DerivedData.json",
+      "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Thread_Coarse_Single_DerivedData.json",
+      "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Thread_Wool_Bin_01_DerivedData.json",
+      "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Thread_Wool_Pile_DerivedData.json",
+      "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Thread_Wool_Single_DerivedData.json",
+      "Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Ash.json",
+      "Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Battlestaff.json",
+      "Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Oak.json",
+      "Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Splitbark.json",
+      "Plugins/GameFeatures/DowdunReach/Content/Gameplay/AI/BlackKnightFaction/MeleeBlackKnight/MiniBossVariant/FlamingVariant/ATK_BlackKnightMelee_Flaming_SlashUp_ComboInitialiser.json",
+      "Plugins/GameFeatures/DowdunReach/Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Maple.json",
+      "Plugins/GameFeatures/DowdunReach/Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Subjugation.json",
+      "Plugins/GameFeatures/FutureMajorVersion/Content/Art/Skeleton/Weapons/Faction/U_MED_Skeleton_Human_Melee_Heavy_Shield_01/Textures/T_U_MED_Skeleton_Human_Melee_Heavy_Shield_ORM.json",
+      "Plugins/GameFeatures/FutureMajorVersion/Content/Gameplay/AI/SkeletonFaction/MeleeSkeleton/OneHandSwordVariant/WitheredVariant/Actions/DAA_RotswornWarrior_Stunbreaker_Retaliate.json",
+      "Plugins/GameFeatures/FutureMajorVersion/Content/Gameplay/AI/SkeletonFaction/MeleeSkeleton/OneHandSwordVariant/WitheredVariant/Attacks/ATK_RotswornWarrior_AttackCombo1_Attack1.json",
+      "Plugins/GameFeatures/FutureMajorVersion/Content/Gameplay/AI/SkeletonFaction/MeleeSkeleton/OneHandSwordVariant/WitheredVariant/Attacks/ATK_RotswornWarrior_AttackCombo1_Attack2.json",
+      "Plugins/GameFeatures/FutureMajorVersion/Content/Gameplay/AI/SkeletonFaction/MeleeSkeleton/OneHandSwordVariant/WitheredVariant/Attacks/ATK_RotswornWarrior_AttackCombo2_Attack1.json",
+      "Plugins/GameFeatures/FutureMajorVersion/Content/Gameplay/AI/SkeletonFaction/MeleeSkeleton/OneHandSwordVariant/WitheredVariant/Attacks/ATK_RotswornWarrior_AttackCombo2_Attack2.json",
+      "Plugins/GameFeatures/FutureMajorVersion/Content/Gameplay/AI/SkeletonFaction/MeleeSkeleton/OneHandSwordVariant/WitheredVariant/Attacks/ATK_RotswornWarrior_AttackCombo3_Attack1.json",
+      "Plugins/GameFeatures/FutureMajorVersion/Content/Gameplay/AI/SkeletonFaction/MeleeSkeleton/OneHandSwordVariant/WitheredVariant/Attacks/ATK_RotswornWarrior_AttackCombo3_Attack2.json",
+      "Plugins/GameFeatures/FutureMajorVersion/Content/Gameplay/AI/SkeletonFaction/MeleeSkeleton/OneHandSwordVariant/WitheredVariant/Attacks/ATK_RotswornWarrior_AttackCombo3_Attack3.json",
+      "Plugins/GameFeatures/FutureMajorVersion/Content/Gameplay/AI/SkeletonFaction/MeleeSkeleton/TwoHandSwordVariant/WitheredVariant/Actions/DAA_RotswornMarauder_Stunbreaker_Retaliate.json",
+      "Plugins/GameFeatures/FutureMajorVersion/Content/Gameplay/AI/ZombieFaction/RotswornZombie/RotswornMinibossSelfReviving/AM_NPC_Zombie_Rotsworn_Spawn_Outofground_ReanimatorZomb.json",
+      "Plugins/GameFeatures/ScornedWilderness/Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Ancestral.json",
+      "Plugins/GameFeatures/ScornedWilderness/Content/Gameplay/Items/Resources/Plant/ITEM_Farming_TreeSeed_Magic.json",
+      "Plugins/GameFeatures/UmbralSands/Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Master.json",
+      "Plugins/GameFeatures/UmbralSands/Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_PharaohsSceptre.json",
+      "Plugins/GameFeatures/UmbralSands/Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_ToktzMejTal.json"
+    ],
+    "parse_errors": [],
+    "top_export_types": [
+      {
+        "type": "StaticMeshComponent",
+        "count": 167922
+      },
+      {
+        "type": "StaticMeshActor",
+        "count": 130664
+      },
+      {
+        "type": "SceneComponent",
+        "count": 26161
+      },
+      {
+        "type": "InstancedStaticMeshComponent",
+        "count": 23240
+      },
+      {
+        "type": "SoundWave",
+        "count": 18359
+      },
+      {
+        "type": "NiagaraScript",
+        "count": 18296
+      },
+      {
+        "type": "SCS_Node",
+        "count": 18110
+      },
+      {
+        "type": "BodySetup",
+        "count": 16384
+      },
+      {
+        "type": "NiagaraDataInterfaceCurve",
+        "count": 16122
+      },
+      {
+        "type": "SplineMeshComponent",
+        "count": 14965
+      },
+      {
+        "type": "Function",
+        "count": 12413
+      },
+      {
+        "type": "Texture2D",
+        "count": 12234
+      },
+      {
+        "type": "ResourceRespawnComponent",
+        "count": 11680
+      },
+      {
+        "type": "ItemDropComponent",
+        "count": 11662
+      },
+      {
+        "type": "NiagaraComponent",
+        "count": 10683
+      },
+      {
+        "type": "BP_OreNodeSpawnComponent_C",
+        "count": 10678
+      },
+      {
+        "type": "FoliageDepictableComponent",
+        "count": 10390
+      },
+      {
+        "type": "AiAudioAnimNotify",
+        "count": 10185
+      },
+      {
+        "type": "MaterialInstanceDynamic",
+        "count": 10101
+      },
+      {
+        "type": "CameraShakeOnDamageComponent",
+        "count": 9037
+      },
+      {
+        "type": "BuildingQueryBoxComponent",
+        "count": 8968
+      },
+      {
+        "type": "WorldActorDamageComponent",
+        "count": 8637
+      },
+      {
+        "type": "BP_FootstepTag_C",
+        "count": 8016
+      },
+      {
+        "type": "BoxComponent",
+        "count": 7674
+      },
+      {
+        "type": "WorldActorHealthComponent",
+        "count": 7262
+      },
+      {
+        "type": "HierarchicalInstancedStaticMeshComponent",
+        "count": 7087
+      },
+      {
+        "type": "HLODInstancedStaticMeshComponent",
+        "count": 6711
+      },
+      {
+        "type": "BlueprintGeneratedClass",
+        "count": 6437
+      },
+      {
+        "type": "NiagaraEmitter",
+        "count": 6268
+      },
+      {
+        "type": "MovieSceneBuiltInEasingFunction",
+        "count": 6120
+      },
+      {
+        "type": "NiagaraDataInterfaceColorCurve",
+        "count": 5187
+      },
+      {
+        "type": "DiegeticEmitterPointComponent",
+        "count": 5141
+      },
+      {
+        "type": "InteractionComponent",
+        "count": 5088
+      },
+      {
+        "type": "DominionMetaSoundSource",
+        "count": 4957
+      },
+      {
+        "type": "StaticMesh",
+        "count": 4893
+      },
+      {
+        "type": "PointLightComponent",
+        "count": 4854
+      },
+      {
+        "type": "FoliageInstancedStaticMeshComponent",
+        "count": 4577
+      },
+      {
+        "type": "SkeletalBodySetup",
+        "count": 4324
+      },
+      {
+        "type": "NiagaraSpriteRendererProperties",
+        "count": 4218
+      },
+      {
+        "type": "NavCollision",
+        "count": 4145
+      },
+      {
+        "type": "MaterialInstanceConstant",
+        "count": 4075
+      },
+      {
+        "type": "AnimSequence",
+        "count": 3615
+      },
+      {
+        "type": "BP_OreNode_Stone_C",
+        "count": 3590
+      },
+      {
+        "type": "PhysicsConstraintTemplate",
+        "count": 3540
+      },
+      {
+        "type": "SimpleConstructionScript",
+        "count": 3200
+      },
+      {
+        "type": "AISpawnVolumeNavigationSeed",
+        "count": 2994
+      },
+      {
+        "type": "AnimMontage",
+        "count": 2932
+      },
+      {
+        "type": "TimelineComponent",
+        "count": 2713
+      },
+      {
+        "type": "Model",
+        "count": 2702
+      },
+      {
+        "type": "QFT_PromptMessage_C",
+        "count": 2650
+      },
+      {
+        "type": "AIPatrolPoint",
+        "count": 2596
+      },
+      {
+        "type": "QFT_Blank_C",
+        "count": 2526
+      },
+      {
+        "type": "SpotLightComponent",
+        "count": 2283
+      },
+      {
+        "type": "BP_ProxyLightComponent_C",
+        "count": 2216
+      },
+      {
+        "type": "InheritableComponentHandler",
+        "count": 1995
+      },
+      {
+        "type": "CosmeticMagnetizationComponent",
+        "count": 1828
+      },
+      {
+        "type": "LandscapeMaterialInstanceConstant",
+        "count": 1721
+      },
+      {
+        "type": "AgilityCourseComponent",
+        "count": 1706
+      },
+      {
+        "type": "NiagaraMeshRendererProperties",
+        "count": 1694
+      },
+      {
+        "type": "VerticalBoxSlot",
+        "count": 1655
+      },
+      {
+        "type": "OverlaySlot",
+        "count": 1634
+      },
+      {
+        "type": "HorizontalBoxSlot",
+        "count": 1616
+      },
+      {
+        "type": "BrushComponent",
+        "count": 1595
+      },
+      {
+        "type": "SphereComponent",
+        "count": 1509
+      },
+      {
+        "type": "MovieSceneEventTriggerSection",
+        "count": 1491
+      },
+      {
+        "type": "SplineComponent",
+        "count": 1374
+      },
+      {
+        "type": "NiagaraSystem",
+        "count": 1356
+      },
+      {
+        "type": "NiagaraActor",
+        "count": 1232
+      },
+      {
+        "type": "RecipeData",
+        "count": 1211
+      },
+      {
+        "type": "BP_DetectionSpellTargetComponent_C",
+        "count": 1207
+      },
+      {
+        "type": "LevelInstanceComponent",
+        "count": 1204
+      },
+      {
+        "type": "BP_Spawner_Stone_C",
+        "count": 1199
+      },
+      {
+        "type": "QFR_TestQuestBool_C",
+        "count": 1197
+      },
+      {
+        "type": "NiagaraDataInterfaceStaticMesh",
+        "count": 1171
+      },
+      {
+        "type": "DecalComponent",
+        "count": 1126
+      },
+      {
+        "type": "DominionWorldSettings",
+        "count": 1107
+      },
+      {
+        "type": "Level",
+        "count": 1107
+      },
+      {
+        "type": "NavigationSystemModuleConfig",
+        "count": 1107
+      },
+      {
+        "type": "World",
+        "count": 1107
+      },
+      {
+        "type": "WorldPartitionRuntimeCellDataSpatialHash",
+        "count": 1107
+      },
+      {
+        "type": "WorldPartitionRuntimeLevelStreamingCell",
+        "count": 1107
+      },
+      {
+        "type": "WorldPartitionLevelStreamingDynamic",
+        "count": 1104
+      },
+      {
+        "type": "NiagaraDataInterfaceVectorField",
+        "count": 1085
+      },
+      {
+        "type": "AnimCurveMetaData",
+        "count": 1069
+      },
+      {
+        "type": "NiagaraDataInterfaceSpriteRendererInfo",
+        "count": 1063
+      },
+      {
+        "type": "SkeletalMeshComponent",
+        "count": 1053
+      },
+      {
+        "type": "FootstepAnimNotify",
+        "count": 1013
+      },
+      {
+        "type": "CapsuleComponent",
+        "count": 997
+      },
+      {
+        "type": "MovieScene",
+        "count": 964
+      },
+      {
+        "type": "BP_InteractableFoliageISMC_PickUps_C",
+        "count": 961
+      },
+      {
+        "type": "NiagaraDataInterfaceVectorCurve",
+        "count": 956
+      },
+      {
+        "type": "MovieSceneCompiledData",
+        "count": 931
+      },
+      {
+        "type": "JournalEntryRecipeData",
+        "count": 914
+      },
+      {
+        "type": "Image",
+        "count": 870
+      },
+      {
+        "type": "BuildingPieceData",
+        "count": 856
+      },
+      {
+        "type": "BuildingDamageComponent",
+        "count": 855
+      },
+      {
+        "type": "BuildingSnapComponent",
+        "count": 855
+      },
+      {
+        "type": "HealthComponent",
+        "count": 855
+      },
+      {
+        "type": "BP_OreNode_Sandstone_C",
+        "count": 851
+      },
+      {
+        "type": "DataTable",
+        "count": 832
+      }
+    ]
+  },
+  "loaders": {
+    "assets": {
+      "fresh_candidates": 1776,
+      "sample_paths": [
+        "Content/Gameplay/Character/Player/Equipment/Jewellery/ITEM_Trinket_Iconic_Amulet_of_Accuracy.json",
+        "Content/Gameplay/Character/Player/Equipment/Jewellery/ITEM_Trinket_Iconic_Amulet_of_Defence.json",
+        "Content/Gameplay/Character/Player/Equipment/Jewellery/ITEM_Trinket_Iconic_Amulet_of_Magic.json",
+        "Content/Gameplay/Character/Player/Equipment/Jewellery/ITEM_Trinket_Iconic_Amulet_of_Strength.json",
+        "Content/Gameplay/Character/Player/Equipment/Jewellery/ITEM_Trinket_Iconic_Ring_of_Life.json",
+        "Content/Gameplay/Character/Player/Equipment/Jewellery/ITEM_Trinket_Iconic_Ring_of_Pursuit.json",
+        "Content/Gameplay/Character/Player/Equipment/Jewellery/ITEM_Trinket_Iconic_Ring_of_Recoil.json",
+        "Content/Gameplay/Character/Player/Equipment/Jewellery/ITEM_Trinket_Iconic_Runic_Ring.json",
+        "Content/Gameplay/Character/Player/Equipment/Jewellery/ITEM_Trinket_Inspiring_Artisan.json",
+        "Content/Gameplay/Character/Player/Equipment/Jewellery/ITEM_Trinket_Inspiring_Attack.json",
+        "Content/Gameplay/Character/Player/Equipment/Jewellery/ITEM_Trinket_Inspiring_Construction.json",
+        "Content/Gameplay/Character/Player/Equipment/Jewellery/ITEM_Trinket_Inspiring_Cooking.json"
+      ],
+      "top_types": [
+        {
+          "type": "RecipeData",
+          "count": 710
+        },
+        {
+          "type": "ItemData",
+          "count": 369
+        },
+        {
+          "type": "BP_Consumables_Food_C",
+          "count": 138
+        },
+        {
+          "type": "GE_Cooldown_Eat_C",
+          "count": 138
+        },
+        {
+          "type": "BP_Consumables_Plan_Base_C",
+          "count": 123
+        },
+        {
+          "type": "BP_Consumables_RecipeUnlocker2_C",
+          "count": 105
+        },
+        {
+          "type": "GE_Cooldown_Drink_C",
+          "count": 81
+        },
+        {
+          "type": "BP_Consumables_ItemEmitter_C",
+          "count": 63
+        },
+        {
+          "type": "BP_Consumables_Potion_C",
+          "count": 58
+        },
+        {
+          "type": "BP_Consumables_SkillTome_C",
+          "count": 29
+        },
+        {
+          "type": "TrinketItemData",
+          "count": 27
+        },
+        {
+          "type": "DataTable",
+          "count": 25
+        }
+      ],
+      "path_scope": {
+        "fresh": 1748,
+        "rsdw": 1749,
+        "fresh_only": [],
+        "rsdw_only": [
+          "Plugins/GameFeatures/ScornedWilderness/Content/Gameplay/Items/Resources/Plant/ITEM_Farming_TreeSeed_Magic.json"
+        ]
+      }
+    },
+    "blueprints": {
+      "fresh_candidates": 7261,
+      "sample_paths": [
+        "Content/Art/Animation/NPC_Velgar/Airial/ABP_Velgar_Flyover.json",
+        "Content/Art/Animation/NPC_Velgar/Airial/ABP_Velgar_Flyover_NoEvent.json",
+        "Content/Art/Animation/PlayerM/Torch/PA_Block_Torch.json",
+        "Content/Art/Env/Architecture/DowdunReach/GateWay/BPP_PLA_DR_Gateway.json",
+        "Content/Art/Env/Architecture/Dragonkin/BP_DK_VautEntrance.json",
+        "Content/Art/Env/Architecture/Dragonkin/BP_DK_VautEntrance_Locked.json",
+        "Content/Art/Env/Architecture/Human/Windmill/BP_Windmill_Blades.json",
+        "Content/Art/Env/Base_Building/Crafting_Stations/Advanced_Tanning_Rack/ABP_Advanced_Tanning_Rack.json",
+        "Content/Art/Env/Base_Building/Crafting_Stations/Brewing_Barrel/ABP_Brewing_Barrel_01.json",
+        "Content/Art/Env/Base_Building/Crafting_Stations/Cooking_Range/ABP_Cooking_Range_01.json",
+        "Content/Art/Env/Base_Building/Crafting_Stations/Furnace/ABP_Furnace_01.json",
+        "Content/Art/Env/Base_Building/Crafting_Stations/Grinder/ABP_Grinder_01.json"
+      ],
+      "top_types": [
+        {
+          "type": "SCS_Node",
+          "count": 18110
+        },
+        {
+          "type": "Function",
+          "count": 12413
+        },
+        {
+          "type": "InstancedStaticMeshComponent",
+          "count": 8982
+        },
+        {
+          "type": "SceneComponent",
+          "count": 6507
+        },
+        {
+          "type": "BlueprintGeneratedClass",
+          "count": 6437
+        },
+        {
+          "type": "StaticMeshComponent",
+          "count": 5013
+        },
+        {
+          "type": "SimpleConstructionScript",
+          "count": 3200
+        },
+        {
+          "type": "InheritableComponentHandler",
+          "count": 1995
+        },
+        {
+          "type": "MovieSceneBuiltInEasingFunction",
+          "count": 1878
+        },
+        {
+          "type": "Texture2D",
+          "count": 1763
+        },
+        {
+          "type": "VerticalBoxSlot",
+          "count": 1655
+        },
+        {
+          "type": "LandscapeMaterialInstanceConstant",
+          "count": 1649
+        }
+      ],
+      "path_scope": {
+        "fresh": 152,
+        "rsdw": 152,
+        "fresh_only": [],
+        "rsdw_only": []
+      }
+    },
+    "buildings": {
+      "fresh_candidates": 4709,
+      "sample_paths": [
+        "Content/Art/BaseBuilding/Decorations/Trophy_Plaques/Materials/MI_Wolf_01_Mane_Solid.json",
+        "Content/Art/BaseBuilding/Decorations/Trophy_Plaques/SM_Trophy_Plaque_Abyssal.json",
+        "Content/Art/BaseBuilding/Decorations/Trophy_Plaques/SM_Trophy_Plaque_BlackDragon.json",
+        "Content/Art/BaseBuilding/Decorations/Trophy_Plaques/SM_Trophy_Plaque_BlueDragon.json",
+        "Content/Art/BaseBuilding/Decorations/Trophy_Plaques/SM_Trophy_Plaque_CowZombieWithering.json",
+        "Content/Art/BaseBuilding/Decorations/Trophy_Plaques/SM_Trophy_Plaque_DarkChompa.json",
+        "Content/Art/BaseBuilding/Decorations/Trophy_Plaques/SM_Trophy_Plaque_DragonWolf.json",
+        "Content/Art/BaseBuilding/Decorations/Trophy_Plaques/SM_Trophy_Plaque_GreenDragon.json",
+        "Content/Art/BaseBuilding/Decorations/Trophy_Plaques/SM_Trophy_Plaque_Guardian.json",
+        "Content/Art/BaseBuilding/Decorations/Trophy_Plaques/SM_Trophy_Plaque_HellRat.json",
+        "Content/Art/BaseBuilding/Decorations/Trophy_Plaques/SM_Trophy_Plaque_QueenBeetle.json",
+        "Content/Art/BaseBuilding/Decorations/Trophy_Plaques/SM_Trophy_Plaque_QueenFlier.json"
+      ],
+      "top_types": [
+        {
+          "type": "SceneComponent",
+          "count": 1641
+        },
+        {
+          "type": "SCS_Node",
+          "count": 1318
+        },
+        {
+          "type": "StaticMeshComponent",
+          "count": 954
+        },
+        {
+          "type": "InstancedStaticMeshComponent",
+          "count": 900
+        },
+        {
+          "type": "BuildingPieceData",
+          "count": 856
+        },
+        {
+          "type": "InteractionComponent",
+          "count": 838
+        },
+        {
+          "type": "BlueprintGeneratedClass",
+          "count": 828
+        },
+        {
+          "type": "BoxComponent",
+          "count": 822
+        },
+        {
+          "type": "SimpleConstructionScript",
+          "count": 821
+        },
+        {
+          "type": "BuildingPieceDerivedData",
+          "count": 819
+        },
+        {
+          "type": "BuildingDamageComponent",
+          "count": 814
+        },
+        {
+          "type": "BuildingSnapComponent",
+          "count": 814
+        }
+      ],
+      "path_scope": {
+        "fresh": 4653,
+        "rsdw": 4674,
+        "fresh_only": [],
+        "rsdw_only": [
+          "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Mining/DA_BaseBuilding_Decoration_Material_Processed_Blurite_Bar_Single_DerivedData.json",
+          "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Mining/DA_BaseBuilding_Decoration_Material_Processed_Bronze_Bar_Single_DerivedData.json",
+          "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Mining/DA_BaseBuilding_Decoration_Material_Processed_Gold_Bar_Single_DerivedData.json",
+          "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Mining/DA_BaseBuilding_Decoration_Material_Processed_Iron_Bar_Single_DerivedData.json",
+          "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Mining/DA_BaseBuilding_Decoration_Material_Processed_Silver_Bar_Single_DerivedData.json",
+          "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Cloth_Coarse_Bin_01_DerivedData.json",
+          "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Cloth_Coarse_Pile_DerivedData.json",
+          "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Cloth_Coarse_Single_DerivedData.json",
+          "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Cloth_Padded_Bin_01_DerivedData.json",
+          "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Cloth_Padded_Pile_DerivedData.json",
+          "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Cloth_Padded_Single_DerivedData.json",
+          "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Cloth_Wool_Bin_01_DerivedData.json",
+          "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Cloth_Wool_Pile_DerivedData.json",
+          "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Cloth_Wool_Single_DerivedData.json",
+          "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Textile_TextileKit_DerivedData.json",
+          "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Thread_Coarse_Bin_01_DerivedData.json",
+          "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Thread_Coarse_Pile_DerivedData.json",
+          "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Thread_Coarse_Single_DerivedData.json",
+          "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Thread_Wool_Bin_01_DerivedData.json",
+          "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Thread_Wool_Pile_DerivedData.json",
+          "Content/Gameplay/BaseBuilding_New/BuildingPieces_DerivedData/Decorations/Materials/Processed/Textiles/DA_BaseBuilding_Decoration_Material_Processed_Thread_Wool_Single_DerivedData.json"
+        ]
+      }
+    },
+    "courses": {
+      "fresh_candidates": 95,
+      "sample_paths": [
+        "Content/Art/Env/Architecture/Scorned/Agility_Platforms/MI_VFX_Agility_Course.json",
+        "Content/Art/UI/Agility/T_BG_CourseComplete.json",
+        "Content/Art/UI/Agility/T_BG_CourseFailed.json",
+        "Content/Art/UI/Agility/T_BG_CourseStart.json",
+        "Content/Art/UI/Agility/T_CourseComplete_Bg_Pattern.json",
+        "Content/Art/UI/Agility/T_CourseComplete_Bg_Shadow.json",
+        "Content/Art/UI/Agility/T_CourseComplete_Icon_Bronze_Bg.json",
+        "Content/Art/UI/Agility/T_CourseComplete_Icon_Gold_Bg.json",
+        "Content/Art/UI/Agility/T_CourseComplete_Icon_Silver_Bg.json",
+        "Content/Art/UI/Map/T_Agility_NewCourse.json",
+        "Content/Audio/DataAssets/MusicData/MusicTransitions/Agility/ADT_MusicTransitions_Agility_OutOfCourse.json",
+        "Content/Audio/MetasoundSources/Music/BGM/AgilityCourse/MSS_Mu_BGM_AgilityCourse.json"
+      ],
+      "top_types": [
+        {
+          "type": "VerticalBoxSlot",
+          "count": 64
+        },
+        {
+          "type": "OverlaySlot",
+          "count": 45
+        },
+        {
+          "type": "Image",
+          "count": 36
+        },
+        {
+          "type": "Function",
+          "count": 28
+        },
+        {
+          "type": "WBP_DomTextBlock_C",
+          "count": 25
+        },
+        {
+          "type": "SoundWave",
+          "count": 21
+        },
+        {
+          "type": "Overlay",
+          "count": 21
+        },
+        {
+          "type": "BlueprintGeneratedClass",
+          "count": 20
+        },
+        {
+          "type": "HorizontalBoxSlot",
+          "count": 19
+        },
+        {
+          "type": "SCS_Node",
+          "count": 14
+        },
+        {
+          "type": "SizeBox",
+          "count": 14
+        },
+        {
+          "type": "SizeBoxSlot",
+          "count": 14
+        }
+      ],
+      "path_scope": {
+        "fresh": 95,
+        "rsdw": 95,
+        "fresh_only": [],
+        "rsdw_only": []
+      }
+    },
+    "dialogue": {
+      "fresh_candidates": 542,
+      "sample_paths": [
+        "Content/Art/UI/Conversation/T_Answer_Diamond.json",
+        "Content/Art/UI/Conversation/T_Answer_Highlight.json",
+        "Content/Art/UI/Conversation/T_Gradient_LowerThird_Fade.json",
+        "Content/Art/UI/Conversation/T_NPC_Answers_Bg.json",
+        "Content/Art/UI/Conversation/T_NPC_Answers_Selected_Bg.json",
+        "Content/Art/UI/Conversation/T_NPC_Gold_Line.json",
+        "Content/Art/UI/Conversation/T_NPC_Name_Bg.json",
+        "Content/Art/UI/Conversation/T_NPC_Question_Bg.json",
+        "Content/Art/VFX/UI/NS_UI_Conversation.json",
+        "Content/Art/VFX/UI/NS_UI_DialogueButtonHighlight.json",
+        "Content/Art/VFX/UI/NS_UI_DialogueButtonLoop.json",
+        "Content/Art/VFX/UI/NS_UI_GenericDialogue_Accent.json"
+      ],
+      "top_types": [
+        {
+          "type": "StaticMeshComponent",
+          "count": 91941
+        },
+        {
+          "type": "StaticMeshActor",
+          "count": 71318
+        },
+        {
+          "type": "SceneComponent",
+          "count": 12834
+        },
+        {
+          "type": "InstancedStaticMeshComponent",
+          "count": 8790
+        },
+        {
+          "type": "ResourceRespawnComponent",
+          "count": 7093
+        },
+        {
+          "type": "ItemDropComponent",
+          "count": 6977
+        },
+        {
+          "type": "SplineMeshComponent",
+          "count": 6951
+        },
+        {
+          "type": "FoliageDepictableComponent",
+          "count": 6391
+        },
+        {
+          "type": "BP_OreNodeSpawnComponent_C",
+          "count": 6086
+        },
+        {
+          "type": "NiagaraComponent",
+          "count": 6003
+        },
+        {
+          "type": "BodySetup",
+          "count": 5991
+        },
+        {
+          "type": "CameraShakeOnDamageComponent",
+          "count": 5846
+        }
+      ],
+      "path_scope": {
+        "fresh": 151,
+        "rsdw": 151,
+        "fresh_only": [],
+        "rsdw_only": []
+      }
+    },
+    "effects": {
+      "fresh_candidates": 742,
+      "sample_paths": [
+        "Content/Art/Animation/PlayerM/StatusEffects/A_PlayerM_SE_Burning_Hotspot.json",
+        "Content/Art/Animation/PlayerM/StatusEffects/A_PlayerM_SE_Encumbrance.json",
+        "Content/Art/Animation/PlayerM/StatusEffects/A_PlayerM_SE_Poison.json",
+        "Content/Art/UI/HUD/StatusEffects/Cold/T_HUD_Frost.json",
+        "Content/Art/UI/Icons/StatusEffects/T_Icon_Sml_Bleed.json",
+        "Content/Art/UI/Icons/StatusEffects/T_Icon_Sml_Burning.json",
+        "Content/Art/UI/Icons/StatusEffects/T_Icon_Sml_Cold.json",
+        "Content/Art/UI/Icons/StatusEffects/T_Icon_Sml_Coziness.json",
+        "Content/Art/UI/Icons/StatusEffects/T_Icon_Sml_Encumbered.json",
+        "Content/Art/UI/Icons/StatusEffects/T_Icon_Sml_Fatigue.json",
+        "Content/Art/UI/Icons/StatusEffects/T_Icon_Sml_FreshStart.json",
+        "Content/Art/UI/Icons/StatusEffects/T_Icon_Sml_Healthregen.json"
+      ],
+      "top_types": [
+        {
+          "type": "StaticMeshComponent",
+          "count": 8839
+        },
+        {
+          "type": "StaticMeshActor",
+          "count": 7313
+        },
+        {
+          "type": "SCS_Node",
+          "count": 1275
+        },
+        {
+          "type": "SceneComponent",
+          "count": 1265
+        },
+        {
+          "type": "SplineMeshComponent",
+          "count": 1204
+        },
+        {
+          "type": "Function",
+          "count": 1119
+        },
+        {
+          "type": "BP_OreNodeSpawnComponent_C",
+          "count": 852
+        },
+        {
+          "type": "BodySetup",
+          "count": 833
+        },
+        {
+          "type": "MaterialInstanceDynamic",
+          "count": 710
+        },
+        {
+          "type": "ResourceRespawnComponent",
+          "count": 662
+        },
+        {
+          "type": "ItemDropComponent",
+          "count": 625
+        },
+        {
+          "type": "CameraShakeOnDamageComponent",
+          "count": 591
+        }
+      ],
+      "path_scope": {
+        "fresh": 438,
+        "rsdw": 438,
+        "fresh_only": [],
+        "rsdw_only": []
+      }
+    },
+    "enums": {
+      "fresh_candidates": 423,
+      "sample_paths": [
+        "Content/Art/Env/Lighting/Mesh/energy_02_sm.json",
+        "Content/Art/Env/Lighting/Mesh/energy_04_sm.json",
+        "Content/Art/Env/Lighting/energy_tile.json",
+        "Content/Art/Env/Misc/Tools/RVT_DecalSpline/FRVT_SplineLookName.json",
+        "Content/Audio/ConcurrencySettings/Enemy_Abyssal_Demon_Abilities_SC.json",
+        "Content/Audio/ConcurrencySettings/Enemy_Abyssal_Demon_Foley_SC.json",
+        "Content/Audio/ConcurrencySettings/Enemy_Abyssal_Demon_Footsteps_ExplosionSweetener.json",
+        "Content/Audio/ConcurrencySettings/Enemy_Abyssal_Demon_Footsteps_SC.json",
+        "Content/Audio/ConcurrencySettings/Enemy_Abyssal_Demon_SC.json",
+        "Content/Audio/ConcurrencySettings/Enemy_BlackKnight_Vocalisation_SC.json",
+        "Content/Audio/ConcurrencySettings/Enemy_Foley_PerObject_SC.json",
+        "Content/Audio/ConcurrencySettings/Enemy_Foley_SC.json"
+      ],
+      "top_types": [
+        {
+          "type": "StaticMeshComponent",
+          "count": 6149
+        },
+        {
+          "type": "StaticMeshActor",
+          "count": 4600
+        },
+        {
+          "type": "InstancedStaticMeshComponent",
+          "count": 2980
+        },
+        {
+          "type": "SceneComponent",
+          "count": 1158
+        },
+        {
+          "type": "SplineMeshComponent",
+          "count": 645
+        },
+        {
+          "type": "NiagaraComponent",
+          "count": 626
+        },
+        {
+          "type": "BodySetup",
+          "count": 597
+        },
+        {
+          "type": "MaterialInstanceDynamic",
+          "count": 500
+        },
+        {
+          "type": "DiegeticEmitterPointComponent",
+          "count": 366
+        },
+        {
+          "type": "ResourceRespawnComponent",
+          "count": 363
+        },
+        {
+          "type": "ItemDropComponent",
+          "count": 349
+        },
+        {
+          "type": "FoliageDepictableComponent",
+          "count": 339
+        }
+      ],
+      "path_scope": {
+        "fresh": 418,
+        "rsdw": 418,
+        "fresh_only": [],
+        "rsdw_only": []
+      }
+    },
+    "equipment": {
+      "fresh_candidates": 4736,
+      "sample_paths": [
+        "Content/Art/Animation/PlayerM/AbyssalWhip/AM_PlayerM_Attack_Club_Whip_01.json",
+        "Content/Art/Animation/PlayerM/AbyssalWhip/AM_PlayerM_Attack_Club_Whip_02.json",
+        "Content/Art/Animation/PlayerM/AbyssalWhip/AM_PlayerM_Attack_Club_Whip_03.json",
+        "Content/Art/Animation/PlayerM/AbyssalWhip/AM_PlayerM_Attack_Club_Whip_03_ShortComboEnd.json",
+        "Content/Art/Animation/PlayerM/AbyssalWhip/AM_PlayerM_Attack_Club_Whip_04.json",
+        "Content/Art/Animation/PlayerM/AbyssalWhip/AM_PlayerM_Attack_Club_Whip_05.json",
+        "Content/Art/Animation/PlayerM/AbyssalWhip/AM_PlayerM_Attack_Club_Whip_Visceral.json",
+        "Content/Art/Animation/PlayerM/AbyssalWhip/AM_PlayerM_Sprint_Attack_Club_Whip_01.json",
+        "Content/Art/Animation/PlayerM/Club/AM_PlayerM_Attack_Club_Secondary.json",
+        "Content/Art/Animation/PlayerM/Club/AM_PlayerM_Attack_Club_Translate_01.json",
+        "Content/Art/Animation/PlayerM/Club/AM_PlayerM_Attack_Club_Translate_02.json",
+        "Content/Art/Animation/PlayerM/Club/AM_PlayerM_Attack_Club_Translate_03.json"
+      ],
+      "top_types": [
+        {
+          "type": "Texture2D",
+          "count": 1138
+        },
+        {
+          "type": "SkeletalBodySetup",
+          "count": 1117
+        },
+        {
+          "type": "PhysicsConstraintTemplate",
+          "count": 921
+        },
+        {
+          "type": "SCS_Node",
+          "count": 773
+        },
+        {
+          "type": "RecipeData",
+          "count": 585
+        },
+        {
+          "type": "SceneComponent",
+          "count": 487
+        },
+        {
+          "type": "AnimCurveMetaData",
+          "count": 447
+        },
+        {
+          "type": "WearableEquipmentMeshData",
+          "count": 440
+        },
+        {
+          "type": "Function",
+          "count": 419
+        },
+        {
+          "type": "InstancedStaticMeshComponent",
+          "count": 359
+        },
+        {
+          "type": "BlueprintGeneratedClass",
+          "count": 312
+        },
+        {
+          "type": "BP_FootstepTag_C",
+          "count": 280
+        }
+      ],
+      "path_scope": {
+        "fresh": 4598,
+        "rsdw": 4608,
+        "fresh_only": [],
+        "rsdw_only": [
+          "Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Ash.json",
+          "Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Battlestaff.json",
+          "Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Oak.json",
+          "Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Splitbark.json",
+          "Plugins/GameFeatures/DowdunReach/Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Maple.json",
+          "Plugins/GameFeatures/DowdunReach/Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Subjugation.json",
+          "Plugins/GameFeatures/ScornedWilderness/Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Ancestral.json",
+          "Plugins/GameFeatures/UmbralSands/Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Master.json",
+          "Plugins/GameFeatures/UmbralSands/Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_PharaohsSceptre.json",
+          "Plugins/GameFeatures/UmbralSands/Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_ToktzMejTal.json"
+        ]
+      }
+    },
+    "events": {
+      "fresh_candidates": 130,
+      "sample_paths": [
+        "Content/Art/Animation/NPC_Velgar/Events/AM_NPC_DragonVelgar_PoisonBreath.json",
+        "Content/Art/Animation/NPC_Velgar/Events/AM_NPC_DragonVelgar_VW_Perch_Complete.json",
+        "Content/Art/Animation/NPC_Velgar/Events/A_NPC_DragonVelgar_PoisonBreath_In.json",
+        "Content/Art/Animation/NPC_Velgar/Events/A_NPC_DragonVelgar_PoisonBreath_Lp.json",
+        "Content/Art/Animation/NPC_Velgar/Events/A_NPC_DragonVelgar_PoisonBreath_Out.json",
+        "Content/Art/Animation/NPC_Velgar/Events/A_NPC_DragonVelgar_VW_Perch_Complete.json",
+        "Content/Art/VFX/Library/Character/Velgar/MeteorStrike/NS_Velgar_WorldEvent_MeteorStrike.json",
+        "Content/Audio/AttenuationSharesets/World/ATT_Short_WorldEvents.json",
+        "Content/Audio/ConcurrencySettings/WorldEvents_SC.json",
+        "Content/Audio/MetasoundSources/World/WorldEvents/ImarusGaze/MSS_Wo_Ev_ImarusGaze_ClawAttack.json",
+        "Content/Audio/MetasoundSources/World/WorldEvents/ImarusGaze/MSS_Wo_Ev_ImarusGaze_ClawStart.json",
+        "Content/Audio/MetasoundSources/World/WorldEvents/ImarusGaze/MSS_Wo_Ev_Soulrift_Imaru_FullLoop.json"
+      ],
+      "top_types": [
+        {
+          "type": "Texture2D",
+          "count": 1763
+        },
+        {
+          "type": "LandscapeMaterialInstanceConstant",
+          "count": 1649
+        },
+        {
+          "type": "StaticMeshComponent",
+          "count": 1428
+        },
+        {
+          "type": "SceneComponent",
+          "count": 1344
+        },
+        {
+          "type": "WorldPartitionRuntimeCellDataSpatialHash",
+          "count": 1107
+        },
+        {
+          "type": "WorldPartitionRuntimeLevelStreamingCell",
+          "count": 1107
+        },
+        {
+          "type": "WorldPartitionLevelStreamingDynamic",
+          "count": 1104
+        },
+        {
+          "type": "HLODInstancedStaticMeshComponent",
+          "count": 1097
+        },
+        {
+          "type": "StaticMeshActor",
+          "count": 911
+        },
+        {
+          "type": "LandscapeComponent",
+          "count": 556
+        },
+        {
+          "type": "LandscapeHeightfieldCollisionComponent",
+          "count": 556
+        },
+        {
+          "type": "BodySetup",
+          "count": 481
+        }
+      ],
+      "path_scope": {
+        "fresh": 113,
+        "rsdw": 113,
+        "fresh_only": [],
+        "rsdw_only": []
+      }
+    },
+    "journal": {
+      "fresh_candidates": 1360,
+      "sample_paths": [
+        "Content/Gameplay/Items/Journaltems/ITEM_JOURNAL_Image_BrinkOfExtinction_KotHaar.json",
+        "Content/Gameplay/Items/Journaltems/ITEM_JOURNAL_TreasureMap_Scarecrow_1.json",
+        "Content/Gameplay/Items/Journaltems/ITEM_JOURNAL_TreasureMap_Scarecrow_2.json",
+        "Content/Gameplay/Items/Journaltems/ITEM_JOURNAL_TreasureMap_Scarecrow_3.json",
+        "Content/UI/JournalData/Entries/DeletedEntries/JOURNAL_Know_Artefact_GraniteMaulHandle.json",
+        "Content/UI/JournalData/Entries/DeletedEntries/JOURNAL_Know_Artefact_GraniteMaulHead.json",
+        "Content/UI/JournalData/Entries/DeletedEntries/JOURNAL_Know_Artefact_GraniteMaulWrappings.json",
+        "Content/UI/JournalData/Entries/DeletedEntries/JOURNAL_Know_CathanJournal_Vault.json",
+        "Content/UI/JournalData/Entries/DeletedEntries/JOURNAL_Know_Tutorials_WeaknessesResistances.json",
+        "Content/UI/JournalData/Entries/DeletedEntries/JOURNAL_Recipes_Armour_Cape_Avas_Attractor.json",
+        "Content/UI/JournalData/Entries/DeletedEntries/JOURNAL_Recipes_Armour_Wardstone_Large.json",
+        "Content/UI/JournalData/Entries/DeletedEntries/JOURNAL_Recipes_Armour_Wardstone_Medium.json"
+      ],
+      "top_types": [
+        {
+          "type": "JournalEntryRecipeData",
+          "count": 914
+        },
+        {
+          "type": "JournalEntryWorldData",
+          "count": 226
+        },
+        {
+          "type": "JournalEntryKnowLoreData",
+          "count": 129
+        },
+        {
+          "type": "JournalEntryKnowPlaceData",
+          "count": 29
+        },
+        {
+          "type": "JournalSubCategoryByGroupData",
+          "count": 18
+        },
+        {
+          "type": "JournalItemData",
+          "count": 14
+        },
+        {
+          "type": "JournalEntryKnowPeopleData",
+          "count": 10
+        },
+        {
+          "type": "JournalEntryKnowTreasureData",
+          "count": 7
+        },
+        {
+          "type": "StringTable",
+          "count": 7
+        },
+        {
+          "type": "JournalCategoryData",
+          "count": 3
+        },
+        {
+          "type": "JournalSubCategoryNoBiomeData",
+          "count": 2
+        },
+        {
+          "type": "JournalData",
+          "count": 1
+        }
+      ],
+      "path_scope": {
+        "fresh": 1346,
+        "rsdw": 1346,
+        "fresh_only": [],
+        "rsdw_only": []
+      }
+    },
+    "lore": {
+      "fresh_candidates": 141,
+      "sample_paths": [
+        "Content/Art/VFX/Library/Lore/MI_LoreHighlight_01.json",
+        "Content/Art/VFX/Library/Lore/NS_LoreItem_Book.json",
+        "Content/UI/JournalData/Entries/DeletedEntries/JOURNAL_Know_CathanJournal_Vault.json",
+        "Content/UI/JournalData/Entries/Knowledge/LoreScraps/JOURNAL_BrinkOfExtinction_KotHaar.json",
+        "Content/UI/JournalData/Entries/Knowledge/LoreScraps/JOURNAL_Know_CathanJournal_Castle.json",
+        "Content/UI/JournalData/Entries/Knowledge/LoreScraps/JOURNAL_Know_CathanJournal_Vannaka.json",
+        "Content/UI/JournalData/Entries/Knowledge/LoreScraps/JOURNAL_Know_CathanJournal_Velgarslair.json",
+        "Content/UI/JournalData/Entries/Knowledge/LoreScraps/JOURNAL_Know_DogDays.json",
+        "Content/UI/JournalData/Entries/Knowledge/LoreScraps/JOURNAL_Know_Dragonwolves_1.json",
+        "Content/UI/JournalData/Entries/Knowledge/LoreScraps/JOURNAL_Know_Dragonwolves_2.json",
+        "Content/UI/JournalData/Entries/Knowledge/LoreScraps/JOURNAL_Know_Dragonwolves_3.json",
+        "Content/UI/JournalData/Entries/Knowledge/LoreScraps/JOURNAL_Know_LoreScrap_A1.json"
+      ],
+      "top_types": [
+        {
+          "type": "JournalEntryKnowLoreData",
+          "count": 129
+        },
+        {
+          "type": "NiagaraScript",
+          "count": 11
+        },
+        {
+          "type": "NiagaraDataInterfaceCurve",
+          "count": 5
+        },
+        {
+          "type": "StringTable",
+          "count": 5
+        },
+        {
+          "type": "JournalEntryKnowTreasureData",
+          "count": 4
+        },
+        {
+          "type": "NiagaraEmitter",
+          "count": 3
+        },
+        {
+          "type": "NiagaraSpriteRendererProperties",
+          "count": 3
+        },
+        {
+          "type": "MaterialInstanceConstant",
+          "count": 1
+        },
+        {
+          "type": "NiagaraDataInterfaceArrayFloat",
+          "count": 1
+        },
+        {
+          "type": "NiagaraDataInterfaceColorCurve",
+          "count": 1
+        },
+        {
+          "type": "NiagaraSystem",
+          "count": 1
+        },
+        {
+          "type": "JournalSubCategoryByGroupData",
+          "count": 1
+        }
+      ],
+      "path_scope": {
+        "fresh": 140,
+        "rsdw": 140,
+        "fresh_only": [],
+        "rsdw_only": []
+      }
+    },
+    "nameplates": {
+      "fresh_candidates": 3,
+      "sample_paths": [
+        "Content/Gameplay/Character/Player/BP_PlayerCharacter.json",
+        "Content/Gameplay/Character/Player/Nameplate/BP_Player_Nameplate.json",
+        "Content/UI/Player/WBP_Player_Nameplate.json"
+      ],
+      "top_types": [
+        {
+          "type": "SCS_Node",
+          "count": 65
+        },
+        {
+          "type": "Function",
+          "count": 58
+        },
+        {
+          "type": "CurveFloat",
+          "count": 18
+        },
+        {
+          "type": "SkeletalMeshComponent",
+          "count": 12
+        },
+        {
+          "type": "GE_Hydration_StaminaRegenScale_C",
+          "count": 5
+        },
+        {
+          "type": "GE_ModifyHealthRegen_C",
+          "count": 5
+        },
+        {
+          "type": "GE_ModifyStaminaRegenDelay_C",
+          "count": 5
+        },
+        {
+          "type": "TimelineTemplate",
+          "count": 5
+        },
+        {
+          "type": "TrackedStatusEffectInstance",
+          "count": 5
+        },
+        {
+          "type": "GE_ModifyMaxStamina_C",
+          "count": 3
+        },
+        {
+          "type": "BlueprintGeneratedClass",
+          "count": 2
+        },
+        {
+          "type": "BP_Player_Nameplate_C",
+          "count": 2
+        }
+      ],
+      "path_scope": {
+        "fresh": 2,
+        "rsdw": 2,
+        "fresh_only": [],
+        "rsdw_only": []
+      }
+    },
+    "niagara": {
+      "fresh_candidates": 3434,
+      "sample_paths": [
+        "Content/Art/Env/Misc/Dungeon/VFX/NS_Eldergate_Lever.json",
+        "Content/Art/Env/Misc/Dungeon/VFX/NS_Eldergate_Portal1.json",
+        "Content/Art/Env/Misc/Dungeon/VFX/NS_Water_Leak_1_Flow.json",
+        "Content/Art/Env/Misc/Dungeon/VFX/NS_Water_Leak_1_Splashes.json",
+        "Content/Art/Env/Misc/Dungeon/VFX/NS_Water_Leak_2_Flow.json",
+        "Content/Art/Env/Misc/Dungeon/VFX/NS_Water_Leak_2_Splash.json",
+        "Content/Art/VFX/Blueprints/AnimNotifyState_PlayerM_StaffEmissive.json",
+        "Content/Art/VFX/Blueprints/Anim_NotifyState_VFX_MagicBeast_StaffEmissive.json",
+        "Content/Art/VFX/Blueprints/BP_GroundFogPlanes.json",
+        "Content/Art/VFX/Blueprints/BP_HeatPlanes.json",
+        "Content/Art/VFX/Blueprints/BP_WolfTrail.json",
+        "Content/Art/VFX/Component/Air/MI_Air_Flare_02.json"
+      ],
+      "top_types": [
+        {
+          "type": "NiagaraScript",
+          "count": 18296
+        },
+        {
+          "type": "NiagaraDataInterfaceCurve",
+          "count": 16122
+        },
+        {
+          "type": "NiagaraEmitter",
+          "count": 6268
+        },
+        {
+          "type": "NiagaraSpriteRendererProperties",
+          "count": 4218
+        },
+        {
+          "type": "NiagaraDataInterfaceColorCurve",
+          "count": 2251
+        },
+        {
+          "type": "NiagaraMeshRendererProperties",
+          "count": 1694
+        },
+        {
+          "type": "NiagaraSystem",
+          "count": 1356
+        },
+        {
+          "type": "NiagaraDataInterfaceVectorField",
+          "count": 1085
+        },
+        {
+          "type": "NiagaraDataInterfaceSpriteRendererInfo",
+          "count": 1063
+        },
+        {
+          "type": "MaterialInstanceConstant",
+          "count": 1050
+        },
+        {
+          "type": "NiagaraDataInterfaceVectorCurve",
+          "count": 930
+        },
+        {
+          "type": "NiagaraDataInterfaceCollisionQuery",
+          "count": 503
+        }
+      ],
+      "path_scope": {
+        "fresh": 3417,
+        "rsdw": 3417,
+        "fresh_only": [],
+        "rsdw_only": []
+      }
+    },
+    "npc": {
+      "fresh_candidates": 8378,
+      "sample_paths": [
+        "Content/Art/Skeleton/NPC/ABP_Master/ALI_Aiming_UpperBody.json",
+        "Content/Art/Skeleton/NPC/ABP_Master/ALI_GroundIK.json",
+        "Content/Art/Skeleton/NPC/ABP_Master/ALI_Head_AimOffset.json",
+        "Content/Art/Skeleton/NPC/ABP_Master/ALI_Locomotion.json",
+        "Content/Art/Skeleton/NPC/ABP_Master/ALI_ShieldBlocking.json",
+        "Content/Art/Skeleton/NPC/ABP_Master/RIG_IKFunctionLibrary.json",
+        "Content/Art/Skeleton/NPC/ABP_Master/RIG_T_GroundIK_Biped.json",
+        "Content/Art/Skeleton/NPC/ABP_Master/RIG_T_GroundIK_Quadruped.json",
+        "Content/Art/Skeleton/NPC/ABP_Master/TABP_Aiming_UpperBody.json",
+        "Content/Art/Skeleton/NPC/ABP_Master/TABP_GroundIK.json",
+        "Content/Art/Skeleton/NPC/ABP_Master/TABP_GroundIK_Biped.json",
+        "Content/Art/Skeleton/NPC/ABP_Master/TABP_GroundIK_Quadruped.json"
+      ],
+      "top_types": [
+        {
+          "type": "AiAudioAnimNotify",
+          "count": 8588
+        },
+        {
+          "type": "Function",
+          "count": 5957
+        },
+        {
+          "type": "BP_FootstepTag_C",
+          "count": 5271
+        },
+        {
+          "type": "SCS_Node",
+          "count": 2902
+        },
+        {
+          "type": "BlueprintGeneratedClass",
+          "count": 2899
+        },
+        {
+          "type": "SkeletalBodySetup",
+          "count": 2867
+        },
+        {
+          "type": "AnimMontage",
+          "count": 2593
+        },
+        {
+          "type": "PhysicsConstraintTemplate",
+          "count": 2468
+        },
+        {
+          "type": "NiagaraScript",
+          "count": 2001
+        },
+        {
+          "type": "NiagaraDataInterfaceCurve",
+          "count": 1632
+        },
+        {
+          "type": "SceneComponent",
+          "count": 1334
+        },
+        {
+          "type": "SimpleConstructionScript",
+          "count": 925
+        }
+      ],
+      "path_scope": {
+        "fresh": 8378,
+        "rsdw": 8389,
+        "fresh_only": [],
+        "rsdw_only": [
+          "Plugins/GameFeatures/DowdunReach/Content/Gameplay/AI/BlackKnightFaction/MeleeBlackKnight/MiniBossVariant/FlamingVariant/ATK_BlackKnightMelee_Flaming_SlashUp_ComboInitialiser.json",
+          "Plugins/GameFeatures/FutureMajorVersion/Content/Gameplay/AI/SkeletonFaction/MeleeSkeleton/OneHandSwordVariant/WitheredVariant/Actions/DAA_RotswornWarrior_Stunbreaker_Retaliate.json",
+          "Plugins/GameFeatures/FutureMajorVersion/Content/Gameplay/AI/SkeletonFaction/MeleeSkeleton/OneHandSwordVariant/WitheredVariant/Attacks/ATK_RotswornWarrior_AttackCombo1_Attack1.json",
+          "Plugins/GameFeatures/FutureMajorVersion/Content/Gameplay/AI/SkeletonFaction/MeleeSkeleton/OneHandSwordVariant/WitheredVariant/Attacks/ATK_RotswornWarrior_AttackCombo1_Attack2.json",
+          "Plugins/GameFeatures/FutureMajorVersion/Content/Gameplay/AI/SkeletonFaction/MeleeSkeleton/OneHandSwordVariant/WitheredVariant/Attacks/ATK_RotswornWarrior_AttackCombo2_Attack1.json",
+          "Plugins/GameFeatures/FutureMajorVersion/Content/Gameplay/AI/SkeletonFaction/MeleeSkeleton/OneHandSwordVariant/WitheredVariant/Attacks/ATK_RotswornWarrior_AttackCombo2_Attack2.json",
+          "Plugins/GameFeatures/FutureMajorVersion/Content/Gameplay/AI/SkeletonFaction/MeleeSkeleton/OneHandSwordVariant/WitheredVariant/Attacks/ATK_RotswornWarrior_AttackCombo3_Attack1.json",
+          "Plugins/GameFeatures/FutureMajorVersion/Content/Gameplay/AI/SkeletonFaction/MeleeSkeleton/OneHandSwordVariant/WitheredVariant/Attacks/ATK_RotswornWarrior_AttackCombo3_Attack2.json",
+          "Plugins/GameFeatures/FutureMajorVersion/Content/Gameplay/AI/SkeletonFaction/MeleeSkeleton/OneHandSwordVariant/WitheredVariant/Attacks/ATK_RotswornWarrior_AttackCombo3_Attack3.json",
+          "Plugins/GameFeatures/FutureMajorVersion/Content/Gameplay/AI/SkeletonFaction/MeleeSkeleton/TwoHandSwordVariant/WitheredVariant/Actions/DAA_RotswornMarauder_Stunbreaker_Retaliate.json",
+          "Plugins/GameFeatures/FutureMajorVersion/Content/Gameplay/AI/ZombieFaction/RotswornZombie/RotswornMinibossSelfReviving/AM_NPC_Zombie_Rotsworn_Spawn_Outofground_ReanimatorZomb.json"
+        ]
+      }
+    },
+    "players": {
+      "fresh_candidates": 3642,
+      "sample_paths": [
+        "Content/Art/Animation/NPC_WildJadeVine/Attack/A_NPC_WildJadeVine_Thorn_Loop_Shock.json",
+        "Content/Art/Animation/PlayerM/AbyssalWhip/AM_PlayerM_Attack_Whip_01_Whip.json",
+        "Content/Art/Animation/PlayerM/AbyssalWhip/AM_PlayerM_Attack_Whip_01_Whip1_Vestige.json",
+        "Content/Art/Animation/PlayerM/AbyssalWhip/AM_PlayerM_Attack_Whip_02_Whip.json",
+        "Content/Art/Animation/PlayerM/AbyssalWhip/AM_PlayerM_Attack_Whip_02_Whip1_Vestige.json",
+        "Content/Art/Animation/PlayerM/AbyssalWhip/AM_PlayerM_Attack_Whip_03_Whip.json",
+        "Content/Art/Animation/PlayerM/AbyssalWhip/AM_PlayerM_Attack_Whip_03_Whip1_Vestige.json",
+        "Content/Art/Animation/PlayerM/AbyssalWhip/AM_PlayerM_Attack_Whip_04_Whip.json",
+        "Content/Art/Animation/PlayerM/AbyssalWhip/AM_PlayerM_Attack_Whip_04_Whip1_Vestige.json",
+        "Content/Art/Animation/PlayerM/AbyssalWhip/AM_PlayerM_Attack_Whip_05_Whip.json",
+        "Content/Art/Animation/PlayerM/AbyssalWhip/AM_PlayerM_Attack_Whip_05_Whip1_Vestige.json",
+        "Content/Art/Animation/PlayerM/AbyssalWhip/AM_PlayerM_Sprint_Attack_Whip_01_Whip.json"
+      ],
+      "top_types": [
+        {
+          "type": "StaticMeshComponent",
+          "count": 59252
+        },
+        {
+          "type": "StaticMeshActor",
+          "count": 47018
+        },
+        {
+          "type": "SceneComponent",
+          "count": 8561
+        },
+        {
+          "type": "SplineMeshComponent",
+          "count": 5258
+        },
+        {
+          "type": "BodySetup",
+          "count": 4815
+        },
+        {
+          "type": "InstancedStaticMeshComponent",
+          "count": 4800
+        },
+        {
+          "type": "MaterialInstanceDynamic",
+          "count": 4291
+        },
+        {
+          "type": "NiagaraComponent",
+          "count": 3966
+        },
+        {
+          "type": "BP_OreNodeSpawnComponent_C",
+          "count": 2852
+        },
+        {
+          "type": "ResourceRespawnComponent",
+          "count": 2825
+        },
+        {
+          "type": "ItemDropComponent",
+          "count": 2728
+        },
+        {
+          "type": "FoliageDepictableComponent",
+          "count": 2518
+        }
+      ],
+      "path_scope": {
+        "fresh": 2836,
+        "rsdw": 2846,
+        "fresh_only": [],
+        "rsdw_only": [
+          "Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Ash.json",
+          "Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Battlestaff.json",
+          "Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Oak.json",
+          "Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Splitbark.json",
+          "Plugins/GameFeatures/DowdunReach/Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Maple.json",
+          "Plugins/GameFeatures/DowdunReach/Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Subjugation.json",
+          "Plugins/GameFeatures/ScornedWilderness/Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Ancestral.json",
+          "Plugins/GameFeatures/UmbralSands/Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_Master.json",
+          "Plugins/GameFeatures/UmbralSands/Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_PharaohsSceptre.json",
+          "Plugins/GameFeatures/UmbralSands/Content/Gameplay/Character/Player/Equipment/Held/Staff/ITEM_Staff_ToktzMejTal.json"
+        ]
+      }
+    },
+    "quests": {
+      "fresh_candidates": 702,
+      "sample_paths": [
+        "Content/Art/Animation/Misc/Quests/SM_Skeleton_Sitting_Quest.json",
+        "Content/Art/Animation/Misc/Quests/SM_Skeleton_Sitting_Quest_Head_01.json",
+        "Content/Art/Animation/Misc/Quests/SM_Skeleton_Sitting_Quest_Headless_01.json",
+        "Content/Art/Animation/Misc/Quests/SM_Skeleton_Sitting_Quest_Headless_02.json",
+        "Content/Art/Animation/Misc/Quests/SM_Skeleton_Sitting_Quest_Headless_03.json",
+        "Content/Art/Env/Base_Building/Decorations/Quest/Material/MI_Book_Spectral.json",
+        "Content/Art/Env/Base_Building/Decorations/Quest/SM_Book_Spectral.json",
+        "Content/Audio/DataAssets/MusicData/MusicPieces/Quests/MPD_Quest_Heartstrings.json",
+        "Content/Audio/DataAssets/MusicData/MusicPieces/Quests/MPD_Quest_RestlessGhosts.json",
+        "Content/Audio/MetasoundSources/Music/BGM/Quests/Heartstrings/MSS_Mu_BGM_Ceridwen.json",
+        "Content/Audio/MetasoundSources/Music/BGM/Quests/Heartstrings/MSS_Mu_Heartstrings_Mem01.json",
+        "Content/Audio/MetasoundSources/Music/BGM/Quests/Heartstrings/MSS_Mu_Heartstrings_Mem02.json"
+      ],
+      "top_types": [
+        {
+          "type": "QFT_PromptMessage_C",
+          "count": 2650
+        },
+        {
+          "type": "QFT_Blank_C",
+          "count": 2526
+        },
+        {
+          "type": "QFR_TestQuestBool_C",
+          "count": 1197
+        },
+        {
+          "type": "QFT_SetQuestBool_C",
+          "count": 747
+        },
+        {
+          "type": "QFR_TestQuestInt_C",
+          "count": 680
+        },
+        {
+          "type": "QFT_UpdateQuestLocation_C",
+          "count": 585
+        },
+        {
+          "type": "ConversationEntryPointNode",
+          "count": 472
+        },
+        {
+          "type": "QFT_SetQuestObjective_C",
+          "count": 406
+        },
+        {
+          "type": "SEN_PlayBark_C",
+          "count": 406
+        },
+        {
+          "type": "ConversationChoiceNode",
+          "count": 387
+        },
+        {
+          "type": "DialogueBarkSideEffectNode",
+          "count": 278
+        },
+        {
+          "type": "Function",
+          "count": 264
+        }
+      ],
+      "path_scope": {
+        "fresh": 702,
+        "rsdw": 702,
+        "fresh_only": [],
+        "rsdw_only": []
+      }
+    },
+    "raw": {
+      "fresh_candidates": 844,
+      "sample_paths": [
+        "Content/Audio/DataAssets/AI/ADT_AI_BlackKnight.json",
+        "Content/Audio/DataAssets/AI/ADT_AI_BlackKnight_Titan.json",
+        "Content/Audio/DataAssets/AI/ADT_AI_Chicken.json",
+        "Content/Audio/DataAssets/AI/ADT_AI_Cow.json",
+        "Content/Audio/DataAssets/AI/ADT_AI_Deer.json",
+        "Content/Audio/DataAssets/AI/ADT_AI_Fuzan.json",
+        "Content/Audio/DataAssets/AI/ADT_AI_Garou.json",
+        "Content/Audio/DataAssets/AI/ADT_AI_Goblin.json",
+        "Content/Audio/DataAssets/AI/ADT_AI_Imaru.json",
+        "Content/Audio/DataAssets/AI/ADT_AI_KalphiteGuardian.json",
+        "Content/Audio/DataAssets/AI/ADT_AI_KalphiteQueen.json",
+        "Content/Audio/DataAssets/AI/ADT_AI_KalphiteSoldier.json"
+      ],
+      "top_types": [
+        {
+          "type": "DataTable",
+          "count": 832
+        },
+        {
+          "type": "FootstepData",
+          "count": 7
+        },
+        {
+          "type": "CompositeDataTable",
+          "count": 4
+        },
+        {
+          "type": "GridlyDataTable",
+          "count": 1
+        }
+      ],
+      "path_scope": {
+        "fresh": 639,
+        "rsdw": 639,
+        "fresh_only": [],
+        "rsdw_only": []
+      }
+    },
+    "recipes": {
+      "fresh_candidates": 2309,
+      "sample_paths": [
+        "Content/Audio/DataAssets/Recipes/ADT_CraftingRecipes.json",
+        "Content/Gameplay/Character/Player/Equipment/Ammo/RECIPE_Ammo_Arrows_Bone_Bleed.json",
+        "Content/Gameplay/Character/Player/Equipment/Ammo/RECIPE_Ammo_Arrows_Bone_Bodkin.json",
+        "Content/Gameplay/Character/Player/Equipment/Ammo/RECIPE_Ammo_Arrows_Bone_Fire.json",
+        "Content/Gameplay/Character/Player/Equipment/Ammo/RECIPE_Ammo_Arrows_Bone_Poison.json",
+        "Content/Gameplay/Character/Player/Equipment/Ammo/RECIPE_Ammo_Arrows_Bronze_Bleed.json",
+        "Content/Gameplay/Character/Player/Equipment/Ammo/RECIPE_Ammo_Arrows_Bronze_Bodkin.json",
+        "Content/Gameplay/Character/Player/Equipment/Ammo/RECIPE_Ammo_Arrows_Bronze_Fire.json",
+        "Content/Gameplay/Character/Player/Equipment/Ammo/RECIPE_Ammo_Arrows_Bronze_Poison.json",
+        "Content/Gameplay/Character/Player/Equipment/Ammo/RECIPE_Ammo_Arrows_Iron_Bleed.json",
+        "Content/Gameplay/Character/Player/Equipment/Ammo/RECIPE_Ammo_Arrows_Iron_Bodkin.json",
+        "Content/Gameplay/Character/Player/Equipment/Ammo/RECIPE_Ammo_Arrows_Iron_Fire.json"
+      ],
+      "top_types": [
+        {
+          "type": "RecipeData",
+          "count": 1211
+        },
+        {
+          "type": "JournalEntryRecipeData",
+          "count": 914
+        },
+        {
+          "type": "BuildingPieceData",
+          "count": 85
+        },
+        {
+          "type": "BuildingPieceDerivedData",
+          "count": 85
+        },
+        {
+          "type": "InstancedStaticMeshComponent",
+          "count": 85
+        },
+        {
+          "type": "RuneRecipeData",
+          "count": 7
+        },
+        {
+          "type": "JournalEntryWorldData",
+          "count": 6
+        },
+        {
+          "type": "DataTable",
+          "count": 1
+        }
+      ],
+      "path_scope": {
+        "fresh": 2269,
+        "rsdw": 2269,
+        "fresh_only": [],
+        "rsdw_only": []
+      }
+    },
+    "spawns": {
+      "fresh_candidates": 1182,
+      "sample_paths": [
+        "Content/Art/Animation/NPC_Ent/Root_Spawn/AM_Root_Tree_ENT_DeSpawn_01.json",
+        "Content/Art/Animation/NPC_Ent/Root_Spawn/A_Root_Tree_ENT_Spawn_01.json",
+        "Content/Art/Animation/NPC_SkeletonFaction/NPC_Skeleton_Maurader/Idle/A_NPC_Skeleton2H_Spawn_OutofGround.json",
+        "Content/Art/Animation/NPC_SkeletonFaction/NPC_Skeleton_Maurader/Idle/A_NPC_SkeletonMelee_Spawn_OutofGround.json",
+        "Content/Art/Animation/NPC_SkeletonFaction/NPC_Skeleton_Necromancer/Idle/A_NPC_SkeletonMagic_Spawn_OutofGround.json",
+        "Content/Art/Animation/NPC_SkeletonFaction/NPC_Skeleton_Ranger/Idle/A_NPC_Skeleton_Ranged_Spawn_OutofGround.json",
+        "Content/Art/Animation/NPC_SkeletonFaction/NPC_Skeleton_Warrior/Idle/A_NPC_1hSkeleton_Idle_Spawn.json",
+        "Content/Art/Cinematics/KeyArt_ComAlpha/Shot_01/LS_KeyArt_ComAlpha_Characters_Shot_01.json",
+        "Content/Art/Cinematics/KeyArt_ComAlpha/Shot_01/LS_KeyArt_ComAlpha_Shot_01.json",
+        "Content/Art/VFX/Component/EffectType/NET_Env_OnSpawn_Kill.json",
+        "Content/Art/VFX/Component/EffectType/NET_Env_Short_OnSpawn_Kill.json",
+        "Content/Art/VFX/Library/Character/Imaru/BossFight/SpectralVines/NS_VFX_VinesSpawn.json"
+      ],
+      "top_types": [
+        {
+          "type": "StaticMeshComponent",
+          "count": 152975
+        },
+        {
+          "type": "StaticMeshActor",
+          "count": 119657
+        },
+        {
+          "type": "SceneComponent",
+          "count": 20761
+        },
+        {
+          "type": "InstancedStaticMeshComponent",
+          "count": 13131
+        },
+        {
+          "type": "SplineMeshComponent",
+          "count": 12538
+        },
+        {
+          "type": "ResourceRespawnComponent",
+          "count": 11680
+        },
+        {
+          "type": "ItemDropComponent",
+          "count": 11598
+        },
+        {
+          "type": "BP_OreNodeSpawnComponent_C",
+          "count": 10678
+        },
+        {
+          "type": "FoliageDepictableComponent",
+          "count": 10382
+        },
+        {
+          "type": "NiagaraComponent",
+          "count": 9318
+        },
+        {
+          "type": "BodySetup",
+          "count": 9283
+        },
+        {
+          "type": "CameraShakeOnDamageComponent",
+          "count": 8990
+        }
+      ],
+      "path_scope": {
+        "fresh": 625,
+        "rsdw": 626,
+        "fresh_only": [],
+        "rsdw_only": [
+          "Plugins/GameFeatures/FutureMajorVersion/Content/Gameplay/AI/ZombieFaction/RotswornZombie/RotswornMinibossSelfReviving/AM_NPC_Zombie_Rotsworn_Spawn_Outofground_ReanimatorZomb.json"
+        ]
+      }
+    },
+    "strings": {
+      "fresh_candidates": 138,
+      "sample_paths": [
+        "Content/Audio/Reverbs/OpenAIR_48k/st_georges_far_IR.json",
+        "Content/Audio/Reverbs/OpenAIR_48k/st_georges_far_IR_Increased.json",
+        "Content/Gameplay/AI/ST_AI_Names.json",
+        "Content/Gameplay/Attributes/ST_Attributes.json",
+        "Content/Gameplay/BaseBuilding/Data/BuildingPieces/Furniture/ST_BuildingPieces_Furniture.json",
+        "Content/Gameplay/BaseBuilding/ST_WorldInteractions.json",
+        "Content/Gameplay/BaseBuilding_New/BuildingPieces/ST_BuildingPieces.json",
+        "Content/Gameplay/Character/Player/PerksV2/ST_Skills_Perks.json",
+        "Content/Gameplay/Character/Player/Skills/ST_SkillLevelUpInstructions.json",
+        "Content/Gameplay/DifficultySettings/ST_DifficultySettings.json",
+        "Content/Gameplay/FTUE/Strings/ST_FTUENotifications.json",
+        "Content/Gameplay/GameplayEffects/Skills/ST_Skills.json"
+      ],
+      "top_types": [
+        {
+          "type": "StringTable",
+          "count": 135
+        },
+        {
+          "type": "AudioImpulseResponse",
+          "count": 2
+        },
+        {
+          "type": "Texture2D",
+          "count": 1
+        }
+      ],
+      "path_scope": {
+        "fresh": 135,
+        "rsdw": 135,
+        "fresh_only": [],
+        "rsdw_only": []
+      }
+    },
+    "vendors": {
+      "fresh_candidates": 135,
+      "sample_paths": [
+        "Content/Gameplay/Items/Vendors/DowdunReach/Recipes/RECIPE_Vendor_DowdunReach_Armour_Body_Black.json",
+        "Content/Gameplay/Items/Vendors/DowdunReach/Recipes/RECIPE_Vendor_DowdunReach_Armour_Body_BlackRanger.json",
+        "Content/Gameplay/Items/Vendors/DowdunReach/Recipes/RECIPE_Vendor_DowdunReach_Armour_Body_Zamorak.json",
+        "Content/Gameplay/Items/Vendors/DowdunReach/Recipes/RECIPE_Vendor_DowdunReach_Armour_Head_Black.json",
+        "Content/Gameplay/Items/Vendors/DowdunReach/Recipes/RECIPE_Vendor_DowdunReach_Armour_Head_BlackRanger.json",
+        "Content/Gameplay/Items/Vendors/DowdunReach/Recipes/RECIPE_Vendor_DowdunReach_Armour_Head_Zamorak.json",
+        "Content/Gameplay/Items/Vendors/DowdunReach/Recipes/RECIPE_Vendor_DowdunReach_Armour_Legs_Black.json",
+        "Content/Gameplay/Items/Vendors/DowdunReach/Recipes/RECIPE_Vendor_DowdunReach_Armour_Legs_BlackRanger.json",
+        "Content/Gameplay/Items/Vendors/DowdunReach/Recipes/RECIPE_Vendor_DowdunReach_Armour_Legs_Zamorak.json",
+        "Content/Gameplay/Items/Vendors/DowdunReach/Recipes/RECIPE_Vendor_DowdunReach_Cape_BlueDyad.json",
+        "Content/Gameplay/Items/Vendors/DowdunReach/Recipes/RECIPE_Vendor_DowdunReach_Cape_BlueHex.json",
+        "Content/Gameplay/Items/Vendors/DowdunReach/Recipes/RECIPE_Vendor_DowdunReach_Cape_GreenDyad.json"
+      ],
+      "top_types": [
+        {
+          "type": "QFT_PromptMessage_C",
+          "count": 227
+        },
+        {
+          "type": "QFT_Blank_C",
+          "count": 190
+        },
+        {
+          "type": "QFR_TestQuestBool_C",
+          "count": 156
+        },
+        {
+          "type": "RecipeData",
+          "count": 124
+        },
+        {
+          "type": "DialogueBarkSideEffectNode",
+          "count": 119
+        },
+        {
+          "type": "QFT_UpdateQuestLocation_C",
+          "count": 85
+        },
+        {
+          "type": "QFT_SetQuestBool_C",
+          "count": 65
+        },
+        {
+          "type": "ConversationChoiceNode",
+          "count": 44
+        },
+        {
+          "type": "ConversationEntryPointNode",
+          "count": 41
+        },
+        {
+          "type": "QFR_TestQuestInt_C",
+          "count": 36
+        },
+        {
+          "type": "QFT_SetQuestObjective_C",
+          "count": 31
+        },
+        {
+          "type": "QFT_ModifyQuestInt_C",
+          "count": 22
+        }
+      ],
+      "path_scope": {
+        "fresh": 125,
+        "rsdw": 125,
+        "fresh_only": [],
+        "rsdw_only": []
+      }
+    }
+  },
+  "method_limit": "Candidate scopes are discovery aids. Runtime class/property checks remain authoritative for patch/create support."
+}

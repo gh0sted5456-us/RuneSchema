@@ -1,4 +1,6 @@
+#include "Utility/NativeFunctionHook.h"
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <format>
 #include <fstream>
@@ -101,11 +103,6 @@ namespace DragonWilds {
                 return false;
             }
 
-            if (soft.WeakPtr.Get() == object)
-            {
-                return true;
-            }
-
             const auto target = UECustom::FSoftObjectPath(object->GetPathName());
             return soft.ObjectID.AssetPath.GetPackageName() == target.AssetPath.GetPackageName()
                 && soft.ObjectID.AssetPath.GetAssetName() == target.AssetPath.GetAssetName();
@@ -115,7 +112,6 @@ namespace DragonWilds {
         {
             auto* soft = reinterpret_cast<UECustom::FSoftObjectPtr*>(destination);
             soft->ObjectID = UECustom::FSoftObjectPath(object->GetPathName());
-            soft->WeakPtr = FWeakObjectPtr(object);
         }
 
         UObject* ResolveItem(const RC::StringType& reference)
@@ -136,9 +132,10 @@ namespace DragonWilds {
 
             TArray<UObject*> items;
             UECustom::UObjectGlobals::GetObjectsOfClass(itemClass, items, true);
+            const FName referenceName(reference,FNAME_Add);
             for (auto* item : items)
             {
-                if (item && item->GetName() == reference
+                if (item && item->GetFName() == referenceName
                     && !item->HasAnyFlags(static_cast<EObjectFlags>(
                         RF_ClassDefaultObject | RF_ArchetypeObject)))
                 {
@@ -211,12 +208,34 @@ namespace DragonWilds {
 
     void DragonWildsBuildingModLoader::ActivateWorldRegistration()
     {
+        // Do not install world-entry/world-teardown registry hooks for an
+        // empty building configuration.  The loader is present in every
+        // RuneSchema install, but touching the native registry is only needed
+        // when at least one valid building definition was applied.
+        if (m_applied.empty())
+        {
+            PS::RoutineLog("buildings",
+                STR("No active building definitions; native registry hooks were not registered.\n"));
+            return;
+        }
+
         RegisterHooks();
+    }
+
+    DragonWildsBuildingModLoader::~DragonWildsBuildingModLoader()
+    {
+        if (m_initGameStateCallbackId != Hook::ERROR_ID)
+            Hook::UnregisterCallback(m_initGameStateCallbackId);
     }
 
     void DragonWildsBuildingModLoader::ReadDefinitions(
         const nlohmann::json& data, const RC::StringType& modName)
     {
+        if (data.is_array())
+        {
+            for (const auto& entry : data) ReadDefinitions(entry, modName);
+            return;
+        }
         if (!data.is_object())
         {
             PS::Log<LogLevel::Error>(
@@ -224,6 +243,10 @@ namespace DragonWilds {
             return;
         }
 
+        if (data.contains("$Patch")) {
+            ApplyPatch(data, modName);
+            return;
+        }
         for (const auto& [key, body] : data.items())
         {
             if (key.starts_with("$"))
@@ -239,10 +262,12 @@ namespace DragonWilds {
                 continue;
             }
 
-            if (!body.contains("Asset") || !body.at("Asset").is_string())
+            const bool hasAsset = body.contains("Asset") && body.at("Asset").is_string();
+            const bool hasClone = body.contains("$Clone") && body.at("$Clone").is_string();
+            if (hasAsset == hasClone)
             {
                 PS::Log<LogLevel::Error>(
-                    STR("{}: Building '{}' requires a cooked 'Asset' path.\n"),
+                    STR("{}: Building '{}' requires exactly one string 'Asset' or '$Clone' path.\n"),
                     modName, RC::to_generic_string(key));
                 continue;
             }
@@ -250,8 +275,9 @@ namespace DragonWilds {
             BuildingDefinition definition{};
             definition.Owner = modName;
             definition.Key = RC::to_generic_string(key);
-            definition.AssetPath =
-                RC::to_generic_string(body.at("Asset").get<std::string>());
+            definition.Clone = hasClone;
+            definition.AssetPath = RC::to_generic_string(
+                body.at(hasClone ? "$Clone" : "Asset").get<std::string>());
 
             if (body.contains("Properties"))
             {
@@ -367,6 +393,94 @@ namespace DragonWilds {
         }
     }
 
+    void DragonWildsBuildingModLoader::ApplyPatch(
+        const nlohmann::json& patch, const RC::StringType& modName)
+    {
+        if (!patch.contains("$Patch") || !patch.at("$Patch").is_string()
+            || !patch.contains("$Target") || !patch.at("$Target").is_object())
+        {
+            PS::Log<LogLevel::Error>(STR("{}: Building '$Patch' requires a string identity and object '$Target'.\n"), modName);
+            return;
+        }
+
+        auto target = RC::to_generic_string(patch.at("$Patch").get<std::string>());
+        const auto separator = target.find(TEXT(':'));
+        const auto targetOwner = separator == RC::StringType::npos
+            ? modName : target.substr(0, separator);
+        const auto targetKey = separator == RC::StringType::npos
+            ? target : target.substr(separator + 1);
+        const auto displayTarget = targetOwner + TEXT(":") + targetKey;
+
+        auto registered = std::find_if(m_definitions.begin(), m_definitions.end(),
+            [&](const BuildingDefinition& definition) {
+                return definition.Owner == targetOwner && definition.Key == targetKey;
+            });
+        if (registered == m_definitions.end())
+        {
+            PS::Log<LogLevel::Error>(STR("{}: Building patch target '{}' was not found.\n"), modName, displayTarget);
+            return;
+        }
+
+        auto candidate = *registered;
+        auto* existing = &candidate;
+        const auto& body = patch.at("$Target");
+        for (const auto& [name, value] : body.items())
+        {
+            if (name == "Properties")
+            {
+                if (!value.is_object())
+                {
+                    PS::Log<LogLevel::Error>(STR("{}: Building patch '{}.Properties' must be an object.\n"), modName, displayTarget);
+                    return;
+                }
+                if (!existing->Properties.is_object()) existing->Properties = nlohmann::json::object();
+                for (const auto& [property, propertyValue] : value.items())
+                    existing->Properties[property] = propertyValue;
+            }
+            else if (name == "Requirements")
+            {
+                if (!value.is_array())
+                {
+                    PS::Log<LogLevel::Error>(STR("{}: Building patch '{}.Requirements' must be an array.\n"), modName, displayTarget);
+                    return;
+                }
+                existing->Requirements = value;
+            }
+            else if (name == "Unlock")
+            {
+                if (!value.is_boolean())
+                {
+                    PS::Log<LogLevel::Error>(STR("{}: Building patch '{}.Unlock' must be boolean.\n"), modName, displayTarget);
+                    return;
+                }
+                existing->Unlock = value.get<bool>();
+            }
+            else if (name == "AddTo")
+            {
+                if (!value.is_object() || !value.contains("Collection") || !value.at("Collection").is_string())
+                {
+                    PS::Log<LogLevel::Error>(STR("{}: Building patch '{}.AddTo' requires a Collection string.\n"), modName, displayTarget);
+                    return;
+                }
+                existing->Target.Collection = RC::to_generic_string(value.at("Collection").get<std::string>());
+                if (value.contains("PageIndex")) existing->Target.PageIndex = value.at("PageIndex").get<int32>();
+            }
+            else
+            {
+                PS::Log<LogLevel::Error>(STR("{}: Building patch '{}' cannot change '{}'.\n"), modName, displayTarget, RC::to_generic_string(name));
+                return;
+            }
+        }
+        auto writes = body;
+        if (writes.contains("Properties") && writes.at("Properties").is_object()) {
+            // This loader replaces each named property, rather than recursively merging it.
+            for (auto& [key, value] : writes["Properties"].items()) value = nullptr;
+        }
+        WarnPatchConflicts(m_patchConflicts, "buildings:" + RC::to_string(displayTarget), writes, RC::to_string(modName), false);
+        m_applied.erase(Identity(existing->Owner, existing->Key));
+        *registered = std::move(candidate);
+    }
+
     void DragonWildsBuildingModLoader::ApplyDefinitions()
     {
         if (!m_catalogue)
@@ -437,6 +551,17 @@ namespace DragonWilds {
             result.Loaded++;
         }
 
+        // Do not install world-entry/world-teardown registry hooks for an
+        // empty building configuration.  The loader is present in every
+        // RuneSchema install, but touching the native registry is only needed
+        // when at least one valid building definition was applied.
+        if (m_applied.empty())
+        {
+            PS::RoutineLog("buildings",
+                STR("No active building definitions; native registry hooks were not registered.\n"));
+            return;
+        }
+
         RegisterHooks();
         if (auto* progress = FindProgressComponent())
         {
@@ -461,12 +586,34 @@ namespace DragonWilds {
             return found->second;
         }
 
-        auto* building = LoadObject(definition.AssetPath);
+        auto* source = LoadObject(definition.AssetPath);
+        if (!source || !source->IsA(m_buildingPieceClass))
+        {
+            PS::Log<LogLevel::Error>(
+                STR("{}: Building '{}' source '{}' resolved as '{}' instead of BuildingPieceData.\n"),
+                definition.Owner, definition.Key, definition.AssetPath,
+                source && source->GetClassPrivate()
+                    ? source->GetClassPrivate()->GetPathName()
+                    : TEXT("<unresolved>"));
+            result.Errors++;
+            return nullptr;
+        }
+
+        PS::Log<LogLevel::Verbose>(
+            STR("{}: Building '{}' source resolved as '{}'.\n"),
+            definition.Owner, definition.Key, source->GetClassPrivate()->GetPathName());
+
+        auto* building = definition.Clone
+            ? CloneBuilding(source, definition.Owner, definition.Key)
+            : source;
         if (!building || !building->IsA(m_buildingPieceClass))
         {
             PS::Log<LogLevel::Error>(
-                STR("Building '{}' asset '{}' is not a BuildingPieceData asset.\n"),
-                definition.Key, definition.AssetPath);
+                STR("{}: Building '{}' clone did not produce a BuildingPieceData object; resolved as '{}'.\n"),
+                definition.Owner, definition.Key,
+                building && building->GetClassPrivate()
+                    ? building->GetClassPrivate()->GetPathName()
+                    : TEXT("<unresolved>"));
             result.Errors++;
             return nullptr;
         }
@@ -474,6 +621,67 @@ namespace DragonWilds {
         building->SetRootSet();
         m_buildings.emplace(identity, building);
         return building;
+    }
+
+    UObject* DragonWildsBuildingModLoader::CloneBuilding(
+        UObject* source, const RC::StringType& owner, const RC::StringType& key)
+    {
+        if (!source || !source->GetClassPrivate()) return nullptr;
+        auto* transientPackage = UECustom::UObjectGlobals::StaticFindObject(
+            nullptr, nullptr, TEXT("/Engine/Transient"), false);
+        if (!transientPackage) return nullptr;
+
+        static uint32 sequence = 0;
+        const auto name = std::format(STR("RuneSchemaBuilding_{}_{}"), key, ++sequence);
+        FStaticConstructObjectParameters params(source->GetClassPrivate(), transientPackage);
+        params.Name = FName(name, FNAME_Add);
+        params.SetFlags = static_cast<EObjectFlags>(RF_Public | RF_Standalone | RF_Transactional);
+        auto* created = UObjectGlobals::StaticConstructObject<UObject*>(params);
+        if (!created) return nullptr;
+
+        constexpr std::uint64_t unsafeFlags =
+            CPF_Transient | CPF_DuplicateTransient | CPF_NonPIEDuplicateTransient
+            | CPF_InstancedReference | CPF_ContainsInstancedReference
+            | CPF_Deprecated | CPF_EditorOnly;
+        std::size_t copied = 0;
+        for (auto* property : TFieldRange<FProperty>(
+                 source->GetClassPrivate(), EFieldIterationFlags::Default))
+        {
+            if (!property || property->HasAnyPropertyFlags(unsafeFlags)) continue;
+            property->CopyCompleteValue_InContainer(created, source);
+            ++copied;
+        }
+
+        const auto stableIdentity = std::format(STR("RuneSchema:{}:{}"), owner, key);
+        for (const auto* field : { TEXT("PersistenceID"), TEXT("InternalName") })
+        {
+            if (auto* property = PropertyHelper::GetPropertyByName(
+                    created->GetClassPrivate(), field))
+            {
+                PropertyHelper::CopyJsonValueToContainer(created, property,
+                    RC::to_string(stableIdentity));
+            }
+        }
+        if (!created->IsA(source->GetClassPrivate())
+            || !PropertyHelper::GetPropertyByName(
+                created->GetClassPrivate(), TEXT("PersistenceID"))
+            || !PropertyHelper::GetPropertyByName(
+                created->GetClassPrivate(), TEXT("InternalName")))
+        {
+            PS::Log<LogLevel::Error>(
+                STR("{}: cloned building '{}' failed post-copy type/identity validation; resolved as '{}'.\n"),
+                owner, key,
+                created->GetClassPrivate()
+                    ? created->GetClassPrivate()->GetPathName()
+                    : TEXT("<unresolved>"));
+            return nullptr;
+        }
+        created->SetRootSet();
+        m_createdBuildings.push_back(created);
+        PS::Log<LogLevel::Verbose>(
+            STR("{}: cloned building '{}' as '{}' using {} reflected properties.\n"),
+            owner, source->GetPathName(), created->GetPathName(), copied);
+        return created;
     }
 
     void DragonWildsBuildingModLoader::ApplyProperties(
@@ -1401,7 +1609,7 @@ namespace DragonWilds {
                 continue;
             }
 
-            function->RegisterPostHook(
+            PS::RegisterNativePostHook(function,
                 [](UnrealScriptFunctionCallableContext& context, void* customData) {
                     static_cast<DragonWildsBuildingModLoader*>(customData)
                         ->ApplyUnlocks(context.Context);
@@ -1412,22 +1620,18 @@ namespace DragonWilds {
         Hook::FCallbackOptions options{};
         options.OwnerModName = TEXT("RuneSchema");
         options.HookName = TEXT("BuildingLoaderInitGameState");
-        Hook::RegisterInitGameStatePreCallback(
+        m_initGameStateCallbackId = Hook::RegisterInitGameStatePreCallback(
             [this](Hook::TCallbackIterationData<void>&, AGameModeBase* gameMode) {
                 PrepareWorldState(gameMode);
             },
             options);
 
-        options.HookName = TEXT("BuildingRegistryWorldTeardown");
-        Hook::RegisterLoadMapPreCallback(
-            [this](Hook::TCallbackIterationData<bool>&, UEngine*, FWorldContext&,
-                FURL, UPendingNetGame*, FString&) {
-                if (!m_nativeRegistrySnapshot.Subsystem)
-                {
-                    return;
-                }
-                RestoreNativeRegistry();
-            }, options);
+        if (m_initGameStateCallbackId == Hook::ERROR_ID)
+        {
+            PS::Log<LogLevel::Warning>(
+                STR("Building world initialization callback could not be registered.\n"));
+            return;
+        }
 
         m_hooksRegistered = true;
     }
@@ -1451,6 +1655,14 @@ namespace DragonWilds {
             PS::Log<LogLevel::Error>(
                 STR("Buildings cannot be registered because the native registry is unavailable.\n"));
             return;
+        }
+
+        // A previous world's subsystem is no longer safe to dereference here.
+        // Drop its snapshot before capturing the newly initialized registry.
+        if (m_nativeRegistrySnapshot.Subsystem
+            && m_nativeRegistrySnapshot.Subsystem != subsystem)
+        {
+            ClearWorldRegistryState();
         }
 
         auto* array = arrayProperty->ContainerPtrToValuePtr<FScriptArray>(subsystem);

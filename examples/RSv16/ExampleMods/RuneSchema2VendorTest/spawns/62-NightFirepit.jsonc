@@ -1,0 +1,13 @@
+[
+  {
+    "Id": "null_night_firepit",
+    "Type": "BuildingProp",
+    "Building": "/Game/Gameplay/BaseBuilding/Data/BuildingPieces/Furniture/Comfort/BUILDPIECE_Campfire.BUILDPIECE_Campfire",
+    "Location": [17850, 186650, "$"],
+    "Rotation": {"Pitch": 0, "Yaw": 0, "Roll": 0},
+    "Scale": 1,
+    "TimeOfDay": "Night",
+    "AllowDeconstruction": true,
+    "UseNativeRespawn": false
+  }
+]

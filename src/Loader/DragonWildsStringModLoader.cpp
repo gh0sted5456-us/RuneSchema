@@ -6,6 +6,7 @@
 #include "Unreal/UObject.hpp"
 #include "Unreal/Hooks.hpp"
 #include "Loader/DragonWildsStringModLoader.h"
+#include "Loader/StringReplacementRules.h"
 #include "SDK/Helper/StringTableHelper.h"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
@@ -36,33 +37,7 @@ namespace {
 
     std::wstring ReadReplacement(const nlohmann::json& value)
     {
-        if (value.is_string())
-        {
-            return Utf8ToWide(value.get<std::string>());
-        }
-
-        if (!value.is_array())
-        {
-            return {};
-        }
-
-        std::wstring joined;
-        for (const auto& line : value)
-        {
-            if (!line.is_string())
-            {
-                continue;
-            }
-
-            if (!joined.empty())
-            {
-                joined += L"\r\n";
-            }
-
-            joined += Utf8ToWide(line.get<std::string>());
-        }
-
-        return joined;
+        return Utf8ToWide(DragonWilds::StringReplacementRules::Read(value));
     }
 }
 
@@ -92,16 +67,13 @@ namespace DragonWilds {
         }
 
         PS::JsonHelpers::ParseJsonFilesInPath(loaderPath, [&](const nlohmann::json& data) {
-            LoadStrings(data);
+            LoadStrings(data, modName);
         });
     }
 
-    void DragonWildsStringModLoader::LoadStrings(const nlohmann::json& data)
+    void DragonWildsStringModLoader::LoadStrings(const nlohmann::json& data, const RC::StringType& modName)
     {
-        if (!data.is_object())
-        {
-            throw std::runtime_error("A strings file must contain a JSON object at the top level");
-        }
+        StringReplacementRules::Validate(data);
 
         for (auto& [Key, Value] : data.items())
         {
@@ -110,19 +82,20 @@ namespace DragonWilds {
                 auto& Scope = m_scoped[Utf8ToWide(Key)];
                 for (auto& [Source, Replacement] : Value.items())
                 {
-                    AddEntry(Scope, Utf8ToWide(Source), ReadReplacement(Replacement));
+                    AddEntry(Scope, Utf8ToWide(Source), ReadReplacement(Replacement), modName, Utf8ToWide(Key));
                 }
             }
             else
             {
-                AddEntry(m_global, Utf8ToWide(Key), ReadReplacement(Value));
+                AddEntry(m_global, Utf8ToWide(Key), ReadReplacement(Value), modName, L"global");
             }
         }
     }
 
-    void DragonWildsStringModLoader::AddEntry(ReplacementMap& target, const std::wstring& source, const std::wstring& replacement)
+    void DragonWildsStringModLoader::AddEntry(ReplacementMap& target, const std::wstring& source, const std::wstring& replacement,
+        const RC::StringType& modName, const std::wstring& scope)
     {
-        if (source.empty() || replacement.empty() || source == replacement)
+        if (source.empty() || replacement.empty())
         {
             return;
         }
@@ -130,11 +103,11 @@ namespace DragonWilds {
         auto Existing = target.find(source);
         if (Existing != target.end() && Existing->second.To != replacement)
         {
-            ++m_conflictCount;
-            return;
+            PS::Log<LogLevel::Warning>(STR("Strings [{}/{}]: '{}' overrides '{}'; last loaded wins.\n"),
+                scope, source, modName, Existing->second.Owner);
         }
 
-        target[source].To = replacement;
+        StringReplacementRules::Replace(target[source], replacement, modName);
     }
 
     void DragonWildsStringModLoader::ApplyPending()
@@ -147,12 +120,6 @@ namespace DragonWilds {
         if (!m_hooked)
         {
             m_hooked = true;
-
-            if (m_conflictCount > 0)
-            {
-                PS::Log<LogLevel::Warning>(STR("{} string replacement(s) target text another mod already replaced, the first one won.\n"),
-                    m_conflictCount);
-            }
 
             Hook::FCallbackOptions options{};
             options.OwnerModName = TEXT("RuneSchema");

@@ -1,11 +1,13 @@
 #include "SDK/Structs/FSoftObjectPath.h"
 #include "Utility/SoftPathParts.h"
+#include "Utility/AssetAliases.h"
 
 using namespace RC;
 using namespace RC::Unreal;
 namespace UECustom {
 FSoftObjectPath::FSoftObjectPath(RC::StringViewType path) {
-    const auto parts=PS::SplitSoftPath(path);
+    const auto resolved=PS::AssetAliases::Resolve(RC::StringType(path));
+    const auto parts=PS::SplitSoftPath(RC::StringViewType(resolved));
     if(!parts.valid) { Reset();return; }
     AssetPath=FTopLevelAssetPath(FName(RC::StringType(parts.package),FNAME_Add),
         parts.asset.empty()?FName{}:FName(RC::StringType(parts.asset),FNAME_Add));

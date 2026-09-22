@@ -10,7 +10,16 @@ using namespace RC;
 using namespace RC::Unreal;
 
 namespace DragonWilds {
-    void SignatureManager::Initialize()
+    namespace {
+        bool Requested(std::initializer_list<const char*> names, const std::string& value)
+        {
+            if (names.size() == 0) return true;
+            for (const auto* name : names) if (name && value == name) return true;
+            return false;
+        }
+    }
+
+    void SignatureManager::InitializeOnly(std::initializer_list<const char*> names)
     {
         std::vector<SignatureContainer> SigContainerBox;
         SigContainerBox.reserve(Signatures.size() + SignaturesCallResolve.size());
@@ -18,6 +27,7 @@ namespace DragonWilds {
 
         for (auto& [ClassAndName, Signature] : Signatures)
         {
+            if (!Requested(names, ClassAndName) || SignatureMap.contains(ClassAndName)) continue;
             SignatureContainer SigContainer = [=]() -> SignatureContainer {
                 return {
                     {{Signature}},
@@ -44,6 +54,7 @@ namespace DragonWilds {
 
         for (auto& [ClassAndName, Signature] : SignaturesCallResolve)
         {
+            if (!Requested(names, ClassAndName) || SignatureMap.contains(ClassAndName)) continue;
             SignatureContainer SigContainer = [=]() -> SignatureContainer {
                 return {
                     {{Signature}},
@@ -69,8 +80,15 @@ namespace DragonWilds {
             SigContainerBox.emplace_back(std::move(SigContainer));
         }
 
-        SigContainerMap.emplace(ScanTarget::MainExe, std::move(SigContainerBox));
-        SinglePassScanner::start_scan(SigContainerMap);
+        if (!SigContainerBox.empty()) {
+            SigContainerMap.emplace(ScanTarget::MainExe, std::move(SigContainerBox));
+            SinglePassScanner::start_scan(SigContainerMap);
+        }
+    }
+
+    void SignatureManager::Initialize()
+    {
+        InitializeOnly({});
     }
 
     void* SignatureManager::GetSignature(const std::string& ClassAndFunction)

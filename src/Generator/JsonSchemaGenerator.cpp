@@ -1,4 +1,9 @@
 #include <fstream>
+#include <iomanip>
+#include <chrono>
+#include <stdexcept>
+#include "Generator/LoaderSchemas.h"
+#include "Generator/DiagnosticExport.h"
 #include "Runtime/HostServices.h"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
@@ -18,6 +23,14 @@ using namespace RC::Unreal;
 namespace fs = std::filesystem;
 
 namespace PS::JsonSchemaGenerator {
+    namespace {
+        thread_local unsigned propertyDepth=0,propertyBudget=4096;
+        template<class Json> void WriteSchema(const fs::path& path,const Json& data) {
+            std::ofstream file(path);
+            file << std::setw(2) << data;file.flush();
+            if(!file)throw std::runtime_error("Failed writing schema: "+path.string());
+        }
+    }
     void ParsePropertyInfo(FProperty* Property, nlohmann::ordered_json& Json);
 
     void ParseEnumPropertyInfo(FEnumProperty* Property, nlohmann::ordered_json& Json)
@@ -165,9 +178,16 @@ namespace PS::JsonSchemaGenerator {
 
     void ParsePropertyInfo(FProperty* Property, nlohmann::ordered_json& Json)
     {
+        if (!Property) return;
+        if(!propertyBudget)throw std::runtime_error("Table property export exceeds 4096 fields.");
         auto PropertyName = RC::to_string(Property->GetName());
         Json[PropertyName] = nlohmann::ordered_json::object();
         nlohmann::ordered_json& JsonProperty = Json[PropertyName];
+        if (propertyDepth>=10) {
+            JsonProperty["description"]="Reflection limit reached; validate this field in game.";return;
+        }
+        --propertyBudget;
+        struct DepthGuard {DepthGuard(){++propertyDepth;}~DepthGuard(){--propertyDepth;}} guard;
 
         if (auto EnumProperty = CastField<FEnumProperty>(Property))
         {
@@ -215,6 +235,8 @@ namespace PS::JsonSchemaGenerator {
 
         std::vector<UObject*> EnumObjects;
         UObjectGlobals::FindAllOf(TEXT("Enum"), EnumObjects);
+        if(EnumObjects.size()>8192)throw std::runtime_error("Enum export exceeds 8192 objects.");
+        size_t totalNames=0;
 
         for (UObject* EnumObject : EnumObjects)
         {
@@ -226,13 +248,10 @@ namespace PS::JsonSchemaGenerator {
             Definition["enum"] = nlohmann::json::array();
 
             auto Names = Enum->GetEnumNames();
+            if(Names.Num()<0 || Names.Num()>4096 || (totalNames+=Names.Num())>131072)
+                throw std::runtime_error("Enum export exceeds name limits.");
             for (int32 Index = 0; Index < Names.Num(); ++Index)
             {
-                if (Index == Names.Num() - 1)
-                {
-                    continue;
-                }
-
                 auto FullName = Names[Index].Key.ToString();
                 Definition["enum"].push_back(RC::to_string(FullName));
 
@@ -243,11 +262,10 @@ namespace PS::JsonSchemaGenerator {
                 }
             }
 
-            EnumJson["definitions"][EnumName] = Definition;
+            EnumJson["definitions"][EnumName] = std::move(Definition);
         }
 
-        std::ofstream OutputFile(DestinationPath / "enums.schema.json");
-        OutputFile << EnumJson.dump(2);
+        WriteSchema(DestinationPath / "enums.schema.json",EnumJson);
 
         PS::Log<LogLevel::Normal>(STR("Finished generating enums.schema.json ({} enums).\n"), EnumObjects.size());
     }
@@ -271,6 +289,7 @@ namespace PS::JsonSchemaGenerator {
 
         TArray<UObject*> datatables;
         UECustom::UObjectGlobals::GetObjectsOfClass(datatableClass, datatables, true);
+        if(datatables.Num()>4096)throw std::runtime_error("Table export exceeds 4096 objects.");
 
         int generated = 0;
         for (auto* object : datatables)
@@ -288,6 +307,10 @@ namespace PS::JsonSchemaGenerator {
             }
 
             auto DataTableName = RC::to_string(DataTable->GetName());
+            if (DataTableName.empty() || DataTableName.find_first_not_of(
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-")!=std::string::npos) continue;
+            if (RawSchemaJson["properties"].contains(DataTableName)) continue;
+            propertyBudget=4096;
 
             nlohmann::ordered_json DataTableSchemaJson = {
                 { "$schema", "http://json-schema.org/draft-07/schema#" },
@@ -307,13 +330,11 @@ namespace PS::JsonSchemaGenerator {
                 ParsePropertyInfo(InnerProperty, DataTableSchemaJson["additionalProperties"]["properties"]);
             }
 
-            std::ofstream OutputFile(RawSchemaPath / std::format("{}.schema.json", DataTableName));
-            OutputFile << DataTableSchemaJson.dump(2);
+            WriteSchema(RawSchemaPath / std::format("{}.schema.json", DataTableName),DataTableSchemaJson);
             generated++;
         }
 
-        std::ofstream OutputFile(DestinationPath / "raw.schema.json");
-        OutputFile << RawSchemaJson.dump(2);
+        WriteSchema(DestinationPath / "raw.schema.json",RawSchemaJson);
 
         PS::Log<LogLevel::Normal>(STR("Finished generating raw schema files ({} data tables).\n"), generated);
     }
@@ -352,23 +373,35 @@ namespace PS::JsonSchemaGenerator {
             }}
         };
 
-        std::ofstream OutputFile(DestinationPath / "utility.schema.json");
-        OutputFile << UtilityJson.dump(2);
+        WriteSchema(DestinationPath / "utility.schema.json",UtilityJson);
 
         PS::Log<LogLevel::Normal>(STR("Finished generating utility.schema.json.\n"));
     }
 
-    void GenerateSchemaFiles()
+    std::string GenerateSchemaFiles(bool includeLoadedTables, const std::string& exportName)
     {
-        PS::Log<LogLevel::Normal>(STR("Beginning generation of schema files, please wait a moment...\n"));
+        PS::Log<LogLevel::Normal>(STR("Exporting schemas.\n"));
 
-        auto SchemaPath = fs::path(PS::HostServices::WorkingDirectory()) / "Mods" / "RuneSchema" / "schemas";
-        std::filesystem::create_directories(SchemaPath);
-
-        GenerateUtilitySchema(SchemaPath);
-        GenerateEnumSchema(SchemaPath);
-        GenerateRawSchemas(SchemaPath);
-
-        PS::Log<LogLevel::Normal>(STR("Finished generating all schema files. All done!\n"));
+        const auto stamp=std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        const auto bundle=fs::path(InspectionTools::DiagnosticExportName(exportName,"Schemas",std::to_string(stamp),false,"schemas")).stem();
+        auto SchemaPath = PS::HostServices::ExportsDirectory() / "schema" / bundle;
+        if (!fs::create_directories(SchemaPath / "loaders"))throw std::runtime_error("Schema export folder already exists");
+        const auto schemas=LoaderSchemas();
+        nlohmann::json index={{"coverage","Structural schemas; not complete loader validation or game-data dumps"},
+            {"loaders",nlohmann::json::object()},{"loadedTableDetailsRequested",includeLoadedTables},
+            {"excluded",{{"paks","Cooked files, not a JSON loader"},{"appearance","Use appearance fields in players; not a separate loader"}}}};
+        for (const auto& [name,schema]:schemas.items()) {
+            const auto file=name+".schema.json";
+            WriteSchema(SchemaPath / "loaders" / file,schema);
+            index["loaders"][name]="loaders/"+file;
+        }
+        if (includeLoadedTables) {
+            GenerateUtilitySchema(SchemaPath);
+            GenerateEnumSchema(SchemaPath);
+            GenerateRawSchemas(SchemaPath);
+        }
+        WriteSchema(SchemaPath / "index.json",index);
+        return SchemaPath.string();
     }
 }

@@ -155,6 +155,8 @@ namespace DragonWilds {
         if (phase != EEngineLifecyclePhase::PostEngineInit) return;
         for (auto& patch : m_pendingPatches)
         {
+            WarnPatchConflicts(m_patchConflicts, "raw:" + patch.Table + ":" + patch.Row,
+                patch.Changes, RC::to_string(patch.ModName), false);
             patch.Changes["$PatchOnly"] = true;
             AddToTableDataMap(patch.Table,
                 nlohmann::json{{patch.Row, std::move(patch.Changes)}});
@@ -182,6 +184,8 @@ namespace DragonWilds {
             if (colon == std::string::npos || colon == 0 || colon + 1 == patch->Reference.size())
                 throw std::runtime_error("raw $Patch identity must be DataTable:RowName");
             auto changes = patch->Changes;
+            WarnPatchConflicts(m_patchConflicts, "raw:" + patch->Reference,
+                changes, RC::to_string(modName), false);
             changes["$PatchOnly"] = true;
             ReloadDocument(nlohmann::json{{patch->Reference.substr(0, colon),
                 {{patch->Reference.substr(colon + 1), changes}}}}, modName);

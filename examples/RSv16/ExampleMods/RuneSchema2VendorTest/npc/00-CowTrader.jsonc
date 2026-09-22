@@ -1,0 +1,17 @@
+// The actor belongs to /npc. The reusable storefront remains in /vendors.
+{
+  "Id": "cabbage_trader_cow",
+  "Type": "AI",
+  "Multiplayer": true,
+  "DisplayName": "Cabbage Trader",
+  "VendorID": "cabbage_trader",
+  "VisualSource": "/Game/Gameplay/NPCs/BP_BaseInteractableNPC.BP_BaseInteractableNPC_C",
+  "Mesh": "/Game/Art/Skeleton/NPC/Creatures/Cow_01/SK_Cow_01.SK_Cow_01",
+  "IdleAnimation": "/Game/Art/Animation/NPC_Cow/Idle/A_NPC_Cow_Idle_Breathe.A_NPC_Cow_Idle_Breathe",
+  "Location": [15806, 186744, "$"],
+  "Scale": 1.0,
+  "EnableCollision": true,
+  "MeshCollision": "Pawn",
+  "Map": {"Enabled": true, "ShowName": true},
+  "OverheadIcon": {"Enabled": true}
+}

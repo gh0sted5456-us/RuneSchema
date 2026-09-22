@@ -1,0 +1,42 @@
+{
+  "Id": "null_blacksmith",
+  "Multiplayer": true,
+  "Type": "Human",
+  "DisplayName": "NuLL the Aspiring Blacksmith",
+  "DialogueID": "null_forge",
+  "VendorID": "null_armory",
+  "QuestID": "null_forge_supplies",
+  "Location": [
+    17850,
+    186450,
+    "$"
+  ],
+  "Rotation": {"Pitch": 0, "Yaw": 160, "Roll": 0},
+  "Scale": 1,
+  "EnableCollision": true,
+  "Map": {
+    "Enabled": true,
+    "ShowName": false
+  },
+  "OverheadIcon": {
+    "Enabled": true
+  },
+  "Pose": {
+    "Preset": "Relaxed",
+    "WeaponVisibility": "Auto"
+  },
+  "Appearance": {
+    "BodyType": "male_A_01",
+    "Head": "male_C_01",
+    "HairPreset": "Preset15",
+    "FacialHairPreset": "M_C_Preset3",
+    "SkinTone": "SkinTone8",
+    "HairColor": "Color1",
+    "EyeColor": "Color6",
+    "EyebrowColor": "Color1"
+  },
+  "Equipment": {
+    "Body": "/DowdunReach/Gameplay/Character/Player/Equipment/Body/ITEM_Armour_T6_Body_Black.ITEM_Armour_T6_Body_Black",
+    "Legs": "/DowdunReach/Gameplay/Character/Player/Equipment/Legs/ITEM_Armour_T6_Legs_Black.ITEM_Armour_T6_Legs_Black"
+  }
+}

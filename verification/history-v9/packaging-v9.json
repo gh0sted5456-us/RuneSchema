@@ -1,0 +1,22 @@
+{
+  "kind": "Source-overlay packaging verification",
+  "source_count": 47,
+  "baseline_overlay_source_count": 34,
+  "unchanged_from_baseline": 17,
+  "changed_from_baseline": 17,
+  "new_in_overlay": 13,
+  "checks": {
+    "zip_crc_integrity": true,
+    "unique_member_paths": true,
+    "relative_paths_only": true,
+    "no_bat_dll_font_binary_or_staging": true,
+    "no_user_settings_or_content_mod_files": true,
+    "source_checksums_match": true,
+    "source_member_count_matches": true,
+    "existing_bat_preserved": true,
+    "unrelated_source_and_preferences_preserved": true,
+    "merged_source_matches_manifest": true
+  },
+  "archive": "RuneSchema.7-R3v9-Helpy-Item-Editor-Direct-Override.zip",
+  "note": "No native compile or in-game test is implied. The included source manifest also identifies the separately read original dllmain.cpp."
+}

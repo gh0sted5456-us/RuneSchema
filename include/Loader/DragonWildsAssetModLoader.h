@@ -1,10 +1,15 @@
 #pragma once
+#include "Loader/AssetAuthoringMetadata.h"
 
 #include <mutex>
+#include <set>
+#include <string>
 #include <unordered_map>
 #include <vector>
 #include "Loader/DragonWildsModLoaderBase.h"
 #include "nlohmann/json.hpp"
+
+namespace RC::Unreal { class UWorld; }
 
 namespace DragonWilds {
     class DragonWildsAssetModLoader : public DragonWildsModLoaderBase {
@@ -14,6 +19,8 @@ namespace DragonWilds {
             RC::StringType ModName;
             nlohmann::json Properties;
             bool IsPatch = false;
+            PS::AssetMetadata::Declaration Metadata;
+            bool InstalledDefinition = true;
         };
 
         struct LoadResult {
@@ -21,6 +28,12 @@ namespace DragonWilds {
             int ErrorCount = 0;
         };
     public:
+        // Game-thread authoring facade; no UI thread touches Unreal objects.
+        inline static DragonWildsAssetModLoader* AuthoringInstance=nullptr;
+        nlohmann::json InspectToolClone(const std::string& sourcePath,bool requireCloneEligibility=true);
+        nlohmann::json ExportToolRecipe(const nlohmann::json& request);
+        nlohmann::json ExportToolOverrides(const nlohmann::json& request);
+        nlohmann::json CreateToolClone(const nlohmann::json& request, RC::Unreal::UWorld* world);
         DragonWildsAssetModLoader();
 
         ~DragonWildsAssetModLoader();
@@ -32,6 +45,9 @@ namespace DragonWilds {
         virtual bool OnInitialize() override final;
     private:
         std::mutex m_mutex;
+        std::set<std::filesystem::path> m_toolAssetFiles;
+        std::set<std::string> m_temporaryToolClones;
+        std::size_t m_toolCloneCount=0;
         std::vector<PendingAsset> m_pendingAssets;
         std::vector<PendingAsset> m_pendingPatches;
         std::vector<RC::Unreal::UObject*> m_createdAssets;
@@ -42,6 +58,8 @@ namespace DragonWilds {
 
         void QueueData(const nlohmann::json& data, const RC::StringType& modName);
         void Apply(RC::Unreal::UObject* object, const PendingAsset& pendingAsset, LoadResult& outResult);
+        void ApplyDominionSpheres(RC::Unreal::UObject* owner,
+            const nlohmann::json& definitions, LoadResult& outResult);
         void AppendProperties(RC::Unreal::UObject* object, RC::Unreal::UClass* objectClass, const nlohmann::json& appendData, LoadResult& outResult);
         void TryApplyPending();
         void ApplyPendingPatches();
@@ -58,4 +76,3 @@ namespace DragonWilds {
         bool IsReadyForPatch(RC::Unreal::UObject* object) const;
     };
 }
-

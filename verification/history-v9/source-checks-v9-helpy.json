@@ -1,0 +1,222 @@
+[
+  {
+    "check": "download decision uses explicit tested policy",
+    "passed": true
+  },
+  {
+    "check": "no full scan request bypass",
+    "passed": true
+  },
+  {
+    "check": "initial attempt only recorded on start",
+    "passed": true
+  },
+  {
+    "check": "cached reference entries reused before request gate",
+    "passed": true
+  },
+  {
+    "check": "successful reference survives write failure in memory",
+    "passed": true
+  },
+  {
+    "check": "new source settings omit expiring TTL",
+    "passed": true
+  },
+  {
+    "check": "legacy age does not force request",
+    "passed": true
+  },
+  {
+    "check": "explicit update routed to same job",
+    "passed": true
+  },
+  {
+    "check": "UI branding and settings",
+    "passed": true
+  },
+  {
+    "check": "old fixed F2 registration removed",
+    "passed": true
+  },
+  {
+    "check": "settings binding shares same source",
+    "passed": true
+  },
+  {
+    "check": "hotkey persisted before activation",
+    "passed": true
+  },
+  {
+    "check": "bad configuration disables overwrites",
+    "passed": true
+  },
+  {
+    "check": "rebind release observed even while Helpy closed",
+    "passed": true
+  },
+  {
+    "check": "active hotkey pass-through used",
+    "passed": true
+  },
+  {
+    "check": "favs target rename",
+    "passed": true
+  },
+  {
+    "check": "no repeated per-frame favorite IO",
+    "passed": true
+  },
+  {
+    "check": "file/per-asset metadata merged",
+    "passed": true
+  },
+  {
+    "check": "metadata bypasses native writer",
+    "passed": true
+  },
+  {
+    "check": "canonical metadata keys declared",
+    "passed": true
+  },
+  {
+    "check": "Yes/No legacy flags accepted",
+    "passed": true
+  },
+  {
+    "check": "metadata schema root exceptions",
+    "passed": true
+  },
+  {
+    "check": "metadata registry and creation proof separate",
+    "passed": true
+  },
+  {
+    "check": "live source and donor permission checked",
+    "passed": true
+  },
+  {
+    "check": "author declarations not cooked proof",
+    "passed": true
+  },
+  {
+    "check": "runtime clone load order sorted",
+    "passed": true
+  },
+  {
+    "check": "incomplete runtime parent blocked",
+    "passed": true
+  },
+  {
+    "check": "typed rows routed to stat table envelope",
+    "passed": true
+  },
+  {
+    "check": "raw format table then row",
+    "passed": true
+  },
+  {
+    "check": "new stat row checked before insertion",
+    "passed": true
+  },
+  {
+    "check": "owned stats read back values",
+    "passed": true
+  },
+  {
+    "check": "rollback removes owned row only",
+    "passed": true
+  },
+  {
+    "check": "source stat table never assigned new values",
+    "passed": true
+  },
+  {
+    "check": "ambiguous short table names refused",
+    "passed": true
+  },
+  {
+    "check": "complex shared inline edits refused",
+    "passed": true
+  },
+  {
+    "check": "safe typed mesh and icon override",
+    "passed": true
+  },
+  {
+    "check": "icon donor auto and source fallback",
+    "passed": true
+  },
+  {
+    "check": "journal native page descriptions",
+    "passed": true
+  },
+  {
+    "check": "journal links created item",
+    "passed": true
+  },
+  {
+    "check": "grouped journal requires IDs and names",
+    "passed": true
+  },
+  {
+    "check": "recipe uses existing Properties and AddTo wrappers",
+    "passed": true
+  },
+  {
+    "check": "recipe station derives native table shape",
+    "passed": true
+  },
+  {
+    "check": "companion outputs permanent only",
+    "passed": true
+  },
+  {
+    "check": "publication coordinator tested and used",
+    "passed": true
+  },
+  {
+    "check": "raw published before asset",
+    "passed": true
+  },
+  {
+    "check": "native rollback ends before publication",
+    "passed": true
+  },
+  {
+    "check": "file failure quarantines and preserves pending",
+    "passed": true
+  },
+  {
+    "check": "no grant on incomplete bundle",
+    "passed": true
+  },
+  {
+    "check": "companion restart need disclosed",
+    "passed": true
+  },
+  {
+    "check": "both dimensions combine before pagination",
+    "passed": true
+  },
+  {
+    "check": "draft pending edits blocked",
+    "passed": true
+  },
+  {
+    "check": "32 session draft limit",
+    "passed": true
+  },
+  {
+    "check": "ingredients and icon use shared placards",
+    "passed": true
+  },
+  {
+    "check": "single-player clone restriction retained",
+    "passed": true
+  },
+  {
+    "check": "native scope does not rewrite NPC or player loaders",
+    "passed": true
+  }
+]

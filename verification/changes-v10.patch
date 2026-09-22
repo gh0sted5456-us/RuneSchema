@@ -1,0 +1,1337 @@
+--- a/raw/include/Generator/F2CatalogPlan.h
++++ b/raw/include/Generator/F2CatalogPlan.h
+@@ -13,16 +13,17 @@
+ 
+ namespace PS::F2Catalog {
+ inline constexpr std::size_t MaxEntries=32768, MaxRoots=128;
+-enum class Kind { Enemy, Resource, Item, ClassCandidate };
++enum class Kind { Enemy, Resource, Item, ClassCandidate, Npc };
+ struct Candidate {
+     std::string path,name;
+     Kind kind=Kind::ClassCandidate;
+     bool operator==(const Candidate&)const=default;
+ };
+ inline const char* KindName(Kind kind) {
+-    switch(kind){case Kind::Enemy:return "Enemy";case Kind::Resource:return "Resource";case Kind::Item:return "Item";default:return "Class";}
++    switch(kind){case Kind::Npc:return "NPC";case Kind::Enemy:return "Enemy";case Kind::Resource:return "Resource";case Kind::Item:return "Item";default:return "Class";}
+ }
+ inline std::optional<Kind> ParseKind(std::string_view value) {
++    if(value=="NPC"||value=="Npc")return Kind::Npc;
+     if(value=="Enemy"||value=="AI")return Kind::Enemy;
+     if(value=="Resource")return Kind::Resource;
+     if(value=="Item")return Kind::Item;
+@@ -103,7 +104,7 @@
+     if(!name.starts_with("BP_"))return {};
+     Kind kind;
+     if(UnderAny(path,sources.resources))kind=Kind::Resource;
+-    else if(UnderAny(path,sources.enemies))kind=Kind::Enemy;
++    else if(UnderAny(path,sources.enemies))kind=Lower(path).find("/gameplay/npcs/")!=std::string::npos?Kind::Npc:Kind::Enemy;
+     else return {};
+     const auto object=path+"."+name+(name.ends_with("_C")?"":"_C");
+     if(!ValidObjectPath(object))return {};
+--- /dev/null
++++ b/raw/include/Generator/HelpyNodes.h
+@@ -0,0 +1,71 @@
++#pragma once
++// Presentation/lease policy only. Classification and favorites never grant spawn permission.
++#include <algorithm>
++#include <cmath>
++#include <stdexcept>
++#include <string>
++#include <string_view>
++namespace PS::HelpyNodes {
++enum class Kind { Npc, AI, Tree, Mineral, OtherResource };
++inline std::string Fold(std::string_view value) {
++    std::string s(value);for(auto& c:s)if(c>='A'&&c<='Z')c=static_cast<char>(c+32);return s;
++}
++inline Kind ResourceKind(std::string_view path,std::string_view evidence={}) {
++    const auto p=Fold(path),e=Fold(evidence);
++    // Prefer the native ancestry/family captured by the loader, then explicit directory families.
++    if(e=="tree")return Kind::Tree;
++    if(e=="mineral")return Kind::Mineral;
++    if(p.find("/trees/")!=p.npos)return Kind::Tree;
++    if(p.find("/mining/")!=p.npos)return Kind::Mineral;
++    return Kind::OtherResource;
++}
++inline Kind EntryKind(int slot,std::string_view nativeKind,std::string_view path,std::string_view family={}) {
++    if(slot==2)return ResourceKind(path,family);
++    return nativeKind=="NPC"?Kind::Npc:Kind::AI;
++}
++inline const char* Prefix(Kind k) {
++    if(k==Kind::Npc)return "@npc:";
++    if(k==Kind::AI)return "@ai:";
++    return "@resource:";
++}
++inline std::string FavoriteKey(Kind kind,std::string_view id) {return std::string(Prefix(kind))+std::string(id);}
++inline bool ValidFavoriteKey(std::string_view key) {
++    std::size_t prefix=0;
++    for(const auto* p:{"@npc:","@ai:","@resource:"})if(key.starts_with(p)){prefix=std::char_traits<char>::length(p);break;}
++    if(!prefix||key.size()<=prefix||key.size()>4096)return false;
++    return std::none_of(key.begin(),key.end(),[](unsigned char c){return c<32||c==127||c=='\\';});
++}
++inline std::string_view FavoriteId(std::string_view key) {
++    if(!ValidFavoriteKey(key))return {};
++    return key.substr(key.find(':')+1);
++}
++inline bool FavoriteIn(int slot,std::string_view key) {
++    return slot==1?(key.starts_with("@npc:")||key.starts_with("@ai:")):
++        slot==2&&key.starts_with("@resource:");
++}
++inline bool InTab(Kind kind,int tab,bool includeOther) {
++    if(tab==2)return true; // Favorites is narrowed separately by exact typed identity.
++    if(kind==Kind::Npc)return tab==0;
++    if(kind==Kind::AI)return tab==1;
++    if(kind==Kind::Tree)return tab==0;
++    return tab==1&&(kind==Kind::Mineral||includeOther);
++}
++inline constexpr int MinDuration=5,MaxDuration=86400,DefaultDuration=300,MaxTemporary=32;
++inline void ValidateDuration(bool permanent,int seconds) {
++    if(permanent) {if(seconds!=0)throw std::runtime_error("Permanent NPCs cannot have a temporary duration.");}
++    else if(seconds<MinDuration||seconds>MaxDuration)throw std::runtime_error("NPC lifetime must be 5..86400 seconds.");
++}
++// Monotonic real-time lease: independent of frame rate, menu opening or game time dilation.
++// The native loader owns actors and requests destruction; expired is never equivalent to freed.
++struct Lease {
++    double deadline=0;
++    bool retiring=false;
++    static Lease Start(double now,int seconds) {
++        ValidateDuration(false,seconds);
++        if(!std::isfinite(now)||now<0)throw std::runtime_error("NPC lifetime clock unavailable.");
++        return {now+seconds,false};
++    }
++    bool Due(double now)const {return retiring||(std::isfinite(now)&&now>=deadline);}
++    void Retire(){retiring=true;}
++};
++} // namespace PS::HelpyNodes
+--- a/raw/include/Generator/QuickMenuDecorations.h
++++ b/raw/include/Generator/QuickMenuDecorations.h
+@@ -1,5 +1,6 @@
+ #pragma once
+ // Presentation policy only. These are cooked texture references, not filesystem paths.
++#include "Generator/HelpyNodes.h"
+ #include <algorithm>
+ #include <cctype>
+ #include <map>
+@@ -15,7 +16,7 @@
+ inline constexpr const char* ModdedBadge="/Game/Mods/RuneSchema/Badges/Runtime/T_Badge_Modded.T_Badge_Modded";
+ inline constexpr float BadgeSize=24.f, BadgeGap=4.f, FavoriteHitSize=36.f;
+ inline constexpr std::size_t MaxFavorites=4096;
+-using Favorites=std::map<std::string,std::string>; // exact item object path -> last display name
++using Favorites=std::map<std::string,std::string>; // item object path OR typed node identity -> last display name
+ 
+ enum class Origin { Unknown, Dragonwilds, RuneSchema, Modded };
+ inline std::string Fold(std::string value) {
+@@ -65,6 +66,9 @@
+     if(dot==path.npos||dot<=slash||dot+1==path.size())return false;
+     return std::none_of(path.begin(),path.end(),[](unsigned char c){return c<32||c==127||c=='\\';});
+ }
++inline bool ValidFavoriteKey(std::string_view key) {
++    return ValidFavoritePath(key)||HelpyNodes::ValidFavoriteKey(key);
++}
+ inline bool Token(std::string_view text,std::string_view token) {
+     if(token.empty())return false;
+     const auto lower=Fold(std::string(text));std::size_t at=0;
+--- a/raw/include/Generator/QuickMenuSpawnRequest.h
++++ b/raw/include/Generator/QuickMenuSpawnRequest.h
+@@ -13,6 +13,14 @@
+         throw std::runtime_error("The selected class is not a complete game asset path. Reindex and select it again.");
+     if(c.count<1||c.count>20||!std::isfinite(c.scale)||c.scale<.1||c.scale>10)
+         throw std::runtime_error("Count must be 1..20 and scale 0.1..10.");
++    if(c.npc) {
++        if(c.resource||c.count!=1||c.powerLevel!=-1||!c.loot.empty()||c.effect!=Effect::Inherit)
++            throw std::runtime_error("NPC placement does not accept AI power, effects, loot or multiple copies per request.");
++        HelpyNodes::ValidateDuration(c.permanent,c.durationSeconds);
++        set("Action",std::string("Spawn"));set("Player",c.player);set("Definition",c.definition);set("Class",c.classPath);
++        set("NPC",true);set("Resource",false);set("Permanent",c.permanent);set("DurationSeconds",c.durationSeconds);
++        set("Name",c.name);set("Scale",c.scale);set("Count",1);set("Distance",5.0);return;
++    }
+     Authoring::ValidatePower(c.powerLevel);
+     if(c.resource && c.powerLevel!=-1)throw std::runtime_error("Resources do not support enemy power level.");
+     set("Permanent",c.permanent);
+--- a/raw/include/Generator/QuickMenuUI.h
++++ b/raw/include/Generator/QuickMenuUI.h
+@@ -28,7 +28,7 @@
+ inline constexpr int Columns=4, ItemsPerPage=12, MaxSelection=64, MaxDrops=16;
+ inline constexpr float GridX=24, GridY=194, CardWidth=174, CardHeight=130, CardPitchX=184, CardPitchY=134;
+ enum class Tab { Items=0, Enemies=1, Resources=2 };
+-struct Entry { std::string id,name,path,icon,search; double power=-1; bool cooked=false; std::string assetClass; bool available=true; std::string detail; std::string appearanceGroup; bool runtimeClone=false,masterwork=false,consumable=false,quest=false; std::string categoryIcon; std::string itemTags{}; bool runeSchemaManaged=false,declaredModded=false,declaredCooked=false; bool cloneEligible=false; std::string cloneReason{}; };
++struct Entry { std::string id,name,path,icon,search; double power=-1; bool cooked=false; std::string assetClass; bool available=true; std::string detail; std::string appearanceGroup; bool runtimeClone=false,masterwork=false,consumable=false,quest=false; std::string categoryIcon; std::string itemTags{}; bool runeSchemaManaged=false,declaredModded=false,declaredCooked=false; bool cloneEligible=false; std::string cloneReason{}; std::string nodeKind{},resourceFamily{}; bool temporaryAllowed=false,permanentAllowed=false; std::string temporaryReason{},permanentReason{}; };
+ struct CatalogIssue {std::string path,reason;};
+ struct Player { std::string id,name; bool self=false; };
+ struct Catalog { std::array<std::vector<Entry>,3> entries; std::vector<Player> players; bool authority=false; std::vector<Entry> visuals; std::vector<CatalogIssue> issues; };
+@@ -39,7 +39,7 @@
+ struct Loot { std::string item; int min=1,max=1; double chance=100; };
+ enum class Effect { Inherit=0, None=1, Ghost=2 };
+ struct Command {
+-    enum class Kind { Refresh, Index, Cancel, Give, Spawn, Players, InspectClone, CreateClone, UpdateReference, SetHotkey } kind=Kind::Refresh;
++    enum class Kind { Refresh, Index, Cancel, Give, Spawn, Players, InspectClone, CreateClone, UpdateReference, SetHotkey, DismissNpcs } kind=Kind::Refresh;
+     std::string player,definition,name,classPath;
+     bool resource=false,permanent=false,giveClone=true,acknowledgeExperimental=false;
+     int powerLevel=-1;
+@@ -56,6 +56,7 @@
+     Effect effect=Effect::Inherit;
+     std::vector<Grant> grants;
+     std::vector<Loot> loot;
++    bool npc=false; int durationSeconds=0;
+ };
+ struct Rect {
+     float x=0,y=0,w=0,h=0;
+@@ -149,6 +150,8 @@
+     Tab tab=Tab::Items;
+     std::array<std::string,3> filters;
+     std::array<int,3> scroll{};
++    int npcTab=0,resourceTab=0; bool includeOtherResources=false;
++    std::string npcDuration="300";
+     std::set<std::string> selection;
+     std::string recipient,quantity="1",status="Open a world and refresh the game catalog.";
+     bool busy=false,indexing=false,closeRequested=false,selectedOnly=false;
+@@ -286,12 +289,48 @@
+         ++favoritesRevision;favoritesDirty=true;
+         favoriteStatus=favoritesWritable?"Favorites changed; saving locally.":"Favorites changed for this session only; Favorites file is unavailable.";
+     }
++    HelpyNodes::Kind NodeKind(const Entry& e,int slot)const {return HelpyNodes::EntryKind(slot,e.nodeKind,e.path,e.resourceFamily);}
++    std::string NodeFavoriteKey(const Entry& e,int slot)const {return HelpyNodes::FavoriteKey(NodeKind(e,slot),e.id);}
++    bool NodeFavorites(int slot)const {return slot==1?npcTab==2:slot==2&&resourceTab==2;}
++    mutable std::array<std::vector<Entry>,2> nodeFavoriteEntries;
++    mutable std::array<uint64_t,2> nodeFavoriteCatalog{},nodeFavoriteRevision{};
++    void ToggleNodeFavorite(const std::string& key) {
++        if(!HelpyNodes::ValidFavoriteKey(key))return;
++        if(favorites.contains(key))favorites.erase(key);
++        else {
++            const Entry* selected=nullptr;
++            for(int slot=1;slot<3;++slot)for(const auto& e:catalog.entries[slot])if(NodeFavoriteKey(e,slot)==key)selected=&e;
++            if(!selected)return;
++            if(favorites.size()>=QuickDecorations::MaxFavorites)throw std::runtime_error("Favorite limit reached (4096 entries).");
++            favorites[key]=Shorten(selected->name,512);
++        }
++        ++favoritesRevision;favoritesDirty=true;
++        favoriteStatus=favoritesWritable?"Favorites changed; saving locally.":"Favorites changed for this session only; file unavailable.";
++    }
+     const std::vector<Entry>& BrowserEntries(int index)const {
++        if(NodeFavorites(index)) {
++            const auto k=static_cast<std::size_t>(index-1);
++            if(nodeFavoriteCatalog[k]==catalogRevision&&nodeFavoriteRevision[k]==favoritesRevision)return nodeFavoriteEntries[k];
++            auto& result=nodeFavoriteEntries[k];result.clear();
++            std::map<std::string,const Entry*> loaded;
++            for(const auto& e:catalog.entries[index])loaded[NodeFavoriteKey(e,index)]=&e;
++            for(const auto& [key,label]:favorites)if(HelpyNodes::FavoriteIn(index,key)) {
++                if(const auto at=loaded.find(key);at!=loaded.end())result.push_back(*at->second);
++                else {Entry missing;missing.id=std::string(HelpyNodes::FavoriteId(key));missing.name=label;missing.available=false;
++                    missing.nodeKind=key.starts_with("@npc:")?"NPC":key.starts_with("@ai:")?"AI":"Resource";
++                    const auto colon=missing.id.find(':');if(colon!=std::string::npos&&missing.id.substr(colon+1).starts_with('/'))missing.path=missing.id.substr(colon+1);
++                    missing.detail="Unavailable: refresh or restore its source mod. Favorites do not respawn definitions.";
++                    result.push_back(std::move(missing));}
++            }
++            std::sort(result.begin(),result.end(),[](const auto& a,const auto& b){const auto an=Lower(a.name),bn=Lower(b.name);return an==bn?a.id<b.id:an<bn;});
++            nodeFavoriteCatalog[k]=catalogRevision;nodeFavoriteRevision[k]=favoritesRevision;return result;
++        }
+         if(index!=0||!favoritesTab)return catalog.entries.at(static_cast<std::size_t>(index));
+         if(favoriteCatalogRevision==catalogRevision&&favoriteListRevision==favoritesRevision)return favoriteEntries;
+         favoriteEntries.clear();std::map<std::string,const Entry*> loaded;
+         for(const auto& e:catalog.entries[0])loaded[e.path]=&e;
+         for(const auto& [path,name]:favorites) {
++            if(!QuickDecorations::ValidFavoritePath(path))continue;
+             if(const auto found=loaded.find(path);found!=loaded.end())favoriteEntries.push_back(*found->second);
+             else {Entry e;e.id=path;e.path=path;e.name=name;e.available=false;e.detail="Unavailable: scan the catalogue or restore its mod. Favorites do not recreate runtime clones.";favoriteEntries.push_back(std::move(e));}
+         }
+@@ -419,7 +458,7 @@
+         const auto slot=static_cast<size_t>(index);
+         auto& cache=matchCache.at(slot);
+         const bool only=index==0&&selectedOnly;
+-        const auto query=filters.at(slot)+"\n"+(index==0&&favoritesTab?"favorites":"all")+(index==0?"\n"+itemType+"\n"+itemSource:"");
++        const auto query=filters.at(slot)+"\n"+(index==0&&favoritesTab?"favorites":"all")+(index==0?"\n"+itemType+"\n"+itemSource:"\n"+std::to_string(index==1?npcTab:resourceTab)+std::to_string(includeOtherResources));
+         if(cache.revision==catalogRevision&&cache.query==query&&cache.favoriteRevision==favoritesRevision&&cache.onlySelected==only
+             &&(!only||cache.selected==selection))return cache.indices;
+         cache.indices.clear();cache.query=query;cache.favoriteRevision=favoritesRevision;cache.onlySelected=only;
+@@ -428,6 +467,7 @@
+         for(size_t i=0;i<entries.size();++i) {
+             const auto& e=entries[i];
+             if((only&&!selection.contains(e.path))||(index==0&&!ItemPasses(e,false)))continue;
++            if(index!=0&&!HelpyNodes::InTab(NodeKind(e,index),index==1?npcTab:resourceTab,includeOtherResources))continue;
+             if(Matches(e.name+" "+e.path+" "+e.search,filters.at(slot)))cache.indices.push_back(i);
+         }
+         return cache.indices;
+@@ -463,6 +503,7 @@
+         playerScroll=QuickDecorations::ClampPage(playerScroll,catalog.players.size(),9);
+     }
+     std::string* Field(const std::string& id) {
++        if(id=="npc-duration")return &npcDuration;
+         if(id=="clone-flavour")return &cloneFlavour;
+         if(id=="clone-power")return &clonePower;
+         if(id=="journal-text")return &journalText;
+@@ -533,7 +574,7 @@
+                 cloneMeshPicker?std::vector<std::string>{"mesh-filter"}:
+                 recipeOpen?std::vector<std::string>{"recipe-category","recipe-output"}:
+                 companionsOpen?std::vector<std::string>{"journal-title","journal-text","journal-group","journal-group-name"}:
+-                node?(tab==Tab::Enemies&&Authoring::EnemyPower.load()!=-1?std::vector<std::string>{"name","scale","count","power"}:std::vector<std::string>{"name","scale","count"}):
++                node?(node->nodeKind=="NPC"?(Authoring::PermanentSpawn.load()?std::vector<std::string>{"name","scale"}:std::vector<std::string>{"name","scale","npc-duration"}):tab==Tab::Enemies&&Authoring::EnemyPower.load()!=-1?std::vector<std::string>{"name","scale","count","power"}:std::vector<std::string>{"name","scale","count"}):
+                 tab==Tab::Items&&cloneTab?cloneAdvancedOpen?std::vector<std::string>{cloneFieldPicker?"clone-filter":"clone-mod"}:
+                 cloneEditorOpen?std::vector<std::string>{"clone-name","clone-power","clone-flavour","clone-icon","quantity"}:std::vector<std::string>{"filter"}:
+                 std::vector<std::string>{"filter","quantity"};
+@@ -619,14 +660,23 @@
+         ValidateGrants(out.grants);return out;
+     }
+     Command SpawnCommand() const {
+-        RequireAuthority();if(!node || !FindNode(node->id))throw std::runtime_error("Select a current enemy or resource first.");
++        RequireAuthority();if(!node || !FindNode(node->id))throw std::runtime_error("Select a current NPC, AI or resource first.");
+         const auto* current=FindNode(node->id);
+         if(!node->available||!current->available)throw std::runtime_error(current->detail.empty()?"This definition is browse-only until its class can be resolved.":current->detail);
+         if(FindNode(node->id)->path!=node->path)throw std::runtime_error("The selected class changed; select it again before spawning.");
+         Command out;out.kind=Command::Kind::Spawn;out.player=recipient;out.definition=node->id;out.classPath=node->path;
+-        out.resource=tab==Tab::Resources;out.name=name;out.scale=Number(scale,.1,10,"Scale (0.1..10)");
+-        out.count=Integer(count,1,20,"Total count");out.effect=effect;
++        out.resource=tab==Tab::Resources;out.npc=current->nodeKind=="NPC";out.name=name;out.scale=Number(scale,.1,10,"Scale (0.1..10)");
++        out.count=out.npc?1:Integer(count,1,20,"Total count");out.effect=effect;
+         out.permanent=Authoring::PermanentSpawn.load();
++        if(out.npc) {
++            const bool allowed=out.permanent?current->permanentAllowed:current->temporaryAllowed;
++            const auto& reason=out.permanent?current->permanentReason:current->temporaryReason;
++            if(!allowed)throw std::runtime_error(reason.empty()?"This NPC mode is unavailable.":reason);
++            if(name.size()>256||name.find('\0')!=std::string::npos)throw std::runtime_error("NPC name is invalid.");
++            out.count=1;out.effect=Effect::Inherit;
++            out.durationSeconds=out.permanent?0:Integer(npcDuration,HelpyNodes::MinDuration,HelpyNodes::MaxDuration,"Lifetime");
++            HelpyNodes::ValidateDuration(out.permanent,out.durationSeconds);return out;
++        }
+         if(!out.resource && Authoring::EnemyPower.load()!=-1)out.powerLevel=Integer(power,Authoring::MinPower,Authoring::MaxPower,"Power level");
+         if(name.size()>256 || name.find('\0')!=std::string::npos)throw std::runtime_error("Name is invalid or too long.");
+         if(drops.size()>MaxDrops)throw std::runtime_error("At most 16 additional loot entries are supported.");
+@@ -644,6 +694,10 @@
+             if(action=="focus"){if(busy&&arg!="filter"&&arg!="loot-filter"&&arg!="mesh-filter"&&arg!="choice-filter")throw std::runtime_error("Wait for the pending item operation.");Focus(arg);return;}
+             focus.clear();selectAll=false;
+             if(action=="tab" && !node && !lootPicker && !playerPicker)tab=static_cast<Tab>(Integer(arg,0,2,"Tab"));
++            else if(action=="node-subtab") {const int sub=Integer(arg,0,2,"Tab");if(tab==Tab::Enemies)npcTab=sub;else if(tab==Tab::Resources)resourceTab=sub;scroll[static_cast<int>(tab)]=0;focus.clear();}
++            else if(action=="node-favorite"){ToggleNodeFavorite(arg);ClampScroll();}
++            else if(action=="other-resources"){includeOtherResources=!includeOtherResources;scroll[2]=0;}
++            else if(action=="dismiss-npcs"){RequireAuthority();Command c;c.kind=Command::Kind::DismissNpcs;c.player=recipient;Queue(std::move(c));}
+             else if(action=="item-subtab") {SaveDraft();cloneEditorOpen=false;cloneTab=arg=="clone";favoritesTab=arg=="favorites";selectedOnly=false;scroll[0]=0;focus.clear();}
+             else if(action=="favorite"){ToggleFavorite(arg);}
+             else if(action=="item-filter-type"||action=="item-filter-source") {filterForPicker=ItemPickerOpen();itemFilterMenu=action=="item-filter-type"?"type":"source";}
+@@ -757,6 +811,7 @@
+             else if(action=="give")Queue(GiveCommand());
+             else if(action=="node") {
+                 if(const auto* e=FindNode(arg)){node=*e;name="";scale="1";count="1";effect=Effect::Inherit;drops.clear();dropScroll=0;}
++                else status="This favorite is unavailable; refresh or restore its source mod. It was not spawned.";
+             }
+             else if(action=="effect")effect=static_cast<Effect>((static_cast<int>(effect)+1)%3);
+             else if(action=="loot-picker"){lootPicker=true;pickerFavoritesOnly=false;lootFilter.clear();lootScroll=0;Focus("loot-filter");}
+@@ -843,7 +898,7 @@
+                     text(lines[start+line],r.x+10,r.y+8+23*static_cast<float>(line),18,active?ink:muted);
+                 f.hits.push_back({r,"focus",id});return;
+             }
+-            const bool numeric=id=="clone-power"||id=="recipe-output"||id.starts_with("ingredient:")||(id=="clone-value"&&(cloneKind=="Number"||cloneKind=="Integer"||cloneKind=="Unsigned"))||id=="quantity"||id=="power"||id=="count"||id=="scale"
++            const bool numeric=id=="npc-duration"||id=="clone-power"||id=="recipe-output"||id.starts_with("ingredient:")||(id=="clone-value"&&(cloneKind=="Number"||cloneKind=="Integer"||cloneKind=="Unsigned"))||id=="quantity"||id=="power"||id=="count"||id=="scale"
+                 ||id.starts_with("min:")||id.starts_with("max:")||id.starts_with("chance:");
+             const auto cap=static_cast<size_t>(std::max(3.f,(r.w*HorizontalFit-(numeric?12:22))/(numeric?8.f:9.f)));
+             if(active&&value){auto pos=std::min(caret,shown.size());shown.insert(pos,"|");if(pos>cap-2){auto begin=pos-(cap-2);while(begin&&((static_cast<unsigned char>(shown[begin])&0xc0)==0x80))--begin;shown.erase(0,begin);}}
+@@ -930,7 +985,7 @@
+         button({216,12,142,36},indexing?"Stop scan":"Full scan",indexing?"cancel":"index","",!busy||indexing);
+         button({368,12,126,36},"Settings","helpy-settings");
+         button({504,12,130,36},"Coverage","coverage");button({644,12,114,36},"Close","close");
+-        const char* names[]{"ITEMS","AI / ENEMIES","RESOURCES"};
++        const char* names[]{"ITEMS","NPCs & AI","RESOURCES"};
+         for(int t=0;t<3;++t)button({20.f+t*250,60,238,38},names[t],"tab",std::to_string(t),true,static_cast<int>(tab)==t);
+         if(tab==Tab::Items) {
+             field({20,108,302,38},"filter","Search name or path...");
+@@ -941,9 +996,9 @@
+             button({504,108,254,38},"To: "+(Recipient()?Recipient()->name:"Select player"),"player-picker");
+         }
+         const int t=static_cast<int>(tab);const auto& matches=Filtered(t);const auto& entries=BrowserEntries(t);
++        if(t!=0){const char* labelsNpc[]{"NPC","AI","FAVORITE"};const char* labelsResource[]{"TREES","STONE & ORE","FAVORITE"};for(int i=0;i<3;++i)button({20+i*178.f,154,168,30},t==1?labelsNpc[i]:labelsResource[i],"node-subtab",std::to_string(i),true,(t==1?npcTab:resourceTab)==i);}
+         if(t==0){button({20,154,150,30},"Spawn items","item-subtab","spawn",true,!cloneTab&&!favoritesTab);button({182,154,178,30},"Clone creator","item-subtab","clone",true,cloneTab);button({372,154,138,30},"Favorites","item-subtab","favorites",true,favoritesTab);}
+-        if(t!=0)text(std::to_string(matches.size())+" / "+std::to_string(entries.size())+" entries",20,160,17,muted);
+-        if(t!=0&&indexing)text("Indexing known paths...",350,160,17,muted);
++        if(t!=0)text(std::to_string(matches.size())+" entries",566,160,17,muted);
+         if(t==0&&!cloneTab) {
+             const int first=scroll[0]*ItemsPerPage;
+             for(int slot=0;slot<Columns*3;++slot){
+@@ -1000,21 +1055,48 @@
+         }else{
+             for(int slot=0;slot<9;++slot){
+                 const size_t index=static_cast<size_t>(scroll[t]*9+slot);if(index>=matches.size())break;
+-                const auto& e=entries[matches[index]];const float y=196+slot*46.f;Rect r{20,y,710,42};
++                const auto& e=entries[matches[index]];const float y=196+slot*46.f;Rect r{20,y,738,42};
+                 soft(r,r.Contains(mouseX,mouseY)?gold:Tint{.18f,.16f,.13f,1});
+-                text(Shorten(e.name,57),32,y+3,18);text(Shorten(e.path,83),32,y+25,15,muted);
+-                f.hits.push_back({r,"node",e.id});if(r.Contains(mouseX,mouseY))hoveredPath=e.path;
++                const auto kind=NodeKind(e,t);const auto favoriteKey=NodeFavoriteKey(e,t);
++                text(Shorten(e.name,48),32,y+3,18,e.available?ink:muted);text(Shorten(e.path.empty()?e.id:e.path,63),32,y+25,15,muted);
++                const auto origin=e.runtimeClone||e.runeSchemaManaged?QuickDecorations::Origin::RuneSchema:
++                    e.declaredModded?QuickDecorations::Origin::Modded:QuickDecorations::ItemOrigin(e.path,e.cooked,false);
++                const float bx=(QuickDecorations::ModPath(e.path)||e.declaredModded)&&origin==QuickDecorations::Origin::RuneSchema?654.f:682.f;
++                f.draws.push_back({Draw::Kind::Badge,{bx,y+10,24,24},QuickDecorations::Texture(origin),{1,1,1,1},16,false,QuickDecorations::Label(origin)});
++                if(bx<680)f.draws.push_back({Draw::Kind::Badge,{682,y+10,24,24},QuickDecorations::ModdedBadge,{1,1,1,1},16,false,"MOD"});
++                const Rect fav{710,y+4,36,36};
++                f.draws.push_back({Draw::Kind::Badge,{716,y+10,24,24},QuickDecorations::FavoriteBadge,IsFavorite(favoriteKey)?ink:Tint{.55f,.53f,.48f,.6f},16,false,IsFavorite(favoriteKey)?"*":"+"});
++                f.hits.push_back({r,"node",e.id});f.hits.push_back({fav,"node-favorite",favoriteKey});
++                if(r.Contains(mouseX,mouseY))hoveredPath=(kind==HelpyNodes::Kind::OtherResource?"Other resource: ":"")+(e.path.empty()?e.detail:e.path);
+             }
+             pager(612,scroll[t],matches.size(),9);
+-            text("Every discovered definition stays searchable. Spawn safety still applies.",20,650,17,muted);
++            if(t==1)button({20,646,348,26},"Dismiss temporary NPCs","dismiss-npcs","",!busy&&catalog.authority);
++            else button({20,646,416,26},std::string(includeOtherResources?"[x] ":"[ ] ")+"Other resources in Stone & Ore","other-resources");
+             
+         }
+-        if(matches.empty()&&!(t==0&&cloneTab))text(t==0&&favoritesTab?
++        if(matches.empty()&&!(t==0&&cloneTab))text(NodeFavorites(t)?"No favorite definitions match this search.":t==0&&favoritesTab?
+             favorites.empty()?"No favorites yet. Use the star on an item placard.":"No favorites match this search.":
+             indexing?"Scanning game assets...":"No matches. Clear the filter or run a full scan.",30,250,18,muted);
+         text(Shorten(hoveredPath.empty()?status:hoveredPath,87),20,674,16);
+         if(node){
+-            overlay(tab==Tab::Resources?"CONFIGURE RESOURCE":"CONFIGURE AI / ENEMY");
++            const bool isNpc=node->nodeKind=="NPC";
++            overlay(isNpc?"CONFIGURE NPC":tab==Tab::Resources?"CONFIGURE RESOURCE":"CONFIGURE AI");
++            if(isNpc) {
++                wrapped(node->name,36,94,74,1,19);text(Shorten(node->path,84),36,122,15,muted);
++                text("Name (blank inherits)",36,153,17,muted);field({36,177,708,38},"name");
++                text("Scale: 0.1 - 10",36,231,17,muted);field({36,255,220,38},"scale");
++                button({282,255,462,38},std::string(Authoring::PermanentSpawn.load()?"[x] ":"[ ] ")+"Permanent NPC placement","permanent-spawn");
++                if(!Authoring::PermanentSpawn.load()) {
++                    text("Lifetime in seconds: 5 - 86400",36,323,18,muted);field({36,351,220,38},"npc-duration");
++                    wrapped("Timed NPCs are session-only. No NPC definition is written. Cleanup targets only Helpy-owned actors.",36,419,72,3,18);
++                }else wrapped("Creates a separate placement definition. The original NPC and its shared store remain untouched.",36,330,72,3,18);
++                const bool allowed=Authoring::PermanentSpawn.load()?node->permanentAllowed:node->temporaryAllowed;
++                const auto reason=Authoring::PermanentSpawn.load()?node->permanentReason:node->temporaryReason;
++                if(!allowed)wrapped(reason.empty()?"This NPC mode is unavailable. Refresh to revalidate.":reason,36,499,76,3,17);
++                button({36,606,330,40},"At: "+(Recipient()?Recipient()->name:"Select player"),"player-picker");
++                button({446,606,298,40},Authoring::PermanentSpawn.load()?"Spawn + save NPC":"Spawn timed NPC","spawn","",!busy&&node->available&&allowed);
++                text(Shorten(status,84),36,664,16,muted);
++            }else {
+             wrapped(node->name,36,94,74,1,19);text(Shorten(node->path,84),36,122,15,muted);
+             text("Name (blank inherits)",36,151,17,muted);field({36,176,708,38},"name");
+             text("Scale: 0.1 - 10",36,229,17,muted);field({36,254,174,38},"scale");
+@@ -1033,6 +1115,7 @@
+             button({36,606,330,40},"At: "+(Recipient()?Recipient()->name:"Select player"),"player-picker");
+             button({446,606,298,40},Authoring::PermanentSpawn.load()?"Spawn + save JSON":"Spawn selection","spawn","",!busy&&node->available);
+             text(Shorten(node->available?status:node->detail,84),36,664,16,muted);
++            }
+         }
+         if(cloneAdvancedOpen){
+             overlay(cloneFieldPicker?"CHOOSE ITEM / TABLE PROPERTY":"ITEM PROPERTIES / STATS");
+@@ -1185,7 +1268,7 @@
+         }
+         std::string summary=indexStage;
+         if(indexing&&indexHasTotal)summary+="  "+std::to_string(indexDone)+" / "+std::to_string(indexTotal);
+-        summary+="  |  Items "+std::to_string(catalog.entries[0].size())+"  Enemies "+std::to_string(catalog.entries[1].size())+"  Resources "+std::to_string(catalog.entries[2].size());
++        summary+="  |  Items "+std::to_string(catalog.entries[0].size())+"  NPC/AI "+std::to_string(catalog.entries[1].size())+"  Resources "+std::to_string(catalog.entries[2].size());
+         if(!favoritesWritable)summary="Favorites: session only. "+summary;
+         text(Shorten(summary,84),390,696,15,ink,true);
+         // Narrow the layout, not the text or artwork. Preserve square icon/badge sizes.
+--- a/raw/include/Loader/DragonWildsNpcLoader.h
++++ b/raw/include/Loader/DragonWildsNpcLoader.h
+@@ -1,6 +1,7 @@
+ #pragma once
+ 
+ #include <atomic>
++#include "Generator/HelpyNodes.h"
+ #include <functional>
+ #include "Loader/QuestService.h"
+ #include "Loader/EventRuntime.h"
+@@ -56,6 +57,12 @@
+         void LoadEvents(const nlohmann::json& data,const RC::StringType& mod){m_events.Load(RC::to_string(mod),data);}
+         void PrepareQuests(RC::Unreal::UObject* context){m_quests.Prepare(context);}
+         void MigrateSavedProgress(RC::Unreal::UObject* controller);
++        // Game-thread authoring facade. No second NPC manager or global actor scan.
++        inline static DragonWildsNpcLoader* HelpyInstance=nullptr;
++        nlohmann::json HelpyDefinitions();
++        nlohmann::json SpawnHelpyNpc(const nlohmann::json& request,RC::Unreal::UWorld* world,RC::Unreal::AActor* player);
++        std::size_t DismissHelpyNpcs(RC::Unreal::UWorld* world=nullptr);
++        std::size_t HelpyTemporaryCount()const {return m_helpyNpcs.size();}
+ 
+     protected:
+         void OnLoad(const std::filesystem::path& loaderPath,
+@@ -70,6 +77,8 @@
+     private:
+         struct VendorDefinition {
+             std::string Id;
++            nlohmann::json HelpySource;
++            bool HelpyTemporary=false;
+             bool Human=false;
+             bool Multiplayer=false;
+             TimeOfDay::Requirement Time=TimeOfDay::Requirement::Any;
+@@ -127,6 +136,21 @@
+             VendorPolicy::VendorStage Stage = VendorPolicy::VendorStage::Visual;
+         };
+ 
++        struct HelpyNpcLease {
++            PS::WeakObjectHandle Actor,World;
++            std::string Key;
++            PS::HelpyNodes::Lease Lifetime;
++            std::string AppliedKey{};
++            RC::StringType ObjectPath{};
++        };
++        std::vector<HelpyNpcLease> m_helpyNpcs;
++        bool m_helpySpawning=false;
++        std::size_t m_helpyCreated=0;
++        RC::Unreal::AActor* FindHelpyNpc(RC::Unreal::UWorld* world,const VendorDefinition& definition) const;
++        void PumpHelpyNpcs();
++        void RetireHelpyNpc(HelpyNpcLease& lease);
++        std::string HelpyTemporaryReason(const VendorDefinition& definition);
++        nlohmann::json HelpyNpcDocument(const VendorDefinition& source,const std::string& id);
+         std::vector<VendorDefinition> m_definitions;
+         NpcCatalog m_catalog;
+         std::unordered_map<std::string,Dialogue::Definition> m_dialogues;
+--- /dev/null
++++ b/raw/include/Loader/HelpyNpcGuards.h
+@@ -0,0 +1,56 @@
++#pragma once
++// Native gates for Helpy-owned NPC instances. These checks never modify a class default.
++#include "SDK/Helper/ActorHelper.h"
++#include "SDK/Helper/PropertyHelper.h"
++#include "Unreal/UFunction.hpp"
++#include "Unreal/AActor.hpp"
++#include <Unreal/CoreUObject/UObject/UnrealType.hpp>
++#include <array>
++#include <cstring>
++namespace DragonWilds::HelpyNpcGuards {
++using namespace RC::Unreal;
++inline bool IsNpc(UClass* type) {
++    auto* base=ActorHelper::ResolveClass(TEXT("/Script/Dominion.InteractableNPC"));
++    return type&&base&&type->IsChildOf(base);
++}
++inline bool Bounded(UClass* type,FProperty* field) {
++    return type&&field&&field->GetArrayDim()==1&&field->GetOffset_Internal()>=0&&field->GetSize()>0
++        &&field->GetOffset_Internal()<=type->GetPropertiesSize()
++        &&field->GetSize()<=type->GetPropertiesSize()-field->GetOffset_Internal();
++}
++inline FStructProperty* Guid(UClass* type) {
++    auto* p=PropertyHelper::CastProperty<FStructProperty>(PropertyHelper::GetPropertyByName(type,TEXT("SpudGuid")));
++    if(!Bounded(type,p)||p->GetSize()!=16||!p->GetStruct()
++        ||p->GetStruct()->GetPathName()!=TEXT("/Script/CoreUObject.Guid"))return nullptr;
++    return p;
++}
++inline FBoolProperty* Skip(UClass* type) {
++    auto* p=PropertyHelper::CastProperty<FBoolProperty>(PropertyHelper::GetPropertyByName(type,TEXT("bSkipSpudStore")));
++    return Bounded(type,p)?p:nullptr;
++}
++inline void TemporaryClass(UClass* type) {
++    if(!IsNpc(type)||ActorHelper::IsAbstract(type)||!Guid(type)||!Skip(type))
++        throw std::runtime_error("NPC lacks a verified SpudGuid / bSkipSpudStore contract; timed spawning is blocked.");
++}
++inline void Exclude(AActor* actor) {
++    if(!actor)throw std::runtime_error("No NPC instance to exclude from persistence.");
++    auto* type=actor->GetClassPrivate();TemporaryClass(type);
++    if(actor->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject)))
++        throw std::runtime_error("Never modify an NPC class default or archetype.");
++    auto* skip=Skip(type);auto* guid=Guid(type);
++    actor->SetFlags(RF_Transient);
++    skip->SetPropertyValue(skip->ContainerPtrToValuePtr<void>(actor),true);
++    const std::array<uint32_t,4> empty{};
++    std::memcpy(guid->ContainerPtrToValuePtr<void>(actor),empty.data(),16);
++    if(!skip->GetPropertyValue(skip->ContainerPtrToValuePtr<void>(actor)))
++        throw std::runtime_error("NPC persistence exclusion did not apply.");
++}
++inline void VerifyExcluded(AActor* actor) {
++    if(!actor)throw std::runtime_error("NPC instance missing after construction.");
++    auto* type=actor->GetClassPrivate();TemporaryClass(type);
++    const std::array<uint32_t,4> empty{};
++    if(!actor->HasAnyFlags(RF_Transient)||!Skip(type)->GetPropertyValue(Skip(type)->ContainerPtrToValuePtr<void>(actor))
++        ||std::memcmp(Guid(type)->ContainerPtrToValuePtr<void>(actor),empty.data(),16)!=0)
++        throw std::runtime_error("NPC construction changed its no-save identity; timed spawn rolled back.");
++}
++} // namespace DragonWilds::HelpyNpcGuards
+--- a/raw/include/Runtime/AuthoredFile.h
++++ b/raw/include/Runtime/AuthoredFile.h
+@@ -12,7 +12,7 @@
+ namespace PS::Authoring {
+ inline std::filesystem::path Directory(const char* category) {
+     const std::string value(category);
+-    if(value!="spawns" && value!="assets" && value!="raw" && value!="journal" && value!="recipes")throw std::runtime_error("Invalid authoring category");
++    if(value!="spawns" && value!="assets" && value!="raw" && value!="journal" && value!="recipes" && value!="npc")throw std::runtime_error("Invalid authoring category");
+     // ModDirectory is UE4SS/Mods/RuneSchema; this is its content-mod subtree.
+     return HostServices::ModDirectory()/"mods"/"runeschema"/value;
+ }
+--- a/raw/include/Runtime/F2FavoriteStore.h
++++ b/raw/include/Runtime/F2FavoriteStore.h
+@@ -11,22 +11,23 @@
+     if(records.size()>QuickDecorations::MaxFavorites)throw std::runtime_error("Too many Helpy favorites");
+     auto rows=nlohmann::json::array();
+     for(const auto& [path,name]:records) {
+-        if(!QuickDecorations::ValidFavoritePath(path)||name.size()>512)throw std::runtime_error("Invalid Helpy favorite entry");
+-        rows.push_back({{"Path",path},{"Name",name}});
++        if(!QuickDecorations::ValidFavoriteKey(path)||name.size()>512)throw std::runtime_error("Invalid Helpy favorite entry");
++        rows.push_back({{"Key",path},{"Name",name}});
+     }
+-    return {{"Version",1},{"Favorites",std::move(rows)}};
++    return {{"Version",2},{"Favorites",std::move(rows)}};
+ }
+ inline QuickDecorations::Favorites Decode(const nlohmann::json& document) {
+-    if(!document.is_object()||!document.contains("Version")||document["Version"]!=1
++    if(!document.is_object()||!document.contains("Version")||(document["Version"]!=1&&document["Version"]!=2)
+         ||!document.contains("Favorites")||!document["Favorites"].is_array()
+         ||document["Favorites"].size()>QuickDecorations::MaxFavorites)
+         throw std::runtime_error("Unsupported Helpy favorites document; existing file left unchanged");
+     QuickDecorations::Favorites records;
++    const char* keyField=document["Version"]==1?"Path":"Key";
+     for(const auto& row:document["Favorites"]) {
+-        if(!row.is_object()||!row.contains("Path")||!row["Path"].is_string()
++        if(!row.is_object()||!row.contains(keyField)||!row[keyField].is_string()
+             ||!row.contains("Name")||!row["Name"].is_string())throw std::runtime_error("Invalid Helpy favorite entry");
+-        const auto path=row["Path"].get<std::string>(),name=row["Name"].get<std::string>();
+-        if(!QuickDecorations::ValidFavoritePath(path)||name.size()>512)throw std::runtime_error("Invalid Helpy favorite path/name");
++        const auto path=row[keyField].get<std::string>(),name=row["Name"].get<std::string>();
++        if(!(document["Version"]==1?QuickDecorations::ValidFavoritePath(path):QuickDecorations::ValidFavoriteKey(path))||name.size()>512)throw std::runtime_error("Invalid Helpy favorite path/name");
+         records[path]=name;
+     }
+     return records;
+--- a/raw/src/Generator/InGameQuickMenu.cpp
++++ b/raw/src/Generator/InGameQuickMenu.cpp
+@@ -817,13 +817,18 @@
+     if(result.contains("Definitions")&&result["Definitions"].is_array()) {
+         data.entries[1].clear();data.entries[2].clear();std::set<std::string> seen;
+         for(const auto& row:result["Definitions"]) {
+-            const auto type=row.value("Type",std::string{});if(type!="AI"&&type!="Resource")continue;
++            const auto type=row.value("Type",std::string{});if(type!="AI"&&type!="Resource"&&type!="NPC")continue;
+             const auto id=row.value("Key",std::string{}),path=row.value("Class",std::string{});
+             if(id.empty()||path.empty()||!seen.insert(id).second)continue;
+             auto name=row.value("Name",std::string{});if(name.empty())name=path.substr(path.find_last_of("./")+1);
+-            data.entries[type=="AI"?1:2].push_back({id,name,path,row.value("Icon",std::string{}),id,
++            const int slot=type=="Resource"?2:1;
++            data.entries[slot].push_back({id,name,path,row.value("Icon",std::string{}),id,
+                 row.contains("PowerLevel")&&row["PowerLevel"].is_number()?row["PowerLevel"].get<double>():-1,
+                 row.value("Packaged",false),{},row.value("Available",true),row.value("Reason",std::string{})});
++            auto& e=data.entries[slot].back();e.nodeKind=type;e.resourceFamily=row.value("ResourceFamily",std::string{});
++            e.runeSchemaManaged=row.value("RuneSchemaManaged",false);e.declaredModded=row.value("DeclaredModded",false);e.declaredCooked=row.value("DeclaredCooked",false);
++            e.temporaryAllowed=row.value("TemporaryAllowed",false);e.permanentAllowed=row.value("PermanentAllowed",false);
++            e.temporaryReason=row.value("TemporaryReason",std::string{});e.permanentReason=row.value("PermanentReason",std::string{});
+         }
+     }
+     if(result.contains("CookedVisuals")&&result["CookedVisuals"].is_array()) {
+@@ -837,7 +842,7 @@
+         data.issues.clear();
+         for(const auto& row:result["CatalogIssues"])data.issues.push_back({row.value("Path",std::string{}),row.value("Reason",std::string{})});
+     }
+-    m_ui.coverageSummary=result.value("CatalogCoverage",std::string{})+" | AI: "+std::to_string(data.entries[1].size())+
++    m_ui.coverageSummary=result.value("CatalogCoverage",std::string{})+" | NPC/AI: "+std::to_string(data.entries[1].size())+
+         " | Resources: "+std::to_string(data.entries[2].size())+" | Unresolved: "+std::to_string(result.value("UnresolvedAssets",std::size_t{}))+
+         " | Unclassified: "+std::to_string(result.value("UnclassifiedRecords",std::size_t{}));
+     if(result.contains("Players")&&result["Players"].is_array()) {
+@@ -863,6 +868,7 @@
+         else if(command.kind==QuickUI::Command::Kind::Index)request["Action"]="IndexQuickCatalog";
+         else if(command.kind==QuickUI::Command::Kind::Refresh){request["Action"]="QuickCatalog";m_failedCanvasIcons.clear();}
+         else if(command.kind==QuickUI::Command::Kind::Players)request["Action"]="QuickPlayers";
++        else if(command.kind==QuickUI::Command::Kind::DismissNpcs){request["Action"]="DismissHelpyNpcs";request["Player"]=command.player;}
+         else if(command.kind==QuickUI::Command::Kind::Give){
+             request["Action"]="GiveItems";request["Player"]=command.player;request["Items"]=nlohmann::json::array();
+             for(const auto& g:command.grants)request["Items"].push_back({{"Item",g.item},{"Count",g.count}});
+--- a/raw/src/Loader/DragonWildsNpcLoader.cpp
++++ b/raw/src/Loader/DragonWildsNpcLoader.cpp
+@@ -59,6 +59,9 @@
+ #include "SDK/Classes/Custom/UWorldPartitionRuntimeLevelStreamingCell.h"
+ #include "SDK/Structs/Custom/FManagedStruct.h"
+ #include "Loader/DragonWildsNpcLoader.h"
++#include "Loader/HelpyNpcGuards.h"
++#include "Runtime/AuthoredFile.h"
++#include <exception>
+ #include "Loader/DragonWildsBlueprintModLoader.h"
+ #include "Loader/DragonWildsRecipeModLoader.h"
+ #include "Loader/VendorOffers.h"
+@@ -239,6 +242,7 @@
+     }
+ 
+ #include "NpcCleanup.inl"
++#include "HelpyNpcAuthoring.inl"
+     DragonWildsNpcLoader::DragonWildsNpcLoader(DragonWildsRecipeModLoader* recipes)
+         : DragonWildsModLoaderBase("npc"), m_recipes(recipes)
+     {
+@@ -247,6 +251,12 @@
+ 
+     DragonWildsNpcLoader::~DragonWildsNpcLoader()
+     {
++        if(HelpyInstance==this)HelpyInstance=nullptr;
++        // Shutdown stays on the existing loader lifecycle. Native lifespan is an
++        // additional fallback; do not call engine APIs from another thread.
++        if(m_gameThreadId.load(std::memory_order_relaxed)==GetCurrentThreadId()) {
++            try {DismissHelpyNpcs();PumpNpcCleanup(1.0);}catch(...) {}
++        }
+         DragonWildsBlueprintModLoader::UnregisterActorInitializedObserver(m_actorObserverId);
+         if(m_clientShopFunction && m_clientShopHookId)m_clientShopFunction->UnregisterHook(m_clientShopHookId);
+         if(m_clientDialogueFunction && m_clientDialogueHookId)m_clientDialogueFunction->UnregisterHook(m_clientDialogueHookId);
+@@ -533,6 +543,7 @@
+                 PumpQuestLocationRefreshes(deltaSeconds);
+                 PS::SaveViewer::PumpNpcExport();
+                 PumpClientReplicas(deltaSeconds);
++                PumpHelpyNpcs();
+                 PumpNpcCleanup(deltaSeconds);
+                 // The current game build no longer exposes a reflected
+                 // day/night transition function.  Re-read its native actor
+@@ -540,7 +551,7 @@
+                 // actually uses time gating.  This is one check per second,
+                 // not an actor/world scan or a permanent background timer.
+                 if(std::ranges::any_of(m_definitions,[](const auto& definition){
+-                    return definition.Enabled && definition.Time!=TimeOfDay::Requirement::Any;
++                    return !definition.HelpyTemporary && definition.Enabled && definition.Time!=TimeOfDay::Requirement::Any;
+                 })) {
+                     m_npcTimeElapsed+=deltaSeconds;
+                     if(m_npcTimeElapsed>=1.0) {
+@@ -554,7 +565,7 @@
+                 PumpQuestLocations(deltaSeconds);
+                 if (m_definitions.empty() || m_scanBudget.Exhausted()) return;
+                 if (std::none_of(m_definitions.begin(), m_definitions.end(),
+-                    [](const auto& definition) { return definition.Enabled && definition.SpawnGate.Pending(); }))
++                    [](const auto& definition) { return !definition.HelpyTemporary && definition.Enabled && definition.SpawnGate.Pending(); }))
+                 {
+                     return;
+                 }
+@@ -587,6 +598,9 @@
+         options.HookName = TEXT("RuneSchemaVendorWorldTeardown");
+         m_worldTeardownCallbackId = Hook::RegisterInitGameStatePreCallback(
+             [this](Hook::TCallbackIterationData<void>&, AGameModeBase*) {
++                // Retire only our session NPCs before dropping world bindings.
++                // Cleanup failures retain their owned retry records.
++                try {DismissHelpyNpcs();PumpNpcCleanup(1.0);}catch(...) {}
+                 m_merchantBindings.clear();
+                 m_pendingLoreRequests.clear();
+                 m_pendingQuestRefreshes.clear();
+@@ -640,6 +654,7 @@
+                 STR("Vendor world teardown reset could not be registered; restart between worlds if needed.\n"));
+         }
+ 
++        HelpyInstance=this;
+         return true;
+     }
+ 
+@@ -765,6 +780,7 @@
+         }
+ 
+         VendorDefinition definition;
++        definition.HelpySource=data;
+         HumanNpc::Validate(data);
+         definition.HideMesh=data.value("HideMesh",false);
+         definition.HideName=data.value("HideName",false);
+@@ -1470,7 +1486,7 @@
+         auto* world = FindLoadedWorld();
+         if (world && std::none_of(m_definitions.begin(), m_definitions.end(),
+             [&](const auto& definition) {
+-                return definition.Enabled && definition.SpawnGate.Pending()
++                return !definition.HelpyTemporary && definition.Enabled && definition.SpawnGate.Pending()
+                     && definition.CellReadyWorld == world;
+             })) {
+             if (m_vendorReport.value("Phase", std::string{}) != "Merchant.WaitingForCell") {
+@@ -1487,7 +1503,7 @@
+             m_vendorReport["World"] = RC::to_string(world->GetPathName());
+             TrySpawnConfiguredVendors(world);
+             const auto pending = std::count_if(m_definitions.begin(), m_definitions.end(),
+-                [](const auto& definition) { return definition.Enabled && definition.SpawnGate.Pending(); });
++                [](const auto& definition) { return !definition.HelpyTemporary && definition.Enabled && definition.SpawnGate.Pending(); });
+             m_vendorReport["PendingDefinitionCount"] = pending;
+             if (!pending) m_vendorReport["Phase"] = "Merchant.AttemptsFinished";
+             if (m_scanBudget.Exhausted()) {
+@@ -1516,7 +1532,7 @@
+         const bool multiplayer=network.Mode!=PS::Network::Role::Standalone;
+         for (auto& definition : m_definitions)
+         {
+-            if (!definition.Enabled || !definition.SpawnGate.Pending()
++            if (definition.HelpyTemporary || !definition.Enabled || !definition.SpawnGate.Pending()
+                 || definition.CellReadyWorld != world)
+             {
+                 continue;
+@@ -1623,7 +1639,7 @@
+             (void)RequireIdentityClass();
+             (void)NpcIdentity::Encode(definition.ModName,definition.Id,NetworkDefinitionFingerprint(world,definition));
+         }
+-        auto* actor = FindPersistentVendor(world, definition);
++        auto* actor = definition.HelpyTemporary?nullptr:FindPersistentVendor(world, definition);
+         bool restored = actor != nullptr;
+         const auto retire=[&] {
+             if(!actor)return;
+@@ -1761,7 +1777,8 @@
+                 if(multiplayer && (!pending->Rename(RC::to_generic_string(definition.NetworkActorName).c_str())
+                     || RC::to_string(pending->GetName())!=definition.NetworkActorName))
+                     throw std::runtime_error("Stable network NPC name could not be assigned exactly");
+-                SetPersistentVendorId(pending, definition);
++                if(definition.HelpyTemporary)HelpyNpcGuards::Exclude(pending);
++                else SetPersistentVendorId(pending, definition);
+                 RecordPhase(definition, "Spawn.Allocated", pending);
+                 for (const auto* field : {TEXT("AutoPossessAI"), TEXT("AutoPossessPlayer")}) {
+                     if (auto* property = PropertyHelper::GetPropertyByName(pending->GetClassPrivate(), field))
+@@ -1780,6 +1797,7 @@
+         }
+ 
+         if (!actor) throw std::runtime_error("SpawnActor returned null");
++        if(definition.HelpyTemporary)HelpyNpcGuards::VerifyExcluded(actor);
+         RecordPhase(definition, restored ? "Persistence.Reused" : "Spawn.Finished", actor,
+             {{"RestoredActor", restored}, {"PersistentGuidWords", definition.PersistentId}});
+ 
+@@ -2440,7 +2458,7 @@
+         auto* bounds = cell->GetContentBounds();
+         if (!world || !bounds || !bounds->bIsValid) return;
+         for (auto& definition : m_definitions) {
+-            if (!definition.Enabled || !definition.SpawnGate.Pending()) continue;
++            if (definition.HelpyTemporary || !definition.Enabled || !definition.SpawnGate.Pending()) continue;
+             const auto x = definition.TargetLocation[0], y = definition.TargetLocation[1];
+             if (x > bounds->Min.X() && x < bounds->Max.X()
+                 && y > bounds->Min.Y() && y < bounds->Max.Y()
+@@ -2473,7 +2491,7 @@
+         }
+ 
+         for(auto& definition:m_definitions) {
+-            if(!definition.Enabled || definition.Time==TimeOfDay::Requirement::Any)continue;
++            if(definition.HelpyTemporary || !definition.Enabled || definition.Time==TimeOfDay::Requirement::Any)continue;
+             const auto key=definition.ModName+":"+definition.Id;
+             const bool allowed=definition.Time==current;
+             auto entry=std::find_if(m_spawnedVendors.begin(),m_spawnedVendors.end(),
+@@ -2683,7 +2701,7 @@
+             {"ActorWeakResolves", bound.Actor.Get() == actor},
+             {"InteractionWeakResolves", bound.Interaction.Get() == interaction},
+             {"StationWeakResolves", bound.Station.Get() == station},
+-            {"ComponentResolution", "SavedActorGuidAndOwnedComponents"},
++            {"ComponentResolution", definition.HelpyTemporary?"HelpyOwnedLeaseAndOwnedComponents":"SavedActorGuidAndOwnedComponents"},
+             {"DispatchRoute", "PlayerInteractionManager.Multicast_AcknowledgeInteractionRequest"},
+             {"ExpectedFunctionFound", expected != nullptr},
+             {"ExpectedFunctionFlags", expected ? static_cast<uint64_t>(expected->GetFunctionFlags()) : 0},
+@@ -2972,7 +2990,7 @@
+             [&](const auto& candidate) {
+                 return candidate.ModName + ":" + candidate.Id == binding->DefinitionKey;
+             });
+-        if (definitionEntry == m_definitions.end()) return;
++        if (definitionEntry == m_definitions.end() || !definitionEntry->Enabled) return;
+         const auto definitionCopy = *definitionEntry;
+         const auto* definition = &definitionCopy;
+         if(!isAuthority && definition->LoreEntry.empty())return;
+@@ -2993,9 +3011,9 @@
+                 | RF_ArchetypeObject | RF_BeginDestroyed | RF_FinishDestroyed)))
+                 throw std::runtime_error("interaction source is not a live instance");
+             if (!source->GetWorld()) throw std::runtime_error("interaction source has no world");
+-            auto* actor = FindPersistentVendor(source->GetWorld(), *definition);
++            auto* actor = definition->HelpyTemporary?FindHelpyNpc(source->GetWorld(),*definition):FindPersistentVendor(source->GetWorld(), *definition);
+             if (!actor || source->GetOuterPrivate() != actor)
+-                throw std::runtime_error("interaction source is not owned by the unique saved vendor");
++                throw std::runtime_error("interaction source is not owned by the unique saved or Helpy-leased vendor");
+             auto findOwned = [&](UClass* type) -> UObject* {
+                 if (!type) throw std::runtime_error("component class unavailable");
+                 UObject* found = nullptr;
+@@ -3059,6 +3077,8 @@
+             || !value.VendorClass)throw std::runtime_error("Shop requires an authoritative player and owned NPC");
+         ActorHelper::FunctionCall playerAuthority(player,TEXT("/Script/Engine.Actor:HasAuthority"));playerAuthority.Invoke();
+         if(!playerAuthority.Result<bool>())throw std::runtime_error("Shop dispatch requires player authority");
++        if(value.HelpyTemporary&&FindHelpyNpc(actor->GetWorld(),value)!=actor)
++            throw std::runtime_error("Temporary NPC has expired or no longer owns this interaction.");
+         const auto generation=m_worldGeneration;
+         const auto* definition=&value;
+         nlohmann::json diagnostics=nlohmann::json::object();
+@@ -3134,6 +3154,8 @@
+                     ? VendorOffers::Owner(definition->ModName,definition->Id) : definition->StoreOwner;
+                 diagnostics["OfferAvailability"]=m_recipes->PrepareStoreForPlayer(owner,definition->Items,controller);
+             }
++            if(definition->HelpyTemporary&&FindHelpyNpc(actor->GetWorld(),*definition)!=actor)
++                throw std::runtime_error("Temporary NPC expired while preparing its storefront.");
+             RecordPhase(*definition, "Shop.Opening", actor, diagnostics);
+             ActorHelper::FunctionCall call(controller,
+                 TEXT("/Script/Dominion.DominionPlayerController:Client_ToggleCraftingMenu"));
+--- a/raw/src/Loader/DragonWildsSpawnLoader.cpp
++++ b/raw/src/Loader/DragonWildsSpawnLoader.cpp
+@@ -7,6 +7,9 @@
+ #include "Runtime/AuthoredFile.h"
+ #include "SDK/Helper/CookedAssetLookup.h"
+ #include "Loader/DragonWildsAssetModLoader.h"
++#include "Loader/DragonWildsNpcLoader.h"
++#include "Loader/HelpyNpcGuards.h"
++#include "Loader/AssetMetadataRegistry.h"
+ #include "Loader/AssetAuthoringMetadata.h"
+ #include "Utility/NativeFunctionHook.h"
+ #include "Runtime/NetworkContext.h"
+--- /dev/null
++++ b/raw/src/Loader/HelpyNpcAuthoring.inl
+@@ -0,0 +1,250 @@
++// Included in DragonWildsNpcLoader.cpp after native helper declarations.
++// All operations are game-thread-only; temporaries are never added to m_catalog or written to /npc.
++namespace {
++double HelpyNpcClock() {
++    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
++}
++void ValidateHelpyNpcLifespan() {
++    auto* function=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,
++        TEXT("/Script/Engine.Actor:SetLifeSpan"),false);
++    auto* input=function?PropertyHelper::CastProperty<FNumericProperty>(
++        function->FindProperty(FName(TEXT("InLifespan"),FNAME_Find))):nullptr;
++    unsigned inputs=0;
++    if(function)for(auto* property:TFieldRange<FProperty>(function,EFieldIterationFlags::Default))
++        if(property->HasAnyPropertyFlags(CPF_Parm))++inputs;
++    if(!function||function->GetParmsSize()!=sizeof(float)||function->GetReturnProperty()||inputs!=1
++        ||!input||input->GetArrayDim()!=1||!input->IsFloatingPoint()||input->GetElementSize()!=sizeof(float)
++        ||input->GetOffset_Internal()!=0||!input->HasAnyPropertyFlags(CPF_Parm)
++        ||input->HasAnyPropertyFlags(CPF_OutParm|CPF_ReturnParm))
++        throw std::runtime_error("NPC native lifespan contract is unavailable; timed spawning is blocked.");
++}
++void HelpyNpcLifespan(AActor* actor,int seconds) {
++    // Native lifespan backs up our owned cleanup queue. No guessed memory offsets.
++    ActorHelper::FunctionCall(actor,TEXT("/Script/Engine.Actor:SetLifeSpan"))
++        .Arg(TEXT("InLifespan"),static_cast<float>(seconds)).Invoke();
++}
++}
++std::string DragonWildsNpcLoader::HelpyTemporaryReason(const VendorDefinition& d) {
++    if(!d.Enabled)return "Source NPC is disabled.";
++    // Conversation completion and quest/lore saves are not portable-vendor state.
++    if(!d.DialogueKey.empty()||!d.LockedDialogueKey.empty()||!d.RequiredFlag.empty()||!d.LoreEntry.empty())
++        return "Timed copies of dialogue, quest-gated or lore NPCs are not supported; use a plain store/visual NPC.";
++    try {HelpyNpcGuards::TemporaryClass(ActorHelper::ResolveClass(RC::to_generic_string(d.BaseActorClassPath)));ValidateHelpyNpcLifespan();}
++    catch(const std::exception& e){return e.what();}
++    catch(...) {return "NPC preflight failed; no temporary actor can be created.";}
++    return {};
++}
++nlohmann::json DragonWildsNpcLoader::HelpyNpcDocument(const VendorDefinition& source,const std::string& id) {
++    // Select only the /npc contract, not resolved storefront internals or pointers.
++    if(!source.HelpySource.is_object())throw std::runtime_error("Original NPC authoring definition is unavailable.");
++    if(source.BaseActorClassPath!="/Game/Gameplay/NPCs/BP_BaseInteractableNPC.BP_BaseInteractableNPC_C")
++        throw std::runtime_error("Permanent copies of legacy custom proxy classes need an explicit /npc conversion.");
++    auto doc=nlohmann::json::object();
++    for(const auto* field:{"DisplayName","VisualSource","Mesh","Materials","IdleAnimation","HideMesh","NoInteract","HideName",
++        "Location","Rotation","Scale","Enabled","EnableCollision","MeshCollision","Type","Appearance","Equipment","Pose","Ghost","VisualEffect","Map","OverheadIcon","VendorID","DialogueID","LoreEntry","Multiplayer","TimeOfDay"})
++        if(source.HelpySource.contains(field))doc[field]=source.HelpySource[field];
++    doc["Id"]=id;doc["Enabled"]=true;doc["TimeOfDay"]="Any";doc["Multiplayer"]=source.Multiplayer;
++    if(!source.DialogueKey.empty())doc["DialogueID"]=source.DialogueKey;
++    if(!source.LoreEntry.empty())doc["LoreEntry"]=source.LoreEntry; // Existing lore IDs are globally resolved by OpenLore.
++    if(source.Stage==VendorPolicy::VendorStage::Merchant) {
++        if(!source.StoreOwner.starts_with("store:"))
++            throw std::runtime_error("This legacy inline merchant has no reusable /vendors store ID; temporary mode only.");
++        doc["VendorID"]=source.StoreOwner.substr(6);
++    }else doc.erase("VendorID");
++    // Validate the same contract that will read the file next launch. This local
++    // catalog only validates its own definition; it does not re-run every mod.
++    NpcCatalog check;check.AddNpc("runeschema",doc);
++    return doc;
++}
++nlohmann::json DragonWildsNpcLoader::HelpyDefinitions() {
++    auto rows=nlohmann::json::array();
++    for(const auto& d:m_definitions) {
++        if(d.HelpyTemporary)continue;
++        const auto key="@runeschema-npc:"+d.ModName+":"+d.Id;
++        const auto temporary=HelpyTemporaryReason(d);
++        std::string permanent;
++        try {(void)HelpyNpcDocument(d,"helpy_preflight");if(!d.Enabled)permanent="Source NPC is disabled.";}
++        catch(const std::exception& e){permanent=e.what();}
++        catch(...) {permanent="NPC placement preflight failed.";}
++        rows.push_back({{"Key",key},{"Name",d.DisplayName.empty()?d.Id:d.DisplayName},{"Class",d.BaseActorClassPath},
++            {"Type","NPC"},{"RuneSchemaManaged",true},{"Available",d.Enabled},{"Loaded",true},
++            {"Reason",d.Enabled?"":"Source NPC is disabled"},{"TemporaryAllowed",temporary.empty()},
++            {"TemporaryReason",temporary},{"PermanentAllowed",permanent.empty()},{"PermanentReason",permanent}});
++    }
++    return rows;
++}
++AActor* DragonWildsNpcLoader::FindHelpyNpc(UWorld* world,const VendorDefinition& definition) const {
++    if(!world||!definition.HelpyTemporary||!definition.Enabled)return nullptr;
++    const auto key=definition.ModName+":"+definition.Id;
++    AActor* found=nullptr;
++    for(const auto& lease:m_helpyNpcs)if(lease.Key==key) {
++        if(lease.Lifetime.Due(HelpyNpcClock())||lease.World.Get()!=world)return nullptr;
++        auto* object=lease.Actor.Get();
++        if(!object||object->GetWorld()!=world||!IsNpcObjectUsable(object))return nullptr;
++        if(!definition.BaseActorClass||!object->IsA(definition.BaseActorClass))
++            throw std::runtime_error("Helpy NPC lease changed its native class.");
++        auto* actor=static_cast<AActor*>(object);
++        HelpyNpcGuards::VerifyExcluded(actor);
++        if(found)throw std::runtime_error("Ambiguous Helpy NPC lease; refusing interaction.");
++        found=actor;
++    }
++    return found;
++}
++void DragonWildsNpcLoader::RetireHelpyNpc(HelpyNpcLease& lease) {
++    lease.Lifetime.Retire();
++    for(auto& d:m_definitions)if(d.HelpyTemporary&&d.ModName+":"+d.Id==lease.Key)d.Enabled=false;
++    // Remove our acknowledgement route before destroying anything. Never toggle
++    // a UI blindly: the native actor/component EndPlay owns its widget teardown.
++    std::erase_if(m_merchantBindings,[&](const auto& b){return b.DefinitionKey==lease.Key;});
++    std::erase_if(m_dialogueSessions,[&](const auto& v){return v.second&&v.second->NpcKey==lease.Key;});
++    // Presentation/application records can outlive the actor's weak reference.
++    // Erase by the exact recorded owner path/key, never by dereferencing a stale token.
++    m_applied.erase(lease.AppliedKey);
++    if(!lease.ObjectPath.empty())std::erase_if(m_npcNames,[&](const auto& entry) {
++        return entry.first==lease.ObjectPath||entry.first.starts_with(lease.ObjectPath+TEXT("."))
++            ||entry.first.starts_with(lease.ObjectPath+TEXT(":"));
++    });
++    std::erase_if(m_spawnedVendors,[&](const auto& entry){return entry.Key==lease.Key;});
++    auto* object=lease.Actor.Get();if(!object)return;
++    auto* actor=static_cast<AActor*>(object);
++    QueueNpcCleanup(actor); // root/queue first so a failed native destroy is retryable
++    if(IsNpcObjectUsable(actor)) {
++        try {ActorHelper::FunctionCall(actor,TEXT("/Script/Engine.Actor:SetActorEnableCollision")).Arg(TEXT("bNewActorEnableCollision"),false).Invoke();}catch(...) {}
++        ActorHelper::DestroyActor(actor);
++    }
++}
++void DragonWildsNpcLoader::PumpHelpyNpcs() {
++    const auto now=HelpyNpcClock();
++    for(auto it=m_helpyNpcs.begin();it!=m_helpyNpcs.end();) {
++        try {
++            auto* actor=it->Actor.Get();
++            if(!actor||!IsNpcObjectUsable(actor)) {
++                RetireHelpyNpc(*it);
++                // The normal cleanup queue, not the timer, releases any acquired root.
++                it=m_helpyNpcs.erase(it);continue;
++            }
++            if(!it->World.Get()||it->World.Get()!=actor->GetWorld()||it->Lifetime.Due(now))RetireHelpyNpc(*it);
++        }catch(const std::exception& e){ErrorOnce("helpy-npc-cleanup:"+it->Key,PS::ToWideSafe(e.what()));}
++        catch(...) { /* keep ownership and retry on the next engine tick */ }
++        ++it;
++    }
++}
++std::size_t DragonWildsNpcLoader::DismissHelpyNpcs(UWorld* world) {
++    std::size_t requested=0;
++    for(auto& lease:m_helpyNpcs)if(!world||lease.World.Get()==world) {
++        ++requested;lease.Lifetime.Retire();
++        try {RetireHelpyNpc(lease);}catch(const std::exception& e){ErrorOnce("helpy-npc-dismiss:"+lease.Key,PS::ToWideSafe(e.what()));}
++        catch(...) { /* Retiring remains sticky; another NPC must still be dismissed. */ }
++    }
++    return requested;
++}
++nlohmann::json DragonWildsNpcLoader::SpawnHelpyNpc(const nlohmann::json& request,UWorld* world,AActor* player) {
++    using namespace PS::HelpyNodes;
++    if(m_helpySpawning)throw std::runtime_error("Another Helpy NPC operation is in progress.");
++    if(!world||!player||player->GetWorld()!=world||PS::Network::Detect(world).Mode!=PS::Network::Role::Standalone)
++        throw std::runtime_error("Helpy NPC authoring is single-player-only until temporary UI/network cleanup is verified.");
++    if(m_worldTeardownCallbackId==Hook::ERROR_ID)throw std::runtime_error("NPC travel cleanup hook is unavailable; no temporary or portable NPC is created.");
++    const auto thread=m_gameThreadId.load(std::memory_order_relaxed);
++    if(!thread||thread!=GetCurrentThreadId())throw std::runtime_error("NPC authoring must run on the game thread.");
++    const auto key=request.at("Definition").get<std::string>();const bool permanent=request.value("Permanent",false);
++    if(request.contains("DurationSeconds")&&(!request["DurationSeconds"].is_number_integer()
++        ||request["DurationSeconds"]<0||request["DurationSeconds"]>MaxDuration))
++        throw std::runtime_error("NPC duration must be a bounded whole number of seconds.");
++    const int seconds=request.value("DurationSeconds",0);ValidateDuration(permanent,seconds);
++    if(request.contains("Count")&&(!request["Count"].is_number_integer()||request["Count"]!=1))
++        throw std::runtime_error("NPC placement creates one actor per request.");
++    if(request.value("Count",1)!=1||request.value("Resource",false)||request.contains("PowerLevel")||request.contains("GhostMesh")
++        ||(request.contains("AdditionalDrops")&&!request["AdditionalDrops"].empty()))throw std::runtime_error("NPC placement cannot accept AI power, drops, effects or a batch count.");
++    const auto name=request.value("Name",std::string{});if(name.size()>256||name.find('\0')!=name.npos)throw std::runtime_error("NPC name is invalid.");
++    const double scale=request.value("Scale",1.0);if(!std::isfinite(scale)||scale<.1||scale>10)throw std::runtime_error("NPC scale must be 0.1..10.");
++    if(m_helpyNpcs.size()+m_pendingNpcCleanup.size()>=MaxTemporary)throw std::runtime_error("32 NPCs/cleanup records are outstanding; let cleanup finish first.");
++    if(m_helpyCreated>=128)throw std::runtime_error("128 Helpy NPC operations reached in this process; restart before another authoring cycle.");
++    const auto generation=m_worldGeneration;
++    struct Busy {bool& flag;Busy(bool& f):flag(f){flag=true;}~Busy(){flag=false;}} busy(m_helpySpawning);
++    std::optional<VendorDefinition> copy;
++    const auto stem=PS::Authoring::NewName();
++    if(key.starts_with("@runeschema-npc:")) {
++        const auto sourceKey=key.substr(16);
++        const auto found=std::find_if(m_definitions.begin(),m_definitions.end(),[&](const auto& d){return !d.HelpyTemporary&&d.ModName+":"+d.Id==sourceKey;});
++        if(found==m_definitions.end()||!found->Enabled)throw std::runtime_error("Source NPC is unavailable; refresh the catalogue.");
++        if(request.value("Class",std::string{})!=found->BaseActorClassPath)throw std::runtime_error("NPC class changed; select it again.");
++        if(!permanent) {const auto why=HelpyTemporaryReason(*found);if(!why.empty())throw std::runtime_error(why);}
++        copy=*found;
++        // Share the source store's ownership; expiry never deletes its shared rows.
++        if(copy->StoreOwner.empty())copy->StoreOwner=VendorOffers::Owner(found->ModName,found->Id);
++    }else {
++        // Native storyline objects are browsable, not silently converted into
++        // RuneSchema neutral proxies with guessed interaction contracts.
++        throw std::runtime_error("Select a RuneSchema NPC definition for portable NPC creation. Vanilla NPCs remain browsable in this cycle.");
++    }
++    auto& d=*copy;
++    auto document=permanent?HelpyNpcDocument(d,stem):nlohmann::json{};
++    d.Id=stem;d.ModName="runeschema";d.HelpyTemporary=!permanent;
++    d.Time=TimeOfDay::Requirement::Any;if(!permanent)d.Multiplayer=false;d.SpawnGate.ResetForMap();
++    if(!name.empty())d.DisplayName=name;
++    for(auto& value:d.SpawnScale)value=scale;
++    if(std::any_of(m_definitions.begin(),m_definitions.end(),[&](const auto& e){return e.ModName==d.ModName&&e.Id==d.Id;}))
++        throw std::runtime_error("Generated NPC identity already exists; no actor was created.");
++    const auto origin=ActorHelper::GetActorLocation(player);
++    if(!std::isfinite(origin.X())||!std::isfinite(origin.Y())||!std::isfinite(origin.Z()))
++        throw std::runtime_error("Player location is not finite; no NPC created.");
++    FVector ground{};std::string error;
++    if(!UECustom::UKismetSystemLibrary::LineTraceGround(world,FVector(origin.X()+500,origin.Y(),origin.Z()+500),
++        FVector(origin.X()+500,origin.Y(),origin.Z()-1500),{player},ground,error))
++        throw std::runtime_error("No ground five metres beside the player; nothing spawned. "+error);
++    if(!std::isfinite(ground.X())||!std::isfinite(ground.Y())||!std::isfinite(ground.Z()))
++        throw std::runtime_error("NPC ground trace returned invalid coordinates.");
++    d.TargetLocation[0]=ground.X();d.TargetLocation[1]=ground.Y();d.TargetLocation[2]=ground.Z()+100;
++    d.GroundToSurface=false;d.GroundOffset=0;d.HasTargetLocation=true;d.SpawnRotation[0]=0;d.SpawnRotation[1]=0;d.SpawnRotation[2]=0;
++    d.PersistentId=VendorIdentity::ForOwner(VendorOffers::Owner(d.ModName,d.Id));
++    if(!ResolveDefinitionClasses(d))throw std::runtime_error("NPC native class/component contracts are not ready.");
++    if(!permanent)HelpyNpcGuards::TemporaryClass(d.BaseActorClass);
++    if(m_definitions.size()>=65536)throw std::runtime_error("NPC definition capacity reached.");
++    m_definitions.reserve(m_definitions.size()+1);m_helpyNpcs.reserve(m_helpyNpcs.size()+1);m_spawnedVendors.reserve(m_spawnedVendors.size()+1);
++    const auto ownKey=d.ModName+":"+d.Id;
++    std::unique_ptr<PS::Authoring::StagedFile> file;
++    if(permanent) {
++        document["Location"]={{"X",d.TargetLocation[0]},{"Y",d.TargetLocation[1]},{"Z",d.TargetLocation[2]}};
++        document["Rotation"]={{"Pitch",0},{"Yaw",0},{"Roll",0}};document["Scale"]=scale;document["DisplayName"]=d.DisplayName;
++        NpcCatalog validate;validate.AddNpc(d.ModName,document);
++        d.HelpySource=document;
++        file=std::make_unique<PS::Authoring::StagedFile>("npc",stem,document);
++        if(generation!=m_worldGeneration)throw std::runtime_error("World changed before NPC publication; no placement saved.");
++        file->Commit();
++    }
++    // Definitions are installed before the actor can acknowledge an interaction.
++    // Use a local copy during reflected calls so world changes cannot invalidate it.
++    AActor* actor=nullptr;
++    try {
++        m_definitions.push_back(d);++m_helpyCreated;
++        if(d.Stage==VendorPolicy::VendorStage::Merchant&&d.InlineMerchant)CreateInlineMerchantRow(d);
++        actor=SpawnVisualVendor(world,d);
++        if(!actor)throw std::runtime_error("NPC creation returned no actor.");
++        if(!permanent) {
++            HelpyNpcGuards::VerifyExcluded(actor);
++            m_helpyNpcs.push_back({PS::WeakObject(actor),PS::WeakObject(world),ownKey,Lease::Start(HelpyNpcClock(),seconds),ActorKey(actor,d),actor->GetPathName()});
++            HelpyNpcLifespan(actor,seconds);
++        }
++        if(generation!=m_worldGeneration)throw std::runtime_error("World changed during NPC setup; new actor retired.");
++        m_spawnedVendors.push_back({ownKey,PS::WeakObject(actor)});
++        for(auto& entry:m_definitions)if(entry.ModName+":"+entry.Id==ownKey){entry.SpawnGate.Begin();break;}
++        nlohmann::json result={{"State","Completed"},{"Permanent",permanent},{"Activated",1},{"Requested",1},{"NpcId",ownKey},{"DurationSeconds",seconds}};
++        if(file)result["File"]=file->Path().string();
++        return result;
++    }catch(...) {
++        const auto failure=std::current_exception();
++        std::string error="Unknown native NPC setup failure";
++        try {std::rethrow_exception(failure);}catch(const std::exception& e){error=e.what();}catch(...) {}
++        // Disable every route before a native destroy, including a lease created
++        // just before SetLifeSpan failed. Never leave a failed actor interactive.
++        for(auto& entry:m_definitions)if(entry.ModName+":"+entry.Id==ownKey){entry.Enabled=false;break;}
++        std::erase_if(m_merchantBindings,[&](const auto& binding){return binding.DefinitionKey==ownKey;});
++        for(auto& lease:m_helpyNpcs)if(lease.Key==ownKey)lease.Lifetime.Retire();
++        if(actor){try{QueueNpcCleanup(actor);ActorHelper::DestroyActor(actor);}catch(...) {}}
++        // A committed author file is retained for explicit repair/restart, not
++        // guessed rollback. In-memory failure cannot claim a successful spawn.
++        if(!file)std::rethrow_exception(failure);
++        return {{"State","SavedActivationIncomplete"},{"Permanent",true},{"Activated",0},{"Requested",1},{"File",file->Path().string()},
++            {"Error",error},{"NpcId",ownKey}};
++    }
++}
+--- a/raw/src/Loader/QuickMenuCatalog.inl
++++ b/raw/src/Loader/QuickMenuCatalog.inl
+@@ -34,10 +34,27 @@
+     }
+     return false;
+ }
+-nlohmann::json ToolDefinitionRow(UClass* type,const std::string& key,bool ai) {
++nlohmann::json ToolDefinitionRow(UClass* type,const std::string& key,bool ai,const std::string& kind={}) {
+     const auto path=RC::to_string(type->GetPathName());const bool concrete=!ActorHelper::IsAbstract(type);
+-    nlohmann::json row={{"Key",key},{"Name",ToolReadableName(path)},{"Class",path},{"Type",ai?"AI":"Resource"},
++    nlohmann::json row={{"Key",key},{"Name",ToolReadableName(path)},{"Class",path},{"Type",kind.empty()?(ai?"AI":"Resource"):kind},
+         {"Available",concrete},{"Loaded",true},{"Reason",concrete?"":"Abstract base definition; not spawnable"}};
++    row["Packaged"]=PS::CookedAssets::VerifiedLoadedObject(type);
++    const auto declared=PS::AssetMetadata::Lookup(type);
++    row["RuneSchemaManaged"]=PS::AssetMetadata::IsManaged(type);row["DeclaredModded"]=declared.modded.value_or(false);row["DeclaredCooked"]=declared.cooked.value_or(false);
++    if(kind=="NPC") {
++        row["TemporaryAllowed"]=false;row["PermanentAllowed"]=false;
++        row["TemporaryReason"]="Vanilla NPC definition: browse-only. Use an authored RuneSchema NPC for timed portable spawning.";
++        row["PermanentReason"]="Vanilla narrative NPC copying is not enabled; its native quest/store lifecycle must not be guessed.";
++    }else if(!ai) {
++        std::string family;
++        std::size_t depth=0;
++        for(UStruct* base=type;base&&depth++<64;base=base->GetSuperStruct()) {
++            const auto name=PS::QuickUI::Lower(RC::to_string(base->GetName()));
++            if(name.find("fellabletree")!=name.npos||name.find("felledtree")!=name.npos||name.find("splittablelog")!=name.npos||name.find("sapling")!=name.npos){family="Tree";break;}
++            if(PS::QuickCatalogRules::MiningName(name))family="Mineral";
++        }
++        row["ResourceFamily"]=family;
++    }
+     // Presentation only: no writes and no fabricated default level.
+     if(auto* defaults=type->GetClassDefaultObject().Get();defaults&&!defaults->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed|RF_NeedLoad|RF_NeedPostLoad))) {
+         if(auto* power=CastField<FNumericProperty>(PropertyHelper::GetPropertyByName(type,TEXT("PowerLevel")));power&&power->GetArrayDim()==1) {
+@@ -55,19 +72,27 @@
+     auto* classType=ActorHelper::ResolveClass(TEXT("/Script/CoreUObject.Class"));
+     auto* actorType=ActorHelper::ResolveClass(TEXT("/Script/Engine.Actor"));
+     auto* aiType=ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionAICharacter"));
++    auto* npcType=ActorHelper::ResolveClass(TEXT("/Script/Dominion.InteractableNPC"));
+     if(!classType||!actorType||!aiType)throw std::runtime_error("The runtime actor classes are not ready");
+     TArray<UObject*> objects;UECustom::UObjectGlobals::GetObjectsOfClass(classType,objects,true);
+     if(objects.Num()<0||objects.Num()>65536)throw std::runtime_error("The loaded class roster exceeds the safe catalog limit; coverage is incomplete");
+     auto rows=nlohmann::json::array();std::set<std::string> seen;
+     for(auto row:authored) {
+         const auto path=row.value("Class",std::string{}),kind=row.value("Type",std::string{});
+-        if(path.empty()||(kind!="AI"&&kind!="Resource"))continue;
++        if(path.empty()||(kind!="AI"&&kind!="Resource"&&kind!="NPC"))continue;
++        if(kind=="NPC") {
++            // Only the live NPC facade supplies authoring permissions, never the disk index.
++            rows.push_back(row);continue;
++        }
+         // Broken definitions remain visible without gaining spawn permission.
+         row["Available"]=false;row["Reason"]="Authored class could not be resolved; correct the definition or re-scan";
+         try {
+             auto* type=ActorHelper::ResolveClass(RC::to_generic_string(path));
+             if(type&&((kind=="AI"&&type->IsChildOf(aiType))||(kind=="Resource"&&ToolResourceClass(type,actorType,aiType)))) {
+                 row["Available"]=!ActorHelper::IsAbstract(type);
++                row["Packaged"]=PS::CookedAssets::VerifiedLoadedObject(type);
++                const auto snapshot=ToolDefinitionRow(type,row.value("Key",std::string{}),kind=="AI");
++                if(snapshot.contains("ResourceFamily"))row["ResourceFamily"]=snapshot["ResourceFamily"];
+                 row["Reason"]=ActorHelper::IsAbstract(type)?"Abstract base definition; not spawnable":"";
+             }
+         }catch(...) {}
+@@ -76,10 +101,10 @@
+     for(auto* object:objects) {
+         if(!object||object->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed|RF_NeedLoad|RF_NeedPostLoad)))continue;
+         auto* type=static_cast<UClass*>(object);
+-        const bool ai=type->IsChildOf(aiType);if(!ai&&!ToolResourceClass(type,actorType,aiType))continue;
+-        const auto path=RC::to_string(type->GetPathName()),kind=std::string(ai?"AI":"Resource");
++        const bool npc=npcType&&type->IsChildOf(npcType),ai=!npc&&type->IsChildOf(aiType);if(!npc&&!ai&&!ToolResourceClass(type,actorType,aiType))continue;
++        const auto path=RC::to_string(type->GetPathName()),kind=std::string(npc?"NPC":ai?"AI":"Resource");
+         if(!path.starts_with('/')||!seen.insert(kind+path).second)continue;
+-        rows.push_back(ToolDefinitionRow(type,std::string(ai?"@loaded-ai:":"@loaded-resource:")+path,ai));
++        rows.push_back(ToolDefinitionRow(type,std::string(npc?"@loaded-npc:":ai?"@loaded-ai:":"@loaded-resource:")+path,ai,npc?"NPC":""));
+     }
+     std::sort(rows.begin(),rows.end(),[](const auto& a,const auto& b){return a.value("Name",std::string{})<b.value("Name",std::string{});});
+     return rows;
+@@ -171,9 +196,9 @@
+             if(entry.kind==Kind::Item) {
+                 if(!itemRows.contains(entry.path))itemRows[entry.path]={{"Path",entry.path},{"Name",name},{"Available",false},
+                     {"Reason","Cached path; not yet validated in this world"},{"Cooked",false}};
+-            }else if(entry.kind==Kind::Enemy||entry.kind==Kind::Resource) {
+-                const bool ai=entry.kind==Kind::Enemy;const auto key=std::string(ai?"@loaded-ai:":"@loaded-resource:")+entry.path;
+-                if(!described.contains(key))described[key]={{"Key",key},{"Name",name},{"Class",entry.path},{"Type",ai?"AI":"Resource"},
++            }else if(entry.kind==Kind::Enemy||entry.kind==Kind::Resource||entry.kind==Kind::Npc) {
++                const bool npc=entry.kind==Kind::Npc,ai=entry.kind==Kind::Enemy;const auto key=std::string(npc?"@loaded-npc:":ai?"@loaded-ai:":"@loaded-resource:")+entry.path;
++                if(!described.contains(key))described[key]={{"Key",key},{"Name",name},{"Class",entry.path},{"Type",npc?"NPC":ai?"AI":"Resource"},
+                     {"Available",false},{"Loaded",false},{"Reason","Cached path; not yet validated in this world"}};
+             }
+         }
+@@ -223,17 +248,17 @@
+         auto* actorType=ActorHelper::ResolveClass(TEXT("/Script/Engine.Actor"));
+         auto* aiType=ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionAICharacter"));
+         if(!type||!actorType||!aiType)throw std::runtime_error("Native actor classes unavailable");
+-        const bool ai=type->IsChildOf(aiType);
+-        if(!ai&&!ToolResourceClass(type,actorType,aiType)) {
++        const bool npc=HelpyNpcGuards::IsNpc(type),ai=!npc&&type->IsChildOf(aiType);
++        if(!npc&&!ai&&!ToolResourceClass(type,actorType,aiType)) {
+             ++unclassified;const auto path=RC::to_string(type->GetPathName());
+-            described.erase("@loaded-ai:"+path);described.erase("@loaded-resource:"+path);
++            described.erase("@loaded-ai:"+path);described.erase("@loaded-resource:"+path);described.erase("@loaded-npc:"+path);
+             return;
+         }
+         const auto path=RC::to_string(type->GetPathName());if(!PS::F2Catalog::ValidObjectPath(path))return;
+         // Remove any old cached *category*, never an authored definition with its own Key.
+-        described.erase(std::string(ai?"@loaded-resource:":"@loaded-ai:")+path);
+-        const auto key=std::string(ai?"@loaded-ai:":"@loaded-resource:")+path;
+-        auto row=ToolDefinitionRow(type,key,ai);row["Packaged"]=true;described[key]=std::move(row);
++        for(const auto* prefix:{"@loaded-ai:","@loaded-resource:","@loaded-npc:"})described.erase(std::string(prefix)+path);
++        const auto key=std::string(npc?"@loaded-npc:":ai?"@loaded-ai:":"@loaded-resource:")+path;
++        auto row=ToolDefinitionRow(type,key,ai,npc?"NPC":"");described[key]=std::move(row);
+     }
+     void Prioritize(const std::string& query) {
+         if(stopped||generation!=PS::SpawnToolRequests::Generation.load()||!world.Get()||query.size()>2048)return;
+@@ -245,11 +270,11 @@
+         if(!plan.Empty()&&!active){active=true;finished=false;stage="Loading search matches";}
+     }
+     nlohmann::json Snapshot(const std::string& message,bool includeLists=false) {
+-        std::size_t ai=0,resources=0;
+-        for(const auto& [key,row]:described){(void)key;if(row.value("Type",std::string{})=="AI")++ai;else ++resources;}
++        std::size_t ai=0,resources=0,npcs=0;
++        for(const auto& [key,row]:described){(void)key;if(row.value("Type",std::string{})=="AI")++ai;else if(row.value("Type",std::string{})=="NPC")++npcs;else ++resources;}
+         nlohmann::json result={{"CatalogReady",true},{"_CatalogIndexing",active},{"CatalogStatus",message},
+             {"RegistryRecords",registryRecords},{"UnresolvedAssets",failed},{"MetadataUnavailable",unknown},{"UnclassifiedRecords",unclassified},
+-            {"CatalogAI",ai},{"CatalogResources",resources},{"IndexStage",stage},{"IndexDone",plan.Done()},{"IndexTotal",plan.Total()},
++            {"CatalogAI",ai},{"CatalogNPCs",npcs},{"CatalogResources",resources},{"IndexStage",stage},{"IndexDone",plan.Done()},{"IndexTotal",plan.Total()},
+             {"IndexHasTotal",!waitingReference},{"IndexFinished",finished},{"IndexDetail",referenceStatus},
+             {"CatalogCoverage",registryReady?fullScan?"Mounted registry candidates; classification/load failures listed below":"Targeted mounted registry plus known/cached paths":"Exact-path reference/cache fallback; not a complete census of installed content"}};
+         if(includeLists) {
+@@ -274,7 +299,7 @@
+                 if(!PS::QuickCatalogRules::BlueprintCandidate(name,type))continue;
+                 const auto path=PS::QuickCatalogRules::GeneratedClassPath(package,name);
+                 const bool resource=PS::F2Catalog::UnderAny(package,sources.resources),enemy=PS::F2Catalog::UnderAny(package,sources.enemies);
+-                if(fullScan||resource||enemy)Add({path,name,resource?Kind::Resource:enemy?Kind::Enemy:Kind::ClassCandidate});
++                if(fullScan||resource||enemy)Add({path,name,resource?Kind::Resource:enemy?(PS::QuickUI::Lower(package).find("/gameplay/npcs/")!=std::string::npos?Kind::Npc:Kind::Enemy):Kind::ClassCandidate});
+             }catch(const std::exception& e){partial=true;++unclassified;Issue("Registry record",e.what());}
+         }
+         referenceStatus="Using mounted game registry; no online path request required.";
+@@ -285,11 +310,11 @@
+         active=true;stage="Preparing index";PS::SpawnToolRequests::CancelRequested.store(false);
+         LoadSettings();
+         for(const auto& value:PS::F2Catalog::BundledPaths()) {
+-            if(value.kind==Kind::Item||PS::F2Catalog::UnderAny(value.path,value.kind==Kind::Enemy?sources.enemies:sources.resources))Add(value);
++            if(value.kind==Kind::Item||PS::F2Catalog::UnderAny(value.path,(value.kind==Kind::Enemy||value.kind==Kind::Npc)?sources.enemies:sources.resources))Add(value);
+         }
+         const auto loaded=ToolLiveDefinitions(authored);Remember(loaded);RememberItems(PS::AssetSearch::ItemRoster());
+         for(const auto& row:loaded)if(row.value("Available",false)&&PS::F2Catalog::ValidObjectPath(row.value("Class",std::string{})))
+-            Add({row.value("Class",std::string{}),row.value("Name",std::string{}),row.value("Type",std::string{})=="AI"?Kind::Enemy:Kind::Resource});
++            Add({row.value("Class",std::string{}),row.value("Name",std::string{}),row.value("Type",std::string{})=="NPC"?Kind::Npc:row.value("Type",std::string{})=="AI"?Kind::Enemy:Kind::Resource});
+         for(const auto& [path,row]:itemRows)if(row.value("Available",false)&&!row.value("RuntimeClone",false))
+             Add({path,row.value("Name",std::string{}),Kind::Item});
+         try {ScanRegistry();}catch(const std::exception& e){partial=true;Issue("Mounted registry",e.what());}
+@@ -319,7 +344,7 @@
+         }
+         stage=waitingReference?"Discovering paths":"Caching known paths";
+         auto result=Snapshot(referenceStatus,true);result["Players"]=std::move(recipients);
+-        result["Status"]="Refresh started: indexing items, enemies and resources. No spawn or grant is performed.";
++        result["Status"]="Refresh started: indexing items, NPCs, AI and resources. No spawn or grant is performed.";
+         PS::SpawnToolRequests::CatalogProgress(result);PS::SpawnToolRequests::Publish(std::move(result));
+     }
+     void Stop(const std::string& reason) noexcept {
+@@ -354,7 +379,7 @@
+             const auto start=std::chrono::steady_clock::now();std::size_t attempted=0;
+             while(attempted++<4) {
+                 auto next=plan.Pop();if(!next)break;
+-                stage=std::string("Caching ")+(next->kind==Kind::Item?"items":next->kind==Kind::Resource?"resources":next->kind==Kind::Enemy?"enemies":"class candidates");
++                stage=std::string("Caching ")+(next->kind==Kind::Item?"items":next->kind==Kind::Resource?"resources":next->kind==Kind::Npc?"NPCs":next->kind==Kind::Enemy?"AI":"class candidates");
+                 try {
+                     if(next->kind==Kind::Item) {
+                         auto* object=ActorHelper::ResolveObject(RC::to_generic_string(next->path));
+@@ -373,7 +398,7 @@
+                     ++failed;Issue(next->path,e.what());
+                     if(auto found=itemRows.find(next->path);found!=itemRows.end()&&!found->second.value("Available",false))
+                         found->second["Reason"]=std::string(e.what()).substr(0,512);
+-                    for(const auto* prefix:{"@loaded-ai:","@loaded-resource:"})
++                    for(const auto* prefix:{"@loaded-ai:","@loaded-resource:","@loaded-npc:"})
+                         if(auto found=described.find(std::string(prefix)+next->path);found!=described.end()&&!found->second.value("Available",false))
+                             found->second["Reason"]=std::string(e.what()).substr(0,512);
+                 }
+--- a/raw/src/Loader/SpawnTools.inl
++++ b/raw/src/Loader/SpawnTools.inl
+@@ -199,9 +199,12 @@
+             result["Status"]=std::format("Refreshed {} currently available authoritative player(s).",players.size());
+             PS::SpawnToolRequests::Publish(std::move(result));return;
+         }
+-        for(const auto& [key,definition]:m_eventTemplates)if(!key.starts_with("__RuneSchemaTools:"))definitions.push_back({{"Key",key},{"Name",definition.Name},{"Class",definition.Class},{"Type","AI"}});
++        for(const auto& [key,definition]:m_eventTemplates)if(!key.starts_with("__RuneSchemaTools:"))definitions.push_back({{"Key",key},{"Name",definition.Name},{"Class",definition.Class},{"Type","AI"},{"RuneSchemaManaged",true}});
+         for(const auto& spawn:m_spawns)if(spawn.Type!=ESpawnEntryType::RemoveActor)
+-            definitions.push_back({{"Key",RC::to_string(spawn.ModName)+":"+RC::to_string(spawn.EntryId)},{"Name",spawn.DisplayName},{"Class",RC::to_string(spawn.Type==ESpawnEntryType::Actor?spawn.ClassPath:spawn.AIClassPath)},{"Type",spawn.Type==ESpawnEntryType::Actor?"Resource":"AI"}});
++            definitions.push_back({{"Key",RC::to_string(spawn.ModName)+":"+RC::to_string(spawn.EntryId)},{"Name",spawn.DisplayName},{"Class",RC::to_string(spawn.Type==ESpawnEntryType::Actor?spawn.ClassPath:spawn.AIClassPath)},{"Type",spawn.Type==ESpawnEntryType::Actor?"Resource":"AI"},{"RuneSchemaManaged",true}});
++        if(auto* npcs=DragonWildsNpcLoader::HelpyInstance) {
++            const auto roster=npcs->HelpyDefinitions();definitions.insert(definitions.end(),roster.begin(),roster.end());
++        }
+         const auto catalogDirectory=PS::HostServices::RuntimeDirectory()/"reference";
+         if(action=="QuickCatalog"||action=="IndexQuickCatalog"||action=="UpdateHelpyReference") {
+             if(g_quickCatalogIndex.active) {
+@@ -234,6 +237,9 @@
+             definitions=nlohmann::json::array();
+             definitions.insert(definitions.end(),ai.begin(),ai.end());
+             definitions.insert(definitions.end(),resources.begin(),resources.end());
++            if(std::filesystem::is_regular_file(catalogDirectory/"npc-catalog.json")) {
++                const auto npcs=ToolCatalog(catalogDirectory/"npc-catalog.json","NPC");definitions.insert(definitions.end(),npcs.begin(),npcs.end());
++            }
+             PS::SpawnToolRequests::Publish({{"Players",players},{"Definitions",definitions},{"Items",items},{"Buildings",buildings},{"CatalogReady",true},
+                 {"Status",std::format("Loaded saved catalogs: {} AI/resources, {} items and {} buildings. Building rows are inspection-only until rebuilt in this world.",definitions.size(),items.size(),buildings.size())}});return;
+         }
+@@ -259,6 +265,10 @@
+                 if(!type || ActorHelper::IsAbstract(type))continue;
+                 const auto path=RC::to_string(type->GetPathName());
+                 std::string kind;
++                if(HelpyNpcGuards::IsNpc(type)) {
++                    if(discovered.insert("NPC"+path).second)definitions.push_back(ToolDefinitionRow(type,"@loaded-npc:"+path,false,"NPC"));
++                    continue;
++                }
+                 if(type->IsChildOf(aiType))kind="AI";
+                 else if(type->IsChildOf(actorType)
+                     && PropertyHelper::GetPropertyByName(type,TEXT("SpudGuid"))
+@@ -329,8 +339,9 @@
+             });
+             fs::create_directories(catalogDirectory);
+             const auto stamp=std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+-            nlohmann::json ai=nlohmann::json::array(),resources=nlohmann::json::array();
+-            for(const auto& row:definitions)(row.value("Type",std::string{})=="AI"?ai:resources).push_back(row);
++            nlohmann::json ai=nlohmann::json::array(),resources=nlohmann::json::array(),npcs=nlohmann::json::array();
++            for(const auto& row:definitions){const auto kind=row.value("Type",std::string{});if(kind=="AI")ai.push_back(row);else if(kind=="NPC")npcs.push_back(row);else if(kind=="Resource")resources.push_back(row);}
++            PS::ConfigFiles::Write(catalogDirectory/"npc-catalog.json",nlohmann::json{{"SchemaVersion",1},{"Kind","NPC"},{"GeneratedUnixSeconds",stamp},{"Entries",npcs}}.dump(2));
+             PS::ConfigFiles::Write(catalogDirectory/"ai-catalog.json",nlohmann::json{{"SchemaVersion",1},{"Kind","AI"},{"GeneratedUnixSeconds",stamp},{"Entries",ai}}.dump(2));
+             PS::ConfigFiles::Write(catalogDirectory/"resource-catalog.json",nlohmann::json{{"SchemaVersion",1},{"Kind","Resource"},{"GeneratedUnixSeconds",stamp},{"Entries",resources}}.dump(2));
+             PS::ConfigFiles::Write(catalogDirectory/"item-catalog.json",nlohmann::json{{"SchemaVersion",1},{"Kind","Item"},{"GeneratedUnixSeconds",stamp},{"Entries",items}}.dump(2));
+@@ -344,6 +355,24 @@
+         if(!selected)throw std::runtime_error("Selected authoritative player is unavailable; refresh");
+         auto* world=selected->GetWorld();
+         if(!world||!GetGameMode(world))throw std::runtime_error("Only the authoritative server may run spawn tools");
++        if(action=="DismissHelpyNpcs"||(action=="Spawn"&&request->value("NPC",false))) {
++            auto* npcs=DragonWildsNpcLoader::HelpyInstance;
++            if(!npcs)throw std::runtime_error("Enable the NPC loader before using Helpy NPC authoring.");
++            auto result=PS::SpawnToolRequests::Read();result["Players"]=players;
++            if(action=="DismissHelpyNpcs") {
++                const auto count=npcs->DismissHelpyNpcs(world);
++                result["Status"]="Requested cleanup of "+std::to_string(count)+" Helpy temporary NPCs. Failed native destruction remains queued; permanent/source actors are untouched.";
++            }else {
++                auto* pawn=static_cast<AActor*>(ActorHelper::GetObjectRef(selected,TEXT("Pawn")));
++                auto spawned=npcs->SpawnHelpyNpc(*request,world,pawn);
++                const bool ok=spawned.value("State",std::string{})=="Completed";
++                result["Status"]=spawned.value("Permanent",false)?
++                    "NPC definition saved: "+spawned.value("File",std::string{})+(ok?"; placement activated.":"; native activation incomplete. "+spawned.value("Error",std::string{})):
++                    "Temporary NPC created for "+std::to_string(spawned.value("DurationSeconds",0))+" seconds. Only its owned actor is retired; source store rows are retained.";
++                result["SpawnResult"]=std::move(spawned);
++            }
++            PS::SpawnToolRequests::Publish(std::move(result));return;
++        }
+         if(action=="InspectClone" || action=="CreateClone") {
+             auto* loader=DragonWildsAssetModLoader::AuthoringInstance;
+             if(!loader)throw std::runtime_error("The assets loader must be enabled before using Clone Creator");

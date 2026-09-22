@@ -34,5 +34,11 @@ int main() {
     bool contextual=false;
     try{ParseJsonFilesInPath(folder,[](const auto&){});}catch(const std::exception& error){contextual=std::string(error.what()).find("broken.json")!=std::string::npos;}
     check(contextual);
+    std::vector<int> isolated;std::vector<std::string> failures;
+    ParseJsonFilesInPathIsolated(folder,
+        [&](const auto& document){isolated.push_back(document.at("order").template get<int>());},
+        [&](const auto& path,const auto& error){failures.push_back(path.filename().string()+":"+error);});
+    check(isolated==std::vector<int>({1,2}) && failures.size()==1
+        && failures[0].find("broken.json")!=std::string::npos);
     std::cout<<"JSON document contracts passed\n";
 }

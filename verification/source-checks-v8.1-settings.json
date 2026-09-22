@@ -1,0 +1,106 @@
+[
+  {
+    "check": "indexer no longer uses RuntimeDirectory",
+    "passed": true
+  },
+  {
+    "check": "editable sources stay in owner settings",
+    "passed": true
+  },
+  {
+    "check": "user-owned indexes remain in owner settings",
+    "passed": true
+  },
+  {
+    "check": "generated local cache read uses settings",
+    "passed": true
+  },
+  {
+    "check": "local cache read migrates if needed",
+    "passed": true
+  },
+  {
+    "check": "reference cache read migrates if needed",
+    "passed": true
+  },
+  {
+    "check": "local cache writes to owner settings",
+    "passed": true
+  },
+  {
+    "check": "reference cache writes to owner settings",
+    "passed": true
+  },
+  {
+    "check": "reference read diagnostics use owner settings",
+    "passed": true
+  },
+  {
+    "check": "legacy root read does not create old runtime folder",
+    "passed": true
+  },
+  {
+    "check": "current path never depends on selected mod",
+    "passed": true
+  },
+  {
+    "check": "reference write protected after read failure",
+    "passed": true
+  },
+  {
+    "check": "migration success reports actual target path",
+    "passed": true
+  },
+  {
+    "check": "migration parses staged and current data with production codec",
+    "passed": true
+  },
+  {
+    "check": "bad cache records reject migration",
+    "passed": true
+  },
+  {
+    "check": "existing settings copy wins",
+    "passed": true
+  },
+  {
+    "check": "migration always uses create-only publish",
+    "passed": true
+  },
+  {
+    "check": "migration byte readback preserved",
+    "passed": true
+  },
+  {
+    "check": "migration never deletes legacy",
+    "passed": true
+  },
+  {
+    "check": "migration does not read content mod directories",
+    "passed": true
+  },
+  {
+    "check": "default preference write mode unchanged",
+    "passed": true
+  },
+  {
+    "check": "Windows create-only publication omits replace flag",
+    "passed": true
+  },
+  {
+    "check": "POSIX create-only publication uses exclusive link",
+    "passed": true
+  },
+  {
+    "check": "favorites stay in global settings",
+    "passed": true
+  },
+  {
+    "check": "authored mod output unchanged",
+    "passed": true
+  },
+  {
+    "check": "no BAT included",
+    "passed": true
+  }
+]

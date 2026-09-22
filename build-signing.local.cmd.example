@@ -1,0 +1,13 @@
+@echo off
+REM Copy this file to build-signing.local.cmd. Never commit the local copy.
+REM Signing is optional. Unsigned builds are published with an explicit warning.
+
+REM RFC3161 timestamping preserves signature validity after certificate expiry.
+set "RUNESCHEMA_SIGN_TIMESTAMP=https://timestamp.digicert.com"
+
+REM Method A: certificate installed with a private key in CurrentUser\My.
+REM set "RUNESCHEMA_SIGN_CERT_SHA1=PASTE_CERTIFICATE_THUMBPRINT_WITHOUT_SPACES"
+REM set "RUNESCHEMA_SIGN_STORE=CurrentUser"
+
+REM Method B: PFX file. SignTool prompts for the password securely.
+REM set "RUNESCHEMA_SIGN_PFX=C:\secure\RuneSchema-CodeSigning.pfx"

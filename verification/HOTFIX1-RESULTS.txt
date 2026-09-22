@@ -1,0 +1,67 @@
+R3v6 HOTFIX 1 / VERIFICATION
+============================
+
+SOURCE CHANGES
+- QuickMenuCatalog.inl: explicitly unwrap GetClassDefaultObject() via Get().
+- InGameQuickMenu.cpp: remove the FNumericProperty forwarding include and use
+  the existing UnrealType.hpp include in its recommended angle-bracket form.
+- 18 remaining source files under raw are byte-for-byte identical to v6.
+- No BAT, dependency pin, build configuration, schema audit, or GUI behaviour
+  changes were made as part of Hotfix 1.
+
+FOCUSED C++ COMPILER REGRESSION
+This extracts the actual default-object if statement from QuickMenuCatalog.inl
+and compiles it with small test-only UObject, UClass and TObjectPtr stand-ins.
+The original expression (without .Get()) is compiled as a negative control and
+must fail. The new expression must compile, have raw-pointer type, preserve
+object identity, retrieve the default once, avoid null/lifecycle-invalid values,
+and leave the mock object's fields unchanged.
+
+This is NOT a UE4SS-header/native-ABI/MSVC test and is NOT a game test.
+
+Commands (run from the package root):
+  python verification/check_default_object_pointer.py --compiler g++
+  python verification/check_default_object_pointer.py --compiler clang++ --sanitize
+
+GCC 14.2 output:
+PASS: original auto* = TObjectPtr expression rejected (negative control).
+PASS: 7 guard cases; raw pointer type, identity, null, lifecycle flags, single retrieval and unchanged metadata.
+PASS: obsolete numeric-property include removed; UnrealType include retained.
+Scope: C++ stand-ins, not real UE4SS/MSVC or in-game validation.
+
+Clang 17 with AddressSanitizer + UndefinedBehaviorSanitizer output:
+PASS: original auto* = TObjectPtr expression rejected (negative control).
+PASS: 7 guard cases; raw pointer type, identity, null, lifecycle flags, single retrieval and unchanged metadata.
+PASS: obsolete numeric-property include removed; UnrealType include retained.
+Scope: C++ stand-ins, not real UE4SS/MSVC or in-game validation.
+
+EXISTING F2 MODEL / ID REGRESSION
+Compiled verification/F2ModelTests.cpp with each compiler using:
+  -std=c++23 -Wall -Wextra -Wpedantic -Werror -Iraw/include
+The Clang build also used:
+  -fsanitize=address,undefined -fno-omit-frame-pointer
+Each executable ran in a separate temporary output directory; the accompanying
+verification/check_identifiers.py then checked the generated ids.txt there.
+No compiled test executables, rendered dumps or generated ids are in this ZIP.
+
+GCC 14.2 output:
+PASS: 23555 assertions; generated 10000 identifiers; all UI modal bounds checked.
+PASS: 10,000 unique, canonical 22-character identifiers round-tripped to 128 bits.
+
+Clang 17 sanitizer output:
+PASS: 23555 assertions; generated 10000 identifiers; all UI modal bounds checked.
+PASS: 10,000 unique, canonical 22-character identifiers round-tripped to 128 bits.
+
+PACKAGING
+The packaging script verifies the original archive's checksums and CRCs,
+requires exactly the two source changes listed above, regenerates the manifest,
+verifies every new archive entry, checks that no BAT is included, and performs
+a temporary direct-merge simulation preserving unrelated source files and a
+sentinel Build RuneSchema.bat. The SHA256-v6-F2.txt file covers every other entry.
+
+LIMITATIONS
+The full Windows DLL has NOT been built or linked here. Native UE4SS class,
+property and asset interactions and all in-game/save behaviour remain untested.
+Portable tests do not prove that every AI/resource definition is discoverable.
+This fix addresses the reported compile errors, not a certification that no
+further compiler errors exist in source files not covered by this overlay.

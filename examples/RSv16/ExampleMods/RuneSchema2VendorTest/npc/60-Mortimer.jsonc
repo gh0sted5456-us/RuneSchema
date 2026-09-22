@@ -1,0 +1,52 @@
+{
+  "Id": "mortimer_debt_collector",
+  "Multiplayer": true,
+  "Type": "Human",
+  "DisplayName": "Mortimer, Undertaker of Unfinished Business",
+  "DialogueID": "mortimer_collection",
+  "QuestID": "mortimer_debtors",
+  "Location": [ 41977, 172604, "$-50" ],
+  "Rotation": {"Pitch": 0, "Yaw": 117.4, "Roll": 0},
+  "Scale": 2,
+  "EnableCollision": true,
+  "VisualEffect": {
+    "Type": "Ghost Glow",
+    "Overlay": true,
+    "BodyMaterial": true,
+    "MainColor": {
+      "R": 0.45,
+      "G": 0.15,
+      "B": 0.95,
+      "A": 1.0
+    },
+    "SecondaryColor": {
+      "R": 0.08,
+      "G": 0.55,
+      "B": 0.85,
+      "A": 1.0
+    }
+  },
+  "Pose": {
+    "Preset": "Relaxed",
+    "WeaponVisibility": "Auto"
+  },
+  "Appearance": {
+    "BodyType": "male_A_01",
+    "Head": "male_C_01",
+    "HairPreset": "Preset15",
+    "FacialHairPreset": "M_C_Preset3",
+    "SkinTone": "SkinTone8",
+    "HairColor": "Color1",
+    "EyeColor": "Color6",
+    "EyebrowColor": "Color1"
+  },
+  "Equipment": {
+    "Body": "/DowdunReach/Gameplay/Character/Player/Equipment/Body/ITEM_Armour_T6_Body_Black.ITEM_Armour_T6_Body_Black",
+    "Legs": "/DowdunReach/Gameplay/Character/Player/Equipment/Legs/ITEM_Armour_T6_Legs_Black.ITEM_Armour_T6_Legs_Black"
+  },
+  "Map": {
+    "Enabled": true,
+    "ShowName": true
+  },
+  "OverheadIcon": { "Enabled": true }
+}

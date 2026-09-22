@@ -1,4 +1,5 @@
 #pragma once
+#include "SDK/WeakObjectHandle.h"
 
 #include "Loader/DragonWildsModLoaderBase.h"
 #include "Loader/Blueprint/DragonWildsBlueprintMod.h"
@@ -11,6 +12,7 @@
 #include <atomic>
 #include <unordered_map>
 #include <vector>
+#include <cstdint>
 
 namespace UECustom {
     class UBlueprintGeneratedClass;
@@ -26,6 +28,12 @@ namespace DragonWilds {
         // Share the PostInitializeComponents detour with spawn modifiers.
         static void SetActorInitializedObserver(
             std::function<void(RC::Unreal::AActor*)> observer);
+
+        // Additional runtime systems can observe actor initialization without
+        // replacing the spawn loader's existing observer.
+        static uint64_t RegisterActorInitializedObserver(
+            std::function<void(RC::Unreal::AActor*)> observer);
+        static void UnregisterActorInitializedObserver(uint64_t observerId);
     protected:
         virtual void OnLoad(const std::filesystem::path& loaderPath, const RC::StringType& modName, const EEngineLifecyclePhase& engineLifecyclePhase) override final;
         virtual void OnAutoReload(const std::filesystem::path::string_type& modName, const std::filesystem::path& modFilePath) override final;
@@ -38,16 +46,18 @@ namespace DragonWilds {
         std::vector<DragonWildsBlueprintMod> m_blueprintPatches;
         std::vector<nlohmann::json> m_pendingBlueprintPatches;
         std::vector<nlohmann::json> m_pathBlueprintPatches;
-        std::vector<RC::Unreal::UObject*> m_ghostRoots;
+        std::vector<PS::WeakObjectHandle> m_ghostRoots;
         std::unordered_map<std::string, GhostMaterials::Set> m_ghostMaterials;
+        RC::Unreal::Hook::GlobalCallbackId m_worldTeardownCallbackId = RC::Unreal::Hook::ERROR_ID;
         void ApplyBlueprintVisualEffect(RC::Unreal::AActor* actor);
+        void ClearWorldVisualEffects();
         void ApplyDeferredPatches(RC::Unreal::UObject* object);
 
         bool HookPostLoad();
         bool HookPostInitComponents();
         void ResetHooks();
 
-        void LoadSafe(const nlohmann::json& data);
+        void LoadSafe(const nlohmann::json& data, const RC::StringType& modName);
 
         void LoadUnsafe(const nlohmann::json& data);
 
@@ -73,6 +83,8 @@ namespace DragonWilds {
         static inline SafetyHookInline PostInitComponentsHook;
         static inline std::function<void(RC::Unreal::AActor*)> PostInitComponentsCallback = nullptr;
         static inline std::function<void(RC::Unreal::AActor*)> ActorInitializedObserver = nullptr;
+        static inline uint64_t NextActorObserverId = 1;
+        static inline std::unordered_map<uint64_t, std::function<void(RC::Unreal::AActor*)>> ActorInitializedObservers;
         static void PostInitComponents(RC::Unreal::AActor* self);
     };
 }

@@ -1,4 +1,22 @@
+#include "Generator/HelpyReferencePolicy.h"
+#include "Generator/F2CatalogPlan.h"
+#include "Generator/F2BundledPaths.h"
+#include "Generator/ItemCatalogMetadata.h"
+#include "Runtime/F2CatalogStore.h"
+#include "Runtime/F2ReferenceIndex.h"
+#include "Runtime/AuthoredFile.h"
+#include "SDK/Helper/CookedAssetLookup.h"
+#include "Loader/DragonWildsAssetModLoader.h"
+#include "Loader/DragonWildsNpcLoader.h"
+#include "Loader/HelpyNpcGuards.h"
+#include "Loader/AssetMetadataRegistry.h"
+#include "Loader/AssetAuthoringMetadata.h"
+#include "Utility/NativeFunctionHook.h"
+#include "Runtime/NetworkContext.h"
+#include "Loader/PlayerActivityEvents.h"
+#include "Loader/NiagaraAttachment.h"
 #include "Loader/Spawn/RuntimeSupport.h"
+#include "SDK/WeakObjectHandle.h"
 using namespace DragonWilds::SpawnRuntime;
 #include <algorithm>
 #include <array>
@@ -10,8 +28,10 @@ using namespace DragonWilds::SpawnRuntime;
 #include <cctype>
 #include <format>
 #include <fstream>
+#include <functional>
 #include <sstream>
 #include <vector>
+#include <thread>
 #include "Unreal/AActor.hpp"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
@@ -24,6 +44,9 @@ using namespace DragonWilds::SpawnRuntime;
 #include "Unreal/UFunctionStructs.hpp"
 #include "Unreal/UObject.hpp"
 #include "Unreal/World.hpp"
+#include "Unreal/UAssetRegistry.hpp"
+#include "Unreal/UAssetRegistryHelpers.hpp"
+#include "Unreal/FAssetData.hpp"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Classes/Custom/UWorldPartitionRuntimeLevelStreamingCell.h"
 #include "SDK/Classes/KismetSystemLibrary.h"
@@ -36,7 +59,21 @@ using namespace DragonWilds::SpawnRuntime;
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
 #include "Loader/DragonWildsSpawnLoader.h"
+#include "Loader/EventIdentity.h"
 #include "Loader/PlayerGhost.h"
+#include "Generator/EventParameters.h"
+#include "Generator/ToolRequest.h"
+#include "Generator/QuickMenuUI.h"
+#include "Generator/QuickMenuCatalogRules.h"
+#include "Generator/SpawnAuthoring.h"
+#include "Generator/AssetSearch.h"
+#include "Generator/ItemIconThumbnail.h"
+#include "Loader/SpawnAuthoringFields.h"
+#include "Loader/SpawnPlacementDraft.h"
+#include "Loader/TimeOfDayRuntime.h"
+#include "Core/ConfigFiles.h"
+#include "SDK/Structs/Custom/FManagedStruct.h"
+#include <Windows.h>
 #include "Loader/DragonWildsBlueprintModLoader.h"
 #include "Loader/PlayerAttributeNames.h"
 #include "Core/JsonPatchDirective.h"
@@ -259,6 +296,10 @@ namespace {
 }
 
 namespace DragonWilds {
+#include "SpawnItemIcons.inl"
+#include "SpawnTools.inl"
+#include "SpawnAdditionalDrops.inl"
+
     DragonWildsSpawnLoader::DragonWildsSpawnLoader() : DragonWildsModLoaderBase("spawns")
     {
         SetDisplayName(TEXT("Spawn Loader"));
@@ -266,6 +307,8 @@ namespace DragonWilds {
 
     DragonWildsSpawnLoader::~DragonWildsSpawnLoader()
     {
+        g_f2ReferenceJob.Shutdown(); // join copied-string worker before unloading this DLL
+        ClearBonusRows();
         if (m_onLevelShownFunction && m_onLevelShownCallbackId != 0)
         {
             m_onLevelShownFunction->UnregisterHook(m_onLevelShownCallbackId);
@@ -287,17 +330,43 @@ namespace DragonWilds {
         {
             m_playerClientRestartFunction->UnregisterHook(m_playerClientRestartCallbackId);
         }
+        if (m_playerPossessionAckFunction && m_playerPossessionAckCallbackId != 0)
+            m_playerPossessionAckFunction->UnregisterHook(m_playerPossessionAckCallbackId);
         if (m_playerPawnStateFunction && m_playerPawnStateCallbackId != 0)
         {
             m_playerPawnStateFunction->UnregisterHook(m_playerPawnStateCallbackId);
+        }
+        if (m_playerTagsChangedFunction && m_playerTagsChangedCallbackId != 0)
+        {
+            m_playerTagsChangedFunction->UnregisterHook(m_playerTagsChangedCallbackId);
+        }
+        if (m_playerDamageReceivedFunction && m_playerDamageReceivedCallbackId != 0)
+        {
+            m_playerDamageReceivedFunction->UnregisterHook(m_playerDamageReceivedCallbackId);
+        }
+        if (m_activityObserver != Hook::ERROR_ID) Hook::UnregisterCallback(m_activityObserver);
+        if (m_respawnObserver != Hook::ERROR_ID) Hook::UnregisterCallback(m_respawnObserver);
+        m_observedActivities.clear();
+        for (const auto& hook : m_playerActivityHooks)
+        {
+            if (hook.Function && hook.CallbackId != 0)
+                hook.Function->UnregisterHook(hook.CallbackId);
         }
         if (m_spawnTickCallbackId != Hook::ERROR_ID)
         {
             Hook::UnregisterCallback(m_spawnTickCallbackId);
         }
+        if (m_worldTeardownCallbackId != Hook::ERROR_ID)
+        {
+            Hook::UnregisterCallback(m_worldTeardownCallbackId);
+        }
+        if (m_protectedBuildingDestroyGuard != Hook::ERROR_ID)
+        {
+            Hook::UnregisterCallback(m_protectedBuildingDestroyGuard);
+        }
         PlayerGhost::Clear();
-        for (auto* material : m_rootedVisualEffectMaterials)
-            if (material && material->IsRootSet()) material->ClearRootSet();
+        for (const auto& ref : m_rootedVisualEffectMaterials)
+            if (auto* material=ref.Get()) if (material->IsRootSet()) material->ClearRootSet();
     }
 
     void DragonWildsSpawnLoader::OnLoad(const fs::path& loaderPath, const RC::StringType& modName, const EEngineLifecyclePhase& engineLifecyclePhase)
@@ -373,6 +442,7 @@ namespace DragonWilds {
             }
         }
 
+        PatchConflicts patchConflicts;
         size_t patched = 0, patchErrors = 0;
         for (auto& patch : patches)
         {
@@ -389,6 +459,7 @@ namespace DragonWilds {
             }
             const auto stats = JsonPatchDirective::Apply(
                 definitions.at(found->second).Body, patch.Directive, true);
+            WarnPatchConflicts(patchConflicts, "spawns:" + reference, patch.Directive.Changes, RC::to_string(patch.Owner));
             ++patched;
             ++m_reportedAlteredSpawns;
             PS::Log<LogLevel::Verbose>( STR("{} patched spawn '{}' ({} fields overwritten).\n"),
@@ -436,6 +507,16 @@ namespace DragonWilds {
 
     void DragonWildsSpawnLoader::OnAutoReload(const RC::StringType& modName, const fs::path& modFilePath)
     {
+        {
+            std::scoped_lock lock{m_toolSpawnFileMutex};
+            if(m_toolSpawnFiles.contains(modFilePath.lexically_normal())) {
+                PS::Log<LogLevel::Warning>(STR("Authored spawn file already installed live; edits require restart: {}\n"),modFilePath.wstring());return;
+            }
+        }
+        const auto prefix=RC::to_string(modName)+":";
+        if(std::any_of(m_eventTemplates.begin(),m_eventTemplates.end(),[&](const auto& entry){return entry.first.starts_with(prefix);})) {
+            PS::Log<LogLevel::Warning>(TEXT("Event spawn template changes in {} require a restart.\n"),modName);return;
+        }
         const bool hasLiveSpawn = std::any_of(m_spawns.begin(), m_spawns.end(), [&](const SpawnInfo& spawn) {
             return spawn.ModName == modName && spawn.bExistsInWorld;
         });
@@ -474,7 +555,57 @@ namespace DragonWilds {
         SetupAIScaleHook();
         SetupAIBindingHooks();
         SetupPlayerJoinHooks();
-        return SetupWorldReadyHook() && SetupSpawnTick();
+        return SetupProtectedBuildingDestroyGuard()
+            && SetupWorldReadyHook() && SetupSpawnTick();
+    }
+
+    bool DragonWildsSpawnLoader::IsProtectedBuildingActor(AActor* actor) const
+    {
+        if (!actor || actor->HasAnyFlags(static_cast<EObjectFlags>(
+            RF_BeginDestroyed | RF_FinishDestroyed))) return false;
+        return std::any_of(m_spawns.begin(), m_spawns.end(),
+            [actor](const SpawnInfo& spawn)
+            {
+                if (!spawn.bBuildingProp || spawn.bAllowDeconstruction) return false;
+                if (spawn.LiveActor.Get() == actor) return true;
+                auto* guidProperty = PropertyHelper::GetPropertyByName(
+                    actor->GetClassPrivate(), TEXT("SpudGuid"));
+                if (!guidProperty || guidProperty->GetSize() != sizeof(FGuid))
+                    return false;
+                const auto actorId = ReadGuidProperty(actor, guidProperty);
+                return std::memcmp(&actorId, &spawn.StableId, sizeof(FGuid)) == 0;
+            });
+    }
+
+    bool DragonWildsSpawnLoader::SetupProtectedBuildingDestroyGuard()
+    {
+        if (m_protectedBuildingDestroyGuard != Hook::ERROR_ID) return true;
+        Hook::FCallbackOptions options{};
+        options.OwnerModName = TEXT("RuneSchema");
+        options.HookName = TEXT("ProtectedBuildingDestroyGuard");
+        const auto ownerThread = std::this_thread::get_id();
+        m_protectedBuildingDestroyGuard = Hook::RegisterProcessEventPreCallback(
+            [this, ownerThread](Hook::TCallbackIterationData<void>& iteration,
+                UObject* source, UFunction* function, void*)
+            {
+                if (std::this_thread::get_id() != ownerThread
+                    || m_allowManagedBuildingDestroy || !source || !function
+                    || function->GetFName() != FName(TEXT("K2_DestroyActor"), FNAME_Add)
+                    || !source->IsA<AActor>()) return;
+                auto* actor = static_cast<AActor*>(source);
+                if (!IsProtectedBuildingActor(actor)) return;
+                iteration.PreventOriginalFunctionCall();
+                PS::Log<LogLevel::Warning>(
+                    STR("Protected BuildingProp '{}' ignored a player deconstruction request.\n"),
+                    actor->GetName());
+            }, options);
+        if (m_protectedBuildingDestroyGuard == Hook::ERROR_ID)
+        {
+            PS::Log<LogLevel::Error>(
+                TEXT("Protected BuildingProp destruction guard could not be registered.\n"));
+            return false;
+        }
+        return true;
     }
 
     void DragonWildsSpawnLoader::LoadSpawns(const nlohmann::json& data, const RC::StringType& modName)
@@ -495,7 +626,7 @@ namespace DragonWilds {
         {
             try
             {
-                RegisterSpawn(value, modName);
+                for(const auto& point:SpawnFields::Expand(value))RegisterSpawn(point, modName);
             }
             catch (const std::exception& e)
             {
@@ -507,39 +638,75 @@ namespace DragonWilds {
 
     void DragonWildsSpawnLoader::RegisterSpawn(const nlohmann::json& value, const RC::StringType& modName)
     {
+        if(value.contains("EventOnly")) {
+            auto entry=Events::ParseSpawn(RC::to_string(modName),value);
+            if(m_eventTemplates.size()>=256 || !m_eventTemplates.emplace(entry.Key,std::move(entry)).second)
+                throw std::runtime_error("Duplicate event spawn ID or template limit exceeded");
+            ++m_reportedNewSpawns;return;
+        }
         PS::JsonHelpers::ValidateFieldExists(value, "Type");
         PS::JsonHelpers::ValidateFieldExists(value, "Location");
 
         SpawnInfo spawn{};
+        spawn.AuthoredDefinition=value;
+        if(value.contains("AdditionalDrops")) {
+            SpawnFields::Drops(value.at("AdditionalDrops"));
+            const auto additionalDropType=value.at("Type").get<std::string>();
+            if(additionalDropType!="AISpawnPoint" && additionalDropType!="Actor")
+                throw std::runtime_error("AdditionalDrops requires AISpawnPoint or Actor resource entries");
+            spawn.AdditionalDrops=value.at("AdditionalDrops");
+        }
+        spawn.EntryId=RC::to_generic_string(value.value("Id",value.value("$Id",std::string("entry_")+std::to_string(m_spawns.size()+1))));
         spawn.ModName = modName;
+        if(value.contains("QuestCompleted")) {
+            if(!value.at("QuestCompleted").is_string())throw std::runtime_error("QuestCompleted must be a quest ID");
+            auto quest=value.at("QuestCompleted").get<std::string>();
+            if(quest.empty() || quest.size()>512)throw std::runtime_error("QuestCompleted must contain a bounded quest ID");
+            spawn.QuestCompleted=quest.find(':')==std::string::npos?RC::to_string(modName)+":"+quest:quest;
+            if(value.contains("PersistAfterCondition")) {
+                if(!value.at("PersistAfterCondition").is_boolean())throw std::runtime_error("PersistAfterCondition must be boolean");
+                spawn.bPersistAfterCondition=value.at("PersistAfterCondition").get<bool>();
+            }
+            if(value.contains("DuplicateRadius")) {
+                if(!value.at("DuplicateRadius").is_number())throw std::runtime_error("DuplicateRadius must be numeric");
+                spawn.DuplicateRadius=value.at("DuplicateRadius").get<double>();
+                if(!std::isfinite(spawn.DuplicateRadius) || spawn.DuplicateRadius<0 || spawn.DuplicateRadius>10000)
+                    throw std::runtime_error("DuplicateRadius must be finite and between 0 and 10000 centimetres");
+            }
+        } else if(value.contains("PersistAfterCondition") || value.contains("DuplicateRadius"))
+            throw std::runtime_error("PersistAfterCondition and DuplicateRadius require QuestCompleted");
         auto locationInput = value;
         const auto& authoredLocation = value.at("Location");
-        if (!authoredLocation.is_object() || !authoredLocation.contains("Z"))
-            throw std::runtime_error("Location must contain X, Y, and Z");
-        if (authoredLocation.at("Z").is_string())
-        {
-            const auto shorthand = authoredLocation.at("Z").get<std::string>();
-            if (shorthand.empty() || shorthand.front() != '$')
-                throw std::runtime_error(
-                    "Location.Z string must use $, $+offset, or $-offset");
-            double offset = 0.0;
-            if (shorthand.size() > 1)
-            {
-                std::size_t consumed = 0;
-                try { offset = std::stod(shorthand.substr(1), &consumed); }
-                catch (...) { throw std::runtime_error("Location.Z $ offset must be numeric"); }
-                if (consumed != shorthand.size() - 1 || !std::isfinite(offset)
-                    || offset < -100000.0 || offset > 100000.0)
-                    throw std::runtime_error(
-                        "Location.Z $ offset must be finite and between -100000 and 100000");
-            }
+        const auto parsedLocation=SpawnFields::ParseLocation(authoredLocation);
+        locationInput["Location"]=parsedLocation.Vector;
+        if (parsedLocation.Ground) {
             spawn.bGroundToSurface = true;
             spawn.bGroundingResolved = false;
-            spawn.GroundZOffset = offset;
-            locationInput["Location"]["Z"] = 0.0;
+            spawn.GroundZOffset = parsedLocation.GroundOffset;
         }
         PS::JsonHelpers::ParseVector(locationInput, "Location", spawn.Location);
         spawn.AuthoredLocation = spawn.Location;
+        // Keep the authored identity stable while giving every /spawns actor
+        // a small landscape clearance at its final placement.
+        spawn.Location=FVector(spawn.Location.X(),spawn.Location.Y(),spawn.Location.Z()+10.0);
+        // Persistent placements default to a blocking-surface trace so an
+        // authored approximation cannot leave AI, resources, or props
+        // floating. Authors can explicitly opt out for intentional airborne
+        // actors; the legacy '$' Z shorthand remains supported.
+        if(!spawn.bGroundToSurface)spawn.bGroundToSurface=true;
+        spawn.bGroundingResolved=false;
+        if(value.contains("GroundToSurface")) {
+            if(!value.at("GroundToSurface").is_boolean())throw std::runtime_error("GroundToSurface must be boolean");
+            spawn.bGroundToSurface=value.at("GroundToSurface").get<bool>();
+            spawn.bGroundingResolved=!spawn.bGroundToSurface;
+        }
+        if(value.contains("GroundOffset")) {
+            if(parsedLocation.Ground)throw std::runtime_error("Use Location.Z '$+offset' or GroundOffset, not both");
+            if(!value.at("GroundOffset").is_number())throw std::runtime_error("GroundOffset must be numeric");
+            spawn.GroundZOffset=value.at("GroundOffset").get<double>();
+            if(!std::isfinite(spawn.GroundZOffset) || std::abs(spawn.GroundZOffset)>100000)
+                throw std::runtime_error("GroundOffset must be finite and between -100000 and 100000");
+        }
 
         if (PS::JsonHelpers::FieldExists(value, "Rotation"))
         {
@@ -598,10 +765,18 @@ namespace DragonWilds {
             if (spawn.LootRow.empty() || spawn.LootRow.size() > 256)
                 throw std::runtime_error("LootRow must contain between 1 and 256 characters");
         }
-        if (PS::JsonHelpers::FieldExists(value, "VisualEffect"))
+        if (PS::JsonHelpers::FieldExists(value, "VisualEffect")) {
             spawn.VisualEffect = ValidateVisualEffect(value.at("VisualEffect"));
+            if(spawn.VisualEffect.value("Type",std::string("Ghost"))=="Niagara"
+                && spawn.VisualEffect.contains("Target")
+                && spawn.VisualEffect.at("Target")!="ActorRoot"
+                && spawn.VisualEffect.at("Target")!="ActorMesh")
+                throw std::runtime_error("Spawn Niagara VisualEffect.Target must be ActorRoot, ActorMesh or omitted");
+        }
         std::string type;
         PS::JsonHelpers::ParseString(value, "Type", type);
+        if(value.contains("SpawnRadiusMeters") && type!="AISpawnPoint")
+            throw std::runtime_error("SpawnRadiusMeters is only supported on ordinary AISpawnPoint entries");
         if (type == "AISpawnPoint")
         {
             RegisterAISpawnPoint(spawn, value);
@@ -610,13 +785,18 @@ namespace DragonWilds {
         {
             RegisterActor(spawn, value);
         }
+        else if (type == "BuildingProp")
+        {
+            RegisterBuildingProp(spawn, value);
+        }
         else if (type == "RemoveActor")
         {
+            spawn.bGroundToSurface=false;spawn.bGroundingResolved=true;
             RegisterRemoveActor(spawn, value);
         }
         else
         {
-            throw std::runtime_error("Type must be 'AISpawnPoint', 'Actor' or 'RemoveActor'");
+            throw std::runtime_error("Type must be 'AISpawnPoint', 'Actor', 'BuildingProp' or 'RemoveActor'");
         }
 
         m_spawns.push_back(std::move(spawn));
@@ -648,12 +828,16 @@ namespace DragonWilds {
 
         spawn.StableId = StableGuid(std::format("{}|{}|{:.17g}|{:.17g}|{:.17g}",
             RC::to_string(spawn.ModName), RC::to_string(spawn.ClassPath),
-            spawn.Location.X(), spawn.Location.Y(), spawn.Location.Z()));
+            spawn.AuthoredLocation.X(), spawn.AuthoredLocation.Y(), spawn.AuthoredLocation.Z()));
 
         std::string aiClass;
         PS::JsonHelpers::ParseString(value, "AIClass", aiClass);
         spawn.AIClassPath = RC::to_generic_string(aiClass);
         spawn.Properties["AIClass"] = aiClass;
+        // Preserve legacy GUIDs, but give each newly-authored v5 placement its
+        // own stable identity even when two intentional placements coincide.
+        if(RC::to_string(spawn.EntryId).starts_with("RS_v5_"))
+            spawn.StableId=StableGuid(RC::to_string(spawn.ModName)+"|v5-ai|"+RC::to_string(spawn.EntryId));
 
         auto* aiClassObject = ResolveClass(RC::to_generic_string(aiClass));
         auto* aiBaseClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
@@ -695,6 +879,10 @@ namespace DragonWilds {
             }
         };
 
+        if(value.contains("PowerLevel") && RC::to_string(spawn.EntryId).starts_with("RS_v5_")) {
+            if(!value.at("PowerLevel").is_number_integer())throw std::runtime_error("PowerLevel must be an integer");
+            PS::Authoring::ValidatePower(value.at("PowerLevel").get<int>());
+        }
         copy("PowerLevel", "PowerLevel");
         copy("Mandatory", "bMandatorySpawn");
         copy("Respawn", "bShouldRespawn");
@@ -703,6 +891,15 @@ namespace DragonWilds {
         copy("RequiresActivation", "bRequiresActivation");
         copy("IgnoreNavmeshRequirement", "bIgnoreNavmeshRequirement");
         copy("RoamGoalQueryType", "RoamGoalQueryTypeOverride");
+        if(PS::JsonHelpers::FieldExists(value,"TimeOfDay")) {
+            if(!value.at("TimeOfDay").is_string())throw std::runtime_error("TimeOfDay must be Any, Day, or Night");
+            const auto requirement=TimeOfDay::Parse(value.at("TimeOfDay").get<std::string>());
+            spawn.Time=requirement;
+            if(requirement!=TimeOfDay::Requirement::Any) {
+                spawn.Properties["bRequiresTimeOfDay"]=true;
+                spawn.Properties["TriggeredTimeOfDay"]=TimeOfDay::Name(requirement);
+            }
+        }
 
         bool requestsRoaming = false;
         if (PS::JsonHelpers::FieldExists(value, "AmbientBehaviour"))
@@ -773,14 +970,7 @@ namespace DragonWilds {
             RegisterAISpawnVariants(spawn, value.at("Variants"), aiBaseClass);
         }
 
-        const bool hasMinDistance = PS::JsonHelpers::FieldExists(value, "MinSpawnDistance");
-        const bool hasMaxDistance = PS::JsonHelpers::FieldExists(value, "MaxSpawnDistance");
-        if (hasMinDistance || hasMaxDistance)
-        {
-            spawn.Properties["bOverrideSpawnRadius"] = true;
-            if (hasMinDistance) copy("MinSpawnDistance", "MinDistanceForSpawnPointToSpawn");
-            if (hasMaxDistance) copy("MaxSpawnDistance", "MaxDistanceForSpawnPointToSpawn");
-        }
+        spawn.Properties.update(Spawns::RadiusProperties(value));
 
         if (PS::JsonHelpers::FieldExists(value, "Properties"))
         {
@@ -910,6 +1100,12 @@ namespace DragonWilds {
                 throw std::runtime_error("UseNativeRespawn must be a boolean");
             spawn.bUseNativeRespawn = value.at("UseNativeRespawn").get<bool>();
         }
+        if(value.contains("TimeOfDay")) {
+            if(!value.at("TimeOfDay").is_string())throw std::runtime_error("TimeOfDay must be Any, Day, or Night");
+            spawn.Time=TimeOfDay::Parse(value.at("TimeOfDay").get<std::string>());
+            if(spawn.Time!=TimeOfDay::Requirement::Any && spawn.bUseNativeRespawn)
+                throw std::runtime_error("Timed actors cannot use native respawn persistence");
+        }
 
         if (PS::JsonHelpers::FieldExists(value, "Properties"))
         {
@@ -937,6 +1133,111 @@ namespace DragonWilds {
                 spawn.ComponentProperties[component] = properties;
             }
         }
+    }
+
+    void DragonWildsSpawnLoader::RegisterBuildingProp(SpawnInfo& spawn,const nlohmann::json& value)
+    {
+        PS::JsonHelpers::ValidateFieldExists(value,"Id");
+        PS::JsonHelpers::ValidateFieldExists(value,"Building");
+        if(!value.at("Building").is_string())throw std::runtime_error("Building must be a BuildingPieceData asset path");
+        const auto buildingPath=value.at("Building").get<std::string>();
+        auto* building=ActorHelper::ResolveObject(RC::to_generic_string(buildingPath));
+        auto* buildingType=ResolveClass(TEXT("/Script/Dominion.BuildingPieceData"));
+        if(!building || !buildingType || !building->IsA(buildingType))
+            throw std::runtime_error("Building did not resolve to BuildingPieceData");
+
+        auto* buildable=CastField<FSoftObjectProperty>(PropertyHelper::GetPropertyByName(
+            building->GetClassPrivate(),TEXT("BuildableActor")));
+        if(!buildable || buildable->GetArrayDim()!=1
+            || buildable->GetElementSize()!=sizeof(UECustom::FSoftObjectPtr))
+            throw std::runtime_error("BuildingPieceData BuildableActor layout changed");
+        const auto& reference=*buildable->ContainerPtrToValuePtr<UECustom::FSoftObjectPtr>(building);
+        auto* classObject=UECustom::UKismetSystemLibrary::LoadAsset_Blocking(
+            UECustom::TSoftObjectPtr<UObject>(reference.ObjectID));
+        UClass* actorClass=classObject && classObject->IsA<UClass>()?static_cast<UClass*>(classObject):nullptr;
+        auto classPath=reference.ObjectID.GetLongPackageFName().ToString()+TEXT(".")+reference.ObjectID.GetAssetFName().ToString();
+        if(!actorClass)actorClass=ResolveClass(classPath);
+        if(!actorClass && !classPath.ends_with(TEXT("_C")))actorClass=ResolveClass(classPath+TEXT("_C"));
+        if(!actorClass || !ActorHelper::IsActorClass(actorClass) || ActorHelper::IsAbstract(actorClass))
+            throw std::runtime_error("BuildingPieceData BuildableActor did not resolve to a concrete Actor class");
+
+        auto actorValue=value;
+        actorValue["Class"]=RC::to_string(actorClass->GetPathName());
+        RegisterActor(spawn,actorValue);
+        spawn.bBuildingProp=true;
+        spawn.BuildingDataPath=buildingPath;
+
+        for(const auto* name:{TEXT("BuildingPieceData"),TEXT("BuildingData"),TEXT("BuildingPiece")}) {
+            auto* property=PropertyHelper::GetPropertyByName(actorClass,name);
+            // Tool/native binding code only knows how to round-trip a hard UObject
+            // reference or a soft-object reference. Do not accept weak/lazy/class
+            // object properties merely because they derive from FObjectPropertyBase.
+            if(!CastField<FObjectProperty>(property) && !CastField<FSoftObjectProperty>(property))continue;
+            auto* objectProperty=CastField<FObjectPropertyBase>(property);
+            if(!objectProperty || objectProperty->GetArrayDim()!=1)continue;
+            auto* expected=objectProperty->GetPropertyClass().Get();
+            if(expected && building->IsA(expected)) {spawn.BuildingObjectProperty=RC::to_string(property->GetName());break;}
+        }
+        auto* dataIndex=CastField<FNumericProperty>(PropertyHelper::GetPropertyByName(
+            building->GetClassPrivate(),TEXT("BuildingPieceDataIndex")));
+        auto* actorIndex=CastField<FNumericProperty>(PropertyHelper::GetPropertyByName(
+            actorClass,TEXT("BuildingPieceDataIndex")));
+        if(dataIndex && actorIndex && dataIndex->IsInteger() && actorIndex->IsInteger()
+            && dataIndex->GetArrayDim()==1 && actorIndex->GetArrayDim()==1) {
+            spawn.BuildingDataIndex=dataIndex->GetSignedIntPropertyValue(
+                dataIndex->ContainerPtrToValuePtr<void>(building));
+            if(spawn.BuildingDataIndex<0)throw std::runtime_error("BuildingPieceDataIndex is not initialized");
+            spawn.bHasBuildingDataIndex=true;
+        }
+        if(spawn.BuildingObjectProperty.empty() && !spawn.bHasBuildingDataIndex)
+            throw std::runtime_error("Buildable actor exposes neither BuildingPieceData nor BuildingPieceDataIndex");
+        if(value.contains("Properties") && (value.at("Properties").contains("BuildingPieceData")
+            || value.at("Properties").contains("BuildingData")
+            || value.at("Properties").contains("BuildingPiece")
+            || value.at("Properties").contains("BuildingPieceDataIndex")))
+            throw std::runtime_error("BuildingProp native data binding cannot be overridden through Properties");
+
+        if(value.contains("AllowDeconstruction")) {
+            if(!value.at("AllowDeconstruction").is_boolean())throw std::runtime_error("AllowDeconstruction must be a boolean");
+            spawn.bAllowDeconstruction=value.at("AllowDeconstruction").get<bool>();
+        }
+    }
+
+    void DragonWildsSpawnLoader::ApplyBuildingData(AActor* actor,const SpawnInfo& spawn)
+    {
+        if(!spawn.bBuildingProp)return;
+        auto* building=ActorHelper::ResolveObject(RC::to_generic_string(spawn.BuildingDataPath));
+        if(!actor || !building)throw std::runtime_error("BuildingProp data binding is unavailable");
+        bool applied=false;
+        if(!spawn.BuildingObjectProperty.empty()) {
+            auto* property=PropertyHelper::GetPropertyByName(actor->GetClassPrivate(),
+                RC::to_generic_string(spawn.BuildingObjectProperty));
+            if(!property)throw std::runtime_error("Buildable actor data property disappeared");
+            PropertyHelper::CopyJsonValueToContainer(actor,property,spawn.BuildingDataPath);
+            if(auto* objectProperty=CastField<FObjectProperty>(property)) {
+                UObject* current=nullptr;
+                std::memcpy(&current,objectProperty->ContainerPtrToValuePtr<void>(actor),sizeof(current));
+                if(current!=building)throw std::runtime_error("BuildingProp object binding did not round-trip");
+                applied=true;
+            } else if(auto* softProperty=CastField<FSoftObjectProperty>(property)) {
+                const auto& current=*softProperty->ContainerPtrToValuePtr<UECustom::FSoftObjectPtr>(actor);
+                const UECustom::FSoftObjectPath expected(building->GetPathName());
+                if(current.ObjectID.AssetPath.GetPackageName()!=expected.AssetPath.GetPackageName()
+                    || current.ObjectID.AssetPath.GetAssetName()!=expected.AssetPath.GetAssetName())
+                    throw std::runtime_error("BuildingProp soft-object binding did not round-trip");
+                applied=true;
+            }
+        }
+        if(spawn.bHasBuildingDataIndex) {
+            auto* property=CastField<FNumericProperty>(PropertyHelper::GetPropertyByName(
+                actor->GetClassPrivate(),TEXT("BuildingPieceDataIndex")));
+            if(!property || !property->IsInteger())throw std::runtime_error("Buildable actor data index disappeared");
+            property->SetIntPropertyValue(property->ContainerPtrToValuePtr<void>(actor),spawn.BuildingDataIndex);
+            if(property->GetSignedIntPropertyValue(property->ContainerPtrToValuePtr<void>(actor))!=spawn.BuildingDataIndex)
+                throw std::runtime_error("BuildingProp index binding did not round-trip");
+            applied=true;
+        }
+        if(!applied)throw std::runtime_error("BuildingProp native data was not applied");
     }
 
     void DragonWildsSpawnLoader::RegisterRemoveActor(SpawnInfo& spawn, const nlohmann::json& value)
@@ -1009,7 +1310,7 @@ namespace DragonWilds {
             return false;
         }
 
-        m_onLevelShownCallbackId = m_onLevelShownFunction->RegisterPostHook(
+        m_onLevelShownCallbackId = PS::RegisterNativePostHook(m_onLevelShownFunction,
             [this](UnrealScriptFunctionCallableContext& context, void*) {
                 OnCellShown(context.Context);
             });
@@ -1027,7 +1328,7 @@ namespace DragonWilds {
             return;
         }
 
-        m_aiScaleCallbackId = m_aiScaleFunction->RegisterPostHook(
+        m_aiScaleCallbackId = PS::RegisterNativePostHook(m_aiScaleFunction,
             [this](UnrealScriptFunctionCallableContext& context, void*) {
                 ApplyAIScale(context.Context);
             });
@@ -1060,7 +1361,7 @@ namespace DragonWilds {
             nullptr, nullptr, TEXT("/Script/UMG.TextBlock:SetText"));
         if (m_healthBarSetTextFunction)
         {
-            m_healthBarSetTextCallbackId = m_healthBarSetTextFunction->RegisterPostHook(
+            m_healthBarSetTextCallbackId = PS::RegisterNativePostHook(m_healthBarSetTextFunction,
                 [this](UnrealScriptFunctionCallableContext& context, void*) {
                     OnHealthBarTextSet(context.Context);
                 });
@@ -1074,11 +1375,33 @@ namespace DragonWilds {
 
     void DragonWildsSpawnLoader::SetupPlayerJoinHooks()
     {
+        m_playerPossessionAckFunction = UECustom::UObjectGlobals::StaticFindObject<UFunction*>(
+            nullptr, nullptr, TEXT("/Script/Engine.PlayerController:ServerAcknowledgePossession"));
+        if (m_playerPossessionAckFunction && (m_playerPossessionAckFunction->GetFunctionFlags() & FUNC_Native))
+            m_playerPossessionAckCallbackId = PS::RegisterNativePostHook(m_playerPossessionAckFunction,
+                [this](UnrealScriptFunctionCallableContext& context, void*) {
+                    auto* controller=context.Context;
+                    if(!controller || controller->GetWorld()!=m_readyWorld || !IsWorldStillLoaded(m_readyWorld))return;
+                    try {
+                        ActorHelper::FunctionCall authority(controller,TEXT("/Script/Engine.Actor:HasAuthority"));
+                        authority.Invoke();if(!authority.Result<bool>())return;
+                        ActorHelper::FunctionCall getPawn(controller,TEXT("/Script/Engine.Controller:K2_GetPawn"));
+                        getPawn.Invoke();auto* pawn=getPawn.Result<UObject*>();
+                        if(!pawn || pawn->GetWorld()!=m_readyWorld)return;
+                        ApplyPlayerRules();
+                    } catch(const std::exception& error) {
+                        PS::Log<LogLevel::Verbose>(STR("Player possession readiness deferred: {}\n"),PS::ToWideSafe(error.what()));
+                    }
+                });
+        PS::Log<LogLevel::Verbose>(STR("/players server possession acknowledgement hook: {}.\n"),m_playerPossessionAckCallbackId!=0);
         m_playerPostLoginFunction = UECustom::UObjectGlobals::StaticFindObject<UFunction*>(
             nullptr, nullptr, TEXT("/Script/Engine.GameModeBase:K2_PostLogin"));
-        if (m_playerPostLoginFunction)
+        // K2_PostLogin is commonly a Blueprint event.  Never send a
+        // non-native function through the native function-pointer hook API.
+        if (m_playerPostLoginFunction
+            && (m_playerPostLoginFunction->GetFunctionFlags() & FUNC_Native))
         {
-            m_playerPostLoginCallbackId = m_playerPostLoginFunction->RegisterPostHook(
+            m_playerPostLoginCallbackId = PS::RegisterNativePostHook(m_playerPostLoginFunction,
                 [this](UnrealScriptFunctionCallableContext&, void*) {
                     ApplyPlayerRules();
                 });
@@ -1088,7 +1411,7 @@ namespace DragonWilds {
             nullptr, nullptr, TEXT("/Script/Engine.PlayerController:ClientRestart"));
         if (m_playerClientRestartFunction)
         {
-            m_playerClientRestartCallbackId = m_playerClientRestartFunction->RegisterPostHook(
+            m_playerClientRestartCallbackId = PS::RegisterNativePostHook(m_playerClientRestartFunction,
                 [this](UnrealScriptFunctionCallableContext& context, void*) {
                     ApplyPlayerRules();
                     try
@@ -1096,7 +1419,9 @@ namespace DragonWilds {
                         auto getPawn = ActorHelper::FunctionCall(context.Context,
                             STR("/Script/Engine.Controller:K2_GetPawn"));
                         getPawn.Invoke();
-                        ApplyClientPlayerVisualRules(getPawn.Result<UObject*>());
+                        auto* pawn = getPawn.Result<UObject*>();
+                        ConfirmPendingRespawn(pawn);
+                        ApplyClientPlayerVisualRules(pawn);
                     }
                     catch (...) {}
                 });
@@ -1106,14 +1431,52 @@ namespace DragonWilds {
             nullptr, nullptr, TEXT("/Script/Engine.Pawn:OnRep_PlayerState"));
         if (m_playerPawnStateFunction)
         {
-            m_playerPawnStateCallbackId = m_playerPawnStateFunction->RegisterPostHook(
+            m_playerPawnStateCallbackId = PS::RegisterNativePostHook(m_playerPawnStateFunction,
                 [this](UnrealScriptFunctionCallableContext& context, void*) {
+                    ConfirmPendingRespawn(context.Context);
                     ApplyClientPlayerVisualRules(context.Context);
                 });
         }
 
+        m_playerTagsChangedFunction = UECustom::UObjectGlobals::StaticFindObject<UFunction*>(
+            nullptr, nullptr,
+            TEXT("/Script/Dominion.DominionPlayerCharacter:HandleGameplayEffectTagsChanged"));
+        if (m_playerTagsChangedFunction)
+        {
+            m_playerTagsChangedCallbackId = PS::RegisterNativePostHook(m_playerTagsChangedFunction,
+                [this](UnrealScriptFunctionCallableContext& context, void*) {
+                    ApplyClientPlayerVisualRules(context.Context, true);
+                });
+        }
+
+        m_playerDamageReceivedFunction = UECustom::UObjectGlobals::StaticFindObject<UFunction*>(
+            nullptr, nullptr,
+            TEXT("/Game/Gameplay/Character/Components/BP_Components_PlayerDamage."
+                "BP_Components_PlayerDamage_C:BP_OnAnyDamageReceived"));
+        // BP_OnAnyDamageReceived is observed by the guarded ProcessEvent
+        // activity observer below; it is not a native function-pointer hook.
+        if (m_playerDamageReceivedFunction
+            && (m_playerDamageReceivedFunction->GetFunctionFlags() & FUNC_Native))
+        {
+            m_playerDamageReceivedCallbackId = PS::RegisterNativePostHook(m_playerDamageReceivedFunction,
+                [this](UnrealScriptFunctionCallableContext& context, void*) {
+                    UObject* pawn = nullptr;
+                    try
+                    {
+                        pawn = ActorHelper::GetObjectRef(
+                            context.Context, TEXT("PlayerCharacter"));
+                    }
+                    catch (...) {}
+                    if (!pawn && context.Context)
+                        pawn = context.Context->GetOuterPrivate();
+                    ApplyClientPlayerVisualRules(pawn, true);
+                });
+        }
+
+        SetupPlayerActivityHooks();
+
         if (m_playerPostLoginCallbackId == 0 && m_playerClientRestartCallbackId == 0
-            && m_playerPawnStateCallbackId == 0)
+            && m_playerPawnStateCallbackId == 0 && m_playerPossessionAckCallbackId == 0)
         {
             PS::Log<LogLevel::Error>(
                 STR("Unable to register native player join hooks; /players will only apply during initial world setup.\n"));
@@ -1122,9 +1485,258 @@ namespace DragonWilds {
 
         PS::Log<LogLevel::Verbose>(
             STR("/players is event-driven (PostLogin={}, ClientRestart={}, "
-                "OnRep_PlayerState={}); periodic player scanning is disabled.\n"),
+                "OnRep_PlayerState={}, TagsChanged={}, PlayerDamage={}, "
+                "ActivityHooks={}); conditional nameplates refresh at 10 Hz.\n"),
             m_playerPostLoginCallbackId != 0, m_playerClientRestartCallbackId != 0,
-            m_playerPawnStateCallbackId != 0);
+            m_playerPawnStateCallbackId != 0, m_playerTagsChangedCallbackId != 0,
+            m_playerDamageReceivedCallbackId != 0, m_playerActivityHooks.size());
+    }
+
+    void DragonWildsSpawnLoader::ConfirmPendingRespawn(UObject* pawn)
+    {
+        if (!pawn || !m_readyWorld || pawn->GetWorld() != m_readyWorld) return;
+
+        UObject* playerState = nullptr;
+        try
+        {
+            auto* statePointer = PropertyHelper::GetValuePtrByPropertyNameInChain<
+                TObjectPtr<UObject>>(pawn, TEXT("PlayerState"));
+            playerState = statePointer ? statePointer->Get() : nullptr;
+        }
+        catch (...) {}
+
+        int32_t playerId = -1;
+        if (playerState) try
+        {
+            auto getId = ActorHelper::FunctionCall(
+                playerState, STR("/Script/Engine.PlayerState:GetPlayerId"));
+            getId.Invoke();
+            playerId = getId.Result<int32_t>();
+        }
+        catch (...) {}
+
+        auto pending = std::find_if(m_pendingRespawns.begin(), m_pendingRespawns.end(),
+            [pawn, playerState, playerId](const auto& value)
+            {
+                if (value.Pawn.Get() == pawn) return true;
+                if (playerState && value.PlayerState.Get() == playerState) return true;
+                return playerId >= 0 && value.PlayerId >= 0 && value.PlayerId == playerId;
+            });
+        if (pending == m_pendingRespawns.end()) return;
+
+        pending->Pawn = PS::WeakObject(pawn);
+        if (playerState) pending->PlayerState = PS::WeakObject(playerState);
+        if (playerId >= 0) pending->PlayerId = playerId;
+        pending->Confirmed = true;
+    }
+
+    void DragonWildsSpawnLoader::SetupPlayerActivityHooks()
+    {
+        m_playerProcessEventActivityPaths.clear();
+        m_playerProcessEventActivityNames.clear();
+        m_playerNativeActivityPaths.clear();
+        const auto addProcessEventPath = [this](const std::string& path) {
+            // Keep every configured exact path in the filtered ProcessEvent
+            // observer. Native post-hooks remain the fast path, but this
+            // fallback also catches Blueprint-exposed or inherited functions
+            // that the game presents through ProcessEvent at runtime.
+            if (ActivityFunctionPath(path)) {
+                m_playerProcessEventActivityPaths.insert(path);
+                m_playerProcessEventActivityNames.insert(
+                    RC::to_generic_string(ActivityFunctionName(path)));
+            }
+        };
+        for (const auto* path : {SkillXPEvent, ToolAttackEvent, PlayerDamageEvent,
+            PlayerRespawnEvent, RespawnFinishedEvent})
+            addProcessEventPath(path);
+        // Keep the radial-menu notification in the same filtered observer. The
+        // direct hook below is preferred, but ProcessEvent is a useful fallback
+        // for RPC/Blueprint dispatch routes that do not enter the native hook.
+        addProcessEventPath(PlayerEmoteNotifyEvent);
+        addProcessEventPath(PlayerEmoteSelectionChangedEvent);
+        for (const auto& rule : m_playerRules)
+            for (const auto& event : rule.Nameplate.Events)
+                addProcessEventPath(event["Function"].get<std::string>());
+
+        if (m_respawnObserver == Hook::ERROR_ID && std::any_of(m_playerRules.begin(),m_playerRules.end(),
+            [](const auto& rule){return !rule.VisualEffect.empty() && rule.VisualEffectTrigger=="Respawn";})) {
+            Hook::FCallbackOptions options{};
+            options.OwnerModName=TEXT("RuneSchema"); options.HookName=TEXT("ConfirmedPlayerRespawn");
+            const auto ownerThread=std::this_thread::get_id();
+            m_respawnObserver=Hook::RegisterProcessEventPreCallback(
+                [this,ownerThread](Hook::TCallbackIterationData<void>&,UObject* source,UFunction* function,void*) {
+                    if(std::this_thread::get_id()!=ownerThread || !m_readyWorld || !source || !function) return;
+                    try {
+                        if(function->GetFName()!=FName(TEXT("Multicast_Respawn"),FNAME_Add)
+                            || to_string(function->GetPathName())!="/Script/Dominion.PlayerRespawnComponent:Multicast_Respawn") return;
+                        auto* pawn=ResolvePlayerPawnFromActivity(source);
+                        if(!pawn || pawn->GetWorld()!=m_readyWorld || !PlayerGhost::IsDead(pawn)) return;
+                        if(std::any_of(m_pendingRespawns.begin(),m_pendingRespawns.end(),[pawn](const auto& p){return p.Pawn.Get()==pawn;})) return;
+                        UObject* playerState = nullptr;
+                        try {
+                            auto* statePointer = PropertyHelper::GetValuePtrByPropertyNameInChain<
+                                TObjectPtr<UObject>>(pawn, TEXT("PlayerState"));
+                            playerState = statePointer ? statePointer->Get() : nullptr;
+                        }
+                        catch (...) {}
+                        int32_t playerId = -1;
+                        if (playerState) try {
+                            auto getId = ActorHelper::FunctionCall(
+                                playerState, STR("/Script/Engine.PlayerState:GetPlayerId"));
+                            getId.Invoke();
+                            playerId = getId.Result<int32_t>();
+                        }
+                        catch (...) {}
+                        if(m_pendingRespawns.size()<16)
+                            m_pendingRespawns.push_back({PS::WeakObject(pawn),
+                                PS::WeakObject(playerState),playerId,30.0,false});
+                    } catch(...) {}
+                },options);
+            if(m_respawnObserver==Hook::ERROR_ID)
+                PS::Log<LogLevel::Warning>(TEXT("Timed respawn observation unavailable.\n"));
+        }
+        if (m_activityObserver == Hook::ERROR_ID) {
+            Hook::FCallbackOptions options{};
+            options.OwnerModName = TEXT("RuneSchema");
+            options.HookName = TEXT("PlayerActivityObservation");
+            const auto ownerThread = std::this_thread::get_id();
+            m_activityObserver = Hook::RegisterProcessEventPostCallback(
+                [this, ownerThread](Hook::TCallbackIterationData<void>&, UObject* source, UFunction* function, void* parameters) {
+                    if (std::this_thread::get_id() != ownerThread || !m_readyWorld || !source || !function) return;
+                    try {
+                        const auto name = function->GetName();
+                        if (!m_playerProcessEventActivityNames.contains(name)) return;
+                        const auto path = to_string(function->GetPathName());
+                        if (!m_playerProcessEventActivityPaths.contains(path)
+                            && path != SkillXPEvent && path != ToolAttackEvent
+                            && path != PlayerRespawnEvent && path != RespawnFinishedEvent
+                            && path != PlayerDamageEvent) return;
+                        // A successfully installed direct native hook already
+                        // delivers this event. Do not process it a second time
+                        // through the global observer; if the function is not
+                        // native, it will not be in this set and the fallback
+                        // below remains active.
+                        const bool emotePath = path == PlayerEmotePlayEvent
+                            || path == PlayerEmoteStopEvent
+                            || path == PlayerEmoteNotifyEvent
+                            || path == PlayerEmoteSelectionChangedEvent;
+                        if (m_playerNativeActivityPaths.contains(path) && !emotePath) return;
+                        auto* pawn = ResolvePlayerPawnFromActivity(source);
+                        if (!pawn || pawn->GetWorld() != m_readyWorld) return;
+                        if (path == PlayerDamageEvent) {
+                            // BP_OnAnyDamageReceived is a Blueprint event, so it
+                            // cannot rely on RegisterNativePostHook. Observe it
+                            // here after the event has updated FatalDamageInfo.
+                            ApplyClientPlayerVisualRules(pawn, true);
+                        } else if (path == PlayerRespawnEvent) {
+                            ConfirmPendingRespawn(pawn);
+                        } else if (path == RespawnFinishedEvent) {
+                            ConfirmPendingRespawn(pawn);
+                            auto pending = std::find_if(m_pendingRespawns.begin(), m_pendingRespawns.end(),
+                                [pawn](const auto& value) { return value.Pawn.Get() == pawn; });
+                            if (pending != m_pendingRespawns.end() && pending->Confirmed)
+                                pending->FinishObserved = true;
+                        } else if (path == SkillXPEvent) {
+                            m_observedActivities.push_back({PS::WeakObject(pawn), path, {},
+                                PS::InspectionTools::CaptureEventParameters(function, parameters)});
+                        } else if (std::any_of(m_playerRules.begin(), m_playerRules.end(),
+                            [&path](const auto& rule) {
+                                return std::any_of(rule.Nameplate.Events.begin(), rule.Nameplate.Events.end(),
+                                    [&path](const auto& event) { return event["Function"] == path; });
+                            })) {
+                            // Explicit Blueprint events use the same queue and
+                            // matcher as native events. Only configured exact
+                            // paths reach this branch, so there is no global
+                            // Blueprint recorder or action polling.
+                            if (m_observedActivities.size() < 256)
+                                m_observedActivities.push_back({PS::WeakObject(pawn), path,
+                                    (path == PlayerEmotePlayEvent || path == PlayerEmoteNotifyEvent
+                                        || path == PlayerEmoteSelectionChangedEvent)
+                                        ? ClassifyPlayerEmoteActivity(source) : std::string{},
+                                    PS::InspectionTools::CaptureEventParameters(function, parameters)});
+                        } else m_observedActivities.push_back({PS::WeakObject(pawn), path,
+                            ClassifyPlayerAttackActivity(source), nlohmann::json::object()});
+                    } catch (...) {}
+                }, options);
+            if (m_activityObserver == Hook::ERROR_ID)
+                PS::Log<LogLevel::Warning>(TEXT("Player activity observer unavailable; XP and tool-swing icons are disabled.\n"));
+        }
+        const auto registerActivityHook = [this](const TCHAR* functionPath,
+            const std::function<std::string(UObject*)>& classify) {
+            if (to_string(functionPath) == ToolAttackEvent) return m_activityObserver != Hook::ERROR_ID;
+            auto* function = UECustom::UObjectGlobals::StaticFindObject<UFunction*>(
+                nullptr, nullptr, functionPath);
+            if (!function) return false;
+            // A reflected Blueprint event is already covered by the filtered
+            // ProcessEvent observer. It is not a native-hook failure and should
+            // not produce a misleading warning.
+            if (!(function->GetFunctionFlags() & FUNC_Native)) return true;
+            if (std::any_of(m_playerActivityHooks.begin(),m_playerActivityHooks.end(),
+                [function](const auto& hook){return hook.Function==function;})) return true;
+            if (m_playerActivityHooks.size()>=66) return false;
+            const auto eventPath=to_string(function->GetPathName());
+            const auto ownerThread=std::this_thread::get_id();
+            const auto callbackId = PS::RegisterNativePostHook(function,
+                [this, classify, function, eventPath, ownerThread](UnrealScriptFunctionCallableContext& context, void*) {
+                    if (std::this_thread::get_id()!=ownerThread) return;
+                    static thread_local bool processing=false;
+                    if (processing) return;
+                    struct Guard { bool& flag; Guard(bool& value):flag(value){flag=true;} ~Guard(){flag=false;} } guard(processing);
+                    try
+                    {
+                        auto* pawn=ResolvePlayerPawnFromActivity(context.Context);
+                        if (!pawn || pawn->GetWorld()!=m_readyWorld) return;
+                        const auto state = classify ? classify(context.Context) : std::string{};
+                        const bool configured=std::any_of(m_playerRules.begin(),m_playerRules.end(),
+                            [&eventPath](const auto& rule) {
+                                return std::any_of(rule.Nameplate.Events.begin(),rule.Nameplate.Events.end(),
+                                    [&eventPath](const auto& event){return event["Function"]==eventPath;});
+                            });
+                        if (configured) {
+                            const auto parameters=PS::InspectionTools::CaptureEventParameters(function,context.TheStack.Locals());
+                            ApplyClientPlayerVisualRules(pawn,true,eventPath,&parameters,state);
+                        } else if (!state.empty()) ApplyClientPlayerVisualRules(pawn,true,{},nullptr,state);
+                    }
+                    catch (...) {}
+                });
+            if (callbackId == 0) return false;
+            m_playerActivityHooks.push_back({function, callbackId});
+            m_playerNativeActivityPaths.insert(eventPath);
+            return true;
+        };
+        registerActivityHook(
+            TEXT("/Script/Dominion.PlayerMagicComponent:Multicast_SendPayloadForSpellCasting"),
+            [this](UObject* source) { return ClassifyPlayerSpellActivity(source); });
+        // Native events use direct post-hooks. Explicit Blueprint events stay
+        // on the filtered ProcessEvent observer above.
+        std::unordered_set<std::string> customEvents;
+        for (const auto& rule:m_playerRules)
+            for (const auto& event:rule.Nameplate.Events) {
+                const auto path=event["Function"].get<std::string>();
+                if (!path.starts_with("/Script/")) continue;
+                if (!customEvents.insert(path).second) continue;
+                if (!m_playerActivityAttemptedFunctions.insert(path).second) continue;
+                if (customEvents.size()>64) {
+                    PS::Log<LogLevel::Warning>(TEXT("Activity event hook limit (64) reached.\n"));
+                    break;
+                }
+                if (!registerActivityHook(PS::ToWideSafe(path.c_str()).c_str(),{})) {
+                    // HealthComponent:OnHealEvent is a known Blueprint-only
+                    // base alias in this game build. Its concrete BP event is
+                    // still observed through ProcessEvent, so do not report a
+                    // misleading native-hook warning for this one path.
+                    if (path != PlayerHealBlueprintNativeAlias)
+                    PS::Log<LogLevel::Warning>(TEXT("Native activity event unavailable: {}\n"),
+                        PS::ToWideSafe(path.c_str()));
+                }
+            }
+        // The radial-menu notification is not part of the author-facing event
+        // list. If the current game build exposes it as native, use its live
+        // AuthoritativeEmoteIndex to recover the same per-slot icon mapping.
+        registerActivityHook(PS::ToWideSafe(PlayerEmoteNotifyEvent).c_str(),
+            [this](UObject* source) { return ClassifyPlayerEmoteActivity(source); });
+        registerActivityHook(PS::ToWideSafe(PlayerEmoteSelectionChangedEvent).c_str(),
+            [this](UObject* source) { return ClassifyPlayerEmoteActivity(source); });
     }
 
     UObject* ResolveAIHealthComponent(UObject* character)
@@ -1154,6 +1766,17 @@ namespace DragonWilds {
         return fallback;
     }
 
+    DragonWildsSpawnLoader::SpawnInfo* DragonWildsSpawnLoader::ResolveAIBinding(const LiveAIBinding& binding)
+    {
+        if (binding.EventSpawn) return binding.EventSpawn.get();
+        const auto found = std::find_if(m_spawns.begin(), m_spawns.end(),
+            [&](const SpawnInfo& entry) {
+                return entry.Type == ESpawnEntryType::AISpawnPoint
+                    && std::memcmp(&entry.StableId, &binding.SpawnId, sizeof(binding.SpawnId)) == 0;
+            });
+        return found == m_spawns.end() ? nullptr : &*found;
+    }
+
     DragonWildsSpawnLoader::SpawnInfo*
         DragonWildsSpawnLoader::ResolveAISpawnForCharacter(UObject* character)
     {
@@ -1171,7 +1794,7 @@ namespace DragonWilds {
         };
         for (const auto& binding : m_liveAIBindings)
         {
-            if (binding.Actor.Get() == character) return findById(binding.SpawnId);
+            if (binding.Actor.Get() == character) return ResolveAIBinding(binding);
         }
 
         auto* aiBaseClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
@@ -1190,7 +1813,7 @@ namespace DragonWilds {
                 + sourceIdProperty->GetOffset_Internal(), sizeof(sourceId));
             if (auto* exact = findById(sourceId))
             {
-                m_liveAIBindings.push_back({FWeakObjectPtr(character), exact->StableId});
+                m_liveAIBindings.push_back({PS::WeakObject(character), exact->StableId});
                 PS::Log<LogLevel::Verbose>(
                     STR("Bound emitted {} to RuneSchema spawn '{}' by native SpawnSourceId.\n"),
                     character->GetClassPrivate()->GetName(),
@@ -1207,6 +1830,7 @@ namespace DragonWilds {
         for (auto& candidate : m_spawns)
         {
             if (candidate.Type != ESpawnEntryType::AISpawnPoint
+                || !candidate.AdditionalDrops.empty()
                 || (candidate.DisplayName.empty() && candidate.BossName.empty()
                     && candidate.LootRow.empty())) continue;
             if (!candidate.AIClassPath.empty())
@@ -1234,7 +1858,7 @@ namespace DragonWilds {
         }
         if (nearest)
         {
-            m_liveAIBindings.push_back({FWeakObjectPtr(character), nearest->StableId});
+            m_liveAIBindings.push_back({PS::WeakObject(character), nearest->StableId});
             PS::Log<LogLevel::Verbose>(
                 STR("Bound emitted {} to nearby RuneSchema spawn '{}' at {:.0f} units.\n"),
                 character->GetClassPrivate()->GetName(),
@@ -1266,6 +1890,7 @@ namespace DragonWilds {
             ApplyCombatMultipliers(character, spawn->HealthMultiplier,
                 spawn->DamageMultiplier);
             ApplyDropMultiplier(actor, spawn->DropMultiplier);
+            ApplyAdditionalDrops(actor,spawn->AdditionalDrops);
         }
     }
 
@@ -1372,10 +1997,11 @@ namespace DragonWilds {
                 character->GetClassPrivate()->GetName(), healthApplied, damageApplied);
     }
 
-    void DragonWildsSpawnLoader::ApplyAILootRow(
+    bool DragonWildsSpawnLoader::ApplyAILootRow(
         UObject* character, const std::string& lootRow)
     {
-        if (!character || lootRow.empty()) return;
+        if (!character || lootRow.empty()) return false;
+        if(auto found=m_bonusApplied.find(character);found!=m_bonusApplied.end() && found->second.Get()==character)return true;
         UObject* loot = nullptr;
         for (const auto* name : {TEXT("LootDrop"), TEXT("LootDrop_GEN_VARIABLE")})
         {
@@ -1388,7 +2014,7 @@ namespace DragonWilds {
                 PS::Log<LogLevel::Warning>(
                     STR("AI LootDrop component was unavailable on {}.\n"),
                     character->GetClassPrivate()->GetName());
-            return;
+            return false;
         }
 
         auto* handleProperty = CastField<FStructProperty>(
@@ -1399,35 +2025,48 @@ namespace DragonWilds {
             PropertyHelper::GetPropertyByName(handleStruct, TEXT("DataTable"))) : nullptr;
         auto* rowProperty = handleStruct ? CastField<FNameProperty>(
             PropertyHelper::GetPropertyByName(handleStruct, TEXT("RowName"))) : nullptr;
-        if (!handleProperty || !tableProperty || !rowProperty)
+        if (!handleProperty || !tableProperty || !rowProperty
+            || handleProperty->GetArrayDim()!=1 || tableProperty->GetArrayDim()!=1 || rowProperty->GetArrayDim()!=1
+            || tableProperty->GetElementSize()!=sizeof(UObject*) || rowProperty->GetElementSize()!=sizeof(FName)
+            || tableProperty->GetOffset_Internal()<0 || rowProperty->GetOffset_Internal()<0
+            || tableProperty->GetOffset_Internal()+tableProperty->GetElementSize()>handleProperty->GetElementSize()
+            || rowProperty->GetOffset_Internal()+rowProperty->GetElementSize()>handleProperty->GetElementSize())
         {
             if (m_lootRowWarningActors.insert(character).second)
                 PS::Log<LogLevel::Warning>(
                     STR("AI EnemyTableRowHandle was unavailable on {}.\n"),
                     character->GetClassPrivate()->GetName());
-            return;
+            return false;
         }
 
         auto* handle = handleProperty->ContainerPtrToValuePtr<void>(loot);
+        UObject* selectedTable=nullptr;
+        std::memcpy(&selectedTable,tableProperty->ContainerPtrToValuePtr<void>(handle),sizeof(selectedTable));
+        const FName requestedRow(RC::to_generic_string(lootRow), FNAME_Add);
         if (auto* commonObject = ActorHelper::ResolveObject(TEXT(
                 "/Game/Gameplay/Items/LootDropTables/DT_EnemyLootDropTable."
                 "DT_EnemyLootDropTable")))
         {
+            if(!commonObject->IsA<UDataTable>())return false;
             auto* commonTable = static_cast<UDataTable*>(commonObject);
-            const FName requestedRow(RC::to_generic_string(lootRow), FNAME_Add);
             if (commonTable->FindRowUnchecked(requestedRow))
             {
-                auto* tableAddress = tableProperty->ContainerPtrToValuePtr<void>(handle);
-                UObject* tableValue = commonTable;
-                std::memcpy(tableAddress, &tableValue, sizeof(tableValue));
+                selectedTable=commonTable;
             }
         }
+        if(!selectedTable || !selectedTable->IsA<UDataTable>() || !static_cast<UDataTable*>(selectedTable)->FindRowUnchecked(requestedRow)) {
+            if(m_lootRowWarningActors.insert(character).second)
+                PS::Log<LogLevel::Warning>(STR("Enemy loot row '{}' is unavailable; existing loot preserved.\n"),RC::to_generic_string(lootRow));
+            return false;
+        }
+        std::memcpy(tableProperty->ContainerPtrToValuePtr<void>(handle),&selectedTable,sizeof(selectedTable));
         rowProperty->SetPropertyValue(
             rowProperty->ContainerPtrToValuePtr<void>(handle),
             FName(RC::to_generic_string(lootRow), FNAME_Add));
         if (m_lootRowConfiguredActors.insert(character).second)
             PS::Log<LogLevel::Verbose>(STR("Applied enemy loot row '{}' to {}.\n"),
                 RC::to_generic_string(lootRow), character->GetClassPrivate()->GetName());
+        return true;
     }
 
     void DragonWildsSpawnLoader::ApplyAIDisplayName(
@@ -1562,13 +2201,8 @@ namespace DragonWilds {
             auto* regularText = ResolveAINameTextBlock(actor, false);
             auto* bossText = ResolveAINameTextBlock(actor, true);
             if (regularText != textBlock && bossText != textBlock) continue;
-            const auto spawn = std::find_if(m_spawns.begin(), m_spawns.end(),
-                [&](const SpawnInfo& entry) {
-                    return entry.Type == ESpawnEntryType::AISpawnPoint
-                        && std::memcmp(&entry.StableId, &binding.SpawnId,
-                            sizeof(binding.SpawnId)) == 0;
-                });
-            if (spawn == m_spawns.end()
+            const auto* spawn = ResolveAIBinding(binding);
+            if (!spawn
                 || (spawn->DisplayName.empty() && spawn->BossName.empty())) return;
             const auto& regularValue = spawn->DisplayName.empty()
                 ? spawn->BossName : spawn->DisplayName;
@@ -1614,13 +2248,8 @@ namespace DragonWilds {
             auto& attempts = m_aiNameRetryAttempts[actor];
             if (attempts >= 120) continue;
             ++attempts;
-            const auto spawn = std::find_if(m_spawns.begin(), m_spawns.end(),
-                [&](const SpawnInfo& entry) {
-                    return entry.Type == ESpawnEntryType::AISpawnPoint
-                        && std::memcmp(&entry.StableId, &binding.SpawnId,
-                            sizeof(binding.SpawnId)) == 0;
-                });
-            if (spawn != m_spawns.end())
+            const auto* spawn = ResolveAIBinding(binding);
+            if (spawn)
                 ApplyAIDisplayName(actor, spawn->DisplayName, spawn->BossName);
         }
     }
@@ -1714,10 +2343,44 @@ namespace DragonWilds {
         options.OwnerModName = TEXT("RuneSchema");
         options.HookName = TEXT("DragonWildsSpawnCreate");
 
+        m_worldTeardownCallbackId = Hook::RegisterInitGameStatePreCallback(
+            [this](Hook::TCallbackIterationData<void>&, AGameModeBase*) {
+                // Preserve authored item rules while resetting per-world state.
+                PlayerGhost::ClearWorld();
+                m_readyWorld = nullptr;
+                m_pendingWorld = nullptr;
+                m_pendingCellBounds.clear();
+                m_toolActors.clear();
+                m_toolPlacements=nlohmann::json::array();
+                PS::SpawnToolRequests::Clear();
+                PS::ItemIconRequests::Clear();
+                PS::ItemIconRequests::Available=false;
+                m_visualEffectAppliedActors.clear();
+                m_nameplateAppliedActors.clear();
+                m_activeNameplateStates.clear();
+                m_observedActivities.clear();
+                m_pendingRespawns.clear();
+                m_nameplateRefreshElapsed = 0.0;
+                m_visualTimerElapsed = 0.0;
+                m_sharedSpawnVisuals.clear();
+                for (const auto& ref : m_rootedVisualEffectMaterials)
+                    if (auto* material=ref.Get()) if (material->IsRootSet()) material->ClearRootSet();
+                m_rootedVisualEffectMaterials.clear();
+            }, options);
+        if (m_worldTeardownCallbackId == Hook::ERROR_ID)
+            PS::Log<LogLevel::Warning>(
+                STR("World-teardown ghost cleanup could not be registered.\n"));
+
+        options.HookName = TEXT("DragonWildsSpawnCreate");
+
         m_spawnTickCallbackId = Hook::RegisterEngineTickPostCallback(
             [this](Hook::TCallbackIterationData<void>&, UEngine*, float deltaSeconds, bool) {
                 PlayerGhost::Flush();
+                PumpItemIcons();
+                PumpSpawnTools();
+                ReconcileTimedBuildingProps(deltaSeconds);
                 RetryPendingAINames(deltaSeconds);
+                RefreshPlayerNameplates(deltaSeconds);
                 if (!m_pendingWorld)
                 {
                     return;
@@ -1792,7 +2455,9 @@ namespace DragonWilds {
         UECustom::UObjectGlobals::GetObjectsOfClass(aiBaseClass, instances, true, static_cast<EObjectFlags>(0));
         for (auto* object : instances)
         {
-            if (!object || object->GetWorld() != world)
+            if (!object || object->GetWorld() != world
+                || object->HasAnyFlags(static_cast<EObjectFlags>(
+                    RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed)))
             {
                 continue;
             }
@@ -1809,6 +2474,60 @@ namespace DragonWilds {
         }
 
         return false;
+    }
+
+    void DragonWildsSpawnLoader::DestroyLiveSpawnedAI(UWorld* world,const SpawnInfo& spawn)
+    {
+        auto* aiBaseClass=UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr,nullptr,TEXT("/Script/Dominion.DominionAICharacter"));
+        auto* spawnInfoProperty=aiBaseClass
+            ? PropertyHelper::GetPropertyByName<FStructProperty>(aiBaseClass,TEXT("SpawnInfo")):nullptr;
+        auto* sourceIdProperty=spawnInfoProperty && spawnInfoProperty->GetStruct()
+            ? PropertyHelper::GetPropertyByName(spawnInfoProperty->GetStruct().Get(),TEXT("SpawnSourceId")):nullptr;
+        if(!aiBaseClass || !spawnInfoProperty || !sourceIdProperty || sourceIdProperty->GetSize()!=sizeof(FGuid))
+            throw std::runtime_error("Timed AI cleanup source identity is unavailable");
+        TArray<UObject*> instances;
+        UECustom::UObjectGlobals::GetObjectsOfClass(aiBaseClass,instances,true,static_cast<EObjectFlags>(0));
+        for(auto* object:instances) {
+            if(!object || object->GetWorld()!=world || !object->IsA<AActor>())continue;
+            FGuid sourceId{};
+            auto* data=reinterpret_cast<uint8*>(object)+spawnInfoProperty->GetOffset_Internal()+sourceIdProperty->GetOffset_Internal();
+            std::memcpy(&sourceId,data,sizeof(sourceId));
+            if(std::memcmp(&sourceId,&spawn.StableId,sizeof(sourceId))==0)
+                ActorHelper::DestroyActor(static_cast<AActor*>(object));
+        }
+    }
+
+    void DragonWildsSpawnLoader::RetireTimedActor(AActor* actor)
+    {
+        if(!actor)return;
+        // A native building can be dormant and can own transient FX.  Wake the
+        // actor before changing presentation, remove locally-created FX, and
+        // make collision/tick/visibility inert before the authoritative destroy.
+        // This leaves no collision frame while the replicated destroy closes
+        // the remote actor channel.
+        if(const auto applied=m_visualEffectAppliedActors.find(actor);
+            applied!=m_visualEffectAppliedActors.end()) {
+            if(auto* component=applied->second.Component.Get())NiagaraAttachment::Destroy(component);
+            m_visualEffectAppliedActors.erase(applied);
+        }
+        try {ActorHelper::FunctionCall(actor,TEXT("/Script/Engine.Actor:FlushNetDormancy")).Invoke();}catch(...){}
+        try {ActorHelper::FunctionCall(actor,TEXT("/Script/Engine.Actor:SetActorEnableCollision")).Arg(TEXT("bNewActorEnableCollision"),false).Invoke();}catch(...){}
+        try {ActorHelper::FunctionCall(actor,TEXT("/Script/Engine.Actor:SetActorTickEnabled")).Arg(TEXT("bEnabled"),false).Invoke();}catch(...){}
+        try {ActorHelper::FunctionCall(actor,TEXT("/Script/Engine.Actor:SetActorHiddenInGame")).Arg(TEXT("bNewHidden"),true).Invoke();}catch(...){}
+        try {ActorHelper::FunctionCall(actor,TEXT("/Script/Engine.Actor:ForceNetUpdate")).Invoke();}catch(...){}
+        const bool prior = m_allowManagedBuildingDestroy;
+        m_allowManagedBuildingDestroy = true;
+        try
+        {
+            ActorHelper::DestroyActor(actor);
+            m_allowManagedBuildingDestroy = prior;
+        }
+        catch (...)
+        {
+            m_allowManagedBuildingDestroy = prior;
+            throw;
+        }
     }
 
     void DragonWildsSpawnLoader::CleanupOrphanedActors(UWorld* world)
@@ -1927,7 +2646,9 @@ namespace DragonWilds {
         m_processingSpawns = true;
         try
         {
-            if (GetGameMode(world))
+            const bool authoritative=GetGameMode(world)!=nullptr;
+            const bool clientPresentation=!authoritative && PS::Network::Detect(world).Mode==PS::Network::Role::Client;
+            if (authoritative || clientPresentation)
             {
                 if (world != m_readyWorld)
                 {
@@ -1941,23 +2662,35 @@ namespace DragonWilds {
                     m_aiNameRetryAttempts.clear();
                     m_aiNameRetryAccumulator = 0.0;
                     m_liveAIBindings.clear();
-                    PlayerGhost::Clear();
+                    PlayerGhost::ClearWorld();
                     m_visualEffectAppliedActors.clear();
+                    m_nameplateAppliedActors.clear();
+                    m_activeNameplateStates.clear();
+                    m_observedActivities.clear();
+                    m_pendingRespawns.clear();
+                    m_nameplateRefreshElapsed = 0.0;
+                m_visualTimerElapsed = 0.0;
+                m_buildingTimeElapsed = 0.0;
                     m_sharedSpawnVisuals.clear();
-                    for (auto* material : m_rootedVisualEffectMaterials)
-                        if (material && material->IsRootSet()) material->ClearRootSet();
+                    for (const auto& ref : m_rootedVisualEffectMaterials)
+                        if (auto* material=ref.Get()) if (material->IsRootSet()) material->ClearRootSet();
                     m_rootedVisualEffectMaterials.clear();
                     for (auto& spawn : m_spawns)
                     {
                         spawn.bExistsInWorld = false;
                         spawn.bSpawnFailed = false;
-                        spawn.Location = spawn.AuthoredLocation;
+                        spawn.bCellActivated = false;
+                        spawn.bTimeAllowed = false;
+                        spawn.bDeconstructed = false;
+                        spawn.LiveActor = {};
+                        spawn.Location = FVector(spawn.AuthoredLocation.X(),spawn.AuthoredLocation.Y(),spawn.AuthoredLocation.Z()+10.0);
                         spawn.bGroundingResolved = !spawn.bGroundToSurface;
                     }
                     m_readyWorld = world;
-                    ApplyPlayerRules();
+                    if(authoritative)ApplyPlayerRules();
+                    else PS::Log<LogLevel::Verbose>(STR("Client player presentation world ready ({}).\n"),trigger);
 
-                    if (!m_spawns.empty())
+                    if (authoritative && !m_spawns.empty())
                     {
                         PS::Log<LogLevel::Verbose>(STR("World ready ({}), processing {} entries.\n"), trigger, m_spawns.size());
                     }
@@ -1966,12 +2699,12 @@ namespace DragonWilds {
                 const bool hasPending = std::any_of(m_spawns.begin(), m_spawns.end(), [](const SpawnInfo& spawn) {
                     return !spawn.bExistsInWorld && !spawn.bSpawnFailed;
                 });
-                if (hasPending && GetAIDirector(world))
+                if (authoritative && hasPending && GetAIDirector(world))
                 {
                     ProcessSpawns(world, bounds);
                 }
 
-                CleanupOrphanedActors(world);
+                if(authoritative)CleanupOrphanedActors(world);
             }
         }
         catch (const std::exception& e)
@@ -2006,14 +2739,34 @@ namespace DragonWilds {
                 {
                     continue;
                 }
+                spawn.bCellActivated = true;
             }
             else if (spawn.Type != ESpawnEntryType::AISpawnPoint)
             {
                 continue;
             }
+            else spawn.bCellActivated = true;
 
             try
             {
+                if(spawn.Type!=ESpawnEntryType::RemoveActor && !spawn.QuestCompleted.empty()) {
+                    if(spawn.bPersistAfterCondition && FindActorByStableId(world,spawn.StableId))spawn.bConditionLatched=true;
+                    if(!spawn.bConditionLatched) {
+                        bool complete=false;
+                        try {complete=IsQuestCompleted && IsQuestCompleted(world,spawn.QuestCompleted);} catch(...) {continue;}
+                        if(complete && spawn.bPersistAfterCondition)spawn.bConditionLatched=true;
+                        if(!complete)continue;
+                    }
+                    if(spawn.Type==ESpawnEntryType::Actor && HasEquivalentActorNear(world,spawn)) {
+                        spawn.bSatisfiedByExisting=true;spawn.bExistsInWorld=true;continue;
+                    }
+                }
+                if(spawn.Type!=ESpawnEntryType::RemoveActor && spawn.Time!=TimeOfDay::Requirement::Any) {
+                    bool allowed=false;
+                    try {allowed=TimeOfDay::Allows(world,spawn.Time);} catch(...) {continue;}
+                    spawn.bTimeAllowed=allowed;
+                    if(!allowed)continue;
+                }
                 ResolveGroundedLocation(world, spawn);
                 switch (spawn.Type)
                 {
@@ -2046,6 +2799,24 @@ namespace DragonWilds {
         }
 
         CreateSpawn(world, spawn);
+    }
+
+    bool DragonWildsSpawnLoader::HasEquivalentActorNear(UWorld* world,const SpawnInfo& spawn)
+    {
+        if(!world || spawn.DuplicateRadius<=0 || spawn.ClassPath.empty())return false;
+        auto* actorClass=ResolveClass(spawn.ClassPath);
+        if(!actorClass || !ActorHelper::IsActorClass(actorClass))return false;
+        TArray<UObject*> objects;UECustom::UObjectGlobals::GetObjectsOfClass(actorClass,objects,true);
+        if(objects.Num()<0 || objects.Num()>4096)throw std::runtime_error("Duplicate placement actor roster exceeds the safe bound");
+        const double limit=spawn.DuplicateRadius*spawn.DuplicateRadius;
+        for(auto* object:objects) {
+            auto* actor=object && object->IsA<AActor>()?static_cast<AActor*>(object):nullptr;
+            if(!actor || actor->GetWorld()!=world || actor->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed)))continue;
+            const auto at=ActorHelper::GetActorLocation(actor);
+            const auto dx=at.X()-spawn.Location.X(),dy=at.Y()-spawn.Location.Y(),dz=at.Z()-spawn.Location.Z();
+            if(dx*dx+dy*dy+dz*dz<=limit)return true;
+        }
+        return false;
     }
 
     void DragonWildsSpawnLoader::ProcessActorEntry(UWorld* world, SpawnInfo& spawn)
@@ -2083,6 +2854,7 @@ namespace DragonWilds {
 
         if (existing && !needsRecreate)
         {
+            if(spawn.bBuildingProp)ApplyBuildingData(existing,spawn);
             const auto current = ActorHelper::GetActorLocation(existing);
             const auto dx = current.X() - spawn.Location.X();
             const auto dy = current.Y() - spawn.Location.Y();
@@ -2097,6 +2869,8 @@ namespace DragonWilds {
                 ApplyVisualEffect(existing, spawn.VisualEffect,
                     STR("Spawn from '") + spawn.ModName + STR("'"));
                 ApplyDropMultiplier(existing, spawn.DropMultiplier);
+                ApplyAdditionalDrops(existing, spawn.AdditionalDrops);
+                spawn.LiveActor=PS::WeakObjectHandle(existing);
                 spawn.bExistsInWorld = true;
                 return;
             }
@@ -2207,7 +2981,7 @@ namespace DragonWilds {
 
         spawn.Location = FVector(
             spawn.AuthoredLocation.X(), spawn.AuthoredLocation.Y(),
-            impact.Z() + spawn.GroundZOffset);
+            impact.Z() + spawn.GroundZOffset + 10.0);
         spawn.bGroundingResolved = true;
         PS::Log<LogLevel::Verbose>(
             STR("Resolved Location.Z '$' for {} from trace origin Z {} to ground Z {} (offset {}).\n"),
@@ -2225,6 +2999,12 @@ namespace DragonWilds {
 
         auto* actor = ActorHelper::SpawnActor(world, spawnClass, spawn.Location, spawn.Rotation,
             [&](AActor* spawned) {
+                if(spawn.Time!=TimeOfDay::Requirement::Any) {
+                    spawned->SetFlags(RF_Transient);
+                    if(auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(
+                        spawned->GetClassPrivate(),TEXT("bSkipSpudStore"))))
+                        skip->SetPropertyValue(skip->ContainerPtrToValuePtr<void>(spawned),true);
+                }
                 SetGuidProperty(spawned, TEXT("Guid"), spawn.StableId);
                 ApplyEntryProperties(spawned, spawn.Properties);
                 if (auto* runtimeProperty = PropertyHelper::GetPropertyByName<FBoolProperty>(
@@ -2235,6 +3015,7 @@ namespace DragonWilds {
                 }
             });
         actor->SetActorScale3D(spawn.Scale);
+        spawn.LiveActor=PS::WeakObjectHandle(actor);
 
         auto* director = GetAIDirector(world);
         const bool added = InvokeAIDirectorSpawnFunction(director,
@@ -2251,6 +3032,114 @@ namespace DragonWilds {
             spawn.Location.X(), spawn.Location.Y(), spawn.Location.Z());
     }
 
+    void DragonWildsSpawnLoader::ValidateEventSpawn(const std::string& key)
+    {
+        const auto found=m_eventTemplates.find(key);
+        if(found==m_eventTemplates.end())throw std::runtime_error("Missing EventOnly spawn template: "+key);
+        auto* type=ResolveClass(RC::to_generic_string(found->second.Class));
+        auto* base=ResolveClass(TEXT("/Script/Dominion.DominionAICharacter"));
+        if(!type || !base || !type->IsChildOf(base))throw std::runtime_error("Event template must resolve to DominionAICharacter");
+        auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(type,TEXT("bSkipSpudStore")));
+        if(!skip || skip->GetArrayDim()!=1)throw std::runtime_error("Event AI save-exclusion flag unavailable");
+    }
+
+    nlohmann::json DragonWildsSpawnLoader::EventSpawnManifest(const std::string& key) const
+    {
+        const auto found=m_eventTemplates.find(key);
+        if(found==m_eventTemplates.end())throw std::runtime_error("Event spawn definition is missing: "+key);
+        return Events::Identity(found->second);
+    }
+
+    bool DragonWildsSpawnLoader::PresentEventIdentity(AActor* actor,const std::string& payload)
+    {
+        if(!actor || !HasInitialized() || payload.empty())return false;
+        if(PS::Network::Detect(actor).Mode!=PS::Network::Role::Client)return false;
+        const auto identity=Events::DecodeIdentity(payload);
+        const auto key=identity.at("spawn").get<std::string>();
+        const auto found=m_eventTemplates.find(key);
+        const bool tool=identity.at("kind")=="tool-ai" || identity.at("kind")=="tool-resource";
+        if(!tool && found==m_eventTemplates.end())throw std::runtime_error("Client event spawn definition is missing: "+key);
+        const auto definition=tool?Events::ToolIdentity(identity):found->second;
+        if(!tool)Events::ValidateIdentity(identity,definition);
+        if(actor->GetClassPrivate()->GetPathName()!=RC::to_generic_string(definition.Class))
+            throw std::runtime_error("Replicated event actor class does not match its definition");
+        if(identity.at("kind")=="tool-resource") {
+            ApplyActorDisplayName(actor,definition.Name);
+            actor->SetActorScale3D(FVector(definition.Scale,definition.Scale,definition.Scale));
+            if(!definition.VisualEffect.empty()){auto visual=definition.VisualEffect;visual["Type"]="Ghost";if(!ApplyVisualEffect(actor,visual,TEXT("Tool resource")))return false;}
+            return true;
+        }
+        if(std::none_of(m_liveAIBindings.begin(),m_liveAIBindings.end(),[&](const auto& binding){return binding.Actor.Get()==actor;})) {
+            auto naming=std::make_shared<SpawnInfo>();naming->DisplayName=definition.Name;naming->BossName=definition.BossName;
+            naming->VisualEffect=definition.VisualEffect;
+            if(!naming->VisualEffect.empty())naming->VisualEffect["Type"]="Ghost";
+            m_customNamedAIActors.erase(actor);m_aiNameRetryAttempts.erase(actor);
+            m_liveAIBindings.push_back({PS::WeakObject(actor),{},naming});
+            ApplyVisualEffect(actor,naming->VisualEffect,TEXT("Event AI"));
+        }
+        ApplyAIDisplayName(actor,definition.Name,definition.BossName);
+        if(identity.value("version",0)==3 && PresentEventState)PresentEventState(actor,identity.at("event").get<std::string>());
+        return true;
+    }
+
+    AActor* DragonWildsSpawnLoader::SpawnEventAI(const std::string& key,UWorld* world,const FVector& position,bool tool,double yaw,const std::string& eventKey,int toolPowerLevel)
+    {
+        if(!world || !GetGameMode(world))throw std::runtime_error("Event AI can only be spawned by world authority");
+        ValidateEventSpawn(key);
+        const auto& definition=m_eventTemplates.at(key);
+        auto* type=ResolveClass(RC::to_generic_string(definition.Class));
+        if(!tool && toolPowerLevel!=-1)throw std::runtime_error("Direct power override requires the authoring tool path");
+        if(toolPowerLevel==-1)toolPowerLevel=definition.PowerLevel;
+        PS::Authoring::ValidatePower(toolPowerLevel);
+        FNumericProperty* power=nullptr;
+        if(toolPowerLevel!=-1) {
+            power=CastField<FNumericProperty>(PropertyHelper::GetPropertyByName(type,TEXT("PowerLevel")));
+            if(!power || power->GetArrayDim()!=1)
+                throw std::runtime_error("This AI has no reflected numeric PowerLevel for a direct temporary spawn. Choose Native/default or Permanent spawn (native spawn-point power)");
+        }
+        auto naming=std::make_shared<SpawnInfo>();
+        naming->DisplayName=definition.Name;
+        naming->BossName=definition.BossName;
+        naming->Scale=FVector(definition.Scale,definition.Scale,definition.Scale);
+        naming->VisualEffect=definition.VisualEffect;
+        if(!naming->VisualEffect.empty())naming->VisualEffect["Type"]="Ghost";
+        auto* actor=ActorHelper::SpawnActor(world,type,position,FRotator(0,yaw,0),[&](AActor* value){
+            value->SetFlags(RF_Transient);
+            // This callback runs before FinishSpawning/BeginPlay; never invent
+            // damage/health multipliers as a substitute for native power.
+            if(power)PropertyHelper::CopyJsonValueToContainer(value,power,toolPowerLevel);
+            auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(type,TEXT("bSkipSpudStore")));
+            skip->SetPropertyValue(skip->ContainerPtrToValuePtr<void>(value),true);
+            if(!skip->GetPropertyValue(skip->ContainerPtrToValuePtr<void>(value)))throw std::runtime_error("Event save exclusion did not round-trip");
+            m_customNamedAIActors.erase(value);
+            m_aiNameRetryAttempts.erase(value);
+            m_liveAIBindings.push_back({PS::WeakObject(value),{},naming});
+        });
+        try {
+            auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(type,TEXT("bSkipSpudStore")));
+            if(!skip || !skip->GetPropertyValue(skip->ContainerPtrToValuePtr<void>(actor)))throw std::runtime_error("Event AI lost save exclusion during creation");
+            if(power) {
+                auto* address=power->ContainerPtrToValuePtr<void>(actor);
+                const auto actual=power->IsInteger()?static_cast<double>(power->GetSignedIntPropertyValue(address)):power->GetFloatingPointPropertyValue(address);
+                if(actual!=toolPowerLevel)throw std::runtime_error("Native AI initialization replaced the requested PowerLevel; temporary spawn rolled back");
+            }
+            actor->SetActorScale3D(FVector(definition.Scale,definition.Scale,definition.Scale));
+            if(!definition.LootRow.empty() && !ApplyAILootRow(actor,definition.LootRow))
+                throw std::runtime_error("Event enemy loot override could not be applied: "+definition.LootRow);
+            ApplyAIDisplayName(actor,definition.Name,definition.BossName);
+            ApplyVisualEffect(actor,naming->VisualEffect,TEXT("Event AI"));
+            const auto mode=PS::Network::Detect(actor).Mode;
+            if(mode!=PS::Network::Role::Standalone) {
+                if(mode==PS::Network::Role::Unknown || !PublishEventIdentity)throw std::runtime_error("Event identity transport unavailable");
+                auto identity=Events::Identity(definition);
+                if(tool)identity["kind"]="tool-ai";
+                else if(!eventKey.empty()){identity["version"]=3;identity["event"]=eventKey;}
+                PublishEventIdentity(actor,identity.dump());
+            }
+            return actor;
+        }catch(...){ActorHelper::DestroyActor(actor);throw;}
+    }
+
     void DragonWildsSpawnLoader::CreateActor(UWorld* world, SpawnInfo& spawn)
     {
         auto* actorClass = ResolveClass(spawn.ClassPath);
@@ -2261,7 +3150,14 @@ namespace DragonWilds {
 
         auto* actor = ActorHelper::SpawnActor(world, actorClass, spawn.Location, spawn.Rotation,
             [&](AActor* spawned) {
+                if(spawn.Time!=TimeOfDay::Requirement::Any) {
+                    spawned->SetFlags(RF_Transient);
+                    if(auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(
+                        spawned->GetClassPrivate(),TEXT("bSkipSpudStore"))))
+                        skip->SetPropertyValue(skip->ContainerPtrToValuePtr<void>(spawned),true);
+                }
                 SetGuidProperty(spawned, TEXT("SpudGuid"), spawn.StableId);
+                ApplyBuildingData(spawned,spawn);
                 ApplyEntryProperties(spawned, spawn.Properties);
             }, ESpawnActorScaleMethod::OverrideRootScale);
         actor->SetActorScale3D(spawn.Scale);
@@ -2271,6 +3167,8 @@ namespace DragonWilds {
         ApplyVisualEffect(actor, spawn.VisualEffect,
             STR("Spawn from '") + spawn.ModName + STR("'"));
         ApplyDropMultiplier(actor, spawn.DropMultiplier);
+        ApplyAdditionalDrops(actor, spawn.AdditionalDrops);
+        spawn.LiveActor=PS::WeakObjectHandle(actor);
 
         if (spawn.bUseNativeRespawn)
         {
@@ -2290,10 +3188,77 @@ namespace DragonWilds {
             actor->GetClassPrivate()->GetName(), spawn.Location.X(), spawn.Location.Y(), spawn.Location.Z());
     }
 
+    void DragonWildsSpawnLoader::ReconcileTimedBuildingProps(float deltaSeconds)
+    {
+        if(!m_readyWorld || !GetGameMode(m_readyWorld))return;
+        if(std::none_of(m_spawns.begin(),m_spawns.end(),[](const auto& spawn){
+            return spawn.Type!=ESpawnEntryType::RemoveActor && (spawn.Time!=TimeOfDay::Requirement::Any || !spawn.QuestCompleted.empty());
+        }))return;
+        m_buildingTimeElapsed+=deltaSeconds;
+        if(m_buildingTimeElapsed<1.0)return;
+        m_buildingTimeElapsed=0;
+        TimeOfDay::Requirement current=TimeOfDay::Requirement::Any;
+        const bool needsTime=std::any_of(m_spawns.begin(),m_spawns.end(),[](const auto& spawn){return spawn.Time!=TimeOfDay::Requirement::Any;});
+        if(needsTime)try {current=TimeOfDay::Current(m_readyWorld);} catch(...) {return;}
+        for(auto& spawn:m_spawns) {
+            if(spawn.Type==ESpawnEntryType::RemoveActor || (spawn.Time==TimeOfDay::Requirement::Any && spawn.QuestCompleted.empty()) || !spawn.bCellActivated)continue;
+            auto* actor=spawn.LiveActor.Get();
+            if(!actor)actor=FindActorByStableId(m_readyWorld,spawn.StableId);
+            if(actor && (actor->GetWorld()!=m_readyWorld
+                || actor->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed))))actor=nullptr;
+            if(actor && !spawn.QuestCompleted.empty() && spawn.bPersistAfterCondition)spawn.bConditionLatched=true;
+            bool questAllowed=spawn.QuestCompleted.empty() || spawn.bConditionLatched;
+            if(!questAllowed)try {questAllowed=IsQuestCompleted && IsQuestCompleted(m_readyWorld,spawn.QuestCompleted);} catch(...) {questAllowed=false;}
+            if(questAllowed && !spawn.QuestCompleted.empty() && spawn.bPersistAfterCondition)spawn.bConditionLatched=true;
+            const bool allowed=(spawn.Time==TimeOfDay::Requirement::Any || spawn.Time==current) && questAllowed;
+            if(allowed!=spawn.bTimeAllowed) {
+                spawn.bTimeAllowed=allowed;
+                if(allowed)spawn.bDeconstructed=false;
+                PS::Log<LogLevel::Verbose>(STR("Conditional spawn '{}' entering {} state.\n"),
+                    spawn.EntryId,allowed?STR("active"):STR("inactive"));
+            }
+            if(!allowed) {
+                try {
+                    if(spawn.Type==ESpawnEntryType::AISpawnPoint)DestroyLiveSpawnedAI(m_readyWorld,spawn);
+                    if(actor && actor->IsA<AActor>())RetireTimedActor(static_cast<AActor*>(actor));
+                } catch(const std::exception& error) {
+                    if(!spawn.bSpawnFailed)PS::Log<LogLevel::Error>(STR("Timed spawn '{}' cleanup failed safely: {}\n"),
+                        spawn.EntryId,PS::ToWideSafe(error.what()));
+                    spawn.bSpawnFailed=true;
+                }
+                spawn.LiveActor={};spawn.bExistsInWorld=false;
+                continue;
+            }
+            if(!actor && spawn.Type==ESpawnEntryType::Actor && !spawn.QuestCompleted.empty()
+                && HasEquivalentActorNear(m_readyWorld,spawn)) {
+                spawn.bSatisfiedByExisting=true;spawn.bExistsInWorld=true;continue;
+            }
+            if(spawn.bSatisfiedByExisting) {
+                if(spawn.Type==ESpawnEntryType::Actor && HasEquivalentActorNear(m_readyWorld,spawn))continue;
+                spawn.bSatisfiedByExisting=false;spawn.bExistsInWorld=false;
+            }
+            if(actor) {spawn.LiveActor=PS::WeakObjectHandle(actor);spawn.bExistsInWorld=true;continue;}
+            if(spawn.bBuildingProp && spawn.bExistsInWorld && spawn.bAllowDeconstruction) {
+                spawn.bDeconstructed=true;
+            }
+            if(spawn.bDeconstructed)continue;
+            spawn.bExistsInWorld=false;spawn.bSpawnFailed=false;
+            try {
+                if(spawn.Type==ESpawnEntryType::AISpawnPoint)ProcessAISpawnPointEntry(m_readyWorld,spawn);
+                else ProcessActorEntry(m_readyWorld,spawn);
+            }
+            catch(const std::exception& error) {
+                spawn.bSpawnFailed=true;
+                PS::Log<LogLevel::Error>(STR("Timed spawn '{}' failed safely: {}\n"),
+                    spawn.EntryId,PS::ToWideSafe(error.what()));
+            }
+        }
+    }
+
     fs::path DragonWildsSpawnLoader::GetNativeRespawnStatePath()
     {
-        return fs::path(PS::HostServices::WorkingDirectory())
-            / "Mods" / "RuneSchema" / "runtime" / "native-respawn-placements.json";
+        return PS::HostServices::ExportsDirectory()
+            / "native-respawn-placements.json";
     }
 
     void DragonWildsSpawnLoader::LoadNativeRespawnState()

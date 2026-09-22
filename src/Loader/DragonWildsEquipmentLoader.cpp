@@ -1,7 +1,11 @@
 #include "Loader/DragonWildsEquipmentLoader.h"
 #include "Loader/SurgeNativeContract.h"
 #include "Loader/EquipmentShadowveil.h"
+#include "Loader/DefinitionRegistry.h"
 #include "SDK/Helper/PropertyHelper.h"
+#include "SDK/Classes/Custom/UObjectGlobals.h"
+#include "SDK/Classes/KismetSystemLibrary.h"
+#include "SDK/Classes/TSoftObjectPtr.h"
 #include "Unreal/UObject.hpp"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
@@ -23,6 +27,7 @@ std::vector<RC::StringType> LegPaths;
 std::atomic<bool> Active{false};
 std::atomic<unsigned> Observed{0};
 uintptr_t ImageBase{};
+uint32_t ExecutableTimestamp{},ExecutableImageSize{};
 const NativeHookContract::Profile<SurgeNative::Site>* SelectedProfile{};
 
 UObject* ObjectRef(UObject* owner, const TCHAR* name) {
@@ -77,8 +82,10 @@ bool Install(const TCHAR*& failure) {
     if (!dos || dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0 || dos->e_lfanew > 4096) return false;
     auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(ImageBase + dos->e_lfanew);
     if (nt->Signature != IMAGE_NT_SIGNATURE || nt->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64) return false;
+    ExecutableTimestamp=nt->FileHeader.TimeDateStamp;
+    ExecutableImageSize=nt->OptionalHeader.SizeOfImage;
     failure = TEXT("unsupported executable build");
-    SelectedProfile = NativeHookContract::Select(nt->FileHeader.TimeDateStamp, nt->OptionalHeader.SizeOfImage, SurgeNative::Profiles);
+    SelectedProfile = NativeHookContract::Select(ExecutableTimestamp, ExecutableImageSize, SurgeNative::Profiles);
     if (!SelectedProfile) return false;
     failure = TEXT("native hook or resume bytes differ");
     if (!NativeHookContract::Validate(std::span(reinterpret_cast<const unsigned char*>(ImageBase), SelectedProfile->imageSize), SelectedProfile->sites)) return false;
@@ -110,6 +117,28 @@ void DragonWildsEquipmentLoader::OnLoad(const std::filesystem::path& path, const
 void DragonWildsEquipmentLoader::OnFinalizeLoad(const EEngineLifecyclePhase& phase) {
     if (phase != EEngineLifecyclePhase::PostEngineInit || m_finalized) return;
     m_finalized = true;
+    size_t effectItems=0;
+    for(const auto& [path,rule]:m_rules.effects)try {
+        for(const auto& effect:rule.effects)if(!effect.starts_with('/') && !DefinitionRegistry::Effects.contains(effect))
+            throw std::runtime_error("unknown gameplay-effect alias: "+effect);
+        const auto wide=RC::to_generic_string(path);
+        auto* item=UECustom::UObjectGlobals::StaticFindObject(nullptr,nullptr,wide.c_str(),false);
+        if(!item) {
+            UECustom::TSoftObjectPtr<UObject> soft{UECustom::FSoftObjectPath(wide)};
+            item=UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
+        }
+        if(!item)throw std::runtime_error("item asset did not resolve");
+        auto* property=CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(item->GetClassPrivate(),TEXT("GrantedEffects")));
+        if(!property)throw std::runtime_error("item does not expose a GrantedEffects array; use /assets for its native nested effect field");
+        nlohmann::json effects=rule.effects;
+        if(rule.mode==EquipmentEffectRules::Mode::Clear)effects=nlohmann::json::array();
+        else if(rule.mode==EquipmentEffectRules::Mode::Append)effects=PropertyHelper::BuildAppendValue(property,effects);
+        PropertyHelper::CopyJsonValueToContainer(item,property,effects);
+        ++effectItems;
+    }catch(const std::exception& error) {
+        PS::Log<LogLevel::Error>(TEXT("Equipment effects '{}': {}.\n"),RC::to_generic_string(path),PS::ToWideSafe(error.what()));
+    }
+    m_rules.effects.clear();
     const auto shadowveil=InitializeEquipmentShadowveil(m_rules.shadowveil);
     m_rules.shadowveil.clear();
     const auto surgeCount=m_rules.surge.size();
@@ -124,12 +153,15 @@ void DragonWildsEquipmentLoader::OnFinalizeLoad(const EEngineLifecyclePhase& pha
             surgeServer=SelectedProfile == &SurgeNative::Profiles[1];
             PS::Log<LogLevel::Verbose>(TEXT("Equipment Surge ({}): {} leg items; 8 native sites validated.\n"),
                 surgeServer ? TEXT("server") : TEXT("client"), LegPaths.size());
-        } else PS::Log<LogLevel::Error>(TEXT("Equipment Surge: {}; feature disabled.\n"), failure);
+        } else if(ExecutableTimestamp && ExecutableImageSize)
+            PS::Log<LogLevel::Warning>(TEXT("Equipment Surge disabled: {} (exe timestamp 0x{:08X}, image size 0x{:X}); capture a new native profile.\n"),failure,ExecutableTimestamp,ExecutableImageSize);
+        else PS::Log<LogLevel::Warning>(TEXT("Equipment Surge disabled: {}.\n"), failure);
     }
     if (shadowveil.enabled || surgeEnabled)
         PS::Log<LogLevel::Normal>(TEXT("Equipment ({}): {} Shadowveil wearables, {} Surge leg items enabled.\n"),
             (shadowveil.enabled ? shadowveil.server : surgeServer) ? TEXT("server") : TEXT("client"),
             shadowveil.enabled ? shadowveil.wearables : 0, surgeEnabled ? surgeCount : 0);
+    if(effectItems)PS::Log<LogLevel::Normal>(TEXT("Equipment effects: applied GrantedEffects to {} item assets.\n"),effectItems);
 }
 void DragonWildsEquipmentLoader::OnAutoReload(const RC::StringType&, const std::filesystem::path&) {
     PS::Log<LogLevel::Warning>(TEXT("Equipment behavior rule changes require restarting the game.\n"));

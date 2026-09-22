@@ -11,7 +11,11 @@ struct PreparedVisualEffect {
     PreparedVisualEffect() = default;
     explicit PreparedVisualEffect(nlohmann::json effect):value(std::move(effect)) {
         auto style=value;
-        if(style.is_object())style.erase("Target");
+        if(style.is_object()) {
+            style.erase("Target");
+            style.erase("Trigger");
+            style.erase("DurationSeconds");
+        }
         key=style.dump();
     }
 };

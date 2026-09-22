@@ -1,0 +1,3459 @@
+{
+  "checkpoint": "RSv16",
+  "generated": "2026-09-19",
+  "productionDllBuilt": false,
+  "nativeBuildVerified": true,
+  "nativeBuildSHA256": "0717537eec9dfeb677da9fbd2cb0ed0b52a0c3e8e8dc5ba73222accac779e825",
+  "files": [
+    {
+      "path": "Build RuneSchema.bat",
+      "bytes": 9144,
+      "sha256": "bf16ff2e2af424f55fa0764dedfd793bb3d932c2451f5828ee82cb9a065c1620"
+    },
+    {
+      "path": "BUILD-NOTES.md",
+      "bytes": 824,
+      "sha256": "ed34c57a0ad38ae4de22e56bf38c4288ed097013fb0b90189498461ecd51461b"
+    },
+    {
+      "path": "DIALOGUE-QUEST-EVENT-SPAWN-VENDOR-AUDIT.md",
+      "bytes": 7179,
+      "sha256": "488682a3827fde7722775ddd87f238b345e580cc4784f27609fb87d1c71c5660"
+    },
+    {
+      "path": "examples/RSv16/dialogue/60-GoblinPatrol.json",
+      "bytes": 736,
+      "sha256": "de317635f9bce0174a2ebaf1acdec74b5e0b618c215211316163004cd4bf33c6"
+    },
+    {
+      "path": "examples/RSv16/events/60-GoblinCaptain.json",
+      "bytes": 416,
+      "sha256": "e9c109e16d6024ee92b297966d90401db98ae93a3621228cb81408a315966758"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/assets/20-GranitesLastWord.jsonc",
+      "bytes": 666,
+      "sha256": "cf26476c50d2565094a2c497e497f61b250299dc0c15c0234a15c2103d90e4d6"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/dialogue/20-GraniteStory.jsonc",
+      "bytes": 23787,
+      "sha256": "7c6bbdefb77388ff1d380be9f667e38cadea177c15648bf58c92f00e3861fb01"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/dialogue/30-NuLL.jsonc",
+      "bytes": 8598,
+      "sha256": "c6e66c0d57ab6fcce65ddf259d2f268efbed36ddbc8292e2930ccfa126e20fe3"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/dialogue/40-Grumble.jsonc",
+      "bytes": 5463,
+      "sha256": "6ba6fbab6f20306b07101a9c9ae24a7ff5be5922895336acc6642bee647718a6"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/dialogue/50-QuantumBanker.jsonc",
+      "bytes": 5060,
+      "sha256": "ae4d83a91de235eb26e3e6d04e2ad533d9cad04a080af5863282f024feb89f9e"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/dialogue/60-Mortimer.jsonc",
+      "bytes": 6748,
+      "sha256": "ec801f69127602804371c1561d678cd58985fe69ee4977c935b3e179fd39c295"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/events/60-MortimerEncounters.json",
+      "bytes": 580,
+      "sha256": "8018002084d70cc21eed7b5da2e30a4ace1d6c5fc274ef9557da45ccd1b7e310"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/events/90-GrumbleGoblinWaves.json",
+      "bytes": 939,
+      "sha256": "d3ea9669a6dc0a405cc6a3204993386554743763bdef2a6ac6aba23d6bf20d90"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/events/91-GrumbleZogreTrial.json",
+      "bytes": 259,
+      "sha256": "410b85d7e1b09245d87b50aa78f669d81498801e913fec13b16509f6d28f44e0"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/ID.txt",
+      "bytes": 155,
+      "sha256": "a5d45e42319608560086a2d8a2ac880e1d6f17d9d989e1fc7d098b7c5ebf736e"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/lore/61-MortimerVillageBook.json",
+      "bytes": 2171,
+      "sha256": "823b7033763e62717c2c44141a8c9eff931da99c0d0569e63e0977cacdcba28c"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/npc/00-CowTrader.jsonc",
+      "bytes": 666,
+      "sha256": "62d749c2188823dbcde4b313474939226412956a8954b05cf78e8aa42e3d3c04"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/npc/20-Granite.jsonc",
+      "bytes": 983,
+      "sha256": "9b52c557d028c6d1f18bc0c513ed8aba39249054b5cbd01fbaa4f79dd544e2ed"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/npc/30-NuLL.jsonc",
+      "bytes": 1049,
+      "sha256": "0041c262f6ca20e5acb8e38d75cbabcba470c558794c05120bb723579c87bb84"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/npc/30-NuLL2.jsonc",
+      "bytes": 1053,
+      "sha256": "4bea9b8defeeaedbae316237f6d872d3a95b1c5c24fcde5cd07f9d27cc9e40a6"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/npc/40-Grumble.jsonc",
+      "bytes": 762,
+      "sha256": "6ecd33f1125e7309af10be395ba55e4208a81b76548e2d0a047415661c891327"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/npc/50-QuantumBanker.jsonc",
+      "bytes": 649,
+      "sha256": "422d9db910fa42420e89c9accbd8b6f10e3cc921ac179f21be80ee13665c5a5e"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/npc/60-Mortimer.jsonc",
+      "bytes": 1305,
+      "sha256": "a597a5d4a82ae94b177870be879519520888d9e7158c831a4dbe17dde30f9b03"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/npc/61-MortimerVillageBook.json",
+      "bytes": 745,
+      "sha256": "b54f1d50bd8be2666fd871c18988cde58bc45fd22f2558c29fc835795e43682a"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/npc/62-NightFirepit.jsonc",
+      "bytes": 452,
+      "sha256": "88e22c85bab1b33d0001cda074468f6e80b908ba19b57f0001c1401d657bc2f2"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/quests/60-GraniteGoblinPatrol.jsonc",
+      "bytes": 1497,
+      "sha256": "8c90549812079e7bbf179814e2c6d6979909992e8b06360b348cf8b20fe5f77e"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/quests/60-MortimerDebtors.json",
+      "bytes": 2559,
+      "sha256": "9191d1af886b2cc26da5b21ad403cbc54e6570e35d6dbede5c71967b90e66c91"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/quests/70-Grumble.jsonc",
+      "bytes": 973,
+      "sha256": "02cf5c812ccd2d8fbd570853f7241571d536a59085ff79eef46b7f2ca56fc23f"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/quests/71-NuLL.jsonc",
+      "bytes": 984,
+      "sha256": "cd8ef1d401e76fb7cfb6bf284e3544137c0d686c6e199b943aaf8704ec81a2e2"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/raw/60-MortimerLoot.json",
+      "bytes": 937,
+      "sha256": "49a681adf667365ca166f8494429edb33429690b1cf1c6dde8d1ce1da42dc9d2"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/README-RSv16.md",
+      "bytes": 1691,
+      "sha256": "1d004ce3f252fb4a451d319f6e6c429db82c5ff024730a4a3722fed02de938c0"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/spawns/60-MortimerZombies.json",
+      "bytes": 1422,
+      "sha256": "fc62103047a41723b3a427f2857bff555a33c708f8bd84090b1f69ef1b905ebb"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/spawns/90-GrumbleGoblins.json",
+      "bytes": 714,
+      "sha256": "7d3095f507d2ecb7676c908a5979f98a55950832609a795228e401b8d4d32068"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/spawns/91-GrumbleZogres.json",
+      "bytes": 782,
+      "sha256": "4b7e9d3c078477c76839d88b0a27e58ff8eb8584526c05a304d50fa9db0fd9bc"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/vendors/00-CowTrader.jsonc",
+      "bytes": 372,
+      "sha256": "af3f00ace8b729329a0aeb0155b612d86a887aaac9be458a9c3b7b13681b3dd8"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/vendors/20-GraniteArmory.jsonc",
+      "bytes": 622,
+      "sha256": "b04a4e768fac9d247b6231bd0ec4c7c4a42c80edb0ac320e8c4f2069d1325d05"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/vendors/30-NuLL and Void Warranties.jsonc",
+      "bytes": 10235,
+      "sha256": "63e716e39f8d8ad355c0f18202d3b9090997be7cf778fcda9933dec9094900be"
+    },
+    {
+      "path": "examples/RSv16/ExampleMods/RuneSchema2VendorTest/vendors/50-QuantumExchange.jsonc",
+      "bytes": 1133,
+      "sha256": "9adc2a199e26364b86713966d0f0e6f6ee1b4259092aef27c79d101c45b18a89"
+    },
+    {
+      "path": "examples/RSv16/npc/60-PortablePatrolMerchant.json",
+      "bytes": 240,
+      "sha256": "3840492c64093a5b78571ba09680c2e7ae155ca8f110a10441c82992964023a1"
+    },
+    {
+      "path": "examples/RSv16/quests/60-GoblinPatrol.json",
+      "bytes": 640,
+      "sha256": "1e6d0b57d5dc4c3a358eb56442cd3721d9e3b4f00f039cb443406f578ccfbb48"
+    },
+    {
+      "path": "examples/RSv16/vendors/60-PatrolSupplies.json",
+      "bytes": 104,
+      "sha256": "d96486f4357ec55e3dd83b1f0aab8aaf216a706c26da2901b9e07aad5368be87"
+    },
+    {
+      "path": "FMODEL-RSDW-AUTHORING-AUDIT.md",
+      "bytes": 10144,
+      "sha256": "4f31f9c91e4b7390329b044128a2fe73133a5d117714822bb6ed1b141b98c286"
+    },
+    {
+      "path": "FULL-LOADER-FMODEL-RSDW-AUDIT.md",
+      "bytes": 17871,
+      "sha256": "0eb6757d4c819f85afa38b4a695aa4d9c0dd8090ce61838f248c70c783cd111d"
+    },
+    {
+      "path": "ITEM-DETAILS-ITEM-LAB-AUDIT.md",
+      "bytes": 4276,
+      "sha256": "801c168061625f7b555631753f1c36612fe66e3f0311904773e4f43c0f1df18a"
+    },
+    {
+      "path": "PHASE-1-NPC-IDENTITY-ISOLATION.md",
+      "bytes": 3507,
+      "sha256": "2d6995745ce89ff352e5cfd42cdfd6bf5e39ba56a4e4a8a7f80f48fbe8566192"
+    },
+    {
+      "path": "PHASED-ROADMAP.md",
+      "bytes": 13008,
+      "sha256": "4998d3bc881fb7578242db3dd3617b386ca5646463f6275bed40777e6250d7ab"
+    },
+    {
+      "path": "raw/CMakeLists.txt",
+      "bytes": 5545,
+      "sha256": "7bfe8f70f475fd140836aba0153d446a87b42d7a7e7f997d152e283b2d2c3454"
+    },
+    {
+      "path": "raw/core/CMakeLists.txt",
+      "bytes": 15676,
+      "sha256": "2ff9dd231adf5a06d20f2b181148ddaf5acfccee43f97459753a8884216d2a5c"
+    },
+    {
+      "path": "raw/include/Core/ConfigFiles.h",
+      "bytes": 389,
+      "sha256": "c60e313531bf7d249bcca49140b57064b8362c205702b519c9619ae1e8ba54b8"
+    },
+    {
+      "path": "raw/include/Core/JournalPlacement.h",
+      "bytes": 5353,
+      "sha256": "1d9a6b1e7a0e7d268328b0c762e7c680c7e83e6c8184279247e08ea3c4a0e01e"
+    },
+    {
+      "path": "raw/include/Core/JsonArrayPatch.h",
+      "bytes": 424,
+      "sha256": "c0bdae6e0525adb5bb13349d19defba97ffd1df6cac8c844bfbd561ca7056332"
+    },
+    {
+      "path": "raw/include/Core/JsonDocument.h",
+      "bytes": 1106,
+      "sha256": "b152f76ef3d46432af267c1559471d2bfbbd89a4a6d59518d1dd3715fb894b84"
+    },
+    {
+      "path": "raw/include/Core/JsonLoadOrderMerge.h",
+      "bytes": 556,
+      "sha256": "9e42f4cf109e6a50ceadf43172f35cd20f9abde3faa29a7569b97f5ac3814cc9"
+    },
+    {
+      "path": "raw/include/Core/JsonPatchDirective.h",
+      "bytes": 615,
+      "sha256": "9f373be81edbe8046a77aa71538c86b1d5bdec82cbc4a237b0315b4129001ed1"
+    },
+    {
+      "path": "raw/include/Core/PatchConflicts.h",
+      "bytes": 4086,
+      "sha256": "d551de7020a2fc8b141663806527047635bcd035206769e8b3d12d5dd0ee6a27"
+    },
+    {
+      "path": "raw/include/Core/SaveCleanup.h",
+      "bytes": 8754,
+      "sha256": "9d317513b2e9a73cb71020c038e750b11f5c730ab9c647baf3506016727476dc"
+    },
+    {
+      "path": "raw/include/Core/SaveRegistrySnapshot.h",
+      "bytes": 734,
+      "sha256": "b0c0894e1d280ec6df8ece1efec1383a8f2caaef49040faf816fe8880d9a87f9"
+    },
+    {
+      "path": "raw/include/Generator/ActivityRuleTemplate.h",
+      "bytes": 2555,
+      "sha256": "a4c85833c00ee650fe28e478fb3f8a325006405be4b072ab35f6080430c60a63"
+    },
+    {
+      "path": "raw/include/Generator/AppearanceResolver.h",
+      "bytes": 3733,
+      "sha256": "bc1fe0981de1513cb1100e51380619816d1e67d34bfd25cbace0a5f3772a3322"
+    },
+    {
+      "path": "raw/include/Generator/AppearanceSignatures.h",
+      "bytes": 15144,
+      "sha256": "4e922440b9eb0f825a086a3d1f819542dfdd5829aa0ff182c2b4826457591fee"
+    },
+    {
+      "path": "raw/include/Generator/AppearanceTrace.h",
+      "bytes": 244,
+      "sha256": "4a8b5764f71d001058be56205c2d3dc23199514de6644a4366763bb392b53b8b"
+    },
+    {
+      "path": "raw/include/Generator/AppearanceTraceContract.h",
+      "bytes": 901,
+      "sha256": "124a707e80faf8194ab99a91afec7fdf6ef2dd10cfce0920be8978dff64b1564"
+    },
+    {
+      "path": "raw/include/Generator/AssetSearch.h",
+      "bytes": 393,
+      "sha256": "64fd581b55c27ff54cbfa09b4afc7fd2c1bf99f95e42c433e494cb251b089820"
+    },
+    {
+      "path": "raw/include/Generator/AssetTemplate.h",
+      "bytes": 2293,
+      "sha256": "7d5d1be322a3959e5c58d6bde9bc93727d595ec0efd6a9f2c72fc4f9363a558b"
+    },
+    {
+      "path": "raw/include/Generator/AuthoredStarters.h",
+      "bytes": 3072,
+      "sha256": "cf0af88f4e54fb5a86aff4b57508a18fcf5a3bd3cf17cfe321bf278fcb91a6f8"
+    },
+    {
+      "path": "raw/include/Generator/AuthoringPolicy.h",
+      "bytes": 2768,
+      "sha256": "e164c985407dbeca30d5e2acc9210c1ffc0044a0ed0b1a7db0a84c02916027a7"
+    },
+    {
+      "path": "raw/include/Generator/CaptureTraversal.h",
+      "bytes": 669,
+      "sha256": "961fad7ebf7c53d8cf24bb81fc2a72dde3ac2dccedd3d6c4a722dd305ee79742"
+    },
+    {
+      "path": "raw/include/Generator/ClonePresentation.h",
+      "bytes": 2865,
+      "sha256": "49494fbd601df1f5835997dec6f14b330eeed93480a4c45381c58f0bf1deb563"
+    },
+    {
+      "path": "raw/include/Generator/DiagnosticExport.h",
+      "bytes": 2674,
+      "sha256": "655bd44b1d8f1b212a2c4a1eacea9319a376e866fc4b44d301d8dba906a0bf72"
+    },
+    {
+      "path": "raw/include/Generator/DiagnosticLibrary.h",
+      "bytes": 3046,
+      "sha256": "59193d424fcf11d495bda011c8873566e41601b2a33179c11482e649aaba9f1f"
+    },
+    {
+      "path": "raw/include/Generator/DiagnosticPreset.h",
+      "bytes": 5926,
+      "sha256": "4265c2318d37fd662fb3bdd687f5e8ba428e63fbbcf28b3a36883ba57ad544e0"
+    },
+    {
+      "path": "raw/include/Generator/EventParameters.h",
+      "bytes": 399,
+      "sha256": "cde3af9a0e3a179162d4041df41faa56d3e8e196afcb0ba52aa563ad98562e53"
+    },
+    {
+      "path": "raw/include/Generator/F2BundledPaths.h",
+      "bytes": 13115,
+      "sha256": "820d5bed5305f24456dbbe0866d2c9f8f5f8304127dbc7b99bdfdacb011d48c8"
+    },
+    {
+      "path": "raw/include/Generator/F2CatalogPlan.h",
+      "bytes": 7105,
+      "sha256": "381a171d4dc2b7f167369eed762726b7ab1cf3392dcd12a3e48784f348f34b51"
+    },
+    {
+      "path": "raw/include/Generator/F2ReferenceTree.h",
+      "bytes": 3671,
+      "sha256": "f00875f2c8300f7f68d2446983ee5831fd7599e4b6ac9d17e44360be9e87e358"
+    },
+    {
+      "path": "raw/include/Generator/FocusedCapture.h",
+      "bytes": 564,
+      "sha256": "4d22d80d0f75552b867807a12cc9fd37f481f7a50e9fce8ef71026ba13d417de"
+    },
+    {
+      "path": "raw/include/Generator/HelpyHotkeys.h",
+      "bytes": 1531,
+      "sha256": "9cef37db2414bac875fb9e2b719fce03a18f2700a5f72c2c1230343819bf96bc"
+    },
+    {
+      "path": "raw/include/Generator/HelpyItemFilters.h",
+      "bytes": 3019,
+      "sha256": "d0eea0870ac1652ab7ea94d66398f884a4c94f36d615d5fcfcb20de992509912"
+    },
+    {
+      "path": "raw/include/Generator/HelpyNodes.h",
+      "bytes": 3368,
+      "sha256": "1789893a8555eb6cc619dcae3915f28b90a1284c27536116fc85f6260b2234d0"
+    },
+    {
+      "path": "raw/include/Generator/HelpyPropertyValue.h",
+      "bytes": 5324,
+      "sha256": "9eab230d1ba50471797e04a90082dd85eb030ece066c9851d795011bf21936d3"
+    },
+    {
+      "path": "raw/include/Generator/HelpyReferencePolicy.h",
+      "bytes": 403,
+      "sha256": "9b222dc628be1f64778b85c82b19dbf378c4513ba5d5dc2d88c7d840f01bfd4c"
+    },
+    {
+      "path": "raw/include/Generator/HelpyStatKey.h",
+      "bytes": 1006,
+      "sha256": "f41f93b78a69c39216a8c0ab4fd9a86949c8b20fe2907d10b5739eb537246ec2"
+    },
+    {
+      "path": "raw/include/Generator/InGameQuickMenu.h",
+      "bytes": 4388,
+      "sha256": "f92250d548a622b18e9875f637c66e2788da8f53717da0ff663174de08e5bf86"
+    },
+    {
+      "path": "raw/include/Generator/InspectionTools.h",
+      "bytes": 689,
+      "sha256": "c1134aa2e6b3550c371763dd820805c7886a6433ed0a64294d8dc66368d2fa79"
+    },
+    {
+      "path": "raw/include/Generator/ItemCatalogMetadata.h",
+      "bytes": 260,
+      "sha256": "21026dc77acdddb464ec4edeced712abe50f11b796417bac28f8d687ad4bb96f"
+    },
+    {
+      "path": "raw/include/Generator/ItemCloneRequest.h",
+      "bytes": 2861,
+      "sha256": "8f06d115207c3f78098e50f1ae8fcdd33982d5f1ec84ce423cc90e8d60891a88"
+    },
+    {
+      "path": "raw/include/Generator/ItemGridPicker.h",
+      "bytes": 4120,
+      "sha256": "b244c667ca781347d8231df51ee828d3437e700ea6d31103ff3a3078e00490e6"
+    },
+    {
+      "path": "raw/include/Generator/ItemIconCache.h",
+      "bytes": 5136,
+      "sha256": "20dc8136f077f4edd7b5fc3cb9b7ee725f9bdf574f4557ff590eb154c0703d6a"
+    },
+    {
+      "path": "raw/include/Generator/ItemIconThumbnail.h",
+      "bytes": 221,
+      "sha256": "c9f7ac3b19fce7650e328243900d425849205b5f0ef1685f2ca9eeb70051de27"
+    },
+    {
+      "path": "raw/include/Generator/JsonSchemaGenerator.h",
+      "bytes": 180,
+      "sha256": "a9728ff900d6aa6c4a267cc4cf15b06f90b40f458a3091e04eb7c5399795766b"
+    },
+    {
+      "path": "raw/include/Generator/LoaderCapabilities.h",
+      "bytes": 3771,
+      "sha256": "5658ef72a95f326ef2d99e893e8e4fee42920db30d0aa14f96ae701ddd90e3ec"
+    },
+    {
+      "path": "raw/include/Generator/LoaderSchemas.h",
+      "bytes": 49495,
+      "sha256": "65b7e7331c2dcc9a5fee6727a11cca28ff74bbb1def16b3182cba183aaaa67c9"
+    },
+    {
+      "path": "raw/include/Generator/LoaderTemplate.h",
+      "bytes": 6965,
+      "sha256": "5d6f722164474d67946d436f7c7df25fc3a4babaed7918de1d231c834f8b31ad"
+    },
+    {
+      "path": "raw/include/Generator/NativeCallResolver.h",
+      "bytes": 2735,
+      "sha256": "ac75fdcf99303cfcf8e9f8d915d47febc0b6bdfad855bf298b622ed904e6f69e"
+    },
+    {
+      "path": "raw/include/Generator/NiagaraPreset.h",
+      "bytes": 5866,
+      "sha256": "7ef5483473b936ad1f816738c38ed1280929ba434a17fc0235388636ee365b1a"
+    },
+    {
+      "path": "raw/include/Generator/NiagaraTest.h",
+      "bytes": 357,
+      "sha256": "99e93738e8d59170cc00a7affc1e8c01e4f3629fc213c6bd2c866d4f6583695d"
+    },
+    {
+      "path": "raw/include/Generator/NpcSaveExport.h",
+      "bytes": 3375,
+      "sha256": "2829e001ce2ba2a3c27bc1be39c0aa413065b6bebeaaf51ea7a7d07d8e013b2a"
+    },
+    {
+      "path": "raw/include/Generator/PlayerTrace.h",
+      "bytes": 346,
+      "sha256": "cf2d3b91fe8511a994226630c20c33939218b359b6b2a158da92698d5e1f634b"
+    },
+    {
+      "path": "raw/include/Generator/PlayerTraceOptions.h",
+      "bytes": 3139,
+      "sha256": "efa5552cd343a9d19368c2037e0e453337ce2896d1f0b45525411bb65abe62a0"
+    },
+    {
+      "path": "raw/include/Generator/QuestStatusPanel.h",
+      "bytes": 1932,
+      "sha256": "6edbf3cea1751d3545c372d54a5ab808ead684031557288141254c726970f10d"
+    },
+    {
+      "path": "raw/include/Generator/QuickMenuCatalogRules.h",
+      "bytes": 2757,
+      "sha256": "89cfc7081d3c43dfcc7084aafe4ab82f05ac8f5dd0d7d631514f4eadcb02356e"
+    },
+    {
+      "path": "raw/include/Generator/QuickMenuDecorations.h",
+      "bytes": 7161,
+      "sha256": "5c3787a790f9ece03bb8ad21f7c7e411aef2cccc3cef952dc9fdcf62eb642a8e"
+    },
+    {
+      "path": "raw/include/Generator/QuickMenuInputSafety.h",
+      "bytes": 3271,
+      "sha256": "6d42a858421f7a89ab9915e3ba42bf9c99418f4ef65d02e60b133b154047daa0"
+    },
+    {
+      "path": "raw/include/Generator/QuickMenuSpawnRequest.h",
+      "bytes": 2722,
+      "sha256": "a9a3985c6626157819c8a717b1688858bcb5494935480281932f6f2c5e8597ea"
+    },
+    {
+      "path": "raw/include/Generator/QuickMenuUI.h",
+      "bytes": 113020,
+      "sha256": "bee7f37bcd54aa495580f47ae9d615e23824cbf026c35787be38fe4cedd2190a"
+    },
+    {
+      "path": "raw/include/Generator/ReferenceExport.h",
+      "bytes": 3378,
+      "sha256": "8d672cff1cda2a257c4bfa215b0319137ee20cf87b9c32512e9d83d3a5b7381c"
+    },
+    {
+      "path": "raw/include/Generator/SaveReport.h",
+      "bytes": 1975,
+      "sha256": "6f6b4749b83290dd5cca8a6b9f25b87c9b30a4f4e601a0855e2185d2a8335b66"
+    },
+    {
+      "path": "raw/include/Generator/SaveViewer.h",
+      "bytes": 264,
+      "sha256": "a36e78a21e3d7d4e3828f0fd4d18a891e97dfb30bf11ce5878184d29fcc13610"
+    },
+    {
+      "path": "raw/include/Generator/SpawnAuthoring.h",
+      "bytes": 1249,
+      "sha256": "505b22fffa2fea17c3aa70d698073b99566be71ed50b4da0b92f1a61f796ad40"
+    },
+    {
+      "path": "raw/include/Generator/SpawnToolsPanel.h",
+      "bytes": 29104,
+      "sha256": "f3952ad6ee96e0a6c38f3041635502a6e8f318e383d9f82419d4818a78caccee"
+    },
+    {
+      "path": "raw/include/Generator/StarterPreflight.h",
+      "bytes": 3106,
+      "sha256": "a5988e5191f8fce8df931060d0b90deb17631fdbd6920f372014fb43d0fa84ac"
+    },
+    {
+      "path": "raw/include/Generator/ToolRequest.h",
+      "bytes": 7225,
+      "sha256": "8ebfb3506aee5b6b32f69712329b3fab3991d5e08418f416a1638edabe3401c3"
+    },
+    {
+      "path": "raw/include/Generator/TraceNameFilters.h",
+      "bytes": 2524,
+      "sha256": "ad92968f92fbef25f12d25623589092350749ddac16a8281c037f95d23eeddfd"
+    },
+    {
+      "path": "raw/include/Generator/TraceProfile.h",
+      "bytes": 4828,
+      "sha256": "413a085174d3b6989ada6ea5f9f9b1e62a152e83a002202b85623b40e2bf3895"
+    },
+    {
+      "path": "raw/include/Loader/AppearanceEvents.h",
+      "bytes": 327,
+      "sha256": "4e13a26bc165c5b2bf8709f7941e5f48e2b44d501ba7dde0d9bf05ced12fe4df"
+    },
+    {
+      "path": "raw/include/Loader/AssetAuthoringMetadata.h",
+      "bytes": 2311,
+      "sha256": "2a40fed49caaa4b3325ccc3076d4724930c6fab2b5af2033204ffd2cc64c851f"
+    },
+    {
+      "path": "raw/include/Loader/AssetClonePolicy.h",
+      "bytes": 1876,
+      "sha256": "6ca71820885301c43df7342e9c148cd6abd37cabdec1f209cab8822d5a02249e"
+    },
+    {
+      "path": "raw/include/Loader/AssetMetadataRegistry.h",
+      "bytes": 667,
+      "sha256": "64cc222abc0759cccbd688c99aa83ee9054b5373aa1acc7004c960fff18a3f38"
+    },
+    {
+      "path": "raw/include/Loader/AssetProvenance.h",
+      "bytes": 386,
+      "sha256": "0917768ecbadc34e415d5ce7a4010a18ae00eae15722f21de3c97057bc1cf3cc"
+    },
+    {
+      "path": "raw/include/Loader/Blueprint/DragonWildsBlueprintMod.h",
+      "bytes": 542,
+      "sha256": "a6a9c237755405a2048f804fc6c1366544971cc219b9e6025c68895ce166bfd0"
+    },
+    {
+      "path": "raw/include/Loader/DefinitionRegistry.h",
+      "bytes": 789,
+      "sha256": "d3209fb86de7aa640a7159f0afc78bab1841bc25e4ba9fde179516402b39bc5b"
+    },
+    {
+      "path": "raw/include/Loader/DialogueDefinition.h",
+      "bytes": 10680,
+      "sha256": "640a8422b2e4786e8024230ad86f3147b822cc532141bd7a44aef7d77b60dd55"
+    },
+    {
+      "path": "raw/include/Loader/DialogueGraphIdentity.h",
+      "bytes": 1003,
+      "sha256": "84408f257dc1355e50607c9b857d7c376d2023c71e259d6ccc338843a9d664f3"
+    },
+    {
+      "path": "raw/include/Loader/DialogueGraphLifecycle.h",
+      "bytes": 1094,
+      "sha256": "3a43336ce40895dec0ba14dd90536f8378fd614dca113a147b1558b3e4c11e56"
+    },
+    {
+      "path": "raw/include/Loader/DialogueProgress.h",
+      "bytes": 2422,
+      "sha256": "9411a08453741fe38222b9b5db81df3e276c6aada1c78e3709d9ba5f94e5c631"
+    },
+    {
+      "path": "raw/include/Loader/DialogueSaveIdentity.h",
+      "bytes": 1066,
+      "sha256": "804d1556f9edcd6baa93efa5911df7a870bddb0ee12ca251db1880ca1144f3bd"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsAssetModLoader.h",
+      "bytes": 3513,
+      "sha256": "b2d0a2d3c475eb85a6d26f6a028f3302d3007ec0ffd20fb69adae569998d8c6a"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsBlueprintModLoader.h",
+      "bytes": 4274,
+      "sha256": "d5be9e8e59a4aed7bcff7c8bbf563354e1d4c081bc0b8a6697333fbc41efa63c"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsBuildingModLoader.h",
+      "bytes": 4994,
+      "sha256": "aa852b951fdad90f6ea3057b205c2395d36fc9b20147a116e581e4885c6f0170"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsCourseLoader.h",
+      "bytes": 4272,
+      "sha256": "aae966265241f19c78c3ff09aef66f290e9477340bc4d2438627f66c90586287"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsDialogueLoader.h",
+      "bytes": 1152,
+      "sha256": "7da7dcf89dd5b2e2a3a65f8d561db0d4a4cf4a66db5e0b9052c857cdeebe05fa"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsEnumLoader.h",
+      "bytes": 990,
+      "sha256": "8c71f3bc895353b81002984107f5804ece7a2da3da651c6017e04e69fbe78652"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsEquipmentLoader.h",
+      "bytes": 766,
+      "sha256": "fa6354d5c48b0bb786f05a85fb1a44e43a47dbfbb0cb4b1c737320507dd7b75a"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsEventLoader.h",
+      "bytes": 3919,
+      "sha256": "a6d6fe758992df101739ce4d2277447e67d14229167de70c8c9caa0d26c5a71f"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsGameplayEffectLoader.h",
+      "bytes": 1065,
+      "sha256": "b323139bb1eb71c6d043d4669e476c5cb4f246f1601305beebb7a4e0e0f18f66"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsJournalModLoader.h",
+      "bytes": 3509,
+      "sha256": "69ae19cecc126c88fb0a3f8d5d868944243f549c3ffc3d67fe2150184f8d5e20"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsMainLoader.h",
+      "bytes": 3035,
+      "sha256": "8bdb111bd783bebd51ef52a686732e76253da2af4fbbf7fa6c6a7f4ae4464d00"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsModLoaderBase.h",
+      "bytes": 2549,
+      "sha256": "1739a4bef643aae0e63f08aa11a6b0b99aa427012b8997ee069bfd66ffccb6a4"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsNiagaraLoader.h",
+      "bytes": 541,
+      "sha256": "f16a06ebda2a32091785b9e9afb703cf50b727edf293fd6ecdcca4202adce7bc"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsNpcLoader.h",
+      "bytes": 21869,
+      "sha256": "cf0159d3735e3ff3a69e3ae1c04f3702f3a4758a760cd12cfb0faaea2313e905"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsQuestLoader.h",
+      "bytes": 2899,
+      "sha256": "7783c0feda8b1d3d7502545989eec33bb43ddab7e926b132f99bf5079eeaa4c3"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsRawTableLoader.h",
+      "bytes": 2859,
+      "sha256": "7a71bb8174fcd5b64969cdb63ef0f347d02c8e9e9b9fb1b28110355c8a0f722f"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsRecipeModLoader.h",
+      "bytes": 4399,
+      "sha256": "45e98b7a04dd1c956cdb5ba8f43617e03765bebdde5d44788d7c5cdd57291f86"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsSpawnLoader.h",
+      "bytes": 25689,
+      "sha256": "3707db0ce203bbd3beb5e17396e970fc1245907bff3582d94cf99657cbf4079a"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsStringModLoader.h",
+      "bytes": 1488,
+      "sha256": "de1448bc5dbe27d42dcd34ec6a1e60b534f9e4003eb65f8cca6cb09f6ec49377"
+    },
+    {
+      "path": "raw/include/Loader/DragonWildsVendorLoader.h",
+      "bytes": 633,
+      "sha256": "92e2126fe289173a95e6a084cb183d99b301691b119f3ecb58082c2724799794"
+    },
+    {
+      "path": "raw/include/Loader/EquipmentRules.h",
+      "bytes": 1052,
+      "sha256": "01c9cffb88fe8ffc6e702c2cecb73f1ed3ed22ff946977b1c793d0bee3d4d5a4"
+    },
+    {
+      "path": "raw/include/Loader/EquipmentShadowveil.h",
+      "bytes": 322,
+      "sha256": "02630a1ad1f84c9feed39696a4fcc4d760391c728b2f76e8e8dc0e36a6962192"
+    },
+    {
+      "path": "raw/include/Loader/EventDefinition.h",
+      "bytes": 13518,
+      "sha256": "654281cf7aba057c19f59b8788171289e295f2dc0fb69129a23e65517d5e2fcf"
+    },
+    {
+      "path": "raw/include/Loader/EventIdentity.h",
+      "bytes": 4815,
+      "sha256": "4f70a6ad15063a3e1798c73c5f2ce9ec816971a61e456f6d748e6c0af4241fe9"
+    },
+    {
+      "path": "raw/include/Loader/EventRuntime.h",
+      "bytes": 25857,
+      "sha256": "071823fdcc718a9b03a3f0b022015f12e6288a6f5466b396b2ce97e556515d4b"
+    },
+    {
+      "path": "raw/include/Loader/GameplayEffectDocument.h",
+      "bytes": 1706,
+      "sha256": "1420140fdac550bdbdce4e1a3dc67db1ab54d4c292bd5d14d891a4e84f25a33f"
+    },
+    {
+      "path": "raw/include/Loader/GameplayTestContext.h",
+      "bytes": 3240,
+      "sha256": "650a48d52744646ba120fe06dd6addb3b3278cbe17f4cecb9453754ddc903f36"
+    },
+    {
+      "path": "raw/include/Loader/GhostScope.h",
+      "bytes": 459,
+      "sha256": "55004e1300aec3e0cb1f6624149e068bb2e54e09542629b69e896a56fd38aa3f"
+    },
+    {
+      "path": "raw/include/Loader/HelpyDependencyOrder.h",
+      "bytes": 1840,
+      "sha256": "17c515c3230bbd91771bc80923dacd2e705b56f1192426676c2f97771567bd47"
+    },
+    {
+      "path": "raw/include/Loader/HelpyNpcGuards.h",
+      "bytes": 3055,
+      "sha256": "9db9ba1d32a829f92b716b539a1e7b2e74e48aa8e4d85d59cc6af18a773e66bd"
+    },
+    {
+      "path": "raw/include/Loader/HumanNpc.h",
+      "bytes": 5561,
+      "sha256": "5fbb0b7575ab431a2be02ab065a3be639725f99e533183c1b310c783153c4f21"
+    },
+    {
+      "path": "raw/include/Loader/HumanPose.h",
+      "bytes": 5574,
+      "sha256": "a3ca1077ea9d9f91295227a5231f07b8d9137c1085cc5e84560c81667d6ac4cb"
+    },
+    {
+      "path": "raw/include/Loader/ItemIdentity.h",
+      "bytes": 399,
+      "sha256": "ad2f8e25e315805a70c7cb46574add5c5f42a25dd26463db1984032731e2f838"
+    },
+    {
+      "path": "raw/include/Loader/JournalJsonFieldContract.h",
+      "bytes": 1859,
+      "sha256": "ed6d57bc77e09f54e96b7149100d5624b546c78c6b3a298bf9feeade9e954aaf"
+    },
+    {
+      "path": "raw/include/Loader/JournalNativeContract.h",
+      "bytes": 14437,
+      "sha256": "168b9ac11c357b4b5ee6c08852453260257ae49d1ca28897df7ce5d9132c46fe"
+    },
+    {
+      "path": "raw/include/Loader/JournalPersistenceContract.h",
+      "bytes": 25198,
+      "sha256": "9089397cbe74f21ab2837a190db977f927cd3bafd9a29d49f0839bb40a5fefa7"
+    },
+    {
+      "path": "raw/include/Loader/JournalPlayerAccess.h",
+      "bytes": 3104,
+      "sha256": "70339a36cbbdd2e42782b9932c0bc0cba4c8bd02dd1de3d54b69a8964ba6defc"
+    },
+    {
+      "path": "raw/include/Loader/JournalSaveOwnership.h",
+      "bytes": 5678,
+      "sha256": "892c2d8658eb5e138eb387b16fed1f6334fc6e541a06acdd57117b2ac441b607"
+    },
+    {
+      "path": "raw/include/Loader/ModLoadOrder.h",
+      "bytes": 876,
+      "sha256": "7e22a3c8c52e337018ea9159ea51070a7e57000ba67b89ec15167ea2691716b4"
+    },
+    {
+      "path": "raw/include/Loader/ModOrderPolicy.h",
+      "bytes": 1093,
+      "sha256": "2d3c6f80d99aebfaf756a158636ea65aec76a4a097c0fdadc7718db6c5e1f531"
+    },
+    {
+      "path": "raw/include/Loader/NativeDialogueSave.h",
+      "bytes": 2474,
+      "sha256": "ef11d1b555edcf1a5f9961a9752421ce008d86ad7116c078c8455013165b57dc"
+    },
+    {
+      "path": "raw/include/Loader/NativeHookContract.h",
+      "bytes": 1139,
+      "sha256": "993ee05460b00dd6409e94848b6ca3e09e827d6097547f1038457df731dc7f3a"
+    },
+    {
+      "path": "raw/include/Loader/NativeQuestCleanup.h",
+      "bytes": 11396,
+      "sha256": "0db5ece99c828404e83b55c4e842194961348c8ff696200e29585527e4251742"
+    },
+    {
+      "path": "raw/include/Loader/NativeQuestReceipt.h",
+      "bytes": 954,
+      "sha256": "deacfaadcf4470458e3e545b17de7982f9193b5d9a4cb32caa3453681f7c883d"
+    },
+    {
+      "path": "raw/include/Loader/NativeQuestStageProgress.h",
+      "bytes": 968,
+      "sha256": "ae817c2b000ebba2672a9d2fd9d60fe978214c189cc9b33dcc665d0ccac12a7a"
+    },
+    {
+      "path": "raw/include/Loader/NativeShopContract.h",
+      "bytes": 3387,
+      "sha256": "13bf8fc3d6adcb2a2d8e01f197a97116a83bb87161e0dcd6bdc4847442d334d1"
+    },
+    {
+      "path": "raw/include/Loader/NiagaraAttachment.h",
+      "bytes": 329,
+      "sha256": "b1082f977d0ea3e228cb202a175fd818393de19d3c0ac01a3cef0966d4a9904a"
+    },
+    {
+      "path": "raw/include/Loader/NpcCatalog.h",
+      "bytes": 14731,
+      "sha256": "5d023dd5d353d3912450d1eea4c5d201f79747f7d65820febf3a9ea35fc2b5a2"
+    },
+    {
+      "path": "raw/include/Loader/NpcCollisionArguments.h",
+      "bytes": 471,
+      "sha256": "2201ec698fc1d83ec1d086c858f95591aa5a65ed08537c63b6bbc4b7a578198c"
+    },
+    {
+      "path": "raw/include/Loader/NpcComponentSelection.h",
+      "bytes": 825,
+      "sha256": "876f17d83b4a13e3cd2dac7e2569e3e6942ec9966234d5dd7724e115b8529168"
+    },
+    {
+      "path": "raw/include/Loader/NpcIdentityPayload.h",
+      "bytes": 1676,
+      "sha256": "30d740805064b26a1abafb52d13c5a2f2925e180c84736c0fdd4c7fc605a47eb"
+    },
+    {
+      "path": "raw/include/Loader/NpcMarkers.h",
+      "bytes": 1883,
+      "sha256": "d077914e086715dcc3a08fc3d39daa2873598ac48bde9c74715ab6a5702817ad"
+    },
+    {
+      "path": "raw/include/Loader/NpcNetwork.h",
+      "bytes": 1927,
+      "sha256": "f184b3b31271af1580a18a331fb1c0215ffc96825a21abf57465773ee6cfcec9"
+    },
+    {
+      "path": "raw/include/Loader/NpcPlacement.h",
+      "bytes": 2245,
+      "sha256": "171bcee2e91d47abbeb7c705eca5898f85196749e1b136d722b1b7e076293d0c"
+    },
+    {
+      "path": "raw/include/Loader/NpcVisualEffect.h",
+      "bytes": 4038,
+      "sha256": "5fdd1d4d39c4ac855a25c68f1650fbfaa20a48862f1761af97f79f11c20d9c3b"
+    },
+    {
+      "path": "raw/include/Loader/PinnedObjectIdentity.h",
+      "bytes": 452,
+      "sha256": "6f8bae061d95f1134b469502458f0a998e6af104d38728cef1e06359fed01db4"
+    },
+    {
+      "path": "raw/include/Loader/PlayerActivityEvents.h",
+      "bytes": 11204,
+      "sha256": "54f3f30f5dc4ea66e9114aae539925f98346d577bfde4374dbf3622d387edb1e"
+    },
+    {
+      "path": "raw/include/Loader/PlayerArchetype.h",
+      "bytes": 2699,
+      "sha256": "2b7a15964fb9beab28b8f2c80644bd362c0be7282164b2a2175233aa6341b6b3"
+    },
+    {
+      "path": "raw/include/Loader/PlayerAttributeNames.h",
+      "bytes": 1473,
+      "sha256": "f6c153b7db3fa9613ee0d0393180e3a231113adef2b5b8b3a84507e69fd620c9"
+    },
+    {
+      "path": "raw/include/Loader/PlayerGhost.h",
+      "bytes": 1094,
+      "sha256": "3cfdbd952b3daa68174162896b559afdeb91bd7a81469f34c43679868dc2a44d"
+    },
+    {
+      "path": "raw/include/Loader/PreparedVisualEffect.h",
+      "bytes": 541,
+      "sha256": "f8550ff2e9212b962cf84810833ede89b944faff22205400b61422f44656e662"
+    },
+    {
+      "path": "raw/include/Loader/QuestAcquisition.h",
+      "bytes": 716,
+      "sha256": "57e05df6ef6294f6380f82b1c37590162a76dbd7d71617671599c6800c56a9d8"
+    },
+    {
+      "path": "raw/include/Loader/QuestDamageCredit.h",
+      "bytes": 4781,
+      "sha256": "4bfd39553dc9a4fb457ef6becba1817d445f125caf627899913f59133a4a19ee"
+    },
+    {
+      "path": "raw/include/Loader/QuestDefinition.h",
+      "bytes": 17764,
+      "sha256": "eb2739fd50852f48e6185df5718cd09ad3196e641b8754d2c9118d2a6d099252"
+    },
+    {
+      "path": "raw/include/Loader/QuestHandIns.h",
+      "bytes": 1593,
+      "sha256": "4b857147e062f1f46ffc622c06553118f8253dd0c901746d254f864b02b4f9fb"
+    },
+    {
+      "path": "raw/include/Loader/QuestIdentityPolicy.h",
+      "bytes": 755,
+      "sha256": "957f81c1ea9579bb9c3661329a7f8dd536485d13a6106f08f7f83475d7158c6f"
+    },
+    {
+      "path": "raw/include/Loader/QuestInspectorModel.h",
+      "bytes": 1349,
+      "sha256": "25c92178eba7743792cfe80e4d7602ab569f6ba33eec8f5071bc549f7432e728"
+    },
+    {
+      "path": "raw/include/Loader/QuestKillCredit.h",
+      "bytes": 4791,
+      "sha256": "3e98b66f04ebe0f90720b7874d2e151137fbffed78bba0298b4a1855d16d6f92"
+    },
+    {
+      "path": "raw/include/Loader/QuestLocationActor.h",
+      "bytes": 8609,
+      "sha256": "468bc41fb7b7b9d4cb7fd974a6ee8d8677744288a431e6fcd2b486b657e8a8e3"
+    },
+    {
+      "path": "raw/include/Loader/QuestNativeAdapter.h",
+      "bytes": 17722,
+      "sha256": "f9723e2124a27b531d24fe45f282ce543c9bb75e818d022c5bc980d9ef0c478c"
+    },
+    {
+      "path": "raw/include/Loader/QuestNativeAsset.h",
+      "bytes": 10232,
+      "sha256": "1a1df5132f1ecd8384f85f90ec4d951d975ccd8ee7a5340f9864965b012ab4db"
+    },
+    {
+      "path": "raw/include/Loader/QuestNativeContract.h",
+      "bytes": 2630,
+      "sha256": "efa14bcf5d65133c9105d60f79f279cc43c509609311a20d14afd8bc7c70aadd"
+    },
+    {
+      "path": "raw/include/Loader/QuestNativeRegistry.h",
+      "bytes": 12805,
+      "sha256": "2eae1788521b869ae9177064b8760dc6a5c5f21cc8e15c7d67e8b08ace08881a"
+    },
+    {
+      "path": "raw/include/Loader/QuestNetworkId.h",
+      "bytes": 2845,
+      "sha256": "5c24a51d0dd0d75acbebd556e042b276bfa4b4dd54fbbf1347a5e6d1eb2f2c34"
+    },
+    {
+      "path": "raw/include/Loader/QuestObjectReference.h",
+      "bytes": 783,
+      "sha256": "77a9491877fac0a5a628dd5be7f35870383947678f20f835bdaaed80711499dc"
+    },
+    {
+      "path": "raw/include/Loader/QuestProgress.h",
+      "bytes": 5426,
+      "sha256": "5fce44055d7440df66f86b178cd09717d2628c56c224fa55adf457444b0e1e63"
+    },
+    {
+      "path": "raw/include/Loader/QuestProgressText.h",
+      "bytes": 1934,
+      "sha256": "6753c7a743994420c9f4430ea9c86cab1d049e86055b1d81e658253e24420b7c"
+    },
+    {
+      "path": "raw/include/Loader/QuestReceiptJournal.h",
+      "bytes": 11896,
+      "sha256": "0d113ceab6c55945fc8defbac29a94b288a87a30b2e8a32672bf632d89eed2cd"
+    },
+    {
+      "path": "raw/include/Loader/QuestRegistryPlan.h",
+      "bytes": 1003,
+      "sha256": "08e7f4ccff3aa01cabe456022c57da6bd050e64b7d6ea48c805caf9ea0550f3b"
+    },
+    {
+      "path": "raw/include/Loader/QuestRepeatPolicy.h",
+      "bytes": 3997,
+      "sha256": "3efed336bc1604faa98b6df52a83f7973e99ce0eb57081a7ce6e374c5bcbd1c0"
+    },
+    {
+      "path": "raw/include/Loader/QuestSaveOwnership.h",
+      "bytes": 4428,
+      "sha256": "ebea005cbc8401050813a86277693b890d8fab78454c90b63b77b8210bfb7ba4"
+    },
+    {
+      "path": "raw/include/Loader/QuestService.h",
+      "bytes": 14831,
+      "sha256": "674fdf49d2263c5a72f27e8268823eb3ffbc012e786e1b80daa399e94f80f1b5"
+    },
+    {
+      "path": "raw/include/Loader/QuestStageProgress.h",
+      "bytes": 8028,
+      "sha256": "2c08cfe79d13eeaac4b399764f59cc21aaf3bb21cdf1d6988e2507074c5e4e74"
+    },
+    {
+      "path": "raw/include/Loader/QuestStageRuntime.h",
+      "bytes": 2545,
+      "sha256": "6ecec007599f5c2743097add87fbae37153866c2baa0059dcc965a76e95e8d60"
+    },
+    {
+      "path": "raw/include/Loader/RecipeUnlockPolicy.h",
+      "bytes": 349,
+      "sha256": "d544ad2614d2f6873297c83f33ef4363fc05ed7bf3b43a7bb27bbd90abbd5bb1"
+    },
+    {
+      "path": "raw/include/Loader/ShadowveilNativeContract.h",
+      "bytes": 4134,
+      "sha256": "a01ded9ca9259aba5f6b015f6382bc8db790ad4549909ff627309f212a0b2e4a"
+    },
+    {
+      "path": "raw/include/Loader/ShadowveilRules.h",
+      "bytes": 2831,
+      "sha256": "f641bcd0dd22e41f6065b1619eb9cccb30b752bafac4535890bca53311a6eb2f"
+    },
+    {
+      "path": "raw/include/Loader/Spawn/GhostMaterials.h",
+      "bytes": 642,
+      "sha256": "8d50952f6d804327817d913caf36c896a691afbfd92d403989aa715021054df5"
+    },
+    {
+      "path": "raw/include/Loader/Spawn/RuntimeSupport.h",
+      "bytes": 408,
+      "sha256": "b0e3abf2bdae5f7bca3c990edc29f5b727dde8506cace337bae9add698118d08"
+    },
+    {
+      "path": "raw/include/Loader/SpawnAuthoringFields.h",
+      "bytes": 3145,
+      "sha256": "2622605b82a07bde74f12ffe35797c170f5be45f50cebe992e0f5693f817357c"
+    },
+    {
+      "path": "raw/include/Loader/SpawnPlacementDraft.h",
+      "bytes": 1645,
+      "sha256": "05e68ce94c61de23fa51e978bb3e43e30caef2610d8651fd8e77bdef387a38f3"
+    },
+    {
+      "path": "raw/include/Loader/SpawnRadius.h",
+      "bytes": 2375,
+      "sha256": "d5c28891e22a864b409611857cd6a8b505d1d177be6bda629ed9a1b2ab3ca0d2"
+    },
+    {
+      "path": "raw/include/Loader/StringReplacementRules.h",
+      "bytes": 1946,
+      "sha256": "eaec585b2f28d58c5ae91d7a75a2ebd5c6eb1e2fd60fc0de38730b831d12cf6d"
+    },
+    {
+      "path": "raw/include/Loader/SurgeEvadeRules.h",
+      "bytes": 1357,
+      "sha256": "341a29a1f508ce6c651154fd99ed60a3faa39909873be112449c6877ef265d36"
+    },
+    {
+      "path": "raw/include/Loader/SurgeNativeContract.h",
+      "bytes": 6315,
+      "sha256": "7de86ef5ba31743d139dee1dc266b6f202f126d74d2ee55e0926de6b28e3b48b"
+    },
+    {
+      "path": "raw/include/Loader/TimeOfDay.h",
+      "bytes": 656,
+      "sha256": "12cc7cdf6602091120d8bdff24d5f32d65e7da5ab31c3c3da35ac616bbccb6a2"
+    },
+    {
+      "path": "raw/include/Loader/TimeOfDayRuntime.h",
+      "bytes": 4282,
+      "sha256": "c856fe9a3208c7fceeeeb098afa013ec12a9c4ed0db78c7df18a0591d650d45d"
+    },
+    {
+      "path": "raw/include/Loader/UniqueTarget.h",
+      "bytes": 402,
+      "sha256": "e0f79ef1ec0fa070e117303329ed24353c9976df41189f58cd95592d9dc280a8"
+    },
+    {
+      "path": "raw/include/Loader/VendorAcknowledgement.h",
+      "bytes": 807,
+      "sha256": "1c7b92d1be8e814ccc5ff165ba5b6f66dc7ad5a4446d543aa18adf26f7287755"
+    },
+    {
+      "path": "raw/include/Loader/VendorCategoryGroups.h",
+      "bytes": 537,
+      "sha256": "d6ada3d3dd949dde91f0b5d57a8e3debaff9d7e747352b796f3ea6fa78834701"
+    },
+    {
+      "path": "raw/include/Loader/VendorCategoryLabel.h",
+      "bytes": 1107,
+      "sha256": "806d4af958c08a5ef9cab93cfcf2d6a12ec7a94f0c890770af0c83ba105d6354"
+    },
+    {
+      "path": "raw/include/Loader/VendorCategoryText.h",
+      "bytes": 486,
+      "sha256": "d99f3f1babe687bc7ea1e2c436a893801108da14c643af21ceb8d706aa64fbc3"
+    },
+    {
+      "path": "raw/include/Loader/VendorIdentity.h",
+      "bytes": 1030,
+      "sha256": "7649be2d3435a3fdb414445ad9d22a9bba219ba6e48fd4d86d73d91f1d64b8b6"
+    },
+    {
+      "path": "raw/include/Loader/VendorOffers.h",
+      "bytes": 3594,
+      "sha256": "c7d3c6790594e57a8f26f6d6bf5c600475a0e879bded57b39643e255eaa0496e"
+    },
+    {
+      "path": "raw/include/Loader/VendorPolicy.h",
+      "bytes": 561,
+      "sha256": "592320c77c7c027e289415338d51c9d40e95ca042af25790f9d8db39eb81089b"
+    },
+    {
+      "path": "raw/include/Loader/VendorSpawnGate.h",
+      "bytes": 1136,
+      "sha256": "ea396dd8c34b6081d924b0c75f8d888922ba6ded1b9ac4a018ef7b9f7f6930d5"
+    },
+    {
+      "path": "raw/include/Loader/VendorTraceBudget.h",
+      "bytes": 545,
+      "sha256": "e48223467810f51aefc9622af20beff5486380431bc8eadaef99fea58c6293e6"
+    },
+    {
+      "path": "raw/include/Loader/VirtualDefinitionId.h",
+      "bytes": 1343,
+      "sha256": "b1a70531c678183556e5971d818c4b07e2edc9401a8b0b09de12327b232479e8"
+    },
+    {
+      "path": "raw/include/Loader/VisualEffectLifetime.h",
+      "bytes": 1973,
+      "sha256": "978887dd56cd537a6938102d7de814f876c00580c2a84fd91ddc2d17f80ac876"
+    },
+    {
+      "path": "raw/include/Loader/VisualPolicy.h",
+      "bytes": 563,
+      "sha256": "2db5fadcd17eab92cf506dbc19a680893e9da05573756d5a5891c5a010ec21bc"
+    },
+    {
+      "path": "raw/include/Loader/WildcardFilter/WildcardBooleanFilter.h",
+      "bytes": 389,
+      "sha256": "6870300a02b80213a82b53d23a570c6090173a83bbb55227aa4ccafb68c4bc56"
+    },
+    {
+      "path": "raw/include/Loader/WildcardFilter/WildcardEnumFilter.h",
+      "bytes": 504,
+      "sha256": "79e189811ba4a63c1b0a060e530e09193877914af25d00436992938548e692ac"
+    },
+    {
+      "path": "raw/include/Loader/WildcardFilter/WildcardFilter.h",
+      "bytes": 1019,
+      "sha256": "7a6e660fbdf36a6e3588e654aeafd8c5ea6272465f4f4460deb5b736e5698efc"
+    },
+    {
+      "path": "raw/include/Loader/WildcardFilter/WildcardFilters.h",
+      "bytes": 549,
+      "sha256": "f2c6e108672296cd783c7f359154ed1326f852770a946acad7b8ea8716ce8b2f"
+    },
+    {
+      "path": "raw/include/Loader/WildcardFilter/WildcardNumericFilter.h",
+      "bytes": 1219,
+      "sha256": "3073781a87b09a3b98824179359cf7e2e9d06e6a004e6b65421d91c8bce260c8"
+    },
+    {
+      "path": "raw/include/Loader/WildcardFilter/WildcardStringFilter.h",
+      "bytes": 524,
+      "sha256": "bc7ccff991c36698a6a873eb488b27d5c34cfc42be71eaa6402a59663062584a"
+    },
+    {
+      "path": "raw/include/Misc/DragonWildsDataRegistrar.h",
+      "bytes": 1725,
+      "sha256": "dd5a92166e5a07b7e3f5d815fde06236633f35a0055dda51617a421bad87519d"
+    },
+    {
+      "path": "raw/include/Misc/FileWatchWrapper.h",
+      "bytes": 1324,
+      "sha256": "cfd1e83e00e45dd6be6f022a883653bbd9e5ad28695fa1bbb808a542304213df"
+    },
+    {
+      "path": "raw/include/Runtime/AuthoredFile.h",
+      "bytes": 3121,
+      "sha256": "cb299f52c7c09bb7249ef89ed8cb79228c08ff68dea7f0459c7afac0af28a461"
+    },
+    {
+      "path": "raw/include/Runtime/F2CacheMigration.h",
+      "bytes": 1663,
+      "sha256": "f109a46aec7ce59ced8e6afc41ff8224988bc34e8881ff1fa1a0b4bdef71e98d"
+    },
+    {
+      "path": "raw/include/Runtime/F2CatalogStore.h",
+      "bytes": 6772,
+      "sha256": "74e50076f4790b3cbfeab04b68c017655a28f81cc7e926f6f5aa51a2aedf593d"
+    },
+    {
+      "path": "raw/include/Runtime/F2FavoriteStore.h",
+      "bytes": 3132,
+      "sha256": "03cf8956fa84ebb0266ed262345ff6b635d9cc2a9f96f89478ed0e9c89a1aeea"
+    },
+    {
+      "path": "raw/include/Runtime/F2PreferenceFile.h",
+      "bytes": 4540,
+      "sha256": "06be80c180290d9b6c5d7156d502b37722e37b686ceaf5992930bdde830b8e9f"
+    },
+    {
+      "path": "raw/include/Runtime/F2ReferenceIndex.h",
+      "bytes": 757,
+      "sha256": "ac27336c664fbebd6664d608fba3ab16a216d39d5fd8aef9e7d930357ebe00c8"
+    },
+    {
+      "path": "raw/include/Runtime/HelpyBundlePublish.h",
+      "bytes": 810,
+      "sha256": "76eea37b4687b10cdb86502fef4313b74713e22fef823c3224533cad1fb0e394"
+    },
+    {
+      "path": "raw/include/Runtime/HelpySettings.h",
+      "bytes": 2676,
+      "sha256": "a47a5295e31fec632094e684fd5677dc64a6fef4e779af8569c20551c79fb46d"
+    },
+    {
+      "path": "raw/include/Runtime/HostServices.h",
+      "bytes": 563,
+      "sha256": "1b16eda654f77e68a24763bbfeb630e733d5736628aa9c5e9e87323ca1c467ff"
+    },
+    {
+      "path": "raw/include/Runtime/Layout.h",
+      "bytes": 2250,
+      "sha256": "d969857281755b6d416bf40fe2095c895b406853bee9bd1ee6f0da39d03661cf"
+    },
+    {
+      "path": "raw/include/Runtime/NetworkContext.h",
+      "bytes": 2961,
+      "sha256": "ee5575aebada9b1a1ebce2d1e85cd6822cdd537013c1867661a9f0572bf268f7"
+    },
+    {
+      "path": "raw/include/Runtime/NetworkRole.h",
+      "bytes": 974,
+      "sha256": "1a7e352bee8c4a7d6e045192520599c4954a733e4adc86d729a38bc177f73216"
+    },
+    {
+      "path": "raw/include/Runtime/NetworkRoleMonitor.h",
+      "bytes": 1824,
+      "sha256": "5b834a584f6dc151ee3a9f15b25ad7655e3a983f2ce65983ccfbd73c4dd4f354"
+    },
+    {
+      "path": "raw/include/Runtime/NetworkRoleNotice.h",
+      "bytes": 1247,
+      "sha256": "0353fd6ec5a67c39e989e28e8e9f8343f3ef3253e6557f675169037267238145"
+    },
+    {
+      "path": "raw/include/Runtime/SearchJob.h",
+      "bytes": 2540,
+      "sha256": "1f8652cd9ebdf39dc13abdeb26660a8c259e4499fce29e7f80d9f27b2af93cad"
+    },
+    {
+      "path": "raw/include/Runtime/SearchJobs.h",
+      "bytes": 87,
+      "sha256": "a1108e42334bd51868716cd52df8d9f807cc9e387134544b49befdf906c093f7"
+    },
+    {
+      "path": "raw/include/Runtime/UE4SSCompatibility.h",
+      "bytes": 1006,
+      "sha256": "d43b9abb4ee402d7a90b9a5a3c65f01c482fea9930b26e28db30b2026618bd53"
+    },
+    {
+      "path": "raw/include/SDK/Classes/Custom/UBlueprintGeneratedClass.h",
+      "bytes": 472,
+      "sha256": "112b63edde02807a9e0e1966448ebfa0db646c6748ee61e7aa12c3eb4c8def75"
+    },
+    {
+      "path": "raw/include/SDK/Classes/Custom/UDataTableStore.h",
+      "bytes": 1144,
+      "sha256": "62a7ddee792692fe8c928697a274c9ef63630e2c0929f095fe46c390f824b264"
+    },
+    {
+      "path": "raw/include/SDK/Classes/Custom/UInheritableComponentHandler.h",
+      "bytes": 796,
+      "sha256": "a1b3d218c9817b4cd3def1e5078dd9755b3559f5cd22348042f7661e889587e5"
+    },
+    {
+      "path": "raw/include/SDK/Classes/Custom/UObjectGlobals.h",
+      "bytes": 1158,
+      "sha256": "56d37ab94ed77d27f71397b5aa6a25847a27a0787a2b42774be9b343e903b2ed"
+    },
+    {
+      "path": "raw/include/SDK/Classes/Custom/UObjectWrapper.h",
+      "bytes": 537,
+      "sha256": "420fb25480c6fccc18c0a2e1ab54d0caed191023faa4c2364a9f3b9f62c1ed35"
+    },
+    {
+      "path": "raw/include/SDK/Classes/Custom/USCS_Node.h",
+      "bytes": 223,
+      "sha256": "3249240ea1aee57e776e627f585d096acfe434f74da989a7317c5467e0db248d"
+    },
+    {
+      "path": "raw/include/SDK/Classes/Custom/USimpleConstructionScript.h",
+      "bytes": 322,
+      "sha256": "774e355a1d07f3810195868549bf8deb0bd3d4bfbfbda9dd47f22a6111b661e4"
+    },
+    {
+      "path": "raw/include/SDK/Classes/Custom/UWorldPartitionRuntimeLevelStreamingCell.h",
+      "bytes": 657,
+      "sha256": "f7464d5966e48fe3850c0c412246a31247f6ca0e9d090f9f4d67c5f16da643bf"
+    },
+    {
+      "path": "raw/include/SDK/Classes/KismetSystemLibrary.h",
+      "bytes": 1028,
+      "sha256": "3ebda31e63bac45b9c1466111d6b366d8d59c0cd4c86ee3cd414d279950839a1"
+    },
+    {
+      "path": "raw/include/SDK/Classes/TPersistentObjectPtr.h",
+      "bytes": 759,
+      "sha256": "9fdc080d336608b23e588228ed4098eb526ad738ae38b68faf1a2943110da4ef"
+    },
+    {
+      "path": "raw/include/SDK/Classes/TSoftClassPtr.h",
+      "bytes": 527,
+      "sha256": "46d2f567999501b15b4478137692781eb9c4359e878a1182e5ccd273abbe728a"
+    },
+    {
+      "path": "raw/include/SDK/Classes/TSoftObjectPtr.h",
+      "bytes": 792,
+      "sha256": "5ac12d526e77324c85d2e3bea594fb149650965cc6c3642209199ef352b58d4e"
+    },
+    {
+      "path": "raw/include/SDK/Classes/UCompositeDataTable.h",
+      "bytes": 374,
+      "sha256": "513274e2dcd864197711fe40bbc8d4900c6c9a67ab2a2852191fd53266cd8d22"
+    },
+    {
+      "path": "raw/include/SDK/DragonWildsSignatures.h",
+      "bytes": 1731,
+      "sha256": "40a0a5bf43be9d318af54bb1e628cd7bc473441d41b8559b0528f6fbb93bb9e4"
+    },
+    {
+      "path": "raw/include/SDK/Helper/ActorHelper.h",
+      "bytes": 3803,
+      "sha256": "f908e55c868ca9aae3b26df8b5c5c1a674751db799d638e6099805d3c3b78631"
+    },
+    {
+      "path": "raw/include/SDK/Helper/ArrayFieldPatch.h",
+      "bytes": 252,
+      "sha256": "d1cb3c57f363ded15b1c6a93eecb42559582dff731b0288355128e561eac09b8"
+    },
+    {
+      "path": "raw/include/SDK/Helper/CookedAssetLookup.h",
+      "bytes": 6667,
+      "sha256": "c7daaf6a68887007916e803d474a2e8b3f1f2a7cb1d9289a213e956bd06a0b93"
+    },
+    {
+      "path": "raw/include/SDK/Helper/ItemAppearanceMetadata.h",
+      "bytes": 1628,
+      "sha256": "bdd3440c72654e0864d49d84b6dbb3669245dd03b62bab8a5395d669fb104a6f"
+    },
+    {
+      "path": "raw/include/SDK/Helper/Memory.h",
+      "bytes": 228,
+      "sha256": "ecf41348b245f9307a4cf95a471cda692865a6729047413bf54ebe04aca2ec52"
+    },
+    {
+      "path": "raw/include/SDK/Helper/PropertyHelper.h",
+      "bytes": 8093,
+      "sha256": "df646563bf5fd4d358e2e0ce177f7bf045203bd1fe3ef766b9809a6b93884cf3"
+    },
+    {
+      "path": "raw/include/SDK/Helper/StringTableHelper.h",
+      "bytes": 392,
+      "sha256": "778f76884d3c1cdcc575a0fc1b7e76750300d00cc475fbcaed30c2d8a5de529f"
+    },
+    {
+      "path": "raw/include/SDK/StaticClassStorage.h",
+      "bytes": 1365,
+      "sha256": "833b60329d0985f931cd90ed4b4d232d6c1136149537115f8032b928e133d2c0"
+    },
+    {
+      "path": "raw/include/SDK/Structs/Custom/FManagedStruct.h",
+      "bytes": 474,
+      "sha256": "ef1fd0456392a7833d6ff5149fc0050d3f0fa4bfa9467c32e2569893f4c62b69"
+    },
+    {
+      "path": "raw/include/SDK/Structs/Custom/FManagedValue.h",
+      "bytes": 378,
+      "sha256": "81168172d635d972238ebc5b8cd6e1460569a922787c0a840347c5aa87495caf"
+    },
+    {
+      "path": "raw/include/SDK/Structs/Custom/FScriptArrayHelper.h",
+      "bytes": 930,
+      "sha256": "945e9763ddc00516d8714552df5afface9e027bd7006826c83bf95a2a1ed66f7"
+    },
+    {
+      "path": "raw/include/SDK/Structs/Custom/FScriptMapHelper.h",
+      "bytes": 1122,
+      "sha256": "ae3ada3ff6b234ff607ba63d85e9d32829762f23aec66bb3381c9921941cb8d5"
+    },
+    {
+      "path": "raw/include/SDK/Structs/Custom/FScriptSetHelper.h",
+      "bytes": 485,
+      "sha256": "cf56415d308c6f0209c60a916c600379ef2b35c79a6929c80ec473901e33e3c4"
+    },
+    {
+      "path": "raw/include/SDK/Structs/FBox.h",
+      "bytes": 726,
+      "sha256": "4a8480ab5d50b37f0e521bf2bc981d815e55de8e85fa04d785c90d5c0297f644"
+    },
+    {
+      "path": "raw/include/SDK/Structs/FSoftObjectPath.h",
+      "bytes": 1626,
+      "sha256": "447a6e3d9bb554525594b4610c5ee1020b8ba550bb8c9b99c1c8e92842080100"
+    },
+    {
+      "path": "raw/include/SDK/Structs/FSoftObjectPtr.h",
+      "bytes": 653,
+      "sha256": "023693a6b3c543a1d2d299951058678d32a5bc171e3c4e80593d436a75d96a95"
+    },
+    {
+      "path": "raw/include/SDK/Structs/FTopLevelAssetPath.h",
+      "bytes": 934,
+      "sha256": "89b80b09fc4fba15c7e12faf74cbb33145d3112b65f45e344896f1f5948b04b7"
+    },
+    {
+      "path": "raw/include/SDK/Structs/FWeakObjectPtr.h",
+      "bytes": 223,
+      "sha256": "1f8d0e915763b96baac61c31276ed78c8fee0f89dc82fffb58daa6e65d676fad"
+    },
+    {
+      "path": "raw/include/SDK/UnrealOffsets.h",
+      "bytes": 118,
+      "sha256": "086f4766620da4274618759077066f32143c41c9eb481c6b510cefb32578bde7"
+    },
+    {
+      "path": "raw/include/SDK/WeakObjectHandle.h",
+      "bytes": 3046,
+      "sha256": "f53daa0200d325ff42375dfaa3a22b95d5b6c5b28df643ae3fb171f73e99e18e"
+    },
+    {
+      "path": "raw/include/Utility/AssetAliases.h",
+      "bytes": 1232,
+      "sha256": "8832bf632174e7485c12128a9d6b4026aba0e9034b4f36e5e265ee2a3fadc8f5"
+    },
+    {
+      "path": "raw/include/Utility/BuildInfo.h",
+      "bytes": 214,
+      "sha256": "234e43e5263d752ef3f64eea4a4f0a765a0b72e4406a0e324fe5bda036db0a75"
+    },
+    {
+      "path": "raw/include/Utility/Config.h",
+      "bytes": 2973,
+      "sha256": "cb1d3913497ba4ab34bdc0068955c5afc994256ab882e8b41a20525786f56578"
+    },
+    {
+      "path": "raw/include/Utility/ConfigCodec.h",
+      "bytes": 744,
+      "sha256": "5d5ec116d172fc01d01185f598f3771a329b7db568c674d25308aa1d6fc7d321"
+    },
+    {
+      "path": "raw/include/Utility/ConsumeQueue.h",
+      "bytes": 818,
+      "sha256": "cd7017c6dad7b4ff1cd4055e9244501baad549b1d28349d809607087b66a8f69"
+    },
+    {
+      "path": "raw/include/Utility/EngineCleanupLifetime.h",
+      "bytes": 529,
+      "sha256": "162f22d9058746338b60b8f193b2856af586b0b25e6385ead10fead0c1ad95b2"
+    },
+    {
+      "path": "raw/include/Utility/InlineHook.h",
+      "bytes": 527,
+      "sha256": "1568b1eaec5c0f297fefaf878c226480efa469cf58539bbeb121bdaa9b158a02"
+    },
+    {
+      "path": "raw/include/Utility/JsonHelpers.h",
+      "bytes": 508,
+      "sha256": "238b11e47e0448bbf64a42df090030edd790464d08dc5e6e3ef006e9ee68e541"
+    },
+    {
+      "path": "raw/include/Utility/Logging.h",
+      "bytes": 2260,
+      "sha256": "4166179cad91b0cb02866dc666117eabeb7f9392c42b924746462822941b56ec"
+    },
+    {
+      "path": "raw/include/Utility/ModFolderLayout.h",
+      "bytes": 1153,
+      "sha256": "a6a291940ebddd64a339acc55650fd6ecbf5a339324c2aa827918a40603c9a62"
+    },
+    {
+      "path": "raw/include/Utility/NativeFunctionHook.h",
+      "bytes": 933,
+      "sha256": "9d4f3f825ae1fe7fb6dfe6910adfa1a09a8e4e5efc11b4799b69b62599bfa09d"
+    },
+    {
+      "path": "raw/include/Utility/OrderedCallbacks.h",
+      "bytes": 930,
+      "sha256": "a8629121f75f9c46c26f0dd3ed0afdd0812fb84c9faf43c70638efd64f7c443d"
+    },
+    {
+      "path": "raw/include/Utility/PatchWarnings.h",
+      "bytes": 767,
+      "sha256": "75ffd4d38b8b305e34780d7aac8ef7f445c47873a1f28df345cd57cc2d347367"
+    },
+    {
+      "path": "raw/include/Utility/SoftPathParts.h",
+      "bytes": 1125,
+      "sha256": "4d170c32aaa232f1f3636320820d89a66ef433a8b89f69424e1f9e93c8b105fd"
+    },
+    {
+      "path": "raw/include/Utility/StartupTrace.h",
+      "bytes": 198,
+      "sha256": "7c64085448caf2671088e54e048e81569a6c096604cf473c7b1ce237249d80b6"
+    },
+    {
+      "path": "raw/include/Utility/UnrealReadinessGate.h",
+      "bytes": 2088,
+      "sha256": "c0d5e69d3fe25d3b97f565ceddfa205f1e989f677046a672783d19c36a6053a1"
+    },
+    {
+      "path": "raw/src/Core/ConfigFiles.cpp",
+      "bytes": 3466,
+      "sha256": "6a5c0447d3c7ef23fa0f39ac75f9cab198bfa382fe71e52fc48681e1f7bb1b76"
+    },
+    {
+      "path": "raw/src/Core/JsonArrayPatch.cpp",
+      "bytes": 2377,
+      "sha256": "9047abe256ed622c8d44b656873cda406e2277deb653104d0bfc8f10d48f9634"
+    },
+    {
+      "path": "raw/src/Core/JsonDocument.cpp",
+      "bytes": 3963,
+      "sha256": "6d6ce30ce9cb59b4f38102193f30fcc0b3e147c3350ae8ac4d1ac46a0d31697b"
+    },
+    {
+      "path": "raw/src/Core/JsonLoadOrderMerge.cpp",
+      "bytes": 3498,
+      "sha256": "c7585984d7fa63cb25c072b8e4176e8010855ff2f69183de7b85bf3255db338a"
+    },
+    {
+      "path": "raw/src/Core/JsonPatchDirective.cpp",
+      "bytes": 2611,
+      "sha256": "87769f39331937babf67f7c018e8796f4fc644b4861d8c28a999fb28a1fddfb6"
+    },
+    {
+      "path": "raw/src/dllmain.cpp",
+      "bytes": 49514,
+      "sha256": "3186a7dd1ec70dfdede94fe6a5c369942d9f0e17e949bcd651bea123deb37595"
+    },
+    {
+      "path": "raw/src/Generator/AppearanceTrace.cpp",
+      "bytes": 3444,
+      "sha256": "ba40136596aee3cc636504fc656bc18111ccfba29ea35f779ca0e518e09f1675"
+    },
+    {
+      "path": "raw/src/Generator/AssetSearch.cpp",
+      "bytes": 25903,
+      "sha256": "9551776fc35104f94637df4fb17a7e46cffaf616e73406266180ef77852fe998"
+    },
+    {
+      "path": "raw/src/Generator/EquipmentSpellApi.cpp",
+      "bytes": 96,
+      "sha256": "135d3c0f3cde154549402dbf7bd820936911d28eca98be8df55ee2f3174f1844"
+    },
+    {
+      "path": "raw/src/Generator/EventParameters.cpp",
+      "bytes": 4425,
+      "sha256": "b691d39528ceeac63e384dad22d418da81d772730104fce0344d19707344d428"
+    },
+    {
+      "path": "raw/src/Generator/FocusedCapture.cpp",
+      "bytes": 8589,
+      "sha256": "6d295f9d447b6073fce193255f0e134ab301d73dd3fbd1f7126f147bdf11092d"
+    },
+    {
+      "path": "raw/src/Generator/InGameQuickMenu.cpp",
+      "bytes": 67996,
+      "sha256": "b11ac70a5fcee964b60004d65bd946a6f23cddaf18a12623efe7acc4572e96f3"
+    },
+    {
+      "path": "raw/src/Generator/InspectionTools.cpp",
+      "bytes": 119008,
+      "sha256": "4f7a573316d751ef0454f8379bddb0728648547d3db86eb1a931314c1e8fc7e0"
+    },
+    {
+      "path": "raw/src/Generator/ItemIconThumbnail.cpp",
+      "bytes": 15467,
+      "sha256": "8624c374883cf86a5547840a317386892a853a91df57d53af9c5ee9f971fa01e"
+    },
+    {
+      "path": "raw/src/Generator/JsonSchemaGenerator.cpp",
+      "bytes": 15997,
+      "sha256": "01f1741bd31ae795f89993f03ad20a0d87a41526ae5715d44946536a840860ec"
+    },
+    {
+      "path": "raw/src/Generator/NiagaraTest.cpp",
+      "bytes": 13763,
+      "sha256": "8d5ff7c696fd22f5dce1a307f0446620adad964cf723caca77bb7d8c48c1303a"
+    },
+    {
+      "path": "raw/src/Generator/NpcExportPanel.inl",
+      "bytes": 5127,
+      "sha256": "629a181326fa56b1cf6ec0198a31a1443c3f44adf9009d0985a247de7c590df8"
+    },
+    {
+      "path": "raw/src/Generator/PlayerTrace.cpp",
+      "bytes": 10840,
+      "sha256": "61c2ad50c780623dec54916e7622b0ac3fc4d78ed02dff9d5466c463d4007029"
+    },
+    {
+      "path": "raw/src/Generator/QuickMenuInputAdapter.inl",
+      "bytes": 19433,
+      "sha256": "1bde2af79ac011bf7b0f547f5c51c9c324609505769a1f29b9a0a04c675a4b0c"
+    },
+    {
+      "path": "raw/src/Generator/SaveCleanupPanel.inl",
+      "bytes": 9874,
+      "sha256": "35453129559a71925e458cd30de6ac786f2cbd1a5ab199e76c6787f3fb4ac8a7"
+    },
+    {
+      "path": "raw/src/Generator/SaveViewer.cpp",
+      "bytes": 15542,
+      "sha256": "9ad62177691fcb988c07c6bfcf0a993f06ef722652a59d0d1c8ef450edd27ed4"
+    },
+    {
+      "path": "raw/src/Loader/AppearanceEvents.cpp",
+      "bytes": 5602,
+      "sha256": "a3d5f53ffb5db28c76e1bb998bf4592a85d5ebb4ec0e064141506e2e8836e29e"
+    },
+    {
+      "path": "raw/src/Loader/AssetAuthoringMetadata.cpp",
+      "bytes": 2438,
+      "sha256": "c03fcc7b2aad4a8150fd0467b05214fe8c831e106c23edfdcded09466c31198e"
+    },
+    {
+      "path": "raw/src/Loader/AssetProvenance.cpp",
+      "bytes": 5400,
+      "sha256": "a948d883f209f2ec80d5433a4f7f88639a4bac2fd16938440cb01fca5c555fa9"
+    },
+    {
+      "path": "raw/src/Loader/Blueprint/BlueprintPatches.cpp",
+      "bytes": 7141,
+      "sha256": "b27af2a437537a76e6fbc13f71007d475f443e5a58ef75ebca9383dbfd6d64aa"
+    },
+    {
+      "path": "raw/src/Loader/Blueprint/DragonWildsBlueprintMod.cpp",
+      "bytes": 547,
+      "sha256": "e08e66e072b29c12c7e9600f7aa56f6e6dbab31e37f9637d726c9ed48b5cb6c7"
+    },
+    {
+      "path": "raw/src/Loader/DragonWildsAssetModLoader.cpp",
+      "bytes": 43792,
+      "sha256": "cd8d482c22d3295ba93280c7e6e05e0f15b06cb4cdda53e4e4a514b432ec3772"
+    },
+    {
+      "path": "raw/src/Loader/DragonWildsBlueprintModLoader.cpp",
+      "bytes": 23620,
+      "sha256": "0fd1e5d6a6dbfb5de34264c6e36fa44704183f1a6dc258348e573651eb4329f0"
+    },
+    {
+      "path": "raw/src/Loader/DragonWildsBuildingModLoader.cpp",
+      "bytes": 95197,
+      "sha256": "065f75e4d8ec4beeef9752733258148f86ff769eb58419e94f8f11370da5959f"
+    },
+    {
+      "path": "raw/src/Loader/DragonWildsCourseLoader.cpp",
+      "bytes": 41759,
+      "sha256": "16ec46ff9d4ce7d2c81312996f5796b66f67991e45af7fc102b22f2993a0d906"
+    },
+    {
+      "path": "raw/src/Loader/DragonWildsEnumLoader.cpp",
+      "bytes": 4610,
+      "sha256": "1f22245181b4f6e331a928e43c308423775a18fd89cb08af430eb45d7f93c04d"
+    },
+    {
+      "path": "raw/src/Loader/DragonWildsEquipmentLoader.cpp",
+      "bytes": 7720,
+      "sha256": "db52e0d5c269e664cc24dcf34cee4b779822f87e007a90a13a2637d63cf488e6"
+    },
+    {
+      "path": "raw/src/Loader/DragonWildsGameplayEffectLoader.cpp",
+      "bytes": 3355,
+      "sha256": "3c9da065a9f54a78f44731f6e352d4f8bdfaf336a01d5f208cf3b41287fc09fd"
+    },
+    {
+      "path": "raw/src/Loader/DragonWildsJournalModLoader.cpp",
+      "bytes": 42753,
+      "sha256": "be2b05d7a5088c3e0508474ed5b8be4bc17a411d5a92c24b0cd9bf651b423249"
+    },
+    {
+      "path": "raw/src/Loader/DragonWildsMainLoader.cpp",
+      "bytes": 31813,
+      "sha256": "fc539dff4df8772a4cd9ac81526b85d1dfb8d514dffd448ba42bae8a6bc884a0"
+    },
+    {
+      "path": "raw/src/Loader/DragonWildsModLoaderBase.cpp",
+      "bytes": 4825,
+      "sha256": "15cd672c63683f297750020458522bf0c2bf67e250a2c9088a59715f37e26356"
+    },
+    {
+      "path": "raw/src/Loader/DragonWildsNiagaraLoader.cpp",
+      "bytes": 2207,
+      "sha256": "8fb7035e1b205576d2202a55f6b106e33afb443b04f945f488fb03e974c0a6c6"
+    },
+    {
+      "path": "raw/src/Loader/DragonWildsNpcLoader.cpp",
+      "bytes": 202381,
+      "sha256": "3c1fbff2d837924a160c6705f781bce1d908717f7500cc4b0519e22b6debce3d"
+    },
+    {
+      "path": "raw/src/Loader/DragonWildsRawTableLoader.cpp",
+      "bytes": 17360,
+      "sha256": "48c05a915da742c7f36965989a448a340bf49653618234dea63ce4be5c9eb502"
+    },
+    {
+      "path": "raw/src/Loader/DragonWildsRecipeModLoader.cpp",
+      "bytes": 41968,
+      "sha256": "ea3ae85a526ef38103d1e30ec658a32dd93e048e858a986164e638a7a2f6312e"
+    },
+    {
+      "path": "raw/src/Loader/DragonWildsSpawnLoader.cpp",
+      "bytes": 148351,
+      "sha256": "eabc31fb593b77c99599548f821c121742e076914e78089c942ccbbc2bb0c1c2"
+    },
+    {
+      "path": "raw/src/Loader/DragonWildsStringModLoader.cpp",
+      "bytes": 6983,
+      "sha256": "0564e3e3e9a5c020792906cad04fdbc30dda11e9d9d591bbd645274dec2a2f8b"
+    },
+    {
+      "path": "raw/src/Loader/DragonWildsVendorLoader.cpp",
+      "bytes": 1099,
+      "sha256": "0e5be7f70c215df1dab569096e638c73c18d5a0888299f0611a152cde1143212"
+    },
+    {
+      "path": "raw/src/Loader/EquipmentShadowveil.cpp",
+      "bytes": 7653,
+      "sha256": "a986e6596bf7614066db209bda423a4eacf0358d7f8586ba9e9c58d6b9d8298e"
+    },
+    {
+      "path": "raw/src/Loader/HelpyItemCompanions.inl",
+      "bytes": 20607,
+      "sha256": "2612438c72787187ccd2d5772d167c4c4fb152310ac3393ca138b9f1a57d4d86"
+    },
+    {
+      "path": "raw/src/Loader/HelpyNpcAuthoring.inl",
+      "bytes": 18241,
+      "sha256": "e13a562d6f89f96bbd173a33650a511d8af647e7b0f0771763228769316c70f8"
+    },
+    {
+      "path": "raw/src/Loader/HumanNpc.inl",
+      "bytes": 27993,
+      "sha256": "dbacd9e23b70cfd1400132b34e902b4ef0b6add2c482efba4feb397addc370cb"
+    },
+    {
+      "path": "raw/src/Loader/JournalGroupPlacement.inl",
+      "bytes": 8359,
+      "sha256": "97c0db79b7143899a44d3e9655a1186270e497a00870be8f07cbb3091a2520ae"
+    },
+    {
+      "path": "raw/src/Loader/JournalHierarchy.inl",
+      "bytes": 6203,
+      "sha256": "0b2af535d30a04fe020b999e70e95a1d6d53f7047b695146fcf9df2054dd3390"
+    },
+    {
+      "path": "raw/src/Loader/JournalJsonBridge.inl",
+      "bytes": 8104,
+      "sha256": "e343af531355dfa3672329cffc9f79748810c81e9fa476499abb75a57d3c2888"
+    },
+    {
+      "path": "raw/src/Loader/JournalLorePresentation.inl",
+      "bytes": 5259,
+      "sha256": "b8274a4ba11a72079d5d8eb2909666e329a68abdcc8511b0c937cea2a5e9b8fd"
+    },
+    {
+      "path": "raw/src/Loader/JournalPersistence.inl",
+      "bytes": 8968,
+      "sha256": "54700b5cd7fb21cfbcd4e19aeec2a751e13b37f541a29ca25d8a2f4a14983100"
+    },
+    {
+      "path": "raw/src/Loader/LiveCloneAuthoring.inl",
+      "bytes": 44443,
+      "sha256": "ab72dafc81204fdc5f8038c870e927cead7d490b6b90148d051e49c961816c3f"
+    },
+    {
+      "path": "raw/src/Loader/ModLoadOrder.cpp",
+      "bytes": 5231,
+      "sha256": "ad4f71aa5e25e9c037eb5affe5f29178f7cee9a750d0d99c4ac192c12ce1169e"
+    },
+    {
+      "path": "raw/src/Loader/NiagaraAttachment.cpp",
+      "bytes": 9352,
+      "sha256": "9f8c079d7a489f5002bedbfc2bc0b13a7dabf752b37db35cd62bdb62679f3175"
+    },
+    {
+      "path": "raw/src/Loader/NpcCleanup.inl",
+      "bytes": 3957,
+      "sha256": "b58f545089904f390a76161a1279fea9cac197f2b7d97c27c161d664225cf40d"
+    },
+    {
+      "path": "raw/src/Loader/NpcDialogue.inl",
+      "bytes": 56576,
+      "sha256": "0e45147f4e9ee725d6dde476c3654bb6acf71a41e36da0b47f8494fe10eace8e"
+    },
+    {
+      "path": "raw/src/Loader/NpcInteraction.inl",
+      "bytes": 2367,
+      "sha256": "4f5247038a9af77160e1d592119f958c4f29077a1464e40f8f89563cdebd705e"
+    },
+    {
+      "path": "raw/src/Loader/NpcMarkers.inl",
+      "bytes": 5246,
+      "sha256": "e4b8d618b662c430fdcfa4979d032b95e4071411063b1bd4fa0d004a35e4998b"
+    },
+    {
+      "path": "raw/src/Loader/NpcMeshSetter.inl",
+      "bytes": 2775,
+      "sha256": "3fd2ea41b10bc8917b71d7436e8ae3d602227aa160ab146d0c2ce9604c6c0d8b"
+    },
+    {
+      "path": "raw/src/Loader/NpcNativeShopRefresh.inl",
+      "bytes": 15559,
+      "sha256": "8da03f6bea3e8a0f5e78ea61ce8812acadd6a44dd7e0524d9452f995bec2f3f7"
+    },
+    {
+      "path": "raw/src/Loader/NpcQuestAcquisition.inl",
+      "bytes": 8806,
+      "sha256": "6afb2573f8c708ae33ef9a88b59cdb9099dc8b64dc12a26756108de55b7647e9"
+    },
+    {
+      "path": "raw/src/Loader/NpcQuestActions.inl",
+      "bytes": 18479,
+      "sha256": "382c5290a5fa2e4c022c5a8a1ad99ab228602a7e200b7c0d4af06029b698231a"
+    },
+    {
+      "path": "raw/src/Loader/NpcQuestCompletion.inl",
+      "bytes": 6960,
+      "sha256": "c848c3ee8af051420afba6bac03d8ab6a099aa5cf6fb044978e841daa495f943"
+    },
+    {
+      "path": "raw/src/Loader/NpcQuestPresentation.inl",
+      "bytes": 5113,
+      "sha256": "f9d012f8d9416a1a8fcf5bbf1318ec08a114365307bf21920e7bf4a1fb224fd8"
+    },
+    {
+      "path": "raw/src/Loader/PlayerGhost.cpp",
+      "bytes": 29725,
+      "sha256": "e3aa272d16d4da75fc90542f8954298e22ded7bcc3332149df43b5d6359e0214"
+    },
+    {
+      "path": "raw/src/Loader/QuickMenuCatalog.inl",
+      "bytes": 33038,
+      "sha256": "beb0aa295c3a8989037949a808de7f11c5564d4ec2cab47778db1059809304f0"
+    },
+    {
+      "path": "raw/src/Loader/ResourceNpc.inl",
+      "bytes": 4913,
+      "sha256": "304ee566f06c74ef7069dcf4de741bb7c17d3e8ba43328175d1ce7e88a3043a9"
+    },
+    {
+      "path": "raw/src/Loader/Spawn/GhostMaterials.cpp",
+      "bytes": 10210,
+      "sha256": "b1ed1f3f9a63500ab1f85a73d121b04852de9ee43bdce0d9246d5d11f5680fa0"
+    },
+    {
+      "path": "raw/src/Loader/Spawn/PlayerRules.cpp",
+      "bytes": 182983,
+      "sha256": "674e637f9270c0c9c5dffafcd4f5e7e8e87e66b991e70d778e799a60b3e1f100"
+    },
+    {
+      "path": "raw/src/Loader/Spawn/RuntimeSupport.cpp",
+      "bytes": 3385,
+      "sha256": "9068584a910fdfa33bda5228dc660dc68adc8a9d01f5d915d01006a11954bcc2"
+    },
+    {
+      "path": "raw/src/Loader/Spawn/VisualEffects.cpp",
+      "bytes": 13110,
+      "sha256": "f3baad4e30afe239b6d28b19aa45f743c7a1c64ab294843b7a48374477b76ddb"
+    },
+    {
+      "path": "raw/src/Loader/SpawnAdditionalDrops.inl",
+      "bytes": 15656,
+      "sha256": "8346c4fa29f6b428410bad2ee38e083a4e7b8fac8e488e61bb304a38ded7c9d9"
+    },
+    {
+      "path": "raw/src/Loader/SpawnItemIcons.inl",
+      "bytes": 1206,
+      "sha256": "d9c066f3d80f9d4082b3dc93686553fb8fc7b0d31ed0b49805b743727917d8c7"
+    },
+    {
+      "path": "raw/src/Loader/SpawnTools.inl",
+      "bytes": 63832,
+      "sha256": "5d5e515aecd9986d4eb450127eff145cc5451649bbd897441a6cc619433b8995"
+    },
+    {
+      "path": "raw/src/Loader/VendorCategoryNativeText.cpp",
+      "bytes": 6453,
+      "sha256": "d1220399ccc56a9507e178d6a0000484d54a52db5dcce44bc11406439541bf0e"
+    },
+    {
+      "path": "raw/src/Loader/VendorCategoryText.cpp",
+      "bytes": 4618,
+      "sha256": "b3c1f610bbf28aa9ad5a5b95aa9647afde808f065ee23b168f82540eebec8d1d"
+    },
+    {
+      "path": "raw/src/Loader/WildcardFilter/WildcardBooleanFilter.cpp",
+      "bytes": 1381,
+      "sha256": "ac9c5712c31fc0f23bd6be8af07d72f194fb68778a01aeacc7ced07825a85582"
+    },
+    {
+      "path": "raw/src/Loader/WildcardFilter/WildcardEnumFilter.cpp",
+      "bytes": 3731,
+      "sha256": "cdada4e2a53c5b109b846b3124183195ab3229d165842a6ea4c553eaa43f33c8"
+    },
+    {
+      "path": "raw/src/Loader/WildcardFilter/WildcardFilter.cpp",
+      "bytes": 3705,
+      "sha256": "2e1a62960266563f8beac249baecb8c7d6e850b8f123347384951d12cd99f71c"
+    },
+    {
+      "path": "raw/src/Loader/WildcardFilter/WildcardFilters.cpp",
+      "bytes": 3302,
+      "sha256": "b61d0a61e543f3a2613f57a89852740921bc15309b6dd9ba09255841b683dea4"
+    },
+    {
+      "path": "raw/src/Loader/WildcardFilter/WildcardNumericFilter.cpp",
+      "bytes": 2697,
+      "sha256": "0b2c9782b9f887d48e06347948e9fa377c921af36b323704a6697e234a9d1c11"
+    },
+    {
+      "path": "raw/src/Loader/WildcardFilter/WildcardStringFilter.cpp",
+      "bytes": 3478,
+      "sha256": "7d2bdde32f69e3d24a138d1aa7b459bff746759cf1e516ddfe2a1a7d9c998cd1"
+    },
+    {
+      "path": "raw/src/Misc/DragonWildsDataRegistrar.cpp",
+      "bytes": 23130,
+      "sha256": "69a4494e3a12cb922920331759e9997c35ffa4f613ce0078ddc09149eaddf93f"
+    },
+    {
+      "path": "raw/src/Misc/FileWatchWrapper.cpp",
+      "bytes": 942,
+      "sha256": "4ba4620e2ed3771e6f6cc813818e2122c28ce75e0c0828bee981d02d748103a7"
+    },
+    {
+      "path": "raw/src/Runtime/F2ReferenceIndex.cpp",
+      "bytes": 6703,
+      "sha256": "97d5038016ffb8b968ee9608b53024ff8272d5df9d99490baad374cd7040c38e"
+    },
+    {
+      "path": "raw/src/Runtime/HostServices.cpp",
+      "bytes": 1550,
+      "sha256": "56d08c0ec04fa0e419d179ebd60b56280389cbb33c9aa0458310123d7f520e3f"
+    },
+    {
+      "path": "raw/src/Runtime/SearchJobs.cpp",
+      "bytes": 7419,
+      "sha256": "473252b35db4cfc988a280a08ca7d6371530faf4c5f89955158dbeec674c9308"
+    },
+    {
+      "path": "raw/src/SDK/Classes/Custom/UBlueprintGeneratedClass.cpp",
+      "bytes": 1233,
+      "sha256": "57cb4c0351a58105981969e470a2b32148204c8e9bc88f9e7b068ca00d0b8635"
+    },
+    {
+      "path": "raw/src/SDK/Classes/Custom/UDataTableStore.cpp",
+      "bytes": 1609,
+      "sha256": "9c110df21d2319352362c562036ea3d3e741ea1288e884445af4846e35df9d0c"
+    },
+    {
+      "path": "raw/src/SDK/Classes/Custom/UInheritableComponentHandler.cpp",
+      "bytes": 467,
+      "sha256": "8b42f7fe876d59d1aa165fbd6e36448223e1ac9a42a2367a9de0aaf82173b04a"
+    },
+    {
+      "path": "raw/src/SDK/Classes/Custom/UObjectGlobals.cpp",
+      "bytes": 2202,
+      "sha256": "972a568c60c5b327b7364b400c23ac44024a377a076433cdc65d1614fe251a6c"
+    },
+    {
+      "path": "raw/src/SDK/Classes/Custom/UObjectWrapper.cpp",
+      "bytes": 367,
+      "sha256": "08b449075efd1801081d27d4fcf6ee4246df20ca41cdc93821e0a33dbb4640eb"
+    },
+    {
+      "path": "raw/src/SDK/Classes/Custom/USCS_Node.cpp",
+      "bytes": 444,
+      "sha256": "8c13869ef451a84e91440fb8271add2d6d7caafe7a272c8a663fb934f8d449a4"
+    },
+    {
+      "path": "raw/src/SDK/Classes/Custom/USimpleConstructionScript.cpp",
+      "bytes": 319,
+      "sha256": "ba08fb9feb6e047f20d71e6de253f73e6d14a9cb48d0a1df1ee9be41b4130e3d"
+    },
+    {
+      "path": "raw/src/SDK/Classes/Custom/UWorldPartitionRuntimeLevelStreamingCell.cpp",
+      "bytes": 918,
+      "sha256": "5f59b0d344a9f03f0c0eeed0067c0e8340e50ce2ba601f1a9d044a8365bcbf34"
+    },
+    {
+      "path": "raw/src/SDK/Classes/KismetSystemLibrary.cpp",
+      "bytes": 12141,
+      "sha256": "19812c756683e6a7113aa4758670b090cf8e73d405ea715f6762bdaf4b372b36"
+    },
+    {
+      "path": "raw/src/SDK/Classes/UCompositeDataTable.cpp",
+      "bytes": 707,
+      "sha256": "572df92ad60fc7dcc72e31afc3c770dc8259c4ebdba98a73ad755de384d08c4a"
+    },
+    {
+      "path": "raw/src/SDK/DragonWildsSignatures.cpp",
+      "bytes": 3354,
+      "sha256": "8a94b19627c20ba1198b1a14c31cad1ccf2a32d4b0fec5e2dd5d58fdc3e47153"
+    },
+    {
+      "path": "raw/src/SDK/Helper/ActorHelper.cpp",
+      "bytes": 19468,
+      "sha256": "7993cf662aabdb2af9d2ac50af9dce9b68fbac4981bc520f5df61d3a6aedb19e"
+    },
+    {
+      "path": "raw/src/SDK/Helper/ArrayFieldPatch.cpp",
+      "bytes": 5422,
+      "sha256": "d71895a963e54b2a32692b0bc867c6cc1ae9d30faec511a496ffb3139d7fa19b"
+    },
+    {
+      "path": "raw/src/SDK/Helper/Memory.cpp",
+      "bytes": 1159,
+      "sha256": "86a0d217c85e7cace5df1c3b6fa4f6cd116db6162543069064ad8102e5ff3667"
+    },
+    {
+      "path": "raw/src/SDK/Helper/PropertyHelper.cpp",
+      "bytes": 40341,
+      "sha256": "40ed4f5ebafa65e8e54190512c8a67a30e74016347e8a9b26b761afe5d0e7704"
+    },
+    {
+      "path": "raw/src/SDK/Helper/StringTableHelper.cpp",
+      "bytes": 7852,
+      "sha256": "a50cfd98808f8e37f396b2decc5f134d8dfd3e1e094cfc6a727734c8a121f80e"
+    },
+    {
+      "path": "raw/src/SDK/StaticClassStorage.cpp",
+      "bytes": 2741,
+      "sha256": "6b893d175276973a71333a9ee0662909a815213f8b2bb3171660f46da79e8373"
+    },
+    {
+      "path": "raw/src/SDK/Structs/Custom/FManagedStruct.cpp",
+      "bytes": 681,
+      "sha256": "b4dd1e5449e30d7e670c8c9380748bf2502f7b741e969087b4c91afcbe7f5770"
+    },
+    {
+      "path": "raw/src/SDK/Structs/Custom/FManagedValue.cpp",
+      "bytes": 410,
+      "sha256": "1d8881160e2f93a942dd8b088ae4b5a67ac4473fc0b4462753ef38d23f723a86"
+    },
+    {
+      "path": "raw/src/SDK/Structs/Custom/FScriptArrayHelper.cpp",
+      "bytes": 2838,
+      "sha256": "5f02db92bc0dd6d3d37504118b1c33694a05090b7c82c7be9ab40e009171eda3"
+    },
+    {
+      "path": "raw/src/SDK/Structs/Custom/FScriptMapHelper.cpp",
+      "bytes": 5709,
+      "sha256": "0e5d54ce562f87ea71e65d55095a614937c65d7352e2058bb97124f32181ff0e"
+    },
+    {
+      "path": "raw/src/SDK/Structs/Custom/FScriptSetHelper.cpp",
+      "bytes": 1701,
+      "sha256": "d5802d63c76fd33f1ff630b51e145f611223f3942ad9bff3f4f019409d49718f"
+    },
+    {
+      "path": "raw/src/SDK/Structs/FSoftObjectPath.cpp",
+      "bytes": 892,
+      "sha256": "b7494252e5153b969a00624c0901498d961231d3602abc8e2424b5451aef8239"
+    },
+    {
+      "path": "raw/src/SDK/UnrealOffsets.cpp",
+      "bytes": 3608,
+      "sha256": "ffb0a8c938461ed53820adb8b532563627a7b3fd53b9245654fe3dd3216240c3"
+    },
+    {
+      "path": "raw/src/Utility/Config.cpp",
+      "bytes": 5057,
+      "sha256": "8fc418ac5bd5c8c9448e11b6d9930f4389df91f1c713d3cd76bd0fd864eca8a8"
+    },
+    {
+      "path": "raw/src/Utility/JsonHelpers.cpp",
+      "bytes": 1866,
+      "sha256": "25bb1d190f37aeab6dbe58225770c6c01031fd2d82a5f6c04fb9d5e1d8f64426"
+    },
+    {
+      "path": "raw/src/Utility/StartupTrace.cpp",
+      "bytes": 1457,
+      "sha256": "dc46d9f99b28eab40f6e0288961f73694e6012f24577c6d6957ec94f5dd58a8c"
+    },
+    {
+      "path": "raw/tests/activity-rule-template.cpp",
+      "bytes": 1685,
+      "sha256": "9b9b1034e408009d4acd42c7f511e03b736b54fea57ee4dc1911266503005c6b"
+    },
+    {
+      "path": "raw/tests/appearance-broker-current.cpp",
+      "bytes": 3461,
+      "sha256": "d230449882615b65a6242fd8a21aecf19518800302e8e65fd19b62890aba4724"
+    },
+    {
+      "path": "raw/tests/appearance-native-relocation.cpp",
+      "bytes": 1350,
+      "sha256": "795d5ecea0a48a21358ead54d19a794caacd2c4f1cf921b690fc3a40f774e05c"
+    },
+    {
+      "path": "raw/tests/appearance-resolver.cpp",
+      "bytes": 7347,
+      "sha256": "93ae9b1e4b59038f47817df04115b20ba010102645d96c25e20dc2f242640a14"
+    },
+    {
+      "path": "raw/tests/appearance-shared-lifecycle.cpp",
+      "bytes": 2682,
+      "sha256": "c89ad0c24d46574ecabda4cf6058fea2c1ce96bafdcf9ca3fe5adb34cedd47d0"
+    },
+    {
+      "path": "raw/tests/asset-aliases.cpp",
+      "bytes": 729,
+      "sha256": "8e68b65f67411c1a873409c266042690ec6ec413bff96a09e2a9674592a15ae3"
+    },
+    {
+      "path": "raw/tests/asset-batch.cpp",
+      "bytes": 8241,
+      "sha256": "a7caa7143f466bf92d361a93fef4cb41ff12bef0411a0b8662e2a61fac4ece3f"
+    },
+    {
+      "path": "raw/tests/asset-provenance-contract.cpp",
+      "bytes": 1457,
+      "sha256": "be46562642d1bd464a054996d58adc8753f157ced6377225201775902a8fd306"
+    },
+    {
+      "path": "raw/tests/asset-template.cpp",
+      "bytes": 2279,
+      "sha256": "9722ca1561bbaf4e5d531ffe69c12fdc227ae4316ea3ddf8f4eb055ab3fe44ea"
+    },
+    {
+      "path": "raw/tests/authoring-policy.cpp",
+      "bytes": 1678,
+      "sha256": "38a3b94af8ecb17a382303c84413a54f69c88c9bdd534b5561b50f2e97e7b5f5"
+    },
+    {
+      "path": "raw/tests/building-preview-safety.cpp",
+      "bytes": 2984,
+      "sha256": "2b92f10b72d9f40ef4bb9a790dde975d6c8b58c9f5ff851228a208491999ea77"
+    },
+    {
+      "path": "raw/tests/capture-traversal.cpp",
+      "bytes": 1210,
+      "sha256": "252b484e1821aca3205a72028213b585435f40a8f0043e6743e36c7bc18a506e"
+    },
+    {
+      "path": "raw/tests/config-compatibility.cpp",
+      "bytes": 695,
+      "sha256": "e6df81d35840c1a9150c02392c1520ceccf79194c47dea51d52c2161b3a96f75"
+    },
+    {
+      "path": "raw/tests/config-settings.cpp",
+      "bytes": 4960,
+      "sha256": "b900a0b6d2751d80eeb4522abc5f0cef2d25d2e09f7803d9c397ef0170b08226"
+    },
+    {
+      "path": "raw/tests/consume-queue.cpp",
+      "bytes": 2450,
+      "sha256": "c0979fbcfe4d14361901d86775e5ba8ed4089a6d2e5660a8b73f3b42966fbd75"
+    },
+    {
+      "path": "raw/tests/diagnostic-export.cpp",
+      "bytes": 5297,
+      "sha256": "7283cbd94e805818c1fcd7b85ec4b98b4c41f90248cd2c7feea9b8c3c74f76e1"
+    },
+    {
+      "path": "raw/tests/diagnostic-library.cpp",
+      "bytes": 1376,
+      "sha256": "3d6dff5c710756a5d43ecc3a1eb3aa5fe6ec35fd84641891cacfe9f028c33b3e"
+    },
+    {
+      "path": "raw/tests/diagnostic-presets.cpp",
+      "bytes": 4771,
+      "sha256": "5638dd45218922f2a042951c6817fc54f3fc66678d2db0367e81ac8c6aae85ac"
+    },
+    {
+      "path": "raw/tests/dialogue-definition.cpp",
+      "bytes": 7331,
+      "sha256": "bce646b42909770e69a678305b9ebd185b4c6fb2bbd9607bc9a1442c6c52c830"
+    },
+    {
+      "path": "raw/tests/dialogue-lifecycle.cpp",
+      "bytes": 3111,
+      "sha256": "e5e8ffe0b547b3e6dfb0036da1fd32c6292be1139b19d7e9adf646ec1bbf2090"
+    },
+    {
+      "path": "raw/tests/dialogue-progress.cpp",
+      "bytes": 1959,
+      "sha256": "f59939d5d64e4df5a270096a02585e79aeb5c49ab2c5f5f6b6b071c450cc0dc3"
+    },
+    {
+      "path": "raw/tests/early-table-replay.cpp",
+      "bytes": 4112,
+      "sha256": "add5457c9fa06f426ead63eb4ff4ab2e0412abc15728354c8e06f722ac746055"
+    },
+    {
+      "path": "raw/tests/engine-cleanup-lifetime.cpp",
+      "bytes": 1408,
+      "sha256": "a32a849102f4ae03d50758bb2eed7c3985a1b923134843072a82e62c91b1cd6d"
+    },
+    {
+      "path": "raw/tests/equipment-rules.cpp",
+      "bytes": 3312,
+      "sha256": "8fab26d152bb5d5a4c733438c835557822d777cf8863f424282520f9bdd47189"
+    },
+    {
+      "path": "raw/tests/event-cleanup-contract.cpp",
+      "bytes": 1523,
+      "sha256": "536cdfa34a73967bd32eaa3ae6742e16162f9ca3b7f77f3d31c64a7e88e300be"
+    },
+    {
+      "path": "raw/tests/event-definition.cpp",
+      "bytes": 13301,
+      "sha256": "e393fdfd3a99398b427ea5cae7740c7b4a140ce6fa40c737fbe8f92e438b16c8"
+    },
+    {
+      "path": "raw/tests/event-example.cpp",
+      "bytes": 1424,
+      "sha256": "5ff9b26c598acc8c9c859e1bf66d3e24be18d3c883288025132a0f0f5f8db136"
+    },
+    {
+      "path": "raw/tests/evidence/quest-native-contract.json",
+      "bytes": 106675,
+      "sha256": "b4d99d21dc644acd9f03155dc28c68436aa7bed46902938912473771a0575851"
+    },
+    {
+      "path": "raw/tests/example-mods.cpp",
+      "bytes": 3762,
+      "sha256": "582a1b8e28369fd016b5f962b5aa9d8a32298b996e87546a35bb830ebd782db2"
+    },
+    {
+      "path": "raw/tests/fetch-quest-example.cpp",
+      "bytes": 1015,
+      "sha256": "f981501d43ddcbbd89fb801845bdfc869306174b7137f3ca72f89f6e3a18216a"
+    },
+    {
+      "path": "raw/tests/field-patches.cpp",
+      "bytes": 2952,
+      "sha256": "dbcb2edef90f4a0d4dace41519fe3aa20d76184715e4e33a30c7a5b84a45d3df"
+    },
+    {
+      "path": "raw/tests/ghost-tools-options.cpp",
+      "bytes": 1776,
+      "sha256": "81d2b99baaa223cdcb0a037ed06e90e2e9e1056a822363e5dbe50c18c7eff6d7"
+    },
+    {
+      "path": "raw/tests/grumble-waves.cpp",
+      "bytes": 2266,
+      "sha256": "ee32a5dacafe4a4d17b88d8e41d2258ee6d025afb0a972eb151cbc8710e9227c"
+    },
+    {
+      "path": "raw/tests/human-pose.cpp",
+      "bytes": 3264,
+      "sha256": "326718529ee15490ded393c1f0afeeeae9a59ca1fb6fbd962f719754be9afb21"
+    },
+    {
+      "path": "raw/tests/ingame-quick-menu-shell.cpp",
+      "bytes": 4182,
+      "sha256": "68a87d31a70636d18e6edd3b99e259de37d853a1d88fcc1a525f9038a1f2eee3"
+    },
+    {
+      "path": "raw/tests/inline-hook.cpp",
+      "bytes": 1288,
+      "sha256": "acc400781d6a0680bf0442e0ccf607253e5f808f0c3698e0f475af1d343c99c7"
+    },
+    {
+      "path": "raw/tests/item-grid-pagination.cpp",
+      "bytes": 1955,
+      "sha256": "3648012269326246165c4a2371dfe4c85b8767e1a3ac7678834ae7863ef339c3"
+    },
+    {
+      "path": "raw/tests/item-grid-picker-reuse.cpp",
+      "bytes": 2227,
+      "sha256": "9942ecfc75d0851fe0479d4765556c112c16c46ccbe4630dbc7cd992dc92d978"
+    },
+    {
+      "path": "raw/tests/item-icon-grid.cpp",
+      "bytes": 3926,
+      "sha256": "aa45aa8f02377f1f24575b430b7acef3b1e19ac878128897fadc6de32a5aeb90"
+    },
+    {
+      "path": "raw/tests/journal-failure-isolation.cpp",
+      "bytes": 3440,
+      "sha256": "512a3ae4d4cbd6e1a3553a614f254cd15d208668b030f4657d840b6545969939"
+    },
+    {
+      "path": "raw/tests/journal-once.cpp",
+      "bytes": 2010,
+      "sha256": "8580a4b97b0c193d123438d5b7e58503f1c365d6c20a09b8fd5a2809e1477fa9"
+    },
+    {
+      "path": "raw/tests/journal-placement.cpp",
+      "bytes": 2051,
+      "sha256": "c113949bb8c8bbd1eee172db6a651bae4a7226235c926a7a68fb70b43b1c20ca"
+    },
+    {
+      "path": "raw/tests/journal-save-ownership.cpp",
+      "bytes": 3212,
+      "sha256": "dbc9426c6324e4efc784527bd369b409cd12e0c5779ff23a8bb55b979ded5b10"
+    },
+    {
+      "path": "raw/tests/journal-soft-reference-contract.cpp",
+      "bytes": 656,
+      "sha256": "1615b2bc3cee4fa43bcced190785c5829c148ade5899e3a8df74e0fa07126d0c"
+    },
+    {
+      "path": "raw/tests/json-document.cpp",
+      "bytes": 2662,
+      "sha256": "d444ff1d6870fec1a41ecc345bab32a5ae0b1225743e7a1ba3abb9ef77c9eae0"
+    },
+    {
+      "path": "raw/tests/loader-schemas.cpp",
+      "bytes": 6768,
+      "sha256": "f16c21d9a4282ba3798229adb2a038527a48a097c05819df153e60fdcd768787"
+    },
+    {
+      "path": "raw/tests/loader-template.cpp",
+      "bytes": 4559,
+      "sha256": "13c940ace569dbbde34eb1649beaf6b2daa88d386babc02b2349173442f50c42"
+    },
+    {
+      "path": "raw/tests/map-storage.cpp",
+      "bytes": 2102,
+      "sha256": "7c4bad12547385aa473b52bf5ca35fa96acee95a7286aa026e60ff5fe46ead73"
+    },
+    {
+      "path": "raw/tests/mod-order-policy.cpp",
+      "bytes": 1720,
+      "sha256": "f4fddf929b114bd5403f76cd905f4dddb9fe8c65f2e9632e730cc1f8424c8989"
+    },
+    {
+      "path": "raw/tests/ModFolderLayoutTests.cpp",
+      "bytes": 2090,
+      "sha256": "e936ca87f180ee9db1bd3a351e3f8786308acf1e8755fcea8ed55e5b229811f9"
+    },
+    {
+      "path": "raw/tests/native-contract.cpp",
+      "bytes": 1740,
+      "sha256": "448d3c5d142aa1b34b4b1666c3f25e8cc8f69b3beef82d6c5a9da658eed19b15"
+    },
+    {
+      "path": "raw/tests/niagara-preset.cpp",
+      "bytes": 2407,
+      "sha256": "3cbe5af02de8dbc1717f0197478147e9ab04dc4e939a1e23ccf5faa2ab59744c"
+    },
+    {
+      "path": "raw/tests/npc-catalog.cpp",
+      "bytes": 29549,
+      "sha256": "3734a4540e0551b5d939e87f5dc3ecedbdcde947016aa75d8e34438214ddb6d2"
+    },
+    {
+      "path": "raw/tests/npc-cleanup-contract.cpp",
+      "bytes": 1893,
+      "sha256": "9cde9fd65e9051f8edbcc96fb186e93dc051837299066a091427a2c2103973f5"
+    },
+    {
+      "path": "raw/tests/ordered-callbacks.cpp",
+      "bytes": 1369,
+      "sha256": "e58e4e27478b0a78b1fdc850cfeea38070954c487e62fbbfbff0ed12a50c5a8e"
+    },
+    {
+      "path": "raw/tests/parse-installed-mods.cpp",
+      "bytes": 1021,
+      "sha256": "815c5bde4a665097501b832d0c050ed0d8651387b409066ccaae701cb23c48fd"
+    },
+    {
+      "path": "raw/tests/patch-conflicts.cpp",
+      "bytes": 2045,
+      "sha256": "aa7642076a7e73d7482f689828e0dcbcde021bcb4420f5b1e5bc6d17170b4c7d"
+    },
+    {
+      "path": "raw/tests/player-activity-events.cpp",
+      "bytes": 8000,
+      "sha256": "2fbb0a7944a02e91ce87a993f8faa465588f7e58aeeb54f211c55cfec6c3fe92"
+    },
+    {
+      "path": "raw/tests/player-archetype.cpp",
+      "bytes": 1356,
+      "sha256": "b238e4b6a3d01923cda73f2549935f71659d92dbeb66a2b93d0f7ec28bc9f1aa"
+    },
+    {
+      "path": "raw/tests/preview-discovery-regression.cpp",
+      "bytes": 2380,
+      "sha256": "fe2c1b87b355ea7b8203760a07f4140756077f617c4ece40dfbfb948e2f629a7"
+    },
+    {
+      "path": "raw/tests/quantum-banker.cpp",
+      "bytes": 9568,
+      "sha256": "57f7f633c032cf7770928548b82f870d0db69a9334858a57a13373dddbb967dd"
+    },
+    {
+      "path": "raw/tests/quest-area-example.cpp",
+      "bytes": 1644,
+      "sha256": "4d49eb60637f9b1beb43210ac68bd9b8d7e2204e0f7bd8b3c0cc874a6136d1b6"
+    },
+    {
+      "path": "raw/tests/quest-definition.cpp",
+      "bytes": 5866,
+      "sha256": "a541990c9aed7dcdbcd3f1895ec28334a328e0bbf7bd35fe808e980a42aa697f"
+    },
+    {
+      "path": "raw/tests/quest-gameplay-owner.cpp",
+      "bytes": 3236,
+      "sha256": "d6c77dedf65bc7a949fb716d9005f7bd306035d481354f222aa5acca0ce24919"
+    },
+    {
+      "path": "raw/tests/quest-inventory-routing.cpp",
+      "bytes": 1354,
+      "sha256": "2a89038d5a3b8a1c2a302d8810b9a7d11490f19870502a08cb5bd7aa0e11e676"
+    },
+    {
+      "path": "raw/tests/quest-kill-credit.cpp",
+      "bytes": 4291,
+      "sha256": "1a80aaebf673b6ec4b9719885fcbb9d1f4b96d79df31dafae255904b9d5d3628"
+    },
+    {
+      "path": "raw/tests/quest-marker-example.cpp",
+      "bytes": 1249,
+      "sha256": "51d5bbe3c0effa69d3b5dec83a0e73292b069c91ea51910c6e9101ebb729e8e7"
+    },
+    {
+      "path": "raw/tests/quest-marker-readiness.cpp",
+      "bytes": 1860,
+      "sha256": "9bee6e34c4a411f9056020ed6f385ac8965f40ae057086af73121ae8b78df40f"
+    },
+    {
+      "path": "raw/tests/quest-native-compile.cpp",
+      "bytes": 1244,
+      "sha256": "7882bbbf46e90fcba51d2aec6cd2b3325ffeea3a78435db419742e5170872b68"
+    },
+    {
+      "path": "raw/tests/quest-native-contract.cpp",
+      "bytes": 3899,
+      "sha256": "220806f7efdbe9d655ec704156036f4461dadc34f258eb2525b4f97bb52247bd"
+    },
+    {
+      "path": "raw/tests/quest-progress.cpp",
+      "bytes": 4220,
+      "sha256": "15733aa43684081a6a3538ff54fca87b1a1cd2b32823e035327fe61c6b46bf5b"
+    },
+    {
+      "path": "raw/tests/quest-receipt-journal.cpp",
+      "bytes": 11416,
+      "sha256": "78956fc04887e2d44cadfe480ba72f7f757017f6e66caf2317f1a6359bbb29e1"
+    },
+    {
+      "path": "raw/tests/quest-registry-plan.cpp",
+      "bytes": 6433,
+      "sha256": "21e1b0584bd775aba6d5bab6a6741710bea4954be42cca4f11625f92e80d72e1"
+    },
+    {
+      "path": "raw/tests/quest-repeat-policy.cpp",
+      "bytes": 1772,
+      "sha256": "e7ea7c4cec71c0a1a534cae2b76654a4963a6bd8417c0e3481d32bfab870cb1e"
+    },
+    {
+      "path": "raw/tests/quest-restart-ownership.cpp",
+      "bytes": 1446,
+      "sha256": "657880d4d7c5fa4edf0144cda03db097d02295114240080955778ea1a1d4bc29"
+    },
+    {
+      "path": "raw/tests/quest-reward-tiers.cpp",
+      "bytes": 7454,
+      "sha256": "87c196f9aac8fd5b2645efa996f5c62ce4b965e51e479c12902c25ba9b92d3fc"
+    },
+    {
+      "path": "raw/tests/quest-save-ownership.cpp",
+      "bytes": 1902,
+      "sha256": "b7727548908bcd5dda0b879004ad123443829fc423af47050da95d4a020a19fb"
+    },
+    {
+      "path": "raw/tests/quest-stage-progress.cpp",
+      "bytes": 7537,
+      "sha256": "c906f5c53742346d2ed7bf3909b4fca7563481cc1918fc8fa85ee97ea637d350"
+    },
+    {
+      "path": "raw/tests/quick_menu/render_preview.cpp",
+      "bytes": 3675,
+      "sha256": "dbf6ed4c71c5f8b38e08b2217fb29b827444e78cb02f11d8424901c5fbfd26ce"
+    },
+    {
+      "path": "raw/tests/quick_menu/run_tests.py",
+      "bytes": 15737,
+      "sha256": "288085c09ce3562566168c74331b9fb3a91f16281667f97ec8685b3a07cbaab6"
+    },
+    {
+      "path": "raw/tests/quick_menu/test_mailbox.cpp",
+      "bytes": 3807,
+      "sha256": "d5f323c28b613f498c8f4e1f44ae4e9504d73f53600e3b42bab1f32ce224205c"
+    },
+    {
+      "path": "raw/tests/quick_menu/test_refinements.cpp",
+      "bytes": 10196,
+      "sha256": "962fe0a725df222ddafb320bbf569682dd10545da26980e9976622ef78008536"
+    },
+    {
+      "path": "raw/tests/quick_menu/test_ui.cpp",
+      "bytes": 10291,
+      "sha256": "fcceaddd22febf39b2504dee3d6e360f52ebebab30d26038b3ecac17f8370072"
+    },
+    {
+      "path": "raw/tests/quick_menu_input/FakeHost.h",
+      "bytes": 9847,
+      "sha256": "6b6276f9659a5b45c33235e982ed0db40b638d685db8a5bfed868cf20957256e"
+    },
+    {
+      "path": "raw/tests/quick_menu_input/run_tests.py",
+      "bytes": 2906,
+      "sha256": "415baa2404e39ca5da217d8b59345449d502668043978dbb743feb4ec3a6f992"
+    },
+    {
+      "path": "raw/tests/quick_menu_input/stubs/safetyhook.hpp",
+      "bytes": 163,
+      "sha256": "87797cbcd324e693f79a02e09cfe753179bf7812e68f3a5521220568290133d8"
+    },
+    {
+      "path": "raw/tests/quick_menu_input/stubs/SDK/WeakObjectHandle.h",
+      "bytes": 385,
+      "sha256": "b8301a13c572f66a5f9f463f997e69f5620e0b26a02d5c7ab7647ff34a2886f7"
+    },
+    {
+      "path": "raw/tests/quick_menu_input/stubs/Unreal/Hooks.hpp",
+      "bytes": 1439,
+      "sha256": "0356f9903fd89f1ca1083747cab6cb916c35d88d762bdb35e5130df1384a4096"
+    },
+    {
+      "path": "raw/tests/quick_menu_input/stubs/Windows.h",
+      "bytes": 2546,
+      "sha256": "fb5ff1c3e80e9ac9b3bd74a326e6374215d99b1db538b356c01029ae96ec3d52"
+    },
+    {
+      "path": "raw/tests/quick_menu_input/test_input.cpp",
+      "bytes": 29955,
+      "sha256": "dbf6caebe7b3d9a59e63337c850d4f3d9a9481c4c8c0611cbabbc2a34773f4e1"
+    },
+    {
+      "path": "raw/tests/recipe-unlock-policy.cpp",
+      "bytes": 577,
+      "sha256": "ac3e006ed4b895c938cb07ce4e5d826901029a22a4e6c33a899e0779e35aadcb"
+    },
+    {
+      "path": "raw/tests/reference-export.cpp",
+      "bytes": 1525,
+      "sha256": "f94547406ec9437d1d5f97192ccaca4fc1990e2e0035efb5484fbfb72a50a22d"
+    },
+    {
+      "path": "raw/tests/resource-additional-drops.cpp",
+      "bytes": 2723,
+      "sha256": "c304b8fd6b7f9c6613002111e5ba7dc9d7f992ab84d5863af3fc77749235d523"
+    },
+    {
+      "path": "raw/tests/runtime-layout.cpp",
+      "bytes": 2068,
+      "sha256": "1241d0d1c9f21cd20e183775dc9d35d845e322a34c6ab31088a5998822ccb945"
+    },
+    {
+      "path": "raw/tests/runtime-search-job.cpp",
+      "bytes": 1104,
+      "sha256": "41b13e87a0838debd8459ff3cb1dcef24f0100fea5f065adfa74def1c84c8818"
+    },
+    {
+      "path": "raw/tests/save-cleanup.cpp",
+      "bytes": 4141,
+      "sha256": "455c7d85b86b3ca450af7b97c1993e22618e0e1799905c75f34dd103a3b0968c"
+    },
+    {
+      "path": "raw/tests/save-report.cpp",
+      "bytes": 2962,
+      "sha256": "6aa02d81b309c28eeee1ee07ee9826ac52bed3d56df68185a43fa08987aeb561"
+    },
+    {
+      "path": "raw/tests/shadowveil-native-relocation.cpp",
+      "bytes": 1732,
+      "sha256": "481fce07f72536be1bf3eb58235b3cc819bdfc15ad04163400a486153b881714"
+    },
+    {
+      "path": "raw/tests/spawn-radius.cpp",
+      "bytes": 1680,
+      "sha256": "9372c77d6bd75a30640185a95197c1f5877b587db26af91d6a4faf0f04da60e2"
+    },
+    {
+      "path": "raw/tests/starter-preflight.cpp",
+      "bytes": 2776,
+      "sha256": "bd13da93b78677b005746fb732df31c6947ad15a6c305b5f15b52611eebbaa43"
+    },
+    {
+      "path": "raw/tests/startup-trace-optin.cpp",
+      "bytes": 826,
+      "sha256": "1e6f7fbf368d665c3a1dc61db4594ac73c18cef66e0d752ca9e2a5e98cc2b4bc"
+    },
+    {
+      "path": "raw/tests/startup-trace.cpp",
+      "bytes": 1015,
+      "sha256": "eb7971e661a65aa523352fc8f2d7a2df684f7724a0af37159f8686e6f94e6ec2"
+    },
+    {
+      "path": "raw/tests/stone-story.cpp",
+      "bytes": 3696,
+      "sha256": "1e1fde95d83e9ca58e4811b22d6f0e72add5d054002f5b36aa970f8a9662e2c7"
+    },
+    {
+      "path": "raw/tests/string-replacements.cpp",
+      "bytes": 1688,
+      "sha256": "e3816e31e6d77cf8fc8f503002a1b26928c7982c77b3c0d55b1d89113d96ab1c"
+    },
+    {
+      "path": "raw/tests/stubs/Unreal/CoreUObject/UObject/UnrealType.hpp",
+      "bytes": 2332,
+      "sha256": "1326db664e5489fe3e71346d694d972041256f7f2c4ffdd22acfb3aa69be8cfd"
+    },
+    {
+      "path": "raw/tests/surge-evade-rules.cpp",
+      "bytes": 1947,
+      "sha256": "2db6ecdb9082df8211128588dad5a7ccdb7c1c8c97d4774e81a3450489c19615"
+    },
+    {
+      "path": "raw/tests/surge-native-relocation.cpp",
+      "bytes": 1583,
+      "sha256": "e1d675a1188a5a3e719d2af3761802b66f8e0ad7142edcf38c30cc1062c1ada9"
+    },
+    {
+      "path": "raw/tests/trace-profile.cpp",
+      "bytes": 6065,
+      "sha256": "512674fa9b5c5541c5b1ad61fa16f167249d0ba38817c8f4293629a863d063ac"
+    },
+    {
+      "path": "raw/tests/tree-quest.cpp",
+      "bytes": 1645,
+      "sha256": "22e14433b45b9f6634285757213ef3587d64fa8a685c3a3c3457412d926c0330"
+    },
+    {
+      "path": "raw/tests/unreal-readiness.cpp",
+      "bytes": 1880,
+      "sha256": "551948c5c863239e9ea35f621972332f5a6da174cdafac703b787ad388e37283"
+    },
+    {
+      "path": "raw/tests/vendor-offers.cpp",
+      "bytes": 2635,
+      "sha256": "5c1ba5d46b0ab2bf1f3c2573f3b7229d4ff9f7812d01914184483e2d9d2425b8"
+    },
+    {
+      "path": "raw/tests/vendor-spawn-gate.cpp",
+      "bytes": 4059,
+      "sha256": "7fa0d06b1e20d2316268fe16799d3977e7f526c6e8953f94ab3a5c29744c4534"
+    },
+    {
+      "path": "raw/tests/vendor-stage-policy.cpp",
+      "bytes": 432,
+      "sha256": "eb4cde48711f95fc990a339e0b7becaa3cdfd55fd87833bc041648401978e3a5"
+    },
+    {
+      "path": "raw/tests/vendor_categories/FakeUnreal.h",
+      "bytes": 5653,
+      "sha256": "5f1ed99ca4db452bbaa0dcedb8647a04bdc558985f3eb9ee141ae27fa11e185a"
+    },
+    {
+      "path": "raw/tests/vendor_categories/run_tests.py",
+      "bytes": 6614,
+      "sha256": "4e1d1a2109ad8342f907120b384ca814a9718924ccbedb548132faef051cd130"
+    },
+    {
+      "path": "raw/tests/vendor_categories/test_categories.cpp",
+      "bytes": 7695,
+      "sha256": "d7fb8a39b725f7246035ce7cd6b29553201ad7807087616b2e6f1001fcc9940c"
+    },
+    {
+      "path": "raw/tests/virtual-definition-id.cpp",
+      "bytes": 2270,
+      "sha256": "74ef398dccccdad267d69923a1b3a22c2b07e68f9da8b4e4d7c94e7618f7783c"
+    },
+    {
+      "path": "raw/tools/build-chromatic-skillcape-effects.ps1",
+      "bytes": 3509,
+      "sha256": "ca213831f508898aacf5c0e3042e4996d2eae5f7dabee755653a697a8489e0b6"
+    },
+    {
+      "path": "raw/tools/check-dependencies.ps1",
+      "bytes": 2149,
+      "sha256": "37fffcc7d82a21021d18d365c87f3e741ab17acdab7fbb31a1f82c10b3995cad"
+    },
+    {
+      "path": "raw/tools/export-skill-catalog.ps1",
+      "bytes": 1283,
+      "sha256": "0d1b86627555df6cc98cfe80287fe73b6acb926caa5855d24e2a20f0c8b0a992"
+    },
+    {
+      "path": "raw/tools/inspect-minidump.ps1",
+      "bytes": 2042,
+      "sha256": "e1d48a4861d93173e6d5da04706e3e59c65f90e4db382e9a4aa26ee0c5b3bdca"
+    },
+    {
+      "path": "raw/tools/inspect-vendor-save.ps1",
+      "bytes": 4155,
+      "sha256": "30e3ffc5fd0a7f26af71e462378ea78f55c9890f3f2b73407b0b76014668ee48"
+    },
+    {
+      "path": "raw/tools/test-currency-costs.ps1",
+      "bytes": 4615,
+      "sha256": "03ed55732372c91179e478c62d00e5cd4d131711c884a1487f6dbcc720128a07"
+    },
+    {
+      "path": "raw/tools/test-currency.ps1",
+      "bytes": 5517,
+      "sha256": "f66cddf2310ef13e7b35385b5fd86f0d71852b63d4c1d9ef2d211c218d31e140"
+    },
+    {
+      "path": "raw/tools/test-loader-schemas.ps1",
+      "bytes": 3898,
+      "sha256": "0e2dd233550ec48b5566a64a4fd51b480652b7ef1e46dc18ea71b67f08ed9904"
+    },
+    {
+      "path": "raw/tools/write-release-manifest.ps1",
+      "bytes": 1262,
+      "sha256": "70950fc34d411da131877f22f308ec3752afcdf9bf3b3a51f90c68b9a5ae7759"
+    },
+    {
+      "path": "README-FIRST.txt",
+      "bytes": 3488,
+      "sha256": "6fc92c446a1f55a9818c59b05eed6d228cd7f09e00ae046aca8c3ab412bb7f63"
+    },
+    {
+      "path": "README-RuneSchema-Helpy-RSv14.txt",
+      "bytes": 4895,
+      "sha256": "cd426ce74571d3c1d54d41aa373edde75a3b2206cd7e3988a72cdab64e606d0a"
+    },
+    {
+      "path": "README-RuneSchema-Helpy-RSv15.txt",
+      "bytes": 2037,
+      "sha256": "ac992504a2b4908da5f52d82f8ac3bb9d8996a6da22912ee0c252cb2197f6174"
+    },
+    {
+      "path": "README-RuneSchema-Helpy-v10.txt",
+      "bytes": 15351,
+      "sha256": "fbf8fd2d84fba47e2b34a6809d5b6e35a28d170d57c4112dbb888cfe03e56582"
+    },
+    {
+      "path": "README-RuneSchema-RSv16.txt",
+      "bytes": 5209,
+      "sha256": "5fd2f5950c71cd012dbd60279c8c1d492174bfbaa78ba49816dbaa7307b57356"
+    },
+    {
+      "path": "README-v5-OVERRIDE.txt",
+      "bytes": 3113,
+      "sha256": "80e51d1686cf31df2c47d3eb60e21c2c51a776c281690c07f44998076d5b955a"
+    },
+    {
+      "path": "README-v6-F2.txt",
+      "bytes": 7677,
+      "sha256": "9d9719ece1aca59d95b4c652bb3c54bc83a0473a43b7f9bcfa5c395daa472e7e"
+    },
+    {
+      "path": "README-v8.1-F2.txt",
+      "bytes": 15578,
+      "sha256": "4333ae2f9590e9bf964866c682b1a82c546a469ffc080983bc28ca54c79a7028"
+    },
+    {
+      "path": "SEGMENT-1-RESOURCE-LOOT.md",
+      "bytes": 2026,
+      "sha256": "9deaacb93cc47fb3ea5e72738185f407e1cc47b39bbd0ed4b82bca7bbc7aaee4"
+    },
+    {
+      "path": "SEGMENT-2-BUILDING-SAFETY.md",
+      "bytes": 2975,
+      "sha256": "79460f5ce553b2c6d3dc15692b707e8eca84bdec31bf41746072ca041d2c080f"
+    },
+    {
+      "path": "SEGMENT-3A-ITEM-GRID.md",
+      "bytes": 1404,
+      "sha256": "db09db74bcae62b34401280913a0d12c7cf54b55363cd7921a4a67f5cda02e67"
+    },
+    {
+      "path": "SEGMENT-3B-REAL-ITEM-ICONS.md",
+      "bytes": 2236,
+      "sha256": "f7fe2e9a9935ad183c55a18854ab456a236ff0dbc461a955d3de0c81c444471b"
+    },
+    {
+      "path": "SEGMENT-3C-SHARED-ITEM-PICKER.md",
+      "bytes": 1413,
+      "sha256": "6b53793f0fe7dfad4fb8496ef87471ebb8c9f1635e87cb2ad9a353a52ef84aac"
+    },
+    {
+      "path": "SEGMENT-4A-COMPILE-HOTFIX-2.md",
+      "bytes": 829,
+      "sha256": "bfea9d1448d515b52a3e1fec78f9c3c0b0dc156bfa1f39b5a3e5730056580f15"
+    },
+    {
+      "path": "SEGMENT-4A-COMPILE-HOTFIX.md",
+      "bytes": 604,
+      "sha256": "71d8fb2a0f228bc29cc85cd3871736ac7bd8d65ac57516d3275a0c62d0c95e47"
+    },
+    {
+      "path": "SEGMENT-4A-F2-QUICK-MENU-SHELL.md",
+      "bytes": 1224,
+      "sha256": "3d66c09fac74b5b63e7b74f1636f6b260345e483b9f9fc585fcd7f7166783f24"
+    },
+    {
+      "path": "SEGMENT-4A-FOCUS-ITEMS.md",
+      "bytes": 1902,
+      "sha256": "852d786cbb7fd97519aa6eac45aa999477e3d96ac05b55bcd98e9e72673d9976"
+    },
+    {
+      "path": "SEGMENT-4A-POSTRENDER-ICON-FIX.md",
+      "bytes": 2121,
+      "sha256": "8c2bd76cd2512c915564361a53653c34ef6369b6de0b515e6de1a98100828e31"
+    },
+    {
+      "path": "SEGMENT-4A-RUNTIME-ALIGNMENT-ICON-SUBLOADER.md",
+      "bytes": 814,
+      "sha256": "eb1dccc48bf0eb412c963e3a31dde019ee36a53d9e13ed632ee78abfc4521139"
+    },
+    {
+      "path": "SEGMENT-4A-STABILITY-CAMERA-LOCK.md",
+      "bytes": 1580,
+      "sha256": "cb6e60e198ff09afbaaaf03ce44a2363b91855dafe9c88308655649cf269d4d2"
+    },
+    {
+      "path": "SEGMENT-4A-STABILIZATION-NOTES.md",
+      "bytes": 1106,
+      "sha256": "0818319f495f8a85f8b6fb9c627708f3c6d8d6296e590d01e6b3fbeb2d4bb6a0"
+    },
+    {
+      "path": "SHA256-v10-raw.txt",
+      "bytes": 53574,
+      "sha256": "d626c4af5b8f0d23018cd307d569b20588f76cdbce64d297be4377e29e77ca0e"
+    },
+    {
+      "path": "SHA256-v6-F2.txt",
+      "bytes": 2595,
+      "sha256": "c9faf7a4f514a170facda0e34178cfb64c2dbcc83e80c1359ff7dd10b5f89339"
+    },
+    {
+      "path": "SHA256-v8.1-raw.txt",
+      "bytes": 3493,
+      "sha256": "08e24b30de755aba6c32b7d5a742e2890c61115ee3824c5b52564250898beb33"
+    },
+    {
+      "path": "verification/audit_all_loaders.py",
+      "bytes": 7047,
+      "sha256": "fe31d3f7d05948ca3e28a1e65d917cb07fecd1155aff8895e046ea129052a889"
+    },
+    {
+      "path": "verification/audit_fmodel_rsdw.py",
+      "bytes": 8977,
+      "sha256": "39bf0860739b4af51667ed89f06ee652bd72ca24b08cf499da37356a09f229f9"
+    },
+    {
+      "path": "verification/bundled-paths.json",
+      "bytes": 17357,
+      "sha256": "88a62fa9524b9aa3befab393ff80451234b7116c050e1fe6502d7eff1e47158e"
+    },
+    {
+      "path": "verification/changes-v10-hotfix1.patch",
+      "bytes": 1220,
+      "sha256": "c322a2fe86935073637aa2a54aa482f1220c74b077a5569bc43757bdfe1655a4"
+    },
+    {
+      "path": "verification/changes-v10.patch",
+      "bytes": 96184,
+      "sha256": "61c069e7d3a3c59ddb0ae5060ffe5d9071f147e73ba6213f14453235e6a66e3e"
+    },
+    {
+      "path": "verification/check_cooked_policy.py",
+      "bytes": 5666,
+      "sha256": "e40981aae20562e09ee4f86c527e1007adabffda46596f05a5e4368091fa18f7"
+    },
+    {
+      "path": "verification/check_cpp_delimiters.py",
+      "bytes": 2053,
+      "sha256": "2eb521cdef3606b71593039c1b9c8451abca3e3f27a80c8ba4785b250f2e4ead"
+    },
+    {
+      "path": "verification/check_default_object_pointer.py",
+      "bytes": 5826,
+      "sha256": "64338489becdbbc7c575cd319674fd297da7604a93a7d6b885d931933caa6fc7"
+    },
+    {
+      "path": "verification/check_gui_rsv14.py",
+      "bytes": 2915,
+      "sha256": "a6d22fa4997aac0f615141ef74ba75c7376e7ab52a4b8c2cf9bff9527677fba8"
+    },
+    {
+      "path": "verification/check_helpy_npc.py",
+      "bytes": 12593,
+      "sha256": "b5c49473b516c24b4f68ff0583511f828e60820116976f38081ee6aea94046b4"
+    },
+    {
+      "path": "verification/check_identifiers.py",
+      "bytes": 584,
+      "sha256": "fe063f4c3c11b4b1c1435dc9faaab3f9acc27dd6635d33e071f0f682e2a9e049"
+    },
+    {
+      "path": "verification/check_loader_schema_syntax.py",
+      "bytes": 5019,
+      "sha256": "9eeded4148676a6b91752da8e7223e5fdd216148fd15ae4a0aec3500270dbb1c"
+    },
+    {
+      "path": "verification/check_metadata_registry.py",
+      "bytes": 3659,
+      "sha256": "3ac648b830320354ef03396a0e0803ecb20f7fe57bbad6b2d790b95dbaab495d"
+    },
+    {
+      "path": "verification/check_provenance_identity.py",
+      "bytes": 3878,
+      "sha256": "4a9356b3b7a81bac2f6d9925683048f4d3bfe9c0596e4c811f754d81394ad023"
+    },
+    {
+      "path": "verification/check_settings_layout.py",
+      "bytes": 4165,
+      "sha256": "91651e7bb2a124213f09cc0ba992c9ddb654da499b3dced09aaf6f4b172fada7"
+    },
+    {
+      "path": "verification/clang-sanitizers-v10.log",
+      "bytes": 1764,
+      "sha256": "dba0c4228e4f5653259a0ca8b9af7cee3b68c3b011253783161f306b94a68da9"
+    },
+    {
+      "path": "verification/clang-sanitizers-v7.log",
+      "bytes": 768,
+      "sha256": "fb52128d7fcae73443ccf93baeedcf395821ed37791dd495a172e03ababc561f"
+    },
+    {
+      "path": "verification/clang-sanitizers-v8.1-settings.log",
+      "bytes": 1193,
+      "sha256": "5fd0f6b03e5c53371b782a13758c536e0fb69df23d5c0e11a0693f887e1fb9c3"
+    },
+    {
+      "path": "verification/clang-sanitizers-v8.log",
+      "bytes": 1061,
+      "sha256": "03c654f7307d1f5a980fbd10d31df6c2c7ebd81a7e50caf64fdf6f5a9d404ac3"
+    },
+    {
+      "path": "verification/clang-schema-hotfix1.log",
+      "bytes": 620,
+      "sha256": "8ac42d274285f2dc00f768e9728378661be8748effe6a34e10eb7d81386d6c46"
+    },
+    {
+      "path": "verification/clang-v10.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "verification/F2BrowserTests.cpp",
+      "bytes": 11247,
+      "sha256": "e3febec910548255d1665e511cb1356b22ef78788547d965a92ef7ae15d745ee"
+    },
+    {
+      "path": "verification/F2CacheMigrationTests.cpp",
+      "bytes": 10683,
+      "sha256": "4d016b645dd480390fa0efea8746540534fb3c9993b62290dfeecd186174d091"
+    },
+    {
+      "path": "verification/F2IndexTests.cpp",
+      "bytes": 8517,
+      "sha256": "b36057ab502cdcd97b26fa37735224069ec5105d4c4023180e12c4440a0ec9bf"
+    },
+    {
+      "path": "verification/F2ModelTests.cpp",
+      "bytes": 11342,
+      "sha256": "c8cf943a2c1fcaad2e85f85cfbb6e63a20a0611b0d36011d55f13b27d2749fe4"
+    },
+    {
+      "path": "verification/F2PreferenceFileTests.cpp",
+      "bytes": 4403,
+      "sha256": "3bea57f4d484300d63f5bbc7af711385bdc515e4c3f64c753050bfd17327a253"
+    },
+    {
+      "path": "verification/F2ProgressTests.cpp",
+      "bytes": 4187,
+      "sha256": "2f16f6b0c2770c328b6670cbea3608caea9897c8f6b561beee75a6d81ebbadea"
+    },
+    {
+      "path": "verification/fixtures/WeakObjectHandle.h",
+      "bytes": 3046,
+      "sha256": "f53daa0200d325ff42375dfaa3a22b95d5b6c5b28df643ae3fb171f73e99e18e"
+    },
+    {
+      "path": "verification/fmodel-rsdw-audit.json",
+      "bytes": 109336,
+      "sha256": "a8d9b2dd6013b8b47f23be4fd96751fdcab32e385a3ca4b52002e8caeb2bdcdc"
+    },
+    {
+      "path": "verification/full-loader-audit.json",
+      "bytes": 56301,
+      "sha256": "235c50981cf96926ba49508e33f3487dd5c16b5d5c840ca55d96018a68a76283"
+    },
+    {
+      "path": "verification/gcc-v10-hotfix1.log",
+      "bytes": 2528,
+      "sha256": "4d879920c0b5be42bd67f070331e66867cf626067592ff8cb8490f67a52cb5a5"
+    },
+    {
+      "path": "verification/gcc-v10.log",
+      "bytes": 1838,
+      "sha256": "b333ae584b15fc0413add5f377835ded34a9d0f4b62b86976cda349e527204d1"
+    },
+    {
+      "path": "verification/gcc-v7.log",
+      "bytes": 768,
+      "sha256": "fb52128d7fcae73443ccf93baeedcf395821ed37791dd495a172e03ababc561f"
+    },
+    {
+      "path": "verification/gcc-v8.1-settings.log",
+      "bytes": 1193,
+      "sha256": "5fd0f6b03e5c53371b782a13758c536e0fb69df23d5c0e11a0693f887e1fb9c3"
+    },
+    {
+      "path": "verification/gcc-v8.log",
+      "bytes": 1061,
+      "sha256": "03c654f7307d1f5a980fbd10d31df6c2c7ebd81a7e50caf64fdf6f5a9d404ac3"
+    },
+    {
+      "path": "verification/helpy_npc_source_checks.py",
+      "bytes": 7797,
+      "sha256": "c9d4c95d03c17ca5b81047ca29915001ce874c387f04a03e9e2560d01a171918"
+    },
+    {
+      "path": "verification/helpy_source_checks.py",
+      "bytes": 8567,
+      "sha256": "4ec03a0f498dd968847786653d5506a41be3c21423e838c0da6a92c749963b12"
+    },
+    {
+      "path": "verification/HelpyV10Tests.cpp",
+      "bytes": 10945,
+      "sha256": "95b31d09bf8c15c676bb4d95e9bfc1036a5ccd02c95391d23acab30fdd3c527e"
+    },
+    {
+      "path": "verification/HelpyV9Tests.cpp",
+      "bytes": 17508,
+      "sha256": "663ef61b3a58e84f58a7ca6d9b32e1cad124dbb3fddd6c87e024eeaec4ba1c5f"
+    },
+    {
+      "path": "verification/history-v10/packaging-v10.json",
+      "bytes": 998,
+      "sha256": "2120d99f0da1d6532bd847bb192ab0823d67db0dd2004939ee6cc6debb16dd6c"
+    },
+    {
+      "path": "verification/history-v10/SHA256-v10-raw.txt",
+      "bytes": 5485,
+      "sha256": "92b24bbce98fb5b366b4dc073424d03f9a109aa1e51d19914825bcd33c89fb9c"
+    },
+    {
+      "path": "verification/history-v10/source-manifest-v10.json",
+      "bytes": 15519,
+      "sha256": "0a92af44baba4dd14db9e5b5e7a2ca8885a5ce5cfec1133c51b98b5f93983aa3"
+    },
+    {
+      "path": "verification/history-v9/clang-sanitizers-v9.log",
+      "bytes": 1559,
+      "sha256": "039915c842050b6f8e878f59d744e7d3027012437f2eb4e779385536a83119e6"
+    },
+    {
+      "path": "verification/history-v9/gcc-v9.log",
+      "bytes": 1477,
+      "sha256": "b3961cb000b9bb51bdf3b1dc4dbbebee174edafbd20ed98d1ea06860ab5178fd"
+    },
+    {
+      "path": "verification/history-v9/layouts/01-items.png",
+      "bytes": 68373,
+      "sha256": "e4ffea8db12834d1ed5614dff21a0c27c9bff9bce079fc4094987b47db2e93b7"
+    },
+    {
+      "path": "verification/history-v9/layouts/02-type-filter.png",
+      "bytes": 42284,
+      "sha256": "4cd02347bdca6413aefc57c3a3e090344d009fbacce88665d2629c646e45262b"
+    },
+    {
+      "path": "verification/history-v9/layouts/03-source-filter.png",
+      "bytes": 37811,
+      "sha256": "4d2e769f82fb730b57056e889f77f467a504fa8a47bca88160e5ae70015cda82"
+    },
+    {
+      "path": "verification/history-v9/layouts/04-item-editor.png",
+      "bytes": 73492,
+      "sha256": "09455b9ae9c5cd1fbfabd0f6cd2120baf574e4917b4253fba0837c430f8756bb"
+    },
+    {
+      "path": "verification/history-v9/layouts/05-property-picker.png",
+      "bytes": 51979,
+      "sha256": "1e8117aaeeb82d172971a2392fb42a6a66db30a451c3555bf5121f3095520cdc"
+    },
+    {
+      "path": "verification/history-v9/layouts/06-text-editor.png",
+      "bytes": 47692,
+      "sha256": "c6b877ff1264d18b8e0a51740ae9261abc25e809f93fd0ff9c0fffc3453815bd"
+    },
+    {
+      "path": "verification/history-v9/layouts/07-companions.png",
+      "bytes": 58970,
+      "sha256": "eddd818a7fda5129565d85fa73766d2a6d74ab769ca2721ff71fab71f97a12d5"
+    },
+    {
+      "path": "verification/history-v9/layouts/08-recipe.png",
+      "bytes": 47961,
+      "sha256": "eac445620daeac56d7c3582bf3e1f3d9019f2d9685725e271ceccd37c102aaa8"
+    },
+    {
+      "path": "verification/history-v9/layouts/09-drafts.png",
+      "bytes": 54850,
+      "sha256": "d503d5537b9509582ce696812156b36699ceb02dfd628c479c1c8c8605540bfa"
+    },
+    {
+      "path": "verification/history-v9/layouts/10-settings.png",
+      "bytes": 56708,
+      "sha256": "c0f53e52bef4f74852a5cca3bb96d9d185f2be5832ae6213bf6686f0ad75df6b"
+    },
+    {
+      "path": "verification/history-v9/packaging-v9.json",
+      "bytes": 847,
+      "sha256": "bf9f365b6e89bbe4ec61818efa5ceeb31fd098646f19ce7e22f1ffcb37d349a3"
+    },
+    {
+      "path": "verification/history-v9/README-RuneSchema-Helpy-v9.txt",
+      "bytes": 21055,
+      "sha256": "626c73788fd0fdbc95d03096a8d9cf67f19d30b6102e0be74cdf373c6cb43437"
+    },
+    {
+      "path": "verification/history-v9/RESULTS-v9.txt",
+      "bytes": 5669,
+      "sha256": "3be12989aa644459f813f3a37c3b866332e174f00becf2cf9c0b01d38a3a682e"
+    },
+    {
+      "path": "verification/history-v9/SHA256-v9-raw.txt",
+      "bytes": 4965,
+      "sha256": "9b4d9bc23d842b91d8ee843fba5cac9edeab447a8fc6a53f6bcb3e807d9b4d32"
+    },
+    {
+      "path": "verification/history-v9/source-checks-v9-helpy.json",
+      "bytes": 4418,
+      "sha256": "c212ccc047439bf678dd673dc02b800681f5c05b4e2d7a6deef9ef530074de0c"
+    },
+    {
+      "path": "verification/history-v9/source-checks-v9-settings.json",
+      "bytes": 2290,
+      "sha256": "ce32b3ee7e009e98657f797eec123a3a5a78c868056b313b1cbf97f07e319e52"
+    },
+    {
+      "path": "verification/history-v9/source-checks-v9.json",
+      "bytes": 5891,
+      "sha256": "19622aa9c973eff87a3ee7b3c8f29a7b395ec33846b536cfd6c6360e912bbda9"
+    },
+    {
+      "path": "verification/history-v9/source-manifest-v9.json",
+      "bytes": 13392,
+      "sha256": "7c3b1695ae6b0c21cb7dfa654f18f5a3abece897540246e127fa3c48a0e71c34"
+    },
+    {
+      "path": "verification/history-v9/toolchains-v9.txt",
+      "bytes": 154,
+      "sha256": "edbc30eca982476e7e53628c93f5c2482ca5f07b91c43cb92f5c09df4375d781"
+    },
+    {
+      "path": "verification/HOTFIX1-RESULTS.txt",
+      "bytes": 3636,
+      "sha256": "3e8c0128bd6403a84ae5df032221530c0d7c84542ce03152a0b525c119c28f65"
+    },
+    {
+      "path": "verification/layouts-rsv14/01-helpy-item-placards.png",
+      "bytes": 30101,
+      "sha256": "26b0c4033f10feec1adbc3fd57682869c96a1759299dc98e11e8efbe5f5ee88a"
+    },
+    {
+      "path": "verification/layouts-rsv14/02-helpy-clone-flow.png",
+      "bytes": 30205,
+      "sha256": "bdae65942719f53cb8f9bad0f80b5b57c200a04a5c36fd693c9a04c5d52cc7f4"
+    },
+    {
+      "path": "verification/layouts-rsv14/03-journal-editor.png",
+      "bytes": 23757,
+      "sha256": "802b579543a5bd367271155d94b89d5f541de6d7aa18c03494d687f4ed06dd81"
+    },
+    {
+      "path": "verification/layouts-rsv14/04-recipe-editor.png",
+      "bytes": 27228,
+      "sha256": "f43b72aaf2527c4ecc6eba41b0c8b54849c8a05627f2baf7a21d55e34170582c"
+    },
+    {
+      "path": "verification/layouts-rsv14/05-ue4ss-server-loaders.png",
+      "bytes": 41015,
+      "sha256": "66767ed6e46beef3b26bb644b2b225b921aca3e1ce2da27482943a1d9551d910"
+    },
+    {
+      "path": "verification/layouts/01-npcs.png",
+      "bytes": 93569,
+      "sha256": "11c252c473ba956f349dc6a8de06acf4db6c5c2c5630429927116750d906435e"
+    },
+    {
+      "path": "verification/layouts/02-ai.png",
+      "bytes": 84295,
+      "sha256": "983ac3ff7f3b8ba3b51f61a7d8beb5ab8d989350616005616e264084586f69b7"
+    },
+    {
+      "path": "verification/layouts/03-npc-favorites.png",
+      "bytes": 45204,
+      "sha256": "3546adcf2b9c2573730c73e41b99f76c688c9027a6a2af27c878c21c6029db49"
+    },
+    {
+      "path": "verification/layouts/04-timed-npc.png",
+      "bytes": 48728,
+      "sha256": "cfa00b535d7c80650e468b3f45c5ecdd47729dadee0dca1f272d675aa0a019ce"
+    },
+    {
+      "path": "verification/layouts/05-permanent-npc.png",
+      "bytes": 43721,
+      "sha256": "6c263b8e30269ca115c6aca5addade0ff1228a3faf5907f8a1a6edaaa52e9d27"
+    },
+    {
+      "path": "verification/layouts/06-native-npc-restriction.png",
+      "bytes": 55804,
+      "sha256": "91f8f1ec849525f34ea51def17ae5707c848045d594351503ddf82eb3259c010"
+    },
+    {
+      "path": "verification/layouts/07-trees.png",
+      "bytes": 91540,
+      "sha256": "547d35a7024e96276fb31fa3fd14caa0a584bfafe6cfe4ef48524e5fba5ddad8"
+    },
+    {
+      "path": "verification/layouts/08-stone-ore.png",
+      "bytes": 102771,
+      "sha256": "4d069125dec96cdef7a4b574acccba39f96f016140a9ea26aebe31b8e91ca91c"
+    },
+    {
+      "path": "verification/layouts/09-other-resources.png",
+      "bytes": 102161,
+      "sha256": "4ca99b1d72fad7e5f731e092aa2f5a8acb73ab00d164f264c24fc35008e1f55d"
+    },
+    {
+      "path": "verification/layouts/10-resource-favorites.png",
+      "bytes": 47424,
+      "sha256": "dcd6224ae416dddfb937a43d64eedd58f79faa34971c002a944b2b3869dac3b7"
+    },
+    {
+      "path": "verification/layouts/refresh-discovery.png",
+      "bytes": 71341,
+      "sha256": "8cceed1655d252b3871197568073a1fb9ca22ef28a5b56157d50b2d09cbda031"
+    },
+    {
+      "path": "verification/layouts/refresh-known.png",
+      "bytes": 71815,
+      "sha256": "248d16e9591fec163b1855bef07a9965c712a1bcd7c75fa0d52808454752c6b4"
+    },
+    {
+      "path": "verification/layouts/source-picker.png",
+      "bytes": 58774,
+      "sha256": "d316b855534d81fa2b6dccaf3eadddc2f233a77ff7b56926fec80dd2b99ee5de"
+    },
+    {
+      "path": "verification/packaging-v10.json",
+      "bytes": 433,
+      "sha256": "a5767b2f08246265a6cba5abd04544cfca8b5365e5c1125422e95a050e8afc57"
+    },
+    {
+      "path": "verification/packaging-v7.json",
+      "bytes": 625,
+      "sha256": "a681b7c42c1530816628ebc4c6b489f31f7f4e1abe0e190dd4600f055ce5844c"
+    },
+    {
+      "path": "verification/packaging-v8.1-settings.json",
+      "bytes": 229,
+      "sha256": "7be34b1258d60ba0c848c0aabae8d630610f87ab71f9be2ffda52101284b40d5"
+    },
+    {
+      "path": "verification/packaging-v8.json",
+      "bytes": 434,
+      "sha256": "43f15c796ac1407a64a3af75321a1bd0bd7d8d999ec6b7d58f52dc3e00ead5bf"
+    },
+    {
+      "path": "verification/render_gui_rsv14.py",
+      "bytes": 6635,
+      "sha256": "58dad50c61f7ba43a95435e2c8bbd60854b091f4bc8be084c7d31a22b32488ff"
+    },
+    {
+      "path": "verification/render_layout.py",
+      "bytes": 1872,
+      "sha256": "16687a041f98d981f21fd7bc3e94ff5693ee4c9a440b79b4046da1468d79499f"
+    },
+    {
+      "path": "verification/RenderHelpyV10.cpp",
+      "bytes": 2281,
+      "sha256": "5e915addf9303702accbd3a3f047fc3fab8741644c4e02620364972bcccd3e78"
+    },
+    {
+      "path": "verification/RenderHelpyV9.cpp",
+      "bytes": 3168,
+      "sha256": "f4b060b3af877d27f838501ff901c279ce6301177d54a7f461a77c42247ec0b7"
+    },
+    {
+      "path": "verification/RenderLayout.cpp",
+      "bytes": 1159,
+      "sha256": "eae73370dc7af236250741963dd70784038a75bce0ee7567994e21363933863b"
+    },
+    {
+      "path": "verification/RESULTS-v10-hotfix1.txt",
+      "bytes": 3225,
+      "sha256": "db7874ce90585ef274a6923e57543c067dbfaca502b5c3b027795df6feef40ae"
+    },
+    {
+      "path": "verification/RESULTS-v10.txt",
+      "bytes": 9277,
+      "sha256": "1b4c9bca7e2c5772d6d748d73f5d51d66e6b2bcb3754e9452983d68100d11654"
+    },
+    {
+      "path": "verification/RESULTS-v7.txt",
+      "bytes": 3466,
+      "sha256": "33cf91c53a21225631716ed1ac08d7d5c9f5e3be64621495532c790135890e7d"
+    },
+    {
+      "path": "verification/RESULTS-v8.1-settings.txt",
+      "bytes": 4471,
+      "sha256": "7f5b08ab8ba407e8fcef1f2307dac6a0873f99f7c9b1cfaf9174cb330384dccc"
+    },
+    {
+      "path": "verification/RESULTS-v8.txt",
+      "bytes": 4248,
+      "sha256": "9fc5badc2b48288e9b77bcfc3a97921eef69c4a0d4c451accebb4bdf959b0d4d"
+    },
+    {
+      "path": "verification/RESULTS.txt",
+      "bytes": 2526,
+      "sha256": "abc3b8458834f84076f12b9508d97ace9b40e92b295df82a9e8773cc64ab84d8"
+    },
+    {
+      "path": "verification/run-rsv16-portable-tests.cmd",
+      "bytes": 1020,
+      "sha256": "0a1b8d90dae426a9bd03293472c7c4285895a46adf0b63e1920963a953260bdd"
+    },
+    {
+      "path": "verification/run_portable_tests.py",
+      "bytes": 2025,
+      "sha256": "04ec7ffaa6236ecd7b7301514a68e6aca5884e436b6af1a0dc20cc1f47327fab"
+    },
+    {
+      "path": "verification/source-checks-v10-helpy.json",
+      "bytes": 4640,
+      "sha256": "f08638219658727c5bdf338bfd52f03f8afc2df72ed356f4e5388653a6a1d4b9"
+    },
+    {
+      "path": "verification/source-checks-v10-npc.json",
+      "bytes": 4144,
+      "sha256": "a0083494d18595b6bf73eb5a8f052defb1659ad1dad2d2f816987d1fc8780f39"
+    },
+    {
+      "path": "verification/source-checks-v10-settings.json",
+      "bytes": 2418,
+      "sha256": "8f003ca58884946fec3fdb67662d3d77779357458476e939ab17f61eb6bf0388"
+    },
+    {
+      "path": "verification/source-checks-v10.json",
+      "bytes": 7029,
+      "sha256": "f0a73dfec5a9616277591700b8b66670aba6176c1d68aab006910c6bd2d728ce"
+    },
+    {
+      "path": "verification/source-checks-v7.json",
+      "bytes": 3554,
+      "sha256": "fcac6b36b1776bdd1dc60d523c844bc3833474342464229f29f249a125ee9af0"
+    },
+    {
+      "path": "verification/source-checks-v8.1-settings.json",
+      "bytes": 2199,
+      "sha256": "7c3d33b68cee61538913cb03665f8189e880e16db5753f412e0146024079dd9c"
+    },
+    {
+      "path": "verification/source-checks-v8.json",
+      "bytes": 5895,
+      "sha256": "b07fa0864107d9c18560112d222a0e4d34613f51e0070fc69e87c70cbd3470b6"
+    },
+    {
+      "path": "verification/source-checks.json",
+      "bytes": 620,
+      "sha256": "6f6e8f30d915548ab524bf7c359a571ced9324b2a29dad36dd841868298e8977"
+    },
+    {
+      "path": "verification/source-manifest-v10.json",
+      "bytes": 15674,
+      "sha256": "1dde66da940add22f8384109abd9f9a2d70dde30ed897718e304d27b143bf25b"
+    },
+    {
+      "path": "verification/source-manifest-v7.json",
+      "bytes": 5849,
+      "sha256": "cdf09bf0c54ca53f4b06f8f2b335f1d694ab2c39c96cce0c9ae1956503f70023"
+    },
+    {
+      "path": "verification/source-manifest-v8.1-settings.json",
+      "bytes": 10720,
+      "sha256": "d9f7dc86dc55c431436f00c230b0a99447fcf2b739457b80cc5bed50bc8911db"
+    },
+    {
+      "path": "verification/source-manifest-v8.json",
+      "bytes": 8428,
+      "sha256": "5a482fbea5848970129de3d331df8dc11cf6d2f37037e4a8fee6bd3afbeba098"
+    },
+    {
+      "path": "verification/source_checks.py",
+      "bytes": 12464,
+      "sha256": "bcd01c57b10adda3cc4591ed2a36c1d1e056455416177b5b38b27a56ffc6558c"
+    },
+    {
+      "path": "verification/toolchains-v10.txt",
+      "bytes": 140,
+      "sha256": "1992f473bc9cc22755935ab1c298ccd2c7d4a9de3609c7b805fc32456efcc6db"
+    },
+    {
+      "path": "verification/verify_full_loader_audit.py",
+      "bytes": 1148,
+      "sha256": "a0f3bfbf6526838531e9b606b4d9c1ed63aab43999ef456ea182a15de634bf19"
+    }
+  ]
+}

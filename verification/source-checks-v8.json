@@ -1,0 +1,318 @@
+[
+  {
+    "check": "exact badge Dragonwilds",
+    "passed": true
+  },
+  {
+    "check": "exact badge Runeschema",
+    "passed": true
+  },
+  {
+    "check": "exact badge RuneSchema",
+    "passed": true
+  },
+  {
+    "check": "exact badge Favorite",
+    "passed": true
+  },
+  {
+    "check": "exact badge Modded",
+    "passed": true
+  },
+  {
+    "check": "no bad badge aliases",
+    "passed": true
+  },
+  {
+    "check": "correct UObject default unwrap",
+    "passed": true
+  },
+  {
+    "check": "enum CastField hotfix retained",
+    "passed": true
+  },
+  {
+    "check": "no forwarding numeric include",
+    "passed": true
+  },
+  {
+    "check": "actual badge draw tint",
+    "passed": true
+  },
+  {
+    "check": "missing texture readable fallback",
+    "passed": true
+  },
+  {
+    "check": "texture type validation",
+    "passed": true
+  },
+  {
+    "check": "one texture resolve per frame",
+    "passed": true
+  },
+  {
+    "check": "retry after refresh",
+    "passed": true
+  },
+  {
+    "check": "icon-only versionless header",
+    "passed": true
+  },
+  {
+    "check": "12 cards per page",
+    "passed": true
+  },
+  {
+    "check": "shared placard drawing",
+    "passed": true
+  },
+  {
+    "check": "favorite art and hitbox constants",
+    "passed": true
+  },
+  {
+    "check": "favorite hit appended after card",
+    "passed": true
+  },
+  {
+    "check": "favorites display page",
+    "passed": true
+  },
+  {
+    "check": "cooked donor filter",
+    "passed": true
+  },
+  {
+    "check": "read-only missing favorites",
+    "passed": true
+  },
+  {
+    "check": "favorite persistence only settings",
+    "passed": true
+  },
+  {
+    "check": "favorites sync before and after events",
+    "passed": true
+  },
+  {
+    "check": "corrupt file is not overwritten",
+    "passed": true
+  },
+  {
+    "check": "preference file exclusive staging",
+    "passed": true
+  },
+  {
+    "check": "Windows flush and replace",
+    "passed": true
+  },
+  {
+    "check": "bounded preference input",
+    "passed": true
+  },
+  {
+    "check": "readback compares favorite records",
+    "passed": true
+  },
+  {
+    "check": "JSON version and structure checked",
+    "passed": true
+  },
+  {
+    "check": "JSON nesting bound",
+    "passed": true
+  },
+  {
+    "check": "exact clone provenance",
+    "passed": true
+  },
+  {
+    "check": "no quality from power",
+    "passed": true
+  },
+  {
+    "check": "native category icon",
+    "passed": true
+  },
+  {
+    "check": "metadata reaches GUI",
+    "passed": true
+  },
+  {
+    "check": "search hint independent slot",
+    "passed": true
+  },
+  {
+    "check": "obsolete hints cancelled on clear",
+    "passed": true
+  },
+  {
+    "check": "bounded debounce",
+    "passed": true
+  },
+  {
+    "check": "bounded priority queue",
+    "passed": true
+  },
+  {
+    "check": "copied path candidate queue",
+    "passed": true
+  },
+  {
+    "check": "game-thread priority pump",
+    "passed": true
+  },
+  {
+    "check": "priority keeps mutation receipts",
+    "passed": true
+  },
+  {
+    "check": "new clone refreshes roster",
+    "passed": true
+  },
+  {
+    "check": "known runtime provenance disallows cooked fallback",
+    "passed": true
+  },
+  {
+    "check": "registry miss still denied",
+    "passed": true
+  },
+  {
+    "check": "source and create use same loaded-object proof",
+    "passed": true
+  },
+  {
+    "check": "appearance donor uses same proof",
+    "passed": true
+  },
+  {
+    "check": "appearance reference fallback verifies actual object",
+    "passed": true
+  },
+  {
+    "check": "raw/TObjectPtr outer accessor handled",
+    "passed": true
+  },
+  {
+    "check": "no build script included",
+    "passed": true
+  },
+  {
+    "check": "refresh starts shared indexing",
+    "passed": true
+  },
+  {
+    "check": "coalesced refresh requests",
+    "passed": true
+  },
+  {
+    "check": "progress fields pass through queue",
+    "passed": true
+  },
+  {
+    "check": "native source-index worker is game-free",
+    "passed": true
+  },
+  {
+    "check": "worker explicitly joined",
+    "passed": true
+  },
+  {
+    "check": "https fixed public reference host",
+    "passed": true
+  },
+  {
+    "check": "no HTTP redirects or automatic credentials",
+    "passed": true
+  },
+  {
+    "check": "bounded HTTP work",
+    "passed": true
+  },
+  {
+    "check": "truncated references split",
+    "passed": true
+  },
+  {
+    "check": "refresh loads editable settings and caches",
+    "passed": true
+  },
+  {
+    "check": "cached paths not spawn permission",
+    "passed": true
+  },
+  {
+    "check": "world generation invalidates indexing",
+    "passed": true
+  },
+  {
+    "check": "cancelled index does not resume on search",
+    "passed": true
+  },
+  {
+    "check": "current query applied to late index results",
+    "passed": true
+  },
+  {
+    "check": "native UObject work on game-thread tick",
+    "passed": true
+  },
+  {
+    "check": "failed reference does not replace old file",
+    "passed": true
+  },
+  {
+    "check": "loaded clone creation tracked immediately",
+    "passed": true
+  },
+  {
+    "check": "provenance shares serial-assigned identity",
+    "passed": true
+  },
+  {
+    "check": "no new origin from a patch",
+    "passed": true
+  },
+  {
+    "check": "bSoftDeleted shared authoring recognition",
+    "passed": true
+  },
+  {
+    "check": "bSoftDeleted optional asset schema",
+    "passed": true
+  },
+  {
+    "check": "bSoftDeleted generic captures",
+    "passed": true
+  },
+  {
+    "check": "missing string name fallback",
+    "passed": true
+  },
+  {
+    "check": "wheel no page navigation",
+    "passed": true
+  },
+  {
+    "check": "narrow layout without shrinking fonts",
+    "passed": true
+  },
+  {
+    "check": "unknown progress indeterminate",
+    "passed": true
+  },
+  {
+    "check": "numeric inputs centered",
+    "passed": true
+  },
+  {
+    "check": "incomplete clones remain unavailable",
+    "passed": true
+  },
+  {
+    "check": "failed startup stops its job",
+    "passed": true
+  }
+]

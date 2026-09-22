@@ -7,6 +7,8 @@ int main() {
     const char* path = "/Game/RuneSchema/Test/Items/cape.cape";
     EquipmentRules::Merge(rules, {{"SurgeEvadeLegs", {{path, true}}}});
     assert(rules.surge.size() == 1 && rules.shadowveil.empty());
+    EquipmentRules::Merge(rules, {{"GrantedEffects", {{path, {{"Mode","Replace"},{"Effects",{"Example:Effects/Swift","/Game/Effects/GE_Test.GE_Test_C"}}}}}}});
+    assert(rules.effects.at(path).effects.size()==2);
     EquipmentRules::Merge(rules, {{"ShadowveilAttackEvadeWearables", {{path, true}}}});
     assert(rules.surge.size() == 1 && rules.shadowveil.size() == 1);
     auto rejects = [&](const nlohmann::json& doc) {
@@ -37,6 +39,10 @@ int main() {
     auto misplacedGrant = actionRule({"Evade"});
     misplacedGrant["ShadowveilWearables"][path]["GrantedEffects"] = {"bad"};
     rejects(misplacedGrant);
+    nlohmann::json invalidEffect={{"GrantedEffects",nlohmann::json::object()}};
+    invalidEffect["GrantedEffects"][path]={{"Mode","Append"},{"Effects",nlohmann::json::array()}};rejects(invalidEffect);
+    invalidEffect["GrantedEffects"][path]={{"Mode","Unknown"},{"Effects",{"Example:Effects/Test"}}};rejects(invalidEffect);
+    invalidEffect["GrantedEffects"][path]={{"Mode","Clear"},{"Effects",{"Example:Effects/Test"}}};rejects(invalidEffect);
     rejects({{"ShadowveilWearables", {{path, false}}}, {"ShadowveilAttackEvadeWearables", {{path, true}}}});
     EquipmentRules::Merge(rules, actionRule({"MeleeAttack", "RangedAttack", "Evade", "MagicAttack", "UtilityCast"}));
     assert(rules.shadowveil.at(path) == 31);
@@ -50,5 +56,5 @@ int main() {
     EquipmentRules::Merge(rules, {{"ShadowveilAttackEvadeWearables", {{path, true}}}});
     EquipmentRules::Merge(rules, {{"ShadowveilAttackEvadeWearables", {{path, false}}}});
     assert(rules.shadowveil.empty() && rules.surge.size() == 1);
-    std::cout << "PASS: legacy compatibility, independent behaviors, five action masks, replacement/disable overrides, invalid/duplicate actions and atomic rollback.\n";
+    std::cout << "PASS: legacy compatibility, gameplay-effect assignment, independent behaviors, five action masks, replacement/disable overrides, invalid/duplicate actions and atomic rollback.\n";
 }

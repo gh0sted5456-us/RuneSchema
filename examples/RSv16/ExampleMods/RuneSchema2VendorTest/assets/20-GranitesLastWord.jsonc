@@ -1,0 +1,13 @@
+// A separate clone: vanilla swords are unchanged. DamageMultiplier is 100x Steel's 5.4.
+{
+  "/Game/RuneSchema/RuneSchema2VendorTest/Items/rs_granites_last_word.rs_granites_last_word": {
+    "$Clone": "/Game/Gameplay/Character/Player/Equipment/Held/GreatSword/ITEM_GreatSword_Steel.ITEM_GreatSword_Steel",
+    "InternalName": "rs_granites_last_word",
+    "PersistenceID": "SlKnVsqo80W2CNH9iXnVQg",
+    "Name": "Granite's Last Word",
+    "FlavourText": "Forty chapters of geological history. One catastrophically overpowered greatsword. Worth exactly one cabbage to a particular cow.",
+    "DamageMultiplier": 540,
+    "BaseDurability": 100000,
+    "Weight": 1
+  }
+}

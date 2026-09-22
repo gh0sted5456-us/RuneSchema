@@ -1,0 +1,19 @@
+--- R3v10/raw/include/Generator/LoaderSchemas.h
++++ R3v10-Hotfix1/raw/include/Generator/LoaderSchemas.h
+@@ -384,7 +384,15 @@
+             {"properties",{{"Radius",{{"type","number"},{"exclusiveMinimum",0},{"maximum",100000},
+                 {"description","Sphere radius in Unreal centimeters."}}}}}}}};
+     asset["allOf"].push_back({{"not",{{"required",{"$Clone","$DominionSpheres"}}}}});
+-    const json authorFlag={{"anyOf",{json{{"type","boolean"}},json{{"type","string"},{"pattern","^(?:[Yy][Ee][Ss]|[Nn][Oo]|[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])$"}}}};
++    const json authorFlag = {
++        {"anyOf", {
++            json{{"type", "boolean"}},
++            json{
++                {"type", "string"},
++                {"pattern", "^(?:[Yy][Ee][Ss]|[Nn][Oo]|[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])$"}
++            }
++        }}
++    };
+     const json moddedBlock={{"type","object"},{"additionalProperties",false},
+         {"properties",{{"RuneSchema",authorFlag},{"Cooked",authorFlag},{"SafeToClone",authorFlag}}},
+         {"description","Author declarations consumed by RuneSchema, not Unreal properties. SafeToClone is permission; actual source type, package evidence and dependencies are still checked."}};

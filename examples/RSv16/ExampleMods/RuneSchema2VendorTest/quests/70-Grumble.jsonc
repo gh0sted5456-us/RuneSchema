@@ -1,0 +1,33 @@
+{
+  "Id": "grumble_stone_retribution",
+  "PersistenceID": "JYSHLvBHSU-M_ZcnJiT5VQ",
+  "Title": "Grumble's Stone Retribution",
+  "Description": "Deliver 25 stone to Grumble. His payments can fund NuLL's forge supplies.",
+  "Repeatable": true,
+  "Completion": "ReturnToNPC",
+  "Category": "Task",
+  "Repeat": {
+    "CooldownSeconds": 300,
+    "RewardMultiplierPerRun": 0.25,
+    "MaximumRewardMultiplier": 2.0
+  },
+  "Stages": [{
+    "Id": "stone_contract",
+    "Objectives": [{
+      "Id": "stone_delivery",
+      "Type": "Collect",
+      "Text": "Bring 25 stone to Grumble.",
+      "ProgressText": "Run {run}: bring {remaining} more stone to Grumble.",
+      "CompleteText": "The stone delivery is ready. Return to Grumble.",
+      "AnnounceProgress": true,
+      "Item": "/Game/Gameplay/Items/Resources/Mineral/ITEM_Resources_Stone.ITEM_Resources_Stone",
+      "Count": 25,
+      "Location": [41435, 172509, -4163],
+      "RadiusMeters": 15
+    }]
+  }],
+  "Reward": {
+    "Item": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+    "Count": 8
+  }
+}

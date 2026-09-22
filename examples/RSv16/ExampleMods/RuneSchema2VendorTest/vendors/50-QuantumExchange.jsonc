@@ -1,0 +1,35 @@
+{
+  "Id": "quantum_exchange",
+  "MerchantName": "Quantum Exchange",
+  "Repairable": false,
+  "Items": [
+    {
+      "Category": "Currency",
+      "Item": "/Game/RuneSchema/Currency/Items/rs_currency_silver.rs_currency_silver",
+      "Currency": "/Game/RuneSchema/Currency/Items/rs_currency_copper.rs_currency_copper",
+      "Price": 100,
+      "Count": 1
+    },
+    {
+      "Category": "Currency",
+      "Item": "/Game/RuneSchema/Currency/Items/rs_currency_gold.rs_currency_gold",
+      "Currency": "/Game/RuneSchema/Currency/Items/rs_currency_silver.rs_currency_silver",
+      "Price": 100,
+      "Count": 1
+    },
+    {
+      "Category": "Currency",
+      "Item": "/Game/RuneSchema/Currency/Items/rs_currency_copper.rs_currency_copper",
+      "Currency": "/Game/RuneSchema/Currency/Items/rs_currency_silver.rs_currency_silver",
+      "Price": 1,
+      "Count": 100
+    },
+    {
+      "Category": "Currency",
+      "Item": "/Game/RuneSchema/Currency/Items/rs_currency_silver.rs_currency_silver",
+      "Currency": "/Game/RuneSchema/Currency/Items/rs_currency_gold.rs_currency_gold",
+      "Price": 1,
+      "Count": 100
+    }
+  ]
+}

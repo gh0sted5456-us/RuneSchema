@@ -1,0 +1,161 @@
+RuneSchema Helpy R3v10 — verification actually executed
+======================================================
+Source-only direct-override candidate. No production Windows/MSVC/UE4SS build
+or in-game execution was performed. No remote repository/Drive writes.
+
+BASIS / SOURCE SCOPE
+--------------------
+R3v9 cumulative overlay plus the current project NPC loader source and header
+retrieved from Drive. The manifest records each original/source SHA-256.
+52 production source files: 37 unchanged v9, 10 modified v9, 2 modified existing
+project NPC files newly included in the overlay, and 3 new source files.
+The existing NpcCleanup.inl and native shop helpers remain project dependencies;
+they are not replaced. No BAT, source CMake file or external dependency pin is
+modified or supplied by this patch.
+
+COMPILERS / FLAGS
+------------------
+GCC 14.2.0 and Clang 17.0.0 (exact strings in toolchains-v10.txt).
+C++23, -Wall -Wextra -Werror -pedantic -pthread.
+Clang additionally uses AddressSanitizer and UndefinedBehaviorSanitizer,
+-fno-omit-frame-pointer and debug symbols.
+
+PORTABLE SUITES — PASS ON BOTH COMPILERS
+---------------------------------------
+F2ModelTests:              24,590 assertions (includes 10,000 generated IDs).
+F2BrowserTests:             4,182 assertions including repeated paging cases.
+F2PreferenceFileTests:         28 actual POSIX preference-file I/O assertions.
+F2IndexTests:                648 path plan/traversal/limit/policy assertions.
+F2ProgressTests:              18 UI model/progress assertions.
+F2CacheMigrationTests:        66 actual POSIX I/O assertions; validator injected.
+HelpyV9Tests:                315 retained v9 item-authoring/policy assertions.
+HelpyV10Tests:               395 new NPC/resource tabs, favorites, request and
+                                 lifetime-policy assertions.
+
+Other checks, also passed with both compiler configurations:
+- 10,000 sampled unique canonical 22-character IDs round-tripped to 128 bits.
+- Default-object pointer: original expression rejected as a negative control;
+  corrected expression passed 7 checks with a TObjectPtr stand-in.
+- Cooked-package policy: 31 checks compiling the shipped function with mocks.
+- Provenance identity: 12 checks using mocked native object slots/weak handles.
+- Metadata registry: 14 checks compiling the registry against object stand-ins.
+- New native NPC guard/lease checks: 56 assertions described below.
+No sanitizer findings occurred in the successful final Clang run.
+Counts are assertions/iterations, not that many independent in-game scenarios.
+
+NEW NATIVE GUARD / LEASE TEST BOUNDARY
+--------------------------------------
+check_helpy_npc.py compiles the shipped HelpyNpcGuards.h and extracts these exact
+method bodies from HelpyNpcAuthoring.inl:
+  FindHelpyNpc, RetireHelpyNpc, PumpHelpyNpcs, DismissHelpyNpcs.
+It uses stand-ins for reflection, native field storage, actors/worlds, weak
+identity, class validity, queueing, game time and destruction.
+
+56 checks include malformed native contract rejection, class-default/archetype
+write refusal, no-save flag and GUID assignment/readback, post-construction
+flag corruption, lease expiry/world/identity/ambiguity checks, independent
+ownership, per-world dismissal, a native destroy that is latent, retry after
+failure, already-collected actors, retained source/other-NPC state, removal of
+owned records after weak-reference loss, and continuing other dismissals when
+one callback raises a non-standard exception.
+
+These are not real Unreal objects or engine memory. SpawnHelpyNpc's full native
+creation method, actual reflection lookup, SetLifeSpan binding, /npc JSON codec,
+and native GUI/merchant integration are NOT compiled by this isolated harness.
+The tests do not establish the existence of bSkipSpudStore on a real NPC class.
+
+NEW UI / POLICY TEST BOUNDARY
+-----------------------------
+The 395 new HelpyV10 assertions exercise the shipped UI model/pure policies:
+- NPC/AI/FAVORITE and TREES/STONE & ORE/FAVORITE separation.
+- Nine-row page bounds, final partial page, search-before-page, wheel no-page.
+- Native-family classification priority and explicit other-resource access.
+- Item/node favorite separation; missing favorites do not regain permission.
+- Independent favorite click targets and no spawns from filtering/paging.
+- Temporary duration validation, permanent duration exclusion, one NPC/request.
+- Existing AI power/drop/count state is not leaked into NPC requests.
+- Revalidation of current class and mode permission before issuing a command.
+- Scoped Dismiss request and lease deadlines/retirement state.
+- NPC reference-index hint acceptance without granting native permissions.
+
+Native queues, actual player authority and engine UObjects are outside the UI
+model. The production nlohmann Favorites Version 1/2 codec was source-reviewed,
+not compiled here; the existing portable file I/O tests do not establish that
+codec's integration with the host DLL.
+
+STATIC INTEGRATION CHECKS — NOT COMPILATION
+-------------------------------------------
+79 general source-wiring checks:      source-checks-v10.json
+27 settings/migration path checks:    source-checks-v10-settings.json
+55 retained v9 Helpy wiring checks:   source-checks-v10-helpy.json
+45 NPC/resource integration checks:  source-checks-v10-npc.json
+
+Checks include the existing loader facade, native type distinction, save guard
+before construction, post-construction verification, owned lease interaction
+resolution, expiry recheck before native shop dispatch, regular respawn-pass
+exclusion, lifecycle cleanup hooks, create-only permanent /npc output, native
+mode boundaries, and typed Favorite codec wiring. Passing string/structure
+checks is not proof of compiler acceptance, Unreal ABI or gameplay correctness.
+
+EXECUTION NOTES
+----------------
+GCC ran all main suites and the older auxiliary compiler checks through the
+runner. The tool call's 200-second execution limit ended the orchestration
+before the remaining auxiliary checks. Those checks were then run separately
+against identical source and appended to gcc-v10.log; all passed. No source
+changes were made between those portions.
+
+An attempt to start Clang with an interactive container session was rejected
+because interactive execution is unavailable. No tests ran in that rejected
+call. The noninteractive Clang runner then completed with exit code 0 and all
+suites/checks passed; output is clang-sanitizers-v10.log.
+
+Packaging renamed current static-check output files from inherited v9 names to
+v10 and reran all four static checks. This only changed verification filenames,
+not tested production source. Historical v9 logs/manifests are kept separately.
+
+LAYOUT
+-------
+Ten offline frames were generated by executing the shipped UI model with
+synthetic NPC/resource data: NPC, AI, NPC favorites, temporary configuration,
+permanent configuration, blocked vanilla NPC, trees, stone/ore, other resources,
+and resource favorites. A comparison-font horizontal text-bound check reported
+no out-of-panel text in these captures. NPC list, temporary config, stone/ore
+and blocked-native modal images were inspected visually. Model tests additionally
+check popup/hit bounds. This is not native Canvas output, real badge artwork,
+or a check of the installed game's font metrics.
+
+Reproduce offline captures in a separate output directory using:
+  g++ -std=c++23 -I<project>/raw/include <project>/verification/RenderHelpyV10.cpp -o render
+  ./render
+  python <project>/verification/render_layout.py .
+Pillow and an installed DejaVu Sans font are used by the optional renderer.
+No fonts or compiled test executables are distributed.
+
+PACKAGING
+----------
+See packaging-v10.json for actual source/member/checksum/integrity checks and
+the simulated merge retaining the BAT, settings and unrelated project files.
+The source manifest contains the 52 current production SHA-256 checksums and
+v9/original-project baseline comparisons. Nothing under installed runtime or
+settings is overwritten by simply extracting this source overlay.
+
+NOT RUN / NOT PROVEN
+--------------------
+- Full Windows/MSVC/UE4SS compilation, linking, deployment or game execution.
+- Production nlohmann JSON codecs, new schema wiring or filesystem integration.
+- Real engine reflection, Spud save exclusion, native lifespan calls or GC.
+- Actual NPC/store construction, source identity preservation in an engine run,
+  or a complete census of installed vanilla/mod NPC/resource definitions.
+- Save/reload while a temporary actor is alive, travel timing, time dilation,
+  actor expiry with a native shop menu already open or abnormal process exit.
+- Dedicated-server/multiplayer portable vendor creation (intentionally blocked).
+- Safety of arbitrary storyline NPC duplication (intentionally blocked).
+- Guaranteed native destruction after a failing engine call, synchronous freeing,
+  or live DLL unload/hot-swap cleanup.
+- Prior v9 native item/DT/journal/recipe work; its original testing limits remain.
+
+Reproduce the optional portable suites on POSIX with Python and C++23:
+  python verification/run_portable_tests.py --compiler g++
+  python verification/run_portable_tests.py --compiler clang++ --sanitize
+The user's Build RuneSchema.bat does not run these tests and is unchanged.

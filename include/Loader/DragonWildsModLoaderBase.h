@@ -5,6 +5,7 @@
 #include "nlohmann/json.hpp"
 #include <string>
 #include <atomic>
+#include "Utility/PatchWarnings.h"
 
 namespace RC::Unreal {
 	class UDataTable;
@@ -38,6 +39,7 @@ namespace DragonWilds {
         const std::string& GetModFolderType();
     protected:
         DragonWildsModLoaderBase(const std::string& modFolderName);
+        PatchConflicts m_patchConflicts;
 
         void SetDisplayName(const RC::StringType& displayName);
 

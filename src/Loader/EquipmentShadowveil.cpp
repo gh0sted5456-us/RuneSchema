@@ -24,6 +24,7 @@ static_assert(std::size(ShadowveilNative::ServerSites) == std::size(ShadowveilNa
 std::atomic<bool> Active{false};
 std::atomic<unsigned> Observed{0};
 uintptr_t ImageBase{};
+uint32_t ExecutableTimestamp{},ExecutableImageSize{};
 const NativeHookContract::Profile<ShadowveilNative::Site>* SelectedProfile{};
 
 UObject* ObjectRef(UObject* owner, const TCHAR* name) {
@@ -90,8 +91,10 @@ bool Install(const TCHAR*& failure) {
     if (!dos || dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0 || dos->e_lfanew > 4096) return false;
     auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(ImageBase + dos->e_lfanew);
     if (nt->Signature != IMAGE_NT_SIGNATURE || nt->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64) return false;
+    ExecutableTimestamp=nt->FileHeader.TimeDateStamp;
+    ExecutableImageSize=nt->OptionalHeader.SizeOfImage;
     failure = TEXT("unsupported executable build");
-    SelectedProfile = NativeHookContract::Select(nt->FileHeader.TimeDateStamp, nt->OptionalHeader.SizeOfImage, ShadowveilNative::Profiles);
+    SelectedProfile = NativeHookContract::Select(ExecutableTimestamp, ExecutableImageSize, ShadowveilNative::Profiles);
     if (!SelectedProfile) return false;
     failure = TEXT("native hook or resume bytes differ");
     if (!NativeHookContract::Validate(std::span(reinterpret_cast<const unsigned char*>(ImageBase), SelectedProfile->imageSize), SelectedProfile->sites)) return false;
@@ -123,7 +126,9 @@ EquipmentShadowveilStatus InitializeEquipmentShadowveil(const ShadowveilRules::R
             server ? TEXT("server") : TEXT("client"), WearablePaths.size());
         return {WearablePaths.size(),true,server};
     }
-    PS::Log<LogLevel::Error>(TEXT("Equipment Shadowveil: {}; feature disabled.\n"), failure);
+    if(ExecutableTimestamp && ExecutableImageSize)
+        PS::Log<LogLevel::Warning>(TEXT("Equipment Shadowveil disabled: {} (exe timestamp 0x{:08X}, image size 0x{:X}); capture a new native profile.\n"),failure,ExecutableTimestamp,ExecutableImageSize);
+    else PS::Log<LogLevel::Warning>(TEXT("Equipment Shadowveil disabled: {}.\n"), failure);
     return {WearablePaths.size(),false,false};
 }
 void ShutdownEquipmentShadowveil() {

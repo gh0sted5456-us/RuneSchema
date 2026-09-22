@@ -1,5 +1,6 @@
 #pragma once
+#include <string>
 
 namespace PS::JsonSchemaGenerator {
-    void GenerateSchemaFiles();
+    std::string GenerateSchemaFiles(bool includeLoadedTables = false, const std::string& exportName = {});
 }

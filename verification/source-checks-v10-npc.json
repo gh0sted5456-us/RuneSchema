@@ -1,0 +1,182 @@
+[
+  {
+    "check": "only requested NPC/resource headings",
+    "passed": true
+  },
+  {
+    "check": "favorites use typed identity and same store",
+    "passed": true
+  },
+  {
+    "check": "old favorites versions accepted",
+    "passed": true
+  },
+  {
+    "check": "new favorite file version separates key from path",
+    "passed": true
+  },
+  {
+    "check": "NPC snapshots decoded, not flattened into resources",
+    "passed": true
+  },
+  {
+    "check": "permission flags travel through live snapshot",
+    "passed": true
+  },
+  {
+    "check": "native classifier checks actual inheritance",
+    "passed": true
+  },
+  {
+    "check": "NPCs recognized before broad resource rules",
+    "passed": true
+  },
+  {
+    "check": "reference index supports NPC kind",
+    "passed": true
+  },
+  {
+    "check": "cache placeholders have no spawn permissions",
+    "passed": true
+  },
+  {
+    "check": "explicit NPC branch before permanent clone and actor spawn",
+    "passed": true
+  },
+  {
+    "check": "actions execute on existing command path",
+    "passed": true
+  },
+  {
+    "check": "authored identity is reselected against live definitions",
+    "passed": true
+  },
+  {
+    "check": "authority is standalone only",
+    "passed": true
+  },
+  {
+    "check": "positive known game-thread ownership required",
+    "passed": true
+  },
+  {
+    "check": "travel hook required before mutation",
+    "passed": true
+  },
+  {
+    "check": "duration JSON bounded before arithmetic conversion",
+    "passed": true
+  },
+  {
+    "check": "NPC auto-batch/power/drops rejected",
+    "passed": true
+  },
+  {
+    "check": "source classes and GUID shape checked",
+    "passed": true
+  },
+  {
+    "check": "no guessed save-property memory offsets",
+    "passed": true
+  },
+  {
+    "check": "class defaults and archetypes excluded",
+    "passed": true
+  },
+  {
+    "check": "exclusion precedes construction completion",
+    "passed": true
+  },
+  {
+    "check": "temporary never receives persistent GUID",
+    "passed": true
+  },
+  {
+    "check": "construction cannot remove exclusion silently",
+    "passed": true
+  },
+  {
+    "check": "native lifespan reflected shape validated",
+    "passed": true
+  },
+  {
+    "check": "owned lease uses monotonic time and native backup",
+    "passed": true
+  },
+  {
+    "check": "temporary interaction does not search persisted GUID",
+    "passed": true
+  },
+  {
+    "check": "expired leases cannot open shop",
+    "passed": true
+  },
+  {
+    "check": "regular NPC interaction ownership stays checked",
+    "passed": true
+  },
+  {
+    "check": "shared vendor table owner retained",
+    "passed": true
+  },
+  {
+    "check": "cleanup never removes shared stores",
+    "passed": true
+  },
+  {
+    "check": "timed copy cannot inherit a respawn gate",
+    "passed": true
+  },
+  {
+    "check": "temporary pending rows excluded from normal scans",
+    "passed": true
+  },
+  {
+    "check": "travel retires leases before releasing bindings",
+    "passed": true
+  },
+  {
+    "check": "native destruction failures retain existing queue",
+    "passed": true
+  },
+  {
+    "check": "expired actor does not leave presentation records",
+    "passed": true
+  },
+  {
+    "check": "remaining NPC cleanup survives unknown exception",
+    "passed": true
+  },
+  {
+    "check": "permanent authoring extends existing allowlist only",
+    "passed": true
+  },
+  {
+    "check": "source definition preserved and new document validated",
+    "passed": true
+  },
+  {
+    "check": "existing network flag preserved for permanent definition",
+    "passed": true
+  },
+  {
+    "check": "no file emission on timed branch",
+    "passed": true
+  },
+  {
+    "check": "failed setup cannot be reported completed",
+    "passed": true
+  },
+  {
+    "check": "vanilla spawn permission explicitly closed",
+    "passed": true
+  },
+  {
+    "check": "queued dismiss does not claim memory freed",
+    "passed": true
+  },
+  {
+    "check": "the item/binding/audit boundaries remain",
+    "passed": true
+  }
+]

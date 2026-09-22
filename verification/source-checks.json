@@ -1,0 +1,18 @@
+{
+  "checked_enum_cast_preserved": true,
+  "enum_header_preserved": true,
+  "all_disk_assets_requested": true,
+  "partial_scan_state_distinct": true,
+  "failed_classes_retained": true,
+  "cooked_source_enforced": true,
+  "appearance_group_enforced": true,
+  "held_actor_visual_field": true,
+  "mounted_reference_validation": true,
+  "fresh_appearance_snapshot_published": true,
+  "no_wrapper_required": true,
+  "canonical_ids_roundtrip": true,
+  "class_default_object_explicit_get": true,
+  "numeric_forwarding_include_removed_from_gui": true,
+  "hotfix1_changed_source_count": 2,
+  "full_windows_build_tested": false
+}

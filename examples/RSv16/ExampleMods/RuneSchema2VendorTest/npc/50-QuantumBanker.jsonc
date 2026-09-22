@@ -1,0 +1,18 @@
+{
+  "Id": "quantum_banker",
+  "Type": "Prop",
+  "Multiplayer": true,
+  "DisplayName": "Quantum Banker",
+  "DialogueID": "quantum_banker_story",
+  "VendorID": "quantum_exchange",
+  // NuLL is at 17850, 186450. Keep a two-metre gap beside him.
+  "Location": [18050, 186450, "$+100"],
+  "Rotation": {"Pitch": 0, "Yaw": 160, "Roll": 0},
+  "Scale": 1,
+  // Ground-relative elevation keeps the sword suspended without a ticking effect.
+  "Mesh": "/Game/Art/Skeleton/Weapons/Melee/Sword_Steel_1H_01/SM_Sword_Steel_1H_01.SM_Sword_Steel_1H_01",
+  "EnableCollision": true,
+  "MeshCollision": "Native",
+  "Map": {"Enabled":true,"ShowName":false},
+  "OverheadIcon": {"Enabled":true}
+}

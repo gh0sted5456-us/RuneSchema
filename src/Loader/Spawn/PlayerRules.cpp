@@ -1,4 +1,9 @@
 #include "Loader/PlayerGhost.h"
+#include "Loader/PlayerArchetype.h"
+#include "Loader/PlayerActivityEvents.h"
+#include "Loader/NpcMarkers.h"
+#include "Loader/VisualEffectLifetime.h"
+#include "SDK/WeakObjectHandle.h"
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -22,6 +27,7 @@
 #include "Unreal/Transform.hpp"
 #include "Unreal/UFunctionStructs.hpp"
 #include "Unreal/UObject.hpp"
+#include "Unreal/UObjectGlobals.hpp"
 #include "Unreal/World.hpp"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Classes/Custom/UWorldPartitionRuntimeLevelStreamingCell.h"
@@ -83,6 +89,27 @@ namespace {
         return fields;
     }
 
+    void ValidateReflectedPatch(const nlohmann::json& patch,const std::string& label,size_t maximum=128)
+    {
+        if(!patch.is_object()||patch.size()>maximum||patch.dump().size()>65536)
+            throw std::runtime_error(label+" must be a bounded object");
+        for(const auto& [name,value]:patch.items())
+            if(name.empty()||name.size()>128||value.is_discarded())
+                throw std::runtime_error(label+" contains an invalid reflected property name or value");
+    }
+
+    void ApplyReflectedPatch(UObject* object,const nlohmann::json& patch,const std::string& label)
+    {
+        if(patch.empty())return;
+        if(!object)throw std::runtime_error(label+" target is unavailable");
+        for(const auto& [name,value]:patch.items()) {
+            auto* property=DragonWilds::PropertyHelper::GetPropertyByName(object->GetClassPrivate(),PS::ToWideSafe(name.c_str()));
+            if(!property)throw std::runtime_error(label+"."+name+" is not exposed by "+RC::to_string(object->GetClassPrivate()->GetPathName()));
+            try {DragonWilds::PropertyHelper::CopyJsonValueToContainer(object,property,value);}
+            catch(const std::exception& error){throw std::runtime_error(label+"."+name+" rejected its JSON value: "+error.what());}
+        }
+    }
+
 }
 namespace DragonWilds {
     void DragonWildsSpawnLoader::LoadPlayerRules(
@@ -96,17 +123,65 @@ namespace DragonWilds {
             m_reportedAppearanceNoOps.clear();
         }
 
-        PS::JsonHelpers::ParseJsonFilesInPath(loaderPath, [&](const nlohmann::json& data) {
-            m_playerDocuments.push_back({modName, data});
-        });
+        std::vector<fs::path> files;for(const auto& file:fs::directory_iterator(loaderPath))if(file.is_regular_file()&&(file.path().extension()==".json"||file.path().extension()==".jsonc"))files.push_back(file.path());std::sort(files.begin(),files.end());
+        for(const auto& file:files)try{PS::JsonHelpers::ParseJsonFileInPath(file,[&](const nlohmann::json& data){m_playerDocuments.push_back({modName,data,file.filename().string()});});}
+        catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("Player file '{}' in mod '{}' rejected; unrelated files continue: {}.\n"),file.filename().native(),modName,PS::ToWideSafe(error.what()));}
+    }
+
+    void DragonWildsSpawnLoader::LoadNameplateDefinitions(
+        const fs::path& loaderPath, const RC::StringType& modName, bool replaceExisting)
+    {
+        if (replaceExisting)
+            std::erase_if(m_nameplateDocuments, [&](const OwnedJsonDocument& document) {
+                return document.ModName == modName;
+            });
+        std::vector<fs::path> files;for(const auto& file:fs::directory_iterator(loaderPath))if(file.is_regular_file()&&(file.path().extension()==".json"||file.path().extension()==".jsonc"))files.push_back(file.path());std::sort(files.begin(),files.end());
+        for(const auto& file:files)try{PS::JsonHelpers::ParseJsonFileInPath(file,[&](const nlohmann::json& data){m_nameplateDocuments.push_back({modName,data,file.filename().string()});});}
+        catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("Nameplate file '{}' in mod '{}' rejected; unrelated files continue: {}.\n"),file.filename().native(),modName,PS::ToWideSafe(error.what()));}
+    }
+
+    void DragonWildsSpawnLoader::FinalizeNameplateDefinitions()
+    {
+        m_nameplateDefinitions.clear();
+        for (const auto& document : m_nameplateDocuments)
+        {
+            if (!document.Document.is_array()) {
+                PS::Log<LogLevel::Error>(STR("Nameplates file '{}' in mod '{}' rejected: root must be an array; unrelated definitions continue.\n"),PS::ToWideSafe(document.SourceFile.c_str()),document.ModName);
+                continue;
+            }
+            std::size_t ordinal=0;
+            for (const auto& entry : document.Document)
+            {
+                ++ordinal;
+                try {
+                    if (!entry.is_object() || !entry.contains("Id") || !entry.at("Id").is_string())
+                        throw std::runtime_error("entry requires a string Id");
+                    const auto id = entry.at("Id").get<std::string>();
+                    if (id.empty() || id.size() > 96)
+                        throw std::runtime_error("Id must be between 1 and 96 characters");
+                    auto definition = entry.contains("Nameplate") ? entry.at("Nameplate") : entry;
+                    if (!definition.is_object())throw std::runtime_error("definition must be an object");
+                    definition.erase("Id");definition.erase("Nameplate");
+                    const auto key = RC::to_string(document.ModName) + ":" + id;
+                    if(!m_nameplateDefinitions.emplace(key,std::move(definition)).second)
+                        throw std::runtime_error("duplicate namespaced Id");
+                } catch(const std::exception& error) {
+                    const auto id=entry.is_object()?entry.value("Id",std::string("<missing Id>")):std::string("<non-object>");
+                    PS::Log<LogLevel::Error>(STR("Nameplate '{}:{}' in file '{}' (entry #{}) rejected; unrelated definitions continue: {}.\n"),
+                        document.ModName,PS::ToWideSafe(id.c_str()),PS::ToWideSafe(document.SourceFile.c_str()),ordinal,PS::ToWideSafe(error.what()));
+                }
+            }
+        }
+        PS::RoutineLog("nameplates",STR("Loaded {} reusable nameplate definition(s).\n"),m_nameplateDefinitions.size());
     }
 
     void DragonWildsSpawnLoader::ParsePlayerRulesDocument(
         const nlohmann::json& data, const RC::StringType& modName)
     {
             if (!data.is_array()) throw std::runtime_error("players JSON root must be an array");
-            for (const auto& value : data)
+            for (const auto& entry : data)
             {
+                const auto value = NormalizePlayerArchetype(entry);
                 if (!value.is_object()) throw std::runtime_error("each players entry must be an object");
                 PlayerRule rule;
                 rule.ModName = modName;
@@ -381,8 +456,265 @@ namespace DragonWilds {
                             std::move(fallbackTablePath), std::move(fallbackRowName), hasFallback});
                     }
                 }
-                if (value.contains("VisualEffect"))
+                if (value.contains("VisualEffect")) {
                     rule.VisualEffect = ValidateVisualEffect(value.at("VisualEffect"));
+                    const auto lifetime=ParseVisualEffectLifetime(rule.VisualEffect,"Load",{"Load","Respawn"});
+                    rule.VisualEffectTrigger=lifetime.Trigger;
+                    rule.VisualEffectSeconds=lifetime.DurationSeconds;
+                    if(rule.VisualEffect.value("Type",std::string("Ghost"))=="Niagara"
+                        && rule.VisualEffect.contains("Target")
+                        && rule.VisualEffect.at("Target")!="EntirePerson"
+                        && rule.VisualEffect.at("Target")!="PlayerMesh")
+                        throw std::runtime_error("Player Niagara VisualEffect.Target must be EntirePerson, PlayerMesh or omitted");
+                }
+                if(value.contains("MapIcon")) {
+                    NpcMarkers::Validate(nlohmann::json{{"Map",value.at("MapIcon")}});
+                    rule.MapIcon=value.at("MapIcon");
+                }
+                if (value.contains("Nameplate"))
+                {
+                    auto nameplate = value.at("Nameplate");
+                    if (!nameplate.is_object())
+                        throw std::runtime_error("Nameplate must be an object");
+                    if (nameplate.contains("Definition"))
+                    {
+                        if (!nameplate.at("Definition").is_string())
+                            throw std::runtime_error("Nameplate.Definition must be a string");
+                        auto reference = nameplate.at("Definition").get<std::string>();
+                        if (reference.find(':') == std::string::npos)
+                            reference = RC::to_string(modName) + ":" + reference;
+                        const auto found = m_nameplateDefinitions.find(reference);
+                        if (found == m_nameplateDefinitions.end())
+                            throw std::runtime_error("Nameplate definition was not found: " + reference);
+                        auto overrides = nameplate;
+                        overrides.erase("Definition");
+                        nameplate = found->second;
+                        nameplate.merge_patch(overrides);
+                    }
+                    for (const auto& [field, ignored] : nameplate.items())
+                        if (field != "Definition" && field != "Mode" && field != "Icon"
+                            && field != "Scale" && field != "Distance"
+                            && field != "PixelWidth" && field != "PixelHeight"
+                            && field != "ActivityTimeoutSeconds"
+                            && field != "ShowSelf" && field != "Client"
+                            && field != "Server" && field != "States" && field != "Events" && field != "SkillXP"
+                            && field != "Native")
+                            throw std::runtime_error("unsupported Nameplate field: " + field);
+                    rule.Nameplate.Configured = true;
+                    if (nameplate.contains("SkillXP")) {
+                        ValidateSkillXP(nameplate.at("SkillXP"), nameplate.value("States", nlohmann::json::object()));
+                        rule.Nameplate.SkillXP = nameplate.at("SkillXP");
+                    }
+                    if (nameplate.contains("Events")) {
+                        ValidateActivityEvents(nameplate.at("Events"),nameplate.value("States",nlohmann::json::object()));
+                        rule.Nameplate.Events=nameplate.at("Events");
+                    }
+                    if (value.contains("Archetype"))
+                        rule.Nameplate.ArchetypeName = value.at("Archetype").at("Name").get<std::string>();
+                    rule.Nameplate.Mode = nameplate.value("Mode", std::string("Name"));
+                    if (rule.Nameplate.Mode != "Name" && rule.Nameplate.Mode != "Icon"
+                        && rule.Nameplate.Mode != "Hidden")
+                        throw std::runtime_error("Nameplate.Mode must be Name, Icon, or Hidden");
+                    if (nameplate.contains("Icon"))
+                    {
+                        if (!nameplate.at("Icon").is_string())
+                            throw std::runtime_error("Nameplate.Icon must be a cooked texture path");
+                        rule.Nameplate.Icon = nameplate.at("Icon").get<std::string>();
+                    }
+                    if (rule.Nameplate.Mode == "Icon" && rule.Nameplate.Icon.empty())
+                        throw std::runtime_error("Nameplate.Mode Icon requires Nameplate.Icon");
+                    if (nameplate.contains("Scale"))
+                    {
+                        if (!nameplate.at("Scale").is_number())
+                            throw std::runtime_error("Nameplate.Scale must be a number");
+                        rule.Nameplate.Scale = nameplate.at("Scale").get<double>();
+                        if (!std::isfinite(rule.Nameplate.Scale)
+                            || rule.Nameplate.Scale < 0.1 || rule.Nameplate.Scale > 4.0)
+                            throw std::runtime_error("Nameplate.Scale must be between 0.1 and 4");
+                    }
+                    if(nameplate.contains("PixelWidth")||nameplate.contains("PixelHeight")) {
+                        rule.Nameplate.PixelWidth=nameplate.value("PixelWidth",64.0);
+                        rule.Nameplate.PixelHeight=nameplate.value("PixelHeight",64.0);
+                        if(!std::isfinite(rule.Nameplate.PixelWidth)||!std::isfinite(rule.Nameplate.PixelHeight)
+                            ||rule.Nameplate.PixelWidth<1||rule.Nameplate.PixelWidth>4096
+                            ||rule.Nameplate.PixelHeight<1||rule.Nameplate.PixelHeight>4096)
+                            throw std::runtime_error("Nameplate pixel dimensions must be between 1 and 4096");
+                        rule.Nameplate.PixelSizeConfigured=true;
+                    }
+                    if (nameplate.contains("Distance"))
+                    {
+                        if (!nameplate.at("Distance").is_number())
+                            throw std::runtime_error("Nameplate.Distance must be a number");
+                        rule.Nameplate.Distance = nameplate.at("Distance").get<double>();
+                        if (!std::isfinite(rule.Nameplate.Distance)
+                            || rule.Nameplate.Distance < 0.0 || rule.Nameplate.Distance > 100000.0)
+                            throw std::runtime_error("Nameplate.Distance must be between 0 and 100000");
+                    }
+                    if (nameplate.contains("ActivityTimeoutSeconds"))
+                    {
+                        if (!nameplate.at("ActivityTimeoutSeconds").is_number())
+                            throw std::runtime_error(
+                                "Nameplate.ActivityTimeoutSeconds must be a number");
+                        rule.Nameplate.ActivityTimeoutSeconds =
+                            nameplate.at("ActivityTimeoutSeconds").get<double>();
+                        if (!std::isfinite(rule.Nameplate.ActivityTimeoutSeconds)
+                            || rule.Nameplate.ActivityTimeoutSeconds < 0.0
+                            || rule.Nameplate.ActivityTimeoutSeconds > 3600.0)
+                            throw std::runtime_error(
+                                "Nameplate.ActivityTimeoutSeconds must be between 0 and 3600");
+                    }
+                    if (nameplate.contains("ShowSelf"))
+                    {
+                        if (!nameplate.at("ShowSelf").is_boolean())
+                            throw std::runtime_error("Nameplate.ShowSelf must be true or false");
+                        rule.Nameplate.ShowSelf = nameplate.at("ShowSelf").get<bool>();
+                    }
+                    const auto parseAudience = [&](const char* field, bool& target) {
+                        if (!nameplate.contains(field)) return;
+                        const auto& audience = nameplate.at(field);
+                        if (audience.is_boolean())
+                        {
+                            target = audience.get<bool>();
+                            return;
+                        }
+                        if (audience.is_string())
+                        {
+                            auto value = audience.get<std::string>();
+                            std::transform(value.begin(), value.end(), value.begin(),
+                                [](unsigned char character) {
+                                    return static_cast<char>(std::tolower(character));
+                                });
+                            if (value == "yes") { target = true; return; }
+                            if (value == "no") { target = false; return; }
+                        }
+                        throw std::runtime_error(std::string("Nameplate.") + field
+                            + " must be Yes, No, true, or false");
+                    };
+                    parseAudience("Client", rule.Nameplate.ShowSelf);
+                    parseAudience("Server", rule.Nameplate.ShowOthers);
+                    if(nameplate.contains("Native")) {
+                        const auto& native=nameplate.at("Native");
+                        if(!native.is_object())throw std::runtime_error("Nameplate.Native must be an object");
+                        for(const auto& [target,patch]:native.items()) {
+                            if(target!="Component"&&target!="Widget"&&target!="Text")
+                                throw std::runtime_error("unsupported Nameplate.Native target: "+target);
+                            ValidateReflectedPatch(patch,"Nameplate.Native."+target,64);
+                            if(target=="Component")rule.Nameplate.ComponentProperties=patch;
+                            else if(target=="Widget")rule.Nameplate.WidgetProperties=patch;
+                            else rule.Nameplate.TextProperties=patch;
+                        }
+                    }
+                    if (nameplate.contains("States"))
+                    {
+                        const auto& states = nameplate.at("States");
+                        if (!states.is_object())
+                            throw std::runtime_error("Nameplate.States must be an object");
+                        for (const auto& [stateName, stateValue] : states.items())
+                        {
+                            if (!ActivityIdentifier(stateName))
+                                throw std::runtime_error(
+                                    "unsupported Nameplate state: " + stateName);
+                            if (!stateValue.is_object())
+                                throw std::runtime_error(
+                                    "Nameplate.States." + stateName + " must be an object");
+                            for (const auto& [field, ignored] : stateValue.items())
+                                if (field != "Icon" && field != "Scale"
+                                    && field != "InactivitySeconds"
+                                    && field != "Priority" && field != "While" && field != "Native")
+                                    throw std::runtime_error(
+                                        "unsupported Nameplate.States." + stateName
+                                        + " field: " + field);
+                            if (stateValue.contains("Icon") && (!stateValue.at("Icon").is_string()
+                                || stateValue.at("Icon").get<std::string>().empty()))
+                                throw std::runtime_error("Nameplate.States."+stateName+" Icon must be a cooked texture path");
+                            if(!stateValue.contains("Icon")&&!stateValue.contains("Native"))
+                                throw std::runtime_error("Nameplate.States."+stateName+" requires Icon or Native overrides");
+                            auto& stateRule = rule.Nameplate.States[stateName];
+                            if (stateValue.contains("While")) {
+                                const auto& condition = stateValue.at("While");
+                                if (!condition.is_object() || condition.size() != 1 || !condition.contains("GameplayEffect")
+                                    || !condition["GameplayEffect"].is_string()
+                                    || !ActivityObjectPath(condition["GameplayEffect"].get<std::string>()))
+                                    throw std::runtime_error("State While requires one absolute GameplayEffect class path");
+                                stateRule.GameplayEffect = condition["GameplayEffect"].get<std::string>();
+                            }
+                            stateRule.Configured = true;
+                            stateRule.Icon = stateValue.value("Icon",std::string{});
+                            if(stateValue.contains("Native")) {
+                                const auto& native=stateValue.at("Native");
+                                if(!native.is_object())throw std::runtime_error("Nameplate state Native must be an object");
+                                for(const auto& [target,patch]:native.items()) {
+                                    if(target!="Component"&&target!="Widget"&&target!="Text")
+                                        throw std::runtime_error("unsupported Nameplate state Native target: "+target);
+                                    ValidateReflectedPatch(patch,"Nameplate.States."+stateName+".Native."+target,64);
+                                    if(target=="Component")stateRule.ComponentProperties=patch;
+                                    else if(target=="Widget")stateRule.WidgetProperties=patch;
+                                    else stateRule.TextProperties=patch;
+                                }
+                            }
+                            if (stateName != "Dead")
+                                stateRule.InactivitySeconds =
+                                    rule.Nameplate.ActivityTimeoutSeconds;
+                            if (stateValue.contains("Scale"))
+                            {
+                                if (!stateValue.at("Scale").is_number())
+                                    throw std::runtime_error(
+                                        "Nameplate.States." + stateName
+                                        + ".Scale must be a number");
+                                stateRule.Scale = stateValue.at("Scale").get<double>();
+                                stateRule.ScaleConfigured = true;
+                                if (!std::isfinite(stateRule.Scale)
+                                    || stateRule.Scale < 0.1
+                                    || stateRule.Scale > 4.0)
+                                    throw std::runtime_error(
+                                        "Nameplate.States." + stateName
+                                        + ".Scale must be between 0.1 and 4");
+                            }
+                            if (stateValue.contains("InactivitySeconds"))
+                            {
+                                if (!stateValue.at("InactivitySeconds").is_number())
+                                    throw std::runtime_error(
+                                        "Nameplate.States." + stateName
+                                        + ".InactivitySeconds must be a number");
+                                stateRule.InactivitySeconds =
+                                    stateValue.at("InactivitySeconds").get<double>();
+                                if (!std::isfinite(stateRule.InactivitySeconds)
+                                    || stateRule.InactivitySeconds < 0.0
+                                    || stateRule.InactivitySeconds > 3600.0)
+                                    throw std::runtime_error(
+                                        "Nameplate.States." + stateName
+                                        + ".InactivitySeconds must be between 0 and 3600");
+                            }
+                            if (stateValue.contains("Priority"))
+                            {
+                                if (!stateValue.at("Priority").is_number_integer())
+                                    throw std::runtime_error(
+                                        "Nameplate.States." + stateName
+                                        + ".Priority must be an integer");
+                                stateRule.Priority = stateValue.at("Priority").get<int>();
+                                if (stateRule.Priority < -10000 || stateRule.Priority > 10000)
+                                    throw std::runtime_error(
+                                        "Nameplate.States." + stateName
+                                        + ".Priority must be between -10000 and 10000");
+                            }
+                            else if (stateName == "Dead") stateRule.Priority = 10000;
+                        }
+                    }
+                }
+                if(value.contains("Native")) {
+                    const auto& native=value.at("Native");
+                    if(!native.is_object())throw std::runtime_error("Native must be an object");
+                    for(const auto& [target,patch]:native.items()) {
+                        if(target=="Pawn") {ValidateReflectedPatch(patch,"Native.Pawn");rule.PawnProperties=patch;continue;}
+                        if(target!="Components"||!patch.is_object()||patch.size()>128)
+                            throw std::runtime_error("Native accepts Pawn and Components objects");
+                        for(const auto& [component,properties]:patch.items()) {
+                            if(component.empty()||component.size()>128)throw std::runtime_error("Native.Components has an invalid component name");
+                            ValidateReflectedPatch(properties,"Native.Components."+component);
+                        }
+                        rule.ComponentProperties=patch;
+                    }
+                }
                 if (rule.SetHealth && rule.SetMaxHealth)
                     throw std::runtime_error("HealthMultiplier cannot be combined with MaxHealth or BaseHealth");
                 if (rule.SetStamina && rule.SetMaxStamina)
@@ -399,7 +731,9 @@ namespace DragonWilds {
                     && !rule.SetRangedAttack && !rule.SetPhysicalDefense
                     && !rule.SetMagicalDefense && !rule.SetRangedDefense
                     && rule.AttributeMultipliers.empty() && rule.Attributes.empty()
-                    && rule.Appearance.empty() && rule.VisualEffect.empty())
+                    && rule.Appearance.empty() && rule.VisualEffect.empty()
+                    && rule.PawnProperties.empty() && rule.ComponentProperties.empty()
+                    && !rule.Nameplate.Configured)
                     throw std::runtime_error("a players entry requires at least one adjustment field");
                 m_playerRules.push_back(std::move(rule));
             }
@@ -463,6 +797,7 @@ namespace DragonWilds {
             }
         }
 
+        PatchConflicts patchConflicts;
         size_t patched = 0, patchErrors = 0;
         for (auto& patch : patches)
         {
@@ -479,6 +814,7 @@ namespace DragonWilds {
             }
             const auto stats = JsonPatchDirective::Apply(
                 definitions.at(found->second).Body, patch.Directive, true);
+            WarnPatchConflicts(patchConflicts, "players:" + reference, patch.Directive.Changes, RC::to_string(patch.Owner));
             ++patched;
             PS::Log<LogLevel::Verbose>( STR("{} patched player rule '{}' ({} fields overwritten).\n"),
                 patch.Owner, RC::to_generic_string(reference), stats.FieldsOverwritten);
@@ -501,6 +837,7 @@ namespace DragonWilds {
         PS::RoutineLog("players", STR("Loaded {} deterministic player rule(s); applied {} deferred patch(es).\n"),
             definitions.size(), patches.size());
         m_playerDocuments.clear();
+        SetupPlayerActivityHooks();
     }
 
     UObject* DragonWildsSpawnLoader::FindLocalPlayerController()
@@ -744,8 +1081,8 @@ namespace DragonWilds {
 
     fs::path DragonWildsSpawnLoader::GetAppearanceProvenancePath()
     {
-        return fs::path(PS::HostServices::WorkingDirectory())
-            / "Mods" / "RuneSchema" / "player-data" / "appearance-fallbacks.json";
+        return PS::HostServices::ExportsDirectory()
+            / "appearance-fallbacks.json";
     }
 
     void DragonWildsSpawnLoader::LoadAppearanceProvenance()
@@ -990,14 +1327,23 @@ namespace DragonWilds {
             STR("Registered appearance source '{}' from appearance/manifest.json.\n"), modName);
     }
 
-    void DragonWildsSpawnLoader::ApplyClientPlayerVisualRules(UObject* pawn)
+    void DragonWildsSpawnLoader::ApplyClientPlayerVisualRules(
+        UObject* pawn, bool nameplatesOnly, const std::string& eventFunction,
+        const nlohmann::json* eventParameters, const std::string& activityState)
     {
-        if (!pawn || (m_playerRules.empty() && !PlayerGhost::HasItemRules())) return;
+        if (!pawn || !pawn->GetWorld()
+            || (m_playerRules.empty() && !PlayerGhost::HasItemRules())) return;
         auto* playerClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
             nullptr, nullptr, TEXT("/Script/Dominion.DominionPlayerCharacter"));
         if (!playerClass || !pawn->IsA(playerClass)) return;
-        try { PlayerGhost::TrackEquipment(pawn); }
-        catch(const std::exception& error) { PS::Log<LogLevel::Warning>(TEXT("Equipment visual unavailable: {}\n"),PS::ToWideSafe(error.what())); }
+        if(!m_readyWorld)TryProcessSpawns(pawn->GetWorld(),nullptr,TEXT("player presentation lifecycle"));
+        if(pawn->GetWorld()!=m_readyWorld)return;
+        if (nameplatesOnly && !GhostMaterials::CanRender(pawn)) return;
+        if (!nameplatesOnly)
+        {
+            try { PlayerGhost::TrackEquipment(pawn); }
+            catch(const std::exception& error) { PS::Log<LogLevel::Warning>(TEXT("Equipment visual unavailable: {}\n"),PS::ToWideSafe(error.what())); }
+        }
         if(m_playerRules.empty())return;
 
         auto* statePointer = PropertyHelper::GetValuePtrByPropertyNameInChain<
@@ -1088,9 +1434,19 @@ namespace DragonWilds {
             }
         }
 
+        const PlayerRule* selectedRespawn = nullptr;
+        const PlayerNameplateRule* selectedNameplate = nullptr;
+        const nlohmann::json* selectedMapIcon = nullptr;
+        RC::StringType selectedNameplateContext;
         for (const auto& rule : m_playerRules)
         {
-            if (rule.VisualEffect.empty()) continue;
+            const bool hasRespawnVisual = !rule.VisualEffect.empty()
+                && rule.VisualEffectTrigger == "Respawn";
+            // Respawn-only visuals must remain selectable during the
+            // nameplate-only refresh pass. Other visuals remain excluded there.
+            if (!rule.Nameplate.Configured && rule.MapIcon.empty()
+                && (rule.VisualEffect.empty() || (nameplatesOnly && !hasRespawnVisual)))
+                continue;
             const bool nameMatches = !playerName.empty()
                 && std::find(rule.PlayerNames.begin(), rule.PlayerNames.end(), playerName)
                     != rule.PlayerNames.end();
@@ -1102,14 +1458,736 @@ namespace DragonWilds {
                     playerSlot) != rule.PlayerLoadSlots.end();
             if (!rule.AllPlayers && !nameMatches && !guidMatches && !slotMatches)
                 continue;
-            ApplyVisualEffect(pawn, rule.VisualEffect,
-                STR("Player visual rule from '") + rule.ModName + STR("'"));
+            const auto context = STR("Player visual rule from '")
+                + rule.ModName + STR("'");
+            if (!rule.VisualEffect.empty() && rule.VisualEffectTrigger=="Respawn") selectedRespawn = &rule;
+            if (!nameplatesOnly && !rule.VisualEffect.empty() && rule.VisualEffectTrigger=="Load") {
+                if(rule.VisualEffectSeconds>0.0)
+                    PlayerGhost::ApplyTimed(pawn,VisualEffectStyle(rule.VisualEffect),rule.VisualEffectSeconds);
+                else ApplyVisualEffect(pawn, VisualEffectStyle(rule.VisualEffect), context);
+            }
+            if (rule.Nameplate.Configured)
+            {
+                selectedNameplate = &rule.Nameplate;
+                selectedNameplateContext = context;
+            }
+            if(!rule.MapIcon.empty())selectedMapIcon=&rule.MapIcon;
+        }
+        if (selectedRespawn && (eventFunction == PlayerRespawnEvent
+            || eventFunction == RespawnFinishedEvent)) {
+            const auto style=VisualEffectStyle(selectedRespawn->VisualEffect);
+            if(selectedRespawn->VisualEffectSeconds>0.0)
+                PlayerGhost::ApplyTimed(pawn,style,selectedRespawn->VisualEffectSeconds,true);
+            else ApplyVisualEffect(pawn,style,STR("Respawn player visual"));
+        }
+        if (selectedNameplate)
+        {
+            if (eventParameters || !activityState.empty()) {
+                ActivityEventMatch match{activityState, "Pulse"};
+                if (eventParameters) {
+                    const auto configured = MatchActivityEventRule(selectedNameplate->Events,eventFunction,*eventParameters);
+                    // Some emote routes expose the index only as component state
+                    // after the call. Prefer that event-time classification over
+                    // the generic fallback rule when it is specific.
+                    const bool specificEmoteState = activityState != ""
+                        && activityState != "Emote"
+                        && (eventFunction == PlayerEmotePlayEvent
+                            || eventFunction == PlayerEmoteNotifyEvent
+                            || eventFunction == PlayerEmoteSelectionChangedEvent);
+                    if (specificEmoteState) match = {activityState, "Pulse"};
+                    else if (configured) match = configured;
+                    if (eventFunction == SkillXPEvent)
+                        match = {MatchSkillXP(selectedNameplate->SkillXP, *eventParameters), "Pulse"};
+                }
+                if (match) {
+                    if (match.Action=="Deactivate") {
+                        const auto active=m_activeNameplateStates.find(pawn);
+                        if (active!=m_activeNameplateStates.end()
+                            && (active->second.State==match.State
+                                || (eventFunction == PlayerEmoteStopEvent
+                                    && active->second.SourceFunction == PlayerEmotePlayEvent)))
+                            m_activeNameplateStates.erase(active);
+                    } else {
+                        const auto incoming=selectedNameplate->States.find(match.State);
+                        const auto active=m_activeNameplateStates.find(pawn);
+                        bool replace=true;
+                        if (incoming!=selectedNameplate->States.end()
+                            && active!=m_activeNameplateStates.end()
+                            && active->second.Actor.Get() == pawn
+                            && (active->second.Latched || active->second.RemainingSeconds > 0.0))
+                        {
+                            const auto current=selectedNameplate->States.find(active->second.State);
+                            replace=current==selectedNameplate->States.end()
+                                || incoming->second.Priority>=current->second.Priority;
+                        }
+                        if (replace)
+                            m_activeNameplateStates.insert_or_assign(pawn,
+                                ActiveNameplateState{PS::WeakObject(pawn),match.State,-1.0,
+                                    match.Action=="Activate",eventFunction});
+                    }
+                }
+            }
+            bool isLocalPlayer = false;
+            try
+            {
+                auto* controllerPointer = PropertyHelper::GetValuePtrByPropertyNameInChain<
+                    TObjectPtr<UObject>>(pawn, TEXT("Controller"));
+                auto* controller = controllerPointer ? controllerPointer->Get() : nullptr;
+                if (controller)
+                {
+                    auto local = ActorHelper::FunctionCall(
+                        controller, STR("/Script/Engine.Controller:IsLocalController"));
+                    local.Invoke();
+                    isLocalPlayer = local.Result<bool>();
+                }
+            }
+            catch (...) {}
+            if ((isLocalPlayer && selectedNameplate->ShowSelf)
+                || (!isLocalPlayer && selectedNameplate->ShowOthers))
+                ApplyPlayerNameplate(pawn, *selectedNameplate, selectedNameplateContext);
+        }
+        if(selectedMapIcon)ApplyPlayerMapIcon(pawn,*selectedMapIcon,STR("Player MapIcon"));
+    }
+
+    void DragonWildsSpawnLoader::ApplyPlayerMapIcon(UObject* pawn,
+        const nlohmann::json& options, const RC::StringType& context)
+    {
+        try {
+            auto* actor=Cast<AActor>(pawn);
+            auto* type=ActorHelper::ResolveClass(TEXT("/Script/MinimapPlugin.MapIconComponent"));
+            if(!actor||!type)throw std::runtime_error("MapIconComponent is unavailable");
+            auto components=actor->GetComponentsByClass(type);
+            UObject* component=components.Num()?components[0]:nullptr;
+            if(!component) {
+                ActorHelper::FunctionCall add(actor,TEXT("/Script/Engine.Actor:AddComponentByClass"));
+                add.Arg(TEXT("Class"),type).Arg(TEXT("bManualAttachment"),true)
+                    .Arg(TEXT("RelativeTransform"),FTransform{}).Arg(TEXT("bDeferredFinish"),true).Invoke();
+                component=add.Result<UObject*>();
+                if(!component)throw std::runtime_error("MapIconComponent could not be created");
+                ActorHelper::FunctionCall finish(actor,TEXT("/Script/Engine.Actor:FinishAddComponent"));
+                finish.Arg(TEXT("Component"),component).Arg(TEXT("bManualAttachment"),true)
+                    .Arg(TEXT("RelativeTransform"),FTransform{}).Invoke();
+            }
+            const bool enabled=options.value("Enabled",true);
+            ActorHelper::FunctionCall visible(component,TEXT("/Script/MinimapPlugin.MapIconComponent:SetIconVisible"));
+            visible.Arg(TEXT("bNewVisible"),enabled).Invoke();
+            if(!enabled)return;
+            auto* texture=ActorHelper::ResolveObject(RC::to_generic_string(
+                options.value("Icon",std::string(NpcMarkers::DefaultIcon))));
+            auto* textureType=ActorHelper::ResolveClass(TEXT("/Script/Engine.Texture2D"));
+            if(!texture||!textureType||!texture->IsA(textureType))
+                throw std::runtime_error("MapIcon.Icon did not resolve to Texture2D");
+            ActorHelper::FunctionCall icon(component,TEXT("/Script/MinimapPlugin.MapIconComponent:SetIconTexture"));
+            icon.Arg(TEXT("NewIcon"),texture).Invoke();
+            if(options.contains("Size")) {
+                auto* size=PropertyHelper::GetPropertyByName(type,TEXT("IconSize"));
+                auto* unit=PropertyHelper::GetPropertyByName(type,TEXT("IconSizeUnit"));
+                if(!size||!unit)throw std::runtime_error("Map icon size contract is unavailable");
+                PropertyHelper::CopyJsonValueToContainer(component,size,options.at("Size"));
+                PropertyHelper::CopyJsonValueToContainer(component,unit,
+                    NpcMarkers::MapSizeUnit(options.value("SizeMode",std::string("Pixels"))));
+            }
+        } catch(const std::exception& error) {
+            const auto key="player-map-icon:"+RC::to_string(pawn->GetPathName())+":"+error.what();
+            if(m_reportedPlayerRuleFailures.insert(key).second)
+                PS::Log<LogLevel::Warning>(STR("{} unavailable: {}.\n"),context,PS::ToWideSafe(error.what()));
+        }
+    }
+
+    std::unordered_set<std::string> DragonWildsSpawnLoader::ActivePlayerEffectData(UObject* pawn)
+    {
+        std::unordered_set<std::string> result;
+        if (!pawn || pawn->GetWorld() != m_readyWorld) return result;
+        auto* component = ActorHelper::GetObjectRef(pawn, TEXT("GameplayEffectsComponent"));
+        auto* type = UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr, nullptr,
+            TEXT("/Script/Dominion.DominionGameplayEffect"));
+        if (!component || !type) return result;
+        auto* data = CastField<FClassProperty>(PropertyHelper::GetPropertyByName(type, TEXT("Data")));
+        auto* blocked = CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(type, TEXT("bIsBlocked")));
+        auto* removed = CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(type, TEXT("bWasRemoved")));
+        auto* owner = CastField<FObjectPropertyBase>(PropertyHelper::GetPropertyByName(type, TEXT("ComponentOwner")));
+        if (!data || data->GetArrayDim() != 1 || data->GetElementSize() != sizeof(UObject*)
+            || !owner || owner->GetArrayDim() != 1 || owner->GetElementSize() != sizeof(UObject*)
+            || !blocked || !removed || blocked->GetArrayDim() != 1 || removed->GetArrayDim() != 1) return result;
+        for (const auto* name : {TEXT("ReplicatedInstances"), TEXT("NonReplicatedInstances")}) {
+            auto* property = CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(component->GetClassPrivate(), name));
+            auto* inner = property ? CastField<FObjectProperty>(property->GetInner()) : nullptr;
+            if (!inner || property->GetArrayDim() != 1 || inner->GetElementSize() != sizeof(UObject*)) continue;
+            auto* array = property->ContainerPtrToValuePtr<FScriptArray>(component);
+            if (!array || array->Num() < 0 || array->Num() > 512 || (array->Num() && !array->GetData())) continue;
+            for (int32 index = 0; index < array->Num(); ++index) {
+                auto* effect = inner->GetObjectPropertyValue(static_cast<uint8*>(array->GetData()) + index * sizeof(UObject*));
+                if (!effect || !effect->IsA(type)
+                    || owner->GetObjectPropertyValue(owner->ContainerPtrToValuePtr<void>(effect)) != component
+                    || blocked->GetPropertyValue(blocked->ContainerPtrToValuePtr<void>(effect))
+                    || removed->GetPropertyValue(removed->ContainerPtrToValuePtr<void>(effect))) continue;
+                auto* definition = data->GetObjectPropertyValue(data->ContainerPtrToValuePtr<void>(effect));
+                if (definition) result.insert(RC::to_string(definition->GetPathName()));
+            }
+        }
+        return result;
+    }
+
+    bool DragonWildsSpawnLoader::ApplyPlayerNameplate(UObject* pawn,
+        const PlayerNameplateRule& rule, const RC::StringType& context)
+    {
+        try
+        {
+            const auto stateRule = [&](const std::string& name)
+                -> const PlayerNameplateStateRule* {
+                const auto found = rule.States.find(name);
+                return found != rule.States.end() && found->second.Configured
+                    ? &found->second : nullptr;
+            };
+            const auto* deadRule = stateRule("Dead");
+            bool dead = false;
+            if (deadRule)
+            {
+                auto* damage = ActorHelper::GetObjectRef(
+                    pawn, TEXT("BP_Components_PlayerDamage"));
+                auto* fatalProperty = damage ? CastField<FStructProperty>(
+                    PropertyHelper::GetPropertyByName(
+                        damage->GetClassPrivate(), TEXT("FatalDamageInfo"))) : nullptr;
+                auto* fatalStruct = fatalProperty
+                    ? fatalProperty->GetStruct().Get() : nullptr;
+                auto* isSetProperty = fatalStruct ? CastField<FBoolProperty>(
+                    PropertyHelper::GetPropertyByName(
+                        fatalStruct, TEXT("bIsSet"))) : nullptr;
+                if (fatalProperty && isSetProperty)
+                {
+                    auto* fatalData = fatalProperty->ContainerPtrToValuePtr<void>(damage);
+                    dead = isSetProperty->GetPropertyValue(
+                        isSetProperty->ContainerPtrToValuePtr<void>(fatalData));
+                }
+            }
+
+            auto active = m_activeNameplateStates.find(pawn);
+            if (dead)
+            {
+                if (deadRule->InactivitySeconds > 0.0)
+                    m_activeNameplateStates.insert_or_assign(pawn,
+                        ActiveNameplateState{PS::WeakObject(pawn), "Dead",
+                            deadRule->InactivitySeconds});
+            }
+            else if (active != m_activeNameplateStates.end()
+                && active->second.Actor.Get() == pawn
+                && active->second.State == "Dead"
+                && active->second.RemainingSeconds > 0.0)
+            {
+                dead = true;
+            }
+            else if (active != m_activeNameplateStates.end()
+                && active->second.State == "Dead")
+            {
+                m_activeNameplateStates.erase(active);
+            }
+
+            const PlayerNameplateStateRule* effectiveState = dead ? deadRule : nullptr;
+            std::string effectiveStateName = dead ? "Dead" : std::string{};
+            active = m_activeNameplateStates.find(pawn);
+            if (!dead && active != m_activeNameplateStates.end()
+                && active->second.Actor.Get() == pawn)
+            {
+                if (const auto* activityRule = stateRule(active->second.State))
+                {
+                    if (!active->second.Latched && active->second.RemainingSeconds < 0.0)
+                        active->second.RemainingSeconds = activityRule->InactivitySeconds;
+                    if (active->second.Latched || active->second.RemainingSeconds > 0.0)
+                    {
+                        if (!effectiveState || activityRule->Priority >= effectiveState->Priority)
+                        {
+                            effectiveState = activityRule;
+                            effectiveStateName = active->second.State;
+                        }
+                    }
+                    else
+                    {
+                        m_activeNameplateStates.erase(active);
+                    }
+                }
+                else
+                {
+                    m_activeNameplateStates.erase(active);
+                }
+            }
+
+            if (!dead && std::any_of(rule.States.begin(), rule.States.end(),
+                [](const auto& entry) { return !entry.second.GameplayEffect.empty(); })) {
+                const auto effects = ActivePlayerEffectData(pawn);
+                for (const auto& [name, candidate] : rule.States)
+                    if (candidate.Configured && effects.contains(candidate.GameplayEffect)
+                        && (!effectiveState || candidate.Priority > effectiveState->Priority
+                            || (candidate.Priority == effectiveState->Priority && name < effectiveStateName))) {
+                        effectiveState = &candidate;
+                        effectiveStateName = name;
+                    }
+            }
+            const std::string effectiveMode = effectiveState && !effectiveState->Icon.empty() ? "Icon" : rule.Mode;
+            const std::string& effectiveIcon = effectiveState && !effectiveState->Icon.empty()
+                ? effectiveState->Icon : rule.Icon;
+            const double effectiveScale = effectiveState
+                && effectiveState->ScaleConfigured ? effectiveState->Scale : rule.Scale;
+            const double iconWidth=rule.PixelSizeConfigured?rule.PixelWidth:64.0;
+            const double iconHeight=rule.PixelSizeConfigured?rule.PixelHeight:64.0;
+            const double layoutScale=rule.PixelSizeConfigured?1.0:effectiveScale;
+            auto componentProperties=rule.ComponentProperties,widgetProperties=rule.WidgetProperties,textProperties=rule.TextProperties;
+            if(effectiveState) {
+                componentProperties.merge_patch(effectiveState->ComponentProperties);
+                widgetProperties.merge_patch(effectiveState->WidgetProperties);
+                textProperties.merge_patch(effectiveState->TextProperties);
+            }
+            auto* nameplate = ActorHelper::GetObjectRef(
+                pawn, TEXT("BP_Player_Nameplate"));
+            if (!nameplate)
+                throw std::runtime_error("BP_Player_Nameplate was unavailable");
+
+            const bool hidden = effectiveMode == "Hidden";
+            if (auto* property = PropertyHelper::GetPropertyByName(
+                    nameplate->GetClassPrivate(), TEXT("bHiddenInGame")))
+                PropertyHelper::CopyJsonValueToContainer(nameplate, property, hidden);
+            if (auto* property = PropertyHelper::GetPropertyByName(
+                    nameplate->GetClassPrivate(), TEXT("DistanceFromPlayerToShow")))
+                PropertyHelper::CopyJsonValueToContainer(
+                    nameplate, property, rule.Distance);
+            if (rule.ShowSelf)
+            {
+                if (auto* property = PropertyHelper::GetPropertyByName(
+                        nameplate->GetClassPrivate(), TEXT("bOwnerNoSee")))
+                    PropertyHelper::CopyJsonValueToContainer(nameplate, property, false);
+            }
+
+            try
+            {
+                ActorHelper::FunctionCall(nameplate,
+                    STR("/Script/Engine.SceneComponent:SetVisibility"))
+                    .Arg(TEXT("bNewVisibility"), !hidden)
+                    .Arg(TEXT("bPropagateToChildren"), true).Invoke();
+            }
+            catch (...) {}
+
+            auto getWidget = ActorHelper::FunctionCall(nameplate,
+                STR("/Script/UMG.WidgetComponent:GetUserWidgetObject"));
+            getWidget.Invoke();
+            auto* widget = getWidget.Result<UObject*>();
+            if (!widget)
+                throw std::runtime_error("the player nameplate widget was not initialized");
+            if (rule.ShowSelf)
+                ActorHelper::FunctionCall(widget,
+                    STR("/Script/UMG.Widget:SetVisibility"))
+                    .Arg(TEXT("InVisibility"), static_cast<uint8>(4)).Invoke();
+            const auto signature = effectiveMode + "|" + effectiveIcon + "|"
+                + std::to_string(layoutScale) + "|" + std::to_string(iconWidth)
+                + "x" + std::to_string(iconHeight) + "|" + std::to_string(rule.Distance)
+                + "|" + (rule.ShowSelf ? "self" : "no-self")
+                + "|" + (rule.ShowOthers ? "others" : "no-others")
+                + "|centered-square-v3|"+componentProperties.dump()+"|"
+                +widgetProperties.dump()+"|"+textProperties.dump();
+            if (const auto applied = m_nameplateAppliedActors.find(pawn);
+                applied != m_nameplateAppliedActors.end()
+                && applied->second.Actor.Get() == widget
+                && applied->second.Signature == signature)
+                return true;
+            auto* text = ActorHelper::GetObjectRef(
+                widget, TEXT("PlayerNameTextBlock"));
+            if (!text)
+                throw std::runtime_error("PlayerNameTextBlock was unavailable");
+            ApplyReflectedPatch(nameplate,componentProperties,"Nameplate.Native.Component");
+            ApplyReflectedPatch(widget,widgetProperties,"Nameplate.Native.Widget");
+            ApplyReflectedPatch(text,textProperties,"Nameplate.Native.Text");
+
+            const auto setVisibility = [](UObject* target, uint8 visibility) {
+                if (!target) return;
+                ActorHelper::FunctionCall(target,
+                    STR("/Script/UMG.Widget:SetVisibility"))
+                    .Arg(TEXT("InVisibility"), visibility).Invoke();
+            };
+
+            auto* widgetTree = ActorHelper::GetObjectRef(widget, TEXT("WidgetTree"));
+            UObject* icon = nullptr;
+            UObject* iconSlot = nullptr;
+            if (widgetTree)
+            {
+                const auto iconPath = widgetTree->GetPathName()
+                    + TEXT(".RuneSchemaNameplateIcon");
+                icon = UECustom::UObjectGlobals::StaticFindObject(
+                    nullptr, nullptr, iconPath.c_str(), false);
+                if (icon)
+                    iconSlot = ActorHelper::GetObjectRef(icon, TEXT("Slot"));
+            }
+
+            if (effectiveMode != "Icon")
+            {
+                setVisibility(text, hidden ? 1 : 4);
+                if (icon) setVisibility(icon, 1);
+                m_nameplateAppliedActors.insert_or_assign(pawn,
+                    AppliedVisual{PS::WeakObject(widget), signature});
+                return true;
+            }
+
+            auto* texture = ActorHelper::ResolveObject(
+                RC::to_generic_string(effectiveIcon));
+            if (!texture)
+                throw std::runtime_error("Nameplate.Icon could not load texture: "+effectiveIcon);
+            if (!widgetTree)
+                throw std::runtime_error("the player nameplate WidgetTree was unavailable");
+
+            if (!icon)
+            {
+                auto* imageClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+                    nullptr, nullptr, TEXT("/Script/UMG.Image"), false);
+                auto* root = ActorHelper::GetObjectRef(widgetTree, TEXT("RootWidget"));
+                if (!imageClass || !root)
+                    throw std::runtime_error("UMG Image or the nameplate root panel was unavailable");
+
+                FStaticConstructObjectParameters params(imageClass, widgetTree);
+                params.Name = FName(TEXT("RuneSchemaNameplateIcon"), FNAME_Add);
+                params.SetFlags = static_cast<EObjectFlags>(RF_Transactional);
+                icon = UObjectGlobals::StaticConstructObject<UObject*>(params);
+                if (!icon)
+                    throw std::runtime_error("failed to construct the nameplate icon widget");
+
+                auto addChild = ActorHelper::FunctionCall(root,
+                    STR("/Script/UMG.PanelWidget:AddChild"));
+                addChild.Arg(TEXT("Content"), icon).Invoke();
+                iconSlot = addChild.Result<UObject*>();
+                if (!iconSlot)
+                    throw std::runtime_error("failed to add the nameplate icon to its canvas");
+            }
+
+            if (!iconSlot)
+                throw std::runtime_error("the nameplate icon canvas slot was unavailable");
+
+            // Apply the texture before touching layout so a reflected layout mismatch
+            // can never leave UMG's default white image behind.
+            auto setBrush = ActorHelper::FunctionCall(icon,
+                STR("/Script/UMG.Image:SetBrushFromTexture"));
+            setBrush.Arg(TEXT("Texture"), texture)
+                .Arg(TEXT("bMatchSize"), false).Invoke();
+            auto* renderTransform = PropertyHelper::GetPropertyByName(
+                icon->GetClassPrivate(), TEXT("RenderTransform"));
+            if (!renderTransform)
+                throw std::runtime_error("the nameplate icon RenderTransform was unavailable");
+            PropertyHelper::CopyJsonValueToContainer(icon, renderTransform,
+                nlohmann::json{
+                    {"Translation", {{"X", 0.0}, {"Y", 0.0}}},
+                    {"Scale", {{"X", layoutScale}, {"Y", layoutScale}}},
+                    {"Shear", {{"X", 0.0}, {"Y", 0.0}}},
+                    {"Angle", 0.0}
+                });
+
+            if (auto* layout = PropertyHelper::GetPropertyByName(
+                    iconSlot->GetClassPrivate(), TEXT("LayoutData")))
+            {
+                PropertyHelper::CopyJsonValueToContainer(iconSlot, layout,
+                    nlohmann::json{
+                        {"Offsets", {{"Left", 250.0}, {"Top", 25.0},
+                            {"Right", iconWidth}, {"Bottom", iconHeight}}},
+                        {"Anchors", {
+                            {"Minimum", {{"X", 0.0}, {"Y", 0.0}}},
+                            {"Maximum", {{"X", 0.0}, {"Y", 0.0}}}}},
+                        {"Alignment", {{"X", 0.5}, {"Y", 0.5}}}
+                    });
+            }
+            if (auto* autoSize = PropertyHelper::GetPropertyByName(
+                    iconSlot->GetClassPrivate(), TEXT("bAutoSize")))
+                PropertyHelper::CopyJsonValueToContainer(iconSlot, autoSize, false);
+
+            // Canvas slot field writes alone do not always invalidate Slate's cached
+            // layout. Use the public UMG setters as well so the live slot is centered.
+            auto setPosition = ActorHelper::FunctionCall(iconSlot,
+                STR("/Script/UMG.CanvasPanelSlot:SetPosition"));
+            auto setSize = ActorHelper::FunctionCall(iconSlot,
+                STR("/Script/UMG.CanvasPanelSlot:SetSize"));
+            auto setAlignment = ActorHelper::FunctionCall(iconSlot,
+                STR("/Script/UMG.CanvasPanelSlot:SetAlignment"));
+            if (Version::IsBelow(5, 0))
+            {
+                setPosition.Arg(TEXT("InPosition"),
+                    FVector2D::AsPre500(250.0f, 25.0f)).Invoke();
+                setSize.Arg(TEXT("InSize"),
+                    FVector2D::AsPre500(static_cast<float>(iconWidth),static_cast<float>(iconHeight))).Invoke();
+                setAlignment.Arg(TEXT("InAlignment"),
+                    FVector2D::AsPre500(0.5f, 0.5f)).Invoke();
+            }
+            else
+            {
+                setPosition.Arg(TEXT("InPosition"),
+                    FVector2D::As500Plus(250.0, 25.0)).Invoke();
+                setSize.Arg(TEXT("InSize"),
+                    FVector2D::As500Plus(iconWidth,iconHeight)).Invoke();
+                setAlignment.Arg(TEXT("InAlignment"),
+                    FVector2D::As500Plus(0.5, 0.5)).Invoke();
+            }
+            ActorHelper::FunctionCall(iconSlot,
+                STR("/Script/UMG.CanvasPanelSlot:SetAutoSize"))
+                .Arg(TEXT("InbAutoSize"), false).Invoke();
+
+            setVisibility(text, 1);
+            setVisibility(icon, 4);
+            m_nameplateAppliedActors.insert_or_assign(pawn,
+                AppliedVisual{PS::WeakObject(widget), signature});
+            if (m_nameplateAppliedActors.size() > 128)
+                std::erase_if(m_nameplateAppliedActors,
+                    [](const auto& value) { return !value.second.Actor.Get(); });
+            const auto reportKey = "nameplate-applied\n" + RC::to_string(context)
+                + "\n" + (effectiveState ? effectiveStateName + "\n" : "default\n")
+                + effectiveIcon;
+            if (m_reportedPlayerRuleApplications.insert(reportKey).second)
+                PS::RoutineLog("players", STR("{} applied {} icon nameplate '{}'.\n"),
+                    context, effectiveState
+                        ? RC::to_generic_string(effectiveStateName) : TEXT("default"),
+                    RC::to_generic_string(effectiveIcon));
+            return true;
+        }
+        catch (const std::exception& error)
+        {
+            const auto diagnosticKey = "nameplate\n" + RC::to_string(context)
+                + "\n" + error.what();
+            if (m_reportedPlayerRuleFailures.insert(diagnosticKey).second)
+                PS::Log<LogLevel::Warning>(STR("{} nameplate skipped safely: {}.\n"),
+                    context, PS::ToWideSafe(error.what()));
+            return false;
+        }
+    }
+
+    UObject* DragonWildsSpawnLoader::ResolvePlayerPawnFromActivity(UObject* source)
+    {
+        if (!source) return nullptr;
+        auto* playerClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr, nullptr, TEXT("/Script/Dominion.DominionPlayerCharacter"));
+        if (!playerClass) return nullptr;
+        auto* controllerClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr, nullptr, TEXT("/Script/Dominion.DominionPlayerController"));
+        unsigned depth = 0;
+        for (auto* candidate = source; candidate && depth++ < 8; candidate = candidate->GetOuterPrivate())
+        {
+            if (candidate->IsA(playerClass)) return candidate;
+            if (controllerClass && candidate->IsA(controllerClass)) {
+                auto* pawn = ActorHelper::GetObjectRef(candidate, TEXT("Pawn"));
+                return pawn && pawn->IsA(playerClass) ? pawn : nullptr;
+            }
+        }
+        return nullptr;
+    }
+
+    std::string DragonWildsSpawnLoader::ClassifyPlayerAttackActivity(UObject* source)
+    {
+        if (!source) return {};
+        auto sourcePath = RC::to_string(source->GetPathName());
+        std::transform(sourcePath.begin(), sourcePath.end(), sourcePath.begin(),
+            [](unsigned char character) {
+                return static_cast<char>(std::tolower(character));
+            });
+        if (sourcePath.contains("rangedattack")) return "Ranged";
+
+        return "Attack";
+    }
+
+    std::string DragonWildsSpawnLoader::ClassifyPlayerEmoteActivity(UObject* source)
+    {
+        auto* pawn = ResolvePlayerPawnFromActivity(source);
+        UObject* component = nullptr;
+        auto* emoteClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr, nullptr, TEXT("/Script/Dominion.PlayerEmotesComponent"));
+        unsigned depth = 0;
+        for (auto* candidate = source; candidate && depth++ < 8;
+            candidate = candidate->GetOuterPrivate())
+        {
+            if (emoteClass && candidate->IsA(emoteClass))
+            {
+                component = candidate;
+                break;
+            }
+        }
+        if (!component && pawn)
+        {
+            try { component = ActorHelper::GetObjectRef(
+                pawn, TEXT("BP_Components_PlayerEmotes")); }
+            catch (...) {}
+        }
+        if (!component) return "Emote";
+
+        try
+        {
+            auto* property = PropertyHelper::GetPropertyByName(
+                component->GetClassPrivate(), TEXT("AuthoritativeEmoteIndex"));
+            auto* numeric = CastField<FNumericProperty>(property);
+            if (numeric && numeric->IsInteger())
+            {
+                const auto value = numeric->GetSignedIntPropertyValue(
+                    numeric->ContainerPtrToValuePtr<void>(component));
+                switch (value)
+                {
+                    case 0: return "Wave";
+                    case 1: return "Celebrate";
+                    case 2: return "No";
+                    case 3: return "Point";
+                    case 4: return "NoWay";
+                    case 5: return "Yes";
+                    default: break;
+                }
+            }
+        }
+        catch (...) {}
+        return "Emote";
+    }
+
+    std::string DragonWildsSpawnLoader::ClassifyPlayerSpellActivity(UObject* source)
+    {
+        if (!source) return {};
+
+        // Read only reflected fields at the existing native spell event. Never
+        // interpret TOptional storage or install fishing Blueprint callbacks.
+        auto* spellProperty = CastField<FStructProperty>(PropertyHelper::GetPropertyByName(
+            source->GetClassPrivate(), TEXT("SpellBeingPreparedOrCast")));
+        auto* spellStruct = spellProperty ? spellProperty->GetStruct().Get() : nullptr;
+        auto* dataProperty = spellStruct ? CastField<FObjectPropertyBase>(
+            PropertyHelper::GetPropertyByName(spellStruct,
+                TEXT("SpellBeingPreparedOrCastData"))) : nullptr;
+        if (dataProperty)
+        {
+            auto* spellAddress = spellProperty->ContainerPtrToValuePtr<void>(source);
+            auto* data = dataProperty->GetObjectPropertyValue(
+                dataProperty->ContainerPtrToValuePtr<void>(spellAddress));
+            if (data)
+            {
+                // The mounted fishing spell assets are distinct from magic.
+                return RC::to_string(data->GetPathName()).starts_with("/Fishing/")
+                    ? "Fishing" : "Magic";
+            }
+        }
+
+        auto* pawn = ResolvePlayerPawnFromActivity(source);
+        auto* componentProperty = pawn ? CastField<FObjectPropertyBase>(
+            PropertyHelper::GetPropertyByName(pawn->GetClassPrivate(),
+                TEXT("BP_PlayerFishingComponentV2"))) : nullptr;
+        auto* fishing = componentProperty ? componentProperty->GetObjectPropertyValue(
+            componentProperty->ContainerPtrToValuePtr<void>(pawn)) : nullptr;
+        auto* stateProperty = fishing ? CastField<FStructProperty>(
+            PropertyHelper::GetPropertyByName(fishing->GetClassPrivate(),
+                TEXT("InternalState"))) : nullptr;
+        auto* stateStruct = stateProperty ? stateProperty->GetStruct().Get() : nullptr;
+        auto* activityProperty = stateStruct ? PropertyHelper::GetPropertyByName(
+            stateStruct, TEXT("CurrentActivity")) : nullptr;
+        auto* enumProperty = CastField<FEnumProperty>(activityProperty);
+        auto* numericProperty = enumProperty ? enumProperty->GetUnderlyingProperty()
+            : CastField<FNumericProperty>(activityProperty);
+        if (numericProperty && numericProperty->IsInteger())
+        {
+            auto* stateAddress = stateProperty->ContainerPtrToValuePtr<void>(fishing);
+            const auto activity = numericProperty->GetSignedIntPropertyValue(
+                activityProperty->ContainerPtrToValuePtr<void>(stateAddress));
+            // Only these active values were observed in the supplied captures.
+            // RecentCast/RecentBite remain set after fishing and are not signals.
+            if (activity == 2 || activity == 3) return "Fishing";
+        }
+        return "Magic";
+    }
+
+    void DragonWildsSpawnLoader::SetPlayerNameplateActivity(UObject* source,
+        const std::string& state)
+    {
+        auto* pawn = ResolvePlayerPawnFromActivity(source);
+        if (!pawn || pawn->GetWorld() != m_readyWorld) return;
+        ApplyClientPlayerVisualRules(pawn, true, {}, nullptr, state);
+    }
+
+    void DragonWildsSpawnLoader::RefreshPlayerNameplates(double deltaSeconds)
+    {
+        if (!m_readyWorld)
+        {
+            m_pendingRespawns.clear();
+            m_observedActivities.clear();
+            m_activeNameplateStates.clear();
+            m_nameplateRefreshElapsed = 0.0;
+            m_visualTimerElapsed = 0.0;
+            return;
+        }
+        m_visualTimerElapsed += std::max(0.0,deltaSeconds);
+        if(m_visualTimerElapsed>=0.1) {
+            PlayerGhost::TickTimed(m_visualTimerElapsed);
+            m_visualTimerElapsed=0.0;
+        }
+        for (auto& pending : m_pendingRespawns) pending.Seconds -= std::max(0.0, deltaSeconds);
+        std::erase_if(m_pendingRespawns, [this](const auto& pending) {
+            auto* pawn=pending.Pawn.Get();
+            // The original pawn may be destroyed before ClientRestart or
+            // OnPlayerRespawn exposes the replacement pawn. Keep the marker
+            // alive by PlayerState/PlayerId until the timeout expires.
+            return pending.Seconds<=0.0
+                || (pawn && pawn->GetWorld() && pawn->GetWorld()!=m_readyWorld);
+        });
+        for (auto iterator = m_pendingRespawns.begin(); iterator != m_pendingRespawns.end();)
+        {
+            auto* pawn = iterator->Pawn.Get();
+            if (iterator->Confirmed && iterator->FinishObserved && pawn && !PlayerGhost::IsDead(pawn)
+                && GhostMaterials::CanRender(pawn))
+            {
+                ApplyClientPlayerVisualRules(pawn, true, RespawnFinishedEvent);
+                iterator = m_pendingRespawns.erase(iterator);
+                continue;
+            }
+            ++iterator;
+        }
+        const bool hasNameplates = std::any_of(m_playerRules.begin(), m_playerRules.end(),
+            [](const PlayerRule& rule) { return rule.Nameplate.Configured; });
+
+        auto observed = std::move(m_observedActivities);
+        m_observedActivities.clear();
+        for (const auto& event : observed)
+            if (auto* pawn = event.Pawn.Get(); pawn && pawn->GetWorld() == m_readyWorld)
+                ApplyClientPlayerVisualRules(pawn, true, event.Function, &event.Parameters, event.State);
+        if (!hasNameplates) return;
+
+        std::vector<UObject*> expired;
+        for (auto iterator = m_activeNameplateStates.begin();
+            iterator != m_activeNameplateStates.end();)
+        {
+            auto* actor = iterator->second.Actor.Get();
+            if (!actor || actor->GetWorld() != m_readyWorld)
+            {
+                iterator = m_activeNameplateStates.erase(iterator);
+                continue;
+            }
+            if (iterator->second.Latched)
+            {
+                ++iterator;
+                continue;
+            }
+            if (iterator->second.RemainingSeconds < 0.0)
+            {
+                ++iterator;
+                continue;
+            }
+            iterator->second.RemainingSeconds -= std::max(0.0, deltaSeconds);
+            if (iterator->second.RemainingSeconds <= 0.0)
+            {
+                expired.push_back(iterator->second.Actor.Get());
+                iterator = m_activeNameplateStates.erase(iterator);
+                continue;
+            }
+            ++iterator;
+        }
+        for (auto* player : expired)
+            if (player && player->GetWorld() == m_readyWorld)
+                ApplyClientPlayerVisualRules(player, true);
+        m_nameplateRefreshElapsed += std::max(0.0, deltaSeconds);
+        if (m_nameplateRefreshElapsed >= 0.1 && std::any_of(m_playerRules.begin(), m_playerRules.end(),
+            [](const auto& rule) { return std::any_of(rule.Nameplate.States.begin(), rule.Nameplate.States.end(),
+                [](const auto& state) { return state.first == "Dead" || !state.second.GameplayEffect.empty(); }); })) {
+            m_nameplateRefreshElapsed = 0.0;
+            std::vector<PS::WeakObjectHandle> players;
+            for (const auto& [key, visual] : m_nameplateAppliedActors) players.push_back(visual.Actor);
+            for (const auto& ref : players)
+                if (auto* pawn = ref.Get(); pawn && pawn->GetWorld() == m_readyWorld)
+                    ApplyClientPlayerVisualRules(pawn, true);
         }
     }
 
     void DragonWildsSpawnLoader::ApplyPlayerRules()
     {
-        if ((m_playerRules.empty() && !PlayerGhost::HasItemRules()) || !IsWorldStillLoaded(m_readyWorld)) return;
+        if ((m_playerRules.empty() && !PlayerGhost::HasItemRules()) || !IsWorldStillLoaded(m_readyWorld)
+            || !GetGameMode(m_readyWorld)) return;
         LoadAppearanceProvenance();
         std::unordered_map<std::string, std::string> activeAppearanceOwners;
         const auto connected = GetConnectedPlayerNames();
@@ -1149,7 +2227,7 @@ namespace DragonWilds {
                         const auto key = RC::to_string(rule.ModName) + "\n*"
                             + std::to_string(slot);
                         if (m_reportedPlayerRuleFailures.insert(key).second)
-                            PS::Log<LogLevel::Warning>(
+                            PS::Log<LogLevel::Verbose>(
                                 STR("Player rule from '{}' targets *{}, but that player has not loaded in this world yet.\n"),
                                 rule.ModName, slot);
                         continue;
@@ -1189,6 +2267,11 @@ namespace DragonWilds {
                         + "\n" + target.Guid + "\n" + ignored;
                     if (m_reportedPlayerRuleFailures.insert(key).second)
                     {
+                        if(ignored=="the selected player has no active pawn") {
+                            PS::Log<LogLevel::Verbose>(STR("Player rule from '{}' for '{}' pending pawn readiness.\n"),
+                                rule.ModName,PS::ToWideSafe(label.c_str()));
+                            continue;
+                        }
                         PS::Log<LogLevel::Error>(
                             STR("Player rule from '{}' for '{}' failed safely: {}\n"),
                             rule.ModName, PS::ToWideSafe(label.c_str()), PS::ToWideSafe(ignored.c_str()));
@@ -1318,7 +2401,9 @@ namespace DragonWilds {
                 && !rule.SetRangedAttack && !rule.SetPhysicalDefense
                 && !rule.SetMagicalDefense && !rule.SetRangedDefense
                 && rule.AttributeMultipliers.empty() && rule.Attributes.empty()
-                && rule.Appearance.empty() && rule.VisualEffect.empty())
+                && rule.Appearance.empty() && rule.VisualEffect.empty()
+                && rule.PawnProperties.empty() && rule.ComponentProperties.empty()
+                && !rule.Nameplate.Configured)
             {
                 result = "no player adjustment was requested";
                 return false;
@@ -1392,9 +2477,37 @@ namespace DragonWilds {
                 result = "the selected player has no active pawn";
                 return false;
             }
-            const bool visualEffectApplied = rule.VisualEffect.empty()
-                || ApplyVisualEffect(pawn, rule.VisualEffect,
-                    STR("Player rule from '") + rule.ModName + STR("'"));
+            bool nativeApplied=true;
+            try {
+                ApplyReflectedPatch(pawn,rule.PawnProperties,"Native.Pawn");
+                for(const auto& [component,properties]:rule.ComponentProperties.items()) {
+                    auto* target=ActorHelper::GetObjectRef(pawn,PS::ToWideSafe(component.c_str()));
+                    ApplyReflectedPatch(target,properties,"Native.Components."+component);
+                }
+            } catch(...) {nativeApplied=false;throw;}
+            bool visualEffectApplied = true;
+            if(!rule.VisualEffect.empty() && rule.VisualEffectTrigger=="Load") {
+                const auto style=VisualEffectStyle(rule.VisualEffect);
+                visualEffectApplied=rule.VisualEffectSeconds>0.0
+                    ? PlayerGhost::ApplyTimed(pawn,style,rule.VisualEffectSeconds)
+                    : ApplyVisualEffect(pawn,style,
+                        STR("Player rule from '") + rule.ModName + STR("'"));
+            }
+            bool nameplateApplied = !rule.Nameplate.Configured;
+            bool nameplateDeferred = false;
+            if (rule.Nameplate.Configured)
+            {
+                if (GhostMaterials::CanRender(pawn))
+                    nameplateApplied = ApplyPlayerNameplate(pawn, rule.Nameplate,
+                        STR("Player rule from '") + rule.ModName + STR("'"));
+                else
+                {
+                    // Dedicated servers retain the rule; each client applies it
+                    // from ClientRestart or OnRep_PlayerState when its widget exists.
+                    nameplateApplied = true;
+                    nameplateDeferred = true;
+                }
+            }
 
             auto state = std::find_if(m_playerAdjustments.begin(), m_playerAdjustments.end(),
                 [&](const PlayerAdjustmentState& value) { return value.Pawn == pawn; });
@@ -2361,6 +3474,9 @@ namespace DragonWilds {
                 appearanceApplied, appearanceStatus);
             appendStatus("visual effect", !rule.VisualEffect.empty(),
                 visualEffectApplied);
+            appendStatus("nameplate", rule.Nameplate.Configured, nameplateApplied,
+                nameplateDeferred ? "client-side rule queued" : std::string{});
+            appendStatus("native properties",!rule.PawnProperties.empty()||!rule.ComponentProperties.empty(),nativeApplied);
 
             std::string statusList;
             for (size_t index = 0; index < requestedStatuses.size(); ++index)
@@ -2374,7 +3490,7 @@ namespace DragonWilds {
                 && staminaRecoveryApplied && physicalAttackApplied && magicalAttackApplied
                 && rangedAttackApplied && physicalDefenseApplied && magicalDefenseApplied
                 && rangedDefenseApplied && namedAttributesApplied && appearanceApplied
-                && visualEffectApplied;
+                && visualEffectApplied && nameplateApplied && nativeApplied;
         }
         catch (const std::exception& error)
         {

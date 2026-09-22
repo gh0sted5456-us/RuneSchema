@@ -10,7 +10,7 @@ inline constexpr unsigned ExtendedCaptureDepthLimit = 16;
 inline void ValidatePreset(const nlohmann::json& value, bool extendedDepth = false) {
     if (!value.is_object()) throw std::runtime_error("Preset must be a JSON object.");
     for (const auto& [key, ignored] : value.items())
-        if (key != "Name" && key != "Objects" && key != "ControllerProperties" && key != "IncludePlayer" && key != "IncludeControllerComponents" && key != "PropertyCaptures" && key != "CaptureLimits")
+        if (key != "Name" && key != "Objects" && key != "ControllerProperties" && key != "IncludePlayer" && key != "IncludeControllerComponents" && key != "PropertyCaptures" && key != "CaptureLimits" && key != "CaptureDelaySeconds")
             throw std::runtime_error("Unknown preset field: " + key);
     if (!value.contains("Name") || !value["Name"].is_string()) throw std::runtime_error("Preset requires Name.");
     const auto name = value["Name"].get<std::string>();
@@ -18,6 +18,9 @@ inline void ValidatePreset(const nlohmann::json& value, bool extendedDepth = fal
     for (unsigned char c : name) if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-'))
         throw std::runtime_error("Name must contain only letters, digits, underscores or hyphens.");
     bool any = false;
+    if (value.contains("CaptureDelaySeconds") && (!value["CaptureDelaySeconds"].is_number_integer()
+        || value["CaptureDelaySeconds"] < 0 || value["CaptureDelaySeconds"] > 30))
+        throw std::runtime_error("CaptureDelaySeconds must be an integer from 0 to 30.");
     if (value.contains("CaptureLimits")) {
         if (!value.contains("PropertyCaptures") || !value["CaptureLimits"].is_object())
             throw std::runtime_error("CaptureLimits requires PropertyCaptures and an object value");
@@ -39,9 +42,13 @@ inline void ValidatePreset(const nlohmann::json& value, bool extendedDepth = fal
         const auto& captures = value["PropertyCaptures"];
         if (!captures.is_array() || captures.size() > 32) throw std::runtime_error("PropertyCaptures must contain at most 32 targets");
         for (const auto& capture : captures) {
-            if (!capture.is_object() || capture.size() != 2 || !capture.contains("Root") || !capture.contains("Path")
+            if (!capture.is_object() || capture.size() < 2 || capture.size() > 3 || !capture.contains("Root") || !capture.contains("Path")
                 || !capture["Root"].is_string() || !capture["Path"].is_array() || capture["Path"].empty() || capture["Path"].size() > 8)
                 throw std::runtime_error("Property capture requires Root and a Path of 1-8 property names");
+            if(capture.contains("Optional")&&!capture["Optional"].is_boolean())
+                throw std::runtime_error("Property capture Optional must be boolean");
+            for(const auto& [key,ignored]:capture.items())if(key!="Root"&&key!="Path"&&key!="Optional")
+                throw std::runtime_error("Unknown property capture field: "+key);
             const auto root = capture["Root"].get<std::string>();
             if (root.empty() || root.size() > 2048 || (root != "Player" && root != "Controller" && root != "Selected" && !root.starts_with("/")))
                 throw std::runtime_error("Root must be Player, Controller, Selected or a full object path");

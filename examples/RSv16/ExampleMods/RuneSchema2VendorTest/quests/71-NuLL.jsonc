@@ -1,0 +1,28 @@
+{
+  "Id": "null_forge_supplies",
+  "PersistenceID": "DoyUSLmGSTeCnSWktlrg7A",
+  "Title": "A Bar Is Born",
+  "Description": "Bring three bronze bars to NuLL beside Granite. Visit Grumble again for another stone contract.",
+  "Repeatable": true,
+  "Completion": "ReturnToNPC",
+  "Category": "Regular",
+  "Stages": [{
+    "Id": "forge_delivery",
+    "Objectives": [{
+      "Id": "bronze_delivery",
+      "Type": "Collect",
+      "Text": "Bring 3 bronze bars to NuLL.",
+      "ProgressText": "Bring {remaining} more bronze bars to NuLL.",
+      "CompleteText": "The bronze delivery is ready. Return to NuLL.",
+      "AnnounceProgress": true,
+      "Item": "/Game/Gameplay/Items/Resources/Metal/ITEM_Resources_BronzeBar.ITEM_Resources_BronzeBar",
+      "Count": 3,
+      "Location": [17850, 186450, -3018],
+      "RadiusMeters": 15
+    }]
+  }],
+  "Reward": {
+    "Item": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+    "Count": 5
+  }
+}
