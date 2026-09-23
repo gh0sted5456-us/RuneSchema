@@ -1,0 +1,3 @@
+build-signing.local.cmd
+*.pfx
+*.p12

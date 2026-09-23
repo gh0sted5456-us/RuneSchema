@@ -1,0 +1,63 @@
+// RuneSchema settings. Edit with the game closed, then restart.
+// Advanced logging controls detail; advanced runtime unlocks authoring and diagnostics.
+// Plugin-owned settings live below plugins/<PluginId>/settings/.
+{
+  "enableAutoReload": false,
+  "advancedLogging": false,
+  "advancedRuntime": false,
+  "colorCodeLoaderAnnotations": true,
+  "enableExperimentalDropScaling": false,
+  "plugins": {
+    "compatibilityNotices": "quiet"
+  },
+  "helpyAuthority": {
+    "allowClientItemGrants": false,
+    "allowClientTemporarySpawns": false,
+    "maximumItemCount": 100,
+    "maximumSpawnCount": 5,
+    "maximumNpcDurationSeconds": 300,
+    "permittedPlayerGuids": [],
+    "permittedPlayerNames": []
+  },
+  "loadOrder": {
+    "enabled": true,
+    "autoCreate": true,
+    "reconcileFolders": true,
+    "preserveComments": true,
+    "strictValues": true,
+    "deterministicFallback": true
+  },
+  "loaders": {
+    "assets": true,
+    "blueprints": true,
+    "buildings": true,
+    "courses": true,
+    "dialogue": true,
+    "effects": true,
+    "enums": true,
+    "equipment": true,
+    "events": true,
+    "journal": true,
+    "lore": true,
+    "nameplates": true,
+    "niagara": true,
+    "npc": true,
+    "players": true,
+    "quests": true,
+    "registry": true,
+    "raw": true,
+    "recipes": true,
+    "spawns": true,
+    "strings": true,
+    "vendors": true
+  },
+  "spawnBehavior": {
+    "enableNativeRoaming": true,
+    "defaultRoamRadius": 800.0,
+    "defaultRoamMaxZTolerance": 200.0
+  },
+  "npcDiagnostics": {
+    "statusExport": false,
+    "interactionTraceExport": false
+  }
+}
