@@ -1,8 +1,15 @@
 #include "Utility/NativeFunctionHook.h"
 #include <cstring>
 #include <algorithm>
+#include <filesystem>
 #include <limits>
+#include <map>
 #include <unordered_set>
+#include <vector>
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
 #include "Unreal/CoreUObject/UObject/FStrProperty.hpp"
@@ -18,6 +25,8 @@
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "Utility/Logging.h"
+#include "Core/ConfigFiles.h"
+#include "Core/SaveCleanup.h"
 #include "Loader/OwnedContentLedger.h"
 #include "Loader/ModLoadOrder.h"
 #include "Runtime/HostServices.h"
@@ -30,6 +39,101 @@ namespace DragonWilds {
     static constexpr const TCHAR* ItemDataClassPath = TEXT("/Script/Dominion.ItemData");
     static constexpr const TCHAR* RecipeDataClassPath = TEXT("/Script/Dominion.RecipeData");
     static constexpr const TCHAR* QuestDataClassPath = TEXT("/Script/Dominion.QuestData");
+
+    static std::filesystem::path CharacterSaveDirectory()
+    {
+        const auto required=GetEnvironmentVariableW(L"LOCALAPPDATA",nullptr,0);
+        if(!required)throw std::runtime_error("LOCALAPPDATA is unavailable");
+        std::vector<wchar_t> value(required);
+        if(GetEnvironmentVariableW(L"LOCALAPPDATA",value.data(),required)+1!=required)
+            throw std::runtime_error("LOCALAPPDATA changed while it was read");
+        return std::filesystem::path(value.data())/L"RSDragonwilds"/L"Saved"/L"SaveCharacters";
+    }
+
+    static std::filesystem::path PreserveCharacterSave(
+        const std::filesystem::path& path)
+    {
+        for(unsigned index=0;index<1000;++index)
+        {
+            auto backup=path;
+            backup+=index?L".runeschema-before-clean-"+std::to_wstring(index)+L".bak"
+                :L".runeschema-before-clean.bak";
+            std::error_code error;
+            if(std::filesystem::copy_file(path,backup,
+                std::filesystem::copy_options::none,error))return backup;
+            if(error!=std::errc::file_exists)
+                throw std::system_error(error,"Cannot preserve character save before cleanup");
+        }
+        throw std::runtime_error("Character-save backup limit reached");
+    }
+
+    static bool CleanRetiredCharacterSaves(
+        const std::vector<OwnedContent::Record>& retired)
+    {
+        std::unordered_map<std::string,std::string> items,recipes;
+        std::set<std::string> owners;
+        for(const auto& record:retired)
+        {
+            owners.insert(record.Owner);
+            if(record.Kind=="Item")items.emplace(record.PersistenceID,record.Owner);
+            else if(record.Kind=="Recipe")recipes.emplace(record.PersistenceID,record.Owner);
+        }
+        if(owners.empty())return true;
+        const auto folder=CharacterSaveDirectory();
+        std::error_code statusError;
+        if(!std::filesystem::exists(folder,statusError))return true;
+        if(statusError || !std::filesystem::is_directory(folder,statusError) || statusError)
+            throw std::runtime_error("Character-save directory is unreadable");
+        std::size_t entries=0,files=0,bytes=0,changed=0,removed=0;
+        bool complete=true;
+        for(const auto& entry:std::filesystem::directory_iterator(folder))
+        {
+            if(++entries>512)throw std::runtime_error("Character-save directory exceeds 512 entries");
+            if(!entry.is_regular_file() || entry.path().extension()!=L".json")continue;
+            if(++files>64)throw std::runtime_error("Character-save directory exceeds 64 JSON files");
+            const auto size=entry.file_size();
+            if(size>8*1024*1024 || (bytes+=size)>64*1024*1024)
+                throw std::runtime_error("Character-save scan exceeds its bounded-read limit");
+            std::filesystem::path backup;
+            try
+            {
+                const auto source=nlohmann::json::parse(
+                    PS::ConfigFiles::Read(entry.path(),8*1024*1024));
+                const auto plan=PS::SaveCleanup::PlanOwned(
+                    source,items,recipes,owners);
+                if(plan.Removed.empty())continue;
+                const auto serialized=plan.Save.dump();
+                if(nlohmann::json::parse(serialized)!=plan.Save)
+                    throw std::runtime_error("Cleaned character save failed JSON verification");
+                backup=PreserveCharacterSave(entry.path());
+                PS::ConfigFiles::Write(entry.path(),serialized);
+                if(nlohmann::json::parse(PS::ConfigFiles::Read(
+                    entry.path(),8*1024*1024))!=plan.Save)
+                    throw std::runtime_error("Written character save failed verification");
+                ++changed;removed+=plan.Removed.size();
+                PS::Log<LogLevel::Normal>(
+                    STR("[SAVE-CLEANER][OWNED-ONLY] Cleaned {} retired RuneSchema record(s) from '{}' before character deserialization. Backup: '{}'.\n"),
+                    plan.Removed.size(),entry.path().filename().native(),backup.native());
+            }
+            catch(const std::exception& error)
+            {
+                complete=false;
+                if(backup.empty())
+                    PS::Log<LogLevel::Error>(
+                        STR("[SAVE-CLEANER][DEGRADED] Character save '{}' was left unchanged: {}.\n"),
+                        entry.path().filename().native(),PS::ToWideSafe(error.what()));
+                else
+                    PS::Log<LogLevel::Error>(
+                        STR("[SAVE-CLEANER][DEGRADED] Cleanup of character save '{}' did not complete; its original is preserved at '{}': {}.\n"),
+                        entry.path().filename().native(),backup.native(),PS::ToWideSafe(error.what()));
+            }
+        }
+        if(changed)
+            PS::Log<LogLevel::Normal>(
+                STR("[SAVE-CLEANER][OWNED-ONLY] Pre-load cleanup completed for {} character save(s), removing {} ledger-confirmed record(s) from {} absent or disabled owner(s).\n"),
+                changed,removed,owners.size());
+        return complete;
+    }
 
     static constexpr struct {
         const TCHAR* DataClassPath;
@@ -137,41 +241,21 @@ namespace DragonWilds {
 
     void DragonWildsDataRegistrar::PrepareRetiredContent()
     {
+        if(m_retiredContentPrepared)return;
+        m_retiredContentPrepared=true;
         try
         {
-            const auto path = PS::HostServices::SettingsDirectory()
-                / "OwnedContentLedger.json";
-            auto records = OwnedContent::Read(path);
-            std::vector<OwnedContent::Record> migration;
-            const auto active = ModLoadOrder::ActiveOwners(
-                PS::HostServices::ModDirectory() / "mods");
-            const auto disabled = OwnedContent::DiscoverDisabledDefinitions(
-                PS::HostServices::ModDirectory() / "mods", active);
-            migration.insert(migration.end(), disabled.begin(), disabled.end());
-            const auto exports = PS::HostServices::ExportsDirectory();
-            for (const auto* name : {"asset-clones-current.json", "asset-clones-previous.json"})
-            {
-                try
-                {
-                    const auto recovered = OwnedContent::ReadCloneManifest(exports / name);
-                    migration.insert(migration.end(), recovered.begin(), recovered.end());
-                }
-                catch (const std::exception& error)
-                {
-                    PS::Log<LogLevel::Warning>(
-                        STR("[SAVE-CLEANER][MIGRATION] Ignored invalid prior clone manifest '{}': {}.\n"),
-                        RC::to_generic_string(name), PS::ToWideSafe(error.what()));
-                }
-            }
-            if (!migration.empty())
-            {
-                OwnedContent::Merge(path, migration);
-                records = OwnedContent::Read(path);
-                PS::Log<LogLevel::Normal>(
-                    STR("[SAVE-CLEANER][MIGRATION] Recovered {} historical RuneSchema persistent-content identity record(s) without activating disabled content.\n"),
-                    migration.size());
-            }
-            for (const auto& record : OwnedContent::Absent(records, active))
+            const auto path = OwnedContent::LedgerPath(
+                PS::HostServices::SettingsDirectory());
+            // The previous file is one compact snapshot, not an accumulating
+            // history. Loaders contributed the identities that succeeded this
+            // run; finalization returns only identities that disappeared and
+            // atomically overwrites the snapshot with the current set.
+            const auto retired=OwnedContent::CompareSnapshot(path);
+            if(!CleanRetiredCharacterSaves(retired))
+                throw std::runtime_error("one or more character saves could not be cleaned; the previous identity snapshot was retained for retry");
+            OwnedContent::CommitSnapshot(path);
+            for (const auto& record : retired)
             {
                 if(record.Kind!="Item" && record.Kind!="Recipe" && record.Kind!="Quest")continue;
                 const auto* classPath=record.Kind=="Item"?ItemDataClassPath:

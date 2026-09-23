@@ -1,12 +1,16 @@
 #include "Runtime/PluginHost.h"
 #include "Runtime/PluginCatalog.h"
 #include "Runtime/RuneSchemaPluginApi.h"
+#include "Runtime/MappingBackbone.h"
+#include "Runtime/HostServices.h"
+#include "Core/UsmapIndex.h"
 #include "Generator/ToolRequest.h"
 #include "Utility/BuildInfo.h"
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Helper/PropertyHelper.h"
+#include "SDK/DragonWildsSignatures.h"
 #include <windows.h>
 #include <algorithm>
 #include <mutex>
@@ -78,12 +82,44 @@ int32_t RS_PLUGIN_CALL CoreDiscovery(void*,const char* requestJson,char* respons
         const auto request=nlohmann::json::parse(requestJson);
         if(!request.is_object())return RS_PLUGIN_INVALID_ARGUMENT;
         nlohmann::json services=nlohmann::json::array(),capabilities=nlohmann::json::array(),connections=nlohmann::json::array();
-        std::scoped_lock lock(Gate);
+        {std::scoped_lock lock(Gate);
         for(const auto& [name,service]:Services)services.push_back({{"Name",name},{"Owner",service.Owner}});
         for(const auto& [name,owner]:Capabilities)capabilities.push_back({{"Name",name},{"Owner",owner}});
-        for(const auto& [name,owner]:ActiveConnections)connections.push_back({{"Name",name},{"Owner",owner}});
+        for(const auto& [name,owner]:ActiveConnections)connections.push_back({{"Name",name},{"Owner",owner}});}
+        const auto& mapping=MappingBackbone::Current(std::filesystem::path(HostServices::WorkingDirectory()));
+        const auto parser=Usmap::Index::Shared().Snapshot();
         return JsonResponse({{"ApiVersion",RUNESCHEMA_PLUGIN_API_VERSION},{"Services",services},
-            {"Capabilities",capabilities},{"Connections",connections}},response,capacity,size);
+            {"Capabilities",capabilities},{"Connections",connections},{"MappingBackbone",{
+                {"Available",mapping.Available},{"Path",mapping.Available?mapping.Path.string():std::string{}},
+                {"Bytes",mapping.Size},{"Fingerprint",mapping.Fingerprint},{"Index",parser}}}},response,capacity,size);
+    }catch(...){return RS_PLUGIN_FAILED;}
+}
+int32_t RS_PLUGIN_CALL CoreMapping(void*,const char* requestJson,char* response,uint32_t capacity,uint32_t* size) {
+    if(!requestJson)return RS_PLUGIN_INVALID_ARGUMENT;
+    try {
+        const auto request=nlohmann::json::parse(requestJson);
+        const auto& mapping=MappingBackbone::Current(std::filesystem::path(HostServices::WorkingDirectory()));
+        const auto result=Usmap::Index::Shared().Handle(mapping.Path,mapping.Fingerprint,
+            HostServices::CacheDirectory()/"mappings",request);
+        return JsonResponse(result,response,capacity,size);
+    } catch(const std::exception& error) {
+        return JsonResponse({{"Ok",false},{"Error",error.what()}},response,capacity,size);
+    } catch(...) {
+        return JsonResponse({{"Ok",false},{"Error","Mapping query failed"}},response,capacity,size);
+    }
+}
+int32_t RS_PLUGIN_CALL CoreBindings(void*,const char* requestJson,char* response,uint32_t capacity,uint32_t* size) {
+    if(!requestJson)return RS_PLUGIN_INVALID_ARGUMENT;
+    try {
+        const auto request=nlohmann::json::parse(requestJson);
+        if(!request.is_object()||request.value("Action",std::string("Status"))!="Status")return RS_PLUGIN_INVALID_ARGUMENT;
+        static constexpr std::array<const char*,7> names{{"FPakPlatformFile::GetPakFolders","UObjectGlobals::StaticFindObject",
+            "FName::Constructor","FMemory::Free","UDataTable::Serialize","GetObjectsOfClass","FName::ToString_Wchar"}};
+        const auto requested=request.value("Binding",std::string{});nlohmann::json rows=nlohmann::json::array();
+        for(const auto* name:names)if(requested.empty()||requested==name)rows.push_back({{"Binding",name},
+            {"Available",DragonWilds::SignatureManager::GetSignature(name)!=nullptr},
+            {"Source",DragonWilds::SignatureManager::GetSource(name)}});
+        return JsonResponse({{"Ok",true},{"Bindings",std::move(rows)}},response,capacity,size);
     }catch(...){return RS_PLUGIN_FAILED;}
 }
 void RS_PLUGIN_CALL HostLog(uint32_t level,const char* plugin,const char* message) {
@@ -132,8 +168,14 @@ int32_t RS_PLUGIN_CALL IsFieldA(void* field,void* fieldClass) {
     try{return DragonWilds::PropertyHelper::IsPropertyA(static_cast<RC::Unreal::FField*>(field),
         static_cast<RC::Unreal::FFieldClass*>(fieldClass))?1:0;}catch(...){return 0;}
 }
+void* RS_PLUGIN_CALL ResolveBinding(const char* caller,const char* binding) {
+    if(!Token(caller)||!binding||strnlen_s(binding,129)>128)return nullptr;
+    const auto source=DragonWilds::SignatureManager::GetSource(binding);
+    if(source=="unresolved")return nullptr;
+    return DragonWilds::SignatureManager::GetSignature(binding);
+}
 constexpr RuneSchemaHostApi HostApi{sizeof(RuneSchemaHostApi),RUNESCHEMA_PLUGIN_API_VERSION,HostLog,RegisterCapability,
-    RegisterService,CallService,FindObject,ForEachObjectOfClass,FindFieldClass,IsFieldA};
+    RegisterService,CallService,FindObject,ForEachObjectOfClass,FindFieldClass,IsFieldA,ResolveBinding};
 void CompatibilityNotice(const std::string& message) {
     const auto mode=PSConfig::Get()->GetSettings().plugins.compatibilityNotices;
     if(mode=="off")return;
@@ -147,15 +189,21 @@ PluginHost::~PluginHost(){Shutdown();}
 void PluginHost::Load(const std::filesystem::path& root) {
     Shutdown();
     {std::scoped_lock lock(Gate);Services.insert_or_assign("runeschema.tools",Service{"RuneSchema.Core",CoreTools,nullptr});
-        Services.insert_or_assign("runeschema.discovery",Service{"RuneSchema.Core",CoreDiscovery,nullptr});}
+        Services.insert_or_assign("runeschema.discovery",Service{"RuneSchema.Core",CoreDiscovery,nullptr});
+        Services.insert_or_assign("runeschema.mapping",Service{"RuneSchema.Core",CoreMapping,nullptr});
+        Services.insert_or_assign("runeschema.bindings",Service{"RuneSchema.Core",CoreBindings,nullptr});
+        Capabilities.insert_or_assign("mapping.query","RuneSchema.Core");
+        Capabilities.insert_or_assign("binding.resolve","RuneSchema.Core");}
     std::vector<PluginCatalog::Plugin> manifests;
     try{manifests=PluginCatalog::Discover(root,&m_state->Messages);}
     catch(const std::exception& error){m_state->Messages.push_back(std::string("plugin catalog rejected; RuneSchema core continues: ")+error.what());return;}
     catch(...){m_state->Messages.push_back("plugin catalog rejected by an unknown error; RuneSchema core continues");return;}
     for(const auto& manifest:manifests) {
         if(!manifest.Enabled)continue;
+        if(manifest.ApiVersion!=RUNESCHEMA_PLUGIN_API_VERSION)
+            CompatibilityNotice(manifest.Id+": manifest API "+std::to_string(manifest.ApiVersion)+", host API "+std::to_string(RUNESCHEMA_PLUGIN_API_VERSION)+"; trying native startup");
         if(!manifest.BuiltForRuneSchema.empty()&&manifest.BuiltForRuneSchema!=BuildInfo::Version)
-            CompatibilityNotice(manifest.Id+": built for RuneSchema "+manifest.BuiltForRuneSchema+", running on "+BuildInfo::Version+"; attempting best-effort load");
+            CompatibilityNotice(manifest.Id+": built for RuneSchema "+manifest.BuiltForRuneSchema+", running on "+BuildInfo::Version+"; trying load");
         for(const auto& [dependency,declaredVersion]:manifest.Dependencies)if(!declaredVersion.empty()&&declaredVersion!="*"&&
             std::none_of(manifests.begin(),manifests.end(),[&](const auto& candidate){return candidate.Id==dependency&&candidate.Version==declaredVersion;}))
             CompatibilityNotice(manifest.Id+": dependency "+dependency+" was developed against "+declaredVersion+"; attempting the available version");
@@ -173,8 +221,13 @@ void PluginHost::Load(const std::filesystem::path& root) {
             m_state->LoadedPlugins.push_back({manifest,nullptr,nullptr,nullptr,nullptr,nullptr});
             m_state->Messages.push_back(manifest.Id+": loaded content plugin API 1");continue;
         }
-        const auto absolute=std::filesystem::weakly_canonical(manifest.EntryPoint);
-        if(!std::filesystem::is_regular_file(absolute))continue;
+        std::error_code pathError;
+        auto absolute=std::filesystem::weakly_canonical(manifest.EntryPoint,pathError);
+        if(pathError)absolute=manifest.EntryPoint;
+        if(!std::filesystem::is_regular_file(absolute)){
+            m_state->Messages.push_back(manifest.Id+": native DLL not found; PAK content is still available");
+            continue;
+        }
         auto module=LoadLibraryExW(absolute.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);
         if(!module){m_state->Messages.push_back(manifest.Id+": LoadLibraryExW failed ("+std::to_string(GetLastError())+")");continue;}
         const auto query=reinterpret_cast<RuneSchemaPluginQueryFn>(GetProcAddress(module,"RuneSchemaPlugin_Query"));
@@ -184,10 +237,10 @@ void PluginHost::Load(const std::filesystem::path& root) {
         const RuneSchemaPluginDescriptor* descriptor=nullptr;try{descriptor=query();}catch(...){descriptor=nullptr;}
         if(!descriptor||descriptor->StructSize<sizeof(RuneSchemaPluginDescriptor)||descriptor->ApiVersion!=RUNESCHEMA_PLUGIN_API_VERSION
             ||!descriptor->Id||manifest.Id!=descriptor->Id||!descriptor->Version) {
-            m_state->Messages.push_back(manifest.Id+": DLL identity or API contract is incompatible");FreeLibrary(module);continue;
+            m_state->Messages.push_back(manifest.Id+": native DLL identity/API is incompatible and was isolated; core, other plugins, and its PAK mounting continue");FreeLibrary(module);continue;
         }
         if(manifest.Version!=descriptor->Version)
-            CompatibilityNotice(manifest.Id+": manifest version "+manifest.Version+", DLL version "+descriptor->Version+"; attempting best-effort load");
+            CompatibilityNotice(manifest.Id+": manifest version "+manifest.Version+", DLL version "+descriptor->Version+"; trying load");
         m_state->Messages.push_back(manifest.Id+": manifest="+manifest.Version+", dll="+descriptor->Version+
             ", built-for="+(manifest.BuiltForRuneSchema.empty()?std::string("unspecified"):manifest.BuiltForRuneSchema)+
             ", host="+BuildInfo::Version);

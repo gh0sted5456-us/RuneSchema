@@ -1,0 +1,21 @@
+{
+  "schema": "runeschema.registry-patch/v1",
+  "modId": "ExampleMod",
+  "profile": "dragonwilds.dataTableOwnedRows.v1",
+  "patches": [
+    {
+      "id": "add-example-row",
+      "target": {
+        "kind": "dataTable",
+        "objectPath": "/Game/Example/DT_Example.DT_Example",
+        "expectedRowStruct": "/Script/Example.ExampleRow"
+      },
+      "operation": "addRow",
+      "row": {
+        "name": "auto",
+        "template": { "rowName": "VanillaTemplate" },
+        "values": { "Enabled": true, "Weight": 10 }
+      }
+    }
+  ]
+}

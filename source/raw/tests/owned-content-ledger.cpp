@@ -20,9 +20,28 @@ int RunOwnedContentLedger() {
     const auto absent=Absent(read,{"Enabled"});
     assert(absent.size()==1 && absent[0].Owner=="Disabled"
         && absent[0].PersistenceID==b.PersistenceID);
+    assert(Absent(read,{"enabled"}).size()==1); // owner matching is case-insensitive
     Merge(file,{a});assert(Read(file).size()==2); // historical ownership survives removal
     bool transfer=false;try {auto changed=b;changed.Owner="Other";Merge(file,{changed});}
     catch(const std::exception&){transfer=true;}assert(transfer);
+    const auto snapshot=root/"snapshot.json";
+    Merge(snapshot,{a,b});
+    BeginSnapshot(snapshot);
+    Merge(snapshot,{a});
+    const auto missing=CompareSnapshot(snapshot);
+    assert(missing.size()==1 && missing[0].PersistenceID==b.PersistenceID);
+    CommitSnapshot(snapshot);
+    const auto current=Read(snapshot);
+    assert(current.size()==1 && current[0].PersistenceID==a.PersistenceID);
+    const auto settings=root/"settings";
+    Write(LegacyLedgerPath(settings),{{a.PersistenceID,a}});
+    const auto canonical=LedgerPath(settings);
+    assert(canonical==settings/"safesave"/"OwnedContentLedger.json");
+    BeginSnapshot(canonical);
+    assert(std::filesystem::exists(canonical) && !std::filesystem::exists(LegacyLedgerPath(settings))
+        && CompareSnapshot(canonical).size()==1);
+    Merge(canonical,{a});CommitSnapshot(canonical);
+    assert(Read(canonical).size()==1);
     const auto assets=root/"mods"/"Disabled"/"assets";
     std::filesystem::create_directories(assets);
     PS::ConfigFiles::Write(assets/"items.jsonc",R"({

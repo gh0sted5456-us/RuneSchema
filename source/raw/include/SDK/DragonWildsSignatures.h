@@ -4,16 +4,23 @@
 #include <unordered_map>
 #include <string>
 #include <initializer_list>
+#include "Helpers/String.hpp"
 
 namespace DragonWilds {
     class SignatureManager {
     public:
         static void Initialize();
         static void InitializeOnly(std::initializer_list<const char*> names);
-        
+
         static void* GetSignature(const std::string& ClassAndFunction);
+        // Resolve a virtual UObject member from UE4SS's versioned vtable map.
+        // Existing providers retain priority; validated runtime addresses are cached.
+        static void* ResolveUObjectVirtual(const std::string& binding,
+            const RC::StringType& classPath, std::initializer_list<const RC::CharType*> members);
+        static std::string GetSource(const std::string& binding);
     private:
         static inline std::unordered_map<std::string, void*> SignatureMap;
+        static inline std::unordered_map<std::string, std::string> SourceMap;
 
         static inline std::unordered_map<std::string, std::string> Signatures {
 

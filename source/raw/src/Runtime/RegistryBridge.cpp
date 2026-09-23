@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include "nlohmann/json.hpp"
 #include "Runtime/HostServices.h"
+#include "Runtime/MappingBackbone.h"
 #include "Generator/ToolRequest.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Helper/ActorHelper.h"
@@ -38,7 +39,18 @@ constexpr size_t MaxEnvelopeBytes = 16 * 1024;
 constexpr size_t MaxActionPayloadBytes = 4 * 1024;
 constexpr uint32_t MaxRequestsPerSecond = 8;
 constexpr size_t MaxWorldInstances = 512;
-constexpr auto BuildIdentity = "0.7.5.9";
+constexpr auto BuildIdentity = "0.7.5.14";
+
+const PS::MappingBackbone::Mapping& LocalMapping() {
+    return PS::MappingBackbone::Current(PS::HostServices::WorkingDirectory());
+}
+
+std::string MappingState(const std::string& local,const std::string& remote) {
+    if(local.empty()&&remote.empty())return "unavailable";
+    if(local.empty())return "authority-only";
+    if(remote.empty())return "client-only";
+    return local==remote?"match":"different";
+}
 
 std::string Fingerprint(const std::string& bytes) {
     // A deterministic content identity is sufficient here: clients receive no
@@ -191,9 +203,10 @@ void RegistryBridge::SetRegistrySnapshot(std::string snapshot) {
 }
 
 std::string RegistryBridge::CompactPayload() const {
+    const auto& mapping=LocalMapping();
     nlohmann::json payload={{"kind","RuneSchemaRegistryBridgeState"},{"protocolVersion",Protocol},
         {"build",BuildIdentity},{"channels",{"system.compat","registry.action","quest.control","quest.state","dialogue.session","event.state","spawn.state","npc.state","vendor.state","player.profile","nameplate.profile","world.state","notify.player"}},
-        {"registryFingerprint",m_manifestFingerprint},{"registryRevision",m_registryRevision},
+        {"registryFingerprint",m_manifestFingerprint},{"mappingFingerprint",mapping.Fingerprint},{"registryRevision",m_registryRevision},
         {"activationRevision",m_activationRevision},{"persistentStateRevision",m_persistentRevision}};
     if(!m_activationEnvelope.empty())payload["activation"]=nlohmann::json::parse(m_activationEnvelope);
     if(!m_persistentStateEnvelope.empty())payload["persistentState"]=nlohmann::json::parse(m_persistentStateEnvelope);
@@ -394,11 +407,12 @@ void RegistryBridge::HandleGenericRequest(UObject* source,UFunction* function,vo
             const bool buildMatch=payload.value("build",std::string{})==BuildIdentity;
             const bool registryMatch=payload.value("registryFingerprint",std::string{})==m_manifestFingerprint;
             const bool compatible=protocolMatch&&buildMatch&&registryMatch;
+            const auto mappingState=MappingState(LocalMapping().Fingerprint,payload.value("mappingFingerprint",std::string{}));
             SendReceipt(source,channel,entity,revision,compatible,compatible?
-                "RuneSchema compatibility accepted: "+std::string(BuildIdentity):
+                "RuneSchema compatibility accepted: "+std::string(BuildIdentity)+" (mapping="+mappingState+")":
                 "RuneSchema compatibility differs (protocol="+std::string(protocolMatch?"match":"different")+
                 ", build="+(buildMatch?"match":"different")+", registry="+(registryMatch?"match":"different")+
-                "). Generic actions remain available and are validated individually by authority.");return;
+                ", mapping="+mappingState+").");return;
         }
         if(channel=="registry.action") {
             if(action!="execute")throw std::runtime_error("Unsupported registry action verb");
@@ -438,8 +452,11 @@ void RegistryBridge::ObserveClientTransport(UObject* source,UFunction* function,
     const auto channel=ParameterString(function,parameters,TEXT("Channel"),64),entity=ParameterString(function,parameters,TEXT("EntityId"),512);
     if(name==FName(TEXT("ClientRuneSchemaReceipt"),FNAME_Add)) {
         (void)ParameterInt64(function,parameters,TEXT("Revision"));
-        (void)ParameterBool(function,parameters,TEXT("Success"));
-        (void)ParameterString(function,parameters,TEXT("Detail"),512);
+        const auto success=ParameterBool(function,parameters,TEXT("Success"));
+        const auto detail=ParameterString(function,parameters,TEXT("Detail"),512);
+        if(channel=="system.compat" && (!success || detail.find("mapping=different")!=std::string::npos
+            || detail.find("mapping=authority-only")!=std::string::npos || detail.find("mapping=client-only")!=std::string::npos))
+            PS::Log<LogLevel::Warning>(STR("{}\n"),PS::ToWideSafe(detail.c_str()));
     } else {
         const auto payload=ParameterString(function,parameters,TEXT("Payload"),MaxActionPayloadBytes);(void)nlohmann::json::parse(payload);
         DragonWilds::ActorHelper::FunctionCall owner(source,TEXT("/Script/Engine.ActorComponent:GetOwner"));owner.Invoke();
@@ -462,7 +479,8 @@ void RegistryBridge::SendCompatibilityAck(const std::string& remoteFingerprint) 
     for(auto* player:players)if(player&&player->IsA<AActor>())try {
         DragonWilds::ActorHelper::FunctionCall local(player,TEXT("/Script/Engine.Pawn:IsLocallyControlled"));local.Invoke();if(!local.Result<bool>())continue;
         const auto components=static_cast<AActor*>(player)->GetComponentsByClass(contract.Type);if(!components.Num())continue;auto* rpc=components[0]->GetFunctionByNameInChain(TEXT("ServerRequestRuneSchemaAction"));if(!rpc)continue;
-        const nlohmann::json payload={{"protocolVersion",Protocol},{"build",BuildIdentity},{"registryFingerprint",m_manifestFingerprint},{"channels",{"system.compat","registry.action","quest.control","quest.state","dialogue.session","event.state","spawn.state","npc.state","vendor.state","player.profile","nameplate.profile","world.state","notify.player"}}};
+        const nlohmann::json payload={{"protocolVersion",Protocol},{"build",BuildIdentity},{"registryFingerprint",m_manifestFingerprint},
+            {"mappingFingerprint",LocalMapping().Fingerprint},{"channels",{"system.compat","registry.action","quest.control","quest.state","dialogue.session","event.state","spawn.state","npc.state","vendor.state","player.profile","nameplate.profile","world.state","notify.player"}}};
         DragonWilds::ActorHelper::FunctionCall request(components[0],rpc);request.Arg(TEXT("Channel"),std::string("system.compat")).Arg(TEXT("EntityId"),std::string("client"))
             .Arg(TEXT("ActionKey"),std::string("hello")).Arg(TEXT("Payload"),payload.dump()).Arg(TEXT("Revision"),++m_outboundRevision).Invoke();
         DragonWilds::ActorHelper::FunctionCall resync(components[0],rpc);resync.Arg(TEXT("Channel"),std::string("quest.state")).Arg(TEXT("EntityId"),std::string("all"))
@@ -776,6 +794,9 @@ void RegistryBridge::Observe(UObject* source,UFunction* function) {
         const auto remote=state.value("registryFingerprint",std::string{});
         const bool manifestMatch=!local.empty()&&Fingerprint(local)==remote;
         if(!manifestMatch)PS::Log<LogLevel::Warning>(STR("Registry bridge manifest differs from authority; continuing in degraded mode and validating each action independently.\n"));
+        const auto mappingState=MappingState(LocalMapping().Fingerprint,state.value("mappingFingerprint",std::string{}));
+        if(mappingState=="different"||mappingState=="authority-only"||mappingState=="client-only")
+            PS::Log<LogLevel::Warning>(STR("RuneSchema mapping differs from authority ({}). Live reflection remains active.\n"),PS::ToWideSafe(mappingState.c_str()));
         const auto registry=state.value("registryRevision",0u);
         if(registry>m_seenRegistryRevision){m_seenRegistryRevision=registry;SendCompatibilityAck(remote);}
         const auto activation=state.value("activationRevision",0u);

@@ -183,7 +183,7 @@ void DragonWildsRegistryLoader::LoadDocument(const json& input,const std::string
         try {auto normalized=NormalizeEntry(entry,owner);
             m_audit.push_back({{"Key",normalized["key"]},{"Owner",owner},{"Source",source},{"Status","Accepted"},{"PresentationCount",normalized["presentation"].size()}});
             m_modEntries.push_back(std::move(normalized));
-        }catch(const std::exception& error){m_audit.push_back({{"Key",owner+":"+id},{"Owner",owner},{"Source",source},{"Status","Rejected"},{"Reason",error.what()}});PS::Log<RC::LogLevel::Error>(STR("Registry '{}:{}' in '{}' (entry #{}) rejected; unrelated entries continue: {}.\n"),PS::ToWideSafe(owner.c_str()),PS::ToWideSafe(id.c_str()),PS::ToWideSafe(source.c_str()),ordinal,PS::ToWideSafe(error.what()));}
+        }catch(const std::exception& error){m_audit.push_back({{"Key",owner+":"+id},{"Owner",owner},{"Source",source},{"Status","Rejected"},{"Reason",error.what()}});PS::Log<RC::LogLevel::Error>(STR("Registry '{}:{}' in '{}' (entry #{}) rejected: {}.\n"),PS::ToWideSafe(owner.c_str()),PS::ToWideSafe(id.c_str()),PS::ToWideSafe(source.c_str()),ordinal,PS::ToWideSafe(error.what()));}
     }
 }
 
@@ -195,7 +195,7 @@ void DragonWildsRegistryLoader::OnLoad(const std::filesystem::path& path,const R
         throw std::runtime_error("registry owner is invalid or reserved");
     std::vector<std::filesystem::path> files;for(const auto& file:std::filesystem::directory_iterator(path))if(file.is_regular_file()&&(file.path().extension()==".json"||file.path().extension()==".jsonc"))files.push_back(file.path());std::sort(files.begin(),files.end());
     for(const auto& file:files)try{PS::JsonHelpers::ParseJsonFileInPath(file,[&](const json& document){LoadDocument(document,owner,file.filename().string());});}
-    catch(const std::exception& error){m_audit.push_back({{"Owner",owner},{"Source",file.filename().string()},{"Status","Rejected"},{"Reason",error.what()}});PS::Log<RC::LogLevel::Error>(STR("Registry file '{}' in mod '{}' rejected; unrelated files continue: {}.\n"),file.filename().native(),mod,PS::ToWideSafe(error.what()));}
+    catch(const std::exception& error){m_audit.push_back({{"Owner",owner},{"Source",file.filename().string()},{"Status","Rejected"},{"Reason",error.what()}});PS::Log<RC::LogLevel::Error>(STR("Registry file '{}' in mod '{}' rejected: {}.\n"),file.filename().native(),mod,PS::ToWideSafe(error.what()));}
 }
 
 void DragonWildsRegistryLoader::LoadCookedRegistries() {
@@ -211,7 +211,7 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
         if(!Identifier(owner)||owner=="RuneSchema"||owner=="FModel")throw std::runtime_error("cooked RegistryOwner is invalid or reserved");
         LoadDocument(json::parse(document),owner,"pak:"+path);
         PS::Log<RC::LogLevel::Normal>(STR("Registry: discovered cooked registry asset '{}' owned by '{}'.\n"),PS::ToWideSafe(path.c_str()),PS::ToWideSafe(owner.c_str()));
-    }catch(const std::exception& error){const auto name=RC::to_string(asset.AssetName().ToString());const auto package=RC::to_string(asset.PackageName().ToString());m_audit.push_back({{"Owner","<cooked>"},{"Source","pak:"+package+"."+name},{"Status","Rejected"},{"Reason",error.what()}});PS::Log<RC::LogLevel::Error>(STR("Cooked registry asset '{}' rejected; unrelated registries continue: {}.\n"),PS::ToWideSafe((package+"."+name).c_str()),PS::ToWideSafe(error.what()));}
+    }catch(const std::exception& error){const auto name=RC::to_string(asset.AssetName().ToString());const auto package=RC::to_string(asset.PackageName().ToString());m_audit.push_back({{"Owner","<cooked>"},{"Source","pak:"+package+"."+name},{"Status","Rejected"},{"Reason",error.what()}});PS::Log<RC::LogLevel::Error>(STR("Cooked registry asset '{}' rejected: {}.\n"),PS::ToWideSafe((package+"."+name).c_str()),PS::ToWideSafe(error.what()));}
 }
 
 void DragonWildsRegistryLoader::WriteMerged() {
@@ -229,7 +229,7 @@ void DragonWildsRegistryLoader::WriteMerged() {
     m_bridge.SetRegistrySnapshot(merged.dump());
     if(PS::PSConfig::Get()->GetSettings().advancedRuntime)
         PS::ConfigFiles::Write(PS::HostServices::ExportsDirectory()/"RegistryManifestAudit.json",
-            json{{"Build","0.7.5.9"},{"Accepted",m_modEntries.size()},{"Entries",m_audit}}.dump(2)+"\n");
+            json{{"Build","0.7.5.14"},{"Accepted",m_modEntries.size()},{"Entries",m_audit}}.dump(2)+"\n");
     PS::Log<RC::LogLevel::Normal>(TEXT("Registry: merged {} mod-owned entries.\n"),m_modEntries.size());
 }
 

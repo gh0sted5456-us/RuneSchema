@@ -4,6 +4,7 @@
 #include "Core/SaveRegistrySnapshot.h"
 #include <cctype>
 #include <map>
+#include <unordered_map>
 
 namespace PS::SaveCleanup {
 using Json=nlohmann::json;
@@ -49,7 +50,9 @@ inline void CheckPending(const Json& row) {
 }
 // Pure transformation: never reads/writes a file or queries a partially loaded registry.
 // Installed and absent owners are explicit selections; neither is inferred from an asset prefix.
-inline Preview Plan(const Json& source,const std::set<std::string>& requested,bool eraseProgress=false,const RegistrySnapshot* registry=nullptr) {
+inline Preview Plan(const Json& source,const std::set<std::string>& requested,
+    bool eraseProgress=false,const RegistrySnapshot* registry=nullptr,
+    bool removePendingOwned=false) {
     RequireCharacter(source);
     for(const auto& owner:requested)DragonWilds::Quests::ValidateOwner(owner);
     const std::set<std::string> selected=eraseProgress?requested:std::set<std::string>{};
@@ -119,7 +122,7 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,bo
             if(!owner.empty())++result.Owners[owner];
             const bool registryOrphan=registry && registry->QuestsComplete && !registry->Quests.contains(id);
             if(!registryOrphan && (owner.empty() || !selected.contains(owner))){retained.push_back(row);continue;}
-            CheckPending(row);
+            if(!removePendingOwned)CheckPending(row);
             removed.insert(id);
             result.Removed.push_back({{"Kind","Quest/dialogue"},{"Id",id},{"Mod",owner.empty()?"Registry-unknown (owner unavailable)":owner}});
             for(const auto& variable:row.at("QuestInts")) {
@@ -155,6 +158,95 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,bo
             native[DragonWilds::JournalSave::Manifest]=DragonWilds::JournalSave::EncodeNative(DragonWilds::JournalSave::ReadOwnership(cleaned.Journal));
         for(const auto& id:cleaned.Removed)result.Removed.push_back({{"Kind","Journal/lore"},{"Id",id},{"Mod",owners.at(id)}});
         game["Journal"]=std::move(native);
+    }
+    return result;
+}
+
+// Automatic cleanup is deliberately narrower than the diagnostic registry
+// repair above. It accepts only historical RuneSchema identities whose owner
+// has been confirmed absent or explicitly disabled. Unknown third-party and
+// vanilla records are never inferred to be removable.
+inline Preview PlanOwned(const Json& source,
+    const std::unordered_map<std::string,std::string>& retiredItems,
+    const std::unordered_map<std::string,std::string>& retiredRecipes,
+    const std::set<std::string>& retiredOwners) {
+    auto result=Plan(source,retiredOwners,true,nullptr,true);
+    auto& game=result.Save.at("GameProgress");
+    std::set<std::string> removedInventorySlots;
+    const auto record=[&](const char* kind,const std::string& id,
+        const std::string& slot,const std::string& owner) {
+        Json row={{"Kind",kind},{"Id",id},{"Mod",owner}};
+        if(!slot.empty())row["Slot"]=slot;
+        result.Removed.push_back(std::move(row));
+        ++result.Owners[owner];
+    };
+    for(const auto* section:{"Inventory","PersonalInventory"}) {
+        if(!game.contains(section))continue;
+        auto& entries=game.at(section);
+        if(!entries.is_object())continue;
+        for(auto it=entries.begin();it!=entries.end();) {
+            const auto& item=it.value();
+            if(!item.is_object() || !item.contains("ItemData")
+                || !item.at("ItemData").is_string()) {++it;continue;}
+            const auto id=item.at("ItemData").get<std::string>();
+            const auto owned=retiredItems.find(id);
+            if(owned==retiredItems.end()) {++it;continue;}
+            if(std::string_view(section)=="Inventory")removedInventorySlots.insert(it.key());
+            record(section,id,it.key(),owned->second);
+            it=entries.erase(it);
+        }
+    }
+    if(game.contains("Loadout") && game.at("Loadout").is_object()) {
+        auto& entries=game.at("Loadout");
+        for(auto it=entries.begin();it!=entries.end();) {
+            const auto& item=it.value();
+            std::string id,owner;
+            bool remove=false;
+            if(item.is_object() && item.contains("ItemData")
+                && item.at("ItemData").is_string()) {
+                id=item.at("ItemData").get<std::string>();
+                const auto owned=retiredItems.find(id);
+                if(owned!=retiredItems.end()) {remove=true;owner=owned->second;}
+            }
+            if(!remove && item.is_object()
+                && item.contains("PlayerInventoryItemIndex")
+                && item.at("PlayerInventoryItemIndex").is_number_integer()) {
+                const auto slot=std::to_string(
+                    item.at("PlayerInventoryItemIndex").get<int>());
+                if(removedInventorySlots.contains(slot)) {
+                    remove=true;id=slot;
+                    // The referenced inventory record was already removed and
+                    // carries the same confirmed ownership. Recover it from
+                    // the removal report without guessing from the loadout.
+                    for(auto row=result.Removed.rbegin();row!=result.Removed.rend();++row)
+                        if(row->value("Kind",std::string{})=="Inventory"
+                            && row->value("Slot",std::string{})==slot) {
+                            owner=row->value("Mod",std::string{});break;
+                        }
+                }
+            }
+            if(!remove) {++it;continue;}
+            record("Loadout",id,it.key(),owner);
+            it=entries.erase(it);
+        }
+    }
+    if(game.contains("Progress") && game.at("Progress").is_object()) {
+        auto& progress=game.at("Progress");
+        for(const auto* field:{"ItemsPickedUp","MilestoneMaterialsPickedUp",
+            "RecipesUnlocked","RecipesNew"}) {
+            if(!progress.contains(field) || !progress.at(field).is_array())continue;
+            auto& entries=progress.at(field);
+            const auto& owned=std::string_view(field).starts_with("Recipes")
+                ?retiredRecipes:retiredItems;
+            for(auto it=entries.begin();it!=entries.end();) {
+                if(!it->is_string()) {++it;continue;}
+                const auto id=it->get<std::string>();
+                const auto found=owned.find(id);
+                if(found==owned.end()) {++it;continue;}
+                record(field,id,{},found->second);
+                it=entries.erase(it);
+            }
+        }
     }
     return result;
 }

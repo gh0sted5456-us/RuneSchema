@@ -687,7 +687,7 @@ namespace DragonWilds {
                     m_vendorReport["Error"] = error.what();
                     WriteVendorStatus();
                     PS::Log<LogLevel::Error>(
-                        STR("Vendor scan failed safely: {}\n"),
+                        STR("Vendor scan failed: {}\n"),
                         PS::ToWideSafe(error.what()));
                 }
             }, options);
@@ -784,10 +784,10 @@ namespace DragonWilds {
                     try {auto pending=m_catalog;pending.AddNpc(RC::to_string(modName),entry);m_catalog=std::move(pending);}
                     catch(const std::exception& error) {
                         const auto id=entry.is_object()?entry.value("Id",std::string("<missing Id>")):std::string("<non-object>");
-                        PS::Log<LogLevel::Error>(STR("NPC '{}:{}' rejected; unrelated definitions will continue: {}\n"),
+                        PS::Log<LogLevel::Error>(STR("NPC '{}:{}' rejected: {}\n"),
                             modName,RC::to_generic_string(id),PS::ToWideSafe(error.what()));
                     }
-                    catch(...) {PS::Log<LogLevel::Error>(STR("NPC definition in '{}' was rejected by an unknown error; unrelated definitions will continue.\n"),modName);}
+                    catch(...) {PS::Log<LogLevel::Error>(STR("NPC definition in '{}' rejected: unknown error.\n"),modName);}
                 };
                 if(entries.is_array())for(const auto& entry:entries)add(entry);else add(entries);
             },
@@ -814,7 +814,7 @@ namespace DragonWilds {
         {
             std::size_t rejected=0;
             const auto report=[&](const std::string& key,const std::string& error) {
-                ++rejected;PS::Log<LogLevel::Error>(STR("NPC '{}' was disabled; unrelated definitions will continue: {}\n"),
+                ++rejected;PS::Log<LogLevel::Error>(STR("NPC '{}' disabled: {}\n"),
                     RC::to_generic_string(key),PS::ToWideSafe(error.c_str()));
             };
             const auto resolved=m_catalog.ResolveIsolated(
@@ -2478,7 +2478,7 @@ namespace DragonWilds {
                 sourceOwner = defaultObject.Get();
             }
             // If a game build exposes only the live generated class, retain a
-            // best-effort fallback to a loaded source actor. This is no longer
+            // Fall back to a loaded source actor. This is no longer
             // the normal path and is never the spawned vendor actor.
             if (!sourceOwner)
             {
@@ -3920,7 +3920,7 @@ namespace DragonWilds {
                 }
                 catch (...)
                 {
-                    // Shutdown is best-effort. The validated rooted lease
+                    // Shutdown may fail. The validated rooted lease
                     // avoids the pinned UE4SS zero-serial weak-pointer issue.
                 }
             }

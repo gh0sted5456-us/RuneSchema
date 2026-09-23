@@ -265,7 +265,7 @@ namespace {
         catch (const std::exception& error)
         {
             PS::Log<LogLevel::Warning>(
-                STR("AI director call '{}' failed safely: {}\n"),
+                STR("AI director call '{}' failed: {}\n"),
                 functionPath, PS::ToWideSafe(error.what()));
             return false;
         }
@@ -347,7 +347,7 @@ namespace {
         catch (const std::exception& error)
         {
             PS::Log<LogLevel::Warning>(
-                STR("Custom actor name '{}' failed safely on {}: {}\n"),
+                STR("Custom actor name '{}' failed on {}: {}\n"),
                 PS::ToWideSafe(displayName.c_str()), actor->GetClassPrivate()->GetName(),
                 PS::ToWideSafe(error.what()));
         }
@@ -1463,13 +1463,13 @@ namespace DragonWilds {
                 catch (const std::exception& error)
                 {
                     PS::Log<LogLevel::Warning>(
-                        STR("Native AI instance binding failed safely: {}\n"),
+                        STR("Native AI instance binding failed: {}\n"),
                         PS::ToWideSafe(error.what()));
                 }
                 catch (...)
                 {
                     PS::Log<LogLevel::Warning>(
-                        STR("Native AI instance binding failed safely with an unknown error.\n"));
+                        STR("Native AI instance binding failed: unknown error.\n"));
                 }
             });
 
@@ -3010,7 +3010,7 @@ namespace DragonWilds {
             {
                 spawn.bSpawnFailed = true;
                 PS::Log<LogLevel::Error>(
-                    STR("[DEGRADED][BUILDING-ASSEMBLY] Client assembly '{}' failed safely: {}\n"),
+                    STR("[DEGRADED][BUILDING-ASSEMBLY] Client assembly '{}' failed: {}\n"),
                     spawn.EntryId, PS::ToWideSafe(error.what()));
             }
         }
@@ -3580,7 +3580,7 @@ namespace DragonWilds {
                     if(spawn.Type==ESpawnEntryType::AISpawnPoint)DestroyLiveSpawnedAI(m_readyWorld,spawn);
                     if(actor && actor->IsA<AActor>())RetireTimedActor(static_cast<AActor*>(actor));
                 } catch(const std::exception& error) {
-                    if(!spawn.bSpawnFailed)PS::Log<LogLevel::Error>(STR("Timed spawn '{}' cleanup failed safely: {}\n"),
+                    if(!spawn.bSpawnFailed)PS::Log<LogLevel::Error>(STR("Timed spawn '{}' cleanup failed: {}\n"),
                         spawn.EntryId,PS::ToWideSafe(error.what()));
                     spawn.bSpawnFailed=true;
                 }
@@ -3607,7 +3607,7 @@ namespace DragonWilds {
             }
             catch(const std::exception& error) {
                 spawn.bSpawnFailed=true;
-                PS::Log<LogLevel::Error>(STR("Timed spawn '{}' failed safely: {}\n"),
+                PS::Log<LogLevel::Error>(STR("Timed spawn '{}' failed: {}\n"),
                     spawn.EntryId,PS::ToWideSafe(error.what()));
             }
         }
@@ -3641,7 +3641,7 @@ namespace DragonWilds {
         {
             m_placedNativeRespawnActors.clear();
             PS::Log<LogLevel::Warning>(
-                STR("Native-respawn placement state was ignored safely: {}\n"),
+                STR("Native-respawn placement state ignored: {}\n"),
                 PS::ToWideSafe(exception.what()));
         }
     }

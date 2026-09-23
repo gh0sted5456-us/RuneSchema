@@ -46,6 +46,7 @@
 #include "Loader/DragonWildsRegistryLoader.h"
 #include "Loader/DragonWildsMainLoader.h"
 #include "Loader/ModLoadOrder.h"
+#include "Loader/OwnedContentLedger.h"
 #include "Misc/FileWatchWrapper.h"
 
 using namespace RC;
@@ -106,6 +107,8 @@ namespace DragonWilds {
         {
             Hook::UnregisterCallback(AutoReloadCallbackId);
         }
+        if (m_coreStartupCallbackId != Hook::ERROR_ID)
+            Hook::UnregisterCallback(m_coreStartupCallbackId);
 
         AutoReloadWorkPending.store(false);
         AutoReloadCallbackId = Hook::ERROR_ID;
@@ -129,7 +132,27 @@ namespace DragonWilds {
     void DragonWildsMainLoader::Initialize()
 	{
         m_readiness.MarkUnrealReady();
+        // Some WinGDK builds do not materialize the DataTable CDO/vtable during
+        // PreInitialize. Retry once Unreal is ready, without duplicating a hook
+        // that was already installed successfully.
+        if (DatatableSerializeCallbacks.empty())
+            HookDatatableSerialize();
         HookGameInstanceInit();
+        // GameInstance::Init and the optional DataTable hook remain the earliest
+        // paths.  A game-thread tick is the storefront-agnostic fallback.  It
+        // avoids initializing loaders in on_unreal_init before their target
+        // assets/tables are ready, while still completing before a player can
+        // select and deserialize a character.
+        Hook::FCallbackOptions startupOptions{};
+        startupOptions.OwnerModName=TEXT("RuneSchema");
+        startupOptions.HookName=TEXT("CoreStartupFallback");
+        m_coreStartupCallbackId=Hook::RegisterEngineTickPostCallback(
+            [this](Hook::TCallbackIterationData<void>&,UEngine*,float,bool) {
+                if(m_coreStartupComplete.load(std::memory_order_acquire))return;
+                if(InitCore())m_coreStartupComplete.store(true,std::memory_order_release);
+            },startupOptions);
+        if(m_coreStartupCallbackId==Hook::ERROR_ID)
+            PS::Log<LogLevel::Error>(STR("[DEGRADED][CORE] Game-thread startup fallback could not be installed.\n"));
         PS::StartupTrace::Mark("UE4SS readiness published; awaiting engine lifecycle event");
         SetupAutoReload();
 	}
@@ -203,9 +226,22 @@ namespace DragonWilds {
     void DragonWildsMainLoader::SetupPostEngineInitLoaders()
     {
         PS::StartupTrace::Mark("PostEngineInit begin");
+        OwnedContent::BeginSnapshot(OwnedContent::LedgerPath(
+            PS::HostServices::SettingsDirectory()));
         InitializeMods(EEngineLifecyclePhase::PostEngineInit);
         LoadMods(EEngineLifecyclePhase::PostEngineInit);
+        // Active owners and their persistent IDs are now known.  Permanently
+        // remove records owned by absent/disabled mods before the character
+        // selection/load path can deserialize them.
+        m_dataRegistrar.PrepareRetiredContent();
         PS::StartupTrace::Mark("PostEngineInit complete");
+    }
+
+    void DragonWildsMainLoader::SetupGameInstanceInitLoadersOnce()
+    {
+        bool expected=false;
+        if (!m_gameInstanceLoadersStarted.compare_exchange_strong(expected,true)) return;
+        SetupGameInstanceInitLoaders();
     }
 
     void DragonWildsMainLoader::SetupGameInstanceInitLoaders()
@@ -217,20 +253,20 @@ namespace DragonWilds {
         if (m_buildingLoader)
         {
             try {m_buildingLoader->ActivateWorldRegistration();}
-            catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:buildings] World registration disabled; unrelated loaders continue: {}.\n"),PS::ToWideSafe(error.what()));}
+            catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:buildings] World registration disabled: {}.\n"),PS::ToWideSafe(error.what()));}
         }
 
         if (m_stringLoader)
         {
             try {m_stringLoader->ApplyPending();}
-            catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:strings] Pending strings were not applied; unrelated loaders continue: {}.\n"),PS::ToWideSafe(error.what()));}
+            catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:strings] Pending strings were not applied: {}.\n"),PS::ToWideSafe(error.what()));}
         }
 
         PS::StartupTrace::Mark("data registrar begin");
         try {m_dataRegistrar.Initialize();}
-        catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][SERVICE:data-registrar] Registration/save cleanup unavailable; unrelated loaders continue: {}.\n"),PS::ToWideSafe(error.what()));}
+        catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][SERVICE:data-registrar] Registration/save cleanup unavailable: {}.\n"),PS::ToWideSafe(error.what()));}
         try {m_registryBridge.Start();}
-        catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][SERVICE:registry-bridge] Networking bridge unavailable; local loaders continue: {}.\n"),PS::ToWideSafe(error.what()));}
+        catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][SERVICE:registry-bridge] Networking bridge unavailable: {}.\n"),PS::ToWideSafe(error.what()));}
         PS::StartupTrace::Mark("GameInstanceInit loaders complete (deferred world work may remain)");
     }
 
@@ -238,10 +274,17 @@ namespace DragonWilds {
     {
         auto DatatableSerializeFuncPtr = DragonWilds::SignatureManager::GetSignature("UDataTable::Serialize");
         if (!DatatableSerializeFuncPtr)
+            DatatableSerializeFuncPtr = DragonWilds::SignatureManager::ResolveUObjectVirtual(
+                "UDataTable::Serialize", TEXT("/Script/Engine.DataTable"),
+                {TEXT("Serialize__Ref_FArchive"), TEXT("Serialize")});
+        if (!DatatableSerializeFuncPtr)
         {
-            PS::Log<LogLevel::Error>(STR("Unable to initialize RuneSchema core, signature for UDataTable::Serialize is outdated.\n"));
+            PS::Log<LogLevel::Warning>(STR("[DEGRADED][BINDING:UDataTable::Serialize] Early DataTable observation is unavailable; core startup will continue through GameInstance.\n"));
             return;
         }
+
+        PS::Log<LogLevel::Normal>(STR("Native binding UDataTable::Serialize provider: {}.\n"),
+            PS::ToWideSafe(DragonWilds::SignatureManager::GetSource("UDataTable::Serialize").c_str()));
 
         DatatableSerializeCallbacks.push_back([&](RC::Unreal::UDataTable* datatable) {
             if (m_readiness.Observe(datatable)) m_datatableRegistry.Add(datatable);
@@ -251,7 +294,7 @@ namespace DragonWilds {
         if (!PS::InstallInlineHook(DatatableSerialize_Hook, reinterpret_cast<void*>(DatatableSerializeFuncPtr), reinterpret_cast<void*>(OnDataTableSerialized))) {
             DatatableSerializeCallbacks.clear();
             PS::StartupTrace::Mark("ERROR DataTable hook installation");
-            PS::Log<LogLevel::Error>(STR("Unable to install DataTable serialization hook.\n"));
+            PS::Log<LogLevel::Warning>(STR("[DEGRADED][BINDING:UDataTable::Serialize] Early DataTable hook installation failed; core startup will continue through GameInstance.\n"));
             return;
         }
         PS::Log<LogLevel::Verbose>(STR("Core pre-initialized.\n"));
@@ -270,7 +313,7 @@ namespace DragonWilds {
         PS::Log<LogLevel::Verbose>(STR("Found GameInstance::Init: {}\n"), GameInstanceInitPtr);
 
         GameInstanceInitCallbacks.push_back([&](UObject* Instance) {
-            if (InitCore()) SetupGameInstanceInitLoaders();
+            if (InitCore()) SetupGameInstanceInitLoadersOnce();
         });
 
         if (!PS::InstallInlineHook(GameInstanceInit_Hook, GameInstanceInitPtr, reinterpret_cast<void*>(OnGameInstanceInit))) {
@@ -564,11 +607,11 @@ namespace DragonWilds {
             try { loader->Initialize(engineLifecyclePhase); }
             catch (const std::exception& e) {
                 PS::StartupTrace::Mark("ERROR initialize: " + loader->GetModFolderType());
-                PS::Log<LogLevel::Error>(STR("[DISABLED][LOADER:{}] Initialization failed; RuneSchema core and unrelated loaders continue: {}\n"), RC::to_generic_string(loader->GetModFolderType()), PS::ToWideSafe(e.what()));
+                PS::Log<LogLevel::Error>(STR("[DISABLED][LOADER:{}] Initialization failed: {}\n"), RC::to_generic_string(loader->GetModFolderType()), PS::ToWideSafe(e.what()));
             }
             catch (...) {
                 PS::StartupTrace::Mark("ERROR initialize: " + loader->GetModFolderType());
-                PS::Log<LogLevel::Error>(STR("[DISABLED][LOADER:{}] Initialization threw an unknown error; RuneSchema core and unrelated loaders continue.\n"), RC::to_generic_string(loader->GetModFolderType()));
+                PS::Log<LogLevel::Error>(STR("[DISABLED][LOADER:{}] Initialization failed: unknown error.\n"), RC::to_generic_string(loader->GetModFolderType()));
             }
         }
     }
@@ -579,7 +622,7 @@ namespace DragonWilds {
             && PS::PSConfig::Get()->IsLoaderEnabled("recipes")) {
             for (auto& loader : m_loaders) if (loader->GetModFolderType() == "recipes")
                 try {static_cast<DragonWildsRecipeModLoader*>(loader.get())->PrepareReferences();}
-                catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:recipes] Reference preparation failed; unrelated loaders continue: {}.\n"),PS::ToWideSafe(error.what()));}
+                catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:recipes] Reference preparation failed: {}.\n"),PS::ToWideSafe(error.what()));}
         }
         // Definitions must exist before any mod's property or appearance consumers.
         if(engineLifecyclePhase==EEngineLifecyclePhase::PostEngineInit) {
@@ -591,7 +634,7 @@ namespace DragonWilds {
                     catch(const std::exception& e) { PS::Log<LogLevel::Error>(TEXT("{} definitions rejected: {}\n"),owner,PS::ToWideSafe(e.what())); }
                 });
                 try {loader->FinalizeLoad(engineLifecyclePhase);}
-                catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:{}] Definition finalization failed; unrelated loaders continue: {}.\n"),RC::to_generic_string(kind),PS::ToWideSafe(error.what()));}
+                catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:{}] Definition finalization failed: {}.\n"),RC::to_generic_string(kind),PS::ToWideSafe(error.what()));}
             }
         }
         if (engineLifecyclePhase == EEngineLifecyclePhase::PostEngineInit && m_spawnLoader
@@ -608,7 +651,7 @@ namespace DragonWilds {
                 catch (const std::exception& e)
                 {
                     PS::Log<LogLevel::Error>(
-                        STR("Appearance source '{}' was rejected safely: {}\n"),
+                        STR("Appearance source '{}' rejected: {}\n"),
                         modName, PS::ToWideSafe(e.what()));
                 }
             });
@@ -635,11 +678,11 @@ namespace DragonWilds {
                     try { loader->Load(modPath, modName, engineLifecyclePhase); }
                     catch (const std::exception& e) {
                         PS::StartupTrace::Mark("ERROR load " + RC::to_string(modName) + "/" + loaderKind);
-                        PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:{}][MOD:{}] Section failed; unrelated sections continue: {}\n"), RC::to_generic_string(loaderKind), modName, PS::ToWideSafe(e.what()));
+                        PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:{}][MOD:{}] Section failed: {}\n"), RC::to_generic_string(loaderKind), modName, PS::ToWideSafe(e.what()));
                     }
                     catch (...) {
                         PS::StartupTrace::Mark("ERROR load " + RC::to_string(modName) + "/" + loaderKind);
-                        PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:{}][MOD:{}] Section threw an unknown error; unrelated sections continue.\n"), RC::to_generic_string(loaderKind), modName);
+                        PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:{}][MOD:{}] Section failed: unknown error.\n"), RC::to_generic_string(loaderKind), modName);
                     }
                     PS::StartupTrace::Mark("load loader end: " + RC::to_string(modName)
                         + "/" + loaderKind);
@@ -656,11 +699,11 @@ namespace DragonWilds {
             try { loader->FinalizeLoad(engineLifecyclePhase); }
             catch (const std::exception& e) {
                 PS::StartupTrace::Mark("ERROR finalize: " + loader->GetModFolderType());
-                PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:{}] Finalization failed; RuneSchema core and unrelated loaders continue: {}\n"), RC::to_generic_string(loader->GetModFolderType()), PS::ToWideSafe(e.what()));
+                PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:{}] Finalization failed: {}\n"), RC::to_generic_string(loader->GetModFolderType()), PS::ToWideSafe(e.what()));
             }
             catch (...) {
                 PS::StartupTrace::Mark("ERROR finalize: " + loader->GetModFolderType());
-                PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:{}] Finalization threw an unknown error; RuneSchema core and unrelated loaders continue.\n"), RC::to_generic_string(loader->GetModFolderType()));
+                PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:{}] Finalization failed: unknown error.\n"), RC::to_generic_string(loader->GetModFolderType()));
             }
         }
 
@@ -675,7 +718,7 @@ namespace DragonWilds {
                     catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:nameplates][MOD:{}] Section disabled; remaining mods continue: {}.\n"),modName,PS::ToWideSafe(error.what()));}
                 });
                 try {m_spawnLoader->FinalizeNameplateDefinitions();}
-                catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:nameplates] Finalization failed; players and unrelated loaders continue: {}.\n"),PS::ToWideSafe(error.what()));}
+                catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:nameplates] Finalization failed: {}.\n"),PS::ToWideSafe(error.what()));}
             }
             IterateModsFolder([&](const fs::path& modPath,
                 const fs::path::string_type& modName)
@@ -694,7 +737,7 @@ namespace DragonWilds {
                 }
             });
             try {m_spawnLoader->FinalizePlayerRules();}
-            catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:players] Finalization failed; unrelated loaders continue: {}.\n"),PS::ToWideSafe(error.what()));}
+            catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:players] Finalization failed: {}.\n"),PS::ToWideSafe(error.what()));}
         }
     }
 

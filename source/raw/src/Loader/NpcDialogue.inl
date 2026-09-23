@@ -824,7 +824,7 @@ void DragonWildsNpcLoader::OnDialogueTask(UObject* source,UFunction* function,vo
             ErrorOnce("event-action:"+action.EventKey,RC::to_generic_string(std::string("Event action failed: ")+error.what()));return;
         }
         if(!action.QuestKey.empty()) {
-            if(action.Response)DialogueField(action.Response,TEXT("Message"),"I could not safely update this quest. Please check the RuneSchema error before trying again.");
+            if(action.Response)DialogueField(action.Response,TEXT("Message"),"The quest update failed. Check the RuneSchema log before trying again.");
             ErrorOnce("quest-action:"+action.QuestKey,RC::to_generic_string(std::string("Quest action failed: ")+error.what()));return;
         }
         if(!action.Store.empty()) {

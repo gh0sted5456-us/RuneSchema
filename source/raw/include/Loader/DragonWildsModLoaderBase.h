@@ -5,6 +5,7 @@
 #include "nlohmann/json.hpp"
 #include <string>
 #include <atomic>
+#include <vector>
 #include "Utility/PatchWarnings.h"
 
 namespace RC::Unreal {
@@ -45,6 +46,8 @@ namespace DragonWilds {
 
 
         RC::Unreal::UDataTable* TryGetDatatableByName(const std::string& name);
+        RC::Unreal::UDataTable* TryGetDatatableByPath(const std::string& path);
+        std::vector<RC::Unreal::UDataTable*> GetDatatablesByName(const std::string& name);
 
         RC::Unreal::UDataTable* GetDatatableByName(const std::string& name);
     protected:

@@ -250,7 +250,7 @@ public:
             auto verified=record;verified.InternalName=actualName;verifiedDeclarations.push_back(std::move(verified));
         }
         if(!verifiedDeclarations.empty())
-            OwnedContent::Merge(PS::HostServices::SettingsDirectory()/"OwnedContentLedger.json",verifiedDeclarations);
+            OwnedContent::Merge(OwnedContent::LedgerPath(PS::HostServices::SettingsDirectory()),verifiedDeclarations);
         for(const auto& [key,document]:definitions) {
             if(!assets.contains(key))assets.emplace(key,std::make_unique<NativeAsset>(catalog.Find("_",key),hidden.contains(key)));
             assets.at(key)->EnsureIdentity(catalog.Find("_",key));

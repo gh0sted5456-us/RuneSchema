@@ -40,8 +40,15 @@ namespace DragonWilds {
         return entries;
     }
     bool ModLoadOrder::Save(const fs::path& path, const std::vector<ModOrderEntry>& entries) {
+        std::error_code directoryError;
+        fs::create_directories(path.parent_path(), directoryError);
+        if (directoryError) {
+            PS::Log<RC::LogLevel::Warning>(STR("Load-order directory unavailable: {} ({}).\n"),
+                path.parent_path().native(), PS::ToWideSafe(directoryError.message().c_str()));
+            return false;
+        }
         std::ofstream file(path, std::ios::trunc);
-        if (!file) { PS::Log<RC::LogLevel::Error>(STR("Failed to write runeschema.txt.\n")); return false; }
+        if (!file) { PS::Log<RC::LogLevel::Warning>(STR("Load-order file is not writable: {}.\n"), path.native()); return false; }
         file << "; RuneSchema mod order - loaded top to bottom.\n"
                 "; Use 1 to enable and 0 to disable.\n"
                 "; AA_ and ZZ_ folders are enabled implicitly when omitted. Add one here only to override it.\n";
@@ -55,8 +62,15 @@ namespace DragonWilds {
             if (text.empty() || text.front() == STR(';') || text.front() == STR('#') || text.find(STR(':')) == RC::StringType::npos)
                 comments.push_back(line);
         }
+        std::error_code directoryError;
+        fs::create_directories(path.parent_path(), directoryError);
+        if (directoryError) {
+            PS::Log<RC::LogLevel::Warning>(STR("Load-order directory unavailable: {} ({}).\n"),
+                path.parent_path().native(), PS::ToWideSafe(directoryError.message().c_str()));
+            return false;
+        }
         std::ofstream output(path, std::ios::trunc);
-        if (!output) { PS::Log<RC::LogLevel::Error>(STR("Failed to write runeschema.txt.\n")); return false; }
+        if (!output) { PS::Log<RC::LogLevel::Warning>(STR("Load-order file is not writable: {}.\n"), path.native()); return false; }
         for (const auto& c : comments) output << c << '\n';
         for (const auto& e : entries) output << Narrow(e.Name) << " : " << (e.Enabled ? 1 : 0) << '\n';
         return static_cast<bool>(output);

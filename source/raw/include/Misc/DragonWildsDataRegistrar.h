@@ -17,6 +17,11 @@ namespace RC::Unreal {
 namespace DragonWilds {
     class DragonWildsDataRegistrar {
     public:
+        // Runs the file-backed, owned-content cleanup as soon as RuneSchema has
+        // finished discovering the active mod set.  This deliberately does not
+        // depend on a GameInstance or a player controller: character JSON must
+        // be clean before the game attempts to deserialize it.
+        void PrepareRetiredContent();
         void Initialize();
         void Shutdown();
         ~DragonWildsDataRegistrar() { Shutdown(); }
@@ -26,6 +31,7 @@ namespace DragonWilds {
         std::vector<std::pair<RC::Unreal::UFunction*, int32_t>> m_functionHooks;
         RC::Unreal::Hook::GlobalCallbackId m_gameStateHook = RC::Unreal::Hook::ERROR_ID;
         bool m_initialized = false;
+        bool m_retiredContentPrepared = false;
         struct RetiredContent {
             RC::Unreal::UObject* Data = nullptr;
             std::string Kind;
@@ -35,7 +41,6 @@ namespace DragonWilds {
         std::vector<RetiredContent> m_retiredContent;
 
         bool ResolveBindings();
-        void PrepareRetiredContent();
         void ScrubRetiredContent(RC::Unreal::UObject* controller);
         void InstallHooks();
         void RegisterAll();

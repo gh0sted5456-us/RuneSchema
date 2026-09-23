@@ -661,7 +661,7 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
                 if(ordinary->Scale.Y()!=definition.Scale || ordinary->Scale.Z()!=definition.Scale)throw std::runtime_error("Tool AI copies currently require uniform scale");
                 if(!ordinary->VisualEffect.empty()&&!request->contains("GhostMesh")) {
                     definition.VisualEffect=ordinary->VisualEffect;definition.VisualEffect["Type"]="Ghost Glow";
-                    if(ordinary->VisualEffect.value("Type",std::string{})!="Ghost")throw std::runtime_error("This spawn visual cannot be copied safely by the tool");
+                    if(ordinary->VisualEffect.value("Type",std::string{})!="Ghost")throw std::runtime_error("This spawn visual is not supported by the copy tool");
                 }
             }
         } else {

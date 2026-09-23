@@ -30,6 +30,17 @@ struct Record {
     std::string Source;
     bool InternalNameAsserted=false;
 };
+inline std::mutex SnapshotMutex;
+inline bool SnapshotActive=false;
+inline std::filesystem::path SnapshotPath;
+inline std::map<std::string,Record> SnapshotPrevious;
+inline std::map<std::string,Record> SnapshotCurrent;
+inline std::filesystem::path LedgerPath(const std::filesystem::path& settingsDirectory) {
+    return settingsDirectory / "safesave" / "OwnedContentLedger.json";
+}
+inline std::filesystem::path LegacyLedgerPath(const std::filesystem::path& settingsDirectory) {
+    return settingsDirectory / "OwnedContentLedger.json";
+}
 inline void Validate(const Record& value) {
     static const std::set<std::string> Kinds{"Item","Recipe","Building","Quest","Journal","Lore"};
     if(!Kinds.contains(value.Kind) || value.Owner.empty() || value.Owner.size()>256
@@ -89,7 +100,53 @@ inline std::vector<Record> Read(const std::filesystem::path& path) {
     }
     return result;
 }
+inline void Write(const std::filesystem::path& path,const std::map<std::string,Record>& records) {
+    nlohmann::json rows=nlohmann::json::array();
+    for(const auto& [id,value]:records)rows.push_back({{"Kind",value.Kind},{"Owner",value.Owner},
+        {"PersistenceID",value.PersistenceID},{"InternalName",value.InternalName},{"Source",value.Source}});
+    PS::ConfigFiles::Write(path,nlohmann::json{{"Kind","RuneSchemaOwnedContent"},{"Version",1},
+        {"Policy","Previous successful active-content identity snapshot; missing identities are permanently removed from saves on the next load."},
+        {"Records",rows}}.dump(2));
+}
+
+inline void BeginSnapshot(const std::filesystem::path& path) {
+    // Preserve the last known-good snapshot during an upgrade. The legacy
+    // location is read once only when the canonical SafeSave file is absent.
+    if(!std::filesystem::exists(path)) {
+        const auto settingsDirectory=path.parent_path().parent_path();
+        const auto legacy=LegacyLedgerPath(settingsDirectory);
+        if(std::filesystem::exists(legacy)) {
+            std::map<std::string,Record> migrated;
+            for(auto value:Read(legacy))migrated.emplace(value.PersistenceID,std::move(value));
+            Write(path,migrated);
+            std::error_code ignored;
+            std::filesystem::remove(legacy,ignored);
+        }
+    }
+    std::map<std::string,Record> previous;
+    for(auto value:Read(path))previous.emplace(value.PersistenceID,std::move(value));
+    std::lock_guard lock(SnapshotMutex);
+    SnapshotPath=path.lexically_normal();
+    SnapshotPrevious=std::move(previous);
+    SnapshotCurrent.clear();
+    SnapshotActive=true;
+}
+
 inline void Merge(const std::filesystem::path& path,const std::vector<Record>& current) {
+    std::lock_guard lock(SnapshotMutex);
+    if(SnapshotActive && path.lexically_normal()==SnapshotPath) {
+        for(const auto& value:current) {
+            Validate(value);
+            const auto old=SnapshotPrevious.find(value.PersistenceID);
+            if(old!=SnapshotPrevious.end() && old->second.Owner!=value.Owner)
+                throw std::runtime_error("RuneSchema owned-content identity transfer refused");
+            const auto found=SnapshotCurrent.find(value.PersistenceID);
+            if(found!=SnapshotCurrent.end() && found->second.Owner!=value.Owner)
+                throw std::runtime_error("RuneSchema owned-content identity collision");
+            SnapshotCurrent[value.PersistenceID]=value;
+        }
+        return;
+    }
     std::map<std::string,Record> records;
     for(auto value:Read(path))records.emplace(value.PersistenceID,std::move(value));
     for(const auto& value:current) {
@@ -99,16 +156,36 @@ inline void Merge(const std::filesystem::path& path,const std::vector<Record>& c
             throw std::runtime_error("RuneSchema owned-content identity transfer refused");
         records[value.PersistenceID]=value;
     }
-    nlohmann::json rows=nlohmann::json::array();
-    for(const auto& [id,value]:records)rows.push_back({{"Kind",value.Kind},{"Owner",value.Owner},
-        {"PersistenceID",value.PersistenceID},{"InternalName",value.InternalName},{"Source",value.Source}});
-    PS::ConfigFiles::Write(path,nlohmann::json{{"Kind","RuneSchemaOwnedContent"},{"Version",1},
-        {"Policy","Historical RuneSchema ownership only; absent owners become temporary load tombstones and are removed after native inventory load."},
-        {"Records",rows}}.dump(2));
+    Write(path,records);
+}
+
+inline std::vector<Record> CompareSnapshot(const std::filesystem::path& path) {
+    std::lock_guard lock(SnapshotMutex);
+    if(!SnapshotActive || path.lexically_normal()!=SnapshotPath)
+        throw std::runtime_error("RuneSchema owned-content snapshot was not started");
+    std::vector<Record> missing;
+    for(const auto& [id,value]:SnapshotPrevious)
+        if(!SnapshotCurrent.contains(id))missing.push_back(value);
+    return missing;
+}
+
+inline void CommitSnapshot(const std::filesystem::path& path) {
+    std::lock_guard lock(SnapshotMutex);
+    if(!SnapshotActive || path.lexically_normal()!=SnapshotPath)
+        throw std::runtime_error("RuneSchema owned-content snapshot was not started");
+    Write(path,SnapshotCurrent);
+    SnapshotPrevious.clear();
+    SnapshotCurrent.clear();
+    SnapshotPath.clear();
+    SnapshotActive=false;
 }
 inline std::vector<Record> Absent(const std::vector<Record>& records,const std::set<std::string>& active) {
+    const auto key=[](std::string value){std::transform(value.begin(),value.end(),value.begin(),
+        [](unsigned char c){return static_cast<char>(std::tolower(c));});return value;};
+    std::set<std::string> activeKeys;
+    for(const auto& owner:active)activeKeys.insert(key(owner));
     std::vector<Record> result;
-    for(const auto& value:records)if(!active.contains(value.Owner))result.push_back(value);
+    for(const auto& value:records)if(!activeKeys.contains(key(value.Owner)))result.push_back(value);
     return result;
 }
 

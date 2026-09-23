@@ -78,7 +78,7 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
         std::ifstream stream(manifest);nlohmann::json data;stream>>data;
         for(const auto* field:{"SchemaVersion","Id","Version"})
             if(!data.contains(field))throw std::runtime_error(std::string("Plugin manifest missing ")+field+": "+manifest.string());
-        if(data.at("SchemaVersion")!=1||data.value("ApiVersion",1)!=1)throw std::runtime_error("Unsupported plugin manifest/API version: "+manifest.string());
+        if(data.at("SchemaVersion")!=1)throw std::runtime_error("Unsupported plugin manifest schema: "+manifest.string());
         Plugin plugin;plugin.Id=data.at("Id").get<std::string>();plugin.Name=data.value("Name",plugin.Id);
         plugin.Version=data.at("Version").get<std::string>();plugin.ApiVersion=data.value("ApiVersion",1);
         plugin.BuiltForRuneSchema=data.value("BuiltForRuneSchema",std::string{});
@@ -108,8 +108,8 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
         if(data.contains("EntryPoint")) {
             const auto entry=fs::path(data.at("EntryPoint").get<std::string>());
             if(entry.is_absolute()||entry.empty()||entry.has_parent_path()||entry.extension()!=L".dll")throw std::runtime_error("Plugin EntryPoint must be a DLL filename under dll/: "+plugin.Id);
+            // A missing DLL does not hide the manifest or its PAKs.
             plugin.EntryPoint=plugin.DllRoot/entry;
-            if(plugin.Enabled&&!fs::is_regular_file(plugin.EntryPoint))throw std::runtime_error("Plugin entry point is missing: "+plugin.Id);
         }
         result.push_back(std::move(plugin));
         } catch(const std::exception& error) {
@@ -121,7 +121,8 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
     const auto requested=ReadOrder(root);std::unordered_map<std::string,OrderEntry> requestedById;
     for(const auto& entry:requested)requestedById.emplace(entry.Id,entry);
     for(auto& plugin:result)if(const auto found=requestedById.find(plugin.Id);found!=requestedById.end()) {
-        if(plugin.Required&&!found->second.Enabled){if(diagnostics)diagnostics->push_back(plugin.Id+": rejected because a required plugin was disabled in plugins.txt");plugin.Enabled=false;continue;}
+        if(plugin.Required&&!found->second.Enabled&&diagnostics)
+            diagnostics->push_back(plugin.Id+": legacy Required flag ignored; explicit plugins.txt disable wins and RuneSchema core remains independent");
         plugin.Enabled=plugin.Enabled&&found->second.Enabled;
     }
     std::sort(result.begin(),result.end(),[&](const auto& a,const auto& b){
@@ -131,11 +132,18 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
     });
     std::unordered_map<std::string,size_t> byId;for(size_t i=0;i<result.size();++i)byId.emplace(result[i].Id,i);
     std::vector<bool> valid(result.size());for(size_t i=0;i<result.size();++i)valid[i]=result[i].Enabled;
-    bool changed=true;while(changed){changed=false;for(size_t i=0;i<result.size();++i)if(valid[i])for(const auto& [dependency,declaredVersion]:result[i].Dependencies){const auto found=byId.find(dependency);if(found==byId.end()||!valid[found->second]){valid[i]=false;changed=true;if(diagnostics)diagnostics->push_back(result[i].Id+": rejected because dependency "+dependency+" is missing, disabled, or invalid");break;}}}
-    std::vector<size_t> indegree(result.size());for(size_t i=0;i<result.size();++i)if(valid[i])for(const auto& dependency:result[i].Dependencies)++indegree[i];
+    for(size_t i=0;i<result.size();++i)if(valid[i])for(const auto& [dependency,declaredVersion]:result[i].Dependencies){
+        const auto found=byId.find(dependency);
+        if((found==byId.end()||!valid[found->second])&&diagnostics)
+            diagnostics->push_back(result[i].Id+": dependency "+dependency+" is unavailable; loading without it");
+    }
+    std::vector<size_t> indegree(result.size());for(size_t i=0;i<result.size();++i)if(valid[i])for(const auto& dependency:result[i].Dependencies){const auto found=byId.find(dependency.first);if(found!=byId.end()&&valid[found->second])++indegree[i];}
     std::vector<Plugin> ordered;ordered.reserve(result.size());std::vector<bool> emitted(result.size());
     bool progress=true;while(progress){progress=false;for(size_t i=0;i<result.size();++i)if(valid[i]&&!emitted[i]&&indegree[i]==0){emitted[i]=true;progress=true;ordered.push_back(result[i]);for(size_t consumer=0;consumer<result.size();++consumer)if(valid[consumer]&&!emitted[consumer])for(const auto& dependency:result[consumer].Dependencies)if(dependency.first==result[i].Id&&indegree[consumer])--indegree[consumer];}}
-    for(size_t i=0;i<result.size();++i)if(valid[i]&&!emitted[i]&&diagnostics)diagnostics->push_back(result[i].Id+": rejected because its dependency graph contains a cycle");
+    for(size_t i=0;i<result.size();++i)if(valid[i]&&!emitted[i]) {
+        if(diagnostics)diagnostics->push_back(result[i].Id+": dependency cycle detected; using manifest order");
+        ordered.push_back(result[i]);
+    }
     return ordered;
 }
 }

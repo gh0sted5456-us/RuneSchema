@@ -214,7 +214,7 @@ namespace DragonWilds {
         }
         catch (const std::exception& error)
         {
-            PS::Log<LogLevel::Warning>(STR("{} visual effect failed safely: {}\n"),
+            PS::Log<LogLevel::Warning>(STR("{} visual effect failed: {}\n"),
                 context, PS::ToWideSafe(error.what()));
             return false;
         }

@@ -2,6 +2,7 @@
 #include <atomic>
 #include <array>
 #include <cstdint>
+#include <deque>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -93,6 +94,8 @@ private:
     int m_wheelRemainder=0;
     std::unordered_map<std::string,WeakObjectHandle> m_canvasIcons;
     std::unordered_set<std::string> m_failedCanvasIcons;
+    std::unordered_set<std::string> m_queuedCanvasIcons;
+    std::deque<std::string> m_canvasIconQueue,m_canvasIconOrder;
     RC::Unreal::Hook::GlobalCallbackId m_inputModeHook=RC::Unreal::Hook::ERROR_ID;
     RC::Unreal::Hook::GlobalCallbackId m_worldResetHook=RC::Unreal::Hook::ERROR_ID;
     RC::Unreal::Hook::GlobalCallbackId m_inputSafetyHook=RC::Unreal::Hook::ERROR_ID;

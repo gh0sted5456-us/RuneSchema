@@ -2,7 +2,9 @@
 
 #include "Unreal/NameTypes.hpp"
 #include "Loader/DragonWildsModLoaderBase.h"
+#include "Loader/RegistryPatchPlan.h"
 #include "nlohmann/json.hpp"
+#include <set>
 
 namespace RC::Unreal {
     class UDataTable;
@@ -44,8 +46,18 @@ namespace DragonWilds {
         std::unordered_map<RC::StringType, std::vector<nlohmann::json>> m_tableDataMap;
         struct PendingPatch { std::string Table; std::string Row; nlohmann::json Changes; RC::StringType ModName; };
         std::vector<PendingPatch> m_pendingPatches;
+        std::vector<RegistryPatch::Document> m_registryDocuments;
+        std::vector<RegistryPatch::Patch> m_registryPlan;
+        std::unordered_map<std::string, std::pair<std::string,std::string>> m_ownedRows;
+        std::set<std::string> m_appliedRegistryPatches;
         void LoadDocument(const nlohmann::json& data, const RC::StringType& modName);
         void ReloadDocument(const nlohmann::json& data, const RC::StringType& modName);
+        void LoadRegistryDirectory(const std::filesystem::path& path, const RC::StringType& modName, bool customization);
+        void LoadAndApplyRegistryTargets();
+        void ApplyRegistryPatches(RC::Unreal::UDataTable* datatable);
+        void ApplyObjectRegistryPatches();
+        nlohmann::json ResolveRegistryValue(const nlohmann::json& value, const RegistryPatch::Patch& patch) const;
+        bool ProfileAllows(const RegistryPatch::Patch& patch) const;
 
         void HandleFilters(RC::Unreal::UDataTable* datatable, const nlohmann::json& data, LoadResult& outResult);
 

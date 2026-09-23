@@ -29,6 +29,8 @@ namespace PS::QuickUI {
 // though it were 780 px wide, which caused overflow and pointer drift.
 inline constexpr float NavRailWidth=84, ContentWidth=876, DesignWidth=NavRailWidth+ContentWidth, Width=DesignWidth, Height=720;
 inline constexpr float HorizontalFit=1.0f;
+inline constexpr float FontScale=1.12f;
+inline constexpr float SurfaceInset=16.f, SurfaceWidth=ContentWidth-SurfaceInset*2.f;
 inline constexpr int Columns=3, ItemsPerPage=12, MaxSelection=64, MaxDrops=16;
 inline constexpr float GridX=20, GridY=194, CardWidth=266, CardHeight=92, CardPitchX=278, CardPitchY=98;
 enum class Tab { Items=0, Enemies=1, Resources=2 };
@@ -1163,8 +1165,8 @@ public:
             soft({x+9,top+32+(track-thumb)*fraction,10,thumb},gold,2);
         };
         const auto overlay=[&](const std::string& title){
-            f.hits.clear();f.rightHits.clear();hoveredPath.clear();rect({0,0,ContentWidth,Height},{0,0,0,.84f});panel({16,28,748,664},ash);
-            text(title,36,47,23,{.84f,.68f,.36f,1});iconButton({710,38,38,38},QuickDecorations::CloseBadge,"X","Back / close","close");
+            f.hits.clear();f.rightHits.clear();hoveredPath.clear();rect({0,0,ContentWidth,Height},{0,0,0,.84f});panel({SurfaceInset,28,SurfaceWidth,664},ash);
+            text(title,36,47,23,{.84f,.68f,.36f,1});iconButton({ContentWidth-66,38,38,38},QuickDecorations::CloseBadge,"X","Back / close","close");
         };
         panel({0,0,ContentWidth,Height},ash);
         text("HELPY",20,20,22,ink);
@@ -1502,7 +1504,7 @@ public:
                         text(Shorten(edited?itemDetailEdits.at(v.name):v.hasValue?v.value:v.reason,55),382,y,15,edited?ink:muted);
                         if(v.editable&&!busy)f.hits.push_back({row,"item-detail-field",v.name});
                     }
-                    if(itemDetailFields.empty())text("No safely readable reflected fields were returned.",36,304,18,muted);
+                    if(itemDetailFields.empty())text("No supported reflected fields were returned.",36,304,18,muted);
                     pager(588,itemDetailsPage,itemDetailFields.size(),pageSize);
                     button({500,632,244,38},itemDetailEdits.empty()?"Edit a field to export":"Export "+std::to_string(itemDetailEdits.size())+" override(s)","item-overrides-export","",!busy&&!itemDetailEdits.empty());
                 }else if(itemDetailsTab==1) {
@@ -1540,9 +1542,9 @@ public:
         }
         if(cartOpen) {
             f.hits.clear();f.rightHits.clear();hoveredPath.clear();
-            rect({0,0,ContentWidth,Height},{0,0,0,.84f});panel({16,28,748,664},ash);
+            rect({0,0,ContentWidth,Height},{0,0,0,.84f});panel({SurfaceInset,28,SurfaceWidth,664},ash);
             text("ITEM CART",36,47,23,{.84f,.68f,.36f,1});
-            button({656,38,88,38},"Back","cart-close");
+            button({ContentWidth-132,38,96,38},"Back","cart-close");
             text("Choose a quantity for each item. Grants are sent as one bounded batch.",36,92,17,muted);
             std::vector<std::string> cart(selection.begin(),selection.end());
             constexpr int CartRows=7;const int first=cartPage*CartRows;

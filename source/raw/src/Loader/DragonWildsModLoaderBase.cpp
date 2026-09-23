@@ -59,11 +59,11 @@ namespace DragonWilds {
         const auto started=std::chrono::steady_clock::now();
         try {OnLoad(loaderPath, modName, engineLifecyclePhase);}
         catch(const std::exception& error) {
-            PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:{}][MOD:{}] Section rejected at '{}'; unrelated sections, mods, and loaders continue: {}.\n"),
+            PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:{}][MOD:{}] '{}' rejected: {}.\n"),
                 RC::to_generic_string(m_modFolderType),modName,loaderPath.native(),PS::ToWideSafe(error.what()));
         }
         catch(...) {
-            PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:{}][MOD:{}] Section rejected at '{}' with an unknown error; unrelated sections, mods, and loaders continue.\n"),
+            PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:{}][MOD:{}] '{}' rejected: unknown error.\n"),
                 RC::to_generic_string(m_modFolderType),modName,loaderPath.native());
         }
         const auto elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -120,6 +120,16 @@ namespace DragonWilds {
         return m_datatableRegistry->GetDatatableByName(name);
     }
 
+    RC::Unreal::UDataTable* DragonWildsModLoaderBase::TryGetDatatableByPath(const std::string& path)
+    {
+        return m_datatableRegistry ? m_datatableRegistry->GetDatatableByPath(path) : nullptr;
+    }
+
+    std::vector<RC::Unreal::UDataTable*> DragonWildsModLoaderBase::GetDatatablesByName(const std::string& name)
+    {
+        return m_datatableRegistry ? m_datatableRegistry->GetDatatablesByName(name) : std::vector<RC::Unreal::UDataTable*>{};
+    }
+
     RC::Unreal::UDataTable* DragonWildsModLoaderBase::GetDatatableByName(const std::string& name)
     {
         if (!m_datatableRegistry)
@@ -160,7 +170,7 @@ namespace DragonWilds {
         const auto started=std::chrono::steady_clock::now();
         if (!OnInitialize())
         {
-            PS::Log<LogLevel::Error>(STR("[DISABLED][LOADER:{}] Required capability unavailable; this loader is off, RuneSchema core and unrelated loaders continue.\n"), RC::to_generic_string(m_modFolderType));
+            PS::Log<LogLevel::Error>(STR("[DISABLED][LOADER:{}] Required capability unavailable.\n"), RC::to_generic_string(m_modFolderType));
             return;
         }
 

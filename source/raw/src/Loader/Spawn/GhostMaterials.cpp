@@ -161,7 +161,7 @@ try {
             catch (const std::exception& error)
             {
                 PS::Log<LogLevel::Warning>(
-                    STR("{} Ghost mesh enumeration failed safely: {}\n"),
+                    STR("{} Ghost mesh enumeration failed: {}\n"),
                     context, PS::ToWideSafe(error.what()));
             }
             for (const auto* name : componentNames)
@@ -172,7 +172,7 @@ try {
                 catch (const std::exception& error)
                 {
                     PS::Log<LogLevel::Warning>(
-                        STR("{} Ghost overlay skipped component {} safely: {}\n"),
+                        STR("{} Ghost overlay skipped component {}: {}\n"),
                         context, name, PS::ToWideSafe(error.what()));
                 }
             }
@@ -190,7 +190,7 @@ try {
         }
         catch (const std::exception& error)
         {
-            PS::Log<LogLevel::Warning>(STR("{} Ghost visual effect failed safely: {}\n"),
+            PS::Log<LogLevel::Warning>(STR("{} Ghost visual effect failed: {}\n"),
                 context, PS::ToWideSafe(error.what()));
             return false;
         }

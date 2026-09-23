@@ -841,7 +841,7 @@ namespace DragonWilds {
             if(definition.Declared) {
                 auto* name=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(building->GetClassPrivate(),TEXT("InternalName")));
                 const auto actualName=name?RC::to_string(*name->GetPropertyValue(name->ContainerPtrToValuePtr<void>(building))):std::string{};
-                OwnedContent::Merge(PS::HostServices::SettingsDirectory()/"OwnedContentLedger.json",
+                OwnedContent::Merge(OwnedContent::LedgerPath(PS::HostServices::SettingsDirectory()),
                     {{"Building",RC::to_string(definition.Owner),definition.DeclaredPersistenceID,
                         actualName,RC::to_string(definition.AssetPath)}});
             }

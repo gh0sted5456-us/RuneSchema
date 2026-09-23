@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <string>
 #include <mutex>
+#include <vector>
 #include "Utility/OrderedCallbacks.h"
 #include "Unreal/Core/HAL/Platform.hpp"
 
@@ -18,6 +19,8 @@ namespace UECustom {
     class UDataTableRegistry {
     public:
         RC::Unreal::UDataTable* GetDatatableByName(const std::string& name);
+        RC::Unreal::UDataTable* GetDatatableByPath(const std::string& path);
+        std::vector<RC::Unreal::UDataTable*> GetDatatablesByName(const std::string& name);
 
         DatatableSerializeCallbackId RegisterDatatableSerializeCallback(const DatatableSerializeCallback& callback);
         void UnregisterDatatableSerializeCallback(const DatatableSerializeCallbackId& callbackId);
@@ -30,6 +33,8 @@ namespace UECustom {
         std::mutex m_mutex;
         std::recursive_mutex m_dispatchMutex;
         std::unordered_map<std::string, RC::Unreal::UDataTable*> m_datatableMap;
+        std::unordered_map<std::string, RC::Unreal::UDataTable*> m_datatablePathMap;
+        std::unordered_map<std::string, std::vector<RC::Unreal::UDataTable*>> m_datatablesByName;
         PS::OrderedCallbacks<DatatableSerializeCallback> m_callbacks;
     };
 }

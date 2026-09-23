@@ -59,6 +59,8 @@ namespace DragonWilds {
 
         void SetupGameInstanceInitLoaders();
 
+        void SetupGameInstanceInitLoadersOnce();
+
         void HookDatatableSerialize();
 
         void HookGameInstanceInit();
@@ -87,6 +89,9 @@ namespace DragonWilds {
 
         PS::UnrealReadinessGate<RC::Unreal::UDataTable*> m_readiness;
         bool m_orderResolved = false;
+        std::atomic<bool> m_gameInstanceLoadersStarted{false};
+        std::atomic<bool> m_coreStartupComplete{false};
+        RC::Unreal::Hook::GlobalCallbackId m_coreStartupCallbackId = RC::Unreal::Hook::ERROR_ID;
         std::vector<RC::StringType> m_orderedMods;
 
         static inline std::vector<std::function<void(RC::Unreal::UDataTable*)>> DatatableSerializeCallbacks;

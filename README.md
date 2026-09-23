@@ -1,16 +1,18 @@
-# RuneSchema 0.7.5.9 Experimental
+# RuneSchema 0.7.5.14 Experimental
 
-This branch contains the clean, buildable RuneSchema 0.7.5.9 source and its
+This branch contains the clean, buildable RuneSchema 0.7.5.14 source and its
 ready-to-install artifacts.
 
-- [RuneSchema universal runtime](release/0.7.5.9/RuneSchema-0.7.5.9-Universal.zip)
-- [UE4SS for Steam/GOG](release/0.7.5.9/UE4SS-3.0.1-f6d5f942-Steam-GOG.zip)
-- [UE4SS for Game Pass/WinGDK](release/0.7.5.9/UE4SS-3.0.1-f6d5f942-GamePass-WinGDK.zip)
-- [Artifact hashes and installation notes](release/0.7.5.9/README.md)
+- [RuneSchema universal runtime](release/0.7.5.14/RuneSchema-0.7.5.14-Universal.zip)
+- [RuneSchema core-only runtime](release/0.7.5.14/RuneSchema-0.7.5.14-Core.zip)
+- [UE4SS for Steam/GOG](release/0.7.5.14/UE4SS-3.0.1-f6d5f942-Steam-GOG.zip)
+- [UE4SS for Game Pass/WinGDK](release/0.7.5.14/UE4SS-3.0.1-f6d5f942-GamePass-WinGDK.zip)
+- [Artifact hashes and installation notes](release/0.7.5.14/README.md)
 
 The RuneSchema runtime is storefront-agnostic and detects Steam/GOG or Game
-Pass/WinGDK at runtime. Its archive includes `RuneSchema/enabled.txt` and does
-not ship a `RuneSchema/mods` payload.
+Pass/WinGDK at runtime. Its archive includes `RuneSchema/enabled.txt`, the
+optional map under `RuneSchema/dlls/mappings`, and an empty `RuneSchema/mods`
+folder.
 
 Run `Build RuneSchema.bat` or `build\build.bat -Clean` to rebuild the package.
 

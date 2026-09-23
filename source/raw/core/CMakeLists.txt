@@ -13,7 +13,8 @@ add_library(RuneSchemaJsonCore STATIC
     ../src/Core/JsonDocument.cpp
     ../src/Core/JsonArrayPatch.cpp
     ../src/Core/JsonLoadOrderMerge.cpp
-    ../src/Core/JsonPatchDirective.cpp)
+    ../src/Core/JsonPatchDirective.cpp
+    ../src/Core/UsmapIndex.cpp)
 target_compile_features(RuneSchemaJsonCore PUBLIC cxx_std_23)
 target_include_directories(RuneSchemaJsonCore PUBLIC ../include)
 target_link_libraries(RuneSchemaJsonCore PUBLIC nlohmann_json::nlohmann_json)
@@ -28,7 +29,7 @@ if(PROJECT_IS_TOP_LEVEL)
     endif()
     string(REPLACE "/DNDEBUG" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
     enable_testing()
-    foreach(test asset-aliases quest-definition quest-progress quest-native-contract quest-registry-plan spawn-radius quest-repeat-policy quest-save-ownership quest-receipt-journal quest-reward-tiers quest-stage-progress owned-content-ledger)
+    foreach(test asset-aliases quest-definition quest-progress quest-native-contract quest-registry-plan spawn-radius quest-repeat-policy quest-save-ownership quest-receipt-journal quest-reward-tiers quest-stage-progress owned-content-ledger registry-patch-plan)
         add_executable(${test} ../tests/${test}.cpp)
         target_link_libraries(${test} PRIVATE RuneSchemaJsonCore)
         if(MSVC)
@@ -210,7 +211,35 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Generator/InGameQuickMenu.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Generator/QuickMenuUI.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Runtime/PluginHost.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../src/dllmain.cpp")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/dllmain.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Runtime/Storefront.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Runtime/PluginCatalog.h")
+    add_executable(plugin-catalog-compatibility ../tests/plugin-catalog-compatibility.cpp)
+    target_link_libraries(plugin-catalog-compatibility PRIVATE RuneSchemaJsonCore)
+    if(MSVC)
+        set_property(TARGET plugin-catalog-compatibility PROPERTY MSVC_RUNTIME_LIBRARY MultiThreadedDLL)
+    endif()
+    add_test(NAME plugin-catalog-compatibility COMMAND plugin-catalog-compatibility)
+    add_executable(documentation-contract ../tests/documentation-contract.cpp)
+    add_test(NAME documentation-contract COMMAND documentation-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../AUTHORING-GUIDE.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../LOADER-WALKTHROUGHS.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../plugins/plugins.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../clean-base/RuneSchema/plugins/plugins.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../API-REFERENCE.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Runtime/RuneSchemaPluginApi.h")
+    add_executable(usmap-index ../tests/usmap-index.cpp)
+    target_link_libraries(usmap-index PRIVATE RuneSchemaJsonCore)
+    if(MSVC)
+        set_property(TARGET usmap-index PROPERTY MSVC_RUNTIME_LIBRARY MultiThreadedDLL)
+    endif()
+    add_test(NAME usmap-index COMMAND usmap-index)
+    add_executable(native-binding-resolution ../tests/native-binding-resolution.cpp)
+    add_test(NAME native-binding-resolution COMMAND native-binding-resolution
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/SDK/DragonWildsSignatures.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/ModLoadOrder.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Runtime/PluginHost.cpp")
     add_executable(preview-discovery-regression ../tests/preview-discovery-regression.cpp)
     add_executable(quest-restart-ownership ../tests/quest-restart-ownership.cpp)
     add_test(NAME quest-restart-ownership COMMAND quest-restart-ownership "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/QuestNativeAdapter.h" "${CMAKE_CURRENT_SOURCE_DIR}/../src/SDK/Helper/ActorHelper.cpp")

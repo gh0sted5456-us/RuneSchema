@@ -63,6 +63,41 @@ int Run() {
     Require(questErased.Removed.end()!=std::find_if(questErased.Removed.begin(),questErased.Removed.end(),
         [](const auto& row){return row.value("Kind","")=="Quest/dialogue" && row.value("Id","")=="missing-quest";}));
     Require(Plan(preserved.Save,{},false,&registry).Save==preserved.Save);
+    auto ownedSave=assetSave;
+    ownedSave["GameProgress"]["Inventory"]["7"]={{"ItemData","missing-helmet"},{"Count",1}};
+    ownedSave["GameProgress"]["PersonalInventory"]["9"]={{"ItemData","missing-shield"}};
+    ownedSave["GameProgress"]["Loadout"]["Helmet"]={{"PlayerInventoryItemIndex",7}};
+    ownedSave["GameProgress"]["Loadout"]["Chest"]={{"ItemData","missing-body"}};
+    ownedSave["GameProgress"]["Loadout"]["Cape"]={{"ItemData","active-cape"}};
+    ownedSave["GameProgress"]["Progress"]={{"ItemsPickedUp",{"unrelated","missing-helmet"}},
+        {"MilestoneMaterialsPickedUp",{"missing-shield"}},
+        {"RecipesUnlocked",{"missing-recipe","recipe1"}},
+        {"RecipesNew",{"missing-recipe"}}};
+    const std::unordered_map<std::string,std::string> retiredItems={
+        {"missing-helmet","BlackG"},{"missing-shield","BlackG"},{"missing-body","BlackG"}};
+    const std::unordered_map<std::string,std::string> retiredRecipes={{"missing-recipe","BlackG"}};
+    const auto ownedCleaned=PlanOwned(ownedSave,retiredItems,retiredRecipes,{"BlackG"});
+    Require(!ownedCleaned.Save["GameProgress"]["Inventory"].contains("7"));
+    Require(!ownedCleaned.Save["GameProgress"]["PersonalInventory"].contains("9"));
+    Require(!ownedCleaned.Save["GameProgress"]["Loadout"].contains("Helmet"));
+    Require(!ownedCleaned.Save["GameProgress"]["Loadout"].contains("Chest"));
+    Require(ownedCleaned.Save["GameProgress"]["Loadout"].contains("Cape"));
+    Require(ownedCleaned.Save["GameProgress"]["Inventory"].contains("0"));
+    Require(ownedCleaned.Save["GameProgress"]["Progress"]["ItemsPickedUp"]==Json::array({"unrelated"}));
+    Require(ownedCleaned.Save["GameProgress"]["Progress"]["RecipesUnlocked"]==Json::array({"recipe1"}));
+    Require(PlanOwned(ownedCleaned.Save,retiredItems,retiredRecipes,{"BlackG"}).Save==ownedCleaned.Save);
+    Require(PlanOwned(ownedSave,{}, {},{}).Save==ownedSave);
+    auto pendingOwned=ownedSave;
+    const std::string retiredQuest="BBBBBBBBBBBBBBBBBBBBBA";
+    auto pendingInts=DragonWilds::Quests::OwnershipVariables("BlackG",retiredQuest);
+    pendingInts.push_back({{"QuestVariableName","RuneSchema.Phase"},{"QuestVariableValue",3}});
+    pendingOwned["GameProgress"]["QuestProgress"]["Quests"].push_back(
+        {{"QuestId",retiredQuest},{"QuestInts",pendingInts}});
+    const auto pendingRemoved=PlanOwned(pendingOwned,retiredItems,retiredRecipes,{"BlackG"});
+    Require(pendingRemoved.Save["GameProgress"]["QuestProgress"]["Quests"].end()==
+        std::find_if(pendingRemoved.Save["GameProgress"]["QuestProgress"]["Quests"].begin(),
+            pendingRemoved.Save["GameProgress"]["QuestProgress"]["Quests"].end(),
+            [&](const auto& row){return row.value("QuestId","")==retiredQuest;}));
     auto damaged=assetSave;
     damaged["GameProgress"]["Inventory"]["broken"]="not-an-item";
     damaged["GameProgress"]["Loadout"]["broken"]={{"PlayerInventoryItemIndex","not-an-index"}};

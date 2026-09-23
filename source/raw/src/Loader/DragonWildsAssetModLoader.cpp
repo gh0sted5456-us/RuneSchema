@@ -364,6 +364,31 @@ namespace DragonWilds {
                 modName,
                 std::move(normalizedProperties), isPatch,metadata,true
             };
+            // Snapshot the authored identity during the cheap JSON pass.  Clone
+            // application can legitimately be deferred until GameInstanceInit;
+            // save cleanup must still know that this active mod owns the item
+            // before character deserialization begins.
+            if(!isPatch && pending.Properties.contains("$Clone")
+                && pending.Properties.contains("PersistenceID")
+                && pending.Properties.at("PersistenceID").is_string()
+                && pending.Properties.contains("InternalName")
+                && pending.Properties.at("InternalName").is_string()) {
+                const auto source=pending.Properties.at("$Clone").get<std::string>();
+                const auto destination=RC::to_string(pending.ObjectPath);
+                if(OwnedContent::LooksLikeItemClone(destination,source)) {
+                    try {
+                        OwnedContent::Record owned{"Item",RC::to_string(modName),
+                            pending.Properties.at("PersistenceID").get<std::string>(),
+                            pending.Properties.at("InternalName").get<std::string>(),destination};
+                        OwnedContent::Validate(owned);
+                        OwnedContent::Merge(OwnedContent::LedgerPath(
+                            PS::HostServices::SettingsDirectory()),{owned});
+                    } catch(const std::exception& error) {
+                        PS::Log<LogLevel::Error>(STR("[SAVE-CLEANER][MOD:{}] Clone identity '{}' was not tracked: {}.\n"),
+                            modName,pending.ObjectPath,PS::ToWideSafe(error.what()));
+                    }
+                }
+            }
             if (isPatch) WarnPatchConflicts(m_patchConflicts, "assets:" + RC::to_string(pending.ObjectPath),
                 pending.Properties, RC::to_string(modName), false);
             (isPatch ? m_pendingPatches : m_pendingAssets).push_back(std::move(pending));
@@ -406,7 +431,7 @@ namespace DragonWilds {
             verifiedObjects.push_back(object);
         }
         if(!declarations.empty()) {
-            OwnedContent::Merge(PS::HostServices::SettingsDirectory()/"OwnedContentLedger.json",declarations);
+            OwnedContent::Merge(OwnedContent::LedgerPath(PS::HostServices::SettingsDirectory()),declarations);
             for(std::size_t index=0;index<declarations.size();++index) {
                 verifiedObjects[index]->SetRootSet();
                 OwnedContent::RegisterActiveDeclarationPath(declarations[index].Source);
@@ -676,7 +701,7 @@ namespace DragonWilds {
             }
             catch (const std::exception& error)
             {
-                PS::Log<LogLevel::Error>(STR("Clone '{}' from {} was rejected safely: {}\n"),
+                PS::Log<LogLevel::Error>(STR("Clone '{}' from {} rejected: {}\n"),
                     it->Target, it->ModName, PS::ToWideSafe(error.what()));
                 batchResults[it->ModName].ErrorCount++;
                 return true;

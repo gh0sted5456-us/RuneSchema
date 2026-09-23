@@ -26,7 +26,9 @@ namespace UECustom {
         uint8* DataPtr = static_cast<uint8*>(ScriptArray->GetData());
         void* NewElementPtr = DataPtr + FirstIndex * ElementSize;
         InnerProperty->InitializeValue(NewElementPtr);
-        FMemory::Memcpy(NewElementPtr, Value, ElementSize);
+        // Reflected array elements may own strings, soft references, or nested
+        // containers. A byte copy aliases that storage and can double-free it.
+        InnerProperty->CopySingleValue(NewElementPtr, Value);
     }
 
     void FScriptArrayHelper::Add(UECustom::FManagedValue& ValuePtr)

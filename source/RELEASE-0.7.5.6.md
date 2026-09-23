@@ -30,10 +30,13 @@
   `asset-clones-current.json` or `asset-clones-previous.json` diagnostic
   manifest. These sources seed the ownership ledger; they never restore an
   item or execute a disabled definition.
-- Before native inventory deserialization, absent-owner item IDs receive
-  temporary registry tombstones. After the inventory-load callback, RuneSchema
-  removes those exact items through `InventoryComponent:RemoveItemByData` and
-  verifies the resulting count is zero.
+- Before native character deserialization, RuneSchema removes only exact
+  absent-owner identities from inventory, personal inventory, loadout, and
+  item/recipe progress. It also clears loadout records that point at a removed
+  inventory slot. A sibling backup is created before the character JSON is
+  atomically replaced and read back for verification.
+- Temporary registry tombstones and the verified post-load native scrub remain
+  as a second line of defense for records that survive the file preflight.
 - The next normal game save persists the cleaned inventory. Reinstalling the
   mod later does not restore removed stacks.
 - Quest/dialogue and journal cleanup retain their existing embedded ownership
@@ -44,7 +47,9 @@
   the record is retained rather than guessed away.
 
 This is intentionally not the previous broad unresolved-ID scan. It does no
-global object walk and performs no save-file rewrite during startup.
+global object walk. Character JSON files are scanned only when the historical
+ledger contains content for a confirmed absent or explicitly disabled owner;
+ordinary startup does no save-file scan.
 If a mod was deleted before 0.7.5.6 and neither a historical ledger nor a prior
 clone manifest exists, RuneSchema deliberately refuses to guess which unknown
 save ID belonged to that mod.

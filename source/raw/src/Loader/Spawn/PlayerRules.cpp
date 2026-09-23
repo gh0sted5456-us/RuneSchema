@@ -125,7 +125,7 @@ namespace DragonWilds {
 
         std::vector<fs::path> files;for(const auto& file:fs::directory_iterator(loaderPath))if(file.is_regular_file()&&(file.path().extension()==".json"||file.path().extension()==".jsonc"))files.push_back(file.path());std::sort(files.begin(),files.end());
         for(const auto& file:files)try{PS::JsonHelpers::ParseJsonFileInPath(file,[&](const nlohmann::json& data){m_playerDocuments.push_back({modName,data,file.filename().string()});});}
-        catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("Player file '{}' in mod '{}' rejected; unrelated files continue: {}.\n"),file.filename().native(),modName,PS::ToWideSafe(error.what()));}
+        catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("Player file '{}' in mod '{}' rejected: {}.\n"),file.filename().native(),modName,PS::ToWideSafe(error.what()));}
     }
 
     void DragonWildsSpawnLoader::LoadNameplateDefinitions(
@@ -137,7 +137,7 @@ namespace DragonWilds {
             });
         std::vector<fs::path> files;for(const auto& file:fs::directory_iterator(loaderPath))if(file.is_regular_file()&&(file.path().extension()==".json"||file.path().extension()==".jsonc"))files.push_back(file.path());std::sort(files.begin(),files.end());
         for(const auto& file:files)try{PS::JsonHelpers::ParseJsonFileInPath(file,[&](const nlohmann::json& data){m_nameplateDocuments.push_back({modName,data,file.filename().string()});});}
-        catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("Nameplate file '{}' in mod '{}' rejected; unrelated files continue: {}.\n"),file.filename().native(),modName,PS::ToWideSafe(error.what()));}
+        catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("Nameplate file '{}' in mod '{}' rejected: {}.\n"),file.filename().native(),modName,PS::ToWideSafe(error.what()));}
     }
 
     void DragonWildsSpawnLoader::FinalizeNameplateDefinitions()
@@ -146,7 +146,7 @@ namespace DragonWilds {
         for (const auto& document : m_nameplateDocuments)
         {
             if (!document.Document.is_array()) {
-                PS::Log<LogLevel::Error>(STR("Nameplates file '{}' in mod '{}' rejected: root must be an array; unrelated definitions continue.\n"),PS::ToWideSafe(document.SourceFile.c_str()),document.ModName);
+                PS::Log<LogLevel::Error>(STR("Nameplates file '{}' in mod '{}' rejected: root must be an array.\n"),PS::ToWideSafe(document.SourceFile.c_str()),document.ModName);
                 continue;
             }
             std::size_t ordinal=0;
@@ -167,7 +167,7 @@ namespace DragonWilds {
                         throw std::runtime_error("duplicate namespaced Id");
                 } catch(const std::exception& error) {
                     const auto id=entry.is_object()?entry.value("Id",std::string("<missing Id>")):std::string("<non-object>");
-                    PS::Log<LogLevel::Error>(STR("Nameplate '{}:{}' in file '{}' (entry #{}) rejected; unrelated definitions continue: {}.\n"),
+                    PS::Log<LogLevel::Error>(STR("Nameplate '{}:{}' in file '{}' (entry #{}) rejected: {}.\n"),
                         document.ModName,PS::ToWideSafe(id.c_str()),PS::ToWideSafe(document.SourceFile.c_str()),ordinal,PS::ToWideSafe(error.what()));
                 }
             }
@@ -1126,7 +1126,7 @@ namespace DragonWilds {
         {
             m_appearanceProvenance.clear();
             PS::Log<LogLevel::Error>(
-                STR("Appearance fallback state was ignored safely: {}\n"),
+                STR("Appearance fallback state ignored: {}\n"),
                 PS::ToWideSafe(error.what()));
         }
     }
@@ -1952,7 +1952,7 @@ namespace DragonWilds {
             const auto diagnosticKey = "nameplate\n" + RC::to_string(context)
                 + "\n" + error.what();
             if (m_reportedPlayerRuleFailures.insert(diagnosticKey).second)
-                PS::Log<LogLevel::Warning>(STR("{} nameplate skipped safely: {}.\n"),
+                PS::Log<LogLevel::Warning>(STR("{} nameplate skipped: {}.\n"),
                     context, PS::ToWideSafe(error.what()));
             return false;
         }
@@ -2281,7 +2281,7 @@ namespace DragonWilds {
                             continue;
                         }
                         PS::Log<LogLevel::Error>(
-                            STR("Player rule from '{}' for '{}' failed safely: {}\n"),
+                            STR("Player rule from '{}' for '{}' failed: {}\n"),
                             rule.ModName, PS::ToWideSafe(label.c_str()), PS::ToWideSafe(ignored.c_str()));
                     }
                 }
@@ -2339,7 +2339,7 @@ namespace DragonWilds {
                     changed, &customization, error))
                 {
                     PS::Log<LogLevel::Error>(
-                        STR("Appearance fallback for player {} field {} failed safely: {}\n"),
+                        STR("Appearance fallback for player {} field {} failed: {}\n"),
                         PS::ToWideSafe(record->PlayerGuid.c_str()),
                         PS::ToWideSafe(record->Field.c_str()), PS::ToWideSafe(error.c_str()));
                     ++record;
@@ -2361,7 +2361,7 @@ namespace DragonWilds {
             catch (const std::exception& error)
             {
                 PS::Log<LogLevel::Error>(
-                    STR("Appearance fallback failed safely: {}\n"), PS::ToWideSafe(error.what()));
+                    STR("Appearance fallback failed: {}\n"), PS::ToWideSafe(error.what()));
                 ++record;
             }
             catch (...)
@@ -2901,7 +2901,7 @@ namespace DragonWilds {
                                 catch (const std::exception& error)
                                 {
                                     PS::Log<LogLevel::Warning>(
-                                        STR("Max-health gameplay effect failed safely: {}\n"),
+                                        STR("Max-health gameplay effect failed: {}\n"),
                                         PS::ToWideSafe(error.what()));
                                 }
                             }
@@ -3502,12 +3502,12 @@ namespace DragonWilds {
         }
         catch (const std::exception& error)
         {
-            result = std::string("player adjustment failed safely: ") + error.what();
+            result = std::string("player adjustment failed: ") + error.what();
             return false;
         }
         catch (...)
         {
-            result = "player adjustment failed safely with an unknown exception";
+            result = "player adjustment failed: unknown error";
             return false;
         }
     }

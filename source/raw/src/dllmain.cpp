@@ -33,6 +33,7 @@
 #include "Utility/Config.h"
 #include "Utility/BuildInfo.h"
 #include "Runtime/Storefront.h"
+#include "Runtime/MappingBackbone.h"
 #include "Utility/Logging.h"
 #include "Utility/StartupTrace.h"
 #include "SDK/DragonWildsSignatures.h"
@@ -248,7 +249,7 @@ public:
         for(const auto& connection:m_pluginHost.Connections())
             PS::Log<LogLevel::Normal>(TEXT("Plugin connection enabled: {}\n"),PS::ToWideSafe(connection.c_str()));
         if(!m_pluginHost.HasCapability("bridge.registry"))
-            PS::Log<LogLevel::Error>(TEXT("Required RuneSchema.Networking capability bridge.registry is unavailable; vanilla systems continue and dependent bridge requests will report unavailable.\n"));
+            PS::Log<LogLevel::Normal>(TEXT("RuneSchema.Networking is not active. Local loaders remain enabled.\n"));
         if(m_pluginHost.HasCapability("helpy.navigation"))try {
             const auto about=m_pluginHost.Call("RuneSchema.Core","helpy.about","{}");
             PS::Log<LogLevel::Normal>(TEXT("Helpy plugin service: {}\n"),PS::ToWideSafe(about.c_str()));
@@ -256,11 +257,21 @@ public:
             PS::Log<LogLevel::Warning>(TEXT("Helpy plugin service validation failed: {}\n"),PS::ToWideSafe(error.what()));
         }
         PS::UE4SSCompatibility::Report();
-        // Storefront selection changes native-resolution policy. It is a
-        // startup fact, not a diagnostic, so it must remain visible with the
-        // standard logging profile.
-        RC::Output::send<RC::LogLevel::Normal>(TEXT("[RuneSchema] Runtime storefront: {} | package profile: Universal | compatible paths selected automatically.\n"),
-            PS::ToWideSafe(PS::Storefront::Name(PS::Storefront::Current())));
+        // Storefront selection controls native signature lookup.
+        const auto& storefront=PS::Storefront::CurrentDetection();
+        RC::Output::send<RC::LogLevel::Normal>(TEXT("[RuneSchema] Runtime storefront: {} | reason: {} | package profile: Universal.\n"),
+            PS::ToWideSafe(PS::Storefront::Name(storefront.Value)),storefront.Reason);
+        if(storefront.Value==PS::Storefront::Kind::GamePass) {
+            const auto signatureState=storefront.HasGamePassSignatures?TEXT("available"):TEXT("missing");
+            RC::Output::send<RC::LogLevel::Normal>(TEXT("[RuneSchema] Game Pass pivot: UE4SS_Signatures={} at {} | native Steam-only scans disabled.\n"),
+                signatureState,storefront.SignatureRoot.wstring());
+        }
+        const auto& mapping=PS::MappingBackbone::Current(std::filesystem::path(PS::HostServices::WorkingDirectory()));
+        if(mapping.Available)
+            RC::Output::send<RC::LogLevel::Normal>(TEXT("[RuneSchema] Mapping backbone: {} | bytes={} | fingerprint={}.\n"),
+                mapping.Path.wstring(),mapping.Size,PS::ToWideSafe(mapping.Fingerprint.c_str()));
+        else
+            RC::Output::send<RC::LogLevel::Normal>(TEXT("[RuneSchema] Mapping backbone: no Mappings.usmap found; live reflection remains authoritative.\n"));
         PS::StartupTrace::Mark("signature scan begin");
 
         DragonWilds::SignatureManager::Initialize();
@@ -417,7 +428,7 @@ public:
             ImGui::Text("Game target: %s", PS::BuildInfo::GameTarget);
             if (!PS::UE4SSCompatibility::MatchesTarget()) {
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.75f, 0.18f, 1.0f));
-                ImGui::TextWrapped("Runtime build differs from the tested API line. RuneSchema will continue best-effort; failed capabilities are reported individually.");
+                ImGui::TextWrapped("Runtime build differs from the tested API line. Unavailable capabilities are reported separately.");
                 ImGui::PopStyleColor();
             }
             ImGui::SeparatorText("Attribution");

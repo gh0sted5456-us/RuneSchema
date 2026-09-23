@@ -312,7 +312,8 @@ void InGameQuickMenu::ResetWorld() {
     m_pendingRequest=0;m_highSurrogate=0;m_wheelRemainder=0;
     SpawnToolRequests::Cancel();
     m_world.Reset();m_seenWorld=false;
-    m_canvasIcons.clear();m_failedCanvasIcons.clear();
+    m_canvasIcons.clear();m_failedCanvasIcons.clear();m_queuedCanvasIcons.clear();
+    m_canvasIconQueue.clear();m_canvasIconOrder.clear();
     std::lock_guard lock(m_eventMutex);m_events.clear();
 }
 bool InGameQuickMenu::Initialize(bool reportFailure) {
@@ -1005,11 +1006,40 @@ void InGameQuickMenu::RenderCanvas(UObject* canvas) {
     PrioritizeVisibleSearch(m_ui);
     if(auto command=m_ui.TakeCommand())Submit(*command);
     m_currentTab.store(static_cast<int>(m_ui.tab));
-    const auto frame=m_ui.Render(mx,my);bool loadedIcon=false;
+    const auto frame=m_ui.Render(mx,my);
+    // Capture only icon paths requested by the current painted frame. The
+    // cache is shared by every Helpy tab for this game session, bounded, and
+    // populated on the game thread without a catalogue-wide startup scan.
+    for(const auto& draw:frame.draws)if(draw.kind==QuickUI::Draw::Kind::Icon&&!draw.text.empty()
+        &&!m_canvasIcons.contains(draw.text)&&!m_failedCanvasIcons.contains(draw.text)
+        &&m_queuedCanvasIcons.insert(draw.text).second)m_canvasIconQueue.push_back(draw.text);
+    constexpr std::size_t IconCacheLimit=256,FirstFrameIconBudget=16,SteadyIconBudget=4;
+    std::size_t iconBudget=m_canvasIcons.empty()?FirstFrameIconBudget:SteadyIconBudget;
+    UClass* textureType=nullptr;
+    while(iconBudget--&&!m_canvasIconQueue.empty()) {
+        auto path=std::move(m_canvasIconQueue.front());m_canvasIconQueue.pop_front();m_queuedCanvasIcons.erase(path);
+        UObject* texture=nullptr;
+        try {texture=ActorHelper::ResolveObject(RC::to_generic_string(path));}catch(...) {texture=nullptr;}
+        if(!texture)for(const auto* fallback:QuickDecorations::FallbackTextures(path)) {
+            if(!fallback||!*fallback)continue;
+            try {texture=ActorHelper::ResolveObject(RC::to_generic_string(fallback));}catch(...) {texture=nullptr;}
+            if(texture)break;
+        }
+        if(!textureType)try {textureType=ActorHelper::ResolveClass(TEXT("/Script/Engine.Texture"));}catch(...) {textureType=nullptr;}
+        if(!texture||!textureType||!texture->IsA(textureType)) {
+            if(m_failedCanvasIcons.insert(path).second)
+                PS::Log<LogLevel::Warning>(STR("RuneSchema Helpy item icon unavailable: {}\n"),RC::to_generic_string(path));
+            continue;
+        }
+        auto& weak=m_canvasIcons[path];weak.Assign(texture);m_canvasIconOrder.push_back(path);
+        while(m_canvasIcons.size()>IconCacheLimit&&!m_canvasIconOrder.empty()) {
+            const auto oldest=std::move(m_canvasIconOrder.front());m_canvasIconOrder.pop_front();m_canvasIcons.erase(oldest);
+        }
+    }
     for(const auto& draw:frame.draws) {
         const auto& r=draw.box;const auto& c=draw.color;
         if(draw.kind==QuickUI::Draw::Kind::Rectangle)DrawRect(canvas,x+r.x*factor,y+r.y*factor,r.w*factor,r.h*factor,c[0],c[1],c[2],c[3]);
-        else if(draw.kind==QuickUI::Draw::Kind::Text)DrawText(canvas,draw.text,x+r.x*factor,y+r.y*factor,(draw.font/24.f)*factor,c[0],c[1],c[2],c[3],draw.centreX);
+        else if(draw.kind==QuickUI::Draw::Kind::Text)DrawText(canvas,draw.text,x+r.x*factor,y+r.y*factor,(draw.font/24.f)*factor*QuickUI::FontScale,c[0],c[1],c[2],c[3],draw.centreX);
         else{
             bool drawn=false;
             try {
@@ -1017,24 +1047,8 @@ void InGameQuickMenu::RenderCanvas(UObject* canvas) {
                 // primitives. Only live catalogue artwork performs an object
                 // lookup, so Helpy has no cooked menu-asset dependency.
                 if(draw.kind==QuickUI::Draw::Kind::Icon&&!draw.text.empty()) {
-                    auto& weak=m_canvasIcons[draw.text];auto* texture=weak.Get();
-                    if(!texture&&!loadedIcon&&!m_failedCanvasIcons.contains(draw.text)) {
-                        loadedIcon=true;
-                        // A failed primary lookup must not bypass the legacy-name retry.
-                        try {texture=ActorHelper::ResolveObject(RC::to_generic_string(draw.text));}catch(...) {texture=nullptr;}
-                        if(!texture)for(const auto* fallback:QuickDecorations::FallbackTextures(draw.text)) {
-                            if(!fallback || !*fallback)continue;
-                            try {texture=ActorHelper::ResolveObject(RC::to_generic_string(fallback));}catch(...) {texture=nullptr;}
-                            if(texture)break;
-                        }
-                        auto* textureType=ActorHelper::ResolveClass(TEXT("/Script/Engine.Texture"));
-                        if(!texture||!textureType||!texture->IsA(textureType)){
-                            if(m_failedCanvasIcons.insert(draw.text).second)
-                                PS::Log<LogLevel::Warning>(STR("RuneSchema Helpy item icon unavailable: {}\n"),RC::to_generic_string(draw.text));
-                            texture=nullptr;
-                        }
-                        if(texture)weak.Assign(texture);
-                    }
+                    auto found=m_canvasIcons.find(draw.text);
+                    auto* texture=found==m_canvasIcons.end()?nullptr:found->second.Get();
                     if(texture&&!texture->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed))) {
                         DrawTexture(canvas,texture,x+r.x*factor,y+r.y*factor,r.w*factor,r.h*factor,c[0],c[1],c[2],c[3]);drawn=true;
                     }
@@ -1044,7 +1058,7 @@ void InGameQuickMenu::RenderCanvas(UObject* canvas) {
                 const auto label=draw.kind==QuickUI::Draw::Kind::Badge?draw.fallback:std::string("?");
                 DrawRect(canvas,x+r.x*factor,y+r.y*factor,r.w*factor,r.h*factor,.10f,.09f,.07f,.85f*c[3]);
                 DrawText(canvas,label,x+(r.x+r.w/2)*factor,y+(r.y+4)*factor,
-                    (label.size()>2?.43f:.62f)*factor,.95f,.87f,.67f,c[3],true);
+                    (label.size()>2?.43f:.62f)*factor*QuickUI::FontScale,.95f,.87f,.67f,c[3],true);
             }
         }
     }

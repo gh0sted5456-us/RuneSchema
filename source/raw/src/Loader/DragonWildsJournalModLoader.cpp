@@ -369,7 +369,7 @@ namespace DragonWilds {
                     TrackOwnedId(entry,id->GetPropertyValue(id->ContainerPtrToValuePtr<void>(entry)),def.Owner,true);
                     auto* name=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(entry->GetClassPrivate(),TEXT("InternalName")));
                     const auto actualName=RC::to_string(*name->GetPropertyValue(name->ContainerPtrToValuePtr<void>(entry)));
-                    OwnedContent::Merge(PS::HostServices::SettingsDirectory()/"OwnedContentLedger.json",
+                    OwnedContent::Merge(OwnedContent::LedgerPath(PS::HostServices::SettingsDirectory()),
                         {{m_loreOnly?"Lore":"Journal",RC::to_string(def.Owner),def.DeclaredPersistenceID,
                             actualName,RC::to_string(def.Key)}});
                 }
@@ -834,7 +834,7 @@ namespace DragonWilds {
             nullptr, nullptr, PersistenceLoadedPath);
         if (!function)
         {
-            PS::Log<LogLevel::Error>(STR("Journal persistence event was not found; custom entries cannot be unlocked safely.\n"));
+            PS::Log<LogLevel::Error>(STR("Journal persistence event was not found; custom entry unlocks are disabled.\n"));
             return;
         }
         size_t parameterCount=0;

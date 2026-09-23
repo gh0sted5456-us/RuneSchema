@@ -4,8 +4,11 @@ param(
     [switch]$PluginOnly
 )
 $ErrorActionPreference = 'Stop'
-$Version = '0.7.5.9'
-$BuildRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$Version = '0.7.5.14'
+$BuildRoot = [IO.Path]::GetFullPath($PSScriptRoot)
+if (-not (Test-Path -LiteralPath (Join-Path $BuildRoot 'source\raw\CMakeLists.txt') -PathType Leaf)) {
+    $BuildRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+}
 $SourceRoot = Join-Path $BuildRoot 'source'
 $RawSource = Join-Path $SourceRoot 'raw'
 $CleanBase = Join-Path $BuildRoot 'clean-base\RuneSchema'
@@ -44,8 +47,7 @@ try {
             if ($key -ieq 'Path') { $pathValues += $value; continue }
             Set-Item -LiteralPath "Env:$key" -Value $value
         }
-        # cmd can emit both PATH and Path; keep the vcvars version that contains
-        # the selected MSVC toolchain instead of accidentally restoring the old one.
+        # Prefer the vcvars PATH containing the selected compiler.
         $compilerPath = $pathValues | Where-Object { $_ -match 'VC\\Tools\\MSVC\\.+\\bin\\Hostx64\\x64' } | Select-Object -First 1
         if (-not $compilerPath) { $compilerPath = $pathValues | Sort-Object Length -Descending | Select-Object -First 1 }
         if ($compilerPath) { $env:PATH = $compilerPath }
@@ -61,8 +63,7 @@ try {
             throw "Refusing unsafe clean path: $resolved"
         }
         if (-not (Test-Path -LiteralPath $resolved)) { return }
-        # Rust/CMake intermediates can exceed the legacy Win32 path limit.
-        # Directory.Delete with an extended path keeps the clean deterministic.
+        # Build intermediates can exceed the legacy Win32 path limit.
         $extended = if ($resolved.StartsWith('\\')) { '\\?\UNC\' + $resolved.Substring(2) } else { '\\?\' + $resolved }
         $tree = [IO.DirectoryInfo]::new($extended)
         foreach ($file in $tree.EnumerateFiles('*',[IO.SearchOption]::AllDirectories)) {
@@ -75,8 +76,7 @@ try {
         [IO.Directory]::Delete($extended, $true)
     }
     function Initialize-GitHubTransport {
-        # Keep dependency retrieval self-contained and force public UE4SS
-        # submodules that use SSH-shaped URLs through GitHub HTTPS.
+        # Fetch public UE4SS dependencies over HTTPS.
         $env:GIT_TERMINAL_PROMPT = '0'
         $env:GCM_INTERACTIVE = 'Never'
         $env:GIT_CONFIG_COUNT = '3'
@@ -117,9 +117,7 @@ try {
         return $null
     }
     function Attempt-Signing([string[]]$Files) {
-        # A GitHub-hosted signer can be supplied, but only with an explicit SHA-256
-        # pin. Signing still requires a real private certificate/key; downloading
-        # a signing program alone cannot create a trusted signature.
+        # Optional signer downloads require a pinned SHA-256 hash.
         $signer = $null
         if ($env:RUNESCHEMA_SIGNER_URL -and $env:RUNESCHEMA_SIGNER_SHA256) {
             if ($env:RUNESCHEMA_SIGNER_URL -notmatch '^https://github\.com/') {
@@ -209,19 +207,27 @@ try {
         Copy-Item -LiteralPath $payload -Destination $pluginRoot -Recurse
         Write-Host "Created plugin-only package $zip; RuneSchema.dll was not built or replaced." -ForegroundColor Green
     }
-    function New-Package([string]$Name, [string]$CoreDll, [string]$HelpyDll) {
+    function New-Package([string]$Name, [string]$CoreDll, [string]$HelpyDll, [bool]$IncludePlugins = $true) {
         $packageRoot = Join-Path $DistRoot $Name
         $payload = Join-Path $packageRoot 'RuneSchema'
         if (Test-Path $packageRoot) { Remove-Item -LiteralPath $packageRoot -Recurse -Force }
         New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
         Copy-Item -LiteralPath $CleanBase -Destination $packageRoot -Recurse
-        # UE4SS treats this marker as the explicit enablement for the main
-        # RuneSchema mod. Keep it in every drag-and-drop runtime package.
+        # UE4SS enable marker.
         Set-Content -LiteralPath (Join-Path $payload 'enabled.txt') -Value '' -Encoding ascii
         $mods = Join-Path $payload 'mods'
         if (Test-Path $mods) { Remove-Item -LiteralPath $mods -Recurse -Force }
+        # Keep the documented drop-in layout without shipping a load-order file
+        # or sample mods that could replace an existing installation's content.
+        New-Item -ItemType Directory -Path $mods -Force | Out-Null
+        if (-not $IncludePlugins) {
+            $optionalPlugins = Join-Path $payload 'plugins'
+            if (Test-Path $optionalPlugins) { Remove-Item -LiteralPath $optionalPlugins -Recurse -Force }
+        }
         Copy-Item -LiteralPath $CoreDll -Destination (Join-Path $payload 'dlls\main.dll') -Force
-        Copy-Item -LiteralPath $HelpyDll -Destination (Join-Path $payload 'plugins\RuneSchema.Helpy\dll\RuneSchema.Helpy.dll') -Force
+        if ($IncludePlugins) {
+            Copy-Item -LiteralPath $HelpyDll -Destination (Join-Path $payload 'plugins\RuneSchema.Helpy\dll\RuneSchema.Helpy.dll') -Force
+        }
         $report = foreach ($dll in Get-ChildItem -LiteralPath $payload -Filter '*.dll' -File -Recurse) {
             $before = $dll.Length; $state = Compress-DllBestEffort $dll.FullName
             [pscustomobject]@{ File = $dll.FullName.Substring($payload.Length + 1); Before = $before; After = (Get-Item $dll.FullName).Length; State = $state }
@@ -257,7 +263,7 @@ try {
     $releaseContracts = if ($PluginOnly) { @('helpy-instant-open') } else { @('vendor-offers','loader-schemas','npc-catalog','player-activity-events',
         'quest-gameplay-owner','quest-native-contract','quest-definition','event-definition',
         'dialogue-definition','building-preview-safety','building-clone-contract','static-building-assembly-contract','owned-content-ledger','owned-save-cleanup-contract','resource-additional-drops','niagara-preset',
-        'time-of-day-contract','helpy-instant-open') }
+        'time-of-day-contract','registry-patch-plan','helpy-instant-open','plugin-catalog-compatibility','documentation-contract','usmap-index','native-binding-resolution') }
     Invoke-Checked 'cmake.exe' (@('--build', $contractBuild, '--target') + $releaseContracts + @('--parallel', '1')) 'Release contract test build'
     $contractPattern = '^(' + (($releaseContracts | ForEach-Object {[regex]::Escape($_)}) -join '|') + ')$'
     Invoke-Checked 'ctest.exe' @('--test-dir', $contractBuild, '--output-on-failure', '-R', $contractPattern) 'Release contract tests'
@@ -268,7 +274,9 @@ try {
         Write-Host "`n$Version Helpy-only build complete: $DistRoot" -ForegroundColor Green
         return
     }
-    New-Package "RuneSchema-$Version-Universal" $universal.Core $helpy
+    New-Package "RuneSchema-$Version-Universal" $universal.Core $helpy $true
+    # Plugin-free runtime.
+    New-Package "RuneSchema-$Version-Core" $universal.Core $helpy $false
     $pluginRoot = Join-Path $BuildRoot 'plugins'
     if (Test-Path $pluginRoot) { Remove-Item -LiteralPath $pluginRoot -Recurse -Force }
     New-Item -ItemType Directory -Path $pluginRoot -Force | Out-Null
