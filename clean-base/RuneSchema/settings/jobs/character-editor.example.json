@@ -1,0 +1,8 @@
+{
+  "schema": "RuneSchema.TraceJob.v1",
+  "id": "character-editor-example",
+  "enabled": false,
+  "maxEvents": 256,
+  "classContains": ["MainMenuCharCreateScreen", "WBP_MainMenu_CharCreate_C", "CharacterOptionSelect", "WBP_CharacterOptionSelect_C"],
+  "functionContains": []
+}

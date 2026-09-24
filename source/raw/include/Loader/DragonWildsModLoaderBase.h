@@ -30,7 +30,7 @@ namespace DragonWilds {
 
         void Setup();
         void AutoReload(const RC::StringType& modName, const std::filesystem::path& modFilePath);
-        void Load(const std::filesystem::path& modPath, const RC::StringType& modName, const EEngineLifecyclePhase& engineLifecyclePhase);
+        bool Load(const std::filesystem::path& modPath, const RC::StringType& modName, const EEngineLifecyclePhase& engineLifecyclePhase);
         void FinalizeLoad(const EEngineLifecyclePhase& engineLifecyclePhase);
 
 		void Initialize(const EEngineLifecyclePhase& engineLifecyclePhase);

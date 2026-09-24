@@ -966,6 +966,10 @@ namespace DragonWilds {
 #ifdef RUNESCHEMA_PLUGIN_CLIENT
         return nullptr;
 #else
+        using NativeGetMap = TMap<FName, FFieldClass*>&(*)();
+        static const auto nativeGetMap = reinterpret_cast<NativeGetMap>(
+            DragonWilds::SignatureManager::GetSignature("FFieldClass::GetNameToFieldClassMap"));
+        if (nativeGetMap) return &nativeGetMap();
         return &FFieldClass::GetNameToFieldClassMap();
 #endif
     }

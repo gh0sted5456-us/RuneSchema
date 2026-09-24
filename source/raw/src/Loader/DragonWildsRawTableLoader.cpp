@@ -3,6 +3,7 @@
 #include <Unreal/CoreUObject/UObject/UnrealType.hpp>
 #include "Unreal/NameTypes.hpp"
 #include "Unreal/Engine/UDataTable.hpp"
+#include "Unreal/Hooks.hpp"
 #include "SDK/Classes/UCompositeDataTable.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Classes/Custom/UDataTableStore.h"
@@ -12,6 +13,8 @@
 #include "SDK/Structs/Custom/FScriptMapHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "Utility/Logging.h"
+#include "Utility/Config.h"
+#include "Runtime/HostServices.h"
 #include "Utility/JsonHelpers.h"
 #include "Loader/DragonWildsRawTableLoader.h"
 #include "Loader/CharacterCustomizationPlan.h"
@@ -41,6 +44,38 @@ namespace {
             return true;
         };
         return nlohmann::json::parse(input,callback,true,true);
+    }
+
+    int CharacterOptionCount(UObject* object, const char* selector)
+    {
+        if (!object || !object->GetClassPrivate()) return -1;
+        auto* options = DragonWilds::PropertyHelper::GetPropertyByName<FMapProperty>(
+            object->GetClassPrivate(), TEXT("CharacterOptionData"));
+        if (!options) options = DragonWilds::PropertyHelper::GetPropertyByName<FMapProperty>(
+            object->GetClassPrivate(), TEXT("CharacterOptions"));
+        auto* valueStruct = options
+            ? DragonWilds::PropertyHelper::CastProperty<FStructProperty>(options->GetValueProp()) : nullptr;
+        auto* optionData = valueStruct
+            ? DragonWilds::PropertyHelper::GetPropertyByName<FArrayProperty>(
+                valueStruct->GetStruct().Get(), TEXT("OptionData")) : nullptr;
+        if (!options || !valueStruct || !optionData) return -1;
+        auto* keyProperty = options->GetKeyProp();
+        const auto keySize=keyProperty->GetSize();
+        const auto keyAlignment=keyProperty->GetMinAlignment();
+        if(keySize<=0||keyAlignment<=0||(keyAlignment&(keyAlignment-1)))return -1;
+        void* key=FMemory::Malloc(keySize,keyAlignment);if(!key)return -1;
+        keyProperty->InitializeValue(key);
+        DragonWilds::PropertyHelper::CopyJsonValueToContainer(
+            key, keyProperty, std::string(selector));
+        int count = -1;
+        UECustom::FScriptMapHelper map(
+            options, options->ContainerPtrToValuePtr<void>(object));
+        map.ForEachPair([&](void* candidate, void* value) {
+            if (count < 0 && keyProperty->Identical(candidate, key))
+                count = optionData->ContainerPtrToValuePtr<FScriptArray>(value)->Num();
+        });
+        keyProperty->DestroyValue(key);FMemory::Free(key);
+        return count;
     }
 }
 
@@ -136,20 +171,43 @@ namespace DragonWilds {
             return;
         }
 
-        PS::JsonHelpers::ParseJsonFilesInPath(loaderPath, [&](const nlohmann::json& data) {
-            LoadDocument(data, modName);
+        PS::JsonHelpers::ParseJsonFilesInPathWithSource(loaderPath,
+            [&](const nlohmann::json& data, const fs::path& relative) {
+            LoadDocument(data, modName, relative.generic_string());
         });
-        LoadRegistryDirectory(loaderPath / "patches", modName, false);
-        LoadRegistryDirectory(loaderPath / "character_customization", modName, true);
     }
 
-    void DragonWildsRawTableLoader::LoadDocument(const nlohmann::json& data, const RC::StringType& modName)
+    DragonWildsRawTableLoader::~DragonWildsRawTableLoader()
     {
-        if (data.is_array()) { for (const auto& entry : data) LoadDocument(entry, modName); return; }
+        if(m_characterEditorTraceCallbackId!=Hook::ERROR_ID)
+            Hook::UnregisterCallback(m_characterEditorTraceCallbackId);
+    }
+
+    void DragonWildsRawTableLoader::LoadDocument(const nlohmann::json& data,
+        const RC::StringType& modName, const std::string& source)
+    {
+        if (data.is_array()) { for (const auto& entry : data) LoadDocument(entry, modName, source); return; }
         if (data.is_object() && data.value("schema", "") == RegistryPatch::Schema)
         {
-            try { m_registryDocuments.push_back(RegistryPatch::ParseDocument(data, RC::to_string(modName), "raw")); }
+            try { m_registryDocuments.push_back(RegistryPatch::ParseDocument(data, RC::to_string(modName), source)); }
             catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[REGISTRY-PATCH][REJECTED][MOD:{}] {}.\n"),modName,PS::ToWideSafe(error.what()));}
+            return;
+        }
+        if (data.is_object() && data.value("schema", "") == CharacterCustomization::Schema)
+        {
+            try {
+                RegistryPatch::Document document;
+                document.Owner=RegistryPatch::NormalizeId(RC::to_string(modName));
+                document.Source=source;
+                document.Profile="dragonwilds.characterCustomization.v1";
+                document.Priority=data.value("priority",0);
+                document.Patches=CharacterCustomization::Expand(data,RC::to_string(modName),source);
+                m_registryDocuments.push_back(std::move(document));
+            }
+            catch(const std::exception& error) {
+                PS::Log<LogLevel::Error>(STR("[REGISTRY-PATCH][REJECTED][MOD:{}][FILE:{}] {}; remaining definitions continue.\n"),
+                    modName,RC::to_generic_string(source),PS::ToWideSafe(error.what()));
+            }
             return;
         }
             try
@@ -270,7 +328,101 @@ namespace DragonWilds {
 
     bool DragonWildsRawTableLoader::OnInitialize()
     {
+        LoadTraceJobs();
+        RegisterCharacterEditorTrace();
         return true;
+    }
+
+    void DragonWildsRawTableLoader::LoadTraceJobs()
+    {
+        const auto& settings=PS::PSConfig::Get()->GetSettings();
+        if(!settings.advancedRuntime || !settings.diagnosticJobs.enabled)return;
+        const auto add=[this](std::string id,std::vector<std::string> classes,
+            std::vector<std::string> functions={},std::size_t maximum=256) {
+            if(id.empty()||classes.empty()||maximum==0||maximum>4096)
+                throw std::runtime_error("trace job has invalid id, class search, or MaxEvents");
+            if(std::ranges::any_of(m_traceJobs,[&](const auto& job){return job.Id==id;}))
+                throw std::runtime_error("duplicate trace job id: "+id);
+            m_traceJobs.push_back({std::move(id),std::move(classes),std::move(functions),maximum,{}});
+        };
+        if(settings.diagnosticJobs.characterEditorPreset)
+            add("character-editor",{"MainMenuCharCreateScreen","WBP_MainMenu_CharCreate_C",
+                "CharacterOptionSelect","WBP_CharacterOptionSelect_C"});
+        const auto root=PS::HostServices::SettingsDirectory()/"jobs";
+        if(std::filesystem::exists(root))for(const auto& entry:std::filesystem::recursive_directory_iterator(root))try {
+            if(!entry.is_regular_file() || (entry.path().extension()!=".json"&&entry.path().extension()!=".jsonc"))continue;
+            const auto data=ParseStrict(entry.path());
+            if(data.value("schema",std::string{})!="RuneSchema.TraceJob.v1" || !data.value("enabled",true))continue;
+            const auto strings=[&](const char* key){
+                std::vector<std::string> result;
+                if(data.contains(key))for(const auto& value:data.at(key)) {
+                    if(!value.is_string()||value.get<std::string>().empty())throw std::runtime_error(std::string(key)+" must contain non-empty strings");
+                    result.push_back(value.get<std::string>());
+                }
+                return result;
+            };
+            add(data.at("id").get<std::string>(),strings("classContains"),
+                strings("functionContains"),data.value("maxEvents",256u));
+        }catch(const std::exception& error) {
+            PS::Log<LogLevel::Error>(STR("[TRACE-JOB][REJECTED][FILE:{}] {}.\n"),
+                entry.path().wstring(),PS::ToWideSafe(error.what()));
+        }
+        if(!m_traceJobs.empty())PS::Log<LogLevel::Normal>(STR("[TRACE-JOB][READY] {} player-independent job{} armed.\n"),
+            m_traceJobs.size(),m_traceJobs.size()==1?STR(""):STR("s"));
+    }
+
+    void DragonWildsRawTableLoader::RegisterCharacterEditorTrace()
+    {
+        if(m_characterEditorTraceCallbackId!=Hook::ERROR_ID||m_traceJobs.empty())return;
+        Hook::FCallbackOptions options{};
+        options.OwnerModName=TEXT("RuneSchema");
+        options.HookName=TEXT("CharacterEditorConsumerTrace");
+        m_characterEditorTraceCallbackId=Hook::RegisterProcessEventPostCallback(
+            [this](Hook::TCallbackIterationData<void>&,UObject* source,UFunction* function,void*) {
+                TraceCharacterEditorEvent(source,function);
+            },options);
+        if(m_characterEditorTraceCallbackId==Hook::ERROR_ID)
+            PS::Log<LogLevel::Warning>(TEXT("[CHARACTER-EDITOR][TRACE] Existing ProcessEvent callback registration was unavailable.\n"));
+        else
+            PS::Log<LogLevel::Normal>(TEXT("[TRACE-JOB] Player-independent ProcessEvent tracing armed.\n"));
+    }
+
+    void DragonWildsRawTableLoader::TraceCharacterEditorEvent(UObject* source,UFunction* function)
+    {
+        if(!source||!function||!source->GetClassPrivate())return;
+        const auto classPath=RC::to_string(source->GetClassPrivate()->GetPathName());
+        const auto functionPath=RC::to_string(function->GetPathName());
+        for(auto& job:m_traceJobs) {
+            const auto matches=[](const std::string& haystack,const std::vector<std::string>& needles) {
+                return needles.empty()||std::ranges::any_of(needles,[&](const auto& needle){return haystack.find(needle)!=std::string::npos;});
+            };
+            if(!matches(classPath,job.ClassContains)||!matches(functionPath,job.FunctionContains))continue;
+            const auto signature=classPath+"|"+functionPath;
+            if(job.Seen.size()>=job.MaxEvents||!job.Seen.insert(signature).second)continue;
+            PS::Log<LogLevel::Normal>(STR("[TRACE-JOB][{}][EVENT] object='{}' class='{}' function='{}'.\n"),
+                PS::ToWideSafe(job.Id.c_str()),source->GetPathName(),source->GetClassPrivate()->GetPathName(),function->GetPathName());
+        }
+        if(classPath.find("WBP_CharacterOptionSelect_C")!=std::string::npos
+            && (functionPath.ends_with(":Construct") || functionPath.ends_with(":BP_OnOpen"))) {
+            const auto signature=classPath+"|"+functionPath+"|counts";
+            if(m_characterEditorTraceEvents.insert(signature).second) {
+                auto* generated=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,
+                    TEXT("/Game/UI/MainMenu/CharacterCreate/Data/DA_CharacterOptionData.DA_CharacterOptionData_C"),false);
+                auto* defaults=generated?generated->GetClassDefaultObject().Get():nullptr;
+                auto* table=TryGetDatatableByName("DT_Customization_HairPresets");
+                PS::Log<LogLevel::Normal>(STR("[CHARACTER-MENU][VERIFY] event='{}' cdoHairOptions={} hairPresetRows={}.\n"),
+                    function->GetPathName(),CharacterOptionCount(defaults,"HairPreset"),
+                    table?table->GetRowMap().Num():0);
+                for(FProperty* field=source->GetClassPrivate()->GetPropertyLink();field;field=field->GetPropertyLinkNext()) {
+                    auto* array=PropertyHelper::CastProperty<FArrayProperty>(field);if(!array)continue;
+                    const auto name=RC::to_string(field->GetName());
+                    if(name.find("Option")==std::string::npos&&name.find("Data")==std::string::npos)continue;
+                    auto* value=array->ContainerPtrToValuePtr<FScriptArray>(source);
+                    PS::Log<LogLevel::Normal>(STR("[CHARACTER-MENU][LIVE-ARRAY] property='{}' count={}.\n"),
+                        field->GetName(),value?value->Num():-1);
+                }
+            }
+        }
     }
 
     void DragonWildsRawTableLoader::OnDatatableSerialized(RC::Unreal::UDataTable* datatable)
@@ -287,20 +439,6 @@ namespace DragonWilds {
             Apply(datatable->GetName(), datatable);
         }
         ApplyRegistryPatches(datatable);
-    }
-
-    void DragonWildsRawTableLoader::LoadRegistryDirectory(const fs::path& path, const RC::StringType& modName, bool customization)
-    {
-        if(!fs::is_directory(path))return;
-        std::vector<fs::path> files;for(const auto& entry:fs::directory_iterator(path))if(entry.is_regular_file()&&(entry.path().extension()==".json"||entry.path().extension()==".jsonc"))files.push_back(entry.path());
-        std::ranges::sort(files);
-        for(const auto& file:files)try {
-            auto data=ParseStrict(file);const auto source=file.generic_string();
-            if(customization) {
-                RegistryPatch::Document document;document.Owner=RegistryPatch::NormalizeId(RC::to_string(modName));document.Source=source;document.Profile="dragonwilds.characterCustomization.v1";
-                document.Priority=data.value("priority",0);document.Patches=CharacterCustomization::Expand(data,RC::to_string(modName),source);m_registryDocuments.push_back(std::move(document));
-            } else m_registryDocuments.push_back(RegistryPatch::ParseDocument(data,RC::to_string(modName),source));
-        } catch(const std::exception& error) {PS::Log<LogLevel::Error>(STR("[REGISTRY-PATCH][REJECTED][MOD:{}][FILE:{}] {}; remaining definitions continue.\n"),modName,file.native(),PS::ToWideSafe(error.what()));}
     }
 
     bool DragonWildsRawTableLoader::ProfileAllows(const RegistryPatch::Patch& patch) const

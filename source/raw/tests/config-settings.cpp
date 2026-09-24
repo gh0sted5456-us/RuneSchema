@@ -45,6 +45,12 @@ int RunConfigSettings() {
     assert(!DecodeSettings(R"({"loaders":{"dialogue":false}})").loaders.dialogue);
     assert(!DecodeSettings("{}").npcDiagnostics.statusExport);
     assert(!DecodeSettings("{}").npcDiagnostics.interactionTraceExport);
+    assert(!DecodeSettings("{}").diagnosticJobs.enabled);
+    assert(!DecodeSettings("{}").diagnosticJobs.characterEditorPreset);
+    auto jobSettings=DecodeSettings(R"({"advancedRuntime":true,"diagnosticJobs":{"enabled":true,"characterEditorPreset":true}})");
+    assert(jobSettings.advancedRuntime && jobSettings.diagnosticJobs.enabled
+        && jobSettings.diagnosticJobs.characterEditorPreset);
+    assert(DecodeSettings(EncodeSettings(jobSettings)).diagnosticJobs.enabled);
     assert(!DecodeSettings(R"({"advancedLogging":true})").npcDiagnostics.statusExport);
     auto diagnosticSettings=DecodeSettings(R"({"npcDiagnostics":{"statusExport":true,"interactionTraceExport":false}})");
     assert(diagnosticSettings.npcDiagnostics.statusExport && !diagnosticSettings.npcDiagnostics.interactionTraceExport);

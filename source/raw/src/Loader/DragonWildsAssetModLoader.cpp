@@ -37,12 +37,14 @@
 #include "SDK/Classes/TSoftObjectPtr.h"
 #include "SDK/Structs/FSoftObjectPath.h"
 #include "SDK/Structs/Custom/FManagedValue.h"
+#include "SDK/Structs/Custom/FScriptArrayHelper.h"
 #include "SDK/Structs/Custom/FScriptMapHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "Utility/JsonHelpers.h"
 #include "Utility/ConsumeQueue.h"
 #include "Utility/Logging.h"
 #include "Loader/DragonWildsAssetModLoader.h"
+#include "Loader/RegistryPatchPlan.h"
 #include "Core/JsonPatchDirective.h"
 #include "Loader/PlayerGhost.h"
 
@@ -51,6 +53,475 @@ using namespace RC::Unreal;
 
 namespace
 {
+    bool IsDataAssetTarget(const std::string& target)
+    {
+        if (target.empty() || target.front() != '/' || target.find("..") != std::string::npos)
+            return false;
+        const auto slash = target.find_last_of('/');
+        const auto dot = target.find('.', slash == std::string::npos ? 0 : slash);
+        if (slash == std::string::npos || dot == std::string::npos || dot <= slash + 1)
+            return false;
+        return target.substr(slash + 1, dot - slash - 1).starts_with("DA_");
+    }
+
+    bool IsDirectDataAssetPatch(const nlohmann::json& document)
+    {
+        if (!document.is_object()) return false;
+        bool found = false;
+        for (const auto& [target, body] : document.items())
+        {
+            if (target.starts_with('$')) continue;
+            if (!IsDataAssetTarget(target) || !body.is_object()
+                || body.contains("$Clone") || body.contains("$Patch")) return false;
+            found = true;
+        }
+        return found;
+    }
+
+    bool IsCharacterOptionPath(std::string_view path)
+    {
+        return (path.starts_with("CharacterOptionData[") || path.starts_with("CharacterOptions["))
+            && path.ends_with("].OptionData");
+    }
+
+    void NormalizeCharacterOptionValue(nlohmann::json& value)
+    {
+        if (value.is_array())
+        {
+            for (auto& item : value) NormalizeCharacterOptionValue(item);
+            return;
+        }
+        if (!value.is_object()) return;
+        const auto normalizeEnum = [&](const char* field, const char* authored,
+            const char* reflected) {
+            if (value.contains(field) && value.at(field).is_string()
+                && value.at(field).get<std::string>() == authored)
+                value[field] = reflected;
+        };
+        normalizeEnum("BodyTypeCompatability", "both", "Both");
+        normalizeEnum("BodyTypeCompatability", "male", "Male");
+        normalizeEnum("BodyTypeCompatability", "female", "Female");
+        for (const auto* field : {"FaceTypeCompatibility", "EyeTypeCompatibility"})
+            if (value.contains(field) && value.at(field).is_string()
+                && value.at(field).get<std::string>() == "all") value[field] = -1;
+    }
+
+    nlohmann::json DirectDataAssetOperations(const nlohmann::json& body)
+    {
+        if (body.contains("$Operations"))
+        {
+            if (!body.at("$Operations").is_array() || body.at("$Operations").empty()
+                || body.at("$Operations").size() > 1024)
+                throw std::runtime_error("$Operations requires 1..1024 entries");
+            return body.at("$Operations");
+        }
+
+        nlohmann::json operations = nlohmann::json::array();
+        for (const auto& [path, authored] : body.items())
+        {
+            if (path.starts_with('$')) continue;
+            nlohmann::json operation{{"Path", path}};
+            if (authored.is_object())
+            {
+                static constexpr std::array<std::string_view, 5> directives{
+                    "$Set", "$Merge", "$Append", "$AppendUnique", "$MergeWhere"};
+                std::string selected;
+                for (const auto directive : directives)
+                    if (authored.contains(directive))
+                    {
+                        if (!selected.empty())
+                            throw std::runtime_error("a DA_ field may select only one write directive");
+                        selected = std::string(directive);
+                    }
+                if (selected.empty())
+                {
+                    operation["Op"] = "Merge";
+                    operation["Value"] = authored;
+                }
+                else
+                {
+                    operation["Op"] = selected.substr(1);
+                    if (selected == "$MergeWhere")
+                    {
+                        const auto& group=authored.at(selected);
+                        if (!group.is_object() || !group.contains("Field") || !group.at("Field").is_string()
+                            || !group.contains("Values") || !group.at("Values").is_array()
+                            || group.at("Values").empty() || !group.contains("Value")
+                            || !group.at("Value").is_object())
+                            throw std::runtime_error("$MergeWhere requires Field, a non-empty Values array, and an object Value");
+                        operation["SelectorPath"] = group.at("Field");
+                        operation["SelectorValues"] = group.at("Values");
+                        operation["Value"] = group.at("Value");
+                    }
+                    else operation["Value"] = authored.at(selected);
+                    for (const auto& [key, unused] : authored.items())
+                        if (key != selected && key != "$Identity" && key != "$TemplateIndex")
+                            throw std::runtime_error("unknown DA_ field directive: " + key);
+                    if (selected == "$AppendUnique")
+                    {
+                        if (authored.contains("$Identity"))
+                            operation["IdentityPath"] = authored.at("$Identity");
+                        else if (IsCharacterOptionPath(path))
+                            operation["IdentityPath"] = "DataHandle.RowName";
+                        else throw std::runtime_error("$AppendUnique requires $Identity");
+                    }
+                    if (authored.contains("$TemplateIndex"))
+                        operation["TemplateIndex"] = authored.at("$TemplateIndex");
+                    else if (selected == "$AppendUnique" && IsCharacterOptionPath(path))
+                        operation["TemplateIndex"] = 0;
+                }
+            }
+            else
+            {
+                operation["Op"] = "Set";
+                operation["Value"] = authored;
+            }
+            if (IsCharacterOptionPath(path)) NormalizeCharacterOptionValue(operation["Value"]);
+            operations.push_back(std::move(operation));
+            if (operations.size() > 1024)
+                throw std::runtime_error("a DA_ target may contain at most 1024 field writes");
+        }
+        if (operations.empty()) throw std::runtime_error("a DA_ target requires at least one field write");
+        return operations;
+    }
+
+    struct PathSegment
+    {
+        std::string Name;
+        std::string Selector;
+        bool HasSelector = false;
+    };
+
+    struct ResolvedMember
+    {
+        void* Container = nullptr;
+        FProperty* Property = nullptr;
+        std::string CanonicalPath;
+    };
+
+    std::vector<PathSegment> ParsePropertyPath(const std::string& path)
+    {
+        if (path.empty() || path.size() > 1024) throw std::runtime_error("property path length is invalid");
+        std::vector<PathSegment> result;
+        std::size_t offset = 0;
+        while (offset < path.size())
+        {
+            const auto dot = path.find('.', offset);
+            const auto token = path.substr(offset, dot == std::string::npos ? std::string::npos : dot - offset);
+            if (token.empty()) throw std::runtime_error("property path contains an empty segment");
+            PathSegment segment;
+            const auto open = token.find('[');
+            if (open == std::string::npos) segment.Name = token;
+            else
+            {
+                if (token.back() != ']' || token.find('[', open + 1) != std::string::npos)
+                    throw std::runtime_error("property path selector is malformed");
+                segment.Name = token.substr(0, open);
+                segment.Selector = token.substr(open + 1, token.size() - open - 2);
+                segment.HasSelector = true;
+                if (segment.Selector.empty() || segment.Selector == "*" || segment.Selector.contains(".."))
+                    throw std::runtime_error("property path selector is invalid");
+            }
+            if (segment.Name.empty() || !std::ranges::all_of(segment.Name, [](unsigned char c) {
+                    return std::isalnum(c) || c == '_';
+                })) throw std::runtime_error("property path contains an invalid identifier");
+            result.push_back(std::move(segment));
+            if (result.size() > 32) throw std::runtime_error("property path exceeds 32 segments");
+            if (dot == std::string::npos) break;
+            offset = dot + 1;
+        }
+        return result;
+    }
+
+    FProperty* FindMember(UClass* objectType, UScriptStruct* structType, const std::string& name)
+    {
+        const auto wide = RC::to_generic_string(name);
+        auto* found = objectType ? DragonWilds::PropertyHelper::GetPropertyByName(objectType, wide)
+            : DragonWilds::PropertyHelper::GetPropertyByName(structType, wide);
+        if (found || (name != "CharacterOptionData" && name != "CharacterOptions")) return found;
+        FField* field = objectType ? static_cast<FField*>(objectType->GetPropertyLink())
+            : structType->GetChildProperties();
+        while (field)
+        {
+            auto* candidate=DragonWilds::PropertyHelper::CastProperty<FMapProperty>(field);
+            auto* valueStruct=candidate
+                ? DragonWilds::PropertyHelper::CastProperty<FStructProperty>(candidate->GetValueProp()) : nullptr;
+            if (valueStruct && DragonWilds::PropertyHelper::GetPropertyByName<FArrayProperty>(
+                    valueStruct->GetStruct().Get(),TEXT("OptionData"))) return candidate;
+            field = DragonWilds::PropertyHelper::GetNextField(field);
+        }
+        return nullptr;
+    }
+
+    ResolvedMember ResolveMember(void* root, UClass* rootType, UScriptStruct* rootStruct,
+        const std::string& path)
+    {
+        auto segments = ParsePropertyPath(path);
+        void* container = root;
+        UClass* objectType = rootType;
+        UScriptStruct* structType = rootStruct;
+        std::string canonical;
+        for (std::size_t index = 0; index < segments.size(); ++index)
+        {
+            const auto& segment = segments[index];
+            auto* property = FindMember(objectType, structType, segment.Name);
+            if (!property) throw std::runtime_error("property path member was not found: " + segment.Name);
+            if (!canonical.empty()) canonical.push_back('.');
+            const auto actualName = RC::to_string(property->GetName());
+            canonical += actualName;
+            if (segment.HasSelector)
+            {
+                canonical.push_back('[');
+                if (actualName == "CharacterOptionData" && segment.Selector == "HairPreset")
+                    canonical += "ECharacterOptionType::HairPreset";
+                else canonical += segment.Selector;
+                canonical.push_back(']');
+            }
+            const bool last = index + 1 == segments.size();
+            if (last)
+            {
+                if (segment.HasSelector)
+                    throw std::runtime_error("a terminal selector is not a writable member; select a child property");
+                return {container, property, canonical};
+            }
+
+            void* value = property->ContainerPtrToValuePtr<void>(container);
+            FProperty* selectedType = property;
+            if (segment.HasSelector)
+            {
+                if (auto* mapProperty = DragonWilds::PropertyHelper::CastProperty<FMapProperty>(property))
+                {
+                    auto* keyProperty = mapProperty->GetKeyProp();
+                    auto* valueProperty = mapProperty->GetValueProp();
+                    UECustom::FScriptMapHelper map(mapProperty, value);
+                    UECustom::FManagedValue pair;
+                    map.InitializePair(pair);
+                    auto selector = segment.Selector;
+                    DragonWilds::PropertyHelper::CopyJsonValueToContainer(
+                        pair.GetData(), keyProperty, selector);
+                    void* selected = nullptr;
+                    map.ForEachPair([&](void* key, void* mapValue) {
+                        if (!selected && keyProperty->Identical(key, map.GetKeyPtr(pair.GetData()))) selected = mapValue;
+                    });
+                    if (!selected) throw std::runtime_error("map selector did not match an existing key: " + selector);
+                    value = selected;
+                    selectedType = valueProperty;
+                }
+                else if (auto* arrayProperty = DragonWilds::PropertyHelper::CastProperty<FArrayProperty>(property))
+                {
+                    if (!std::ranges::all_of(segment.Selector, [](unsigned char c) { return std::isdigit(c); }))
+                        throw std::runtime_error("array selector must be a non-negative integer");
+                    const auto wanted = std::stoull(segment.Selector);
+                    FScriptArrayHelper array(arrayProperty, value);
+                    if (wanted >= static_cast<std::size_t>(array.Num()))
+                        throw std::runtime_error("array selector is outside the current array");
+                    value = array.GetRawPtr(static_cast<int32>(wanted));
+                    selectedType = arrayProperty->GetInner();
+                }
+                else throw std::runtime_error("selector used on a property that is not a map or array");
+            }
+
+            if (auto* objectProperty = CastField<FObjectPropertyBase>(selectedType))
+            {
+                auto* object = objectProperty->GetObjectPropertyValue(value);
+                if (!object) throw std::runtime_error("property path traversed a null object reference");
+                container = object;
+                objectType = object->GetClassPrivate();
+                structType = nullptr;
+            }
+            else if (auto* childStruct = DragonWilds::PropertyHelper::CastProperty<FStructProperty>(selectedType))
+            {
+                container = value;
+                objectType = nullptr;
+                structType = childStruct->GetStruct().Get();
+            }
+            else throw std::runtime_error("property path attempted to traverse a scalar property");
+        }
+        throw std::runtime_error("property path did not resolve");
+    }
+
+    void MergeStruct(void* value, UScriptStruct* type, const nlohmann::json& patch)
+    {
+        if (!patch.is_object()) throw std::runtime_error("Merge requires an object value");
+        for (const auto& [name, fieldValue] : patch.items())
+        {
+            auto* field = DragonWilds::PropertyHelper::GetPropertyByName(type, RC::to_generic_string(name));
+            if (!field) throw std::runtime_error("merge member was not found: " + name);
+            DragonWilds::PropertyHelper::CopyJsonValueToContainer(value, field, fieldValue);
+        }
+    }
+
+    bool SameIdentity(void* left, void* right, UScriptStruct* type, const std::string& identityPath)
+    {
+        const auto a = ResolveMember(left, nullptr, type, identityPath);
+        const auto b = ResolveMember(right, nullptr, type, identityPath);
+        if (a.Property != b.Property) return false;
+        return a.Property->Identical(a.Property->ContainerPtrToValuePtr<void>(a.Container),
+            b.Property->ContainerPtrToValuePtr<void>(b.Container));
+    }
+
+    struct AppendResult
+    {
+        int Before = 0;
+        int After = 0;
+        int Added = 0;
+        int Existing = 0;
+        std::string Identity;
+    };
+
+    void ValidateCharacterOptionHandle(const nlohmann::json& operation)
+    {
+        if (!operation.contains("Value"))
+            throw std::runtime_error("character option append requires Value");
+        const auto validate=[](const nlohmann::json& value) {
+        if (!value.is_object()) throw std::runtime_error("character option value must be an object");
+        if (!value.contains("DataHandle") || !value.at("DataHandle").is_object())
+            throw std::runtime_error("character option append requires DataHandle");
+        const auto& handle=value.at("DataHandle");
+        if (!handle.contains("DataTable") || !handle.at("DataTable").is_string()
+            || !handle.contains("RowName") || !handle.at("RowName").is_string())
+            throw std::runtime_error("character option DataHandle requires string DataTable and RowName");
+        const auto tablePath=RC::to_generic_string(handle.at("DataTable").get<std::string>());
+        auto* object=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,tablePath.c_str(),false);
+        if (!object)
+        {
+            UECustom::TSoftObjectPtr<UObject> soft{UECustom::FSoftObjectPath(tablePath)};
+            object=UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
+        }
+        if (!object || !object->IsA(UDataTable::StaticClass()))
+            throw std::runtime_error("character option DataHandle table did not resolve to UDataTable");
+        const auto row=FName(RC::to_generic_string(handle.at("RowName").get<std::string>()),FNAME_Find);
+        if (!static_cast<UDataTable*>(object)->FindRowUnchecked(row))
+            throw std::runtime_error("character option DataHandle row is unavailable");
+        };
+        const auto& value=operation.at("Value");
+        if (value.is_array()) for (const auto& item : value) validate(item);
+        else validate(value);
+    }
+
+    AppendResult AppendValues(const ResolvedMember& member, const nlohmann::json& operation, bool unique)
+    {
+        auto* arrayProperty = DragonWilds::PropertyHelper::CastProperty<FArrayProperty>(member.Property);
+        if (!arrayProperty) throw std::runtime_error("Append operation requires an array property");
+        auto* elementStruct = DragonWilds::PropertyHelper::CastProperty<FStructProperty>(arrayProperty->GetInner());
+        if (unique && (!elementStruct || !operation.contains("IdentityPath")
+            || !operation.at("IdentityPath").is_string()))
+            throw std::runtime_error("AppendUnique requires a struct array and IdentityPath");
+        if (!operation.contains("Value")) throw std::runtime_error("Append operation requires Value");
+        nlohmann::json values = operation.at("Value").is_array()
+            ? operation.at("Value") : nlohmann::json::array({operation.at("Value")});
+        auto* arrayAddress = arrayProperty->ContainerPtrToValuePtr<void>(member.Container);
+        UECustom::FScriptArrayHelper destination(arrayAddress, arrayProperty);
+        FScriptArrayHelper inspect(arrayProperty, arrayAddress);
+        AppendResult result;
+        result.Before = inspect.Num();
+        for (const auto& value : values)
+        {
+            UECustom::FManagedValue prepared;
+            destination.InitializeValue(prepared);
+            if (operation.contains("TemplateIndex"))
+            {
+                const auto templateIndex = operation.at("TemplateIndex").get<int>();
+                if (templateIndex < 0 || templateIndex >= inspect.Num())
+                    throw std::runtime_error("TemplateIndex is outside the current array");
+                arrayProperty->GetInner()->CopySingleValue(prepared.GetData(), inspect.GetRawPtr(templateIndex));
+            }
+            DragonWilds::PropertyHelper::CopyJsonValueToContainer(
+                prepared.GetData(), arrayProperty->GetInner(), value);
+            bool exists = false;
+            int identityMatches = 0;
+            if (unique)
+            {
+                const auto identity = operation.at("IdentityPath").get<std::string>();
+                if (value.is_object() && value.contains("DataHandle")
+                    && value.at("DataHandle").is_object()
+                    && value.at("DataHandle").contains("RowName")
+                    && value.at("DataHandle").at("RowName").is_string())
+                    result.Identity = value.at("DataHandle").at("RowName").get<std::string>();
+                for (int32 index = 0; index < inspect.Num(); ++index)
+                    if (SameIdentity(prepared.GetData(), inspect.GetRawPtr(index),
+                        elementStruct->GetStruct().Get(), identity))
+                    {
+                        ++identityMatches;
+                        if (!arrayProperty->GetInner()->Identical(prepared.GetData(),inspect.GetRawPtr(index)))
+                            throw std::runtime_error("AppendUnique identity conflicts with a different existing value");
+                        exists=true;
+                    }
+                if (identityMatches > 1)
+                    throw std::runtime_error("AppendUnique identity already exists more than once");
+            }
+            if (!exists) { destination.Add(prepared); ++result.Added; }
+            else ++result.Existing;
+            if (unique)
+            {
+                const auto identity = operation.at("IdentityPath").get<std::string>();
+                int verified = 0;
+                for (int32 index = 0; index < inspect.Num(); ++index)
+                    if (SameIdentity(prepared.GetData(), inspect.GetRawPtr(index),
+                        elementStruct->GetStruct().Get(), identity)) ++verified;
+                if (verified != 1)
+                    throw std::runtime_error("AppendUnique post-commit identity verification failed");
+            }
+        }
+        result.After = inspect.Num();
+        if (result.After != result.Before + result.Added)
+            throw std::runtime_error("Append operation count verification failed");
+        return result;
+    }
+
+    int MergeWhere(const ResolvedMember& member, const nlohmann::json& operation)
+    {
+        auto* arrayProperty=DragonWilds::PropertyHelper::CastProperty<FArrayProperty>(member.Property);
+        auto* elementStruct=arrayProperty
+            ? DragonWilds::PropertyHelper::CastProperty<FStructProperty>(arrayProperty->GetInner()) : nullptr;
+        if (!arrayProperty || !elementStruct)
+            throw std::runtime_error("$MergeWhere requires an array of reflected structs");
+        if (!operation.contains("SelectorPath") || !operation.at("SelectorPath").is_string()
+            || !operation.contains("SelectorValues") || !operation.at("SelectorValues").is_array()
+            || operation.at("SelectorValues").empty() || !operation.contains("Value")
+            || !operation.at("Value").is_object())
+            throw std::runtime_error("$MergeWhere selector contract is invalid");
+
+        const auto selectorPath=operation.at("SelectorPath").get<std::string>();
+        auto* arrayAddress=arrayProperty->ContainerPtrToValuePtr<void>(member.Container);
+        UECustom::FScriptArrayHelper managed(arrayAddress,arrayProperty);
+        FScriptArrayHelper inspect(arrayProperty,arrayAddress);
+        std::vector<void*> selectedElements;
+        std::set<void*> uniqueElements;
+        for (const auto& selectorValue : operation.at("SelectorValues"))
+        {
+            UECustom::FManagedValue expected;
+            managed.InitializeValue(expected);
+            const auto expectedMember=ResolveMember(expected.GetData(),nullptr,
+                elementStruct->GetStruct().Get(),selectorPath);
+            DragonWilds::PropertyHelper::CopyJsonValueToContainer(
+                expectedMember.Container,expectedMember.Property,selectorValue);
+            int matches=0;
+            for (int32 index=0;index<inspect.Num();++index)
+            {
+                auto* element=inspect.GetRawPtr(index);
+                if (!SameIdentity(expected.GetData(),element,
+                    elementStruct->GetStruct().Get(),selectorPath)) continue;
+                ++matches;
+                if (!uniqueElements.insert(element).second)
+                    throw std::runtime_error("$MergeWhere contains duplicate selectors for one array entry");
+                selectedElements.push_back(element);
+            }
+            if (matches!=1)
+                throw std::runtime_error("$MergeWhere selector must match exactly one array entry");
+        }
+        for (const auto& [name,value] : operation.at("Value").items())
+        {
+            auto* field=DragonWilds::PropertyHelper::GetPropertyByName(
+                elementStruct->GetStruct().Get(),RC::to_generic_string(name));
+            if (!field) throw std::runtime_error("$MergeWhere value member was not found: "+name);
+            DragonWilds::PropertyHelper::ValidateJsonValueType(field,value);
+        }
+        for (auto* element : selectedElements)
+            MergeStruct(element,elementStruct->GetStruct().Get(),operation.at("Value"));
+        return static_cast<int>(selectedElements.size());
+    }
+
     bool ReadRequiredString(const nlohmann::json& body, const char* name,
         std::string& out)
     {
@@ -175,10 +646,17 @@ namespace DragonWilds {
 
     DragonWildsAssetModLoader::~DragonWildsAssetModLoader()
     {
+        if (m_characterMenuPatchHook != Hook::ERROR_ID)
+        {
+            Hook::UnregisterCallback(m_characterMenuPatchHook);
+            m_characterMenuPatchHook = Hook::ERROR_ID;
+        }
         if(AuthoringInstance==this)AuthoringInstance=nullptr;
         std::scoped_lock lock{m_mutex};
         m_pendingAssets.clear();
         m_pendingPatches.clear();
+        m_pendingObjectPatches.clear();
+        m_retainedObjectPatches.clear();
         m_createdAssetsByTarget.clear();
         PS::AssetAliases::Clear();
         m_createdAssets.clear();
@@ -190,14 +668,16 @@ namespace DragonWilds {
     {
         if (engineLifecyclePhase == EEngineLifecyclePhase::PostEngineInit)
         {
-            PS::JsonHelpers::ParseJsonFilesInPath(loaderPath, [&](const nlohmann::json& data) {
-                QueueData(data, modName);
+            PS::JsonHelpers::ParseJsonFilesInPathWithSource(loaderPath,
+                [&](const nlohmann::json& data, const std::filesystem::path& relative) {
+                QueueData(data, modName, relative.generic_string());
             });
         }
         else if (engineLifecyclePhase == EEngineLifecyclePhase::GameInstanceInit)
         {
             TryApplyPending();
             ApplyPendingPatches();
+            ApplyObjectPatches();
             ReportUnresolvedAssets();
         }
     }
@@ -213,11 +693,12 @@ namespace DragonWilds {
             }
         }
         PS::JsonHelpers::ParseJsonFileInPath(modFilePath, [&](const nlohmann::json& data) {
-            QueueData(data, modName);
+            QueueData(data, modName, modFilePath.filename().generic_string());
         });
 
         TryApplyPending();
         ApplyPendingPatches();
+        ApplyObjectPatches();
         ReportUnresolvedAssets();
     }
 
@@ -228,6 +709,7 @@ namespace DragonWilds {
 
     bool DragonWildsAssetModLoader::OnInitialize()
     {
+        RegisterCharacterMenuPatchReplay();
         m_dataAssetClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
             nullptr, nullptr, TEXT("/Script/Engine.DataAsset"), false);
 
@@ -266,11 +748,21 @@ namespace DragonWilds {
         return true;
     }
 
-    void DragonWildsAssetModLoader::QueueData(const nlohmann::json& data, const RC::StringType& modName)
+    void DragonWildsAssetModLoader::QueueData(const nlohmann::json& data,
+        const RC::StringType& modName, const std::string& source)
     {
         if (!data.is_object())
         {
-            PS::Log<LogLevel::Error>(STR("JSON root must be an object.\n"));
+            PS::Log<LogLevel::Warning>(STR("[LOADER:assets][PARTIAL][MOD:{}][FILE:{}] Root must be an object; this file was skipped.\n"),
+                modName,RC::to_generic_string(source));
+            return;
+        }
+
+        try { if (QueueObjectPatch(data, modName, source)) return; }
+        catch (const std::exception& error)
+        {
+            PS::Log<LogLevel::Warning>(STR("[LOADER:assets][PARTIAL][MOD:{}][FILE:{}] Field edit skipped: {}. Other asset files continue.\n"),
+                modName,RC::to_generic_string(source),PS::ToWideSafe(error.what()));
             return;
         }
 
@@ -382,7 +874,7 @@ namespace DragonWilds {
                             pending.Properties.at("InternalName").get<std::string>(),destination};
                         OwnedContent::Validate(owned);
                         OwnedContent::Merge(OwnedContent::LedgerPath(
-                            PS::HostServices::SettingsDirectory()),{owned});
+                            PS::HostServices::StateDirectory()),{owned});
                     } catch(const std::exception& error) {
                         PS::Log<LogLevel::Error>(STR("[SAVE-CLEANER][MOD:{}] Clone identity '{}' was not tracked: {}.\n"),
                             modName,pending.ObjectPath,PS::ToWideSafe(error.what()));
@@ -392,6 +884,354 @@ namespace DragonWilds {
             if (isPatch) WarnPatchConflicts(m_patchConflicts, "assets:" + RC::to_string(pending.ObjectPath),
                 pending.Properties, RC::to_string(modName), false);
             (isPatch ? m_pendingPatches : m_pendingAssets).push_back(std::move(pending));
+        }
+    }
+
+    bool DragonWildsAssetModLoader::QueueObjectPatch(const nlohmann::json& data,
+        const RC::StringType& modName, const std::string& source)
+    {
+        // New DA_ files are identified by their target paths. Older schema
+        // envelopes remain readable so installed mods do not break.
+        const auto runtimeSchema = data.value("schema", std::string{});
+        const auto schema = runtimeSchema.empty()
+            ? data.value("$schema", std::string{}) : runtimeSchema;
+        std::vector<PendingObjectPatch> pending;
+        if (IsDirectDataAssetPatch(data) || schema == "RuneSchema.AssetPatch.v2")
+        {
+            for (const auto& [target, body] : data.items())
+            {
+                if (target.starts_with("$")) continue;
+                if (!IsDataAssetTarget(target) || !body.is_object())
+                    throw std::runtime_error("DA_ patches require full cooked DA_ paths with object bodies");
+                const auto generatedClass = target.ends_with("_C");
+                const auto mode = body.value("$Target",
+                    generatedClass ? "ClassDefaultObject" : "Object");
+                if (mode != "Object" && mode != "ClassDefaultObject")
+                    throw std::runtime_error("$Target must be Object or ClassDefaultObject");
+                const auto expected = body.value("$ExpectedClass",
+                    mode == "ClassDefaultObject" ? target : std::string{});
+                auto operations = DirectDataAssetOperations(body);
+                for (auto& operation : operations)
+                    if (operation.is_object() && operation.contains("Path")
+                        && operation.at("Path").is_string()
+                        && IsCharacterOptionPath(operation.at("Path").get_ref<const std::string&>())
+                        && operation.contains("Value"))
+                        NormalizeCharacterOptionValue(operation["Value"]);
+                pending.push_back({NormalizeObjectPath(RC::to_generic_string(target)),
+                    RC::to_generic_string(expected),modName,source,"da-fields",
+                    mode == "ClassDefaultObject" ? PatchTargetMode::ClassDefaultObject : PatchTargetMode::Object,
+                    std::move(operations)});
+            }
+        }
+        else if (schema == RegistryPatch::Schema)
+        {
+            auto document = RegistryPatch::ParseDocument(data, RC::to_string(modName), source);
+            for (const auto& patch : document.Patches)
+            {
+                if (patch.Op <= RegistryPatch::Operation::PatchExistingRow) continue;
+                if (patch.TargetSpec.ObjectPath.empty())
+                    throw std::runtime_error("/assets registry object patches require full objectPath targets");
+                std::string operation;
+                switch (patch.Op)
+                {
+                case RegistryPatch::Operation::Set: operation="Set"; break;
+                case RegistryPatch::Operation::Merge: operation="Merge"; break;
+                case RegistryPatch::Operation::Append: operation="Append"; break;
+                case RegistryPatch::Operation::AppendUnique: operation="AppendUnique"; break;
+                case RegistryPatch::Operation::UpsertOwned: operation="Merge"; break;
+                default: throw std::runtime_error("unsupported /assets registry object operation");
+                }
+                auto property=patch.Property;
+                auto value = patch.Value;
+                nlohmann::json item;
+                const auto selectorOpen=property.find('{');
+                if (operation=="Merge" && selectorOpen!=std::string::npos && property.ends_with('}'))
+                {
+                    const auto selector=property.substr(selectorOpen+1,property.size()-selectorOpen-2);
+                    const auto equals=selector.find('=');
+                    if (equals==std::string::npos || equals==0 || equals+1>=selector.size())
+                        throw std::runtime_error("legacy merge selector must use {Field=Value}");
+                    property.resize(selectorOpen);
+                    item={{"Op","MergeWhere"},{"Path",property},{"Value",value},
+                        {"SelectorPath",selector.substr(0,equals)},
+                        {"SelectorValues",nlohmann::json::array({selector.substr(equals+1)})}};
+                }
+                else item={{"Op",operation},{"Path",property},{"Value",value}};
+                if (IsCharacterOptionPath(property)) NormalizeCharacterOptionValue(item["Value"]);
+                if (patch.Identity.is_object() && patch.Identity.contains("property"))
+                    item["IdentityPath"]=patch.Identity.at("property");
+                if (patch.Template.is_object() && patch.Template.contains("fromIndex"))
+                    item["TemplateIndex"]=patch.Template.at("fromIndex");
+                pending.push_back({NormalizeObjectPath(RC::to_generic_string(patch.TargetSpec.ObjectPath)),
+                    RC::to_generic_string(patch.TargetSpec.ExpectedClass),modName,source,patch.Id,
+                    patch.TargetSpec.Kind == RegistryPatch::TargetKind::ClassDefaultObject
+                        ? PatchTargetMode::ClassDefaultObject : PatchTargetMode::Object,
+                    nlohmann::json::array({std::move(item)})});
+            }
+        }
+        else return false;
+
+        if (pending.empty())
+            throw std::runtime_error("asset patch document contains no object operations");
+        std::scoped_lock lock{m_mutex};
+        m_pendingObjectPatches.insert(m_pendingObjectPatches.end(),
+            std::make_move_iterator(pending.begin()), std::make_move_iterator(pending.end()));
+        return true;
+    }
+
+    void DragonWildsAssetModLoader::RegisterCharacterMenuPatchReplay()
+    {
+        if (m_characterMenuPatchHook != Hook::ERROR_ID) return;
+        Hook::FCallbackOptions options{};
+        options.OwnerModName = TEXT("RuneSchema");
+        options.HookName = TEXT("CharacterMenuAssetPatchReplay");
+        m_characterMenuPatchHook = Hook::RegisterProcessEventPreCallback(
+            [this](Hook::TCallbackIterationData<void>&, UObject* source, UFunction* function, void*)
+            {
+                if (!source || !function || !source->GetClassPrivate() || m_replayingCharacterMenuPatches) return;
+                const auto classPath = RC::to_string(source->GetClassPrivate()->GetPathName());
+                if (classPath.find("WBP_CharacterOptionSelect_C") == std::string::npos) return;
+                const auto functionPath = RC::to_string(function->GetPathName());
+                if (!functionPath.ends_with(":Construct") && !functionPath.ends_with(":BP_OnOpen")) return;
+                m_replayingCharacterMenuPatches = true;
+                try { ApplyObjectPatches(true); }
+                catch (const std::exception& error)
+                {
+                    PS::Log<LogLevel::Warning>(STR("[LOADER:assets][PARTIAL][CHARACTER-MENU] Replay skipped: {}. Other assets remain active.\n"),
+                        PS::ToWideSafe(error.what()));
+                }
+                m_replayingCharacterMenuPatches = false;
+            }, options);
+        if (m_characterMenuPatchHook == Hook::ERROR_ID)
+            PS::Log<LogLevel::Warning>(TEXT("[LOADER:assets][PARTIAL][CHARACTER-MENU] Pre-open replay is unavailable; other asset edits remain active.\n"));
+        else
+            PS::Log<LogLevel::Normal>(TEXT("[LOADER:assets][OK][CHARACTER-MENU] Pre-open replay enabled.\n"));
+    }
+
+    void DragonWildsAssetModLoader::ApplyObjectPatches(bool characterMenuReplay)
+    {
+        std::vector<PendingObjectPatch> pending;
+        {
+            std::scoped_lock lock{m_mutex};
+            if (characterMenuReplay)
+            {
+                std::ranges::copy_if(m_retainedObjectPatches, std::back_inserter(pending), [](const auto& patch) {
+                    return RC::to_string(patch.ObjectPath).find("DA_CharacterOptionData") != std::string::npos;
+                });
+            }
+            else
+            {
+                pending.swap(m_pendingObjectPatches);
+                m_retainedObjectPatches.insert(m_retainedObjectPatches.end(), pending.begin(), pending.end());
+            }
+        }
+        std::ranges::sort(pending, [](const auto& left, const auto& right) {
+            return std::tie(left.ModName,left.Source,left.PatchId,left.ObjectPath)
+                < std::tie(right.ModName,right.Source,right.PatchId,right.ObjectPath);
+        });
+        struct VerificationSummary
+        {
+            RC::StringType ModName;
+            RC::StringType Target;
+            std::string Category;
+            int Baseline = -1;
+            int Final = -1;
+            int Added = 0;
+            int Existing = 0;
+            int Verified = 0;
+        };
+        std::map<std::string,VerificationSummary> summaries;
+        std::vector<PendingObjectPatch> committedClassDefaults;
+        for (const auto& patch : pending) try
+        {
+            const auto pathText = RC::to_string(patch.ObjectPath);
+            const auto slash = pathText.find_last_of('/');
+            const auto dot = pathText.find('.', slash == std::string::npos ? 0 : slash);
+            const auto assetName = pathText.substr(slash + 1,
+                dot == std::string::npos ? std::string::npos : dot - slash - 1);
+            if (!assetName.starts_with("DA_"))
+                throw std::runtime_error("generic object patches are limited to explicit DA_ targets");
+
+            auto* resolved = UECustom::UObjectGlobals::StaticFindObject<UObject*>(
+                nullptr,nullptr,patch.ObjectPath.c_str(),false);
+            if (!resolved)
+            {
+                UECustom::TSoftObjectPtr<UObject> soft{UECustom::FSoftObjectPath(patch.ObjectPath)};
+                resolved=UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
+            }
+            if (!resolved) throw std::runtime_error("target could not be loaded");
+            UObject* target = resolved;
+            UClass* requestedClass = nullptr;
+            if (patch.Mode == PatchTargetMode::ClassDefaultObject)
+            {
+                if (!resolved->IsA(UClass::StaticClass()))
+                    throw std::runtime_error("ClassDefaultObject target did not resolve to UClass");
+                requestedClass = static_cast<UClass*>(resolved);
+                target = requestedClass->GetClassDefaultObject().Get();
+                if (!target || !target->HasAnyFlags(RF_ClassDefaultObject))
+                    throw std::runtime_error("class default object is unavailable or invalid");
+            }
+            else if (!IsSupportedTarget(target))
+                throw std::runtime_error("object target is not a DataAsset, curve, or DataAsset subobject");
+            if (!IsReadyForPatch(target)) throw std::runtime_error("target is not ready for reflected editing");
+
+            if (!patch.ExpectedClass.empty())
+            {
+                auto* expectedObject = UECustom::UObjectGlobals::StaticFindObject<UObject*>(
+                    nullptr,nullptr,patch.ExpectedClass.c_str(),false);
+                if (!expectedObject)
+                {
+                    UECustom::TSoftObjectPtr<UObject> soft{UECustom::FSoftObjectPath(patch.ExpectedClass)};
+                    expectedObject=UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
+                }
+                if (!expectedObject || !expectedObject->IsA(UClass::StaticClass()))
+                    throw std::runtime_error("$ExpectedClass did not resolve to UClass");
+                auto* expected=static_cast<UClass*>(expectedObject);
+                if (!target->IsA(expected))
+                    throw std::runtime_error("target does not match $ExpectedClass");
+                if (requestedClass && requestedClass != expected && !requestedClass->IsChildOf(expected))
+                    throw std::runtime_error("resolved generated class does not match $ExpectedClass");
+            }
+
+            struct Prepared { std::string Op; ResolvedMember Member; nlohmann::json Body; };
+            std::vector<Prepared> prepared;
+            for (const auto& operation : patch.Operations)
+            {
+                if (!operation.is_object() || !operation.contains("Op") || !operation.contains("Path")
+                    || !operation.at("Op").is_string() || !operation.at("Path").is_string())
+                    throw std::runtime_error("each operation requires string Op and Path");
+                const auto op = operation.at("Op").get<std::string>();
+                if (op!="Set" && op!="Merge" && op!="Append" && op!="AppendUnique" && op!="MergeWhere")
+                    throw std::runtime_error("operation must be Set, Merge, Append, AppendUnique, or MergeWhere");
+                auto member=ResolveMember(target,target->GetClassPrivate(),nullptr,
+                    operation.at("Path").get<std::string>());
+                if ((op=="Append"||op=="AppendUnique"||op=="MergeWhere")
+                    && !PropertyHelper::CastProperty<FArrayProperty>(member.Property))
+                    throw std::runtime_error("array operation path does not resolve to an array");
+                if (op=="Set" && (PropertyHelper::CastProperty<FArrayProperty>(member.Property)
+                    || PropertyHelper::CastProperty<FMapProperty>(member.Property)))
+                    throw std::runtime_error("Set cannot replace complete arrays or maps; use Append or Merge");
+                prepared.push_back({op,std::move(member),operation});
+            }
+
+            int writes=0;
+            for (const auto& operation : prepared)
+            {
+                if (!operation.Body.contains("Value"))
+                    throw std::runtime_error("operation requires Value");
+                if (operation.Op=="Set")
+                {
+                    PropertyHelper::CopyJsonValueToContainer(operation.Member.Container,
+                        operation.Member.Property,operation.Body.at("Value"));
+                    ++writes;
+                }
+                else if (operation.Op=="Merge")
+                {
+                    if (auto* structure=PropertyHelper::CastProperty<FStructProperty>(operation.Member.Property))
+                        MergeStruct(structure->ContainerPtrToValuePtr<void>(operation.Member.Container),
+                            structure->GetStruct().Get(),operation.Body.at("Value"));
+                    else if (PropertyHelper::CastProperty<FMapProperty>(operation.Member.Property))
+                        PropertyHelper::CopyJsonValueToContainer(operation.Member.Container,
+                            operation.Member.Property,operation.Body.at("Value"));
+                    else throw std::runtime_error("Merge requires a struct or map property");
+                    ++writes;
+                }
+                else if (operation.Op=="MergeWhere")
+                {
+                    writes += MergeWhere(operation.Member,operation.Body);
+                }
+                else
+                {
+                    const auto characterOption = operation.Member.CanonicalPath.starts_with(
+                        "CharacterOptionData[ECharacterOptionType::")
+                        && operation.Member.CanonicalPath.ends_with("].OptionData");
+                    if (operation.Op=="AppendUnique" && characterOption)
+                        ValidateCharacterOptionHandle(operation.Body);
+                    const auto outcome=AppendValues(operation.Member,operation.Body,
+                        operation.Op=="AppendUnique");
+                    writes += outcome.Added;
+                    if (operation.Op=="AppendUnique")
+                    {
+                        PS::Log<LogLevel::Normal>(STR("[LOADER:assets][OK][MOD:{}] target={} field={} identity=DataHandle.RowName:{} count={}->{} added={} existing={}.\n"),
+                            patch.ModName,target->GetPathName(),
+                            RC::to_generic_string(operation.Member.CanonicalPath),RC::to_generic_string(outcome.Identity),
+                            outcome.Before,outcome.After,outcome.Added,outcome.Existing);
+                        const auto key=RC::to_string(patch.ModName)+"|"+RC::to_string(patch.ObjectPath)
+                            +"|"+operation.Member.CanonicalPath;
+                        auto& summary=summaries[key];
+                        summary.ModName=patch.ModName;summary.Target=target->GetPathName();
+                        const auto begin=operation.Member.CanonicalPath.find("::")+2;
+                        const auto end=operation.Member.CanonicalPath.find(']',begin);
+                        summary.Category=operation.Member.CanonicalPath.substr(begin,end-begin);
+                        if(summary.Baseline<0)summary.Baseline=outcome.Before;
+                        summary.Final=outcome.After;summary.Added+=outcome.Added;
+                        summary.Existing+=outcome.Existing;++summary.Verified;
+                    }
+                }
+            }
+            if (patch.Mode==PatchTargetMode::ClassDefaultObject)
+                committedClassDefaults.push_back(patch);
+            if (prepared.empty() || std::ranges::none_of(prepared,[](const auto& operation){return operation.Op=="AppendUnique";}))
+                PS::Log<LogLevel::Normal>(STR("[LOADER:assets][OK][MOD:{}][FILE:{}] target={} writes={}.\n"),
+                    patch.ModName,RC::to_generic_string(patch.Source),patch.ObjectPath,writes);
+        }
+        catch(const std::exception& error)
+        {
+            PS::Log<LogLevel::Warning>(STR("[LOADER:assets][PARTIAL][MOD:{}][FILE:{}][TARGET:{}] Field edit skipped: {}. Other targets continue.\n"),
+                patch.ModName,RC::to_generic_string(patch.Source),patch.ObjectPath,PS::ToWideSafe(error.what()));
+        }
+
+        for (const auto& [unused,summary] : summaries)
+            PS::Log<LogLevel::Normal>(STR("[CHARACTER-OPTIONS][VERIFIED][MOD:{}] target={} category={} baseline={} added={} existing={} final={} verified={} missing=0 duplicates=0.\n"),
+                summary.ModName,summary.Target,RC::to_generic_string(summary.Category),summary.Baseline,summary.Added,summary.Existing,
+                summary.Final,summary.Verified);
+
+        std::set<std::string> propagatedTargets;
+        for (const auto& seed : committedClassDefaults)
+        {
+            const auto path=RC::to_string(seed.ObjectPath);
+            if (!propagatedTargets.insert(path).second) continue;
+            auto* object=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,
+                seed.ObjectPath.c_str(),false);
+            if (!object || !object->IsA(UClass::StaticClass())) continue;
+            auto* objectClass=static_cast<UClass*>(object);
+            TArray<UObject*> instances;
+            const auto invalid=static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject
+                |RF_NeedLoad|RF_NeedPostLoad|RF_NeedInitialization|RF_BeginDestroyed|RF_FinishDestroyed);
+            UECustom::UObjectGlobals::GetObjectsOfClass(objectClass,instances,true,invalid);
+            if (instances.Num()==0)
+                PS::Log<LogLevel::Normal>(STR("[CHARACTER-OPTIONS][PROPAGATED] class={} instances=0; the updated class default will be used for new menus.\n"),
+                    objectClass->GetPathName());
+            for (auto* instance : instances) try
+            {
+                if (!instance || !IsReadyForPatch(instance)) continue;
+                int before=-1,after=-1,added=0,existing=0,verified=0;
+                for (const auto& patch : committedClassDefaults)
+                {
+                    if (patch.ObjectPath!=seed.ObjectPath) continue;
+                    for (const auto& operation : patch.Operations)
+                    {
+                        if (operation.value("Op",std::string{})!="AppendUnique") continue;
+                        const auto member=ResolveMember(instance,instance->GetClassPrivate(),nullptr,
+                            operation.at("Path").get<std::string>());
+                        if (member.CanonicalPath.starts_with("CharacterOptionData[ECharacterOptionType::")
+                            && member.CanonicalPath.ends_with("].OptionData"))
+                            ValidateCharacterOptionHandle(operation);
+                        const auto outcome=AppendValues(member,operation,true);
+                        if(before<0)before=outcome.Before;after=outcome.After;
+                        added+=outcome.Added;existing+=outcome.Existing;++verified;
+                    }
+                }
+                if (verified)
+                    PS::Log<LogLevel::Normal>(STR("[CHARACTER-OPTIONS][PROPAGATED] object={} class={} count={}->{} added={} existing={} verified={} missing=0.\n"),
+                        instance->GetPathName(),instance->GetClassPrivate()->GetPathName(),before,after,
+                        added,existing,verified);
+            }
+            catch(const std::exception& error)
+            {
+                PS::Log<LogLevel::Warning>(STR("[LOADER:assets][PARTIAL][CHARACTER-MENU] Existing menu object={} was not updated: {}. New menus still use the class default.\n"),
+                    instance?instance->GetPathName():STR("<null>"),PS::ToWideSafe(error.what()));
+            }
         }
     }
 
@@ -431,7 +1271,7 @@ namespace DragonWilds {
             verifiedObjects.push_back(object);
         }
         if(!declarations.empty()) {
-            OwnedContent::Merge(OwnedContent::LedgerPath(PS::HostServices::SettingsDirectory()),declarations);
+            OwnedContent::Merge(OwnedContent::LedgerPath(PS::HostServices::StateDirectory()),declarations);
             for(std::size_t index=0;index<declarations.size();++index) {
                 verifiedObjects[index]->SetRootSet();
                 OwnedContent::RegisterActiveDeclarationPath(declarations[index].Source);

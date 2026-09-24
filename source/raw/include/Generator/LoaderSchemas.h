@@ -123,6 +123,10 @@ inline nlohmann::json LoaderSchemas() {
         {"required",{"Item","Min","Max","ChancePercent"}},{"properties",{{"Item",{{"type","string"},{"pattern","^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$"}}},
         {"Min",{{"type","integer"},{"minimum",1},{"maximum",10000}}},{"Max",{{"type","integer"},{"minimum",1},{"maximum",10000}}},{"ChancePercent",{{"type","number"},{"minimum",0},{"maximum",100}}}}}}}};
     result["spawns"]["items"]["properties"]["PowerLevel"]={{"type","integer"},{"minimum",1},{"maximum",100},{"description","Native Dominion AI spawn power level. Supported on AISpawnPoint entries and validated for every authored ID."}};
+    result["spawns"]["items"]["properties"]["Scale"]={{"anyOf",{
+        json{{"type","number"},{"minimum",0.01},{"maximum",100}},
+        json{{"type","array"},{"minItems",3},{"maxItems",3},{"items",{{"type","number"},{"minimum",0.01},{"maximum",100}}}}
+    }},{"description","Uniform number or XYZ actor scale. Every component accepts 0.01 through 100."}};
     result["spawns"]["items"]["properties"]["SpawnRadiusMeters"]={{"type","number"},{"minimum",0.01},{"maximum",10000},{"description","Ordinary AISpawnPoint native proximity eligibility radius in metres. Minimum distance becomes zero; external activation is disabled. Cannot combine with MinSpawnDistance, MaxSpawnDistance or raw radius/activation Properties. Native streaming, navigation, population and respawn rules still apply; not a guaranteed one-shot ambush trigger."}};
     result["spawns"]["items"]["properties"]["GroundToSurface"]={{"type","boolean"},{"default",true},{"description","Trace the authored X/Y placement onto blocking ground before spawning. Disable only for intentionally airborne actors."}};
     result["spawns"]["items"]["properties"]["GroundOffset"]={{"type","number"},{"minimum",-100000},{"maximum",100000},{"default",0},{"description","Centimetre offset above or below the resolved ground. Do not combine with the Location.Z $+offset shorthand."}};
@@ -173,7 +177,7 @@ inline nlohmann::json LoaderSchemas() {
     vendor["properties"]["Row"]=text;
     vendor["properties"]["Location"]=groundLocation;
     vendor["properties"]["Rotation"]=placementRotator;
-    const json positiveNumber={{"type","number"},{"exclusiveMinimum",0}};
+    const json positiveNumber={{"type","number"},{"minimum",0.01},{"maximum",100}};
     vendor["properties"]["Scale"]={{"anyOf",{positiveNumber,
         json{{"type","array"},{"minItems",3},{"maxItems",3},{"items",positiveNumber}}}}};
     vendor["properties"]["EnableCollision"]={{"type","boolean"}};
@@ -383,7 +387,7 @@ inline nlohmann::json LoaderSchemas() {
     result["events"]["items"]["allOf"]=json::array({{{"not",{{"required",{"TimeOfDay","SpawnTimeOfDay"}}}}}});
     const json eventSpawn={{"type","object"},{"additionalProperties",false},{"required",{"Id","Type","EventOnly","AIClass"}},
         {"properties",{{"Id",text},{"Type",{{"const","AISpawnPoint"}}},{"EventOnly",{{"const",true}}},
-            {"AIClass",{{"type","string"},{"pattern","^/"}}},{"DisplayName",{{"type","string"},{"minLength",1},{"maxLength",128}}},{"BossName",{{"type","string"},{"minLength",1},{"maxLength",128}}},{"Scale",{{"type","number"},{"minimum",0.1},{"maximum",5}}}}}};
+            {"AIClass",{{"type","string"},{"pattern","^/"}}},{"DisplayName",{{"type","string"},{"minLength",1},{"maxLength",128}}},{"BossName",{{"type","string"},{"minLength",1},{"maxLength",128}}},{"Scale",{{"type","number"},{"minimum",0.01},{"maximum",100}}}}}};
     result["spawns"]["items"]["allOf"]=json::array({{{"if",{{"required",{"EventOnly"}}}},{"then",eventSpawn}}});
     result["spawns"]["items"]["allOf"][0]["then"]["properties"]["VisualEffect"]=ghostVisual;
     result["spawns"]["items"]["allOf"][0]["then"]["properties"]["PowerLevel"]={{"type","integer"},{"minimum",1},{"maximum",100}};
@@ -562,7 +566,7 @@ inline nlohmann::json LoaderSchemas() {
     player["properties"]["PlayerGuid"]=text;
     player["properties"]["PlayerGuids"]=textList;
     const json multiplier={{"type","number"},{"minimum",0},{"maximum",100}};
-    player["properties"]["Scale"]={{"type","number"},{"minimum",0.25},{"maximum",3}};
+    player["properties"]["Scale"]={{"type","number"},{"minimum",0.01},{"maximum",100}};
     for(const auto* field:{"HealthMultiplier","DefenseMultiplier","DamageMultiplier","StaminaMultiplier",
         "WalkSpeedMultiplier","RunSpeedMultiplier","CarryWeightMultiplier","PoisonResistanceMultiplier",
         "StaminaRecoveryMultiplier","PhysicalAttackMultiplier","MagicalAttackMultiplier","MagicAttackMultiplier",

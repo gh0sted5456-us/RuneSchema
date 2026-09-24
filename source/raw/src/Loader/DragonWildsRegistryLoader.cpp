@@ -193,9 +193,16 @@ void DragonWildsRegistryLoader::OnLoad(const std::filesystem::path& path,const R
     const auto owner=RC::to_string(mod);
     if(!Identifier(owner) || owner=="FModel" || owner=="RuneSchema")
         throw std::runtime_error("registry owner is invalid or reserved");
-    std::vector<std::filesystem::path> files;for(const auto& file:std::filesystem::directory_iterator(path))if(file.is_regular_file()&&(file.path().extension()==".json"||file.path().extension()==".jsonc"))files.push_back(file.path());std::sort(files.begin(),files.end());
-    for(const auto& file:files)try{PS::JsonHelpers::ParseJsonFileInPath(file,[&](const json& document){LoadDocument(document,owner,file.filename().string());});}
-    catch(const std::exception& error){m_audit.push_back({{"Owner",owner},{"Source",file.filename().string()},{"Status","Rejected"},{"Reason",error.what()}});PS::Log<RC::LogLevel::Error>(STR("Registry file '{}' in mod '{}' rejected: {}.\n"),file.filename().native(),mod,PS::ToWideSafe(error.what()));}
+    PS::JsonHelpers::ParseJsonFilesInPathWithSource(path,
+        [&](const json& document,const std::filesystem::path& relative) {
+            const auto source=relative.generic_string();
+            try {LoadDocument(document,owner,source);}
+            catch(const std::exception& error) {
+                m_audit.push_back({{"Owner",owner},{"Source",source},{"Status","Rejected"},{"Reason",error.what()}});
+                PS::Log<RC::LogLevel::Error>(STR("Registry file '{}' in mod '{}' rejected: {}.\n"),
+                    PS::ToWideSafe(source.c_str()),mod,PS::ToWideSafe(error.what()));
+            }
+        });
 }
 
 void DragonWildsRegistryLoader::LoadCookedRegistries() {
@@ -229,7 +236,7 @@ void DragonWildsRegistryLoader::WriteMerged() {
     m_bridge.SetRegistrySnapshot(merged.dump());
     if(PS::PSConfig::Get()->GetSettings().advancedRuntime)
         PS::ConfigFiles::Write(PS::HostServices::ExportsDirectory()/"RegistryManifestAudit.json",
-            json{{"Build","0.7.5.14"},{"Accepted",m_modEntries.size()},{"Entries",m_audit}}.dump(2)+"\n");
+            json{{"Build","0.7.5.21"},{"Accepted",m_modEntries.size()},{"Entries",m_audit}}.dump(2)+"\n");
     PS::Log<RC::LogLevel::Normal>(TEXT("Registry: merged {} mod-owned entries.\n"),m_modEntries.size());
 }
 

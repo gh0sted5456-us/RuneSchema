@@ -28,7 +28,7 @@ int main() {
     fs::create_directory(folder/"nested");std::ofstream(folder/"nested"/"c.json")<<R"({"order":3})";
     std::vector<int> visited;
     ParseJsonFilesInPath(folder,[&](const auto& document){visited.push_back(document.at("order").template get<int>());});
-    check(visited==std::vector<int>({1,2}));
+    check(visited==std::vector<int>({1,2,3}));
     ParseJsonFileInPath(folder/"missing.json",[&](const auto&){throw std::runtime_error("Missing file visited");});
     std::ofstream(folder/"broken.json")<<"{";
     bool contextual=false;
@@ -38,7 +38,13 @@ int main() {
     ParseJsonFilesInPathIsolated(folder,
         [&](const auto& document){isolated.push_back(document.at("order").template get<int>());},
         [&](const auto& path,const auto& error){failures.push_back(path.filename().string()+":"+error);});
-    check(isolated==std::vector<int>({1,2}) && failures.size()==1
+    check(isolated==std::vector<int>({1,2,3}) && failures.size()==1
         && failures[0].find("broken.json")!=std::string::npos);
+    std::vector<std::string> sources;
+    ParseJsonFilesInPathWithSourceIsolated(folder,
+        [&](const auto& document,const auto& source){
+            if(document.contains("order"))sources.push_back(source.generic_string());
+        },[](const auto&,const auto&){});
+    check(sources==std::vector<std::string>({"a.jsonc","b.json","nested/c.json"}));
     std::cout<<"JSON document contracts passed\n";
 }

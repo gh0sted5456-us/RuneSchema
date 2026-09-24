@@ -1,5 +1,60 @@
 # RuneSchema authoring guide
 
+## Nested loader folders
+
+Every loader owns its complete directory tree. Definitions may sit directly in
+`assets`, `raw`, `recipes`, `buildings`, or another loader root, or in arbitrary
+nested organizational folders below it. RuneSchema recursively reads `.json` and
+`.jsonc`, sorts normalized paths relative to the loader root, and does not use
+folder names as runtime identity. It does not follow directory links outside a mod.
+
+For character creation, see `CHARACTER-CREATION-AUTHORING.md`. It records all
+nine verified menu categories and the required `/raw` row plus `/assets`
+menu-option transaction.
+
+## Editing `DA_` assets and Blueprint defaults
+
+Put the full cooked `DA_` object or generated-class path at the top of an
+`/assets` document. That path is the target identity. The owning mod directory
+is the mod identity. Do not add a web schema URL, `modId`, profile, transaction,
+or duplicate target declaration. A target ending in `_C` is resolved as its
+class default object; an ordinary `DA_...DA_...` path resolves as the DataAsset.
+
+```json
+{
+  "/Game/UI/MainMenu/CharacterCreate/Data/DA_CharacterOptionData.DA_CharacterOptionData_C": {
+    "CharacterOptionData[ECharacterOptionType::HairPreset].OptionData": {
+      "$AppendUnique": [{
+        "Name": "Example Hair",
+        "BodyTypeCompatability": "both",
+        "FaceTypeCompatibility": "all",
+        "EyeTypeCompatibility": "all",
+        "DataHandle": {
+          "DataTable": "/Game/Gameplay/Character/Player/Customization/DT_Customization_HairPresets.DT_Customization_HairPresets",
+          "RowName": "RS_ExampleHair"
+        }
+      }]
+    }
+  }
+}
+```
+
+A direct scalar value is a `Set`; a direct object value is a `Merge`.
+`$Set`, `$Merge`, `$Append`, and `$AppendUnique` are available when the intended
+operation should be stated explicitly. Character menu option arrays infer
+`DataHandle.RowName` as their unique identity and use the first native entry as
+the typed template. `$Identity` and `$TemplateIndex` remain available for other
+arrays. Whole-container replacement, arbitrary calls, raw offsets, and byte
+writes remain unavailable. The older enveloped patch forms still load for
+compatibility, but new mods should use the direct `DA_` form above.
+
+When the same field change applies to several existing array entries, use
+`$MergeWhere` instead of repeating complete patch objects. `Field` is a
+reflected identity path within each array element, `Values` lists the exact
+identities to match, and `Value` contains the fields to merge. Every selector
+must match exactly once; RuneSchema validates the full group before writing.
+See `examples/CharacterCustomization/assets/domains/character_customization/unlock-vanilla-beards.json`.
+
 This guide covers the runtime layout and the path from a JSON file to a loaded
 game object. See [LOADER-WALKTHROUGHS.md](LOADER-WALKTHROUGHS.md) for every
 loader's input and workflow.
@@ -18,9 +73,7 @@ ue4ss/
       │  └─ mappings/
       │     └─ Mappings.usmap       optional
       ├─ settings/
-      │  ├─ settings.jsonc
-      │  └─ safesave/
-      │     └─ OwnedContentLedger.json  generated
+      │  └─ settings.jsonc
       ├─ plugins/                    optional
       └─ mods/
          ├─ runeschema.txt
@@ -34,6 +87,13 @@ ue4ss/
 
 Release ZIPs intentionally omit `RuneSchema/mods`. Create that directory when
 installing content mods.
+
+RuneSchema keeps authored settings with the install, but mutable compatibility
+state is stored with the game saves. SafeSave uses
+`%LOCALAPPDATA%/RSDragonwilds/Saved/RuneSchema/safesave/OwnedContentLedger.json`;
+per-world building registry records remain under
+`Saved/RuneSchema/<WorldGuid>/CustomBuildingData.json`. On first launch, an
+older ledger under `RuneSchema/settings` is staged, verified, and migrated.
 
 ## Create a mod
 

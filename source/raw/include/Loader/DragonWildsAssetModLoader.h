@@ -8,6 +8,7 @@
 #include <vector>
 #include "Loader/DragonWildsModLoaderBase.h"
 #include "nlohmann/json.hpp"
+#include "Unreal/Hooks.hpp"
 
 namespace RC::Unreal { class UWorld; }
 
@@ -26,6 +27,16 @@ namespace DragonWilds {
         struct LoadResult {
             int PropertiesWritten = 0;
             int ErrorCount = 0;
+        };
+        enum class PatchTargetMode { Object, ClassDefaultObject };
+        struct PendingObjectPatch {
+            RC::StringType ObjectPath;
+            RC::StringType ExpectedClass;
+            RC::StringType ModName;
+            std::string Source;
+            std::string PatchId;
+            PatchTargetMode Mode = PatchTargetMode::Object;
+            nlohmann::json Operations;
         };
     public:
         // Game-thread authoring facade; no UI thread touches Unreal objects.
@@ -50,6 +61,10 @@ namespace DragonWilds {
         std::size_t m_toolCloneCount=0;
         std::vector<PendingAsset> m_pendingAssets;
         std::vector<PendingAsset> m_pendingPatches;
+        std::vector<PendingObjectPatch> m_pendingObjectPatches;
+        std::vector<PendingObjectPatch> m_retainedObjectPatches;
+        RC::Unreal::Hook::GlobalCallbackId m_characterMenuPatchHook = RC::Unreal::Hook::ERROR_ID;
+        bool m_replayingCharacterMenuPatches = false;
         std::vector<RC::Unreal::UObject*> m_createdAssets;
         std::unordered_map<RC::StringType, RC::Unreal::UObject*> m_createdAssetsByTarget;
         RC::Unreal::UClass* m_dataAssetClass = nullptr;
@@ -57,7 +72,12 @@ namespace DragonWilds {
         RC::Unreal::UClass* m_recipeDataClass = nullptr;
         RC::Unreal::UClass* m_curveBaseClass = nullptr;
 
-        void QueueData(const nlohmann::json& data, const RC::StringType& modName);
+        void QueueData(const nlohmann::json& data, const RC::StringType& modName,
+            const std::string& source = "assets");
+        bool QueueObjectPatch(const nlohmann::json& data, const RC::StringType& modName,
+            const std::string& source);
+        void ApplyObjectPatches(bool characterMenuReplay = false);
+        void RegisterCharacterMenuPatchReplay();
         void RegisterDeclarations(const nlohmann::json& data, const RC::StringType& modName);
         void Apply(RC::Unreal::UObject* object, const PendingAsset& pendingAsset, LoadResult& outResult);
         void ApplyDominionSpheres(RC::Unreal::UObject* owner,

@@ -4,7 +4,9 @@
 #include "Loader/DragonWildsModLoaderBase.h"
 #include "Loader/RegistryPatchPlan.h"
 #include "nlohmann/json.hpp"
+#include "Unreal/Hooks.hpp"
 #include <set>
+#include <vector>
 
 namespace RC::Unreal {
     class UDataTable;
@@ -26,7 +28,7 @@ namespace DragonWilds {
 	public:
 		DragonWildsRawTableLoader();
 
-		~DragonWildsRawTableLoader() = default;
+		~DragonWildsRawTableLoader() override;
 
 
         void Apply(const RC::StringType& datatableName, RC::Unreal::UDataTable* datatable);
@@ -50,9 +52,22 @@ namespace DragonWilds {
         std::vector<RegistryPatch::Patch> m_registryPlan;
         std::unordered_map<std::string, std::pair<std::string,std::string>> m_ownedRows;
         std::set<std::string> m_appliedRegistryPatches;
-        void LoadDocument(const nlohmann::json& data, const RC::StringType& modName);
+        RC::Unreal::Hook::GlobalCallbackId m_characterEditorTraceCallbackId = RC::Unreal::Hook::ERROR_ID;
+        std::set<std::string> m_characterEditorTraceEvents;
+        struct TraceJob {
+            std::string Id;
+            std::vector<std::string> ClassContains;
+            std::vector<std::string> FunctionContains;
+            std::size_t MaxEvents = 256;
+            std::set<std::string> Seen;
+        };
+        std::vector<TraceJob> m_traceJobs;
+        void LoadTraceJobs();
+        void RegisterCharacterEditorTrace();
+        void TraceCharacterEditorEvent(RC::Unreal::UObject* source, RC::Unreal::UFunction* function);
+        void LoadDocument(const nlohmann::json& data, const RC::StringType& modName,
+            const std::string& source = "raw");
         void ReloadDocument(const nlohmann::json& data, const RC::StringType& modName);
-        void LoadRegistryDirectory(const std::filesystem::path& path, const RC::StringType& modName, bool customization);
         void LoadAndApplyRegistryTargets();
         void ApplyRegistryPatches(RC::Unreal::UDataTable* datatable);
         void ApplyObjectRegistryPatches();

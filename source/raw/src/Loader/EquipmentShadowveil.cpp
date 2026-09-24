@@ -6,6 +6,7 @@
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
 #include "Helpers/Casting.hpp"
 #include "Utility/Logging.h"
+#include "Runtime/Storefront.h"
 #include <Windows.h>
 #include <safetyhook.hpp>
 #include <atomic>
@@ -96,6 +97,14 @@ bool Install(const TCHAR*& failure) {
     failure = TEXT("unsupported executable build");
     SelectedProfile = NativeHookContract::Select(ExecutableTimestamp, ExecutableImageSize, ShadowveilNative::Profiles);
     if (!SelectedProfile) return false;
+    const bool gamePassProfile = SelectedProfile->timestamp == ShadowveilNative::GamePassTimestamp
+        && SelectedProfile->imageSize == ShadowveilNative::GamePassImageSize;
+    const auto lane = PS::Storefront::CurrentNativeLane();
+    if ((gamePassProfile && lane != PS::Storefront::NativeLane::GamePassNative)
+        || (!gamePassProfile && lane == PS::Storefront::NativeLane::GamePassNative)) {
+        failure = TEXT("native hook profile does not match the selected storefront lane");
+        return false;
+    }
     failure = TEXT("native hook or resume bytes differ");
     if (!NativeHookContract::Validate(std::span(reinterpret_cast<const unsigned char*>(ImageBase), SelectedProfile->imageSize), SelectedProfile->sites)) return false;
     failure = TEXT("native hook creation failed");
@@ -122,8 +131,9 @@ EquipmentShadowveilStatus InitializeEquipmentShadowveil(const ShadowveilRules::R
     const TCHAR* failure{};
     if (Install(failure)) {
         const bool server=SelectedProfile->timestamp == ShadowveilNative::ServerTimestamp;
+        const bool gamePass=SelectedProfile->timestamp == ShadowveilNative::GamePassTimestamp;
         PS::Log<LogLevel::Verbose>(TEXT("Equipment Shadowveil ({}): {} wearables; 5 native binding sites validated.\n"),
-            server ? TEXT("server") : TEXT("client"), WearablePaths.size());
+            server ? TEXT("server") : gamePass ? TEXT("gamepass") : TEXT("steam-gog"), WearablePaths.size());
         return {WearablePaths.size(),true,server};
     }
     if(ExecutableTimestamp && ExecutableImageSize)

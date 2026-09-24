@@ -104,7 +104,7 @@ int main(){
     const auto resourceExport=PS::SpawnAuthoring::Placement({{"Type","Actor"},{"Class","/Game/Rock.Rock_C"},{"UseNativeRespawn",true}},"rock_1",{1,2,3},0);
     assert(resourceExport["UseNativeRespawn"]==true && resourceExport["Class"]=="/Game/Rock.Rock_C");
     assert(Rejects([&]{PS::SpawnAuthoring::Placement(spawn,"../bad",{0,0,0},0);}));
-    auto badTool=toolPayload;badTool["scale"]=100;assert(Rejects([&]{ToolIdentity(badTool);}));
+    auto badTool=toolPayload;badTool["scale"]=100.01;assert(Rejects([&]{ToolIdentity(badTool);}));
     badTool=toolPayload;badTool["spawn"]="Other:temporary_1";assert(Rejects([&]{ToolIdentity(badTool);}));
     badTool=toolPayload;badTool["extra"]=true;assert(Rejects([&]{ToolIdentity(badTool);}));
     const auto lookup=[&](const std::string& key){auto value=named;value.Key=key;return Identity(value);};

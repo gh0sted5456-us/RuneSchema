@@ -1287,7 +1287,7 @@ public:
             if(isNpc) {
                 wrapped(node->name,36,94,74,1,19);text(Shorten(node->path,84),36,122,15,muted);
                 text("Name (blank inherits)",36,145,17,muted);field({36,169,708,36},"name");
-                text("Scale: 0.1 - 10",36,214,17,muted);field({36,238,180,36},"scale");
+                text("Scale: 0.01 - 100",36,214,17,muted);field({36,238,180,36},"scale");
                 button({236,238,508,36},std::string(Authoring::PermanentSpawn.load()?"[x] ":"[ ] ")+"Permanent NPC placement","permanent-spawn");
                 button({36,292,708,36},npcGridPlacement?"PLACEMENT: PRECISE WORLD GRID":"PLACEMENT: RANDOM RADIUS AROUND PLAYER","npc-placement-mode");
                 if(npcGridPlacement) {
@@ -1307,7 +1307,7 @@ public:
             }else {
             wrapped(node->name,36,94,74,1,19);text(Shorten(node->path,84),36,122,15,muted);
             text("Name (blank inherits)",36,151,17,muted);field({36,176,708,38},"name");
-            text("Scale: 0.1 - 10",36,229,17,muted);field({36,254,174,38},"scale");
+            text("Scale: 0.01 - 100",36,229,17,muted);field({36,254,174,38},"scale");
             text("Count: 1 - 20",226,229,17,muted);field({226,254,174,38},"count");
             const char* effects[]{"Original / inherit","None","Ghost Glow"};text("Visual effect",416,229,17,muted);button({416,254,328,38},effects[static_cast<int>(effect)],"effect");
             button({36,310,286,36},std::string(Authoring::PermanentSpawn.load()?"[x] ":"[ ] ")+"Permanent spawn","permanent-spawn");

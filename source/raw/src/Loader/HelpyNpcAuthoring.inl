@@ -160,7 +160,7 @@ nlohmann::json DragonWildsNpcLoader::SpawnHelpyNpc(const nlohmann::json& request
     if(request.value("Count",1)!=1||request.value("Resource",false)||request.contains("PowerLevel")||request.contains("GhostMesh")
         ||(request.contains("AdditionalDrops")&&!request["AdditionalDrops"].empty()))throw std::runtime_error("NPC placement cannot accept AI power, drops, effects or a batch count.");
     const auto name=request.value("Name",std::string{});if(name.size()>256||name.find('\0')!=name.npos)throw std::runtime_error("NPC name is invalid.");
-    const double scale=request.value("Scale",1.0);if(!std::isfinite(scale)||scale<=0.0)throw std::runtime_error("NPC scale must be finite and greater than zero.");
+    const double scale=request.value("Scale",1.0);if(!std::isfinite(scale)||scale<0.01||scale>100.0)throw std::runtime_error("NPC scale must be finite and between 0.01 and 100.");
     if(m_helpyNpcs.size()+m_pendingNpcCleanup.size()>=MaxTemporary)throw std::runtime_error("32 NPCs/cleanup records are outstanding; let cleanup finish first.");
     if(m_helpyCreated>=128)throw std::runtime_error("128 Helpy NPC operations reached in this process; restart before another authoring cycle.");
     const auto generation=m_worldGeneration;

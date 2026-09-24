@@ -43,34 +43,38 @@ namespace DragonWilds {
         if (HasInitialized()) OnAutoReload(modName, modFilePath);
     }
 
-    void DragonWildsModLoaderBase::Load(const fs::path& modPath, const RC::StringType& modName, const EEngineLifecyclePhase& engineLifecyclePhase)
+    bool DragonWildsModLoaderBase::Load(const fs::path& modPath, const RC::StringType& modName, const EEngineLifecyclePhase& engineLifecyclePhase)
     {
+        auto loaderPath = modPath / m_modFolderType;
+        if (!fs::is_directory(loaderPath)) return true;
+
         if (!HasInitialized())
         {
-            return;
-        }
-
-        auto loaderPath = modPath / m_modFolderType;
-        if (!fs::is_directory(loaderPath))
-        {
-            return;
+            return false;
         }
 
         const auto started=std::chrono::steady_clock::now();
-        try {OnLoad(loaderPath, modName, engineLifecyclePhase);}
+        try {
+            OnLoad(loaderPath, modName, engineLifecyclePhase);
+            PS::RoutineLog(m_modFolderType, STR("[LOADER:{}][OK][MOD:{}] Section loaded.\n"),
+                RC::to_generic_string(m_modFolderType), modName);
+        }
         catch(const std::exception& error) {
-            PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:{}][MOD:{}] '{}' rejected: {}.\n"),
-                RC::to_generic_string(m_modFolderType),modName,loaderPath.native(),PS::ToWideSafe(error.what()));
+            PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL][MOD:{}] Section skipped: {}. Remaining sections continue.\n"),
+                RC::to_generic_string(m_modFolderType),modName,PS::ToWideSafe(error.what()));
+            return false;
         }
         catch(...) {
-            PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:{}][MOD:{}] '{}' rejected: unknown error.\n"),
-                RC::to_generic_string(m_modFolderType),modName,loaderPath.native());
+            PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL][MOD:{}] Section skipped after an unknown failure. Remaining sections continue.\n"),
+                RC::to_generic_string(m_modFolderType),modName);
+            return false;
         }
         const auto elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now()-started).count();
         if(elapsed>=1000)
             PS::Log<LogLevel::Normal>(STR("[PERF][LOADER:{}][MOD:{}] Section load took {} ms.\n"),
                 RC::to_generic_string(m_modFolderType),modName,elapsed);
+        return true;
     }
 
     void DragonWildsModLoaderBase::FinalizeLoad(const EEngineLifecyclePhase& phase)
@@ -170,7 +174,7 @@ namespace DragonWilds {
         const auto started=std::chrono::steady_clock::now();
         if (!OnInitialize())
         {
-            PS::Log<LogLevel::Error>(STR("[DISABLED][LOADER:{}] Required capability unavailable.\n"), RC::to_generic_string(m_modFolderType));
+            PS::Log<LogLevel::Warning>(STR("[LOADER:{}][DISABLED] Required capability is unavailable; other loaders continue.\n"), RC::to_generic_string(m_modFolderType));
             return;
         }
 
@@ -182,6 +186,6 @@ namespace DragonWilds {
             PS::Log<LogLevel::Normal>(STR("[PERF][LOADER:{}] Initialization took {} ms.\n"),
                 RC::to_generic_string(m_modFolderType),elapsed);
 
-        PS::Log<LogLevel::Normal>(STR("[READY][LOADER:{}] Initialized.\n"), RC::to_generic_string(m_modFolderType));
+        PS::RoutineLog(m_modFolderType, STR("[LOADER:{}][OK] Initialized.\n"), RC::to_generic_string(m_modFolderType));
     }
 }

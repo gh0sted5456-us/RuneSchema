@@ -5,6 +5,10 @@
   "enableAutoReload": false,
   "advancedLogging": false,
   "advancedRuntime": false,
+  "diagnosticJobs": {
+    "enabled": false,
+    "characterEditorPreset": false
+  },
   "colorCodeLoaderAnnotations": true,
   "enableExperimentalDropScaling": false,
   "plugins": {
@@ -14,7 +18,7 @@
     "allowClientItemGrants": false,
     "allowClientTemporarySpawns": false,
     "maximumItemCount": 100,
-    "maximumSpawnCount": 5,
+    "maximumSpawnCount": 100,
     "maximumNpcDurationSeconds": 300,
     "permittedPlayerGuids": [],
     "permittedPlayerNames": []

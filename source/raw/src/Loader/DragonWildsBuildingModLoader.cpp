@@ -759,6 +759,7 @@ namespace DragonWilds {
                 if (definition.Clone)
                 {
                     m_buildings.erase(identity);
+                    m_buildingHandles.erase(identity);
                     DiscardUncommittedClone(building);
                 }
                 result.Errors++;
@@ -826,7 +827,7 @@ namespace DragonWilds {
                 placed = AddToMenu(building, placement) && placed;
             if (!placed) { fail(); continue; }
 
-            m_buildings[identity] = building;
+            RememberBuilding(identity, building);
 
             if (definition.Unlock)
             {
@@ -841,7 +842,7 @@ namespace DragonWilds {
             if(definition.Declared) {
                 auto* name=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(building->GetClassPrivate(),TEXT("InternalName")));
                 const auto actualName=name?RC::to_string(*name->GetPropertyValue(name->ContainerPtrToValuePtr<void>(building))):std::string{};
-                OwnedContent::Merge(OwnedContent::LedgerPath(PS::HostServices::SettingsDirectory()),
+                OwnedContent::Merge(OwnedContent::LedgerPath(PS::HostServices::StateDirectory()),
                     {{"Building",RC::to_string(definition.Owner),definition.DeclaredPersistenceID,
                         actualName,RC::to_string(definition.AssetPath)}});
             }
@@ -877,11 +878,10 @@ namespace DragonWilds {
         const BuildingDefinition& definition, LoadResult& result, UObject** sourceOut)
     {
         const auto identity = Identity(definition.Owner, definition.Key);
-        if (auto found = m_buildings.find(identity);
-            found != m_buildings.end())
+        if (auto* cached = GetValidBuilding(identity))
         {
             if (sourceOut) *sourceOut = LoadObject(definition.AssetPath);
-            return found->second;
+            return cached;
         }
 
         auto* source = LoadObject(definition.AssetPath);
@@ -932,7 +932,100 @@ namespace DragonWilds {
         }
 
         building->SetRootSet();
+        RememberBuilding(identity,building);
+        PS::Log<LogLevel::Verbose>(
+            STR("[BUILDING-ASSET][RETAINED] owner='{}' key='{}' configured='{}' object='{}' class='{}' root={} mode={}.\n"),
+            definition.Owner,definition.Key,definition.AssetPath,building->GetPathName(),
+            building->GetClassPrivate()->GetPathName(),building->IsRootSet(),
+            definition.Clone?TEXT("clone"):TEXT("direct"));
         return building;
+    }
+
+    UObject* DragonWildsBuildingModLoader::GetValidBuilding(const RC::StringType& identity) const
+    {
+        const auto found=m_buildingHandles.find(identity);
+        return found==m_buildingHandles.end()?nullptr:found->second.Get();
+    }
+
+    void DragonWildsBuildingModLoader::RememberBuilding(
+        const RC::StringType& identity,UObject* object)
+    {
+        if(!object){m_buildings.erase(identity);m_buildingHandles.erase(identity);return;}
+        m_buildings[identity]=object;
+        m_buildingHandles[identity]=PS::WeakObjectHandle(object);
+    }
+
+    bool DragonWildsBuildingModLoader::RefreshBuildingReferencesForWorld()
+    {
+        bool valid=true;
+        for(const auto& definition:m_definitions)
+        {
+            const auto identity=Identity(definition.Owner,definition.Key);
+            if(!m_applied.contains(identity))continue;
+            auto* previous=GetValidBuilding(identity);
+            UObject* object=previous;
+            if(definition.Clone)
+            {
+                if(!object)
+                {
+                    PS::Log<LogLevel::Error>(
+                        STR("[BUILDING-ASSET][INVALID] owner='{}' key='{}' clone lifetime was lost; registration refused.\n"),
+                        definition.Owner,definition.Key);
+                    valid=false;
+                    continue;
+                }
+            }
+            else
+            {
+                // A direct cooked export is package-owned. Resolve its stable
+                // asset path at every world boundary instead of trusting a raw
+                // pointer retained across frontend/world package activity.
+                object=LoadObject(definition.AssetPath);
+                if(!object||!m_buildingPieceClass||!object->IsA(m_buildingPieceClass))
+                {
+                    PS::Log<LogLevel::Error>(
+                        STR("[BUILDING-ASSET][INVALID] owner='{}' key='{}' configured='{}' could not be re-resolved as BuildingPieceData.\n"),
+                        definition.Owner,definition.Key,definition.AssetPath);
+                    RememberBuilding(identity,nullptr);
+                    valid=false;
+                    continue;
+                }
+                object->SetRootSet();
+                RememberBuilding(identity,object);
+            }
+
+            // From this point on the object came from a current weak handle or
+            // a fresh synchronous resolve; no stale raw pointer is dereferenced.
+            auto* type=object->GetClassPrivate();
+            auto* idProperty=type?CastField<FStrProperty>(PropertyHelper::GetPropertyByName(type,TEXT("PersistenceID"))):nullptr;
+            auto* nameProperty=type?CastField<FStrProperty>(PropertyHelper::GetPropertyByName(type,TEXT("InternalName"))):nullptr;
+            if(!idProperty||!nameProperty)
+            {
+                PS::Log<LogLevel::Error>(
+                    STR("[BUILDING-ASSET][INVALID] owner='{}' key='{}' object='{}' lacks PersistenceID/InternalName after world resolve.\n"),
+                    definition.Owner,definition.Key,object->GetPathName());
+                valid=false;
+                continue;
+            }
+            const auto persistence=RC::to_string(*idProperty->GetPropertyValue(idProperty->ContainerPtrToValuePtr<void>(object)));
+            const auto internal=RC::to_string(*nameProperty->GetPropertyValue(nameProperty->ContainerPtrToValuePtr<void>(object)));
+            if(persistence.empty()||internal.empty()
+                || (definition.Declared&&persistence!=definition.DeclaredPersistenceID)
+                || (definition.DeclaredInternalNameAsserted&&internal!=definition.DeclaredInternalName))
+            {
+                PS::Log<LogLevel::Error>(
+                    STR("[BUILDING-ASSET][INVALID] owner='{}' key='{}' cooked identity changed: PersistenceID='{}' InternalName='{}'.\n"),
+                    definition.Owner,definition.Key,PS::ToWideSafe(persistence.c_str()),PS::ToWideSafe(internal.c_str()));
+                valid=false;
+                continue;
+            }
+            PS::Log<LogLevel::Normal>(
+                STR("[BUILDING-ASSET][WORLD] owner='{}' key='{}' configured='{}' object='{}' class='{}' action={} root={} PersistenceID='{}' InternalName='{}'.\n"),
+                definition.Owner,definition.Key,definition.AssetPath,object->GetPathName(),type->GetPathName(),
+                previous==object?TEXT("reused"):TEXT("re-resolved"),object->IsRootSet(),
+                PS::ToWideSafe(persistence.c_str()),PS::ToWideSafe(internal.c_str()));
+        }
+        return valid;
     }
 
     UObject* DragonWildsBuildingModLoader::CloneBuilding(
@@ -999,17 +1092,34 @@ namespace DragonWilds {
     bool DragonWildsBuildingModLoader::ValidateBuildableActor(
         UObject* source, const BuildingDefinition& definition)
     {
-        if (!definition.Properties.contains("BuildableActor")) return true;
-        if (!definition.Clone)
+        RC::StringType path;
+        if (definition.Properties.contains("BuildableActor"))
         {
-            PS::Log<LogLevel::Error>(
-                STR("Building '{}': BuildableActor replacement requires '$Clone'; mutating a shared native data asset is refused.\n"),
-                definition.Key);
-            return false;
+            if (!definition.Clone)
+            {
+                PS::Log<LogLevel::Error>(
+                    STR("Building '{}': BuildableActor replacement requires '$Clone'; mutating a shared native data asset is refused.\n"),
+                    definition.Key);
+                return false;
+            }
+            path = RC::to_generic_string(
+                definition.Properties.at("BuildableActor").get<std::string>());
         }
-
-        const auto path = RC::to_generic_string(
-            definition.Properties.at("BuildableActor").get<std::string>());
+        else
+        {
+            auto* property = source ? CastField<FSoftObjectProperty>(
+                PropertyHelper::GetPropertyByName(source->GetClassPrivate(), TEXT("BuildableActor"))) : nullptr;
+            auto* soft = property
+                ? property->ContainerPtrToValuePtr<UECustom::FSoftObjectPtr>(source) : nullptr;
+            if (!soft || soft->ObjectID.AssetPath.GetPackageName() == NAME_None
+                || soft->ObjectID.AssetPath.GetAssetName() == NAME_None)
+            {
+                PS::Log<LogLevel::Error>(STR("Building '{}': baked BuildableActor is empty.\n"), definition.Key);
+                return false;
+            }
+            path = soft->ObjectID.AssetPath.GetPackageName().ToString()
+                + TEXT(".") + soft->ObjectID.AssetPath.GetAssetName().ToString();
+        }
         auto* actorClass = ActorHelper::ResolveClass(path);
         auto* baseClass = ActorHelper::ResolveClass(
             TEXT("/Game/Gameplay/BaseBuilding/Actors/"
@@ -1050,6 +1160,9 @@ namespace DragonWilds {
                 definition.Key, path);
             return false;
         }
+        PS::Log<LogLevel::Normal>(
+            STR("[BUILDING-MATERIALIZATION][VERIFIED] owner='{}' key='{}' actor='{}' class='{}' concrete=true binding=true.\n"),
+            definition.Owner, definition.Key, path, actorClass->GetPathName());
         return true;
     }
 
@@ -1344,9 +1457,8 @@ namespace DragonWilds {
             const auto identity = Identity(definition.Owner, definition.Key);
             if (!m_applied.contains(identity)) continue;
 
-            const auto loaded = m_buildings.find(identity);
-            if (loaded == m_buildings.end() || !loaded->second) continue;
-            auto* object = loaded->second;
+            auto* object=GetValidBuilding(identity);
+            if(!object){PS::Log<LogLevel::Error>(STR("Building '{} / {}' has no valid retained object at registry protection.\n"),definition.Owner,definition.Key);return false;}
             auto* idProperty = CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
                 object->GetClassPrivate(), TEXT("PersistenceID")));
             auto* nameProperty = CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
@@ -1474,9 +1586,8 @@ namespace DragonWilds {
                 const auto identity = Identity(definition.Owner, definition.Key);
                 if (!m_applied.contains(identity)) continue;
 
-                const auto loaded = m_buildings.find(identity);
-                if (loaded == m_buildings.end() || !loaded->second) continue;
-                auto* object = loaded->second;
+                auto* object=GetValidBuilding(identity);
+                if(!object)return false;
                 const auto& active = activeById.at(activeIdsByObject.at(object));
                 auto foundIndex = currentIndexById.find(active.PersistenceId);
                 int32 index = foundIndex == currentIndexById.end() ? nextIndex++ : foundIndex->second;
@@ -2083,9 +2194,14 @@ namespace DragonWilds {
 
     void DragonWildsBuildingModLoader::PrepareWorldState(AGameModeBase* gameMode)
     {
-        if (!m_catalogue)
+        // The frontend may unload/reload package-owned assets before this
+        // callback. Re-resolve both catalogue and direct definitions before
+        // touching any reflected field.
+        m_catalogue=LoadObject(CataloguePath);
+        if(!m_catalogue||!RefreshBuildingReferencesForWorld()||!RefreshBuildingCatalogueForWorld())
         {
-            m_catalogue = LoadObject(CataloguePath);
+            PS::Log<LogLevel::Error>(STR("Buildings cannot be registered because one or more retained assets failed world-boundary validation.\n"));
+            return;
         }
 
         auto* subsystem = FindBuildingSubsystem(gameMode);
@@ -2102,10 +2218,22 @@ namespace DragonWilds {
             return;
         }
 
-        // A previous world's subsystem is no longer safe to dereference here.
-        // Drop its snapshot before capturing the newly initialized registry.
-        if (m_nativeRegistrySnapshot.Subsystem
-            && m_nativeRegistrySnapshot.Subsystem != subsystem)
+        // InitGameState can run again against the same persistent subsystem
+        // after a frontend/world transition. Restore its native baseline before
+        // taking a fresh snapshot; otherwise the previous protected state is
+        // mistaken for an unsafe double reconstruction and registration aborts.
+        if (m_nativeRegistrySnapshot.Subsystem == subsystem)
+        {
+            if (!RestoreNativeRegistry())
+            {
+                PS::Log<LogLevel::Error>(
+                    STR("Building registry refresh could not restore its prior native baseline.\n"));
+                return;
+            }
+            PS::Log<LogLevel::Normal>(
+                STR("[BUILDING-REGISTRY][REFRESH] Restored the persistent subsystem baseline before reconstruction.\n"));
+        }
+        else if (m_nativeRegistrySnapshot.Subsystem)
         {
             ClearWorldRegistryState();
         }
@@ -2158,6 +2286,33 @@ namespace DragonWilds {
         }
     }
 
+    bool DragonWildsBuildingModLoader::RefreshBuildingCatalogueForWorld()
+    {
+        if(!m_catalogue)return false;
+        for(const auto& definition:m_definitions) {
+            const auto identity=Identity(definition.Owner,definition.Key);
+            if(!m_applied.contains(identity))continue;
+            auto* building=GetValidBuilding(identity);
+            if(!building) {
+                PS::Log<LogLevel::Error>(STR("[BUILDING-CATALOGUE][FAILED] owner='{}' key='{}' has no valid object.\n"),
+                    definition.Owner,RC::to_generic_string(definition.Key));
+                return false;
+            }
+            if(!AddPersistenceIdentity(building))return false;
+            auto placements=definition.InheritSourcePlacement
+                ? FindSourcePlacements(building) : definition.Targets;
+            if(placements.empty()&&!definition.Declared) {
+                PS::Log<LogLevel::Error>(STR("[BUILDING-CATALOGUE][FAILED] owner='{}' key='{}' has no placement.\n"),
+                    definition.Owner,RC::to_generic_string(definition.Key));
+                return false;
+            }
+            for(const auto& placement:placements)if(!AddToMenu(building,placement))return false;
+            PS::Log<LogLevel::Normal>(STR("[BUILDING-CATALOGUE][VERIFIED] owner='{}' key='{}' placements={} object='{}'.\n"),
+                definition.Owner,RC::to_generic_string(definition.Key),placements.size(),building->GetPathName());
+        }
+        return true;
+    }
+
     void DragonWildsBuildingModLoader::ApplyUnlocks(UObject* progressComponent)
     {
         if (!progressComponent || m_unlocks.empty())
@@ -2168,11 +2323,7 @@ namespace DragonWilds {
         std::vector<UObject*> buildings;
         for (const auto& key : m_unlocks)
         {
-            auto found = m_buildings.find(key);
-            if (found != m_buildings.end() && found->second)
-            {
-                buildings.push_back(found->second);
-            }
+            if(auto* building=GetValidBuilding(key))buildings.push_back(building);
         }
 
         auto* unlockedProperty = CastField<FArrayProperty>(

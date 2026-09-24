@@ -1,0 +1,23 @@
+{
+  "/Game/UI/MainMenu/CharacterCreate/Data/DA_CharacterOptionData.DA_CharacterOptionData_C": {
+    "CharacterOptions[FacialHairPreset].OptionData": {
+      "$MergeWhere": {
+        "Field": "DataHandle.RowName",
+        "Values": [
+          "F_A_PresetNone", "F_A_Preset1", "F_A_Preset2", "F_A_Preset3", "F_A_Preset4",
+          "F_B_PresetNone", "F_B_Preset1", "F_B_Preset2", "F_B_Preset3", "F_B_Preset4",
+          "F_C_PresetNone", "F_C_Preset1", "F_C_Preset2", "F_C_Preset3", "F_C_Preset4",
+          "F_D_PresetNone", "F_D_Preset1", "F_D_Preset2", "F_D_Preset3", "F_D_Preset4",
+          "M_A_PresetNone", "M_A_Preset1", "M_A_Preset2", "M_A_Preset3", "M_A_Preset4",
+          "M_B_PresetNone", "M_B_Preset1", "M_B_Preset2", "M_B_Preset3", "M_B_Preset4",
+          "M_C_PresetNone", "M_C_Preset1", "M_C_Preset2", "M_C_Preset3", "M_C_Preset4",
+          "M_D_PresetNone", "M_D_Preset1", "M_D_Preset2", "M_D_Preset3", "M_D_Preset4"
+        ],
+        "Value": {
+          "BodyTypeCompatability": "both",
+          "FaceTypeCompatibility": "all"
+        }
+      }
+    }
+  }
+}

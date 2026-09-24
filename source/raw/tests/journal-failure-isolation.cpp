@@ -35,7 +35,15 @@ int main(int argc, char** argv) {
     require(source.find("ensureInArray") == std::string::npos);
     require(source.find("m_knownIds") == std::string::npos);
     require(source.find("InstallNativePersistence();") != std::string::npos);
+    require(source.find("if (!m_ownedIds.empty())") != std::string::npos);
+    require(source.find("[FEATURE:journal-save-cleanup][UNAVAILABLE]") != std::string::npos);
+    const auto persistence = source.find("InstallNativePersistence();", apply);
+    const auto hooks = source.find("RegisterHooks();", persistence);
+    require(persistence != std::string::npos && hooks != std::string::npos);
+    require(source.substr(persistence, hooks-persistence).find("catch (const std::exception& error)") != std::string::npos);
     require(source.find("JournalPersistence::Install(this,") != std::string::npos);
+    require(source.find("NativeLane::GamePassNative") != std::string::npos);
+    require(source.find("WinGDK journal save-cleanup adapter is not verified") != std::string::npos);
     require(source.find("StripUnusableIdsFromCharacterSave") == std::string::npos);
     require(source.find("SaveCharacters") == std::string::npos);
     require(source.find("QuestRegistry::NativeRegistry::RegisterJournal(subsystem,subsystem->GetOuterPrivate(),entry);")

@@ -1,0 +1,20 @@
+{
+  "/Game/UI/MainMenu/CharacterCreate/Data/DA_CharacterOptionData.DA_CharacterOptionData_C": {
+    "CharacterOptionData[ECharacterOptionType::HairPreset].OptionData": {
+      "$AppendUnique": [
+        {
+          "Name": "Example Hair",
+          "OptionalText": "",
+          "BodyTypeCompatability": "both",
+          "FaceTypeCompatibility": "all",
+          "EyeTypeCompatibility": "all",
+          "DataHandle": {
+            "DataTable": "/Game/Gameplay/Character/Player/Customization/DT_Customization_HairPresets.DT_Customization_HairPresets",
+            "RowName": "RS_ExampleHair"
+          },
+          "bIsDisabled": false
+        }
+      ]
+    }
+  }
+}

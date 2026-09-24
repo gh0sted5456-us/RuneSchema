@@ -37,6 +37,7 @@
 #include "Loader/JournalPlayerAccess.h"
 #include "Loader/JournalSaveOwnership.h"
 #include "Runtime/HostServices.h"
+#include "Runtime/Storefront.h"
 #include "Core/JsonPatchDirective.h"
 #include "Core/JournalPlacement.h"
 #include "Unreal/Property/FTextProperty.hpp"
@@ -369,7 +370,7 @@ namespace DragonWilds {
                     TrackOwnedId(entry,id->GetPropertyValue(id->ContainerPtrToValuePtr<void>(entry)),def.Owner,true);
                     auto* name=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(entry->GetClassPrivate(),TEXT("InternalName")));
                     const auto actualName=RC::to_string(*name->GetPropertyValue(name->ContainerPtrToValuePtr<void>(entry)));
-                    OwnedContent::Merge(OwnedContent::LedgerPath(PS::HostServices::SettingsDirectory()),
+                    OwnedContent::Merge(OwnedContent::LedgerPath(PS::HostServices::StateDirectory()),
                         {{m_loreOnly?"Lore":"Journal",RC::to_string(def.Owner),def.DeclaredPersistenceID,
                             actualName,RC::to_string(def.Key)}});
                 }
@@ -411,7 +412,19 @@ namespace DragonWilds {
                     result.EntriesReady, result.Placements);
             }
         }
-        InstallNativePersistence();
+        // Native persistence cleanup is an optional safety adapter. A
+        // storefront-specific routine mismatch must not roll back journal
+        // registration, placement, or unlock delivery.
+        if (!m_ownedIds.empty()) {
+            try {
+                InstallNativePersistence();
+            } catch (const std::exception& error) {
+                PS::Log<LogLevel::Warning>(STR("[FEATURE:journal-save-cleanup][UNAVAILABLE] {}. Journal/lore content remains active.\n"),
+                    PS::ToWideSafe(error.what()));
+            } catch (...) {
+                PS::Log<LogLevel::Warning>(STR("[FEATURE:journal-save-cleanup][UNAVAILABLE] Native adapter initialization failed. Journal/lore content remains active.\n"));
+            }
+        }
         RegisterHooks();
         m_initialJournalApplied = true;
         return result;
@@ -929,6 +942,12 @@ namespace DragonWilds {
 
     void DragonWildsJournalModLoader::InstallNativePersistence()
     {
+        // The journal JSON ABI is native and build-specific. The WinGDK
+        // reader/writer pair is known, but its JSON helper ABI is not yet a
+        // complete verified contract. Never run the Steam adapter in that
+        // process; unlock delivery below remains storefront-neutral.
+        if (PS::Storefront::CurrentNativeLane() == PS::Storefront::NativeLane::GamePassNative)
+            throw std::runtime_error("WinGDK journal save-cleanup adapter is not verified for this build");
         JournalPersistence::Install(this, JournalSave::Owners(m_ownedIds.begin(),m_ownedIds.end()), m_journalComponentClass);
     }
 }

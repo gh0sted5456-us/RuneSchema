@@ -1,4 +1,5 @@
 #include "Loader/VendorOffers.h"
+#include "Loader/VendorCategoryGate.h"
 #include <cassert>
 #include <map>
 #include <vector>
@@ -59,4 +60,36 @@ int main() {
     bad=item;bad.erase("Currency");Rejects([&]{Properties(bad);});
     bad=item;bad.erase("Price");Rejects([&]{Properties(bad);});
     bad=item;bad["Item"]="not an asset";Rejects([&]{Properties(bad);});
+
+    // Category gates remove whole offers without changing the category identity
+    // or relative order of any surviving offer. Hidden items must never float
+    // into the next visible native LabeledRecipes group.
+    json gated=json::array({
+        {{"Item","/Game/General.General"},{"Currency","/Game/Coin.Coin"},{"Price",1},{"Category","General"},{"Tag","general"}},
+        {{"Item","/Game/DayA.DayA"},{"Currency","/Game/Coin.Coin"},{"Price",1},{"Category","Day"},{"Order",2},{"Tag","day-late"}},
+        {{"Item","/Game/Night.Night"},{"Currency","/Game/Coin.Coin"},{"Price",1},{"Category","Night"},{"Tag","night"}},
+        {{"Item","/Game/DayB.DayB"},{"Currency","/Game/Coin.Coin"},{"Price",1},{"Category","Day"},{"Order",0},{"Tag","day-first"}},
+        {{"Item","/Game/Elite.Elite"},{"Currency","/Game/Coin.Coin"},{"Price",1},{"Category","Elite"},{"Tag","elite"}}
+    });
+    const auto rules=DragonWilds::VendorCategoryGate::Parse(json::array({
+        {{"Category","Day"},{"TimeOfDay","Day"}},
+        {{"Category","Night"},{"TimeOfDay","Night"}},
+        {{"Category","Elite"},{"MinPowerLevel",50}}
+    }));
+    const auto day=OrderedWithinCategories(DragonWilds::VendorCategoryGate::Filter(
+        gated,rules,25,DragonWilds::TimeOfDay::Requirement::Day));
+    assert(day.size()==3);
+    assert(day[0]["Category"]=="General" && day[0]["Tag"]=="general");
+    assert(day[1]["Category"]=="Day" && day[1]["Tag"]=="day-first");
+    assert(day[2]["Category"]=="Day" && day[2]["Tag"]=="day-late");
+    for(const auto& offer:day)assert(offer["Category"]!="Night" && offer["Category"]!="Elite");
+    const auto night=OrderedWithinCategories(DragonWilds::VendorCategoryGate::Filter(
+        gated,rules,75,DragonWilds::TimeOfDay::Requirement::Night));
+    assert(night.size()==3);
+    assert(night[0]["Category"]=="General");
+    assert(night[1]["Category"]=="Night");
+    assert(night[2]["Category"]=="Elite");
+    const auto unknownPower=DragonWilds::VendorCategoryGate::Filter(
+        gated,rules,std::nullopt,DragonWilds::TimeOfDay::Requirement::Day);
+    assert(std::none_of(unknownPower.begin(),unknownPower.end(),[](const auto& offer){return offer["Category"]=="Elite";}));
 }

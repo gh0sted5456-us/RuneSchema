@@ -22,16 +22,6 @@ namespace DragonWilds {
             return false;
         }
 
-        bool StorefrontAllows(const std::string& value)
-        {
-            if (value == "UObjectGlobals::StaticFindObject"
-                || value == "GetObjectsOfClass"
-                || value == "FName::ToString_Wchar"
-                || value == "UDataTable::Serialize")
-                return PS::Storefront::AllowsSteamNativeSignatures();
-            return true;
-        }
-
         bool IsExecutable(void* address)
         {
             MEMORY_BASIC_INFORMATION memory{};
@@ -44,22 +34,39 @@ namespace DragonWilds {
 
     void SignatureManager::InitializeOnly(std::initializer_list<const char*> names)
     {
+        const std::unordered_map<std::string, std::string>* directPatterns = nullptr;
+        const std::unordered_map<std::string, std::string>* callPatterns = nullptr;
+        switch (PS::Storefront::CurrentNativeLane()) {
+        case PS::Storefront::NativeLane::SteamNative:
+            directPatterns = &SteamSignatures;
+            callPatterns = &SteamSignaturesCallResolve;
+            break;
+        case PS::Storefront::NativeLane::GamePassNative:
+            directPatterns = &GamePassSignatures;
+            callPatterns = &GamePassSignaturesCallResolve;
+            break;
+        default:
+            break;
+        }
+        if (!directPatterns || !callPatterns) return;
         std::vector<SignatureContainer> SigContainerBox;
-        SigContainerBox.reserve(Signatures.size() + SignaturesCallResolve.size());
+        SigContainerBox.reserve(directPatterns->size() + callPatterns->size());
         SinglePassScanner::SignatureContainerMap SigContainerMap;
 
-        for (auto& [ClassAndName, Signature] : Signatures)
+        for (const auto& [ClassAndName, Signature] : *directPatterns)
         {
-            if (!Requested(names, ClassAndName) || !StorefrontAllows(ClassAndName)
-                || SignatureMap.contains(ClassAndName)) continue;
+            if (!Requested(names, ClassAndName) || SignatureMap.contains(ClassAndName)) continue;
             SignatureContainer SigContainer = [=]() -> SignatureContainer {
                 return {
                     {{Signature}},
                     [=](SignatureContainer& self) {
                         void* FunctionPointer = static_cast<void*>(self.get_match_address());
 
+                        if (!IsExecutable(FunctionPointer)) return false;
                         SignatureMap.emplace(ClassAndName, FunctionPointer);
-                        SourceMap.insert_or_assign(ClassAndName, "embedded-aob");
+                        SourceMap.insert_or_assign(ClassAndName,
+                            PS::Storefront::AllowsGamePassNativeSignatures()
+                                ? "gamepass-embedded-aob" : "steam-embedded-aob");
                         PS::Log<LogLevel::Verbose>(STR("Found {}: {}\n"), RC::to_generic_string(ClassAndName), FunctionPointer);
 
                         self.get_did_succeed() = true;
@@ -69,7 +76,9 @@ namespace DragonWilds {
                     [=](const SignatureContainer& self) {
                         if (!self.get_did_succeed())
                         {
-                            PS::Log<RC::LogLevel::Error>(STR("Failed to find signature for {}.\n"), RC::to_generic_string(ClassAndName));
+                            PS::Log<RC::LogLevel::Warning>(STR("[BINDING:{}][UNAVAILABLE] {} executable pattern did not validate; the dependent feature will use a safe provider or remain disabled.\n"),
+                                RC::to_generic_string(ClassAndName),
+                                PS::ToWideSafe(PS::Storefront::Name(PS::Storefront::Current())));
                         }
                     }
                 };
@@ -77,10 +86,9 @@ namespace DragonWilds {
             SigContainerBox.emplace_back(std::move(SigContainer));
         }
 
-        for (auto& [ClassAndName, Signature] : SignaturesCallResolve)
+        for (const auto& [ClassAndName, Signature] : *callPatterns)
         {
-            if (!Requested(names, ClassAndName) || !StorefrontAllows(ClassAndName)
-                || SignatureMap.contains(ClassAndName)) continue;
+            if (!Requested(names, ClassAndName) || SignatureMap.contains(ClassAndName)) continue;
             SignatureContainer SigContainer = [=]() -> SignatureContainer {
                 return {
                     {{Signature}},
@@ -88,8 +96,11 @@ namespace DragonWilds {
                         void* FunctionPointer = static_cast<void*>(self.get_match_address());
                         void* FinalAddress = ASM::resolve_call(FunctionPointer);
 
+                        if (!IsExecutable(FinalAddress)) return false;
                         SignatureMap.emplace(ClassAndName, FinalAddress);
-                        SourceMap.insert_or_assign(ClassAndName, "embedded-call-aob");
+                        SourceMap.insert_or_assign(ClassAndName,
+                            PS::Storefront::AllowsGamePassNativeSignatures()
+                                ? "gamepass-embedded-call-aob" : "steam-embedded-call-aob");
                         PS::Log<LogLevel::Verbose>(STR("Found {}: {}\n"), RC::to_generic_string(ClassAndName), FinalAddress);
 
                         self.get_did_succeed() = true;
@@ -99,7 +110,9 @@ namespace DragonWilds {
                     [=](const SignatureContainer& self) {
                         if (!self.get_did_succeed())
                         {
-                            PS::Log<RC::LogLevel::Error>(STR("Failed to find signature for {}.\n"), RC::to_generic_string(ClassAndName));
+                            PS::Log<RC::LogLevel::Warning>(STR("[BINDING:{}][UNAVAILABLE] {} call pattern did not validate; the dependent feature will use a safe provider or remain disabled.\n"),
+                                RC::to_generic_string(ClassAndName),
+                                PS::ToWideSafe(PS::Storefront::Name(PS::Storefront::Current())));
                         }
                     }
                 };

@@ -29,7 +29,7 @@ inline SpawnTemplate ParseSpawn(const std::string& mod,const Json& data) {
     if(data.contains("Scale")) {
         if(!data["Scale"].is_number())throw std::runtime_error("Event spawn Scale must be numeric");
         value.Scale=data["Scale"].get<double>();
-        if(!std::isfinite(value.Scale) || value.Scale<0.1 || value.Scale>5)throw std::runtime_error("Event spawn Scale must be 0.1..5");
+        if(!std::isfinite(value.Scale) || value.Scale<0.01 || value.Scale>100)throw std::runtime_error("Event spawn Scale must be 0.01..100");
     }
     if(data.contains("VisualEffect")) {
         NpcVisualEffect::Validate(data.at("VisualEffect"));

@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 #include "Loader/DragonWildsModLoaderBase.h"
+#include "SDK/WeakObjectHandle.h"
 #include "nlohmann/json.hpp"
 
 namespace RC::Unreal {
@@ -93,6 +94,10 @@ namespace DragonWilds {
         void PrepareWorldState(RC::Unreal::AGameModeBase* gameMode);
         bool ResolveWorldRegistryPath(RC::Unreal::AGameModeBase* gameMode);
         bool ProtectWorldRegistry(RC::Unreal::UObject* subsystem);
+        bool RefreshBuildingReferencesForWorld();
+        bool RefreshBuildingCatalogueForWorld();
+        RC::Unreal::UObject* GetValidBuilding(const RC::StringType& identity) const;
+        void RememberBuilding(const RC::StringType& identity, RC::Unreal::UObject* object);
         RC::Unreal::UObject* CreateRetiredBuilding(
             const nlohmann::json& record, RC::Unreal::int32 historicalIndex);
         bool CaptureNativeRegistry(RC::Unreal::UObject* subsystem);
@@ -115,6 +120,7 @@ namespace DragonWilds {
 
         std::vector<BuildingDefinition> m_definitions;
         std::unordered_map<RC::StringType, RC::Unreal::UObject*> m_buildings;
+        std::unordered_map<RC::StringType, PS::WeakObjectHandle> m_buildingHandles;
         std::unordered_set<RC::StringType> m_applied;
         std::unordered_set<RC::StringType> m_unlocks;
         std::vector<RC::Unreal::UObject*> m_retiredBuildings;

@@ -1024,10 +1024,10 @@ namespace DragonWilds {
         ReadVector3(data, "Scale", definition.SpawnScale, true);
         for (const auto value : definition.SpawnScale)
         {
-            if (value <= 0.0)
+            if (!std::isfinite(value) || value < 0.01 || value > 100.0)
             {
                 throw std::runtime_error(
-                    "Vendor field 'Scale' must contain only positive numbers");
+                    "Vendor field 'Scale' must contain only finite numbers from 0.01 to 100");
             }
         }
         if (data.contains("Items"))

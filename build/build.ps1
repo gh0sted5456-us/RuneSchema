@@ -4,7 +4,7 @@ param(
     [switch]$PluginOnly
 )
 $ErrorActionPreference = 'Stop'
-$Version = '0.7.5.14'
+$Version = '0.7.5.21'
 $BuildRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 if (-not (Test-Path -LiteralPath (Join-Path $BuildRoot 'source\raw\CMakeLists.txt') -PathType Leaf)) {
     $BuildRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -262,8 +262,9 @@ try {
     Invoke-Checked 'cmake.exe' @('-S', (Join-Path $RawSource 'core'), '-B', $contractBuild, '-G', 'Ninja', "-DRUNESCHEMA_JSON_INCLUDE_DIR=$jsonHeaders", '-DCMAKE_BUILD_TYPE=Release') 'Release contract test configure'
     $releaseContracts = if ($PluginOnly) { @('helpy-instant-open') } else { @('vendor-offers','loader-schemas','npc-catalog','player-activity-events',
         'quest-gameplay-owner','quest-native-contract','quest-definition','event-definition',
-        'dialogue-definition','building-preview-safety','building-clone-contract','static-building-assembly-contract','owned-content-ledger','owned-save-cleanup-contract','resource-additional-drops','niagara-preset',
-        'time-of-day-contract','registry-patch-plan','helpy-instant-open','plugin-catalog-compatibility','documentation-contract','usmap-index','native-binding-resolution') }
+        'dialogue-definition','building-preview-safety','building-clone-contract','static-building-assembly-contract','owned-content-ledger','owned-save-cleanup-contract','resource-additional-drops','resource-scale-idempotence','niagara-preset',
+        'time-of-day-contract','registry-patch-plan','json-document','asset-patch-v2-contract','helpy-instant-open','plugin-catalog-compatibility','documentation-contract','usmap-index','native-binding-resolution',
+        'vendor-category-refresh-contract','storefront-lanes','state-storage-contract','native-contract','journal-failure-isolation') }
     Invoke-Checked 'cmake.exe' (@('--build', $contractBuild, '--target') + $releaseContracts + @('--parallel', '1')) 'Release contract test build'
     $contractPattern = '^(' + (($releaseContracts | ForEach-Object {[regex]::Escape($_)}) -join '|') + ')$'
     Invoke-Checked 'ctest.exe' @('--test-dir', $contractBuild, '--output-on-failure', '-R', $contractPattern) 'Release contract tests'
@@ -282,6 +283,10 @@ try {
     New-Item -ItemType Directory -Path $pluginRoot -Force | Out-Null
     $package = Get-ChildItem -LiteralPath $DistRoot -Directory -Filter "RuneSchema-$Version-Universal" | Select-Object -First 1
     if (-not $package) { throw 'Universal package directory was not produced.' }
+    # Keep clean-base usable as the current unpacked runtime, not merely as a
+    # packaging template containing DLLs inherited from the previous version.
+    Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\dlls\main.dll') -Destination (Join-Path $CleanBase 'dlls\main.dll') -Force
+    Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\plugins\RuneSchema.Helpy\dll\RuneSchema.Helpy.dll') -Destination (Join-Path $CleanBase 'plugins\RuneSchema.Helpy\dll\RuneSchema.Helpy.dll') -Force
     Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\dlls') -Destination (Join-Path $pluginRoot 'Universal\dlls') -Recurse
     Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\plugins') -Destination (Join-Path $pluginRoot 'Universal\plugins') -Recurse
     foreach ($runtime in @(

@@ -1,4 +1,4 @@
-# RuneSchema 0.7.5.14
+# RuneSchema 0.7.5.21
 
 RuneSchema is a UE4SS runtime for self-contained RuneScape: Dragonwilds
 content mods. It loads validated JSON/JSONC definitions, connects them to
@@ -11,6 +11,8 @@ bridges without replacing vanilla game systems.
   cooked assets, plugins, mappings, multiplayer, logs, and testing.
 - [LOADER-WALKTHROUGHS.md](LOADER-WALKTHROUGHS.md) — walkthroughs for all 22
   loader folders with JSON examples and cross-loader references.
+- [CHARACTER-CREATION-AUTHORING.md](CHARACTER-CREATION-AUTHORING.md) — all
+  verified character-menu categories, tables, fields, and replay behavior.
 - [COMPATIBILITY-BACKBONE.md](COMPATIBILITY-BACKBONE.md) — storefront, USMAP,
   and plugin compatibility behavior.
 - [API-REFERENCE.md](API-REFERENCE.md) — complete plugin ABI, host functions,
@@ -31,8 +33,8 @@ Run `..\build\build.bat -Clean` to build the release:
 - Game Pass uses its matching UE4SS runtime and `UE4SS_Signatures` overrides where supplied.
 
 Helpy is built once as a storefront-neutral RuneSchema API client. The output
-is `dist\RuneSchema-0.7.5.14-Universal.zip`. A plugin-free
-`RuneSchema-0.7.5.14-Core.zip` is emitted as proof that plug-ins are optional;
+is `dist\RuneSchema-0.7.5.21-Universal.zip`. A plugin-free
+`RuneSchema-0.7.5.21-Core.zip` is emitted as proof that plug-ins are optional;
 the two verified UE4SS runtime ZIPs are copied beside both. `-Clean` recreates
 build and distribution directories.
 

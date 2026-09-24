@@ -261,9 +261,11 @@ public:
         const auto& storefront=PS::Storefront::CurrentDetection();
         RC::Output::send<RC::LogLevel::Normal>(TEXT("[RuneSchema] Runtime storefront: {} | reason: {} | package profile: Universal.\n"),
             PS::ToWideSafe(PS::Storefront::Name(storefront.Value)),storefront.Reason);
+        RC::Output::send<RC::LogLevel::Normal>(TEXT("[RuneSchema] Native binding lane: {}.\n"),
+            PS::ToWideSafe(PS::Storefront::NativeLaneName(PS::Storefront::CurrentNativeLane())));
         if(storefront.Value==PS::Storefront::Kind::GamePass) {
             const auto signatureState=storefront.HasGamePassSignatures?TEXT("available"):TEXT("missing");
-            RC::Output::send<RC::LogLevel::Normal>(TEXT("[RuneSchema] Game Pass pivot: UE4SS_Signatures={} at {} | native Steam-only scans disabled.\n"),
+            RC::Output::send<RC::LogLevel::Normal>(TEXT("[RuneSchema] Game Pass pivot: UE4SS_Signatures={} at {} | isolated WinGDK native lane selected.\n"),
                 signatureState,storefront.SignatureRoot.wstring());
         }
         const auto& mapping=PS::MappingBackbone::Current(std::filesystem::path(PS::HostServices::WorkingDirectory()));
@@ -401,6 +403,11 @@ public:
             ImGui::TextWrapped("Enables presets, traces, inspection, exports, save cleanup, and guided loader authoring. It uses only the live job, export, and saved-result folders required by those tools.");
             ImGui::Checkbox("Advanced diagnostics (restart required)", &settings.advancedRuntime);
             ImGui::TextWrapped("Enables full catalog scans, diagnostic caches, and heavyweight troubleshooting. It is not required for normal authoring or gameplay.");
+            ImGui::BeginDisabled(!settings.advancedRuntime);
+            ImGui::Checkbox("Enable diagnostic jobs (restart required)", &settings.diagnosticJobs.enabled);
+            ImGui::Checkbox("Character editor trace preset", &settings.diagnosticJobs.characterEditorPreset);
+            ImGui::TextWrapped("Jobs run from settings/jobs recursively and do not require a player. Turning Advanced diagnostics off disables every job.");
+            ImGui::EndDisabled();
             ImGui::SeparatorText("Server Helpy permissions");
             ImGui::TextWrapped("These permissions are disabled by default. Allowed client requests are executed and validated by server authority; clients can never export files or create permanent placements through this bridge.");
             ImGui::Checkbox("Allow client item grants", &settings.helpyAuthority.allowClientItemGrants);
@@ -412,7 +419,7 @@ public:
             ImGui::SetNextItemWidth(140.0f);
             ImGui::InputInt("Maximum temporary NPC seconds", &settings.helpyAuthority.maximumNpcDurationSeconds);
             settings.helpyAuthority.maximumItemCount=std::clamp(settings.helpyAuthority.maximumItemCount,1,10000);
-            settings.helpyAuthority.maximumSpawnCount=std::clamp(settings.helpyAuthority.maximumSpawnCount,1,64);
+            settings.helpyAuthority.maximumSpawnCount=std::clamp(settings.helpyAuthority.maximumSpawnCount,1,100);
             settings.helpyAuthority.maximumNpcDurationSeconds=std::clamp(settings.helpyAuthority.maximumNpcDurationSeconds,1,3600);
             ImGui::TextWrapped("Remote users must also match permittedPlayerGuids or permittedPlayerNames in settings/settings.jsonc. An empty allowlist denies all remote Helpy mutations; GUIDs are preferred.");
             ImGui::TextWrapped("Plugin controls are owned by each plugin under plugins/<PluginId>/settings/. Helpy activation and its hotkey are managed by RuneSchema.Helpy.");

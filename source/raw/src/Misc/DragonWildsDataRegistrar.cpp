@@ -246,7 +246,7 @@ namespace DragonWilds {
         try
         {
             const auto path = OwnedContent::LedgerPath(
-                PS::HostServices::SettingsDirectory());
+                PS::HostServices::StateDirectory());
             // The previous file is one compact snapshot, not an accumulating
             // history. Loaders contributed the identities that succeeded this
             // run; finalization returns only identities that disappeared and

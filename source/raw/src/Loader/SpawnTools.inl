@@ -123,7 +123,7 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
         if(request.value("Permanent",false))
             throw std::runtime_error("Clients cannot author permanent Helpy spawns");
         const int count=request.value("Count",1);
-        if(count<1 || count>std::clamp(policy.maximumSpawnCount,1,64))
+        if(count<1 || count>std::clamp(policy.maximumSpawnCount,1,100))
             throw std::runtime_error("Helpy spawn count exceeds the server limit");
         request["Permanent"]=false;
         if(request.value("NPC",false)) {
@@ -563,7 +563,7 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
                 throw std::runtime_error("Building previews require Count=1 and distance 3..50 metres");
             const auto buildingPath=request->at("Building").get<std::string>();
             const double yaw=request->value("Yaw",0.0),height=request->value("Height",0.0),scale=request->value("Scale",1.0);
-            if(!std::isfinite(yaw) || !std::isfinite(height) || std::abs(height)>1000 || !std::isfinite(scale) || scale<=0.0)
+            if(!std::isfinite(yaw) || !std::isfinite(height) || std::abs(height)>1000 || !std::isfinite(scale) || scale<0.01 || scale>100.0)
                 throw std::runtime_error("Building scale/yaw/height is invalid");
             auto authored=nlohmann::json{{"Id","candidate"},{"Type","BuildingProp"},{"Building",buildingPath},
                 {"Scale",scale},{"AllowDeconstruction",request->value("AllowDeconstruction",false)},{"UseNativeRespawn",false},
@@ -681,8 +681,8 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
             if(!resource && request->value("Boss",false))definition.BossName=definition.Name;
         }
         const double requestedScale=request->value("Scale",definition.Scale);
-        if(!std::isfinite(requestedScale) || requestedScale<=0.0)
-            throw std::runtime_error("AI/resource instance scale must be finite and greater than zero");
+        if(!std::isfinite(requestedScale) || requestedScale<0.01 || requestedScale>100.0)
+            throw std::runtime_error("AI/resource instance scale must be finite and between 0.01 and 100");
         definition.Scale=requestedScale;
         const double yaw=request->value("Yaw",0.0),height=request->value("Height",0.0);
         if(!std::isfinite(yaw) || !std::isfinite(height) || std::abs(height)>1000)throw std::runtime_error("Yaw/height must be finite; height offset limited to +/-1000 cm");
@@ -821,7 +821,7 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
                         skip->SetPropertyValue(skip->ContainerPtrToValuePtr<void>(value),true);
                         if(ordinary)ApplyEntryProperties(value,ordinary->Properties);
                         skip->SetPropertyValue(skip->ContainerPtrToValuePtr<void>(value),true);
-                    });
+                    }, ESpawnActorScaleMethod::OverrideRootScale);
                     created.push_back(actor);actor->SetActorScale3D(FVector(definition.Scale,definition.Scale,definition.Scale));
                     ApplyActorDisplayName(actor,definition.Name);
                     if(!definition.VisualEffect.empty()){auto visual=definition.VisualEffect;visual["Type"]="Ghost";ApplyVisualEffect(actor,visual,TEXT("Tool resource"));}

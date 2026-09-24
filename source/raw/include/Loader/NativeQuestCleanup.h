@@ -2,6 +2,7 @@
 #include "Loader/QuestSaveOwnership.h"
 #include "Loader/ModLoadOrder.h"
 #include "Loader/OwnedContentLedger.h"
+#include "Runtime/HostServices.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
@@ -56,7 +57,7 @@ public:
         const auto activeOwners=ModLoadOrder::ActiveOwners(mods);
         std::map<std::string,OwnedContent::Record> absentDeclarations;
         for(const auto& record:OwnedContent::Absent(
-            OwnedContent::Read(OwnedContent::LedgerPath(mods.parent_path()/"settings")),activeOwners))
+            OwnedContent::Read(OwnedContent::LedgerPath(PS::HostServices::StateDirectory())),activeOwners))
             if(record.Kind=="Quest")absentDeclarations.emplace(record.PersistenceID,record);
         auto* property=ArrayProperty(component,TEXT("Quests"),TEXT("QuestProgress"),56);
         auto* inner=CastField<FStructProperty>(property->GetInner());auto* type=inner->GetStruct().Get();

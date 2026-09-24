@@ -89,13 +89,13 @@ namespace UECustom {
         const auto* host=PS::PluginRuntimeServices::Host;
         return host&&host->FindObject?static_cast<UObject*>(host->FindObject(ObjectClass,InObjectPackage,OrigInName,bExactClass?1:0)):nullptr;
 #else
-        // Steam's validated game signature uses the native object hash tables.
+        // Each storefront's validated native signature uses the object hash tables.
         // The public UE4SS finder rejects bare names on this host, while a
         // full object-array walk for every lookup stalls mod loading.
         using NativeFind=UObject*(*)(UClass*,UObject*,const TCHAR*,bool);
         static const auto nativeFind=reinterpret_cast<NativeFind>(
             DragonWilds::SignatureManager::GetSignature("UObjectGlobals::StaticFindObject"));
-        if(PS::Storefront::AllowsSteamNativeSignatures() && nativeFind)
+        if(PS::Storefront::AllowsEmbeddedAobSignatures() && nativeFind)
             return nativeFind(ObjectClass,InObjectPackage,OrigInName,bExactClass);
         // UE4SS f6d5f942's public finder misclassifies some bare asset names
         // as long package names, then throws because no '.' delimiter exists.
@@ -136,7 +136,11 @@ namespace UECustom {
         using NativeGetObjects=void(*)(const UClass*,TArray<UObject*>&,bool,EObjectFlags,EInternalObjectFlags);
         static const auto nativeGetObjects=reinterpret_cast<NativeGetObjects>(
             DragonWilds::SignatureManager::GetSignature("GetObjectsOfClass"));
-        if(PS::Storefront::AllowsSteamNativeSignatures() && nativeGetObjects) {
+        // The WinGDK executable exposes a callback-based iterator with a
+        // deceptively similar prologue. It is not ABI-compatible with this
+        // TArray-returning wrapper, so only the validated Win64 target may be
+        // called directly. WinGDK uses the shared UE4SS providers below.
+        if(PS::Storefront::CurrentNativeLane()==PS::Storefront::NativeLane::SteamNative && nativeGetObjects) {
             nativeGetObjects(ClassToLookFor,Results,bIncludeDerivedClasses,ExcludeFlags,ExclusionInternalFlags);
             return;
         }

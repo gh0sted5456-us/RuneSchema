@@ -439,6 +439,7 @@ namespace DragonWilds {
         double m_nameplateRefreshElapsed = 0.0;
         double m_visualTimerElapsed = 0.0;
         double m_buildingTimeElapsed = 0.0;
+        double m_nativeRespawnScaleElapsed = 0.0;
         RC::Unreal::Hook::GlobalCallbackId m_activityObserver = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::Hook::GlobalCallbackId m_respawnObserver = RC::Unreal::Hook::ERROR_ID;
         struct PendingRespawn {
@@ -476,6 +477,7 @@ namespace DragonWilds {
         std::pair<bool,std::string> VerifyToolBuildingInstance(RC::Unreal::AActor* actor,RC::Unreal::UObject* building,const SpawnInfo& spawn,RC::Unreal::UWorld* world,bool requireTransient) const;
         std::pair<bool,std::string> VerifyToolBuildingCandidate(RC::Unreal::UObject* building,const SpawnInfo& spawn,RC::Unreal::UWorld* world) const;
         void ReconcileTimedBuildingProps(float deltaSeconds);
+        void ReconcileNativeRespawnScales(double deltaSeconds);
         RC::Unreal::UClass* ResolveClass(const RC::StringType& classPath);
         void DumpAIClasses();
 

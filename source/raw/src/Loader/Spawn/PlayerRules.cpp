@@ -123,9 +123,9 @@ namespace DragonWilds {
             m_reportedAppearanceNoOps.clear();
         }
 
-        std::vector<fs::path> files;for(const auto& file:fs::directory_iterator(loaderPath))if(file.is_regular_file()&&(file.path().extension()==".json"||file.path().extension()==".jsonc"))files.push_back(file.path());std::sort(files.begin(),files.end());
-        for(const auto& file:files)try{PS::JsonHelpers::ParseJsonFileInPath(file,[&](const nlohmann::json& data){m_playerDocuments.push_back({modName,data,file.filename().string()});});}
-        catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("Player file '{}' in mod '{}' rejected: {}.\n"),file.filename().native(),modName,PS::ToWideSafe(error.what()));}
+        PS::JsonHelpers::ParseJsonFilesInPathWithSourceIsolated(loaderPath,
+            [&](const nlohmann::json& data,const fs::path& source){m_playerDocuments.push_back({modName,data,source.generic_string()});},
+            [&](const fs::path& file,const std::string& error){PS::Log<LogLevel::Error>(STR("Player file '{}' in mod '{}' rejected: {}.\n"),file.native(),modName,PS::ToWideSafe(error.c_str()));});
     }
 
     void DragonWildsSpawnLoader::LoadNameplateDefinitions(
@@ -135,9 +135,9 @@ namespace DragonWilds {
             std::erase_if(m_nameplateDocuments, [&](const OwnedJsonDocument& document) {
                 return document.ModName == modName;
             });
-        std::vector<fs::path> files;for(const auto& file:fs::directory_iterator(loaderPath))if(file.is_regular_file()&&(file.path().extension()==".json"||file.path().extension()==".jsonc"))files.push_back(file.path());std::sort(files.begin(),files.end());
-        for(const auto& file:files)try{PS::JsonHelpers::ParseJsonFileInPath(file,[&](const nlohmann::json& data){m_nameplateDocuments.push_back({modName,data,file.filename().string()});});}
-        catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("Nameplate file '{}' in mod '{}' rejected: {}.\n"),file.filename().native(),modName,PS::ToWideSafe(error.what()));}
+        PS::JsonHelpers::ParseJsonFilesInPathWithSourceIsolated(loaderPath,
+            [&](const nlohmann::json& data,const fs::path& source){m_nameplateDocuments.push_back({modName,data,source.generic_string()});},
+            [&](const fs::path& file,const std::string& error){PS::Log<LogLevel::Error>(STR("Nameplate file '{}' in mod '{}' rejected: {}.\n"),file.native(),modName,PS::ToWideSafe(error.c_str()));});
     }
 
     void DragonWildsSpawnLoader::FinalizeNameplateDefinitions()
@@ -261,7 +261,7 @@ namespace DragonWilds {
                         throw std::runtime_error(std::string(field) + " is out of range");
                     specified = true;
                 };
-                parse("Scale", rule.SetScale, rule.ScaleMultiplier, 0.25, 3.0);
+                parse("Scale", rule.SetScale, rule.ScaleMultiplier, 0.01, 100.0);
                 parse("HealthMultiplier", rule.SetHealth, rule.HealthMultiplier, 0.1);
                 parse("MaxHealth", rule.SetMaxHealth, rule.MaxHealth, 1.0, 1000000.0);
                 parse("BaseHealth", rule.SetMaxHealth, rule.MaxHealth, 1.0, 1000000.0);
@@ -834,7 +834,7 @@ namespace DragonWilds {
                     PS::ToWideSafe(error.what()));
             }
         }
-        PS::RoutineLog("players", STR("Loaded {} deterministic player rule(s); applied {} deferred patch(es).\n"),
+        PS::RoutineLog("players", STR("[LOADER:players][OK] Loaded {} player rule(s); applied {} deferred update(s).\n"),
             definitions.size(), patches.size());
         m_playerDocuments.clear();
         SetupPlayerActivityHooks();
@@ -2416,7 +2416,7 @@ namespace DragonWilds {
                 result = "no player adjustment was requested";
                 return false;
             }
-            if ((setScale && (!std::isfinite(scaleMultiplier) || scaleMultiplier < 0.25 || scaleMultiplier > 3.0))
+            if ((setScale && (!std::isfinite(scaleMultiplier) || scaleMultiplier < 0.01 || scaleMultiplier > 100.0))
                 || (setHealth && (!std::isfinite(healthMultiplier) || healthMultiplier < 0.1 || healthMultiplier > 100.0))
                 || (setMaxHealth && (!std::isfinite(maxHealth) || maxHealth < 1.0 || maxHealth > 1000000.0))
                 || (setDefense && (!std::isfinite(defenseMultiplier) || defenseMultiplier < 0.1 || defenseMultiplier > 100.0))
@@ -2434,7 +2434,7 @@ namespace DragonWilds {
                 || (rule.SetMaxCarryWeight && (!std::isfinite(rule.MaxCarryWeight)
                     || rule.MaxCarryWeight < 1.0 || rule.MaxCarryWeight > 1000000.0)))
             {
-                result = "scale must be 0.25-3, health/defense/damage/stamina multipliers must be 0.1-100, and absolute health/stamina must be 1-1000000";
+                result = "scale must be 0.01-100, health/defense/damage/stamina multipliers must be 0.1-100, and absolute health/stamina must be 1-1000000";
                 return false;
             }
             if (setHealth && setMaxHealth)

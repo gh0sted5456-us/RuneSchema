@@ -165,6 +165,11 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsSpawnLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/SpawnAdditionalDrops.inl"
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Generator/SpawnToolsPanel.h")
+    add_executable(resource-scale-idempotence ../tests/resource-scale-idempotence.cpp)
+    add_test(NAME resource-scale-idempotence COMMAND resource-scale-idempotence
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsSpawnLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/SpawnTools.inl"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/DragonWildsSpawnLoader.h")
     add_executable(building-preview-safety ../tests/building-preview-safety.cpp)
     add_test(NAME building-preview-safety COMMAND building-preview-safety
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/SpawnTools.inl"
@@ -239,7 +244,33 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/SDK/DragonWildsSignatures.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/ModLoadOrder.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Runtime/PluginHost.cpp")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Runtime/PluginHost.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Runtime/Storefront.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/SDK/UnrealOffsets.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/dllmain.cpp")
+    add_executable(storefront-lanes ../tests/storefront-lanes.cpp)
+    target_include_directories(storefront-lanes PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../include")
+    target_compile_features(storefront-lanes PRIVATE cxx_std_23)
+    add_test(NAME storefront-lanes COMMAND storefront-lanes)
+    add_executable(state-storage-contract ../tests/state-storage-contract.cpp)
+    add_test(NAME state-storage-contract COMMAND state-storage-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Runtime/HostServices.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsBuildingModLoader.cpp")
+    add_executable(asset-patch-v2-contract ../tests/asset-patch-v2-contract.cpp)
+    target_link_libraries(asset-patch-v2-contract PRIVATE RuneSchemaJsonCore)
+    if(MSVC)
+        set_property(TARGET asset-patch-v2-contract PROPERTY MSVC_RUNTIME_LIBRARY MultiThreadedDLL)
+    endif()
+    add_test(NAME asset-patch-v2-contract COMMAND asset-patch-v2-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../schemas/asset-patch-v2.schema.json"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../examples/CharacterCustomization/assets/domains/character_customization/hair-menu.json"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../examples/CharacterCustomization/assets/domains/character_customization/unlock-vanilla-beards.json"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsAssetModLoader.cpp")
+    add_executable(vendor-category-refresh-contract ../tests/vendor-category-refresh-contract.cpp)
+    add_test(NAME vendor-category-refresh-contract COMMAND vendor-category-refresh-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsNpcLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/NpcNativeShopRefresh.inl")
     add_executable(preview-discovery-regression ../tests/preview-discovery-regression.cpp)
     add_executable(quest-restart-ownership ../tests/quest-restart-ownership.cpp)
     add_test(NAME quest-restart-ownership COMMAND quest-restart-ownership "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/QuestNativeAdapter.h" "${CMAKE_CURRENT_SOURCE_DIR}/../src/SDK/Helper/ActorHelper.cpp")

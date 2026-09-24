@@ -53,6 +53,13 @@ namespace PS {
         bool interactionTraceExport = false;
     };
 
+    struct DiagnosticJobSettings {
+        // Master switch for JSON trace/search jobs. advancedRuntime is the
+        // global kill switch for every advanced diagnostic facility.
+        bool enabled = false;
+        bool characterEditorPreset = false;
+    };
+
     struct PluginSettings {
         // "normal" logs compatibility notices normally, "quiet" emits them
         // only with advanced logging, and "off" suppresses them.
@@ -65,7 +72,7 @@ namespace PS {
         bool allowClientItemGrants = false;
         bool allowClientTemporarySpawns = false;
         int maximumItemCount = 100;
-        int maximumSpawnCount = 5;
+        int maximumSpawnCount = 100;
         int maximumNpcDurationSeconds = 300;
         // Empty lists deny remote Helpy mutations. GUIDs are preferred;
         // exact names are an explicit compatibility fallback.
@@ -88,6 +95,7 @@ namespace PS {
         LoaderActivationSettings loaders{};
         SpawnBehaviorSettings spawnBehavior{};
         NpcDiagnosticSettings npcDiagnostics{};
+        DiagnosticJobSettings diagnosticJobs{};
         PluginSettings plugins{};
         HelpyAuthoritySettings helpyAuthority{};
     };

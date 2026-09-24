@@ -207,6 +207,17 @@ namespace {
         if(same && rowMatches && repairMatches && masterworkMatches
             && vendor->GetPropertyValue(vendor->ContainerPtrToValuePtr<void>(station))
             && groups->Identical(source,labels))return false;
+
+        // A station component survives while its merchant menu is closed.  Its
+        // native category cache can therefore still contain labels from the
+        // previous power/time/quest state even though the owned DataTable row
+        // has already been rebuilt.  Clear both derived arrays before asking
+        // Dominion to reconstruct the cache so a gated category cannot linger
+        // as an empty or mis-indexed tab.
+        UECustom::FScriptArrayHelper cachedArray(labels,cached);
+        UECustom::FScriptArrayHelper validArray(valid->ContainerPtrToValuePtr<void>(station),valid);
+        cachedArray.Empty();
+        validArray.Empty();
         native(station);
         if(!vendor->GetPropertyValue(vendor->ContainerPtrToValuePtr<void>(station))
             || repair->GetPropertyValue(repair->ContainerPtrToValuePtr<void>(station))

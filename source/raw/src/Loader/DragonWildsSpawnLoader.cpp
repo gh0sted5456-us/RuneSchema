@@ -804,9 +804,11 @@ namespace DragonWilds {
             {
                 PS::JsonHelpers::ParseVector(value, "Scale", spawn.Scale);
             }
-            if (spawn.Scale.X() <= 0.0 || spawn.Scale.Y() <= 0.0 || spawn.Scale.Z() <= 0.0)
+            if (!std::isfinite(spawn.Scale.X()) || !std::isfinite(spawn.Scale.Y()) || !std::isfinite(spawn.Scale.Z())
+                || spawn.Scale.X() < 0.01 || spawn.Scale.Y() < 0.01 || spawn.Scale.Z() < 0.01
+                || spawn.Scale.X() > 100.0 || spawn.Scale.Y() > 100.0 || spawn.Scale.Z() > 100.0)
             {
-                throw std::runtime_error("Scale components must be greater than zero");
+                throw std::runtime_error("Scale components must be finite and between 0.01 and 100");
             }
         }
 
@@ -2505,6 +2507,7 @@ namespace DragonWilds {
                 m_pendingRespawns.clear();
                 m_nameplateRefreshElapsed = 0.0;
                 m_visualTimerElapsed = 0.0;
+                m_nativeRespawnScaleElapsed = 0.0;
                 m_sharedSpawnVisuals.clear();
                 for (const auto& ref : m_rootedVisualEffectMaterials)
                     if (auto* material=ref.Get()) if (material->IsRootSet()) material->ClearRootSet();
@@ -2521,6 +2524,7 @@ namespace DragonWilds {
                 PlayerGhost::Flush();
                 PumpItemIcons();
                 PumpSpawnTools();
+                ReconcileNativeRespawnScales(deltaSeconds);
                 ReconcileTimedBuildingProps(deltaSeconds);
                 RetryPendingAINames(deltaSeconds);
                 PumpClientSpawnVisuals(deltaSeconds);
@@ -2770,6 +2774,7 @@ namespace DragonWilds {
                     m_nameplateRefreshElapsed = 0.0;
                 m_visualTimerElapsed = 0.0;
                 m_buildingTimeElapsed = 0.0;
+                    m_nativeRespawnScaleElapsed = 0.0;
                     m_sharedSpawnVisuals.clear();
                     for (const auto& ref : m_rootedVisualEffectMaterials)
                         if (auto* material=ref.Get()) if (material->IsRootSet()) material->ClearRootSet();
@@ -3369,8 +3374,10 @@ namespace DragonWilds {
                 PS::JsonHelpers::ParseVector(piece, "Location", location);
                 PS::JsonHelpers::ParseRotator(piece, "Rotation", rotation);
                 PS::JsonHelpers::ParseVector(piece, "Scale", scale);
-                if (scale.X() <= 0 || scale.Y() <= 0 || scale.Z() <= 0)
-                    throw std::runtime_error("piece scale must be positive");
+                if (!std::isfinite(scale.X()) || !std::isfinite(scale.Y()) || !std::isfinite(scale.Z())
+                    || scale.X() < 0.01 || scale.Y() < 0.01 || scale.Z() < 0.01
+                    || scale.X() > 100.0 || scale.Y() > 100.0 || scale.Z() > 100.0)
+                    throw std::runtime_error("piece scale must be finite and between 0.01 and 100");
                 const FTransform pieceTransform(rotation, location, scale);
 
                 std::size_t meshes = 0;
@@ -3610,6 +3617,45 @@ namespace DragonWilds {
                 PS::Log<LogLevel::Error>(STR("Timed spawn '{}' failed: {}\n"),
                     spawn.EntryId,PS::ToWideSafe(error.what()));
             }
+        }
+    }
+
+    void DragonWildsSpawnLoader::ReconcileNativeRespawnScales(double deltaSeconds)
+    {
+        if (!m_readyWorld || !GetGameMode(m_readyWorld)) return;
+        if (std::none_of(m_spawns.begin(), m_spawns.end(), [](const auto& spawn) {
+            return spawn.Type == ESpawnEntryType::Actor && spawn.bUseNativeRespawn;
+        })) return;
+
+        m_nativeRespawnScaleElapsed += std::max(0.0, deltaSeconds);
+        if (m_nativeRespawnScaleElapsed < 1.0) return;
+        m_nativeRespawnScaleElapsed = 0.0;
+
+        constexpr double epsilon = 0.0001;
+        for (auto& spawn : m_spawns)
+        {
+            if (spawn.Type != ESpawnEntryType::Actor || !spawn.bUseNativeRespawn
+                || !spawn.bCellActivated) continue;
+
+            auto* actor = spawn.LiveActor.Get();
+            if (!actor) actor = FindActorByStableId(m_readyWorld, spawn.StableId);
+            if (!actor || actor->GetWorld() != m_readyWorld
+                || actor->HasAnyFlags(static_cast<EObjectFlags>(
+                    RF_BeginDestroyed | RF_FinishDestroyed))) continue;
+
+            const auto current = static_cast<AActor*>(actor)->GetActorScale3D();
+            const bool changed = std::abs(current.X() - spawn.Scale.X()) > epsilon
+                || std::abs(current.Y() - spawn.Scale.Y()) > epsilon
+                || std::abs(current.Z() - spawn.Scale.Z()) > epsilon;
+            if (changed)
+            {
+                static_cast<AActor*>(actor)->SetActorScale3D(spawn.Scale);
+                PS::Log<LogLevel::Verbose>(
+                    STR("Normalized native-respawn scale for '{}' to {} {} {}.\n"),
+                    spawn.EntryId, spawn.Scale.X(), spawn.Scale.Y(), spawn.Scale.Z());
+            }
+            spawn.LiveActor = PS::WeakObjectHandle(actor);
+            spawn.bExistsInWorld = true;
         }
     }
 

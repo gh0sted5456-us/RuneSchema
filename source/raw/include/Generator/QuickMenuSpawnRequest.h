@@ -11,7 +11,7 @@ void EncodeSpawn(const Command& c, Set&& set, AddDrop&& addDrop) {
     if(c.classPath.empty()||c.classPath.front()!='/'||c.classPath.find('.')==std::string::npos
         ||c.classPath.size()>2048||c.classPath.find_first_of("\r\n\t")!=std::string::npos)
         throw std::runtime_error("The selected class is not a complete game asset path. Reindex and select it again.");
-    if(c.count<1||c.count>20||!std::isfinite(c.scale)||c.scale<=0.0)
+    if(c.count<1||c.count>20||!std::isfinite(c.scale)||c.scale<0.01||c.scale>100.0)
         throw std::runtime_error("Count must be 1..20 and scale 0.1..10.");
     if(c.npc) {
         if(c.resource||c.count!=1||c.powerLevel!=-1||!c.loot.empty()||c.effect!=Effect::Inherit)

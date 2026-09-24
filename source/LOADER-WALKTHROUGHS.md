@@ -1,7 +1,93 @@
 # Loader walkthroughs
 
+Every loader accepts supported files throughout its complete nested subtree.
+Subfolders are organizational only; processing order is the normalized path
+relative to the loader root.
+
+The `assets` loader accepts direct `DA_` field patches. A full target ending in
+`_C` identifies its Blueprint class default object; an ordinary `DA_` path
+identifies the DataAsset. No schema URL or repeated mod ID is needed. For hair,
+keep the DataTable rows in `raw` and append the unique menu option to
+`DA_CharacterOptionData_C` from `assets`; see `examples/CharacterCustomization`.
+
 Each loader reads files from `RuneSchema/mods/<ModName>/<loader>/`. Examples in
 this repository are authoring references; release ZIPs do not install them.
+
+## The common authoring model
+
+RuneSchema derives ownership from `<ModName>`. Authors do not repeat a mod ID in
+each loader file. Inside that boundary, identity comes from the native object
+path, DataTable row name, loader `Id`, or `PersistenceID` appropriate to the
+record. References to another RuneSchema record use `ModName:Id`; an unqualified
+`Id` means the current mod.
+
+Every loader recursively discovers `.json` and `.jsonc`. It does not follow
+directory links. Files are sorted by normalized path relative to the loader
+root, so numbered names such as `00-base.jsonc` and `20-overrides.jsonc` make
+intent visible. Nested folders are organizational and never become identity.
+Later compatible definitions may extend or replace earlier values according to
+the loader contract; duplicate persistent identities are rejected rather than
+silently reassigned.
+
+There are four common shapes:
+
+- A map keyed by cooked object path or record key: `/assets`, `/raw`,
+  `/recipes`, `/buildings`, `/journal`, `/lore`, and `/strings`.
+- An array of independently validated records: `/spawns`, `/players`,
+  `/quests`, `/events`, and most `/npc` definitions.
+- A reusable catalogue keyed by an `Id`: `/vendors`, `/effects`, `/niagara`,
+  and `/nameplates`.
+- A direct reflected target followed by native field paths: advanced `/assets`
+  `DA_` edits and compatible `/raw` transactions.
+
+Normal successful section writes use `[LOADER:<name>][OK]` and are shown only
+when advanced logging is enabled. A bad file, record, field, or optional native
+capability uses `[PARTIAL]` or `[DISABLED]`; RuneSchema continues with unrelated
+files, sections, mods, and loaders. Errors are reserved for core invariants and
+save-integrity boundaries where continuing could persist an unsafe identity.
+
+The server owns gameplay mutations: inventory grants, purchases, quest state,
+spawning, building placement, AI, drops, and event progression. Clients present
+replicated actors and the visual data they have installed. A cooked asset path
+must therefore exist wherever it is rendered. Identical JSON on server and
+clients does not turn a presentation declaration into server authority; use
+`/registry` for the explicit server/client action bridge.
+
+SafeSave records only RuneSchema-owned persistent identities. At the next load,
+the current definitions are compared with that compact snapshot. Missing owned
+items, recipes, journal/lore entries, quests, buildings, and declarations are
+eligible for cleanup. Vanilla content and arbitrary unresolved game content are
+outside that boundary. Reinstalling a removed mod is a fresh install; RuneSchema
+does not restore removed state from a historical ledger.
+
+## Active-mod example index
+
+These examples are based on the active local mod set inspected for this guide.
+They are references to patterns, not files bundled into a public runtime.
+
+| Loader | Active reference | What it demonstrates |
+|---|---|---|
+| `assets` | `ArmorCollection`, `Currency`, `MoreHair`, `ResourcesAndLoot` | item clones, cooked items, character-menu DA edits, and native asset edits |
+| `blueprints` | `ArmorCollection`, `ResourcesAndLoot` | loaded Blueprint-default changes |
+| `buildings` | `Currency/20-CurrencyProps.jsonc` | registering a cooked BuildingPieceData entry and adding it to a page |
+| `dialogue` | `RuneSchema2VendorTest`, `TravellingMerchants` | vendor, quest, event, and NPC actions |
+| `equipment` | `ArmorCollection/98-GhostlyWatcher.json` | Surge evade and Shadowveil preservation on equipped paths |
+| `events` | `RuneSchema2VendorTest`, `TravellingMerchants` | wave encounters, areas, time, and messages |
+| `journal` | `ArmorCollection`, `Currency`, `RuneSchemaJournalTest` | recipe discovery and authored journal records |
+| `lore` | `LoreEditTest`, `RuneSchema2VendorTest` | native lore edits and new readable entries |
+| `nameplates` | `PlayerActivityNameplates` | reusable activity badge presentation |
+| `npc` | `RuneSchema2VendorTest`, `TravellingMerchants` | human merchants, story NPCs, and an interactable prop |
+| `players` | `PlayerProfiles`, `PlayerActivityNameplates`, `RespawnGhostTest` | selectors, attributes, scale, ghost presentation, and badges |
+| `quests` | `RuneSchema2VendorTest`, `TravellingMerchants` | collect/kill progression, persistence, events, and rewards |
+| `raw` | `MoreHair`, `ArmorCollection`, `Currency`, `ResourcesAndLoot` | customization, wearable, loot, and station DataTable rows |
+| `recipes` | `ArmorCollection`, `BlackG` | crafting/destruction recipes and station placement |
+| `registry` | `ElementalStaves` | server/client spell presentation declarations |
+| `spawns` | `RuneSchema2VendorTest`, `TravellingMerchants`, `RuneSchemaGeneratedSpawnExample` | AI, props, night content, event templates, and generated definitions |
+| `vendors` | `RuneSchema2VendorTest`, `TravellingMerchants` | categories, stock, repair, power-level, and time gates |
+
+No active definition was present for `courses`, `effects`, `enums`, `niagara`,
+or `strings` during this audit. Their examples below are built from the loader's
+current runtime schema rather than presented as locally proven mod content.
 
 ## Loader map
 
@@ -61,6 +147,44 @@ can attach a supported equip effect. `RecipesToUnlock` and
 `BuildingPieceToUnlock` are inherited by a clone unless explicitly replaced.
 
 Reference: `examples/RSv16/ExampleMods/RuneSchema2VendorTest/assets`.
+
+### Direct `DA_` fields
+
+For an existing DataAsset or generated-class default, put the complete `DA_`
+path first and native field paths below it. RuneSchema infers a class default
+object from `_C`; the mod directory supplies ownership.
+
+```json
+{
+  "/Game/UI/MainMenu/CharacterCreate/Data/DA_CharacterOptionData.DA_CharacterOptionData_C": {
+    "CharacterOptions[FacialHairPreset].OptionData": {
+      "$MergeWhere": {
+        "Field": "DataHandle.RowName",
+        "Values": ["F_A_PresetNone", "M_A_PresetNone"],
+        "Value": {
+          "BodyTypeCompatability": "both",
+          "FaceTypeCompatibility": "all"
+        }
+      }
+    }
+  }
+}
+```
+
+Direct scalar values perform `Set`; direct objects perform `Merge`. `$Set` and
+`$Merge` make that choice explicit. `$Append` adds typed array members.
+`$AppendUnique` adds only when `$Identity` does not already exist; character
+options infer `DataHandle.RowName` and their native template. `$MergeWhere`
+updates existing struct-array entries selected by `Field` and `Values`. It
+requires every selector to match exactly one entry and validates every changed
+field before committing the group. A missing or duplicate beard row therefore
+rejects that grouped edit instead of changing an arbitrary option.
+
+The active MoreHair menu file motivated this form: its former registry envelope
+repeated target, transaction, profile, and mod identity for every option. In the
+current form, the target is written once, each field is written once, and only
+the values that differ remain. Legacy envelope documents are still translated
+internally so installed mods are not forced to migrate immediately.
 
 ## `blueprints`
 

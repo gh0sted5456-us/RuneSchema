@@ -29,6 +29,20 @@ int main(int argc,char** argv) {
         "managed identity fields are not protected");
     require(loader.find("requirement.at(\"Amount\").get<int64_t>() <= 0")!=std::string::npos,
         "non-positive costs are not rejected");
+    require(loader.find("RefreshBuildingReferencesForWorld()")!=std::string::npos,
+        "direct assets are not refreshed before world registration");
+    require(loader.find("GetValidBuilding(identity)")!=std::string::npos,
+        "registry protection can bypass serial-validated building handles");
+    require(loader.find("object=LoadObject(definition.AssetPath)")!=std::string::npos,
+        "direct assets are not re-resolved from their stable configured path");
+    require(loader.find("definition.Clone?TEXT(\"clone\"):TEXT(\"direct\")")!=std::string::npos,
+        "direct and clone lifetime diagnostics are no longer distinct");
+    require(loader.find("cooked identity changed")!=std::string::npos,
+        "world-boundary baked identity verification is missing");
+    require(loader.find("RefreshBuildingCatalogueForWorld()")!=std::string::npos,
+        "fresh world catalogue does not replay custom menu placements");
+    require(loader.find("[BUILDING-CATALOGUE][VERIFIED]")!=std::string::npos,
+        "world catalogue replay has no acceptance diagnostic");
     require(schema.find("appends the clone to every page/collection containing its $Clone source")!=std::string::npos,
         "inherited menu behavior is undocumented in schema");
     require(schema.find("Complete replacement build cost")!=std::string::npos,

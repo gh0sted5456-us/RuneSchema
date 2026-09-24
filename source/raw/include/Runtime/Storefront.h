@@ -8,6 +8,7 @@
 
 namespace PS::Storefront {
     enum class Kind { SteamGog, GamePass, Unknown };
+    enum class NativeLane { SteamNative, GamePassNative, SharedOnly };
 
     struct Detection {
         Kind Value{Kind::Unknown};
@@ -109,5 +110,34 @@ namespace PS::Storefront {
     inline bool AllowsSteamNativeSignatures() noexcept
     {
         return Current() == Kind::SteamGog;
+    }
+
+    inline bool AllowsGamePassNativeSignatures() noexcept
+    {
+        return Current() == Kind::GamePass;
+    }
+
+    inline NativeLane CurrentNativeLane() noexcept
+    {
+        switch (Current()) {
+        case Kind::SteamGog: return NativeLane::SteamNative;
+        case Kind::GamePass: return NativeLane::GamePassNative;
+        default: return NativeLane::SharedOnly;
+        }
+    }
+
+    inline const char* NativeLaneName(NativeLane lane) noexcept
+    {
+        switch (lane) {
+        case NativeLane::SteamNative: return "steam-native";
+        case NativeLane::GamePassNative: return "gamepass-native";
+        default: return "shared-safe";
+        }
+    }
+
+    inline bool AllowsEmbeddedAobSignatures() noexcept
+    {
+        const auto lane = CurrentNativeLane();
+        return lane == NativeLane::SteamNative || lane == NativeLane::GamePassNative;
     }
 }

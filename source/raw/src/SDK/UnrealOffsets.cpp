@@ -21,12 +21,20 @@ void DragonWilds::UnrealOffsets::Initialize()
     PS::Log<LogLevel::Verbose>(STR("Unreal Version set to {}.{}.\n"), Unreal::Version::Major, Unreal::Version::Minor);
 
     auto FNameConstructorAddress = DragonWilds::SignatureManager::GetSignature("FName::Constructor");
-    FName::ConstructorInternal.assign_address(FNameConstructorAddress);
-    PS::Log<LogLevel::Verbose>(STR("FName::Constructor was assigned address of {}\n"), FNameConstructorAddress);
+    if (FNameConstructorAddress) {
+        FName::ConstructorInternal.assign_address(FNameConstructorAddress);
+        PS::Log<LogLevel::Verbose>(STR("FName::Constructor was assigned address of {}\n"), FNameConstructorAddress);
+    } else {
+        PS::Log<LogLevel::Normal>(STR("FName::Constructor remains on the UE4SS host binding.\n"));
+    }
 
     auto FNameToStringAddress = DragonWilds::SignatureManager::GetSignature("FName::ToString_Wchar");
-    FName::ToStringInternal.assign_address(FNameToStringAddress);
-    PS::Log<LogLevel::Verbose>(STR("FName::ToString was assigned address of {}\n"), FNameToStringAddress);
+    if (FNameToStringAddress) {
+        FName::ToStringInternal.assign_address(FNameToStringAddress);
+        PS::Log<LogLevel::Verbose>(STR("FName::ToString was assigned address of {}\n"), FNameToStringAddress);
+    } else {
+        PS::Log<LogLevel::Normal>(STR("FName::ToString remains on the UE4SS host binding.\n"));
+    }
 
     UnrealInitializer::InitializeVersionedContainer();
     PS::Log<LogLevel::Verbose>(STR("Versioned Container initialized.\n"));

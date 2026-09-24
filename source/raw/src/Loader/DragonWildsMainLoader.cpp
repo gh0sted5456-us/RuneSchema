@@ -54,6 +54,40 @@ using namespace RC::Unreal;
 
 namespace fs = std::filesystem;
 
+namespace {
+    struct ModIdentity { std::string Id; std::string Name; std::string Author="Unknown Author"; std::string Website; bool Present=false; };
+    std::string TrimIdentity(std::string value) {
+        const auto first=value.find_first_not_of(" \t\r\n");
+        if(first==std::string::npos)return {};
+        const auto last=value.find_last_not_of(" \t\r\n");
+        return value.substr(first,last-first+1);
+    }
+    ModIdentity ReadModIdentity(const fs::path& root,const RC::StringType& folder) {
+        ModIdentity result;result.Id=RC::to_string(folder);result.Name=result.Id;
+        const auto file=root/"ID.txt";if(!fs::exists(file))return result;
+        result.Present=true;std::ifstream input(file);if(!input)throw std::runtime_error("ID.txt could not be opened");
+        std::string line;bool structured=false;
+        while(std::getline(input,line)) {
+            line=TrimIdentity(line);if(line.empty()||line.starts_with('#'))continue;
+            const auto split=line.find_first_of(":=");
+            if(split==std::string::npos) {if(!structured){result.Id=line;result.Name=line;}continue;}
+            structured=true;auto key=TrimIdentity(line.substr(0,split));auto value=TrimIdentity(line.substr(split+1));
+            if(key=="ModID"||key=="ModId")result.Id=value;
+            else if(key=="Name"||key=="ModName")result.Name=value;
+            else if(key=="Author"||key=="ModAuthor")result.Author=value;
+            else if(key=="Website"||key=="ModWebsite"||key=="ModSite")result.Website=value;
+        }
+        if(result.Id.empty())throw std::runtime_error("ID.txt requires ModID when the file is present");
+        if(result.Name.empty())result.Name=result.Id;
+        if(result.Author.empty())throw std::runtime_error("ID.txt Author cannot be empty");
+        if(result.Id.size()>128||result.Name.size()>256||result.Author.size()>256||result.Website.size()>2048)
+            throw std::runtime_error("ID.txt metadata exceeds its safe length limit");
+        if(!result.Website.empty()&&!result.Website.starts_with("https://")&&!result.Website.starts_with("http://"))
+            throw std::runtime_error("ID.txt Website must be an http or https link");
+        return result;
+    }
+}
+
 namespace
 {
     struct PendingAutoReload
@@ -227,7 +261,7 @@ namespace DragonWilds {
     {
         PS::StartupTrace::Mark("PostEngineInit begin");
         OwnedContent::BeginSnapshot(OwnedContent::LedgerPath(
-            PS::HostServices::SettingsDirectory()));
+            PS::HostServices::StateDirectory()));
         InitializeMods(EEngineLifecyclePhase::PostEngineInit);
         LoadMods(EEngineLifecyclePhase::PostEngineInit);
         // Active owners and their persistent IDs are now known.  Permanently
@@ -279,7 +313,7 @@ namespace DragonWilds {
                 {TEXT("Serialize__Ref_FArchive"), TEXT("Serialize")});
         if (!DatatableSerializeFuncPtr)
         {
-            PS::Log<LogLevel::Warning>(STR("[DEGRADED][BINDING:UDataTable::Serialize] Early DataTable observation is unavailable; core startup will continue through GameInstance.\n"));
+            PS::Log<LogLevel::Warning>(STR("[BINDING:UDataTable::Serialize][UNAVAILABLE] Early table observation is disabled; normal GameInstance loading continues.\n"));
             return;
         }
 
@@ -294,7 +328,7 @@ namespace DragonWilds {
         if (!PS::InstallInlineHook(DatatableSerialize_Hook, reinterpret_cast<void*>(DatatableSerializeFuncPtr), reinterpret_cast<void*>(OnDataTableSerialized))) {
             DatatableSerializeCallbacks.clear();
             PS::StartupTrace::Mark("ERROR DataTable hook installation");
-            PS::Log<LogLevel::Warning>(STR("[DEGRADED][BINDING:UDataTable::Serialize] Early DataTable hook installation failed; core startup will continue through GameInstance.\n"));
+            PS::Log<LogLevel::Warning>(STR("[BINDING:UDataTable::Serialize][UNAVAILABLE] Early table hook could not be installed; normal GameInstance loading continues.\n"));
             return;
         }
         PS::Log<LogLevel::Verbose>(STR("Core pre-initialized.\n"));
@@ -607,11 +641,11 @@ namespace DragonWilds {
             try { loader->Initialize(engineLifecyclePhase); }
             catch (const std::exception& e) {
                 PS::StartupTrace::Mark("ERROR initialize: " + loader->GetModFolderType());
-                PS::Log<LogLevel::Error>(STR("[DISABLED][LOADER:{}] Initialization failed: {}\n"), RC::to_generic_string(loader->GetModFolderType()), PS::ToWideSafe(e.what()));
+                PS::Log<LogLevel::Warning>(STR("[LOADER:{}][DISABLED] Initialization failed: {}. Other loaders continue.\n"), RC::to_generic_string(loader->GetModFolderType()), PS::ToWideSafe(e.what()));
             }
             catch (...) {
                 PS::StartupTrace::Mark("ERROR initialize: " + loader->GetModFolderType());
-                PS::Log<LogLevel::Error>(STR("[DISABLED][LOADER:{}] Initialization failed: unknown error.\n"), RC::to_generic_string(loader->GetModFolderType()));
+                PS::Log<LogLevel::Warning>(STR("[LOADER:{}][DISABLED] Initialization failed after an unknown error. Other loaders continue.\n"), RC::to_generic_string(loader->GetModFolderType()));
             }
         }
     }
@@ -622,7 +656,7 @@ namespace DragonWilds {
             && PS::PSConfig::Get()->IsLoaderEnabled("recipes")) {
             for (auto& loader : m_loaders) if (loader->GetModFolderType() == "recipes")
                 try {static_cast<DragonWildsRecipeModLoader*>(loader.get())->PrepareReferences();}
-                catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:recipes] Reference preparation failed: {}.\n"),PS::ToWideSafe(error.what()));}
+                catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[LOADER:recipes][PARTIAL] Reference preparation failed: {}. Other loaders continue.\n"),PS::ToWideSafe(error.what()));}
         }
         // Definitions must exist before any mod's property or appearance consumers.
         if(engineLifecyclePhase==EEngineLifecyclePhase::PostEngineInit) {
@@ -630,11 +664,10 @@ namespace DragonWilds {
                 const auto& kind=loader->GetModFolderType();
                 if(kind!="effects" && kind!="niagara")continue;
                 IterateModsFolder([&](const fs::path& path,const fs::path::string_type& owner) {
-                    try { loader->Load(path,owner,engineLifecyclePhase); }
-                    catch(const std::exception& e) { PS::Log<LogLevel::Error>(TEXT("{} definitions rejected: {}\n"),owner,PS::ToWideSafe(e.what())); }
+                    loader->Load(path,owner,engineLifecyclePhase);
                 });
                 try {loader->FinalizeLoad(engineLifecyclePhase);}
-                catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:{}] Definition finalization failed: {}.\n"),RC::to_generic_string(kind),PS::ToWideSafe(error.what()));}
+                catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL] Definition finalization failed: {}. Other loaders continue.\n"),RC::to_generic_string(kind),PS::ToWideSafe(error.what()));}
             }
         }
         if (engineLifecyclePhase == EEngineLifecyclePhase::PostEngineInit && m_spawnLoader
@@ -650,8 +683,8 @@ namespace DragonWilds {
                 }
                 catch (const std::exception& e)
                 {
-                    PS::Log<LogLevel::Error>(
-                        STR("Appearance source '{}' rejected: {}\n"),
+                    PS::Log<LogLevel::Warning>(
+                        STR("[LOADER:players][PARTIAL][MOD:{}] Appearance source skipped: {}. Other sections continue.\n"),
                         modName, PS::ToWideSafe(e.what()));
                 }
             });
@@ -661,6 +694,8 @@ namespace DragonWilds {
         {
             try
             {
+                const auto identity=ReadModIdentity(modPath,modName);
+                bool modSuccessful=true;
                 PS::StartupTrace::Mark("load mod: " + RC::to_string(modName));
                 PS::Log<LogLevel::Verbose>(STR("Loading mod: {}\n"), modName);
 
@@ -675,22 +710,20 @@ namespace DragonWilds {
                     const auto loaderKind = loader->GetModFolderType();
                     PS::StartupTrace::Mark("load loader begin: " + RC::to_string(modName)
                         + "/" + loaderKind);
-                    try { loader->Load(modPath, modName, engineLifecyclePhase); }
-                    catch (const std::exception& e) {
-                        PS::StartupTrace::Mark("ERROR load " + RC::to_string(modName) + "/" + loaderKind);
-                        PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:{}][MOD:{}] Section failed: {}\n"), RC::to_generic_string(loaderKind), modName, PS::ToWideSafe(e.what()));
-                    }
-                    catch (...) {
-                        PS::StartupTrace::Mark("ERROR load " + RC::to_string(modName) + "/" + loaderKind);
-                        PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:{}][MOD:{}] Section failed: unknown error.\n"), RC::to_generic_string(loaderKind), modName);
-                    }
+                    if (!loader->Load(modPath, modName, engineLifecyclePhase)) modSuccessful=false;
                     PS::StartupTrace::Mark("load loader end: " + RC::to_string(modName)
                         + "/" + loaderKind);
+                }
+                if(engineLifecyclePhase==EEngineLifecyclePhase::PostEngineInit && modSuccessful) {
+                    PS::Log<LogLevel::Normal>(STR("[MOD:{}][OK] '{}' by '{}' loaded.\n"), modName,
+                        PS::ToWideSafe(identity.Name.c_str()),PS::ToWideSafe(identity.Author.c_str()));
+                } else if(engineLifecyclePhase==EEngineLifecyclePhase::PostEngineInit) {
+                    PS::Log<LogLevel::Warning>(STR("[MOD:{}][PARTIAL] One or more sections were skipped; successfully loaded sections remain active.\n"),modName);
                 }
             }
             catch (const std::exception& e)
             {
-                PS::Log<LogLevel::Error>(STR("Failed to load mod {} - {}\n"), modName, PS::ToWideSafe(e.what()));
+                PS::Log<LogLevel::Warning>(STR("[MOD:{}][PARTIAL] Metadata or discovery failed: {}. Other mods continue.\n"), modName, PS::ToWideSafe(e.what()));
             }
         });
 
@@ -699,11 +732,11 @@ namespace DragonWilds {
             try { loader->FinalizeLoad(engineLifecyclePhase); }
             catch (const std::exception& e) {
                 PS::StartupTrace::Mark("ERROR finalize: " + loader->GetModFolderType());
-                PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:{}] Finalization failed: {}\n"), RC::to_generic_string(loader->GetModFolderType()), PS::ToWideSafe(e.what()));
+                PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL] Finalization failed: {}. Other loaders continue.\n"), RC::to_generic_string(loader->GetModFolderType()), PS::ToWideSafe(e.what()));
             }
             catch (...) {
                 PS::StartupTrace::Mark("ERROR finalize: " + loader->GetModFolderType());
-                PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:{}] Finalization failed: unknown error.\n"), RC::to_generic_string(loader->GetModFolderType()));
+                PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL] Finalization failed after an unknown error. Other loaders continue.\n"), RC::to_generic_string(loader->GetModFolderType()));
             }
         }
 
@@ -715,10 +748,10 @@ namespace DragonWilds {
                 IterateModsFolder([&](const fs::path& modPath, const fs::path::string_type& modName) {
                     const auto nameplatesPath = modPath / "nameplates";
                     if (fs::is_directory(nameplatesPath))try {m_spawnLoader->LoadNameplateDefinitions(nameplatesPath, modName);}
-                    catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:nameplates][MOD:{}] Section disabled; remaining mods continue: {}.\n"),modName,PS::ToWideSafe(error.what()));}
+                    catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[LOADER:nameplates][PARTIAL][MOD:{}] Section skipped: {}. Other mods continue.\n"),modName,PS::ToWideSafe(error.what()));}
                 });
                 try {m_spawnLoader->FinalizeNameplateDefinitions();}
-                catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:nameplates] Finalization failed: {}.\n"),PS::ToWideSafe(error.what()));}
+                catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[LOADER:nameplates][PARTIAL] Finalization failed: {}. Other loaders continue.\n"),PS::ToWideSafe(error.what()));}
             }
             IterateModsFolder([&](const fs::path& modPath,
                 const fs::path::string_type& modName)
@@ -731,13 +764,13 @@ namespace DragonWilds {
                 }
                 catch (const std::exception& e)
                 {
-                    PS::Log<LogLevel::Error>(
-                        STR("Failed to load /players for mod {} - {}\n"),
+                    PS::Log<LogLevel::Warning>(
+                        STR("[LOADER:players][PARTIAL][MOD:{}] Section skipped: {}. Other sections continue.\n"),
                         modName, PS::ToWideSafe(e.what()));
                 }
             });
             try {m_spawnLoader->FinalizePlayerRules();}
-            catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:players] Finalization failed: {}.\n"),PS::ToWideSafe(error.what()));}
+            catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[LOADER:players][PARTIAL] Finalization failed: {}. Other loaders continue.\n"),PS::ToWideSafe(error.what()));}
         }
     }
 

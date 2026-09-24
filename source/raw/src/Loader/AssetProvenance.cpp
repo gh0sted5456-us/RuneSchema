@@ -88,7 +88,7 @@ void Flush() {
         for(const auto& [object,entry]:entries)if(entry.registered && !entry.persistenceId.empty())
             owned.push_back({"Item",entry.creator,entry.persistenceId,entry.internalName,entry.source});
         if(!owned.empty())DragonWilds::OwnedContent::Merge(
-            DragonWilds::OwnedContent::LedgerPath(HostServices::SettingsDirectory()),owned);
+            DragonWilds::OwnedContent::LedgerPath(HostServices::StateDirectory()),owned);
         if(!PSConfig::Get()->IsDebugLoggingEnabled()){dirty=false;return;}
         const auto folder=HostServices::ExportsDirectory();
         const auto current=folder/"asset-clones-current.json",previous=folder/"asset-clones-previous.json";

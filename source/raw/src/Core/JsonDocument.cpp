@@ -8,6 +8,43 @@
 
 namespace fs = std::filesystem;
 namespace PS::JsonHelpers {
+    namespace {
+        std::vector<fs::path> DiscoverJsonFiles(const fs::path& root)
+        {
+            if (!fs::is_directory(root)) return {};
+            const auto canonicalRoot = fs::weakly_canonical(root);
+            std::vector<fs::path> files;
+            std::error_code error;
+            fs::recursive_directory_iterator iterator(root,
+                fs::directory_options::skip_permission_denied, error), end;
+            for (; iterator != end; iterator.increment(error))
+            {
+                if (error) { error.clear(); continue; }
+                const auto& entry = *iterator;
+                if (entry.is_symlink(error))
+                {
+                    if (entry.is_directory(error)) iterator.disable_recursion_pending();
+                    continue;
+                }
+                if (!entry.is_regular_file(error)) continue;
+                const auto extension = entry.path().extension();
+                if (extension != ".json" && extension != ".jsonc") continue;
+                const auto resolved = fs::weakly_canonical(entry.path(), error);
+                if (error) { error.clear(); continue; }
+                const auto relative = resolved.lexically_relative(canonicalRoot);
+                if (relative.empty() || relative.native().starts_with(fs::path("..").native())) continue;
+                files.push_back(resolved);
+                if (files.size() > 4096)
+                    throw std::runtime_error("Loader directory exceeds the 4096 JSON-file safety limit");
+            }
+            std::ranges::sort(files, [&](const auto& left, const auto& right) {
+                return left.lexically_relative(canonicalRoot).generic_string()
+                    < right.lexically_relative(canonicalRoot).generic_string();
+            });
+            files.erase(std::unique(files.begin(), files.end()), files.end());
+            return files;
+        }
+    }
     bool FieldExists(const nlohmann::json& data, const std::string& fieldName)
     {
         return data.contains(fieldName);
@@ -69,6 +106,8 @@ namespace PS::JsonHelpers {
             return;
         }
 
+        if (fs::file_size(path) > 2 * 1024 * 1024)
+            throw std::runtime_error("JSON definition exceeds the 2 MiB safety limit");
         std::ifstream f(path);
 
         nlohmann::json data = nlohmann::json::parse(f, nullptr, true, true);
@@ -77,20 +116,21 @@ namespace PS::JsonHelpers {
 
     void ParseJsonFilesInPath(const std::filesystem::path& path, const std::function<void(const nlohmann::json&)>& callback)
     {
-        if (!fs::is_directory(path))
-        {
-            return;
-        }
+        ParseJsonFilesInPathWithSource(path,
+            [&](const nlohmann::json& document, const fs::path&) { callback(document); });
+    }
 
-        std::vector<fs::path> files;
-        for (const auto& file : fs::directory_iterator(path))
-            if (file.is_regular_file() && file.path().has_extension()) files.push_back(file.path());
-        std::sort(files.begin(), files.end());
-        for (const auto& filePath : files)
+    void ParseJsonFilesInPathWithSource(const std::filesystem::path& path,
+        const std::function<void(const nlohmann::json&, const std::filesystem::path&)>& callback)
+    {
+        for (const auto& filePath : DiscoverJsonFiles(path))
         {
             try
             {
-                ParseJsonFileInPath(filePath, callback);
+                ParseJsonFileInPath(filePath,
+                    [&](const nlohmann::json& document) {
+                        callback(document, filePath.lexically_relative(fs::weakly_canonical(path)));
+                    });
             }
             catch (const std::exception& e)
             {
@@ -103,14 +143,19 @@ namespace PS::JsonHelpers {
         const std::function<void(const nlohmann::json&)>& callback,
         const std::function<void(const std::filesystem::path&, const std::string&)>& onError)
     {
-        if (!fs::is_directory(path)) return;
-        std::vector<fs::path> files;
-        for (const auto& file : fs::directory_iterator(path))
-            if (file.is_regular_file() && file.path().has_extension()) files.push_back(file.path());
-        std::sort(files.begin(), files.end());
-        for (const auto& filePath : files)
+        ParseJsonFilesInPathWithSourceIsolated(path,
+            [&](const nlohmann::json& document, const fs::path&) { callback(document); }, onError);
+    }
+
+    void ParseJsonFilesInPathWithSourceIsolated(const std::filesystem::path& path,
+        const std::function<void(const nlohmann::json&, const std::filesystem::path&)>& callback,
+        const std::function<void(const std::filesystem::path&, const std::string&)>& onError)
+    {
+        for (const auto& filePath : DiscoverJsonFiles(path))
         {
-            try { ParseJsonFileInPath(filePath, callback); }
+            try { ParseJsonFileInPath(filePath, [&](const nlohmann::json& document) {
+                callback(document, filePath.lexically_relative(fs::weakly_canonical(path)));
+            }); }
             catch (const std::exception& error)
             {
                 if (onError) onError(filePath, error.what());
