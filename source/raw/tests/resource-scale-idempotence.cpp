@@ -24,16 +24,16 @@ int main(int argc,char** argv) {
         "permanent resource creation no longer overrides the root scale");
     Require(tools.find("}, ESpawnActorScaleMethod::OverrideRootScale);")!=std::string::npos,
         "temporary resource creation can multiply with an authored root scale");
-    Require(loader.find("ReconcileNativeRespawnScales(deltaSeconds)")!=std::string::npos,
-        "native resource respawns are not reconciled from the engine tick");
-    Require(loader.find("current.X() - spawn.Scale.X()")!=std::string::npos
-        && loader.find("SetActorScale3D(spawn.Scale)")!=std::string::npos,
-        "native resource respawn scale is not restored as an absolute value");
-    Require(header.find("m_nativeRespawnScaleElapsed")!=std::string::npos,
-        "native resource scale reconciliation is not rate limited");
+    Require(loader.find("ReconcileManagedActorScales(deltaSeconds)")!=std::string::npos,
+        "managed actor scales are not reconciled from the engine tick");
+    Require(loader.find("current.X() - authored.X()")!=std::string::npos
+        && loader.find("actor->SetActorScale3D(authored)")!=std::string::npos,
+        "managed actor scale is not restored as an absolute value");
+    Require(header.find("m_managedScaleElapsed")!=std::string::npos,
+        "managed actor scale reconciliation is not rate limited");
     Require(loader.find("GetActorScale3D() *") == std::string::npos
         && loader.find("GetActorScale3D()*") == std::string::npos,
         "resource scale is compounded from the actor's current scale");
 
-    std::cout<<"PASS: resource scale is absolute at creation and re-normalized after native respawn.\n";
+    std::cout<<"PASS: managed scale is absolute at creation and re-normalized after reload or respawn.\n";
 }

@@ -231,6 +231,7 @@ namespace DragonWilds {
         struct AppearanceSource {
             std::unordered_map<std::string, std::string> Tables;
             std::unordered_map<std::string, std::string> FallbackRows;
+            std::unordered_map<std::string, std::unordered_set<std::string>> Rows;
         };
 
         struct AppearanceProvenance {
@@ -247,6 +248,8 @@ namespace DragonWilds {
         struct PlayerAdjustmentState {
             RC::Unreal::UObject* Pawn = nullptr;
             RC::Unreal::FVector BaseScale{1.0, 1.0, 1.0};
+            RC::Unreal::FVector DesiredScale{1.0, 1.0, 1.0};
+            bool HasDesiredScale = false;
             double BaseMaxHealth = 0.0;
             bool HasBaseHealth = false;
             RC::Unreal::UObject* StaminaAttributes = nullptr;
@@ -439,7 +442,8 @@ namespace DragonWilds {
         double m_nameplateRefreshElapsed = 0.0;
         double m_visualTimerElapsed = 0.0;
         double m_buildingTimeElapsed = 0.0;
-        double m_nativeRespawnScaleElapsed = 0.0;
+        double m_managedScaleElapsed = 0.0;
+        double m_playerAppearanceSnapshotElapsed = 0.0;
         RC::Unreal::Hook::GlobalCallbackId m_activityObserver = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::Hook::GlobalCallbackId m_respawnObserver = RC::Unreal::Hook::ERROR_ID;
         struct PendingRespawn {
@@ -477,7 +481,10 @@ namespace DragonWilds {
         std::pair<bool,std::string> VerifyToolBuildingInstance(RC::Unreal::AActor* actor,RC::Unreal::UObject* building,const SpawnInfo& spawn,RC::Unreal::UWorld* world,bool requireTransient) const;
         std::pair<bool,std::string> VerifyToolBuildingCandidate(RC::Unreal::UObject* building,const SpawnInfo& spawn,RC::Unreal::UWorld* world) const;
         void ReconcileTimedBuildingProps(float deltaSeconds);
-        void ReconcileNativeRespawnScales(double deltaSeconds);
+        void ReconcileManagedActorScales(double deltaSeconds);
+        void CapturePlayerAppearanceSnapshots(double deltaSeconds);
+        bool ObserveDeclaredAppearance(RC::Unreal::UObject* pawn,
+            const std::string& playerGuid);
         RC::Unreal::UClass* ResolveClass(const RC::StringType& classPath);
         void DumpAIClasses();
 
@@ -564,8 +571,14 @@ namespace DragonWilds {
         std::vector<PlayerLoadOrderEntry> GetConnectedPlayersInLoadOrder();
         void LoadAppearanceProvenance();
         bool SaveAppearanceProvenance(std::string& error);
+        bool EnsurePlayerAppearanceSnapshot(RC::Unreal::UObject* pawn,
+            const std::string& playerGuid, bool replace, std::string& error);
+        bool ReadPlayerAppearanceSnapshot(const std::string& playerGuid,
+            const std::string& field, std::string& dataTablePath,
+            std::string& rowName, std::string& error) const;
         void ReconcileAppearanceFallbacks(
-            const std::unordered_map<std::string, std::string>& activeOwners);
+            const std::unordered_map<std::string, std::string>& activeOwners,
+            bool declaredOnly = false);
         bool ReadPlayerAppearance(RC::Unreal::UObject* pawn,
             const std::string& field, std::string& dataTablePath,
             std::string& rowName, RC::Unreal::UObject** customization,
@@ -575,6 +588,9 @@ namespace DragonWilds {
             const std::string& rowName, bool& changed,
             RC::Unreal::UObject** customization, std::string& error);
         static std::filesystem::path GetAppearanceProvenancePath();
+        static std::filesystem::path GetPlayerAppearanceDirectory();
+        static std::filesystem::path GetPlayerAppearanceSnapshotPath(
+            const std::string& playerGuid);
         static std::filesystem::path GetNativeRespawnStatePath();
     };
 }

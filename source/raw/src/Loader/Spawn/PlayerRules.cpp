@@ -89,6 +89,11 @@ namespace {
         return fields;
     }
 
+    constexpr std::array<std::string_view, 8> SnapshotAppearanceFields{
+        "BodyType", "FaceType", "HairPreset", "FacialHairPreset",
+        "SkinTone", "HairColor", "EyeColor", "EyebrowColor"
+    };
+
     void ValidateReflectedPatch(const nlohmann::json& patch,const std::string& label,size_t maximum=128)
     {
         if(!patch.is_object()||patch.size()>maximum||patch.dump().size()>65536)
@@ -1081,8 +1086,23 @@ namespace DragonWilds {
 
     fs::path DragonWildsSpawnLoader::GetAppearanceProvenancePath()
     {
-        return PS::HostServices::ExportsDirectory()
-            / "appearance-fallbacks.json";
+        return GetPlayerAppearanceDirectory() / "appearance-ownership.json";
+    }
+
+    fs::path DragonWildsSpawnLoader::GetPlayerAppearanceDirectory()
+    {
+        return PS::HostServices::StateDirectory() / "players";
+    }
+
+    fs::path DragonWildsSpawnLoader::GetPlayerAppearanceSnapshotPath(
+        const std::string& playerGuid)
+    {
+        if (playerGuid.empty() || playerGuid.size() > 128
+            || !std::all_of(playerGuid.begin(), playerGuid.end(), [](unsigned char value) {
+                return std::isalnum(value) || value == '-' || value == '_';
+            }))
+            return {};
+        return GetPlayerAppearanceDirectory() / (playerGuid + ".json");
     }
 
     void DragonWildsSpawnLoader::LoadAppearanceProvenance()
@@ -1090,6 +1110,24 @@ namespace DragonWilds {
         if (m_appearanceProvenanceLoaded) return;
         m_appearanceProvenanceLoaded = true;
         const auto path = GetAppearanceProvenancePath();
+        const auto legacyPath = PS::HostServices::ExportsDirectory()
+            / "appearance-fallbacks.json";
+        if (!fs::is_regular_file(path) && fs::is_regular_file(legacyPath))
+        {
+            try
+            {
+                fs::create_directories(path.parent_path());
+                fs::copy_file(legacyPath, path, fs::copy_options::overwrite_existing);
+                PS::RoutineLog("players",
+                    STR("Moved appearance ownership state into LocalAppData.\n"));
+            }
+            catch (const std::exception& error)
+            {
+                PS::Log<LogLevel::Warning>(
+                    STR("Appearance ownership migration deferred: {}\n"),
+                    PS::ToWideSafe(error.what()));
+            }
+        }
         const auto temporary = fs::path(path.string() + ".tmp");
         std::error_code staleTemporaryError;
         if (fs::remove(temporary, staleTemporaryError))
@@ -1221,6 +1259,212 @@ namespace DragonWilds {
         }
     }
 
+    bool DragonWildsSpawnLoader::EnsurePlayerAppearanceSnapshot(
+        UObject* pawn, const std::string& playerGuid, bool replace,
+        std::string& error)
+    {
+        const auto path = GetPlayerAppearanceSnapshotPath(playerGuid);
+        if (!pawn || path.empty())
+        {
+            error = "player pawn or GUID was unavailable";
+            return false;
+        }
+        if (!replace && fs::is_regular_file(path)) return true;
+
+        nlohmann::json fields = nlohmann::json::object();
+        for (const auto fieldView : SnapshotAppearanceFields)
+        {
+            const std::string field(fieldView);
+            std::string table;
+            std::string row;
+            std::string fieldError;
+            if (!ReadPlayerAppearance(pawn, field, table, row, nullptr, fieldError))
+            {
+                error = field + ": " + fieldError;
+                return false;
+            }
+            fields[field] = {{"DataTable", table}, {"RowName", row}};
+        }
+
+        const nlohmann::json document{
+            {"Kind", "RuneSchemaPlayerAppearanceSnapshot"},
+            {"SchemaVersion", 1},
+            {"PlayerGuid", playerGuid},
+            {"Policy", "WriteOnceFallback"},
+            {"Fields", std::move(fields)},
+        };
+        const auto temporary = fs::path(path.string() + ".tmp");
+        try
+        {
+            fs::create_directories(path.parent_path());
+            {
+                std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
+                if (!output) throw std::runtime_error("snapshot temporary file could not be opened");
+                output << document.dump(2) << '\n';
+                if (!output.good()) throw std::runtime_error("snapshot write failed");
+            }
+            if (!replace && fs::is_regular_file(path))
+            {
+                std::error_code ignored;
+                fs::remove(temporary, ignored);
+                return true;
+            }
+            fs::copy_file(temporary, path, fs::copy_options::overwrite_existing);
+            std::error_code ignored;
+            fs::remove(temporary, ignored);
+            PS::RoutineLog("players",
+                STR("Saved appearance-only fallback for player {}.\n"),
+                PS::ToWideSafe(playerGuid.c_str()));
+            return true;
+        }
+        catch (const std::exception& exception)
+        {
+            std::error_code ignored;
+            fs::remove(temporary, ignored);
+            error = exception.what();
+            return false;
+        }
+    }
+
+    bool DragonWildsSpawnLoader::ReadPlayerAppearanceSnapshot(
+        const std::string& playerGuid, const std::string& field,
+        std::string& dataTablePath, std::string& rowName, std::string& error) const
+    {
+        const auto path = GetPlayerAppearanceSnapshotPath(playerGuid);
+        try
+        {
+            if (path.empty() || !fs::is_regular_file(path))
+                throw std::runtime_error("appearance snapshot was unavailable");
+            if (fs::file_size(path) > 256 * 1024)
+                throw std::runtime_error("appearance snapshot exceeded its size limit");
+            std::ifstream input(path, std::ios::binary);
+            const auto document = nlohmann::json::parse(input, nullptr, true, true);
+            if (!document.is_object()
+                || document.value("Kind", std::string{}) != "RuneSchemaPlayerAppearanceSnapshot"
+                || document.value("SchemaVersion", 0) != 1
+                || document.value("PlayerGuid", std::string{}) != playerGuid
+                || !document.contains("Fields") || !document.at("Fields").is_object()
+                || !document.at("Fields").contains(field))
+                throw std::runtime_error("appearance snapshot had an invalid schema");
+            const auto& value = document.at("Fields").at(field);
+            dataTablePath = value.at("DataTable").get<std::string>();
+            rowName = value.at("RowName").get<std::string>();
+            if (dataTablePath.empty() || rowName.empty())
+                throw std::runtime_error("appearance snapshot field was empty");
+            return true;
+        }
+        catch (const std::exception& exception)
+        {
+            error = exception.what();
+            return false;
+        }
+    }
+
+    bool DragonWildsSpawnLoader::ObserveDeclaredAppearance(
+        UObject* pawn, const std::string& playerGuid)
+    {
+        if (!pawn || playerGuid.empty() || m_appearanceSources.empty()) return false;
+        LoadAppearanceProvenance();
+        bool changed = false;
+        for (const auto fieldView : SnapshotAppearanceFields)
+        {
+            const std::string field(fieldView);
+            std::string currentTable;
+            std::string currentRow;
+            std::string ignored;
+            if (!ReadPlayerAppearance(pawn, field, currentTable, currentRow,
+                nullptr, ignored)) continue;
+            const auto normalizedCurrent = ActorHelper::NormalizeObjectPath(
+                RC::to_generic_string(currentTable));
+            for (const auto& [owner, source] : m_appearanceSources)
+            {
+                const auto table = source.Tables.find(field);
+                if (table == source.Tables.end()
+                    || ActorHelper::NormalizeObjectPath(RC::to_generic_string(table->second))
+                        != normalizedCurrent) continue;
+                const auto declaredRows = source.Rows.find(field);
+                if (declaredRows != source.Rows.end()
+                    && !declaredRows->second.contains(currentRow)) continue;
+                const auto existing = std::find_if(m_appearanceProvenance.begin(),
+                    m_appearanceProvenance.end(), [&](const auto& value) {
+                        return value.PlayerGuid == playerGuid && value.Field == field;
+                    });
+                if (existing != m_appearanceProvenance.end()) break;
+
+                std::string fallbackTable;
+                std::string fallbackRow;
+                const auto authoredFallback = source.FallbackRows.find(field);
+                if (authoredFallback != source.FallbackRows.end())
+                {
+                    const auto known = AppearanceFields().find(field);
+                    if (known == AppearanceFields().end()) continue;
+                    fallbackTable = known->second.second;
+                    fallbackRow = authoredFallback->second;
+                }
+                else if (!ReadPlayerAppearanceSnapshot(playerGuid, field,
+                    fallbackTable, fallbackRow, ignored)) continue;
+                if (ActorHelper::NormalizeObjectPath(RC::to_generic_string(fallbackTable))
+                        == normalizedCurrent && fallbackRow == currentRow)
+                    continue;
+
+                m_appearanceProvenance.push_back({playerGuid, field, owner,
+                    "appearance/manifest.json", currentTable, currentRow,
+                    fallbackTable, fallbackRow});
+                changed = true;
+                break;
+            }
+        }
+        if (changed)
+        {
+            std::string error;
+            if (!SaveAppearanceProvenance(error))
+                PS::Log<LogLevel::Warning>(
+                    STR("Declared appearance ownership could not be saved: {}\n"),
+                    PS::ToWideSafe(error.c_str()));
+        }
+        return changed;
+    }
+
+    void DragonWildsSpawnLoader::CapturePlayerAppearanceSnapshots(double deltaSeconds)
+    {
+        m_playerAppearanceSnapshotElapsed += deltaSeconds;
+        if (m_playerAppearanceSnapshotElapsed < 1.0 || !m_readyWorld
+            || !GetGameMode(m_readyWorld)) return;
+        m_playerAppearanceSnapshotElapsed = 0.0;
+        for (const auto& player : GetConnectedPlayersInLoadOrder())
+        {
+            if (player.Guid.empty()) continue;
+            bool ambiguous = false;
+            auto* controller = FindPlayerControllerByGuid(player.Guid, ambiguous);
+            if (!controller || ambiguous) continue;
+            try
+            {
+                auto getPawn = ActorHelper::FunctionCall(
+                    controller, STR("/Script/Engine.Controller:K2_GetPawn"));
+                getPawn.Invoke();
+                auto* pawn = getPawn.Result<UObject*>();
+                std::string error;
+                if (!EnsurePlayerAppearanceSnapshot(pawn, player.Guid, false, error))
+                {
+                    const auto key = "appearance-snapshot\n" + player.Guid + "\n" + error;
+                    if (m_reportedPlayerRuleFailures.insert(key).second)
+                        PS::Log<LogLevel::Warning>(
+                            STR("Appearance snapshot for player {} deferred: {}\n"),
+                            PS::ToWideSafe(player.Guid.c_str()), PS::ToWideSafe(error.c_str()));
+                }
+                ObserveDeclaredAppearance(pawn, player.Guid);
+            }
+            catch (...) {}
+        }
+        std::unordered_map<std::string, std::string> activeDeclaredOwners;
+        for (const auto& record : m_appearanceProvenance)
+            if (record.Source == "appearance/manifest.json"
+                && m_appearanceSources.contains(record.OwnerMod))
+                activeDeclaredOwners[record.PlayerGuid + "\n" + record.Field]
+                    = record.OwnerMod;
+        ReconcileAppearanceFallbacks(activeDeclaredOwners, true);
+    }
+
     bool DragonWildsSpawnLoader::WritePlayerAppearance(
         UObject* pawn, const std::string& field, const std::string& dataTablePath,
         const std::string& rowName, bool& changed, UObject** customizationOut,
@@ -1320,6 +1564,23 @@ namespace DragonWilds {
                 if (known == AppearanceFields().end() || !row.is_string() || row.get<std::string>().empty())
                     throw std::runtime_error("appearance manifest contains an invalid fallback for " + inputField);
                 source.FallbackRows[known->second.first] = row.get<std::string>();
+            }
+        }
+        if (document.contains("Rows"))
+        {
+            if (!document.at("Rows").is_object())
+                throw std::runtime_error("appearance manifest Rows must be an object");
+            for (const auto& [inputField, rows] : document.at("Rows").items())
+            {
+                const auto known = AppearanceFields().find(inputField);
+                if (known == AppearanceFields().end() || !rows.is_array())
+                    throw std::runtime_error("appearance manifest contains an invalid Rows field for " + inputField);
+                for (const auto& row : rows)
+                {
+                    if (!row.is_string() || row.get_ref<const std::string&>().empty())
+                        throw std::runtime_error("appearance manifest Rows values must be non-empty strings");
+                    source.Rows[known->second.first].insert(row.get<std::string>());
+                }
             }
         }
         m_appearanceSources[RC::to_string(modName)] = std::move(source);
@@ -2305,12 +2566,18 @@ namespace DragonWilds {
     }
 
     void DragonWildsSpawnLoader::ReconcileAppearanceFallbacks(
-        const std::unordered_map<std::string, std::string>& activeOwners)
+        const std::unordered_map<std::string, std::string>& activeOwners,
+        bool declaredOnly)
     {
         bool stateChanged = false;
         for (auto record = m_appearanceProvenance.begin();
             record != m_appearanceProvenance.end();)
         {
+            if (declaredOnly && record->Source != "appearance/manifest.json")
+            {
+                ++record;
+                continue;
+            }
             const auto active = activeOwners.find(record->PlayerGuid + "\n" + record->Field);
             if (active != activeOwners.end() && active->second == record->OwnerMod)
             {
@@ -2338,12 +2605,21 @@ namespace DragonWilds {
                     record->FallbackDataTablePath, record->FallbackRowName,
                     changed, &customization, error))
                 {
-                    PS::Log<LogLevel::Error>(
-                        STR("Appearance fallback for player {} field {} failed: {}\n"),
-                        PS::ToWideSafe(record->PlayerGuid.c_str()),
-                        PS::ToWideSafe(record->Field.c_str()), PS::ToWideSafe(error.c_str()));
-                    ++record;
-                    continue;
+                    std::string snapshotTable;
+                    std::string snapshotRow;
+                    std::string snapshotError;
+                    if (!ReadPlayerAppearanceSnapshot(record->PlayerGuid, record->Field,
+                            snapshotTable, snapshotRow, snapshotError)
+                        || !WritePlayerAppearance(pawn, record->Field,
+                            snapshotTable, snapshotRow, changed, &customization, error))
+                    {
+                        PS::Log<LogLevel::Error>(
+                            STR("Appearance fallback for player {} field {} failed: {}\n"),
+                            PS::ToWideSafe(record->PlayerGuid.c_str()),
+                            PS::ToWideSafe(record->Field.c_str()), PS::ToWideSafe(error.c_str()));
+                        ++record;
+                        continue;
+                    }
                 }
                 if (changed && customization)
                 {
@@ -2485,6 +2761,16 @@ namespace DragonWilds {
                 result = "the selected player has no active pawn";
                 return false;
             }
+            if (!resolvedPlayerGuid.empty())
+            {
+                std::string snapshotError;
+                if (!EnsurePlayerAppearanceSnapshot(
+                    pawn, resolvedPlayerGuid, false, snapshotError))
+                    PS::Log<LogLevel::Warning>(
+                        STR("Appearance fallback capture for player {} was deferred: {}\n"),
+                        PS::ToWideSafe(resolvedPlayerGuid.c_str()),
+                        PS::ToWideSafe(snapshotError.c_str()));
+            }
             bool nativeApplied=true;
             try {
                 ApplyReflectedPatch(pawn,rule.PawnProperties,"Native.Pawn");
@@ -2523,6 +2809,7 @@ namespace DragonWilds {
             {
                 PlayerAdjustmentState initial;
                 initial.Pawn = pawn;
+                initial.BaseScale = static_cast<AActor*>(pawn)->GetActorScale3D();
                 m_playerAdjustments.push_back(std::move(initial));
                 state = std::prev(m_playerAdjustments.end());
             }
@@ -2653,10 +2940,12 @@ namespace DragonWilds {
 
             if (setScale)
             {
-                static_cast<AActor*>(pawn)->SetActorScale3D(FVector(
+                state->DesiredScale = FVector(
                     state->BaseScale.X() * scaleMultiplier,
                     state->BaseScale.Y() * scaleMultiplier,
-                    state->BaseScale.Z() * scaleMultiplier));
+                    state->BaseScale.Z() * scaleMultiplier);
+                state->HasDesiredScale = true;
+                static_cast<AActor*>(pawn)->SetActorScale3D(state->DesiredScale);
                 scaleApplied = true;
             }
 

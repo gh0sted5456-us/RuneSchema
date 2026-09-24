@@ -329,11 +329,13 @@ namespace DragonWilds {
         void PumpNpcCleanup(double deltaSeconds);
         bool m_npcTimeDirty=false;
         double m_npcTimeElapsed=0;
+        double m_npcScaleElapsed=0;
         TimeOfDay::Requirement m_lastObservedTime=TimeOfDay::Requirement::Any;
         PS::WeakObjectHandle m_activeVendorStation;
         PS::WeakObjectHandle m_activeVendorController;
         std::string m_activeVendorDefinition;
         void ReconcileNpcTimeOfDay();
+        void ReconcileNpcScales(double deltaSeconds);
         bool NpcTimeAllows(RC::Unreal::UObject* context,const VendorDefinition& definition) const;
         struct NamedTarget {
             RC::Unreal::UObject* Token=nullptr; // compared against live callback objects only

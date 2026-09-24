@@ -646,6 +646,7 @@ namespace DragonWilds {
                 PumpClientReplicas(deltaSeconds);
                 PumpHelpyNpcs();
                 PumpNpcCleanup(deltaSeconds);
+                ReconcileNpcScales(deltaSeconds);
                 // The current game build no longer exposes a reflected
                 // day/night transition function.  Re-read its native actor
                 // fields at a bounded cadence, and only when a definition
@@ -734,6 +735,7 @@ namespace DragonWilds {
                 m_scanBudget.ResetForMap();
                 m_npcTimeDirty=false;
                 m_npcTimeElapsed=0;
+                m_npcScaleElapsed=0;
                 m_lastObservedTime=TimeOfDay::Requirement::Any;
                 m_activeVendorStation={};
                 m_activeVendorController={};
@@ -2797,6 +2799,34 @@ namespace DragonWilds {
     bool DragonWildsNpcLoader::NpcTimeAllows(UObject* context,const VendorDefinition& definition) const
     {
         return TimeOfDay::Allows(context,definition.Time);
+    }
+
+    void DragonWildsNpcLoader::ReconcileNpcScales(double deltaSeconds)
+    {
+        m_npcScaleElapsed += deltaSeconds;
+        if (m_npcScaleElapsed < 1.0) return;
+        m_npcScaleElapsed = 0.0;
+
+        for (const auto& binding : m_spawnedVendors)
+        {
+            auto* actor = static_cast<AActor*>(binding.Actor.Get());
+            if (!actor || !IsNpcObjectUsable(actor)) continue;
+            const auto definition = std::find_if(m_definitions.begin(), m_definitions.end(),
+                [&](const auto& value) {
+                    return value.ModName + ":" + value.Id == binding.Key;
+                });
+            if (definition == m_definitions.end()) continue;
+            const FVector desired(definition->SpawnScale[0], definition->SpawnScale[1],
+                definition->SpawnScale[2]);
+            const auto current = actor->GetActorScale3D();
+            if (std::abs(current.X() - desired.X()) <= 0.001
+                && std::abs(current.Y() - desired.Y()) <= 0.001
+                && std::abs(current.Z() - desired.Z()) <= 0.001) continue;
+            actor->SetActorScale3D(desired);
+            PS::Log<LogLevel::Verbose>(
+                STR("Restored authored scale for managed NPC '{}'.\n"),
+                PS::ToWideSafe(binding.Key.c_str()));
+        }
     }
 
     void DragonWildsNpcLoader::ReconcileNpcTimeOfDay()

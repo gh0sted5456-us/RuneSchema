@@ -23,10 +23,11 @@ static void Check(bool value, const char* message)
 
 int main(int argc, char** argv)
 {
-    Check(argc >= 4, "host, main loader, and building loader supplied");
+    Check(argc >= 5, "host, main loader, building loader, and player rules supplied");
     const auto host = Read(argv[1]);
     const auto mainLoader = Read(argv[2]);
     const auto buildingLoader = Read(argv[3]);
+    const auto playerRules = Read(argv[4]);
     Check(host.find("RSDragonwilds") != std::string::npos
         && host.find("Saved") != std::string::npos
         && host.find("RuneSchema") != std::string::npos,
@@ -42,5 +43,13 @@ int main(int argc, char** argv)
     Check(buildingLoader.find("GetProjectSavedDirectory") != std::string::npos
         && buildingLoader.find("CustomBuildingData.json") != std::string::npos,
         "world building data remains in the engine Saved directory");
+    Check(playerRules.find("StateDirectory() / \"players\"") != std::string::npos
+        && playerRules.find("RuneSchemaPlayerAppearanceSnapshot") != std::string::npos
+        && playerRules.find("WriteOnceFallback") != std::string::npos,
+        "appearance-only write-once player snapshots use LocalAppData");
+    Check(playerRules.find("SnapshotAppearanceFields") != std::string::npos
+        && playerRules.find("\"FacialHairPreset\"") != std::string::npos
+        && playerRules.find("\"EyebrowColor\"") != std::string::npos,
+        "player snapshots cover the canonical appearance handles");
     std::cout << "Mutable state storage contract passed.\n";
 }

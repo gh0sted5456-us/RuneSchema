@@ -1,4 +1,4 @@
-# RuneSchema registry patching (0.7.5.21)
+# RuneSchema registry patching (0.7.5.22)
 
 RuneSchema keeps the original `/raw` table format for compatibility and adds two strict, opt-in definition folders beneath each enabled mod:
 

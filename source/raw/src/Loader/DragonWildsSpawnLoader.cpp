@@ -2507,7 +2507,8 @@ namespace DragonWilds {
                 m_pendingRespawns.clear();
                 m_nameplateRefreshElapsed = 0.0;
                 m_visualTimerElapsed = 0.0;
-                m_nativeRespawnScaleElapsed = 0.0;
+                m_managedScaleElapsed = 0.0;
+                m_playerAppearanceSnapshotElapsed = 0.0;
                 m_sharedSpawnVisuals.clear();
                 for (const auto& ref : m_rootedVisualEffectMaterials)
                     if (auto* material=ref.Get()) if (material->IsRootSet()) material->ClearRootSet();
@@ -2524,7 +2525,8 @@ namespace DragonWilds {
                 PlayerGhost::Flush();
                 PumpItemIcons();
                 PumpSpawnTools();
-                ReconcileNativeRespawnScales(deltaSeconds);
+                ReconcileManagedActorScales(deltaSeconds);
+                CapturePlayerAppearanceSnapshots(deltaSeconds);
                 ReconcileTimedBuildingProps(deltaSeconds);
                 RetryPendingAINames(deltaSeconds);
                 PumpClientSpawnVisuals(deltaSeconds);
@@ -2774,7 +2776,8 @@ namespace DragonWilds {
                     m_nameplateRefreshElapsed = 0.0;
                 m_visualTimerElapsed = 0.0;
                 m_buildingTimeElapsed = 0.0;
-                    m_nativeRespawnScaleElapsed = 0.0;
+                    m_managedScaleElapsed = 0.0;
+                    m_playerAppearanceSnapshotElapsed = 0.0;
                     m_sharedSpawnVisuals.clear();
                     for (const auto& ref : m_rootedVisualEffectMaterials)
                         if (auto* material=ref.Get()) if (material->IsRootSet()) material->ClearRootSet();
@@ -3620,42 +3623,82 @@ namespace DragonWilds {
         }
     }
 
-    void DragonWildsSpawnLoader::ReconcileNativeRespawnScales(double deltaSeconds)
+    void DragonWildsSpawnLoader::ReconcileManagedActorScales(double deltaSeconds)
     {
         if (!m_readyWorld || !GetGameMode(m_readyWorld)) return;
-        if (std::none_of(m_spawns.begin(), m_spawns.end(), [](const auto& spawn) {
-            return spawn.Type == ESpawnEntryType::Actor && spawn.bUseNativeRespawn;
-        })) return;
+        if (m_spawns.empty() && std::none_of(m_playerAdjustments.begin(),
+            m_playerAdjustments.end(), [](const auto& state) {
+                return state.HasDesiredScale;
+            })) return;
 
-        m_nativeRespawnScaleElapsed += std::max(0.0, deltaSeconds);
-        if (m_nativeRespawnScaleElapsed < 1.0) return;
-        m_nativeRespawnScaleElapsed = 0.0;
+        m_managedScaleElapsed += std::max(0.0, deltaSeconds);
+        if (m_managedScaleElapsed < 1.0) return;
+        m_managedScaleElapsed = 0.0;
 
         constexpr double epsilon = 0.0001;
-        for (auto& spawn : m_spawns)
-        {
-            if (spawn.Type != ESpawnEntryType::Actor || !spawn.bUseNativeRespawn
-                || !spawn.bCellActivated) continue;
-
-            auto* actor = spawn.LiveActor.Get();
-            if (!actor) actor = FindActorByStableId(m_readyWorld, spawn.StableId);
+        const auto normalize = [&](AActor* actor, const FVector& authored,
+            const RC::StringType& identity) {
             if (!actor || actor->GetWorld() != m_readyWorld
                 || actor->HasAnyFlags(static_cast<EObjectFlags>(
-                    RF_BeginDestroyed | RF_FinishDestroyed))) continue;
-
-            const auto current = static_cast<AActor*>(actor)->GetActorScale3D();
-            const bool changed = std::abs(current.X() - spawn.Scale.X()) > epsilon
-                || std::abs(current.Y() - spawn.Scale.Y()) > epsilon
-                || std::abs(current.Z() - spawn.Scale.Z()) > epsilon;
+                    RF_BeginDestroyed | RF_FinishDestroyed))) return false;
+            const auto current = actor->GetActorScale3D();
+            const bool changed = std::abs(current.X() - authored.X()) > epsilon
+                || std::abs(current.Y() - authored.Y()) > epsilon
+                || std::abs(current.Z() - authored.Z()) > epsilon;
             if (changed)
             {
-                static_cast<AActor*>(actor)->SetActorScale3D(spawn.Scale);
+                // Authored scale is absolute. Never multiply a restored actor's
+                // current transform: save reloads and native respawns may reuse it.
+                actor->SetActorScale3D(authored);
                 PS::Log<LogLevel::Verbose>(
-                    STR("Normalized native-respawn scale for '{}' to {} {} {}.\n"),
-                    spawn.EntryId, spawn.Scale.X(), spawn.Scale.Y(), spawn.Scale.Z());
+                    STR("Restored managed scale for '{}' to {} {} {}.\n"),
+                    identity, authored.X(), authored.Y(), authored.Z());
             }
-            spawn.LiveActor = PS::WeakObjectHandle(actor);
-            spawn.bExistsInWorld = true;
+            return true;
+        };
+
+        for (auto& spawn : m_spawns)
+        {
+            if (spawn.Type == ESpawnEntryType::RemoveActor || !spawn.bCellActivated)
+                continue;
+
+            auto* actor = spawn.LiveActor.Get();
+            if (!actor && spawn.Type != ESpawnEntryType::AISpawnPoint)
+                actor = FindActorByStableId(m_readyWorld, spawn.StableId);
+            if (!actor && spawn.Type == ESpawnEntryType::AISpawnPoint)
+            {
+                for (auto& binding : m_liveAIBindings)
+                {
+                    auto* character = binding.Actor.Get();
+                    if (!character || ResolveAISpawnForCharacter(character) != &spawn)
+                        continue;
+                    actor = character;
+                    if (actor) break;
+                }
+            }
+            if (actor && normalize(static_cast<AActor*>(actor), spawn.Scale,
+                spawn.EntryId))
+            {
+                spawn.LiveActor = PS::WeakObjectHandle(actor);
+                spawn.bExistsInWorld = true;
+            }
+        }
+
+        for (auto state = m_playerAdjustments.begin();
+            state != m_playerAdjustments.end();)
+        {
+            auto* actor = state->Pawn && state->Pawn->IsA<AActor>()
+                ? static_cast<AActor*>(state->Pawn) : nullptr;
+            if (!actor || actor->GetWorld() != m_readyWorld
+                || actor->HasAnyFlags(static_cast<EObjectFlags>(
+                    RF_BeginDestroyed | RF_FinishDestroyed)))
+            {
+                state = m_playerAdjustments.erase(state);
+                continue;
+            }
+            if (state->HasDesiredScale)
+                normalize(actor, state->DesiredScale, TEXT("player-rule"));
+            ++state;
         }
     }
 

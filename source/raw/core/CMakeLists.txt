@@ -256,7 +256,8 @@ if(PROJECT_IS_TOP_LEVEL)
     add_test(NAME state-storage-contract COMMAND state-storage-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Runtime/HostServices.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsBuildingModLoader.cpp")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsBuildingModLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/Spawn/PlayerRules.cpp")
     add_executable(asset-patch-v2-contract ../tests/asset-patch-v2-contract.cpp)
     target_link_libraries(asset-patch-v2-contract PRIVATE RuneSchemaJsonCore)
     if(MSVC)

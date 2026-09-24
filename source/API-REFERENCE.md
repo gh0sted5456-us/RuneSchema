@@ -6,7 +6,7 @@ It lets optional native plugins register capabilities and JSON services, call
 other services, and use a small set of UE4SS object helpers.
 
 RuneSchema's semantic version and the API version are separate. A plugin can
-target RuneSchema 0.7.5.21 while still using API 1.
+target RuneSchema 0.7.5.22 while still using API 1.
 
 ## Files and exports
 
@@ -36,7 +36,7 @@ The loader recognizes this manifest contract:
   "Name": "Example Plugin",
   "Version": "1.0.0",
   "ApiVersion": 1,
-  "BuiltForRuneSchema": "0.7.5.21",
+  "BuiltForRuneSchema": "0.7.5.22",
   "EntryPoint": "Example.Plugin.dll",
   "Enabled": true,
   "ConsoleMessage": "Example plugin loaded.",

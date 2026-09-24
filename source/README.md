@@ -1,4 +1,9 @@
-# RuneSchema 0.7.5.21
+# RuneSchema 0.7.5.22
+
+This revision extends absolute scale reconciliation to every RuneSchema-managed
+actor path and adds appearance-only, write-once player fallbacks under
+`%LOCALAPPDATA%\RSDragonwilds\Saved\RuneSchema\players`. See
+`RELEASE-0.7.5.22.md` for the exact behavior and privacy boundary.
 
 RuneSchema is a UE4SS runtime for self-contained RuneScape: Dragonwilds
 content mods. It loads validated JSON/JSONC definitions, connects them to
@@ -33,8 +38,8 @@ Run `..\build\build.bat -Clean` to build the release:
 - Game Pass uses its matching UE4SS runtime and `UE4SS_Signatures` overrides where supplied.
 
 Helpy is built once as a storefront-neutral RuneSchema API client. The output
-is `dist\RuneSchema-0.7.5.21-Universal.zip`. A plugin-free
-`RuneSchema-0.7.5.21-Core.zip` is emitted as proof that plug-ins are optional;
+is `dist\RuneSchema-0.7.5.22-Universal.zip`. A plugin-free
+`RuneSchema-0.7.5.22-Core.zip` is emitted as proof that plug-ins are optional;
 the two verified UE4SS runtime ZIPs are copied beside both. `-Clean` recreates
 build and distribution directories.
 

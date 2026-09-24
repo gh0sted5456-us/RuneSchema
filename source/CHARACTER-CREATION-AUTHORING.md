@@ -121,6 +121,40 @@ definition is in `examples/CharacterCustomization`.
 - `DataHandle.RowName`: unique in the category and already present in its
   DataTable at commit time.
 
+## Removable custom appearance ownership
+
+Mods that add selectable appearance rows through `/raw` should include
+`appearance/manifest.json`. This lets RuneSchema remember which selected rows
+belong to that mod and restore only the affected appearance field if the mod is
+later disabled or missing.
+
+```json
+{
+  "SchemaVersion": 1,
+  "Tables": {
+    "HairPreset": "/Game/Mods/MyHair/DT_MyHair.DT_MyHair"
+  },
+  "Rows": {
+    "HairPreset": ["MyHair01", "MyHair02"]
+  },
+  "Fallbacks": {
+    "HairPreset": "F_A_HairPreset01"
+  }
+}
+```
+
+`Tables` identifies the owning DataTable. `Rows` is optional but recommended
+when a table is shared; it limits ownership to the listed row names.
+`Fallbacks` is also optional, but strongly recommended when a player might
+already be wearing the custom row the first time RuneSchema creates the
+write-once snapshot. Without an explicit fallback, RuneSchema uses the player's
+original appearance snapshot only when it differs from the custom selection.
+
+Snapshots live at
+`%LOCALAPPDATA%\RSDragonwilds\Saved\RuneSchema\players\<character-guid>.json`.
+They contain only native appearance handles and never armor, equipment,
+inventory, attributes, quests, names, or other save data.
+
 ## Evidence and diagnostics
 
 With advanced logging enabled, successful writes report the common
