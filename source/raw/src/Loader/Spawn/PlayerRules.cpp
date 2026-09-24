@@ -2579,7 +2579,10 @@ namespace DragonWilds {
                 continue;
             }
             const auto active = activeOwners.find(record->PlayerGuid + "\n" + record->Field);
-            if (active != activeOwners.end() && active->second == record->OwnerMod)
+            const bool declaredSourceActive = record->Source == "appearance/manifest.json"
+                && m_appearanceSources.contains(record->OwnerMod);
+            if (declaredSourceActive
+                || (active != activeOwners.end() && active->second == record->OwnerMod))
             {
                 ++record;
                 continue;
