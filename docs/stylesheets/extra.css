@@ -171,29 +171,12 @@
   color: #bce8b5;
 }
 
-.rs-hero__mark {
-  display: inline-flex;
-  align-items: baseline;
-  gap: .12em;
-  margin-bottom: .55rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: clamp(1.55rem, 4vw, 2.5rem);
-  line-height: 1;
-  color: #f1f1f1;
-  filter: drop-shadow(0 0 12px rgba(255,255,255,.06));
-}
-
-.rs-hero__mark span:first-child {
-  text-shadow: -7px 0 18px color-mix(in srgb, var(--rs-steam) 72%, transparent);
-}
-
-.rs-hero__mark span:last-child {
-  text-shadow: 7px 0 18px color-mix(in srgb, var(--rs-gamepass) 72%, transparent);
-}
-
-.rs-hero__mark strong {
-  color: #ef4a39;
-  font-weight: 850;
+.rs-hero__logo {
+  display: block;
+  width: clamp(5.25rem, 11vw, 7.25rem);
+  height: auto;
+  margin: .15rem 0 .8rem;
+  filter: drop-shadow(0 0 18px rgba(200, 166, 99, .12));
 }
 
 .rs-hero h1 {

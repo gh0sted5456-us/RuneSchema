@@ -7,8 +7,9 @@ repo_name: gh0sted5456-us/RuneSchema
 theme:
   name: material
   language: en
+  logo: assets/images/runeschema-logo.png
+  favicon: assets/images/runeschema-logo.png
   icon:
-    logo: material/code-braces
     repo: fontawesome/brands/github
   palette:
     - media: "(prefers-color-scheme: dark)"
@@ -89,8 +90,31 @@ nav:
   - Start Here:
       - Overview: OVERVIEW.md
       - Authoring Guide: AUTHORING-GUIDE.md
-      - Loader Walkthroughs: LOADER-WALKTHROUGHS.md
       - Example Library: EXAMPLES.md
+  - Loaders:
+      - Overview: LOADER-WALKTHROUGHS.md
+      - Assets: loaders/assets.md
+      - Blueprints: loaders/blueprints.md
+      - Buildings: loaders/buildings.md
+      - Courses: loaders/courses.md
+      - Dialogue: loaders/dialogue.md
+      - Effects: loaders/effects.md
+      - Enums: loaders/enums.md
+      - Equipment: loaders/equipment.md
+      - Events: loaders/events.md
+      - Journal: loaders/journal.md
+      - Lore: loaders/lore.md
+      - Nameplates: loaders/nameplates.md
+      - Niagara: loaders/niagara.md
+      - NPC: loaders/npc.md
+      - Players: loaders/players.md
+      - Quests: loaders/quests.md
+      - Raw / DataTables: loaders/raw.md
+      - Recipes: loaders/recipes.md
+      - Registry: loaders/registry.md
+      - Spawns: loaders/spawns.md
+      - Strings: loaders/strings.md
+      - Vendors: loaders/vendors.md
   - Authoring:
       - Character Creation: CHARACTER-CREATION-AUTHORING.md
       - Registry Patching: REGISTRY-PATCHING.md

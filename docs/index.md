@@ -10,7 +10,7 @@ hide:
 <span class="rs-platform rs-platform--gamepass">Game Pass / WinGDK</span>
 </div>
 
-<div class="rs-hero__mark" aria-hidden="true"><span>{</span><strong>R</strong><span>}</span></div>
+<img class="rs-hero__logo" src="assets/images/runeschema-logo.png" alt="RuneSchema logo">
 
 # RuneSchema
 
