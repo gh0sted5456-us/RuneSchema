@@ -1,36 +1,59 @@
 :root {
-  --rs-ink: #101214;
-  --rs-panel: #171a1e;
+  --rs-ink: #0d0f11;
+  --rs-panel: #15181c;
+  --rs-panel-soft: #1b1f24;
   --rs-gold: #c8a663;
-  --rs-gold-soft: #e1c98f;
-  --rs-steam: #7bc7ef;
-  --rs-gamepass: #78c96a;
-  --rs-line: color-mix(in srgb, var(--rs-gold) 38%, transparent);
+  --rs-gold-soft: #e2ca92;
+  --rs-steam: #72bff0;
+  --rs-gamepass: #74c86a;
+  --rs-line: color-mix(in srgb, var(--rs-gold) 30%, transparent);
 }
 
 [data-md-color-scheme="slate"] {
   --md-default-bg-color: #0f1114;
   --md-default-fg-color: #e8e8e8;
-  --md-primary-fg-color: #111315;
-  --md-primary-fg-color--dark: #0b0d0f;
+  --md-primary-fg-color: #0b0d0f;
+  --md-primary-fg-color--dark: #08090b;
   --md-accent-fg-color: var(--rs-gold-soft);
   --md-typeset-a-color: #d7bd82;
   --md-code-bg-color: #15191d;
+  --md-footer-bg-color: #0b0d0f;
+  --md-footer-bg-color--dark: #08090b;
 }
 
 [data-md-color-scheme="default"] {
-  --md-primary-fg-color: #171a1e;
-  --md-primary-fg-color--dark: #0f1114;
+  --md-primary-fg-color: #111315;
+  --md-primary-fg-color--dark: #0b0d0f;
   --md-accent-fg-color: #8b6c32;
   --md-typeset-a-color: #785d2b;
 }
 
+.md-grid {
+  max-width: 78rem;
+}
+
 .md-header {
   border-bottom: 1px solid var(--rs-line);
+  box-shadow: none;
+}
+
+.md-header__title {
+  font-weight: 700;
 }
 
 .md-tabs {
-  border-bottom: 1px solid color-mix(in srgb, var(--rs-gold) 22%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--rs-gold) 18%, transparent);
+}
+
+.md-tabs__link {
+  font-weight: 600;
+  opacity: .82;
+}
+
+.md-tabs__link--active,
+.md-tabs__link:hover {
+  color: var(--rs-gold-soft);
+  opacity: 1;
 }
 
 .md-nav__link--active,
@@ -39,17 +62,35 @@
   color: var(--rs-gold-soft);
 }
 
+.md-sidebar--primary .md-nav__title {
+  font-weight: 700;
+}
+
+.md-content__inner {
+  padding-bottom: 3rem;
+}
+
+.md-typeset {
+  font-size: .82rem;
+}
+
 .md-typeset h1,
-.md-typeset h2 {
-  letter-spacing: -0.02em;
+.md-typeset h2,
+.md-typeset h3 {
+  letter-spacing: -0.018em;
 }
 
 .md-typeset h1 {
-  font-weight: 750;
+  font-weight: 760;
 }
 
 .md-typeset h2 {
-  font-weight: 700;
+  margin-top: 2.2rem;
+  font-weight: 720;
+}
+
+.md-typeset h3 {
+  font-weight: 680;
 }
 
 .md-typeset code {
@@ -57,20 +98,27 @@
 }
 
 .md-typeset pre > code {
-  border: 1px solid color-mix(in srgb, var(--rs-gold) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rs-gold) 14%, transparent);
+}
+
+.md-typeset .twemoji,
+.md-typeset .emojione {
+  width: 1.25em;
+  height: 1.25em;
+  vertical-align: -0.18em;
 }
 
 .rs-hero {
   position: relative;
   overflow: hidden;
-  margin: 0 0 1.4rem;
-  padding: clamp(1.4rem, 4vw, 2.6rem);
+  margin: .4rem 0 2rem;
+  padding: clamp(1.6rem, 4vw, 3rem);
   border: 1px solid var(--rs-line);
-  border-radius: .7rem;
+  border-radius: .75rem;
   background:
-    radial-gradient(circle at 17% 15%, color-mix(in srgb, var(--rs-steam) 12%, transparent), transparent 34%),
-    radial-gradient(circle at 84% 78%, color-mix(in srgb, var(--rs-gamepass) 10%, transparent), transparent 36%),
-    linear-gradient(135deg, color-mix(in srgb, var(--rs-panel) 92%, transparent), color-mix(in srgb, var(--rs-ink) 98%, transparent));
+    radial-gradient(circle at 10% 12%, color-mix(in srgb, var(--rs-steam) 12%, transparent), transparent 28%),
+    radial-gradient(circle at 90% 88%, color-mix(in srgb, var(--rs-gamepass) 10%, transparent), transparent 30%),
+    linear-gradient(145deg, #171a1e, #0c0e10 72%);
 }
 
 .rs-hero::after {
@@ -79,10 +127,10 @@
   inset: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(color-mix(in srgb, var(--rs-gold) 5%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--rs-gold) 5%, transparent) 1px, transparent 1px);
-  background-size: 26px 26px;
-  mask-image: linear-gradient(to bottom right, black, transparent 72%);
+    linear-gradient(color-mix(in srgb, var(--rs-gold) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--rs-gold) 4%, transparent) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: linear-gradient(135deg, black, transparent 76%);
 }
 
 .rs-hero > * {
@@ -90,31 +138,49 @@
   z-index: 1;
 }
 
-.rs-hero h2 {
-  margin-top: .5rem;
-  max-width: 850px;
-  color: inherit;
-  font-size: clamp(1.55rem, 3vw, 2.35rem);
+.rs-hero__eyebrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+  align-items: center;
+  margin-bottom: 1.1rem;
 }
 
-.rs-hero p {
-  max-width: 860px;
-  font-size: 1.02rem;
+.rs-version,
+.rs-platform {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.6rem;
+  padding: .18rem .55rem;
+  border: 1px solid color-mix(in srgb, var(--rs-gold) 36%, transparent);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .22);
+  color: #d9d9d9;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .025em;
+}
+
+.rs-platform--steam {
+  border-color: color-mix(in srgb, var(--rs-steam) 55%, transparent);
+  color: #b8e3fb;
+}
+
+.rs-platform--gamepass {
+  border-color: color-mix(in srgb, var(--rs-gamepass) 55%, transparent);
+  color: #bce8b5;
 }
 
 .rs-hero__mark {
   display: inline-flex;
   align-items: baseline;
-  gap: .18em;
+  gap: .12em;
+  margin-bottom: .55rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: clamp(1.5rem, 4vw, 2.5rem);
+  font-size: clamp(1.55rem, 4vw, 2.5rem);
   line-height: 1;
-  color: #111;
-  filter: drop-shadow(0 0 14px rgba(255,255,255,.08));
-}
-
-[data-md-color-scheme="slate"] .rs-hero__mark {
   color: #f1f1f1;
+  filter: drop-shadow(0 0 12px rgba(255,255,255,.06));
 }
 
 .rs-hero__mark span:first-child {
@@ -126,39 +192,39 @@
 }
 
 .rs-hero__mark strong {
-  color: var(--rs-gold-soft);
-  font-weight: 800;
+  color: #ef4a39;
+  font-weight: 850;
 }
 
-.rs-status-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: .75rem;
-  margin: 1rem 0 2rem;
+.rs-hero h1 {
+  margin: 0 0 .4rem;
+  color: #fff;
+  font-size: clamp(2rem, 5vw, 3.1rem);
+  font-weight: 820;
 }
 
-.rs-status-card {
-  padding: 1rem 1.05rem;
-  border: 1px solid color-mix(in srgb, var(--rs-gold) 20%, transparent);
-  border-radius: .55rem;
-  background: color-mix(in srgb, var(--md-default-bg-color) 93%, var(--rs-gold) 7%);
+.rs-hero > p {
+  max-width: 850px;
+  margin: .55rem 0;
+  color: #d5d7da;
+  font-size: .95rem;
+  line-height: 1.65;
 }
 
-.rs-status-card h3 {
-  margin-top: 0;
+.rs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .55rem;
+  margin-top: 1.25rem;
 }
 
-.md-typeset .grid.cards > ul > li,
-.md-typeset .grid.cards > ol > li {
-  border-color: color-mix(in srgb, var(--rs-gold) 25%, transparent);
-  border-radius: .55rem;
-  transition: border-color .16s ease, transform .16s ease;
+.rs-actions .md-button {
+  margin: 0;
 }
 
-.md-typeset .grid.cards > ul > li:hover,
-.md-typeset .grid.cards > ol > li:hover {
-  border-color: color-mix(in srgb, var(--rs-gold) 62%, transparent);
-  transform: translateY(-1px);
+.md-button {
+  border-radius: .38rem !important;
+  font-weight: 700;
 }
 
 .md-button--primary {
@@ -168,15 +234,108 @@
 }
 
 .md-button:not(.md-button--primary) {
-  border-color: color-mix(in srgb, var(--rs-gold) 48%, transparent);
+  border-color: color-mix(in srgb, var(--rs-gold) 45%, transparent);
+  color: #e5e5e5;
+}
+
+.rs-card-grid {
+  margin-top: .6rem;
+}
+
+.md-typeset .grid.cards > ul,
+.md-typeset .grid.cards > ol {
+  gap: .7rem;
+}
+
+.md-typeset .grid.cards > ul > li,
+.md-typeset .grid.cards > ol > li {
+  min-height: 100%;
+  padding: 1rem 1.05rem;
+  border: 1px solid color-mix(in srgb, var(--rs-gold) 20%, transparent);
+  border-radius: .55rem;
+  background: color-mix(in srgb, var(--md-default-bg-color) 95%, var(--rs-gold) 5%);
+  box-shadow: none;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+
+.md-typeset .grid.cards > ul > li:hover,
+.md-typeset .grid.cards > ol > li:hover {
+  border-color: color-mix(in srgb, var(--rs-gold) 54%, transparent);
+  background: color-mix(in srgb, var(--md-default-bg-color) 92%, var(--rs-gold) 8%);
+  transform: translateY(-1px);
+}
+
+.md-typeset .grid.cards .twemoji {
+  width: 1.45rem;
+  height: 1.45rem;
+  margin-right: .25rem;
+  color: var(--rs-gold-soft);
+}
+
+.rs-card-grid--compact .md-typeset {
+  font-size: inherit;
+}
+
+.rs-platform-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .7rem;
+  margin-top: .7rem;
+}
+
+.rs-platform-card {
+  padding: 1.05rem 1.15rem;
+  border: 1px solid var(--rs-line);
+  border-radius: .55rem;
+  background: color-mix(in srgb, var(--md-default-bg-color) 95%, var(--rs-gold) 5%);
+}
+
+.rs-platform-card h3 {
+  margin-top: 0;
+}
+
+.rs-platform-card--steam {
+  border-color: color-mix(in srgb, var(--rs-steam) 36%, transparent);
+}
+
+.rs-platform-card--gamepass {
+  border-color: color-mix(in srgb, var(--rs-gamepass) 36%, transparent);
+}
+
+.md-typeset table:not([class]) {
+  border: 1px solid color-mix(in srgb, var(--rs-gold) 15%, transparent);
+  border-radius: .45rem;
 }
 
 .md-typeset table:not([class]) th {
-  background: color-mix(in srgb, var(--rs-gold) 12%, var(--md-default-bg-color));
+  background: color-mix(in srgb, var(--rs-gold) 10%, var(--md-default-bg-color));
+}
+
+.md-typeset .admonition,
+.md-typeset details {
+  border-radius: .45rem;
+  box-shadow: none;
+}
+
+.md-footer {
+  border-top: 1px solid color-mix(in srgb, var(--rs-gold) 16%, transparent);
 }
 
 @media (max-width: 760px) {
-  .rs-status-grid {
+  .rs-hero {
+    padding: 1.25rem;
+  }
+
+  .rs-platform-grid {
     grid-template-columns: 1fr;
+  }
+
+  .rs-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .rs-actions .md-button {
+    text-align: center;
   }
 }
