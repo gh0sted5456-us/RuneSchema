@@ -29,6 +29,10 @@ int main(int argc, char** argv) {
     for (const auto* name : {"JournalHierarchyInsertWinGDK", "JournalCategory1WinGDK",
             "JournalCategory2WinGDK", "JournalCategory3WinGDK", "JournalHierarchyBuilderLayoutWinGDK"})
         Require(journalContract.find(name) != std::string::npos, "A verified WinGDK journal binding is missing");
+    Require(journalContract.find("4c894c24204c894424185355565741544155415641574883ec68") != std::string::npos,
+        "WinGDK journal insert is not the verified 40-byte-key/28-byte-value map specialization");
+    Require(journalContract.find("48895c24184c894c242055565741544155415641574883ec40") == std::string::npos,
+        "Unsafe WinGDK 64-byte-key/8-byte-value map specialization is still configured");
     Require(mesh.find("WearableMeshRoutineReturnWinGDK") != std::string::npos,
         "WinGDK wearable mesh binding is missing");
     std::cout << "WinGDK journal and wearable-mesh lane contract passed.\n";

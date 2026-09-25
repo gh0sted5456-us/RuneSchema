@@ -236,7 +236,7 @@ void DragonWildsRegistryLoader::WriteMerged() {
     m_bridge.SetRegistrySnapshot(merged.dump());
     if(PS::PSConfig::Get()->GetSettings().advancedRuntime)
         PS::ConfigFiles::Write(PS::HostServices::ExportsDirectory()/"RegistryManifestAudit.json",
-            json{{"Build","0.7.5.23"},{"Accepted",m_modEntries.size()},{"Entries",m_audit}}.dump(2)+"\n");
+            json{{"Build","0.7.5.24"},{"Accepted",m_modEntries.size()},{"Entries",m_audit}}.dump(2)+"\n");
     PS::Log<RC::LogLevel::Normal>(TEXT("Registry: merged {} mod-owned entries.\n"),m_modEntries.size());
 }
 

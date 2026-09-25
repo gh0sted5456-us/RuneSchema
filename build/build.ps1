@@ -4,7 +4,7 @@ param(
     [switch]$PluginOnly
 )
 $ErrorActionPreference = 'Stop'
-$Version = '0.7.5.23'
+$Version = '0.7.5.24'
 $BuildRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 if (-not (Test-Path -LiteralPath (Join-Path $BuildRoot 'source\raw\CMakeLists.txt') -PathType Leaf)) {
     $BuildRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))

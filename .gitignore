@@ -20,6 +20,7 @@ cmake_install.cmake
 
 # Local packaging and runtime data
 dist/
+plugins/
 example-mods/
 RuneSchema/mods/
 RuneSchema/config/

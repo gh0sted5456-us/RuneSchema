@@ -41,7 +41,7 @@ the native save adapter until every JSON helper and ownership rule is verified.
 
 The same image has separately validated journal hierarchy/category entry points:
 
-- hierarchy insert: `0x76C86F0`;
+- hierarchy insert: `0x6ED8FD0`;
 - category 1: `0x713DD80`;
 - category 2: `0x713DDF0`;
 - category 3: `0x713DE60`;
@@ -51,6 +51,13 @@ RuneSchema treats the three category routines as separate one-argument WinGDK
 entry points. Steam retains its single category dispatcher. All five WinGDK
 patterns must resolve uniquely inside executable memory before hierarchy
 placement is enabled; no WinGDK address is considered by the Steam/GOG lane.
+
+The earlier `0x76C86F0` candidate was rejected after a live WinGDK trace and
+crash-dump audit. It inserts a different map specialization with a 64-byte key
+and an 8-byte value. Journal hierarchy records use a 40-byte soft-object key
+and a 28-byte value; calling the old candidate caused an invalid native copy.
+The corrected `0x6ED8FD0` routine is called directly by the verified hierarchy
+builder and has the matching journal record layout.
 
 ## Update policy
 
