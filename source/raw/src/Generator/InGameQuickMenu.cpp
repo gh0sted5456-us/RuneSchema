@@ -738,6 +738,7 @@ void InGameQuickMenu::ReadCatalog() {
     nlohmann::json receipt;
     const bool completed=m_pendingRequest&&SpawnToolRequests::TakeCompleted(m_pendingRequest,receipt);
     if(!changed&&!completed)return;
+    m_presentedFrameValid=false;
     m_ui.status=(completed?receipt:result).value("Status",std::string("Ready."));
     if(changed){
         m_ui.indexing=result.value("_CatalogIndexing",false);
@@ -968,13 +969,13 @@ void InGameQuickMenu::RenderCanvas(UObject* canvas) {
     // Fit against the real logical extent and permit modest growth on high-DPI
     // viewports. The margin remains resolution independent and ultrawide
     // screens are constrained by height rather than stretched horizontally.
-    const float factor=std::min({(screenW-32)/QuickUI::Width,(screenH-32)/QuickUI::Height,1.35f});
+    const float factor=std::min({(screenW-32)/QuickUI::Width,(screenH-32)/QuickUI::Height,QuickUI::MaxViewportScale});
     if(factor<=0)throw std::runtime_error("The viewport is too small");
     const float x=(screenW-QuickUI::Width*factor)*.5f,y=(screenH-QuickUI::Height*factor)*.5f;
     const auto generation=m_generation.load();
-    if(generation!=m_seenGeneration){m_seenGeneration=generation;m_highSurrogate=0;m_wheelRemainder=0;m_ui.closeRequested=false;m_ui.focus.clear();}
+    if(generation!=m_seenGeneration){m_seenGeneration=generation;m_highSurrogate=0;m_wheelRemainder=0;m_ui.closeRequested=false;m_ui.focus.clear();m_presentedFrameValid=false;}
     const auto requested=m_requestedTab.exchange(-1);
-    if(requested>=0&&!m_ui.node&&!m_ui.lootPicker&&!m_ui.playerPicker&&!m_ui.ItemPickerOpen()&&!m_ui.cloneFieldOpen&&!m_ui.cloneAdvancedOpen&&!m_ui.cloneMeshPicker&&!m_ui.cloneMeshFieldPicker&&!m_ui.cloneModeOpen&&!m_ui.coverageOpen)m_ui.tab=static_cast<QuickUI::Tab>(std::clamp(requested,0,2));
+    if(requested>=0&&!m_ui.node&&!m_ui.lootPicker&&!m_ui.playerPicker&&!m_ui.ItemPickerOpen()&&!m_ui.cloneFieldOpen&&!m_ui.cloneAdvancedOpen&&!m_ui.cloneMeshPicker&&!m_ui.cloneMeshFieldPicker&&!m_ui.cloneModeOpen&&!m_ui.coverageOpen){m_ui.tab=static_cast<QuickUI::Tab>(std::clamp(requested,0,2));m_presentedFrameValid=false;}
     HelpySettings::EnsureLoaded();m_ui.helpyKey=HelpyHotkeys::Name();
     m_ui.advancedRuntime=PSConfig::Get()->GetSettings().advancedRuntime;
     SyncFavorites(m_ui);
@@ -985,16 +986,27 @@ void InGameQuickMenu::RenderCanvas(UObject* canvas) {
     std::vector<Event> events;{std::lock_guard lock(m_eventMutex);events.swap(m_events);}
     for(const auto& event:events) {
         if(event.generation!=generation)continue;
-        if(event.kind==Event::Kind::Click){const auto frame=m_ui.Render(mx,my);m_ui.Click(frame,(event.x*screenW-x)/factor,(event.y*screenH-y)/factor);}
-        else if(event.kind==Event::Kind::RightClick){const auto frame=m_ui.Render(mx,my);m_ui.RightClick(frame,(event.x*screenW-x)/factor,(event.y*screenH-y)/factor);}
-        else if(event.kind==Event::Kind::Wheel){m_wheelRemainder+=event.value;const int steps=m_wheelRemainder/WHEEL_DELTA;m_wheelRemainder%=WHEEL_DELTA;if(steps)m_ui.Wheel(steps);}
-        else if(event.kind==Event::Kind::Key)m_ui.Key(event.value,event.control);
+        if(event.kind==Event::Kind::Click||event.kind==Event::Kind::RightClick){
+            // Input belongs to the scene the player actually saw. Reuse that
+            // scene for hit testing instead of rebuilding the complete UI just
+            // to discover the same rectangles.
+            QuickUI::Frame fallback;
+            const QuickUI::Frame* hitFrame=nullptr;
+            if(m_presentedFrameValid&&m_presentedFrameGeneration==generation)hitFrame=&m_presentedFrame;
+            else {fallback=m_ui.Render(mx,my);hitFrame=&fallback;}
+            const float hitX=(event.x*screenW-x)/factor,hitY=(event.y*screenH-y)/factor;
+            if(event.kind==Event::Kind::Click)m_ui.Click(*hitFrame,hitX,hitY);
+            else m_ui.RightClick(*hitFrame,hitX,hitY);
+            m_presentedFrameValid=false;
+        }
+        else if(event.kind==Event::Kind::Wheel){m_wheelRemainder+=event.value;const int steps=m_wheelRemainder/WHEEL_DELTA;m_wheelRemainder%=WHEEL_DELTA;if(steps){m_ui.Wheel(steps);m_presentedFrameValid=false;}}
+        else if(event.kind==Event::Kind::Key){m_ui.Key(event.value,event.control);m_presentedFrameValid=false;}
         else{
             const auto unit=static_cast<uint16_t>(event.value);
             if(unit>=0xd800&&unit<=0xdbff){m_highSurrogate=unit;continue;}
             uint32_t cp=unit;
             if(unit>=0xdc00&&unit<=0xdfff){if(!m_highSurrogate)continue;cp=0x10000+((m_highSurrogate-0xd800)<<10)+(unit-0xdc00);}
-            m_highSurrogate=0;m_ui.Character(cp);
+            m_highSurrogate=0;m_ui.Character(cp);m_presentedFrameValid=false;
         }
         if(m_ui.closeRequested){
             CloseWithReason(event.kind==Event::Kind::Key&&event.value==VK_ESCAPE?
@@ -1006,14 +1018,24 @@ void InGameQuickMenu::RenderCanvas(UObject* canvas) {
     PrioritizeVisibleSearch(m_ui);
     if(auto command=m_ui.TakeCommand())Submit(*command);
     m_currentTab.store(static_cast<int>(m_ui.tab));
-    const auto frame=m_ui.Render(mx,my);
+    const bool pointerMoved=!m_presentedFrameValid||std::abs(mx-m_lastRenderMouseX)>.35f||std::abs(my-m_lastRenderMouseY)>.35f;
+    if(!m_presentedFrameValid||m_presentedFrameGeneration!=generation||pointerMoved||m_ui.indexing){
+        m_presentedFrame=m_ui.Render(mx,my);
+        m_presentedFrameGeneration=generation;
+        m_lastRenderMouseX=mx;m_lastRenderMouseY=my;
+        m_presentedFrameValid=true;
+    }
+    const auto& frame=m_presentedFrame;
     // Capture only icon paths requested by the current painted frame. The
     // cache is shared by every Helpy tab for this game session, bounded, and
     // populated on the game thread without a catalogue-wide startup scan.
     for(const auto& draw:frame.draws)if(draw.kind==QuickUI::Draw::Kind::Icon&&!draw.text.empty()
         &&!m_canvasIcons.contains(draw.text)&&!m_failedCanvasIcons.contains(draw.text)
         &&m_queuedCanvasIcons.insert(draw.text).second)m_canvasIconQueue.push_back(draw.text);
-    constexpr std::size_t IconCacheLimit=256,FirstFrameIconBudget=16,SteadyIconBudget=4;
+    // Asset resolution can hitch the game thread. Visible icons are still
+    // prioritised, but fill in over a few frames instead of front-loading a
+    // dozen reflected loads into the first interactive frame.
+    constexpr std::size_t IconCacheLimit=256,FirstFrameIconBudget=6,SteadyIconBudget=2;
     std::size_t iconBudget=m_canvasIcons.empty()?FirstFrameIconBudget:SteadyIconBudget;
     UClass* textureType=nullptr;
     while(iconBudget--&&!m_canvasIconQueue.empty()) {
