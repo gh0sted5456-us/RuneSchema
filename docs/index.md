@@ -22,6 +22,7 @@ RuneSchema loads validated JSON and JSONC definitions, connects authored data to
 [Start authoring](AUTHORING-GUIDE.md){ .md-button .md-button--primary }
 [Loader reference](LOADER-WALKTHROUGHS.md){ .md-button }
 [Working examples](EXAMPLES.md){ .md-button }
+[Ask RuneSchema](ASK-RUNESCHEMA.md){ .md-button }
 </div>
 </div>
 
