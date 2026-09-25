@@ -268,7 +268,13 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Runtime/HostServices.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsBuildingModLoader.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/Spawn/PlayerRules.cpp")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/Spawn/PlayerRules.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Misc/DragonWildsDataRegistrar.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Generator/SaveViewer.cpp")
+    add_executable(equipment-storefront-lane ../tests/equipment-storefront-lane.cpp)
+    add_test(NAME equipment-storefront-lane COMMAND equipment-storefront-lane
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsEquipmentLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/EquipmentShadowveil.cpp")
     add_executable(asset-patch-v2-contract ../tests/asset-patch-v2-contract.cpp)
     target_link_libraries(asset-patch-v2-contract PRIVATE RuneSchemaJsonCore)
     if(MSVC)

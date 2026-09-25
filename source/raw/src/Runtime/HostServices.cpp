@@ -1,4 +1,5 @@
 #include "Runtime/HostServices.h"
+#include "Runtime/Storefront.h"
 #include "UE4SSProgram.hpp"
 #include "Runtime/Layout.h"
 #include <Windows.h>
@@ -14,6 +15,37 @@ namespace PS::HostServices {
             if (::GetEnvironmentVariableW(L"LOCALAPPDATA", value.data(), required) + 1 != required)
                 throw std::runtime_error("LOCALAPPDATA changed while it was read");
             return std::filesystem::path(value.data());
+        }
+
+        std::wstring PackageFamilyName() {
+            using GetCurrentPackageFamilyNameFn = LONG(WINAPI*)(UINT32*, PWSTR);
+            const auto kernel32 = ::GetModuleHandleW(L"kernel32.dll");
+            const auto getFamilyName = kernel32
+                ? reinterpret_cast<GetCurrentPackageFamilyNameFn>(
+                    ::GetProcAddress(kernel32, "GetCurrentPackageFamilyName"))
+                : nullptr;
+            if (!getFamilyName) return {};
+            UINT32 length = 0;
+            if (getFamilyName(&length, nullptr) != ERROR_INSUFFICIENT_BUFFER || length <= 1)
+                return {};
+            std::vector<wchar_t> value(length);
+            if (getFamilyName(&length, value.data()) != ERROR_SUCCESS) return {};
+            return std::wstring(value.data());
+        }
+
+        std::filesystem::path LegacyStateDirectory() {
+            return LocalAppDataDirectory() / L"RSDragonwilds" / L"Saved" / L"RuneSchema";
+        }
+
+        std::filesystem::path PackageStateDirectory() {
+            if (Storefront::Current() != Storefront::Kind::GamePass) return {};
+            const auto family = PackageFamilyName();
+            if (family.empty()) return {};
+            // Xbox-managed saves live under SystemAppData\wgs. RuneSchema does
+            // not edit that provider database directly; its own ledger belongs
+            // in LocalState and native adapters clean provider payloads in-game.
+            return LocalAppDataDirectory() / L"Packages" / family / L"LocalState"
+                / L"RSDragonwilds" / L"Saved" / L"RuneSchema";
         }
 
         void MigrateSafeSaveLedger(const std::filesystem::path& modDirectory,
@@ -42,6 +74,26 @@ namespace PS::HostServices {
                 return;
             }
         }
+
+        void SeedPackageLedger(const std::filesystem::path& stateDirectory) {
+            if (stateDirectory == LegacyStateDirectory()) return;
+            const auto destination = stateDirectory / "safesave" / "OwnedContentLedger.json";
+            const auto source = LegacyStateDirectory() / "safesave" / "OwnedContentLedger.json";
+            if (std::filesystem::exists(destination) || !std::filesystem::is_regular_file(source)) return;
+            std::filesystem::create_directories(destination.parent_path());
+            auto temporary = destination;
+            temporary += ".migrating";
+            std::error_code ignored;
+            std::filesystem::remove(temporary, ignored);
+            std::filesystem::copy_file(source, temporary, std::filesystem::copy_options::none);
+            if (std::filesystem::file_size(source) != std::filesystem::file_size(temporary)) {
+                std::filesystem::remove(temporary, ignored);
+                throw std::runtime_error("Game Pass SafeSave ledger seeding verification failed");
+            }
+            std::filesystem::rename(temporary, destination);
+            // Preserve the Steam/GOG ledger. The two storefront lanes diverge
+            // after this one-time seed and must never overwrite each other.
+        }
     }
     std::filesystem::path WorkingDirectory() {
         return RC::UE4SSProgram::get_program().get_working_directory();
@@ -55,7 +107,8 @@ namespace PS::HostServices {
     std::filesystem::path ModDirectory() { return WorkingDirectory() / "Mods" / "RuneSchema"; }
     std::filesystem::path SettingsDirectory() { return ModDirectory() / "settings"; }
     std::filesystem::path StateDirectory() {
-        return LocalAppDataDirectory() / L"RSDragonwilds" / L"Saved" / L"RuneSchema";
+        const auto package = PackageStateDirectory();
+        return package.empty() ? LegacyStateDirectory() : package;
     }
     std::filesystem::path SavedDirectory() { return RuntimeDirectory() / "saved"; }
     std::filesystem::path CacheDirectory() { return SavedDirectory() / "cache"; }
@@ -69,6 +122,7 @@ namespace PS::HostServices {
     void MigrateLegacyLayout() {
         RuntimeLayout::Migrate(ModDirectory());
         MigrateSafeSaveLedger(ModDirectory(), StateDirectory());
+        SeedPackageLedger(StateDirectory());
     }
     bool GuiEnabled() {
         // on_ui_init is the host's GUI capability boundary. Reading the

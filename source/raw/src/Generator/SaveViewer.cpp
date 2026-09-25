@@ -6,6 +6,7 @@
 #include "Unreal/UEnum.hpp"
 #include "Core/SaveCleanup.h"
 #include "Runtime/HostServices.h"
+#include "Runtime/Storefront.h"
 #include <imgui.h>
 #include <set>
 #include "SDK/Helper/ActorHelper.h"
@@ -159,6 +160,8 @@ namespace {
         call.Invoke();uint32 lanes[4]{};call.MoveResult(lanes,sizeof(lanes));
         const auto guid=SaveReport::Guid(std::format("{:08X}{:08X}{:08X}{:08X}",lanes[0],lanes[1],lanes[2],lanes[3]));
         if(guid.empty())throw std::runtime_error("Active character identity unavailable.");
+        if(PS::Storefront::CurrentNativeLane()==PS::Storefront::NativeLane::GamePassNative)
+            throw std::runtime_error("Character-save file browsing is unavailable for Xbox WGS storage; use the live inventory view.");
         wchar_t local[MAX_PATH]{};
         const auto length=GetEnvironmentVariableW(L"LOCALAPPDATA",local,MAX_PATH);
         if(!length || length>=MAX_PATH)throw std::runtime_error("Character-save directory unavailable.");

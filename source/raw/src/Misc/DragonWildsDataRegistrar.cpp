@@ -30,6 +30,7 @@
 #include "Loader/OwnedContentLedger.h"
 #include "Loader/ModLoadOrder.h"
 #include "Runtime/HostServices.h"
+#include "Runtime/Storefront.h"
 #include "Misc/DragonWildsDataRegistrar.h"
 
 using namespace RC;
@@ -79,6 +80,17 @@ namespace DragonWilds {
             else if(record.Kind=="Recipe")recipes.emplace(record.PersistenceID,record.Owner);
         }
         if(owners.empty())return true;
+        if (PS::Storefront::CurrentNativeLane() == PS::Storefront::NativeLane::GamePassNative)
+        {
+            // WinGDK persists this title through Xbox Game Save (WGS). Its
+            // provider database is not a directory of independently writable
+            // character JSON files. Keep the retired identities alive for the
+            // reflected post-load scrub below; the game then writes the clean
+            // state back through its active provider lock.
+            PS::Log<LogLevel::Verbose>(
+                STR("[SAVE-CLEANER][PROVIDER] Xbox WGS save detected; using in-game owned-content cleanup instead of direct Steam JSON editing.\n"));
+            return true;
+        }
         const auto folder=CharacterSaveDirectory();
         std::error_code statusError;
         if(!std::filesystem::exists(folder,statusError))return true;

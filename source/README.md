@@ -1,8 +1,8 @@
-# RuneSchema 0.7.5.24
+# RuneSchema 0.7.5.25
 
 This revision corrects the isolated Game Pass/WinGDK journal hierarchy insert
 binding while preserving the 0.7.5.23 wearable-mesh and character-mapping work.
-See `RELEASE-0.7.5.24.md` for the exact change and
+See `RELEASE-0.7.5.25.md` for the exact change and
 `RELEASE-0.7.5.23.md` for the retained features.
 
 RuneSchema is a UE4SS runtime for self-contained RuneScape: Dragonwilds
@@ -38,8 +38,8 @@ Run `..\build\build.bat -Clean` to build the release:
 - Game Pass uses its matching UE4SS runtime and `UE4SS_Signatures` overrides where supplied.
 
 Helpy is built once as a storefront-neutral RuneSchema API client. The output
-is `dist\RuneSchema-0.7.5.24-Universal.zip`. A plugin-free
-`RuneSchema-0.7.5.24-Core.zip` is emitted as proof that plug-ins are optional;
+is `dist\RuneSchema-0.7.5.25-Universal.zip`. A plugin-free
+`RuneSchema-0.7.5.25-Core.zip` is emitted as proof that plug-ins are optional;
 the two verified UE4SS runtime ZIPs are copied beside both. `-Clean` recreates
 build and distribution directories.
 

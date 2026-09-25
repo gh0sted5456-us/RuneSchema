@@ -25,7 +25,7 @@ loaders, other entries in the same mod, and plug-ins continue loading.
 | Core engine signatures | Verified profile | Verified WinGDK profile | UE4SS/reflection where available |
 | Object enumeration | Verified native `TArray` routine | UE4SS hash tables/object array; native callback iterator rejected | Yes |
 | Shadowveil equipment actions | Five verified sites | Five verified sites at `0x6E48153`, `0x6E48171`, `0x6E48224`, `0x6E48192`, `0x6E481BA` | Only Shadowveil binding is inactive |
-| Surge equipment behavior | Eight verified sites | Incomplete trace; deliberately inactive | Ordinary equipment effects still load |
+| Surge/Dash equipment behavior | Eight sites independently verified against the current Steam PE (`0x6BAC8379`, image `0x0DDEC000`) and isolated to the Steam/GOG lane | Incomplete trace; deliberately inactive | Windstep and ordinary cooked `GrantedEffects` still load through reflection |
 | Journal/lore registration | Reflected registry plus validated Steam hierarchy routines | Reflected registry plus five isolated WinGDK hierarchy/category routines | The affected hierarchy placement is skipped; entries and unrelated loaders continue |
 | Journal native JSON save cleanup | Verified Steam adapter | Reader/writer pair traced, helper ABI incomplete; deliberately inactive | Journal content and unlock delivery continue |
 | Appearance event bridge | Full five-site signature contract | Verified WinGDK wearable-mesh event; unverified WinGDK sites remain inactive | Consumer reports unavailable; other systems continue |
@@ -51,6 +51,16 @@ RuneSchema treats the three category routines as separate one-argument WinGDK
 entry points. Steam retains its single category dispatcher. All five WinGDK
 patterns must resolve uniquely inside executable memory before hierarchy
 placement is enabled; no WinGDK address is considered by the Steam/GOG lane.
+
+## Save storage lanes
+
+Steam/GOG character JSON files live in the normal
+`%LOCALAPPDATA%\RSDragonwilds\Saved` tree and may be backed up and cleaned
+directly. Game Pass uses the Xbox Game Save provider under the package's
+`SystemAppData\wgs` tree. RuneSchema never rewrites that provider database as
+loose files. WinGDK cleanup runs against the game-owned payload while its save
+provider is active, and RuneSchema's own ownership ledger is kept separately
+under the package's `LocalState\RSDragonwilds\Saved\RuneSchema` tree.
 
 The earlier `0x76C86F0` candidate was rejected after a live WinGDK trace and
 crash-dump audit. It inserts a different map specialization with a 64-byte key

@@ -12,6 +12,7 @@
 #include "Helpers/Casting.hpp"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
+#include "Runtime/Storefront.h"
 #include <Windows.h>
 #include <safetyhook.hpp>
 #include <atomic>
@@ -84,6 +85,10 @@ bool Install(const TCHAR*& failure) {
     if (nt->Signature != IMAGE_NT_SIGNATURE || nt->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64) return false;
     ExecutableTimestamp=nt->FileHeader.TimeDateStamp;
     ExecutableImageSize=nt->OptionalHeader.SizeOfImage;
+    if (PS::Storefront::CurrentNativeLane() != PS::Storefront::NativeLane::SteamNative) {
+        failure = TEXT("Surge/Dash native contract is currently verified only for the isolated Steam/GOG lane");
+        return false;
+    }
     failure = TEXT("unsupported executable build");
     SelectedProfile = NativeHookContract::Select(ExecutableTimestamp, ExecutableImageSize, SurgeNative::Profiles);
     if (!SelectedProfile) return false;

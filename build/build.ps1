@@ -4,7 +4,7 @@ param(
     [switch]$PluginOnly
 )
 $ErrorActionPreference = 'Stop'
-$Version = '0.7.5.24'
+$Version = '0.7.5.25'
 $BuildRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 if (-not (Test-Path -LiteralPath (Join-Path $BuildRoot 'source\raw\CMakeLists.txt') -PathType Leaf)) {
     $BuildRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -264,7 +264,7 @@ try {
         'quest-gameplay-owner','quest-native-contract','quest-definition','event-definition',
         'dialogue-definition','building-preview-safety','building-clone-contract','static-building-assembly-contract','owned-content-ledger','owned-save-cleanup-contract','resource-additional-drops','resource-scale-idempotence','niagara-preset',
         'time-of-day-contract','registry-patch-plan','json-document','asset-patch-v2-contract','helpy-instant-open','plugin-catalog-compatibility','documentation-contract','usmap-index','native-binding-resolution',
-        'vendor-category-refresh-contract','storefront-lanes','state-storage-contract','native-contract','journal-failure-isolation',
+        'vendor-category-refresh-contract','storefront-lanes','state-storage-contract','equipment-storefront-lane','native-contract','journal-failure-isolation',
         'journal-wingdk-lane','main-menu-log-budget') }
     Invoke-Checked 'cmake.exe' (@('--build', $contractBuild, '--target') + $releaseContracts + @('--parallel', '1')) 'Release contract test build'
     $contractPattern = '^(' + (($releaseContracts | ForEach-Object {[regex]::Escape($_)}) -join '|') + ')$'
