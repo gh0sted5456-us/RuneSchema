@@ -27,6 +27,28 @@ vendor IDs. `HideWeapon` can suppress inherited weapon presentation. Prefer
 `/buildings` or `/spawns` for static architecture rather than using an NPC as a
 prop.
 
+## Simple rules
+
+- `/npc` creates persistent AI, human, or resource-style actors.
+- Choose one actor role, use a compatible visual source, and bind dialogue or vendor IDs as needed.
+- Prefer `/buildings` or `/spawns` for static architecture.
+
+## FAQ
+
+### FAQ-NPC-001 — Can an NPC definition act as a merchant? {#faq-npc-001}
+
+Yes. Bind a RuneSchema vendor with `VendorID`, and optionally bind dialogue
+with `DialogueID`.
+
+### FAQ-NPC-002 — Should I use NPC for a static prop or building? {#faq-npc-002}
+
+Normally no. Use `/buildings` for buildable content or `/spawns` for
+supported world placement.
+
+### FAQ-NPC-003 — Can I hide a weapon inherited from the visual source? {#faq-npc-003}
+
+Yes. `HideWeapon` can suppress inherited weapon presentation.
+
 ## Working examples
 
 - [Great Tree: resource-style world actor](../examples/GreatTree/npc/85-GreatTree.json)
