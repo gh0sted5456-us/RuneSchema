@@ -29,6 +29,23 @@ Use `/journal` for recipe and discovery entries.
 Groups can be created where the native category supports them. Verify the
 entry, pages, icon, unlock, save, and reload.
 
+## Simple rules
+
+- Use `/journal` for recipe discovery and authored journal entries.
+- `AddTo` may use a full subcategory path or an unambiguous loaded category.
+- `Unlock` controls whether the entry is granted; placement and grouping are separate concerns.
+
+## FAQ
+
+### FAQ-JOURNAL-001 — Can AddTo use a short category instead of a full path? {#faq-journal-001}
+
+Yes, when that loaded category is unambiguous. Use the full subcategory path
+when you need exact targeting.
+
+### FAQ-JOURNAL-002 — Can a journal definition create groups? {#faq-journal-002}
+
+Yes, where the native category supports grouping.
+
 ---
 
 [← All loaders](../LOADER-WALKTHROUGHS.md) · [Authoring guide](../AUTHORING-GUIDE.md)
