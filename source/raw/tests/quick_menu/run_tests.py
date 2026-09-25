@@ -59,6 +59,7 @@ def main() -> None:
     rules = (raw/'include/Generator/QuickMenuCatalogRules.h').read_text(encoding='utf-8')
     native = (raw/'src/Generator/InGameQuickMenu.cpp').read_text(encoding='utf-8')
     header = (raw/'include/Generator/InGameQuickMenu.h').read_text(encoding='utf-8')
+    ui = (raw/'include/Generator/QuickMenuUI.h').read_text(encoding='utf-8')
     mailbox = (raw/'include/Generator/ToolRequest.h').read_text(encoding='utf-8')
     tools = (raw/'src/Loader/SpawnTools.inl').read_text(encoding='utf-8')
     index = (raw/'src/Loader/QuickMenuCatalog.inl').read_text(encoding='utf-8')
