@@ -9,6 +9,7 @@ on:
       - 'docs/**'
       - 'source/*.md'
       - 'source/loaders/**'
+      - 'source/unreal-runeschema/**'
       - 'source/examples/**'
       - 'source/schemas/**'
       - 'source/raw/BASE-BUILDER-IMPORT.md'
@@ -51,6 +52,8 @@ jobs:
           mv docs/README.md docs/OVERVIEW.md
           rm -rf docs/loaders
           cp -R source/loaders docs/loaders
+          rm -rf docs/unreal-runeschema
+          cp -R source/unreal-runeschema docs/unreal-runeschema
           rm -rf docs/examples docs/schemas
           cp -R source/examples docs/examples
           cp -R source/schemas docs/schemas

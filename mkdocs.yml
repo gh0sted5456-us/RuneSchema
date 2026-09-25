@@ -120,6 +120,9 @@ nav:
       - Registry Patching: REGISTRY-PATCHING.md
       - Building & Cloning: BUILDING-CLONING-FMODEL-AUDIT.md
       - SafeSave & Ownership: SAFE-SAVE-AND-LEDGER.md
+  - Unreal + RuneSchema:
+      - Overview: unreal-runeschema/index.md
+      - Stations, Quests & Recipes: unreal-runeschema/stations-quests-recipes.md
   - Compatibility:
       - Compatibility Backbone: COMPATIBILITY-BACKBONE.md
       - Game Pass Save System: GAMEPASS-SAVE-SYSTEM.md
