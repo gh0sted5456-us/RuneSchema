@@ -91,6 +91,7 @@ nav:
       - Overview: OVERVIEW.md
       - Authoring Guide: AUTHORING-GUIDE.md
       - Example Library: EXAMPLES.md
+      - Ask RuneSchema: ASK-RUNESCHEMA.md
   - Loaders:
       - Overview: LOADER-WALKTHROUGHS.md
       - Assets: loaders/assets.md
