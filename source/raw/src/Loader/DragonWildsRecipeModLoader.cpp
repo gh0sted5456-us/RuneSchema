@@ -773,8 +773,9 @@ namespace DragonWilds {
             const bool hasOneTableTarget = placement.Table.empty() != placement.DataTable.empty();
             const bool validDataTablePath = placement.DataTable.empty()
                 || (placement.DataTable.starts_with('/') && placement.DataTable.find('.') != std::string::npos);
+            const bool hasOneLayout = placement.Category.empty() != placement.Array.empty();
             if (hasOneTableTarget && validDataTablePath && !placement.Row.empty()
-                && (!placement.Category.empty() || !placement.Array.empty()))
+                && hasOneLayout)
             {
                 placements.push_back(std::move(placement));
             }
@@ -785,10 +786,21 @@ namespace DragonWilds {
 
     bool DragonWildsRecipeModLoader::Place(UObject* recipe, const Placement& placement, RC::Unreal::UDataTable* datatable)
     {
+        const auto reportFailure = [&](const std::string& reason) {
+            const auto key = RC::to_string(recipe->GetPathName()) + "\n"
+                + PlacementTableLabel(placement) + "\n" + RC::to_string(placement.Row)
+                + "\n" + RC::to_string(placement.Category) + "\n"
+                + RC::to_string(placement.Array) + "\n" + reason;
+            if (m_reportedPlacementFailures.insert(key).second)
+                PS::Log<LogLevel::Error>(STR("Failed placing Recipe '{}' into {}.{}: {}.\n"),
+                    recipe->GetName(), RC::to_generic_string(PlacementTableLabel(placement)),
+                    placement.Row, PS::ToWideSafe(reason.c_str()));
+        };
         auto rowStruct = datatable->GetRowStruct();
         auto* row = datatable->FindRowUnchecked(FName(placement.Row, FNAME_Add));
         if (!rowStruct || !row)
         {
+            reportFailure("target has no live row");
             return false;
         }
 
@@ -802,8 +814,7 @@ namespace DragonWilds {
         }
         catch (const std::exception& e)
         {
-            PS::Log<LogLevel::Error>(STR("Failed placing Recipe '{}' into {}.{}: {}\n"),
-                recipe->GetName(), RC::to_generic_string(PlacementTableLabel(placement)), placement.Row, PS::ToWideSafe(e.what()));
+            reportFailure(e.what());
             return false;
         }
     }
@@ -813,13 +824,13 @@ namespace DragonWilds {
         auto* labeledProp = CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(rowStruct, TEXT("LabeledRecipes")));
         if (!labeledProp)
         {
-            return false;
+            throw std::runtime_error("target row does not expose LabeledRecipes; use Array for a processing-station recipe array");
         }
 
         auto* categoryProp = CastField<FStructProperty>(labeledProp->GetInner());
         if (!categoryProp || !categoryProp->GetStruct())
         {
-            return false;
+            throw std::runtime_error("LabeledRecipes does not contain the native category structure");
         }
 
         auto* labelProp = CastField<FTextProperty>(
@@ -827,7 +838,7 @@ namespace DragonWilds {
         auto* collectionProp = CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(categoryProp->GetStruct().Get(), TEXT("Collection")));
         if (!labelProp || !collectionProp || !CastField<FSoftObjectProperty>(collectionProp->GetInner()))
         {
-            return false;
+            throw std::runtime_error("LabeledRecipes does not expose the native Label/Collection soft-recipe layout");
         }
 
         if (collectionProp->GetInner()->GetElementSize() != static_cast<int32>(sizeof(UECustom::FSoftObjectPtr)))
@@ -912,13 +923,18 @@ namespace DragonWilds {
     bool DragonWildsRecipeModLoader::PlaceInArray(UObject* recipe, UScriptStruct* rowStruct, uint8* row, const RC::StringType& arrayName, const RC::StringType& replaces)
     {
         auto* arrayProp = CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(rowStruct, arrayName));
-        if (!arrayProp || !CastField<FObjectProperty>(arrayProp->GetInner()))
-        {
-            return false;
-        }
+        auto* inner = arrayProp ? CastField<FObjectProperty>(arrayProp->GetInner()) : nullptr;
+        auto* acceptedClass = inner ? inner->GetPropertyClass().Get() : nullptr;
+        if (!arrayProp || arrayProp->GetArrayDim() != 1 || !inner || !acceptedClass
+            || !recipe || !recipe->IsA(acceptedClass))
+            throw std::runtime_error("Array does not expose a compatible RecipeData object collection");
+        if (inner->GetElementSize() != static_cast<int32>(sizeof(UObject*)))
+            throw std::runtime_error("RecipeData array element size is incompatible");
 
         auto* array = arrayProp->ContainerPtrToValuePtr<FScriptArray>(row);
         auto elementSize = arrayProp->GetInner()->GetElementSize();
+        if (!array || array->Num() < 0 || (array->Num() && !array->GetData()))
+            throw std::runtime_error("RecipeData array storage is invalid");
 
         if (array->GetData())
         {

@@ -107,6 +107,8 @@ int RunLoaderSchemas(int argc,char** argv) {
     assert(recipePlacement.at("properties").contains("DataTable"));
     assert(recipePlacement.at("allOf").at(0).at("oneOf").size()==2);
     assert(recipePlacement.at("allOf").at(1).at("oneOf").size()==2);
+    assert(recipePlacement.at("properties").at("Category").at("description").get<std::string>().find("crafting stations")!=std::string::npos);
+    assert(recipePlacement.at("properties").at("Array").at("description").get<std::string>().find("processing-station")!=std::string::npos);
     const auto& spheres=schemas.at("assets").at("patternProperties").at("^(?!(?:RuneSchema|Modded)$)[^$]").at("properties").at("$DominionSpheres");
     assert(spheres.at("minProperties")==1 && spheres.at("maxProperties")==32);
     assert(spheres.at("additionalProperties").at("properties").at("Radius").at("maximum")==100000);

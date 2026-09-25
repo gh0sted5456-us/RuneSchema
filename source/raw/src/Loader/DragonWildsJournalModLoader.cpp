@@ -117,44 +117,12 @@ namespace DragonWilds {
             return value.at(key).get<bool>();
         }
 
-        UObject* FindObjectByClassAndName(const TCHAR* classPath, const RC::StringType& name)
+        RC::StringType NormalizeReferenceKey(RC::StringType value)
         {
-            auto* objectClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr, nullptr, classPath);
-            if (!objectClass)
-            {
-                return nullptr;
-            }
-
-            TArray<UObject*> objects;
-            UECustom::UObjectGlobals::GetObjectsOfClass(objectClass, objects, true);
-            UObject* match = nullptr;
-            const FName targetName(name,FNAME_Add);
-            for (auto* object : objects)
-            {
-                if (object && object->GetFName() == targetName
-                    && !object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject | RF_ArchetypeObject)))
-                {
-                    if (match && match != object)
-                        throw std::runtime_error("Ambiguous journal reference; use the full asset path: " + RC::to_string(name));
-                    match = object;
-                }
-            }
-
-            return match;
-        }
-
-        UObject* ResolveSoftReference(const TCHAR* classPath, const RC::StringType& reference)
-        {
-            if (reference.starts_with(TEXT("/")))
-            {
-                UECustom::TSoftObjectPtr<UObject> soft{ UECustom::FSoftObjectPath(reference) };
-                auto* target = UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
-                auto* expected = UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr, nullptr, classPath);
-                if (target && (!expected || !target->IsA(expected)))
-                    throw std::runtime_error("Journal reference has the wrong asset class: " + RC::to_string(reference));
-                return target;
-            }
-            return FindObjectByClassAndName(classPath, reference);
+            std::transform(value.begin(), value.end(), value.begin(), [](auto character) {
+                return static_cast<TCHAR>(std::towlower(character));
+            });
+            return value;
         }
 
         void SetLiveSoftReference(UObject* owner, FProperty* property, UObject* target)
@@ -338,6 +306,7 @@ namespace DragonWilds {
 
     DragonWildsJournalModLoader::LoadResult DragonWildsJournalModLoader::ApplyAll()
     {
+        ResetFinalizeCaches();
         LoadResult result{};
 
         for (auto& def : m_defs)
@@ -429,7 +398,60 @@ namespace DragonWilds {
         }
         RegisterHooks();
         m_initialJournalApplied = true;
+        ResetFinalizeCaches();
         return result;
+    }
+
+    void DragonWildsJournalModLoader::ResetFinalizeCaches()
+    {
+        m_recipeReferenceIndex = {};
+        m_itemReferenceIndex = {};
+        m_tableReferenceIndex = {};
+        m_subCategoryCache.clear();
+        m_finalizeJournalSubsystem = nullptr;
+        m_finalizeJournalSubsystemResolved = false;
+    }
+
+    UObject* DragonWildsJournalModLoader::ResolveSoftReference(const TCHAR* classPath,
+        const RC::StringType& reference, ReferenceIndex& index)
+    {
+        auto* expected = UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr, nullptr, classPath);
+        if (!expected) return nullptr;
+        if (reference.starts_with(TEXT("/")))
+        {
+            UECustom::TSoftObjectPtr<UObject> soft{ UECustom::FSoftObjectPath(reference) };
+            auto* target = UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
+            if (target && !target->IsA(expected))
+                throw std::runtime_error("Journal reference has the wrong asset class: " + RC::to_string(reference));
+            return target;
+        }
+
+        if (!index.Built)
+        {
+            TArray<UObject*> objects;
+            UECustom::UObjectGlobals::GetObjectsOfClass(expected, objects, true);
+            for (auto* object : objects)
+            {
+                if (!object || object->HasAnyFlags(static_cast<EObjectFlags>(
+                    RF_ClassDefaultObject | RF_ArchetypeObject | RF_BeginDestroyed | RF_FinishDestroyed)))
+                    continue;
+                const auto key = NormalizeReferenceKey(object->GetName());
+                if (index.Ambiguous.contains(key)) continue;
+                const auto [found, inserted] = index.Unique.emplace(key, object);
+                if (!inserted && found->second != object)
+                {
+                    index.Unique.erase(found);
+                    index.Ambiguous.insert(key);
+                }
+            }
+            index.Built = true;
+        }
+
+        const auto key = NormalizeReferenceKey(reference);
+        if (index.Ambiguous.contains(key))
+            throw std::runtime_error("Ambiguous journal reference; use the full asset path: " + RC::to_string(reference));
+        const auto found = index.Unique.find(key);
+        return found == index.Unique.end() ? nullptr : found->second;
     }
 
     UClass* DragonWildsJournalModLoader::ResolveEntryClass(const nlohmann::json& body) const
@@ -553,6 +575,8 @@ namespace DragonWilds {
         };
         for (const auto& [name, unused] : body.items()) preserve(RC::to_generic_string(name));
         for (const auto* name : {TEXT("ItemData"), TEXT("RecipeData"), TEXT("Image"), TEXT("JournalItemData")}) preserve(name);
+        UObject* resolvedRecipe = nullptr;
+        UObject* resolvedItem = nullptr;
         for (auto& [name, value] : body.items())
         {
             if (name == "Type" || name == "AddTo" || name == "Unlock")
@@ -571,10 +595,11 @@ namespace DragonWilds {
             if (name == "RecipeData" && value.is_string())
             {
                 auto reference = RC::to_generic_string(value.get<std::string>());
-                auto* recipe = ResolveSoftReference(RecipeDataClassPath, reference);
+                auto* recipe = ResolveSoftReference(RecipeDataClassPath, reference, m_recipeReferenceIndex);
                 if (recipe)
                 {
                     SetLiveSoftReference(entry, property, recipe);
+                    resolvedRecipe = recipe;
                 }
                 else
                 {
@@ -585,12 +610,13 @@ namespace DragonWilds {
             else if (name == "ItemData" && value.is_string())
             {
                 auto reference = RC::to_generic_string(value.get<std::string>());
-                auto* item = ResolveSoftReference(ItemDataClassPath, reference);
+                auto* item = ResolveSoftReference(ItemDataClassPath, reference, m_itemReferenceIndex);
                 if (!item)
                 {
                     throw std::runtime_error("ItemData could not be resolved; check the cooked item asset path.");
                 }
                 SetLiveSoftReference(entry, property, item);
+                resolvedItem = item;
             }
             else if (name == "StationTableRowHandle" && value.is_object())
             {
@@ -601,7 +627,7 @@ namespace DragonWilds {
                     throw std::runtime_error("StationTableRowHandle requires DataTable and RowName.");
                 }
 
-                auto* table = ResolveSoftReference(DataTableClassPath, tableName);
+                auto* table = ResolveSoftReference(DataTableClassPath, tableName, m_tableReferenceIndex);
                 if (!table)
                 {
                     throw std::runtime_error(std::format("Data table '{}' was not loaded.",
@@ -632,10 +658,14 @@ namespace DragonWilds {
             }
         }
 
-        auto resolveField = [&](const TCHAR* name, bool required) -> UObject* {
+        auto resolveField = [&](const TCHAR* name, bool required, UObject* alreadyResolved = nullptr) -> UObject* {
             auto* field = CastField<FSoftObjectProperty>(PropertyHelper::GetPropertyByName(entry->GetClassPrivate(), name));
             if (!field || field->GetSize() != sizeof(UECustom::FSoftObjectPtr))
                 throw std::runtime_error("Journal reference property layout changed: " + RC::to_string(name));
+            if (alreadyResolved) {
+                SetLiveSoftReference(entry, field, alreadyResolved);
+                return alreadyResolved;
+            }
             auto* reference = field->ContainerPtrToValuePtr<UECustom::FSoftObjectPtr>(entry);
             if (reference->ObjectID.GetAssetFName() == NAME_None) {
                 if (required) throw std::runtime_error("Journal entry requires " + RC::to_string(name));
@@ -651,8 +681,8 @@ namespace DragonWilds {
         resolveField(TEXT("JournalItemData"), false);
         auto* recipeClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr, nullptr, EntryClassPaths[5]);
         if (recipeClass && entry->IsA(recipeClass)) {
-            auto* recipe = resolveField(TEXT("RecipeData"), true);
-            auto* item = resolveField(TEXT("ItemData"), false);
+            auto* recipe = resolveField(TEXT("RecipeData"), true, resolvedRecipe);
+            auto* item = resolveField(TEXT("ItemData"), false, resolvedItem);
             auto* outputs = CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(recipe->GetClassPrivate(), TEXT("ItemsCreated")));
             auto* output = outputs ? CastField<FStructProperty>(outputs->GetInner()) : nullptr;
             auto* itemField = output && output->GetStruct() ? CastField<FObjectPropertyBase>(
@@ -709,7 +739,10 @@ namespace DragonWilds {
         }
 
         UObject* subCategory=nullptr;
-        if(path.starts_with(TEXT("/"))) {
+        const auto categoryCacheKey = NormalizeReferenceKey(path);
+        if (const auto cached = m_subCategoryCache.find(categoryCacheKey); cached != m_subCategoryCache.end()) {
+            subCategory = cached->second;
+        } else if(path.starts_with(TEXT("/"))) {
             UECustom::TSoftObjectPtr<UObject> softSubCategory{ UECustom::FSoftObjectPath(path) };
             subCategory=UECustom::UKismetSystemLibrary::LoadAsset_Blocking(softSubCategory);
         } else {
@@ -736,6 +769,7 @@ namespace DragonWilds {
         {
             throw std::runtime_error(std::format("AddTo.SubCategory could not be loaded: {}", RC::to_string(path)));
         }
+        m_subCategoryCache.emplace(categoryCacheKey, subCategory);
 
         FMapProperty* dataMapProperty = nullptr;
         void* dataMap = nullptr;
@@ -806,6 +840,8 @@ namespace DragonWilds {
 
     UObject* DragonWildsJournalModLoader::FindJournalSubsystem()
     {
+        if (m_finalizeJournalSubsystemResolved) return m_finalizeJournalSubsystem;
+        m_finalizeJournalSubsystemResolved = true;
         TArray<UObject*> objects;
         UECustom::UObjectGlobals::GetObjectsOfClass(m_journalSubsystemClass, objects, true);
         UObject* selected=nullptr;
@@ -815,7 +851,8 @@ namespace DragonWilds {
             if(selected)throw std::runtime_error("Journal subsystem is ambiguous; registration refused");
             selected=object;
         }
-        return selected;
+        m_finalizeJournalSubsystem = selected;
+        return m_finalizeJournalSubsystem;
     }
 
     void DragonWildsJournalModLoader::RegisterEntry(UObject* entry,const RC::StringType& owner)

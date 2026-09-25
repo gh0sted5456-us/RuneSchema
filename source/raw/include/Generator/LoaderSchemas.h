@@ -81,8 +81,8 @@ inline nlohmann::json LoaderSchemas() {
             {"Table",{{"type","string"},{"minLength",1},{"description","Legacy DataTable object-name lookup. Retained for vanilla tables and existing definitions; use DataTable for a custom cooked table."}}},
             {"DataTable",{{"type","string"},{"pattern","^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$"},{"description","Exact cooked DataTable object path, for example /Game/MyMod/Data/DT_MyStation.DT_MyStation. The asset is loaded on demand and also matched when serialized later."}}},
             {"Row",{{"type","string"},{"minLength",1}}},
-            {"Array",{{"type","string"},{"minLength",1},{"description","Recipe UObject array field on the selected row, used by crafting and processing stations."}}},
-            {"Category",{{"type","string"},{"minLength",1},{"description","Merchant LabeledRecipes category label."}}},
+            {"Array",{{"type","string"},{"minLength",1},{"description","Direct RecipeData object-array field on the selected row. Dragonwilds processing-station rows use Recipes."}}},
+            {"Category",{{"type","string"},{"minLength",1},{"description","LabeledRecipes category label used by native crafting stations and merchants."}}},
             {"Replaces",{{"type","string"},{"minLength",1},{"description","Optional existing recipe name to replace in Array instead of appending."}}}
         }}};
     recipe["properties"]["AddTo"]={{"type","array"},{"minItems",1},{"maxItems",128},{"items",recipePlacement},{"description","Place this recipe into station rows or merchant categories. Use exactly one of Table (legacy short name) or DataTable (exact cooked asset path)."}};

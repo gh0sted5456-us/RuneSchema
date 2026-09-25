@@ -253,6 +253,10 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../../../clean-base/RuneSchema/plugins/plugins.txt"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../API-REFERENCE.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Runtime/RuneSchemaPluginApi.h")
+    add_executable(recipe-placement-contract ../tests/recipe-placement-contract.cpp)
+    add_test(NAME recipe-placement-contract COMMAND recipe-placement-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRecipeModLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../LOADER-WALKTHROUGHS.md")
     add_executable(usmap-index ../tests/usmap-index.cpp)
     target_link_libraries(usmap-index PRIVATE RuneSchemaJsonCore)
     if(MSVC)

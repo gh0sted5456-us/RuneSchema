@@ -69,6 +69,18 @@ namespace DragonWilds {
         RC::Unreal::UClass* m_journalSubsystemClass = nullptr;
         bool m_hooksActive = false;
 
+        struct ReferenceIndex {
+            bool Built = false;
+            std::unordered_map<RC::StringType, RC::Unreal::UObject*> Unique;
+            std::unordered_set<RC::StringType> Ambiguous;
+        };
+        ReferenceIndex m_recipeReferenceIndex;
+        ReferenceIndex m_itemReferenceIndex;
+        ReferenceIndex m_tableReferenceIndex;
+        std::unordered_map<RC::StringType, RC::Unreal::UObject*> m_subCategoryCache;
+        RC::Unreal::UObject* m_finalizeJournalSubsystem = nullptr;
+        bool m_finalizeJournalSubsystemResolved = false;
+
         void QueueData(const nlohmann::json& data, const RC::StringType& modName);
         void ApplyPendingPatches();
         LoadResult ApplyAll();
@@ -84,5 +96,8 @@ namespace DragonWilds {
 
         void TrackOwnedId(RC::Unreal::UObject* entry, const RC::Unreal::FString& persistenceId,const RC::StringType& owner,bool declared=false);
         void InstallNativePersistence();
+        RC::Unreal::UObject* ResolveSoftReference(const TCHAR* classPath,
+            const RC::StringType& reference, ReferenceIndex& index);
+        void ResetFinalizeCaches();
     };
 }

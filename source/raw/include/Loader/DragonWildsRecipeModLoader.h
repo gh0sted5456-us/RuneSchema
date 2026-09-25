@@ -68,6 +68,7 @@ namespace DragonWilds {
         std::unordered_map<RC::StringType, RC::Unreal::UObject*> m_recipes;
         std::unordered_set<RC::StringType> m_unlock;
         std::unordered_set<RC::StringType> m_propsApplied;
+        std::unordered_set<std::string> m_reportedPlacementFailures;
         RC::Unreal::UClass* m_recipeClass = nullptr;
         RC::Unreal::UClass* m_progressComponentClass = nullptr;
         std::vector<std::pair<RC::Unreal::UFunction*, int32_t>> m_functionHooks;
