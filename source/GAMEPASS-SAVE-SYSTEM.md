@@ -76,3 +76,9 @@ Steam/GOG uses:
 
 The two lanes may be seeded once, but they do not overwrite one another after
 that point.
+
+## Manual recovery
+
+Do not edit GUID-named WGS files or `containers.index` directly. For a
+backup-first extraction, appearance repair, and verified reimport procedure,
+see [MANUAL-SAVE-RECOVERY.md](MANUAL-SAVE-RECOVERY.md).

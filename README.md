@@ -1,24 +1,13 @@
-# RuneSchema 0.7.5.27 Experimental
+# RuneSchema 0.7.5.28 Experimental
 
-This branch contains the clean RuneSchema 0.7.5.27 runtime and the matching
-UE4SS storefront packages.
+Total parity and general performance enhancements.
 
-- [RuneSchema universal runtime](release/0.7.5.27/RuneSchema-0.7.5.27-Universal.zip)
-- [RuneSchema core-only runtime](release/0.7.5.27/RuneSchema-0.7.5.27-Core.zip)
-- [UE4SS for Steam/GOG](release/0.7.5.27/UE4SS-3.0.1-f6d5f942-Steam-GOG.zip)
-- [UE4SS for Game Pass/WinGDK](release/0.7.5.27/UE4SS-3.0.1-f6d5f942-GamePass-WinGDK.zip)
-- [Artifact hashes and installation notes](release/0.7.5.27/README.md)
+- [Universal runtime](release/0.7.5.28/RuneSchema-0.7.5.28-Universal.zip)
+- [Core-only runtime](release/0.7.5.28/RuneSchema-0.7.5.28-Core.zip)
+- [UE4SS for Steam/GOG](release/0.7.5.28/UE4SS-3.0.1-f6d5f942-Steam-GOG.zip)
+- [UE4SS for Game Pass/WinGDK](release/0.7.5.28/UE4SS-3.0.1-f6d5f942-GamePass-WinGDK.zip)
+- [Artifact hashes and installation notes](release/0.7.5.28/README.md)
 
-The universal RuneSchema DLL detects Steam/GOG or Game Pass/WinGDK at runtime
-and selects an isolated native-binding lane. Both RuneSchema archives include
-`RuneSchema/enabled.txt`, `RuneSchema/dlls/mappings/Mappings.usmap`, and an
-empty `RuneSchema/mods` directory.
+The universal runtime detects Steam/GOG and Game Pass/WinGDK automatically. Detailed authoring and recovery documentation is available under [source](source/README.md).
 
-Version 0.7.5.27 maps the Dragonwilds Xbox Game Save layout and reports the
-active package WGS root. A pending unsupported Game Pass save category no
-longer blocks verified item/recipe cleanup; the remaining ownership snapshot
-stays pending for retry. Steam/GOG's backed-up JSON lane is unchanged.
-
-Based on the original RuneSchema 0.6.0 from Snorkles. This version is
-maintained by members of the RSDW Modding Community. PalSchema foundation by
-Okaetsu.
+Based on the original RuneSchema 0.6.0 from Snorkles. Maintained by members of the RSDW Modding Community. PalSchema foundation by Okaetsu.

@@ -155,6 +155,11 @@ Snapshots live at
 They contain only native appearance handles and never armor, equipment,
 inventory, attributes, quests, names, or other save data.
 
+If automatic restoration cannot load the character far enough to run, follow
+the backup-first field repair in
+[MANUAL-SAVE-RECOVERY.md](MANUAL-SAVE-RECOVERY.md). Do not edit Game Pass WGS
+container files directly.
+
 ## Evidence and diagnostics
 
 With advanced logging enabled, successful writes report the common

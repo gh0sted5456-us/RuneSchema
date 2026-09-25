@@ -585,12 +585,49 @@ Placement rules:
 
 - Use `Table` for a unique legacy short table name.
 - Use `DataTable` for an exact vanilla or modded cooked table path.
-- Use `Array` for station/processor recipe arrays.
-- Use `Category` for merchant labeled-recipe categories.
+- Use `Category` for a native `LabeledRecipes` category. Both crafting-station
+  rows and merchant rows use this layout.
+- Use `Array` for a direct `RecipeData` object array. Dragonwilds processing
+  stations use `Array: "Recipes"`.
 - Use `RuneSchemaVendors` for one or more RuneSchema store IDs.
 - Use `VanillaVendors` for native merchant table/row targets.
 - `Unlock:true` grants the recipe; placement alone does not.
 - `Order` sorts within a category. Lower values appear first.
+
+The verified vanilla station targets are:
+
+```text
+/Game/Gameplay/World/Stations/DT_CraftingStationsDataTable.DT_CraftingStationsDataTable
+  Category layout: CraftingTable, RuneAltar, GarouMasonsBench, PotteryWheel,
+  RangeBronze, RangeStone, JewelersBench, BrewingCauldron, ToolsMeleeBench,
+  MysticForge, FletchingBenchv2, ArmourBench
+
+/Game/Gameplay/World/Stations/DT_ProcessingStationDataTable.DT_ProcessingStationDataTable
+  Array "Recipes": Campfire, Kiln, Grinder, Loom, Sawmill, Spinning Wheel,
+  Tannery, Furnace, Air Altar, Fire Altar, BrewingCauldron, Grill, Stonecutter,
+  AdvancedSmelter, FermentationBarrel, AdvancedTannery,
+  AdvancedSpinningWheel
+```
+
+For example, the older dye definitions target the crafting-side
+`BrewingCauldron` and correctly create a `Dyes` category:
+
+```json
+{"Table":"DT_CraftingStationsDataTable","Row":"BrewingCauldron","Category":"Dyes"}
+```
+
+To make the same recipe run through the timed processing cauldron, use:
+
+```json
+{"Table":"DT_ProcessingStationDataTable","Row":"BrewingCauldron","Array":"Recipes"}
+```
+
+`Category` and `Array` are mutually exclusive. RuneSchema validates the live
+row structure and the array's accepted object class before writing. A missing
+table, row, category layout, or recipe array rejects only that placement.
+Exact `DataTable` paths are recommended for custom or potentially ambiguous
+tables. Helpy's station picker derives its choices from the same reflected
+`LabeledRecipes` and `RecipeData[]` layouts.
 
 ## `registry`
 
