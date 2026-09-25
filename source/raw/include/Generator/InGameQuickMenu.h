@@ -85,6 +85,12 @@ private:
 
     std::atomic<bool> m_renderErrorLogged{false};
     QuickUI::Model m_ui;
+    // Retain the last generated draw/hit scene. Canvas still paints every
+    // PostRender, but an idle Helpy no longer rebuilds its command tree.
+    QuickUI::Frame m_presentedFrame;
+    uint64_t m_presentedFrameGeneration=0;
+    float m_lastRenderMouseX=-100000.f,m_lastRenderMouseY=-100000.f;
+    bool m_presentedFrameValid=false;
     uint64_t m_seenGeneration=0,m_requestSequence=0,m_pendingRequest=0;
     std::array<uint64_t,3> m_catalogRevisions{};
     uint64_t m_lastCatalogReadAt=0;
