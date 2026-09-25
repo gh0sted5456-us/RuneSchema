@@ -1,0 +1,123 @@
+site_name: RuneSchema Documentation
+site_description: "Authoring and runtime reference for RuneSchema, a UE4SS content runtime for RuneScape: Dragonwilds."
+site_url: https://gh0sted5456-us.github.io/RuneSchema/
+repo_url: https://github.com/gh0sted5456-us/RuneSchema
+repo_name: gh0sted5456-us/RuneSchema
+
+theme:
+  name: material
+  language: en
+  icon:
+    logo: material/code-braces
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  features:
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+
+plugins:
+  - search:
+      separator: '[\\s\\-\\.\\_]+'
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/extra.js
+
+extra:
+  generator: false
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/gh0sted5456-us/RuneSchema
+      name: RuneSchema on GitHub
+
+copyright: >-
+  RuneSchema documentation · Based on the original RuneSchema 0.6.0 by Snorkles · PalSchema foundation by Okaetsu
+
+nav:
+  - Home: index.md
+  - Start Here:
+      - Overview: OVERVIEW.md
+      - Authoring Guide: AUTHORING-GUIDE.md
+      - Loader Walkthroughs: LOADER-WALKTHROUGHS.md
+      - Example Library: EXAMPLES.md
+  - Authoring:
+      - Character Creation: CHARACTER-CREATION-AUTHORING.md
+      - Registry Patching: REGISTRY-PATCHING.md
+      - Building & Cloning: BUILDING-CLONING-FMODEL-AUDIT.md
+      - SafeSave & Ownership: SAFE-SAVE-AND-LEDGER.md
+  - Compatibility:
+      - Compatibility Backbone: COMPATIBILITY-BACKBONE.md
+      - Game Pass Save System: GAMEPASS-SAVE-SYSTEM.md
+      - Native Hook Parity: NATIVE-HOOK-PARITY.md
+  - Developer Reference:
+      - Plugin API: API-REFERENCE.md
+      - JSON Schemas: SCHEMAS.md
+  - Internals:
+      - Baseline Subsystem Audit: BASELINE-SUBSYSTEM-AUDIT.md
+      - Helpy Renderer Audit: HELpy-REDESIGN-AUDIT.md
+      - Base Builder Import: raw/BASE-BUILDER-IMPORT.md
+      - Documentation Index: DOCUMENTATION-INDEX.md
+  - Releases:
+      - Release Index: RELEASES.md
+      - 0.7.5.28: RELEASE-0.7.5.28.md
+      - 0.7.5.26: RELEASE-0.7.5.26.md
+      - 0.7.5.25: RELEASE-0.7.5.25.md
+      - 0.7.5.24: RELEASE-0.7.5.24.md
+      - 0.7.5.23: RELEASE-0.7.5.23.md
+      - 0.7.5.22: RELEASE-0.7.5.22.md
+      - 0.7.5.21: RELEASE-0.7.5.21.md
+      - 0.7.5.20: RELEASE-0.7.5.20.md
+      - 0.7.5.18: RELEASE-0.7.5.18.md
+      - 0.7.5.17: RELEASE-0.7.5.17.md
+      - 0.7.5.16: RELEASE-0.7.5.16.md
+      - 0.7.5.15: RELEASE-0.7.5.15.md
+      - 0.7.5.14: RELEASE-0.7.5.14.md
+      - 0.7.5.13: RELEASE-0.7.5.13.md
+      - 0.7.5.9: RELEASE-0.7.5.9.md
+      - 0.7.5.8: RELEASE-0.7.5.8.md
+      - 0.7.5.7: RELEASE-0.7.5.7.md
+      - 0.7.5.6: RELEASE-0.7.5.6.md
+      - 0.7.5.5 Audit: RELEASE-0.7.5.5-NOTES-AUDIT.md

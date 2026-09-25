@@ -1,0 +1,182 @@
+:root {
+  --rs-ink: #101214;
+  --rs-panel: #171a1e;
+  --rs-gold: #c8a663;
+  --rs-gold-soft: #e1c98f;
+  --rs-steam: #7bc7ef;
+  --rs-gamepass: #78c96a;
+  --rs-line: color-mix(in srgb, var(--rs-gold) 38%, transparent);
+}
+
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #0f1114;
+  --md-default-fg-color: #e8e8e8;
+  --md-primary-fg-color: #111315;
+  --md-primary-fg-color--dark: #0b0d0f;
+  --md-accent-fg-color: var(--rs-gold-soft);
+  --md-typeset-a-color: #d7bd82;
+  --md-code-bg-color: #15191d;
+}
+
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #171a1e;
+  --md-primary-fg-color--dark: #0f1114;
+  --md-accent-fg-color: #8b6c32;
+  --md-typeset-a-color: #785d2b;
+}
+
+.md-header {
+  border-bottom: 1px solid var(--rs-line);
+}
+
+.md-tabs {
+  border-bottom: 1px solid color-mix(in srgb, var(--rs-gold) 22%, transparent);
+}
+
+.md-nav__link--active,
+.md-nav__link:focus,
+.md-nav__link:hover {
+  color: var(--rs-gold-soft);
+}
+
+.md-typeset h1,
+.md-typeset h2 {
+  letter-spacing: -0.02em;
+}
+
+.md-typeset h1 {
+  font-weight: 750;
+}
+
+.md-typeset h2 {
+  font-weight: 700;
+}
+
+.md-typeset code {
+  border-radius: .25rem;
+}
+
+.md-typeset pre > code {
+  border: 1px solid color-mix(in srgb, var(--rs-gold) 16%, transparent);
+}
+
+.rs-hero {
+  position: relative;
+  overflow: hidden;
+  margin: 0 0 1.4rem;
+  padding: clamp(1.4rem, 4vw, 2.6rem);
+  border: 1px solid var(--rs-line);
+  border-radius: .7rem;
+  background:
+    radial-gradient(circle at 17% 15%, color-mix(in srgb, var(--rs-steam) 12%, transparent), transparent 34%),
+    radial-gradient(circle at 84% 78%, color-mix(in srgb, var(--rs-gamepass) 10%, transparent), transparent 36%),
+    linear-gradient(135deg, color-mix(in srgb, var(--rs-panel) 92%, transparent), color-mix(in srgb, var(--rs-ink) 98%, transparent));
+}
+
+.rs-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--rs-gold) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--rs-gold) 5%, transparent) 1px, transparent 1px);
+  background-size: 26px 26px;
+  mask-image: linear-gradient(to bottom right, black, transparent 72%);
+}
+
+.rs-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.rs-hero h2 {
+  margin-top: .5rem;
+  max-width: 850px;
+  color: inherit;
+  font-size: clamp(1.55rem, 3vw, 2.35rem);
+}
+
+.rs-hero p {
+  max-width: 860px;
+  font-size: 1.02rem;
+}
+
+.rs-hero__mark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: .18em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: clamp(1.5rem, 4vw, 2.5rem);
+  line-height: 1;
+  color: #111;
+  filter: drop-shadow(0 0 14px rgba(255,255,255,.08));
+}
+
+[data-md-color-scheme="slate"] .rs-hero__mark {
+  color: #f1f1f1;
+}
+
+.rs-hero__mark span:first-child {
+  text-shadow: -7px 0 18px color-mix(in srgb, var(--rs-steam) 72%, transparent);
+}
+
+.rs-hero__mark span:last-child {
+  text-shadow: 7px 0 18px color-mix(in srgb, var(--rs-gamepass) 72%, transparent);
+}
+
+.rs-hero__mark strong {
+  color: var(--rs-gold-soft);
+  font-weight: 800;
+}
+
+.rs-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .75rem;
+  margin: 1rem 0 2rem;
+}
+
+.rs-status-card {
+  padding: 1rem 1.05rem;
+  border: 1px solid color-mix(in srgb, var(--rs-gold) 20%, transparent);
+  border-radius: .55rem;
+  background: color-mix(in srgb, var(--md-default-bg-color) 93%, var(--rs-gold) 7%);
+}
+
+.rs-status-card h3 {
+  margin-top: 0;
+}
+
+.md-typeset .grid.cards > ul > li,
+.md-typeset .grid.cards > ol > li {
+  border-color: color-mix(in srgb, var(--rs-gold) 25%, transparent);
+  border-radius: .55rem;
+  transition: border-color .16s ease, transform .16s ease;
+}
+
+.md-typeset .grid.cards > ul > li:hover,
+.md-typeset .grid.cards > ol > li:hover {
+  border-color: color-mix(in srgb, var(--rs-gold) 62%, transparent);
+  transform: translateY(-1px);
+}
+
+.md-button--primary {
+  background-color: var(--rs-gold) !important;
+  border-color: var(--rs-gold) !important;
+  color: #111 !important;
+}
+
+.md-button:not(.md-button--primary) {
+  border-color: color-mix(in srgb, var(--rs-gold) 48%, transparent);
+}
+
+.md-typeset table:not([class]) th {
+  background: color-mix(in srgb, var(--rs-gold) 12%, var(--md-default-bg-color));
+}
+
+@media (max-width: 760px) {
+  .rs-status-grid {
+    grid-template-columns: 1fr;
+  }
+}
