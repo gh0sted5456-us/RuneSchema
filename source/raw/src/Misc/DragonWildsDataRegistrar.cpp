@@ -88,7 +88,8 @@ namespace DragonWilds {
             // reflected post-load scrub below; the game then writes the clean
             // state back through its active provider lock.
             PS::Log<LogLevel::Verbose>(
-                STR("[SAVE-CLEANER][PROVIDER] Xbox WGS save detected; using in-game owned-content cleanup instead of direct Steam JSON editing.\n"));
+                STR("[SAVE-CLEANER][PROVIDER] Xbox WGS save detected at '{}'; using in-game owned-content cleanup instead of direct Steam JSON editing.\n"),
+                PS::HostServices::XboxSaveRoot().native());
             return true;
         }
         const auto folder=CharacterSaveDirectory();
@@ -341,10 +342,9 @@ namespace DragonWilds {
                         kinds += kind;
                     }
                     PS::Log<LogLevel::Error>(
-                        STR("[SAVE-CLEANER][PROVIDER][RETRY] Game Pass cleanup has no verified live adapter for retired kind(s): {}. The previous ledger is retained and no provider cleanup was attempted.\n"),
+                        STR("[SAVE-CLEANER][PROVIDER][PARTIAL] Game Pass cleanup has no verified live adapter for retired kind(s): {}. Supported item/recipe cleanup will continue, while the previous ledger is retained for the remaining kinds.\n"),
                         PS::ToWideSafe(kinds.c_str()));
                 }
-                return;
             }
             const bool hasItems=std::any_of(m_retiredContent.begin(),m_retiredContent.end(),[](const auto& value){return value.Kind=="Item";});
             auto* inventoryProperty = hasItems ? CastField<FObjectPropertyBase>(
@@ -406,6 +406,16 @@ namespace DragonWilds {
                 PS::Log<LogLevel::Normal>(STR("[SAVE-CLEANER][OWNED-ONLY] Removed {} retired recipe unlock identity(s); the next native save persists the clean progress state.\n"),removedRecipes);
             if (!m_pendingProviderSnapshot.empty())
             {
+                if (!m_pendingProviderUnsupportedKinds.empty())
+                {
+                    if (!m_providerPartialReported)
+                    {
+                        m_providerPartialReported = true;
+                        PS::Log<LogLevel::Normal>(
+                            STR("[SAVE-CLEANER][PROVIDER][VERIFIED-PARTIAL] Supported Game Pass item/recipe state was read-back verified. The previous ownership snapshot remains pending for unsupported save categories.\n"));
+                    }
+                    return;
+                }
                 // All owned item counts and recipe sets above were read back
                 // as absent. Only now may WinGDK replace its previous identity
                 // snapshot; a crash or missed provider event will retry on the

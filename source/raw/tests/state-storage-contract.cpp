@@ -38,6 +38,9 @@ int main(int argc, char** argv)
         && host.find("LocalState") != std::string::npos
         && host.find("SystemAppData\\wgs") != std::string::npos,
         "Game Pass state is package-local and Xbox WGS is never treated as a normal save directory");
+    Check(host.find("XboxSaveRoot()") != std::string::npos
+        && registrar.find("HostServices::XboxSaveRoot()") != std::string::npos,
+        "Game Pass save diagnostics do not resolve the active package WGS root");
     Check(host.find("Preserve the Steam/GOG ledger") != std::string::npos,
         "the Game Pass ledger seed does not consume Steam state");
     Check(host.find("safesave") != std::string::npos
@@ -65,6 +68,9 @@ int main(int argc, char** argv)
     Check(registrar.find("OwnedContent::CommitSnapshot(m_pendingProviderSnapshot)") != std::string::npos
         && registrar.find("[SAVE-CLEANER][PROVIDER][PENDING]") != std::string::npos,
         "Game Pass retains its previous ledger until provider cleanup is verified");
+    Check(registrar.find("[SAVE-CLEANER][PROVIDER][VERIFIED-PARTIAL]") != std::string::npos
+        && registrar.find("item/recipe cleanup will continue") != std::string::npos,
+        "unsupported Game Pass categories do not prevent supported item/recipe cleanup");
     Check(saveViewer.find("Character-save file browsing is unavailable for Xbox WGS storage") != std::string::npos,
         "the file viewer does not mistake Steam saves for Game Pass saves");
     std::cout << "Mutable state storage contract passed.\n";

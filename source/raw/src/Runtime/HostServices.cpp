@@ -110,6 +110,13 @@ namespace PS::HostServices {
         const auto package = PackageStateDirectory();
         return package.empty() ? LegacyStateDirectory() : package;
     }
+    std::filesystem::path XboxSaveRoot() {
+        if (Storefront::Current() != Storefront::Kind::GamePass) return {};
+        const auto family = PackageFamilyName();
+        if (family.empty()) return {};
+        return LocalAppDataDirectory() / L"Packages" / family
+            / L"SystemAppData" / L"wgs";
+    }
     std::filesystem::path SavedDirectory() { return RuntimeDirectory() / "saved"; }
     std::filesystem::path CacheDirectory() { return SavedDirectory() / "cache"; }
     std::filesystem::path ProgressDirectory() { return SavedDirectory() / "progress"; }

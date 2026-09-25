@@ -39,6 +39,7 @@ namespace DragonWilds {
         std::filesystem::path m_pendingProviderSnapshot;
         std::set<std::string> m_pendingProviderUnsupportedKinds;
         bool m_providerBlockReported = false;
+        bool m_providerPartialReported = false;
         struct RetiredContent {
             RC::Unreal::UObject* Data = nullptr;
             std::string Kind;

@@ -1,8 +1,9 @@
-# RuneSchema 0.7.5.26
+# RuneSchema 0.7.5.27
 
-This revision adds independent, default-off save-persistence controls for
-journal/lore and recipe unlocks while preserving the dual storefront lanes.
-See `RELEASE-0.7.5.26.md` for the exact change and
+This revision validates Dragonwilds' Xbox Game Save layout and allows
+supported Game Pass item/recipe cleanup to proceed independently.
+See `RELEASE-0.7.5.27.md` for the exact change and
+`RELEASE-0.7.5.26.md` for the persistence controls, and
 `RELEASE-0.7.5.25.md` for the retained compatibility work.
 
 RuneSchema is a UE4SS runtime for self-contained RuneScape: Dragonwilds
@@ -20,6 +21,8 @@ bridges without replacing vanilla game systems.
   verified character-menu categories, tables, fields, and replay behavior.
 - [COMPATIBILITY-BACKBONE.md](COMPATIBILITY-BACKBONE.md) — storefront, USMAP,
   and plugin compatibility behavior.
+- [GAMEPASS-SAVE-SYSTEM.md](GAMEPASS-SAVE-SYSTEM.md) — WGS location, payload
+  formats, ownership ledger, and provider-safe cleanup behavior.
 - [API-REFERENCE.md](API-REFERENCE.md) — complete plugin ABI, host functions,
   lifecycle, core services, mapping queries, and example plugin.
 - [REGISTRY-PATCHING.md](REGISTRY-PATCHING.md) — transactional `/raw` registry
@@ -38,8 +41,8 @@ Run `..\build\build.bat -Clean` to build the release:
 - Game Pass uses its matching UE4SS runtime and `UE4SS_Signatures` overrides where supplied.
 
 Helpy is built once as a storefront-neutral RuneSchema API client. The output
-is `dist\RuneSchema-0.7.5.26-Universal.zip`. A plugin-free
-`RuneSchema-0.7.5.26-Core.zip` is emitted as proof that plug-ins are optional;
+is `dist\RuneSchema-0.7.5.27-Universal.zip`. A plugin-free
+`RuneSchema-0.7.5.27-Core.zip` is emitted as proof that plug-ins are optional;
 the two verified UE4SS runtime ZIPs are copied beside both. `-Clean` recreates
 build and distribution directories.
 

@@ -30,4 +30,10 @@ int main(int argc,char** argv){
         "verified Game Pass provider cleanup has no explicit completion state");
     need(registrar.find("m_pendingProviderUnsupportedKinds")!=registrar.npos,
         "unsupported Game Pass save categories do not fail closed");
+    need(registrar.find("[SAVE-CLEANER][PROVIDER][VERIFIED-PARTIAL]")!=registrar.npos,
+        "supported Game Pass identities are not cleaned when another save category remains pending");
+    const auto partialWarning=registrar.find("[SAVE-CLEANER][PROVIDER][PARTIAL]");
+    const auto supportedCleanup=registrar.find("const bool hasItems",partialWarning);
+    need(partialWarning<supportedCleanup,
+        "unsupported Game Pass categories still block supported item/recipe cleanup");
 }
