@@ -4,7 +4,7 @@ param(
     [switch]$PluginOnly
 )
 $ErrorActionPreference = 'Stop'
-$Version = '0.7.5.25'
+$Version = '0.7.5.26'
 $BuildRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 if (-not (Test-Path -LiteralPath (Join-Path $BuildRoot 'source\raw\CMakeLists.txt') -PathType Leaf)) {
     $BuildRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -258,14 +258,15 @@ try {
     $universal = Invoke-UniversalBuild -OnlyPlugin:$PluginOnly
     $dependencyRoot = Join-Path $universal.Build '_deps'
     $jsonHeaders = Join-Path $dependencyRoot 'nlohmann_json-src\include'
+    $glazeHeaders = Join-Path $dependencyRoot 'glaze-src\include'
     $contractBuild = Join-Path $BuildCache 'contracts'
-    Invoke-Checked 'cmake.exe' @('-S', (Join-Path $RawSource 'core'), '-B', $contractBuild, '-G', 'Ninja', "-DRUNESCHEMA_JSON_INCLUDE_DIR=$jsonHeaders", '-DCMAKE_BUILD_TYPE=Release') 'Release contract test configure'
+    Invoke-Checked 'cmake.exe' @('-S', (Join-Path $RawSource 'core'), '-B', $contractBuild, '-G', 'Ninja', "-DRUNESCHEMA_JSON_INCLUDE_DIR=$jsonHeaders", "-DRUNESCHEMA_GLAZE_INCLUDE_DIR=$glazeHeaders", '-DCMAKE_BUILD_TYPE=Release') 'Release contract test configure'
     $releaseContracts = if ($PluginOnly) { @('helpy-instant-open') } else { @('vendor-offers','loader-schemas','npc-catalog','player-activity-events',
         'quest-gameplay-owner','quest-native-contract','quest-definition','event-definition',
         'dialogue-definition','building-preview-safety','building-clone-contract','static-building-assembly-contract','owned-content-ledger','owned-save-cleanup-contract','resource-additional-drops','resource-scale-idempotence','niagara-preset',
         'time-of-day-contract','registry-patch-plan','json-document','asset-patch-v2-contract','helpy-instant-open','plugin-catalog-compatibility','documentation-contract','usmap-index','native-binding-resolution',
         'vendor-category-refresh-contract','storefront-lanes','state-storage-contract','equipment-storefront-lane','native-contract','journal-failure-isolation',
-        'journal-wingdk-lane','main-menu-log-budget') }
+        'journal-wingdk-lane','main-menu-log-budget','config-settings','persistence-mode-contract','preview-refresh-contract') }
     Invoke-Checked 'cmake.exe' (@('--build', $contractBuild, '--target') + $releaseContracts + @('--parallel', '1')) 'Release contract test build'
     $contractPattern = '^(' + (($releaseContracts | ForEach-Object {[regex]::Escape($_)}) -join '|') + ')$'
     Invoke-Checked 'ctest.exe' @('--test-dir', $contractBuild, '--output-on-failure', '-R', $contractPattern) 'Release contract tests'

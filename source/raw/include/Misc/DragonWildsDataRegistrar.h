@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <filesystem>
 #include <set>
 #include <utility>
 #include <vector>
@@ -32,6 +33,12 @@ namespace DragonWilds {
         RC::Unreal::Hook::GlobalCallbackId m_gameStateHook = RC::Unreal::Hook::ERROR_ID;
         bool m_initialized = false;
         bool m_retiredContentPrepared = false;
+        // Steam JSON cleanup commits immediately after its atomic file pass.
+        // WinGDK must retain the previous ledger until the provider-backed
+        // live state has been scrubbed and read-back verified.
+        std::filesystem::path m_pendingProviderSnapshot;
+        std::set<std::string> m_pendingProviderUnsupportedKinds;
+        bool m_providerBlockReported = false;
         struct RetiredContent {
             RC::Unreal::UObject* Data = nullptr;
             std::string Kind;

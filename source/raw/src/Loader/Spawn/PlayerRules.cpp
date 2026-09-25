@@ -3605,7 +3605,9 @@ namespace DragonWilds {
                 namedAttributeStatus += "]";
             }
 
-            if (!rule.Appearance.empty())
+            const bool appearancePersistence =
+                PS::PSConfig::Get()->GetSettings().persistence.characterCustomization;
+            if (!rule.Appearance.empty() && appearancePersistence)
             {
                 bool changed = false;
                 bool provenanceChanged = false;
@@ -3729,7 +3731,9 @@ namespace DragonWilds {
                 }
             }
 
-            std::string appearanceStatus = "applied";
+            std::string appearanceStatus = !rule.Appearance.empty() && !appearancePersistence
+                ? "save persistence disabled; character option loaders remain active"
+                : "applied";
             if (!appearanceApplied)
             {
                 appearanceStatus = "unsupported [";

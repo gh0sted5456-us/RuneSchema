@@ -32,6 +32,7 @@
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "Utility/JsonHelpers.h"
+#include "Utility/Config.h"
 #include "Utility/Logging.h"
 #include "Loader/DragonWildsJournalModLoader.h"
 #include "Loader/JournalPlayerAccess.h"
@@ -416,7 +417,7 @@ namespace DragonWilds {
         // Native persistence cleanup is an optional safety adapter. A
         // storefront-specific routine mismatch must not roll back journal
         // registration, placement, or unlock delivery.
-        if (!m_ownedIds.empty()) {
+        if (PS::PSConfig::Get()->GetSettings().persistence.journal && !m_ownedIds.empty()) {
             try {
                 InstallNativePersistence();
             } catch (const std::exception& error) {
@@ -888,6 +889,15 @@ namespace DragonWilds {
 
     void DragonWildsJournalModLoader::UnlockEntries(UObject* journalComponent)
     {
+        // Dominion has no journal equivalent of the recipe subsystem's
+        // RecipesUnlockedThatShouldNotPersist set. UnlockJournalEntry mutates
+        // native persistence, so temporary mode leaves unlock delivery alone
+        // while registration and category placement remain active.
+        if (!PS::PSConfig::Get()->GetSettings().persistence.journal)
+        {
+            PS::RoutineLog("journal", STR("Journal/lore persistence is disabled; registered entries remain loaded without save-backed player unlocks.\n"));
+            return;
+        }
         if (!journalComponent || !journalComponent->IsA(m_journalComponentClass))
         {
             PS::Log<LogLevel::Error>(STR("Journal persistence event supplied an invalid component.\n"));

@@ -21,6 +21,7 @@
 #include "SDK/Structs/FSoftObjectPath.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "Utility/JsonHelpers.h"
+#include "Utility/Config.h"
 #include "Utility/Logging.h"
 #include "Loader/DragonWildsRecipeModLoader.h"
 #include "Loader/VendorCategoryText.h"
@@ -54,7 +55,12 @@ namespace DragonWilds {
             return;
         }
 
-        for (auto* propertyName : { TEXT("RecipesUnlocked"), TEXT("RecipesUnlockedThatShouldNotPersist") })
+        std::vector<const TCHAR*> targetSets{TEXT("RecipesUnlockedThatShouldNotPersist")};
+        if (PS::PSConfig::Get()->GetSettings().persistence.recipes)
+        {
+            targetSets.insert(targetSets.begin(), TEXT("RecipesUnlocked"));
+        }
+        for (auto* propertyName : targetSets)
         {
             auto* setProperty = CastField<FSetProperty>(PropertyHelper::GetPropertyByName(progressComponent->GetClassPrivate(), propertyName));
             if (!setProperty)
@@ -233,7 +239,10 @@ namespace DragonWilds {
         for(auto* recipe:recipes)report["Recipes"].push_back({{"Path",RC::to_string(recipe->GetPathName())},{"ObjectIndex",recipe->GetInternalIndex()}});
         report["RuntimeRecipeCreations"]=m_recipeRevision;
         std::vector<std::pair<const TCHAR*,FSetProperty*>> sets;
-        for(const auto* name:{TEXT("RecipesUnlocked"),TEXT("RecipesUnlockedThatShouldNotPersist")}) {
+        std::vector<const TCHAR*> targetSets{TEXT("RecipesUnlockedThatShouldNotPersist")};
+        if (PS::PSConfig::Get()->GetSettings().persistence.recipes)
+            targetSets.insert(targetSets.begin(),TEXT("RecipesUnlocked"));
+        for(const auto* name:targetSets) {
             auto* property=CastField<FSetProperty>(PropertyHelper::GetPropertyByName(progress->GetClassPrivate(),name));
             auto* element=property?CastField<FObjectPropertyBase>(property->GetElementProp()):nullptr;
             if(!property || property->GetArrayDim()!=1 || !element || element->GetElementSize()!=sizeof(UObject*)

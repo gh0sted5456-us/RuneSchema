@@ -408,6 +408,13 @@ public:
             ImGui::Checkbox("Character editor trace preset", &settings.diagnosticJobs.characterEditorPreset);
             ImGui::TextWrapped("Jobs run from settings/jobs recursively and do not require a player. Turning Advanced diagnostics off disables every job.");
             ImGui::EndDisabled();
+            ImGui::SeparatorText("Journal and recipe persistence");
+            ImGui::Checkbox("Save RuneSchema character customization", &settings.persistence.characterCustomization);
+            ImGui::TextWrapped("Off by default. Character option and data-table loaders remain active, but automatic /players appearance assignments do not rewrite CustomizationSaveData.");
+            ImGui::Checkbox("Save RuneSchema journal/lore unlocks", &settings.persistence.journal);
+            ImGui::TextWrapped("Off by default. Journal and lore assets still load and are placed, but automatic player unlock delivery is skipped so RuneSchema does not add them to the save.");
+            ImGui::Checkbox("Save RuneSchema recipe unlocks", &settings.persistence.recipes);
+            ImGui::TextWrapped("Off by default. Recipes remain available for the current session through the game's non-persistent recipe set. Enable this only when permanent recipe unlocks are wanted.");
             ImGui::SeparatorText("Server Helpy permissions");
             ImGui::TextWrapped("These permissions are disabled by default. Allowed client requests are executed and validated by server authority; clients can never export files or create permanent placements through this bridge.");
             ImGui::Checkbox("Allow client item grants", &settings.helpyAuthority.allowClientItemGrants);

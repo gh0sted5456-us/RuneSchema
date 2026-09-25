@@ -10,6 +10,11 @@
   "plugins": {
     "compatibilityNotices": "quiet"
   },
+  "persistence": {
+    "characterCustomization": false,
+    "journal": false,
+    "recipes": false
+  },
   "helpyAuthority": {
     "allowClientItemGrants": false,
     "allowClientTemporarySpawns": false,

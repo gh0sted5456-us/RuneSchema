@@ -95,6 +95,37 @@ per-world building registry records remain under
 `Saved/RuneSchema/<WorldGuid>/CustomBuildingData.json`. On first launch, an
 older ledger under `RuneSchema/settings` is staged, verified, and migrated.
 
+On Game Pass, RuneSchema never treats Xbox Game Save (`SystemAppData/wgs`) as
+a loose JSON directory. Retired owned items and recipes are scrubbed only from
+the provider-hydrated live player state. The prior ownership ledger is retained
+until read-back verification succeeds, so a crash or missed provider event is
+retried on the next launch. Categories without a verified WinGDK live cleanup
+adapter fail closed and also retain the prior ledger. Steam/GOG keeps its
+separate backup-first character JSON route.
+
+Journal/lore and recipe loaders are enabled independently from save
+persistence. The default settings are:
+
+```jsonc
+"persistence": {
+  "characterCustomization": false,
+  "journal": false,
+  "recipes": false
+}
+```
+
+With recipe persistence off, recipes are added only to the game's transient
+unlock set and remain usable for the current session. With journal persistence
+off, RuneSchema still creates, registers, and places journal/lore assets but
+does not call the game's save-backed player unlock function. Enable a setting
+only when those unlocks should become permanent. These controls do not change
+the corresponding entries under `loaders`.
+
+With `characterCustomization` off, `/assets`, `/raw`, and character-option
+table extensions still load, but automatic appearance assignments authored in
+`/players` do not rewrite `CustomizationSaveData`. A player explicitly saving
+a selection through the vanilla character editor remains a native game action.
+
 ## Create a mod
 
 1. Create `RuneSchema/mods/MyMod`.

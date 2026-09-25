@@ -62,6 +62,9 @@ int main(int argc, char** argv)
     Check(registrar.find("Xbox WGS save detected") != std::string::npos
         && registrar.find("GamePassNative") != std::string::npos,
         "Game Pass cleanup uses the in-game provider path instead of direct JSON writes");
+    Check(registrar.find("OwnedContent::CommitSnapshot(m_pendingProviderSnapshot)") != std::string::npos
+        && registrar.find("[SAVE-CLEANER][PROVIDER][PENDING]") != std::string::npos,
+        "Game Pass retains its previous ledger until provider cleanup is verified");
     Check(saveViewer.find("Character-save file browsing is unavailable for Xbox WGS storage") != std::string::npos,
         "the file viewer does not mistake Steam saves for Game Pass saves");
     std::cout << "Mutable state storage contract passed.\n";

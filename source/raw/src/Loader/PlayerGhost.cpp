@@ -90,7 +90,6 @@ Hook::GlobalCallbackId previewBeginPlayCallback=Hook::ERROR_ID;
 Hook::GlobalCallbackId previewTickCallback=Hook::ERROR_ID;
 PS::WeakObjectHandle previewActor;
 bool previewHookWarning{};
-bool previewBootstrapComplete{};
 
 PreviewSlot InferPreviewSlot(std::string_view hint) {
     std::string path(hint);
@@ -146,7 +145,6 @@ void ReleasePreviewLifecycle() {
     previewBeginPlayCallback=Hook::ERROR_ID;
     previewTickCallback=Hook::ERROR_ID;
     previewActor.Reset();
-    previewBootstrapComplete=false;
 }
 
 bool IsMenuPreview(UObject* actor) {
@@ -164,12 +162,10 @@ void EnsurePreviewLifecycle() {
         options.HookName=TEXT("EquipmentVisualPreviewBeginPlay");
         previewBeginPlayCallback=Hook::RegisterBeginPlayPostCallback(
             [](Hook::TCallbackIterationData<void>&,AActor* actor) {
-                if(AppearanceEvents::Unavailable())return;
                 try {
                     if(!IsMenuPreview(actor))return;
                     previewActor=PS::WeakObject(actor);
                     TrackPreview(actor);
-                    previewBootstrapComplete=true;
                 } catch(const std::exception& error) {
                     PS::Log<LogLevel::Warning>(TEXT("Character preview begin-play refresh skipped: {}\n"),
                         PS::ToWideSafe(error.what()));
@@ -181,9 +177,12 @@ void EnsurePreviewLifecycle() {
         previewTickCallback=Hook::RegisterEngineTickPostCallback(
             [](Hook::TCallbackIterationData<void>&,UEngine*,float,bool) {
                 static unsigned cadence{};
-                if(AppearanceEvents::Unavailable())return;
-                if(previewBootstrapComplete)return;
-                if(++cadence%4!=0)return;
+                // WinGDK currently exposes the verified wearable return but
+                // not every Steam-only appearance callback. Keep a bounded,
+                // menu-only refresh alive after discovery so later preview
+                // equipment changes cannot be missed. This callback exists
+                // only while an item preview effect is registered.
+                if(++cadence%15!=0)return;
                 try {
                 auto* preview=previewActor.Get();
                 if(!preview)preview=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,
@@ -191,7 +190,6 @@ void EnsurePreviewLifecycle() {
                 if(preview) {
                     previewActor=PS::WeakObject(preview);
                     TrackPreview(preview);
-                    previewBootstrapComplete=true;
                 }
                 } catch(const std::exception& error) {
                         if(AppearanceEvents::Unavailable() && previewHookWarning)return;
@@ -398,7 +396,16 @@ void TrackPreview(UObject* preview) {
         std::erase_if(states,[](auto& state){return !state->player.Get();});
         if(states.size()>=16)throw std::runtime_error("Player ghost limit reached");
         auto state=std::make_unique<State>();state->player=PS::WeakObject(preview);state->preview=true;
-        AppearanceEvents::Subscribe(AppearanceEvents::Consumer::Ghost,Dirty);
+        try {
+            AppearanceEvents::Subscribe(AppearanceEvents::Consumer::Ghost,Dirty);
+        }
+        catch (const std::exception& error) {
+            if (!previewHookWarning) {
+                previewHookWarning=true;
+                PS::Log<LogLevel::Warning>(TEXT("Character preview native refresh unavailable; using the bounded menu fallback: {}\n"),
+                    PS::ToWideSafe(error.what()));
+            }
+        }
         try {
             Refresh(*state);
             PS::Log<LogLevel::Verbose>(TEXT("Character preview visuals: {} ({} affected meshes).\n"),

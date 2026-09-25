@@ -266,7 +266,21 @@ namespace DragonWilds {
             const auto retired=OwnedContent::CompareSnapshot(path);
             if(!CleanRetiredCharacterSaves(retired))
                 throw std::runtime_error("one or more character saves could not be cleaned; the previous identity snapshot was retained for retry");
-            OwnedContent::CommitSnapshot(path);
+            const bool providerCleanup = PS::Storefront::CurrentNativeLane()
+                == PS::Storefront::NativeLane::GamePassNative && !retired.empty();
+            if (providerCleanup)
+            {
+                m_pendingProviderSnapshot = path;
+                for (const auto& record : retired)
+                    if (record.Kind != "Item" && record.Kind != "Recipe")
+                        m_pendingProviderUnsupportedKinds.insert(record.Kind);
+                PS::Log<LogLevel::Normal>(
+                    STR("[SAVE-CLEANER][PROVIDER][PENDING] Retaining the previous Game Pass identity snapshot until provider-backed cleanup is read-back verified.\n"));
+            }
+            else
+            {
+                OwnedContent::CommitSnapshot(path);
+            }
             for (const auto& record : retired)
             {
                 if(record.Kind!="Item" && record.Kind!="Recipe" && record.Kind!="Quest")continue;
@@ -311,9 +325,27 @@ namespace DragonWilds {
 
     void DragonWildsDataRegistrar::ScrubRetiredContent(UObject* controller)
     {
-        if (!controller || m_retiredContent.empty()) return;
+        if (!controller || (m_retiredContent.empty() && m_pendingProviderSnapshot.empty())) return;
         try
         {
+            if (!m_pendingProviderSnapshot.empty()
+                && !m_pendingProviderUnsupportedKinds.empty())
+            {
+                if (!m_providerBlockReported)
+                {
+                    m_providerBlockReported = true;
+                    std::string kinds;
+                    for (const auto& kind : m_pendingProviderUnsupportedKinds)
+                    {
+                        if (!kinds.empty()) kinds += ", ";
+                        kinds += kind;
+                    }
+                    PS::Log<LogLevel::Error>(
+                        STR("[SAVE-CLEANER][PROVIDER][RETRY] Game Pass cleanup has no verified live adapter for retired kind(s): {}. The previous ledger is retained and no provider cleanup was attempted.\n"),
+                        PS::ToWideSafe(kinds.c_str()));
+                }
+                return;
+            }
             const bool hasItems=std::any_of(m_retiredContent.begin(),m_retiredContent.end(),[](const auto& value){return value.Kind=="Item";});
             auto* inventoryProperty = hasItems ? CastField<FObjectPropertyBase>(
                 PropertyHelper::GetPropertyByName(controller->GetClassPrivate(), TEXT("InventoryComponent"))) : nullptr;
@@ -372,6 +404,17 @@ namespace DragonWilds {
                     removedKinds, removedCount);
             if(removedRecipes)
                 PS::Log<LogLevel::Normal>(STR("[SAVE-CLEANER][OWNED-ONLY] Removed {} retired recipe unlock identity(s); the next native save persists the clean progress state.\n"),removedRecipes);
+            if (!m_pendingProviderSnapshot.empty())
+            {
+                // All owned item counts and recipe sets above were read back
+                // as absent. Only now may WinGDK replace its previous identity
+                // snapshot; a crash or missed provider event will retry on the
+                // next launch instead of forgetting the cleanup obligation.
+                OwnedContent::CommitSnapshot(m_pendingProviderSnapshot);
+                m_pendingProviderSnapshot.clear();
+                PS::Log<LogLevel::Normal>(
+                    STR("[SAVE-CLEANER][PROVIDER][VERIFIED] Game Pass live cleanup was verified; the ownership snapshot is now committed.\n"));
+            }
         }
         catch (const std::exception& error)
         {

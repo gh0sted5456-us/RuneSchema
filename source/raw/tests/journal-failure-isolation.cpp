@@ -35,7 +35,8 @@ int main(int argc, char** argv) {
     require(source.find("ensureInArray") == std::string::npos);
     require(source.find("m_knownIds") == std::string::npos);
     require(source.find("InstallNativePersistence();") != std::string::npos);
-    require(source.find("if (!m_ownedIds.empty())") != std::string::npos);
+    require(source.find("persistence.journal && !m_ownedIds.empty()") != std::string::npos);
+    require(source.find("if (!PS::PSConfig::Get()->GetSettings().persistence.journal)") != std::string::npos);
     require(source.find("[FEATURE:journal-save-cleanup][UNAVAILABLE]") != std::string::npos);
     const auto persistence = source.find("InstallNativePersistence();", apply);
     const auto hooks = source.find("RegisterHooks();", persistence);

@@ -21,4 +21,13 @@ int main(int argc,char** argv){
     need(registrar.find("OWNED-ONLY")!=registrar.npos,"owned-only operator tag missing");
     need(registrar.find("RecipesUnlocked")!=registrar.npos && registrar.find("FScriptSetHelper")!=registrar.npos,"retired recipe unlock cleanup is missing");
     need(registrar.find("IsActiveDeclarationPath")!=registrar.npos,"active cooked declarations are not admitted to native registration");
+    const auto compare=registrar.find("OwnedContent::CompareSnapshot(path)");
+    const auto pending=registrar.find("m_pendingProviderSnapshot = path",compare);
+    const auto providerCommit=registrar.find("OwnedContent::CommitSnapshot(m_pendingProviderSnapshot)",pending);
+    need(compare< pending && pending<providerCommit,
+        "Game Pass ledger is committed before provider-backed cleanup verification");
+    need(registrar.find("[SAVE-CLEANER][PROVIDER][VERIFIED]")!=registrar.npos,
+        "verified Game Pass provider cleanup has no explicit completion state");
+    need(registrar.find("m_pendingProviderUnsupportedKinds")!=registrar.npos,
+        "unsupported Game Pass save categories do not fail closed");
 }

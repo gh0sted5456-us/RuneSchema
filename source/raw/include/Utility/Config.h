@@ -66,6 +66,19 @@ namespace PS {
         std::string compatibilityNotices = "quiet";
     };
 
+    struct PersistenceSettings {
+        // Automatic /players appearance assignments stay read-only while
+        // false. Character option/table loaders remain active.
+        bool characterCustomization = false;
+        // Journal/lore has no native transient unlock collection. When this
+        // is false the loader still registers and places content, but skips
+        // the player unlock call that would write it into the save.
+        bool journal = false;
+        // Recipes use the game's explicit non-persistent unlock collection
+        // while this is false, so they remain usable for the current session.
+        bool recipes = false;
+    };
+
     struct HelpyAuthoritySettings {
         // Client Helpy requests are always server-executed and independently
         // validated. Permanent authoring/export operations are never accepted.
@@ -97,6 +110,7 @@ namespace PS {
         NpcDiagnosticSettings npcDiagnostics{};
         DiagnosticJobSettings diagnosticJobs{};
         PluginSettings plugins{};
+        PersistenceSettings persistence{};
         HelpyAuthoritySettings helpyAuthority{};
     };
 

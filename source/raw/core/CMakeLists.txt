@@ -137,6 +137,15 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsAssetModLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsBlueprintModLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp")
+    add_executable(persistence-mode-contract ../tests/persistence-mode-contract.cpp)
+    add_test(NAME persistence-mode-contract COMMAND persistence-mode-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Utility/Config.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsJournalModLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRecipeModLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/Spawn/PlayerRules.cpp")
+    add_executable(preview-refresh-contract ../tests/preview-refresh-contract.cpp)
+    add_test(NAME preview-refresh-contract COMMAND preview-refresh-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/PlayerGhost.cpp")
     add_executable(journal-save-ownership ../tests/journal-save-ownership.cpp)
     target_link_libraries(journal-save-ownership PRIVATE RuneSchemaJsonCore)
     add_test(NAME journal-save-ownership COMMAND journal-save-ownership)
