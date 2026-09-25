@@ -27,6 +27,10 @@ vendor IDs. `HideWeapon` can suppress inherited weapon presentation. Prefer
 `/buildings` or `/spawns` for static architecture rather than using an NPC as a
 prop.
 
+## Working examples
+
+- [Great Tree: resource-style world actor](../examples/GreatTree/npc/85-GreatTree.json)
+
 ---
 
 [← All loaders](../LOADER-WALKTHROUGHS.md) · [Authoring guide](../AUTHORING-GUIDE.md)

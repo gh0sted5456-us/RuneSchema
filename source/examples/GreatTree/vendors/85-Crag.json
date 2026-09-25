@@ -1,0 +1,68 @@
+{
+  "Id": "crag_treasury",
+  "MerchantName": "Crag's Sacred Treasury",
+  "CategoryRules": [
+    {
+      "Category": "Moonlit Treasures",
+      "TimeOfDay": "Night"
+    }
+  ],
+  "Items": [
+    {
+      "Item": "/Game/Gameplay/Character/Player/Equipment/Held/Pickaxe/ITEM_Pickaxe_Steel.ITEM_Pickaxe_Steel",
+      "Currency": "/Game/RuneSchema/RuneSchema2VendorTest/Items/rs_sacred_leaf.rs_sacred_leaf",
+      "Price": 99,
+      "Count": 1,
+      "Category": "Sacred Tools"
+    },
+    {
+      "Item": "/Game/Gameplay/Character/Player/Equipment/Held/GreatAxe/ITEM_GreatAxe_Steel.ITEM_GreatAxe_Steel",
+      "Currency": "/Game/RuneSchema/RuneSchema2VendorTest/Items/rs_sacred_leaf.rs_sacred_leaf",
+      "Price": 199,
+      "Count": 1,
+      "Category": "Sacred Arms"
+    },
+    {
+      "Item": "/Game/Gameplay/Character/Player/Equipment/Held/GreatSword/ITEM_GreatSword_Steel.ITEM_GreatSword_Steel",
+      "Currency": "/Game/RuneSchema/RuneSchema2VendorTest/Items/rs_sacred_leaf.rs_sacred_leaf",
+      "Price": 249,
+      "Count": 1,
+      "Category": "Sacred Arms"
+    },
+    {
+      "Item": "/Game/Gameplay/Character/Player/Equipment/Body/ITEM_Armour_T5_Body_Steel.ITEM_Armour_T5_Body_Steel",
+      "Currency": "/Game/RuneSchema/RuneSchema2VendorTest/Items/rs_sacred_leaf.rs_sacred_leaf",
+      "Price": 299,
+      "Count": 1,
+      "Category": "Sacred Armour"
+    },
+    {
+      "Item": "/Game/Gameplay/Character/Player/Equipment/Legs/ITEM_Armour_T5_Legs_Steel.ITEM_Armour_T5_Legs_Steel",
+      "Currency": "/Game/RuneSchema/RuneSchema2VendorTest/Items/rs_sacred_leaf.rs_sacred_leaf",
+      "Price": 199,
+      "Count": 1,
+      "Category": "Sacred Armour"
+    },
+    {
+      "Item": "/UmbralSands/Gameplay/Character/Player/Equipment/Held/GreatSword/ITEM_GreatSword_Adamant.ITEM_GreatSword_Adamant",
+      "Currency": "/Game/RuneSchema/RuneSchema2VendorTest/Items/rs_sacred_leaf.rs_sacred_leaf",
+      "Price": 499,
+      "Count": 1,
+      "Category": "Moonlit Treasures"
+    },
+    {
+      "Item": "/UmbralSands/Gameplay/Character/Player/Equipment/Body/ITEM_Armour_T7_Body_Adamant.ITEM_Armour_T7_Body_Adamant",
+      "Currency": "/Game/RuneSchema/RuneSchema2VendorTest/Items/rs_sacred_leaf.rs_sacred_leaf",
+      "Price": 599,
+      "Count": 1,
+      "Category": "Moonlit Treasures"
+    },
+    {
+      "Item": "/UmbralSands/Gameplay/Character/Player/Equipment/Held/Pickaxe/ITEM_Pickaxe_Adamant.ITEM_Pickaxe_Adamant",
+      "Currency": "/Game/RuneSchema/RuneSchema2VendorTest/Items/rs_sacred_leaf.rs_sacred_leaf",
+      "Price": 399,
+      "Count": 1,
+      "Category": "Moonlit Treasures"
+    }
+  ]
+}

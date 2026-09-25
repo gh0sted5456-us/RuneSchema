@@ -28,6 +28,10 @@ Bind the store with an NPC `VendorID`, a dialogue vendor action, or a recipe
 contribution. Ordering is within each category. Confirm purchase authority,
 stock refresh, reconnect, and save/reload.
 
+## Working examples
+
+- [Great Tree: Crag's treasury with a night-only category](../examples/GreatTree/vendors/85-Crag.json)
+
 ---
 
 [← All loaders](../LOADER-WALKTHROUGHS.md) · [Authoring guide](../AUTHORING-GUIDE.md)

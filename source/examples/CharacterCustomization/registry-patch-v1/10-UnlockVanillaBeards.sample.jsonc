@@ -1,0 +1,39 @@
+// Abridged from MoreHair's 10-UnlockVanillaBeards.json.
+// The original repeats the same transaction for the remaining beard rows.
+{
+  "$schema": "https://runeschema.dev/schemas/registry-patch-v1.schema.json",
+  "schema": "runeschema.registry-patch/v1",
+  "modId": "MoreHair",
+  "profile": "dragonwilds.characterCustomization.v1",
+  "priority": 0,
+  "patches": [
+    {
+      "id": "unlock-beard-f-a-presetnone",
+      "transaction": "unlock-vanilla-beards",
+      "target": {
+        "kind": "classDefaultObject",
+        "objectPath": "/Game/UI/MainMenu/CharacterCreate/Data/DA_CharacterOptionData.DA_CharacterOptionData_C"
+      },
+      "operation": "merge",
+      "property": "CharacterOptions[FacialHairPreset].OptionData{DataHandle.RowName=F_A_PresetNone}",
+      "value": {
+        "BodyTypeCompatability": "both",
+        "FaceTypeCompatibility": -1
+      }
+    },
+    {
+      "id": "unlock-beard-f-a-preset1",
+      "transaction": "unlock-vanilla-beards",
+      "target": {
+        "kind": "classDefaultObject",
+        "objectPath": "/Game/UI/MainMenu/CharacterCreate/Data/DA_CharacterOptionData.DA_CharacterOptionData_C"
+      },
+      "operation": "merge",
+      "property": "CharacterOptions[FacialHairPreset].OptionData{DataHandle.RowName=F_A_Preset1}",
+      "value": {
+        "BodyTypeCompatability": "both",
+        "FaceTypeCompatibility": -1
+      }
+    }
+  ]
+}

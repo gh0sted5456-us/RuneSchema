@@ -38,6 +38,10 @@ Walkthrough:
 5. Test the acceptance toast, progress, reconnect, reload, turn-in, repeat, and
    removal behavior.
 
+## Working examples
+
+- [Great Tree: multi-stage story quest](../examples/GreatTree/quests/87-GreatTreeStory.json)
+
 ---
 
 [← All loaders](../LOADER-WALKTHROUGHS.md) · [Authoring guide](../AUTHORING-GUIDE.md)

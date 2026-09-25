@@ -1,0 +1,63 @@
+{
+  "DT_EnemyLootDropTable": {
+    "RS_GreatTree_StoryBoss": {
+      "TablesByPowerLevel": [
+        {
+          "MinimumPowerLevel": 0,
+          "TableHandles": [
+            {
+              "DataTable": "/Game/Gameplay/Items/LootDropTables/DT_LootDropTable.DT_LootDropTable",
+              "RowName": "RS_GreatTree_StoryBoss"
+            }
+          ]
+        }
+      ]
+    },
+    "RS_GreatTree_DefenseBoss": {
+      "TablesByPowerLevel": [
+        {
+          "MinimumPowerLevel": 0,
+          "TableHandles": [
+            {
+              "DataTable": "/Game/Gameplay/Items/LootDropTables/DT_LootDropTable.DT_LootDropTable",
+              "RowName": "RS_GreatTree_DefenseBoss"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "DT_LootDropTable": {
+    "RS_GreatTree_StoryBoss": {
+      "Conditions": [],
+      "DropChance": 100,
+      "Resources": [
+        {
+          "SpawnedItemData": "/Game/RuneSchema/RuneSchema2VendorTest/Items/rs_sacred_leaf.rs_sacred_leaf",
+          "MinimumDropAmount": 45,
+          "MaximumDropAmount": 45,
+          "DropChance": 100,
+          "bOneInstancePerPlayerOnlyVisibleToThem": false,
+          "bAutoAddToInventory": false,
+          "bOnlyForPlayersThatInflictedDamage": false
+        },
+        {
+          "SpawnedItemData": "/Game/RuneSchema/RuneSchema2VendorTest/Items/rs_little_stone.rs_little_stone",
+          "MinimumDropAmount": 1,
+          "MaximumDropAmount": 1,
+          "DropChance": 100,
+          "bOneInstancePerPlayerOnlyVisibleToThem": false,
+          "bAutoAddToInventory": false,
+          "bOnlyForPlayersThatInflictedDamage": false
+        }
+      ],
+      "Recipes": []
+    },
+    "RS_GreatTree_DefenseBoss": {
+      "Conditions": [],
+      "DropChance": 0,
+      "Resources": [],
+      "Recipes": []
+    }
+  }
+}

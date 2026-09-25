@@ -74,6 +74,10 @@ current form, the target is written once, each field is written once, and only
 the values that differ remain. Legacy envelope documents are still translated
 internally so installed mods are not forced to migrate immediately.
 
+## Working examples
+
+- [Great Tree: Sacred Leaf and quest items](../examples/GreatTree/assets/85-GreatTreeItems.json)
+
 ---
 
 [← All loaders](../LOADER-WALKTHROUGHS.md) · [Authoring guide](../AUTHORING-GUIDE.md)

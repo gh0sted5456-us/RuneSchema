@@ -27,6 +27,10 @@ both. `AdditionalDrops` supports an item, minimum, maximum, and chance. A
 quest-completed condition can latch with `PersistAfterCondition`. `EventOnly`
 templates are definitions for `/events` and do not place permanent actors.
 
+## Working examples
+
+- [Great Tree: event-only goblin templates](../examples/GreatTree/spawns/87-GreatTree-TribeTrial.json)
+
 ---
 
 [← All loaders](../LOADER-WALKTHROUGHS.md) · [Authoring guide](../AUTHORING-GUIDE.md)

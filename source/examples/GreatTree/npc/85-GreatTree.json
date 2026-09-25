@@ -1,0 +1,30 @@
+{
+  "Id": "great_tree",
+  "Type": "Resource",
+  "Multiplayer": true,
+  "DisplayName": "The Great Tree",
+  "Mesh": "/Game/Art/Env/Landscape/Foliage/Trees/Maple/SM_MapleTree_01.SM_MapleTree_01",
+  "Scale": 15,
+  "Location": [
+    15804.021219909444,
+    183460.70981055885,
+    -3266.6912307033563
+  ],
+  "Rotation": {
+    "Pitch": 0,
+    "Roll": 0,
+    "Yaw": 0
+  },
+  "EnableCollision": true,
+  "MeshCollision": "Pawn",
+  "LoreID": "great_tree_lore",
+  "Map": {
+    "Enabled": true,
+    "ShowName": true
+  },
+  "OverheadIcon": {
+    "Enabled": true,
+    "Height": 180,
+    "Distance": 6000
+  }
+}

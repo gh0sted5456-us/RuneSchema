@@ -1,0 +1,220 @@
+[
+  {
+    "Id": "great_tree_tribe_trial",
+    "TimeoutSeconds": 900,
+    "Scope": "Participant",
+    "Area": {
+      "Location": [
+        42250,
+        174375,
+        -3266
+      ],
+      "RadiusMeters": 85,
+      "Visibility": "Auto"
+    },
+    "Messages": {
+      "Started": "Grumble's tribe answers the challenge.",
+      "WaveStarted": "Wave {wave} of {waves}: stronger goblins approach.",
+      "BossStarted": "The brute arrives. Stand your ground!",
+      "Completed": "The tribe is defeated. Loot the Little Stone and return to Grumble.",
+      "Failed": "The attack overwhelmed you. Speak to the quest giver to retry.",
+      "Cancelled": "The encounter was cancelled."
+    },
+    "Waves": [
+      [
+        {
+          "SpawnID": "great_tree_tribe_trial_1_melee",
+          "Location": [
+            43550,
+            174375,
+            "$+150"
+          ]
+        },
+        {
+          "SpawnID": "great_tree_tribe_trial_1_melee",
+          "Location": [
+            41600,
+            175501,
+            "$+150"
+          ]
+        },
+        {
+          "SpawnID": "great_tree_tribe_trial_1_melee",
+          "Location": [
+            41600,
+            173249,
+            "$+150"
+          ]
+        }
+      ],
+      [
+        {
+          "SpawnID": "great_tree_tribe_trial_2_melee",
+          "Location": [
+            43550,
+            174375,
+            "$+150"
+          ]
+        },
+        {
+          "SpawnID": "great_tree_tribe_trial_2_melee",
+          "Location": [
+            42652,
+            175611,
+            "$+150"
+          ]
+        },
+        {
+          "SpawnID": "great_tree_tribe_trial_2_melee",
+          "Location": [
+            41198,
+            175139,
+            "$+150"
+          ]
+        },
+        {
+          "SpawnID": "great_tree_tribe_trial_2_ranged",
+          "Location": [
+            41198,
+            173611,
+            "$+150"
+          ]
+        },
+        {
+          "SpawnID": "great_tree_tribe_trial_2_ranged",
+          "Location": [
+            42652,
+            173139,
+            "$+150"
+          ]
+        }
+      ],
+      [
+        {
+          "SpawnID": "great_tree_tribe_trial_3_melee",
+          "Location": [
+            43550,
+            174375,
+            "$+150"
+          ]
+        },
+        {
+          "SpawnID": "great_tree_tribe_trial_3_melee",
+          "Location": [
+            42900,
+            175501,
+            "$+150"
+          ]
+        },
+        {
+          "SpawnID": "great_tree_tribe_trial_3_ranged",
+          "Location": [
+            41600,
+            175501,
+            "$+150"
+          ]
+        },
+        {
+          "SpawnID": "great_tree_tribe_trial_3_ranged",
+          "Location": [
+            40950,
+            174375,
+            "$+150"
+          ]
+        },
+        {
+          "SpawnID": "great_tree_tribe_trial_3_shield",
+          "Location": [
+            41600,
+            173249,
+            "$+150"
+          ]
+        },
+        {
+          "SpawnID": "great_tree_tribe_trial_3_shield",
+          "Location": [
+            42900,
+            173249,
+            "$+150"
+          ]
+        }
+      ],
+      [
+        {
+          "SpawnID": "great_tree_tribe_trial_4_melee",
+          "Location": [
+            43550,
+            174375,
+            "$+150"
+          ]
+        },
+        {
+          "SpawnID": "great_tree_tribe_trial_4_melee",
+          "Location": [
+            43169,
+            175294,
+            "$+150"
+          ]
+        },
+        {
+          "SpawnID": "great_tree_tribe_trial_4_melee",
+          "Location": [
+            42250,
+            175675,
+            "$+150"
+          ]
+        },
+        {
+          "SpawnID": "great_tree_tribe_trial_4_ranged",
+          "Location": [
+            41331,
+            175294,
+            "$+150"
+          ]
+        },
+        {
+          "SpawnID": "great_tree_tribe_trial_4_ranged",
+          "Location": [
+            40950,
+            174375,
+            "$+150"
+          ]
+        },
+        {
+          "SpawnID": "great_tree_tribe_trial_4_ranged",
+          "Location": [
+            41331,
+            173456,
+            "$+150"
+          ]
+        },
+        {
+          "SpawnID": "great_tree_tribe_trial_4_shield",
+          "Location": [
+            42250,
+            173075,
+            "$+150"
+          ]
+        },
+        {
+          "SpawnID": "great_tree_tribe_trial_4_shield",
+          "Location": [
+            43169,
+            173456,
+            "$+150"
+          ]
+        }
+      ],
+      [
+        {
+          "SpawnID": "great_tree_tribe_trial_5_shield",
+          "Location": [
+            43550,
+            174375,
+            "$+150"
+          ]
+        }
+      ]
+    ]
+  }
+]

@@ -1,0 +1,94 @@
+[
+  {
+    "Id": "great_tree_tribe_trial_1_melee",
+    "Type": "AISpawnPoint",
+    "EventOnly": true,
+    "AIClass": "/Game/Gameplay/AI/GoblinFaction/MeleeGoblin/BP_AI_MeleeGoblin_Character.BP_AI_MeleeGoblin_Character_C",
+    "DisplayName": "Treebreaker Melee",
+    "PowerLevel": 2,
+    "Scale": 1
+  },
+  {
+    "Id": "great_tree_tribe_trial_2_melee",
+    "Type": "AISpawnPoint",
+    "EventOnly": true,
+    "AIClass": "/Game/Gameplay/AI/GoblinFaction/MeleeGoblin/BP_AI_MeleeGoblin_Character.BP_AI_MeleeGoblin_Character_C",
+    "DisplayName": "Treebreaker Melee",
+    "PowerLevel": 3,
+    "Scale": 1
+  },
+  {
+    "Id": "great_tree_tribe_trial_2_ranged",
+    "Type": "AISpawnPoint",
+    "EventOnly": true,
+    "AIClass": "/Game/Gameplay/AI/GoblinFaction/RangedGoblin/BP_AI_RangedGoblin_Character.BP_AI_RangedGoblin_Character_C",
+    "DisplayName": "Treebreaker Ranged",
+    "PowerLevel": 3,
+    "Scale": 1
+  },
+  {
+    "Id": "great_tree_tribe_trial_3_melee",
+    "Type": "AISpawnPoint",
+    "EventOnly": true,
+    "AIClass": "/Game/Gameplay/AI/GoblinFaction/MeleeGoblin/BP_AI_MeleeGoblin_Character.BP_AI_MeleeGoblin_Character_C",
+    "DisplayName": "Treebreaker Melee",
+    "PowerLevel": 4,
+    "Scale": 1
+  },
+  {
+    "Id": "great_tree_tribe_trial_3_ranged",
+    "Type": "AISpawnPoint",
+    "EventOnly": true,
+    "AIClass": "/Game/Gameplay/AI/GoblinFaction/RangedGoblin/BP_AI_RangedGoblin_Character.BP_AI_RangedGoblin_Character_C",
+    "DisplayName": "Treebreaker Ranged",
+    "PowerLevel": 4,
+    "Scale": 1
+  },
+  {
+    "Id": "great_tree_tribe_trial_3_shield",
+    "Type": "AISpawnPoint",
+    "EventOnly": true,
+    "AIClass": "/Game/Gameplay/AI/GoblinFaction/ShieldGoblin/BP_AI_ShieldGoblin_Character.BP_AI_ShieldGoblin_Character_C",
+    "DisplayName": "Treebreaker Shield",
+    "PowerLevel": 4,
+    "Scale": 1
+  },
+  {
+    "Id": "great_tree_tribe_trial_4_melee",
+    "Type": "AISpawnPoint",
+    "EventOnly": true,
+    "AIClass": "/Game/Gameplay/AI/GoblinFaction/MeleeGoblin/BP_AI_MeleeGoblin_Character.BP_AI_MeleeGoblin_Character_C",
+    "DisplayName": "Treebreaker Melee",
+    "PowerLevel": 5,
+    "Scale": 1
+  },
+  {
+    "Id": "great_tree_tribe_trial_4_ranged",
+    "Type": "AISpawnPoint",
+    "EventOnly": true,
+    "AIClass": "/Game/Gameplay/AI/GoblinFaction/RangedGoblin/BP_AI_RangedGoblin_Character.BP_AI_RangedGoblin_Character_C",
+    "DisplayName": "Treebreaker Ranged",
+    "PowerLevel": 5,
+    "Scale": 1
+  },
+  {
+    "Id": "great_tree_tribe_trial_4_shield",
+    "Type": "AISpawnPoint",
+    "EventOnly": true,
+    "AIClass": "/Game/Gameplay/AI/GoblinFaction/ShieldGoblin/BP_AI_ShieldGoblin_Character.BP_AI_ShieldGoblin_Character_C",
+    "DisplayName": "Treebreaker Shield",
+    "PowerLevel": 5,
+    "Scale": 1
+  },
+  {
+    "Id": "great_tree_tribe_trial_5_shield",
+    "Type": "AISpawnPoint",
+    "EventOnly": true,
+    "AIClass": "/Game/Gameplay/AI/GoblinFaction/ShieldGoblin/BP_AI_ShieldGoblin_Character.BP_AI_ShieldGoblin_Character_C",
+    "DisplayName": "Moggruk, the Stone-Fisted",
+    "PowerLevel": 6,
+    "Scale": 2.5,
+    "BossName": "Moggruk, the Stone-Fisted",
+    "LootRow": "RS_GreatTree_StoryBoss"
+  }
+]

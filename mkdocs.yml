@@ -124,15 +124,15 @@ nav:
       - Overview: unreal-runeschema/index.md
       - Stations, Quests & Recipes: unreal-runeschema/stations-quests-recipes.md
   - Compatibility:
-      - Compatibility Backbone: COMPATIBILITY-BACKBONE.md
+      - Compatibility: COMPATIBILITY-BACKBONE.md
       - Game Pass Save System: GAMEPASS-SAVE-SYSTEM.md
-      - Native Hook Parity: NATIVE-HOOK-PARITY.md
+      - Native Hook Support: NATIVE-HOOK-PARITY.md
   - Developer Reference:
       - Plugin API: API-REFERENCE.md
       - JSON Schemas: SCHEMAS.md
   - Internals:
-      - Baseline Subsystem Audit: BASELINE-SUBSYSTEM-AUDIT.md
-      - Helpy Renderer Audit: HELpy-REDESIGN-AUDIT.md
+      - Subsystem Baseline: BASELINE-SUBSYSTEM-AUDIT.md
+      - Helpy Rendering & Cache: HELpy-REDESIGN-AUDIT.md
       - Base Builder Import: raw/BASE-BUILDER-IMPORT.md
       - Documentation Index: DOCUMENTATION-INDEX.md
   - Releases:

@@ -1,0 +1,11 @@
+{
+  "DT_WearableEquipment": {
+    "Cape_Attack": {
+      "Defense": 10,
+      "MeleeResistance": 13,
+      "RangedResistance": 6,
+      "MagicResistance": 4,
+      "MaxVitalShield": 0
+    }
+  }
+}
