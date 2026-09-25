@@ -26,9 +26,9 @@ loaders, other entries in the same mod, and plug-ins continue loading.
 | Object enumeration | Verified native `TArray` routine | UE4SS hash tables/object array; native callback iterator rejected | Yes |
 | Shadowveil equipment actions | Five verified sites | Five verified sites at `0x6E48153`, `0x6E48171`, `0x6E48224`, `0x6E48192`, `0x6E481BA` | Only Shadowveil binding is inactive |
 | Surge equipment behavior | Eight verified sites | Incomplete trace; deliberately inactive | Ordinary equipment effects still load |
-| Journal/lore registration | Reflected registry and event hooks | Same reflected registry and event hooks | Entries remain active |
+| Journal/lore registration | Reflected registry plus validated Steam hierarchy routines | Reflected registry plus five isolated WinGDK hierarchy/category routines | The affected hierarchy placement is skipped; entries and unrelated loaders continue |
 | Journal native JSON save cleanup | Verified Steam adapter | Reader/writer pair traced, helper ABI incomplete; deliberately inactive | Journal content and unlock delivery continue |
-| Appearance event bridge | Full signature contract required | Full signature contract required | Consumer reports unavailable; other systems continue |
+| Appearance event bridge | Full five-site signature contract | Verified WinGDK wearable-mesh event; unverified WinGDK sites remain inactive | Consumer reports unavailable; other systems continue |
 | Merchant stock refresh | Reflected hooks first; native cache optional | Reflected hooks first; native cache optional | Scheduled replicated-state refresh |
 | Quest, dialogue, event, time-of-day and spawn hooks | Reflected `UFunction`/RuneSchema API | Same | Feature-scoped warning |
 
@@ -38,6 +38,19 @@ The audited WinGDK image is version `100.4.0.0`, timestamp `0x9924253F`, image
 size `0x0DB11000`. Journal writer and reader were traced at RVAs `0x6EA3590`
 and `0x6EA3800`. They are recorded as evidence only; RuneSchema does not invoke
 the native save adapter until every JSON helper and ownership rule is verified.
+
+The same image has separately validated journal hierarchy/category entry points:
+
+- hierarchy insert: `0x76C86F0`;
+- category 1: `0x713DD80`;
+- category 2: `0x713DDF0`;
+- category 3: `0x713DE60`;
+- hierarchy builder/layout witness: `0x6EA5DA0`.
+
+RuneSchema treats the three category routines as separate one-argument WinGDK
+entry points. Steam retains its single category dispatcher. All five WinGDK
+patterns must resolve uniquely inside executable memory before hierarchy
+placement is enabled; no WinGDK address is considered by the Steam/GOG lane.
 
 ## Update policy
 

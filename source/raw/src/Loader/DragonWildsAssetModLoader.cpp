@@ -1516,6 +1516,9 @@ namespace DragonWilds {
 
         UObject* itemSubsystem = nullptr;
         bool subsystemSearched = false;
+        constexpr size_t detailLimit = 8;
+        size_t detailLines = 0;
+        size_t omittedDetails = 0;
         PS::ConsumeQueue(m_pendingAssets, [&](PendingAsset& pending)
         {
             auto* it = &pending;
@@ -1577,6 +1580,14 @@ namespace DragonWilds {
             }
             if (isClone) PS::AssetProvenance::Record(object,it->Properties.at("$Clone").get<std::string>(),
                 RC::to_string(it->ModName),createdNow,registered,result.ErrorCount,it->Properties);
+            if (isClone && registered && result.ErrorCount == 0) {
+                if (detailLines < detailLimit) {
+                    PS::Log<LogLevel::Verbose>(STR("{}: {} clone '{}' as '{}'.\n"),
+                        it->ModName, createdNow ? STR("created") : STR("updated"),
+                        it->Target, object->GetPathName());
+                    ++detailLines;
+                } else ++omittedDetails;
+            }
 
             auto& batchResult = batchResults[it->ModName];
             if (isClone) {
@@ -1591,6 +1602,8 @@ namespace DragonWilds {
         });
 
         PS::AssetProvenance::Flush();
+        if (omittedDetails)
+            PS::Log<LogLevel::Verbose>(STR("Assets: {} additional successful clone detail(s) omitted.\n"), omittedDetails);
         for (auto& [modName, result] : batchResults)
         {
             if (result.Created || result.ClonesUpdated)
@@ -1758,25 +1771,14 @@ namespace DragonWilds {
             CPF_Transient | CPF_DuplicateTransient | CPF_NonPIEDuplicateTransient
             | CPF_InstancedReference | CPF_ContainsInstancedReference
             | CPF_Deprecated | CPF_EditorOnly;
-        std::size_t copied = 0;
-        RC::StringType inheritedUnlockFields;
         for (auto* property : TFieldRange<FProperty>(
                  source->GetClassPrivate(), EFieldIterationFlags::Default))
         {
             if (!property || property->HasAnyPropertyFlags(unsafeFlags)) continue;
             property->CopyCompleteValue_InContainer(created, source);
-            ++copied;
-            if (IsUnlockableAssetField(RC::to_string(property->GetName()))) {
-                if (!inheritedUnlockFields.empty()) inheritedUnlockFields += TEXT(", ");
-                inheritedUnlockFields += property->GetName();
-            }
         }
 
         ClearItemIdentity(created, created->GetClassPrivate());
-
-        if (!inheritedUnlockFields.empty())
-            PS::Log<LogLevel::Verbose>(STR("{}: clone inherited unlockable field(s): {}. Explicit asset fields can replace them.\n"),
-                pendingAsset.ModName, inheritedUnlockFields);
 
         // Existing mods keep their prior row-name policy. Live authored clones
         // opt in to inheriting the original row and never create a dangling row.
@@ -1794,9 +1796,6 @@ namespace DragonWilds {
         m_createdAssets.push_back(created);
         m_createdAssetsByTarget[pendingAsset.Target] = created;
         m_createdAssetsByTarget[runtimePath] = created;
-        PS::Log<LogLevel::Verbose>(
-            STR("{}: cloned baked item '{}' to new runtime item '{}' using {} reflected properties.\n"),
-            pendingAsset.ModName, source->GetPathName(), runtimePath, copied);
         return created;
     }
 

@@ -1,0 +1,12 @@
+#pragma once
+#include "Generator/AppearanceSignatures.h"
+namespace DragonWilds::JournalWinGDKContract {
+inline constexpr PS::AppearanceSignatures::Target CategoryTargets[]{{18,4,true}};
+inline constexpr PS::AppearanceSignatures::Signature Definitions[]{
+{"JournalHierarchyInsertWinGDK",0,"48895c24184c894c242055565741544155415641574883ec40bd010000004c8be28b5134498bd8488bf18d7dfe85d274324c6379308d42ff4c8b094b8d0cbf4803c94d6344c9044489463089463485c0","ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",nullptr,0},
+{"JournalCategory1WinGDK",0,"48895c2408574883ec20488bf94883c130e86ab686fa488bd84885c07423","ffffffffffffffffffffffffffffffffffff00000000ffffffffffffffff",CategoryTargets,std::size(CategoryTargets)},
+{"JournalCategory2WinGDK",0,"48895c2408574883ec20488bf94883c158e8fab586fa488bd84885c07423","ffffffffffffffffffffffffffffffffffff00000000ffffffffffffffff",CategoryTargets,std::size(CategoryTargets)},
+{"JournalCategory3WinGDK",0,"48895c2408574883ec20488bf94883e980e88ab586fa488bd84885c07423","ffffffffffffffffffffffffffffffffffff00000000ffffffffffffffff",CategoryTargets,std::size(CategoryTargets)},
+{"JournalHierarchyBuilderLayoutWinGDK",0,"48894c2408555356574154415541564157488d6c24984881ec68010000488bd9","ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",nullptr,0}
+};
+}

@@ -2,8 +2,10 @@ namespace {
 struct JournalNativeRoutines {
     using Insert = void* (*)(void*, int32*, const void*, bool*);
     using Category = UObject* (*)(UObject*, uint8);
+    using FixedCategory = UObject* (*)(UObject*);
     Insert insert{};
     Category category{};
+    std::array<FixedCategory, 3> categories{};
     std::string error;
     JournalNativeRoutines() {
         try {
@@ -28,12 +30,26 @@ struct JournalNativeRoutines {
                     (section[i].Characteristics & IMAGE_SCN_MEM_EXECUTE) != 0});
             }
             std::span<const uint8_t> image(reinterpret_cast<const uint8_t*>(base), size);
-            uintptr_t addresses[3]{};
-            for (size_t i = 0; i < 3; ++i)
-                addresses[i] = base + PS::AppearanceResolver::Resolve(image, sections, JournalNativeContract::Definitions[i]);
-            insert = reinterpret_cast<Insert>(addresses[0]);
-            category = reinterpret_cast<Category>(addresses[1]);
+            if (PS::Storefront::AllowsGamePassNativeSignatures()) {
+                uintptr_t addresses[5]{};
+                for (size_t i = 0; i < std::size(addresses); ++i)
+                    addresses[i] = base + PS::AppearanceResolver::Resolve(image, sections, JournalWinGDKContract::Definitions[i]);
+                insert = reinterpret_cast<Insert>(addresses[0]);
+                for (size_t i = 0; i < categories.size(); ++i)
+                    categories[i] = reinterpret_cast<FixedCategory>(addresses[i + 1]);
+            } else {
+                uintptr_t addresses[3]{};
+                for (size_t i = 0; i < std::size(addresses); ++i)
+                    addresses[i] = base + PS::AppearanceResolver::Resolve(image, sections, JournalNativeContract::Definitions[i]);
+                insert = reinterpret_cast<Insert>(addresses[0]);
+                category = reinterpret_cast<Category>(addresses[1]);
+            }
         } catch (const std::exception& e) { error = e.what(); }
+    }
+    UObject* ResolveCategory(UObject* root, uint8 categoryId) const {
+        if (categoryId >= 1 && categoryId <= categories.size() && categories[categoryId - 1])
+            return categories[categoryId - 1](root);
+        return category ? category(root, categoryId) : nullptr;
     }
 };
 
@@ -68,7 +84,7 @@ JournalHierarchyPlacement PrepareJournalHierarchy(UObject* subsystem, UObject* s
     JournalHierarchyPlacement result{native.insert, reinterpret_cast<uint8*>(subsystem) + 0x200};
     unsigned matches = 0;
     for (uint8 categoryId = 1; categoryId <= 3; ++categoryId) {
-        auto* category = native.category(root, categoryId);
+        auto* category = native.ResolveCategory(root, categoryId);
         if (!category) continue;
         auto scan = [&](FMapProperty* field, void* owner) {
             if (!field || !CastField<FNameProperty>(field->GetKeyProp())

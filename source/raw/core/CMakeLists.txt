@@ -126,6 +126,17 @@ if(PROJECT_IS_TOP_LEVEL)
     target_link_libraries(journal-placement PRIVATE RuneSchemaJsonCore)
     add_test(NAME journal-placement COMMAND journal-placement)
     add_executable(journal-failure-isolation ../tests/journal-failure-isolation.cpp)
+    add_executable(journal-wingdk-lane ../tests/journal-wingdk-lane.cpp)
+    add_test(NAME journal-wingdk-lane COMMAND journal-wingdk-lane
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/JournalHierarchy.inl"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/JournalWinGDKContract.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Generator/AppearanceWinGDKSignatures.h")
+    add_executable(main-menu-log-budget ../tests/main-menu-log-budget.cpp)
+    add_test(NAME main-menu-log-budget COMMAND main-menu-log-budget
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRecipeModLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsAssetModLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsBlueprintModLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp")
     add_executable(journal-save-ownership ../tests/journal-save-ownership.cpp)
     target_link_libraries(journal-save-ownership PRIVATE RuneSchemaJsonCore)
     add_test(NAME journal-save-ownership COMMAND journal-save-ownership)

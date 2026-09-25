@@ -304,8 +304,6 @@ namespace DragonWilds {
                     };
                     m_modsMap.emplace(assetFName, newModContainer);
                 }
-
-                PS::Log<LogLevel::Verbose>(STR("Loaded changes to {}\n"), assetNameWide);
             }
         }
     }
@@ -314,6 +312,8 @@ namespace DragonWilds {
     {
         if (data.is_array()) { for (const auto& entry : data) LoadUnsafe(entry); return; }
         if (data.contains("$Patch") || data.contains("$Target")) return;
+        constexpr size_t detailLimit = 8;
+        size_t applied = 0;
         for (auto& [assetName, assetData] : data.items())
         {
             if (assetData.is_object() && (assetData.contains("$Patch") || assetData.contains("$Target"))) continue;
@@ -336,9 +336,17 @@ namespace DragonWilds {
                 ApplyData(assetData, defaultObject.Get(), true);
                 ApplyDeferredPatches(defaultObject.Get());
 
-                PS::Log<RC::LogLevel::Verbose>(TEXT("Applied changes to {}\n"), static_cast<UClass*>(asset)->GetNamePrivate().ToString());
+                if (applied < detailLimit)
+                    PS::Log<RC::LogLevel::Verbose>(TEXT("Applied Blueprint changes to {}.\n"),
+                        static_cast<UClass*>(asset)->GetNamePrivate().ToString());
+                ++applied;
             }
         }
+        if (applied > detailLimit)
+            PS::Log<LogLevel::Verbose>(STR("Blueprints: {} additional successful change detail(s) omitted.\n"),
+                applied - detailLimit);
+        if (applied)
+            PS::RoutineLog("blueprints", STR("Blueprints: {} change set(s) applied.\n"), applied);
     }
 
     void DragonWildsBlueprintModLoader::ModifyObject(RC::Unreal::UObject* object)

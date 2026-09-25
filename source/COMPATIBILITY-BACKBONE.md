@@ -28,6 +28,13 @@ append-only `ResolveBinding` host function. The `runeschema.bindings` service
 provides discovery and source/status reporting without exposing raw addresses
 through JSON.
 
+Journal hierarchy placement follows the same split. Steam/GOG uses its
+validated insert, category-dispatch, and builder contracts. Game Pass uses its
+own validated hierarchy insert, three independent category entry points, and
+builder-layout witness. The executable-pattern resolver requires a unique match,
+checks relative targets and executable sections, and disables only hierarchy
+placement when the active storefront contract does not validate.
+
 ## Loader ownership and conflict rules
 
 - Every loader owns only its named folder and isolates failures by mod and section.

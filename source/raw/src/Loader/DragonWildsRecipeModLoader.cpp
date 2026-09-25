@@ -458,6 +458,9 @@ namespace DragonWilds {
         }
 
         LoadResult result{};
+        constexpr size_t detailLimit = 12;
+        size_t detailLines = 0;
+        size_t omittedDetails = 0;
 
         for (auto& def : m_recipeDefs)
         {
@@ -484,22 +487,24 @@ namespace DragonWilds {
             if (created)
             {
                 result.Created++;
+                if (detailLines < detailLimit) {
+                    PS::Log<LogLevel::Verbose>(STR("Created Recipe '{}'.\n"), def.Key);
+                    ++detailLines;
+                } else ++omittedDetails;
             }
             else
             {
                 result.Edited++;
-                PS::Log<LogLevel::Verbose>(STR("Modified Recipe '{}'\n"), def.Key);
+                if (detailLines < detailLimit) {
+                    PS::Log<LogLevel::Verbose>(STR("Modified Recipe '{}'.\n"), def.Key);
+                    ++detailLines;
+                } else ++omittedDetails;
             }
-        }
-
-        if (result.Created || result.Edited || result.ErrorCount)
-        {
-            PS::RoutineLog("recipes", STR("Recipes: {} created, {} edited, {} error{}.\n"),
-                result.Created, result.Edited, result.ErrorCount, result.ErrorCount == 1 ? STR("") : STR("s"));
         }
 
         RegisterHooks();
 
+        int placed = 0;
         for (auto& def : m_recipeDefs)
         {
             auto it = m_recipes.find(def.Key);
@@ -513,11 +518,24 @@ namespace DragonWilds {
                 auto* datatable = ResolvePlacementTable(placement);
                 if (datatable && Place(it->second, placement, datatable))
                 {
-                    PS::Log<LogLevel::Verbose>(STR("Placed Recipe '{}' into {}.{}\n"),
-                        it->second->GetName(), RC::to_generic_string(PlacementTableLabel(placement)), placement.Row);
+                    ++placed;
+                    if (detailLines < detailLimit) {
+                        PS::Log<LogLevel::Verbose>(STR("Placed Recipe '{}' into {}.{}.\n"),
+                            it->second->GetName(), RC::to_generic_string(PlacementTableLabel(placement)), placement.Row);
+                        ++detailLines;
+                    } else ++omittedDetails;
                 }
             }
         }
+
+        if (result.Created || result.Edited || placed || result.ErrorCount)
+        {
+            PS::RoutineLog("recipes", STR("Recipes: {} created, {} edited, {} placed, {} error{}.\n"),
+                result.Created, result.Edited, placed, result.ErrorCount,
+                result.ErrorCount == 1 ? STR("") : STR("s"));
+        }
+        if (omittedDetails)
+            PS::Log<LogLevel::Verbose>(STR("Recipes: {} additional successful operation detail(s) omitted.\n"), omittedDetails);
     }
 
     std::string DragonWildsRecipeModLoader::PlacementTableLabel(const Placement& placement)
@@ -659,8 +677,6 @@ namespace DragonWilds {
                 PropertyHelper::CopyJsonValueToContainer(reinterpret_cast<uint8*>(recipe), property, value);
             }
         }
-
-        PS::Log<LogLevel::Verbose>(STR("Created Recipe '{}'\n"), def.Key);
 
         if (WantsUnlock(def.Body))
         {

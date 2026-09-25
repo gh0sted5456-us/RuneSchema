@@ -45,6 +45,11 @@ when advanced logging is enabled. A bad file, record, field, or optional native
 capability uses `[PARTIAL]` or `[DISABLED]`; RuneSchema continues with unrelated
 files, sections, mods, and loaders. Errors are reserved for core invariants and
 save-integrity boundaries where continuing could persist an unsafe identity.
+Advanced logging keeps a small sample of successful recipe, asset-clone, and
+Blueprint operations, then reports how many additional detail lines were
+omitted. Loader totals, warnings, partial failures, and errors are never hidden.
+This keeps the front-end log readable without removing the evidence needed to
+identify which kind of operation ran.
 
 The server owns gameplay mutations: inventory grants, purchases, quest state,
 spawning, building placement, AI, drops, and event progression. Clients present

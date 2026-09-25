@@ -1,6 +1,8 @@
 #include "Generator/AppearanceResolver.h"
+#include "Generator/AppearanceWinGDKSignatures.h"
 #include "Generator/NativeCallResolver.h"
 #include "Loader/JournalNativeContract.h"
+#include "Loader/JournalWinGDKContract.h"
 #include "Loader/NativeShopContract.h"
 #include "Loader/JournalPersistenceContract.h"
 #include "Loader/JournalJsonFieldContract.h"
@@ -73,6 +75,24 @@ int main(int argc,char** argv) {
         image[128]^=1;Reject([&]{Resolve(image,{&section,1},definition);});image[128]^=1;
         place(8192);Reject([&]{Resolve(image,{&section,1},definition);});
     }
+    const auto verifyWinGDKDefinition=[&](const PS::AppearanceSignatures::Signature& definition) {
+        const auto code=Decode(definition.code);
+        image.assign(65536,0);section={0,image.size(),true};
+        const auto place=[&](size_t offset) {
+            std::copy(code.begin(),code.end(),image.begin()+offset);
+            for(size_t i=0;i<definition.targetCount;++i) {
+                const auto& target=definition.targets[i];
+                const int32_t displacement=static_cast<int32_t>(60000-offset-target.offset-target.next);
+                std::memcpy(image.data()+offset+target.offset,&displacement,4);
+            }
+        };
+        place(128);Require(Resolve(image,{&section,1},definition)==128+definition.hookOffset);
+        image[128]^=1;Reject([&]{Resolve(image,{&section,1},definition);});image[128]^=1;
+        place(8192);Reject([&]{Resolve(image,{&section,1},definition);});
+    };
+    for(const auto& definition:DragonWilds::JournalWinGDKContract::Definitions)
+        verifyWinGDKDefinition(definition);
+    verifyWinGDKDefinition(PS::AppearanceWinGDKSignatures::WearableMeshRoutineReturn);
     if(argc==2) {
         std::ifstream file(argv[1],std::ios::binary);Require(file.good());
         std::vector<uint8_t> raw((std::istreambuf_iterator<char>(file)),{});

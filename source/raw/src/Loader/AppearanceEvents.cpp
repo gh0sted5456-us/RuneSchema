@@ -1,6 +1,8 @@
 #include "Loader/AppearanceEvents.h"
 #include "Generator/AppearanceTraceContract.h"
 #include "Generator/AppearanceResolver.h"
+#include "Generator/AppearanceWinGDKSignatures.h"
+#include "Runtime/Storefront.h"
 #include <Windows.h>
 #include <safetyhook.hpp>
 #include <atomic>
@@ -41,8 +43,13 @@ void Resolve() {
                     (section[i].Characteristics&IMAGE_SCN_MEM_EXECUTE)!=0});
             }
             std::span<const uint8_t> image(reinterpret_cast<const uint8_t*>(base),size);
+            const bool gamePass=PS::Storefront::AllowsGamePassNativeSignatures();
             for(size_t i=0;i<resolved.size();++i) {
-                resolved[i]=PS::AppearanceResolver::Resolve(image,sections,PS::AppearanceSignatures::Definitions[i]);
+                if(gamePass && i>0) { resolved[i]=0; continue; }
+                const auto& definition=gamePass
+                    ? PS::AppearanceWinGDKSignatures::WearableMeshRoutineReturn
+                    : PS::AppearanceSignatures::Definitions[i];
+                resolved[i]=PS::AppearanceResolver::Resolve(image,sections,definition);
                 std::memcpy(originalBytes[i].data(),image.data()+resolved[i],originalBytes[i].size());
             }
         } catch(const std::exception& error) {
@@ -74,13 +81,14 @@ void Subscribe(Consumer consumer, Observer observer) {
     Resolve();
     try {
         for (size_t i=0; i<hooks.size(); ++i) {
+            if(!resolved[i])continue;
             if(std::memcmp(reinterpret_cast<const void*>(base+resolved[i]),originalBytes[i].data(),originalBytes[i].size()))
                 throw std::runtime_error("Appearance hook instructions changed after resolution");
             auto hook=safetyhook::MidHook::create(reinterpret_cast<void*>(base+resolved[i]),callbacks[i],safetyhook::MidHook::StartDisabled);
             if (!hook) throw std::runtime_error("Appearance hook creation failed.");
             hooks[i]=std::move(*hook);
         }
-        for (auto& hook:hooks) if (!hook.enable()) throw std::runtime_error("Appearance hook activation failed.");
+        for (auto& hook:hooks) if (hook && !hook.enable()) throw std::runtime_error("Appearance hook activation failed.");
     } catch(const std::exception& error) {
         for(auto& hook:hooks)hook={};
         resolutionError=error.what();unavailable.store(true,std::memory_order_release);throw;

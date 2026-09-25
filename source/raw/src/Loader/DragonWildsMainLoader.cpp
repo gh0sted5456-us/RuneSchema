@@ -697,7 +697,6 @@ namespace DragonWilds {
                 const auto identity=ReadModIdentity(modPath,modName);
                 bool modSuccessful=true;
                 PS::StartupTrace::Mark("load mod: " + RC::to_string(modName));
-                PS::Log<LogLevel::Verbose>(STR("Loading mod: {}\n"), modName);
 
                 if (engineLifecyclePhase == EEngineLifecyclePhase::PostEngineInit)
                 {
@@ -864,14 +863,18 @@ namespace DragonWilds {
             pakRoots.push_back(modsRoot);
         }
         std::unordered_set<std::wstring> registered;
+        size_t addedPakDirectories = 0;
         for (const auto& pakRoot : pakRoots) {
             if(!fs::is_directory(pakRoot))continue;
             const auto canonical=fs::weakly_canonical(pakRoot).wstring();if(!registered.emplace(canonical).second)continue;
             const auto absolute = pakRoot.native();
             const auto withSuffix = std::format(STR("{}/"), RC::to_generic_string(absolute));
             OutPakFolders->Add(FString(withSuffix.c_str()));
-            PS::Log<LogLevel::Verbose>(STR("Added ordered RuneSchema .pak read directory at {}\n"), withSuffix);
+            ++addedPakDirectories;
         }
+        if (addedPakDirectories)
+            PS::Log<LogLevel::Verbose>(STR("Added {} ordered RuneSchema .pak read director{}.\n"),
+                addedPakDirectories, addedPakDirectories == 1 ? STR("y") : STR("ies"));
     }
 
     void DragonWildsMainLoader::OnDataTableSerialized(RC::Unreal::UDataTable* This, RC::Unreal::FArchive* Archive)

@@ -44,6 +44,7 @@
 #include "Unreal/Core/HAL/UnrealMemory.hpp"
 #include "Unreal/Engine/UDataTable.hpp"
 #include "Loader/JournalNativeContract.h"
+#include "Loader/JournalWinGDKContract.h"
 #include "Loader/JournalPersistenceContract.h"
 #include "Loader/JournalJsonFieldContract.h"
 #include "Generator/NativeCallResolver.h"
