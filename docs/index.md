@@ -4,19 +4,20 @@ hide:
 ---
 
 <div class="rs-hero" markdown>
+<h1 class="rs-sr-only">RuneSchema</h1>
+
+<img class="rs-hero__banner" src="assets/images/runeschema-banner.png" alt="RuneSchema">
+
 <div class="rs-hero__eyebrow">
 <span class="rs-version">RuneSchema 0.7.5.28</span>
 <span class="rs-platform rs-platform--steam">Steam / GOG</span>
 <span class="rs-platform rs-platform--gamepass">Game Pass / WinGDK</span>
 </div>
 
-<img class="rs-hero__logo" src="assets/images/runeschema-logo.png" alt="RuneSchema logo">
-
-# RuneSchema
-
 **Authoring and runtime reference for RuneScape: Dragonwilds.**
 
-RuneSchema loads validated JSON and JSONC definitions, connects authored data to mounted cooked assets, and provides the runtime bridges needed for self-contained content mods.
+RuneSchema loads JSON/JSONC definitions, connects them to cooked assets, and
+provides the runtime bridges used by self-contained content mods.
 
 <div class="rs-actions" markdown>
 [Start authoring](AUTHORING-GUIDE.md){ .md-button .md-button--primary }
@@ -33,7 +34,8 @@ RuneSchema loads validated JSON and JSONC definitions, connects authored data to
 
     ---
 
-    Installation, folder structure, load order, cooked assets, mappings, multiplayer behavior, and validation.
+    Install RuneSchema, create a mod folder, understand load order, add cooked
+    assets, and test the result.
 
     [:octicons-arrow-right-24: Authoring guide](AUTHORING-GUIDE.md)
 
@@ -41,9 +43,9 @@ RuneSchema loads validated JSON and JSONC definitions, connects authored data to
 
     ---
 
-    Find the correct loader folder, accepted JSON shape, relationships, and representative definitions.
+    Find the correct loader folder, accepted JSON shape, and working examples.
 
-    [:octicons-arrow-right-24: Loader walkthroughs](LOADER-WALKTHROUGHS.md)
+    [:octicons-arrow-right-24: Loader reference](LOADER-WALKTHROUGHS.md)
 
 -   :material-cube-outline:{ .lg .middle } **Unreal + RuneSchema**
 
@@ -58,7 +60,8 @@ RuneSchema loads validated JSON and JSONC definitions, connects authored data to
 
     ---
 
-    Use focused character, registry, building, vendor, NPC, quest, event, and diagnostic examples.
+    Browse focused examples for DataTables, UI patches, quests, events, vendors,
+    NPCs, character customization, and buildings.
 
     [:octicons-arrow-right-24: Example library](EXAMPLES.md)
 
@@ -70,39 +73,29 @@ RuneSchema loads validated JSON and JSONC definitions, connects authored data to
 
 -   :material-account-edit:{ .lg .middle } **Character creation**
 
-    Add or patch character-customization rows and connect them to the native menu.
+    Add or patch customization rows and connect them to the native menu.
 
-    [:octicons-arrow-right-24: Open guide](CHARACTER-CREATION-AUTHORING.md)
+    [:octicons-arrow-right-24: Character creation](CHARACTER-CREATION-AUTHORING.md)
 
 -   :material-database-edit:{ .lg .middle } **Registry & DataTables**
 
-    Use owned-row transactions, strict target resolution, and reflected-property validation.
+    Add owned rows or patch supported existing data with runtime validation.
 
-    [:octicons-arrow-right-24: Registry patching](REGISTRY-PATCHING.md)
+    [:octicons-arrow-right-24: Registry & DataTables](REGISTRY-PATCHING.md)
 
 -   :material-home-edit-outline:{ .lg .middle } **Buildings & clones**
 
-    Work with cloned pieces, cooked props, build-menu placement, collision, HISM, and persistence.
+    Register cooked building pieces, clone compatible data, and control build
+    menu placement.
 
     [:octicons-arrow-right-24: Building reference](BUILDING-CLONING-FMODEL-AUDIT.md)
 
 -   :material-shield-check:{ .lg .middle } **SafeSave**
 
-    Understand ownership tracking, retirement, cleanup, retry behavior, and storefront-specific save handling.
+    Track RuneSchema-owned identities and clean retired content without treating
+    unresolved vanilla or third-party data as disposable.
 
     [:octicons-arrow-right-24: SafeSave & ownership](SAFE-SAVE-AND-LEDGER.md)
-
--   :material-api:{ .lg .middle } **Native plugins**
-
-    Use the RuneSchema ABI, host functions, lifecycle callbacks, services, mappings, and capabilities.
-
-    [:octicons-arrow-right-24: Plugin API](API-REFERENCE.md)
-
--   :material-code-json:{ .lg .middle } **JSON schemas**
-
-    Use the machine-readable schemas for strict authoring surfaces and editor validation.
-
-    [:octicons-arrow-right-24: Schema reference](SCHEMAS.md)
 
 </div>
 
@@ -113,9 +106,9 @@ RuneSchema loads validated JSON and JSONC definitions, connects authored data to
 <div class="rs-platform-card rs-platform-card--steam" markdown>
 ### :simple-steam: Steam / GOG
 
-Uses the Steam/GOG runtime lane and backed-up JSON save-cleanup path.
+Uses the desktop runtime lane and backed-up loose JSON save path.
 
-[Compatibility backbone →](COMPATIBILITY-BACKBONE.md)
+[Compatibility →](COMPATIBILITY-BACKBONE.md)
 </div>
 
 <div class="rs-platform-card rs-platform-card--gamepass" markdown>
@@ -123,37 +116,63 @@ Uses the Steam/GOG runtime lane and backed-up JSON save-cleanup path.
 
 Uses the isolated WinGDK runtime lane and Xbox Game Save provider path.
 
-[Game Pass save system →](GAMEPASS-SAVE-SYSTEM.md)
+[Game Pass saves →](GAMEPASS-SAVE-SYSTEM.md)
 </div>
 
 </div>
 
-## Reference
+<div class="rs-advanced-only" markdown>
+
+## Advanced reference
 
 <div class="grid cards rs-card-grid rs-card-grid--reference" markdown>
 
--   :material-book-open-page-variant:{ .lg .middle } **Project overview**
+-   :material-api:{ .lg .middle } **Plugin API**
 
-    Current runtime structure, release package, and project-level notes.
+    Native plugin ABI, services, capabilities, mappings, and validated bindings.
 
-    [:octicons-arrow-right-24: Overview](OVERVIEW.md)
+    [:octicons-arrow-right-24: Plugin API](API-REFERENCE.md)
 
--   :material-layers-triple:{ .lg .middle } **Compatibility & native parity**
+-   :material-code-json:{ .lg .middle } **JSON schemas**
 
-    Storefront detection, mappings, signatures, plugin boundaries, and verified native capabilities.
+    Machine-readable schemas for strict authoring surfaces.
 
-    [:octicons-arrow-right-24: Compatibility](COMPATIBILITY-BACKBONE.md)
+    [:octicons-arrow-right-24: JSON schemas](SCHEMAS.md)
 
--   :material-history:{ .lg .middle } **Release history**
+-   :material-speedometer:{ .lg .middle } **Startup performance**
 
-    Chronological implementation records for current and previous 0.7.5 releases.
+    Measured loader stages and storefront-specific startup costs.
 
-    [:octicons-arrow-right-24: Release notes](RELEASES.md)
+    [:octicons-arrow-right-24: Performance notes](STARTUP-PERFORMANCE.md)
+
+-   :material-lifebuoy:{ .lg .middle } **Manual recovery**
+
+    Backup-first save recovery when normal owned-content cleanup cannot complete.
+
+    [:octicons-arrow-right-24: Recovery guide](MANUAL-SAVE-RECOVERY.md)
+
+-   :material-cog-outline:{ .lg .middle } **Internals**
+
+    Native hooks, subsystem boundaries, Helpy rendering, and developer notes.
+
+    [:octicons-arrow-right-24: Native hook support](NATIVE-HOOK-PARITY.md)
+
+-   :material-tag-outline:{ .lg .middle } **Current release**
+
+    Public release notes for RuneSchema 0.7.5.28.
+
+    [:octicons-arrow-right-24: Release](RELEASES.md)
 
 </div>
 
-!!! info "Current documentation is authoritative"
-    Use the **Authoring Guide**, **Loader Walkthroughs**, **SafeSave and Ownership**, **Compatibility Backbone**, and **Plugin API** for current behavior. Release notes and audits preserve implementation history.
+</div>
+
+!!! info "Current guides are authoritative"
+    Use the current Authoring, Loader, Compatibility, SafeSave, and Plugin API
+    pages for present behavior. Historical implementation files are kept in the
+    repository but are not part of the public manual.
 
 !!! warning "Runtime reflection wins"
-    Schemas and examples document accepted authoring shapes. Unreal reflection and runtime validation remain authoritative for object, row, field, and type compatibility.
+    Schemas and examples document accepted authoring shapes. Unreal reflection
+    and runtime validation remain authoritative for object, row, field, and type
+    compatibility.

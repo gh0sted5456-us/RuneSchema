@@ -85,7 +85,7 @@ Mapping differences are diagnostic. Live reflection validates mutations.
 Journal finalization now uses one-pass reference indexes and cached journal
 objects.
 
-Measured 0.7.5.28 journal finalization:
+Current 0.7.5.28 journal-finalization reference:
 
 - Game Pass: about **410 ms**, down from about **8.65 s**
 - Steam/GOG: about **306 ms**
