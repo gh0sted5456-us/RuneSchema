@@ -36,3 +36,12 @@ content trace jobs.
 - Incorporated the retained-frame collection UI from the experimental Helpy
   work: warm flat styling, consistent panel geometry, larger viewport scaling,
   and bounded incremental icon loading.
+
+## Loader folders
+
+- Loader directory names are ASCII case-insensitive. For example, `recipes`,
+  `Recipes`, and `RECIPES` all select the `/recipes` loader, including nested
+  JSON discovery and automatic reload routing.
+- `players`, `nameplates`, and known-folder diagnostics follow the same rule.
+- A mod containing multiple loader folders that differ only by case is rejected
+  for that section so content is never loaded twice in an undefined order.

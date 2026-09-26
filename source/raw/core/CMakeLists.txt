@@ -264,6 +264,9 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Utility/Config.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../../clean-base/RuneSchema/settings/jobs/character-editor.example.json"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../../clean-base/RuneSchema/settings/jobs/building-menu.example.json")
+    add_executable(loader-folder-case ../tests/loader-folder-case.cpp)
+    target_link_libraries(loader-folder-case PRIVATE RuneSchemaJsonCore)
+    add_test(NAME loader-folder-case COMMAND loader-folder-case)
     add_executable(usmap-index ../tests/usmap-index.cpp)
     target_link_libraries(usmap-index PRIVATE RuneSchemaJsonCore)
     if(MSVC)

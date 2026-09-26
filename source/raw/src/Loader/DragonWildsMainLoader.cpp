@@ -210,7 +210,7 @@ namespace DragonWilds {
         auto modName = it->native();
 
         std::advance(it, 1);
-        auto folderType = it->string();
+        auto folderType = PS::ModFolderLayout::AsciiLower(it->string());
 
         std::ifstream f(filePath);
         if (f.peek() == std::ifstream::traits_type::eof()) {
@@ -490,9 +490,9 @@ namespace DragonWilds {
                             m_spawnLoader->LoadNameplateDefinitions(
                                 pendingAutoReload.FilePath.parent_path(), pendingAutoReload.ModName, true);
                             m_spawnLoader->FinalizeNameplateDefinitions();
-                            const auto playersPath = modPath / "players";
-                            if (fs::is_directory(playersPath))
-                                m_spawnLoader->LoadPlayerRules(playersPath, pendingAutoReload.ModName, true);
+                            const auto playersPath = PS::ModFolderLayout::ResolveLoaderDirectory(modPath,"players");
+                            if (playersPath)
+                                m_spawnLoader->LoadPlayerRules(*playersPath, pendingAutoReload.ModName, true);
                             m_spawnLoader->FinalizePlayerRules();
                             PS::Log<LogLevel::Normal>(
                                 STR("Auto-reloaded /nameplates for mod {}\n"),
@@ -502,7 +502,8 @@ namespace DragonWilds {
                         for (auto& loader : m_loaders)
                         {
                             if (handled) break;
-                            if (loader->GetModFolderType() == pendingAutoReload.FolderType)
+                            if (PS::ModFolderLayout::EqualsInsensitive(
+                                loader->GetModFolderType(),pendingAutoReload.FolderType))
                             {
                                 loader->AutoReload(pendingAutoReload.ModName, pendingAutoReload.FilePath);
                                 PS::Log<LogLevel::Normal>(STR("Auto-reloaded mod {}\n"), pendingAutoReload.ModName);
@@ -745,8 +746,8 @@ namespace DragonWilds {
             if (PS::PSConfig::Get()->IsLoaderEnabled("nameplates"))
             {
                 IterateModsFolder([&](const fs::path& modPath, const fs::path::string_type& modName) {
-                    const auto nameplatesPath = modPath / "nameplates";
-                    if (fs::is_directory(nameplatesPath))try {m_spawnLoader->LoadNameplateDefinitions(nameplatesPath, modName);}
+                    const auto nameplatesPath = PS::ModFolderLayout::ResolveLoaderDirectory(modPath,"nameplates");
+                    if (nameplatesPath)try {m_spawnLoader->LoadNameplateDefinitions(*nameplatesPath, modName);}
                     catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[LOADER:nameplates][PARTIAL][MOD:{}] Section skipped: {}. Other mods continue.\n"),modName,PS::ToWideSafe(error.what()));}
                 });
                 try {m_spawnLoader->FinalizeNameplateDefinitions();}
@@ -755,11 +756,11 @@ namespace DragonWilds {
             IterateModsFolder([&](const fs::path& modPath,
                 const fs::path::string_type& modName)
             {
-                const auto playersPath = modPath / "players";
-                if (!fs::is_directory(playersPath)) return;
+                const auto playersPath = PS::ModFolderLayout::ResolveLoaderDirectory(modPath,"players");
+                if (!playersPath) return;
                 try
                 {
-                    m_spawnLoader->LoadPlayerRules(playersPath, modName);
+                    m_spawnLoader->LoadPlayerRules(*playersPath, modName);
                 }
                 catch (const std::exception& e)
                 {
@@ -783,13 +784,17 @@ namespace DragonWilds {
             }
 
             auto folderType = entry.path().filename().string();
-            if (folderType == PS::ModFolderLayout::PakDirectory || folderType == "players" || folderType == "nameplates")
+            if (PS::ModFolderLayout::EqualsInsensitive(folderType,PS::ModFolderLayout::PakDirectory)
+                || PS::ModFolderLayout::EqualsInsensitive(folderType,"players")
+                || PS::ModFolderLayout::EqualsInsensitive(folderType,"nameplates"))
             {
                 continue;
             }
 
             auto known = std::any_of(m_loaders.begin(), m_loaders.end(),
-                [&](const auto& loader) { return loader->GetModFolderType() == folderType; });
+                [&](const auto& loader) {
+                    return PS::ModFolderLayout::EqualsInsensitive(loader->GetModFolderType(),folderType);
+                });
             if (known)
             {
                 continue;

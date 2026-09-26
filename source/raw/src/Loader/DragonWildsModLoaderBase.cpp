@@ -3,6 +3,7 @@
 #include "Unreal/Engine/UDataTable.hpp"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
+#include "Utility/ModFolderLayout.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -45,8 +46,16 @@ namespace DragonWilds {
 
     bool DragonWildsModLoaderBase::Load(const fs::path& modPath, const RC::StringType& modName, const EEngineLifecyclePhase& engineLifecyclePhase)
     {
-        auto loaderPath = modPath / m_modFolderType;
-        if (!fs::is_directory(loaderPath)) return true;
+        fs::path loaderPath;
+        try {
+            const auto resolved=PS::ModFolderLayout::ResolveLoaderDirectory(modPath,m_modFolderType);
+            if(!resolved)return true;
+            loaderPath=*resolved;
+        } catch(const std::exception& error) {
+            PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL][MOD:{}] Folder resolution failed: {}.\n"),
+                RC::to_generic_string(m_modFolderType),modName,PS::ToWideSafe(error.what()));
+            return false;
+        }
 
         if (!HasInitialized())
         {
