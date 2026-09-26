@@ -26,6 +26,26 @@ RuneSchema vendors.
 }
 ```
 
+`ItemData` accepts either the normal full Unreal object path or a canonical
+22-character `PersistenceID`. A persistence ID is resolved against the live
+`ItemData` registry after all asset loaders have had a chance to register their
+runtime clones. This is the preferred route when a recipe consumes or creates a
+RuneSchema `$Clone`, because the clone's save identity is stable even when its
+runtime object was created during startup.
+
+```jsonc
+"ItemsCreated": [
+  {"ItemData":"AAAAAAAAAAAAAAAAAAAAAQ","Count":1}
+]
+```
+
+RuneSchema-created `RecipeData` no longer lives under `/Engine/Transient`.
+Authored recipes use a stable runtime object route beneath
+`/Game/RuneSchema/<ModName>/Recipes/`; generated vendor recipes use
+`/Game/RuneSchema/Generated/Recipes/`. These are runtime objects rather than
+cooked assets, but their non-transient object paths give crafting and processing
+station references a stable route for the current session.
+
 Placement rules:
 
 - Use `Table` for a unique legacy short table name.
@@ -79,6 +99,7 @@ tables. Helpy's station picker derives its choices from the same reflected
 - Recipe placement and recipe unlocking are separate operations.
 - Use `DataTable` for an exact cooked table path; use `Table` only for a unique legacy short name.
 - `Category` targets native `LabeledRecipes`; `Array` targets a direct recipe array. Do not use both on the same placement.
+- Clone-backed recipe inputs and outputs may use the clone's canonical `PersistenceID` instead of its runtime object path.
 
 ## FAQ
 
@@ -96,6 +117,13 @@ the short table name is unique.
 ### FAQ-RECIPES-003 — Can a placement use both Category and Array? {#faq-recipes-003}
 
 No. `Category` and `Array` are mutually exclusive placement modes.
+
+### FAQ-RECIPES-004 — How should a recipe reference a RuneSchema clone? {#faq-recipes-004}
+
+Use the clone's canonical 22-character `PersistenceID` in
+`ItemsConsumed[].ItemData` or `ItemsCreated[].ItemData`. RuneSchema resolves
+that ID after clone registration and writes the live clone object route into the
+native recipe. Full object paths remain supported for vanilla and cooked items.
 
 ---
 
