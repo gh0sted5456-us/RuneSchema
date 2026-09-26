@@ -6,6 +6,7 @@
 #include "nlohmann/json.hpp"
 #include "Unreal/Hooks.hpp"
 #include <set>
+#include <mutex>
 #include <vector>
 
 namespace RC::Unreal {
@@ -52,19 +53,24 @@ namespace DragonWilds {
         std::vector<RegistryPatch::Patch> m_registryPlan;
         std::unordered_map<std::string, std::pair<std::string,std::string>> m_ownedRows;
         std::set<std::string> m_appliedRegistryPatches;
-        RC::Unreal::Hook::GlobalCallbackId m_characterEditorTraceCallbackId = RC::Unreal::Hook::ERROR_ID;
-        std::set<std::string> m_characterEditorTraceEvents;
+        RC::Unreal::Hook::GlobalCallbackId m_traceJobCallbackId = RC::Unreal::Hook::ERROR_ID;
         struct TraceJob {
             std::string Id;
             std::vector<std::string> ClassContains;
             std::vector<std::string> FunctionContains;
             std::size_t MaxEvents = 256;
+            bool ConsoleEvents = false;
             std::set<std::string> Seen;
+            nlohmann::json Events = nlohmann::json::array();
+            bool Dirty = false;
         };
         std::vector<TraceJob> m_traceJobs;
+        std::mutex m_traceJobMutex;
+        bool m_traceJobFailureReported = false;
         void LoadTraceJobs();
-        void RegisterCharacterEditorTrace();
-        void TraceCharacterEditorEvent(RC::Unreal::UObject* source, RC::Unreal::UFunction* function);
+        void RegisterTraceJobs();
+        void TraceJobEvent(RC::Unreal::UObject* source, RC::Unreal::UFunction* function);
+        void FlushTraceJob(TraceJob& job, bool complete = false) noexcept;
         void LoadDocument(const nlohmann::json& data, const RC::StringType& modName,
             const std::string& source = "raw");
         void ReloadDocument(const nlohmann::json& data, const RC::StringType& modName);

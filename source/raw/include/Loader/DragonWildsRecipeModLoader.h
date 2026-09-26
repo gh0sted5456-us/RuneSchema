@@ -66,6 +66,10 @@ namespace DragonWilds {
         struct PendingPatch { RC::StringType ModName; std::string Reference; nlohmann::json Changes; };
         std::vector<PendingPatch> m_pendingPatches;
         std::unordered_map<RC::StringType, RC::Unreal::UObject*> m_recipes;
+        // Packages backing authored RecipeData objects. Timed processing
+        // queues retain recipe references beyond the immediate interaction,
+        // so these recipes must never live in /Engine/Transient.
+        std::vector<RC::Unreal::UObject*> m_runtimeRecipePackages;
         std::unordered_set<RC::StringType> m_unlock;
         std::unordered_set<RC::StringType> m_propsApplied;
         std::unordered_set<std::string> m_reportedPlacementFailures;

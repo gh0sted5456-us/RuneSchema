@@ -30,6 +30,27 @@ namespace PS::QuickUI {
 inline constexpr float NavRailWidth=84, ContentWidth=876, DesignWidth=NavRailWidth+ContentWidth, Width=DesignWidth, Height=720;
 inline constexpr float HorizontalFit=1.0f;
 inline constexpr float FontScale=1.12f;
+inline constexpr float MaxViewportScale=2.5f;
+
+// Collection-log-inspired presentation: warm parchment text, restrained gold
+// state accents and near-black brown surfaces.  Keep these flat: every Canvas
+// primitive crosses Unreal's reflected drawing boundary.
+namespace Theme {
+using Tint=std::array<float,4>;
+inline constexpr Tint Background{.025f,.022f,.019f,1};
+inline constexpr Tint Surface{.050f,.045f,.040f,.96f};
+inline constexpr Tint SurfaceRaised{.068f,.058f,.045f,.98f};
+inline constexpr Tint Hover{.10f,.08f,.045f,.95f};
+inline constexpr Tint Active{.14f,.105f,.050f,1};
+inline constexpr Tint Gold{.91f,.77f,.48f,1};
+inline constexpr Tint GoldHi{.98f,.88f,.64f,1};
+inline constexpr Tint Cream{.92f,.89f,.82f,1};
+inline constexpr Tint Muted{.60f,.57f,.52f,1};
+inline constexpr Tint Dim{.40f,.38f,.35f,1};
+inline constexpr Tint Green{.58f,.82f,.45f,1};
+inline constexpr Tint Divider{.18f,.15f,.105f,1};
+inline constexpr Tint Danger{.82f,.42f,.34f,1};
+}
 inline constexpr float SurfaceInset=16.f, SurfaceWidth=ContentWidth-SurfaceInset*2.f;
 inline constexpr int Columns=3, ItemsPerPage=12, MaxSelection=64, MaxDrops=16;
 inline constexpr float GridX=20, GridY=194, CardWidth=266, CardHeight=92, CardPitchX=278, CardPitchY=98;
@@ -990,7 +1011,7 @@ public:
         const float navMouseX=shellMouseX;
         mouseX=shellMouseX-NavRailWidth;
         ClampScroll();Frame f;using Tint=std::array<float,4>;
-        const Tint ash{.055f,.059f,.063f,1},gold{.77f,.79f,.81f,1},muted{.57f,.59f,.61f,1},ink{.91f,.92f,.93f,1};
+        const Tint ash=Theme::Background,gold=Theme::Gold,muted=Theme::Muted,ink=Theme::Cream;
         std::string hoveredPath;
         const auto rect=[&](Rect r,Tint c){f.draws.push_back({Draw::Kind::Rectangle,r,{},c,18,false,{}});};
         // Canvas primitives cross the reflection boundary once per draw. The
@@ -1016,13 +1037,15 @@ public:
         };
         const auto button=[&](Rect r,std::string label,std::string action,std::string arg="",bool enabled=true,bool active=false,float left=12.f){
             const bool hover=enabled&&r.Contains(mouseX,mouseY);
-            soft(r,active?Tint{.20f,.22f,.24f,1}:hover?Tint{.13f,.15f,.17f,1}:Tint{.085f,.09f,.095f,1});
-            text(Shorten(label,static_cast<size_t>(std::max(3.f,((r.w-left-6)*HorizontalFit)/8.2f))),r.x+left,r.y+(r.h-18)/2,18,enabled?ink:muted);
+            soft(r,active?Theme::Active:hover?Theme::Hover:Theme::Surface);
+            if(active)rect({r.x,r.y+r.h-2,r.w,2},Theme::Gold);
+            text(Shorten(label,static_cast<size_t>(std::max(3.f,((r.w-left-6)*HorizontalFit)/8.2f))),r.x+left,r.y+(r.h-18)/2,18,enabled?(active?Theme::GoldHi:ink):Theme::Dim);
             if(enabled)f.hits.push_back({r,std::move(action),std::move(arg)});
         };
         const auto field=[&](Rect r,const std::string& id,std::string placeholder=""){
             auto* value=Field(id);const bool active=focus==id;
-            soft(r,active?Tint{.22f,.25f,.28f,1}:Tint{.09f,.10f,.11f,1},2);
+            soft(r,active?Theme::SurfaceRaised:Theme::Surface,2);
+            if(active)rect({r.x,r.y+r.h-2,r.w,2},Theme::Gold);
             std::string shown=value?*value:std::string{};
             if(id=="clone-value"&&r.h>90&&(cloneKind=="Text"||cloneKind=="JSON")) {
                 const std::size_t columns=static_cast<std::size_t>(std::max(8.f,(r.w*HorizontalFit-28)/10.f));
@@ -1057,7 +1080,7 @@ public:
         };
         const auto icon=[&](const std::string& path,Rect r){
             if(!path.empty())f.draws.push_back({Draw::Kind::Icon,r,path,{1,1,1,1},18,false,{}});
-            else {soft(r,{.09f,.10f,.11f,1});text("?",r.x+r.w/2,r.y+r.h*.28f,26,muted,true);}
+            else {soft(r,Theme::Surface);text("?",r.x+r.w/2,r.y+r.h*.28f,26,Theme::Dim,true);}
         };
         const auto powerLabel=[](double value){
             if(!std::isfinite(value)||value<0)return std::string("--");
@@ -1078,35 +1101,35 @@ public:
             return std::string("Item");
         };
         const auto iconButton=[&](Rect r,const std::string& texture,const std::string& fallback,const std::string& tooltip,const std::string& action,bool enabled=true){
-            const bool hover=enabled&&r.Contains(mouseX,mouseY);soft(r,hover?Tint{.16f,.18f,.20f,1}:Tint{.085f,.09f,.095f,1},2);
+            const bool hover=enabled&&r.Contains(mouseX,mouseY);soft(r,hover?Theme::Hover:Theme::Surface,2);
             badge(texture,{r.x+6,r.y+6,r.w-12,r.h-12},fallback,enabled?1.f:.35f);if(enabled)f.hits.push_back({r,action,{}});if(hover)hoveredPath=tooltip;
         };
         const auto placard=[&](Rect r,const Entry& e,const std::string& action,const std::string& arg,bool selected=false,bool allowFavorite=true,bool allowDetails=false){
             const bool hover=r.Contains(mouseX,mouseY);
-            const Tint masterwork{1.f,.73f,.12f,1};
-            const Tint edge=e.masterwork?masterwork:selected?Tint{.20f,.22f,.24f,1}:hover?Tint{.12f,.13f,.14f,1}:Tint{.075f,.08f,.085f,1};
-            soft(r,edge);
+            const Tint masterwork=Theme::GoldHi;
+            const Tint edge=e.masterwork?masterwork:selected?Theme::Active:hover?Theme::Hover:Theme::Surface;
             const bool compact=r.h<100;
             if(compact) {
-                // Cards disappear into the ash workspace until hovered. This
-                // preserves the fixed 3x4 geometry without a bright tile wall.
-                const Tint card=ash,cardHover{.085f,.095f,.105f,1},cardInk=ink,cardMuted=muted;
-                if(selected){soft(r,{.88f,.72f,.18f,1});soft({r.x+2,r.y+2,r.w-4,r.h-4},{.075f,.071f,.055f,1});}
-                else soft(r,hover?cardHover:card);
+                // One retained-looking flat card instead of stacked faux borders.
+                // Selected/masterwork state is a single 3 px accent, matching the
+                // reference UI while reducing reflected Canvas submissions.
+                const Tint card=Theme::Surface,cardHover=Theme::Hover,cardInk=ink,cardMuted=muted;
+                soft(r,selected?Theme::Active:hover?cardHover:card);
+                if(selected||e.masterwork)rect({r.x,r.y,3,r.h},e.masterwork?Theme::GoldHi:Theme::Gold);
                 icon(e.icon,{r.x+10,r.y+10,54,54});
                 const auto name=e.name.empty()?std::string("Choose item"):e.name;
-                text(Shorten(name,28),r.x+74,r.y+10,16,e.available?cardInk:cardMuted);
+                text(Shorten(name,28),r.x+74,r.y+10,16,e.masterwork?Theme::GoldHi:e.available?cardInk:cardMuted);
                 const auto type=itemTypeLabel(e);
                 text(Shorten(type,28),r.x+74,r.y+35,14,cardMuted);
                 const bool hasPower=e.available&&std::isfinite(e.power)&&e.power>=0;
-                if(hasPower)text("Power Level: "+powerLabel(e.power),r.x+74,r.y+58,14,e.masterwork?Tint{.62f,.38f,.02f,1}:cardMuted);
+                if(hasPower)text("Power Level: "+powerLabel(e.power),r.x+74,r.y+58,14,e.masterwork?Theme::Gold:cardMuted);
                 if(!action.empty()&&e.available)f.hits.push_back({r,action,arg});
                 if(allowDetails&&e.available)f.rightHits.push_back({r,"item-details",e.path});
-                if(selected)text("+",r.x+48,r.y+60,19,{.55f,.38f,.02f,1});
+                if(selected)text("+",r.x+48,r.y+60,19,Theme::GoldHi);
                 if(!e.path.empty()) {
                     if(allowFavorite) {
                         const Rect hit{r.x+r.w-28,r.y+1,27,27};const bool favorite=IsFavorite(e.path),overStar=hit.Contains(mouseX,mouseY);
-                        text(favorite?"*":"+",hit.x+hit.w/2,hit.y+3,17,favorite?Tint{.55f,.38f,.02f,1}:cardMuted,true);
+                        text(favorite?"*":"+",hit.x+hit.w/2,hit.y+3,17,favorite?Theme::GoldHi:cardMuted,true);
                         f.hits.push_back({hit,"favorite",e.path});
                         if(overStar)hoveredPath=favorite?"Remove from Favorites":"Add to Favorites";
                         else if(hover)hoveredPath=e.available?e.path:e.detail;
@@ -1114,6 +1137,7 @@ public:
                 }
                 return;
             }
+            soft(r,edge);
             // Placard chrome has fixed semantic corners: source at upper-left,
             // Favorite at upper-right, and item traits along the lower-right.
             // The item artwork and label retain the full centered content area.
@@ -1169,8 +1193,9 @@ public:
             text(title,36,47,23,{.84f,.68f,.36f,1});iconButton({ContentWidth-66,38,38,38},QuickDecorations::CloseBadge,"X","Back / close","close");
         };
         panel({0,0,ContentWidth,Height},ash);
-        text("HELPY",20,20,22,ink);
+        text("HELPY",20,20,22,Theme::GoldHi);
         text("RuneSchema",102,24,15,muted);
+        rect({20,58,ContentWidth-40,1},Theme::Divider);
         button({552,12,82,34},"Refresh","refresh","",!busy&&!indexing);
         if(indexing)button({642,12,112,34},"Stop scan","cancel");
         else if(advancedRuntime)button({642,12,112,34},"Full scan","index","",!busy);
@@ -1248,7 +1273,7 @@ public:
             button({596,616,162,34},cloneCreated?"Created":temporaryBlocked?"Temp blocked":"Create item","create-clone","",!busy&&!cloneCreated&&cloneReady&&cloneAcknowledged&&!temporaryBlocked);
             if(Rect{458,616,126,34}.Contains(mouseX,mouseY))hoveredPath="Experimental single-player test: use a disposable or restorable save.";
         }else{
-            const Tint card=ash,cardHover{.085f,.095f,.105f,1},cardInk=ink,cardMuted=muted;
+            const Tint card=Theme::Surface,cardHover=Theme::Hover,cardInk=ink,cardMuted=muted;
             for(int slot=0;slot<ItemsPerPage;++slot){
                 const size_t index=static_cast<size_t>(scroll[t]*ItemsPerPage+slot);if(index>=matches.size())break;
                 const auto& e=entries[matches[index]];
@@ -1280,6 +1305,7 @@ public:
         if(matches.empty()&&!(t==0&&cloneTab))text(NodeFavorites(t)?"No favorite definitions match this search.":t==0&&favoritesTab?
             favorites.empty()?"No favorites yet. Use the star on an item placard.":"No favorites match this search.":
             indexing?"Scanning game assets...":"No matches. Clear the filter or run a full scan.",30,250,18,muted);
+        rect({20,668,ContentWidth-40,1},Theme::Divider);
         text(Shorten(hoveredPath.empty()?status:hoveredPath,87),20,674,16);
         if(node){
             const bool isNpc=node->nodeKind=="NPC";
@@ -1583,15 +1609,15 @@ public:
         const auto railText=[&](std::string value,float x,float y,float size,Tint color,bool centre=false){f.draws.push_back({Draw::Kind::Text,{x,y,0,0},std::move(value),color,size,centre,{}});};
         const auto railButton=[&](float y,const char* mark,const char* label,const char* arg,bool active){
             const Rect r{8,y,NavRailWidth-16,62};const bool hover=!navBlocked&&!busy&&r.Contains(navMouseX,mouseY);
-            if(active||hover)railRect({r.x,r.y,r.w,r.h},active?Tint{.075f,.085f,.095f,1}:Tint{.04f,.047f,.052f,1});
-            if(active)railRect({r.x,r.y,3,r.h},ink);
-            railText(mark,r.x+r.w/2,r.y+6,21,active?ink:muted,true);
+            if(active||hover)railRect({r.x,r.y,r.w,r.h},active?Theme::Active:Theme::Hover);
+            if(active)railRect({r.x,r.y,3,r.h},Theme::Gold);
+            railText(mark,r.x+r.w/2,r.y+6,21,active?Theme::GoldHi:muted,true);
             railText(label,r.x+r.w/2,r.y+36,11,active?ink:muted,true);
             if(!navBlocked&&!busy)f.hits.push_back({r,"rail",arg});
         };
-        railRect({0,0,NavRailWidth,Height},{.018f,.02f,.022f,1});
-        railRect({NavRailWidth-1,0,1,Height},{.11f,.12f,.13f,1});
-        railText("RS",NavRailWidth/2,20,24,ink,true);
+        railRect({0,0,NavRailWidth,Height},Theme::Background);
+        railRect({NavRailWidth-1,0,1,Height},Theme::Divider);
+        railText("RS",NavRailWidth/2,20,24,Theme::GoldHi,true);
         railText("HELPY",NavRailWidth/2,50,11,muted,true);
         railButton(92,"I","Items","items",tab==Tab::Items&&!cloneTab);
         railButton(164,"A","AI","ai",tab==Tab::Enemies);

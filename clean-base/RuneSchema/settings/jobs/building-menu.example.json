@@ -1,0 +1,14 @@
+{
+  "schema": "RuneSchema.TraceJob.v1",
+  "id": "building-menu-example",
+  "enabled": false,
+  "maxEvents": 256,
+  "consoleEvents": false,
+  "classContains": [
+    "WBP_Building_TabNav_C",
+    "BuildingCategoryGridNav",
+    "BuildingCategoryItemSlot",
+    "AccordionCategory"
+  ],
+  "functionContains": []
+}

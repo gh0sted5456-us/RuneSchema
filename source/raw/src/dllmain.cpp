@@ -405,7 +405,7 @@ public:
             ImGui::TextWrapped("Enables full catalog scans, diagnostic caches, and heavyweight troubleshooting. It is not required for normal authoring or gameplay.");
             ImGui::BeginDisabled(!settings.advancedRuntime);
             ImGui::Checkbox("Enable diagnostic jobs (restart required)", &settings.diagnosticJobs.enabled);
-            ImGui::Checkbox("Character editor trace preset", &settings.diagnosticJobs.characterEditorPreset);
+            ImGui::TextWrapped("Trace jobs are defined by JSON/JSONC profiles under settings/jobs. Event results are written under runtime/live/jobs/exports without console spam unless a profile explicitly enables consoleEvents.");
             ImGui::TextWrapped("Jobs run from settings/jobs recursively and do not require a player. Turning Advanced diagnostics off disables every job.");
             ImGui::EndDisabled();
             ImGui::SeparatorText("Journal and recipe persistence");

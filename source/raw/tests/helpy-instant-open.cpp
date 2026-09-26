@@ -29,11 +29,18 @@ int main(int argc,char** argv){
     Check(!Has(toggle,"Command::Kind::Refresh")&&!Has(toggle,"Command::Kind::Index"),"open never starts refresh or full scan");
     Check(Has(ui,"Columns=3")&&Has(ui,"ItemsPerPage=12"),"fixed three-by-four catalogue layout");
     Check(Has(ui,"FontScale=1.12f"),"larger unified Helpy typography scale");
+    Check(Has(ui,"namespace Theme")&&Has(ui,"GoldHi")&&Has(ui,"SurfaceRaised")&&Has(ui,"Divider"),
+        "collection palette and flat warm surfaces missing");
+    Check(Has(ui,"MaxViewportScale=2.5f")&&Has(menu,"QuickUI::MaxViewportScale"),
+        "high-resolution viewport scaling contract missing");
+    Check(Has(menu,"hitFrame=&m_presentedFrame")&&Has(menu,"pointerMoved")
+        &&Has(menu,"m_presentedFrameValid=false"),"retained presented-frame behavior missing");
     Check(Has(ui,"SurfaceWidth=ContentWidth-SurfaceInset*2.f")
         &&Has(ui,"panel({SurfaceInset,28,SurfaceWidth,664},ash)"),"tabs and overlays do not share one painted width");
-    Check(Has(menu,"IconCacheLimit=256")&&Has(menu,"FirstFrameIconBudget=16")
+    Check(Has(menu,"IconCacheLimit=256")&&Has(menu,"FirstFrameIconBudget=6")
+        &&Has(menu,"SteadyIconBudget=2")
         &&Has(menu,"m_canvasIconQueue")&&Has(menu,"for(const auto& draw:frame.draws)"),
-        "bounded visible-first session icon capture missing");
+        "smoothed visible-first session icon capture missing");
     Check(!Has(menu,"const auto frame=m_ui.Render(mx,my);bool loadedIcon=false"),
         "one-icon-per-frame loading throttle returned");
     Check(Has(host,"plugin.Manifest.Version")&&Has(host,"plugin.Manifest.ConsoleMessage"),"plugin announcement is manifest driven");

@@ -1,6 +1,7 @@
 #include "Utility/NativeFunctionHook.h"
 #include "SDK/WeakObjectHandle.h"
 #include <algorithm>
+#include <cctype>
 #include <vector>
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
@@ -24,6 +25,7 @@
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
 #include "Loader/DragonWildsRecipeModLoader.h"
+#include "Loader/AssetProvenance.h"
 #include "Loader/VendorCategoryText.h"
 #include "Loader/VendorCategoryLabel.h"
 #include "Loader/RecipeUnlockPolicy.h"
@@ -46,6 +48,79 @@ namespace DragonWilds {
     static bool WantsUnlock(const nlohmann::json& body)
     {
         return PS::RecipeUnlockPolicy::Automatic(body);
+    }
+
+    struct RuntimeCloneOutputStatus
+    {
+        bool Found = false;
+        bool Safe = true;
+        std::string Reason;
+    };
+
+    static bool IsRootRetained(UObject* object)
+    {
+        if(!object||object->GetInternalIndex()<0)return false;
+        auto* slot=FUObjectArray::IndexToObject(object->GetInternalIndex());
+        return slot&&slot->GetUObject()==object&&slot->IsValid(false)&&slot->IsRootSet();
+    }
+
+    static RuntimeCloneOutputStatus InspectRuntimeCloneOutputs(UObject* recipe)
+    {
+        RuntimeCloneOutputStatus status{};
+        if(!recipe||!recipe->GetClassPrivate())return status;
+        auto* outputs=CastField<FArrayProperty>(
+            PropertyHelper::GetPropertyByName(recipe->GetClassPrivate(),TEXT("ItemsCreated")));
+        auto* output=outputs?CastField<FStructProperty>(outputs->GetInner()):nullptr;
+        auto* itemField=output&&output->GetStruct()?CastField<FObjectPropertyBase>(
+            PropertyHelper::GetPropertyByName(output->GetStruct().Get(),TEXT("ItemData"))):nullptr;
+        if(!outputs||!output||!itemField)return status;
+        UECustom::FScriptArrayHelper items(outputs->ContainerPtrToValuePtr<FScriptArray>(recipe),outputs);
+        items.ForEachElement([&](void* value) {
+            if(!status.Safe)return;
+            auto* item=itemField->GetObjectPropertyValue(itemField->ContainerPtrToValuePtr<void>(value));
+            const auto provenance=PS::AssetProvenance::Lookup(item);
+            if(!provenance.is_object()||provenance.value("Kind",std::string{})!="RuneSchemaAssetClone")return;
+            status.Found=true;
+            if(!provenance.value("Registered",false)) {
+                status.Safe=false;
+                status.Reason="runtime-clone output has not completed ItemSubsystem registration";
+                return;
+            }
+            const auto identity=provenance.value("PersistenceID",std::string{});
+            if(identity.empty()) {
+                status.Safe=false;
+                status.Reason="runtime-clone output has no stable PersistenceID";
+                return;
+            }
+            if(!IsRootRetained(item)) {
+                status.Safe=false;
+                status.Reason="runtime-clone output is not retained for the processing queue lifetime";
+            }
+        });
+        return status;
+    }
+
+    static std::string RecipePackageSegment(std::string value)
+    {
+        const auto identity=value;
+        for(auto& character:value)
+            if(!std::isalnum(static_cast<unsigned char>(character))&&character!='_')character='_';
+        while(!value.empty()&&value.front()=='_')value.erase(value.begin());
+        if(value.empty())value="RSRecipe";
+        if(std::isdigit(static_cast<unsigned char>(value.front())))value.insert(value.begin(),'R');
+        if(value.size()>72)value.resize(72);
+        std::uint64_t hash=1469598103934665603ull;
+        for(const auto character:identity) {
+            hash^=static_cast<unsigned char>(character);
+            hash*=1099511628211ull;
+        }
+        static constexpr char digits[]="0123456789abcdef";
+        std::string suffix(16,'0');
+        for(int index=15;index>=0;--index) {
+            suffix[static_cast<size_t>(index)]=digits[hash&0xfu];
+            hash>>=4u;
+        }
+        return value+"_"+suffix;
     }
 
     static void AddRecipeUnlocks(UObject* progressComponent, const std::vector<UObject*>& recipes)
@@ -132,6 +207,7 @@ namespace DragonWilds {
         for (const auto& [key, owner] : m_vendorRecipeOwners) {
             if (auto* recipe=LiveRecipe(key))recipe->ClearRootSet();
         }
+        for(auto* package:m_runtimeRecipePackages)if(IsRootRetained(package))package->ClearRootSet();
     }
 
     UObject* DragonWildsRecipeModLoader::LiveRecipe(const RC::StringType& key) const
@@ -662,11 +738,45 @@ namespace DragonWilds {
             }
         }
 
-        static auto* transientPackage = UECustom::UObjectGlobals::StaticFindObject(
-            nullptr, nullptr, TEXT("/Engine/Transient"), false);
+        const auto segment=RecipePackageSegment(RC::to_string(def.Key));
+        const auto packagePath=RC::to_generic_string("/Game/RuneSchema/Recipes/"+segment);
+        const auto objectName=RC::to_generic_string(segment);
+        const auto objectPath=packagePath+TEXT(".")+objectName;
+        if(auto* existing=UECustom::UObjectGlobals::StaticFindObject<UObject*>(
+            nullptr,nullptr,objectPath.c_str(),false)) {
+            if(!existing->IsA(m_recipeClass)) {
+                PS::Log<LogLevel::Error>(STR("Recipe runtime path '{}' is occupied by an incompatible object.\n"),objectPath);
+                return nullptr;
+            }
+            existing->SetRootSet();
+            m_recipes.emplace(def.Key,existing);
+            if(WantsUnlock(def.Body))m_unlock.insert(def.Key);
+            return existing;
+        }
+        auto* package=UECustom::UObjectGlobals::StaticFindObject<UObject*>(
+            nullptr,nullptr,packagePath.c_str(),false);
+        if(!package) {
+            auto* packageClass=UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+                nullptr,nullptr,TEXT("/Script/CoreUObject.Package"),false);
+            if(!packageClass) {
+                PS::Log<LogLevel::Error>(STR("Recipe '{}' cannot create a stable runtime package.\n"),def.Key);
+                return nullptr;
+            }
+            FStaticConstructObjectParameters packageParams(packageClass,nullptr);
+            packageParams.Name=FName(packagePath,FNAME_Add);
+            packageParams.SetFlags=static_cast<EObjectFlags>(RF_Public|RF_Standalone|RF_Transactional);
+            package=UObjectGlobals::StaticConstructObject<UObject*>(packageParams);
+        }
+        if(!package) {
+            PS::Log<LogLevel::Error>(STR("Recipe '{}' stable runtime package creation failed.\n"),def.Key);
+            return nullptr;
+        }
+        package->SetRootSet();
+        if(std::find(m_runtimeRecipePackages.begin(),m_runtimeRecipePackages.end(),package)==m_runtimeRecipePackages.end())
+            m_runtimeRecipePackages.push_back(package);
 
-        FStaticConstructObjectParameters params(m_recipeClass, transientPackage);
-        params.Name = FName(def.Key, FNAME_Add);
+        FStaticConstructObjectParameters params(m_recipeClass, package);
+        params.Name = FName(objectName, FNAME_Add);
         params.SetFlags = static_cast<EObjectFlags>(RF_Public | RF_Standalone | RF_Transactional);
 
         auto* recipe = UObjectGlobals::StaticConstructObject<UObject*>(params);
@@ -796,6 +906,19 @@ namespace DragonWilds {
                     recipe->GetName(), RC::to_generic_string(PlacementTableLabel(placement)),
                     placement.Row, PS::ToWideSafe(reason.c_str()));
         };
+        // Processing stations retain the RecipeData reference while work is
+        // queued. Authored recipes use a deterministic rooted package, and a
+        // runtime-clone output is admitted only after the item registry owns a
+        // stable PersistenceID for it. Any unsafe placement is isolated here.
+        if(!placement.Array.empty()) {
+            const auto clone=InspectRuntimeCloneOutputs(recipe);
+            if(clone.Found&&(!clone.Safe||recipe->GetPathName().starts_with(TEXT("/Engine/Transient")))) {
+                reportFailure(clone.Safe
+                    ? "processing recipe still has a transient identity"
+                    : clone.Reason);
+                return false;
+            }
+        }
         auto rowStruct = datatable->GetRowStruct();
         auto* row = datatable->FindRowUnchecked(FName(placement.Row, FNAME_Add));
         if (!rowStruct || !row)

@@ -6,8 +6,7 @@
   "advancedLogging": false,
   "advancedRuntime": false,
   "diagnosticJobs": {
-    "enabled": false,
-    "characterEditorPreset": false
+    "enabled": false
   },
   "colorCodeLoaderAnnotations": true,
   "enableExperimentalDropScaling": false,

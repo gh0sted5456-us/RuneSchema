@@ -59,6 +59,7 @@ def main() -> None:
     rules = (raw/'include/Generator/QuickMenuCatalogRules.h').read_text(encoding='utf-8')
     native = (raw/'src/Generator/InGameQuickMenu.cpp').read_text(encoding='utf-8')
     header = (raw/'include/Generator/InGameQuickMenu.h').read_text(encoding='utf-8')
+    ui = (raw/'include/Generator/QuickMenuUI.h').read_text(encoding='utf-8')
     mailbox = (raw/'include/Generator/ToolRequest.h').read_text(encoding='utf-8')
     tools = (raw/'src/Loader/SpawnTools.inl').read_text(encoding='utf-8')
     index = (raw/'src/Loader/QuickMenuCatalog.inl').read_text(encoding='utf-8')
@@ -87,6 +88,10 @@ def main() -> None:
         ('read-only diagnostic cannot submit commands or consume input', 'Submit(' not in diagnostic and 'RenderCanvas(' not in diagnostic and 'NOT INTERACTIVE' in diagnostic),
         ('submitted frame and interactive readiness have separate states', 'm_frameSubmitted.load(std::memory_order_acquire),m_openRequestedAt.load()' in native and 'm_inputDiagnostic.load' in native),
         ('native PostRender invokes the actual UI model', 'm_ui.Render(mx,my)' in native and 's_postRenderHook.call(viewport,canvas)' in native),
+        ('collection palette keeps flat warm Helpy surfaces', 'namespace Theme' in ui and 'GoldHi' in ui and 'SurfaceRaised' in ui and 'Divider' in ui),
+        ('high-resolution viewport scaling is bounded but no longer 1.35x', 'MaxViewportScale=2.5f' in ui and 'QuickUI::MaxViewportScale' in native),
+        ('presented scene is retained for idle frames and hit testing', 'QuickUI::Frame m_presentedFrame' in header and 'hitFrame=&m_presentedFrame' in native and 'pointerMoved' in native),
+        ('visible icon loading is deliberately spread across frames', 'FirstFrameIconBudget=6,SteadyIconBudget=2' in native),
         ('validated native viewport query replaces SizeX-only dependency', 'PlayerController:GetViewportSize' in native and 'CPF_OutParm' in native and 'params==2' in native),
         ('same-process thread-scoped input hook', 'SetWindowsHookExW(WH_GETMESSAGE,&InputThunk,nullptr,thread)' in native and 'pid!=GetCurrentProcessId()' in native),
         ('input events are bounded and generation checked', 'm_events.size()<256' in native and 'event.generation!=generation' in native),

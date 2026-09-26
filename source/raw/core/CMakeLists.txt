@@ -257,6 +257,13 @@ if(PROJECT_IS_TOP_LEVEL)
     add_test(NAME recipe-placement-contract COMMAND recipe-placement-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRecipeModLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../LOADER-WALKTHROUGHS.md")
+    add_executable(trace-job-contract ../tests/trace-job-contract.cpp)
+    target_link_libraries(trace-job-contract PRIVATE RuneSchemaJsonCore)
+    add_test(NAME trace-job-contract COMMAND trace-job-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRawTableLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Utility/Config.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../clean-base/RuneSchema/settings/jobs/character-editor.example.json"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../clean-base/RuneSchema/settings/jobs/building-menu.example.json")
     add_executable(usmap-index ../tests/usmap-index.cpp)
     target_link_libraries(usmap-index PRIVATE RuneSchemaJsonCore)
     if(MSVC)

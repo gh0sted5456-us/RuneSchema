@@ -1,8 +1,8 @@
-# RuneSchema 0.7.5.28
+# RuneSchema 0.7.5.29
 
 This revision validates Dragonwilds' Xbox Game Save layout and allows
 supported Game Pass item/recipe cleanup to proceed independently.
-See `RELEASE-0.7.5.28.md` for the exact change and
+See `RELEASE-0.7.5.29.md` for the exact change and
 `RELEASE-0.7.5.26.md` for the persistence controls, and
 `RELEASE-0.7.5.25.md` for the retained compatibility work.
 
@@ -46,8 +46,8 @@ Run `..\build\build.bat -Clean` to build the release:
 - Game Pass uses its matching UE4SS runtime and `UE4SS_Signatures` overrides where supplied.
 
 Helpy is built once as a storefront-neutral RuneSchema API client. The output
-is `dist\RuneSchema-0.7.5.28-Universal.zip`. A plugin-free
-`RuneSchema-0.7.5.28-Core.zip` is emitted as proof that plug-ins are optional;
+is `dist\RuneSchema-0.7.5.29-Universal.zip`. A plugin-free
+`RuneSchema-0.7.5.29-Core.zip` is emitted as proof that plug-ins are optional;
 the two verified UE4SS runtime ZIPs are copied beside both. `-Clean` recreates
 build and distribution directories.
 

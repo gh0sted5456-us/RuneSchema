@@ -57,7 +57,6 @@ namespace PS {
         // Master switch for JSON trace/search jobs. advancedRuntime is the
         // global kill switch for every advanced diagnostic facility.
         bool enabled = false;
-        bool characterEditorPreset = false;
     };
 
     struct PluginSettings {

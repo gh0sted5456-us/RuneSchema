@@ -43,6 +43,16 @@ int main(int argc, char** argv)
         "late-serialized DataTables are no longer replayed");
     Need(loader, "recipe->IsA(acceptedClass)",
         "processing array writes are not type checked");
+    Need(loader, "InspectRuntimeCloneOutputs(recipe)",
+        "timed processing does not validate runtime-clone outputs");
+    Need(loader, "/Game/RuneSchema/Recipes/",
+        "authored processing recipes do not receive a stable runtime path");
+    Need(loader, "runtime-clone output has not completed ItemSubsystem registration",
+        "unregistered runtime-clone processing output is not isolated");
+    Need(loader, "runtime-clone output has no stable PersistenceID",
+        "runtime-clone processing identity is not validated");
+    Need(loader, "processing recipe still has a transient identity",
+        "transient processing recipes are not rejected");
     Need(loader, "sizeof(UObject*)", "processing array element size is not checked");
     for (const auto* token : {
         "DT_CraftingStationsDataTable", "DT_ProcessingStationDataTable",

@@ -14,6 +14,7 @@
 #include "SDK/Helper/PropertyHelper.h"
 #include "Utility/Logging.h"
 #include "Utility/Config.h"
+#include "Core/ConfigFiles.h"
 #include "Runtime/HostServices.h"
 #include "Utility/JsonHelpers.h"
 #include "Loader/DragonWildsRawTableLoader.h"
@@ -24,6 +25,7 @@
 #include "SDK/Structs/FSoftObjectPath.h"
 #include "SDK/Classes/TSoftObjectPtr.h"
 #include <fstream>
+#include <cctype>
 #include <memory>
 #include <set>
 
@@ -46,37 +48,6 @@ namespace {
         return nlohmann::json::parse(input,callback,true,true);
     }
 
-    int CharacterOptionCount(UObject* object, const char* selector)
-    {
-        if (!object || !object->GetClassPrivate()) return -1;
-        auto* options = DragonWilds::PropertyHelper::GetPropertyByName<FMapProperty>(
-            object->GetClassPrivate(), TEXT("CharacterOptionData"));
-        if (!options) options = DragonWilds::PropertyHelper::GetPropertyByName<FMapProperty>(
-            object->GetClassPrivate(), TEXT("CharacterOptions"));
-        auto* valueStruct = options
-            ? DragonWilds::PropertyHelper::CastProperty<FStructProperty>(options->GetValueProp()) : nullptr;
-        auto* optionData = valueStruct
-            ? DragonWilds::PropertyHelper::GetPropertyByName<FArrayProperty>(
-                valueStruct->GetStruct().Get(), TEXT("OptionData")) : nullptr;
-        if (!options || !valueStruct || !optionData) return -1;
-        auto* keyProperty = options->GetKeyProp();
-        const auto keySize=keyProperty->GetSize();
-        const auto keyAlignment=keyProperty->GetMinAlignment();
-        if(keySize<=0||keyAlignment<=0||(keyAlignment&(keyAlignment-1)))return -1;
-        void* key=FMemory::Malloc(keySize,keyAlignment);if(!key)return -1;
-        keyProperty->InitializeValue(key);
-        DragonWilds::PropertyHelper::CopyJsonValueToContainer(
-            key, keyProperty, std::string(selector));
-        int count = -1;
-        UECustom::FScriptMapHelper map(
-            options, options->ContainerPtrToValuePtr<void>(object));
-        map.ForEachPair([&](void* candidate, void* value) {
-            if (count < 0 && keyProperty->Identical(candidate, key))
-                count = optionData->ContainerPtrToValuePtr<FScriptArray>(value)->Num();
-        });
-        keyProperty->DestroyValue(key);FMemory::Free(key);
-        return count;
-    }
 }
 
 namespace DragonWilds {
@@ -179,8 +150,9 @@ namespace DragonWilds {
 
     DragonWildsRawTableLoader::~DragonWildsRawTableLoader()
     {
-        if(m_characterEditorTraceCallbackId!=Hook::ERROR_ID)
-            Hook::UnregisterCallback(m_characterEditorTraceCallbackId);
+        if(m_traceJobCallbackId!=Hook::ERROR_ID)
+            Hook::UnregisterCallback(m_traceJobCallbackId);
+        for(auto& job:m_traceJobs)FlushTraceJob(job,true);
     }
 
     void DragonWildsRawTableLoader::LoadDocument(const nlohmann::json& data,
@@ -329,7 +301,7 @@ namespace DragonWilds {
     bool DragonWildsRawTableLoader::OnInitialize()
     {
         LoadTraceJobs();
-        RegisterCharacterEditorTrace();
+        RegisterTraceJobs();
         return true;
     }
 
@@ -338,23 +310,33 @@ namespace DragonWilds {
         const auto& settings=PS::PSConfig::Get()->GetSettings();
         if(!settings.advancedRuntime || !settings.diagnosticJobs.enabled)return;
         const auto add=[this](std::string id,std::vector<std::string> classes,
-            std::vector<std::string> functions={},std::size_t maximum=256) {
+            std::vector<std::string> functions,std::size_t maximum,bool consoleEvents) {
             if(id.empty()||classes.empty()||maximum==0||maximum>4096)
                 throw std::runtime_error("trace job has invalid id, class search, or MaxEvents");
+            if(id.size()>96||!std::ranges::all_of(id,[](unsigned char value) {
+                return std::isalnum(value)||value=='-'||value=='_'||value=='.';
+            })) throw std::runtime_error("trace job id must use 1..96 letters, digits, dot, dash, or underscore");
             if(std::ranges::any_of(m_traceJobs,[&](const auto& job){return job.Id==id;}))
                 throw std::runtime_error("duplicate trace job id: "+id);
-            m_traceJobs.push_back({std::move(id),std::move(classes),std::move(functions),maximum,{}});
+            TraceJob job;
+            job.Id=std::move(id);job.ClassContains=std::move(classes);
+            job.FunctionContains=std::move(functions);job.MaxEvents=maximum;
+            job.ConsoleEvents=consoleEvents;
+            m_traceJobs.push_back(std::move(job));
         };
-        if(settings.diagnosticJobs.characterEditorPreset)
-            add("character-editor",{"MainMenuCharCreateScreen","WBP_MainMenu_CharCreate_C",
-                "CharacterOptionSelect","WBP_CharacterOptionSelect_C"});
         const auto root=PS::HostServices::SettingsDirectory()/"jobs";
         if(std::filesystem::exists(root))for(const auto& entry:std::filesystem::recursive_directory_iterator(root))try {
             if(!entry.is_regular_file() || (entry.path().extension()!=".json"&&entry.path().extension()!=".jsonc"))continue;
             const auto data=ParseStrict(entry.path());
             if(data.value("schema",std::string{})!="RuneSchema.TraceJob.v1" || !data.value("enabled",true))continue;
+            if(!data.is_object())throw std::runtime_error("trace job must be an object");
+            static const std::set<std::string> allowed{"schema","id","enabled","maxEvents",
+                "classContains","functionContains","consoleEvents"};
+            for(const auto& [key,value]:data.items())if(!allowed.contains(key))
+                throw std::runtime_error("unknown trace job field: "+key);
             const auto strings=[&](const char* key){
                 std::vector<std::string> result;
+                if(data.contains(key)&&!data.at(key).is_array())throw std::runtime_error(std::string(key)+" must be an array");
                 if(data.contains(key))for(const auto& value:data.at(key)) {
                     if(!value.is_string()||value.get<std::string>().empty())throw std::runtime_error(std::string(key)+" must contain non-empty strings");
                     result.push_back(value.get<std::string>());
@@ -362,36 +344,61 @@ namespace DragonWilds {
                 return result;
             };
             add(data.at("id").get<std::string>(),strings("classContains"),
-                strings("functionContains"),data.value("maxEvents",256u));
+                strings("functionContains"),data.value("maxEvents",256u),
+                data.value("consoleEvents",false));
         }catch(const std::exception& error) {
             PS::Log<LogLevel::Error>(STR("[TRACE-JOB][REJECTED][FILE:{}] {}.\n"),
                 entry.path().wstring(),PS::ToWideSafe(error.what()));
         }
-        if(!m_traceJobs.empty())PS::Log<LogLevel::Normal>(STR("[TRACE-JOB][READY] {} player-independent job{} armed.\n"),
+        if(!m_traceJobs.empty())PS::Log<LogLevel::Normal>(STR("[TRACE-JOB][READY] {} JSON job{} armed; events export under runtime/live/jobs/exports.\n"),
             m_traceJobs.size(),m_traceJobs.size()==1?STR(""):STR("s"));
     }
 
-    void DragonWildsRawTableLoader::RegisterCharacterEditorTrace()
+    void DragonWildsRawTableLoader::RegisterTraceJobs()
     {
-        if(m_characterEditorTraceCallbackId!=Hook::ERROR_ID||m_traceJobs.empty())return;
+        if(m_traceJobCallbackId!=Hook::ERROR_ID||m_traceJobs.empty())return;
         Hook::FCallbackOptions options{};
         options.OwnerModName=TEXT("RuneSchema");
-        options.HookName=TEXT("CharacterEditorConsumerTrace");
-        m_characterEditorTraceCallbackId=Hook::RegisterProcessEventPostCallback(
+        options.HookName=TEXT("JsonTraceJobRunner");
+        m_traceJobCallbackId=Hook::RegisterProcessEventPostCallback(
             [this](Hook::TCallbackIterationData<void>&,UObject* source,UFunction* function,void*) {
-                TraceCharacterEditorEvent(source,function);
+                try { TraceJobEvent(source,function); }
+                catch(const std::exception& error) {
+                    std::lock_guard lock(m_traceJobMutex);
+                    if(!m_traceJobFailureReported) {
+                        m_traceJobFailureReported=true;
+                        PS::Log<LogLevel::Error>(STR("[TRACE-JOB][RUNNER-FAILED] {}; further callback failures are suppressed.\n"),
+                            PS::ToWideSafe(error.what()));
+                    }
+                }
             },options);
-        if(m_characterEditorTraceCallbackId==Hook::ERROR_ID)
-            PS::Log<LogLevel::Warning>(TEXT("[CHARACTER-EDITOR][TRACE] Existing ProcessEvent callback registration was unavailable.\n"));
+        if(m_traceJobCallbackId==Hook::ERROR_ID)
+            PS::Log<LogLevel::Warning>(TEXT("[TRACE-JOB] ProcessEvent callback registration was unavailable.\n"));
         else
-            PS::Log<LogLevel::Normal>(TEXT("[TRACE-JOB] Player-independent ProcessEvent tracing armed.\n"));
+            PS::Log<LogLevel::Normal>(TEXT("[TRACE-JOB] JSON ProcessEvent runner armed.\n"));
     }
 
-    void DragonWildsRawTableLoader::TraceCharacterEditorEvent(UObject* source,UFunction* function)
+    void DragonWildsRawTableLoader::FlushTraceJob(TraceJob& job,bool complete) noexcept
+    {
+        if(!job.Dirty)return;
+        try {
+            const nlohmann::json result={{"schema","RuneSchema.TraceJobResult.v1"},{"id",job.Id},
+                {"complete",complete||job.Events.size()>=job.MaxEvents},{"eventCount",job.Events.size()},
+                {"maxEvents",job.MaxEvents},{"events",job.Events}};
+            PS::ConfigFiles::Write(PS::HostServices::ExportsDirectory()/("TraceJob-"+job.Id+".json"),result.dump(2));
+            job.Dirty=false;
+        } catch(const std::exception& error) {
+            PS::Log<LogLevel::Error>(STR("[TRACE-JOB][{}][EXPORT-FAILED] {}.\n"),
+                PS::ToWideSafe(job.Id.c_str()),PS::ToWideSafe(error.what()));
+        }
+    }
+
+    void DragonWildsRawTableLoader::TraceJobEvent(UObject* source,UFunction* function)
     {
         if(!source||!function||!source->GetClassPrivate())return;
         const auto classPath=RC::to_string(source->GetClassPrivate()->GetPathName());
         const auto functionPath=RC::to_string(function->GetPathName());
+        std::lock_guard lock(m_traceJobMutex);
         for(auto& job:m_traceJobs) {
             const auto matches=[](const std::string& haystack,const std::vector<std::string>& needles) {
                 return needles.empty()||std::ranges::any_of(needles,[&](const auto& needle){return haystack.find(needle)!=std::string::npos;});
@@ -399,29 +406,13 @@ namespace DragonWilds {
             if(!matches(classPath,job.ClassContains)||!matches(functionPath,job.FunctionContains))continue;
             const auto signature=classPath+"|"+functionPath;
             if(job.Seen.size()>=job.MaxEvents||!job.Seen.insert(signature).second)continue;
-            PS::Log<LogLevel::Normal>(STR("[TRACE-JOB][{}][EVENT] object='{}' class='{}' function='{}'.\n"),
+            job.Events.push_back({{"object",RC::to_string(source->GetPathName())},
+                {"class",classPath},{"function",functionPath}});
+            job.Dirty=true;
+            if(job.ConsoleEvents)PS::Log<LogLevel::Normal>(STR("[TRACE-JOB][{}][EVENT] object='{}' class='{}' function='{}'.\n"),
                 PS::ToWideSafe(job.Id.c_str()),source->GetPathName(),source->GetClassPrivate()->GetPathName(),function->GetPathName());
-        }
-        if(classPath.find("WBP_CharacterOptionSelect_C")!=std::string::npos
-            && (functionPath.ends_with(":Construct") || functionPath.ends_with(":BP_OnOpen"))) {
-            const auto signature=classPath+"|"+functionPath+"|counts";
-            if(m_characterEditorTraceEvents.insert(signature).second) {
-                auto* generated=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,
-                    TEXT("/Game/UI/MainMenu/CharacterCreate/Data/DA_CharacterOptionData.DA_CharacterOptionData_C"),false);
-                auto* defaults=generated?generated->GetClassDefaultObject().Get():nullptr;
-                auto* table=TryGetDatatableByName("DT_Customization_HairPresets");
-                PS::Log<LogLevel::Normal>(STR("[CHARACTER-MENU][VERIFY] event='{}' cdoHairOptions={} hairPresetRows={}.\n"),
-                    function->GetPathName(),CharacterOptionCount(defaults,"HairPreset"),
-                    table?table->GetRowMap().Num():0);
-                for(FProperty* field=source->GetClassPrivate()->GetPropertyLink();field;field=field->GetPropertyLinkNext()) {
-                    auto* array=PropertyHelper::CastProperty<FArrayProperty>(field);if(!array)continue;
-                    const auto name=RC::to_string(field->GetName());
-                    if(name.find("Option")==std::string::npos&&name.find("Data")==std::string::npos)continue;
-                    auto* value=array->ContainerPtrToValuePtr<FScriptArray>(source);
-                    PS::Log<LogLevel::Normal>(STR("[CHARACTER-MENU][LIVE-ARRAY] property='{}' count={}.\n"),
-                        field->GetName(),value?value->Num():-1);
-                }
-            }
+            if(job.Events.size()==1||job.Events.size()%64==0||job.Events.size()>=job.MaxEvents)
+                FlushTraceJob(job,job.Events.size()>=job.MaxEvents);
         }
     }
 
