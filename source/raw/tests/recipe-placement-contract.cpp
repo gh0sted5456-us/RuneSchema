@@ -26,9 +26,10 @@ static void Need(const std::string& text, const std::string& token, const char* 
 
 int main(int argc, char** argv)
 {
-    if (argc != 3) return 2;
+    if (argc != 4) return 2;
     const auto loader = Read(argv[1]);
     const auto guide = Read(argv[2]);
+    const auto properties = Read(argv[3]);
 
     Need(loader,
         "const bool hasOneLayout = placement.Category.empty() != placement.Array.empty();",
@@ -53,7 +54,17 @@ int main(int argc, char** argv)
         "runtime-clone processing identity is not validated");
     Need(loader, "processing recipe still has a transient identity",
         "transient processing recipes are not rejected");
+    Need(loader, "m_invalidRecipes.insert(def.Key)",
+        "partially written recipes can still reach a station table");
+    Need(loader, "if(m_invalidRecipes.contains(def.Key))continue;",
+        "invalid recipe placement is not blocked during initial and replay placement");
     Need(loader, "sizeof(UObject*)", "processing array element size is not checked");
+    Need(properties, "String references carry no separate ObjectName",
+        "moved RuneSchema string paths no longer receive stable-name relocation fallback");
+    Need(properties, "object->IsA(expectedClass)",
+        "relocated object references are not constrained to the property type");
+    Need(properties, "Ambiguous relocated object reference",
+        "ambiguous relocated object names are not rejected");
     for (const auto* token : {
         "DT_CraftingStationsDataTable", "DT_ProcessingStationDataTable",
         "CraftingTable", "BrewingCauldron", "AdvancedSmelter",

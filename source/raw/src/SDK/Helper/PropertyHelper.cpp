@@ -458,6 +458,18 @@ namespace DragonWilds {
             if (Value.is_string())
             {
                 objectPath = RC::to_generic_string(Value.get<std::string>());
+                // String references carry no separate ObjectName. Preserve a
+                // stable-name fallback so a RuneSchema object can move to a
+                // different runtime package without breaking every recipe
+                // that names its former path.
+                const auto slash = objectPath.find_last_of(TEXT('/'));
+                const auto dot = objectPath.find(TEXT('.'),
+                    slash == RC::StringType::npos ? 0 : slash + 1);
+                const auto end = objectPath.find(TEXT(':'),
+                    dot == RC::StringType::npos ? 0 : dot + 1);
+                if (dot != RC::StringType::npos && dot + 1 < objectPath.size())
+                    objectName = objectPath.substr(dot + 1,
+                        end == RC::StringType::npos ? RC::StringType::npos : end - dot - 1);
             }
             else
             {
@@ -535,20 +547,36 @@ namespace DragonWilds {
             if (!referencedObject && !objectName.empty())
             {
                 const FName targetName(objectName,FNAME_Add);
+                auto* expectedClass=Property->GetPropertyClass().Get();
+                bool ambiguous=false;
                 UObjectGlobals::ForEachUObject([&](UObject* object, int32_t, int32_t) -> LoopAction {
-                    if (object && object->GetFName() == targetName)
+                    if (object && object->GetFName() == targetName
+                        && (!expectedClass || object->IsA(expectedClass)))
                     {
+                        if(referencedObject && referencedObject!=object) {
+                            ambiguous=true;
+                            return LoopAction::Break;
+                        }
                         referencedObject = object;
-                        return LoopAction::Break;
                     }
                     return LoopAction::Continue;
                 });
+                if(ambiguous)
+                    throw std::runtime_error(std::format(
+                        "Ambiguous relocated object reference for property {}",
+                        GetPropertyNameAsUTF8String(Property)));
             }
 
             if (!referencedObject)
             {
                 throw std::runtime_error(std::format("Failed to resolve object reference for property {}", GetPropertyNameAsUTF8String(Property)));
             }
+
+            auto* expectedClass=Property->GetPropertyClass().Get();
+            if(expectedClass && !referencedObject->IsA(expectedClass))
+                throw std::runtime_error(std::format(
+                    "Resolved object has the wrong type for property {}",
+                    GetPropertyNameAsUTF8String(Property)));
 
             if (Property->GetElementSize() != sizeof(UObject*))
             {

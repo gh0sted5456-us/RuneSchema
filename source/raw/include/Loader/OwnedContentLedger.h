@@ -137,12 +137,11 @@ inline void Merge(const std::filesystem::path& path,const std::vector<Record>& c
     if(SnapshotActive && path.lexically_normal()==SnapshotPath) {
         for(const auto& value:current) {
             Validate(value);
-            const auto old=SnapshotPrevious.find(value.PersistenceID);
-            if(old!=SnapshotPrevious.end() && old->second.Owner!=value.Owner)
-                throw std::runtime_error("RuneSchema owned-content identity transfer refused");
-            const auto found=SnapshotCurrent.find(value.PersistenceID);
-            if(found!=SnapshotCurrent.end() && found->second.Owner!=value.Owner)
-                throw std::runtime_error("RuneSchema owned-content identity collision");
+            // PersistenceID is the durable save identity. Owner, object path,
+            // internal name, and kind describe the definition that supplies it
+            // during this run and may legitimately change when a mod is moved,
+            // renamed, or reorganized. The live registries remain responsible
+            // for rejecting two simultaneously loaded objects with one ID.
             SnapshotCurrent[value.PersistenceID]=value;
         }
         return;
@@ -151,9 +150,6 @@ inline void Merge(const std::filesystem::path& path,const std::vector<Record>& c
     for(auto value:Read(path))records.emplace(value.PersistenceID,std::move(value));
     for(const auto& value:current) {
         Validate(value);
-        const auto found=records.find(value.PersistenceID);
-        if(found!=records.end() && found->second.Owner!=value.Owner)
-            throw std::runtime_error("RuneSchema owned-content identity transfer refused");
         records[value.PersistenceID]=value;
     }
     Write(path,records);

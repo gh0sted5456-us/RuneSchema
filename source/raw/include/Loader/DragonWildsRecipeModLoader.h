@@ -72,6 +72,9 @@ namespace DragonWilds {
         std::vector<RC::Unreal::UObject*> m_runtimeRecipePackages;
         std::unordered_set<RC::StringType> m_unlock;
         std::unordered_set<RC::StringType> m_propsApplied;
+        // A partially written recipe must never enter a crafting or timed
+        // processing table. Unreal may later dereference its empty ItemData.
+        std::unordered_set<RC::StringType> m_invalidRecipes;
         std::unordered_set<std::string> m_reportedPlacementFailures;
         RC::Unreal::UClass* m_recipeClass = nullptr;
         RC::Unreal::UClass* m_progressComponentClass = nullptr;

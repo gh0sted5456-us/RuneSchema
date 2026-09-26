@@ -482,6 +482,7 @@ namespace DragonWilds {
             }
 
             m_propsApplied.erase(keyWide);
+            m_invalidRecipes.erase(keyWide);
         }
     }
 
@@ -566,8 +567,18 @@ namespace DragonWilds {
                 continue;
             }
 
+            const auto errorsBefore=result.ErrorCount;
             ApplyProperties(recipe, def.Body, result);
             m_propsApplied.insert(def.Key);
+            if(result.ErrorCount!=errorsBefore) {
+                m_invalidRecipes.insert(def.Key);
+                m_unlock.erase(def.Key);
+                PS::Log<LogLevel::Error>(STR(
+                    "Recipe '{}' was not placed or unlocked because one or more properties failed validation.\n"),
+                    def.Key);
+                continue;
+            }
+            m_invalidRecipes.erase(def.Key);
 
             if (created)
             {
@@ -592,6 +603,7 @@ namespace DragonWilds {
         int placed = 0;
         for (auto& def : m_recipeDefs)
         {
+            if(m_invalidRecipes.contains(def.Key))continue;
             auto it = m_recipes.find(def.Key);
             if (it == m_recipes.end() || !it->second)
             {
@@ -661,6 +673,7 @@ namespace DragonWilds {
         int placed = 0;
         for (auto& def : m_recipeDefs)
         {
+            if(m_invalidRecipes.contains(def.Key))continue;
             auto it = m_recipes.find(def.Key);
             if (it == m_recipes.end() || !it->second)
             {

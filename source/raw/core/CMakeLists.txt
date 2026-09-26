@@ -256,7 +256,8 @@ if(PROJECT_IS_TOP_LEVEL)
     add_executable(recipe-placement-contract ../tests/recipe-placement-contract.cpp)
     add_test(NAME recipe-placement-contract COMMAND recipe-placement-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRecipeModLoader.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../LOADER-WALKTHROUGHS.md")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../LOADER-WALKTHROUGHS.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/SDK/Helper/PropertyHelper.cpp")
     add_executable(trace-job-contract ../tests/trace-job-contract.cpp)
     target_link_libraries(trace-job-contract PRIVATE RuneSchemaJsonCore)
     add_test(NAME trace-job-contract COMMAND trace-job-contract

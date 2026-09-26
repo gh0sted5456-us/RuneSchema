@@ -22,17 +22,23 @@ int RunOwnedContentLedger() {
         && absent[0].PersistenceID==b.PersistenceID);
     assert(Absent(read,{"enabled"}).size()==1); // owner matching is case-insensitive
     Merge(file,{a});assert(Read(file).size()==2); // historical ownership survives removal
-    bool transfer=false;try {auto changed=b;changed.Owner="Other";Merge(file,{changed});}
-    catch(const std::exception&){transfer=true;}assert(transfer);
+    auto changed=b;changed.Owner="Other";changed.Source="/Game/Moved/B.B";
+    Merge(file,{changed});
+    const auto transferred=Read(file);
+    const auto transferredRow=std::find_if(transferred.begin(),transferred.end(),[&](const auto& row){return row.PersistenceID==b.PersistenceID;});
+    assert(transferredRow!=transferred.end() && transferredRow->Owner=="Other"
+        && transferredRow->Source=="/Game/Moved/B.B");
     const auto snapshot=root/"snapshot.json";
     Merge(snapshot,{a,b});
     BeginSnapshot(snapshot);
-    Merge(snapshot,{a});
+    auto movedA=a;movedA.Owner="Coinage";movedA.Source="/Game/Mods/Coinage/ITEM_A.ITEM_A";
+    Merge(snapshot,{movedA});
     const auto missing=CompareSnapshot(snapshot);
     assert(missing.size()==1 && missing[0].PersistenceID==b.PersistenceID);
     CommitSnapshot(snapshot);
     const auto current=Read(snapshot);
-    assert(current.size()==1 && current[0].PersistenceID==a.PersistenceID);
+    assert(current.size()==1 && current[0].PersistenceID==a.PersistenceID
+        && current[0].Owner=="Coinage" && current[0].Source==movedA.Source);
     const auto settings=root/"settings";
     Write(LegacyLedgerPath(settings),{{a.PersistenceID,a}});
     const auto canonical=LedgerPath(settings);

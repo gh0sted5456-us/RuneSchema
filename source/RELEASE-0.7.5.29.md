@@ -30,6 +30,15 @@ content trace jobs.
   have all been verified.
 - A clone that fails those checks is isolated to that recipe placement. Cooked
   outputs and the rest of the station continue loading normally.
+- SafeSave uses PersistenceID as the durable identity. Owner, folder, runtime
+  path, and internal-name fields may be refreshed when the same content is
+  reorganized without producing a false removal.
+- String object references can recover a moved RuneSchema runtime object by a
+  unique, type-compatible stable name. Ambiguous and wrong-type matches fail
+  closed.
+- A recipe with any unresolved property is neither placed nor unlocked, which
+  prevents partially initialized ItemData pointers from reaching crafting or
+  timed-processing code.
 
 ## Helpy
 
