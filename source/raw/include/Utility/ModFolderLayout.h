@@ -2,10 +2,10 @@
 #include <algorithm>
 #include <filesystem>
 #include <optional>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <stdexcept>
 
 namespace PS::ModFolderLayout {
 inline constexpr const char* PakDirectory = "paks";
@@ -18,6 +18,8 @@ inline std::string AsciiLower(std::string value) {
     });
     return value;
 }
+
+inline std::string FoldAscii(std::string value) { return AsciiLower(std::move(value)); }
 
 inline bool EqualsInsensitive(std::string_view left, std::string_view right) {
     return AsciiLower(std::string(left)) == AsciiLower(std::string(right));
@@ -46,6 +48,27 @@ inline std::optional<std::filesystem::path> ResolveLoaderDirectory(
     }
     if (error) throw std::runtime_error("loader folder scan failed: " + error.message());
     return match;
+}
+
+inline std::filesystem::path FindChildDirectory(
+    const std::filesystem::path& parent, std::string_view wanted) {
+    namespace fs = std::filesystem;
+    std::error_code error;
+    if (!fs::is_directory(parent, error) || error) return {};
+    const auto folded = FoldAscii(std::string(wanted));
+    fs::path found;
+    std::size_t entries = 0;
+    for (const auto& entry : fs::directory_iterator(parent, error)) {
+        if (error) throw std::system_error(error, "Cannot enumerate mod directory");
+        if (++entries > 256) throw std::runtime_error("Mod folder contains more than 256 top-level entries");
+        std::error_code typeError;
+        if (!entry.is_directory(typeError) || typeError) continue;
+        if (FoldAscii(entry.path().filename().string()) != folded) continue;
+        if (!found.empty() && fs::weakly_canonical(found) != fs::weakly_canonical(entry.path()))
+            throw std::runtime_error("Loader folder names differ only by case; keep exactly one");
+        found = entry.path();
+    }
+    return found;
 }
 
 inline bool ContainsLegacyPakContent(const std::filesystem::path& folder, std::error_code& error) {
