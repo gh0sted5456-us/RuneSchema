@@ -15,6 +15,9 @@ that supports the answer.
     Try: <button type="button" data-rs-question="Can /raw edit any DataTable?">raw DataTables</button>
     <button type="button" data-rs-question="Does placing a recipe unlock it?">recipe unlocks</button>
     <button type="button" data-rs-question="Can blueprints create a new Blueprint class?">Blueprint classes</button>
+    <button type="button" data-rs-question="Do I need modId in every file?">mod identity</button>
+    <button type="button" data-rs-question="Can I use nested folders?">nested folders</button>
+    <button type="button" data-rs-question="Do clients need the same cooked assets?">multiplayer assets</button>
   </div>
   <div id="rs-ask-status" class="rs-ask__status" aria-live="polite"></div>
   <div id="rs-ask-results" class="rs-ask__results"></div>
