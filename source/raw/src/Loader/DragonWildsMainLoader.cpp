@@ -210,7 +210,7 @@ namespace DragonWilds {
         auto modName = it->native();
 
         std::advance(it, 1);
-        auto folderType = it->string();
+        auto folderType = PS::ModFolderLayout::FoldAscii(it->string());
 
         std::ifstream f(filePath);
         if (f.peek() == std::ifstream::traits_type::eof()) {
@@ -490,8 +490,8 @@ namespace DragonWilds {
                             m_spawnLoader->LoadNameplateDefinitions(
                                 pendingAutoReload.FilePath.parent_path(), pendingAutoReload.ModName, true);
                             m_spawnLoader->FinalizeNameplateDefinitions();
-                            const auto playersPath = modPath / "players";
-                            if (fs::is_directory(playersPath))
+                            const auto playersPath = PS::ModFolderLayout::FindChildDirectory(modPath, "players");
+                            if (!playersPath.empty())
                                 m_spawnLoader->LoadPlayerRules(playersPath, pendingAutoReload.ModName, true);
                             m_spawnLoader->FinalizePlayerRules();
                             PS::Log<LogLevel::Normal>(
@@ -745,8 +745,8 @@ namespace DragonWilds {
             if (PS::PSConfig::Get()->IsLoaderEnabled("nameplates"))
             {
                 IterateModsFolder([&](const fs::path& modPath, const fs::path::string_type& modName) {
-                    const auto nameplatesPath = modPath / "nameplates";
-                    if (fs::is_directory(nameplatesPath))try {m_spawnLoader->LoadNameplateDefinitions(nameplatesPath, modName);}
+                    const auto nameplatesPath = PS::ModFolderLayout::FindChildDirectory(modPath, "nameplates");
+                    if (!nameplatesPath.empty())try {m_spawnLoader->LoadNameplateDefinitions(nameplatesPath, modName);}
                     catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[LOADER:nameplates][PARTIAL][MOD:{}] Section skipped: {}. Other mods continue.\n"),modName,PS::ToWideSafe(error.what()));}
                 });
                 try {m_spawnLoader->FinalizeNameplateDefinitions();}
@@ -755,8 +755,8 @@ namespace DragonWilds {
             IterateModsFolder([&](const fs::path& modPath,
                 const fs::path::string_type& modName)
             {
-                const auto playersPath = modPath / "players";
-                if (!fs::is_directory(playersPath)) return;
+                const auto playersPath = PS::ModFolderLayout::FindChildDirectory(modPath, "players");
+                if (playersPath.empty()) return;
                 try
                 {
                     m_spawnLoader->LoadPlayerRules(playersPath, modName);
@@ -783,13 +783,14 @@ namespace DragonWilds {
             }
 
             auto folderType = entry.path().filename().string();
-            if (folderType == PS::ModFolderLayout::PakDirectory || folderType == "players" || folderType == "nameplates")
+            const auto foldedFolderType = PS::ModFolderLayout::FoldAscii(folderType);
+            if (foldedFolderType == PS::ModFolderLayout::PakDirectory || foldedFolderType == "players" || foldedFolderType == "nameplates")
             {
                 continue;
             }
 
             auto known = std::any_of(m_loaders.begin(), m_loaders.end(),
-                [&](const auto& loader) { return loader->GetModFolderType() == folderType; });
+                [&](const auto& loader) { return loader->GetModFolderType() == foldedFolderType; });
             if (known)
             {
                 continue;
