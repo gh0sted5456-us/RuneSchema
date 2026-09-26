@@ -94,6 +94,21 @@ No. For the verified direct `DA_` authoring form, put the complete target path
 first and the native field path below it. The mod directory supplies ownership;
 the legacy registry-patch envelope remains readable for compatibility.
 
+### FAQ-ASSETS-003 — Can I patch an existing item without cloning it? {#faq-assets-003}
+
+Yes. `/assets` can patch a loaded item at its existing object path. Use
+`$Clone` only when you want a separate item identity at a new cooked path.
+
+### FAQ-ASSETS-004 — Where should I edit DataTable rows referenced by an item? {#faq-assets-004}
+
+Use `/raw` for DataTable row work such as wearable-equipment rows. Keep the
+item/DataAsset edit in `/assets`.
+
+### FAQ-ASSETS-005 — Does a clone keep RecipesToUnlock and BuildingPieceToUnlock? {#faq-assets-005}
+
+Yes. Those links are inherited from the source unless you explicitly replace
+them.
+
 ## Working examples
 
 - [Great Tree: Sacred Leaf and quest items](../examples/GreatTree/assets/85-GreatTreeItems.json)
