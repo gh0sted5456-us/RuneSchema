@@ -74,6 +74,8 @@ namespace DragonWilds {
         RC::Unreal::UClass* m_recipeClass = nullptr;
         RC::Unreal::UClass* m_itemDataClass = nullptr;
         RC::Unreal::UClass* m_progressComponentClass = nullptr;
+        std::unordered_map<std::string, RC::Unreal::UObject*> m_itemRoutes;
+        std::unordered_set<std::string> m_ambiguousItemRoutes;
         std::vector<std::pair<RC::Unreal::UFunction*, int32_t>> m_functionHooks;
         bool m_hooksActive = false;
         std::unordered_map<RC::StringType, std::string> m_vendorRecipeOwners;
@@ -84,6 +86,9 @@ namespace DragonWilds {
         uint64_t m_recipeRevision=0;
         RC::Unreal::UObject* LiveRecipe(const RC::StringType& key) const;
         RC::Unreal::UObject* EnsureRuntimePackage(const RC::StringType& packagePath);
+        void RefreshItemRoutes();
+        nlohmann::json RouteRecipeItemReferences(std::string_view propertyName,
+            const nlohmann::json& authored) const;
 
         void QueueData(const nlohmann::json& data, const RC::StringType& modName);
         void ApplyPendingPatches();
