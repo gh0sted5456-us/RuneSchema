@@ -52,7 +52,7 @@ int main(int argc, char** argv)
         "late-serialized DataTables are no longer replayed");
     Need(loader, "recipe->IsA(acceptedClass)",
         "processing array writes are not type checked");
-    Need(loader, "InspectRuntimeCloneOutputs(recipe)",
+    Need(loader, "InspectRuntimeCloneOutputs(recipe,m_itemRoutes,m_ambiguousItemRoutes)",
         "timed processing does not validate runtime-clone outputs");
     Need(loader, "RuntimeRecipePath(def.ModName,def.Key)",
         "authored processing recipes do not receive a stable mod-scoped runtime path");
@@ -60,6 +60,8 @@ int main(int argc, char** argv)
         "unregistered runtime-clone processing output is not isolated");
     Need(loader, "runtime-clone output has no stable PersistenceID",
         "runtime-clone processing identity is not validated");
+    Need(loader, "does not round-trip through the live PersistenceID registry",
+        "processing output is not verified against the live ItemSubsystem identity route");
     Need(loader, "processing recipe still has a transient identity",
         "transient processing recipes are not rejected");
     Need(loader, "m_invalidRecipes.insert(def.Key)",

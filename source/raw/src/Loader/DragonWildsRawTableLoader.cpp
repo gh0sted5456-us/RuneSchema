@@ -227,6 +227,7 @@ namespace DragonWilds {
                 RC::to_generic_string(patch.Row));
         }
         m_pendingPatches.clear();
+        LoadAndApplyRawTargets();
         try {
             m_registryPlan=RegistryPatch::BuildPlan(m_registryDocuments);
             if(!m_registryPlan.empty())PS::Log<LogLevel::Normal>(STR("[REGISTRY-PATCH][READY] {} operation{} planned with ownership, dependency, and capability validation.\n"),
@@ -269,7 +270,21 @@ namespace DragonWilds {
                     continue;
                 }
 
-                auto datatable = TryGetDatatableByName(key);
+                UDataTable* datatable=nullptr;
+                if(key.starts_with('/') && key.find('.')!=std::string::npos)
+                {
+                    auto* object=UECustom::UObjectGlobals::StaticFindObject(
+                        nullptr,nullptr,RC::to_generic_string(key).c_str(),false);
+                    if(!object)
+                    {
+                        UECustom::TSoftObjectPtr<UObject> soft{
+                            UECustom::FSoftObjectPath(RC::to_generic_string(key))};
+                        object=UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
+                    }
+                    if(object&&object->IsA(UDataTable::StaticClass()))
+                        datatable=static_cast<UDataTable*>(object);
+                }
+                else datatable = TryGetDatatableByName(key);
                 if (!datatable)
                 {
                     PS::Log<LogLevel::Error>(STR("Failed to auto-reload {}, data table {} doesn't exist.\n"),
@@ -429,7 +444,49 @@ namespace DragonWilds {
         {
             Apply(datatable->GetName(), datatable);
         }
+        const auto path=RC::to_string(datatable->GetPathName());
+        if(m_tableDataMap.contains(RC::to_generic_string(path))
+            && m_appliedExactTargets.insert(path).second)
+            Apply(RC::to_generic_string(path),datatable);
         ApplyRegistryPatches(datatable);
+    }
+
+    void DragonWildsRawTableLoader::LoadAndApplyRawTargets()
+    {
+        std::vector<std::string> paths;
+        for(const auto& [target,_]:m_tableDataMap)
+        {
+            const auto path=RC::to_string(target);
+            if(path.starts_with('/') && path.find('.')!=std::string::npos)
+                paths.push_back(path);
+        }
+        std::ranges::sort(paths);
+        paths.erase(std::unique(paths.begin(),paths.end()),paths.end());
+        for(const auto& path:paths)try
+        {
+            if(m_appliedExactTargets.contains(path))continue;
+            auto* object=UECustom::UObjectGlobals::StaticFindObject(
+                nullptr,nullptr,RC::to_generic_string(path).c_str(),false);
+            if(!object)
+            {
+                UECustom::TSoftObjectPtr<UObject> soft{
+                    UECustom::FSoftObjectPath(RC::to_generic_string(path))};
+                object=UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
+            }
+            if(!object||!object->IsA(UDataTable::StaticClass()))
+                throw std::runtime_error("target did not resolve to UDataTable");
+            // LoadAsset_Blocking may synchronously invoke OnDatatableSerialized,
+            // which applies and records this exact target before returning.
+            if(m_appliedExactTargets.contains(path))continue;
+            auto* table=static_cast<UDataTable*>(object);
+            Apply(RC::to_generic_string(path),table);
+            m_appliedExactTargets.insert(path);
+        }
+        catch(const std::exception& error)
+        {
+            PS::Log<LogLevel::Error>(STR("Raw DataTable target '{}' was not applied: {}. Other tables continue.\n"),
+                RC::to_generic_string(path),PS::ToWideSafe(error.what()));
+        }
     }
 
     bool DragonWildsRawTableLoader::ProfileAllows(const RegistryPatch::Patch& patch) const

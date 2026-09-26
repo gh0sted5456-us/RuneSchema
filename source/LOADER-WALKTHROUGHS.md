@@ -143,6 +143,12 @@ Walkthrough:
 1. Choose a source with the same native item type and behavior you need.
 2. Assign a unique destination path, `PersistenceID`, and `InternalName`.
 3. Override only reflected fields that exist on the source type.
+
+`/assets` owns UObject/DataAsset cloning and field edits. It does not own
+DataTable rows or station placement. A clone is accepted only after its
+`PersistenceID` and `InternalName` are registered in the live ItemSubsystem;
+recipes should reference that registered clone by its PersistenceID or its
+actual stable RuneSchema object path.
 4. Add `/raw` rows when the item points to row handles such as wearable data.
 5. Add `/recipes`, `/journal`, or `/vendors` references after the item path is
    stable.
@@ -566,6 +572,21 @@ Walkthrough:
 }
 ```
 
+Any reflected `UDataTable` can be edited by using its exact object path as the
+top-level key:
+
+```jsonc
+{
+  "/Game/MyMod/Data/DT_Custom.DT_Custom": {
+    "ExistingRow": {"SomeField": 10},
+    "NewRow": {"SomeField": 20}
+  }
+}
+```
+
+RuneSchema loads an exact target on demand, validates that it really is a
+`UDataTable`, and prevents synchronous serialization from applying the same
+document twice. Legacy short names remain supported when they are unique.
 Use an exact DataTable object path when a short table name is ambiguous. New
 registry-patch documents can declare the target path, row struct, ownership,
 preconditions, and operation. See
@@ -615,6 +636,10 @@ Placement rules:
   references into a stable `/Game/RuneSchema/<mod>/Recipes/` recipe object.
   Missing or ambiguous IDs reject that recipe instead of leaving a transient
   or partially initialized object in a crafting or processing queue.
+- Processing placement additionally verifies that a clone's PersistenceID
+  resolves back to the exact registered ItemData object. A duplicate identity,
+  unregistered clone, transient recipe, or mismatched route rejects only that
+  recipe placement before the station can retain it.
 
 The verified vanilla station targets are:
 

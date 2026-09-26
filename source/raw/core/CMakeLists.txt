@@ -258,6 +258,10 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRecipeModLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../LOADER-WALKTHROUGHS.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/SDK/Helper/PropertyHelper.cpp")
+    add_executable(raw-datatable-contract ../tests/raw-datatable-contract.cpp)
+    add_test(NAME raw-datatable-contract COMMAND raw-datatable-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRawTableLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../LOADER-WALKTHROUGHS.md")
     add_executable(trace-job-contract ../tests/trace-job-contract.cpp)
     target_link_libraries(trace-job-contract PRIVATE RuneSchemaJsonCore)
     add_test(NAME trace-job-contract COMMAND trace-job-contract

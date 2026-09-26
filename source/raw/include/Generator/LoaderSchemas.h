@@ -495,10 +495,16 @@ inline nlohmann::json LoaderSchemas() {
     equipmentEffectRule["properties"]["$Comment"]=text;
     const json equipmentEffects={{"type","object"},{"maxProperties",256},{"propertyNames",{{"pattern","^/.*\\..+$"}}},
         {"additionalProperties",equipmentEffectRule}};
+    const json equipmentAssetReference={{"type","string"},{"pattern","^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$"},{"maxLength",1024}};
+    json equipmentItemRule={{"type","object"},{"minProperties",1},{"additionalProperties",false},
+        {"properties",{{"AssociatedSkill",equipmentAssetReference},{"SkillUsed",equipmentAssetReference},
+            {"SkillPerkRequiredToEquip",equipmentAssetReference},{"GrantedEffects",equipmentEffectRule},{"$Comment",text}}}};
+    const json equipmentItems={{"type","object"},{"maxProperties",256},{"propertyNames",{{"pattern","^/.*\\..+$"}}},
+        {"additionalProperties",equipmentItemRule}};
     result["equipment"]={{"type","object"},{"minProperties",1},{"additionalProperties",false},
         {"properties",{{"SurgeEvadeLegs",{{"type","object"},{"maxProperties",64},{"additionalProperties",{{"type","boolean"}}}}},
             {"ShadowveilWearables",object},{"ShadowveilAttackEvadeWearables",{{"type","object"},{"maxProperties",64},{"additionalProperties",{{"type","boolean"}}}}},
-            {"GrantedEffects",equipmentEffects}}},
+            {"GrantedEffects",equipmentEffects},{"Items",equipmentItems}}},
         {"not",{{"required",{"ShadowveilWearables","ShadowveilAttackEvadeWearables"}}}}};
     const json scalar={{"anyOf",{json{{"type",{"number","boolean"}}},json{{"type","string"},{"minLength",1},{"maxLength",512},{"pattern","^/"}}}}};
     const json condition={{"type","object"},{"additionalProperties",false},{"required",{"Path"}},

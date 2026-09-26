@@ -69,7 +69,9 @@ namespace DragonWilds {
         return slot&&slot->GetUObject()==object&&slot->IsValid(false)&&slot->IsRootSet();
     }
 
-    static RuntimeCloneOutputStatus InspectRuntimeCloneOutputs(UObject* recipe)
+    static RuntimeCloneOutputStatus InspectRuntimeCloneOutputs(UObject* recipe,
+        const std::unordered_map<std::string,UObject*>& itemRoutes,
+        const std::unordered_set<std::string>& ambiguousRoutes)
     {
         RuntimeCloneOutputStatus status{};
         if(!recipe||!recipe->GetClassPrivate())return status;
@@ -95,6 +97,17 @@ namespace DragonWilds {
             if(identity.empty()) {
                 status.Safe=false;
                 status.Reason="runtime-clone output has no stable PersistenceID";
+                return;
+            }
+            if(ambiguousRoutes.contains(identity)) {
+                status.Safe=false;
+                status.Reason="runtime-clone output PersistenceID is ambiguous";
+                return;
+            }
+            const auto registered=itemRoutes.find(identity);
+            if(registered==itemRoutes.end() || registered->second!=item) {
+                status.Safe=false;
+                status.Reason="runtime-clone output does not round-trip through the live PersistenceID registry";
                 return;
             }
             if(!IsRootRetained(item)) {
@@ -1071,7 +1084,7 @@ namespace DragonWilds {
         // runtime-clone output is admitted only after the item registry owns a
         // stable PersistenceID for it. Any unsafe placement is isolated here.
         if(!placement.Array.empty()) {
-            const auto clone=InspectRuntimeCloneOutputs(recipe);
+            const auto clone=InspectRuntimeCloneOutputs(recipe,m_itemRoutes,m_ambiguousItemRoutes);
             if(clone.Found&&(!clone.Safe||recipe->GetPathName().starts_with(TEXT("/Engine/Transient")))) {
                 reportFailure(clone.Safe
                     ? "processing recipe still has a transient identity"

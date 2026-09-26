@@ -94,6 +94,7 @@ int RunLoaderSchemas(int argc,char** argv) {
     assert(schemas.at("effects").at("x-runeschema-reference-forms").size()==2);
     assert(schemas.at("equipment").at("additionalProperties")==false);
     assert(schemas.at("equipment").at("properties").contains("GrantedEffects"));
+    assert(schemas.at("equipment").at("properties").contains("Items"));
     const auto& declaration=schemas.at("assets").at("properties").at("$declaration");
     assert(declaration.at("oneOf").size()==2);
     assert(declaration.at("oneOf").at(0).at("properties").at("Kind").at("enum")==nlohmann::json::array({"Item","Recipe"}));

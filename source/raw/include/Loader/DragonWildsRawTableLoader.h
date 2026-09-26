@@ -47,6 +47,7 @@ namespace DragonWilds {
         virtual void OnDatatableSerialized(RC::Unreal::UDataTable* datatable) override final;
     private:
         std::unordered_map<RC::StringType, std::vector<nlohmann::json>> m_tableDataMap;
+        std::set<std::string> m_appliedExactTargets;
         struct PendingPatch { std::string Table; std::string Row; nlohmann::json Changes; RC::StringType ModName; };
         std::vector<PendingPatch> m_pendingPatches;
         std::vector<RegistryPatch::Document> m_registryDocuments;
@@ -75,6 +76,7 @@ namespace DragonWilds {
             const std::string& source = "raw");
         void ReloadDocument(const nlohmann::json& data, const RC::StringType& modName);
         void LoadAndApplyRegistryTargets();
+        void LoadAndApplyRawTargets();
         void ApplyRegistryPatches(RC::Unreal::UDataTable* datatable);
         void ApplyObjectRegistryPatches();
         nlohmann::json ResolveRegistryValue(const nlohmann::json& value, const RegistryPatch::Patch& patch) const;
