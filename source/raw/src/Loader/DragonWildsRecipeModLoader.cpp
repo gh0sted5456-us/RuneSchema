@@ -405,9 +405,18 @@ namespace DragonWilds {
         }
         else if (engineLifecyclePhase == EEngineLifecyclePhase::GameInstanceInit)
         {
-            ApplyPendingPatches();
-            ApplyAll();
+            // Runtime ItemData clones are applied by the assets loader while
+            // the per-mod pass is still running. Finalization waits until every
+            // mod has had that chance before resolving recipe PersistenceIDs.
         }
+    }
+
+    void DragonWildsRecipeModLoader::OnFinalizeLoad(
+        const EEngineLifecyclePhase& engineLifecyclePhase)
+    {
+        if(engineLifecyclePhase!=EEngineLifecyclePhase::GameInstanceInit)return;
+        ApplyPendingPatches();
+        ApplyAll();
     }
 
     void DragonWildsRecipeModLoader::OnAutoReload(const RC::StringType& modName, const std::filesystem::path& modFilePath)
@@ -439,6 +448,12 @@ namespace DragonWilds {
             if (!m_recipeClass)
             {
                 throw std::runtime_error("Class RecipeData was not found");
+            }
+
+            m_itemDataClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr, nullptr, ItemDataClassPath);
+            if (!m_itemDataClass)
+            {
+                throw std::runtime_error("Class ItemData was not found");
             }
 
             m_progressComponentClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr, nullptr, ProgressComponentClassPath);
@@ -501,7 +516,7 @@ namespace DragonWilds {
                         for(auto& placement:placements)placement["Category"]=VendorOffers::Category(body);
                         nlohmann::json native={{"Properties",VendorOffers::Properties(body)},{"Unlock",true},{"AddTo",placements}};
                         const auto identity=RC::to_generic_string("RSMerchant_"+VendorOffers::Identity(offer.Mod,offer.Id));
-                        m_recipeDefs.push_back({identity,native,ParsePlacements(native)});
+                        m_recipeDefs.push_back({identity,RC::to_generic_string(offer.Mod),native,ParsePlacements(native)});
                     }
                     m_storeOffers.push_back(std::move(offer));
                     continue;
@@ -525,7 +540,7 @@ namespace DragonWilds {
                 PS::Log<LogLevel::Error>(STR("Recipe '{}': {}. Skipping.\n"), keyWide, PS::ToWideSafe(error.what()));
                 continue;
             }
-            RecipeDef def{ keyWide, body, ParsePlacements(body) };
+            RecipeDef def{ keyWide, modName, body, ParsePlacements(body) };
 
             auto existing = std::find_if(m_recipeDefs.begin(), m_recipeDefs.end(),
                 [&](const RecipeDef& d) { return d.Key == keyWide; });
