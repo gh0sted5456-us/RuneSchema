@@ -52,7 +52,7 @@ inline void CheckPending(const Json& row) {
 // Installed and absent owners are explicit selections; neither is inferred from an asset prefix.
 inline Preview Plan(const Json& source,const std::set<std::string>& requested,
     bool eraseProgress=false,const RegistrySnapshot* registry=nullptr,
-    bool removePendingOwned=false) {
+    bool removePendingOwned=false,bool pruneRegistryProgress=false) {
     RequireCharacter(source);
     for(const auto& owner:requested)DragonWilds::Quests::ValidateOwner(owner);
     const std::set<std::string> selected=eraseProgress?requested:std::set<std::string>{};
@@ -87,7 +87,7 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
                 }else ++it;
             }
         }
-        if(eraseProgress && game.contains("Progress")) {
+        if((eraseProgress || pruneRegistryProgress) && game.contains("Progress")) {
             auto& progress=game.at("Progress");
             if(!progress.is_object())throw std::runtime_error("Unsupported item/recipe progress layout");
             for(const auto* field:{"ItemsPickedUp","MilestoneMaterialsPickedUp","RecipesUnlocked","RecipesNew"}) {
