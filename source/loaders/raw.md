@@ -62,6 +62,28 @@ property.
 No. For an existing row, provide the fields you intend to change. RuneSchema
 writes the matching reflected properties you supplied.
 
+### FAQ-RAW-005 — Can /raw patch an arbitrary UObject or Blueprint? {#faq-raw-005}
+
+No. `/raw` is the DataTable authoring surface. Use `/assets` for loaded
+DataAssets/object patches and `/blueprints` for supported class/component
+defaults.
+
+### FAQ-RAW-006 — When should I use a registry-patch document instead of classic /raw? {#faq-raw-006}
+
+Use the registry-patch form when you need an exact cooked DataTable path,
+explicit ownership, preconditions, dependency ordering, or a stricter
+transactional operation.
+
+### FAQ-RAW-007 — Can $Append target any field? {#faq-raw-007}
+
+No. The target field must exist on the reflected row structure and must be an
+array.
+
+### FAQ-RAW-008 — Can I guess nested row layouts from a USMAP export? {#faq-raw-008}
+
+Do not rely on a USMAP alone. Use it as a reference, then verify the target
+against live reflection before authoring nested structures.
+
 ## Working examples
 
 - [Capes: Attack cape override](../examples/Capes/raw/DT_ITEM_Cape_Attack_override.json)
