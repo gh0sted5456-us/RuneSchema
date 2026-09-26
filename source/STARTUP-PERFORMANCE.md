@@ -7,9 +7,10 @@ that interval.
 
 ## September 25, 2026 baseline
 
-The 0.7.5.27 universal runtime was profiled on both Steam/GOG and Game
-Pass/WinGDK with the same active RuneSchema mod set. These measurements are a
-diagnostic baseline, not guaranteed startup times for every computer.
+These measurements were captured during the 0.7.5.27–0.7.5.28 optimization
+cycle on both Steam/GOG and Game Pass/WinGDK with the same active RuneSchema
+mod set. They remain the 0.7.5.28 reference baseline until superseded by a new
+profile and are not guaranteed startup times for every computer.
 
 | Stage | Steam/GOG | Game Pass/WinGDK | Owner |
 | --- | ---: | ---: | --- |
