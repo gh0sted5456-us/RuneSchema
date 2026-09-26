@@ -1,0 +1,183 @@
+# Developer guide
+
+This section is for RuneSchema contributors and plugin authors. Mod authors
+usually only need the [Authoring Guide](AUTHORING-GUIDE.md) and
+[Loader Reference](LOADER-WALKTHROUGHS.md).
+
+## Runtime layout
+
+RuneSchema ships one `main.dll` with separate Steam/GOG and Game Pass/WinGDK
+native lanes.
+
+Core rules:
+
+- each loader reads only its own mod folder;
+- loader failures stay scoped to the affected file, mod, or feature where safe;
+- live Unreal reflection validates objects, rows, fields, and types before writes;
+- optional native hooks may disable one feature without disabling the loader system;
+- Helpy and other plugins are optional and are not required by core loaders.
+
+Shared services own storefront detection, native bindings, mappings, DataTable
+registration, networking, ownership tracking, and lifecycle readiness.
+
+## Native bindings
+
+Native calls are storefront-specific. A Steam address or byte pattern is never
+reused on WinGDK only because the code looks similar.
+
+A native hook is enabled only when its profile and runtime checks match. These
+checks include the storefront lane, executable identity, hook bytes, resume
+bytes, and callback contract where applicable.
+
+Current behavior:
+
+| Area | Steam / GOG | Game Pass / WinGDK |
+| --- | --- | --- |
+| Core engine bindings | validated native profile with reflection fallback | WinGDK profile plus UE4SS/reflection fallback |
+| Object enumeration | validated native path | UE4SS hash tables/object array |
+| Shadowveil actions | supported | supported on the verified WinGDK profile |
+| Surge/Dash native actions | supported on the verified Steam profile | native path disabled until the complete contract is verified |
+| Journal/lore placement | native/reflected path | WinGDK-specific hierarchy/category path |
+| Character preview | native appearance hooks plus fallback | verified wearable event plus bounded menu fallback |
+| Merchant, quest, dialogue, events, spawns | reflection/RuneSchema services | same |
+
+When a game update changes the executable identity, affected native features
+remain off until a new profile is verified. Do not weaken byte checks to make
+an old profile match a new build.
+
+## Save handling
+
+RuneSchema removes only content with recorded RuneSchema ownership.
+
+### Steam / GOG
+
+Character saves are loose files under:
+
+```text
+%LOCALAPPDATA%\RSDragonwilds\Saved
+```
+
+Owned-content cleanup can back up, update, and verify those files before the
+game loads them.
+
+### Game Pass / WinGDK
+
+Game Pass uses Xbox Game Save under the package `SystemAppData\wgs` tree.
+RuneSchema does not treat GUID-named provider files or `containers.index` as
+ordinary Steam JSON files.
+
+Cleanup runs against hydrated game state and lets Dragonwilds write through
+its active WGS provider. RuneSchema keeps its own ownership ledger under the
+package `LocalState\RSDragonwilds\Saved\RuneSchema` tree.
+
+For user recovery procedures, use
+[Manual Save Recovery](MANUAL-SAVE-RECOVERY.md). Do not direct users to edit
+WGS provider files in place.
+
+## Persistence settings
+
+Loader activation and save persistence are separate.
+
+```jsonc
+"persistence": {
+  "characterCustomization": false,
+  "journal": false,
+  "recipes": false
+}
+```
+
+The defaults are `false`. Loaders can remain active while RuneSchema avoids
+writing the corresponding persistent unlock or appearance state.
+
+Recipes use the game's transient recipe set when recipe persistence is off.
+Journal/lore content can still register and appear without calling the native
+save-backed unlock path. Character customization loaders can stay active
+without applying automatic save-backed player appearance rules.
+
+## Build and package flow
+
+The repository build entry point is:
+
+```text
+..\build\build.bat -Clean
+```
+
+The build compiles the core runtime and Helpy, runs release checks, stages the
+runtime, compresses release DLLs with UPX when configured, and attempts code
+signing when local signing settings are available. Signing configuration stays
+outside source control.
+
+Published 0.7.5.28 packages are:
+
+- `RuneSchema-0.7.5.28-Universal.zip`
+- `RuneSchema-0.7.5.28-Core.zip`
+- Steam/GOG UE4SS runtime ZIP
+- Game Pass/WinGDK UE4SS runtime ZIP
+
+The Universal and Core packages use the same storefront-aware core. The Core
+package omits optional plugins as a dependency check.
+
+Build into a staging directory and replace the published package only after
+compile, compression/signing checks, and package validation succeed.
+
+## Helpy
+
+Helpy is a plugin-owned viewport UI. It does not clone a Dragonwilds menu.
+
+Current implementation rules:
+
+- `UGameViewportClient::PostRender` is the viewport lifecycle boundary;
+- the model/request layer stays independent of the renderer;
+- layout, rendering, and hit testing share one logical coordinate system;
+- Canvas function lookups are cached;
+- icon loading is bounded and missing icons are negatively cached;
+- opening Helpy does not start a full UObject scan;
+- catalog parsing and preference writes stay out of the render callback.
+
+The current Canvas path is intentionally simple. If it cannot meet the
+performance target after profiling, keep the model and replace only the
+presenter with plugin-owned UMG.
+
+## Performance
+
+Do not read every gap between log lines as RuneSchema CPU time. UE4SS object
+construction, Unreal readiness, garbage collection, player-controller creation,
+and viewport creation can all delay the next RuneSchema lifecycle event.
+
+Measured 0.7.5.28 journal finalization after the current indexing work:
+
+| Storefront | Journal finalization |
+| --- | ---: |
+| Steam / GOG | about 306 ms |
+| Game Pass / WinGDK | about 410 ms |
+
+The measured Game Pass recipe-reference preparation path remains slower at
+about 2.91 seconds for the profiled mod set. Any optimization must keep
+storefront separation, late object availability, auto-reload behavior, and
+per-entry failure isolation.
+
+## Loader and ownership boundaries
+
+Do not add broad startup scans to solve a loader-specific problem.
+
+Prefer this order:
+
+1. wait for the capability or object the subsystem owns;
+2. resolve the narrow target;
+3. validate reflection/native contracts;
+4. apply the change;
+5. report a scoped failure if the capability is unavailable.
+
+SafeSave must never broaden an unresolved ID into proof of ownership. Vanilla,
+unknown third-party, malformed, and unresolved records remain untouched unless
+RuneSchema ownership is known.
+
+## Documentation and releases
+
+The public site documents the Nexus-published **0.7.5.28** release. Intermediate
+0.7.x development builds are kept in Git history rather than exposed as
+separate public release pages.
+
+Public docs should describe current behavior. Put implementation history,
+addresses, profiling notes, and build mechanics here instead of in loader or
+authoring pages.
