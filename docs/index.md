@@ -9,7 +9,7 @@ hide:
 <img class="rs-hero__banner" src="assets/images/runeschema-banner.png" alt="RuneSchema">
 
 <div class="rs-hero__eyebrow">
-<span class="rs-version">RuneSchema 0.7.5.28</span>
+<span class="rs-version">Current Release</span>
 <span class="rs-platform rs-platform--steam">Steam / GOG</span>
 <span class="rs-platform rs-platform--gamepass">Game Pass / WinGDK</span>
 </div>
@@ -130,7 +130,7 @@ hide:
 
     [:octicons-arrow-right-24: Schema reference](SCHEMAS.md)
 
--   :material-history:{ .lg .middle } **Release 0.7.5.28**
+-   :material-history:{ .lg .middle } **Current release**
 
     ---
 
@@ -143,7 +143,7 @@ hide:
 </div>
 
 !!! info "Current release"
-    The website documents **RuneSchema 0.7.5.28**. Intermediate 0.7.x development builds stay in Git history instead of separate public pages.
+    The website documents the current supported RuneSchema release. Historical development checkpoints stay in Git history.
 
 !!! warning "Runtime reflection decides compatibility"
     Examples show supported authoring shapes. Unreal reflection still determines whether a target object, row, field, and value type are valid at runtime.

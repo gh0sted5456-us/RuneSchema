@@ -160,8 +160,7 @@ const RS_ADVANCED_PATHS = [
   "/SCHEMAS/",
   "/raw/BASE-BUILDER-IMPORT/",
   "/DOCUMENTATION-INDEX/",
-  "/RELEASES/",
-  "/RELEASE-0.7.5.28/"
+  "/CURRENT-RELEASE/"
 ];
 
 function rsDocsLabel(node) {

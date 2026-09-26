@@ -12,20 +12,19 @@ Start with these pages:
 Focused authoring pages:
 
 - [Character Creation](CHARACTER-CREATION-AUTHORING.md)
-- [Registry Patching](REGISTRY-PATCHING.md)
+- [Registry & DataTables](REGISTRY-PATCHING.md)
 - [Building Cloning](BUILDING-CLONING.md)
 - [SafeSave & Ownership](SAFE-SAVE-AND-LEDGER.md)
 - [Compatibility](COMPATIBILITY-BACKBONE.md)
 - [Manual Save Recovery](MANUAL-SAVE-RECOVERY.md)
 - [Unreal + RuneSchema](unreal-runeschema/index.md)
 
-## Release
+## Current release
 
-The public site tracks the Nexus-published
-[0.7.5.28 release](RELEASE-0.7.5.28.md).
+- [Current Release](CURRENT-RELEASE.md) — public release summary and package types.
 
-Intermediate 0.7.x development notes are kept in Git history rather than
-published as separate documentation pages.
+Historical development checkpoints remain in Git history rather than the public
+manual.
 
 ## Developers
 

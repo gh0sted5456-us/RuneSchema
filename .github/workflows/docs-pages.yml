@@ -48,7 +48,7 @@ jobs:
       - name: Stage RuneSchema documentation
         shell: bash
         run: |
-          rm -f docs/RELEASE-0.7.5.*.md
+          rm -f docs/RELEASE-*.md docs/CURRENT-RELEASE.md
           rm -f docs/BASELINE-SUBSYSTEM-AUDIT.md
           rm -f docs/BUILDING-CLONING-FMODEL-AUDIT.md
           rm -f docs/GAMEPASS-SAVE-SYSTEM.md

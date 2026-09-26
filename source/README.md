@@ -1,4 +1,4 @@
-# RuneSchema 0.7.5.28
+# RuneSchema
 
 RuneSchema is a UE4SS runtime for **RuneScape: Dragonwilds** content mods.
 
@@ -12,20 +12,24 @@ For mod authors:
 - [Authoring Guide](AUTHORING-GUIDE.md)
 - [Loader Reference](LOADER-WALKTHROUGHS.md)
 - [Example Library](EXAMPLES.md)
+- [Ask RuneSchema](ASK-RUNESCHEMA.md)
 - [Character Creation](CHARACTER-CREATION-AUTHORING.md)
-- [Registry Patching](REGISTRY-PATCHING.md)
+- [Registry & DataTables](REGISTRY-PATCHING.md)
 - [Building Cloning](BUILDING-CLONING.md)
 - [Compatibility](COMPATIBILITY-BACKBONE.md)
+- [SafeSave & Ownership](SAFE-SAVE-AND-LEDGER.md)
 - [Manual Save Recovery](MANUAL-SAVE-RECOVERY.md)
+- [Unreal + RuneSchema](unreal-runeschema/index.md)
 
 For RuneSchema contributors and plugin authors:
 
 - [Developer Guide](DEVELOPER-GUIDE.md)
 - [Plugin API](API-REFERENCE.md)
+- [Current Release](CURRENT-RELEASE.md)
 
 ## Updating an install
 
-Extract the new RuneSchema archive over the existing RuneSchema directory.
+Extract the current RuneSchema archive over the existing RuneSchema directory.
 Do not delete the directory first.
 
 Keep your existing:
@@ -56,9 +60,8 @@ Contributor build and packaging notes are in the
 
 ## Release
 
-The public documentation tracks the Nexus-published **0.7.5.28** release.
-Intermediate 0.7.x development notes remain available in Git history instead of
-separate website pages.
+The public documentation describes the current supported release. Historical
+development checkpoints remain in Git history instead of the public guide.
 
-Based on the original RuneSchema 0.6.0 by Snorkles. PalSchema foundation by
-Okaetsu. Maintained by members of the RSDW Modding Community.
+Based on the original RuneSchema by Snorkles. PalSchema foundation by Okaetsu.
+Maintained by members of the RSDW Modding Community.

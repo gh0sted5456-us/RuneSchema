@@ -5,8 +5,7 @@ The public C ABI is declared in
 It lets optional native plugins register capabilities and JSON services, call
 other services, and use a small set of UE4SS object helpers.
 
-RuneSchema's semantic version and the API version are separate. A plugin can
-target RuneSchema 0.7.5.28 while still using API 1.
+RuneSchema release versions and Plugin API versions are separate. Plugin API 1 is the current public ABI.
 
 ## Files and exports
 
@@ -36,7 +35,6 @@ The loader recognizes this manifest contract:
   "Name": "Example Plugin",
   "Version": "1.0.0",
   "ApiVersion": 1,
-  "BuiltForRuneSchema": "0.7.5.28",
   "EntryPoint": "Example.Plugin.dll",
   "Enabled": true,
   "ConsoleMessage": "Example plugin loaded.",
@@ -53,7 +51,7 @@ The loader recognizes this manifest contract:
 | `Version` | yes | Plugin-owned version token. |
 | `Name` | no | Display name; defaults to `Id`, maximum 128 characters. |
 | `ApiVersion` | no | Defaults to API 1. The DLL descriptor is authoritative for safe ABI calls. |
-| `BuiltForRuneSchema` | no | Informational compatibility version; never a semantic-version load gate. |
+| `BuiltForRuneSchema` | no | Optional informational compatibility token; never an API/ABI load gate. |
 | `EntryPoint` | no | DLL filename directly under `dll/`. Omit for a content-only plugin. |
 | `Enabled` | no | Manifest default; defaults to true. `plugins.txt` can still disable it. |
 | `ConsoleMessage` | no | Single-line message, maximum 512 characters. |

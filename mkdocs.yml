@@ -83,7 +83,7 @@ extra:
       name: RuneSchema on GitHub
 
 copyright: >-
-  RuneSchema documentation · Based on the original RuneSchema 0.6.0 by Snorkles · PalSchema foundation by Okaetsu
+  RuneSchema documentation · Original RuneSchema by Snorkles · PalSchema foundation by Okaetsu
 
 nav:
   - Home: index.md
@@ -128,8 +128,7 @@ nav:
       - Overview: COMPATIBILITY-BACKBONE.md
       - Manual Save Recovery: MANUAL-SAVE-RECOVERY.md
   - Release:
-      - Release Index: RELEASES.md
-      - 0.7.5.28: RELEASE-0.7.5.28.md
+      - Current Release: CURRENT-RELEASE.md
   - Developers:
       - Developer Guide: DEVELOPER-GUIDE.md
       - Plugin API: API-REFERENCE.md

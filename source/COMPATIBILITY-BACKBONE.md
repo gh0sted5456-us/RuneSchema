@@ -1,7 +1,6 @@
 # Compatibility
 
-RuneSchema 0.7.5.28 supports Steam/GOG and Game Pass/WinGDK with one
-storefront-aware runtime.
+RuneSchema supports Steam/GOG and Game Pass/WinGDK with one storefront-aware runtime.
 
 ## Storefronts
 
@@ -50,7 +49,7 @@ entry does not bypass server validation.
 
 ## Native feature fallback
 
-Some features use game-build-specific native hooks. If a hook cannot be
+Some features use storefront-specific native hooks. If a hook cannot be
 validated for the current executable, RuneSchema leaves that feature off and
 continues with unrelated loaders and services.
 
@@ -67,5 +66,5 @@ Steam save-editing instructions onto the Game Pass WGS provider.
 For user recovery steps, see
 [Manual Save Recovery](MANUAL-SAVE-RECOVERY.md).
 
-For storefront detection, hook validation, WGS internals, and build-specific
+For storefront detection, hook validation, WGS internals, and storefront-specific
 details, see the [Developer Guide](DEVELOPER-GUIDE.md).

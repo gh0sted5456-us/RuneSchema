@@ -410,7 +410,7 @@
   .rs-ask__row { flex-direction: column; }
 }
 
-/* RuneSchema 0.7.5.28 navigation modes + purple brand */
+/* RuneSchema navigation modes + purple brand */
 :root {
   --rs-gold: #8155d8;
   --rs-gold-soft: #b59aef;
