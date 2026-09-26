@@ -294,7 +294,8 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsBuildingModLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/Spawn/PlayerRules.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Misc/DragonWildsDataRegistrar.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Generator/SaveViewer.cpp")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Generator/SaveViewer.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Generator/SaveCleanupPanel.inl")
     add_executable(equipment-storefront-lane ../tests/equipment-storefront-lane.cpp)
     add_test(NAME equipment-storefront-lane COMMAND equipment-storefront-lane
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsEquipmentLoader.cpp"

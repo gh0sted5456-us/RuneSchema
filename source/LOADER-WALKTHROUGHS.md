@@ -593,6 +593,12 @@ Placement rules:
 - Use `VanillaVendors` for native merchant table/row targets.
 - `Unlock:true` grants the recipe; placement alone does not.
 - `Order` sorts within a category. Lower values appear first.
+- Clone-backed `ItemsConsumed` and `ItemsCreated` may use the clone's unique
+  22-character `PersistenceID` in `ItemData`. RuneSchema resolves those IDs
+  once after all asset clones register, then writes the native `ItemData`
+  references into a stable `/Game/RuneSchema/<mod>/Recipes/` recipe object.
+  Missing or ambiguous IDs reject that recipe instead of leaving a transient
+  or partially initialized object in a crafting or processing queue.
 
 The verified vanilla station targets are:
 

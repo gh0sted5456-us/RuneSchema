@@ -23,13 +23,14 @@ static void Check(bool value, const char* message)
 
 int main(int argc, char** argv)
 {
-    Check(argc >= 7, "host, loaders, player rules, registrar, and save viewer supplied");
+    Check(argc >= 8, "host, loaders, player rules, registrar, save viewer, and cleanup panel supplied");
     const auto host = Read(argv[1]);
     const auto mainLoader = Read(argv[2]);
     const auto buildingLoader = Read(argv[3]);
     const auto playerRules = Read(argv[4]);
     const auto registrar = Read(argv[5]);
     const auto saveViewer = Read(argv[6]);
+    const auto cleanupPanel = Read(argv[7]);
     Check(host.find("RSDragonwilds") != std::string::npos
         && host.find("Saved") != std::string::npos
         && host.find("RuneSchema") != std::string::npos,
@@ -72,8 +73,8 @@ int main(int argc, char** argv)
     Check(registrar.find("\"/Game/RuneSchema/\"") != std::string::npos
         && registrar.find("PublishRegistry") != std::string::npos,
         "runtime RuneSchema assets feed the live Safe Clean registry snapshot");
-    Check(saveViewer.find("Remove invalid item/recipe/quest PersistenceIDs") != std::string::npos
-        && saveViewer.find("ReadRegistry()") != std::string::npos,
+    Check(cleanupPanel.find("Remove invalid item/recipe/quest PersistenceIDs") != std::string::npos
+        && cleanupPanel.find("ReadRegistry()") != std::string::npos,
         "Safe Clean exposes explicit live-registry orphan repair");
     Check(registrar.find("OwnedContent::CommitSnapshot(m_pendingProviderSnapshot)") != std::string::npos
         && registrar.find("[SAVE-CLEANER][PROVIDER][PENDING]") != std::string::npos,

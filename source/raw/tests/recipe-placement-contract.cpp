@@ -24,6 +24,14 @@ static void Need(const std::string& text, const std::string& token, const char* 
     }
 }
 
+static void Avoid(const std::string& text, const std::string& token, const char* message)
+{
+    if (text.find(token) != std::string::npos) {
+        std::cerr << "FAIL: " << message << '\n';
+        std::exit(1);
+    }
+}
+
 int main(int argc, char** argv)
 {
     if (argc != 4) return 2;
