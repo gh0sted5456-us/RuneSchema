@@ -1,8 +1,12 @@
 #include "Utility/NativeFunctionHook.h"
 #include "SDK/WeakObjectHandle.h"
 #include <algorithm>
+#include <cctype>
+#include <cstdint>
+#include <string_view>
 #include <vector>
 #include "Unreal/CoreUObject/UObject/Class.hpp"
+#include "Unreal/CoreUObject/UObject/FStrProperty.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
 #include "Unreal/UFunctionStructs.hpp"
 #include "Unreal/UObject.hpp"
@@ -27,6 +31,7 @@
 #include "Loader/VendorCategoryText.h"
 #include "Loader/VendorCategoryLabel.h"
 #include "Loader/RecipeUnlockPolicy.h"
+#include "Loader/ItemIdentity.h"
 #include "Core/JsonPatchDirective.h"
 
 using namespace RC;
@@ -34,6 +39,7 @@ using namespace RC::Unreal;
 
 namespace DragonWilds {
     static constexpr const TCHAR* RecipeDataClassPath = TEXT("/Script/Dominion.RecipeData");
+    static constexpr const TCHAR* ItemDataClassPath = TEXT("/Script/Dominion.ItemData");
     static constexpr const TCHAR* ProgressComponentClassPath = TEXT("/Script/Dominion.ProgressComponent");
     static constexpr const TCHAR* PlayerControllerClassPath = TEXT("/Script/Dominion.DominionPlayerController");
     static constexpr const TCHAR* ServerCraftRecipePath = TEXT("/Script/Dominion.InventoryController:Server_CraftRecipe");
@@ -46,6 +52,106 @@ namespace DragonWilds {
     static bool WantsUnlock(const nlohmann::json& body)
     {
         return PS::RecipeUnlockPolicy::Automatic(body);
+    }
+
+    static std::string RecipePathSegment(std::string_view value,
+        std::string_view fallback)
+    {
+        std::string result;
+        result.reserve(value.size());
+        bool underscore=false;
+        for(const auto character:value)
+        {
+            const auto byte=static_cast<unsigned char>(character);
+            const auto normalized=(std::isalnum(byte) || character=='_')
+                ? character : '_';
+            if(normalized=='_' && underscore)continue;
+            result.push_back(normalized);
+            underscore=normalized=='_';
+        }
+        while(!result.empty() && result.front()=='_')result.erase(result.begin());
+        while(!result.empty() && result.back()=='_')result.pop_back();
+        if(result.empty())result.assign(fallback);
+        if(result.size()>72)result.resize(72);
+        return result;
+    }
+
+    static std::string StableRecipeSuffix(std::string_view value)
+    {
+        std::uint64_t hash=14695981039346656037ull;
+        for(const unsigned char character:value)
+            hash=(hash^character)*1099511628211ull;
+        constexpr char digits[]="0123456789abcdef";
+        std::string result(16,'0');
+        for(int index=15;index>=0;--index)
+        {
+            result[static_cast<std::size_t>(index)]=digits[hash&0xf];
+            hash>>=4;
+        }
+        return result;
+    }
+
+    static RC::StringType RuntimeRecipePath(
+        const RC::StringType& modName,const RC::StringType& key)
+    {
+        const auto mod=RecipePathSegment(RC::to_string(modName),"UnnamedMod");
+        const auto raw=RC::to_string(key);
+        const auto object="RSRecipe_"+RecipePathSegment(raw,"Recipe")
+            +"_"+StableRecipeSuffix(raw);
+        return RC::to_generic_string("/Game/RuneSchema/"+mod
+            +"/Recipes/"+object+"."+object);
+    }
+
+    static UObject* ResolveRecipeItemByPersistenceId(
+        const std::string& reference,UClass* itemClass)
+    {
+        if(!IsCanonicalPersistenceId(reference))return nullptr;
+        if(!itemClass)throw std::runtime_error("ItemData class is unavailable for recipe PersistenceID routing");
+        auto* field=CastField<FStrProperty>(
+            PropertyHelper::GetPropertyByName(itemClass,TEXT("PersistenceID")));
+        if(!field || field->GetArrayDim()!=1)
+            throw std::runtime_error("ItemData PersistenceID contract is unavailable");
+
+        TArray<UObject*> items;
+        UECustom::UObjectGlobals::GetObjectsOfClass(itemClass,items,true);
+        if(items.Num()>32768)
+            throw std::runtime_error("Loaded ItemData roster exceeds recipe routing limit");
+
+        UObject* found=nullptr;
+        for(auto* item:items)
+        {
+            if(!item || item->HasAnyFlags(static_cast<EObjectFlags>(
+                RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed)))
+                continue;
+            const auto value=field->GetPropertyValue(
+                field->ContainerPtrToValuePtr<void>(item));
+            if(RC::to_string(*value)!=reference)continue;
+            if(found && found!=item)
+                throw std::runtime_error("Recipe ItemData PersistenceID is ambiguous: "+reference);
+            found=item;
+        }
+        if(!found)
+            throw std::runtime_error("Recipe ItemData PersistenceID is not registered: "+reference);
+        return found;
+    }
+
+    static nlohmann::json RouteRecipeItemReferences(
+        std::string_view propertyName,const nlohmann::json& authored,
+        UClass* itemClass)
+    {
+        if(propertyName!="ItemsConsumed" && propertyName!="ItemsCreated")
+            return authored;
+        auto routed=authored;
+        if(!routed.is_array())return routed;
+        for(auto& row:routed)
+        {
+            if(!row.is_object() || !row.contains("ItemData")
+                || !row.at("ItemData").is_string())continue;
+            const auto reference=row.at("ItemData").get<std::string>();
+            if(auto* item=ResolveRecipeItemByPersistenceId(reference,itemClass))
+                row["ItemData"]=RC::to_string(item->GetPathName());
+        }
+        return routed;
     }
 
     static void AddRecipeUnlocks(UObject* progressComponent, const std::vector<UObject*>& recipes)
