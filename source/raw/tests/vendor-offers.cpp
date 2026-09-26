@@ -35,7 +35,8 @@ int main() {
         std::map<std::string,std::string> names;
         for(const auto& [owner,slot]:definitions) {
             const auto identity=Identity(owner,slot);
-            names.emplace(identity,"/Engine/Transient."+RecipeObjectName(identity));
+            const auto name=RecipeObjectName(identity);
+            names.emplace(identity,"/Game/RuneSchema/Generated/Recipes/"+name+"."+name);
         }
         return names;
     };
