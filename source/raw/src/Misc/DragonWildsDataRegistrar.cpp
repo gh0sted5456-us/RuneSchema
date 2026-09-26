@@ -316,6 +316,7 @@ namespace DragonWilds {
         for (auto& retired : m_retiredContent)
             if (retired.Data) retired.Data->ClearRootSet();
         m_retiredContent.clear();
+        PS::SaveCleanup::PublishRegistry({});
     }
 
     void DragonWildsDataRegistrar::InstallHooks()
@@ -591,6 +592,10 @@ namespace DragonWilds {
         snapshot.QuestsComplete = questsReady;
         if (itemsReady && recipesReady)
             PS::SaveCleanup::PublishRegistry(std::move(snapshot));
+        else
+            // Never leave a previous world's registry available to Safe Clean
+            // when the current world could not prove a complete item/recipe map.
+            PS::SaveCleanup::PublishRegistry({});
     }
 
     void DragonWildsDataRegistrar::RegisterMissing(UClass* dataClass, UObject* subsystem)
