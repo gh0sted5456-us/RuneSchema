@@ -102,58 +102,6 @@ namespace DragonWilds {
             +"/Recipes/"+object+"."+object);
     }
 
-    static UObject* ResolveRecipeItemByPersistenceId(
-        const std::string& reference,UClass* itemClass)
-    {
-        if(!IsCanonicalPersistenceId(reference))return nullptr;
-        if(!itemClass)throw std::runtime_error("ItemData class is unavailable for recipe PersistenceID routing");
-        auto* field=CastField<FStrProperty>(
-            PropertyHelper::GetPropertyByName(itemClass,TEXT("PersistenceID")));
-        if(!field || field->GetArrayDim()!=1)
-            throw std::runtime_error("ItemData PersistenceID contract is unavailable");
-
-        TArray<UObject*> items;
-        UECustom::UObjectGlobals::GetObjectsOfClass(itemClass,items,true);
-        if(items.Num()>32768)
-            throw std::runtime_error("Loaded ItemData roster exceeds recipe routing limit");
-
-        UObject* found=nullptr;
-        for(auto* item:items)
-        {
-            if(!item || item->HasAnyFlags(static_cast<EObjectFlags>(
-                RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed)))
-                continue;
-            const auto value=field->GetPropertyValue(
-                field->ContainerPtrToValuePtr<void>(item));
-            if(RC::to_string(*value)!=reference)continue;
-            if(found && found!=item)
-                throw std::runtime_error("Recipe ItemData PersistenceID is ambiguous: "+reference);
-            found=item;
-        }
-        if(!found)
-            throw std::runtime_error("Recipe ItemData PersistenceID is not registered: "+reference);
-        return found;
-    }
-
-    static nlohmann::json RouteRecipeItemReferences(
-        std::string_view propertyName,const nlohmann::json& authored,
-        UClass* itemClass)
-    {
-        if(propertyName!="ItemsConsumed" && propertyName!="ItemsCreated")
-            return authored;
-        auto routed=authored;
-        if(!routed.is_array())return routed;
-        for(auto& row:routed)
-        {
-            if(!row.is_object() || !row.contains("ItemData")
-                || !row.at("ItemData").is_string())continue;
-            const auto reference=row.at("ItemData").get<std::string>();
-            if(auto* item=ResolveRecipeItemByPersistenceId(reference,itemClass))
-                row["ItemData"]=RC::to_string(item->GetPathName());
-        }
-        return routed;
-    }
-
     static void AddRecipeUnlocks(UObject* progressComponent, const std::vector<UObject*>& recipes)
     {
         if (!progressComponent || recipes.empty())
@@ -278,11 +226,70 @@ namespace DragonWilds {
         return package;
     }
 
+    void DragonWildsRecipeModLoader::RefreshItemRoutes()
+    {
+        m_itemRoutes.clear();
+        m_ambiguousItemRoutes.clear();
+        if(!m_itemDataClass)
+            throw std::runtime_error("ItemData class is unavailable for recipe PersistenceID routing");
+
+        auto* field=CastField<FStrProperty>(
+            PropertyHelper::GetPropertyByName(m_itemDataClass,TEXT("PersistenceID")));
+        if(!field || field->GetArrayDim()!=1)
+            throw std::runtime_error("ItemData PersistenceID contract is unavailable");
+
+        TArray<UObject*> items;
+        UECustom::UObjectGlobals::GetObjectsOfClass(m_itemDataClass,items,true);
+        if(items.Num()>32768)
+            throw std::runtime_error("Loaded ItemData roster exceeds recipe routing limit");
+
+        for(auto* item:items)
+        {
+            if(!item || item->HasAnyFlags(static_cast<EObjectFlags>(
+                RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed)))
+                continue;
+            const auto value=field->GetPropertyValue(
+                field->ContainerPtrToValuePtr<void>(item));
+            const auto id=RC::to_string(*value);
+            if(id.empty())continue;
+            const auto [found,inserted]=m_itemRoutes.emplace(id,item);
+            if(!inserted && found->second!=item)
+            {
+                m_itemRoutes.erase(id);
+                m_ambiguousItemRoutes.insert(id);
+            }
+        }
+    }
+
+    nlohmann::json DragonWildsRecipeModLoader::RouteRecipeItemReferences(
+        std::string_view propertyName,const nlohmann::json& authored) const
+    {
+        if(propertyName!="ItemsConsumed" && propertyName!="ItemsCreated")
+            return authored;
+        auto routed=authored;
+        if(!routed.is_array())return routed;
+        for(auto& row:routed)
+        {
+            if(!row.is_object() || !row.contains("ItemData")
+                || !row.at("ItemData").is_string())continue;
+            const auto reference=row.at("ItemData").get<std::string>();
+            if(!IsCanonicalPersistenceId(reference))continue;
+            if(m_ambiguousItemRoutes.contains(reference))
+                throw std::runtime_error("Recipe ItemData PersistenceID is ambiguous: "+reference);
+            const auto found=m_itemRoutes.find(reference);
+            if(found==m_itemRoutes.end() || !found->second)
+                throw std::runtime_error("Recipe ItemData PersistenceID is not registered: "+reference);
+            row["ItemData"]=RC::to_string(found->second->GetPathName());
+        }
+        return routed;
+    }
+
     UObject* DragonWildsRecipeModLoader::EnsureVendorRecipe(const std::string& owner,
         const std::string& identity, const nlohmann::json& properties)
     {
         if (!m_recipeClass || !m_progressComponentClass)
             throw std::runtime_error("Vendor offers require the initialized /recipes loader");
+        if(m_itemRoutes.empty())RefreshItemRoutes();
         const auto key=RC::to_generic_string("RSVendor_"+identity);
         if(auto owned=m_vendorRecipeOwners.find(key);owned!=m_vendorRecipeOwners.end() && owned->second!=owner)
             throw std::runtime_error("Vendor recipe ownership collision; existing recipe preserved");
@@ -330,7 +337,7 @@ namespace DragonWilds {
             for(const auto& [name,value]:values.items()) {
                 auto* property=PropertyHelper::GetPropertyByName(m_recipeClass,RC::to_generic_string(name));
                 if(!property)throw std::runtime_error("Vendor RecipeData field unavailable: "+name);
-                const auto routed=RouteRecipeItemReferences(name,value,m_itemDataClass);
+                const auto routed=RouteRecipeItemReferences(name,value);
                 PropertyHelper::CopyJsonValueToContainer(recipe,property,routed);
             }
         }
@@ -614,6 +621,11 @@ namespace DragonWilds {
             return;
         }
 
+        // Build the PersistenceID -> ItemData route once per recipe batch.
+        // Older code performed a global UObject scan for every consumed and
+        // created item field, which scaled poorly with larger mod packs.
+        RefreshItemRoutes();
+
         LoadResult result{};
         constexpr size_t detailLimit = 12;
         size_t detailLines = 0;
@@ -890,7 +902,7 @@ namespace DragonWilds {
             try
             {
                 const auto routed=RouteRecipeItemReferences(
-                    propertyName,propertyValue,m_itemDataClass);
+                    propertyName,propertyValue);
                 PropertyHelper::CopyJsonValueToContainer(
                     reinterpret_cast<uint8*>(recipe), property, routed);
             }
