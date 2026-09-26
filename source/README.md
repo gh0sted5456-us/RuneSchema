@@ -11,7 +11,7 @@ For mod authors:
 
 - [Authoring Guide](AUTHORING-GUIDE.md)
 - [Loader Reference](LOADER-WALKTHROUGHS.md)
-- [Example Library](../docs/EXAMPLES.md)
+- [Example Library](EXAMPLES.md)
 - [Character Creation](CHARACTER-CREATION-AUTHORING.md)
 - [Registry Patching](REGISTRY-PATCHING.md)
 - [Building Cloning](BUILDING-CLONING.md)
