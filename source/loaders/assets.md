@@ -74,6 +74,26 @@ current form, the target is written once, each field is written once, and only
 the values that differ remain. Legacy envelope documents are still translated
 internally so installed mods are not forced to migrate immediately.
 
+## Simple rules
+
+- Use `/assets` for loaded items, DataAssets, reflected object edits, or compatible item clones.
+- A new clone needs a stable destination path, `PersistenceID`, and `InternalName`.
+- Change only fields that exist on the reflected source type. Put referenced DataTable-row work in `/raw`.
+
+## FAQ
+
+### FAQ-ASSETS-001 — Can I clone an item and change only a few fields? {#faq-assets-001}
+
+Yes. Start from a compatible source with `$Clone`; inherited fields remain unless
+you explicitly replace them. Give the clone its own stable path,
+`PersistenceID`, and `InternalName`.
+
+### FAQ-ASSETS-002 — Do direct character-menu DataAsset edits need the old registry metadata envelope? {#faq-assets-002}
+
+No. For the verified direct `DA_` authoring form, put the complete target path
+first and the native field path below it. The mod directory supplies ownership;
+the legacy registry-patch envelope remains readable for compatibility.
+
 ## Working examples
 
 - [Great Tree: Sacred Leaf and quest items](../examples/GreatTree/assets/85-GreatTreeItems.json)

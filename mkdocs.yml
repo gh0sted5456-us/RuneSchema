@@ -47,9 +47,6 @@ plugins:
   - search:
       separator: '[\\s\\-\\.\\_]+'
 
-exclude_docs: |
-  RELEASE-*.md
-
 markdown_extensions:
   - abbr
   - admonition
@@ -94,6 +91,7 @@ nav:
       - Overview: OVERVIEW.md
       - Authoring Guide: AUTHORING-GUIDE.md
       - Examples: EXAMPLES.md
+      - Ask RuneSchema: ASK-RUNESCHEMA.md
   - Loaders:
       - Overview: LOADER-WALKTHROUGHS.md
       - Assets: loaders/assets.md
@@ -121,24 +119,20 @@ nav:
   - Authoring:
       - Character Creation: CHARACTER-CREATION-AUTHORING.md
       - Registry & DataTables: REGISTRY-PATCHING.md
-      - Buildings & Cloning: BUILDING-CLONING-FMODEL-AUDIT.md
+      - Building & Cloning: BUILDING-CLONING.md
       - SafeSave & Ownership: SAFE-SAVE-AND-LEDGER.md
   - Unreal + RuneSchema:
       - Overview: unreal-runeschema/index.md
       - Stations, Quests & Recipes: unreal-runeschema/stations-quests-recipes.md
   - Compatibility:
       - Overview: COMPATIBILITY-BACKBONE.md
-      - Game Pass Saves: GAMEPASS-SAVE-SYSTEM.md
-  - Developer:
+      - Manual Save Recovery: MANUAL-SAVE-RECOVERY.md
+  - Release:
+      - Release Index: RELEASES.md
+      - 0.7.5.28: RELEASE-0.7.5.28.md
+  - Developers:
+      - Developer Guide: DEVELOPER-GUIDE.md
       - Plugin API: API-REFERENCE.md
       - JSON Schemas: SCHEMAS.md
-      - Operations:
-          - Startup Performance: STARTUP-PERFORMANCE.md
-          - Manual Save Recovery: MANUAL-SAVE-RECOVERY.md
-      - Internals:
-          - Native Hook Support: NATIVE-HOOK-PARITY.md
-          - Subsystem Baseline: BASELINE-SUBSYSTEM-AUDIT.md
-          - Helpy Rendering & Cache: HELpy-REDESIGN-AUDIT.md
-          - Base Builder Import: raw/BASE-BUILDER-IMPORT.md
-          - Documentation Index: DOCUMENTATION-INDEX.md
-  - Release: RELEASES.md
+      - Base Builder Import: raw/BASE-BUILDER-IMPORT.md
+      - Documentation Map: DOCUMENTATION-INDEX.md

@@ -1,42 +1,43 @@
-# RuneSchema 0.7.5.28 documentation index
+# Documentation map
 
-This index organizes the authoritative documentation for the universal
-RuneSchema 0.7.5.28 runtime. The release uses one `main.dll` with isolated
-Steam/GOG and Game Pass/WinGDK execution lanes.
+## Mod authors
 
-## Start here
+Start with these pages:
 
-1. `README.md` — project and release overview.
-2. `AUTHORING-GUIDE.md` — installation, mod structure, ordering, cooked assets,
-   mappings, multiplayer, logging, and build workflow.
-3. `LOADER-WALKTHROUGHS.md` — every loader, accepted shapes, examples, and
-   cross-loader behavior.
-4. `SAFE-SAVE-AND-LEDGER.md` — ownership ledger and safe removal behavior.
-5. `COMPATIBILITY-BACKBONE.md` — universal runtime, storefront detection,
-   signatures, mappings, plugins, and failure isolation.
+1. [Authoring Guide](AUTHORING-GUIDE.md) — install layout, mod structure, ordering, cooked assets, mappings, multiplayer, logs, and testing.
+2. [Loader Reference](LOADER-WALKTHROUGHS.md) — loader selection, rules, examples, and FAQ.
+3. [Example Library](EXAMPLES.md) — focused working patterns.
+4. [Ask RuneSchema](ASK-RUNESCHEMA.md) — searches the curated loader FAQ.
 
-## Focused references
+Focused authoring pages:
 
-- `API-REFERENCE.md` — native plugin ABI and RuneSchema services.
-- `CHARACTER-CREATION-AUTHORING.md` — character editor DataAssets, tables,
-  fields, and runtime refresh rules.
-- `REGISTRY-PATCHING.md` — `/raw`, `/assets`, and transactional registry edits.
-- `BUILDING-CLONING-FMODEL-AUDIT.md` — cloned pieces, build-menu placement,
-  imported assemblies, collision, HISM, and persistence.
-- `GAMEPASS-SAVE-SYSTEM.md` — WGS directory, index/container structure,
-  character/world payload formats, and provider boundary.
-- `NATIVE-HOOK-PARITY.md` — verified Steam and WinGDK native capabilities.
-- `HELpy-REDESIGN-AUDIT.md` — minimal on-demand UI and catalog behavior.
-- `BASELINE-SUBSYSTEM-AUDIT.md` — baseline subsystem and compatibility audit.
+- [Character Creation](CHARACTER-CREATION-AUTHORING.md)
+- [Registry Patching](REGISTRY-PATCHING.md)
+- [Building Cloning](BUILDING-CLONING.md)
+- [SafeSave & Ownership](SAFE-SAVE-AND-LEDGER.md)
+- [Compatibility](COMPATIBILITY-BACKBONE.md)
+- [Manual Save Recovery](MANUAL-SAVE-RECOVERY.md)
+- [Unreal + RuneSchema](unreal-runeschema/index.md)
 
-## Machine-readable references
+## Release
 
-- `schemas/` contains the current JSON schemas.
-- `examples/` contains loader and integration examples. Examples are authoring
-  references and are not installed into a public runtime.
+The public site tracks the Nexus-published
+[0.7.5.28 release](RELEASE-0.7.5.28.md).
 
-## Historical notes
+Intermediate 0.7.x development notes are kept in Git history rather than
+published as separate documentation pages.
 
-`RELEASE-*.md` files are chronological implementation records. They should not
-override the current authoring guide, loader walkthroughs, SafeSave guide, or
-API reference when behavior changed in a later release.
+## Developers
+
+- [Developer Guide](DEVELOPER-GUIDE.md) — runtime lanes, native hooks, save handling, build/package flow, Helpy internals, and profiling.
+- [Plugin API](API-REFERENCE.md) — native plugin interface and services.
+- [JSON Schemas](SCHEMAS.md) — strict machine-readable authoring contracts.
+- [Base Builder Import](raw/BASE-BUILDER-IMPORT.md) — advanced assembly import details.
+
+## Machine-readable material
+
+- `schemas/` — JSON schemas.
+- `examples/` — authoring and integration examples.
+
+Public authoring pages describe current behavior. Implementation history belongs
+in Git history or the Developer Guide.

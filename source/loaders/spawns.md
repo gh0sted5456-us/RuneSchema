@@ -27,6 +27,27 @@ both. `AdditionalDrops` supports an item, minimum, maximum, and chance. A
 quest-completed condition can latch with `PersistAfterCondition`. `EventOnly`
 templates are definitions for `/events` and do not place permanent actors.
 
+## Simple rules
+
+- `/spawns` places supported AI, actors, resources, and building props.
+- Use either `GroundOffset` or a ground-relative Z value such as `$+10`, not both.
+- `EventOnly:true` creates an event template rather than a permanent placement.
+
+## FAQ
+
+### FAQ-SPAWNS-001 — Does EventOnly place an actor in the world immediately? {#faq-spawns-001}
+
+No. It defines a spawn template for `/events`; it does not create a permanent
+world placement by itself.
+
+### FAQ-SPAWNS-002 — Can I use GroundOffset and $+10 together? {#faq-spawns-002}
+
+No. Pick one ground-offset form for the placement.
+
+### FAQ-SPAWNS-003 — Can a spawn add extra item drops? {#faq-spawns-003}
+
+Yes. `AdditionalDrops` supports an item plus minimum, maximum, and chance.
+
 ## Working examples
 
 - [Great Tree: event-only goblin templates](../examples/GreatTree/spawns/87-GreatTree-TribeTrial.json)
