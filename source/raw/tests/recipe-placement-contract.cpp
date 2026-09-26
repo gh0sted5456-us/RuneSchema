@@ -46,8 +46,8 @@ int main(int argc, char** argv)
         "processing array writes are not type checked");
     Need(loader, "InspectRuntimeCloneOutputs(recipe)",
         "timed processing does not validate runtime-clone outputs");
-    Need(loader, "/Game/RuneSchema/Recipes/",
-        "authored processing recipes do not receive a stable runtime path");
+    Need(loader, "RuntimeRecipePath(def.ModName,def.Key)",
+        "authored processing recipes do not receive a stable mod-scoped runtime path");
     Need(loader, "runtime-clone output has not completed ItemSubsystem registration",
         "unregistered runtime-clone processing output is not isolated");
     Need(loader, "runtime-clone output has no stable PersistenceID",
@@ -65,6 +65,15 @@ int main(int argc, char** argv)
         "relocated object references are not constrained to the property type");
     Need(properties, "Ambiguous relocated object reference",
         "ambiguous relocated object names are not rejected");
+    Avoid(loader, "/Engine/Transient", "recipe loader still creates transient-engine RecipeData");
+    Need(loader, "/Game/RuneSchema/Generated/Recipes/", "generated recipe objects do not use a stable RuneSchema route");
+    Need(loader, "RuntimeRecipePath(def.ModName,def.Key)", "authored recipe objects do not use the mod-scoped RuneSchema route");
+    Need(loader, "RefreshItemRoutes()", "recipe ItemData PersistenceID index disappeared");
+    Need(loader, "m_itemRoutes.find(reference)", "recipe ItemData PersistenceID routing disappeared");
+    Need(loader, "propertyName!=\"ItemsConsumed\" && propertyName!=\"ItemsCreated\"",
+        "recipe routing is not scoped to native ingredient/output collections");
+    Need(loader, "OnFinalizeLoad(", "recipe linking is no longer deferred until all clone assets load");
+    Need(guide, "22-character `PersistenceID`", "clone-backed recipe PersistenceID authoring is undocumented");
     for (const auto* token : {
         "DT_CraftingStationsDataTable", "DT_ProcessingStationDataTable",
         "CraftingTable", "BrewingCauldron", "AdvancedSmelter",
