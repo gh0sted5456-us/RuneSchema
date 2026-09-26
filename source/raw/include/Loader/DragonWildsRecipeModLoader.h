@@ -29,6 +29,7 @@ namespace DragonWilds {
 
         struct RecipeDef {
             RC::StringType Key;
+            RC::StringType ModName;
             nlohmann::json Body;
             std::vector<Placement> Placements;
         };
@@ -76,8 +77,11 @@ namespace DragonWilds {
         std::unordered_map<RC::StringType, std::string> m_vendorRecipeOwners;
         struct RecipeLease { int32_t Index; RC::StringType Path; };
         std::unordered_map<RC::StringType, RecipeLease> m_vendorRecipeLeases;
+        std::vector<RC::Unreal::UObject*> m_ownedRuntimeRecipes;
+        std::vector<RC::Unreal::UObject*> m_runtimePackages;
         uint64_t m_recipeRevision=0;
         RC::Unreal::UObject* LiveRecipe(const RC::StringType& key) const;
+        RC::Unreal::UObject* EnsureRuntimePackage(const RC::StringType& packagePath);
 
         void QueueData(const nlohmann::json& data, const RC::StringType& modName);
         void ApplyPendingPatches();
