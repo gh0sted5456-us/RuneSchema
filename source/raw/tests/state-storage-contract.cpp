@@ -65,6 +65,16 @@ int main(int argc, char** argv)
     Check(registrar.find("Xbox WGS save detected") != std::string::npos
         && registrar.find("GamePassNative") != std::string::npos,
         "Game Pass cleanup uses the in-game provider path instead of direct JSON writes");
+    Check(registrar.find("BackupRetention = 3") != std::string::npos
+        && registrar.find("\"safesave\" / \"backups\"") != std::string::npos
+        && registrar.find("PruneLegacyCharacterBackups") != std::string::npos,
+        "Steam SafeSave uses bounded off-directory backups and prunes legacy clutter");
+    Check(registrar.find("\"/Game/RuneSchema/\"") != std::string::npos
+        && registrar.find("PublishRegistry") != std::string::npos,
+        "runtime RuneSchema assets feed the live Safe Clean registry snapshot");
+    Check(saveViewer.find("Remove invalid item/recipe/quest PersistenceIDs") != std::string::npos
+        && saveViewer.find("ReadRegistry()") != std::string::npos,
+        "Safe Clean exposes explicit live-registry orphan repair");
     Check(registrar.find("OwnedContent::CommitSnapshot(m_pendingProviderSnapshot)") != std::string::npos
         && registrar.find("[SAVE-CLEANER][PROVIDER][PENDING]") != std::string::npos,
         "Game Pass retains its previous ledger until provider cleanup is verified");
