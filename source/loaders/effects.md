@@ -38,6 +38,20 @@ creates a reusable reference ID for it.
 No. The Effects loader is a catalogue/alias layer; it does not clone or patch
 the effect class defaults.
 
+### FAQ-EFFECTS-003 — Can a consumer use the full GameplayEffect class path instead of the RuneSchema ID? {#faq-effects-003}
+
+Yes, where that consumer accepts a full class path. The RuneSchema effect ID is
+mainly a reusable alias.
+
+### FAQ-EFFECTS-004 — Can effect IDs be organized with slashes? {#faq-effects-004}
+
+Yes. IDs such as `Movement/Dash` are supported by the documented catalogue
+shape and can be referenced as `ModName:Effects/Movement/Dash`.
+
+### FAQ-EFFECTS-005 — Does the effect definition need a cooked class? {#faq-effects-005}
+
+Yes. The target GameplayEffect class must already exist as cooked content.
+
 ---
 
 [← All loaders](../LOADER-WALKTHROUGHS.md) · [Authoring guide](../AUTHORING-GUIDE.md)

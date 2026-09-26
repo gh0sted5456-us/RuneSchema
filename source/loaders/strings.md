@@ -40,6 +40,19 @@ Yes. Exact source text matters for the replacement to match.
 
 The later loaded replacement wins within that scope.
 
+### FAQ-STRINGS-004 — Can I scope a text replacement to one named table? {#faq-strings-004}
+
+Yes. The Strings loader supports named scopes as well as global source-text
+replacement.
+
+### FAQ-STRINGS-005 — Does the Strings loader do fuzzy or partial matching? {#faq-strings-005}
+
+No documented fuzzy match is provided. The source text must match exactly.
+
+### FAQ-STRINGS-006 — Can a replacement value be a list? {#faq-strings-006}
+
+Yes, where the loader's target supports multiple results.
+
 ---
 
 [← All loaders](../LOADER-WALKTHROUGHS.md) · [Authoring guide](../AUTHORING-GUIDE.md)

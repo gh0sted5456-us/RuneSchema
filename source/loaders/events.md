@@ -42,6 +42,18 @@ it is not a permanent world placement.
 
 Yes. Event IDs can be used to scope kill credit for quest objectives.
 
+### FAQ-EVENTS-003 — Does an event spawn definition need to exist first? {#faq-events-003}
+
+Yes. Create the referenced `/spawns` template before the event that uses it.
+
+### FAQ-EVENTS-004 — How do ground-relative event locations work? {#faq-events-004}
+
+`$`, `$+offset`, and `$-offset` resolve Z against blocking ground.
+
+### FAQ-EVENTS-005 — How are events started or cancelled? {#faq-events-005}
+
+Use the supported dialogue actions for event start and cancellation.
+
 ## Working examples
 
 - [Great Tree: five-wave tribe trial](../examples/GreatTree/events/85-GreatTree-TribeTrial.json)

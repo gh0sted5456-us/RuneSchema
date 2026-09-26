@@ -48,6 +48,21 @@ No. Pick one ground-offset form for the placement.
 
 Yes. `AdditionalDrops` supports an item plus minimum, maximum, and chance.
 
+### FAQ-SPAWNS-004 — Can a spawn be limited by time of day? {#faq-spawns-004}
+
+Yes. `TimeOfDay` is part of the documented spawn definition shape.
+
+### FAQ-SPAWNS-005 — Can a quest-completed condition stay latched? {#faq-spawns-005}
+
+Yes. Use `PersistAfterCondition` where the documented quest-completed
+condition should remain active after it first becomes true.
+
+### FAQ-SPAWNS-006 — Can I use a fixed Z coordinate instead of ground-relative Z? {#faq-spawns-006}
+
+Yes. A normal numeric Z value is allowed. Use `$`, `$+offset`, or
+`$-offset` only when you want the loader to resolve height from blocking
+ground.
+
 ## Working examples
 
 - [Great Tree: event-only goblin templates](../examples/GreatTree/spawns/87-GreatTree-TribeTrial.json)

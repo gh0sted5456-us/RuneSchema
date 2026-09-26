@@ -46,6 +46,19 @@ when that distinction is acceptable.
 Player pawns and components can be recreated, so a rule that looks correct on
 initial spawn also needs a respawn test.
 
+### FAQ-PLAYERS-004 — Can player appearance assets exist only on the server? {#faq-players-004}
+
+No. Cooked appearance assets and referenced customization rows must be
+available on every client that renders them.
+
+### FAQ-PLAYERS-005 — Can a player rule reference a reusable nameplate definition? {#faq-players-005}
+
+Yes. Reference the definition created under `/nameplates`.
+
+### FAQ-PLAYERS-006 — Can one rule select by wildcard instead of a specific player? {#faq-players-006}
+
+Yes. The documented wildcard selector is `"PlayerName": "*"`.
+
 ---
 
 [← All loaders](../LOADER-WALKTHROUGHS.md) · [Authoring guide](../AUTHORING-GUIDE.md)

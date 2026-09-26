@@ -41,6 +41,18 @@ No. Lore uses the journal registry with the entry type fixed to lore.
 
 Yes. Use a supported dialogue lore action, or unlock the lore entry normally.
 
+### FAQ-LORE-003 — Can a lore entry stay locked until dialogue opens it? {#faq-lore-003}
+
+Yes. Keep `Unlock:false` and open it through a supported dialogue lore action.
+
+### FAQ-LORE-004 — Can cooked lore content use $declaration? {#faq-lore-004}
+
+Yes. Cooked entries may use `$declaration` for RuneSchema ownership tracking.
+
+### FAQ-LORE-005 — Can lore entries have multiple pages? {#faq-lore-005}
+
+Yes. Lore uses the journal registry and supports multiple page descriptions.
+
 ---
 
 [← All loaders](../LOADER-WALKTHROUGHS.md) · [Authoring guide](../AUTHORING-GUIDE.md)

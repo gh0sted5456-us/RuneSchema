@@ -97,6 +97,26 @@ the short table name is unique.
 
 No. `Category` and `Array` are mutually exclusive placement modes.
 
+### FAQ-RECIPES-004 — Can one recipe be added to more than one station or vendor? {#faq-recipes-004}
+
+Yes. `AddTo` can contain multiple placement entries.
+
+### FAQ-RECIPES-005 — Can recipes be contributed to RuneSchema vendors and vanilla merchants? {#faq-recipes-005}
+
+Yes. Use `RuneSchemaVendors` for RuneSchema store IDs and `VanillaVendors`
+for native merchant targets.
+
+### FAQ-RECIPES-006 — Should a processing station use Category or Array? {#faq-recipes-006}
+
+Use `Array:"Recipes"` for the documented processing-station layout. Use
+`Category` for native `LabeledRecipes` layouts such as the documented
+crafting-station rows.
+
+### FAQ-RECIPES-007 — Can a custom station use an exact cooked DataTable path? {#faq-recipes-007}
+
+Yes. Use `DataTable` with the full cooked table path when the target is custom
+or could be ambiguous.
+
 ---
 
 [← All loaders](../LOADER-WALKTHROUGHS.md) · [Authoring guide](../AUTHORING-GUIDE.md)

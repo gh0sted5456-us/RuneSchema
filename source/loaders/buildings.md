@@ -58,6 +58,20 @@ fields in the building definition and cannot be hidden inside `Properties`.
 Normally no. Use `/buildings` for buildable content or `/spawns` for supported
 static world placement instead of treating architecture as an NPC.
 
+### FAQ-BUILDINGS-003 — What happens if I omit AddTo on a clone? {#faq-buildings-003}
+
+The clone inherits the catalogue placements that contain its source. Use
+`AddTo` when you want an explicit collection or page.
+
+### FAQ-BUILDINGS-004 — Does Requirements append to the source cost? {#faq-buildings-004}
+
+No. `Requirements` replaces the complete material-cost list.
+
+### FAQ-BUILDINGS-005 — Can BuildableActor point at any Blueprint? {#faq-buildings-005}
+
+No. Use a cooked compatible child of the game's base building actor and verify
+placement, collision, save/reload, and client presentation.
+
 ---
 
 [← All loaders](../LOADER-WALKTHROUGHS.md) · [Authoring guide](../AUTHORING-GUIDE.md)

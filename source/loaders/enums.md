@@ -34,6 +34,18 @@ No. Supply only the value name.
 No. The loader extends the loaded name set only. Code or Blueprint behavior
 must already know how to handle that value.
 
+### FAQ-ENUMS-003 — Can I extend any enum I can name? {#faq-enums-003}
+
+Only supported enums that are loaded at runtime are documented for this loader.
+
+### FAQ-ENUMS-004 — Can I add more than one enum value in one file? {#faq-enums-004}
+
+Yes. Supply an array of value names for the loaded enum.
+
+### FAQ-ENUMS-005 — Does the Enums loader create Blueprint or C++ behavior for the new value? {#faq-enums-005}
+
+No. It extends the loaded enum name set only.
+
 ---
 
 [← All loaders](../LOADER-WALKTHROUGHS.md) · [Authoring guide](../AUTHORING-GUIDE.md)

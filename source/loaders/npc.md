@@ -49,6 +49,18 @@ supported world placement.
 
 Yes. `HideWeapon` can suppress inherited weapon presentation.
 
+### FAQ-NPC-004 — Can /npc create resource-style world actors? {#faq-npc-004}
+
+Yes. The NPC loader supports persistent AI, human, and resource-style actors.
+
+### FAQ-NPC-005 — Can I give an NPC both dialogue and a vendor? {#faq-npc-005}
+
+Yes. Bind `DialogueID` and `VendorID` on the same supported NPC definition.
+
+### FAQ-NPC-006 — Can NPC PowerLevel be authored? {#faq-npc-006}
+
+Yes. `PowerLevel` is part of the documented NPC definition shape.
+
 ## Working examples
 
 - [Great Tree: resource-style world actor](../examples/GreatTree/npc/85-GreatTree.json)

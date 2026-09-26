@@ -59,6 +59,20 @@ persistent identity across loads and updates.
 
 Bind them from supported dialogue actions.
 
+### FAQ-QUESTS-004 — Do objective IDs need to be unique? {#faq-quests-004}
+
+Yes. Keep objective IDs unique within the authored quest.
+
+### FAQ-QUESTS-005 — Can a kill objective be tied to an event or search area? {#faq-quests-005}
+
+Yes. Event IDs and search areas can be used when the objective requires that
+scope.
+
+### FAQ-QUESTS-006 — Should I test quests across reconnect and reload? {#faq-quests-006}
+
+Yes. Test acceptance, progress, reconnect, reload, turn-in, repeat behavior,
+and removal behavior.
+
 ## Working examples
 
 - [Great Tree: multi-stage story quest](../examples/GreatTree/quests/87-GreatTreeStory.json)

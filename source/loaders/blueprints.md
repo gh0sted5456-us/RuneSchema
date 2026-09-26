@@ -40,6 +40,22 @@ exist and are loaded. A new Blueprint class must be cooked and mounted separatel
 Treat them as restart-required. The loader reference specifically calls for a
 restart after changing a class default.
 
+### FAQ-BLUEPRINTS-003 — Should I use /blueprints for a DataAsset edit? {#faq-blueprints-003}
+
+Usually no. Use `/assets` for loaded DataAssets and direct `DA_` field edits.
+Use `/blueprints` for supported reflected defaults on an existing loaded
+class or component.
+
+### FAQ-BLUEPRINTS-004 — What if I need a completely new Blueprint class? {#faq-blueprints-004}
+
+Cook the new Blueprint into a PAK and mount it. The Blueprints loader does not
+generate new classes.
+
+### FAQ-BLUEPRINTS-005 — Can I write a field that is not exposed by reflection? {#faq-blueprints-005}
+
+No supported authoring path is documented for that. Confirm the target field
+against live reflection before using it.
+
 ## Working examples
 
 - [Fixed Menu: character-creation labels](../examples/FixedMenu/blueprints/character_creation_text.jsonc)

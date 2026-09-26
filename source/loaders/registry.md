@@ -50,6 +50,20 @@ Yes. Client presentation assets must be installed wherever they are rendered.
 
 The duplicate identity is rejected and reported.
 
+### FAQ-REGISTRY-004 — Does /registry replace the normal loader folders? {#faq-registry-004}
+
+No. It is the multiplayer authority/presentation bridge. Items, recipes,
+spawns, quests, vendors, and other content still belong in their normal
+loaders.
+
+### FAQ-REGISTRY-005 — Can client presentation work if the cooked asset is missing on that client? {#faq-registry-005}
+
+No. The referenced presentation asset must exist on the client that renders it.
+
+### FAQ-REGISTRY-006 — Is a registry entry scoped to its mod? {#faq-registry-006}
+
+Yes. Registry identity is namespaced as `ModName:Id`.
+
 ---
 
 [← All loaders](../LOADER-WALKTHROUGHS.md) · [Authoring guide](../AUTHORING-GUIDE.md)

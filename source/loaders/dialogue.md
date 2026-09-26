@@ -54,6 +54,23 @@ No. The current dialogue contract supports up to four choices per node.
 Yes, through the supported dialogue actions. Bind the conversation to an NPC,
 then use the appropriate vendor, quest, event, lore, animation, or Niagara action.
 
+### FAQ-DIALOGUE-003 — How do I continue from one dialogue choice to another node? {#faq-dialogue-003}
+
+Use `Next` to point the choice at the next node.
+
+### FAQ-DIALOGUE-004 — How do I end a dialogue branch? {#faq-dialogue-004}
+
+Set `End:true` on the choice that should close the conversation.
+
+### FAQ-DIALOGUE-005 — Where do I attach a dialogue to an NPC? {#faq-dialogue-005}
+
+Set the NPC's `DialogueID` to the dialogue definition ID.
+
+### FAQ-DIALOGUE-006 — Can a choice open a RuneSchema vendor directly? {#faq-dialogue-006}
+
+Yes. A supported choice can reference a vendor ID, as in the documented
+`VendorID` example.
+
 ---
 
 [← All loaders](../LOADER-WALKTHROUGHS.md) · [Authoring guide](../AUTHORING-GUIDE.md)

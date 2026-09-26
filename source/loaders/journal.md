@@ -46,6 +46,20 @@ when you need exact targeting.
 
 Yes, where the native category supports grouping.
 
+### FAQ-JOURNAL-003 — Does AddTo automatically unlock the journal entry? {#faq-journal-003}
+
+No. Placement and unlock state are separate. Use the entry's `Unlock` setting
+for grant behavior.
+
+### FAQ-JOURNAL-004 — Can a journal entry contain more than one page? {#faq-journal-004}
+
+Yes. Add multiple objects to `PageDescriptions`.
+
+### FAQ-JOURNAL-005 — When should I use a full subcategory path? {#faq-journal-005}
+
+Use the full path when you need exact targeting or when a short loaded category
+would be ambiguous.
+
 ---
 
 [← All loaders](../LOADER-WALKTHROUGHS.md) · [Authoring guide](../AUTHORING-GUIDE.md)

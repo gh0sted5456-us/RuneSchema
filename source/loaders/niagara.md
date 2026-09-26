@@ -41,6 +41,20 @@ how RuneSchema references and attaches it.
 
 No. Only `User.*` parameters are accepted by this loader.
 
+### FAQ-NIAGARA-003 — What Niagara parameter value types are supported? {#faq-niagara-003}
+
+Boolean, number, vector, and color values are documented for `User.*`
+parameters.
+
+### FAQ-NIAGARA-004 — Do clients need the Niagara system installed? {#faq-niagara-004}
+
+Yes. The referenced Niagara system is cooked presentation content and must be
+available on clients that render it.
+
+### FAQ-NIAGARA-005 — How do other loaders use a Niagara definition? {#faq-niagara-005}
+
+Reference the definition from a supported consumer visual-effect block.
+
 ---
 
 [← All loaders](../LOADER-WALKTHROUGHS.md) · [Authoring guide](../AUTHORING-GUIDE.md)
