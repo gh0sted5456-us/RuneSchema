@@ -92,6 +92,7 @@ nav:
       - Authoring Guide: AUTHORING-GUIDE.md
       - Example Library: EXAMPLES.md
       - Ask RuneSchema: ASK-RUNESCHEMA.md
+      - FAQ: FAQ.md
   - Loaders:
       - Overview: LOADER-WALKTHROUGHS.md
       - Assets: loaders/assets.md
