@@ -92,6 +92,39 @@ files or `containers.index` in place.
 - storefront-specific cleanup never falls back to the other storefront's save
   path.
 
+## FAQ
+
+### FAQ-SAFESAVE-001 — Does SafeSave delete every unresolved item or recipe ID? {#faq-safesave-001}
+
+No. An unresolved identity is not enough. Cleanup requires recorded RuneSchema
+ownership.
+
+### FAQ-SAFESAVE-002 — Is OwnedContentLedger.json a save backup? {#faq-safesave-002}
+
+No. It stores ownership identities, not inventory amounts, character progress,
+or restorable copies of mod content.
+
+### FAQ-SAFESAVE-003 — Will reinstalling a removed mod restore items that SafeSave deleted? {#faq-safesave-003}
+
+No. Reinstalling the mod is treated as a fresh install. Removed items or stacks
+are not restored from the ledger.
+
+### FAQ-SAFESAVE-004 — Do Steam/GOG and Game Pass use the same cleanup path? {#faq-safesave-004}
+
+No. Steam/GOG can use backed-up loose character files. Game Pass cleanup works
+through hydrated game state and the active Xbox Game Save provider.
+
+### FAQ-SAFESAVE-005 — Should I manually edit Game Pass WGS files or containers.index? {#faq-safesave-005}
+
+No. Use the documented recovery flow instead of editing provider-managed WGS
+files in place.
+
+### FAQ-SAFESAVE-006 — What happens if cleanup cannot be verified? {#faq-safesave-006}
+
+RuneSchema keeps the previous ownership ledger pending so the cleanup can retry
+later instead of treating an uncertain result as success.
+
+
 ## Author checklist
 
 - Use a stable `PersistenceID` for persistent content.
