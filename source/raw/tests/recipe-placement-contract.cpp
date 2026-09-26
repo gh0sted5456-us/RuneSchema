@@ -55,7 +55,8 @@ int main(int argc, char** argv)
     Avoid(loader, "/Engine/Transient", "recipe loader still creates transient-engine RecipeData");
     Need(loader, "/Game/RuneSchema/Generated/Recipes/", "generated recipe objects do not use a stable RuneSchema route");
     Need(loader, "RuntimeRecipePath(def.ModName,def.Key)", "authored recipe objects do not use the mod-scoped RuneSchema route");
-    Need(loader, "ResolveRecipeItemByPersistenceId", "recipe ItemData PersistenceID routing disappeared");
+    Need(loader, "RefreshItemRoutes()", "recipe ItemData PersistenceID index disappeared");
+    Need(loader, "m_itemRoutes.find(reference)", "recipe ItemData PersistenceID routing disappeared");
     Need(loader, "propertyName!=\"ItemsConsumed\" && propertyName!=\"ItemsCreated\"",
         "recipe routing is not scoped to native ingredient/output collections");
     Need(loader, "OnFinalizeLoad(", "recipe linking is no longer deferred until all clone assets load");
