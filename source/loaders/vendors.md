@@ -50,6 +50,24 @@ No. Ordering is within each category.
 Yes. Vendor definitions are reusable and can be bound from supported NPC or
 dialogue flows.
 
+### FAQ-VENDORS-004 — Can a vendor be marked repairable? {#faq-vendors-004}
+
+Yes. `Repairable` is part of the documented vendor definition.
+
+### FAQ-VENDORS-005 — Can vendor availability be gated? {#faq-vendors-005}
+
+Yes. The vendor loader supports authored availability gates such as the
+documented power-level and time-of-day rules.
+
+### FAQ-VENDORS-006 — Can a recipe contribute an offer to a RuneSchema vendor? {#faq-vendors-006}
+
+Yes. Recipe definitions can target one or more RuneSchema vendor IDs.
+
+### FAQ-VENDORS-007 — Can a category name be a simple one-word label? {#faq-vendors-007}
+
+Yes. Category labels such as `Supplies` are valid; they do not need to contain
+multiple words.
+
 ## Working examples
 
 - [Great Tree: Crag's treasury with a night-only category](../examples/GreatTree/vendors/85-Crag.json)
