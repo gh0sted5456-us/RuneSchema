@@ -810,21 +810,37 @@ namespace DragonWilds {
             }
         }
 
-        static auto* transientPackage = UECustom::UObjectGlobals::StaticFindObject(
-            nullptr, nullptr, TEXT("/Engine/Transient"), false);
+        const auto runtimePath=RuntimeRecipePath(def.ModName,def.Key);
+        const auto dot=runtimePath.rfind(TEXT('.'));
+        if(dot==RC::StringType::npos)
+            throw std::runtime_error("Failed to form runtime recipe path");
+        const auto packagePath=runtimePath.substr(0,dot);
+        const auto objectName=runtimePath.substr(dot+1);
+        auto* package=EnsureRuntimePackage(packagePath);
+        if(auto* existing=UECustom::UObjectGlobals::StaticFindObject<UObject*>(
+            nullptr,nullptr,runtimePath.c_str(),false))
+        {
+            if(!existing->IsA(m_recipeClass))
+                throw std::runtime_error("Runtime recipe path is occupied by an incompatible object");
+            existing->SetRootSet();
+            m_recipes.emplace(def.Key,existing);
+            return existing;
+        }
 
-        FStaticConstructObjectParameters params(m_recipeClass, transientPackage);
-        params.Name = FName(def.Key, FNAME_Add);
-        params.SetFlags = static_cast<EObjectFlags>(RF_Public | RF_Standalone | RF_Transactional);
+        FStaticConstructObjectParameters params(m_recipeClass,package);
+        params.Name=FName(objectName,FNAME_Add);
+        params.SetFlags=static_cast<EObjectFlags>(
+            RF_Public|RF_Standalone|RF_Transactional);
 
-        auto* recipe = UObjectGlobals::StaticConstructObject<UObject*>(params);
-        if (!recipe)
+        auto* recipe=UObjectGlobals::StaticConstructObject<UObject*>(params);
+        if(!recipe)
         {
             PS::Log<LogLevel::Error>(STR("Failed to construct Recipe '{}'.\n"), def.Key);
             return nullptr;
         }
 
         recipe->SetRootSet();
+        m_ownedRuntimeRecipes.push_back(recipe);
 
         for (auto* propertyName : { TEXT("PersistenceID"), TEXT("InternalName") })
         {
@@ -873,7 +889,10 @@ namespace DragonWilds {
 
             try
             {
-                PropertyHelper::CopyJsonValueToContainer(reinterpret_cast<uint8*>(recipe), property, propertyValue);
+                const auto routed=RouteRecipeItemReferences(
+                    propertyName,propertyValue,m_itemDataClass);
+                PropertyHelper::CopyJsonValueToContainer(
+                    reinterpret_cast<uint8*>(recipe), property, routed);
             }
             catch (const std::exception& e)
             {
