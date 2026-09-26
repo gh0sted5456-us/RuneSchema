@@ -94,6 +94,37 @@ a vanilla plan item.
 For progression-controlled buildings, use `Unlock: false` and grant access
 through a tested RuneSchema quest, event, or other progression rule.
 
+## FAQ
+
+### FAQ-BUILDCLONE-001 — Does $Clone replace the vanilla building source? {#faq-buildclone-001}
+
+No. It creates a separate RuneSchema-owned building entry and leaves the source
+in place.
+
+### FAQ-BUILDCLONE-002 — What happens if AddTo is omitted? {#faq-buildclone-002}
+
+The clone inherits the source's catalogue placement.
+
+### FAQ-BUILDCLONE-003 — Does Requirements add to the source material cost? {#faq-buildclone-003}
+
+No. It replaces the complete requirements list.
+
+### FAQ-BUILDCLONE-004 — What kind of path should BuildableActor use? {#faq-buildclone-004}
+
+Use the full cooked generated-class path for a compatible building actor,
+ending in `_C`.
+
+### FAQ-BUILDCLONE-005 — Does Unlock:true rewrite a vanilla plan item? {#faq-buildclone-005}
+
+No. It adds the clone to the current unlock state; it does not rewrite a
+vanilla plan item.
+
+### FAQ-BUILDCLONE-006 — Do server and clients need the same cooked building assets? {#faq-buildclone-006}
+
+Yes. Install the same cooked replacement assets and RuneSchema definitions on
+the server and clients that participate in the multiplayer test.
+
+
 ## Multiplayer test
 
 Install the same cooked assets and RuneSchema definitions on the server and
