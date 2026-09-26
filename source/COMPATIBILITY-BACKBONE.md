@@ -67,5 +67,40 @@ Steam save-editing instructions onto the Game Pass WGS provider.
 For user recovery steps, see
 [Manual Save Recovery](MANUAL-SAVE-RECOVERY.md).
 
+## FAQ
+
+### FAQ-COMPAT-001 — Is there a separate RuneSchema DLL for Steam and Game Pass? {#faq-compat-001}
+
+No. RuneSchema 0.7.5.28 uses one storefront-aware runtime with separate native
+lanes internally.
+
+### FAQ-COMPAT-002 — Does Game Pass use Steam-only native byte patterns? {#faq-compat-002}
+
+No. The WinGDK lane does not use Steam-only pattern scans.
+
+### FAQ-COMPAT-003 — Is a USMAP required for RuneSchema to work? {#faq-compat-003}
+
+No. It is optional. Live Unreal reflection still validates runtime writes.
+
+### FAQ-COMPAT-004 — Can one incompatible plugin DLL disable RuneSchema core? {#faq-compat-004}
+
+No. A native ABI mismatch can skip that plugin DLL without disabling the core
+runtime.
+
+### FAQ-COMPAT-005 — Is Helpy required for loader functionality? {#faq-compat-005}
+
+No. Helpy is optional.
+
+### FAQ-COMPAT-006 — Does /registry bypass server validation? {#faq-compat-006}
+
+No. Registry entries connect authority actions with client presentation, but
+server-owned actions are still validated by the server.
+
+### FAQ-COMPAT-007 — Can a game update disable only one native feature? {#faq-compat-007}
+
+Yes. If a build-specific hook no longer validates, RuneSchema can leave that
+feature off while unrelated loaders and services continue.
+
+
 For storefront detection, hook validation, WGS internals, and build-specific
 details, see the [Developer Guide](DEVELOPER-GUIDE.md).
