@@ -364,13 +364,29 @@ namespace DragonWilds {
             if(!row.is_object() || !row.contains("ItemData")
                 || !row.at("ItemData").is_string())continue;
             const auto reference=row.at("ItemData").get<std::string>();
-            if(!IsCanonicalPersistenceId(reference))continue;
-            if(m_ambiguousItemRoutes.contains(reference))
-                throw std::runtime_error("Recipe ItemData PersistenceID is ambiguous: "+reference);
-            const auto found=m_itemRoutes.find(reference);
-            if(found==m_itemRoutes.end() || !found->second)
-                throw std::runtime_error("Recipe ItemData PersistenceID is not registered: "+reference);
-            row["ItemData"]=RC::to_string(found->second->GetPathName());
+            if(IsCanonicalPersistenceId(reference)) {
+                // Compatibility for definitions written before recipe ItemData
+                // references were standardized on object paths.
+                if(m_ambiguousItemRoutes.contains(reference))
+                    throw std::runtime_error("Recipe ItemData PersistenceID is ambiguous: "+reference);
+                const auto found=m_itemRoutes.find(reference);
+                if(found==m_itemRoutes.end() || !found->second)
+                    throw std::runtime_error("Recipe ItemData PersistenceID is not registered: "+reference);
+                row["ItemData"]=RC::to_string(found->second->GetPathName());
+                continue;
+            }
+            if(!reference.starts_with('/') || reference.find('.')==std::string::npos)
+                throw std::runtime_error("Recipe ItemData must be a full object path");
+            const auto path=RC::to_generic_string(reference);
+            auto* item=UECustom::UObjectGlobals::StaticFindObject<UObject*>(
+                nullptr,nullptr,path.c_str(),false);
+            if(!item) {
+                UECustom::TSoftObjectPtr<UObject> soft{UECustom::FSoftObjectPath(path)};
+                item=UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
+            }
+            if(!item || !item->IsA(m_itemDataClass))
+                throw std::runtime_error("Recipe ItemData path did not resolve to ItemData: "+reference);
+            row["ItemData"]=RC::to_string(item->GetPathName());
         }
         return routed;
     }

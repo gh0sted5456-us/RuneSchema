@@ -147,8 +147,8 @@ Walkthrough:
 `/assets` owns UObject/DataAsset cloning and field edits. It does not own
 DataTable rows or station placement. A clone is accepted only after its
 `PersistenceID` and `InternalName` are registered in the live ItemSubsystem;
-recipes should reference that registered clone by its PersistenceID or its
-actual stable RuneSchema object path.
+recipes should reference the registered clone by its actual stable RuneSchema
+object path. PersistenceID input is retained only for older recipe definitions.
 4. Add `/raw` rows when the item points to row handles such as wearable data.
 5. Add `/recipes`, `/journal`, or `/vendors` references after the item path is
    stable.
@@ -630,12 +630,13 @@ Placement rules:
 - Use `VanillaVendors` for native merchant table/row targets.
 - `Unlock:true` grants the recipe; placement alone does not.
 - `Order` sorts within a category. Lower values appear first.
-- Clone-backed `ItemsConsumed` and `ItemsCreated` may use the clone's unique
-  22-character `PersistenceID` in `ItemData`. RuneSchema resolves those IDs
-  once after all asset clones register, then writes the native `ItemData`
-  references into a stable `/Game/RuneSchema/<mod>/Recipes/` recipe object.
-  Missing or ambiguous IDs reject that recipe instead of leaving a transient
-  or partially initialized object in a crafting or processing queue.
+- `ItemsConsumed[].ItemData` and `ItemsCreated[].ItemData` should use the full
+  item object path. Runtime clones have deterministic paths below
+  `/Game/RuneSchema/<mod>/Items/`; RuneSchema resolves and type-checks that path
+  after all clones register. Older definitions that supplied a 22-character
+  `PersistenceID` remain readable and are migrated to the resolved object path
+  in memory. Missing paths or ambiguous legacy IDs reject that recipe instead
+  of leaving a transient or partially initialized object in a queue.
 - Processing placement additionally verifies that a clone's PersistenceID
   resolves back to the exact registered ItemData object. A duplicate identity,
   unregistered clone, transient recipe, or mismatched route rejects only that

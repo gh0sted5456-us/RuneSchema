@@ -81,10 +81,17 @@ int main(int argc, char** argv)
     Need(loader, "RuntimeRecipePath(def.ModName,def.Key)", "authored recipe objects do not use the mod-scoped RuneSchema route");
     Need(loader, "RefreshItemRoutes()", "recipe ItemData PersistenceID index disappeared");
     Need(loader, "m_itemRoutes.find(reference)", "recipe ItemData PersistenceID routing disappeared");
+    Need(loader, "Recipe ItemData must be a full object path",
+        "recipe ItemData does not enforce the path-first authoring contract");
+    Need(loader, "Recipe ItemData path did not resolve to ItemData",
+        "recipe ItemData paths are not resolved and type checked");
     Need(loader, "propertyName!=\"ItemsConsumed\" && propertyName!=\"ItemsCreated\"",
         "recipe routing is not scoped to native ingredient/output collections");
     Need(loader, "OnFinalizeLoad(", "recipe linking is no longer deferred until all clone assets load");
-    Need(guide, "22-character `PersistenceID`", "clone-backed recipe PersistenceID authoring is undocumented");
+    Need(guide, "should use the full\n  item object path",
+        "path-first clone-backed recipe authoring is undocumented");
+    Need(guide, "PersistenceID input is retained only for older recipe definitions",
+        "legacy recipe PersistenceID compatibility is undocumented");
     for (const auto* token : {
         "DT_CraftingStationsDataTable", "DT_ProcessingStationDataTable",
         "CraftingTable", "BrewingCauldron", "AdvancedSmelter",
