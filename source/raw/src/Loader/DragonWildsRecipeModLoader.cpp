@@ -901,55 +901,37 @@ namespace DragonWilds {
             }
         }
 
-        const auto segment=RecipePackageSegment(RC::to_string(def.Key));
-        const auto packagePath=RC::to_generic_string("/Game/RuneSchema/Recipes/"+segment);
-        const auto objectName=RC::to_generic_string(segment);
-        const auto objectPath=packagePath+TEXT(".")+objectName;
+        const auto runtimePath=RuntimeRecipePath(def.ModName,def.Key);
+        const auto dot=runtimePath.rfind(TEXT('.'));
+        if(dot==RC::StringType::npos)
+            throw std::runtime_error("Failed to form runtime recipe path");
+        const auto packagePath=runtimePath.substr(0,dot);
+        const auto objectName=runtimePath.substr(dot+1);
+        auto* package=EnsureRuntimePackage(packagePath);
         if(auto* existing=UECustom::UObjectGlobals::StaticFindObject<UObject*>(
-            nullptr,nullptr,objectPath.c_str(),false)) {
-            if(!existing->IsA(m_recipeClass)) {
-                PS::Log<LogLevel::Error>(STR("Recipe runtime path '{}' is occupied by an incompatible object.\n"),objectPath);
-                return nullptr;
-            }
+            nullptr,nullptr,runtimePath.c_str(),false))
+        {
+            if(!existing->IsA(m_recipeClass))
+                throw std::runtime_error("Runtime recipe path is occupied by an incompatible object");
             existing->SetRootSet();
             m_recipes.emplace(def.Key,existing);
-            if(WantsUnlock(def.Body))m_unlock.insert(def.Key);
             return existing;
         }
-        auto* package=UECustom::UObjectGlobals::StaticFindObject<UObject*>(
-            nullptr,nullptr,packagePath.c_str(),false);
-        if(!package) {
-            auto* packageClass=UECustom::UObjectGlobals::StaticFindObject<UClass*>(
-                nullptr,nullptr,TEXT("/Script/CoreUObject.Package"),false);
-            if(!packageClass) {
-                PS::Log<LogLevel::Error>(STR("Recipe '{}' cannot create a stable runtime package.\n"),def.Key);
-                return nullptr;
-            }
-            FStaticConstructObjectParameters packageParams(packageClass,nullptr);
-            packageParams.Name=FName(packagePath,FNAME_Add);
-            packageParams.SetFlags=static_cast<EObjectFlags>(RF_Public|RF_Standalone|RF_Transactional);
-            package=UObjectGlobals::StaticConstructObject<UObject*>(packageParams);
-        }
-        if(!package) {
-            PS::Log<LogLevel::Error>(STR("Recipe '{}' stable runtime package creation failed.\n"),def.Key);
-            return nullptr;
-        }
-        package->SetRootSet();
-        if(std::find(m_runtimeRecipePackages.begin(),m_runtimeRecipePackages.end(),package)==m_runtimeRecipePackages.end())
-            m_runtimeRecipePackages.push_back(package);
 
-        FStaticConstructObjectParameters params(m_recipeClass, package);
-        params.Name = FName(objectName, FNAME_Add);
-        params.SetFlags = static_cast<EObjectFlags>(RF_Public | RF_Standalone | RF_Transactional);
+        FStaticConstructObjectParameters params(m_recipeClass,package);
+        params.Name=FName(objectName,FNAME_Add);
+        params.SetFlags=static_cast<EObjectFlags>(
+            RF_Public|RF_Standalone|RF_Transactional);
 
-        auto* recipe = UObjectGlobals::StaticConstructObject<UObject*>(params);
-        if (!recipe)
+        auto* recipe=UObjectGlobals::StaticConstructObject<UObject*>(params);
+        if(!recipe)
         {
             PS::Log<LogLevel::Error>(STR("Failed to construct Recipe '{}'.\n"), def.Key);
             return nullptr;
         }
 
         recipe->SetRootSet();
+        m_ownedRuntimeRecipes.push_back(recipe);
 
         for (auto* propertyName : { TEXT("PersistenceID"), TEXT("InternalName") })
         {
@@ -998,7 +980,10 @@ namespace DragonWilds {
 
             try
             {
-                PropertyHelper::CopyJsonValueToContainer(reinterpret_cast<uint8*>(recipe), property, propertyValue);
+                const auto routed=RouteRecipeItemReferences(
+                    propertyName,propertyValue,m_itemDataClass);
+                PropertyHelper::CopyJsonValueToContainer(
+                    reinterpret_cast<uint8*>(recipe), property, routed);
             }
             catch (const std::exception& e)
             {
