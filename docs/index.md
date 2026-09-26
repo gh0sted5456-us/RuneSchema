@@ -134,7 +134,7 @@ hide:
 
     ---
 
-    Public release notes for the current Nexus build.
+    Public release notes for the current Nexus release.
 
     [:octicons-arrow-right-24: Release notes](RELEASES.md)
 
