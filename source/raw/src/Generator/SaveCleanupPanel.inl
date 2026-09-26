@@ -6,16 +6,18 @@ void RenderCleanup() {
     static json source,removed;
     static std::map<std::string,size_t> owners;
     static std::set<std::string> installed,selected;
+    static std::shared_ptr<const SaveCleanup::RegistrySnapshot> registry;
     static std::string message;
     static bool confirmed=false;
     static bool eraseProgress=false;
+    static bool pruneInvalidPersistence=false;
     ImGui::TextWrapped("Export a cleaned character save. The original and running world are never modified.");
-    ImGui::TextWrapped("Only quest, dialogue, location, journal and lore records carrying explicit RuneSchema ownership can be removed. Character saves are never rewritten automatically during game startup or world entry.");
+    ImGui::TextWrapped("Owned RuneSchema quest, dialogue, location, journal and lore records can be removed by owner. Safe Clean can also compare saved item, recipe and quest PersistenceIDs against the fully loaded native registries and remove identities that no longer exist.");
     ImGui::TextWrapped("Do not clean the character currently loaded in game. Put offline character JSON files in the shared input folder, then select one below.");
-    try {if(ImportSelector("Imported character save##cleanup",input,sizeof(input))) {source=nullptr;owners.clear();selected.clear();removed=nullptr;confirmed=false;}}
+    try {if(ImportSelector("Imported character save##cleanup",input,sizeof(input))) {source=nullptr;owners.clear();selected.clear();removed=nullptr;registry.reset();pruneInvalidPersistence=false;confirmed=false;}}
     catch(const std::exception& e){message=e.what();}
     if(ImGui::InputText("Character save JSON path",input,sizeof(input))) {
-        source=nullptr;owners.clear();selected.clear();removed=nullptr;confirmed=false;
+        source=nullptr;owners.clear();selected.clear();removed=nullptr;registry.reset();pruneInvalidPersistence=false;confirmed=false;
     }
     if(ImGui::Button("Inspect save and scan mods")) {
         source=nullptr;owners.clear();selected.clear();removed=nullptr;confirmed=false;
@@ -33,7 +35,11 @@ void RenderCleanup() {
             }
             if(fs::last_write_time(path)!=before || fs::file_size(path)!=size)throw std::runtime_error("Save changed during inspection; inspect again");
             sourcePath=path;sourceTime=before;sourceSize=size;source=std::move(data);owners=plan.Owners;installed=std::move(found);
-            message="Select owners below, preview removals, then export. Unknown means the saved owner is absent from this mod directory.";
+            registry=SaveCleanup::ReadRegistry();
+            pruneInvalidPersistence=false;
+            message=registry && registry->Ready()
+                ?"Select owners and/or enable invalid PersistenceID cleanup, preview removals, then export. Unknown means the saved owner is absent from this mod directory."
+                :"Select owners, preview removals, then export. Live item/recipe registry validation is unavailable until a world has fully loaded.";
         }catch(const std::exception& e){message=e.what();}
     }
     if(!source.is_null()) {
@@ -53,13 +59,30 @@ void RenderCleanup() {
             ImGui::PopID();
         }
         if(ImGui::Checkbox("Erase progress for selected RuneSchema owners",&eraseProgress)){removed=nullptr;confirmed=false;}
-        if(!eraseProgress)ImGui::TextWrapped("Progress preservation is on: quest credit, dialogue flags, journal/lore unlocks and item/recipe discovery history are retained.");
+        if(!eraseProgress)ImGui::TextWrapped("Progress preservation is on: quest credit, dialogue flags, journal/lore unlocks and item/recipe discovery history are retained unless invalid PersistenceID cleanup is enabled below.");
         else ImGui::TextWrapped("Progress erasure removes saved quest, dialogue, location, journal and lore records for selected RuneSchema owners.");
-        ImGui::BeginDisabled(selected.empty());
+
+        const bool registryReady=registry && registry->Ready();
+        ImGui::BeginDisabled(!registryReady);
+        if(ImGui::Checkbox("Remove invalid item/recipe/quest PersistenceIDs",&pruneInvalidPersistence)){removed=nullptr;confirmed=false;}
+        ImGui::EndDisabled();
+        if(!registryReady) {
+            pruneInvalidPersistence=false;
+            ImGui::TextDisabled("Live registry unavailable. Enter a fully loaded world, then inspect the save again.");
+        } else if(pruneInvalidPersistence) {
+            ImGui::TextWrapped("Registry repair removes saved inventory/loadout item IDs, discovery/unlock IDs, and (when the quest registry is complete) quest IDs that are absent from the current native registries. Disabled or missing mods therefore count as absent.");
+        }
+
+        ImGui::BeginDisabled(selected.empty() && !pruneInvalidPersistence);
         if(ImGui::Button("Preview removals")) {
             removed=nullptr;confirmed=false;
-            try {removed=SaveCleanup::Plan(source,selected,eraseProgress).Removed;message="Preview ready. Only explicitly owned RuneSchema records are eligible.";}
-            catch(const std::exception& e){message=e.what();}
+            try {
+                const auto* validation=pruneInvalidPersistence?registry.get():nullptr;
+                removed=SaveCleanup::Plan(source,selected,eraseProgress,validation,false,pruneInvalidPersistence).Removed;
+                message=pruneInvalidPersistence
+                    ?"Preview ready. Owned records and registry-invalid PersistenceIDs are listed below."
+                    :"Preview ready. Only explicitly owned RuneSchema records are eligible.";
+            } catch(const std::exception& e){message=e.what();}
         }
         ImGui::EndDisabled();
         if(removed.is_array()) {
@@ -73,7 +96,8 @@ void RenderCleanup() {
             if(ImGui::Button("Export cleaned copy"))try {
                 if(fs::last_write_time(sourcePath)!=sourceTime || fs::file_size(sourcePath)!=sourceSize || Read(sourcePath)!=source)
                     throw std::runtime_error("Source save changed; inspect and preview it again before export");
-                const auto plan=SaveCleanup::Plan(source,selected,eraseProgress);
+                const auto* validation=pruneInvalidPersistence?registry.get():nullptr;
+                const auto plan=SaveCleanup::Plan(source,selected,eraseProgress,validation,false,pruneInvalidPersistence);
                 if(plan.Removed!=removed)throw std::runtime_error("Cleanup preview changed; inspect again");
                 auto text=plan.Save.dump(1,'\t');
                 std::ifstream encoding(sourcePath,std::ios::binary);char bom[2]{};encoding.read(bom,2);
