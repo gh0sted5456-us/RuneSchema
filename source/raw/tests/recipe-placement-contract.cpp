@@ -65,7 +65,8 @@ int main(int argc, char** argv)
         "relocated object references are not constrained to the property type");
     Need(properties, "Ambiguous relocated object reference",
         "ambiguous relocated object names are not rejected");
-    Avoid(loader, "/Engine/Transient", "recipe loader still creates transient-engine RecipeData");
+    Avoid(loader, "StaticFindObject<UObject*>(nullptr,nullptr,TEXT(\"/Engine/Transient\")",
+        "recipe loader still constructs RecipeData in the transient engine package");
     Need(loader, "/Game/RuneSchema/Generated/Recipes/", "generated recipe objects do not use a stable RuneSchema route");
     Need(loader, "RuntimeRecipePath(def.ModName,def.Key)", "authored recipe objects do not use the mod-scoped RuneSchema route");
     Need(loader, "RefreshItemRoutes()", "recipe ItemData PersistenceID index disappeared");
