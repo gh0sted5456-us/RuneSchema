@@ -55,6 +55,10 @@ int Run() {
     const auto erased=Plan(assetSave,{},true,&registry);
     Require(erased.Save["GameProgress"]["Progress"]["RecipesUnlocked"]==Json::array({"recipe1"}));
     Require(erased.Save["GameProgress"]["Progress"]["ItemsPickedUp"]==Json::array({"item1"}));
+    const auto orphanPruned=Plan(assetSave,{},false,&registry,false,true);
+    Require(orphanPruned.Save["GameProgress"]["Progress"]["RecipesUnlocked"]==Json::array({"recipe1"}));
+    Require(orphanPruned.Save["GameProgress"]["Progress"]["ItemsPickedUp"]==Json::array({"item1"}));
+    Require(orphanPruned.Save["GameProgress"]["QuestProgress"]==assetSave["GameProgress"]["QuestProgress"]);
     auto missingQuest=assetSave;
     missingQuest["GameProgress"]["QuestProgress"]["Quests"][0]["QuestId"]="missing-quest";
     missingQuest["GameProgress"]["QuestProgress"]["Quests"][0]["QuestInts"]=Json::array();
