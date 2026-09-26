@@ -235,9 +235,8 @@ namespace DragonWilds {
     DragonWildsRecipeModLoader::~DragonWildsRecipeModLoader()
     {
         for (const auto& [function, id] : m_functionHooks) if (function && id) function->UnregisterHook(id);
-        for (const auto& [key, owner] : m_vendorRecipeOwners) {
-            if (auto* recipe=LiveRecipe(key))recipe->ClearRootSet();
-        }
+        for(auto* recipe:m_ownedRuntimeRecipes)if(recipe)recipe->ClearRootSet();
+        for(auto* package:m_runtimePackages)if(package)package->ClearRootSet();
     }
 
     UObject* DragonWildsRecipeModLoader::LiveRecipe(const RC::StringType& key) const
@@ -251,6 +250,32 @@ namespace DragonWilds {
         if(!slot || slot->GetUObject()!=found->second || !slot->IsRootSet() || !slot->IsValid(false))return nullptr;
         auto* recipe=slot->GetUObject();
         return recipe && recipe->GetPathName()==lease->second.Path && recipe->IsA(m_recipeClass)?recipe:nullptr;
+    }
+
+    UObject* DragonWildsRecipeModLoader::EnsureRuntimePackage(
+        const RC::StringType& packagePath)
+    {
+        auto* packageClass=UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr,nullptr,TEXT("/Script/CoreUObject.Package"),false);
+        if(!packageClass)throw std::runtime_error("Unreal package class is unavailable for runtime recipes");
+
+        if(auto* existing=UECustom::UObjectGlobals::StaticFindObject<UObject*>(
+            nullptr,nullptr,packagePath.c_str(),false))
+        {
+            if(!existing->IsA(packageClass))
+                throw std::runtime_error("Runtime recipe package path is occupied by a non-package object");
+            return existing;
+        }
+
+        FStaticConstructObjectParameters params(packageClass,nullptr);
+        params.Name=FName(packagePath,FNAME_Add);
+        params.SetFlags=static_cast<EObjectFlags>(
+            RF_Public|RF_Standalone|RF_Transactional);
+        auto* package=UObjectGlobals::StaticConstructObject<UObject*>(params);
+        if(!package)throw std::runtime_error("Failed to create runtime recipe package");
+        package->SetRootSet();
+        m_runtimePackages.push_back(package);
+        return package;
     }
 
     UObject* DragonWildsRecipeModLoader::EnsureVendorRecipe(const std::string& owner,
@@ -276,19 +301,20 @@ namespace DragonWilds {
         if(!recipe) {
             if(std::any_of(m_recipeDefs.begin(),m_recipeDefs.end(),[&](const auto& def){return def.Key==key;}))
                 throw std::runtime_error("Vendor recipe conflicts with an authored recipe definition");
-            auto* package=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,TEXT("/Engine/Transient"));
-            if (!package)throw std::runtime_error("Transient package unavailable for vendor recipe");
             const auto objectName=RC::to_generic_string(VendorOffers::RecipeObjectName(identity));
-            const auto path=RC::StringType(TEXT("/Engine/Transient."))+objectName;
+            const auto packagePath=RC::StringType(TEXT("/Game/RuneSchema/Generated/Recipes/"))+objectName;
+            const auto path=packagePath+RC::StringType(TEXT("."))+objectName;
+            auto* package=EnsureRuntimePackage(packagePath);
             if (UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,path.c_str()))
                 throw std::runtime_error("Vendor runtime recipe name collision; existing object preserved");
             FStaticConstructObjectParameters params(m_recipeClass,package);
             params.Name=FName(objectName,FNAME_Add);
-            params.SetFlags=static_cast<EObjectFlags>(RF_Public|RF_Transient);
+            params.SetFlags=static_cast<EObjectFlags>(RF_Public|RF_Standalone|RF_Transactional);
             recipe=UObjectGlobals::StaticConstructObject<UObject*>(params);
             if(!recipe)throw std::runtime_error("Failed to construct vendor RecipeData");
             ++m_recipeRevision;
             recipe->SetRootSet();
+            m_ownedRuntimeRecipes.push_back(recipe);
             // Retain ownership even if a field write fails. A bounded vendor
             // retry repairs this same object instead of leaking new recipes.
             m_recipes.emplace(key,recipe);
@@ -304,7 +330,8 @@ namespace DragonWilds {
             for(const auto& [name,value]:values.items()) {
                 auto* property=PropertyHelper::GetPropertyByName(m_recipeClass,RC::to_generic_string(name));
                 if(!property)throw std::runtime_error("Vendor RecipeData field unavailable: "+name);
-                PropertyHelper::CopyJsonValueToContainer(recipe,property,value);
+                const auto routed=RouteRecipeItemReferences(name,value,m_itemDataClass);
+                PropertyHelper::CopyJsonValueToContainer(recipe,property,routed);
             }
         }
         m_propsApplied.insert(key);
