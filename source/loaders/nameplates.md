@@ -45,6 +45,20 @@ No. Define it in `/nameplates`, then reference that definition from a
 Yes. States and observed function events can change or pulse a badge when their
 function paths and parameter conditions match.
 
+### FAQ-NAMEPLATES-003 — Can I match a function by a loose or partial name? {#faq-nameplates-003}
+
+Use the exact function path documented by the runtime and keep parameter
+conditions narrow.
+
+### FAQ-NAMEPLATES-004 — Can a nameplate react to player activity? {#faq-nameplates-004}
+
+Yes. States and observed function events can change or pulse a badge.
+
+### FAQ-NAMEPLATES-005 — What multiplayer cases should I test? {#faq-nameplates-005}
+
+Test self, host, remote client, distance limits, inactivity timeout, death, and
+respawn.
+
 ---
 
 [← All loaders](../LOADER-WALKTHROUGHS.md) · [Authoring guide](../AUTHORING-GUIDE.md)
