@@ -30,6 +30,23 @@ Loaders record identities they create. Cooked persistent content can use
 A missing registry lookup by itself is not proof that content is safe to
 remove.
 
+## Safe Clean registry repair
+
+The manual Safe Clean tool has an additional opt-in repair mode for stale
+`PersistenceID` records. After a world has fully loaded, RuneSchema snapshots
+the native item and recipe persistence registries, including successfully
+registered runtime clones. Safe Clean can compare an offline character save to
+that snapshot and preview removal of:
+
+- inventory, personal-inventory, and loadout item IDs that are no longer registered;
+- item discovery and milestone IDs that are no longer registered;
+- recipe unlock/new IDs that are no longer registered;
+- quest IDs only when the quest registry was captured completely.
+
+This mode is deliberately separate from automatic SafeSave cleanup. Startup
+cleanup remains ownership-only. Registry-invalid cleanup must be selected
+explicitly in Safe Clean, previewed, and exported as a copy.
+
 ## Items and equipped gear
 
 When a player removes a mod while wearing or carrying a RuneSchema-owned item,
@@ -49,9 +66,19 @@ Character saves are loose files under:
 %LOCALAPPDATA%\RSDragonwilds\Saved\SaveCharacters
 ```
 
-RuneSchema applies the ownership-only cleanup before deserialization, keeps a
-`runeschema-before-clean` backup, writes atomically, and reads the result back
-before committing the new ledger.
+RuneSchema applies the ownership-only cleanup before deserialization, writes
+atomically, and reads the result back before committing the new ledger.
+
+Recovery backups are no longer written beside the character JSON. SafeSave keeps
+at most three rotating pre-clean copies per character under:
+
+```text
+%LOCALAPPDATA%\RSDragonwilds\Saved\RuneSchema\safesave\backups
+```
+
+After a verified cleanup, legacy
+`*.runeschema-before-clean*.bak` files for that character are removed from
+`SaveCharacters`. Dragonwilds-owned `.backup` files are not touched.
 
 RuneSchema state is stored separately at:
 
