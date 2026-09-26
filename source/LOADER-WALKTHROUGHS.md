@@ -340,13 +340,29 @@ Use `/equipment` to bind supported behavior to worn item paths.
       "Mode": "Append",
       "Effects": ["MyMod:Effects/Movement/Dash"]
     }
+  },
+  "Items": {
+    "/Game/MyMod/Items/ITEM_MagicCape.ITEM_MagicCape": {
+      "AssociatedSkill": "/Game/Gameplay/Character/Player/Skills/SKILL_Magic.SKILL_Magic",
+      "SkillUsed": "/Game/Gameplay/Character/Player/Skills/SKILL_Artisan.SKILL_Artisan",
+      "SkillPerkRequiredToEquip": "/Game/Gameplay/Character/Player/PerksV2/Magic/PerkV2_Magic_Skillcape.PerkV2_Magic_Skillcape",
+      "GrantedEffects": {
+        "Mode": "Append",
+        "Effects": ["/Game/MyMod/Effects/GE_MagicCape.GE_MagicCape_C"]
+      }
+    }
   }
 }
 ```
 
 `GrantedEffects` supports `Replace`, `Append`, and `Clear`. Use item data paths,
-not executable addresses. Validate equip, unequip, death, respawn, reconnect,
-and client presentation.
+not executable addresses. `Items` also exposes the vanilla equipment fields
+`AssociatedSkill`, `SkillUsed`, and `SkillPerkRequiredToEquip`. A
+`UtilitySpellData` is a modular spell definition, not an equipment property;
+grant the appropriate cooked gameplay effect instead of writing a spell path
+into an invented field. Wearable defense/resistance data belongs to
+`DT_WearableEquipment` and should be patched explicitly through `/raw`.
+Validate equip, unequip, death, respawn, reconnect, and client presentation.
 
 ## `events`
 
@@ -642,23 +658,25 @@ under the owning mod namespace.
 
 ```json
 {
-  "SchemaVersion": 1,
-  "Entries": [{
-    "Id": "spell_presentation",
-    "Kind": "SpellPresentation",
+  "spell_presentation": {
+    "Kind": "UtilitySpellPresentation",
     "Spell": "/Game/MyMod/Spells/DA_MySpell.DA_MySpell",
     "Presentation": [{
       "Phase": "SpawnVFX",
       "Class": "/Game/MyMod/VFX/BP_MyImpact.BP_MyImpact_C",
       "Classification": "PureVFX"
     }]
-  }]
+  }
 }
 ```
 
 Duplicate `ModName:Id` keys are rejected and reported. Presentation assets must
 exist on clients. Authority actions are validated on the server; the JSON does
-not grant permission by itself.
+not grant permission by itself. The compact ID-keyed form above needs no schema
+header. Single entries, bare arrays, and legacy `{SchemaVersion, Entries}`
+documents remain compatible. Descriptive kinds include spell, utility-spell,
+skill, gameplay-effect, equipment, persistent-effect, weather, world, audio,
+and cosmetic presentations.
 
 ## `spawns`
 

@@ -106,6 +106,32 @@ bool Install(const TCHAR*& failure) {
     Active.store(true, std::memory_order_release);
     return true;
 }
+
+UObject* ResolveAsset(const std::string& path) {
+    const auto wide=RC::to_generic_string(path);
+    auto* object=UECustom::UObjectGlobals::StaticFindObject(nullptr,nullptr,wide.c_str(),false);
+    if(object)return object;
+    UECustom::TSoftObjectPtr<UObject> soft{UECustom::FSoftObjectPath(wide)};
+    return UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
+}
+
+void ApplyEffects(UObject* item,const EquipmentEffectRules::Assignment& rule) {
+    for(const auto& effect:rule.effects)if(!effect.starts_with('/') && !DefinitionRegistry::Effects.contains(effect))
+        throw std::runtime_error("unknown gameplay-effect alias: "+effect);
+    auto* property=CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(item->GetClassPrivate(),TEXT("GrantedEffects")));
+    if(!property)throw std::runtime_error("item does not expose a GrantedEffects array");
+    nlohmann::json effects=rule.effects;
+    if(rule.mode==EquipmentEffectRules::Mode::Clear)effects=nlohmann::json::array();
+    else if(rule.mode==EquipmentEffectRules::Mode::Append)effects=PropertyHelper::BuildAppendValue(property,effects);
+    PropertyHelper::CopyJsonValueToContainer(item,property,effects);
+}
+
+void ApplyObjectField(UObject* item,const TCHAR* field,const std::optional<std::string>& value) {
+    if(!value)return;
+    auto* property=CastField<FObjectPropertyBase>(PropertyHelper::GetPropertyByName(item->GetClassPrivate(),field));
+    if(!property)throw std::runtime_error("item does not expose the requested equipment field");
+    PropertyHelper::CopyJsonValueToContainer(item,property,*value);
+}
 }
 
 DragonWildsEquipmentLoader::DragonWildsEquipmentLoader() : DragonWildsModLoaderBase("equipment") {
@@ -124,26 +150,27 @@ void DragonWildsEquipmentLoader::OnFinalizeLoad(const EEngineLifecyclePhase& pha
     m_finalized = true;
     size_t effectItems=0;
     for(const auto& [path,rule]:m_rules.effects)try {
-        for(const auto& effect:rule.effects)if(!effect.starts_with('/') && !DefinitionRegistry::Effects.contains(effect))
-            throw std::runtime_error("unknown gameplay-effect alias: "+effect);
-        const auto wide=RC::to_generic_string(path);
-        auto* item=UECustom::UObjectGlobals::StaticFindObject(nullptr,nullptr,wide.c_str(),false);
-        if(!item) {
-            UECustom::TSoftObjectPtr<UObject> soft{UECustom::FSoftObjectPath(wide)};
-            item=UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
-        }
+        auto* item=ResolveAsset(path);
         if(!item)throw std::runtime_error("item asset did not resolve");
-        auto* property=CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(item->GetClassPrivate(),TEXT("GrantedEffects")));
-        if(!property)throw std::runtime_error("item does not expose a GrantedEffects array; use /assets for its native nested effect field");
-        nlohmann::json effects=rule.effects;
-        if(rule.mode==EquipmentEffectRules::Mode::Clear)effects=nlohmann::json::array();
-        else if(rule.mode==EquipmentEffectRules::Mode::Append)effects=PropertyHelper::BuildAppendValue(property,effects);
-        PropertyHelper::CopyJsonValueToContainer(item,property,effects);
+        ApplyEffects(item,rule);
         ++effectItems;
     }catch(const std::exception& error) {
         PS::Log<LogLevel::Error>(TEXT("Equipment effects '{}': {}.\n"),RC::to_generic_string(path),PS::ToWideSafe(error.what()));
     }
     m_rules.effects.clear();
+    size_t configuredItems=0;
+    for(const auto& [path,rule]:m_rules.items)try {
+        auto* item=ResolveAsset(path);
+        if(!item)throw std::runtime_error("item asset did not resolve");
+        ApplyObjectField(item,TEXT("AssociatedSkill"),rule.associatedSkill);
+        ApplyObjectField(item,TEXT("SkillUsed"),rule.skillUsed);
+        ApplyObjectField(item,TEXT("SkillPerkRequiredToEquip"),rule.skillPerkRequiredToEquip);
+        if(rule.grantedEffects)ApplyEffects(item,*rule.grantedEffects);
+        ++configuredItems;
+    }catch(const std::exception& error) {
+        PS::Log<LogLevel::Error>(TEXT("Equipment item '{}': {}. Other item rules continue.\n"),RC::to_generic_string(path),PS::ToWideSafe(error.what()));
+    }
+    m_rules.items.clear();
     const auto shadowveil=InitializeEquipmentShadowveil(m_rules.shadowveil);
     m_rules.shadowveil.clear();
     const auto surgeCount=m_rules.surge.size();
@@ -167,6 +194,7 @@ void DragonWildsEquipmentLoader::OnFinalizeLoad(const EEngineLifecyclePhase& pha
             (shadowveil.enabled ? shadowveil.server : surgeServer) ? TEXT("server") : TEXT("client"),
             shadowveil.enabled ? shadowveil.wearables : 0, surgeEnabled ? surgeCount : 0);
     if(effectItems)PS::Log<LogLevel::Normal>(TEXT("Equipment effects: applied GrantedEffects to {} item assets.\n"),effectItems);
+    if(configuredItems)PS::Log<LogLevel::Normal>(TEXT("Equipment: configured skills, perks or effects on {} item assets.\n"),configuredItems);
     PS::Log<LogLevel::Verbose>(TEXT("[CAPABILITY][equipment] reflected item fields, GrantedEffects, cooked visuals, NPC equipment and native replication remain independent of optional native behavior bindings.\n"));
 }
 void DragonWildsEquipmentLoader::OnAutoReload(const RC::StringType&, const std::filesystem::path&) {

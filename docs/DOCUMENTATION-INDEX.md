@@ -14,6 +14,7 @@ Steam/GOG and Game Pass/WinGDK execution lanes.
 4. `SAFE-SAVE-AND-LEDGER.md` — ownership ledger and safe removal behavior.
 5. `COMPATIBILITY-BACKBONE.md` — universal runtime, storefront detection,
    signatures, mappings, plugins, and failure isolation.
+6. `SAVE-LANE-ARCHITECTURE.md` — shared cleanup policy and lane-specific commits.
 
 ## Focused references
 
@@ -28,6 +29,8 @@ Steam/GOG and Game Pass/WinGDK execution lanes.
 - `NATIVE-HOOK-PARITY.md` — verified Steam and WinGDK native capabilities.
 - `HELpy-REDESIGN-AUDIT.md` — minimal on-demand UI and catalog behavior.
 - `BASELINE-SUBSYSTEM-AUDIT.md` — baseline subsystem and compatibility audit.
+- `EQUIPMENT-AND-MAGIC.md` — item effects, skills, perks, and native behavior boundaries.
+- `REGISTRY.md` — compact registry authoring and authority/client bridge rules.
 
 ## Machine-readable references
 

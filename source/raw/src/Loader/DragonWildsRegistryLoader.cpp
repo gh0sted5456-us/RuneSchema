@@ -47,7 +47,11 @@ void Fields(const json& value,std::initializer_list<const char*> allowed,const c
 
 json AuthorDocument(const json& source) {
     if(source.is_object()&&source.contains("RegistryJson")&&source["RegistryJson"].is_string())return json::parse(source["RegistryJson"].get<std::string>());
-    if(source.is_object()&&source.contains("SchemaVersion"))return source;
+    if(source.is_object()&&source.contains("Entries")) {
+        auto document=source;
+        if(!document.contains("SchemaVersion"))document["SchemaVersion"]=1;
+        return document;
+    }
     if(source.is_object()&&source.contains("kind")&&source.value("kind",std::string{})=="RuneSchemaRegistryBridgeManifest"&&source.contains("entries")) {
         json entries=json::array();for(const auto& row:source["entries"]) {
             json entry={{"Id",row.value("id",std::string{})},{"Kind",row.value("kind",std::string{})}};
@@ -58,12 +62,30 @@ json AuthorDocument(const json& source) {
         }return {{"SchemaVersion",1},{"Entries",std::move(entries)}};
     }
     if(source.is_object()&&source.contains("Properties")&&source["Properties"].is_object())return AuthorDocument(source["Properties"]);
+    if(source.is_object()&&source.contains("Id")&&source.contains("Kind"))
+        return {{"SchemaVersion",1},{"Entries",json::array({source})}};
+    if(source.is_object()&&!source.empty()) {
+        json entries=json::array();
+        for(const auto& [id,value]:source.items()) {
+            if(id=="$Comment")continue;
+            if(!value.is_object() || !value.contains("Kind")) {
+                entries=json::array();
+                break;
+            }
+            auto entry=value;
+            if(entry.contains("Id") && entry["Id"]!=id)
+                throw std::runtime_error("compact registry key conflicts with its Id field");
+            entry["Id"]=id;
+            entries.push_back(std::move(entry));
+        }
+        if(!entries.empty())return {{"SchemaVersion",1},{"Entries",std::move(entries)}};
+    }
     if(source.is_array()) {
         bool fmodel=false;for(const auto& exportRow:source)if(exportRow.is_object()&&(exportRow.contains("Type")||exportRow.contains("Properties"))){fmodel=true;if(exportRow.contains("Properties"))try{return AuthorDocument(exportRow["Properties"]);}catch(...) {}}
         if(fmodel)throw std::runtime_error("FModel export detected, but no RuneSchema registry contract was found. Author a simple Entries document or cook a registry asset with RegistryJson; do not paste an arbitrary asset dump");
         return {{"SchemaVersion",1},{"Entries",source}};
     }
-    throw std::runtime_error("unsupported registry root; use {SchemaVersion, Entries}, an Entries array, a merged RuneSchema manifest, or a cooked RegistryJson contract");
+    throw std::runtime_error("unsupported registry root; use a compact Id-to-entry map, one entry, an Entries array, or a cooked RegistryJson contract");
 }
 }
 
@@ -87,8 +109,10 @@ nlohmann::json DragonWildsRegistryLoader::NormalizeEntry(const json& entry,const
     const auto id=entry.value("Id",std::string{});
     const auto kind=entry.value("Kind",std::string{});
     if(!Identifier(id))throw std::runtime_error("registry Id must use letters, numbers, dot, dash or underscore");
-    if(kind!="SpellPresentation" && kind!="PersistentEffect" && kind!="WeatherPresentation"
-        && kind!="AudioPresentation" && kind!="CosmeticWrapper")
+    if(kind!="SpellPresentation" && kind!="UtilitySpellPresentation" && kind!="SkillPresentation"
+        && kind!="GameplayEffectPresentation" && kind!="EquipmentPresentation"
+        && kind!="PersistentEffect" && kind!="WeatherPresentation"
+        && kind!="WorldPresentation" && kind!="AudioPresentation" && kind!="CosmeticWrapper")
         throw std::runtime_error("registry Kind is unsupported");
     const auto key=owner+":"+id;
     if(m_keys.contains(key))throw std::runtime_error("duplicate registry key '"+key+"'");
@@ -223,6 +247,9 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
 
 void DragonWildsRegistryLoader::WriteMerged() {
     json entries=m_modEntries;
+    std::sort(entries.begin(),entries.end(),[](const json& left,const json& right) {
+        return left.value("key",std::string{})<right.value("key",std::string{});
+    });
     std::size_t pure=0,native=0,wrappers=0,unsupported=0;
     for(const auto& entry:entries)for(const auto& row:entry.value("presentation",json::array())) {
         const auto value=row.value("classification",std::string{});
