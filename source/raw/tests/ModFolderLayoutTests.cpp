@@ -22,6 +22,13 @@ int main(int argc, char** argv) {
     };
     fs::create_directories(root / "empty");
     check(root / "empty", false);
+    fs::create_directories(root / "case" / "ReCiPeS");
+    if (PS::ModFolderLayout::FoldAscii("ReCiPeS") != "recipes") return 4;
+    const auto recipes = PS::ModFolderLayout::FindChildDirectory(root / "case", "recipes");
+    if (recipes.empty() || recipes.filename().string() != "ReCiPeS") return 5;
+    if (!PS::ModFolderLayout::FindChildDirectory(root / "case", "RECIPES").empty()
+        && PS::ModFolderLayout::FindChildDirectory(root / "case", "RECIPES") != recipes) return 6;
+    checks += 3;
     file(root / "json" / "nested" / "data.json");
     check(root / "json", false);
     fs::create_directories(root / "fake" / "folder.pak");
