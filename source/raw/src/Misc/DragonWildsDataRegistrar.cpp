@@ -125,6 +125,43 @@ namespace DragonWilds {
         return slot(0);
     }
 
+    static void PruneLegacyCharacterBackups(
+        const std::filesystem::path& source)
+    {
+        const auto prefix=source.filename().wstring()
+            +L".runeschema-before-clean";
+        std::size_t removed=0;
+        std::error_code iterationError;
+        std::filesystem::directory_iterator it(source.parent_path(),iterationError);
+        if(iterationError)
+        {
+            PS::Log<LogLevel::Warning>(
+                STR("[SAVE-CLEANER] Could not inspect legacy backup files beside '{}': {}.\n"),
+                source.filename().native(),PS::ToWideSafe(iterationError.message().c_str()));
+            return;
+        }
+        for(const auto& entry:it)
+        {
+            std::error_code typeError;
+            if(!entry.is_regular_file(typeError) || typeError)continue;
+            const auto name=entry.path().filename().wstring();
+            if(name.size()<prefix.size()+4
+                || name.compare(0,prefix.size(),prefix)!=0
+                || name.compare(name.size()-4,4,L".bak")!=0)
+                continue;
+            std::error_code removeError;
+            if(std::filesystem::remove(entry.path(),removeError))++removed;
+            else if(removeError)
+                PS::Log<LogLevel::Warning>(
+                    STR("[SAVE-CLEANER] Could not remove legacy backup '{}': {}.\n"),
+                    entry.path().filename().native(),PS::ToWideSafe(removeError.message().c_str()));
+        }
+        if(removed)
+            PS::Log<LogLevel::Normal>(
+                STR("[SAVE-CLEANER] Removed {} legacy RuneSchema backup file(s) from SaveCharacters; recovery copies now live under Saved/RuneSchema/safesave/backups.\n"),
+                removed);
+    }
+
     static bool CleanRetiredCharacterSaves(
         const std::vector<OwnedContent::Record>& retired)
     {
@@ -180,6 +217,7 @@ namespace DragonWilds {
                 if(nlohmann::json::parse(PS::ConfigFiles::Read(
                     entry.path(),8*1024*1024))!=plan.Save)
                     throw std::runtime_error("Written character save failed verification");
+                PruneLegacyCharacterBackups(entry.path());
                 ++changed;removed+=plan.Removed.size();
                 PS::Log<LogLevel::Normal>(
                     STR("[SAVE-CLEANER][OWNED-ONLY] Cleaned {} retired RuneSchema record(s) from '{}' before character deserialization. Backup: '{}'.\n"),
@@ -221,7 +259,9 @@ namespace DragonWilds {
 
     static bool IsCustomDataPath(const RC::StringType& path)
     {
-        return path.starts_with(TEXT("/Game/Mods/")) || path.starts_with(TEXT("/Engine/Transient"))
+        return path.starts_with(TEXT("/Game/Mods/"))
+            || path.starts_with(TEXT("/Game/RuneSchema/"))
+            || path.starts_with(TEXT("/Engine/Transient"))
             || OwnedContent::IsActiveDeclarationPath(RC::to_string(path));
     }
 
