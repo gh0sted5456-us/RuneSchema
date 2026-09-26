@@ -14,147 +14,135 @@ hide:
 
 # RuneSchema
 
-**Authoring and runtime reference for RuneScape: Dragonwilds.**
-
-RuneSchema loads validated JSON and JSONC definitions, connects authored data to mounted cooked assets, and provides the runtime bridges needed for self-contained content mods.
+**JSON/JSONC mod authoring and runtime support for RuneScape: Dragonwilds.**
 
 <div class="rs-actions" markdown>
 [Start authoring](AUTHORING-GUIDE.md){ .md-button .md-button--primary }
 [Loader reference](LOADER-WALKTHROUGHS.md){ .md-button }
-[Working examples](EXAMPLES.md){ .md-button }
 [Ask RuneSchema](ASK-RUNESCHEMA.md){ .md-button }
+[Examples](EXAMPLES.md){ .md-button }
 </div>
 </div>
 
-## Start here
+## For mod authors
 
 <div class="grid cards rs-card-grid" markdown>
 
--   :material-hammer-wrench:{ .lg .middle } **Author a mod**
+-   :material-hammer-wrench:{ .lg .middle } **Authoring guide**
 
     ---
 
-    Installation, folder structure, load order, cooked assets, mappings, multiplayer behavior, and validation.
+    Mod layout, load order, cooked assets, mappings, multiplayer, logs, and testing.
 
-    [:octicons-arrow-right-24: Authoring guide](AUTHORING-GUIDE.md)
+    [:octicons-arrow-right-24: Open guide](AUTHORING-GUIDE.md)
 
--   :material-folder-cog:{ .lg .middle } **Choose a loader**
+-   :material-folder-cog:{ .lg .middle } **Loaders**
 
     ---
 
-    Find the correct loader folder, accepted JSON shape, relationships, and representative definitions.
+    Pick the right loader and see its rules, examples, and FAQ.
 
-    [:octicons-arrow-right-24: Loader walkthroughs](LOADER-WALKTHROUGHS.md)
+    [:octicons-arrow-right-24: Loader reference](LOADER-WALKTHROUGHS.md)
+
+-   :material-account-edit:{ .lg .middle } **Character creation**
+
+    ---
+
+    Add or patch character options, hair, facial hair, and native menu data.
+
+    [:octicons-arrow-right-24: Character creation](CHARACTER-CREATION-AUTHORING.md)
+
+-   :material-home-edit-outline:{ .lg .middle } **Buildings**
+
+    ---
+
+    Clone building entries, use cooked replacement actors, and place them in the build menu.
+
+    [:octicons-arrow-right-24: Building cloning](BUILDING-CLONING.md)
 
 -   :material-cube-outline:{ .lg .middle } **Unreal + RuneSchema**
 
     ---
 
-    Combine cooked Unreal actors and data assets with RuneSchema registration,
-    recipes, quests, dialogue, and packaging.
+    Connect cooked Unreal content to recipes, quests, dialogue, stations, and RuneSchema registration.
 
     [:octicons-arrow-right-24: Unreal + RuneSchema](unreal-runeschema/index.md)
 
--   :material-flask-outline:{ .lg .middle } **Start from an example**
+-   :material-layers-triple:{ .lg .middle } **Compatibility**
 
     ---
 
-    Use focused character, registry, building, vendor, NPC, quest, event, and diagnostic examples.
+    Steam/GOG, Game Pass/WinGDK, mappings, plugins, multiplayer, and save boundaries.
 
-    [:octicons-arrow-right-24: Example library](EXAMPLES.md)
+    [:octicons-arrow-right-24: Compatibility](COMPATIBILITY-BACKBONE.md)
 
 </div>
 
-## Common authoring areas
+## Save safety and recovery
 
 <div class="grid cards rs-card-grid rs-card-grid--compact" markdown>
 
--   :material-account-edit:{ .lg .middle } **Character creation**
+-   :material-shield-check:{ .lg .middle } **SafeSave & ownership**
 
-    Add or patch character-customization rows and connect them to the native menu.
+    ---
 
-    [:octicons-arrow-right-24: Open guide](CHARACTER-CREATION-AUTHORING.md)
+    How RuneSchema tracks owned content and retires missing mod identities.
 
--   :material-database-edit:{ .lg .middle } **Registry & DataTables**
+    [:octicons-arrow-right-24: SafeSave](SAFE-SAVE-AND-LEDGER.md)
 
-    Use owned-row transactions, strict target resolution, and reflected-property validation.
+-   :material-backup-restore:{ .lg .middle } **Manual recovery**
 
-    [:octicons-arrow-right-24: Registry patching](REGISTRY-PATCHING.md)
+    ---
 
--   :material-home-edit-outline:{ .lg .middle } **Buildings & clones**
+    Backup-first recovery steps for supported save problems.
 
-    Work with cloned pieces, cooked props, build-menu placement, collision, HISM, and persistence.
+    [:octicons-arrow-right-24: Recovery guide](MANUAL-SAVE-RECOVERY.md)
 
-    [:octicons-arrow-right-24: Building reference](BUILDING-CLONING-FMODEL-AUDIT.md)
+-   :material-history:{ .lg .middle } **Release 0.7.5.28**
 
--   :material-shield-check:{ .lg .middle } **SafeSave**
+    ---
 
-    Understand ownership tracking, retirement, cleanup, retry behavior, and storefront-specific save handling.
+    Public release notes for the current Nexus build.
 
-    [:octicons-arrow-right-24: SafeSave & ownership](SAFE-SAVE-AND-LEDGER.md)
+    [:octicons-arrow-right-24: Release notes](RELEASE-0.7.5.28.md)
 
--   :material-api:{ .lg .middle } **Native plugins**
+</div>
 
-    Use the RuneSchema ABI, host functions, lifecycle callbacks, services, mappings, and capabilities.
+## Developers
 
-    [:octicons-arrow-right-24: Plugin API](API-REFERENCE.md)
+Runtime internals, native hooks, build/package flow, Helpy implementation notes,
+profiling, plugin API, and schemas are grouped under the developer section.
+
+<div class="grid cards rs-card-grid rs-card-grid--reference" markdown>
+
+-   :material-code-braces:{ .lg .middle } **Developer guide**
+
+    ---
+
+    Runtime architecture, storefront lanes, saves, build flow, Helpy, and performance.
+
+    [:octicons-arrow-right-24: Developer guide](DEVELOPER-GUIDE.md)
+
+-   :material-api:{ .lg .middle } **Plugin API**
+
+    ---
+
+    Native plugin ABI, lifecycle callbacks, host functions, and services.
+
+    [:octicons-arrow-right-24: API reference](API-REFERENCE.md)
 
 -   :material-code-json:{ .lg .middle } **JSON schemas**
 
-    Use the machine-readable schemas for strict authoring surfaces and editor validation.
+    ---
+
+    Machine-readable schemas for strict authoring surfaces.
 
     [:octicons-arrow-right-24: Schema reference](SCHEMAS.md)
 
 </div>
 
-## Platform support
+!!! info "Current release"
+    The website documents **RuneSchema 0.7.5.28**. Intermediate 0.7.x development builds are kept in Git history instead of separate public pages.
 
-<div class="rs-platform-grid" markdown>
-
-<div class="rs-platform-card rs-platform-card--steam" markdown>
-### :simple-steam: Steam / GOG
-
-Uses the Steam/GOG runtime lane and backed-up JSON save-cleanup path.
-
-[Compatibility backbone →](COMPATIBILITY-BACKBONE.md)
-</div>
-
-<div class="rs-platform-card rs-platform-card--gamepass" markdown>
-### :material-microsoft-xbox: Game Pass / WinGDK
-
-Uses the isolated WinGDK runtime lane and Xbox Game Save provider path.
-
-[Game Pass save system →](GAMEPASS-SAVE-SYSTEM.md)
-</div>
-
-</div>
-
-## Reference
-
-<div class="grid cards rs-card-grid rs-card-grid--reference" markdown>
-
--   :material-book-open-page-variant:{ .lg .middle } **Project overview**
-
-    Current runtime structure, release package, and project-level notes.
-
-    [:octicons-arrow-right-24: Overview](OVERVIEW.md)
-
--   :material-layers-triple:{ .lg .middle } **Compatibility & native parity**
-
-    Storefront detection, mappings, signatures, plugin boundaries, and verified native capabilities.
-
-    [:octicons-arrow-right-24: Compatibility](COMPATIBILITY-BACKBONE.md)
-
--   :material-history:{ .lg .middle } **Release history**
-
-    Chronological implementation records for current and previous 0.7.5 releases.
-
-    [:octicons-arrow-right-24: Release notes](RELEASES.md)
-
-</div>
-
-!!! info "Current documentation is authoritative"
-    Use the **Authoring Guide**, **Loader Walkthroughs**, **SafeSave and Ownership**, **Compatibility Backbone**, and **Plugin API** for current behavior. Release notes and audits preserve implementation history.
-
-!!! warning "Runtime reflection wins"
-    Schemas and examples document accepted authoring shapes. Unreal reflection and runtime validation remain authoritative for object, row, field, and type compatibility.
+!!! warning "Runtime reflection decides compatibility"
+    Examples show supported authoring shapes. Unreal reflection still determines whether a target object, row, field, and value type are valid at runtime.
