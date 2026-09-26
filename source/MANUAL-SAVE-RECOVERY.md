@@ -10,8 +10,9 @@ last-resort recovery path, not the normal uninstall workflow.
    a dedicated server, or a save-conversion tool has it open.
 2. Copy the complete save folder to a separate backup directory. Do not keep
    the only backup beside the live file under the same name.
-3. Preserve RuneSchema's `*.runeschema-before-clean*.bak` files. They are
-   byte-for-byte pre-cleanup copies and may be newer than the game's `.backup`.
+3. Preserve RuneSchema's rotating SafeSave backups under
+   `%LOCALAPPDATA%\\RSDragonwilds\\Saved\\RuneSchema\\safesave\\backups`. They
+   are byte-for-byte pre-cleanup copies and may be newer than the game's `.backup`.
 4. Repair only identities known to belong to the removed mod. Never delete an
    unknown persistence ID merely because it is unfamiliar.
 5. Validate the edited JSON before replacing a live character save.
@@ -37,8 +38,9 @@ The filename is not authoritative. Open a copy and confirm
 This is the safest manual option when a known-good backup is recent enough:
 
 1. Copy the entire `SaveCharacters` directory somewhere safe.
-2. Choose the newest known-good `.backup`, `.runeschema_backup`, or
-   `.runeschema-before-clean*.bak` for that character.
+2. Choose the newest known-good game `.backup`, older `.runeschema_backup`, or
+   RuneSchema SafeSave copy from `Saved\\RuneSchema\\safesave\\backups` for
+   that character.
 3. Copy that backup to a temporary `.json` filename.
 4. Validate the temporary JSON.
 5. Replace the live character `.json` with the validated copy.

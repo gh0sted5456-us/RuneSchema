@@ -29,6 +29,7 @@ namespace DragonWilds {
 
         struct RecipeDef {
             RC::StringType Key;
+            RC::StringType ModName;
             nlohmann::json Body;
             std::vector<Placement> Placements;
         };
@@ -54,6 +55,7 @@ namespace DragonWilds {
     protected:
         virtual void OnLoad(const std::filesystem::path& loaderPath, const RC::StringType& modName, const EEngineLifecyclePhase& engineLifecyclePhase) override final;
         virtual void OnAutoReload(const RC::StringType& modName, const std::filesystem::path& modFilePath) override final;
+        void OnFinalizeLoad(const EEngineLifecyclePhase& engineLifecyclePhase) override final;
 
         virtual bool CanInitialize(const EEngineLifecyclePhase& engineLifecyclePhase) override final;
         virtual bool OnInitialize() override final;
@@ -70,14 +72,23 @@ namespace DragonWilds {
         std::unordered_set<RC::StringType> m_propsApplied;
         std::unordered_set<std::string> m_reportedPlacementFailures;
         RC::Unreal::UClass* m_recipeClass = nullptr;
+        RC::Unreal::UClass* m_itemDataClass = nullptr;
         RC::Unreal::UClass* m_progressComponentClass = nullptr;
+        std::unordered_map<std::string, RC::Unreal::UObject*> m_itemRoutes;
+        std::unordered_set<std::string> m_ambiguousItemRoutes;
         std::vector<std::pair<RC::Unreal::UFunction*, int32_t>> m_functionHooks;
         bool m_hooksActive = false;
         std::unordered_map<RC::StringType, std::string> m_vendorRecipeOwners;
         struct RecipeLease { int32_t Index; RC::StringType Path; };
         std::unordered_map<RC::StringType, RecipeLease> m_vendorRecipeLeases;
+        std::vector<RC::Unreal::UObject*> m_ownedRuntimeRecipes;
+        std::vector<RC::Unreal::UObject*> m_runtimePackages;
         uint64_t m_recipeRevision=0;
         RC::Unreal::UObject* LiveRecipe(const RC::StringType& key) const;
+        RC::Unreal::UObject* EnsureRuntimePackage(const RC::StringType& packagePath);
+        void RefreshItemRoutes();
+        nlohmann::json RouteRecipeItemReferences(std::string_view propertyName,
+            const nlohmann::json& authored) const;
 
         void QueueData(const nlohmann::json& data, const RC::StringType& modName);
         void ApplyPendingPatches();

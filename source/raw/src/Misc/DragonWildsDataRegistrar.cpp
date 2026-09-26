@@ -27,6 +27,7 @@
 #include "Utility/Logging.h"
 #include "Core/ConfigFiles.h"
 #include "Core/SaveCleanup.h"
+#include "Core/SaveRegistrySnapshot.h"
 #include "Loader/OwnedContentLedger.h"
 #include "Loader/ModLoadOrder.h"
 #include "Runtime/HostServices.h"
@@ -54,18 +55,111 @@ namespace DragonWilds {
     static std::filesystem::path PreserveCharacterSave(
         const std::filesystem::path& path)
     {
-        for(unsigned index=0;index<1000;++index)
+        // SafeSave backups are recovery state, not game saves. Keep them out of
+        // SaveCharacters and rotate a small fixed history instead of creating
+        // an unbounded series of numbered .bak files beside every character.
+        constexpr unsigned BackupRetention = 3;
+        const auto folder = PS::HostServices::StateDirectory()
+            / "safesave" / "backups";
+        std::error_code error;
+        std::filesystem::create_directories(folder, error);
+        if (error)
+            throw std::system_error(error,
+                "Cannot create the RuneSchema SafeSave backup directory");
+
+        auto base = folder / path.filename();
+        base += L".before-clean.bak";
+        const auto slot = [&](unsigned index) {
+            auto value = base;
+            if (index) value += L"." + std::to_wstring(index);
+            return value;
+        };
+
+        auto pending = base;
+        pending += L".next";
+        std::filesystem::remove(pending, error);
+        if (error)
+            throw std::system_error(error,
+                "Cannot clear the pending RuneSchema SafeSave backup");
+        if (!std::filesystem::copy_file(path, pending,
+                std::filesystem::copy_options::overwrite_existing, error))
         {
-            auto backup=path;
-            backup+=index?L".runeschema-before-clean-"+std::to_wstring(index)+L".bak"
-                :L".runeschema-before-clean.bak";
-            std::error_code error;
-            if(std::filesystem::copy_file(path,backup,
-                std::filesystem::copy_options::none,error))return backup;
-            if(error!=std::errc::file_exists)
-                throw std::system_error(error,"Cannot preserve character save before cleanup");
+            if (!error) error = std::make_error_code(std::errc::io_error);
+            throw std::system_error(error,
+                "Cannot preserve character save before cleanup");
         }
-        throw std::runtime_error("Character-save backup limit reached");
+
+        try
+        {
+            for (unsigned index = BackupRetention - 1; index > 0; --index)
+            {
+                const auto from = slot(index - 1);
+                const auto to = slot(index);
+                const bool exists = std::filesystem::exists(from, error);
+                if (error)
+                    throw std::system_error(error,
+                        "Cannot inspect RuneSchema SafeSave backup rotation");
+                if (!exists) continue;
+
+                std::filesystem::remove(to, error);
+                if (error)
+                    throw std::system_error(error,
+                        "Cannot prune an old RuneSchema SafeSave backup");
+                std::filesystem::rename(from, to, error);
+                if (error)
+                    throw std::system_error(error,
+                        "Cannot rotate RuneSchema SafeSave backups");
+            }
+
+            std::filesystem::rename(pending, slot(0), error);
+            if (error)
+                throw std::system_error(error,
+                    "Cannot activate the new RuneSchema SafeSave backup");
+        }
+        catch (...)
+        {
+            std::error_code ignored;
+            std::filesystem::remove(pending, ignored);
+            throw;
+        }
+        return slot(0);
+    }
+
+    static void PruneLegacyCharacterBackups(
+        const std::filesystem::path& source)
+    {
+        const auto prefix=source.filename().wstring()
+            +L".runeschema-before-clean";
+        std::size_t removed=0;
+        std::error_code iterationError;
+        std::filesystem::directory_iterator it(source.parent_path(),iterationError);
+        if(iterationError)
+        {
+            PS::Log<LogLevel::Warning>(
+                STR("[SAVE-CLEANER] Could not inspect legacy backup files beside '{}': {}.\n"),
+                source.filename().native(),PS::ToWideSafe(iterationError.message().c_str()));
+            return;
+        }
+        for(const auto& entry:it)
+        {
+            std::error_code typeError;
+            if(!entry.is_regular_file(typeError) || typeError)continue;
+            const auto name=entry.path().filename().wstring();
+            if(name.size()<prefix.size()+4
+                || name.compare(0,prefix.size(),prefix)!=0
+                || name.compare(name.size()-4,4,L".bak")!=0)
+                continue;
+            std::error_code removeError;
+            if(std::filesystem::remove(entry.path(),removeError))++removed;
+            else if(removeError)
+                PS::Log<LogLevel::Warning>(
+                    STR("[SAVE-CLEANER] Could not remove legacy backup '{}': {}.\n"),
+                    entry.path().filename().native(),PS::ToWideSafe(removeError.message().c_str()));
+        }
+        if(removed)
+            PS::Log<LogLevel::Normal>(
+                STR("[SAVE-CLEANER] Removed {} legacy RuneSchema backup file(s) from SaveCharacters; recovery copies now live under Saved/RuneSchema/safesave/backups.\n"),
+                removed);
     }
 
     static bool CleanRetiredCharacterSaves(
@@ -123,6 +217,7 @@ namespace DragonWilds {
                 if(nlohmann::json::parse(PS::ConfigFiles::Read(
                     entry.path(),8*1024*1024))!=plan.Save)
                     throw std::runtime_error("Written character save failed verification");
+                PruneLegacyCharacterBackups(entry.path());
                 ++changed;removed+=plan.Removed.size();
                 PS::Log<LogLevel::Normal>(
                     STR("[SAVE-CLEANER][OWNED-ONLY] Cleaned {} retired RuneSchema record(s) from '{}' before character deserialization. Backup: '{}'.\n"),
@@ -164,7 +259,9 @@ namespace DragonWilds {
 
     static bool IsCustomDataPath(const RC::StringType& path)
     {
-        return path.starts_with(TEXT("/Game/Mods/")) || path.starts_with(TEXT("/Engine/Transient"))
+        return path.starts_with(TEXT("/Game/Mods/"))
+            || path.starts_with(TEXT("/Game/RuneSchema/"))
+            || path.starts_with(TEXT("/Engine/Transient"))
             || OwnedContent::IsActiveDeclarationPath(RC::to_string(path));
     }
 
@@ -219,6 +316,7 @@ namespace DragonWilds {
         for (auto& retired : m_retiredContent)
             if (retired.Data) retired.Data->ClearRootSet();
         m_retiredContent.clear();
+        PS::SaveCleanup::PublishRegistry({});
     }
 
     void DragonWildsDataRegistrar::InstallHooks()
@@ -436,6 +534,11 @@ namespace DragonWilds {
 
     void DragonWildsDataRegistrar::RegisterAll()
     {
+        PS::SaveCleanup::RegistrySnapshot snapshot;
+        bool itemsReady = false;
+        bool recipesReady = false;
+        bool questsReady = false;
+
         for (auto& [dataClass, subsystemClass] : m_bindings)
         {
             auto* subsystem = FindSubsystemInstance(subsystemClass);
@@ -447,7 +550,52 @@ namespace DragonWilds {
             }
 
             RegisterMissing(dataClass, subsystem);
+
+            // Safe Clean compares character-save identities against the same
+            // native maps the game actually uses. Capture only after custom
+            // registrations have been applied so successfully registered
+            // clones are considered valid too.
+            auto* idMapProperty = CastField<FMapProperty>(
+                PropertyHelper::GetPropertyByName(
+                    subsystem->GetClassPrivate(), TEXT("PersistenceIDToDataMap")));
+            if (!idMapProperty) continue;
+
+            std::unordered_set<std::string>* target = nullptr;
+            const auto classPath = dataClass->GetPathName();
+            if (classPath == ItemDataClassPath)
+            {
+                target = &snapshot.Items;
+                itemsReady = true;
+            }
+            else if (classPath == RecipeDataClassPath)
+            {
+                target = &snapshot.Recipes;
+                recipesReady = true;
+            }
+            else if (classPath == QuestDataClassPath)
+            {
+                target = &snapshot.Quests;
+                questsReady = true;
+            }
+            if (!target) continue;
+
+            UECustom::FScriptMapHelper idMap(
+                idMapProperty,
+                idMapProperty->ContainerPtrToValuePtr<void>(subsystem));
+            idMap.ForEachPair([&](void* keyPtr, void*) {
+                auto* key = static_cast<FString*>(keyPtr);
+                if (key && key->GetCharArray().Num() > 1)
+                    target->insert(RC::to_string(RC::StringType(**key)));
+            });
         }
+
+        snapshot.QuestsComplete = questsReady;
+        if (itemsReady && recipesReady)
+            PS::SaveCleanup::PublishRegistry(std::move(snapshot));
+        else
+            // Never leave a previous world's registry available to Safe Clean
+            // when the current world could not prove a complete item/recipe map.
+            PS::SaveCleanup::PublishRegistry({});
     }
 
     void DragonWildsDataRegistrar::RegisterMissing(UClass* dataClass, UObject* subsystem)

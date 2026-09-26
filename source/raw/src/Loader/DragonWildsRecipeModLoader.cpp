@@ -1,8 +1,12 @@
 #include "Utility/NativeFunctionHook.h"
 #include "SDK/WeakObjectHandle.h"
 #include <algorithm>
+#include <cctype>
+#include <cstdint>
+#include <string_view>
 #include <vector>
 #include "Unreal/CoreUObject/UObject/Class.hpp"
+#include "Unreal/CoreUObject/UObject/FStrProperty.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
 #include "Unreal/UFunctionStructs.hpp"
 #include "Unreal/UObject.hpp"
@@ -27,6 +31,7 @@
 #include "Loader/VendorCategoryText.h"
 #include "Loader/VendorCategoryLabel.h"
 #include "Loader/RecipeUnlockPolicy.h"
+#include "Loader/ItemIdentity.h"
 #include "Core/JsonPatchDirective.h"
 
 using namespace RC;
@@ -34,6 +39,7 @@ using namespace RC::Unreal;
 
 namespace DragonWilds {
     static constexpr const TCHAR* RecipeDataClassPath = TEXT("/Script/Dominion.RecipeData");
+    static constexpr const TCHAR* ItemDataClassPath = TEXT("/Script/Dominion.ItemData");
     static constexpr const TCHAR* ProgressComponentClassPath = TEXT("/Script/Dominion.ProgressComponent");
     static constexpr const TCHAR* PlayerControllerClassPath = TEXT("/Script/Dominion.DominionPlayerController");
     static constexpr const TCHAR* ServerCraftRecipePath = TEXT("/Script/Dominion.InventoryController:Server_CraftRecipe");
@@ -46,6 +52,54 @@ namespace DragonWilds {
     static bool WantsUnlock(const nlohmann::json& body)
     {
         return PS::RecipeUnlockPolicy::Automatic(body);
+    }
+
+    static std::string RecipePathSegment(std::string_view value,
+        std::string_view fallback)
+    {
+        std::string result;
+        result.reserve(value.size());
+        bool underscore=false;
+        for(const auto character:value)
+        {
+            const auto byte=static_cast<unsigned char>(character);
+            const auto normalized=(std::isalnum(byte) || character=='_')
+                ? character : '_';
+            if(normalized=='_' && underscore)continue;
+            result.push_back(normalized);
+            underscore=normalized=='_';
+        }
+        while(!result.empty() && result.front()=='_')result.erase(result.begin());
+        while(!result.empty() && result.back()=='_')result.pop_back();
+        if(result.empty())result.assign(fallback);
+        if(result.size()>72)result.resize(72);
+        return result;
+    }
+
+    static std::string StableRecipeSuffix(std::string_view value)
+    {
+        std::uint64_t hash=14695981039346656037ull;
+        for(const unsigned char character:value)
+            hash=(hash^character)*1099511628211ull;
+        constexpr char digits[]="0123456789abcdef";
+        std::string result(16,'0');
+        for(int index=15;index>=0;--index)
+        {
+            result[static_cast<std::size_t>(index)]=digits[hash&0xf];
+            hash>>=4;
+        }
+        return result;
+    }
+
+    static RC::StringType RuntimeRecipePath(
+        const RC::StringType& modName,const RC::StringType& key)
+    {
+        const auto mod=RecipePathSegment(RC::to_string(modName),"UnnamedMod");
+        const auto raw=RC::to_string(key);
+        const auto object="RSRecipe_"+RecipePathSegment(raw,"Recipe")
+            +"_"+StableRecipeSuffix(raw);
+        return RC::to_generic_string("/Game/RuneSchema/"+mod
+            +"/Recipes/"+object+"."+object);
     }
 
     static void AddRecipeUnlocks(UObject* progressComponent, const std::vector<UObject*>& recipes)
@@ -129,9 +183,8 @@ namespace DragonWilds {
     DragonWildsRecipeModLoader::~DragonWildsRecipeModLoader()
     {
         for (const auto& [function, id] : m_functionHooks) if (function && id) function->UnregisterHook(id);
-        for (const auto& [key, owner] : m_vendorRecipeOwners) {
-            if (auto* recipe=LiveRecipe(key))recipe->ClearRootSet();
-        }
+        for(auto* recipe:m_ownedRuntimeRecipes)if(recipe)recipe->ClearRootSet();
+        for(auto* package:m_runtimePackages)if(package)package->ClearRootSet();
     }
 
     UObject* DragonWildsRecipeModLoader::LiveRecipe(const RC::StringType& key) const
@@ -147,11 +200,96 @@ namespace DragonWilds {
         return recipe && recipe->GetPathName()==lease->second.Path && recipe->IsA(m_recipeClass)?recipe:nullptr;
     }
 
+    UObject* DragonWildsRecipeModLoader::EnsureRuntimePackage(
+        const RC::StringType& packagePath)
+    {
+        auto* packageClass=UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr,nullptr,TEXT("/Script/CoreUObject.Package"),false);
+        if(!packageClass)throw std::runtime_error("Unreal package class is unavailable for runtime recipes");
+
+        if(auto* existing=UECustom::UObjectGlobals::StaticFindObject<UObject*>(
+            nullptr,nullptr,packagePath.c_str(),false))
+        {
+            if(!existing->IsA(packageClass))
+                throw std::runtime_error("Runtime recipe package path is occupied by a non-package object");
+            return existing;
+        }
+
+        FStaticConstructObjectParameters params(packageClass,nullptr);
+        params.Name=FName(packagePath,FNAME_Add);
+        params.SetFlags=static_cast<EObjectFlags>(
+            RF_Public|RF_Standalone|RF_Transactional);
+        auto* package=UObjectGlobals::StaticConstructObject<UObject*>(params);
+        if(!package)throw std::runtime_error("Failed to create runtime recipe package");
+        package->SetRootSet();
+        m_runtimePackages.push_back(package);
+        return package;
+    }
+
+    void DragonWildsRecipeModLoader::RefreshItemRoutes()
+    {
+        m_itemRoutes.clear();
+        m_ambiguousItemRoutes.clear();
+        if(!m_itemDataClass)
+            throw std::runtime_error("ItemData class is unavailable for recipe PersistenceID routing");
+
+        auto* field=CastField<FStrProperty>(
+            PropertyHelper::GetPropertyByName(m_itemDataClass,TEXT("PersistenceID")));
+        if(!field || field->GetArrayDim()!=1)
+            throw std::runtime_error("ItemData PersistenceID contract is unavailable");
+
+        TArray<UObject*> items;
+        UECustom::UObjectGlobals::GetObjectsOfClass(m_itemDataClass,items,true);
+        if(items.Num()>32768)
+            throw std::runtime_error("Loaded ItemData roster exceeds recipe routing limit");
+
+        for(auto* item:items)
+        {
+            if(!item || item->HasAnyFlags(static_cast<EObjectFlags>(
+                RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed)))
+                continue;
+            const auto value=field->GetPropertyValue(
+                field->ContainerPtrToValuePtr<void>(item));
+            const auto id=RC::to_string(*value);
+            if(id.empty())continue;
+            const auto [found,inserted]=m_itemRoutes.emplace(id,item);
+            if(!inserted && found->second!=item)
+            {
+                m_itemRoutes.erase(id);
+                m_ambiguousItemRoutes.insert(id);
+            }
+        }
+    }
+
+    nlohmann::json DragonWildsRecipeModLoader::RouteRecipeItemReferences(
+        std::string_view propertyName,const nlohmann::json& authored) const
+    {
+        if(propertyName!="ItemsConsumed" && propertyName!="ItemsCreated")
+            return authored;
+        auto routed=authored;
+        if(!routed.is_array())return routed;
+        for(auto& row:routed)
+        {
+            if(!row.is_object() || !row.contains("ItemData")
+                || !row.at("ItemData").is_string())continue;
+            const auto reference=row.at("ItemData").get<std::string>();
+            if(!IsCanonicalPersistenceId(reference))continue;
+            if(m_ambiguousItemRoutes.contains(reference))
+                throw std::runtime_error("Recipe ItemData PersistenceID is ambiguous: "+reference);
+            const auto found=m_itemRoutes.find(reference);
+            if(found==m_itemRoutes.end() || !found->second)
+                throw std::runtime_error("Recipe ItemData PersistenceID is not registered: "+reference);
+            row["ItemData"]=RC::to_string(found->second->GetPathName());
+        }
+        return routed;
+    }
+
     UObject* DragonWildsRecipeModLoader::EnsureVendorRecipe(const std::string& owner,
         const std::string& identity, const nlohmann::json& properties)
     {
         if (!m_recipeClass || !m_progressComponentClass)
             throw std::runtime_error("Vendor offers require the initialized /recipes loader");
+        if(m_itemRoutes.empty())RefreshItemRoutes();
         const auto key=RC::to_generic_string("RSVendor_"+identity);
         if(auto owned=m_vendorRecipeOwners.find(key);owned!=m_vendorRecipeOwners.end() && owned->second!=owner)
             throw std::runtime_error("Vendor recipe ownership collision; existing recipe preserved");
@@ -170,19 +308,20 @@ namespace DragonWilds {
         if(!recipe) {
             if(std::any_of(m_recipeDefs.begin(),m_recipeDefs.end(),[&](const auto& def){return def.Key==key;}))
                 throw std::runtime_error("Vendor recipe conflicts with an authored recipe definition");
-            auto* package=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,TEXT("/Engine/Transient"));
-            if (!package)throw std::runtime_error("Transient package unavailable for vendor recipe");
             const auto objectName=RC::to_generic_string(VendorOffers::RecipeObjectName(identity));
-            const auto path=RC::StringType(TEXT("/Engine/Transient."))+objectName;
+            const auto packagePath=RC::StringType(TEXT("/Game/RuneSchema/Generated/Recipes/"))+objectName;
+            const auto path=packagePath+RC::StringType(TEXT("."))+objectName;
+            auto* package=EnsureRuntimePackage(packagePath);
             if (UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,path.c_str()))
                 throw std::runtime_error("Vendor runtime recipe name collision; existing object preserved");
             FStaticConstructObjectParameters params(m_recipeClass,package);
             params.Name=FName(objectName,FNAME_Add);
-            params.SetFlags=static_cast<EObjectFlags>(RF_Public|RF_Transient);
+            params.SetFlags=static_cast<EObjectFlags>(RF_Public|RF_Standalone|RF_Transactional);
             recipe=UObjectGlobals::StaticConstructObject<UObject*>(params);
             if(!recipe)throw std::runtime_error("Failed to construct vendor RecipeData");
             ++m_recipeRevision;
             recipe->SetRootSet();
+            m_ownedRuntimeRecipes.push_back(recipe);
             // Retain ownership even if a field write fails. A bounded vendor
             // retry repairs this same object instead of leaking new recipes.
             m_recipes.emplace(key,recipe);
@@ -198,7 +337,8 @@ namespace DragonWilds {
             for(const auto& [name,value]:values.items()) {
                 auto* property=PropertyHelper::GetPropertyByName(m_recipeClass,RC::to_generic_string(name));
                 if(!property)throw std::runtime_error("Vendor RecipeData field unavailable: "+name);
-                PropertyHelper::CopyJsonValueToContainer(recipe,property,value);
+                const auto routed=RouteRecipeItemReferences(name,value);
+                PropertyHelper::CopyJsonValueToContainer(recipe,property,routed);
             }
         }
         m_propsApplied.insert(key);
@@ -272,9 +412,18 @@ namespace DragonWilds {
         }
         else if (engineLifecyclePhase == EEngineLifecyclePhase::GameInstanceInit)
         {
-            ApplyPendingPatches();
-            ApplyAll();
+            // Runtime ItemData clones are applied by the assets loader while
+            // the per-mod pass is still running. Finalization waits until every
+            // mod has had that chance before resolving recipe PersistenceIDs.
         }
+    }
+
+    void DragonWildsRecipeModLoader::OnFinalizeLoad(
+        const EEngineLifecyclePhase& engineLifecyclePhase)
+    {
+        if(engineLifecyclePhase!=EEngineLifecyclePhase::GameInstanceInit)return;
+        ApplyPendingPatches();
+        ApplyAll();
     }
 
     void DragonWildsRecipeModLoader::OnAutoReload(const RC::StringType& modName, const std::filesystem::path& modFilePath)
@@ -306,6 +455,12 @@ namespace DragonWilds {
             if (!m_recipeClass)
             {
                 throw std::runtime_error("Class RecipeData was not found");
+            }
+
+            m_itemDataClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr, nullptr, ItemDataClassPath);
+            if (!m_itemDataClass)
+            {
+                throw std::runtime_error("Class ItemData was not found");
             }
 
             m_progressComponentClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr, nullptr, ProgressComponentClassPath);
@@ -368,7 +523,7 @@ namespace DragonWilds {
                         for(auto& placement:placements)placement["Category"]=VendorOffers::Category(body);
                         nlohmann::json native={{"Properties",VendorOffers::Properties(body)},{"Unlock",true},{"AddTo",placements}};
                         const auto identity=RC::to_generic_string("RSMerchant_"+VendorOffers::Identity(offer.Mod,offer.Id));
-                        m_recipeDefs.push_back({identity,native,ParsePlacements(native)});
+                        m_recipeDefs.push_back({identity,RC::to_generic_string(offer.Mod),native,ParsePlacements(native)});
                     }
                     m_storeOffers.push_back(std::move(offer));
                     continue;
@@ -392,7 +547,7 @@ namespace DragonWilds {
                 PS::Log<LogLevel::Error>(STR("Recipe '{}': {}. Skipping.\n"), keyWide, PS::ToWideSafe(error.what()));
                 continue;
             }
-            RecipeDef def{ keyWide, body, ParsePlacements(body) };
+            RecipeDef def{ keyWide, modName, body, ParsePlacements(body) };
 
             auto existing = std::find_if(m_recipeDefs.begin(), m_recipeDefs.end(),
                 [&](const RecipeDef& d) { return d.Key == keyWide; });
@@ -465,6 +620,11 @@ namespace DragonWilds {
         {
             return;
         }
+
+        // Build the PersistenceID -> ItemData route once per recipe batch.
+        // Older code performed a global UObject scan for every consumed and
+        // created item field, which scaled poorly with larger mod packs.
+        RefreshItemRoutes();
 
         LoadResult result{};
         constexpr size_t detailLimit = 12;
@@ -662,21 +822,37 @@ namespace DragonWilds {
             }
         }
 
-        static auto* transientPackage = UECustom::UObjectGlobals::StaticFindObject(
-            nullptr, nullptr, TEXT("/Engine/Transient"), false);
+        const auto runtimePath=RuntimeRecipePath(def.ModName,def.Key);
+        const auto dot=runtimePath.rfind(TEXT('.'));
+        if(dot==RC::StringType::npos)
+            throw std::runtime_error("Failed to form runtime recipe path");
+        const auto packagePath=runtimePath.substr(0,dot);
+        const auto objectName=runtimePath.substr(dot+1);
+        auto* package=EnsureRuntimePackage(packagePath);
+        if(auto* existing=UECustom::UObjectGlobals::StaticFindObject<UObject*>(
+            nullptr,nullptr,runtimePath.c_str(),false))
+        {
+            if(!existing->IsA(m_recipeClass))
+                throw std::runtime_error("Runtime recipe path is occupied by an incompatible object");
+            existing->SetRootSet();
+            m_recipes.emplace(def.Key,existing);
+            return existing;
+        }
 
-        FStaticConstructObjectParameters params(m_recipeClass, transientPackage);
-        params.Name = FName(def.Key, FNAME_Add);
-        params.SetFlags = static_cast<EObjectFlags>(RF_Public | RF_Standalone | RF_Transactional);
+        FStaticConstructObjectParameters params(m_recipeClass,package);
+        params.Name=FName(objectName,FNAME_Add);
+        params.SetFlags=static_cast<EObjectFlags>(
+            RF_Public|RF_Standalone|RF_Transactional);
 
-        auto* recipe = UObjectGlobals::StaticConstructObject<UObject*>(params);
-        if (!recipe)
+        auto* recipe=UObjectGlobals::StaticConstructObject<UObject*>(params);
+        if(!recipe)
         {
             PS::Log<LogLevel::Error>(STR("Failed to construct Recipe '{}'.\n"), def.Key);
             return nullptr;
         }
 
         recipe->SetRootSet();
+        m_ownedRuntimeRecipes.push_back(recipe);
 
         for (auto* propertyName : { TEXT("PersistenceID"), TEXT("InternalName") })
         {
@@ -725,7 +901,10 @@ namespace DragonWilds {
 
             try
             {
-                PropertyHelper::CopyJsonValueToContainer(reinterpret_cast<uint8*>(recipe), property, propertyValue);
+                const auto routed=RouteRecipeItemReferences(
+                    propertyName,propertyValue);
+                PropertyHelper::CopyJsonValueToContainer(
+                    reinterpret_cast<uint8*>(recipe), property, routed);
             }
             catch (const std::exception& e)
             {

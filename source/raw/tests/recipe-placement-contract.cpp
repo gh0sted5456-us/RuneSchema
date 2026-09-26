@@ -24,6 +24,14 @@ static void Need(const std::string& text, const std::string& token, const char* 
     }
 }
 
+static void Avoid(const std::string& text, const std::string& token, const char* message)
+{
+    if (text.find(token) != std::string::npos) {
+        std::cerr << "FAIL: " << message << '\n';
+        std::exit(1);
+    }
+}
+
 int main(int argc, char** argv)
 {
     if (argc != 3) return 2;
@@ -44,6 +52,15 @@ int main(int argc, char** argv)
     Need(loader, "recipe->IsA(acceptedClass)",
         "processing array writes are not type checked");
     Need(loader, "sizeof(UObject*)", "processing array element size is not checked");
+    Avoid(loader, "/Engine/Transient", "recipe loader still creates transient-engine RecipeData");
+    Need(loader, "/Game/RuneSchema/Generated/Recipes/", "generated recipe objects do not use a stable RuneSchema route");
+    Need(loader, "RuntimeRecipePath(def.ModName,def.Key)", "authored recipe objects do not use the mod-scoped RuneSchema route");
+    Need(loader, "RefreshItemRoutes()", "recipe ItemData PersistenceID index disappeared");
+    Need(loader, "m_itemRoutes.find(reference)", "recipe ItemData PersistenceID routing disappeared");
+    Need(loader, "propertyName!=\"ItemsConsumed\" && propertyName!=\"ItemsCreated\"",
+        "recipe routing is not scoped to native ingredient/output collections");
+    Need(loader, "OnFinalizeLoad(", "recipe linking is no longer deferred until all clone assets load");
+    Need(guide, "22-character `PersistenceID`", "clone-backed recipe PersistenceID authoring is undocumented");
     for (const auto* token : {
         "DT_CraftingStationsDataTable", "DT_ProcessingStationDataTable",
         "CraftingTable", "BrewingCauldron", "AdvancedSmelter",
