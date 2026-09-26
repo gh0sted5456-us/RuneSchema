@@ -322,3 +322,90 @@
     text-align: center;
   }
 }
+
+
+/* Ask RuneSchema */
+.rs-ask {
+  margin: 1.2rem 0 2rem;
+  padding: 1rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: .45rem;
+  background: var(--md-default-bg-color);
+}
+.rs-ask__label {
+  display: block;
+  margin-bottom: .45rem;
+  font-weight: 700;
+}
+.rs-ask__row {
+  display: flex;
+  gap: .55rem;
+  align-items: stretch;
+}
+.rs-ask__input {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: .7rem .8rem;
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: .3rem;
+  background: var(--md-code-bg-color);
+  color: var(--md-default-fg-color);
+  font: inherit;
+}
+.rs-ask__examples {
+  margin-top: .6rem;
+  color: var(--md-default-fg-color--light);
+  font-size: .82rem;
+}
+.rs-ask__examples button {
+  margin: .15rem .2rem;
+  padding: .18rem .42rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--md-typeset-a-color);
+  cursor: pointer;
+}
+.rs-ask__status {
+  margin-top: .85rem;
+  font-weight: 600;
+}
+.rs-ask__results {
+  display: grid;
+  gap: .7rem;
+  margin-top: .65rem;
+}
+.rs-ask-result {
+  padding: .8rem .9rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: .35rem;
+}
+.rs-ask-result--best {
+  border-color: var(--md-accent-fg-color);
+}
+.rs-ask-result h3 {
+  margin: .35rem 0;
+}
+.rs-ask-result p {
+  margin: .35rem 0 .55rem;
+}
+.rs-ask-result__meta {
+  display: flex;
+  gap: .45rem;
+  align-items: center;
+  color: var(--md-default-fg-color--light);
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.rs-faq-id {
+  display: inline-block;
+  padding: .1rem .35rem;
+  border-radius: .2rem;
+  background: var(--md-code-bg-color);
+  color: var(--md-code-fg-color);
+  font-family: var(--md-code-font-family);
+}
+@media (max-width: 600px) {
+  .rs-ask__row { flex-direction: column; }
+}

@@ -38,6 +38,27 @@ Walkthrough:
 5. Test the acceptance toast, progress, reconnect, reload, turn-in, repeat, and
    removal behavior.
 
+## Simple rules
+
+- Quests are per-character definitions with stable quest and persistence IDs.
+- Stage objective IDs must be unique within the authored quest.
+- Bind accept and turn-in actions through dialogue, then test persistence across reconnect and reload.
+
+## FAQ
+
+### FAQ-QUESTS-001 — Are RuneSchema quests global or per character? {#faq-quests-001}
+
+They are per-character quest definitions.
+
+### FAQ-QUESTS-002 — Do I need a stable PersistenceID? {#faq-quests-002}
+
+Yes. Use a stable persistence ID so the same authored quest keeps the same
+persistent identity across loads and updates.
+
+### FAQ-QUESTS-003 — Where do quest accept and turn-in actions come from? {#faq-quests-003}
+
+Bind them from supported dialogue actions.
+
 ## Working examples
 
 - [Great Tree: multi-stage story quest](../examples/GreatTree/quests/87-GreatTreeStory.json)

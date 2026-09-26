@@ -1,106 +1,71 @@
 # Compatibility
 
-RuneSchema uses one runtime with separate storefront lanes.
+RuneSchema 0.7.5.28 supports Steam/GOG and Game Pass/WinGDK with one
+storefront-aware runtime.
 
-## Startup
+## Storefronts
 
-1. **Detect storefront.**
-   - `WinGDK`, Windows package identity, or the Xbox
-     `UE4SS_Signatures/StaticConstructObject.lua` file selects Game Pass.
-   - `Win64`, Steam, or GOG selects the desktop lane.
+### Steam / GOG
 
-2. **Select native behavior.**
-   - Steam/GOG may use validated embedded signatures.
-   - Game Pass disables Steam-only scans and prefers UE4SS metadata, reflection,
-     and its own validated WinGDK contracts.
+RuneSchema can use validated Steam/GOG native bindings where required and falls
+back to UE4SS metadata or Unreal reflection where supported.
 
-3. **Select mappings.**
-   - Preferred: `Mods/RuneSchema/dlls/mappings`
-   - Compatibility paths: UE4SS root, `ue4ss/mappings`,
-     `Mods/RuneSchema/mappings`, and `Mods/RuneSchema/shared`
-   - Exact `Mappings.usmap` names win. Otherwise the newest map is selected.
+### Game Pass / WinGDK
 
-4. **Start core services.**
+RuneSchema uses the WinGDK runtime lane. Steam-only byte patterns are not used
+on Game Pass.
 
-5. **Load optional plugins.**
-   - Semantic-version differences are notices.
-   - ABI incompatibility can block one native DLL, not the whole runtime.
-   - Complete plugin PAK triplets can still mount independently.
+Xbox Game Save data is provider-managed. RuneSchema does not treat the WGS
+database as loose Steam JSON files.
 
-## Game Pass DataTable serialization
+## Mappings
 
-For `UDataTable::Serialize(FArchive&)`, Game Pass resolves the live vtable slot
-from UE4SS's versioned `UObject` layout metadata.
+RuneSchema looks for an optional `.usmap` in these locations:
 
-RuneSchema checks that the target points to executable memory. If Unreal is not
-ready during preload, resolution is retried later.
+1. `Mods/RuneSchema/dlls/mappings`
+2. the UE4SS root
+3. `ue4ss/mappings`
+4. older RuneSchema mapping locations kept for compatibility
 
-The installed `UE4SS_Signatures` folder remains owned by UE4SS and is reported
-at startup.
+Mappings help type queries and diagnostics. Live Unreal reflection still
+decides whether a runtime write is valid.
 
-## Mapping service
+## Plugins
 
-`runeschema.mapping` parses the selected uncompressed UE4SS map only when a
-plugin or diagnostic asks for a type query.
+Plugins are optional.
 
-Parsing is bounded by file size, count, time, and cache limits.
+A plugin with an incompatible native ABI can be skipped without disabling
+RuneSchema core. Plugin PAK content that is otherwise valid can remain
+independent from a native DLL.
 
-Server/client mapping fingerprints are diagnostic only. A mismatch does not
-reject a connection. Live reflection remains authoritative for mutation.
+Helpy is not required by the loader system.
 
-## Native bindings
+## Multiplayer
 
-`main.dll` owns native resolution.
+Gameplay mutations remain server-owned. Clients need the cooked assets required
+for anything they render.
 
-It records provenance and exposes only allow-listed RuneSchema bindings.
+`/registry` connects server actions with client presentation, but a registry
+entry does not bypass server validation.
 
-- Steam/GOG may use a validated AOB.
-- Game Pass prefers UE4SS metadata or reflection when a Steam pattern is not
-  portable.
-- Missing bindings disable only the dependent hook or feature.
+## Native feature fallback
 
-Native plugins can check `RuneSchemaHostApi::StructSize` and use the append-only
-`ResolveBinding` host function.
+Some features use game-build-specific native hooks. If a hook cannot be
+validated for the current executable, RuneSchema leaves that feature off and
+continues with unrelated loaders and services.
 
-The `runeschema.bindings` service reports capability and source without
-exposing raw addresses through JSON.
+A game update may therefore temporarily affect one native feature without
+breaking normal JSON authoring.
 
-## Journal hierarchy
+## Saves
 
-Journal placement is storefront-specific.
+SafeSave removes only content with recorded RuneSchema ownership.
 
-- Steam/GOG uses its validated insert, category-dispatch, and builder contracts.
-- Game Pass uses its validated hierarchy insert, three category entry points,
-  and builder-layout witness.
+Steam/GOG and Game Pass use different save paths and cleanup lanes. Do not copy
+Steam save-editing instructions onto the Game Pass WGS provider.
 
-Patterns must resolve uniquely in executable memory. If validation fails,
-hierarchy placement is disabled for that lane; unrelated journal data and
-loaders continue.
+For user recovery steps, see
+[Manual Save Recovery](MANUAL-SAVE-RECOVERY.md).
 
-## Loader rules
-
-- Each loader owns only its named folder.
-- Failures are isolated by mod and section.
-- Effects and Niagara load before their consumers.
-- `/raw` uses explicit ownership, dependency order, preconditions, and
-  transactional commits.
-- `/registry` is the multiplayer authority/presentation bridge. It does not
-  replace the other loaders.
-- Live reflection validates objects and fields before mutation.
-- Core and vanilla behavior do not depend on Helpy or Networking.
-
-## Plugin behavior
-
-`BuiltForRuneSchema` and semantic versions are informational.
-
-RuneSchema attempts best-effort startup. A native ABI mismatch skips that DLL
-because it cannot be called safely. Other components continue.
-
-Helpy uses an instant-open model:
-
-- embedded first page;
-- bounded pagination;
-- no automatic full scan;
-- push updates;
-- lazy icons;
-- manual refresh/full scan.
+For storefront detection, hook validation, WGS internals, and build-specific
+details, see the [Developer Guide](DEVELOPER-GUIDE.md).

@@ -38,7 +38,25 @@ Walkthrough:
 `PersistenceID`, `InternalName`, piece index, and requirements cannot be hidden
 inside `Properties`; RuneSchema owns those fields. For imported assemblies and
 static parent objects, see [raw/BASE-BUILDER-IMPORT.md](../raw/BASE-BUILDER-IMPORT.md)
-and [BUILDING-CLONING-FMODEL-AUDIT.md](../BUILDING-CLONING-FMODEL-AUDIT.md).
+and [BUILDING-CLONING-FMODEL-AUDIT.md](../BUILDING-CLONING.md).
+
+## Simple rules
+
+- Register an existing `BuildingPieceData` asset or clone a compatible one for a new build-menu identity.
+- Point `BuildableActor` at a cooked child of the game's base building actor.
+- Replace the full requirements list when changing cost. Use `AddTo` for explicit menu placement.
+
+## FAQ
+
+### FAQ-BUILDINGS-001 — Can I hide PersistenceID or InternalName inside Properties? {#faq-buildings-001}
+
+No. `PersistenceID`, `InternalName`, piece index, and requirements are owned
+fields in the building definition and cannot be hidden inside `Properties`.
+
+### FAQ-BUILDINGS-002 — Should I use an NPC definition for a static building prop? {#faq-buildings-002}
+
+Normally no. Use `/buildings` for buildable content or `/spawns` for supported
+static world placement instead of treating architecture as an NPC.
 
 ---
 

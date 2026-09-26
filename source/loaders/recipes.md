@@ -74,6 +74,29 @@ Exact `DataTable` paths are recommended for custom or potentially ambiguous
 tables. Helpy's station picker derives its choices from the same reflected
 `LabeledRecipes` and `RecipeData[]` layouts.
 
+## Simple rules
+
+- Recipe placement and recipe unlocking are separate operations.
+- Use `DataTable` for an exact cooked table path; use `Table` only for a unique legacy short name.
+- `Category` targets native `LabeledRecipes`; `Array` targets a direct recipe array. Do not use both on the same placement.
+
+## FAQ
+
+### FAQ-RECIPES-001 — Does placing a recipe at a station automatically unlock it? {#faq-recipes-001}
+
+No. Placement makes the station or vendor contain the recipe; `Unlock:true`
+controls whether the recipe is granted.
+
+### FAQ-RECIPES-002 — When should I use DataTable instead of Table? {#faq-recipes-002}
+
+Use `DataTable` when you want an exact vanilla or modded cooked table path,
+especially for custom or potentially ambiguous tables. Use `Table` only when
+the short table name is unique.
+
+### FAQ-RECIPES-003 — Can a placement use both Category and Array? {#faq-recipes-003}
+
+No. `Category` and `Array` are mutually exclusive placement modes.
+
 ---
 
 [← All loaders](../LOADER-WALKTHROUGHS.md) · [Authoring guide](../AUTHORING-GUIDE.md)
