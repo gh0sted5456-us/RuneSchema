@@ -40,6 +40,20 @@ Yes. Use `$Patch` with `$Target` for an existing authored course.
 Unreal centimeters. Keep starter, finish, orb, prop, and zone placement in the
 same coordinate convention.
 
+### FAQ-COURSES-003 — What do $Patch and $Target do? {#faq-courses-003}
+
+They let a course definition patch an existing authored course instead of
+creating a separate course record.
+
+### FAQ-COURSES-004 — Are course coordinates written in meters? {#faq-courses-004}
+
+No. Course locations use Unreal centimeters.
+
+### FAQ-COURSES-005 — Does the course zone need to cover the playable route? {#faq-courses-005}
+
+Yes. Verify that the authored zone encloses the route players are expected to
+run.
+
 ---
 
 [← All loaders](../LOADER-WALKTHROUGHS.md) · [Authoring guide](../AUTHORING-GUIDE.md)
