@@ -42,6 +42,19 @@ Yes. Use `GrantedEffects` with `Mode: "Append"`.
 
 Target the worn item's data path. Do not use executable addresses.
 
+### FAQ-EQUIPMENT-003 — What GrantedEffects modes are supported? {#faq-equipment-003}
+
+`Replace`, `Append`, and `Clear`.
+
+### FAQ-EQUIPMENT-004 — Can equipment reference a RuneSchema effect alias? {#faq-equipment-004}
+
+Yes. The documented example uses a RuneSchema effect definition from
+`/effects`.
+
+### FAQ-EQUIPMENT-005 — What lifecycle cases should I test? {#faq-equipment-005}
+
+Test equip, unequip, death, respawn, reconnect, and remote-client presentation.
+
 ---
 
 [← All loaders](../LOADER-WALKTHROUGHS.md) · [Authoring guide](../AUTHORING-GUIDE.md)
