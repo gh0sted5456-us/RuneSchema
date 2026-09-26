@@ -38,7 +38,7 @@ Walkthrough:
 `PersistenceID`, `InternalName`, piece index, and requirements cannot be hidden
 inside `Properties`; RuneSchema owns those fields. For imported assemblies and
 static parent objects, see [raw/BASE-BUILDER-IMPORT.md](../raw/BASE-BUILDER-IMPORT.md)
-and [BUILDING-CLONING-FMODEL-AUDIT.md](../BUILDING-CLONING-FMODEL-AUDIT.md).
+and [BUILDING-CLONING-FMODEL-AUDIT.md](../BUILDING-CLONING.md).
 
 ## Simple rules
 
