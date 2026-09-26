@@ -160,6 +160,42 @@ the backup-first field repair in
 [MANUAL-SAVE-RECOVERY.md](MANUAL-SAVE-RECOVERY.md). Do not edit Game Pass WGS
 container files directly.
 
+## FAQ
+
+### FAQ-CHARACTER-001 — Does a new character option need both /raw and /assets? {#faq-character-001}
+
+Yes. Add or patch the customization DataTable row through `/raw`, then append
+the menu option through `/assets`.
+
+### FAQ-CHARACTER-002 — Will a new DataTable row automatically create a menu button? {#faq-character-002}
+
+No. A row by itself does not create a character-menu option.
+
+### FAQ-CHARACTER-003 — What happens if the menu option points to a missing DataTable row? {#faq-character-003}
+
+RuneSchema rejects the option when its `DataHandle` does not resolve.
+
+### FAQ-CHARACTER-004 — Do current character-menu edits need $schema, modId, profile, or transaction metadata? {#faq-character-004}
+
+No. For the current direct `DA_` authoring form, the target path and field
+operation are enough. The owning mod comes from the mod folder.
+
+### FAQ-CHARACTER-005 — Can I update many existing beard or hair options in one operation? {#faq-character-005}
+
+Yes. Use `$MergeWhere` when the same field change applies to multiple existing
+option-array entries.
+
+### FAQ-CHARACTER-006 — Can RuneSchema fix a hair or beard mesh that does not fit the head? {#faq-character-006}
+
+No. Mesh fitting, scale, and local offsets must be correct in the cooked
+skeletal mesh.
+
+### FAQ-CHARACTER-007 — Why use appearance/manifest.json for custom appearance rows? {#faq-character-007}
+
+It records which customization rows belong to the mod so RuneSchema can restore
+only the affected appearance field if that mod is later disabled or missing.
+
+
 ## Evidence and diagnostics
 
 With advanced logging enabled, successful writes report the common
