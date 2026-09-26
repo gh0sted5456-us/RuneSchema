@@ -55,6 +55,7 @@ namespace DragonWilds {
     protected:
         virtual void OnLoad(const std::filesystem::path& loaderPath, const RC::StringType& modName, const EEngineLifecyclePhase& engineLifecyclePhase) override final;
         virtual void OnAutoReload(const RC::StringType& modName, const std::filesystem::path& modFilePath) override final;
+        void OnFinalizeLoad(const EEngineLifecyclePhase& engineLifecyclePhase) override final;
 
         virtual bool CanInitialize(const EEngineLifecyclePhase& engineLifecyclePhase) override final;
         virtual bool OnInitialize() override final;
@@ -71,6 +72,7 @@ namespace DragonWilds {
         std::unordered_set<RC::StringType> m_propsApplied;
         std::unordered_set<std::string> m_reportedPlacementFailures;
         RC::Unreal::UClass* m_recipeClass = nullptr;
+        RC::Unreal::UClass* m_itemDataClass = nullptr;
         RC::Unreal::UClass* m_progressComponentClass = nullptr;
         std::vector<std::pair<RC::Unreal::UFunction*, int32_t>> m_functionHooks;
         bool m_hooksActive = false;
