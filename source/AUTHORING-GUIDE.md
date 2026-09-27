@@ -88,20 +88,19 @@ ue4ss/
 Release ZIPs intentionally omit `RuneSchema/mods`. Create that directory when
 installing content mods.
 
-RuneSchema keeps authored settings with the install, but mutable compatibility
-state is stored with the game saves. SafeSave uses
+RuneSchema keeps authored settings with the install, but its small content
+ownership record is stored with the game saves. Save cleanup uses
 `%LOCALAPPDATA%/RSDragonwilds/Saved/RuneSchema/safesave/OwnedContentLedger.json`;
 per-world building registry records remain under
 `Saved/RuneSchema/<WorldGuid>/CustomBuildingData.json`. On first launch, an
-older ledger under `RuneSchema/settings` is staged, verified, and migrated.
+older ownership record under `RuneSchema/settings` is checked and migrated.
 
-On Game Pass, RuneSchema never treats Xbox Game Save (`SystemAppData/wgs`) as
-a loose JSON directory. Retired owned items and recipes are scrubbed only from
-the provider-hydrated live player state. The prior ownership ledger is retained
-until read-back verification succeeds, so a crash or missed provider event is
-retried on the next launch. Categories without a verified WinGDK live cleanup
-adapter fail closed and also retain the prior ledger. Steam/GOG keeps its
-separate backup-first character JSON route.
+Steam/GOG and Game Pass use the same cleanup rule: RuneSchema waits for the
+game to load the character, removes only missing content that RuneSchema had
+previously recorded, verifies the result, and lets the game save normally.
+RuneSchema does not edit Xbox Game Save (`SystemAppData/wgs`) files directly.
+If a category cannot be checked safely, the previous ownership record is kept
+so cleanup can retry on the next launch.
 
 Journal/lore and recipe loaders are enabled independently from save
 persistence. The default settings are:
@@ -109,17 +108,17 @@ persistence. The default settings are:
 ```jsonc
 "persistence": {
   "characterCustomization": false,
-  "journal": false,
-  "recipes": false
+  "journal": true,
+  "recipes": true,
+  "quests": true
 }
 ```
 
-With recipe persistence off, recipes are added only to the game's transient
-unlock set and remain usable for the current session. With journal persistence
-off, RuneSchema still creates, registers, and places journal/lore assets but
-does not call the game's save-backed player unlock function. Enable a setting
-only when those unlocks should become permanent. These controls do not change
-the corresponding entries under `loaders`.
+Journal, recipe, and quest saving are enabled by default. Turning one off keeps
+its loader active but prevents RuneSchema from making new progress in that
+category permanent. For example, a recipe can still be placed at a station
+without automatically saving it as unlocked. These controls do not change the
+matching entries under `loaders`.
 
 With `characterCustomization` off, `/assets`, `/raw`, and character-option
 table extensions still load, but automatic appearance assignments authored in
@@ -183,10 +182,10 @@ supported operations.
 ## Cooked assets and `$declaration`
 
 A cooked PAK can contain objects that RuneSchema did not create. Add a
-`$declaration` in a supported loader to assign those objects to the mod's
-current ownership snapshot. On the next load, RuneSchema compares that small
-snapshot with the active definitions and removes the missing mod's known save
-references before overwriting the snapshot. It never restores removed state.
+`$declaration` in a supported loader so RuneSchema knows which mod owns those
+objects. On the next load, RuneSchema compares the previous list with the
+active definitions and removes missing, previously owned save references after
+the game finishes loading. It never restores removed state.
 
 Supported declaration areas are:
 
@@ -267,10 +266,10 @@ A plugin can provide:
 - both; or
 - neither while it is being developed.
 
-Manifest and semantic-version differences are reported but do not block a
-load attempt. An ABI mismatch cannot be called and disables that DLL. The
-plugin's complete PAK containers can still mount. A missing dependency does
-not disable RuneSchema core.
+Manifest and version differences are reported but do not block a load attempt.
+If a plugin DLL cannot safely use the current RuneSchema plugin interface,
+RuneSchema skips that DLL. The plugin's complete PAK containers can still
+mount. A missing dependency does not disable RuneSchema core.
 
 Set a plugin to `0` in `plugins.txt` to disable it. This also overrides the
 legacy `Required` manifest field.

@@ -12,6 +12,7 @@ RuneSchema vendors.
 ```jsonc
 {
   "RECIPE_MY_ITEM": {
+    "PersistenceID": "AAAAAAAAAAAAAAAAAAAAAA",
     "AddTo": [{
       "DataTable": "/Game/MyMod/Data/DT_MyStation.DT_MyStation",
       "Row": "StationRow",
@@ -37,7 +38,13 @@ Placement rules:
 - Use `RuneSchemaVendors` for one or more RuneSchema store IDs.
 - Use `VanillaVendors` for native merchant table/row targets.
 - `Unlock:true` grants the recipe; placement alone does not.
+- `PersistenceID` is optional. When omitted, RuneSchema derives a stable ID
+  from the mod folder and recipe key.
 - `Order` sorts within a category. Lower values appear first.
+- `ItemsConsumed[].ItemData` and `ItemsCreated[].ItemData` should use full item
+  object paths. RuneSchema accepts a timed-processing output only after an
+  `/assets` clone is fully registered and its persistent identity resolves back
+  to that exact item.
 
 The verified vanilla station targets are:
 
@@ -96,6 +103,18 @@ the short table name is unique.
 ### FAQ-RECIPES-003 — Can a placement use both Category and Array? {#faq-recipes-003}
 
 No. `Category` and `Array` are mutually exclusive placement modes.
+
+### FAQ-RECIPES-004 — Can a timed processing station create an `/assets` clone? {#faq-recipes-004}
+
+Yes. Reference the clone by its RuneSchema object path. RuneSchema verifies the
+registered clone before adding the recipe to a processing queue. An unresolved
+or duplicate item identity rejects that recipe placement instead of leaving an
+unsafe queued output.
+
+### FAQ-RECIPES-005 — Must every recipe provide PersistenceID? {#faq-recipes-005}
+
+No. It is optional. A supplied value must be unique and stable; otherwise
+RuneSchema derives one from the owning mod and recipe key.
 
 ---
 

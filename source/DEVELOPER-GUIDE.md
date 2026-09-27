@@ -51,14 +51,14 @@ RuneSchema removes only content with recorded RuneSchema ownership.
 
 ### Steam / GOG
 
-Character saves are loose files under:
+Character saves are stored under:
 
 ```text
 %LOCALAPPDATA%\RSDragonwilds\Saved
 ```
 
-Owned-content cleanup can back up, update, and verify those files before the
-game loads them.
+RuneSchema waits for the game to load the character, removes verified missing
+RuneSchema content from the active character, and lets the game save normally.
 
 ### Game Pass / WinGDK
 
@@ -66,8 +66,8 @@ Game Pass uses Xbox Game Save under the package `SystemAppData\wgs` tree.
 RuneSchema does not treat GUID-named provider files or `containers.index` as
 ordinary Steam JSON files.
 
-Cleanup runs against hydrated game state and lets Dragonwilds write through
-its active WGS provider. RuneSchema keeps its own ownership ledger under the
+Cleanup runs after Dragonwilds loads the character and lets the game write
+through Xbox Game Save. RuneSchema keeps its small ownership record under the
 package `LocalState\RSDragonwilds\Saved\RuneSchema` tree.
 
 For user recovery procedures, use
@@ -81,13 +81,15 @@ Loader activation and save persistence are separate.
 ```jsonc
 "persistence": {
   "characterCustomization": false,
-  "journal": false,
-  "recipes": false
+  "journal": true,
+  "recipes": true,
+  "quests": true
 }
 ```
 
-The defaults are `false`. Loaders can remain active while RuneSchema avoids
-writing the corresponding persistent unlock or appearance state.
+Journal, recipe, and quest persistence default to `true`. Automatic character
+customization persistence defaults to `false`. Loaders remain active when a
+matching persistence setting is disabled.
 
 Recipes use the game's transient recipe set when recipe persistence is off.
 Journal/lore content can still register and appear without calling the native

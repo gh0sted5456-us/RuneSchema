@@ -1,114 +1,116 @@
 # Current release
 
-This page summarizes the current public RuneSchema release.
+RuneSchema uses one `main.dll` for Steam/GOG and Game Pass. It detects the
+running storefront and selects the matching game support automatically.
 
-## Main changes
+## Stability and compatibility
 
-### Universal runtime
+- Steam/GOG and Game Pass use separate game-function data where their
+  executables differ.
+- Both storefronts follow the same loader, ownership, and save-cleanup rules.
+- An unavailable optional game function disables only the feature that needs
+  it. Other loaders continue where it is safe to do so.
+- Plugins remain optional. A plugin version mismatch does not prevent
+  RuneSchema from loading.
+- Loader folders and nested organizational folders are case-insensitive.
 
-- One `main.dll` supports Steam/GOG and Game Pass/WinGDK.
-- Storefront-specific native code stays in separate runtime lanes.
-- Missing optional hooks disable only the feature that needs them.
-- UE4SS metadata and Unreal reflection remain the fallback where supported.
+## Save cleanup
 
-### Loader and authoring system
+RuneSchema records only the persistent identities supplied by RuneSchema mods.
+After all enabled mods and the character have loaded, it removes matching
+records that belonged to a now-disabled, removed, or changed mod.
 
-- Loader folders support nested JSON/JSONC organization.
-- `/assets` supports direct reflected DataAsset/class-default edits and
-  compatible item cloning.
-- `/raw` supports DataTable row creation and patching plus strict registry
-  transactions.
-- Exact cooked DataTable paths are supported where the authoring contract calls
-  for them.
-- Character-menu edits can use the direct target/field form without a repeated
-  registry envelope.
-- `$MergeWhere`, `$AppendUnique`, owned-row transactions, dependency ordering,
-  and reflected field checks reduce repeated definitions and unsafe writes.
+The current cleanup covers RuneSchema-owned:
 
-### Character creation
+- carried and equipped items;
+- recipe unlocks;
+- quest progress;
+- journal entries; and
+- lore entries.
 
-- Character options can be added or updated across native editor categories.
-- Hair and facial-hair authoring use native DataTables and menu DataAssets.
-- Retained character-menu edits are replayed when the game rebuilds relevant
-  class defaults.
-- Appearance persistence is separate from loader activation.
+Steam/GOG and Game Pass now use the same process. RuneSchema changes the active
+character only after the game has loaded it, verifies each applicable category,
+and lets the game save through its normal storefront service. Xbox Game Save
+files are never edited directly. Unknown, vanilla, and unrecorded third-party
+content is left alone.
 
-### Recipes, journals, vendors, and progression
+## Loader improvements
 
-- Recipe placement supports exact DataTable paths, categories, direct recipe
-  arrays, vanilla merchants, and RuneSchema vendors.
-- Recipe placement and recipe unlocking are separate.
-- Journal/lore registration can remain active when save-backed unlock
-  persistence is disabled.
-- Vendor filtering keeps category identity stable while applying time,
-  power-level, and quest gates.
+- `/assets` supports compatible item clones, cooked-content declarations,
+  unlock items, and direct `DA_` asset edits.
+- `/raw` can create or patch rows in a DataTable selected by short name or exact
+  cooked path.
+- `/recipes` can target crafting stations, timed processing stations, vanilla
+  merchants, RuneSchema vendors, and compatible custom station tables.
+- Runtime-created item clones are registered before a processing recipe is
+  accepted, preventing an incomplete item from entering a timed queue.
+- Recipe placement and recipe unlocking remain separate choices.
+- `/journal` and `/lore` support authored entries, grouping, placement, normal
+  unlocking, and save cleanup on both storefronts.
+- `/buildings` supports new build-menu entries, inherited or replaced costs,
+  cooked replacement actors, processing-station fuel settings, and Base Builder
+  imports.
+- `/equipment` supports equipped effects, skills, utility actions, Surge-style
+  movement, and Shadowveil-style presentation when the required game function
+  is available for the detected storefront.
+- `/registry` joins server-authoritative actions with the matching client
+  presentation data and reports duplicate keys.
+- Vendor categories keep their authored order and can use power-level,
+  time-of-day, quest, and timeout conditions.
+- Player, NPC, resource, and building scale is applied from its authored base
+  value instead of multiplying again after a reload or respawn.
 
-### Buildings and Base Builder
+## Character creation
 
-- Building clones inherit catalogue placement when `AddTo` is omitted.
-- Cooked replacement actors are validated before use.
-- Requirements replace the full source cost.
-- Base Builder imports support native pieces, static assemblies, and hybrid
-  layouts.
+- Hair, facial hair, body, face, skin, eyes, and other supported character-menu
+  options can be added or updated through `/raw` and direct `/assets` `DA_`
+  edits.
+- New authoring files need only the target `DA_` path and the fields being
+  changed. A web schema URL or repeated mod identifier is not required.
+- Character-menu changes are reapplied when the game rebuilds the menu data.
+- Automatic RuneSchema appearance saving remains off by default. A choice saved
+  through the game's character editor remains a normal game action.
 
-### Multiplayer and registry
+## Multiplayer and time conditions
 
-- `/registry` provides the server-authority/client-presentation bridge.
-- Server-owned gameplay actions remain validated on the server.
-- Client presentation uses installed cooked assets and replicated world state.
-- Duplicate persistent identities are rejected.
+- The server remains responsible for inventory, purchases, quests, spawning,
+  buildings, AI, drops, and events.
+- Clients render the cooked assets they have installed and receive replicated
+  world state.
+- Time-of-day conditions are shared by vendors, NPCs, spawns, events, quests,
+  dialogue, rewards, drops, and visual effects where each loader supports them.
 
-### SafeSave and persistence
+## Helpy and diagnostics
 
-- Cleanup is limited to identities previously owned by RuneSchema.
-- Vanilla and unknown third-party records are left alone.
-- Steam/GOG uses backed-up loose character files where appropriate.
-- Game Pass cleanup uses hydrated game state and the Xbox Game Save provider
-  instead of treating WGS files as Steam JSON.
-- Recipe, journal, and character-customization persistence can be disabled
-  independently of their loaders.
+- Helpy is optional and opens from its saved catalogue instead of scanning the
+  entire game every time.
+- Search, filtering, pagination, and icon work are loaded as needed.
+- Normal logging shows loader totals, warnings, and failures without repeating
+  successful low-level operations.
+- Advanced logging adds bounded examples for troubleshooting.
 
-### Helpy
+## Default persistence settings
 
-- Helpy remains optional.
-- Opening the UI does not trigger a full UObject scan.
-- Search, filtering, pagination, lazy icon work, and cached catalogue data keep
-  the normal browse path bounded.
-- UI work remains isolated from core loader behavior.
+```jsonc
+"persistence": {
+  "characterCustomization": false,
+  "journal": true,
+  "recipes": true,
+  "quests": true
+}
+```
 
-### Performance and diagnostics
-
-- Journal finalization uses indexed reference lookup instead of repeated full
-  object scans.
-- Current reference measurements are about **306 ms on Steam/GOG** and
-  **410 ms on Game Pass** for the profiled mod set.
-- Loader success output is quieter while warnings, failures, and summaries stay
-  visible.
-- Errors remain scoped so unrelated mods and loaders can continue where safe.
+Turning off one of these settings does not disable its loader. It prevents
+RuneSchema from making new progress in that category permanent.
 
 ## Packages
 
-The public release provides:
+- **Universal** includes RuneSchema core and the optional bundled plugins.
+- **Core** includes RuneSchema without optional plugins.
+- The same RuneSchema DLL supports both storefronts; use the UE4SS runtime made
+  for the installed game build.
 
-- Universal RuneSchema runtime;
-- Core-only RuneSchema runtime;
-- Steam/GOG UE4SS runtime;
-- Game Pass/WinGDK UE4SS runtime.
-
-Exact package names, hashes, and installation notes are available in the
-repository [release directory](https://github.com/gh0sted5456-us/RuneSchema/tree/main/release).
-
-## Documentation
-
-For current behavior, use:
-
-- [Authoring Guide](AUTHORING-GUIDE.md)
-- [Loader Reference](LOADER-WALKTHROUGHS.md)
-- [Character Creation](CHARACTER-CREATION-AUTHORING.md)
-- [Registry & DataTables](REGISTRY-PATCHING.md)
-- [Building Cloning](BUILDING-CLONING.md)
-- [Compatibility](COMPATIBILITY-BACKBONE.md)
-- [SafeSave & Ownership](SAFE-SAVE-AND-LEDGER.md)
-
-Implementation details and build flow are kept in the
-[Developer Guide](DEVELOPER-GUIDE.md).
+See the [Authoring Guide](AUTHORING-GUIDE.md),
+[Loader Reference](LOADER-WALKTHROUGHS.md),
+[Examples](EXAMPLES.md), and
+[Save Cleanup](SAFE-SAVE-AND-LEDGER.md) for current usage.

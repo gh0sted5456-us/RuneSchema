@@ -61,9 +61,10 @@ jobs:
           cp -R source/loaders docs/loaders
           rm -rf docs/unreal-runeschema
           cp -R source/unreal-runeschema docs/unreal-runeschema
-          rm -rf docs/examples docs/schemas
+          rm -rf docs/examples
           cp -R source/examples docs/examples
-          cp -R source/schemas docs/schemas
+          mkdir -p docs/schemas
+          cp -R source/schemas/. docs/schemas/
           mkdir -p docs/raw/include/Runtime
           cp source/raw/BASE-BUILDER-IMPORT.md docs/raw/BASE-BUILDER-IMPORT.md
           cp source/raw/include/Runtime/RuneSchemaPluginApi.h docs/raw/include/Runtime/RuneSchemaPluginApi.h

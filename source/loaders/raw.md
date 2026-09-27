@@ -19,10 +19,21 @@ Supported DataTable row creation and patching.
 }
 ```
 
-The classic map form uses the DataTable's short name. When a short name is
-ambiguous or you need exact target control, use a registry-patch document with
-a full cooked `target.objectPath`, row struct, ownership, preconditions, and
-operation. See
+The top-level key may be a unique short name or the exact cooked DataTable
+object path:
+
+```jsonc
+{
+  "/Game/MyMod/Data/DT_Custom.DT_Custom": {
+    "ExistingRow": {"SomeField": 10},
+    "NewRow": {"SomeField": 20}
+  }
+}
+```
+
+Use the exact path for custom tables or whenever a short name could be
+ambiguous. A registry-patch document adds stricter ownership, preconditions,
+and all-or-nothing row operations. See
 [`schemas/registry-patch-v1.schema.json`](../schemas/registry-patch-v1.schema.json)
 and `examples/RegistryPatch`.
 
@@ -31,7 +42,7 @@ against live reflection before committing a row.
 
 ## Simple rules
 
-- In the classic `/raw` map form, use the DataTable's **short name** as the top-level key and the row name below it.
+- Use a unique DataTable short name or an exact cooked object path as the top-level key and the row name below it.
 - RuneSchema checks the target row's live reflected structure. Supplied fields that exist are written; unknown fields are reported.
 - Use a registry-patch document with `target.objectPath` when you need an exact cooked DataTable path or stricter ownership/precondition handling.
 
@@ -44,12 +55,10 @@ layout matches live Unreal reflection. The classic raw editor is generic: it
 looks up each supplied property on the target row struct rather than requiring
 a hard-coded implementation for every DataTable.
 
-### FAQ-RAW-002 — Can I use a full cooked DataTable path as the top-level key in classic /raw JSON? {#faq-raw-002}
+### FAQ-RAW-002 — Can I use a full cooked DataTable path as the top-level key? {#faq-raw-002}
 
-No. The classic map form is keyed by the DataTable's short name, such as
-`DT_WearableEquipment`. When an exact path is required, use a registry-patch
-target with `objectPath`, for example
-`/Game/.../DT_Name.DT_Name`.
+Yes. Use `/Game/.../DT_Name.DT_Name`. Exact paths are recommended for modded
+tables and ambiguous short names.
 
 ### FAQ-RAW-003 — What happens if I specify a field that does not exist on the row struct? {#faq-raw-003}
 

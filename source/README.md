@@ -17,7 +17,7 @@ For mod authors:
 - [Registry & DataTables](REGISTRY-PATCHING.md)
 - [Building Cloning](BUILDING-CLONING.md)
 - [Compatibility](COMPATIBILITY-BACKBONE.md)
-- [SafeSave & Ownership](SAFE-SAVE-AND-LEDGER.md)
+- [Save Cleanup & Ownership](SAFE-SAVE-AND-LEDGER.md)
 - [Manual Save Recovery](MANUAL-SAVE-RECOVERY.md)
 - [Unreal + RuneSchema](unreal-runeschema/index.md)
 

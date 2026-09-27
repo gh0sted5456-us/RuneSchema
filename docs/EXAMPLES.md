@@ -74,6 +74,27 @@ loader in isolation.
 ## Building clones
 
 - [Cooked prop/building example](examples/BuildingClone/buildings/10-CookedProps.jsonc)
+- [Processing-station override example](examples/RSv16/ExampleMods/RuneSchemaBuildingOverrideExample/buildings/10-CoinageStations.jsonc)
+
+The first example covers a new building or prop. The station example shows
+cost replacement, accepted fuel changes, fuel slots, processing speed, and
+automatic-start behavior.
+
+## Recipe unlock items
+
+[Dawnveil recipe unlocker](examples/RSv16/ExampleMods/RuneSchemaRecipeUnlockConsumable/assets/10-DawnveilRecipeUnlocker.jsonc)
+clones an existing consumable and assigns recipes for it to unlock. Recipe
+names may point to a RuneSchema recipe ID or a compatible cooked recipe path.
+
+## Crafting and processing placement
+
+- Use `Category` for a named crafting or merchant category.
+- Use `Array: "Recipes"` for a timed processing station.
+- Use an exact `DataTable` path for a custom cooked station table.
+- Reference an `/assets` clone by its RuneSchema object path. RuneSchema checks
+  that the clone is fully registered before accepting a timed output.
+
+See the [recipes loader](loaders/recipes.md) for working placement shapes.
 
 For projects that combine cooked Unreal content with RuneSchema registration,
 see [Unreal + RuneSchema](unreal-runeschema/index.md).

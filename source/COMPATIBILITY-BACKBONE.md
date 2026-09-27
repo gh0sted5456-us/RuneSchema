@@ -6,16 +6,16 @@ RuneSchema supports Steam/GOG and Game Pass/WinGDK with one storefront-aware run
 
 ### Steam / GOG
 
-RuneSchema can use validated Steam/GOG native bindings where required and falls
-back to UE4SS metadata or Unreal reflection where supported.
+RuneSchema uses the Steam/GOG support path when the running game is the
+Steam/GOG build.
 
 ### Game Pass / WinGDK
 
 RuneSchema uses the WinGDK runtime lane. Steam-only byte patterns are not used
 on Game Pass.
 
-Xbox Game Save data is provider-managed. RuneSchema does not treat the WGS
-database as loose Steam JSON files.
+Xbox Game Save data is managed by the Xbox app. RuneSchema does not edit those
+files as though they were Steam character files.
 
 ## Mappings
 
@@ -26,16 +26,16 @@ RuneSchema looks for an optional `.usmap` in these locations:
 3. `ue4ss/mappings`
 4. older RuneSchema mapping locations kept for compatibility
 
-Mappings help type queries and diagnostics. Live Unreal reflection still
-decides whether a runtime write is valid.
+Mappings improve field names, type information, and diagnostics. The loaded
+game still decides whether a requested object or field is available.
 
 ## Plugins
 
 Plugins are optional.
 
-A plugin with an incompatible native ABI can be skipped without disabling
-RuneSchema core. Plugin PAK content that is otherwise valid can remain
-independent from a native DLL.
+A plugin built for an incompatible RuneSchema version can be skipped without
+disabling RuneSchema itself. Valid plugin PAK content can remain independent
+from an optional plugin DLL.
 
 Helpy is not required by the loader system.
 
@@ -49,9 +49,9 @@ entry does not bypass server validation.
 
 ## Native feature fallback
 
-Some features use storefront-specific native hooks. If a hook cannot be
-validated for the current executable, RuneSchema leaves that feature off and
-continues with unrelated loaders and services.
+Some features need a storefront-specific game function. If RuneSchema cannot
+verify that function for the current game build, it leaves only that feature
+off and continues loading unrelated content.
 
 A game update may therefore temporarily affect one native feature without
 breaking normal JSON authoring.
@@ -60,8 +60,9 @@ breaking normal JSON authoring.
 
 SafeSave removes only content with recorded RuneSchema ownership.
 
-Steam/GOG and Game Pass use different save paths and cleanup lanes. Do not copy
-Steam save-editing instructions onto the Game Pass WGS provider.
+Steam/GOG and Game Pass store saves differently, but RuneSchema applies the
+same ownership and cleanup rules after the game loads a character. Do not use
+Steam file-editing instructions on Xbox Game Save files.
 
 For user recovery steps, see
 [Manual Save Recovery](MANUAL-SAVE-RECOVERY.md).

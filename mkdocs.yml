@@ -120,7 +120,7 @@ nav:
       - Character Creation: CHARACTER-CREATION-AUTHORING.md
       - Registry & DataTables: REGISTRY-PATCHING.md
       - Building & Cloning: BUILDING-CLONING.md
-      - SafeSave & Ownership: SAFE-SAVE-AND-LEDGER.md
+      - Save Cleanup & Ownership: SAFE-SAVE-AND-LEDGER.md
   - Unreal + RuneSchema:
       - Overview: unreal-runeschema/index.md
       - Stations, Quests & Recipes: unreal-runeschema/stations-quests-recipes.md

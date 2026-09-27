@@ -26,6 +26,13 @@ Use `/equipment` to bind supported behavior to worn item paths.
 not executable addresses. Validate equip, unequip, death, respawn, reconnect,
 and client presentation.
 
+The loader also accepts supported item fields for native actions, skills,
+projectiles, block effects, tags, durability behavior, and other fields that
+exist on the selected equipment item. Surge-style movement and
+Shadowveil-style presentation use storefront-specific game support; if that
+support is unavailable, RuneSchema disables only that behavior and continues
+loading the remaining equipment changes.
+
 ## Simple rules
 
 - Bind supported equipment behavior to worn item data paths.

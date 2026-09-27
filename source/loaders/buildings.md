@@ -19,6 +19,17 @@ as a separate build-menu entry.
     "Requirements": [
       {"ItemData":"/Game/Gameplay/Items/ITEM_Log.ITEM_Log","Amount":4}
     ],
+    "Overrides": {
+      "Processing": {
+        "AcceptedFuels": {
+          "Mode": "Append",
+          "Items": ["/Game/MyMod/Fuel/FUEL_Coal.FUEL_Coal"]
+        },
+        "MaxFuelSlots": 4,
+        "Rate": 1.25,
+        "AutoStartProcess": false
+      }
+    },
     "Unlock": true,
     "AddTo": {"Collection":"Modded Buildings","PageIndex":0}
   }
@@ -37,8 +48,13 @@ Walkthrough:
 
 `PersistenceID`, `InternalName`, piece index, and requirements cannot be hidden
 inside `Properties`; RuneSchema owns those fields. For imported assemblies and
-static parent objects, see [raw/BASE-BUILDER-IMPORT.md](../raw/BASE-BUILDER-IMPORT.md)
-and [BUILDING-CLONING-FMODEL-AUDIT.md](../BUILDING-CLONING.md).
+static parent objects, see [Base Builder import](../raw/BASE-BUILDER-IMPORT.md)
+and [Building cloning](../BUILDING-CLONING.md).
+
+For compatible processing buildings, `Overrides.Processing` can append,
+replace, or clear accepted fuels and can set fuel slots, processing rate, and
+automatic start. RuneSchema rejects unsupported fields without discarding an
+otherwise valid building definition.
 
 ## Simple rules
 

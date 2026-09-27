@@ -21,7 +21,7 @@ block to translate and rotate the entire local layout into the game world:
 
 - `NativeBuildingPieces` (default) creates ordinary game building actors. They
   retain native building behavior and each piece remains an independent actor.
-- `StaticAssembly` creates one transient RuneSchema-owned parent at `Location`
+- `StaticAssembly` creates one RuneSchema-owned parent at `Location`
   and groups matching cooked meshes into
   `HierarchicalInstancedStaticMeshComponent` children. The imported local
   transforms remain relative to that parent, so moving or rotating the center

@@ -82,13 +82,13 @@ hide:
 
 <div class="grid cards rs-card-grid rs-card-grid--compact" markdown>
 
--   :material-shield-check:{ .lg .middle } **SafeSave & ownership**
+-   :material-shield-check:{ .lg .middle } **Save cleanup & ownership**
 
     ---
 
     How RuneSchema tracks owned content and retires missing mod identities.
 
-    [:octicons-arrow-right-24: SafeSave](SAFE-SAVE-AND-LEDGER.md)
+    [:octicons-arrow-right-24: Save cleanup](SAFE-SAVE-AND-LEDGER.md)
 
 -   :material-backup-restore:{ .lg .middle } **Manual recovery**
 
@@ -118,7 +118,7 @@ hide:
 
     ---
 
-    Native plugin ABI, lifecycle callbacks, host functions, and services.
+    Plugin interface, lifecycle callbacks, host functions, and services.
 
     [:octicons-arrow-right-24: API reference](API-REFERENCE.md)
 

@@ -63,7 +63,7 @@ the current definitions are compared with that compact snapshot. Missing owned
 items, recipes, journal/lore entries, quests, buildings, and declarations are
 eligible for cleanup. Vanilla content and arbitrary unresolved game content are
 outside that boundary. Reinstalling a removed mod is a fresh install; RuneSchema
-does not restore removed state from a historical ledger.
+does not restore removed state from an older ownership record.
 
 ## Active-mod example index
 
@@ -144,7 +144,7 @@ Walkthrough:
 2. Assign a unique destination path, `PersistenceID`, and `InternalName`.
 3. Override only reflected fields that exist on the source type.
 
-`/assets` owns UObject/DataAsset cloning and field edits. It does not own
+`/assets` owns item and DataAsset cloning and field edits. It does not own
 DataTable rows or station placement. A clone is accepted only after its
 `PersistenceID` and `InternalName` are registered in the live ItemSubsystem;
 recipes should reference the registered clone by its actual stable RuneSchema
@@ -270,7 +270,7 @@ addresses remain outside this authoring surface.
 `PersistenceID`, `InternalName`, piece index, and requirements cannot be hidden
 inside `Properties`; RuneSchema owns those fields. For imported assemblies and
 static parent objects, see [raw/BASE-BUILDER-IMPORT.md](raw/BASE-BUILDER-IMPORT.md)
-and [BUILDING-CLONING-FMODEL-AUDIT.md](BUILDING-CLONING-FMODEL-AUDIT.md).
+and [Building cloning](BUILDING-CLONING.md).
 
 ## `courses`
 
@@ -685,10 +685,10 @@ Placement rules:
   after all clones register. Older definitions that supplied a 22-character
   `PersistenceID` remain readable and are migrated to the resolved object path
   in memory. Missing paths or ambiguous legacy IDs reject that recipe instead
-  of leaving a transient or partially initialized object in a queue.
+  of leaving an incomplete item in a processing queue.
 - Processing placement additionally verifies that a clone's PersistenceID
-  resolves back to the exact registered ItemData object. A duplicate identity,
-  unregistered clone, transient recipe, or mismatched route rejects only that
+  resolves back to the exact registered item. A duplicate identity,
+  unregistered clone, incomplete recipe, or mismatched route rejects only that
   recipe placement before the station can retain it.
 
 The verified vanilla station targets are:
@@ -823,5 +823,5 @@ stock refresh, reconnect, and save/reload.
 - [COMPATIBILITY-BACKBONE.md](COMPATIBILITY-BACKBONE.md): storefront and plugin
   compatibility flow.
 - [REGISTRY-PATCHING.md](REGISTRY-PATCHING.md): transactional DataTable patches.
-- [HELpy-REDESIGN-AUDIT.md](HELpy-REDESIGN-AUDIT.md): Helpy runtime design.
+- [Current release](CURRENT-RELEASE.md): current Helpy behavior and performance rules.
 - `raw/include/Generator/LoaderSchemas.h`: runtime-generated schema source.

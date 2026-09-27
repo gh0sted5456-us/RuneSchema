@@ -25,6 +25,9 @@ Readable lore entries and pages using the journal registry.
 Open the entry from a supported dialogue lore action or unlock it normally.
 Cooked entries may use `$declaration` for ownership tracking.
 
+Lore uses the same persistence setting and missing-mod cleanup as journal
+entries on Steam/GOG and Game Pass.
+
 ## Simple rules
 
 - `/lore` uses the journal registry but fixes the entry type to lore.

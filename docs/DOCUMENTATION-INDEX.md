@@ -14,7 +14,7 @@ Focused authoring pages:
 - [Character Creation](CHARACTER-CREATION-AUTHORING.md)
 - [Registry & DataTables](REGISTRY-PATCHING.md)
 - [Building Cloning](BUILDING-CLONING.md)
-- [SafeSave & Ownership](SAFE-SAVE-AND-LEDGER.md)
+- [Save Cleanup & Ownership](SAFE-SAVE-AND-LEDGER.md)
 - [Compatibility](COMPATIBILITY-BACKBONE.md)
 - [Manual Save Recovery](MANUAL-SAVE-RECOVERY.md)
 - [Unreal + RuneSchema](unreal-runeschema/index.md)

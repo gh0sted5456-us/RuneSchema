@@ -5,6 +5,9 @@
   "enableAutoReload": false,
   "advancedLogging": false,
   "advancedRuntime": false,
+  "diagnosticJobs": {
+    "enabled": false
+  },
   "colorCodeLoaderAnnotations": true,
   "enableExperimentalDropScaling": false,
   "plugins": {
@@ -12,14 +15,15 @@
   },
   "persistence": {
     "characterCustomization": false,
-    "journal": false,
-    "recipes": false
+    "journal": true,
+    "recipes": true,
+    "quests": true
   },
   "helpyAuthority": {
     "allowClientItemGrants": false,
     "allowClientTemporarySpawns": false,
     "maximumItemCount": 100,
-    "maximumSpawnCount": 5,
+    "maximumSpawnCount": 100,
     "maximumNpcDurationSeconds": 300,
     "permittedPlayerGuids": [],
     "permittedPlayerNames": []
