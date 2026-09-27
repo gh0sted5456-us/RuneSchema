@@ -108,4 +108,56 @@ inline Cleanup RemoveAbsent(const Json& journal,const std::set<std::string>& abs
     StoreOwnership(result.Journal,owners);
     return result;
 }
+// Remove only ledger-confirmed identities. The saved ownership manifest must
+// still agree with the historical owner, so a reused ID cannot be scrubbed.
+inline Cleanup RemoveOwnedIds(const Json& journal,const Owners& retired) {
+    auto owners=ReadOwnership(journal);
+    Cleanup result{journal,{}};
+    for(const auto& [id,owner]:retired) {
+        ValidateId(id);Quests::ValidateOwner(owner);
+        const auto found=owners.find(id);
+        if(found!=owners.end() && found->second==owner)result.Removed.insert(id);
+    }
+    for(const auto* field:{"UnlockedEntries","UnreadEntries"}) {
+        if(!journal.contains(field))continue;
+        const auto& source=journal.at(field);
+        if(!source.is_array() || source.size()>65535)throw std::runtime_error("Invalid journal saved entry list");
+        auto retained=Json::array();
+        for(const auto& entry:source) {
+            if(!entry.is_string())throw std::runtime_error("Invalid journal saved entry identity");
+            const auto id=entry.get<std::string>();ValidateId(id);
+            if(!result.Removed.contains(id))retained.push_back(entry);
+        }
+        result.Journal[field]=std::move(retained);
+    }
+    for(const auto& id:result.Removed)owners.erase(id);
+    StoreOwnership(result.Journal,owners);
+    return result;
+}
+// Exclude currently loaded RuneSchema entries from a native save without
+// removing them from the live journal.  This gives journal/lore the same
+// runtime-visible, save-transient mode already used by recipes.
+inline Json RemoveCurrent(const Json& journal,const Owners& current) {
+    std::set<std::string> ids;
+    for(const auto& [id,mod]:current) {
+        ValidateId(id);Quests::ValidateOwner(mod);ids.insert(id);
+    }
+    auto result=journal;
+    for(const auto* field:{"UnlockedEntries","UnreadEntries"}) {
+        if(!result.contains(field))continue;
+        const auto& source=result.at(field);
+        if(!source.is_array() || source.size()>65535)throw std::runtime_error("Invalid journal saved entry list");
+        auto retained=Json::array();
+        for(const auto& entry:source) {
+            if(!entry.is_string())throw std::runtime_error("Invalid journal saved entry identity");
+            const auto id=entry.get<std::string>();ValidateId(id);
+            if(!ids.contains(id))retained.push_back(entry);
+        }
+        result[field]=std::move(retained);
+    }
+    auto owners=ReadOwnership(result);
+    for(const auto& id:ids)owners.erase(id);
+    StoreOwnership(result,owners);
+    return result;
+}
 }

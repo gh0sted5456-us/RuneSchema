@@ -47,4 +47,14 @@ int main(int argc,char** argv) {
         "inherited menu behavior is undocumented in schema");
     require(schema.find("Complete replacement build cost")!=std::string::npos,
         "replacement cost behavior is undocumented in schema");
+    require(loader.find("[BUILDING-OVERRIDE][OK]")!=std::string::npos,
+        "station override verification is missing");
+    require(loader.find("StationBuildingPieceData")!=std::string::npos,
+        "station rows are not linked by their building relationship");
+    require(loader.find("PlacementProfileRowHandle")!=std::string::npos,
+        "placement profile override is missing");
+    require(loader.find("EBuildingRequirements::InteractAnywhere")!=std::string::npos,
+        "shelter override does not use the verified native enum");
+    require(schema.find("ProcessingRate multiplier")!=std::string::npos,
+        "processing-rate precedence is undocumented");
 }

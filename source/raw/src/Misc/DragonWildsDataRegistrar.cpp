@@ -30,6 +30,7 @@
 #include "Core/SaveRegistrySnapshot.h"
 #include "Loader/OwnedContentLedger.h"
 #include "Loader/ModLoadOrder.h"
+#include "Loader/NativeQuestCleanup.h"
 #include "Runtime/HostServices.h"
 #include "Runtime/Storefront.h"
 #include "Misc/DragonWildsDataRegistrar.h"
@@ -165,15 +166,16 @@ namespace DragonWilds {
     static bool CleanRetiredCharacterSaves(
         const std::vector<OwnedContent::Record>& retired)
     {
-        std::unordered_map<std::string,std::string> items,recipes;
-        std::set<std::string> owners;
+        std::unordered_map<std::string,std::string> items,recipes,quests;
+        DragonWilds::JournalSave::Owners journal;
         for(const auto& record:retired)
         {
-            owners.insert(record.Owner);
             if(record.Kind=="Item")items.emplace(record.PersistenceID,record.Owner);
             else if(record.Kind=="Recipe")recipes.emplace(record.PersistenceID,record.Owner);
+            else if(record.Kind=="Quest")quests.emplace(record.PersistenceID,record.Owner);
+            else if(record.Kind=="Journal" || record.Kind=="Lore")journal.emplace(record.PersistenceID,record.Owner);
         }
-        if(owners.empty())return true;
+        if(items.empty() && recipes.empty() && quests.empty() && journal.empty())return true;
         if (PS::Storefront::CurrentNativeLane() == PS::Storefront::NativeLane::GamePassNative)
         {
             // WinGDK persists this title through Xbox Game Save (WGS). Its
@@ -191,7 +193,7 @@ namespace DragonWilds {
         if(!std::filesystem::exists(folder,statusError))return true;
         if(statusError || !std::filesystem::is_directory(folder,statusError) || statusError)
             throw std::runtime_error("Character-save directory is unreadable");
-        std::size_t entries=0,files=0,bytes=0,changed=0,removed=0;
+        std::size_t entries=0,files=0,bytes=0,changed=0,removed=0,profiles=0;
         bool complete=true;
         for(const auto& entry:std::filesystem::directory_iterator(folder))
         {
@@ -206,8 +208,17 @@ namespace DragonWilds {
             {
                 const auto source=nlohmann::json::parse(
                     PS::ConfigFiles::Read(entry.path(),8*1024*1024));
+                const auto documentKind=PS::SaveCleanup::ClassifyCharacterDocument(source);
+                if(documentKind==PS::SaveCleanup::CharacterDocumentKind::ProfileOnly)
+                {
+                    // A profile-only character has no gameplay persistence to
+                    // prune. It remains eligible on later starts after the game
+                    // adds GameProgress to the same document.
+                    ++profiles;
+                    continue;
+                }
                 const auto plan=PS::SaveCleanup::PlanOwned(
-                    source,items,recipes,owners);
+                    source,items,recipes,quests,journal);
                 if(plan.Removed.empty())continue;
                 const auto serialized=plan.Save.dump();
                 if(nlohmann::json::parse(serialized)!=plan.Save)
@@ -239,7 +250,103 @@ namespace DragonWilds {
         if(changed)
             PS::Log<LogLevel::Normal>(
                 STR("[SAVE-CLEANER][OWNED-ONLY] Pre-load cleanup completed for {} character save(s), removing {} ledger-confirmed record(s) from {} absent or disabled owner(s).\n"),
-                changed,removed,owners.size());
+                changed,removed,items.size()+recipes.size()+quests.size()+journal.size());
+        if(profiles)
+            PS::Log<LogLevel::Verbose>(
+                STR("[SAVE-CLEANER][STEAM] Skipped {} profile-only character document(s) with no gameplay persistence.\n"),
+                profiles);
+        return complete;
+    }
+
+    static bool ScrubUnknownCharacterSaves(
+        const PS::SaveCleanup::RegistrySnapshot& registry)
+    {
+        if (!registry.Ready())
+            throw std::runtime_error(
+                "persistent registries are incomplete; startup scrub refused");
+        if (PS::Storefront::CurrentNativeLane()
+            == PS::Storefront::NativeLane::GamePassNative)
+        {
+            // WGS containers are provider-owned. Missing RuneSchema content is
+            // removed through the post-load live adapters below; directly
+            // rewriting container blobs would bypass Xbox locking and checksums.
+            return true;
+        }
+
+        const auto folder = CharacterSaveDirectory();
+        std::error_code statusError;
+        if (!std::filesystem::exists(folder, statusError)) return true;
+        if (statusError || !std::filesystem::is_directory(folder, statusError)
+            || statusError)
+            throw std::runtime_error("character-save directory is unreadable");
+
+        std::size_t entries = 0, files = 0, bytes = 0;
+        std::size_t changed = 0, removed = 0, profiles = 0;
+        bool complete = true;
+        for (const auto& entry : std::filesystem::directory_iterator(folder))
+        {
+            if (++entries > 512)
+                throw std::runtime_error(
+                    "character-save directory exceeds 512 entries");
+            if (!entry.is_regular_file() || entry.path().extension() != L".json")
+                continue;
+            if (++files > 64)
+                throw std::runtime_error(
+                    "character-save directory exceeds 64 JSON files");
+            const auto size = entry.file_size();
+            if (size > 8 * 1024 * 1024 || (bytes += size) > 64 * 1024 * 1024)
+                throw std::runtime_error(
+                    "character-save scan exceeds its bounded-read limit");
+
+            std::filesystem::path backup;
+            try
+            {
+                const auto source = nlohmann::json::parse(
+                    PS::ConfigFiles::Read(entry.path(), 8 * 1024 * 1024));
+                const auto documentKind =
+                    PS::SaveCleanup::ClassifyCharacterDocument(source);
+                if (documentKind
+                    == PS::SaveCleanup::CharacterDocumentKind::ProfileOnly)
+                {
+                    ++profiles;
+                    continue;
+                }
+                const auto plan = PS::SaveCleanup::Plan(
+                    source, {}, false, &registry, false, true);
+                if (plan.Removed.empty()) continue;
+
+                const auto serialized = plan.Save.dump();
+                if (nlohmann::json::parse(serialized) != plan.Save)
+                    throw std::runtime_error(
+                        "scrubbed character save failed JSON verification");
+                backup = PreserveCharacterSave(entry.path());
+                PS::ConfigFiles::Write(entry.path(), serialized);
+                if (nlohmann::json::parse(PS::ConfigFiles::Read(
+                        entry.path(), 8 * 1024 * 1024)) != plan.Save)
+                    throw std::runtime_error(
+                        "written character save failed verification");
+                PruneLegacyCharacterBackups(entry.path());
+                ++changed;
+                removed += plan.Removed.size();
+            }
+            catch (const std::exception& error)
+            {
+                complete = false;
+                if (backup.empty())
+                    PS::Log<LogLevel::Error>(
+                        STR("[SAVE-SCRUB][DEGRADED] Character save '{}' was left unchanged: {}.\n"),
+                        entry.path().filename().native(),
+                        PS::ToWideSafe(error.what()));
+                else
+                    PS::Log<LogLevel::Error>(
+                        STR("[SAVE-SCRUB][DEGRADED] Character save '{}' retained its original at '{}': {}.\n"),
+                        entry.path().filename().native(), backup.native(),
+                        PS::ToWideSafe(error.what()));
+            }
+        }
+        PS::Log<LogLevel::Normal>(
+            STR("[SAVE-SCRUB] Registry-complete startup pass checked {} gameplay save(s), changed {}, and removed {} unresolved persistent record(s).\n"),
+            files - profiles, changed, removed);
         return complete;
     }
 
@@ -371,7 +478,12 @@ namespace DragonWilds {
             {
                 m_pendingProviderSnapshot = path;
                 for (const auto& record : retired)
-                    if (record.Kind != "Item" && record.Kind != "Recipe")
+                    // Building declarations live in world state, not the
+                    // character provider. Quest state has a native live
+                    // adapter below. Journal/lore remain with their dedicated
+                    // serialized-state adapter.
+                    if (record.Kind != "Item" && record.Kind != "Recipe"
+                        && record.Kind != "Quest" && record.Kind != "Building")
                         m_pendingProviderUnsupportedKinds.insert(record.Kind);
                 PS::Log<LogLevel::Normal>(
                     STR("[SAVE-CLEANER][PROVIDER][PENDING] Retaining the previous Game Pass identity snapshot until provider-backed cleanup is read-back verified.\n"));
@@ -502,6 +614,16 @@ namespace DragonWilds {
                     removedKinds, removedCount);
             if(removedRecipes)
                 PS::Log<LogLevel::Normal>(STR("[SAVE-CLEANER][OWNED-ONLY] Removed {} retired recipe unlock identity(s); the next native save persists the clean progress state.\n"),removedRecipes);
+            std::size_t removedQuests=0;
+            if(std::any_of(m_retiredContent.begin(),m_retiredContent.end(),
+                [](const auto& value){return value.Kind=="Quest";}))
+            {
+                const auto mods=std::filesystem::path(PS::HostServices::WorkingDirectory())
+                    / "Mods" / "RuneSchema" / "mods";
+                removedQuests=Quests::NativeQuestCleanup::Run(controller,mods);
+                if(removedQuests)
+                    PS::Log<LogLevel::Normal>(STR("[SAVE-CLEANER][OWNED-ONLY] Removed {} retired quest identity(s); the next native save persists the clean quest state.\n"),removedQuests);
+            }
             if (!m_pendingProviderSnapshot.empty())
             {
                 if (!m_pendingProviderUnsupportedKinds.empty())
@@ -591,7 +713,29 @@ namespace DragonWilds {
 
         snapshot.QuestsComplete = questsReady;
         if (itemsReady && recipesReady)
-            PS::SaveCleanup::PublishRegistry(std::move(snapshot));
+        {
+            // Publish only a complete native view, then perform exactly one
+            // bounded pre-world pass. Custom registrations are already in the
+            // maps, so active mod content cannot be mistaken for an orphan.
+            PS::SaveCleanup::PublishRegistry(snapshot);
+            if (!m_registryScrubCompleted)
+            {
+                // Mark the process attempt before any I/O. A damaged file is
+                // reported and retried next launch, not rescanned by every
+                // subsequent world or inventory callback in this process.
+                m_registryScrubCompleted = true;
+                try
+                {
+                    (void)ScrubUnknownCharacterSaves(snapshot);
+                }
+                catch (const std::exception& error)
+                {
+                    PS::Log<LogLevel::Error>(
+                        STR("[SAVE-SCRUB][DEGRADED] Startup scrub was skipped and saves were left unchanged: {}.\n"),
+                        PS::ToWideSafe(error.what()));
+                }
+            }
+        }
         else
             // Never leave a previous world's registry available to Safe Clean
             // when the current world could not prove a complete item/recipe map.

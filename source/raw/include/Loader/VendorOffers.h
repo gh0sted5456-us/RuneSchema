@@ -12,6 +12,21 @@
 #include "Loader/TimeOfDay.h"
 
 namespace DragonWilds::VendorOffers {
+inline std::string CompletedQuest(const nlohmann::json& item) {
+    const bool legacy=item.contains("QuestCompleted"), direct=item.contains("QuestID");
+    if(legacy && direct && item.at("QuestCompleted")!=item.at("QuestID"))
+        throw std::runtime_error("Vendor offer QuestCompleted and QuestID must identify the same quest");
+    if(item.contains("QuestState")) {
+        if(!direct)throw std::runtime_error("Vendor offer QuestState requires QuestID");
+        if(!item.at("QuestState").is_string() || item.at("QuestState").get<std::string>()!="Complete")
+            throw std::runtime_error("Vendor offer QuestState currently supports only Complete");
+    }
+    if(!legacy && !direct)return {};
+    const auto& value=item.at(legacy?"QuestCompleted":"QuestID");
+    if(!value.is_string() || value.get<std::string>().empty() || value.get<std::string>().size()>512)
+        throw std::runtime_error("Vendor offer quest gate must be a quest ID");
+    return value.get<std::string>();
+}
 inline int Order(const nlohmann::json& item,int fallback) {
     if(!item.contains("Order"))return fallback;
     const auto& value=item.at("Order");
@@ -75,8 +90,7 @@ inline nlohmann::json Properties(const nlohmann::json& item) {
         if(!item.at("TimeOfDay").is_string())throw std::runtime_error("Vendor offer TimeOfDay must be Any, Day, or Night");
         (void)TimeOfDay::Parse(item.at("TimeOfDay").get<std::string>());
     }
-    if(item.contains("QuestCompleted") && (!item.at("QuestCompleted").is_string() || item.at("QuestCompleted").get<std::string>().empty()
-        || item.at("QuestCompleted").get<std::string>().size()>512))throw std::runtime_error("Vendor offer QuestCompleted must be a quest ID");
+    (void)CompletedQuest(item);
     const auto count=number("Count",1,1), price=number("Price",0,0);
     const auto product=path("Item"), currency=path("Currency");
     return {{"ItemsCreated",json::array({json{{"ItemData",product},{"Count",count}}})},

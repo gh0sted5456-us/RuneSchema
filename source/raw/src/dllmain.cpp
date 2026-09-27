@@ -408,13 +408,15 @@ public:
             ImGui::TextWrapped("Trace jobs are defined by JSON/JSONC profiles under settings/jobs. Event results are written under runtime/live/jobs/exports without console spam unless a profile explicitly enables consoleEvents.");
             ImGui::TextWrapped("Jobs run from settings/jobs recursively and do not require a player. Turning Advanced diagnostics off disables every job.");
             ImGui::EndDisabled();
-            ImGui::SeparatorText("Journal and recipe persistence");
+            ImGui::SeparatorText("Progress persistence");
             ImGui::Checkbox("Save RuneSchema character customization", &settings.persistence.characterCustomization);
             ImGui::TextWrapped("Off by default. Character option and data-table loaders remain active, but automatic /players appearance assignments do not rewrite CustomizationSaveData.");
             ImGui::Checkbox("Save RuneSchema journal/lore unlocks", &settings.persistence.journal);
-            ImGui::TextWrapped("Off by default. Journal and lore assets still load and are placed, but automatic player unlock delivery is skipped so RuneSchema does not add them to the save.");
+            ImGui::TextWrapped("On by default. Off keeps automatic RuneSchema journal/lore unlocks session-only when the storefront save adapter is available. Schema Unlock still controls immediate visibility.");
             ImGui::Checkbox("Save RuneSchema recipe unlocks", &settings.persistence.recipes);
-            ImGui::TextWrapped("Off by default. Recipes remain available for the current session through the game's non-persistent recipe set. Enable this only when permanent recipe unlocks are wanted.");
+            ImGui::TextWrapped("On by default. Off keeps automatic and consumable-granted RuneSchema recipe unlocks in the game's non-persistent recipe set.");
+            ImGui::Checkbox("Save RuneSchema quest progress", &settings.persistence.quests);
+            ImGui::TextWrapped("On by default. Off leaves quest definitions available to other loaders but blocks RuneSchema quest actions because native quest progress is save-backed.");
             ImGui::SeparatorText("Server Helpy permissions");
             ImGui::TextWrapped("These permissions are disabled by default. Allowed client requests are executed and validated by server authority; clients can never export files or create permanent placements through this bridge.");
             ImGui::Checkbox("Allow client item grants", &settings.helpyAuthority.allowClientItemGrants);

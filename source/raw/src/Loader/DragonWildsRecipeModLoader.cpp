@@ -1,6 +1,7 @@
 #include "Utility/NativeFunctionHook.h"
 #include "SDK/WeakObjectHandle.h"
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cstdint>
 #include <string_view>
@@ -33,7 +34,10 @@
 #include "Loader/VendorCategoryLabel.h"
 #include "Loader/RecipeUnlockPolicy.h"
 #include "Loader/ItemIdentity.h"
+#include "Loader/DialogueSaveIdentity.h"
+#include "Loader/OwnedContentLedger.h"
 #include "Core/JsonPatchDirective.h"
+#include "Runtime/HostServices.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -53,6 +57,37 @@ namespace DragonWilds {
     static bool WantsUnlock(const nlohmann::json& body)
     {
         return PS::RecipeUnlockPolicy::Automatic(body);
+    }
+
+    static RC::StringType RecipeIdentity(
+        const RC::StringType& owner,const RC::StringType& key)
+    {
+        return owner+TEXT(":")+key;
+    }
+
+    static std::string RecipePersistenceId(
+        const RC::StringType& owner,const RC::StringType& key,
+        const nlohmann::json& body)
+    {
+        std::optional<std::string> direct,nested;
+        if(body.contains("PersistenceID")) {
+            if(!body.at("PersistenceID").is_string())
+                throw std::runtime_error("Recipe PersistenceID must be a string");
+            direct=body.at("PersistenceID").get<std::string>();
+        }
+        if(body.contains("Properties")&&body.at("Properties").is_object()
+            &&body.at("Properties").contains("PersistenceID")) {
+            const auto& value=body.at("Properties").at("PersistenceID");
+            if(!value.is_string())throw std::runtime_error("Recipe Properties.PersistenceID must be a string");
+            nested=value.get<std::string>();
+        }
+        if(direct&&nested&&*direct!=*nested)
+            throw std::runtime_error("Recipe PersistenceID conflicts with Properties.PersistenceID");
+        const auto result=direct?*direct:(nested?*nested:
+            DialogueSave::PersistenceIdForSeed("Recipe/"+RC::to_string(owner)+"/"+RC::to_string(key)));
+        if(!IsCanonicalPersistenceId(result))
+            throw std::runtime_error("Recipe PersistenceID must be a canonical 22-character identity");
+        return result;
     }
 
     struct RuntimeCloneOutputStatus
@@ -196,10 +231,13 @@ namespace DragonWilds {
             return;
         }
 
-        std::vector<const TCHAR*> targetSets{TEXT("RecipesUnlockedThatShouldNotPersist")};
-        if (PS::PSConfig::Get()->GetSettings().persistence.recipes)
+        // Dominion reads RecipesUnlocked to decide what the player can see.
+        // RecipesUnlockedThatShouldNotPersist is only an exclusion marker used
+        // by the save path; it is not a second runtime unlock collection.
+        std::vector<const TCHAR*> targetSets{TEXT("RecipesUnlocked")};
+        if (!PS::PSConfig::Get()->GetSettings().persistence.recipes)
         {
-            targetSets.insert(targetSets.begin(), TEXT("RecipesUnlocked"));
+            targetSets.push_back(TEXT("RecipesUnlockedThatShouldNotPersist"));
         }
         for (auto* propertyName : targetSets)
         {
@@ -486,9 +524,12 @@ namespace DragonWilds {
         for(auto* recipe:recipes)report["Recipes"].push_back({{"Path",RC::to_string(recipe->GetPathName())},{"ObjectIndex",recipe->GetInternalIndex()}});
         report["RuntimeRecipeCreations"]=m_recipeRevision;
         std::vector<std::pair<const TCHAR*,FSetProperty*>> sets;
-        std::vector<const TCHAR*> targetSets{TEXT("RecipesUnlockedThatShouldNotPersist")};
-        if (PS::PSConfig::Get()->GetSettings().persistence.recipes)
-            targetSets.insert(targetSets.begin(),TEXT("RecipesUnlocked"));
+        // The non-persistent set is an exclusion marker, not a replacement
+        // for the visible unlock set.  Store recipes must always be present in
+        // RecipesUnlocked or the native menu cannot display them.
+        std::vector<const TCHAR*> targetSets{TEXT("RecipesUnlocked")};
+        if (!PS::PSConfig::Get()->GetSettings().persistence.recipes)
+            targetSets.push_back(TEXT("RecipesUnlockedThatShouldNotPersist"));
         for(const auto* name:targetSets) {
             auto* property=CastField<FSetProperty>(PropertyHelper::GetPropertyByName(progress->GetClassPrivate(),name));
             auto* element=property?CastField<FObjectPropertyBase>(property->GetElementProp()):nullptr;
@@ -657,7 +698,7 @@ namespace DragonWilds {
             RecipeDef def{ keyWide, modName, body, ParsePlacements(body) };
 
             auto existing = std::find_if(m_recipeDefs.begin(), m_recipeDefs.end(),
-                [&](const RecipeDef& d) { return d.Key == keyWide; });
+                [&](const RecipeDef& d) { return d.ModName==modName && d.Key == keyWide; });
             if (existing != m_recipeDefs.end())
             {
                 *existing = std::move(def);
@@ -667,8 +708,9 @@ namespace DragonWilds {
                 m_recipeDefs.push_back(std::move(def));
             }
 
-            m_propsApplied.erase(keyWide);
-            m_invalidRecipes.erase(keyWide);
+            const auto identity=RecipeIdentity(modName,keyWide);
+            m_propsApplied.erase(identity);
+            m_invalidRecipes.erase(identity);
         }
     }
 
@@ -678,10 +720,13 @@ namespace DragonWilds {
         for (const auto& patch : m_pendingPatches)
         {
             auto key = patch.Reference;
-            if (const auto colon = key.find(':'); colon != std::string::npos) key = key.substr(colon + 1);
+            auto owner=RC::to_string(patch.ModName);
+            if (const auto colon = key.find(':'); colon != std::string::npos) {
+                owner=key.substr(0,colon);key=key.substr(colon+1);
+            }
             const auto wideKey = RC::to_generic_string(key);
             auto found = std::find_if(m_recipeDefs.begin(), m_recipeDefs.end(),
-                [&](const RecipeDef& def) { return def.Key == wideKey; });
+                [&](const RecipeDef& def) { return def.ModName==RC::to_generic_string(owner) && def.Key == wideKey; });
             if (found == m_recipeDefs.end())
             {
                 PS::Log<LogLevel::Error>(STR("{}: recipe $Patch target '{}' was not loaded; no recipe was created.\n"),
@@ -700,7 +745,7 @@ namespace DragonWilds {
             found->Body = std::move(patchedBody);
             WarnPatchConflicts(m_patchConflicts, "recipes:" + key, patch.Changes, RC::to_string(patch.ModName));
             found->Placements = ParsePlacements(found->Body);
-            m_propsApplied.erase(found->Key);
+            m_propsApplied.erase(RecipeIdentity(found->ModName,found->Key));
             ++updated;
             PS::Log<LogLevel::Verbose>( STR("{} patched recipe '{}' ({} fields, {} merged array rows, {} appended array rows).\n"),
                 patch.ModName, found->Key, stats.FieldsOverwritten,
@@ -722,6 +767,41 @@ namespace DragonWilds {
         }
     }
 
+    UObject* DragonWildsRecipeModLoader::ResolveReference(
+        const RC::StringType& requestingMod,const std::string& reference) const
+    {
+        if(reference.empty())return nullptr;
+        const auto wide=RC::to_generic_string(reference);
+        if(wide.starts_with(TEXT("/"))) {
+            auto* object=UECustom::UObjectGlobals::StaticFindObject<UObject*>(
+                nullptr,nullptr,wide.c_str(),false);
+            if(!object) {
+                UECustom::TSoftObjectPtr<UObject> soft{UECustom::FSoftObjectPath(wide)};
+                object=UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
+            }
+            return object && m_recipeClass && object->IsA(m_recipeClass)?object:nullptr;
+        }
+        auto owner=requestingMod;
+        auto key=wide;
+        const auto separator=wide.find(TEXT(':'));
+        const bool qualified=separator!=RC::StringType::npos;
+        if(separator!=RC::StringType::npos) {
+            owner=wide.substr(0,separator);key=wide.substr(separator+1);
+        }
+        const RecipeDef* match=nullptr;
+        for(const auto& def:m_recipeDefs)if(def.ModName==owner && def.Key==key) {
+            if(match)return nullptr;
+            match=&def;
+        }
+        if(!match && !qualified) {
+            for(const auto& def:m_recipeDefs)if(def.Key==key) {
+                if(match)return nullptr;
+                match=&def;
+            }
+        }
+        return match?LiveRecipe(RecipeIdentity(match->ModName,match->Key)):nullptr;
+    }
+
     void DragonWildsRecipeModLoader::ApplyAll()
     {
         if (m_recipeDefs.empty())
@@ -741,10 +821,11 @@ namespace DragonWilds {
 
         for (auto& def : m_recipeDefs)
         {
+            const auto identity=RecipeIdentity(def.ModName,def.Key);
             // Controls future automatic grants only; never revoke learned/save progress.
-            if (WantsUnlock(def.Body)) m_unlock.insert(def.Key);
-            else m_unlock.erase(def.Key);
-            if (m_propsApplied.find(def.Key) != m_propsApplied.end())
+            if (WantsUnlock(def.Body)) m_unlock.insert(identity);
+            else m_unlock.erase(identity);
+            if (m_propsApplied.find(identity) != m_propsApplied.end())
             {
                 continue;
             }
@@ -753,23 +834,45 @@ namespace DragonWilds {
             auto* recipe = ResolveOrCreate(def, created);
             if (!recipe)
             {
-                m_propsApplied.insert(def.Key);
+                m_propsApplied.insert(identity);
                 result.ErrorCount++;
                 continue;
             }
 
             const auto errorsBefore=result.ErrorCount;
             ApplyProperties(recipe, def.Body, result);
-            m_propsApplied.insert(def.Key);
+            m_propsApplied.insert(identity);
             if(result.ErrorCount!=errorsBefore) {
-                m_invalidRecipes.insert(def.Key);
-                m_unlock.erase(def.Key);
+                m_invalidRecipes.insert(identity);
+                m_unlock.erase(identity);
                 PS::Log<LogLevel::Error>(STR(
                     "Recipe '{}' was not placed or unlocked because one or more properties failed validation.\n"),
                     def.Key);
                 continue;
             }
-            m_invalidRecipes.erase(def.Key);
+            m_invalidRecipes.erase(identity);
+
+            if(std::find(m_ownedRuntimeRecipes.begin(),m_ownedRuntimeRecipes.end(),recipe)
+                !=m_ownedRuntimeRecipes.end()) {
+                const auto persistence=RecipePersistenceId(def.ModName,def.Key,def.Body);
+                auto* id=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
+                    recipe->GetClassPrivate(),TEXT("PersistenceID")));
+                auto* name=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
+                    recipe->GetClassPrivate(),TEXT("InternalName")));
+                const auto actualId=id?RC::to_string(*id->GetPropertyValue(
+                    id->ContainerPtrToValuePtr<void>(recipe))):std::string{};
+                const auto actualName=name?RC::to_string(*name->GetPropertyValue(
+                    name->ContainerPtrToValuePtr<void>(recipe))):std::string{};
+                if(actualId!=persistence||actualName.empty()) {
+                    m_invalidRecipes.insert(identity);m_unlock.erase(identity);
+                    ++result.ErrorCount;
+                    PS::Log<LogLevel::Error>(STR("Recipe '{}' ownership identity did not verify; placement and unlock were refused.\n"),def.Key);
+                    continue;
+                }
+                OwnedContent::Merge(OwnedContent::LedgerPath(
+                    PS::HostServices::StateDirectory()),{{"Recipe",RC::to_string(def.ModName),
+                        actualId,actualName,RC::to_string(recipe->GetPathName())}});
+            }
 
             if (created)
             {
@@ -794,8 +897,9 @@ namespace DragonWilds {
         int placed = 0;
         for (auto& def : m_recipeDefs)
         {
-            if(m_invalidRecipes.contains(def.Key))continue;
-            auto it = m_recipes.find(def.Key);
+            const auto identity=RecipeIdentity(def.ModName,def.Key);
+            if(m_invalidRecipes.contains(identity))continue;
+            auto it = m_recipes.find(identity);
             if (it == m_recipes.end() || !it->second)
             {
                 continue;
@@ -817,11 +921,8 @@ namespace DragonWilds {
         }
 
         if (result.Created || result.Edited || placed || result.ErrorCount)
-        {
-            PS::RoutineLog("recipes", STR("Recipes: {} created, {} edited, {} placed, {} error{}.\n"),
-                result.Created, result.Edited, placed, result.ErrorCount,
-                result.ErrorCount == 1 ? STR("") : STR("s"));
-        }
+            PS::LoaderSummary("recipes", result.Created + result.Edited,
+                result.Created, result.Edited, placed, result.ErrorCount);
         if (omittedDetails)
             PS::Log<LogLevel::Verbose>(STR("Recipes: {} additional successful operation detail(s) omitted.\n"), omittedDetails);
     }
@@ -864,8 +965,9 @@ namespace DragonWilds {
         int placed = 0;
         for (auto& def : m_recipeDefs)
         {
-            if(m_invalidRecipes.contains(def.Key))continue;
-            auto it = m_recipes.find(def.Key);
+            const auto identity=RecipeIdentity(def.ModName,def.Key);
+            if(m_invalidRecipes.contains(identity))continue;
+            auto it = m_recipes.find(identity);
             if (it == m_recipes.end() || !it->second)
             {
                 continue;
@@ -893,7 +995,8 @@ namespace DragonWilds {
     {
         outCreated = false;
 
-        auto cached = m_recipes.find(def.Key);
+        const auto identity=RecipeIdentity(def.ModName,def.Key);
+        auto cached = m_recipes.find(identity);
         if (cached != m_recipes.end())
         {
             return cached->second;
@@ -914,17 +1017,19 @@ namespace DragonWilds {
             }
 
             recipe->SetRootSet();
-            m_recipes.emplace(def.Key, recipe);
+            m_recipes.emplace(identity, recipe);
 
             if (WantsUnlock(def.Body))
             {
-                m_unlock.insert(def.Key);
+                m_unlock.insert(identity);
             }
             return recipe;
         }
 
         TArray<UObject*> recipes;
-        UECustom::UObjectGlobals::GetObjectsOfClass(m_recipeClass, recipes, true);
+        const auto duplicateKey=std::count_if(m_recipeDefs.begin(),m_recipeDefs.end(),
+            [&](const RecipeDef& candidate){return candidate.Key==def.Key;})>1;
+        if(!duplicateKey)UECustom::UObjectGlobals::GetObjectsOfClass(m_recipeClass, recipes, true);
         const FName recipeName(def.Key,FNAME_Add);
         for (auto* candidate : recipes)
         {
@@ -932,11 +1037,11 @@ namespace DragonWilds {
                 && !candidate->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject)))
             {
                 candidate->SetRootSet();
-                m_recipes.emplace(def.Key, candidate);
+                m_recipes.emplace(identity, candidate);
 
                 if (WantsUnlock(def.Body))
                 {
-                    m_unlock.insert(def.Key);
+                    m_unlock.insert(identity);
                 }
                 return candidate;
             }
@@ -955,7 +1060,7 @@ namespace DragonWilds {
             if(!existing->IsA(m_recipeClass))
                 throw std::runtime_error("Runtime recipe path is occupied by an incompatible object");
             existing->SetRootSet();
-            m_recipes.emplace(def.Key,existing);
+            m_recipes.emplace(identity,existing);
             return existing;
         }
 
@@ -974,21 +1079,19 @@ namespace DragonWilds {
         recipe->SetRootSet();
         m_ownedRuntimeRecipes.push_back(recipe);
 
-        for (auto* propertyName : { TEXT("PersistenceID"), TEXT("InternalName") })
-        {
-            if (auto* property = PropertyHelper::GetPropertyByName(m_recipeClass, propertyName))
-            {
-                nlohmann::json value = RC::to_string(def.Key);
-                PropertyHelper::CopyJsonValueToContainer(reinterpret_cast<uint8*>(recipe), property, value);
-            }
-        }
+        if (auto* property = PropertyHelper::GetPropertyByName(m_recipeClass, TEXT("InternalName")))
+            PropertyHelper::CopyJsonValueToContainer(reinterpret_cast<uint8*>(recipe), property,
+                nlohmann::json(RC::to_string(def.Key)));
+        if (auto* property = PropertyHelper::GetPropertyByName(m_recipeClass, TEXT("PersistenceID")))
+            PropertyHelper::CopyJsonValueToContainer(reinterpret_cast<uint8*>(recipe), property,
+                nlohmann::json(RecipePersistenceId(def.ModName,def.Key,def.Body)));
 
         if (WantsUnlock(def.Body))
         {
-            m_unlock.insert(def.Key);
+            m_unlock.insert(identity);
         }
 
-        m_recipes.emplace(def.Key, recipe);
+        m_recipes.emplace(identity, recipe);
         outCreated = true;
         return recipe;
     }
@@ -1286,7 +1389,7 @@ namespace DragonWilds {
 
     void DragonWildsRecipeModLoader::RegisterHooks()
     {
-        if (m_hooksActive || m_unlock.empty())
+        if (m_hooksActive || m_recipes.empty())
         {
             return;
         }
@@ -1356,7 +1459,7 @@ namespace DragonWilds {
 
     void DragonWildsRecipeModLoader::ApplyUnlocks(UObject* progressComponent)
     {
-        if (!progressComponent || m_unlock.empty())
+        if (!progressComponent)
         {
             return;
         }
@@ -1368,6 +1471,35 @@ namespace DragonWilds {
         }
 
         AddRecipeUnlocks(progressComponent, recipes);
+
+        // Native recipe-unlocker consumables add their targets after use.
+        // When persistence is disabled, mirror every currently unlocked
+        // RuneSchema recipe into Dominion's save-exclusion set as well. This
+        // preserves the consumable's normal runtime behavior without making
+        // the discovery permanent.
+        if (!PS::PSConfig::Get()->GetSettings().persistence.recipes)
+        {
+            auto* unlockedProperty=CastField<FSetProperty>(PropertyHelper::GetPropertyByName(
+                progressComponent->GetClassPrivate(),TEXT("RecipesUnlocked")));
+            auto* transientProperty=CastField<FSetProperty>(PropertyHelper::GetPropertyByName(
+                progressComponent->GetClassPrivate(),TEXT("RecipesUnlockedThatShouldNotPersist")));
+            auto* unlockedElement=unlockedProperty?CastField<FObjectPropertyBase>(unlockedProperty->GetElementProp()):nullptr;
+            auto* transientElement=transientProperty?CastField<FObjectPropertyBase>(transientProperty->GetElementProp()):nullptr;
+            if(!unlockedProperty || !transientProperty || !unlockedElement || !transientElement
+                || unlockedElement->GetElementSize()!=sizeof(UObject*) || transientElement->GetElementSize()!=sizeof(UObject*))
+            {
+                static std::atomic_bool reported=false;
+                if(!reported.exchange(true))PS::Log<LogLevel::Warning>(STR(
+                    "[FEATURE:recipe-transient-unlocks][UNAVAILABLE] Native unlock-set layout changed; consumable discoveries may persist.\n"));
+                return;
+            }
+            UECustom::FScriptSetHelper unlocked(unlockedProperty,
+                unlockedProperty->ContainerPtrToValuePtr<void>(progressComponent));
+            UECustom::FScriptSetHelper transient(transientProperty,
+                transientProperty->ContainerPtrToValuePtr<void>(progressComponent));
+            for(const auto& [key,recipe]:m_recipes)
+                if(recipe && unlocked.Contains(&recipe))transient.Add(&recipe);
+        }
     }
 
     UObject* DragonWildsRecipeModLoader::FindProgressComponent()

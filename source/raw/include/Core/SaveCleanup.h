@@ -13,6 +13,24 @@ struct Preview {
     Json Removed=Json::array();
     std::map<std::string,size_t> Owners;
 };
+enum class CharacterDocumentKind {
+    Gameplay,
+    ProfileOnly,
+    Unsupported,
+};
+inline CharacterDocumentKind ClassifyCharacterDocument(const Json& save) {
+    if(!save.is_object())return CharacterDocumentKind::Unsupported;
+    if(save.contains("GameProgress"))
+        return save.at("GameProgress").is_object()
+            ?CharacterDocumentKind::Gameplay:CharacterDocumentKind::Unsupported;
+    // Dragonwilds writes a small, valid profile document while a character is
+    // being created. It owns customization and metadata but has no inventory,
+    // progress, journal, quest, or recipe state for SafeSave to prune.
+    if(save.contains("Customization") && save.at("Customization").is_object()
+        && save.contains("meta_data") && save.at("meta_data").is_object())
+        return CharacterDocumentKind::ProfileOnly;
+    return CharacterDocumentKind::Unsupported;
+}
 inline std::string OwnerKey(std::string value) {
     for(auto& character:value)character=static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
     return value;
@@ -24,7 +42,7 @@ inline std::set<std::string> AbsentOwners(const std::map<std::string,size_t>& ow
     return absent;
 }
 inline void RequireCharacter(const Json& save) {
-    if(!save.is_object() || !save.contains("GameProgress") || !save.at("GameProgress").is_object())
+    if(ClassifyCharacterDocument(save)!=CharacterDocumentKind::Gameplay)
         throw std::runtime_error("Only native character JSON saves are supported; world/SPUD saves require their own adapter");
 }
 inline Json JournalPayload(const Json& journal) {
@@ -122,7 +140,10 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
             if(!owner.empty())++result.Owners[owner];
             const bool registryOrphan=registry && registry->QuestsComplete && !registry->Quests.contains(id);
             if(!registryOrphan && (owner.empty() || !selected.contains(owner))){retained.push_back(row);continue;}
-            if(!removePendingOwned)CheckPending(row);
+            // An identity absent from the complete native registry cannot be
+            // resumed, so stale phase markers must not preserve it. The
+            // pending-exchange guard applies only to explicit owner removal.
+            if(!registryOrphan && !removePendingOwned)CheckPending(row);
             removed.insert(id);
             result.Removed.push_back({{"Kind","Quest/dialogue"},{"Id",id},{"Mod",owner.empty()?"Registry-unknown (owner unavailable)":owner}});
             for(const auto& variable:row.at("QuestInts")) {
@@ -169,8 +190,10 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
 inline Preview PlanOwned(const Json& source,
     const std::unordered_map<std::string,std::string>& retiredItems,
     const std::unordered_map<std::string,std::string>& retiredRecipes,
-    const std::set<std::string>& retiredOwners) {
-    auto result=Plan(source,retiredOwners,true,nullptr,true);
+    const std::unordered_map<std::string,std::string>& retiredQuests={},
+    const DragonWilds::JournalSave::Owners& retiredJournal={}) {
+    RequireCharacter(source);
+    Preview result{source};
     auto& game=result.Save.at("GameProgress");
     std::set<std::string> removedInventorySlots;
     const auto record=[&](const char* kind,const std::string& id,
@@ -180,6 +203,48 @@ inline Preview PlanOwned(const Json& source,
         result.Removed.push_back(std::move(row));
         ++result.Owners[owner];
     };
+    if(game.contains("QuestProgress") && !retiredQuests.empty()) {
+        auto& progress=game.at("QuestProgress");
+        if(!progress.is_object() || !progress.contains("Quests") || !progress.at("Quests").is_array())
+            throw std::runtime_error("Unsupported quest save layout");
+        std::set<std::string> removed,locations;
+        auto retained=Json::array();
+        for(const auto& row:progress.at("Quests")) {
+            if(!row.is_object() || !row.contains("QuestId") || !row.at("QuestId").is_string()) {retained.push_back(row);continue;}
+            const auto id=row.at("QuestId").get<std::string>();
+            const auto found=retiredQuests.find(id);
+            if(found==retiredQuests.end() || DragonWilds::Quests::OwnedBy(row)!=found->second) {retained.push_back(row);continue;}
+            removed.insert(id);record("Quest/dialogue",id,{},found->second);
+            for(const auto& variable:row.at("QuestInts")) {
+                const auto name=variable.value("QuestVariableName",std::string{});
+                if(name.starts_with("RuneSchema.Location:") && variable.value("QuestVariableValue",Json{})==DragonWilds::Quests::OwnershipVersion)
+                    locations.insert(name.substr(20));
+            }
+        }
+        progress["Quests"]=std::move(retained);
+        if(progress.contains("QuestTracked") && progress.at("QuestTracked").is_string()
+            && removed.contains(progress.at("QuestTracked").get<std::string>()))progress["QuestTracked"]="";
+        if(progress.contains("QuestLocations") && !locations.empty()) {
+            if(!progress.at("QuestLocations").is_array())throw std::runtime_error("Unsupported quest location save layout");
+            auto kept=Json::array();
+            for(const auto& row:progress.at("QuestLocations")) {
+                if(!row.is_object() || !row.contains("QuestLocationId") || !row.at("QuestLocationId").is_string())throw std::runtime_error("Unsupported quest location record");
+                if(locations.contains(row.at("QuestLocationId").get<std::string>()))
+                    result.Removed.push_back({{"Kind","Quest location"},{"Id",row.at("QuestLocationId")}});
+                else kept.push_back(row);
+            }
+            progress["QuestLocations"]=std::move(kept);
+        }
+    }
+    if(game.contains("Journal") && !retiredJournal.empty()) {
+        auto payload=JournalPayload(game.at("Journal"));
+        const auto cleaned=DragonWilds::JournalSave::RemoveOwnedIds(payload,retiredJournal);
+        auto native=cleaned.Journal;
+        if(game.at("Journal").contains(DragonWilds::JournalSave::Manifest))
+            native[DragonWilds::JournalSave::Manifest]=DragonWilds::JournalSave::EncodeNative(DragonWilds::JournalSave::ReadOwnership(cleaned.Journal));
+        for(const auto& id:cleaned.Removed)record("Journal/lore",id,{},retiredJournal.at(id));
+        game["Journal"]=std::move(native);
+    }
     for(const auto* section:{"Inventory","PersonalInventory"}) {
         if(!game.contains(section))continue;
         auto& entries=game.at(section);

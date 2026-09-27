@@ -93,4 +93,13 @@ int main() {
     const auto unknownPower=DragonWilds::VendorCategoryGate::Filter(
         gated,rules,std::nullopt,DragonWilds::TimeOfDay::Requirement::Day);
     assert(std::none_of(unknownPower.begin(),unknownPower.end(),[](const auto& offer){return offer["Category"]=="Elite";}));
+    const auto questRules=DragonWilds::VendorCategoryGate::Parse(json::array({
+        {{"Category","General"},{"QuestID","Mod:Finished"},{"QuestState","Complete"}}
+    }));
+    assert(DragonWilds::VendorCategoryGate::Filter(gated,questRules,25,
+        DragonWilds::TimeOfDay::Requirement::Day,[](const std::string& id){return id=="Mod:Finished";}).size()==5);
+    assert(DragonWilds::VendorCategoryGate::Filter(gated,questRules,25,
+        DragonWilds::TimeOfDay::Requirement::Day,[](const std::string&){return false;}).size()==4);
+    auto badQuestState=gated[0];badQuestState["QuestID"]="Mod:Quest";badQuestState["QuestState"]="Active";
+    Rejects([&]{(void)Properties(badQuestState);});
 }

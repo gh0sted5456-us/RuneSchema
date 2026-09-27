@@ -218,6 +218,8 @@ namespace DragonWilds {
             bool PixelSizeConfigured = false;
             double Distance = 2500.0;
             double ActivityTimeoutSeconds = 2.0;
+            bool AlwaysFaceCamera = true;
+            bool OnlyShowNearby = false;
             bool ShowSelf = false;
             bool ShowOthers = true;
             std::unordered_map<std::string, PlayerNameplateStateRule> States;

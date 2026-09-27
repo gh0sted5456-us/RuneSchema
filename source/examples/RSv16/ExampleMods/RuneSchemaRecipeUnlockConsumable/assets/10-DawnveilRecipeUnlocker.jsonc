@@ -1,0 +1,15 @@
+{
+  // This preserves the native Study/Use behavior, inherited icon, inherited
+  // mesh and inherited presentation of the vanilla vestige. Only identity,
+  // text and the recipe target are replaced.
+  "/Game/RuneSchema/RuneSchemaRecipeUnlockConsumable/Items/rs_dawnveil_plate_recipe_codex.rs_dawnveil_plate_recipe_codex": {
+    "$Clone": "/Game/Gameplay/Items/Consumables/Vestiges/Armour/DA_Consumable_Vestige_Armour_Head_Sack.DA_Consumable_Vestige_Armour_Head_Sack",
+    "PersistenceID": "ssZ1_9zj-2CVt5_bbFamKA",
+    "InternalName": "rs_dawnveil_plate_recipe_codex",
+    "Name": "Dawnveil Paladin Plate Plans",
+    "FlavourText": "Study these plans to learn how to forge the Dawnveil Paladin Plate.",
+    "RecipesToUnlock": [
+      "ArmorCollection:RECIPE_RS_Dawnveil_Body"
+    ]
+  }
+}

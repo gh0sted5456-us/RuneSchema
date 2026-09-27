@@ -33,6 +33,9 @@ namespace DragonWilds {
         RC::Unreal::Hook::GlobalCallbackId m_gameStateHook = RC::Unreal::Hook::ERROR_ID;
         bool m_initialized = false;
         bool m_retiredContentPrepared = false;
+        // One bounded registry-complete character pass per process. This is a
+        // core startup invariant, not an optional maintenance operation.
+        bool m_registryScrubCompleted = false;
         // Steam JSON cleanup commits immediately after its atomic file pass.
         // WinGDK must retain the previous ledger until the provider-backed
         // live state has been scrubbed and read-back verified.

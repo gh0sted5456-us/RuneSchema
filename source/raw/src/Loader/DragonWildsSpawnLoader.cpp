@@ -557,9 +557,11 @@ namespace DragonWilds {
                 });
             const auto removals = std::count_if(m_spawns.begin(), m_spawns.end(),
                 [](const SpawnInfo& spawn) { return spawn.Type == ESpawnEntryType::RemoveActor; });
-            PS::RoutineLog("spawns",
-                STR("Spawns: {} new, {} altered, {} errors; {} AI ({} bosses), {} resource nodes, {} other actors, {} removals.\n"),
-                m_reportedNewSpawns, m_reportedAlteredSpawns, m_reportedSpawnErrors,
+            PS::LoaderSummary("spawns", m_spawns.size(),
+                m_reportedNewSpawns, m_reportedAlteredSpawns, 0,
+                m_reportedSpawnErrors);
+            PS::Log<LogLevel::Verbose>(
+                STR("[loader=spawns] AI={} bosses={} resources={} actors={} removals={}.\n"),
                 ai, bosses, resourceNodes, otherActors, removals);
         }
         TryProcessSpawns(m_readyWorld, nullptr, STR("initial load"));
@@ -3651,7 +3653,7 @@ namespace DragonWilds {
                 // current transform: save reloads and native respawns may reuse it.
                 actor->SetActorScale3D(authored);
                 PS::Log<LogLevel::Verbose>(
-                    STR("Restored managed scale for '{}' to {} {} {}.\n"),
+                    STR("[loader=spawns] restored scale '{}' = ({}, {}, {}).\n"),
                     identity, authored.X(), authored.Y(), authored.Z());
             }
             return true;
@@ -3660,6 +3662,13 @@ namespace DragonWilds {
         for (auto& spawn : m_spawns)
         {
             if (spawn.Type == ESpawnEntryType::RemoveActor || !spawn.bCellActivated)
+                continue;
+            // Conditional actors are retired by ReconcileTimedBuildingProps.
+            // Do not rediscover the actor during its deferred destruction and
+            // fight the retirement path by restoring its scale every second.
+            if ((spawn.Time != TimeOfDay::Requirement::Any
+                    || !spawn.QuestCompleted.empty())
+                && !spawn.bTimeAllowed)
                 continue;
 
             auto* actor = spawn.LiveActor.Get();

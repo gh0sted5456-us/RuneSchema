@@ -43,10 +43,19 @@ inline std::filesystem::path LegacyLedgerPath(const std::filesystem::path& setti
 }
 inline void Validate(const Record& value) {
     static const std::set<std::string> Kinds{"Item","Recipe","Building","Quest","Journal","Lore"};
-    if(!Kinds.contains(value.Kind) || value.Owner.empty() || value.Owner.size()>256
-        || !IsCanonicalPersistenceId(value.PersistenceID) || value.InternalName.empty()
-        || value.InternalName.size()>1024 || value.Source.size()>2048)
-        throw std::runtime_error("Invalid RuneSchema owned-content record");
+    const bool journalIdentity=value.Kind=="Journal" || value.Kind=="Lore";
+    const bool validIdentity=journalIdentity
+        ? !value.PersistenceID.empty() && value.PersistenceID.size()<=1024
+            && std::none_of(value.PersistenceID.begin(),value.PersistenceID.end(),
+                [](unsigned char character){return character<32 || character==127;})
+        : IsCanonicalPersistenceId(value.PersistenceID);
+    if(!Kinds.contains(value.Kind))throw std::runtime_error("Owned-content Kind is unsupported: "+value.Kind);
+    if(value.Owner.empty() || value.Owner.size()>256)
+        throw std::runtime_error("Owned-content Owner is empty or too long");
+    if(!validIdentity)throw std::runtime_error("Owned-content PersistenceID is invalid for "+value.Kind);
+    if(value.InternalName.empty() || value.InternalName.size()>1024)
+        throw std::runtime_error("Owned-content InternalName is empty or too long");
+    if(value.Source.size()>2048)throw std::runtime_error("Owned-content Source is too long");
 }
 
 inline std::string DeclaredInternalName(const std::string& path) {

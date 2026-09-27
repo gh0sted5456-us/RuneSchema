@@ -93,7 +93,6 @@ private:
     RC::Unreal::AGameModeBase* m_pendingMode = nullptr;
     float m_retryElapsed = 0.0f;
     float m_retryInterval = 0.0f;
-    float m_playerBridgeInterval = 0.0f;
     uint32_t m_seenRegistryRevision = 0;
     uint32_t m_seenActivationRevision = 0;
     uint32_t m_seenPersistentRevision = 0;
@@ -133,8 +132,10 @@ private:
     void EnsurePlayerBridges();
     RC::Unreal::UObject* EnsureBridgeComponent(RC::Unreal::AActor* actor,bool publishRegistry);
     bool Attach(RC::Unreal::AGameModeBase* mode);
+    void StartRetryTick();
     void RetryAttach(float deltaSeconds);
     void Observe(RC::Unreal::UObject* source, RC::Unreal::UFunction* function);
+    void ObservePlayerLifecycle(RC::Unreal::UObject* source, RC::Unreal::UFunction* function);
     void ObserveAuthorityPre(RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
     void ObserveSelectionNotify(RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
     void ObserveAuthorityPost(RC::Unreal::UObject* source,RC::Unreal::UFunction* function);

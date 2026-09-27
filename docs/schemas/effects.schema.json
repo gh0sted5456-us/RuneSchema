@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "description": "Gameplay-effect definitions alias verified cooked Blueprint classes under virtual IDs. They do not clone or patch class defaults.",
+  "patternProperties": {
+    "^[^$]": {
+      "additionalProperties": false,
+      "properties": {
+        "$Comment": {
+          "type": "string"
+        },
+        "Class": {
+          "pattern": "^/[^.]+\\.[^/]+_C$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "Class"
+      ],
+      "type": "object"
+    }
+  },
+  "title": "RuneSchema /effects",
+  "type": "object",
+  "x-runeschema-coverage": "structural",
+  "x-runeschema-definition-id": "ModName:Category/Id",
+  "x-runeschema-reference-forms": [
+    "ModName:Category/Id",
+    "/Game/.../Effect.Effect_C"
+  ],
+  "x-runeschema-starter-capabilities": {
+    "append": false,
+    "clone": false,
+    "patch": false,
+    "search": "authored files"
+  }
+}

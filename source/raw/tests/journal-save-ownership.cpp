@@ -37,6 +37,15 @@ int main() {
     const auto empty=RemoveAbsent(Record(Json::object(),{{"story","StoneStory"}}),{"StoneStory"},true);
     require(empty.Journal==Json::object());
     require(RemoveAbsent(removed.Journal,{"StoneStory"},true).Journal==removed.Journal);
+    const auto exact=RemoveOwnedIds(owned,{{"armor","ArmorCollection"}});
+    require(exact.Removed==std::set<std::string>{"armor"});
+    require(exact.Journal.at("UnlockedEntries")==Json::array({"vanilla","story","other"}));
+    require(ReadOwnership(exact.Journal)==Owners{{"story","StoneStory"}});
+    require(RemoveOwnedIds(owned,{{"armor","DifferentMod"}}).Journal==owned);
+    const auto transient=RemoveCurrent(owned,{{"story","StoneStory"}});
+    require(transient.at("UnlockedEntries")==Json::array({"vanilla","armor","other"}));
+    require(transient.at("UnreadEntries")==Json::array({"other"}));
+    require(ReadOwnership(transient)==Owners{{"armor","ArmorCollection"}});
     const NativeFields before={std::vector<std::string>{"vanilla","story"},{"story"},EncodeNative({{"story","StoneStory"}})};
     const NativeFields after={std::vector<std::string>{"vanilla"},{},{}};
     for(size_t failure=0;failure<3;++failure) {

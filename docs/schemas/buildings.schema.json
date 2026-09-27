@@ -1,0 +1,777 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "anyOf": [
+    {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "patternProperties": {
+            "^[^$]": {
+              "additionalProperties": false,
+              "oneOf": [
+                {
+                  "not": {
+                    "required": [
+                      "Asset"
+                    ]
+                  },
+                  "required": [
+                    "$Clone"
+                  ]
+                },
+                {
+                  "not": {
+                    "required": [
+                      "$Clone"
+                    ]
+                  },
+                  "required": [
+                    "Asset"
+                  ]
+                }
+              ],
+              "properties": {
+                "$Clone": {
+                  "description": "Clone a cooked BuildingPieceData asset. The clone receives a new RuneSchema identity and remains a separate build-menu entry.",
+                  "pattern": "^/",
+                  "type": "string"
+                },
+                "AddTo": {
+                  "description": "Optional explicit placement(s). When omitted, RuneSchema appends the clone to every page/collection containing its $Clone source.",
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "Collection": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "PageIndex": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "Collection"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "Collection": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "PageIndex": {
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "Collection"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 32,
+                      "minItems": 1,
+                      "type": "array"
+                    }
+                  ]
+                },
+                "Asset": {
+                  "description": "Register an existing BuildingPieceData asset; use $Clone when changing the actor or cost.",
+                  "pattern": "^/",
+                  "type": "string"
+                },
+                "Overrides": {
+                  "additionalProperties": false,
+                  "description": "Optional direct-building presentation, placement, shelter and station-row overrides. Omitted fields preserve cooked values; every requested runtime target is verified before registration.",
+                  "properties": {
+                    "Names": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "Catalogue": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "Interact": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "Menu": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "World": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "Placement": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "Profile": {
+                          "description": "Existing row in the building's cooked placement-profile table. PropProfile is the standard terrain-capable station profile.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "RequiresFoundation": {
+                          "description": "False selects Profile, or PropProfile when Profile is omitted. True requires an explicit verified profile.",
+                          "type": "boolean"
+                        },
+                        "RequiresRoof": {
+                          "description": "False maps the actor's BuildingShelterComponent to InteractAnywhere.",
+                          "type": "boolean"
+                        },
+                        "RequiresShelter": {
+                          "description": "False maps the actor's BuildingShelterComponent to InteractAnywhere.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "Processing": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "AcceptedFuels": {
+                          "additionalProperties": false,
+                          "description": "Mutate the processing row's AcceptedFuels array. Append preserves native fuels; authors should not repeat a fuel already present. Replace and Clear are explicit.",
+                          "oneOf": [
+                            {
+                              "not": {
+                                "required": [
+                                  "Items"
+                                ]
+                              },
+                              "properties": {
+                                "Mode": {
+                                  "const": "Clear"
+                                }
+                              }
+                            },
+                            {
+                              "properties": {
+                                "Mode": {
+                                  "enum": [
+                                    "Replace",
+                                    "Append"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "Items"
+                              ]
+                            }
+                          ],
+                          "properties": {
+                            "Items": {
+                              "items": {
+                                "pattern": "^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$",
+                                "type": "string"
+                              },
+                              "maxItems": 64,
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "Mode": {
+                              "enum": [
+                                "Replace",
+                                "Append",
+                                "Clear"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "Mode"
+                          ],
+                          "type": "object"
+                        },
+                        "AutoStartProcess": {
+                          "description": "Writes native bAutoStartProcess.",
+                          "type": "boolean"
+                        },
+                        "CanProcessBeStartedThroughUI": {
+                          "description": "Writes native bCanProcessBeStartedThroughUI.",
+                          "type": "boolean"
+                        },
+                        "IgnitesBurning": {
+                          "description": "Writes native bIgnitesBurning.",
+                          "type": "boolean"
+                        },
+                        "InfluenceRange": {
+                          "maximum": 100000,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "MaxFuelSlots": {
+                          "maximum": 64,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "MaxResourceSlots": {
+                          "maximum": 64,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "Rate": {
+                          "description": "ProcessingRate multiplier on the single station row that references this building. Recipe Min/MaxProcessingTime still takes precedence for per-recipe duration.",
+                          "exclusiveMinimum": 0,
+                          "maximum": 100,
+                          "type": "number"
+                        },
+                        "StartingFuelCount": {
+                          "maximum": 100000,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "StartingFuelItem": {
+                          "description": "Optional starting FuelItemData object path; null preserves an explicitly empty starter slot.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "StopsWhenRecipeChanges": {
+                          "description": "Writes native bStopsWhenRecipeChanges.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "Properties": {
+                  "additionalProperties": true,
+                  "description": "Reflected BuildingPieceData overrides. PersistenceID, InternalName, BuildingPieceDataIndex and Requirements are managed and rejected here. A BuildableActor override must be a cooked BP_BaseBuilding_BaseActor child.",
+                  "type": "object"
+                },
+                "Requirements": {
+                  "description": "Complete replacement build cost. Every item must resolve before the clone is registered.",
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "Amount": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "ItemData": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ItemData",
+                      "Amount"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 64,
+                  "type": "array"
+                },
+                "Unlock": {
+                  "default": true,
+                  "description": "Session-unlock the separate cloned entry. False does not revoke an unlock already persisted by the game.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        {
+          "properties": {
+            "$Patch": {
+              "type": "string"
+            },
+            "$Target": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "$Patch",
+            "$Target"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "$declaration": {
+              "description": "Ownership declaration for PAK-cooked persistent content. RuneSchema verifies the live asset identity before recording it.",
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "InternalName": {
+                      "description": "Optional cooked InternalName assertion. When omitted, RuneSchema reads it from the asset.",
+                      "maxLength": 1024,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "Kind": {
+                      "const": "Building",
+                      "description": "Optional assertion; the containing loader determines this kind."
+                    },
+                    "Path": {
+                      "description": "Exact cooked object path shipped by the mod PAK.",
+                      "pattern": "^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$",
+                      "type": "string"
+                    },
+                    "PersistenceID": {
+                      "description": "Canonical PersistenceID baked into the cooked asset. RuneSchema verifies it against the loaded object.",
+                      "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "Path",
+                    "PersistenceID"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "InternalName": {
+                        "description": "Optional cooked InternalName assertion. When omitted, RuneSchema reads it from the asset.",
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "Kind": {
+                        "const": "Building",
+                        "description": "Optional assertion; the containing loader determines this kind."
+                      },
+                      "Path": {
+                        "description": "Exact cooked object path shipped by the mod PAK.",
+                        "pattern": "^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$",
+                        "type": "string"
+                      },
+                      "PersistenceID": {
+                        "description": "Canonical PersistenceID baked into the cooked asset. RuneSchema verifies it against the loaded object.",
+                        "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "Path",
+                      "PersistenceID"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 4096,
+                  "minItems": 1,
+                  "type": "array"
+                }
+              ]
+            }
+          },
+          "required": [
+            "$declaration"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "items": {
+        "anyOf": [
+          {
+            "additionalProperties": true,
+            "patternProperties": {
+              "^[^$]": {
+                "additionalProperties": false,
+                "oneOf": [
+                  {
+                    "not": {
+                      "required": [
+                        "Asset"
+                      ]
+                    },
+                    "required": [
+                      "$Clone"
+                    ]
+                  },
+                  {
+                    "not": {
+                      "required": [
+                        "$Clone"
+                      ]
+                    },
+                    "required": [
+                      "Asset"
+                    ]
+                  }
+                ],
+                "properties": {
+                  "$Clone": {
+                    "description": "Clone a cooked BuildingPieceData asset. The clone receives a new RuneSchema identity and remains a separate build-menu entry.",
+                    "pattern": "^/",
+                    "type": "string"
+                  },
+                  "AddTo": {
+                    "description": "Optional explicit placement(s). When omitted, RuneSchema appends the clone to every page/collection containing its $Clone source.",
+                    "oneOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "Collection": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "PageIndex": {
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "Collection"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "Collection": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "PageIndex": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "Collection"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 32,
+                        "minItems": 1,
+                        "type": "array"
+                      }
+                    ]
+                  },
+                  "Asset": {
+                    "description": "Register an existing BuildingPieceData asset; use $Clone when changing the actor or cost.",
+                    "pattern": "^/",
+                    "type": "string"
+                  },
+                  "Overrides": {
+                    "additionalProperties": false,
+                    "description": "Optional direct-building presentation, placement, shelter and station-row overrides. Omitted fields preserve cooked values; every requested runtime target is verified before registration.",
+                    "properties": {
+                      "Names": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "Catalogue": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "Interact": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "Menu": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "World": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "Placement": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "Profile": {
+                            "description": "Existing row in the building's cooked placement-profile table. PropProfile is the standard terrain-capable station profile.",
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "RequiresFoundation": {
+                            "description": "False selects Profile, or PropProfile when Profile is omitted. True requires an explicit verified profile.",
+                            "type": "boolean"
+                          },
+                          "RequiresRoof": {
+                            "description": "False maps the actor's BuildingShelterComponent to InteractAnywhere.",
+                            "type": "boolean"
+                          },
+                          "RequiresShelter": {
+                            "description": "False maps the actor's BuildingShelterComponent to InteractAnywhere.",
+                            "type": "boolean"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "Processing": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "AcceptedFuels": {
+                            "additionalProperties": false,
+                            "description": "Mutate the processing row's AcceptedFuels array. Append preserves native fuels; authors should not repeat a fuel already present. Replace and Clear are explicit.",
+                            "oneOf": [
+                              {
+                                "not": {
+                                  "required": [
+                                    "Items"
+                                  ]
+                                },
+                                "properties": {
+                                  "Mode": {
+                                    "const": "Clear"
+                                  }
+                                }
+                              },
+                              {
+                                "properties": {
+                                  "Mode": {
+                                    "enum": [
+                                      "Replace",
+                                      "Append"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "Items"
+                                ]
+                              }
+                            ],
+                            "properties": {
+                              "Items": {
+                                "items": {
+                                  "pattern": "^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$",
+                                  "type": "string"
+                                },
+                                "maxItems": 64,
+                                "minItems": 1,
+                                "type": "array",
+                                "uniqueItems": true
+                              },
+                              "Mode": {
+                                "enum": [
+                                  "Replace",
+                                  "Append",
+                                  "Clear"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "Mode"
+                            ],
+                            "type": "object"
+                          },
+                          "AutoStartProcess": {
+                            "description": "Writes native bAutoStartProcess.",
+                            "type": "boolean"
+                          },
+                          "CanProcessBeStartedThroughUI": {
+                            "description": "Writes native bCanProcessBeStartedThroughUI.",
+                            "type": "boolean"
+                          },
+                          "IgnitesBurning": {
+                            "description": "Writes native bIgnitesBurning.",
+                            "type": "boolean"
+                          },
+                          "InfluenceRange": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "MaxFuelSlots": {
+                            "maximum": 64,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "MaxResourceSlots": {
+                            "maximum": 64,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "Rate": {
+                            "description": "ProcessingRate multiplier on the single station row that references this building. Recipe Min/MaxProcessingTime still takes precedence for per-recipe duration.",
+                            "exclusiveMinimum": 0,
+                            "maximum": 100,
+                            "type": "number"
+                          },
+                          "StartingFuelCount": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "StartingFuelItem": {
+                            "description": "Optional starting FuelItemData object path; null preserves an explicitly empty starter slot.",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "StopsWhenRecipeChanges": {
+                            "description": "Writes native bStopsWhenRecipeChanges.",
+                            "type": "boolean"
+                          }
+                        },
+                        "type": "object"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "Properties": {
+                    "additionalProperties": true,
+                    "description": "Reflected BuildingPieceData overrides. PersistenceID, InternalName, BuildingPieceDataIndex and Requirements are managed and rejected here. A BuildableActor override must be a cooked BP_BaseBuilding_BaseActor child.",
+                    "type": "object"
+                  },
+                  "Requirements": {
+                    "description": "Complete replacement build cost. Every item must resolve before the clone is registered.",
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "Amount": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "ItemData": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "ItemData",
+                        "Amount"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 64,
+                    "type": "array"
+                  },
+                  "Unlock": {
+                    "default": true,
+                    "description": "Session-unlock the separate cloned entry. False does not revoke an unlock already persisted by the game.",
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "$Patch": {
+                "type": "string"
+              },
+              "$Target": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "$Patch",
+              "$Target"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "$declaration": {
+                "description": "Ownership declaration for PAK-cooked persistent content. RuneSchema verifies the live asset identity before recording it.",
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "InternalName": {
+                        "description": "Optional cooked InternalName assertion. When omitted, RuneSchema reads it from the asset.",
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "Kind": {
+                        "const": "Building",
+                        "description": "Optional assertion; the containing loader determines this kind."
+                      },
+                      "Path": {
+                        "description": "Exact cooked object path shipped by the mod PAK.",
+                        "pattern": "^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$",
+                        "type": "string"
+                      },
+                      "PersistenceID": {
+                        "description": "Canonical PersistenceID baked into the cooked asset. RuneSchema verifies it against the loaded object.",
+                        "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "Path",
+                      "PersistenceID"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "InternalName": {
+                          "description": "Optional cooked InternalName assertion. When omitted, RuneSchema reads it from the asset.",
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "Kind": {
+                          "const": "Building",
+                          "description": "Optional assertion; the containing loader determines this kind."
+                        },
+                        "Path": {
+                          "description": "Exact cooked object path shipped by the mod PAK.",
+                          "pattern": "^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$",
+                          "type": "string"
+                        },
+                        "PersistenceID": {
+                          "description": "Canonical PersistenceID baked into the cooked asset. RuneSchema verifies it against the loaded object.",
+                          "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "Path",
+                        "PersistenceID"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 4096,
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "$declaration"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "type": "array"
+    }
+  ],
+  "description": "Structural authoring hints, not an exhaustive runtime validator. Asset paths, identities, reflected properties and event compatibility must be validated in game.",
+  "title": "RuneSchema /buildings",
+  "x-runeschema-coverage": "structural",
+  "x-runeschema-starter-capabilities": {
+    "append": false,
+    "clone": true,
+    "patch": false,
+    "search": "loaded records"
+  }
+}

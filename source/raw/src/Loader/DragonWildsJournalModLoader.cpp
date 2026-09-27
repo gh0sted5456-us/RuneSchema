@@ -35,6 +35,7 @@
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
 #include "Loader/DragonWildsJournalModLoader.h"
+#include "Loader/DragonWildsRecipeModLoader.h"
 #include "Loader/JournalPlayerAccess.h"
 #include "Loader/JournalSaveOwnership.h"
 #include "Runtime/HostServices.h"
@@ -142,6 +143,12 @@ namespace DragonWilds {
         : DragonWildsModLoaderBase(loreOnly ? "lore" : "journal"), m_loreOnly(loreOnly)
     {
         SetDisplayName(loreOnly ? TEXT("Lore Loader") : TEXT("Journal Loader"));
+    }
+
+    DragonWildsJournalModLoader::~DragonWildsJournalModLoader()
+    {
+        if(m_acquisitionCallbackId!=Hook::ERROR_ID)
+            Hook::UnregisterCallback(m_acquisitionCallbackId);
     }
 
     void DragonWildsJournalModLoader::OnLoad(const std::filesystem::path& loaderPath,
@@ -307,6 +314,7 @@ namespace DragonWilds {
     DragonWildsJournalModLoader::LoadResult DragonWildsJournalModLoader::ApplyAll()
     {
         ResetFinalizeCaches();
+        m_acquisitionUnlocks.clear();
         LoadResult result{};
 
         for (auto& def : m_defs)
@@ -334,23 +342,53 @@ namespace DragonWilds {
                         || (def.DeclaredInternalNameAsserted && actualName!=def.DeclaredInternalName))
                         throw std::runtime_error("Cooked journal/lore declaration does not match its PersistenceID/InternalName");
                 }
-                ApplyProperties(entry, def.Body);
+                ApplyProperties(entry, def.Body, def.Owner);
+                if (m_createdEntries.contains(entry)) {
+                    // Runtime journal/lore identity is the authored entry key.
+                    // Reassert it after reflected fields so a default/accidental
+                    // identity value cannot invalidate the ownership snapshot.
+                    const auto identity = RC::to_string(def.Key);
+                    for (const auto* fieldName : {TEXT("PersistenceID"), TEXT("InternalName")}) {
+                        auto* field = CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
+                            entry->GetClassPrivate(), fieldName));
+                        if (!field) throw std::runtime_error(
+                            "Owned journal/lore identity fields are unavailable");
+                        PropertyHelper::CopyJsonValueToContainer(entry, field, identity);
+                    }
+                }
                 RegisterEntry(entry,def.Owner);
-                if(def.Declared) {
-                    auto* id=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(entry->GetClassPrivate(),TEXT("PersistenceID")));
-                    TrackOwnedId(entry,id->GetPropertyValue(id->ContainerPtrToValuePtr<void>(entry)),def.Owner,true);
-                    auto* name=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(entry->GetClassPrivate(),TEXT("InternalName")));
-                    const auto actualName=RC::to_string(*name->GetPropertyValue(name->ContainerPtrToValuePtr<void>(entry)));
-                    OwnedContent::Merge(OwnedContent::LedgerPath(PS::HostServices::StateDirectory()),
-                        {{m_loreOnly?"Lore":"Journal",RC::to_string(def.Owner),def.DeclaredPersistenceID,
-                            actualName,RC::to_string(def.Key)}});
+                if(def.Body.contains("UnlockOnAcquire")) {
+                    if(!def.Body.at("UnlockOnAcquire").is_boolean())
+                        throw std::runtime_error("UnlockOnAcquire must be a boolean");
+                    if(def.Body.at("UnlockOnAcquire").get<bool>()) {
+                        if(!def.Body.contains("ItemData") || !def.Body.at("ItemData").is_string())
+                            throw std::runtime_error("UnlockOnAcquire requires a string ItemData reference");
+                        auto* item=ResolveSoftReference(ItemDataClassPath,
+                            RC::to_generic_string(def.Body.at("ItemData").get<std::string>()),m_itemReferenceIndex);
+                        if(!item)throw std::runtime_error("UnlockOnAcquire ItemData could not be resolved");
+                        m_acquisitionUnlocks.push_back({item,def.Key});
+                    }
                 }
                 if (def.Body.contains("AddTo")) {
                     if (Place(entry, def)) ++result.Placements;
                 } else if (m_createdEntries.contains(entry))
                     throw std::runtime_error("New journal entries require AddTo");
 
-                if (ReadBool(def.Body, "Unlock", !def.Declared))
+                if(m_createdEntries.contains(entry) || def.Declared) {
+                    auto* id=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(entry->GetClassPrivate(),TEXT("PersistenceID")));
+                    auto* name=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(entry->GetClassPrivate(),TEXT("InternalName")));
+                    if(!id || !name)throw std::runtime_error("Owned journal/lore identity fields are unavailable");
+                    const auto& persistence=id->GetPropertyValue(id->ContainerPtrToValuePtr<void>(entry));
+                    const auto actualId=RC::to_string(*persistence);
+                    const auto actualName=RC::to_string(*name->GetPropertyValue(name->ContainerPtrToValuePtr<void>(entry)));
+                    TrackOwnedId(entry,persistence,def.Owner,def.Declared);
+                    OwnedContent::Merge(OwnedContent::LedgerPath(PS::HostServices::StateDirectory()),
+                        {{m_loreOnly?"Lore":"Journal",RC::to_string(def.Owner),actualId,
+                            actualName,RC::to_string(def.Key)}});
+                }
+
+                const bool acquire=def.Body.value("UnlockOnAcquire",false);
+                if (ReadBool(def.Body, "Unlock", !def.Declared && !acquire))
                 {
                     m_unlock.insert(def.Key);
                 }
@@ -371,24 +409,15 @@ namespace DragonWilds {
         }
 
         if (!m_defs.empty())
-        {
-            if (result.ErrorCount > 0)
-            {
-                PS::Log<LogLevel::Warning>(STR("Journal: {} entries ready, {} placements, {} errors.\n"),
-                    result.EntriesReady, result.Placements, result.ErrorCount);
-            }
-            else
-            {
-                PS::RoutineLog("journal", STR("Journal: {} entries ready, {} placements, 0 errors.\n"),
-                    result.EntriesReady, result.Placements);
-            }
-        }
+            PS::LoaderSummary(m_loreOnly ? "lore" : "journal", result.EntriesReady,
+                result.EntriesReady, 0, result.Placements, result.ErrorCount);
         // Native persistence cleanup is an optional safety adapter. A
         // storefront-specific routine mismatch must not roll back journal
         // registration, placement, or unlock delivery.
-        if (PS::PSConfig::Get()->GetSettings().persistence.journal && !m_ownedIds.empty()) {
+        if (!m_ownedIds.empty()) {
             try {
                 InstallNativePersistence();
+                m_nativePersistenceReady = true;
             } catch (const std::exception& error) {
                 PS::Log<LogLevel::Warning>(STR("[FEATURE:journal-save-cleanup][UNAVAILABLE] {}. Journal/lore content remains active.\n"),
                     PS::ToWideSafe(error.what()));
@@ -397,6 +426,7 @@ namespace DragonWilds {
             }
         }
         RegisterHooks();
+        RegisterAcquisitionHook();
         m_initialJournalApplied = true;
         ResetFinalizeCaches();
         return result;
@@ -430,18 +460,37 @@ namespace DragonWilds {
         {
             TArray<UObject*> objects;
             UECustom::UObjectGlobals::GetObjectsOfClass(expected, objects, true);
-            for (auto* object : objects)
-            {
-                if (!object || object->HasAnyFlags(static_cast<EObjectFlags>(
-                    RF_ClassDefaultObject | RF_ArchetypeObject | RF_BeginDestroyed | RF_FinishDestroyed)))
-                    continue;
-                const auto key = NormalizeReferenceKey(object->GetName());
-                if (index.Ambiguous.contains(key)) continue;
+            const auto addReference = [&](const RC::StringType& referenceKey, UObject* object) {
+                if (referenceKey.empty()) return;
+                const auto key = NormalizeReferenceKey(referenceKey);
+                if (index.Ambiguous.contains(key)) return;
                 const auto [found, inserted] = index.Unique.emplace(key, object);
                 if (!inserted && found->second != object)
                 {
                     index.Unique.erase(found);
                     index.Ambiguous.insert(key);
+                }
+            };
+            for (auto* object : objects)
+            {
+                if (!object || object->HasAnyFlags(static_cast<EObjectFlags>(
+                    RF_ClassDefaultObject | RF_ArchetypeObject | RF_BeginDestroyed | RF_FinishDestroyed)))
+                    continue;
+
+                addReference(object->GetName(), object);
+                for (const auto* propertyName : {TEXT("InternalName"), TEXT("PersistenceID")})
+                {
+                    auto* property = CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
+                        object->GetClassPrivate(), propertyName));
+                    if (!property || property->GetArrayDim() != 1
+                        || property->GetElementSize() != sizeof(FString))
+                        continue;
+                    const auto& value = property->GetPropertyValue(
+                        property->ContainerPtrToValuePtr<void>(object));
+                    const auto& characters = value.GetCharArray();
+                    if (characters.Num() > 1 && characters.GetData()
+                        && characters.GetData()[characters.Num() - 1] == 0)
+                        addReference(RC::StringType(characters.GetData(), characters.Num() - 1), object);
                 }
             }
             index.Built = true;
@@ -545,7 +594,8 @@ namespace DragonWilds {
         return entry;
     }
 
-    void DragonWildsJournalModLoader::ApplyProperties(UObject* entry, const nlohmann::json& body)
+    void DragonWildsJournalModLoader::ApplyProperties(UObject* entry,
+        const nlohmann::json& body, const RC::StringType& owner)
     {
         if (body.contains("Type")) {
             auto* expected = ResolveEntryClass(body);
@@ -579,7 +629,7 @@ namespace DragonWilds {
         UObject* resolvedItem = nullptr;
         for (auto& [name, value] : body.items())
         {
-            if (name == "Type" || name == "AddTo" || name == "Unlock")
+            if (name == "Type" || name == "AddTo" || name == "Unlock" || name == "UnlockOnAcquire")
             {
                 continue;
             }
@@ -595,7 +645,12 @@ namespace DragonWilds {
             if (name == "RecipeData" && value.is_string())
             {
                 auto reference = RC::to_generic_string(value.get<std::string>());
-                auto* recipe = ResolveSoftReference(RecipeDataClassPath, reference, m_recipeReferenceIndex);
+                auto* recipe = m_recipeService
+                    ? m_recipeService->ResolveReference(owner, value.get<std::string>())
+                    : nullptr;
+                if (!recipe && reference.starts_with(TEXT("/")))
+                    recipe = ResolveSoftReference(RecipeDataClassPath, reference,
+                        m_recipeReferenceIndex);
                 if (recipe)
                 {
                     SetLiveSoftReference(entry, property, recipe);
@@ -857,23 +912,17 @@ namespace DragonWilds {
 
     void DragonWildsJournalModLoader::RegisterEntry(UObject* entry,const RC::StringType& owner)
     {
+        (void)owner;
         auto* subsystem = FindJournalSubsystem();
         if (!subsystem)
         {
             throw std::runtime_error("Journal subsystem was unavailable.");
         }
-        auto* persistenceProperty = CastField<FStrProperty>(
-            PropertyHelper::GetPropertyByName(entry->GetClassPrivate(), TEXT("PersistenceID")));
-        if(!persistenceProperty || persistenceProperty->GetArrayDim()!=1)
-            throw std::runtime_error("Journal persistence identity field changed");
-        const auto& persistenceId = persistenceProperty->GetPropertyValue(
-            persistenceProperty->ContainerPtrToValuePtr<void>(entry));
         try {
             QuestRegistry::NativeRegistry::RegisterJournal(subsystem,subsystem->GetOuterPrivate(),entry);
         } catch(const std::exception& error) {
             throw std::runtime_error(std::string("Journal registry: ")+error.what());
         }
-        TrackOwnedId(entry, persistenceId,owner);
     }
 
     void DragonWildsJournalModLoader::RegisterHooks()
@@ -926,13 +975,11 @@ namespace DragonWilds {
 
     void DragonWildsJournalModLoader::UnlockEntries(UObject* journalComponent)
     {
-        // Dominion has no journal equivalent of the recipe subsystem's
-        // RecipesUnlockedThatShouldNotPersist set. UnlockJournalEntry mutates
-        // native persistence, so temporary mode leaves unlock delivery alone
-        // while registration and category placement remain active.
-        if (!PS::PSConfig::Get()->GetSettings().persistence.journal)
+        // Temporary mode is runtime-visible on lanes where the native writer
+        // adapter can exclude RuneSchema-owned IDs from the save payload.
+        if (!PS::PSConfig::Get()->GetSettings().persistence.journal && !m_nativePersistenceReady)
         {
-            PS::RoutineLog("journal", STR("Journal/lore persistence is disabled; registered entries remain loaded without save-backed player unlocks.\n"));
+            PS::RoutineLog("journal", STR("Journal/lore temporary unlocks are unavailable because the native save adapter is not ready; registered entries remain active.\n"));
             return;
         }
         if (!journalComponent || !journalComponent->IsA(m_journalComponentClass))
@@ -964,16 +1011,95 @@ namespace DragonWilds {
         if(unavailable)PS::Log<LogLevel::Warning>(STR("Journal unlock: {} requested entries unavailable; asset placement does not confirm player unlock.\n"),unavailable);
     }
 
-    UObject* DragonWildsJournalModLoader::FindJournalComponent()
+    void DragonWildsJournalModLoader::RegisterAcquisitionHook()
+    {
+        if(m_acquisitionCallbackId!=Hook::ERROR_ID || m_acquisitionUnlocks.empty())return;
+        Hook::FCallbackOptions options{};
+        options.OwnerModName=TEXT("RuneSchema");
+        options.HookName=m_loreOnly?TEXT("RuneSchemaLoreAcquisition"):TEXT("RuneSchemaJournalAcquisition");
+        m_acquisitionCallbackId=Hook::RegisterProcessEventPostCallback(
+            [this](Hook::TCallbackIterationData<void>&,UObject* source,UFunction* function,void*) {
+                try {ObserveAcquisition(source,function);} catch(...) {}
+            },options);
+        if(m_acquisitionCallbackId==Hook::ERROR_ID)
+            PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL] Item-acquisition unlock observer was unavailable.\n"),
+                RC::to_generic_string(GetModFolderType()));
+    }
+
+    void DragonWildsJournalModLoader::ObserveAcquisition(UObject* source,UFunction* function)
+    {
+        if(m_observingAcquisition || !source || !function || m_acquisitionUnlocks.empty()
+            || (!PS::PSConfig::Get()->GetSettings().persistence.journal && !m_nativePersistenceReady))return;
+        const auto path=function->GetPathName();
+        UObject* controller=nullptr;bool credit=true;
+        if(path==TEXT("/Game/Gameplay/Character/Player/BP_PlayerController.BP_PlayerController_C:OnInventoryChanged_BrokenItemFTUE"))
+            controller=source;
+        else if(path==TEXT("/Script/Dominion.LoadoutComponent:OnReceiveInventoryChanged"))
+            controller=source->GetOuterPrivate();
+        else if(path==TEXT("/Script/Dominion.InventoryComponent:OnRep_HasLoadedFromSave")) {
+            controller=source->GetOuterPrivate();credit=false;
+        } else return;
+        if(!controller || !controller->GetWorld())return;
+        auto* inventoryProperty=CastField<FObjectPropertyBase>(
+            PropertyHelper::GetPropertyByName(controller->GetClassPrivate(),TEXT("InventoryComponent")));
+        auto* inventory=inventoryProperty?inventoryProperty->GetObjectPropertyValue(
+            inventoryProperty->ContainerPtrToValuePtr<void>(controller)):nullptr;
+        if(!inventory || inventory->GetOuterPrivate()!=controller || inventory->GetWorld()!=controller->GetWorld())return;
+        auto* slot=FUObjectArray::IndexToObject(controller->GetInternalIndex());
+        if(!slot || slot->GetUObject()!=controller || !slot->IsValid(false) || slot->GetSerialNumber()<=0)return;
+        const auto identity=std::to_string(controller->GetInternalIndex())+":"+std::to_string(slot->GetSerialNumber());
+        auto& baseline=m_acquisitionBaselines[identity];
+        auto* journal=FindJournalComponent(controller);
+        m_observingAcquisition=true;
+        struct Guard {bool& Value;~Guard(){Value=false;}} guard{m_observingAcquisition};
+        std::unordered_map<RC::StringType,UObject*> items;
+        for(const auto& binding:m_acquisitionUnlocks)if(binding.Item)
+            items.emplace(binding.Item->GetPathName(),binding.Item);
+        std::unordered_set<RC::StringType> added;
+        for(const auto& [itemPath,item]:items) {
+            ActorHelper::FunctionCall count(inventory,TEXT("/Script/Dominion.InventoryComponent:GetNumItemsByData"));
+            count.Arg(TEXT("ItemData"),item).Invoke();
+            const auto current=count.Result<int32_t>();
+            if(current<0)continue;
+            const auto found=baseline.find(itemPath);
+            const auto previous=found==baseline.end()?(credit?0:current):found->second;
+            baseline[itemPath]=current;
+            if(credit && current>previous)added.insert(itemPath);
+        }
+        if(!journal)return;
+        for(const auto& binding:m_acquisitionUnlocks) {
+            if(!binding.Item || !added.contains(binding.Item->GetPathName()))continue;
+            const auto entry=m_entries.find(binding.EntryKey);
+            if(entry!=m_entries.end())if(auto* object=entry->second.Get())
+                (void)JournalPlayerAccess::EnsureUnlocked(journal,object);
+        }
+    }
+
+    UObject* DragonWildsJournalModLoader::FindJournalComponent(UObject* controller)
     {
         TArray<UObject*> objects;
         UECustom::UObjectGlobals::GetObjectsOfClass(m_journalComponentClass, objects, true);
+        UObject* sameWorld=nullptr;
         for (auto* object : objects)
         {
-            if (object && !object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject | RF_ArchetypeObject)))
-                return object;
+            if (!object || object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject | RF_ArchetypeObject)))continue;
+            if(controller) {
+                if(object->GetWorld()!=controller->GetWorld())continue;
+                bool owned=false;
+                for(auto* outer=object->GetOuterPrivate();outer;outer=outer->GetOuterPrivate())
+                    if(outer==controller){owned=true;break;}
+                if(owned)return object;
+                // Some builds attach JournalComponent beneath a player state
+                // or pawn rather than directly beneath the controller.  A
+                // unique same-world component is safe for single-player; an
+                // ambiguous multiplayer world is deliberately rejected.
+                if(sameWorld)return nullptr;
+                sameWorld=object;
+                continue;
+            }
+            return object;
         }
-        return nullptr;
+        return sameWorld;
     }
 
     void DragonWildsJournalModLoader::TrackOwnedId(UObject* entry, const FString& persistenceId,const RC::StringType& owner,bool declared)

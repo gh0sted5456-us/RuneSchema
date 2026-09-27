@@ -1,8 +1,10 @@
-# SafeSave and ownership ledger
+# Built-in save scrubbing and ownership ledger
 
-RuneSchema removes only content it can prove belongs to RuneSchema and to a mod
-or declaration that is no longer active. It does not treat every unresolved
-game identity as disposable.
+Save scrubbing is part of RuneSchema startup. It is not an optional feature or
+a separate restore system. RuneSchema first loads active definitions and builds
+the same native item, recipe and quest registries used by the game. Only after
+those maps are complete does it remove unresolved persistent records. A partial
+registry can never authorize deletion.
 
 ## What the ledger stores
 
@@ -12,25 +14,49 @@ owning mod, persistence ID, and the minimal internal identity required for a
 safe comparison. It does not contain inventory quantities, player progress,
 save backups, or restorable copies of mod content.
 
+The player save remains the only home for inventory, equipment, recipe
+unlocks, quest state, journal/lore unlocks and appearance. The ledger is not a
+second save system: it is only the smallest ownership snapshot needed to prove
+which exact missing IDs RuneSchema may remove on the next startup.
+
 Loaders record identities they create or explicitly receive through
 `$declaration`. Declarations are appropriate for cooked PAK content when the
 JSON loader cannot infer ownership safely. They mark ownership only; they do
 not change the cooked object.
 
-## Startup comparison
+## Startup sequence
 
 1. RuneSchema discovers enabled mods and processes their loader files.
 2. Successful persistent definitions form the current snapshot.
 3. The previous snapshot is compared with the current one.
 4. A previous identity becomes retired when its owner is removed or disabled,
-   or when that specific declaration disappears.
-5. Only those retired, ledger-confirmed identities become cleanup candidates.
-6. The new snapshot is committed only after the applicable cleanup transaction
-   is verified.
+   or when that specific definition or declaration disappears.
+5. Retired, ledger-confirmed RuneSchema identities become exact cleanup
+   candidates in both storefront lanes.
+6. After active custom data is inserted into the native maps, the first
+   complete item/recipe registry publication triggers one bounded menu-phase
+   pass. Inventory, loadout, item progress, recipe progress and complete quest
+   registries are scrubbed of unresolved identities before world entry.
+7. The new ownership snapshot is committed only after its applicable cleanup
+   transaction is verified.
 
-An active definition is retained. Vanilla content and unknown third-party
-identities are retained. RuneSchema does not guess from a name prefix or from
-the mere fact that a native registry lookup failed.
+Cleanup is keyed by the exact retired `PersistenceID`, not merely by the mod
+folder. Removing one recipe, quest, journal entry, lore entry, building or item
+from an otherwise active mod cannot retire its siblings. The saved quest or
+journal ownership marker must also agree with the historical owner before that
+record is removed.
+
+Items, recipes, quests and buildings use the game's canonical 22-character
+identity form. Journal and lore use their native readable entry IDs, such as
+`RS_Journal_Dawnveil_Armor`; those IDs are intentionally preserved in both the
+player save and the minimal ownership snapshot.
+
+An active definition is retained because it is present in the final native
+registry. RuneSchema does not guess from a name prefix. Steam/GOG can also
+remove any nonempty inventory, equipment, item-progress, recipe-progress or
+quest identity that is absent from the complete native registry. Journal and
+lore remain exact ownership-ledger operations because the game does not expose
+an equivalent complete persistence map for those categories.
 
 ## Equipped armor and inventory items
 
@@ -52,11 +78,12 @@ Steam/GOG character saves are ordinary JSON files under:
 %LOCALAPPDATA%\RSDragonwilds\Saved\SaveCharacters
 ```
 
-Before deserialization, RuneSchema parses each bounded character file, applies
-the ownership-only plan, verifies the resulting JSON, preserves the original
-as a `runeschema-before-clean` backup, writes atomically, and reads the result
-back. A failed parse, verification, backup, or write leaves the ledger pending
-for a later retry.
+Before deserialization, RuneSchema first applies exact retired ownership and
+then performs one registry-complete pass in the menu. It parses each bounded
+character file, verifies the resulting JSON, preserves the original under the
+RuneSchema state directory, writes atomically, and reads the result back. A
+failed parse, verification, backup, or write leaves the file unchanged or its
+original recoverable and reports a degraded result.
 
 RuneSchema state is stored separately at:
 

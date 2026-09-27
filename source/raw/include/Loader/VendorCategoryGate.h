@@ -25,7 +25,8 @@ inline std::vector<Rule> Parse(const nlohmann::json& value) {
     for(const auto& entry:value) {
         if(!entry.is_object())throw std::runtime_error("Each CategoryRules entry must be an object");
         for(const auto& [key,unused]:entry.items())
-            if(key!="Category" && key!="MinPowerLevel" && key!="MaxPowerLevel" && key!="TimeOfDay" && key!="QuestCompleted")
+            if(key!="Category" && key!="MinPowerLevel" && key!="MaxPowerLevel" && key!="TimeOfDay"
+                && key!="QuestCompleted" && key!="QuestID" && key!="QuestState")
                 throw std::runtime_error("Unknown vendor category rule field: "+key);
         if(!entry.contains("Category") || !entry.at("Category").is_string())
             throw std::runtime_error("CategoryRules.Category must be a string");
@@ -48,12 +49,8 @@ inline std::vector<Rule> Parse(const nlohmann::json& value) {
             if(!entry.at("TimeOfDay").is_string())throw std::runtime_error("CategoryRules.TimeOfDay must be Any, Day, or Night");
             rule.Time=TimeOfDay::Parse(entry.at("TimeOfDay").get<std::string>());
         }
-        if(entry.contains("QuestCompleted")) {
-            if(!entry.at("QuestCompleted").is_string() || entry.at("QuestCompleted").get<std::string>().empty()
-                || entry.at("QuestCompleted").get<std::string>().size()>512)
-                throw std::runtime_error("CategoryRules.QuestCompleted must be a quest ID");
-            rule.CompletedQuest=entry.at("QuestCompleted").get<std::string>();
-        }
+        try {rule.CompletedQuest=VendorOffers::CompletedQuest(entry);}
+        catch(const std::exception& error){throw std::runtime_error(std::string("CategoryRules: ")+error.what());}
         if(!rule.MinimumPowerLevel && !rule.MaximumPowerLevel && rule.Time==TimeOfDay::Requirement::Any && rule.CompletedQuest.empty())
             throw std::runtime_error("CategoryRules entry must define a power, time, or completed-quest gate");
         result.push_back(std::move(rule));
@@ -77,7 +74,7 @@ inline nlohmann::json Filter(const nlohmann::json& items,const std::vector<Rule>
         if(found!=rules.end() && !allowed(found->MinimumPowerLevel,found->MaximumPowerLevel,found->Time,found->CompletedQuest))continue;
         const auto number=[&](const char* key)->std::optional<int>{if(!item.contains(key))return {};return item.at(key).get<int>();};
         auto itemTime=TimeOfDay::Requirement::Any;if(item.contains("TimeOfDay"))itemTime=TimeOfDay::Parse(item.at("TimeOfDay").get<std::string>());
-        const auto itemQuest=item.value("QuestCompleted",std::string{});
+        const auto itemQuest=VendorOffers::CompletedQuest(item);
         if(!allowed(number("MinPowerLevel"),number("MaxPowerLevel"),itemTime,itemQuest))continue;
         result.push_back(item);
     }

@@ -16,6 +16,7 @@
 #include <set>
 #include <algorithm>
 #include "Loader/AssetProvenance.h"
+#include "Loader/DragonWildsRecipeModLoader.h"
 #include "Loader/OwnedContentLedger.h"
 #include "Runtime/HostServices.h"
 #include "Utility/AssetAliases.h"
@@ -1352,7 +1353,18 @@ namespace DragonWilds {
 
             try
             {
-                PropertyHelper::CopyJsonValueToContainer(object, property, propertyValue);
+                auto routed=propertyValue;
+                if(propertyName=="RecipesToUnlock") {
+                    if(!m_recipeService)throw std::runtime_error("recipe reference service is unavailable");
+                    if(!routed.is_array())throw std::runtime_error("RecipesToUnlock must be an array");
+                    for(auto& reference:routed) {
+                        if(!reference.is_string())throw std::runtime_error("RecipesToUnlock entries must be strings");
+                        auto* recipe=m_recipeService->ResolveReference(pendingAsset.ModName,reference.get<std::string>());
+                        if(!recipe)throw std::runtime_error("RecipesToUnlock target is unavailable or ambiguous: "+reference.get<std::string>());
+                        reference=RC::to_string(recipe->GetPathName());
+                    }
+                }
+                PropertyHelper::CopyJsonValueToContainer(object, property, routed);
                 outResult.PropertiesWritten++;
                 if (IsUnlockableAssetField(propertyName))
                     PS::Log<LogLevel::Verbose>(STR("[{}] Applied unlockable asset field '{}'.\n"),
@@ -1604,19 +1616,27 @@ namespace DragonWilds {
         PS::AssetProvenance::Flush();
         if (omittedDetails)
             PS::Log<LogLevel::Verbose>(STR("Assets: {} additional successful clone detail(s) omitted.\n"), omittedDetails);
+        std::size_t totalCreated=0,totalUpdated=0,totalErrors=0;
         for (auto& [modName, result] : batchResults)
         {
+            totalCreated+=result.Created;
+            totalUpdated+=result.ClonesUpdated+result.Patched+result.TargetsUpdated;
+            totalErrors+=result.ErrorCount;
             if (result.Created || result.ClonesUpdated)
-                PS::RoutineLog("assets", STR("{} $Clone: {} new, {} updated.\n"),
+                PS::Log<LogLevel::Verbose>(STR("[loader=assets][mod={}] clones: created={} updated={}.\n"),
                     modName, result.Created, result.ClonesUpdated);
             if (result.Patched)
-                PS::RoutineLog("patches", STR("{} $Patch: {} updated.\n"), modName, result.Patched);
+                PS::Log<LogLevel::Verbose>(STR("[loader=assets][mod={}] patches: updated={}.\n"), modName, result.Patched);
             if (result.ErrorCount)
                 PS::Log<LogLevel::Warning>(STR("{} assets: {} updated, {} properties written, {} errors.\n"),
                     modName, result.TargetsUpdated, result.PropertiesWritten, result.ErrorCount);
             else if (result.TargetsUpdated)
-                PS::RoutineLog("assets", STR("{} assets: {} updated, 0 errors.\n"), modName, result.TargetsUpdated);
+                PS::Log<LogLevel::Verbose>(STR("[loader=assets][mod={}] targets: updated={} properties={}.\n"),
+                    modName, result.TargetsUpdated, result.PropertiesWritten);
         }
+        if(!batchResults.empty())
+            PS::LoaderSummary("assets", totalCreated+totalUpdated,
+                totalCreated,totalUpdated,0,totalErrors);
     }
 
     void DragonWildsAssetModLoader::ReportUnresolvedAssets()

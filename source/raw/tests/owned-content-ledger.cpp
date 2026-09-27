@@ -15,13 +15,23 @@ int RunOwnedContentLedger() {
     const auto file=root/"ledger.json";
     const Record a{"Item","Enabled","AAAAAAAAAAAAAAAAAAAAAA","ITEM_A","/Game/A.A"};
     const Record b{"Item","Disabled","BBBBBBBBBBBBBBBBBBBBBA","ITEM_B","/Game/B.B"};
+    const Record journal{"Journal","Enabled","RS_Journal_Dawnveil_Armor",
+        "RS_Journal_Dawnveil_Armor","RS_Journal_Dawnveil_Armor"};
     Merge(file,{a,b});
     const auto read=Read(file);assert(read.size()==2);
     const auto absent=Absent(read,{"Enabled"});
     assert(absent.size()==1 && absent[0].Owner=="Disabled"
         && absent[0].PersistenceID==b.PersistenceID);
     assert(Absent(read,{"enabled"}).size()==1); // owner matching is case-insensitive
-    Merge(file,{a});assert(Read(file).size()==2); // historical ownership survives removal
+    Merge(file,{journal});
+    const auto withJournal=Read(file);
+    assert(std::any_of(withJournal.begin(),withJournal.end(),[](const auto& row){
+        return row.Kind=="Journal" && row.PersistenceID=="RS_Journal_Dawnveil_Armor";}));
+    bool badJournal=false;
+    try {auto invalid=journal;invalid.PersistenceID="RS_Journal\nBad";Validate(invalid);}
+    catch(const std::exception&){badJournal=true;}
+    assert(badJournal);
+    Merge(file,{a});assert(Read(file).size()==3); // historical ownership survives removal
     auto changed=b;changed.Owner="Other";changed.Source="/Game/Moved/B.B";
     Merge(file,{changed});
     const auto transferred=Read(file);

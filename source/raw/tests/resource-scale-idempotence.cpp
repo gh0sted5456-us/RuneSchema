@@ -31,6 +31,8 @@ int main(int argc,char** argv) {
         "managed actor scale is not restored as an absolute value");
     Require(header.find("m_managedScaleElapsed")!=std::string::npos,
         "managed actor scale reconciliation is not rate limited");
+    Require(loader.find("&& !spawn.bTimeAllowed")!=std::string::npos,
+        "inactive conditional actors are rediscovered by the scale reconciler");
     Require(loader.find("GetActorScale3D() *") == std::string::npos
         && loader.find("GetActorScale3D()*") == std::string::npos,
         "resource scale is compounded from the actor's current scale");

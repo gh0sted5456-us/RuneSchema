@@ -7,6 +7,7 @@
 #include <vector>
 #include "Loader/DragonWildsModLoaderBase.h"
 #include "nlohmann/json.hpp"
+#include "Unreal/Hooks.hpp"
 
 namespace RC::Unreal {
     class UClass;
@@ -15,6 +16,7 @@ namespace RC::Unreal {
 }
 
 namespace DragonWilds {
+    class DragonWildsRecipeModLoader;
     class DragonWildsJournalModLoader : public DragonWildsModLoaderBase {
         struct JournalDef {
             RC::StringType Key;
@@ -34,6 +36,8 @@ namespace DragonWilds {
 
     public:
         explicit DragonWildsJournalModLoader(bool loreOnly = false);
+        ~DragonWildsJournalModLoader();
+        void SetRecipeService(DragonWildsRecipeModLoader* service) { m_recipeService = service; }
         bool OpenLoreForPlayer(RC::Unreal::UObject* controller,const std::string& reference);
 
     protected:
@@ -46,6 +50,7 @@ namespace DragonWilds {
 
     private:
         bool m_loreOnly = false;
+        DragonWildsRecipeModLoader* m_recipeService = nullptr;
         bool m_initialJournalApplied = false;
         std::vector<JournalDef> m_defs;
         struct PendingPatch { std::string Reference; nlohmann::json Changes; RC::StringType Owner; };
@@ -68,6 +73,12 @@ namespace DragonWilds {
         RC::Unreal::UClass* m_journalComponentClass = nullptr;
         RC::Unreal::UClass* m_journalSubsystemClass = nullptr;
         bool m_hooksActive = false;
+        bool m_nativePersistenceReady = false;
+        struct AcquisitionUnlock { RC::Unreal::UObject* Item=nullptr; RC::StringType EntryKey; };
+        std::vector<AcquisitionUnlock> m_acquisitionUnlocks;
+        std::unordered_map<std::string,std::unordered_map<RC::StringType,int32_t>> m_acquisitionBaselines;
+        RC::Unreal::Hook::GlobalCallbackId m_acquisitionCallbackId = RC::Unreal::Hook::ERROR_ID;
+        bool m_observingAcquisition = false;
 
         struct ReferenceIndex {
             bool Built = false;
@@ -86,12 +97,15 @@ namespace DragonWilds {
         LoadResult ApplyAll();
         RC::Unreal::UObject* ResolveOrCreate(const JournalDef& def);
         RC::Unreal::UClass* ResolveEntryClass(const nlohmann::json& body) const;
-        void ApplyProperties(RC::Unreal::UObject* entry, const nlohmann::json& body);
+        void ApplyProperties(RC::Unreal::UObject* entry, const nlohmann::json& body,
+            const RC::StringType& owner);
         bool Place(RC::Unreal::UObject* entry, const JournalDef& def);
         void RegisterEntry(RC::Unreal::UObject* entry,const RC::StringType& owner);
         void RegisterHooks();
+        void RegisterAcquisitionHook();
+        void ObserveAcquisition(RC::Unreal::UObject* source,RC::Unreal::UFunction* function);
         void UnlockEntries(RC::Unreal::UObject* journalComponent);
-        RC::Unreal::UObject* FindJournalComponent();
+        RC::Unreal::UObject* FindJournalComponent(RC::Unreal::UObject* controller=nullptr);
         RC::Unreal::UObject* FindJournalSubsystem();
 
         void TrackOwnedId(RC::Unreal::UObject* entry, const RC::Unreal::FString& persistenceId,const RC::StringType& owner,bool declared=false);

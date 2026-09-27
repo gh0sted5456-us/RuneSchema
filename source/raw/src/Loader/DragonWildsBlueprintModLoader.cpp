@@ -346,7 +346,7 @@ namespace DragonWilds {
             PS::Log<LogLevel::Verbose>(STR("Blueprints: {} additional successful change detail(s) omitted.\n"),
                 applied - detailLimit);
         if (applied)
-            PS::RoutineLog("blueprints", STR("Blueprints: {} change set(s) applied.\n"), applied);
+            PS::LoaderSummary("blueprints", applied, 0, applied, 0, 0);
     }
 
     void DragonWildsBlueprintModLoader::ModifyObject(RC::Unreal::UObject* object)

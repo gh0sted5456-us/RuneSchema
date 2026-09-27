@@ -12,6 +12,7 @@ struct Assignment {
     std::optional<std::string> skillUsed;
     std::optional<std::string> skillPerkRequiredToEquip;
     std::optional<EquipmentEffectRules::Assignment> grantedEffects;
+    nlohmann::json properties=nlohmann::json::object();
 };
 using Rules=std::map<std::string,Assignment>;
 
@@ -30,6 +31,19 @@ inline void Merge(Rules& current,const nlohmann::json& value) {
         Assignment next=staged[path];
         for(const auto& [field,fieldValue]:body.items()) {
             if(field=="$Comment")continue;
+            if(field=="Properties") {
+                if(!fieldValue.is_object() || fieldValue.empty() || fieldValue.size()>128)
+                    throw std::runtime_error("Items.Properties must be a non-empty object with at most 128 reflected fields");
+                for(const auto& [name,propertyValue]:fieldValue.items()) {
+                    if(name.empty() || name.size()>256 || name.starts_with('$')
+                        || name=="PersistenceID" || name=="InternalName"
+                        || name=="GrantedEffects" || name=="AssociatedSkill"
+                        || name=="SkillUsed" || name=="SkillPerkRequiredToEquip")
+                        throw std::runtime_error("Items.Properties contains a protected or reserved field: "+name);
+                    next.properties[name]=propertyValue;
+                }
+                continue;
+            }
             if(field=="GrantedEffects") {
                 EquipmentEffectRules::Rules parsed;
                 EquipmentEffectRules::Merge(parsed,nlohmann::json{{path,fieldValue}});

@@ -59,6 +59,14 @@ namespace DragonWilds {
 
         if (!HasInitialized())
         {
+            // A loader may intentionally initialize in a later lifecycle phase
+            // (spawns are the common example).  Its folder existing now is not
+            // a section failure, and must not mark the whole mod PARTIAL.
+            if (!PS::PSConfig::Get()->IsLoaderEnabled(m_modFolderType)
+                || !CanInitialize(engineLifecyclePhase))
+            {
+                return true;
+            }
             return false;
         }
 

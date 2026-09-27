@@ -142,7 +142,14 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Utility/Config.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsJournalModLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRecipeModLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/NpcQuestActions.inl"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/Spawn/PlayerRules.cpp")
+    add_executable(loader-lifecycle-contract ../tests/loader-lifecycle-contract.cpp)
+    add_test(NAME loader-lifecycle-contract COMMAND loader-lifecycle-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsModLoaderBase.cpp")
+    add_executable(recipe-reference-contract ../tests/recipe-reference-contract.cpp)
+    add_test(NAME recipe-reference-contract COMMAND recipe-reference-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRecipeModLoader.cpp")
     add_executable(preview-refresh-contract ../tests/preview-refresh-contract.cpp)
     add_test(NAME preview-refresh-contract COMMAND preview-refresh-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/PlayerGhost.cpp")

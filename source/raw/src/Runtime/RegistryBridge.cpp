@@ -39,7 +39,7 @@ constexpr size_t MaxEnvelopeBytes = 16 * 1024;
 constexpr size_t MaxActionPayloadBytes = 4 * 1024;
 constexpr uint32_t MaxRequestsPerSecond = 8;
 constexpr size_t MaxWorldInstances = 512;
-constexpr auto BuildIdentity = "0.7.5.29";
+constexpr auto BuildIdentity = "0.7.6";
 
 const PS::MappingBackbone::Mapping& LocalMapping() {
     return PS::MappingBackbone::Current(PS::HostServices::WorkingDirectory());
@@ -184,7 +184,7 @@ void RegistryBridge::ResetWorld() {
     m_pendingMode=nullptr;
     m_retryElapsed=m_retryInterval=0.0f;
     m_seenRegistryRevision=m_seenActivationRevision=m_seenPersistentRevision=0;
-    m_activeAuthorityGraph=nullptr;m_nativeAuthorityActionObserved=false;m_playerBridgeInterval=0.0f;
+    m_activeAuthorityGraph=nullptr;m_nativeAuthorityActionObserved=false;
     m_manifestFingerprint.clear();m_activationEnvelope.clear();m_persistentStateEnvelope.clear();
     m_registryRevision=m_activationRevision=m_persistentRevision=0;
     m_outboundRevision=0;m_requestWindows.clear();m_worldInstances.clear();m_worldLedgerRevision=0;
@@ -200,6 +200,9 @@ void RegistryBridge::SetRegistrySnapshot(std::string snapshot) {
     m_registrySnapshot=std::move(snapshot);
     m_manifestFingerprint=Fingerprint(m_registrySnapshot);
     LoadAuthorityActions();
+    // Snapshot publication happens once per registry rebuild. Catch players
+    // already present at that boundary; later pawns attach from BeginPlay.
+    try{EnsurePlayerBridges();}catch(...){}
 }
 
 std::string RegistryBridge::CompactPayload() const {
@@ -354,6 +357,17 @@ void RegistryBridge::EnsurePlayerBridges() {
         DragonWilds::ActorHelper::FunctionCall authority(player,TEXT("/Script/Engine.Actor:HasAuthority"));authority.Invoke();
         if(authority.Result<bool>())EnsureBridgeComponent(static_cast<AActor*>(player),false);
     }
+}
+
+void RegistryBridge::ObservePlayerLifecycle(UObject* source,UFunction* function) {
+    if(!source||!function||!source->IsA<AActor>())return;
+    static const FName beginPlay(TEXT("ReceiveBeginPlay"),FNAME_Add);
+    if(function->GetFName()!=beginPlay)return;
+    auto* playerType=DragonWilds::ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionPlayerCharacter"));
+    if(!playerType||!source->IsA(playerType)
+        || source->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed)))return;
+    DragonWilds::ActorHelper::FunctionCall authority(source,TEXT("/Script/Engine.Actor:HasAuthority"));authority.Invoke();
+    if(authority.Result<bool>())EnsureBridgeComponent(static_cast<AActor*>(source),false);
 }
 
 void RegistryBridge::ForwardRegistryRequest(UObject* component,const std::string& key) {
@@ -611,6 +625,9 @@ bool RegistryBridge::Attach(AGameModeBase* mode) {
         .Arg(TEXT("ShouldReplicate"),true).Invoke();
     m_authorityComponent=component;
     m_pendingMode=nullptr;
+    // One bounded world-ready scan covers pawns whose BeginPlay preceded the
+    // bridge. New pawns are handled by ObservePlayerLifecycle.
+    EnsurePlayerBridges();
     return true;
 }
 
@@ -738,16 +755,6 @@ void RegistryBridge::ObserveAuthorityPost(UObject* source,UFunction* function) {
 }
 
 void RegistryBridge::RetryAttach(float deltaSeconds) {
-    m_playerBridgeInterval+=std::max(0.0f,deltaSeconds);
-    if(m_playerBridgeInterval>=1.0f){
-        m_playerBridgeInterval=0;
-        // Registry JSON is loaded after this runtime starts.  A dedicated
-        // client therefore has no saved manifest on first launch and the old
-        // one-shot load left its action map permanently empty.  Retry only
-        // until the registry loader has produced the local validated manifest.
-        if(m_authorityActions.empty())try{LoadAuthorityActions();}catch(...){}
-        try{EnsurePlayerBridges();}catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("Player registry bridge deferred: {}.\n"),PS::ToWideSafe(error.what()));}
-    }
     if(!m_pendingMode || m_authorityComponent)return;
     m_retryElapsed+=std::max(0.0f,deltaSeconds);
     m_retryInterval+=std::max(0.0f,deltaSeconds);
@@ -763,6 +770,18 @@ void RegistryBridge::RetryAttach(float deltaSeconds) {
         PS::Log<LogLevel::Warning>(STR("Registry bridge unavailable: {}.\n"),PS::ToWideSafe(error.what()));
         m_pendingMode=nullptr;
     }
+}
+
+void RegistryBridge::StartRetryTick() {
+    if(m_retryTick!=Hook::ERROR_ID)return;
+    Hook::FCallbackOptions options{};options.OwnerModName=TEXT("RuneSchema");
+    options.HookName=TEXT("RegistryBridgeDeferredAttach");
+    m_retryTick=Hook::RegisterEngineTickPostCallback(
+        [this](Hook::TCallbackIterationData<void>& iteration,UEngine*,float deltaSeconds,bool){
+            RetryAttach(deltaSeconds);
+            if(!m_pendingMode||m_authorityComponent){m_retryTick=Hook::ERROR_ID;iteration.RemoveSelf();}
+        },options);
+    if(m_retryTick==Hook::ERROR_ID){m_pendingMode=nullptr;PS::Log<LogLevel::Warning>(STR("Registry bridge deferred attachment could not be scheduled.\n"));}
 }
 
 void RegistryBridge::Observe(UObject* source,UFunction* function) {
@@ -922,20 +941,18 @@ void RegistryBridge::Start() {
     options.HookName=TEXT("RegistryBridgeWorldReady");
     m_worldReady=Hook::RegisterInitGameStatePostCallback([this](Hook::TCallbackIterationData<void>&,AGameModeBase* mode){
         m_pendingMode=mode;m_retryElapsed=m_retryInterval=0.0f;
-        try{Attach(mode);}catch(const std::exception& error){m_pendingMode=nullptr;PS::Log<LogLevel::Warning>(STR("Registry bridge unavailable: {}.\n"),PS::ToWideSafe(error.what()));}
+        try{if(!Attach(mode))StartRetryTick();}catch(const std::exception& error){m_pendingMode=nullptr;PS::Log<LogLevel::Warning>(STR("Registry bridge unavailable: {}.\n"),PS::ToWideSafe(error.what()));}
     },options);
-    options.HookName=TEXT("RegistryBridgeDeferredAttach");
-    m_retryTick=Hook::RegisterEngineTickPostCallback([this](Hook::TCallbackIterationData<void>&,UEngine*,float deltaSeconds,bool){RetryAttach(deltaSeconds);},options);
     options.HookName=TEXT("RegistryAuthorityAction");
     m_authorityPre=Hook::RegisterProcessEventPreCallback([this](Hook::TCallbackIterationData<void>&,UObject* source,UFunction* function,void* parameters){
         try{ObserveAuthorityPre(source,function,parameters);}catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("Registry authority precheck rejected: {}.\n"),PS::ToWideSafe(error.what()));}
     },options);
     options.HookName=TEXT("RegistryBridgeRepNotify");
     m_processEvent=Hook::RegisterProcessEventPostCallback([this](Hook::TCallbackIterationData<void>&,UObject* source,UFunction* function,void* parameters){
-        try{ObserveAuthorityPost(source,function);Observe(source,function);ObserveClientTransport(source,function,parameters);}catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("Registry bridge update rejected: {}.\n"),PS::ToWideSafe(error.what()));}
+        try{ObservePlayerLifecycle(source,function);ObserveAuthorityPost(source,function);Observe(source,function);ObserveClientTransport(source,function,parameters);}catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("Registry bridge update rejected: {}.\n"),PS::ToWideSafe(error.what()));}
     },options);
     m_started=m_worldStarting!=Hook::ERROR_ID && m_worldReady!=Hook::ERROR_ID
-        && m_retryTick!=Hook::ERROR_ID && m_authorityPre!=Hook::ERROR_ID && m_processEvent!=Hook::ERROR_ID;
+        && m_authorityPre!=Hook::ERROR_ID && m_processEvent!=Hook::ERROR_ID;
     if(!m_started){Stop();PS::Log<LogLevel::Warning>(STR("Registry bridge hooks could not be installed.\n"));}
 }
 

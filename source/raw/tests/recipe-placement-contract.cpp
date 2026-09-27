@@ -56,6 +56,8 @@ int main(int argc, char** argv)
         "timed processing does not validate runtime-clone outputs");
     Need(loader, "RuntimeRecipePath(def.ModName,def.Key)",
         "authored processing recipes do not receive a stable mod-scoped runtime path");
+    Need(loader, "ResolveReference(",
+        "assets can no longer resolve local recipe-unlocker targets");
     Need(loader, "runtime-clone output has not completed ItemSubsystem registration",
         "unregistered runtime-clone processing output is not isolated");
     Need(loader, "runtime-clone output has no stable PersistenceID",
@@ -64,9 +66,9 @@ int main(int argc, char** argv)
         "processing output is not verified against the live ItemSubsystem identity route");
     Need(loader, "processing recipe still has a transient identity",
         "transient processing recipes are not rejected");
-    Need(loader, "m_invalidRecipes.insert(def.Key)",
+    Need(loader, "m_invalidRecipes.insert(identity)",
         "partially written recipes can still reach a station table");
-    Need(loader, "if(m_invalidRecipes.contains(def.Key))continue;",
+    Need(loader, "if(m_invalidRecipes.contains(identity))continue;",
         "invalid recipe placement is not blocked during initial and replay placement");
     Need(loader, "sizeof(UObject*)", "processing array element size is not checked");
     Need(properties, "String references carry no separate ObjectName",

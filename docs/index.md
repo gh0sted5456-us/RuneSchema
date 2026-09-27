@@ -15,7 +15,7 @@ RuneSchema is a UE4SS runtime for self-contained **RuneScape: Dragonwilds** cont
 <div class="rs-status-grid" markdown>
 <div class="rs-status-card" markdown>
 ### Current documentation
-**RuneSchema 0.7.5.28**
+**RuneSchema 0.7.6**
 
 The current guides describe the universal runtime and its isolated Steam/GOG and Game Pass/WinGDK execution lanes.
 </div>

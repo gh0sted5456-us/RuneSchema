@@ -51,8 +51,10 @@ void DragonWildsGameplayEffectLoader::Apply(const Definition& definition) {
 }
 void DragonWildsGameplayEffectLoader::OnFinalizeLoad(const EEngineLifecyclePhase& phase) {
     if(phase!=EEngineLifecyclePhase::PostEngineInit)return;
-    for(const auto& definition:m_definitions)try { Apply(definition); }
-    catch(const std::exception& error) { PS::Log<LogLevel::Error>(TEXT("Gameplay effect '{}' rejected: {}\n"),to_generic_string(definition.Key),PS::ToWideSafe(error.what())); }
+    std::size_t applied=0,errors=0;
+    for(const auto& definition:m_definitions)try { Apply(definition);++applied; }
+    catch(const std::exception& error) { ++errors;PS::Log<LogLevel::Error>(TEXT("Gameplay effect '{}' rejected: {}\n"),to_generic_string(definition.Key),PS::ToWideSafe(error.what())); }
+    if(!m_definitions.empty())PS::LoaderSummary("effects",m_definitions.size(),0,applied,0,errors);
     m_definitions.clear();
 }
 UClass* DragonWildsGameplayEffectLoader::Resolve(const std::string& key) const {

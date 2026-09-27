@@ -1,0 +1,161 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "description": "Structural authoring hints, not an exhaustive runtime validator. Asset paths, identities, reflected properties and event compatibility must be validated in game.",
+  "minProperties": 1,
+  "not": {
+    "required": [
+      "ShadowveilWearables",
+      "ShadowveilAttackEvadeWearables"
+    ]
+  },
+  "properties": {
+    "GrantedEffects": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "properties": {
+          "$Comment": {
+            "type": "string"
+          },
+          "Effects": {
+            "items": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9_-]+:Effects/[A-Za-z0-9_./-]+$"
+                },
+                {
+                  "pattern": "^/.*\\..*_C$"
+                }
+              ],
+              "maxLength": 1024,
+              "type": "string"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "type": "array"
+          },
+          "Mode": {
+            "enum": [
+              "Replace",
+              "Append",
+              "Clear"
+            ]
+          }
+        },
+        "required": [
+          "Mode"
+        ],
+        "type": "object"
+      },
+      "maxProperties": 256,
+      "propertyNames": {
+        "pattern": "^/.*\\..+$"
+      },
+      "type": "object"
+    },
+    "Items": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "$Comment": {
+            "type": "string"
+          },
+          "AssociatedSkill": {
+            "maxLength": 1024,
+            "pattern": "^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$",
+            "type": "string"
+          },
+          "GrantedEffects": {
+            "additionalProperties": false,
+            "properties": {
+              "$Comment": {
+                "type": "string"
+              },
+              "Effects": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "pattern": "^[A-Za-z0-9_-]+:Effects/[A-Za-z0-9_./-]+$"
+                    },
+                    {
+                      "pattern": "^/.*\\..*_C$"
+                    }
+                  ],
+                  "maxLength": 1024,
+                  "type": "string"
+                },
+                "maxItems": 64,
+                "minItems": 1,
+                "type": "array"
+              },
+              "Mode": {
+                "enum": [
+                  "Replace",
+                  "Append",
+                  "Clear"
+                ]
+              }
+            },
+            "required": [
+              "Mode"
+            ],
+            "type": "object"
+          },
+          "Properties": {
+            "additionalProperties": true,
+            "description": "Additional reflected fields already exposed by the resolved equipment ItemData class. Use this for native PrimaryActionClass, SpecialActionClass, BuffDatas, GameplayEffectOnBlock, GrantedTags, action/projectile data, durability behavior and similar cooked fields. Identity and explicit convenience fields are protected.",
+            "maxProperties": 128,
+            "minProperties": 1,
+            "propertyNames": {
+              "pattern": "^(?!(?:PersistenceID|InternalName|GrantedEffects|AssociatedSkill|SkillUsed|SkillPerkRequiredToEquip)$)[A-Za-z0-9_]{1,256}$"
+            },
+            "type": "object"
+          },
+          "SkillPerkRequiredToEquip": {
+            "maxLength": 1024,
+            "pattern": "^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$",
+            "type": "string"
+          },
+          "SkillUsed": {
+            "maxLength": 1024,
+            "pattern": "^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "maxProperties": 256,
+      "propertyNames": {
+        "pattern": "^/.*\\..+$"
+      },
+      "type": "object"
+    },
+    "ShadowveilAttackEvadeWearables": {
+      "additionalProperties": {
+        "type": "boolean"
+      },
+      "maxProperties": 64,
+      "type": "object"
+    },
+    "ShadowveilWearables": {
+      "type": "object"
+    },
+    "SurgeEvadeLegs": {
+      "additionalProperties": {
+        "type": "boolean"
+      },
+      "maxProperties": 64,
+      "type": "object"
+    }
+  },
+  "title": "RuneSchema /equipment",
+  "type": "object",
+  "x-runeschema-coverage": "structural",
+  "x-runeschema-starter-capabilities": {
+    "append": false,
+    "clone": false,
+    "patch": false,
+    "search": "authored files"
+  }
+}

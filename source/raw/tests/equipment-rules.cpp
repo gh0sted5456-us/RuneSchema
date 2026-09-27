@@ -12,11 +12,13 @@ int main() {
         {"AssociatedSkill","/Game/Skills/SKILL_Magic.SKILL_Magic"},
         {"SkillUsed","/Game/Skills/SKILL_Artisan.SKILL_Artisan"},
         {"SkillPerkRequiredToEquip","/Game/Perks/Perk_Magic.Perk_Magic"},
+        {"Properties",{{"PrimaryActionClass","/Game/Actions/GA_Primary.GA_Primary_C"},{"BuffDatas",nlohmann::json::array()}}},
         {"GrantedEffects",nlohmann::json{{"Mode","Append"},{"Effects",nlohmann::json::array({"/Game/Effects/GE_Magic.GE_Magic_C"})}}}
     };
     EquipmentRules::Merge(rules, {{"Items", {{path, itemRule}}}});
     assert(rules.items.size()==1);
     assert(rules.items.at(path).associatedSkill=="/Game/Skills/SKILL_Magic.SKILL_Magic");
+    assert(rules.items.at(path).properties.at("PrimaryActionClass")=="/Game/Actions/GA_Primary.GA_Primary_C");
     assert(rules.items.at(path).grantedEffects->mode==EquipmentEffectRules::Mode::Append);
     assert(rules.effects.at(path).effects.size()==2);
     EquipmentRules::Merge(rules, {{"ShadowveilAttackEvadeWearables", {{path, true}}}});
@@ -53,6 +55,7 @@ int main() {
     invalidEffect["GrantedEffects"][path]={{"Mode","Append"},{"Effects",nlohmann::json::array()}};rejects(invalidEffect);
     invalidEffect["GrantedEffects"][path]={{"Mode","Unknown"},{"Effects",{"Example:Effects/Test"}}};rejects(invalidEffect);
     invalidEffect["GrantedEffects"][path]={{"Mode","Clear"},{"Effects",{"Example:Effects/Test"}}};rejects(invalidEffect);
+    rejects({{"Items",{{path,{{"Properties",{{"PersistenceID","unsafe"}}}}}}}});
     rejects({{"ShadowveilWearables", {{path, false}}}, {"ShadowveilAttackEvadeWearables", {{path, true}}}});
     EquipmentRules::Merge(rules, actionRule({"MeleeAttack", "RangedAttack", "Evade", "MagicAttack", "UtilityCast"}));
     assert(rules.shadowveil.at(path) == 31);

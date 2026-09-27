@@ -35,8 +35,8 @@ int main(int argc, char** argv) {
     require(source.find("ensureInArray") == std::string::npos);
     require(source.find("m_knownIds") == std::string::npos);
     require(source.find("InstallNativePersistence();") != std::string::npos);
-    require(source.find("persistence.journal && !m_ownedIds.empty()") != std::string::npos);
-    require(source.find("if (!PS::PSConfig::Get()->GetSettings().persistence.journal)") != std::string::npos);
+    require(source.find("if (!m_ownedIds.empty())") != std::string::npos);
+    require(source.find("!m_nativePersistenceReady") != std::string::npos);
     require(source.find("[FEATURE:journal-save-cleanup][UNAVAILABLE]") != std::string::npos);
     const auto persistence = source.find("InstallNativePersistence();", apply);
     const auto hooks = source.find("RegisterHooks();", persistence);
@@ -47,10 +47,12 @@ int main(int argc, char** argv) {
     require(source.find("WinGDK journal save-cleanup adapter is not verified") != std::string::npos);
     require(source.find("StripUnusableIdsFromCharacterSave") == std::string::npos);
     require(source.find("SaveCharacters") == std::string::npos);
-    require(source.find("QuestRegistry::NativeRegistry::RegisterJournal(subsystem,subsystem->GetOuterPrivate(),entry);")
-        < source.find("TrackOwnedId(entry, persistenceId,owner);"));
-    require(source.find("RegisterEntry(entry,def.Owner);",apply)<source.find("Place(entry, def)",apply));
+    const auto registered=source.find("RegisterEntry(entry,def.Owner);",apply);
+    const auto placed=source.find("Place(entry, def)",registered);
+    const auto owned=source.find("TrackOwnedId(entry,persistence,def.Owner,def.Declared);",placed);
+    require(registered<placed && placed<owned);
     require(source.find("found->Owner!=modName")!=std::string::npos);
+    require(source.find("for (const auto* fieldName : {TEXT(\"PersistenceID\"), TEXT(\"InternalName\")})")!=std::string::npos);
     require(source.find("std::memcpy(reverse.GetValuePtr") == std::string::npos);
     std::cout << "PASS: journal source guards for preflight, failure isolation, rooted cache and no character-load retry.\n";
 }

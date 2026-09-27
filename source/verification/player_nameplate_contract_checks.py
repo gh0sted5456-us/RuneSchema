@@ -11,6 +11,9 @@ def require(name,value):
     if not value: raise AssertionError(name)
 
 require('exact nameplate objects','BP_Player_Nameplate' in source and 'PlayerNameTextBlock' in source)
+require('native nameplate lifecycle','DominionWidgetComponent:AllowShowWidget' in source and 'DominionWidgetComponent:UpdateWidgetVisibility' in source)
+require('native nameplate controls','AlwaysFaceCamera' in header and 'OnlyShowNearby' in header and 'AlwaysFaceCamera' in schema and 'OnlyShowNearby' in schema)
+require('pawn/widget cache ownership','AppliedVisual{PS::WeakObject(pawn), PS::WeakObject(widget), signature}' in source)
 require('nameplate reflected targets','Nameplate.Native.Component' in source and 'Nameplate.Native.Widget' in source and 'Nameplate.Native.Text' in source)
 require('player reflected targets','Native.Pawn' in source and 'Native.Components.' in source)
 require('bounded reflected patch','patch.dump().size()>65536' in source and 'patch.size()>maximum' in source)

@@ -5,6 +5,7 @@
 #include "Utility/Config.h"
 #include <string_view>
 #include <utility>
+#include <cstddef>
 
 namespace PS {
     inline auto ToWideSafe(const char* text) -> RC::StringType
@@ -19,6 +20,17 @@ namespace PS {
         {
             wide.push_back(*byte < 0x80 ? static_cast<RC::CharType>(*byte) : STR('?'));
         }
+        return wide;
+    }
+
+    inline auto ToWideSafe(std::string_view text) -> RC::StringType
+    {
+        RC::StringType wide;
+        wide.reserve(text.size());
+        for (const auto byte : text)
+            wide.push_back(static_cast<unsigned char>(byte) < 0x80
+                ? static_cast<RC::CharType>(static_cast<unsigned char>(byte))
+                : STR('?'));
         return wide;
     }
 
@@ -56,6 +68,22 @@ namespace PS {
         FmtArgs&&... fmt_args) -> void
     {
         if (!PS::PSConfig::Get()->IsRoutineNotificationEnabled(channel)) return;
-        Log<RC::LogLevel::Normal>(content, std::forward<FmtArgs>(fmt_args)...);
+        RC::StringType decorated = STR("[loader=");
+        decorated += ToWideSafe(channel);
+        decorated += STR("] ");
+        decorated.append(content.data(), content.size());
+        Log<RC::LogLevel::Normal>(decorated,
+            std::forward<FmtArgs>(fmt_args)...);
+    }
+
+    // One stable, always-visible row per completed loader pass. Individual
+    // objects and property writes remain diagnostic-only.
+    inline void LoaderSummary(std::string_view loader, std::size_t loaded,
+        std::size_t created, std::size_t updated, std::size_t placed,
+        std::size_t errors)
+    {
+        RC::Output::send<RC::LogLevel::Normal>(
+            STR("[RuneSchema] [summary] {} | loaded={} | created={} | updated={} | placed={} | errors={}\n"),
+            ToWideSafe(loader), loaded, created, updated, placed, errors);
     }
 }

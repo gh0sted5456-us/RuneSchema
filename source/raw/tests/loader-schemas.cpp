@@ -95,6 +95,14 @@ int RunLoaderSchemas(int argc,char** argv) {
     assert(schemas.at("equipment").at("additionalProperties")==false);
     assert(schemas.at("equipment").at("properties").contains("GrantedEffects"));
     assert(schemas.at("equipment").at("properties").contains("Items"));
+    const auto& itemProperties=schemas.at("equipment").at("properties").at("Items")
+        .at("additionalProperties").at("properties").at("Properties");
+    assert(itemProperties.at("type")=="object" && itemProperties.at("maxProperties")==128);
+    const auto& processing=schemas.at("buildings").at("anyOf").at(0).at("anyOf").at(0)
+        .at("patternProperties").at("^[^$]")
+        .at("properties").at("Overrides").at("properties").at("Processing").at("properties");
+    assert(processing.contains("AcceptedFuels") && processing.contains("StartingFuelItem")
+        && processing.contains("MaxFuelSlots") && processing.contains("AutoStartProcess"));
     const auto& declaration=schemas.at("assets").at("properties").at("$declaration");
     assert(declaration.at("oneOf").size()==2);
     assert(declaration.at("oneOf").at(0).at("properties").at("Kind").at("enum")==nlohmann::json::array({"Item","Recipe"}));
@@ -104,6 +112,8 @@ int RunLoaderSchemas(int argc,char** argv) {
     assert(schemas.at("quests").at("anyOf").size()==3);
     const auto& recipePlacement=schemas.at("recipes").at("patternProperties").at("^[^$]")
         .at("properties").at("AddTo").at("items");
+    assert(schemas.at("recipes").at("patternProperties").at("^[^$]").at("properties")
+        .at("PersistenceID").at("pattern")=="^[A-Za-z0-9_-]{21}[AQgw]$");
     assert(recipePlacement.at("properties").contains("Table"));
     assert(recipePlacement.at("properties").contains("DataTable"));
     assert(recipePlacement.at("allOf").at(0).at("oneOf").size()==2);

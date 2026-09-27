@@ -35,12 +35,14 @@ int RunConfigSettings() {
     assert(!settings.colorCodeLoaderAnnotations);
     assert(!DecodeSettings("{}").advancedLogging);
     assert(!DecodeSettings("{}").persistence.characterCustomization);
-    assert(!DecodeSettings("{}").persistence.journal);
-    assert(!DecodeSettings("{}").persistence.recipes);
-    auto persistenceSettings=DecodeSettings(R"({"persistence":{"characterCustomization":true,"journal":true,"recipes":true}})");
+    assert(DecodeSettings("{}").persistence.journal);
+    assert(DecodeSettings("{}").persistence.recipes);
+    assert(DecodeSettings("{}").persistence.quests);
+    auto persistenceSettings=DecodeSettings(R"({"persistence":{"characterCustomization":true,"journal":false,"recipes":false,"quests":false}})");
     assert(persistenceSettings.persistence.characterCustomization
-        && persistenceSettings.persistence.journal && persistenceSettings.persistence.recipes);
-    assert(DecodeSettings(EncodeSettings(persistenceSettings)).persistence.journal);
+        && !persistenceSettings.persistence.journal && !persistenceSettings.persistence.recipes
+        && !persistenceSettings.persistence.quests);
+    assert(!DecodeSettings(EncodeSettings(persistenceSettings)).persistence.journal);
     Rejects([&]{DecodeSettings(R"({"persistence":{"characterCustomization":"yes"}})");});
     assert(DecodeSettings("{}").authoringTools);
     assert(DecodeSettings("{}").loaders.dialogue);

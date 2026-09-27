@@ -54,6 +54,7 @@
 #include "SDK/Helper/PropertyHelper.h"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
+#include "Utility/Config.h"
 #include "Utility/BuildInfo.h"
 #include "Loader/VendorAcknowledgement.h"
 #include "Utility/NativeFunctionHook.h"
@@ -831,9 +832,8 @@ namespace DragonWilds {
             m_vendorReport["Phase"] = m_definitions.empty()
                 ? "Merchant.NoDefinitions" : "Merchant.WaitingForWorld";
             WriteVendorStatus();
-            PS::Log<LogLevel::Normal>(
-                STR("Loaded {} NPC/legacy vendor definition(s); {} rejected definition(s) were isolated.\n"),
-                m_definitions.size(),rejected);
+            PS::LoaderSummary("npc-vendors", m_definitions.size(),
+                m_definitions.size(), 0, 0, rejected);
         }
     }
 
@@ -1053,8 +1053,13 @@ namespace DragonWilds {
                 }
                 definition.Items=std::move(valid);
             }
-            for(auto& item:definition.Items)if(item.contains("QuestCompleted"))
-                item["QuestCompleted"]=Dialogue::Reference(definition.ModName,item.at("QuestCompleted"));
+            for(auto& item:definition.Items) {
+                const auto quest=VendorOffers::CompletedQuest(item);
+                if(quest.empty())continue;
+                const auto qualified=Dialogue::Reference(definition.ModName,quest);
+                if(item.contains("QuestCompleted"))item["QuestCompleted"]=qualified;
+                if(item.contains("QuestID"))item["QuestID"]=qualified;
+            }
             definition.InlineMerchant = true;
         }
         if(data.contains("CategoryRules"))

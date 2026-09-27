@@ -1,7 +1,7 @@
-# RuneSchema 0.7.5.28 documentation index
+# RuneSchema 0.7.6 documentation index
 
 This index organizes the authoritative documentation for the universal
-RuneSchema 0.7.5.28 runtime. The release uses one `main.dll` with isolated
+RuneSchema 0.7.6 runtime. The release uses one `main.dll` with isolated
 Steam/GOG and Game Pass/WinGDK execution lanes.
 
 ## Start here
@@ -31,6 +31,8 @@ Steam/GOG and Game Pass/WinGDK execution lanes.
 - `BASELINE-SUBSYSTEM-AUDIT.md` — baseline subsystem and compatibility audit.
 - `EQUIPMENT-AND-MAGIC.md` — item effects, skills, perks, and native behavior boundaries.
 - `REGISTRY.md` — compact registry authoring and authority/client bridge rules.
+- `LOADER-CONSISTENCY-AUDIT-0.7.6.md` — cross-loader identity, failure,
+  equipment, building-fuel, recipe, and SafeSave audit.
 
 ## Machine-readable references
 

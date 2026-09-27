@@ -69,13 +69,16 @@ namespace PS {
         // Automatic /players appearance assignments stay read-only while
         // false. Character option/table loaders remain active.
         bool characterCustomization = false;
-        // Journal/lore has no native transient unlock collection. When this
-        // is false the loader still registers and places content, but skips
-        // the player unlock call that would write it into the save.
-        bool journal = false;
-        // Recipes use the game's explicit non-persistent unlock collection
-        // while this is false, so they remain usable for the current session.
-        bool recipes = false;
+        // Enabled by default. When false, the verified native adapter keeps
+        // RuneSchema journal/lore unlocks visible only for this session.
+        bool journal = true;
+        // Enabled by default. When false, RuneSchema-owned recipe unlocks are
+        // mirrored into the game's explicit non-persistent collection.
+        bool recipes = true;
+        // Native quest progress is inherently save-backed. When false,
+        // RuneSchema quest definitions remain loaded but player quest actions
+        // are disabled so they cannot mutate the save.
+        bool quests = true;
     };
 
     struct HelpyAuthoritySettings {

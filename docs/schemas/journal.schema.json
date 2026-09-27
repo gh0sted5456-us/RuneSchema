@@ -1,0 +1,250 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "description": "Structural authoring hints, not an exhaustive runtime validator. Asset paths, identities, reflected properties and event compatibility must be validated in game.",
+  "patternProperties": {
+    "^[^$]": {
+      "additionalProperties": true,
+      "properties": {
+        "AddTo": {
+          "additionalProperties": false,
+          "description": "Place into any loaded native subcategory. For categories that support groups, Group.CreateIfMissing creates a mod-owned visible category within that native section.",
+          "oneOf": [
+            {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "Section"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "Category"
+                    ]
+                  }
+                ]
+              },
+              "required": [
+                "SubCategory"
+              ]
+            },
+            {
+              "not": {
+                "required": [
+                  "SubCategory"
+                ]
+              },
+              "required": [
+                "Section",
+                "Category"
+              ]
+            }
+          ],
+          "properties": {
+            "Category": {
+              "description": "Friendly native category name, used with Section.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "Group": {
+              "additionalProperties": false,
+              "properties": {
+                "CreateIfMissing": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "DisplayName": {
+                  "type": "string"
+                },
+                "Id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "Id"
+              ],
+              "type": "object"
+            },
+            "Key": {
+              "type": "string"
+            },
+            "Section": {
+              "description": "Friendly native section name, used with Category.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "SubCategory": {
+              "description": "Full cooked JournalSubCategoryData path or an unambiguous loaded category name.",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "DisplayName": {
+          "type": [
+            "string",
+            "object"
+          ]
+        },
+        "Image": {
+          "description": "Cooked image reference using the native Image field. The asset must load and match the live property class.",
+          "type": [
+            "string",
+            "object",
+            "null"
+          ]
+        },
+        "ItemData": {
+          "description": "Recipe output item. Inferred only when ItemsCreated has one distinct item.",
+          "type": [
+            "string",
+            "object"
+          ]
+        },
+        "PageDescriptions": {
+          "items": {
+            "additionalProperties": true,
+            "properties": {
+              "Description": {
+                "type": [
+                  "string",
+                  "object"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "RecipeData": {
+          "description": "Required for Recipe entries; full asset path or unique loaded recipe name.",
+          "type": [
+            "string",
+            "object"
+          ]
+        },
+        "StationTableRowHandle": {
+          "additionalProperties": false,
+          "properties": {
+            "DataTable": {
+              "type": "string"
+            },
+            "RowName": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "DataTable",
+            "RowName"
+          ],
+          "type": "object"
+        },
+        "Type": {
+          "default": "Lore",
+          "enum": [
+            "Lore",
+            "People",
+            "Place",
+            "Treasure",
+            "World",
+            "Recipe"
+          ]
+        },
+        "Unlock": {
+          "default": true,
+          "description": "Unlock the journal entry, not its crafting recipe. False does not revoke previous discovery.",
+          "type": "boolean"
+        },
+        "UnlockOnAcquire": {
+          "default": false,
+          "description": "Unlock this entry when the owning player first receives its ItemData. If Unlock is omitted, acquisition mode suppresses the normal automatic unlock. With save persistence disabled, the verified storefront adapter keeps the unlock session-only.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "properties": {
+    "$declaration": {
+      "description": "Ownership declaration for PAK-cooked persistent content. RuneSchema verifies the live asset identity before recording it.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "InternalName": {
+              "description": "Optional cooked InternalName assertion. When omitted, RuneSchema reads it from the asset.",
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string"
+            },
+            "Kind": {
+              "const": "Journal",
+              "description": "Optional assertion; the containing loader determines this kind."
+            },
+            "Path": {
+              "description": "Exact cooked object path shipped by the mod PAK.",
+              "pattern": "^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$",
+              "type": "string"
+            },
+            "PersistenceID": {
+              "description": "Canonical PersistenceID baked into the cooked asset. RuneSchema verifies it against the loaded object.",
+              "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "Path",
+            "PersistenceID"
+          ],
+          "type": "object"
+        },
+        {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "InternalName": {
+                "description": "Optional cooked InternalName assertion. When omitted, RuneSchema reads it from the asset.",
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Kind": {
+                "const": "Journal",
+                "description": "Optional assertion; the containing loader determines this kind."
+              },
+              "Path": {
+                "description": "Exact cooked object path shipped by the mod PAK.",
+                "pattern": "^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$",
+                "type": "string"
+              },
+              "PersistenceID": {
+                "description": "Canonical PersistenceID baked into the cooked asset. RuneSchema verifies it against the loaded object.",
+                "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "Path",
+              "PersistenceID"
+            ],
+            "type": "object"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "type": "array"
+        }
+      ]
+    }
+  },
+  "title": "RuneSchema /journal",
+  "type": "object",
+  "x-runeschema-coverage": "structural",
+  "x-runeschema-starter-capabilities": {
+    "append": false,
+    "clone": false,
+    "patch": false,
+    "search": "authored files"
+  }
+}

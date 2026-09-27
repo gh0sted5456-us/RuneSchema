@@ -1,6 +1,8 @@
 #include "Loader/TimeOfDayRuntime.h"
 std::string DragonWildsNpcLoader::RunQuestAction(const DialogueCompletionBinding& action,UObject* controller,const std::function<bool()>& current) {
     if(action.QuestAction!="Accept" && action.QuestAction!="TurnIn" && action.QuestAction!="Abandon")throw std::runtime_error("Unsupported quest action");
+    if(!PS::PSConfig::Get()->GetSettings().persistence.quests)
+        return "RuneSchema quest saving is disabled. Quest actions are unavailable for this session.";
     if(!controller || !current())throw std::runtime_error("Quest action requires a current player");
     auto* player=ActorHelper::GetObjectRef(controller,TEXT("Pawn"));
     if(!player || !player->IsA<AActor>() || player->GetWorld()!=controller->GetWorld())throw std::runtime_error("Quest action pawn is unavailable");

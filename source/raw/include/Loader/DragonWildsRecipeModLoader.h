@@ -45,6 +45,10 @@ namespace DragonWilds {
         ~DragonWildsRecipeModLoader();
         // Allocate identities before assets link recipe-unlocker references.
         void PrepareReferences();
+        // Resolve an authored local key, globally unique key, ModID:Key, or
+        // cooked object path after PrepareReferences has allocated objects.
+        RC::Unreal::UObject* ResolveReference(const RC::StringType& requestingMod,
+            const std::string& reference) const;
         const std::vector<NpcCatalog::StoreOffer>& StoreOffers() const { return m_storeOffers; }
         // Internal bridge for /vendors. Creates owned recipes only; never
         // edits a cooked recipe or an authored /recipes definition.

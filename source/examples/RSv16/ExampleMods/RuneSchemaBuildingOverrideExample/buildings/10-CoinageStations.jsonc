@@ -1,0 +1,23 @@
+{
+  "CoinageSalvageAssayerOverride": {
+    "Asset": "/Game/Mods/Coinage/Data/Buildings/BUILDPIECE_Coinage_SalvageAssayer.BUILDPIECE_Coinage_SalvageAssayer",
+    "Unlock": false,
+    "Overrides": {
+      "Names": {
+        "Catalogue": "Salvage Assayer",
+        "World": "Salvage Assayer",
+        "Interact": "Salvage Assayer",
+        "Menu": "Salvage Assayer"
+      },
+      "Placement": {
+        "Profile": "PropProfile",
+        "RequiresFoundation": false,
+        "RequiresRoof": false,
+        "RequiresShelter": false
+      },
+      "Processing": {
+        "Rate": 1.0
+      }
+    }
+  }
+}

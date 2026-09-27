@@ -54,6 +54,17 @@ struct JournalPersistence {
         }
         return absent;
     }
+    static JournalSave::NativeFields Fields(const JournalSave::Json& value) {
+        return {value.at("UnlockedEntries").get<std::vector<std::string>>(),
+            value.at("UnreadEntries").get<std::vector<std::string>>(),
+            JournalSave::EncodeNative(JournalSave::ReadOwnership(value))};
+    }
+    static void ReplacePayload(void* object,const JournalSave::Json& before,const JournalSave::Json& after) {
+        const std::array names={TEXT("UnlockedEntries"),TEXT("UnreadEntries"),TEXT("RuneSchemaOwnership")};
+        JournalSave::ReplaceNativeFields(Fields(before),Fields(after),[&](size_t index,const auto& value) {
+            Api->WriteArray(object,names[index],value);
+        });
+    }
     static bool Read(void* persistence,Shared* json,int32_t version) {
         if(version<8)return Reader.call<bool>(persistence,json,version);
         try {
@@ -66,20 +77,14 @@ struct JournalPersistence {
                 const auto found=current.find(id);
                 if(found!=current.end() && found->second!=owner)throw std::runtime_error("Saved journal ownership conflicts with loaded mod");
             }
+            auto cleanedPayload=payload;
             if(!saved.empty()) {
                 const auto cleaned=JournalSave::RemoveAbsent(payload,ConfirmAbsent(saved),true);
-                if(!cleaned.Removed.empty()) {
-                    const auto fields=[](const auto& value) -> JournalSave::NativeFields {
-                        return {value.at("UnlockedEntries").template get<std::vector<std::string>>(),
-                            value.at("UnreadEntries").template get<std::vector<std::string>>(),
-                            JournalSave::EncodeNative(JournalSave::ReadOwnership(value))};
-                    };
-                    const std::array names={TEXT("UnlockedEntries"),TEXT("UnreadEntries"),TEXT("RuneSchemaOwnership")};
-                    JournalSave::ReplaceNativeFields(fields(payload),fields(cleaned.Journal),[&](size_t index,const auto& value) {
-                        Api->WriteArray(json->Object,names[index],value);
-                    });
-                }
+                cleanedPayload=std::move(cleaned.Journal);
             }
+            if(!PS::PSConfig::Get()->GetSettings().persistence.journal)
+                cleanedPayload=JournalSave::RemoveCurrent(cleanedPayload,current);
+            if(cleanedPayload!=payload)ReplacePayload(json->Object,payload,cleanedPayload);
         }catch(const std::exception& error) {
             Report("load",error.what());
             // This ABI consumes the incoming native shared reference on every
@@ -99,6 +104,11 @@ struct JournalPersistence {
             if(!Writer.call<bool>(persistence,json))return false;
             const auto payload=ReadPayload(held.Object());
             const auto current=CurrentOwners();
+            if(!PS::PSConfig::Get()->GetSettings().persistence.journal) {
+                const auto transient=JournalSave::RemoveCurrent(payload,current);
+                if(transient!=payload)ReplacePayload(held.Object(),payload,transient);
+                return true;
+            }
             Owners included;
             for(const auto* name:{"UnlockedEntries","UnreadEntries"})for(const auto& entry:payload.at(name)) {
                 const auto id=entry.get<std::string>();

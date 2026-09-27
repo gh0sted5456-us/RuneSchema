@@ -1,0 +1,1051 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "anyOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "Actions": {
+          "description": "Delayed pose or emote actions applied to live event actors matching SpawnID.",
+          "items": {
+            "additionalProperties": false,
+            "oneOf": [
+              {
+                "required": [
+                  "Pose"
+                ]
+              },
+              {
+                "required": [
+                  "Emote"
+                ]
+              }
+            ],
+            "properties": {
+              "AfterSeconds": {
+                "maximum": 900,
+                "minimum": 0,
+                "type": "number"
+              },
+              "Emote": {
+                "additionalProperties": false,
+                "description": "One-shot human NPC animation applied after the event delay.",
+                "if": {
+                  "required": [
+                    "Time"
+                  ]
+                },
+                "oneOf": [
+                  {
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "Asset"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "Playback"
+                          ]
+                        }
+                      ]
+                    },
+                    "required": [
+                      "Preset"
+                    ]
+                  },
+                  {
+                    "not": {
+                      "required": [
+                        "Preset"
+                      ]
+                    },
+                    "required": [
+                      "Asset"
+                    ]
+                  }
+                ],
+                "properties": {
+                  "Asset": {
+                    "maxLength": 1024,
+                    "minLength": 2,
+                    "pattern": "^/",
+                    "type": "string"
+                  },
+                  "Playback": {
+                    "enum": [
+                      "Hold",
+                      "Loop",
+                      "Once"
+                    ]
+                  },
+                  "Preset": {
+                    "enum": [
+                      "Equipment",
+                      "Relaxed",
+                      "CharacterSelect",
+                      "Chair",
+                      "Armchair",
+                      "Unarmed",
+                      "Crouched",
+                      "OneHanded",
+                      "Dagger",
+                      "Staff",
+                      "Sword",
+                      "Pickaxe",
+                      "Greatsword",
+                      "Greataxe",
+                      "Shield",
+                      "Torch",
+                      "Bow",
+                      "Yes",
+                      "No",
+                      "Wave",
+                      "Point",
+                      "NoWay",
+                      "Celebrate"
+                    ]
+                  },
+                  "Time": {
+                    "maximum": 60,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "WeaponVisibility": {
+                    "enum": [
+                      "Auto",
+                      "Show",
+                      "Hide"
+                    ]
+                  }
+                },
+                "then": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "Preset": {
+                          "enum": [
+                            "Equipment",
+                            "Unarmed",
+                            "Crouched",
+                            "OneHanded",
+                            "Dagger",
+                            "Staff",
+                            "Sword",
+                            "Pickaxe",
+                            "Greatsword",
+                            "Greataxe",
+                            "Shield",
+                            "Torch",
+                            "Bow"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "Preset"
+                      ]
+                    },
+                    {
+                      "properties": {
+                        "Playback": {
+                          "const": "Hold"
+                        }
+                      },
+                      "required": [
+                        "Asset",
+                        "Playback"
+                      ]
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              "Pose": {
+                "additionalProperties": false,
+                "description": "Human only. Equipment preserves the held item's pose, or uses Relaxed when empty-handed. Time samples held poses in seconds; must be below the loaded clip duration. IdleAnimation and Pose are mutually exclusive. Full-body idles/emotes do not preserve every weapon grip.",
+                "if": {
+                  "required": [
+                    "Time"
+                  ]
+                },
+                "oneOf": [
+                  {
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "Asset"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "Playback"
+                          ]
+                        }
+                      ]
+                    },
+                    "required": [
+                      "Preset"
+                    ]
+                  },
+                  {
+                    "not": {
+                      "required": [
+                        "Preset"
+                      ]
+                    },
+                    "required": [
+                      "Asset"
+                    ]
+                  }
+                ],
+                "properties": {
+                  "Asset": {
+                    "maxLength": 1024,
+                    "minLength": 2,
+                    "pattern": "^/",
+                    "type": "string"
+                  },
+                  "Playback": {
+                    "enum": [
+                      "Hold",
+                      "Loop",
+                      "Once"
+                    ]
+                  },
+                  "Preset": {
+                    "enum": [
+                      "Equipment",
+                      "Relaxed",
+                      "CharacterSelect",
+                      "Chair",
+                      "Armchair",
+                      "Unarmed",
+                      "Crouched",
+                      "OneHanded",
+                      "Dagger",
+                      "Staff",
+                      "Sword",
+                      "Pickaxe",
+                      "Greatsword",
+                      "Greataxe",
+                      "Shield",
+                      "Torch",
+                      "Bow",
+                      "Yes",
+                      "No",
+                      "Wave",
+                      "Point",
+                      "NoWay",
+                      "Celebrate"
+                    ]
+                  },
+                  "Time": {
+                    "maximum": 60,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "WeaponVisibility": {
+                    "enum": [
+                      "Auto",
+                      "Show",
+                      "Hide"
+                    ]
+                  }
+                },
+                "then": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "Preset": {
+                          "enum": [
+                            "Equipment",
+                            "Unarmed",
+                            "Crouched",
+                            "OneHanded",
+                            "Dagger",
+                            "Staff",
+                            "Sword",
+                            "Pickaxe",
+                            "Greatsword",
+                            "Greataxe",
+                            "Shield",
+                            "Torch",
+                            "Bow"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "Preset"
+                      ]
+                    },
+                    {
+                      "properties": {
+                        "Playback": {
+                          "const": "Hold"
+                        }
+                      },
+                      "required": [
+                        "Asset",
+                        "Playback"
+                      ]
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              "SpawnID": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "AfterSeconds",
+              "SpawnID"
+            ],
+            "type": "object"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "type": "array"
+        },
+        "Area": {
+          "additionalProperties": false,
+          "properties": {
+            "Location": {
+              "description": "Optional native quest objective position [X,Y,Z]. Marker lifecycle is experimental.",
+              "items": {
+                "maximum": 100000000,
+                "minimum": -100000000,
+                "type": "number"
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "RadiusMeters": {
+              "maximum": 10000,
+              "minimum": 0.01,
+              "type": "number"
+            },
+            "Visibility": {
+              "enum": [
+                "Auto",
+                "Always",
+                "Never"
+              ]
+            }
+          },
+          "required": [
+            "Location",
+            "RadiusMeters"
+          ],
+          "type": "object"
+        },
+        "DespawnTimeOfDay": {
+          "description": "Retire event actors and restore event weather when this native time state begins.",
+          "enum": [
+            "Day",
+            "Night"
+          ]
+        },
+        "HealthStages": {
+          "description": "Health-threshold taunts sent through the native text-notification route. Optional SpawnID limits a threshold to one event spawn template.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "Message": {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Percent": {
+                "exclusiveMaximum": 100,
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              "SpawnID": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "Percent",
+              "Message"
+            ],
+            "type": "object"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array"
+        },
+        "Id": {
+          "type": "string"
+        },
+        "Messages": {
+          "additionalProperties": false,
+          "properties": {
+            "BossStarted": {
+              "maxLength": 512,
+              "type": "string"
+            },
+            "Cancelled": {
+              "maxLength": 512,
+              "type": "string"
+            },
+            "Completed": {
+              "maxLength": 512,
+              "type": "string"
+            },
+            "Failed": {
+              "maxLength": 512,
+              "type": "string"
+            },
+            "Started": {
+              "maxLength": 512,
+              "type": "string"
+            },
+            "WaveStarted": {
+              "maxLength": 512,
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "Scope": {
+          "enum": [
+            "Participant",
+            "Party",
+            "World"
+          ]
+        },
+        "SpawnTimeOfDay": {
+          "description": "Native time state required when event actors appear. Replaces legacy TimeOfDay.",
+          "enum": [
+            "Any",
+            "Day",
+            "Night"
+          ]
+        },
+        "TimeOfDay": {
+          "enum": [
+            "Any",
+            "Day",
+            "Night"
+          ]
+        },
+        "TimeoutSeconds": {
+          "default": 300,
+          "maximum": 900,
+          "minimum": 10,
+          "type": "number"
+        },
+        "Waves": {
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "GroundOffset": {
+                  "default": 0,
+                  "description": "Additional centimetres above or below RuneSchema's standard 10 cm ground clearance. Do not combine with the Location.Z $+offset shorthand.",
+                  "maximum": 100000,
+                  "minimum": -100000,
+                  "type": "number"
+                },
+                "GroundToSurface": {
+                  "default": true,
+                  "description": "Trace this event member onto blocking ground. Disable only for an intentionally airborne actor and use a numeric Z.",
+                  "type": "boolean"
+                },
+                "Location": {
+                  "description": "Optional native quest objective position [X,Y,Z]. Marker lifecycle is experimental.",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "maximum": 100000000,
+                        "minimum": -100000000,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^\\$([+-][0-9]+(\\.[0-9]+)?)?$",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "maxItems": 3,
+                  "minItems": 3,
+                  "type": "array"
+                },
+                "SpawnID": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "SpawnID",
+                "Location"
+              ],
+              "type": "object"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "type": "array"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "type": "array"
+        },
+        "Weather": {
+          "enum": [
+            "Sunny",
+            "Cloudy",
+            "Fog",
+            "Rain_Light",
+            "Rain_Heavy",
+            "Rain_Storm",
+            "Rain_LightningStorm",
+            "Sandstorm",
+            "Velgar_BossFight"
+          ]
+        }
+      },
+      "required": [
+        "Id",
+        "Waves"
+      ],
+      "type": "object"
+    },
+    {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "Actions": {
+            "description": "Delayed pose or emote actions applied to live event actors matching SpawnID.",
+            "items": {
+              "additionalProperties": false,
+              "oneOf": [
+                {
+                  "required": [
+                    "Pose"
+                  ]
+                },
+                {
+                  "required": [
+                    "Emote"
+                  ]
+                }
+              ],
+              "properties": {
+                "AfterSeconds": {
+                  "maximum": 900,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                "Emote": {
+                  "additionalProperties": false,
+                  "description": "One-shot human NPC animation applied after the event delay.",
+                  "if": {
+                    "required": [
+                      "Time"
+                    ]
+                  },
+                  "oneOf": [
+                    {
+                      "not": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "Asset"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "Playback"
+                            ]
+                          }
+                        ]
+                      },
+                      "required": [
+                        "Preset"
+                      ]
+                    },
+                    {
+                      "not": {
+                        "required": [
+                          "Preset"
+                        ]
+                      },
+                      "required": [
+                        "Asset"
+                      ]
+                    }
+                  ],
+                  "properties": {
+                    "Asset": {
+                      "maxLength": 1024,
+                      "minLength": 2,
+                      "pattern": "^/",
+                      "type": "string"
+                    },
+                    "Playback": {
+                      "enum": [
+                        "Hold",
+                        "Loop",
+                        "Once"
+                      ]
+                    },
+                    "Preset": {
+                      "enum": [
+                        "Equipment",
+                        "Relaxed",
+                        "CharacterSelect",
+                        "Chair",
+                        "Armchair",
+                        "Unarmed",
+                        "Crouched",
+                        "OneHanded",
+                        "Dagger",
+                        "Staff",
+                        "Sword",
+                        "Pickaxe",
+                        "Greatsword",
+                        "Greataxe",
+                        "Shield",
+                        "Torch",
+                        "Bow",
+                        "Yes",
+                        "No",
+                        "Wave",
+                        "Point",
+                        "NoWay",
+                        "Celebrate"
+                      ]
+                    },
+                    "Time": {
+                      "maximum": 60,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "WeaponVisibility": {
+                      "enum": [
+                        "Auto",
+                        "Show",
+                        "Hide"
+                      ]
+                    }
+                  },
+                  "then": {
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "Preset": {
+                            "enum": [
+                              "Equipment",
+                              "Unarmed",
+                              "Crouched",
+                              "OneHanded",
+                              "Dagger",
+                              "Staff",
+                              "Sword",
+                              "Pickaxe",
+                              "Greatsword",
+                              "Greataxe",
+                              "Shield",
+                              "Torch",
+                              "Bow"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "Preset"
+                        ]
+                      },
+                      {
+                        "properties": {
+                          "Playback": {
+                            "const": "Hold"
+                          }
+                        },
+                        "required": [
+                          "Asset",
+                          "Playback"
+                        ]
+                      }
+                    ]
+                  },
+                  "type": "object"
+                },
+                "Pose": {
+                  "additionalProperties": false,
+                  "description": "Human only. Equipment preserves the held item's pose, or uses Relaxed when empty-handed. Time samples held poses in seconds; must be below the loaded clip duration. IdleAnimation and Pose are mutually exclusive. Full-body idles/emotes do not preserve every weapon grip.",
+                  "if": {
+                    "required": [
+                      "Time"
+                    ]
+                  },
+                  "oneOf": [
+                    {
+                      "not": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "Asset"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "Playback"
+                            ]
+                          }
+                        ]
+                      },
+                      "required": [
+                        "Preset"
+                      ]
+                    },
+                    {
+                      "not": {
+                        "required": [
+                          "Preset"
+                        ]
+                      },
+                      "required": [
+                        "Asset"
+                      ]
+                    }
+                  ],
+                  "properties": {
+                    "Asset": {
+                      "maxLength": 1024,
+                      "minLength": 2,
+                      "pattern": "^/",
+                      "type": "string"
+                    },
+                    "Playback": {
+                      "enum": [
+                        "Hold",
+                        "Loop",
+                        "Once"
+                      ]
+                    },
+                    "Preset": {
+                      "enum": [
+                        "Equipment",
+                        "Relaxed",
+                        "CharacterSelect",
+                        "Chair",
+                        "Armchair",
+                        "Unarmed",
+                        "Crouched",
+                        "OneHanded",
+                        "Dagger",
+                        "Staff",
+                        "Sword",
+                        "Pickaxe",
+                        "Greatsword",
+                        "Greataxe",
+                        "Shield",
+                        "Torch",
+                        "Bow",
+                        "Yes",
+                        "No",
+                        "Wave",
+                        "Point",
+                        "NoWay",
+                        "Celebrate"
+                      ]
+                    },
+                    "Time": {
+                      "maximum": 60,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "WeaponVisibility": {
+                      "enum": [
+                        "Auto",
+                        "Show",
+                        "Hide"
+                      ]
+                    }
+                  },
+                  "then": {
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "Preset": {
+                            "enum": [
+                              "Equipment",
+                              "Unarmed",
+                              "Crouched",
+                              "OneHanded",
+                              "Dagger",
+                              "Staff",
+                              "Sword",
+                              "Pickaxe",
+                              "Greatsword",
+                              "Greataxe",
+                              "Shield",
+                              "Torch",
+                              "Bow"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "Preset"
+                        ]
+                      },
+                      {
+                        "properties": {
+                          "Playback": {
+                            "const": "Hold"
+                          }
+                        },
+                        "required": [
+                          "Asset",
+                          "Playback"
+                        ]
+                      }
+                    ]
+                  },
+                  "type": "object"
+                },
+                "SpawnID": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "AfterSeconds",
+                "SpawnID"
+              ],
+              "type": "object"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "type": "array"
+          },
+          "Area": {
+            "additionalProperties": false,
+            "properties": {
+              "Location": {
+                "description": "Optional native quest objective position [X,Y,Z]. Marker lifecycle is experimental.",
+                "items": {
+                  "maximum": 100000000,
+                  "minimum": -100000000,
+                  "type": "number"
+                },
+                "maxItems": 3,
+                "minItems": 3,
+                "type": "array"
+              },
+              "RadiusMeters": {
+                "maximum": 10000,
+                "minimum": 0.01,
+                "type": "number"
+              },
+              "Visibility": {
+                "enum": [
+                  "Auto",
+                  "Always",
+                  "Never"
+                ]
+              }
+            },
+            "required": [
+              "Location",
+              "RadiusMeters"
+            ],
+            "type": "object"
+          },
+          "DespawnTimeOfDay": {
+            "description": "Retire event actors and restore event weather when this native time state begins.",
+            "enum": [
+              "Day",
+              "Night"
+            ]
+          },
+          "HealthStages": {
+            "description": "Health-threshold taunts sent through the native text-notification route. Optional SpawnID limits a threshold to one event spawn template.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "Message": {
+                  "maxLength": 512,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "Percent": {
+                  "exclusiveMaximum": 100,
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                "SpawnID": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "Percent",
+                "Message"
+              ],
+              "type": "object"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "type": "array"
+          },
+          "Id": {
+            "type": "string"
+          },
+          "Messages": {
+            "additionalProperties": false,
+            "properties": {
+              "BossStarted": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "Cancelled": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "Completed": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "Failed": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "Started": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "WaveStarted": {
+                "maxLength": 512,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "Scope": {
+            "enum": [
+              "Participant",
+              "Party",
+              "World"
+            ]
+          },
+          "SpawnTimeOfDay": {
+            "description": "Native time state required when event actors appear. Replaces legacy TimeOfDay.",
+            "enum": [
+              "Any",
+              "Day",
+              "Night"
+            ]
+          },
+          "TimeOfDay": {
+            "enum": [
+              "Any",
+              "Day",
+              "Night"
+            ]
+          },
+          "TimeoutSeconds": {
+            "default": 300,
+            "maximum": 900,
+            "minimum": 10,
+            "type": "number"
+          },
+          "Waves": {
+            "items": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "GroundOffset": {
+                    "default": 0,
+                    "description": "Additional centimetres above or below RuneSchema's standard 10 cm ground clearance. Do not combine with the Location.Z $+offset shorthand.",
+                    "maximum": 100000,
+                    "minimum": -100000,
+                    "type": "number"
+                  },
+                  "GroundToSurface": {
+                    "default": true,
+                    "description": "Trace this event member onto blocking ground. Disable only for an intentionally airborne actor and use a numeric Z.",
+                    "type": "boolean"
+                  },
+                  "Location": {
+                    "description": "Optional native quest objective position [X,Y,Z]. Marker lifecycle is experimental.",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "maximum": 100000000,
+                          "minimum": -100000000,
+                          "type": "number"
+                        },
+                        {
+                          "pattern": "^\\$([+-][0-9]+(\\.[0-9]+)?)?$",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "maxItems": 3,
+                    "minItems": 3,
+                    "type": "array"
+                  },
+                  "SpawnID": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "SpawnID",
+                  "Location"
+                ],
+                "type": "object"
+              },
+              "maxItems": 16,
+              "minItems": 1,
+              "type": "array"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "type": "array"
+          },
+          "Weather": {
+            "enum": [
+              "Sunny",
+              "Cloudy",
+              "Fog",
+              "Rain_Light",
+              "Rain_Heavy",
+              "Rain_Storm",
+              "Rain_LightningStorm",
+              "Sandstorm",
+              "Velgar_BossFight"
+            ]
+          }
+        },
+        "required": [
+          "Id",
+          "Waves"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  ],
+  "description": "Structural authoring hints, not an exhaustive runtime validator. Asset paths, identities, reflected properties and event compatibility must be validated in game.",
+  "items": {
+    "allOf": [
+      {
+        "not": {
+          "required": [
+            "TimeOfDay",
+            "SpawnTimeOfDay"
+          ]
+        }
+      }
+    ]
+  },
+  "title": "RuneSchema /events",
+  "x-runeschema-coverage": "structural",
+  "x-runeschema-starter-capabilities": {
+    "append": false,
+    "clone": false,
+    "patch": false,
+    "search": "loaded records"
+  }
+}

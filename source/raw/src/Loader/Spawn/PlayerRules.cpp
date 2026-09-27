@@ -501,6 +501,7 @@ namespace DragonWilds {
                             && field != "Scale" && field != "Distance"
                             && field != "PixelWidth" && field != "PixelHeight"
                             && field != "ActivityTimeoutSeconds"
+                            && field != "AlwaysFaceCamera" && field != "OnlyShowNearby"
                             && field != "ShowSelf" && field != "Client"
                             && field != "Server" && field != "States" && field != "Events" && field != "SkillXP"
                             && field != "Native")
@@ -568,6 +569,14 @@ namespace DragonWilds {
                             throw std::runtime_error(
                                 "Nameplate.ActivityTimeoutSeconds must be between 0 and 3600");
                     }
+                    for (const auto* field : {"AlwaysFaceCamera", "OnlyShowNearby"})
+                        if (nameplate.contains(field) && !nameplate.at(field).is_boolean())
+                            throw std::runtime_error(std::string("Nameplate.") + field
+                                + " must be true or false");
+                    rule.Nameplate.AlwaysFaceCamera =
+                        nameplate.value("AlwaysFaceCamera", true);
+                    rule.Nameplate.OnlyShowNearby =
+                        nameplate.value("OnlyShowNearby", false);
                     if (nameplate.contains("ShowSelf"))
                     {
                         if (!nameplate.at("ShowSelf").is_boolean())
@@ -1446,9 +1455,13 @@ namespace DragonWilds {
                 std::string error;
                 if (!EnsurePlayerAppearanceSnapshot(pawn, player.Guid, false, error))
                 {
+                    // Controllers are visible before their pawn/customization
+                    // state is authoritative during startup and travel. This is
+                    // an expected retry state, not a user-facing warning.
+                    if (error == "player pawn or GUID was unavailable") continue;
                     const auto key = "appearance-snapshot\n" + player.Guid + "\n" + error;
                     if (m_reportedPlayerRuleFailures.insert(key).second)
-                        PS::Log<LogLevel::Warning>(
+                        PS::Log<LogLevel::Verbose>(
                             STR("Appearance snapshot for player {} deferred: {}\n"),
                             PS::ToWideSafe(player.Guid.c_str()), PS::ToWideSafe(error.c_str()));
                 }
@@ -2018,12 +2031,41 @@ namespace DragonWilds {
                     nameplate->GetClassPrivate(), TEXT("DistanceFromPlayerToShow")))
                 PropertyHelper::CopyJsonValueToContainer(
                     nameplate, property, rule.Distance);
-            if (rule.ShowSelf)
+            if (auto* property = PropertyHelper::GetPropertyByName(
+                    nameplate->GetClassPrivate(), TEXT("bAlwaysFaceLocalCamera")))
+                PropertyHelper::CopyJsonValueToContainer(
+                    nameplate, property, rule.AlwaysFaceCamera);
+            if (auto* property = PropertyHelper::GetPropertyByName(
+                    nameplate->GetClassPrivate(), TEXT("bOnlyShowWhenPlayerNearby")))
+                PropertyHelper::CopyJsonValueToContainer(
+                    nameplate, property, rule.OnlyShowNearby);
+            if (auto* property = PropertyHelper::GetPropertyByName(
+                    nameplate->GetClassPrivate(), TEXT("bOwnerNoSee")))
+                PropertyHelper::CopyJsonValueToContainer(nameplate, property, !rule.ShowSelf);
+            if (auto* property = PropertyHelper::GetPropertyByName(
+                    nameplate->GetClassPrivate(), TEXT("bAllowedToShow")))
+                PropertyHelper::CopyJsonValueToContainer(nameplate, property, !hidden);
+
+            // Dominion owns an additional visibility gate. Scene visibility alone is
+            // temporary because the native component can restore the widget on its
+            // next proximity/update pass.
+            try
             {
-                if (auto* property = PropertyHelper::GetPropertyByName(
-                        nameplate->GetClassPrivate(), TEXT("bOwnerNoSee")))
-                    PropertyHelper::CopyJsonValueToContainer(nameplate, property, false);
+                ActorHelper::FunctionCall(nameplate,
+                    STR("/Script/Dominion.DominionWidgetComponent:AllowShowWidget"))
+                    .Arg(TEXT("bAllow"), !hidden).Invoke();
             }
+            catch (...) {}
+
+            const auto refreshNativeVisibility = [nameplate]() {
+                try
+                {
+                    ActorHelper::FunctionCall(nameplate,
+                        STR("/Script/Dominion.DominionWidgetComponent:UpdateWidgetVisibility"))
+                        .Invoke();
+                }
+                catch (...) {}
+            };
 
             try
             {
@@ -2039,23 +2081,37 @@ namespace DragonWilds {
             getWidget.Invoke();
             auto* widget = getWidget.Result<UObject*>();
             if (!widget)
+            {
+                if (hidden)
+                {
+                    m_nameplateAppliedActors.erase(pawn);
+                    refreshNativeVisibility();
+                    return true;
+                }
                 throw std::runtime_error("the player nameplate widget was not initialized");
-            if (rule.ShowSelf)
+            }
+            if (rule.ShowSelf && !hidden)
                 ActorHelper::FunctionCall(widget,
                     STR("/Script/UMG.Widget:SetVisibility"))
                     .Arg(TEXT("InVisibility"), static_cast<uint8>(4)).Invoke();
             const auto signature = effectiveMode + "|" + effectiveIcon + "|"
                 + std::to_string(layoutScale) + "|" + std::to_string(iconWidth)
                 + "x" + std::to_string(iconHeight) + "|" + std::to_string(rule.Distance)
+                + "|" + (rule.AlwaysFaceCamera ? "face-camera" : "fixed-facing")
+                + "|" + (rule.OnlyShowNearby ? "nearby-only" : "no-distance-gate")
                 + "|" + (rule.ShowSelf ? "self" : "no-self")
                 + "|" + (rule.ShowOthers ? "others" : "no-others")
                 + "|centered-square-v3|"+componentProperties.dump()+"|"
                 +widgetProperties.dump()+"|"+textProperties.dump();
             if (const auto applied = m_nameplateAppliedActors.find(pawn);
                 applied != m_nameplateAppliedActors.end()
-                && applied->second.Actor.Get() == widget
+                && applied->second.Actor.Get() == pawn
+                && applied->second.Component.Get() == widget
                 && applied->second.Signature == signature)
+            {
+                refreshNativeVisibility();
                 return true;
+            }
             auto* text = ActorHelper::GetObjectRef(
                 widget, TEXT("PlayerNameTextBlock"));
             if (!text)
@@ -2089,7 +2145,8 @@ namespace DragonWilds {
                 setVisibility(text, hidden ? 1 : 4);
                 if (icon) setVisibility(icon, 1);
                 m_nameplateAppliedActors.insert_or_assign(pawn,
-                    AppliedVisual{PS::WeakObject(widget), signature});
+                    AppliedVisual{PS::WeakObject(pawn), PS::WeakObject(widget), signature});
+                refreshNativeVisibility();
                 return true;
             }
 
@@ -2194,7 +2251,8 @@ namespace DragonWilds {
             setVisibility(text, 1);
             setVisibility(icon, 4);
             m_nameplateAppliedActors.insert_or_assign(pawn,
-                AppliedVisual{PS::WeakObject(widget), signature});
+                AppliedVisual{PS::WeakObject(pawn), PS::WeakObject(widget), signature});
+            refreshNativeVisibility();
             if (m_nameplateAppliedActors.size() > 128)
                 std::erase_if(m_nameplateAppliedActors,
                     [](const auto& value) { return !value.second.Actor.Get(); });

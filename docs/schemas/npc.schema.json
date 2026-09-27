@@ -1,0 +1,4560 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "anyOf": [
+    {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "else": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "Appearance"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "Equipment"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "Pose"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "DialoguePose"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "Ghost"
+                      ]
+                    }
+                  ]
+                }
+              },
+              "if": {
+                "properties": {
+                  "Type": {
+                    "const": "Human"
+                  }
+                },
+                "required": [
+                  "Type"
+                ]
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "Mesh"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "VisualSource"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "Materials"
+                      ]
+                    }
+                  ]
+                },
+                "required": [
+                  "Appearance"
+                ]
+              }
+            },
+            {
+              "not": {
+                "required": [
+                  "Pose",
+                  "IdleAnimation"
+                ]
+              }
+            },
+            {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "LoreID",
+                      "LoreEntry"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "LoreID",
+                      "DialogueID"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "LoreID",
+                      "VendorID"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "LoreEntry",
+                      "DialogueID"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "LoreEntry",
+                      "VendorID"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "Type": {
+                    "enum": [
+                      "Resource",
+                      "Prop"
+                    ]
+                  }
+                },
+                "required": [
+                  "Type"
+                ]
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "VisualSource"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "IdleAnimation"
+                      ]
+                    }
+                  ]
+                },
+                "required": [
+                  "Mesh"
+                ]
+              }
+            }
+          ],
+          "anyOf": [
+            {
+              "required": [
+                "Mesh"
+              ]
+            },
+            {
+              "required": [
+                "VisualSource"
+              ]
+            },
+            {
+              "properties": {
+                "Type": {
+                  "const": "Human"
+                }
+              },
+              "required": [
+                "Type",
+                "Appearance"
+              ]
+            }
+          ],
+          "properties": {
+            "Appearance": {
+              "additionalProperties": false,
+              "properties": {
+                "BodyType": {
+                  "description": "Row name from DT_Customization_BodyType.",
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "EyeColor": {
+                  "description": "Row name from DT_Customization_EyeColor.",
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "EyebrowColor": {
+                  "description": "Row name from DT_Customization_EyebrowColor.",
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "FacialHairPreset": {
+                  "description": "Row name from DT_Customization_FacialHairPresets.",
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "HairColor": {
+                  "description": "Row name from DT_Customization_HairColor.",
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "HairPreset": {
+                  "description": "Row name from DT_Customization_HairPresets.",
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "Head": {
+                  "description": "Row name from DT_Customization_FaceType (the native FaceDataHandle).",
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "SkinTone": {
+                  "description": "Row name from DT_Customization_SkinTone.",
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "BodyType",
+                "Head",
+                "HairPreset",
+                "FacialHairPreset",
+                "HairColor",
+                "SkinTone",
+                "EyeColor",
+                "EyebrowColor"
+              ],
+              "type": "object"
+            },
+            "DialogueID": {
+              "description": "Native Talk interaction; local dialogue Id or Mod:Id. With VendorID, dialogue choices may open that bound store after closing the conversation.",
+              "minLength": 1,
+              "pattern": "^[^:]+(:[^:]+)?$",
+              "type": "string"
+            },
+            "DialoguePose": {
+              "additionalProperties": false,
+              "description": "Human only. Optional concrete pose applied while dialogue is active; the authored Pose is restored when dialogue closes. Equipment is not supported here.",
+              "if": {
+                "required": [
+                  "Time"
+                ]
+              },
+              "oneOf": [
+                {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "Asset"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "Playback"
+                        ]
+                      }
+                    ]
+                  },
+                  "required": [
+                    "Preset"
+                  ]
+                },
+                {
+                  "not": {
+                    "required": [
+                      "Preset"
+                    ]
+                  },
+                  "required": [
+                    "Asset"
+                  ]
+                }
+              ],
+              "properties": {
+                "Asset": {
+                  "maxLength": 1024,
+                  "minLength": 2,
+                  "pattern": "^/",
+                  "type": "string"
+                },
+                "Playback": {
+                  "enum": [
+                    "Hold",
+                    "Loop",
+                    "Once"
+                  ]
+                },
+                "Preset": {
+                  "enum": [
+                    "Equipment",
+                    "Relaxed",
+                    "CharacterSelect",
+                    "Chair",
+                    "Armchair",
+                    "Unarmed",
+                    "Crouched",
+                    "OneHanded",
+                    "Dagger",
+                    "Staff",
+                    "Sword",
+                    "Pickaxe",
+                    "Greatsword",
+                    "Greataxe",
+                    "Shield",
+                    "Torch",
+                    "Bow",
+                    "Yes",
+                    "No",
+                    "Wave",
+                    "Point",
+                    "NoWay",
+                    "Celebrate"
+                  ]
+                },
+                "Time": {
+                  "maximum": 60,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                "WeaponVisibility": {
+                  "enum": [
+                    "Auto",
+                    "Show",
+                    "Hide"
+                  ]
+                }
+              },
+              "then": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "Preset": {
+                        "enum": [
+                          "Equipment",
+                          "Unarmed",
+                          "Crouched",
+                          "OneHanded",
+                          "Dagger",
+                          "Staff",
+                          "Sword",
+                          "Pickaxe",
+                          "Greatsword",
+                          "Greataxe",
+                          "Shield",
+                          "Torch",
+                          "Bow"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "Preset"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "Playback": {
+                        "const": "Hold"
+                      }
+                    },
+                    "required": [
+                      "Asset",
+                      "Playback"
+                    ]
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "DisplayName": {
+              "type": "string"
+            },
+            "EnableCollision": {
+              "type": "boolean"
+            },
+            "Enabled": {
+              "type": "boolean"
+            },
+            "Equipment": {
+              "additionalProperties": false,
+              "properties": {
+                "Body": {
+                  "description": "WearableEquipmentData whose native Slot is Body.",
+                  "oneOf": [
+                    {
+                      "maxLength": 1024,
+                      "pattern": "^/[^\\r\\n\\t]+$",
+                      "type": "string"
+                    },
+                    {
+                      "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "Cape": {
+                  "description": "WearableEquipmentData whose native Slot is Cape.",
+                  "oneOf": [
+                    {
+                      "maxLength": 1024,
+                      "pattern": "^/[^\\r\\n\\t]+$",
+                      "type": "string"
+                    },
+                    {
+                      "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "Head": {
+                  "description": "WearableEquipmentData whose native Slot is Head.",
+                  "oneOf": [
+                    {
+                      "maxLength": 1024,
+                      "pattern": "^/[^\\r\\n\\t]+$",
+                      "type": "string"
+                    },
+                    {
+                      "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "Legs": {
+                  "description": "WearableEquipmentData whose native Slot is Legs.",
+                  "oneOf": [
+                    {
+                      "maxLength": 1024,
+                      "pattern": "^/[^\\r\\n\\t]+$",
+                      "type": "string"
+                    },
+                    {
+                      "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "MainHand": {
+                  "description": "HeldEquipmentData with native Slot HeldOnlyRight or HeldTwoHanded.",
+                  "oneOf": [
+                    {
+                      "maxLength": 1024,
+                      "pattern": "^/[^\\r\\n\\t]+$",
+                      "type": "string"
+                    },
+                    {
+                      "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "OffHand": {
+                  "description": "HeldEquipmentData with native Slot HeldOnlyLeft. Cannot accompany a two-handed MainHand.",
+                  "oneOf": [
+                    {
+                      "maxLength": 1024,
+                      "pattern": "^/[^\\r\\n\\t]+$",
+                      "type": "string"
+                    },
+                    {
+                      "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "Trinket": {
+                  "description": "WearableEquipmentData whose native Slot is Trinket.",
+                  "oneOf": [
+                    {
+                      "maxLength": 1024,
+                      "pattern": "^/[^\\r\\n\\t]+$",
+                      "type": "string"
+                    },
+                    {
+                      "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            "Ghost": {
+              "additionalProperties": false,
+              "properties": {
+                "Character": {
+                  "type": "boolean"
+                },
+                "Equipment": {
+                  "type": "boolean"
+                },
+                "Weapons": {
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            },
+            "HideMesh": {
+              "description": "Prop only: hide visual mesh while retaining collision.",
+              "type": "boolean"
+            },
+            "HideName": {
+              "default": false,
+              "description": "Hide the in-world NPC name independently of interaction. Map.ShowName controls map labels.",
+              "type": "boolean"
+            },
+            "HideWeapon": {
+              "default": false,
+              "description": "Human only. Keeps MainHand and OffHand equipment data for pose selection but hides the rendered held weapon visuals.",
+              "type": "boolean"
+            },
+            "Id": {
+              "type": "string"
+            },
+            "IdleAnimation": {
+              "type": "string"
+            },
+            "Location": {
+              "description": "World coordinates as [X,Y,Z] or {X,Y,Z}. Z accepts $, $+offset, or $-offset and resolves to blocking ground.",
+              "oneOf": [
+                {
+                  "additionalItems": false,
+                  "items": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "pattern": "^\\$([+-][0-9]+(?:\\.[0-9]+)?)?$",
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  ],
+                  "maxItems": 3,
+                  "minItems": 3,
+                  "type": "array"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "X": {
+                      "type": "number"
+                    },
+                    "Y": {
+                      "type": "number"
+                    },
+                    "Z": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "pattern": "^\\$([+-][0-9]+(?:\\.[0-9]+)?)?$",
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "X",
+                    "Y",
+                    "Z"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
+            "LoreEntry": {
+              "description": "Direct Examine interaction: /lore entry ID or cooked lore asset path. Do not combine with DialogueID or VendorID.",
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string"
+            },
+            "LoreID": {
+              "description": "Preferred /lore reference: local lore Id or Mod:Id. Creates the direct Examine interaction. Do not combine with LoreEntry, DialogueID or VendorID.",
+              "minLength": 1,
+              "pattern": "^[^:]+(:[^:]+)?$",
+              "type": "string"
+            },
+            "Map": {
+              "additionalProperties": false,
+              "properties": {
+                "Enabled": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "Icon": {
+                  "maxLength": 1024,
+                  "minLength": 2,
+                  "pattern": "^/",
+                  "type": "string"
+                },
+                "ShowName": {
+                  "default": true,
+                  "description": "Show the NPC name on its map icon. False keeps the icon without a label; does not change in-world names.",
+                  "type": "boolean"
+                },
+                "Size": {
+                  "maximum": 4096,
+                  "minimum": 1,
+                  "type": "number"
+                },
+                "SizeMode": {
+                  "default": "Pixels",
+                  "enum": [
+                    "Pixels",
+                    "WorldUnits"
+                  ],
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "Materials": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "Mesh": {
+              "type": "string"
+            },
+            "MeshCollision": {
+              "description": "AI Pawn uses the selected mesh's reinitialized PhysicsAsset and removes capsule pawn blocking; missing physics fails setup. AI Native preserves mesh defaults and capsule blocking; None disables mesh collision but retains capsule blocking. Humans use a body capsule, not equipment collision. Resources use authored static-mesh query collision for Native/Pawn and no capsule pawn blocking. EnableCollision=false disables all actor collision.",
+              "enum": [
+                "Native",
+                "Pawn",
+                "None"
+              ]
+            },
+            "Multiplayer": {
+              "default": true,
+              "description": "Enabled by default. Set false only for an explicitly local NPC. Matching cooked assets and RuneSchema definitions must be installed on server and clients.",
+              "type": "boolean"
+            },
+            "NoInteract": {
+              "default": false,
+              "description": "Disable interaction and suppress VendorID, DialogueID, LoreID and LoreEntry bindings without changing collision.",
+              "type": "boolean"
+            },
+            "OverheadIcon": {
+              "additionalProperties": false,
+              "properties": {
+                "Distance": {
+                  "default": 5000,
+                  "maximum": 100000,
+                  "minimum": 100,
+                  "type": "number"
+                },
+                "Enabled": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "Height": {
+                  "default": 220,
+                  "maximum": 2000,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                "Icon": {
+                  "maxLength": 1024,
+                  "minLength": 2,
+                  "pattern": "^/",
+                  "type": "string"
+                },
+                "Scale": {
+                  "default": 0.35,
+                  "maximum": 5,
+                  "minimum": 0.01,
+                  "type": "number"
+                },
+                "Size": {
+                  "maximum": 4096,
+                  "minimum": 1,
+                  "type": "number"
+                },
+                "SizeMode": {
+                  "default": "Scale",
+                  "enum": [
+                    "Scale",
+                    "Pixels"
+                  ],
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "Pose": {
+              "additionalProperties": false,
+              "description": "Human only. Equipment preserves the held item's pose, or uses Relaxed when empty-handed. Time samples held poses in seconds; must be below the loaded clip duration. IdleAnimation and Pose are mutually exclusive. Full-body idles/emotes do not preserve every weapon grip.",
+              "if": {
+                "required": [
+                  "Time"
+                ]
+              },
+              "oneOf": [
+                {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "Asset"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "Playback"
+                        ]
+                      }
+                    ]
+                  },
+                  "required": [
+                    "Preset"
+                  ]
+                },
+                {
+                  "not": {
+                    "required": [
+                      "Preset"
+                    ]
+                  },
+                  "required": [
+                    "Asset"
+                  ]
+                }
+              ],
+              "properties": {
+                "Asset": {
+                  "maxLength": 1024,
+                  "minLength": 2,
+                  "pattern": "^/",
+                  "type": "string"
+                },
+                "Playback": {
+                  "enum": [
+                    "Hold",
+                    "Loop",
+                    "Once"
+                  ]
+                },
+                "Preset": {
+                  "enum": [
+                    "Equipment",
+                    "Relaxed",
+                    "CharacterSelect",
+                    "Chair",
+                    "Armchair",
+                    "Unarmed",
+                    "Crouched",
+                    "OneHanded",
+                    "Dagger",
+                    "Staff",
+                    "Sword",
+                    "Pickaxe",
+                    "Greatsword",
+                    "Greataxe",
+                    "Shield",
+                    "Torch",
+                    "Bow",
+                    "Yes",
+                    "No",
+                    "Wave",
+                    "Point",
+                    "NoWay",
+                    "Celebrate"
+                  ]
+                },
+                "Time": {
+                  "maximum": 60,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                "WeaponVisibility": {
+                  "enum": [
+                    "Auto",
+                    "Show",
+                    "Hide"
+                  ]
+                }
+              },
+              "then": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "Preset": {
+                        "enum": [
+                          "Equipment",
+                          "Unarmed",
+                          "Crouched",
+                          "OneHanded",
+                          "Dagger",
+                          "Staff",
+                          "Sword",
+                          "Pickaxe",
+                          "Greatsword",
+                          "Greataxe",
+                          "Shield",
+                          "Torch",
+                          "Bow"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "Preset"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "Playback": {
+                        "const": "Hold"
+                      }
+                    },
+                    "required": [
+                      "Asset",
+                      "Playback"
+                    ]
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "QuestID": {
+              "description": "Associated /quests definition: local quest Id or Mod:Id. This records the NPC/quest relationship; dialogue choices still control acquisition and completion.",
+              "minLength": 1,
+              "pattern": "^[^:]+(:[^:]+)?$",
+              "type": "string"
+            },
+            "Rotation": {
+              "additionalProperties": false,
+              "description": "Unreal rotator in degrees. Use the named Pitch, Yaw and Roll fields.",
+              "properties": {
+                "Pitch": {
+                  "type": "number"
+                },
+                "Roll": {
+                  "type": "number"
+                },
+                "Yaw": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "Pitch",
+                "Yaw",
+                "Roll"
+              ],
+              "type": "object"
+            },
+            "Scale": {
+              "anyOf": [
+                {
+                  "maximum": 100,
+                  "minimum": 0.01,
+                  "type": "number"
+                },
+                {
+                  "items": {
+                    "maximum": 100,
+                    "minimum": 0.01,
+                    "type": "number"
+                  },
+                  "maxItems": 3,
+                  "minItems": 3,
+                  "type": "array"
+                }
+              ]
+            },
+            "TimeOfDay": {
+              "default": "Any",
+              "description": "Native lifecycle gate. Day/Night NPCs exist only during that phase; authority removes and restores them at the game's dawn/dusk transition while respecting world-cell loading.",
+              "enum": [
+                "Any",
+                "Day",
+                "Night"
+              ],
+              "type": "string"
+            },
+            "Type": {
+              "default": "AI",
+              "description": "Resource and Prop use an explicit StaticMesh on a neutral NPC, without harvesting, damage, drops or building behavior.",
+              "enum": [
+                "AI",
+                "Human",
+                "Resource",
+                "Prop"
+              ]
+            },
+            "VendorID": {
+              "description": "Direct Trade interaction: local store Id or Mod:Id. Omit for a visual-only NPC.",
+              "minLength": 1,
+              "pattern": "^[^:]+(:[^:]+)?$",
+              "type": "string"
+            },
+            "VisualEffect": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "description": "All NPC visual types. Applies to meshes, including human equipment/weapons, not nameplate widgets. Enable Overlay or BodyMaterial.",
+                  "properties": {
+                    "BodyMaterial": {
+                      "default": false,
+                      "type": "boolean"
+                    },
+                    "MainColor": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "A": {
+                          "maximum": 1,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "B": {
+                          "maximum": 64,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "G": {
+                          "maximum": 64,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "R": {
+                          "maximum": 64,
+                          "minimum": 0,
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "R",
+                        "G",
+                        "B",
+                        "A"
+                      ],
+                      "type": "object"
+                    },
+                    "Overlay": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "SecondaryColor": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "A": {
+                          "maximum": 1,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "B": {
+                          "maximum": 64,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "G": {
+                          "maximum": 64,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "R": {
+                          "maximum": 64,
+                          "minimum": 0,
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "R",
+                        "G",
+                        "B",
+                        "A"
+                      ],
+                      "type": "object"
+                    },
+                    "Type": {
+                      "const": "Ghost Glow"
+                    }
+                  },
+                  "required": [
+                    "Type"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "LocationOffset": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "X": {
+                          "maximum": 100000,
+                          "minimum": -100000,
+                          "type": "number"
+                        },
+                        "Y": {
+                          "maximum": 100000,
+                          "minimum": -100000,
+                          "type": "number"
+                        },
+                        "Z": {
+                          "maximum": 100000,
+                          "minimum": -100000,
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "X",
+                        "Y",
+                        "Z"
+                      ],
+                      "type": "object"
+                    },
+                    "Parameters": {
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "maximum": 100000,
+                            "minimum": -100000,
+                            "type": "number"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "X": {
+                                "maximum": 100000,
+                                "minimum": -100000,
+                                "type": "number"
+                              },
+                              "Y": {
+                                "maximum": 100000,
+                                "minimum": -100000,
+                                "type": "number"
+                              },
+                              "Z": {
+                                "maximum": 100000,
+                                "minimum": -100000,
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "X",
+                              "Y",
+                              "Z"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "A": {
+                                "maximum": 100000,
+                                "minimum": -100000,
+                                "type": "number"
+                              },
+                              "B": {
+                                "maximum": 100000,
+                                "minimum": -100000,
+                                "type": "number"
+                              },
+                              "G": {
+                                "maximum": 100000,
+                                "minimum": -100000,
+                                "type": "number"
+                              },
+                              "R": {
+                                "maximum": 100000,
+                                "minimum": -100000,
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "R",
+                              "G",
+                              "B",
+                              "A"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "maxProperties": 32,
+                      "propertyNames": {
+                        "maxLength": 128,
+                        "pattern": "^User\\.[^\\r\\n\\t]*$"
+                      },
+                      "type": "object"
+                    },
+                    "System": {
+                      "maxLength": 1024,
+                      "minLength": 3,
+                      "pattern": "^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$",
+                      "type": "string"
+                    },
+                    "Type": {
+                      "const": "Niagara"
+                    }
+                  },
+                  "required": [
+                    "Type",
+                    "System"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
+            "VisualSource": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "Id",
+            "Location"
+          ],
+          "type": "object"
+        },
+        {
+          "items": {
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "else": {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "Appearance"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "Equipment"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "Pose"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "DialoguePose"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "Ghost"
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "if": {
+                  "properties": {
+                    "Type": {
+                      "const": "Human"
+                    }
+                  },
+                  "required": [
+                    "Type"
+                  ]
+                },
+                "then": {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "Mesh"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "VisualSource"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "Materials"
+                        ]
+                      }
+                    ]
+                  },
+                  "required": [
+                    "Appearance"
+                  ]
+                }
+              },
+              {
+                "not": {
+                  "required": [
+                    "Pose",
+                    "IdleAnimation"
+                  ]
+                }
+              },
+              {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "LoreID",
+                        "LoreEntry"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "LoreID",
+                        "DialogueID"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "LoreID",
+                        "VendorID"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "LoreEntry",
+                        "DialogueID"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "LoreEntry",
+                        "VendorID"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "Type": {
+                      "enum": [
+                        "Resource",
+                        "Prop"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "Type"
+                  ]
+                },
+                "then": {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "VisualSource"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "IdleAnimation"
+                        ]
+                      }
+                    ]
+                  },
+                  "required": [
+                    "Mesh"
+                  ]
+                }
+              }
+            ],
+            "anyOf": [
+              {
+                "required": [
+                  "Mesh"
+                ]
+              },
+              {
+                "required": [
+                  "VisualSource"
+                ]
+              },
+              {
+                "properties": {
+                  "Type": {
+                    "const": "Human"
+                  }
+                },
+                "required": [
+                  "Type",
+                  "Appearance"
+                ]
+              }
+            ],
+            "properties": {
+              "Appearance": {
+                "additionalProperties": false,
+                "properties": {
+                  "BodyType": {
+                    "description": "Row name from DT_Customization_BodyType.",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "EyeColor": {
+                    "description": "Row name from DT_Customization_EyeColor.",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "EyebrowColor": {
+                    "description": "Row name from DT_Customization_EyebrowColor.",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "FacialHairPreset": {
+                    "description": "Row name from DT_Customization_FacialHairPresets.",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "HairColor": {
+                    "description": "Row name from DT_Customization_HairColor.",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "HairPreset": {
+                    "description": "Row name from DT_Customization_HairPresets.",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "Head": {
+                    "description": "Row name from DT_Customization_FaceType (the native FaceDataHandle).",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "SkinTone": {
+                    "description": "Row name from DT_Customization_SkinTone.",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "BodyType",
+                  "Head",
+                  "HairPreset",
+                  "FacialHairPreset",
+                  "HairColor",
+                  "SkinTone",
+                  "EyeColor",
+                  "EyebrowColor"
+                ],
+                "type": "object"
+              },
+              "DialogueID": {
+                "description": "Native Talk interaction; local dialogue Id or Mod:Id. With VendorID, dialogue choices may open that bound store after closing the conversation.",
+                "minLength": 1,
+                "pattern": "^[^:]+(:[^:]+)?$",
+                "type": "string"
+              },
+              "DialoguePose": {
+                "additionalProperties": false,
+                "description": "Human only. Optional concrete pose applied while dialogue is active; the authored Pose is restored when dialogue closes. Equipment is not supported here.",
+                "if": {
+                  "required": [
+                    "Time"
+                  ]
+                },
+                "oneOf": [
+                  {
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "Asset"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "Playback"
+                          ]
+                        }
+                      ]
+                    },
+                    "required": [
+                      "Preset"
+                    ]
+                  },
+                  {
+                    "not": {
+                      "required": [
+                        "Preset"
+                      ]
+                    },
+                    "required": [
+                      "Asset"
+                    ]
+                  }
+                ],
+                "properties": {
+                  "Asset": {
+                    "maxLength": 1024,
+                    "minLength": 2,
+                    "pattern": "^/",
+                    "type": "string"
+                  },
+                  "Playback": {
+                    "enum": [
+                      "Hold",
+                      "Loop",
+                      "Once"
+                    ]
+                  },
+                  "Preset": {
+                    "enum": [
+                      "Equipment",
+                      "Relaxed",
+                      "CharacterSelect",
+                      "Chair",
+                      "Armchair",
+                      "Unarmed",
+                      "Crouched",
+                      "OneHanded",
+                      "Dagger",
+                      "Staff",
+                      "Sword",
+                      "Pickaxe",
+                      "Greatsword",
+                      "Greataxe",
+                      "Shield",
+                      "Torch",
+                      "Bow",
+                      "Yes",
+                      "No",
+                      "Wave",
+                      "Point",
+                      "NoWay",
+                      "Celebrate"
+                    ]
+                  },
+                  "Time": {
+                    "maximum": 60,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "WeaponVisibility": {
+                    "enum": [
+                      "Auto",
+                      "Show",
+                      "Hide"
+                    ]
+                  }
+                },
+                "then": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "Preset": {
+                          "enum": [
+                            "Equipment",
+                            "Unarmed",
+                            "Crouched",
+                            "OneHanded",
+                            "Dagger",
+                            "Staff",
+                            "Sword",
+                            "Pickaxe",
+                            "Greatsword",
+                            "Greataxe",
+                            "Shield",
+                            "Torch",
+                            "Bow"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "Preset"
+                      ]
+                    },
+                    {
+                      "properties": {
+                        "Playback": {
+                          "const": "Hold"
+                        }
+                      },
+                      "required": [
+                        "Asset",
+                        "Playback"
+                      ]
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              "DisplayName": {
+                "type": "string"
+              },
+              "EnableCollision": {
+                "type": "boolean"
+              },
+              "Enabled": {
+                "type": "boolean"
+              },
+              "Equipment": {
+                "additionalProperties": false,
+                "properties": {
+                  "Body": {
+                    "description": "WearableEquipmentData whose native Slot is Body.",
+                    "oneOf": [
+                      {
+                        "maxLength": 1024,
+                        "pattern": "^/[^\\r\\n\\t]+$",
+                        "type": "string"
+                      },
+                      {
+                        "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "Cape": {
+                    "description": "WearableEquipmentData whose native Slot is Cape.",
+                    "oneOf": [
+                      {
+                        "maxLength": 1024,
+                        "pattern": "^/[^\\r\\n\\t]+$",
+                        "type": "string"
+                      },
+                      {
+                        "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "Head": {
+                    "description": "WearableEquipmentData whose native Slot is Head.",
+                    "oneOf": [
+                      {
+                        "maxLength": 1024,
+                        "pattern": "^/[^\\r\\n\\t]+$",
+                        "type": "string"
+                      },
+                      {
+                        "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "Legs": {
+                    "description": "WearableEquipmentData whose native Slot is Legs.",
+                    "oneOf": [
+                      {
+                        "maxLength": 1024,
+                        "pattern": "^/[^\\r\\n\\t]+$",
+                        "type": "string"
+                      },
+                      {
+                        "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "MainHand": {
+                    "description": "HeldEquipmentData with native Slot HeldOnlyRight or HeldTwoHanded.",
+                    "oneOf": [
+                      {
+                        "maxLength": 1024,
+                        "pattern": "^/[^\\r\\n\\t]+$",
+                        "type": "string"
+                      },
+                      {
+                        "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "OffHand": {
+                    "description": "HeldEquipmentData with native Slot HeldOnlyLeft. Cannot accompany a two-handed MainHand.",
+                    "oneOf": [
+                      {
+                        "maxLength": 1024,
+                        "pattern": "^/[^\\r\\n\\t]+$",
+                        "type": "string"
+                      },
+                      {
+                        "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "Trinket": {
+                    "description": "WearableEquipmentData whose native Slot is Trinket.",
+                    "oneOf": [
+                      {
+                        "maxLength": 1024,
+                        "pattern": "^/[^\\r\\n\\t]+$",
+                        "type": "string"
+                      },
+                      {
+                        "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                },
+                "type": "object"
+              },
+              "Ghost": {
+                "additionalProperties": false,
+                "properties": {
+                  "Character": {
+                    "type": "boolean"
+                  },
+                  "Equipment": {
+                    "type": "boolean"
+                  },
+                  "Weapons": {
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              },
+              "HideMesh": {
+                "description": "Prop only: hide visual mesh while retaining collision.",
+                "type": "boolean"
+              },
+              "HideName": {
+                "default": false,
+                "description": "Hide the in-world NPC name independently of interaction. Map.ShowName controls map labels.",
+                "type": "boolean"
+              },
+              "HideWeapon": {
+                "default": false,
+                "description": "Human only. Keeps MainHand and OffHand equipment data for pose selection but hides the rendered held weapon visuals.",
+                "type": "boolean"
+              },
+              "Id": {
+                "type": "string"
+              },
+              "IdleAnimation": {
+                "type": "string"
+              },
+              "Location": {
+                "description": "World coordinates as [X,Y,Z] or {X,Y,Z}. Z accepts $, $+offset, or $-offset and resolves to blocking ground.",
+                "oneOf": [
+                  {
+                    "additionalItems": false,
+                    "items": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "pattern": "^\\$([+-][0-9]+(?:\\.[0-9]+)?)?$",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    ],
+                    "maxItems": 3,
+                    "minItems": 3,
+                    "type": "array"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "X": {
+                        "type": "number"
+                      },
+                      "Y": {
+                        "type": "number"
+                      },
+                      "Z": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "pattern": "^\\$([+-][0-9]+(?:\\.[0-9]+)?)?$",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "X",
+                      "Y",
+                      "Z"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "LoreEntry": {
+                "description": "Direct Examine interaction: /lore entry ID or cooked lore asset path. Do not combine with DialogueID or VendorID.",
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "LoreID": {
+                "description": "Preferred /lore reference: local lore Id or Mod:Id. Creates the direct Examine interaction. Do not combine with LoreEntry, DialogueID or VendorID.",
+                "minLength": 1,
+                "pattern": "^[^:]+(:[^:]+)?$",
+                "type": "string"
+              },
+              "Map": {
+                "additionalProperties": false,
+                "properties": {
+                  "Enabled": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "Icon": {
+                    "maxLength": 1024,
+                    "minLength": 2,
+                    "pattern": "^/",
+                    "type": "string"
+                  },
+                  "ShowName": {
+                    "default": true,
+                    "description": "Show the NPC name on its map icon. False keeps the icon without a label; does not change in-world names.",
+                    "type": "boolean"
+                  },
+                  "Size": {
+                    "maximum": 4096,
+                    "minimum": 1,
+                    "type": "number"
+                  },
+                  "SizeMode": {
+                    "default": "Pixels",
+                    "enum": [
+                      "Pixels",
+                      "WorldUnits"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "Materials": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "Mesh": {
+                "type": "string"
+              },
+              "MeshCollision": {
+                "description": "AI Pawn uses the selected mesh's reinitialized PhysicsAsset and removes capsule pawn blocking; missing physics fails setup. AI Native preserves mesh defaults and capsule blocking; None disables mesh collision but retains capsule blocking. Humans use a body capsule, not equipment collision. Resources use authored static-mesh query collision for Native/Pawn and no capsule pawn blocking. EnableCollision=false disables all actor collision.",
+                "enum": [
+                  "Native",
+                  "Pawn",
+                  "None"
+                ]
+              },
+              "Multiplayer": {
+                "default": true,
+                "description": "Enabled by default. Set false only for an explicitly local NPC. Matching cooked assets and RuneSchema definitions must be installed on server and clients.",
+                "type": "boolean"
+              },
+              "NoInteract": {
+                "default": false,
+                "description": "Disable interaction and suppress VendorID, DialogueID, LoreID and LoreEntry bindings without changing collision.",
+                "type": "boolean"
+              },
+              "OverheadIcon": {
+                "additionalProperties": false,
+                "properties": {
+                  "Distance": {
+                    "default": 5000,
+                    "maximum": 100000,
+                    "minimum": 100,
+                    "type": "number"
+                  },
+                  "Enabled": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "Height": {
+                    "default": 220,
+                    "maximum": 2000,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "Icon": {
+                    "maxLength": 1024,
+                    "minLength": 2,
+                    "pattern": "^/",
+                    "type": "string"
+                  },
+                  "Scale": {
+                    "default": 0.35,
+                    "maximum": 5,
+                    "minimum": 0.01,
+                    "type": "number"
+                  },
+                  "Size": {
+                    "maximum": 4096,
+                    "minimum": 1,
+                    "type": "number"
+                  },
+                  "SizeMode": {
+                    "default": "Scale",
+                    "enum": [
+                      "Scale",
+                      "Pixels"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "Pose": {
+                "additionalProperties": false,
+                "description": "Human only. Equipment preserves the held item's pose, or uses Relaxed when empty-handed. Time samples held poses in seconds; must be below the loaded clip duration. IdleAnimation and Pose are mutually exclusive. Full-body idles/emotes do not preserve every weapon grip.",
+                "if": {
+                  "required": [
+                    "Time"
+                  ]
+                },
+                "oneOf": [
+                  {
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "Asset"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "Playback"
+                          ]
+                        }
+                      ]
+                    },
+                    "required": [
+                      "Preset"
+                    ]
+                  },
+                  {
+                    "not": {
+                      "required": [
+                        "Preset"
+                      ]
+                    },
+                    "required": [
+                      "Asset"
+                    ]
+                  }
+                ],
+                "properties": {
+                  "Asset": {
+                    "maxLength": 1024,
+                    "minLength": 2,
+                    "pattern": "^/",
+                    "type": "string"
+                  },
+                  "Playback": {
+                    "enum": [
+                      "Hold",
+                      "Loop",
+                      "Once"
+                    ]
+                  },
+                  "Preset": {
+                    "enum": [
+                      "Equipment",
+                      "Relaxed",
+                      "CharacterSelect",
+                      "Chair",
+                      "Armchair",
+                      "Unarmed",
+                      "Crouched",
+                      "OneHanded",
+                      "Dagger",
+                      "Staff",
+                      "Sword",
+                      "Pickaxe",
+                      "Greatsword",
+                      "Greataxe",
+                      "Shield",
+                      "Torch",
+                      "Bow",
+                      "Yes",
+                      "No",
+                      "Wave",
+                      "Point",
+                      "NoWay",
+                      "Celebrate"
+                    ]
+                  },
+                  "Time": {
+                    "maximum": 60,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "WeaponVisibility": {
+                    "enum": [
+                      "Auto",
+                      "Show",
+                      "Hide"
+                    ]
+                  }
+                },
+                "then": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "Preset": {
+                          "enum": [
+                            "Equipment",
+                            "Unarmed",
+                            "Crouched",
+                            "OneHanded",
+                            "Dagger",
+                            "Staff",
+                            "Sword",
+                            "Pickaxe",
+                            "Greatsword",
+                            "Greataxe",
+                            "Shield",
+                            "Torch",
+                            "Bow"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "Preset"
+                      ]
+                    },
+                    {
+                      "properties": {
+                        "Playback": {
+                          "const": "Hold"
+                        }
+                      },
+                      "required": [
+                        "Asset",
+                        "Playback"
+                      ]
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              "QuestID": {
+                "description": "Associated /quests definition: local quest Id or Mod:Id. This records the NPC/quest relationship; dialogue choices still control acquisition and completion.",
+                "minLength": 1,
+                "pattern": "^[^:]+(:[^:]+)?$",
+                "type": "string"
+              },
+              "Rotation": {
+                "additionalProperties": false,
+                "description": "Unreal rotator in degrees. Use the named Pitch, Yaw and Roll fields.",
+                "properties": {
+                  "Pitch": {
+                    "type": "number"
+                  },
+                  "Roll": {
+                    "type": "number"
+                  },
+                  "Yaw": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "Pitch",
+                  "Yaw",
+                  "Roll"
+                ],
+                "type": "object"
+              },
+              "Scale": {
+                "anyOf": [
+                  {
+                    "maximum": 100,
+                    "minimum": 0.01,
+                    "type": "number"
+                  },
+                  {
+                    "items": {
+                      "maximum": 100,
+                      "minimum": 0.01,
+                      "type": "number"
+                    },
+                    "maxItems": 3,
+                    "minItems": 3,
+                    "type": "array"
+                  }
+                ]
+              },
+              "TimeOfDay": {
+                "default": "Any",
+                "description": "Native lifecycle gate. Day/Night NPCs exist only during that phase; authority removes and restores them at the game's dawn/dusk transition while respecting world-cell loading.",
+                "enum": [
+                  "Any",
+                  "Day",
+                  "Night"
+                ],
+                "type": "string"
+              },
+              "Type": {
+                "default": "AI",
+                "description": "Resource and Prop use an explicit StaticMesh on a neutral NPC, without harvesting, damage, drops or building behavior.",
+                "enum": [
+                  "AI",
+                  "Human",
+                  "Resource",
+                  "Prop"
+                ]
+              },
+              "VendorID": {
+                "description": "Direct Trade interaction: local store Id or Mod:Id. Omit for a visual-only NPC.",
+                "minLength": 1,
+                "pattern": "^[^:]+(:[^:]+)?$",
+                "type": "string"
+              },
+              "VisualEffect": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "description": "All NPC visual types. Applies to meshes, including human equipment/weapons, not nameplate widgets. Enable Overlay or BodyMaterial.",
+                    "properties": {
+                      "BodyMaterial": {
+                        "default": false,
+                        "type": "boolean"
+                      },
+                      "MainColor": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "A": {
+                            "maximum": 1,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "B": {
+                            "maximum": 64,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "G": {
+                            "maximum": 64,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "R": {
+                            "maximum": 64,
+                            "minimum": 0,
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "R",
+                          "G",
+                          "B",
+                          "A"
+                        ],
+                        "type": "object"
+                      },
+                      "Overlay": {
+                        "default": true,
+                        "type": "boolean"
+                      },
+                      "SecondaryColor": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "A": {
+                            "maximum": 1,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "B": {
+                            "maximum": 64,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "G": {
+                            "maximum": 64,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "R": {
+                            "maximum": 64,
+                            "minimum": 0,
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "R",
+                          "G",
+                          "B",
+                          "A"
+                        ],
+                        "type": "object"
+                      },
+                      "Type": {
+                        "const": "Ghost Glow"
+                      }
+                    },
+                    "required": [
+                      "Type"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "LocationOffset": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "X": {
+                            "maximum": 100000,
+                            "minimum": -100000,
+                            "type": "number"
+                          },
+                          "Y": {
+                            "maximum": 100000,
+                            "minimum": -100000,
+                            "type": "number"
+                          },
+                          "Z": {
+                            "maximum": 100000,
+                            "minimum": -100000,
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "X",
+                          "Y",
+                          "Z"
+                        ],
+                        "type": "object"
+                      },
+                      "Parameters": {
+                        "additionalProperties": {
+                          "anyOf": [
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "maximum": 100000,
+                              "minimum": -100000,
+                              "type": "number"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "X": {
+                                  "maximum": 100000,
+                                  "minimum": -100000,
+                                  "type": "number"
+                                },
+                                "Y": {
+                                  "maximum": 100000,
+                                  "minimum": -100000,
+                                  "type": "number"
+                                },
+                                "Z": {
+                                  "maximum": 100000,
+                                  "minimum": -100000,
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "X",
+                                "Y",
+                                "Z"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "A": {
+                                  "maximum": 100000,
+                                  "minimum": -100000,
+                                  "type": "number"
+                                },
+                                "B": {
+                                  "maximum": 100000,
+                                  "minimum": -100000,
+                                  "type": "number"
+                                },
+                                "G": {
+                                  "maximum": 100000,
+                                  "minimum": -100000,
+                                  "type": "number"
+                                },
+                                "R": {
+                                  "maximum": 100000,
+                                  "minimum": -100000,
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "R",
+                                "G",
+                                "B",
+                                "A"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "maxProperties": 32,
+                        "propertyNames": {
+                          "maxLength": 128,
+                          "pattern": "^User\\.[^\\r\\n\\t]*$"
+                        },
+                        "type": "object"
+                      },
+                      "System": {
+                        "maxLength": 1024,
+                        "minLength": 3,
+                        "pattern": "^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$",
+                        "type": "string"
+                      },
+                      "Type": {
+                        "const": "Niagara"
+                      }
+                    },
+                    "required": [
+                      "Type",
+                      "System"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "VisualSource": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "Id",
+              "Location"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      ]
+    },
+    {
+      "properties": {
+        "Npcs": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "allOf": [
+                {
+                  "else": {
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "Appearance"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "Equipment"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "Pose"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "DialoguePose"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "Ghost"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "if": {
+                    "properties": {
+                      "Type": {
+                        "const": "Human"
+                      }
+                    },
+                    "required": [
+                      "Type"
+                    ]
+                  },
+                  "then": {
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "Mesh"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "VisualSource"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "Materials"
+                          ]
+                        }
+                      ]
+                    },
+                    "required": [
+                      "Appearance"
+                    ]
+                  }
+                },
+                {
+                  "not": {
+                    "required": [
+                      "Pose",
+                      "IdleAnimation"
+                    ]
+                  }
+                },
+                {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "LoreID",
+                          "LoreEntry"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "LoreID",
+                          "DialogueID"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "LoreID",
+                          "VendorID"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "LoreEntry",
+                          "DialogueID"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "LoreEntry",
+                          "VendorID"
+                        ]
+                      }
+                    ]
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "Type": {
+                        "enum": [
+                          "Resource",
+                          "Prop"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "Type"
+                    ]
+                  },
+                  "then": {
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "VisualSource"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "IdleAnimation"
+                          ]
+                        }
+                      ]
+                    },
+                    "required": [
+                      "Mesh"
+                    ]
+                  }
+                }
+              ],
+              "anyOf": [
+                {
+                  "required": [
+                    "Mesh"
+                  ]
+                },
+                {
+                  "required": [
+                    "VisualSource"
+                  ]
+                },
+                {
+                  "properties": {
+                    "Type": {
+                      "const": "Human"
+                    }
+                  },
+                  "required": [
+                    "Type",
+                    "Appearance"
+                  ]
+                }
+              ],
+              "properties": {
+                "Appearance": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "BodyType": {
+                      "description": "Row name from DT_Customization_BodyType.",
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "EyeColor": {
+                      "description": "Row name from DT_Customization_EyeColor.",
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "EyebrowColor": {
+                      "description": "Row name from DT_Customization_EyebrowColor.",
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "FacialHairPreset": {
+                      "description": "Row name from DT_Customization_FacialHairPresets.",
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "HairColor": {
+                      "description": "Row name from DT_Customization_HairColor.",
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "HairPreset": {
+                      "description": "Row name from DT_Customization_HairPresets.",
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "Head": {
+                      "description": "Row name from DT_Customization_FaceType (the native FaceDataHandle).",
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "SkinTone": {
+                      "description": "Row name from DT_Customization_SkinTone.",
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "BodyType",
+                    "Head",
+                    "HairPreset",
+                    "FacialHairPreset",
+                    "HairColor",
+                    "SkinTone",
+                    "EyeColor",
+                    "EyebrowColor"
+                  ],
+                  "type": "object"
+                },
+                "DialogueID": {
+                  "description": "Native Talk interaction; local dialogue Id or Mod:Id. With VendorID, dialogue choices may open that bound store after closing the conversation.",
+                  "minLength": 1,
+                  "pattern": "^[^:]+(:[^:]+)?$",
+                  "type": "string"
+                },
+                "DialoguePose": {
+                  "additionalProperties": false,
+                  "description": "Human only. Optional concrete pose applied while dialogue is active; the authored Pose is restored when dialogue closes. Equipment is not supported here.",
+                  "if": {
+                    "required": [
+                      "Time"
+                    ]
+                  },
+                  "oneOf": [
+                    {
+                      "not": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "Asset"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "Playback"
+                            ]
+                          }
+                        ]
+                      },
+                      "required": [
+                        "Preset"
+                      ]
+                    },
+                    {
+                      "not": {
+                        "required": [
+                          "Preset"
+                        ]
+                      },
+                      "required": [
+                        "Asset"
+                      ]
+                    }
+                  ],
+                  "properties": {
+                    "Asset": {
+                      "maxLength": 1024,
+                      "minLength": 2,
+                      "pattern": "^/",
+                      "type": "string"
+                    },
+                    "Playback": {
+                      "enum": [
+                        "Hold",
+                        "Loop",
+                        "Once"
+                      ]
+                    },
+                    "Preset": {
+                      "enum": [
+                        "Equipment",
+                        "Relaxed",
+                        "CharacterSelect",
+                        "Chair",
+                        "Armchair",
+                        "Unarmed",
+                        "Crouched",
+                        "OneHanded",
+                        "Dagger",
+                        "Staff",
+                        "Sword",
+                        "Pickaxe",
+                        "Greatsword",
+                        "Greataxe",
+                        "Shield",
+                        "Torch",
+                        "Bow",
+                        "Yes",
+                        "No",
+                        "Wave",
+                        "Point",
+                        "NoWay",
+                        "Celebrate"
+                      ]
+                    },
+                    "Time": {
+                      "maximum": 60,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "WeaponVisibility": {
+                      "enum": [
+                        "Auto",
+                        "Show",
+                        "Hide"
+                      ]
+                    }
+                  },
+                  "then": {
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "Preset": {
+                            "enum": [
+                              "Equipment",
+                              "Unarmed",
+                              "Crouched",
+                              "OneHanded",
+                              "Dagger",
+                              "Staff",
+                              "Sword",
+                              "Pickaxe",
+                              "Greatsword",
+                              "Greataxe",
+                              "Shield",
+                              "Torch",
+                              "Bow"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "Preset"
+                        ]
+                      },
+                      {
+                        "properties": {
+                          "Playback": {
+                            "const": "Hold"
+                          }
+                        },
+                        "required": [
+                          "Asset",
+                          "Playback"
+                        ]
+                      }
+                    ]
+                  },
+                  "type": "object"
+                },
+                "DisplayName": {
+                  "type": "string"
+                },
+                "EnableCollision": {
+                  "type": "boolean"
+                },
+                "Enabled": {
+                  "type": "boolean"
+                },
+                "Equipment": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "Body": {
+                      "description": "WearableEquipmentData whose native Slot is Body.",
+                      "oneOf": [
+                        {
+                          "maxLength": 1024,
+                          "pattern": "^/[^\\r\\n\\t]+$",
+                          "type": "string"
+                        },
+                        {
+                          "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "Cape": {
+                      "description": "WearableEquipmentData whose native Slot is Cape.",
+                      "oneOf": [
+                        {
+                          "maxLength": 1024,
+                          "pattern": "^/[^\\r\\n\\t]+$",
+                          "type": "string"
+                        },
+                        {
+                          "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "Head": {
+                      "description": "WearableEquipmentData whose native Slot is Head.",
+                      "oneOf": [
+                        {
+                          "maxLength": 1024,
+                          "pattern": "^/[^\\r\\n\\t]+$",
+                          "type": "string"
+                        },
+                        {
+                          "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "Legs": {
+                      "description": "WearableEquipmentData whose native Slot is Legs.",
+                      "oneOf": [
+                        {
+                          "maxLength": 1024,
+                          "pattern": "^/[^\\r\\n\\t]+$",
+                          "type": "string"
+                        },
+                        {
+                          "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "MainHand": {
+                      "description": "HeldEquipmentData with native Slot HeldOnlyRight or HeldTwoHanded.",
+                      "oneOf": [
+                        {
+                          "maxLength": 1024,
+                          "pattern": "^/[^\\r\\n\\t]+$",
+                          "type": "string"
+                        },
+                        {
+                          "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "OffHand": {
+                      "description": "HeldEquipmentData with native Slot HeldOnlyLeft. Cannot accompany a two-handed MainHand.",
+                      "oneOf": [
+                        {
+                          "maxLength": 1024,
+                          "pattern": "^/[^\\r\\n\\t]+$",
+                          "type": "string"
+                        },
+                        {
+                          "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "Trinket": {
+                      "description": "WearableEquipmentData whose native Slot is Trinket.",
+                      "oneOf": [
+                        {
+                          "maxLength": 1024,
+                          "pattern": "^/[^\\r\\n\\t]+$",
+                          "type": "string"
+                        },
+                        {
+                          "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                },
+                "Ghost": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "Character": {
+                      "type": "boolean"
+                    },
+                    "Equipment": {
+                      "type": "boolean"
+                    },
+                    "Weapons": {
+                      "type": "boolean"
+                    }
+                  },
+                  "type": "object"
+                },
+                "HideMesh": {
+                  "description": "Prop only: hide visual mesh while retaining collision.",
+                  "type": "boolean"
+                },
+                "HideName": {
+                  "default": false,
+                  "description": "Hide the in-world NPC name independently of interaction. Map.ShowName controls map labels.",
+                  "type": "boolean"
+                },
+                "HideWeapon": {
+                  "default": false,
+                  "description": "Human only. Keeps MainHand and OffHand equipment data for pose selection but hides the rendered held weapon visuals.",
+                  "type": "boolean"
+                },
+                "Id": {
+                  "type": "string"
+                },
+                "IdleAnimation": {
+                  "type": "string"
+                },
+                "Location": {
+                  "description": "World coordinates as [X,Y,Z] or {X,Y,Z}. Z accepts $, $+offset, or $-offset and resolves to blocking ground.",
+                  "oneOf": [
+                    {
+                      "additionalItems": false,
+                      "items": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "pattern": "^\\$([+-][0-9]+(?:\\.[0-9]+)?)?$",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      ],
+                      "maxItems": 3,
+                      "minItems": 3,
+                      "type": "array"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "X": {
+                          "type": "number"
+                        },
+                        "Y": {
+                          "type": "number"
+                        },
+                        "Z": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "pattern": "^\\$([+-][0-9]+(?:\\.[0-9]+)?)?$",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "X",
+                        "Y",
+                        "Z"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "LoreEntry": {
+                  "description": "Direct Examine interaction: /lore entry ID or cooked lore asset path. Do not combine with DialogueID or VendorID.",
+                  "maxLength": 1024,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "LoreID": {
+                  "description": "Preferred /lore reference: local lore Id or Mod:Id. Creates the direct Examine interaction. Do not combine with LoreEntry, DialogueID or VendorID.",
+                  "minLength": 1,
+                  "pattern": "^[^:]+(:[^:]+)?$",
+                  "type": "string"
+                },
+                "Map": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "Enabled": {
+                      "default": false,
+                      "type": "boolean"
+                    },
+                    "Icon": {
+                      "maxLength": 1024,
+                      "minLength": 2,
+                      "pattern": "^/",
+                      "type": "string"
+                    },
+                    "ShowName": {
+                      "default": true,
+                      "description": "Show the NPC name on its map icon. False keeps the icon without a label; does not change in-world names.",
+                      "type": "boolean"
+                    },
+                    "Size": {
+                      "maximum": 4096,
+                      "minimum": 1,
+                      "type": "number"
+                    },
+                    "SizeMode": {
+                      "default": "Pixels",
+                      "enum": [
+                        "Pixels",
+                        "WorldUnits"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "Materials": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "Mesh": {
+                  "type": "string"
+                },
+                "MeshCollision": {
+                  "description": "AI Pawn uses the selected mesh's reinitialized PhysicsAsset and removes capsule pawn blocking; missing physics fails setup. AI Native preserves mesh defaults and capsule blocking; None disables mesh collision but retains capsule blocking. Humans use a body capsule, not equipment collision. Resources use authored static-mesh query collision for Native/Pawn and no capsule pawn blocking. EnableCollision=false disables all actor collision.",
+                  "enum": [
+                    "Native",
+                    "Pawn",
+                    "None"
+                  ]
+                },
+                "Multiplayer": {
+                  "default": true,
+                  "description": "Enabled by default. Set false only for an explicitly local NPC. Matching cooked assets and RuneSchema definitions must be installed on server and clients.",
+                  "type": "boolean"
+                },
+                "NoInteract": {
+                  "default": false,
+                  "description": "Disable interaction and suppress VendorID, DialogueID, LoreID and LoreEntry bindings without changing collision.",
+                  "type": "boolean"
+                },
+                "OverheadIcon": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "Distance": {
+                      "default": 5000,
+                      "maximum": 100000,
+                      "minimum": 100,
+                      "type": "number"
+                    },
+                    "Enabled": {
+                      "default": false,
+                      "type": "boolean"
+                    },
+                    "Height": {
+                      "default": 220,
+                      "maximum": 2000,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "Icon": {
+                      "maxLength": 1024,
+                      "minLength": 2,
+                      "pattern": "^/",
+                      "type": "string"
+                    },
+                    "Scale": {
+                      "default": 0.35,
+                      "maximum": 5,
+                      "minimum": 0.01,
+                      "type": "number"
+                    },
+                    "Size": {
+                      "maximum": 4096,
+                      "minimum": 1,
+                      "type": "number"
+                    },
+                    "SizeMode": {
+                      "default": "Scale",
+                      "enum": [
+                        "Scale",
+                        "Pixels"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "Pose": {
+                  "additionalProperties": false,
+                  "description": "Human only. Equipment preserves the held item's pose, or uses Relaxed when empty-handed. Time samples held poses in seconds; must be below the loaded clip duration. IdleAnimation and Pose are mutually exclusive. Full-body idles/emotes do not preserve every weapon grip.",
+                  "if": {
+                    "required": [
+                      "Time"
+                    ]
+                  },
+                  "oneOf": [
+                    {
+                      "not": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "Asset"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "Playback"
+                            ]
+                          }
+                        ]
+                      },
+                      "required": [
+                        "Preset"
+                      ]
+                    },
+                    {
+                      "not": {
+                        "required": [
+                          "Preset"
+                        ]
+                      },
+                      "required": [
+                        "Asset"
+                      ]
+                    }
+                  ],
+                  "properties": {
+                    "Asset": {
+                      "maxLength": 1024,
+                      "minLength": 2,
+                      "pattern": "^/",
+                      "type": "string"
+                    },
+                    "Playback": {
+                      "enum": [
+                        "Hold",
+                        "Loop",
+                        "Once"
+                      ]
+                    },
+                    "Preset": {
+                      "enum": [
+                        "Equipment",
+                        "Relaxed",
+                        "CharacterSelect",
+                        "Chair",
+                        "Armchair",
+                        "Unarmed",
+                        "Crouched",
+                        "OneHanded",
+                        "Dagger",
+                        "Staff",
+                        "Sword",
+                        "Pickaxe",
+                        "Greatsword",
+                        "Greataxe",
+                        "Shield",
+                        "Torch",
+                        "Bow",
+                        "Yes",
+                        "No",
+                        "Wave",
+                        "Point",
+                        "NoWay",
+                        "Celebrate"
+                      ]
+                    },
+                    "Time": {
+                      "maximum": 60,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "WeaponVisibility": {
+                      "enum": [
+                        "Auto",
+                        "Show",
+                        "Hide"
+                      ]
+                    }
+                  },
+                  "then": {
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "Preset": {
+                            "enum": [
+                              "Equipment",
+                              "Unarmed",
+                              "Crouched",
+                              "OneHanded",
+                              "Dagger",
+                              "Staff",
+                              "Sword",
+                              "Pickaxe",
+                              "Greatsword",
+                              "Greataxe",
+                              "Shield",
+                              "Torch",
+                              "Bow"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "Preset"
+                        ]
+                      },
+                      {
+                        "properties": {
+                          "Playback": {
+                            "const": "Hold"
+                          }
+                        },
+                        "required": [
+                          "Asset",
+                          "Playback"
+                        ]
+                      }
+                    ]
+                  },
+                  "type": "object"
+                },
+                "QuestID": {
+                  "description": "Associated /quests definition: local quest Id or Mod:Id. This records the NPC/quest relationship; dialogue choices still control acquisition and completion.",
+                  "minLength": 1,
+                  "pattern": "^[^:]+(:[^:]+)?$",
+                  "type": "string"
+                },
+                "Rotation": {
+                  "additionalProperties": false,
+                  "description": "Unreal rotator in degrees. Use the named Pitch, Yaw and Roll fields.",
+                  "properties": {
+                    "Pitch": {
+                      "type": "number"
+                    },
+                    "Roll": {
+                      "type": "number"
+                    },
+                    "Yaw": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "Pitch",
+                    "Yaw",
+                    "Roll"
+                  ],
+                  "type": "object"
+                },
+                "Scale": {
+                  "anyOf": [
+                    {
+                      "maximum": 100,
+                      "minimum": 0.01,
+                      "type": "number"
+                    },
+                    {
+                      "items": {
+                        "maximum": 100,
+                        "minimum": 0.01,
+                        "type": "number"
+                      },
+                      "maxItems": 3,
+                      "minItems": 3,
+                      "type": "array"
+                    }
+                  ]
+                },
+                "TimeOfDay": {
+                  "default": "Any",
+                  "description": "Native lifecycle gate. Day/Night NPCs exist only during that phase; authority removes and restores them at the game's dawn/dusk transition while respecting world-cell loading.",
+                  "enum": [
+                    "Any",
+                    "Day",
+                    "Night"
+                  ],
+                  "type": "string"
+                },
+                "Type": {
+                  "default": "AI",
+                  "description": "Resource and Prop use an explicit StaticMesh on a neutral NPC, without harvesting, damage, drops or building behavior.",
+                  "enum": [
+                    "AI",
+                    "Human",
+                    "Resource",
+                    "Prop"
+                  ]
+                },
+                "VendorID": {
+                  "description": "Direct Trade interaction: local store Id or Mod:Id. Omit for a visual-only NPC.",
+                  "minLength": 1,
+                  "pattern": "^[^:]+(:[^:]+)?$",
+                  "type": "string"
+                },
+                "VisualEffect": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "All NPC visual types. Applies to meshes, including human equipment/weapons, not nameplate widgets. Enable Overlay or BodyMaterial.",
+                      "properties": {
+                        "BodyMaterial": {
+                          "default": false,
+                          "type": "boolean"
+                        },
+                        "MainColor": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "A": {
+                              "maximum": 1,
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            "B": {
+                              "maximum": 64,
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            "G": {
+                              "maximum": 64,
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            "R": {
+                              "maximum": 64,
+                              "minimum": 0,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "R",
+                            "G",
+                            "B",
+                            "A"
+                          ],
+                          "type": "object"
+                        },
+                        "Overlay": {
+                          "default": true,
+                          "type": "boolean"
+                        },
+                        "SecondaryColor": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "A": {
+                              "maximum": 1,
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            "B": {
+                              "maximum": 64,
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            "G": {
+                              "maximum": 64,
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            "R": {
+                              "maximum": 64,
+                              "minimum": 0,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "R",
+                            "G",
+                            "B",
+                            "A"
+                          ],
+                          "type": "object"
+                        },
+                        "Type": {
+                          "const": "Ghost Glow"
+                        }
+                      },
+                      "required": [
+                        "Type"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "LocationOffset": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "X": {
+                              "maximum": 100000,
+                              "minimum": -100000,
+                              "type": "number"
+                            },
+                            "Y": {
+                              "maximum": 100000,
+                              "minimum": -100000,
+                              "type": "number"
+                            },
+                            "Z": {
+                              "maximum": 100000,
+                              "minimum": -100000,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "X",
+                            "Y",
+                            "Z"
+                          ],
+                          "type": "object"
+                        },
+                        "Parameters": {
+                          "additionalProperties": {
+                            "anyOf": [
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "maximum": 100000,
+                                "minimum": -100000,
+                                "type": "number"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "X": {
+                                    "maximum": 100000,
+                                    "minimum": -100000,
+                                    "type": "number"
+                                  },
+                                  "Y": {
+                                    "maximum": 100000,
+                                    "minimum": -100000,
+                                    "type": "number"
+                                  },
+                                  "Z": {
+                                    "maximum": 100000,
+                                    "minimum": -100000,
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "X",
+                                  "Y",
+                                  "Z"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "A": {
+                                    "maximum": 100000,
+                                    "minimum": -100000,
+                                    "type": "number"
+                                  },
+                                  "B": {
+                                    "maximum": 100000,
+                                    "minimum": -100000,
+                                    "type": "number"
+                                  },
+                                  "G": {
+                                    "maximum": 100000,
+                                    "minimum": -100000,
+                                    "type": "number"
+                                  },
+                                  "R": {
+                                    "maximum": 100000,
+                                    "minimum": -100000,
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "R",
+                                  "G",
+                                  "B",
+                                  "A"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "maxProperties": 32,
+                          "propertyNames": {
+                            "maxLength": 128,
+                            "pattern": "^User\\.[^\\r\\n\\t]*$"
+                          },
+                          "type": "object"
+                        },
+                        "System": {
+                          "maxLength": 1024,
+                          "minLength": 3,
+                          "pattern": "^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$",
+                          "type": "string"
+                        },
+                        "Type": {
+                          "const": "Niagara"
+                        }
+                      },
+                      "required": [
+                        "Type",
+                        "System"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "VisualSource": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "Id",
+                "Location"
+              ],
+              "type": "object"
+            },
+            {
+              "items": {
+                "additionalProperties": false,
+                "allOf": [
+                  {
+                    "else": {
+                      "not": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "Appearance"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "Equipment"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "Pose"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "DialoguePose"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "Ghost"
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    "if": {
+                      "properties": {
+                        "Type": {
+                          "const": "Human"
+                        }
+                      },
+                      "required": [
+                        "Type"
+                      ]
+                    },
+                    "then": {
+                      "not": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "Mesh"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "VisualSource"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "Materials"
+                            ]
+                          }
+                        ]
+                      },
+                      "required": [
+                        "Appearance"
+                      ]
+                    }
+                  },
+                  {
+                    "not": {
+                      "required": [
+                        "Pose",
+                        "IdleAnimation"
+                      ]
+                    }
+                  },
+                  {
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "LoreID",
+                            "LoreEntry"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "LoreID",
+                            "DialogueID"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "LoreID",
+                            "VendorID"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "LoreEntry",
+                            "DialogueID"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "LoreEntry",
+                            "VendorID"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "Type": {
+                          "enum": [
+                            "Resource",
+                            "Prop"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "Type"
+                      ]
+                    },
+                    "then": {
+                      "not": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "VisualSource"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "IdleAnimation"
+                            ]
+                          }
+                        ]
+                      },
+                      "required": [
+                        "Mesh"
+                      ]
+                    }
+                  }
+                ],
+                "anyOf": [
+                  {
+                    "required": [
+                      "Mesh"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "VisualSource"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "Type": {
+                        "const": "Human"
+                      }
+                    },
+                    "required": [
+                      "Type",
+                      "Appearance"
+                    ]
+                  }
+                ],
+                "properties": {
+                  "Appearance": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "BodyType": {
+                        "description": "Row name from DT_Customization_BodyType.",
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "EyeColor": {
+                        "description": "Row name from DT_Customization_EyeColor.",
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "EyebrowColor": {
+                        "description": "Row name from DT_Customization_EyebrowColor.",
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "FacialHairPreset": {
+                        "description": "Row name from DT_Customization_FacialHairPresets.",
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "HairColor": {
+                        "description": "Row name from DT_Customization_HairColor.",
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "HairPreset": {
+                        "description": "Row name from DT_Customization_HairPresets.",
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "Head": {
+                        "description": "Row name from DT_Customization_FaceType (the native FaceDataHandle).",
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "SkinTone": {
+                        "description": "Row name from DT_Customization_SkinTone.",
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "BodyType",
+                      "Head",
+                      "HairPreset",
+                      "FacialHairPreset",
+                      "HairColor",
+                      "SkinTone",
+                      "EyeColor",
+                      "EyebrowColor"
+                    ],
+                    "type": "object"
+                  },
+                  "DialogueID": {
+                    "description": "Native Talk interaction; local dialogue Id or Mod:Id. With VendorID, dialogue choices may open that bound store after closing the conversation.",
+                    "minLength": 1,
+                    "pattern": "^[^:]+(:[^:]+)?$",
+                    "type": "string"
+                  },
+                  "DialoguePose": {
+                    "additionalProperties": false,
+                    "description": "Human only. Optional concrete pose applied while dialogue is active; the authored Pose is restored when dialogue closes. Equipment is not supported here.",
+                    "if": {
+                      "required": [
+                        "Time"
+                      ]
+                    },
+                    "oneOf": [
+                      {
+                        "not": {
+                          "anyOf": [
+                            {
+                              "required": [
+                                "Asset"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "Playback"
+                              ]
+                            }
+                          ]
+                        },
+                        "required": [
+                          "Preset"
+                        ]
+                      },
+                      {
+                        "not": {
+                          "required": [
+                            "Preset"
+                          ]
+                        },
+                        "required": [
+                          "Asset"
+                        ]
+                      }
+                    ],
+                    "properties": {
+                      "Asset": {
+                        "maxLength": 1024,
+                        "minLength": 2,
+                        "pattern": "^/",
+                        "type": "string"
+                      },
+                      "Playback": {
+                        "enum": [
+                          "Hold",
+                          "Loop",
+                          "Once"
+                        ]
+                      },
+                      "Preset": {
+                        "enum": [
+                          "Equipment",
+                          "Relaxed",
+                          "CharacterSelect",
+                          "Chair",
+                          "Armchair",
+                          "Unarmed",
+                          "Crouched",
+                          "OneHanded",
+                          "Dagger",
+                          "Staff",
+                          "Sword",
+                          "Pickaxe",
+                          "Greatsword",
+                          "Greataxe",
+                          "Shield",
+                          "Torch",
+                          "Bow",
+                          "Yes",
+                          "No",
+                          "Wave",
+                          "Point",
+                          "NoWay",
+                          "Celebrate"
+                        ]
+                      },
+                      "Time": {
+                        "maximum": 60,
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "WeaponVisibility": {
+                        "enum": [
+                          "Auto",
+                          "Show",
+                          "Hide"
+                        ]
+                      }
+                    },
+                    "then": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "Preset": {
+                              "enum": [
+                                "Equipment",
+                                "Unarmed",
+                                "Crouched",
+                                "OneHanded",
+                                "Dagger",
+                                "Staff",
+                                "Sword",
+                                "Pickaxe",
+                                "Greatsword",
+                                "Greataxe",
+                                "Shield",
+                                "Torch",
+                                "Bow"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "Preset"
+                          ]
+                        },
+                        {
+                          "properties": {
+                            "Playback": {
+                              "const": "Hold"
+                            }
+                          },
+                          "required": [
+                            "Asset",
+                            "Playback"
+                          ]
+                        }
+                      ]
+                    },
+                    "type": "object"
+                  },
+                  "DisplayName": {
+                    "type": "string"
+                  },
+                  "EnableCollision": {
+                    "type": "boolean"
+                  },
+                  "Enabled": {
+                    "type": "boolean"
+                  },
+                  "Equipment": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "Body": {
+                        "description": "WearableEquipmentData whose native Slot is Body.",
+                        "oneOf": [
+                          {
+                            "maxLength": 1024,
+                            "pattern": "^/[^\\r\\n\\t]+$",
+                            "type": "string"
+                          },
+                          {
+                            "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "Cape": {
+                        "description": "WearableEquipmentData whose native Slot is Cape.",
+                        "oneOf": [
+                          {
+                            "maxLength": 1024,
+                            "pattern": "^/[^\\r\\n\\t]+$",
+                            "type": "string"
+                          },
+                          {
+                            "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "Head": {
+                        "description": "WearableEquipmentData whose native Slot is Head.",
+                        "oneOf": [
+                          {
+                            "maxLength": 1024,
+                            "pattern": "^/[^\\r\\n\\t]+$",
+                            "type": "string"
+                          },
+                          {
+                            "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "Legs": {
+                        "description": "WearableEquipmentData whose native Slot is Legs.",
+                        "oneOf": [
+                          {
+                            "maxLength": 1024,
+                            "pattern": "^/[^\\r\\n\\t]+$",
+                            "type": "string"
+                          },
+                          {
+                            "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "MainHand": {
+                        "description": "HeldEquipmentData with native Slot HeldOnlyRight or HeldTwoHanded.",
+                        "oneOf": [
+                          {
+                            "maxLength": 1024,
+                            "pattern": "^/[^\\r\\n\\t]+$",
+                            "type": "string"
+                          },
+                          {
+                            "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "OffHand": {
+                        "description": "HeldEquipmentData with native Slot HeldOnlyLeft. Cannot accompany a two-handed MainHand.",
+                        "oneOf": [
+                          {
+                            "maxLength": 1024,
+                            "pattern": "^/[^\\r\\n\\t]+$",
+                            "type": "string"
+                          },
+                          {
+                            "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "Trinket": {
+                        "description": "WearableEquipmentData whose native Slot is Trinket.",
+                        "oneOf": [
+                          {
+                            "maxLength": 1024,
+                            "pattern": "^/[^\\r\\n\\t]+$",
+                            "type": "string"
+                          },
+                          {
+                            "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "Ghost": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "Character": {
+                        "type": "boolean"
+                      },
+                      "Equipment": {
+                        "type": "boolean"
+                      },
+                      "Weapons": {
+                        "type": "boolean"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "HideMesh": {
+                    "description": "Prop only: hide visual mesh while retaining collision.",
+                    "type": "boolean"
+                  },
+                  "HideName": {
+                    "default": false,
+                    "description": "Hide the in-world NPC name independently of interaction. Map.ShowName controls map labels.",
+                    "type": "boolean"
+                  },
+                  "HideWeapon": {
+                    "default": false,
+                    "description": "Human only. Keeps MainHand and OffHand equipment data for pose selection but hides the rendered held weapon visuals.",
+                    "type": "boolean"
+                  },
+                  "Id": {
+                    "type": "string"
+                  },
+                  "IdleAnimation": {
+                    "type": "string"
+                  },
+                  "Location": {
+                    "description": "World coordinates as [X,Y,Z] or {X,Y,Z}. Z accepts $, $+offset, or $-offset and resolves to blocking ground.",
+                    "oneOf": [
+                      {
+                        "additionalItems": false,
+                        "items": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "pattern": "^\\$([+-][0-9]+(?:\\.[0-9]+)?)?$",
+                                "type": "string"
+                              }
+                            ]
+                          }
+                        ],
+                        "maxItems": 3,
+                        "minItems": 3,
+                        "type": "array"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "X": {
+                            "type": "number"
+                          },
+                          "Y": {
+                            "type": "number"
+                          },
+                          "Z": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "pattern": "^\\$([+-][0-9]+(?:\\.[0-9]+)?)?$",
+                                "type": "string"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "X",
+                          "Y",
+                          "Z"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "LoreEntry": {
+                    "description": "Direct Examine interaction: /lore entry ID or cooked lore asset path. Do not combine with DialogueID or VendorID.",
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "LoreID": {
+                    "description": "Preferred /lore reference: local lore Id or Mod:Id. Creates the direct Examine interaction. Do not combine with LoreEntry, DialogueID or VendorID.",
+                    "minLength": 1,
+                    "pattern": "^[^:]+(:[^:]+)?$",
+                    "type": "string"
+                  },
+                  "Map": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "Enabled": {
+                        "default": false,
+                        "type": "boolean"
+                      },
+                      "Icon": {
+                        "maxLength": 1024,
+                        "minLength": 2,
+                        "pattern": "^/",
+                        "type": "string"
+                      },
+                      "ShowName": {
+                        "default": true,
+                        "description": "Show the NPC name on its map icon. False keeps the icon without a label; does not change in-world names.",
+                        "type": "boolean"
+                      },
+                      "Size": {
+                        "maximum": 4096,
+                        "minimum": 1,
+                        "type": "number"
+                      },
+                      "SizeMode": {
+                        "default": "Pixels",
+                        "enum": [
+                          "Pixels",
+                          "WorldUnits"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "Materials": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "Mesh": {
+                    "type": "string"
+                  },
+                  "MeshCollision": {
+                    "description": "AI Pawn uses the selected mesh's reinitialized PhysicsAsset and removes capsule pawn blocking; missing physics fails setup. AI Native preserves mesh defaults and capsule blocking; None disables mesh collision but retains capsule blocking. Humans use a body capsule, not equipment collision. Resources use authored static-mesh query collision for Native/Pawn and no capsule pawn blocking. EnableCollision=false disables all actor collision.",
+                    "enum": [
+                      "Native",
+                      "Pawn",
+                      "None"
+                    ]
+                  },
+                  "Multiplayer": {
+                    "default": true,
+                    "description": "Enabled by default. Set false only for an explicitly local NPC. Matching cooked assets and RuneSchema definitions must be installed on server and clients.",
+                    "type": "boolean"
+                  },
+                  "NoInteract": {
+                    "default": false,
+                    "description": "Disable interaction and suppress VendorID, DialogueID, LoreID and LoreEntry bindings without changing collision.",
+                    "type": "boolean"
+                  },
+                  "OverheadIcon": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "Distance": {
+                        "default": 5000,
+                        "maximum": 100000,
+                        "minimum": 100,
+                        "type": "number"
+                      },
+                      "Enabled": {
+                        "default": false,
+                        "type": "boolean"
+                      },
+                      "Height": {
+                        "default": 220,
+                        "maximum": 2000,
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "Icon": {
+                        "maxLength": 1024,
+                        "minLength": 2,
+                        "pattern": "^/",
+                        "type": "string"
+                      },
+                      "Scale": {
+                        "default": 0.35,
+                        "maximum": 5,
+                        "minimum": 0.01,
+                        "type": "number"
+                      },
+                      "Size": {
+                        "maximum": 4096,
+                        "minimum": 1,
+                        "type": "number"
+                      },
+                      "SizeMode": {
+                        "default": "Scale",
+                        "enum": [
+                          "Scale",
+                          "Pixels"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "Pose": {
+                    "additionalProperties": false,
+                    "description": "Human only. Equipment preserves the held item's pose, or uses Relaxed when empty-handed. Time samples held poses in seconds; must be below the loaded clip duration. IdleAnimation and Pose are mutually exclusive. Full-body idles/emotes do not preserve every weapon grip.",
+                    "if": {
+                      "required": [
+                        "Time"
+                      ]
+                    },
+                    "oneOf": [
+                      {
+                        "not": {
+                          "anyOf": [
+                            {
+                              "required": [
+                                "Asset"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "Playback"
+                              ]
+                            }
+                          ]
+                        },
+                        "required": [
+                          "Preset"
+                        ]
+                      },
+                      {
+                        "not": {
+                          "required": [
+                            "Preset"
+                          ]
+                        },
+                        "required": [
+                          "Asset"
+                        ]
+                      }
+                    ],
+                    "properties": {
+                      "Asset": {
+                        "maxLength": 1024,
+                        "minLength": 2,
+                        "pattern": "^/",
+                        "type": "string"
+                      },
+                      "Playback": {
+                        "enum": [
+                          "Hold",
+                          "Loop",
+                          "Once"
+                        ]
+                      },
+                      "Preset": {
+                        "enum": [
+                          "Equipment",
+                          "Relaxed",
+                          "CharacterSelect",
+                          "Chair",
+                          "Armchair",
+                          "Unarmed",
+                          "Crouched",
+                          "OneHanded",
+                          "Dagger",
+                          "Staff",
+                          "Sword",
+                          "Pickaxe",
+                          "Greatsword",
+                          "Greataxe",
+                          "Shield",
+                          "Torch",
+                          "Bow",
+                          "Yes",
+                          "No",
+                          "Wave",
+                          "Point",
+                          "NoWay",
+                          "Celebrate"
+                        ]
+                      },
+                      "Time": {
+                        "maximum": 60,
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "WeaponVisibility": {
+                        "enum": [
+                          "Auto",
+                          "Show",
+                          "Hide"
+                        ]
+                      }
+                    },
+                    "then": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "Preset": {
+                              "enum": [
+                                "Equipment",
+                                "Unarmed",
+                                "Crouched",
+                                "OneHanded",
+                                "Dagger",
+                                "Staff",
+                                "Sword",
+                                "Pickaxe",
+                                "Greatsword",
+                                "Greataxe",
+                                "Shield",
+                                "Torch",
+                                "Bow"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "Preset"
+                          ]
+                        },
+                        {
+                          "properties": {
+                            "Playback": {
+                              "const": "Hold"
+                            }
+                          },
+                          "required": [
+                            "Asset",
+                            "Playback"
+                          ]
+                        }
+                      ]
+                    },
+                    "type": "object"
+                  },
+                  "QuestID": {
+                    "description": "Associated /quests definition: local quest Id or Mod:Id. This records the NPC/quest relationship; dialogue choices still control acquisition and completion.",
+                    "minLength": 1,
+                    "pattern": "^[^:]+(:[^:]+)?$",
+                    "type": "string"
+                  },
+                  "Rotation": {
+                    "additionalProperties": false,
+                    "description": "Unreal rotator in degrees. Use the named Pitch, Yaw and Roll fields.",
+                    "properties": {
+                      "Pitch": {
+                        "type": "number"
+                      },
+                      "Roll": {
+                        "type": "number"
+                      },
+                      "Yaw": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "Pitch",
+                      "Yaw",
+                      "Roll"
+                    ],
+                    "type": "object"
+                  },
+                  "Scale": {
+                    "anyOf": [
+                      {
+                        "maximum": 100,
+                        "minimum": 0.01,
+                        "type": "number"
+                      },
+                      {
+                        "items": {
+                          "maximum": 100,
+                          "minimum": 0.01,
+                          "type": "number"
+                        },
+                        "maxItems": 3,
+                        "minItems": 3,
+                        "type": "array"
+                      }
+                    ]
+                  },
+                  "TimeOfDay": {
+                    "default": "Any",
+                    "description": "Native lifecycle gate. Day/Night NPCs exist only during that phase; authority removes and restores them at the game's dawn/dusk transition while respecting world-cell loading.",
+                    "enum": [
+                      "Any",
+                      "Day",
+                      "Night"
+                    ],
+                    "type": "string"
+                  },
+                  "Type": {
+                    "default": "AI",
+                    "description": "Resource and Prop use an explicit StaticMesh on a neutral NPC, without harvesting, damage, drops or building behavior.",
+                    "enum": [
+                      "AI",
+                      "Human",
+                      "Resource",
+                      "Prop"
+                    ]
+                  },
+                  "VendorID": {
+                    "description": "Direct Trade interaction: local store Id or Mod:Id. Omit for a visual-only NPC.",
+                    "minLength": 1,
+                    "pattern": "^[^:]+(:[^:]+)?$",
+                    "type": "string"
+                  },
+                  "VisualEffect": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "description": "All NPC visual types. Applies to meshes, including human equipment/weapons, not nameplate widgets. Enable Overlay or BodyMaterial.",
+                        "properties": {
+                          "BodyMaterial": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "MainColor": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "A": {
+                                "maximum": 1,
+                                "minimum": 0,
+                                "type": "number"
+                              },
+                              "B": {
+                                "maximum": 64,
+                                "minimum": 0,
+                                "type": "number"
+                              },
+                              "G": {
+                                "maximum": 64,
+                                "minimum": 0,
+                                "type": "number"
+                              },
+                              "R": {
+                                "maximum": 64,
+                                "minimum": 0,
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "R",
+                              "G",
+                              "B",
+                              "A"
+                            ],
+                            "type": "object"
+                          },
+                          "Overlay": {
+                            "default": true,
+                            "type": "boolean"
+                          },
+                          "SecondaryColor": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "A": {
+                                "maximum": 1,
+                                "minimum": 0,
+                                "type": "number"
+                              },
+                              "B": {
+                                "maximum": 64,
+                                "minimum": 0,
+                                "type": "number"
+                              },
+                              "G": {
+                                "maximum": 64,
+                                "minimum": 0,
+                                "type": "number"
+                              },
+                              "R": {
+                                "maximum": 64,
+                                "minimum": 0,
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "R",
+                              "G",
+                              "B",
+                              "A"
+                            ],
+                            "type": "object"
+                          },
+                          "Type": {
+                            "const": "Ghost Glow"
+                          }
+                        },
+                        "required": [
+                          "Type"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "LocationOffset": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "X": {
+                                "maximum": 100000,
+                                "minimum": -100000,
+                                "type": "number"
+                              },
+                              "Y": {
+                                "maximum": 100000,
+                                "minimum": -100000,
+                                "type": "number"
+                              },
+                              "Z": {
+                                "maximum": 100000,
+                                "minimum": -100000,
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "X",
+                              "Y",
+                              "Z"
+                            ],
+                            "type": "object"
+                          },
+                          "Parameters": {
+                            "additionalProperties": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "maximum": 100000,
+                                  "minimum": -100000,
+                                  "type": "number"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "X": {
+                                      "maximum": 100000,
+                                      "minimum": -100000,
+                                      "type": "number"
+                                    },
+                                    "Y": {
+                                      "maximum": 100000,
+                                      "minimum": -100000,
+                                      "type": "number"
+                                    },
+                                    "Z": {
+                                      "maximum": 100000,
+                                      "minimum": -100000,
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "X",
+                                    "Y",
+                                    "Z"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "A": {
+                                      "maximum": 100000,
+                                      "minimum": -100000,
+                                      "type": "number"
+                                    },
+                                    "B": {
+                                      "maximum": 100000,
+                                      "minimum": -100000,
+                                      "type": "number"
+                                    },
+                                    "G": {
+                                      "maximum": 100000,
+                                      "minimum": -100000,
+                                      "type": "number"
+                                    },
+                                    "R": {
+                                      "maximum": 100000,
+                                      "minimum": -100000,
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "R",
+                                    "G",
+                                    "B",
+                                    "A"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "maxProperties": 32,
+                            "propertyNames": {
+                              "maxLength": 128,
+                              "pattern": "^User\\.[^\\r\\n\\t]*$"
+                            },
+                            "type": "object"
+                          },
+                          "System": {
+                            "maxLength": 1024,
+                            "minLength": 3,
+                            "pattern": "^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$",
+                            "type": "string"
+                          },
+                          "Type": {
+                            "const": "Niagara"
+                          }
+                        },
+                        "required": [
+                          "Type",
+                          "System"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "VisualSource": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "Id",
+                  "Location"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          ]
+        }
+      },
+      "required": [
+        "Npcs"
+      ],
+      "type": "object"
+    }
+  ],
+  "description": "Structural authoring hints, not an exhaustive runtime validator. Asset paths, identities, reflected properties and event compatibility must be validated in game.",
+  "title": "RuneSchema /npc",
+  "x-runeschema-coverage": "structural",
+  "x-runeschema-starter-capabilities": {
+    "append": false,
+    "clone": false,
+    "patch": false,
+    "search": "authored files"
+  }
+}

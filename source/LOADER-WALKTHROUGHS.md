@@ -230,6 +230,17 @@ as a separate build-menu entry.
     "Requirements": [
       {"ItemData":"/Game/Gameplay/Items/ITEM_Log.ITEM_Log","Amount":4}
     ],
+    "Overrides": {
+      "Processing": {
+        "AcceptedFuels": {
+          "Mode": "Append",
+          "Items": ["/Game/MyMod/Fuel/FUEL_Coal.FUEL_Coal"]
+        },
+        "MaxFuelSlots": 4,
+        "Rate": 1.25,
+        "AutoStartProcess": false
+      }
+    },
     "Unlock": true,
     "AddTo": {"Collection":"Modded Buildings","PageIndex":0}
   }
@@ -245,6 +256,16 @@ Walkthrough:
 5. Set `AddTo`, or omit it to inherit pages containing the clone source.
 6. Test placement, collision, navigation, save/reload, and deconstruction on
    both host and client.
+
+For processing buildings, `Overrides.Processing` safely exposes the verified
+`DT_ProcessingStationDataTable` row fields: `Rate`, `AcceptedFuels`,
+`StartingFuelItem`, `StartingFuelCount`, `MaxResourceSlots`, `MaxFuelSlots`,
+`InfluenceRange`, `IgnitesBurning`, `StopsWhenRecipeChanges`,
+`CanProcessBeStartedThroughUI`, and `AutoStartProcess`. `AcceptedFuels` supports
+`Append`, `Replace`, and `Clear`; append preserves vanilla fuels. Every
+requested property is preflighted before the station row is changed. Actor
+components, arbitrary functions, save-provider internals, and executable
+addresses remain outside this authoring surface.
 
 `PersistenceID`, `InternalName`, piece index, and requirements cannot be hidden
 inside `Properties`; RuneSchema owns those fields. For imported assemblies and
@@ -352,6 +373,11 @@ Use `/equipment` to bind supported behavior to worn item paths.
       "AssociatedSkill": "/Game/Gameplay/Character/Player/Skills/SKILL_Magic.SKILL_Magic",
       "SkillUsed": "/Game/Gameplay/Character/Player/Skills/SKILL_Artisan.SKILL_Artisan",
       "SkillPerkRequiredToEquip": "/Game/Gameplay/Character/Player/PerksV2/Magic/PerkV2_Magic_Skillcape.PerkV2_Magic_Skillcape",
+      "Properties": {
+        "PrimaryActionClass": "/Game/MyMod/Actions/GA_Magic.GA_Magic_C",
+        "SpecialActionClass": "/Game/MyMod/Actions/GA_MagicSpecial.GA_MagicSpecial_C",
+        "GrantedTags": []
+      },
       "GrantedEffects": {
         "Mode": "Append",
         "Effects": ["/Game/MyMod/Effects/GE_MagicCape.GE_MagicCape_C"]
@@ -364,6 +390,10 @@ Use `/equipment` to bind supported behavior to worn item paths.
 `GrantedEffects` supports `Replace`, `Append`, and `Clear`. Use item data paths,
 not executable addresses. `Items` also exposes the vanilla equipment fields
 `AssociatedSkill`, `SkillUsed`, and `SkillPerkRequiredToEquip`. A
+guarded `Properties` object can write other real reflected item fields such as
+`PrimaryActionClass`, `SpecialActionClass`, `BuffDatas`,
+`GameplayEffectOnBlock`, and `GrantedTags`. All fields are validated as one
+transaction; identity and RuneSchema-managed fields are protected. A
 `UtilitySpellData` is a modular spell definition, not an equipment property;
 grant the appropriate cooked gameplay effect instead of writing a spell path
 into an invented field. Wearable defense/resistance data belongs to
@@ -400,7 +430,7 @@ Use `/journal` for recipe and discovery entries.
   "RS_MyRecipe": {
     "Type": "Recipe",
     "DisplayName": "My Recipe",
-    "RecipeData": "RECIPE_MY_ITEM",
+    "RecipeData": "MyMod:RECIPE_MY_ITEM",
     "ItemData": "/Game/MyMod/Items/ITEM_MyItem.ITEM_MyItem",
     "PageDescriptions": [{"Description":"First page."}],
     "Unlock": true,
@@ -412,6 +442,9 @@ Use `/journal` for recipe and discovery entries.
 }
 ```
 
+`RecipeData` accepts a cooked path, a local recipe key, or the explicit
+`ModID:RecipeKey` form shown above. Qualified identities are recommended for
+portable modpacks because they cannot collide with another mod's recipe name.
 `AddTo` can target a full subcategory path or an unambiguous loaded category.
 Groups can be created where the native category supports them. Verify the
 entry, pages, icon, unlock, save, and reload.
@@ -449,6 +482,9 @@ Nameplates are reusable definitions consumed by `/players`.
       "Mode": "Icon",
       "Icon": "/Game/MyMod/UI/T_Badge.T_Badge",
       "Distance": 2500,
+      "OnlyShowNearby": true,
+      "AlwaysFaceCamera": true,
+      "ActivityTimeoutSeconds": 5,
       "Client": "Yes",
       "Server": "Yes"
     }
@@ -456,9 +492,12 @@ Nameplates are reusable definitions consumed by `/players`.
 ]
 ```
 
-States and observed function events can change or pulse a badge. Use exact
-function paths and narrow parameter conditions. Test self, host, remote client,
-distance, inactivity timeout, death, and respawn.
+States and observed function events can change or pulse a badge. Pulse states
+return to the definition's base `Mode` after their inactivity timeout. Hidden
+mode closes the native Dominion visibility gate as well as the UMG children,
+so the game cannot revive a stale activity icon on a later proximity update.
+Use exact function paths and narrow parameter conditions. Test self, host,
+remote client, distance, inactivity timeout, death, disconnect, and respawn.
 
 ## `niagara`
 
@@ -514,7 +553,12 @@ appearance, effects, archetypes, map icons, and nameplates.
     "Id": "all-players",
     "PlayerName": "*",
     "Scale": 1.0,
-    "Nameplate": {"Definition":"ActivityBadge","ShowSelf":true}
+    "Nameplate": {
+      "Definition":"ActivityBadge",
+      "ShowSelf":true,
+      "OnlyShowNearby":true,
+      "Distance":2500
+    }
   }
 ]
 ```
@@ -604,6 +648,7 @@ RuneSchema vendors.
 ```jsonc
 {
   "RECIPE_MY_ITEM": {
+    "PersistenceID": "AAAAAAAAAAAAAAAAAAAAAA",
     "AddTo": [{
       "DataTable": "/Game/MyMod/Data/DT_MyStation.DT_MyStation",
       "Row": "StationRow",
@@ -629,6 +674,10 @@ Placement rules:
 - Use `RuneSchemaVendors` for one or more RuneSchema store IDs.
 - Use `VanillaVendors` for native merchant table/row targets.
 - `Unlock:true` grants the recipe; placement alone does not.
+- `PersistenceID` is optional for an authored recipe. If omitted, RuneSchema
+  derives a stable canonical identity from the mod folder and recipe key. The
+  registered identity is recorded in SafeSave and is the only identity used
+  to prune a removed recipe from character progress.
 - `Order` sorts within a category. Lower values appear first.
 - `ItemsConsumed[].ItemData` and `ItemsCreated[].ItemData` should use the full
   item object path. Runtime clones have deterministic paths below

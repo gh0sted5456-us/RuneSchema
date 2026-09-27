@@ -13,6 +13,7 @@
 namespace RC::Unreal { class UWorld; }
 
 namespace DragonWilds {
+    class DragonWildsRecipeModLoader;
     class DragonWildsAssetModLoader : public DragonWildsModLoaderBase {
         struct PendingAsset {
             RC::StringType Target;
@@ -46,6 +47,7 @@ namespace DragonWilds {
         nlohmann::json ExportToolOverrides(const nlohmann::json& request);
         nlohmann::json CreateToolClone(const nlohmann::json& request, RC::Unreal::UWorld* world);
         DragonWildsAssetModLoader();
+        void SetRecipeService(DragonWildsRecipeModLoader* service) { m_recipeService=service; }
 
         ~DragonWildsAssetModLoader();
     protected:
@@ -71,6 +73,7 @@ namespace DragonWilds {
         RC::Unreal::UClass* m_itemDataClass = nullptr;
         RC::Unreal::UClass* m_recipeDataClass = nullptr;
         RC::Unreal::UClass* m_curveBaseClass = nullptr;
+        DragonWildsRecipeModLoader* m_recipeService = nullptr;
 
         void QueueData(const nlohmann::json& data, const RC::StringType& modName,
             const std::string& source = "assets");

@@ -48,6 +48,7 @@ inline nlohmann::json LoaderSchemas() {
         fields["Image"]={{"type",{"string","object","null"}},{"description","Cooked image reference using the native Image field. The asset must load and match the live property class."}};
         fields["PageDescriptions"]={{"type","array"},{"items",{{"type","object"},{"properties",{{"Description",localizedText}}},{"additionalProperties",true}}}};
         fields["Unlock"]={{"type","boolean"},{"default",true},{"description","Unlock the journal entry, not its crafting recipe. False does not revoke previous discovery."}};
+        fields["UnlockOnAcquire"]={{"type","boolean"},{"default",false},{"description","Unlock this entry when the owning player first receives its ItemData. If Unlock is omitted, acquisition mode suppresses the normal automatic unlock. With save persistence disabled, the verified storefront adapter keeps the unlock session-only."}};
         fields["RecipeData"]={{"type",{"string","object"}},{"description","Required for Recipe entries; full asset path or unique loaded recipe name."}};
         fields["ItemData"]={{"type",{"string","object"}},{"description","Recipe output item. Inferred only when ItemsCreated has one distinct item."}};
         fields["StationTableRowHandle"]={{"type","object"},{"required",{"DataTable","RowName"}},{"properties",{{"DataTable",text},{"RowName",text}}},{"additionalProperties",false}};
@@ -87,6 +88,7 @@ inline nlohmann::json LoaderSchemas() {
         }}};
     recipe["properties"]["AddTo"]={{"type","array"},{"minItems",1},{"maxItems",128},{"items",recipePlacement},{"description","Place this recipe into station rows or merchant categories. Use exactly one of Table (legacy short name) or DataTable (exact cooked asset path)."}};
     recipe["properties"]["Unlock"]={{"type","boolean"},{"default",false},{"description","Opt into automatic grants. False does not revoke learned recipes; AddTo alone never grants them."}};
+    recipe["properties"]["PersistenceID"]={{"type","string"},{"pattern","^[A-Za-z0-9_-]{21}[AQgw]$"},{"description","Optional canonical save identity for a newly authored recipe. When omitted, RuneSchema derives a stable ID from the owning mod and recipe key. It is verified and recorded in SafeSave after registration."}};
     recipe["properties"]["VendorID"]={{"type","string"},{"minLength",1},{"description","Contribute a store offer using a local store Id or Mod:Id. Requires Item, Currency and Price; permits Count and Category. Cannot be combined with ordinary recipe properties or Unlock. Restart required."}};
     recipe["properties"]["Order"]={{"type","integer"},{"minimum",0},{"maximum",1000000},{"description","Optional sort position within the offer Category for RuneSchema and vanilla vendors. Lower numbers appear first; equal/missing positions retain source order."}};
     recipe["properties"]["RuneSchemaVendors"]={{"type","array"},{"maxItems",128},{"items",{{"type","string"},{"minLength",1}}},{"description","Local store IDs or Mod:Id. Duplicate references collapse. Can be combined with VanillaVendors and legacy VendorID. Restart required."}};
@@ -97,12 +99,52 @@ inline nlohmann::json LoaderSchemas() {
         {"properties",{{"Collection",{{"type","string"},{"minLength",1}}},{"PageIndex",{{"type","integer"},{"minimum",0}}}}}};
     const json buildingRequirement={{"type","object"},{"additionalProperties",false},{"required",{"ItemData","Amount"}},
         {"properties",{{"ItemData",{{"type","string"},{"minLength",1}}},{"Amount",{{"type","integer"},{"minimum",1}}}}}};
+    json buildingOverrides={{"type","object"},{"additionalProperties",false},
+        {"description","Optional direct-building presentation, placement, shelter and station-row overrides. Omitted fields preserve cooked values; every requested runtime target is verified before registration."},
+        {"properties",json::object()}};
+    buildingOverrides["properties"]["Names"]={{"type","object"},{"additionalProperties",false},{"properties",{
+        {"Catalogue",{{"type","string"},{"minLength",1}}},{"World",{{"type","string"},{"minLength",1}}},
+        {"Interact",{{"type","string"},{"minLength",1}}},{"Menu",{{"type","string"},{"minLength",1}}}
+    }}};
+    buildingOverrides["properties"]["Placement"]={{"type","object"},{"additionalProperties",false},{"properties",{
+        {"Profile",{{"type","string"},{"minLength",1},{"description","Existing row in the building's cooked placement-profile table. PropProfile is the standard terrain-capable station profile."}}},
+        {"RequiresFoundation",{{"type","boolean"},{"description","False selects Profile, or PropProfile when Profile is omitted. True requires an explicit verified profile."}}},
+        {"RequiresRoof",{{"type","boolean"},{"description","False maps the actor's BuildingShelterComponent to InteractAnywhere."}}},
+        {"RequiresShelter",{{"type","boolean"},{"description","False maps the actor's BuildingShelterComponent to InteractAnywhere."}}}
+    }}};
+    json buildingFuelRule={{"type","object"},{"additionalProperties",false},{"required",{"Mode"}},
+        {"properties",json::object()},
+        {"description","Mutate the processing row's AcceptedFuels array. Append preserves native fuels; authors should not repeat a fuel already present. Replace and Clear are explicit."}};
+    buildingFuelRule["properties"]["Mode"]={{"enum",{"Replace","Append","Clear"}}};
+    buildingFuelRule["properties"]["Items"]={{"type","array"},{"minItems",1},{"maxItems",64},{"uniqueItems",true},
+        {"items",{{"type","string"},{"pattern","^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$"}}}};
+    buildingFuelRule["oneOf"]=json::array();
+    json clearFuel={{"properties",json::object()},{"not",{{"required",{"Items"}}}}};
+    clearFuel["properties"]["Mode"]={{"const","Clear"}};
+    json assignedFuel={{"properties",json::object()},{"required",{"Items"}}};
+    assignedFuel["properties"]["Mode"]={{"enum",{"Replace","Append"}}};
+    buildingFuelRule["oneOf"].push_back(std::move(clearFuel));
+    buildingFuelRule["oneOf"].push_back(std::move(assignedFuel));
+    buildingOverrides["properties"]["Processing"]={{"type","object"},{"additionalProperties",false},{"properties",{
+        {"Rate",{{"type","number"},{"exclusiveMinimum",0},{"maximum",100},{"description","ProcessingRate multiplier on the single station row that references this building. Recipe Min/MaxProcessingTime still takes precedence for per-recipe duration."}}},
+        {"AcceptedFuels",buildingFuelRule},
+        {"StartingFuelItem",{{"type",{"string","null"}},{"description","Optional starting FuelItemData object path; null preserves an explicitly empty starter slot."}}},
+        {"StartingFuelCount",{{"type","integer"},{"minimum",0},{"maximum",100000}}},
+        {"MaxResourceSlots",{{"type","integer"},{"minimum",1},{"maximum",64}}},
+        {"MaxFuelSlots",{{"type","integer"},{"minimum",0},{"maximum",64}}},
+        {"InfluenceRange",{{"type","number"},{"minimum",0},{"maximum",100000}}},
+        {"IgnitesBurning",{{"type","boolean"},{"description","Writes native bIgnitesBurning."}}},
+        {"StopsWhenRecipeChanges",{{"type","boolean"},{"description","Writes native bStopsWhenRecipeChanges."}}},
+        {"CanProcessBeStartedThroughUI",{{"type","boolean"},{"description","Writes native bCanProcessBeStartedThroughUI."}}},
+        {"AutoStartProcess",{{"type","boolean"},{"description","Writes native bAutoStartProcess."}}}
+    }}};
     const json buildingDefinition={{"type","object"},{"additionalProperties",false},
         {"oneOf",{json{{"required",{"$Clone"}},{"not",{{"required",{"Asset"}}}}},
                    json{{"required",{"Asset"}},{"not",{{"required",{"$Clone"}}}}}}},
         {"properties",{{"$Clone",{{"type","string"},{"pattern","^/"},{"description","Clone a cooked BuildingPieceData asset. The clone receives a new RuneSchema identity and remains a separate build-menu entry."}}},
             {"Asset",{{"type","string"},{"pattern","^/"},{"description","Register an existing BuildingPieceData asset; use $Clone when changing the actor or cost."}}},
             {"Properties",{{"type","object"},{"additionalProperties",true},{"description","Reflected BuildingPieceData overrides. PersistenceID, InternalName, BuildingPieceDataIndex and Requirements are managed and rejected here. A BuildableActor override must be a cooked BP_BaseBuilding_BaseActor child."}}},
+            {"Overrides",buildingOverrides},
             {"Requirements",{{"type","array"},{"maxItems",64},{"items",buildingRequirement},{"description","Complete replacement build cost. Every item must resolve before the clone is registered."}}},
             {"Unlock",{{"type","boolean"},{"default",true},{"description","Session-unlock the separate cloned entry. False does not revoke an unlock already persisted by the game."}}},
             {"AddTo",{{"oneOf",{buildingPlacement,json{{"type","array"},{"minItems",1},{"maxItems",32},{"items",buildingPlacement}}}},
@@ -159,7 +201,7 @@ inline nlohmann::json LoaderSchemas() {
                 {"MinPowerLevel",{{"type","integer"},{"minimum",0},{"maximum",100}}},
                 {"MaxPowerLevel",{{"type","integer"},{"minimum",0},{"maximum",100}}},
                 {"TimeOfDay",{{"enum",{"Any","Day","Night"}}}},
-                {"QuestCompleted",text}}}}},
+                {"QuestCompleted",text},{"QuestID",text},{"QuestState",{{"const","Complete"}}}}}}},
         {"description","Per-player category visibility. Offers in a matching Category appear only when native power level, time, and completed-quest gates pass. Unlisted categories remain visible."}};
     vendor["properties"]["VendorName"]=text;
     vendor["properties"]["Actor"]=text;
@@ -185,7 +227,8 @@ inline nlohmann::json LoaderSchemas() {
     vendor["properties"]["Items"]={{"type","array"},{"items",record}};
     vendor["properties"]["Items"]["items"]["properties"]["Order"]={{"type","integer"},{"minimum",0},{"maximum",1000000},{"description","Optional sort position within this offer Category. Lower numbers appear first; equal/missing positions retain source order."}};
     for(const auto& [field,schema]:json{{"MinPowerLevel",{{"type","integer"},{"minimum",0},{"maximum",100}}},
-        {"MaxPowerLevel",{{"type","integer"},{"minimum",0},{"maximum",100}}},{"TimeOfDay",{{"enum",{"Any","Day","Night"}}}},{"QuestCompleted",text}}.items())
+        {"MaxPowerLevel",{{"type","integer"},{"minimum",0},{"maximum",100}}},{"TimeOfDay",{{"enum",{"Any","Day","Night"}}}},
+        {"QuestCompleted",text},{"QuestID",text},{"QuestState",{{"const","Complete"}}}}.items())
         vendor["properties"]["Items"]["items"]["properties"][field]=schema;
     vendor["properties"]["InteractionComponentClass"]=text;
     vendor["properties"]["VendorComponentClass"]=text;
@@ -498,7 +541,11 @@ inline nlohmann::json LoaderSchemas() {
     const json equipmentAssetReference={{"type","string"},{"pattern","^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$"},{"maxLength",1024}};
     json equipmentItemRule={{"type","object"},{"minProperties",1},{"additionalProperties",false},
         {"properties",{{"AssociatedSkill",equipmentAssetReference},{"SkillUsed",equipmentAssetReference},
-            {"SkillPerkRequiredToEquip",equipmentAssetReference},{"GrantedEffects",equipmentEffectRule},{"$Comment",text}}}};
+            {"SkillPerkRequiredToEquip",equipmentAssetReference},{"GrantedEffects",equipmentEffectRule},
+            {"Properties",{{"type","object"},{"minProperties",1},{"maxProperties",128},
+                {"propertyNames",{{"pattern","^(?!(?:PersistenceID|InternalName|GrantedEffects|AssociatedSkill|SkillUsed|SkillPerkRequiredToEquip)$)[A-Za-z0-9_]{1,256}$"}}},
+                {"additionalProperties",true},{"description","Additional reflected fields already exposed by the resolved equipment ItemData class. Use this for native PrimaryActionClass, SpecialActionClass, BuffDatas, GameplayEffectOnBlock, GrantedTags, action/projectile data, durability behavior and similar cooked fields. Identity and explicit convenience fields are protected."}}},
+            {"$Comment",text}}}};
     const json equipmentItems={{"type","object"},{"maxProperties",256},{"propertyNames",{{"pattern","^/.*\\..+$"}}},
         {"additionalProperties",equipmentItemRule}};
     result["equipment"]={{"type","object"},{"minProperties",1},{"additionalProperties",false},
@@ -544,6 +591,8 @@ inline nlohmann::json LoaderSchemas() {
         {"PixelWidth",{{"type","number"},{"minimum",1},{"maximum",4096}}},
         {"PixelHeight",{{"type","number"},{"minimum",1},{"maximum",4096}}},
         {"Distance",{{"type","number"},{"minimum",0},{"maximum",100000}}},
+        {"AlwaysFaceCamera",{{"type","boolean"},{"description","Keep the native world-space nameplate facing the local camera."}}},
+        {"OnlyShowNearby",{{"type","boolean"},{"description","Use the game's native distance visibility check with Distance as its range."}}},
         {"ShowSelf",{{"type","boolean"}}},{"Client",yesNo},{"Server",yesNo},
         {"States",map(nameplateState)},{"Events",events},
         {"SkillXP",{{"type","object"},{"minProperties",1},{"maxProperties",64},{"additionalProperties",text}}},
@@ -613,7 +662,8 @@ inline nlohmann::json LoaderSchemas() {
     asset["properties"]["PersistenceID"]=text;
     asset["properties"]["bSoftDeleted"]={{"type","boolean"},{"description","Native item retirement flag, including wearable/cape data. Applies only when the target exposes this reflected Boolean. It is not proof of save exclusion and is not injected into ordinary asset patches."}};
     asset["properties"]["BuildingPieceToUnlock"]=assetReference;
-    asset["properties"]["RecipesToUnlock"]={{"type","array"},{"items",assetReference}};
+    asset["properties"]["RecipesToUnlock"]={{"type","array"},{"items",{{"type","string"},{"minLength",1},{"maxLength",1024}}},
+        {"description","Recipes learned when this native recipe-unlocker consumable is used. Accepts any authored local /recipes JSON name (no RECIPE_ prefix required), ModID:RecipeName, a globally unique authored name, or a full cooked RecipeData path. Ambiguous bare names are rejected."}};
     asset["properties"]["$VisualEffect"]={{"type","object"},{"additionalProperties",true},
         {"properties",{{"Trigger",{{"const","Equip"}}},
             {"DurationSeconds",{{"const","INFINITE"}}}}}};

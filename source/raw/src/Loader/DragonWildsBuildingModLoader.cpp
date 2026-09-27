@@ -20,6 +20,7 @@
 #include "Unreal/FText.hpp"
 #include "Unreal/Engine/UDataTable.hpp"
 #include "Unreal/Property/FEnumProperty.hpp"
+#include "Unreal/Property/FTextProperty.hpp"
 #include "Unreal/AGameModeBase.hpp"
 #include "Unreal/Hooks.hpp"
 #include "Unreal/UFunctionStructs.hpp"
@@ -221,8 +222,6 @@ namespace DragonWilds {
         // when at least one valid building definition was applied.
         if (m_applied.empty())
         {
-            PS::RoutineLog("buildings",
-                STR("No active building definitions; native registry hooks were not registered.\n"));
             return;
         }
 
@@ -541,6 +540,48 @@ namespace DragonWilds {
                 definition.Requirements = requirements;
             }
 
+            if(body.contains("Overrides")) {
+                const auto& overrides=body.at("Overrides");
+                bool valid=overrides.is_object();
+                for(const auto& [section,value]:overrides.items()) {
+                    if(section!="Names"&&section!="Placement"&&section!="Processing")valid=false;
+                    if(!value.is_object())valid=false;
+                }
+                if(overrides.contains("Names"))for(const auto& [name,value]:overrides.at("Names").items())
+                    if((name!="Catalogue"&&name!="World"&&name!="Interact"&&name!="Menu")||!value.is_string()||value.get<std::string>().empty())valid=false;
+                if(overrides.contains("Placement"))for(const auto& [name,value]:overrides.at("Placement").items()) {
+                    if(name=="Profile")valid=valid&&value.is_string()&&!value.get<std::string>().empty();
+                    else if(name=="RequiresFoundation"||name=="RequiresRoof"||name=="RequiresShelter")valid=valid&&value.is_boolean();
+                    else valid=false;
+                }
+                if(overrides.contains("Processing"))for(const auto& [name,value]:overrides.at("Processing").items()) {
+                    if(name=="Rate")valid=valid&&value.is_number()&&std::isfinite(value.get<double>())&&value.get<double>()>0&&value.get<double>()<=100;
+                    else if(name=="AcceptedFuels") {
+                        valid=valid&&value.is_object()&&value.contains("Mode")&&value.at("Mode").is_string();
+                        if(!value.is_object())continue;
+                        for(const auto& [field,unused]:value.items())if(field!="Mode"&&field!="Items")valid=false;
+                        const auto mode=value.value("Mode",std::string{});
+                        if(mode!="Replace"&&mode!="Append"&&mode!="Clear")valid=false;
+                        if(mode=="Clear")valid=valid&&(!value.contains("Items")||(value.at("Items").is_array()&&value.at("Items").empty()));
+                        else valid=valid&&value.contains("Items")&&value.at("Items").is_array()&&!value.at("Items").empty()&&value.at("Items").size()<=64;
+                        if(value.contains("Items") && value.at("Items").is_array())for(const auto& item:value.at("Items"))
+                            if(!item.is_string()||item.get<std::string>().empty()||item.get<std::string>().front()!='/')valid=false;
+                    }
+                    else if(name=="StartingFuelItem")valid=valid&&(value.is_null()||(value.is_string()&&!value.get<std::string>().empty()&&value.get<std::string>().front()=='/'));
+                    else if(name=="StartingFuelCount")valid=valid&&value.is_number_integer()&&value.get<int64_t>()>=0&&value.get<int64_t>()<=100000;
+                    else if(name=="MaxFuelSlots")valid=valid&&value.is_number_integer()&&value.get<int64_t>()>=0&&value.get<int64_t>()<=64;
+                    else if(name=="MaxResourceSlots")valid=valid&&value.is_number_integer()&&value.get<int64_t>()>=1&&value.get<int64_t>()<=64;
+                    else if(name=="InfluenceRange")valid=valid&&value.is_number()&&std::isfinite(value.get<double>())&&value.get<double>()>=0&&value.get<double>()<=100000;
+                    else if(name=="IgnitesBurning"||name=="StopsWhenRecipeChanges"||name=="CanProcessBeStartedThroughUI"||name=="AutoStartProcess")valid=valid&&value.is_boolean();
+                    else valid=false;
+                }
+                if(!valid) {
+                    PS::Log<LogLevel::Error>(STR("{}: Building '{}.Overrides' contains an unsupported field or value.\n"),modName,definition.Key);
+                    continue;
+                }
+                definition.Overrides=overrides;
+            }
+
             if (body.contains("Unlock"))
             {
                 if (!body.at("Unlock").is_boolean())
@@ -709,6 +750,13 @@ namespace DragonWilds {
                 existing->Targets = std::move(placements);
                 existing->InheritSourcePlacement = false;
             }
+            else if(name=="Overrides") {
+                if(!value.is_object()) {
+                    PS::Log<LogLevel::Error>(STR("{}: Building patch '{}.Overrides' must be an object.\n"),modName,displayTarget);
+                    return;
+                }
+                existing->Overrides=value;
+            }
             else
             {
                 PS::Log<LogLevel::Error>(STR("{}: Building patch '{}' cannot change '{}'.\n"), modName, displayTarget, RC::to_generic_string(name));
@@ -766,7 +814,8 @@ namespace DragonWilds {
             };
             if (!ValidateBuildableActor(source, definition)
                 || !ApplyProperties(building, definition, result)
-                || !ApplyRequirements(building, definition))
+                || !ApplyRequirements(building, definition)
+                || !ApplyOverrides(building,definition,result))
             {
                 fail();
                 continue;
@@ -855,8 +904,7 @@ namespace DragonWilds {
         // when at least one valid building definition was applied.
         if (m_applied.empty())
         {
-            PS::RoutineLog("buildings",
-                STR("No active building definitions; native registry hooks were not registered.\n"));
+            PS::LoaderSummary("buildings", 0, 0, 0, 0, result.Errors);
             return;
         }
 
@@ -868,9 +916,8 @@ namespace DragonWilds {
 
         if (result.Loaded || result.Errors)
         {
-            PS::Log<LogLevel::Normal>(
-                STR("Buildings: {} loaded, {} error{}.\n"),
-                result.Loaded, result.Errors, result.Errors == 1 ? STR("") : STR("s"));
+            PS::LoaderSummary("buildings", result.Loaded,
+                result.Loaded, 0, 0, result.Errors);
         }
     }
 
@@ -1199,6 +1246,185 @@ namespace DragonWilds {
             }
         }
         return valid;
+    }
+
+    bool DragonWildsBuildingModLoader::ApplyOverrides(
+        UObject* building,const BuildingDefinition& definition,LoadResult& result)
+    {
+        if(definition.Overrides.is_null()||definition.Overrides.empty())return true;
+        const auto fail=[&](const std::string& message) {
+            ++result.Errors;
+            PS::Log<LogLevel::Error>(STR("Building '{}': override rejected: {}.\n"),
+                definition.Key,PS::ToWideSafe(message.c_str()));
+            return false;
+        };
+        const auto writeText=[&](UObject* object,const TCHAR* field,const std::string& value)->bool {
+            auto* property=object?CastField<FTextProperty>(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),field)):nullptr;
+            if(!property)return false;
+            PropertyHelper::CopyJsonValueToContainer(object,property,nlohmann::json(value));
+            return true;
+        };
+        const auto resolveActorClass=[&]() -> UClass* {
+            auto* property=building?CastField<FSoftObjectProperty>(
+                PropertyHelper::GetPropertyByName(building->GetClassPrivate(),TEXT("BuildableActor"))):nullptr;
+            auto* soft=property?property->ContainerPtrToValuePtr<UECustom::FSoftObjectPtr>(building):nullptr;
+            if(!soft||soft->ObjectID.AssetPath.GetPackageName()==NAME_None)return nullptr;
+            return ActorHelper::ResolveClass(soft->ObjectID.AssetPath.GetPackageName().ToString()
+                +TEXT(".")+soft->ObjectID.AssetPath.GetAssetName().ToString());
+        };
+        auto* actorClass=resolveActorClass();
+        auto* actorDefaults=actorClass?actorClass->GetClassDefaultObject().Get():nullptr;
+        if(!actorClass||!actorDefaults)return fail("BuildableActor class/default object is unavailable");
+
+        std::string catalogue,world,interact,menu,stationRow;
+        const auto& names=definition.Overrides.contains("Names")
+            ?definition.Overrides.at("Names"):nlohmann::json::object();
+        if(names.contains("Catalogue")) {
+            catalogue=names.at("Catalogue").get<std::string>();
+            if(!writeText(building,TEXT("DisplayName"),catalogue))return fail("BuildingPieceData.DisplayName is unavailable");
+        }
+        if(names.contains("Interact")) {
+            interact=names.at("Interact").get<std::string>();
+            if(!writeText(actorDefaults,TEXT("InteractionName"),interact))return fail("BuildableActor InteractionName is unavailable");
+        }
+        if(names.contains("World")) {
+            world=names.at("World").get<std::string>();
+            bool written=false;
+            for(const auto* field:{TEXT("WorldDisplayName"),TEXT("BuildingDisplayName"),TEXT("DisplayName")})
+                if(writeText(actorDefaults,field,world)){written=true;break;}
+            if(!written) {
+                if(!catalogue.empty()&&catalogue!=world)return fail("World and Catalogue names differ but the actor has no distinct world-name field");
+                if(!writeText(building,TEXT("DisplayName"),world))return fail("World name has no supported target");
+            }
+        }
+
+        const auto& placement=definition.Overrides.contains("Placement")
+            ?definition.Overrides.at("Placement"):nlohmann::json::object();
+        std::string profile=placement.value("Profile",std::string{});
+        if(placement.contains("RequiresFoundation")&&!placement.at("RequiresFoundation").get<bool>()&&profile.empty())profile="PropProfile";
+        if(!profile.empty()) {
+            UObject* profileOwner=building;
+            auto* handle=CastField<FStructProperty>(PropertyHelper::GetPropertyByName(
+                building->GetClassPrivate(),TEXT("PlacementProfileRowHandle")));
+            if(!handle)for(const auto* field:{TEXT("BuildingPieceDerivedData"),TEXT("DerivedData")}) {
+                auto* property=PropertyHelper::GetPropertyByName(building->GetClassPrivate(),field);
+                UObject* derived=nullptr;
+                if(auto* softProperty=CastField<FSoftObjectProperty>(property)) {
+                    auto* soft=softProperty->ContainerPtrToValuePtr<UECustom::FSoftObjectPtr>(building);
+                    if(soft&&soft->ObjectID.AssetPath.GetPackageName()!=NAME_None)
+                        derived=LoadObject(soft->ObjectID.AssetPath.GetPackageName().ToString()+TEXT(".")+soft->ObjectID.AssetPath.GetAssetName().ToString());
+                }
+                else if(auto* object=CastField<FObjectPropertyBase>(property))derived=object->GetObjectPropertyValue(object->ContainerPtrToValuePtr<void>(building));
+                if(derived) {
+                    auto* candidate=CastField<FStructProperty>(PropertyHelper::GetPropertyByName(derived->GetClassPrivate(),TEXT("PlacementProfileRowHandle")));
+                    if(candidate){profileOwner=derived;handle=candidate;break;}
+                }
+            }
+            auto* type=handle?handle->GetStruct().Get():nullptr;
+            auto* row=type?CastField<FNameProperty>(PropertyHelper::GetPropertyByName(type,TEXT("RowName"))):nullptr;
+            auto* tableField=type?CastField<FObjectPropertyBase>(PropertyHelper::GetPropertyByName(type,TEXT("DataTable"))):nullptr;
+            auto* data=handle?handle->ContainerPtrToValuePtr<void>(profileOwner):nullptr;
+            auto* table=tableField&&data?tableField->GetObjectPropertyValue(tableField->ContainerPtrToValuePtr<void>(data)):nullptr;
+            auto* dataTable=table&&table->IsA<UDataTable>()?static_cast<UDataTable*>(table):nullptr;
+            const FName requested(RC::to_generic_string(profile),FNAME_Find);
+            if(!row||!dataTable||requested==NAME_None||!dataTable->FindRowUnchecked(requested))
+                return fail("placement profile row '"+profile+"' is unavailable");
+            row->SetPropertyValue(row->ContainerPtrToValuePtr<void>(data),requested);
+        }
+
+        if(placement.contains("RequiresFoundation")&&placement.at("RequiresFoundation").get<bool>()&&profile.empty())
+            return fail("RequiresFoundation=true needs an explicit verified placement profile");
+        const bool roof=placement.contains("RequiresRoof"),shelter=placement.contains("RequiresShelter");
+        if((roof&&placement.at("RequiresRoof").get<bool>())||(shelter&&placement.at("RequiresShelter").get<bool>()))
+            return fail("true shelter requirements need an explicit native requirement profile; false maps safely to InteractAnywhere");
+        if(roof||shelter) {
+            auto* shelterClass=ActorHelper::ResolveClass(TEXT("/Script/Dominion.BuildingShelterComponent"));
+            TArray<UObject*> components;
+            if(shelterClass)UECustom::UObjectGlobals::GetObjectsOfClass(shelterClass,components,true);
+            UObject* component=nullptr;
+            for(auto* candidate:components)if(candidate) {
+                for(auto* outer=candidate->GetOuterPrivate();outer;outer=outer->GetOuterPrivate())
+                    if(outer==actorClass||outer==actorDefaults){component=candidate;break;}
+                if(component)break;
+            }
+            auto* requirement=component?PropertyHelper::GetPropertyByName(component->GetClassPrivate(),TEXT("InteractionRequirements")):nullptr;
+            if(!component||!requirement)return fail("BuildableActor has no BuildingShelterComponent.InteractionRequirements");
+            PropertyHelper::CopyJsonValueToContainer(component,requirement,
+                nlohmann::json("EBuildingRequirements::InteractAnywhere"));
+        }
+
+        const auto& processing=definition.Overrides.contains("Processing")
+            ?definition.Overrides.at("Processing"):nlohmann::json::object();
+        const bool needsStation=names.contains("Menu")||!processing.empty();
+        size_t matches=0;
+        if(needsStation) {
+            menu=names.value("Menu",std::string{});
+            for(const auto* tableName:{"DT_CraftingStationsDataTable","DT_ProcessingStationDataTable"})
+                for(auto* table:GetDatatablesByName(tableName)) {
+                    if(!table||!table->GetRowStruct())continue;
+                    auto* rowType=table->GetRowStruct().Get();
+                    auto* stationProperty=PropertyHelper::GetPropertyByName(rowType,TEXT("StationBuildingPieceData"));
+                    if(!stationProperty)continue;
+                    for(const auto& [rowName,rowData]:table->GetRowMap()) {
+                        bool same=false;
+                        if(auto* soft=CastField<FSoftObjectProperty>(stationProperty))
+                            same=SameSoftObject(*soft->ContainerPtrToValuePtr<UECustom::FSoftObjectPtr>(rowData),building);
+                        else if(auto* object=CastField<FObjectPropertyBase>(stationProperty))
+                            same=object->GetObjectPropertyValue(object->ContainerPtrToValuePtr<void>(rowData))==building;
+                        if(!same)continue;
+                        ++matches;stationRow=RC::to_string(rowName.ToString());
+                        const auto stationField=[&](const char* authored)->FProperty* {
+                            const auto native=std::string_view(authored)=="Rate"?"ProcessingRate":
+                                std::string_view(authored)=="IgnitesBurning"?"bIgnitesBurning":
+                                std::string_view(authored)=="StopsWhenRecipeChanges"?"bStopsWhenRecipeChanges":
+                                std::string_view(authored)=="CanProcessBeStartedThroughUI"?"bCanProcessBeStartedThroughUI":
+                                std::string_view(authored)=="AutoStartProcess"?"bAutoStartProcess":authored;
+                            return PropertyHelper::GetPropertyByName(rowType,RC::to_generic_string(native));
+                        };
+                        // Resolve every requested station field before applying
+                        // any of this row's processing mutations.
+                        for(const auto& [name,value]:processing.items())
+                            if(name!="AcceptedFuels"&&!stationField(name.c_str()))
+                                return fail("station row does not expose processing field '"+name+"'");
+                        if(processing.contains("AcceptedFuels")
+                            && !CastField<FArrayProperty>(stationField("AcceptedFuels")))
+                            return fail("station row AcceptedFuels is unavailable or is not an array");
+                        if(!menu.empty()) {
+                            bool named=false;
+                            for(const auto* field:{TEXT("DisplayName"),TEXT("StationDisplayName"),TEXT("Name")})
+                                if(auto* text=CastField<FTextProperty>(PropertyHelper::GetPropertyByName(rowType,field))) {
+                                    PropertyHelper::CopyJsonValueToContainer(rowData,text,nlohmann::json(menu));named=true;break;
+                                }
+                            if(!named) {
+                                if(!catalogue.empty()&&catalogue!=menu)return fail("Menu and Catalogue names differ but the station row has no distinct menu-name field");
+                                if(!writeText(building,TEXT("DisplayName"),menu))return fail("station menu name has no supported target");
+                            }
+                        }
+                        if(processing.contains("Rate")) {
+                            auto* rate=CastField<FNumericProperty>(PropertyHelper::GetPropertyByName(rowType,TEXT("ProcessingRate")));
+                            if(!rate||!rate->IsFloatingPoint())return fail("station row has no floating-point ProcessingRate");
+                            rate->SetFloatingPointPropertyValue(rate->ContainerPtrToValuePtr<void>(rowData),processing.at("Rate").get<double>());
+                        }
+                        if(processing.contains("AcceptedFuels")) {
+                            const auto& rule=processing.at("AcceptedFuels");
+                            auto* fuels=CastField<FArrayProperty>(stationField("AcceptedFuels"));
+                            nlohmann::json values=rule.value("Items",nlohmann::json::array());
+                            if(rule.at("Mode").get<std::string>()=="Append")
+                                values=PropertyHelper::BuildAppendValue(fuels,values);
+                            PropertyHelper::CopyJsonValueToContainer(rowData,fuels,values);
+                        }
+                        for(const auto& [name,value]:processing.items()) {
+                            if(name=="Rate"||name=="AcceptedFuels")continue;
+                            PropertyHelper::CopyJsonValueToContainer(rowData,stationField(name.c_str()),value);
+                        }
+                    }
+                }
+            if(matches!=1)return fail(matches?"building is linked by multiple station rows":"no station row references this building");
+        }
+        PS::Log<LogLevel::Normal>(STR("[BUILDING-OVERRIDE][OK] asset='{}' actor='{}' profile='{}' station='{}' names[catalogue='{}',world='{}',interact='{}',menu='{}'].\n"),
+            building->GetPathName(),actorClass->GetPathName(),PS::ToWideSafe(profile.c_str()),PS::ToWideSafe(stationRow.c_str()),
+            PS::ToWideSafe(catalogue.c_str()),PS::ToWideSafe(world.c_str()),PS::ToWideSafe(interact.c_str()),PS::ToWideSafe(menu.c_str()));
+        return true;
     }
 
     void DragonWildsBuildingModLoader::DiscardUncommittedClone(UObject* building)

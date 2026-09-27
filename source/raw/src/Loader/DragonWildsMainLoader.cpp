@@ -181,9 +181,13 @@ namespace DragonWilds {
         startupOptions.OwnerModName=TEXT("RuneSchema");
         startupOptions.HookName=TEXT("CoreStartupFallback");
         m_coreStartupCallbackId=Hook::RegisterEngineTickPostCallback(
-            [this](Hook::TCallbackIterationData<void>&,UEngine*,float,bool) {
-                if(m_coreStartupComplete.load(std::memory_order_acquire))return;
-                if(InitCore())m_coreStartupComplete.store(true,std::memory_order_release);
+            [this](Hook::TCallbackIterationData<void>& iteration,UEngine*,float,bool) {
+                if(m_coreStartupComplete.load(std::memory_order_acquire)
+                    || InitCore()) {
+                    m_coreStartupComplete.store(true,std::memory_order_release);
+                    m_coreStartupCallbackId=Hook::ERROR_ID;
+                    iteration.RemoveSelf();
+                }
             },startupOptions);
         if(m_coreStartupCallbackId==Hook::ERROR_ID)
             PS::Log<LogLevel::Error>(STR("[DEGRADED][CORE] Game-thread startup fallback could not be installed.\n"));
@@ -367,12 +371,15 @@ namespace DragonWilds {
 
         RegisterLoader(std::make_unique<DragonWildsRawTableLoader>());
 
-        RegisterLoader(std::make_unique<DragonWildsAssetModLoader>());
+        auto assets=std::make_unique<DragonWildsAssetModLoader>();
+        auto* assetService=assets.get();
+        RegisterLoader(std::move(assets));
 
         RegisterLoader(std::make_unique<DragonWildsBlueprintModLoader>());
 
         auto recipes = std::make_unique<DragonWildsRecipeModLoader>();
         auto* recipeService = recipes.get();
+        assetService->SetRecipeService(recipeService);
         RegisterLoader(std::move(recipes));
         auto npcs=std::make_unique<DragonWildsNpcLoader>(recipeService);
         auto* npcService=npcs.get();
@@ -393,8 +400,11 @@ namespace DragonWilds {
         RegisterLoader(std::make_unique<DragonWildsQuestLoader>(npcService));
         RegisterLoader(std::make_unique<DragonWildsEventLoader>(npcService));
 
-        RegisterLoader(std::make_unique<DragonWildsJournalModLoader>());
+        auto journalLoader=std::make_unique<DragonWildsJournalModLoader>();
+        journalLoader->SetRecipeService(recipeService);
+        RegisterLoader(std::move(journalLoader));
         auto loreLoader=std::make_unique<DragonWildsJournalModLoader>(true);
+        loreLoader->SetRecipeService(recipeService);
         npcService->OpenLore=[service=loreLoader.get()](RC::Unreal::UObject* controller,const std::string& entry){return service->OpenLoreForPlayer(controller,entry);};
         RegisterLoader(std::move(loreLoader));
 

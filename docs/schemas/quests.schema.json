@@ -1,0 +1,1968 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "anyOf": [
+    {
+      "additionalProperties": false,
+      "dependencies": {
+        "Repeat": {
+          "properties": {
+            "Repeatable": {
+              "const": true
+            }
+          },
+          "required": [
+            "Repeatable"
+          ]
+        },
+        "RepeatReward": {
+          "properties": {
+            "Repeatable": {
+              "const": true
+            }
+          },
+          "required": [
+            "Repeatable"
+          ]
+        }
+      },
+      "not": {
+        "required": [
+          "StartCost",
+          "EntryOptions"
+        ]
+      },
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "Stages"
+            ]
+          },
+          "required": [
+            "Objective"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "Objective"
+            ]
+          },
+          "required": [
+            "Stages"
+          ]
+        }
+      ],
+      "properties": {
+        "Category": {
+          "default": "Regular",
+          "description": "Task uses the game's green task-quest presentation.",
+          "enum": [
+            "Regular",
+            "Story",
+            "Task"
+          ]
+        },
+        "Completion": {
+          "default": "ReturnToNPC",
+          "enum": [
+            "ReturnToNPC",
+            "Automatic"
+          ],
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "EntryOptions": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "Cost": {
+                "additionalProperties": false,
+                "properties": {
+                  "Count": {
+                    "maximum": 999,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "Item": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "Item",
+                  "Count"
+                ],
+                "type": "object"
+              },
+              "Id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "Id",
+              "Cost"
+            ],
+            "type": "object"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "type": "array"
+        },
+        "Id": {
+          "type": "string"
+        },
+        "Objective": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "dependencies": {
+                "RadiusMeters": [
+                  "Location"
+                ]
+              },
+              "properties": {
+                "AnnounceProgress": {
+                  "default": false,
+                  "description": "Push the expanded progress text through the native player text-notification route whenever credited progress changes.",
+                  "type": "boolean"
+                },
+                "CompleteText": {
+                  "description": "Optional text shown when this objective reaches its required count.",
+                  "maxLength": 1024,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "Count": {
+                  "maximum": 999,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "Hidden": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "Id": {
+                  "type": "string"
+                },
+                "Item": {
+                  "maxLength": 1024,
+                  "minLength": 1,
+                  "pattern": "^/",
+                  "type": "string"
+                },
+                "Location": {
+                  "description": "Optional native quest objective position [X,Y,Z]. Marker lifecycle is experimental.",
+                  "items": {
+                    "maximum": 100000000,
+                    "minimum": -100000000,
+                    "type": "number"
+                  },
+                  "maxItems": 3,
+                  "minItems": 3,
+                  "type": "array"
+                },
+                "Optional": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "ProgressText": {
+                  "description": "Live objective template. Supports {current}, {required}, {remaining}, and repeat-safe {run}; for example: Run {run}: kill {remaining} more goblins.",
+                  "maxLength": 1024,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "RadiusMeters": {
+                  "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
+                  "maximum": 10000,
+                  "minimum": 0.01,
+                  "type": "number"
+                },
+                "Text": {
+                  "type": "string"
+                },
+                "Type": {
+                  "const": "Collect"
+                }
+              },
+              "required": [
+                "Id",
+                "Text",
+                "Item",
+                "Count"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "dependencies": {
+                "RadiusMeters": [
+                  "Location"
+                ],
+                "SpawnID": [
+                  "EventID"
+                ]
+              },
+              "description": "Kill objective: native counter keyed by objective Id; credited local authoritative player only. Candidate requires live death and reload verification.",
+              "properties": {
+                "AIClasses": {
+                  "items": {
+                    "maxLength": 1024,
+                    "pattern": "^/",
+                    "type": "string"
+                  },
+                  "maxItems": 32,
+                  "minItems": 1,
+                  "type": "array",
+                  "uniqueItems": true
+                },
+                "AnnounceProgress": {
+                  "default": false,
+                  "description": "Push the expanded progress text through the native player text-notification route whenever credited progress changes.",
+                  "type": "boolean"
+                },
+                "CompleteText": {
+                  "description": "Optional text shown when this objective reaches its required count.",
+                  "maxLength": 1024,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "Count": {
+                  "maximum": 999,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "EventID": {
+                  "type": "string"
+                },
+                "Hidden": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "Id": {
+                  "type": "string"
+                },
+                "IncludeDerived": {
+                  "default": true,
+                  "type": "boolean"
+                },
+                "Location": {
+                  "description": "Optional native quest objective position [X,Y,Z]. Marker lifecycle is experimental.",
+                  "items": {
+                    "maximum": 100000000,
+                    "minimum": -100000000,
+                    "type": "number"
+                  },
+                  "maxItems": 3,
+                  "minItems": 3,
+                  "type": "array"
+                },
+                "Optional": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "ProgressText": {
+                  "description": "Live objective template. Supports {current}, {required}, {remaining}, and repeat-safe {run}; for example: Run {run}: kill {remaining} more goblins.",
+                  "maxLength": 1024,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "RadiusMeters": {
+                  "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
+                  "maximum": 10000,
+                  "minimum": 0.01,
+                  "type": "number"
+                },
+                "SpawnID": {
+                  "type": "string"
+                },
+                "Text": {
+                  "type": "string"
+                },
+                "Type": {
+                  "const": "Kill"
+                }
+              },
+              "required": [
+                "Id",
+                "Text",
+                "Count",
+                "Type",
+                "AIClasses"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "dependencies": {
+                "RadiusMeters": [
+                  "Location"
+                ]
+              },
+              "description": "Positive inventory additions after acceptance. Any source counts; AOR checks player location. No items consumed at turn-in. Candidate requires multiplayer verification.",
+              "properties": {
+                "AnnounceProgress": {
+                  "default": false,
+                  "description": "Push the expanded progress text through the native player text-notification route whenever credited progress changes.",
+                  "type": "boolean"
+                },
+                "CompleteText": {
+                  "description": "Optional text shown when this objective reaches its required count.",
+                  "maxLength": 1024,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "Count": {
+                  "maximum": 999,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "Hidden": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "Id": {
+                  "type": "string"
+                },
+                "Item": {
+                  "maxLength": 1024,
+                  "minLength": 1,
+                  "pattern": "^/",
+                  "type": "string"
+                },
+                "Location": {
+                  "description": "Optional native quest objective position [X,Y,Z]. Marker lifecycle is experimental.",
+                  "items": {
+                    "maximum": 100000000,
+                    "minimum": -100000000,
+                    "type": "number"
+                  },
+                  "maxItems": 3,
+                  "minItems": 3,
+                  "type": "array"
+                },
+                "Optional": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "ProgressText": {
+                  "description": "Live objective template. Supports {current}, {required}, {remaining}, and repeat-safe {run}; for example: Run {run}: kill {remaining} more goblins.",
+                  "maxLength": 1024,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "RadiusMeters": {
+                  "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
+                  "maximum": 10000,
+                  "minimum": 0.01,
+                  "type": "number"
+                },
+                "Text": {
+                  "type": "string"
+                },
+                "Type": {
+                  "const": "Acquire"
+                }
+              },
+              "required": [
+                "Id",
+                "Text",
+                "Item",
+                "Count",
+                "Type"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "PersistenceID": {
+          "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+          "type": "string"
+        },
+        "Prerequisites": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "Repeat": {
+          "additionalProperties": false,
+          "description": "Cooldown starts at completion. UTC daily/weekly reset may be used alone or combined; all specified gates must pass. Never starts a new run automatically.",
+          "properties": {
+            "CooldownSeconds": {
+              "maximum": 31536000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "MaximumRewardMultiplier": {
+              "default": 1,
+              "description": "Required cap when RewardMultiplierPerRun is greater than zero.",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            },
+            "Reset": {
+              "additionalProperties": false,
+              "else": {
+                "not": {
+                  "required": [
+                    "WeekdayUTC"
+                  ]
+                }
+              },
+              "if": {
+                "properties": {
+                  "Frequency": {
+                    "const": "Weekly"
+                  }
+                }
+              },
+              "properties": {
+                "Frequency": {
+                  "enum": [
+                    "Daily",
+                    "Weekly"
+                  ]
+                },
+                "HourUTC": {
+                  "default": 0,
+                  "maximum": 23,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "MinuteUTC": {
+                  "default": 0,
+                  "maximum": 59,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "WeekdayUTC": {
+                  "description": "Monday=0; required for Weekly, forbidden for Daily.",
+                  "maximum": 6,
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "Frequency"
+              ],
+              "then": {
+                "required": [
+                  "WeekdayUTC"
+                ]
+              },
+              "type": "object"
+            },
+            "RewardMultiplierPerRun": {
+              "default": 0,
+              "description": "Additive multiplier applied for each run after the first.",
+              "maximum": 10,
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "RepeatReward": {
+          "additionalProperties": false,
+          "properties": {
+            "Count": {
+              "maximum": 999,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "Item": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "pattern": "^/",
+              "type": "string"
+            },
+            "TimeOfDay": {
+              "default": "Any",
+              "description": "Hold delivery until the authoritative native time phase matches; quest progress and the unclaimed receipt remain intact.",
+              "enum": [
+                "Any",
+                "Day",
+                "Night"
+              ]
+            }
+          },
+          "required": [
+            "Item",
+            "Count"
+          ],
+          "type": "object"
+        },
+        "Repeatable": {
+          "default": false,
+          "type": "boolean"
+        },
+        "ResultTiers": {
+          "description": "Highest unique Priority among matching entry/time conditions replaces the base Reward; never stacks.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "EntryID": {
+                "type": "string"
+              },
+              "Id": {
+                "type": "string"
+              },
+              "MaxElapsedSeconds": {
+                "description": "Accept to confirmed kill-goal completion, or to first eligible fetch hand-in attempt. Includes offline time. Missing timing does not qualify.",
+                "maximum": 31536000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "Priority": {
+                "maximum": 100000,
+                "minimum": -100000,
+                "type": "integer"
+              },
+              "RequiresObjectives": {
+                "items": {
+                  "pattern": "^[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}$",
+                  "type": "string"
+                },
+                "maxItems": 128,
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "Reward": {
+                "additionalProperties": false,
+                "properties": {
+                  "Count": {
+                    "maximum": 999,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "Item": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/",
+                    "type": "string"
+                  },
+                  "TimeOfDay": {
+                    "default": "Any",
+                    "description": "Hold delivery until the authoritative native time phase matches; quest progress and the unclaimed receipt remain intact.",
+                    "enum": [
+                      "Any",
+                      "Day",
+                      "Night"
+                    ]
+                  }
+                },
+                "required": [
+                  "Item",
+                  "Count"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "Id",
+              "Priority",
+              "Reward"
+            ],
+            "type": "object"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array"
+        },
+        "Reward": {
+          "additionalProperties": false,
+          "properties": {
+            "Count": {
+              "maximum": 999,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "Item": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "pattern": "^/",
+              "type": "string"
+            },
+            "TimeOfDay": {
+              "default": "Any",
+              "description": "Hold delivery until the authoritative native time phase matches; quest progress and the unclaimed receipt remain intact.",
+              "enum": [
+                "Any",
+                "Day",
+                "Night"
+              ]
+            }
+          },
+          "required": [
+            "Item",
+            "Count"
+          ],
+          "type": "object"
+        },
+        "Stages": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "Id": {
+                "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                "type": "string"
+              },
+              "Objectives": {
+                "items": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "dependencies": {
+                        "RadiusMeters": [
+                          "Location"
+                        ]
+                      },
+                      "properties": {
+                        "AnnounceProgress": {
+                          "default": false,
+                          "description": "Push the expanded progress text through the native player text-notification route whenever credited progress changes.",
+                          "type": "boolean"
+                        },
+                        "CompleteText": {
+                          "description": "Optional text shown when this objective reaches its required count.",
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "Count": {
+                          "maximum": 999,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "Hidden": {
+                          "default": false,
+                          "type": "boolean"
+                        },
+                        "Id": {
+                          "type": "string"
+                        },
+                        "Item": {
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "pattern": "^/",
+                          "type": "string"
+                        },
+                        "Location": {
+                          "description": "Optional native quest objective position [X,Y,Z]. Marker lifecycle is experimental.",
+                          "items": {
+                            "maximum": 100000000,
+                            "minimum": -100000000,
+                            "type": "number"
+                          },
+                          "maxItems": 3,
+                          "minItems": 3,
+                          "type": "array"
+                        },
+                        "Optional": {
+                          "default": false,
+                          "type": "boolean"
+                        },
+                        "ProgressText": {
+                          "description": "Live objective template. Supports {current}, {required}, {remaining}, and repeat-safe {run}; for example: Run {run}: kill {remaining} more goblins.",
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "RadiusMeters": {
+                          "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
+                          "maximum": 10000,
+                          "minimum": 0.01,
+                          "type": "number"
+                        },
+                        "Text": {
+                          "type": "string"
+                        },
+                        "Type": {
+                          "const": "Collect"
+                        }
+                      },
+                      "required": [
+                        "Id",
+                        "Text",
+                        "Item",
+                        "Count"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "dependencies": {
+                        "RadiusMeters": [
+                          "Location"
+                        ],
+                        "SpawnID": [
+                          "EventID"
+                        ]
+                      },
+                      "description": "Kill objective: native counter keyed by objective Id; credited local authoritative player only. Candidate requires live death and reload verification.",
+                      "properties": {
+                        "AIClasses": {
+                          "items": {
+                            "maxLength": 1024,
+                            "pattern": "^/",
+                            "type": "string"
+                          },
+                          "maxItems": 32,
+                          "minItems": 1,
+                          "type": "array",
+                          "uniqueItems": true
+                        },
+                        "AnnounceProgress": {
+                          "default": false,
+                          "description": "Push the expanded progress text through the native player text-notification route whenever credited progress changes.",
+                          "type": "boolean"
+                        },
+                        "CompleteText": {
+                          "description": "Optional text shown when this objective reaches its required count.",
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "Count": {
+                          "maximum": 999,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "EventID": {
+                          "type": "string"
+                        },
+                        "Hidden": {
+                          "default": false,
+                          "type": "boolean"
+                        },
+                        "Id": {
+                          "type": "string"
+                        },
+                        "IncludeDerived": {
+                          "default": true,
+                          "type": "boolean"
+                        },
+                        "Location": {
+                          "description": "Optional native quest objective position [X,Y,Z]. Marker lifecycle is experimental.",
+                          "items": {
+                            "maximum": 100000000,
+                            "minimum": -100000000,
+                            "type": "number"
+                          },
+                          "maxItems": 3,
+                          "minItems": 3,
+                          "type": "array"
+                        },
+                        "Optional": {
+                          "default": false,
+                          "type": "boolean"
+                        },
+                        "ProgressText": {
+                          "description": "Live objective template. Supports {current}, {required}, {remaining}, and repeat-safe {run}; for example: Run {run}: kill {remaining} more goblins.",
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "RadiusMeters": {
+                          "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
+                          "maximum": 10000,
+                          "minimum": 0.01,
+                          "type": "number"
+                        },
+                        "SpawnID": {
+                          "type": "string"
+                        },
+                        "Text": {
+                          "type": "string"
+                        },
+                        "Type": {
+                          "const": "Kill"
+                        }
+                      },
+                      "required": [
+                        "Id",
+                        "Text",
+                        "Count",
+                        "Type",
+                        "AIClasses"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "dependencies": {
+                        "RadiusMeters": [
+                          "Location"
+                        ]
+                      },
+                      "description": "Positive inventory additions after acceptance. Any source counts; AOR checks player location. No items consumed at turn-in. Candidate requires multiplayer verification.",
+                      "properties": {
+                        "AnnounceProgress": {
+                          "default": false,
+                          "description": "Push the expanded progress text through the native player text-notification route whenever credited progress changes.",
+                          "type": "boolean"
+                        },
+                        "CompleteText": {
+                          "description": "Optional text shown when this objective reaches its required count.",
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "Count": {
+                          "maximum": 999,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "Hidden": {
+                          "default": false,
+                          "type": "boolean"
+                        },
+                        "Id": {
+                          "type": "string"
+                        },
+                        "Item": {
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "pattern": "^/",
+                          "type": "string"
+                        },
+                        "Location": {
+                          "description": "Optional native quest objective position [X,Y,Z]. Marker lifecycle is experimental.",
+                          "items": {
+                            "maximum": 100000000,
+                            "minimum": -100000000,
+                            "type": "number"
+                          },
+                          "maxItems": 3,
+                          "minItems": 3,
+                          "type": "array"
+                        },
+                        "Optional": {
+                          "default": false,
+                          "type": "boolean"
+                        },
+                        "ProgressText": {
+                          "description": "Live objective template. Supports {current}, {required}, {remaining}, and repeat-safe {run}; for example: Run {run}: kill {remaining} more goblins.",
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "RadiusMeters": {
+                          "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
+                          "maximum": 10000,
+                          "minimum": 0.01,
+                          "type": "number"
+                        },
+                        "Text": {
+                          "type": "string"
+                        },
+                        "Type": {
+                          "const": "Acquire"
+                        }
+                      },
+                      "required": [
+                        "Id",
+                        "Text",
+                        "Item",
+                        "Count",
+                        "Type"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "maxItems": 16,
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "Id",
+              "Objectives"
+            ],
+            "type": "object"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "type": "array"
+        },
+        "StartCost": {
+          "additionalProperties": false,
+          "properties": {
+            "Count": {
+              "maximum": 999,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "Item": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "pattern": "^/",
+              "type": "string"
+            }
+          },
+          "required": [
+            "Item",
+            "Count"
+          ],
+          "type": "object"
+        },
+        "TimeOfDay": {
+          "default": "Any",
+          "description": "Acceptance gate evaluated from the game's native time state. Active quest progress remains intact across later day/night transitions.",
+          "enum": [
+            "Any",
+            "Day",
+            "Night"
+          ]
+        },
+        "Title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Id",
+        "PersistenceID",
+        "Title",
+        "Description",
+        "Reward"
+      ],
+      "type": "object"
+    },
+    {
+      "items": {
+        "additionalProperties": false,
+        "dependencies": {
+          "Repeat": {
+            "properties": {
+              "Repeatable": {
+                "const": true
+              }
+            },
+            "required": [
+              "Repeatable"
+            ]
+          },
+          "RepeatReward": {
+            "properties": {
+              "Repeatable": {
+                "const": true
+              }
+            },
+            "required": [
+              "Repeatable"
+            ]
+          }
+        },
+        "not": {
+          "required": [
+            "StartCost",
+            "EntryOptions"
+          ]
+        },
+        "oneOf": [
+          {
+            "not": {
+              "required": [
+                "Stages"
+              ]
+            },
+            "required": [
+              "Objective"
+            ]
+          },
+          {
+            "not": {
+              "required": [
+                "Objective"
+              ]
+            },
+            "required": [
+              "Stages"
+            ]
+          }
+        ],
+        "properties": {
+          "Category": {
+            "default": "Regular",
+            "description": "Task uses the game's green task-quest presentation.",
+            "enum": [
+              "Regular",
+              "Story",
+              "Task"
+            ]
+          },
+          "Completion": {
+            "default": "ReturnToNPC",
+            "enum": [
+              "ReturnToNPC",
+              "Automatic"
+            ],
+            "type": "string"
+          },
+          "Description": {
+            "type": "string"
+          },
+          "EntryOptions": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "Cost": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "Count": {
+                      "maximum": 999,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "Item": {
+                      "maxLength": 1024,
+                      "minLength": 1,
+                      "pattern": "^/",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "Item",
+                    "Count"
+                  ],
+                  "type": "object"
+                },
+                "Id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "Id",
+                "Cost"
+              ],
+              "type": "object"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "type": "array"
+          },
+          "Id": {
+            "type": "string"
+          },
+          "Objective": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "dependencies": {
+                  "RadiusMeters": [
+                    "Location"
+                  ]
+                },
+                "properties": {
+                  "AnnounceProgress": {
+                    "default": false,
+                    "description": "Push the expanded progress text through the native player text-notification route whenever credited progress changes.",
+                    "type": "boolean"
+                  },
+                  "CompleteText": {
+                    "description": "Optional text shown when this objective reaches its required count.",
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "Count": {
+                    "maximum": 999,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "Hidden": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "Id": {
+                    "type": "string"
+                  },
+                  "Item": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/",
+                    "type": "string"
+                  },
+                  "Location": {
+                    "description": "Optional native quest objective position [X,Y,Z]. Marker lifecycle is experimental.",
+                    "items": {
+                      "maximum": 100000000,
+                      "minimum": -100000000,
+                      "type": "number"
+                    },
+                    "maxItems": 3,
+                    "minItems": 3,
+                    "type": "array"
+                  },
+                  "Optional": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "ProgressText": {
+                    "description": "Live objective template. Supports {current}, {required}, {remaining}, and repeat-safe {run}; for example: Run {run}: kill {remaining} more goblins.",
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "RadiusMeters": {
+                    "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
+                    "maximum": 10000,
+                    "minimum": 0.01,
+                    "type": "number"
+                  },
+                  "Text": {
+                    "type": "string"
+                  },
+                  "Type": {
+                    "const": "Collect"
+                  }
+                },
+                "required": [
+                  "Id",
+                  "Text",
+                  "Item",
+                  "Count"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "dependencies": {
+                  "RadiusMeters": [
+                    "Location"
+                  ],
+                  "SpawnID": [
+                    "EventID"
+                  ]
+                },
+                "description": "Kill objective: native counter keyed by objective Id; credited local authoritative player only. Candidate requires live death and reload verification.",
+                "properties": {
+                  "AIClasses": {
+                    "items": {
+                      "maxLength": 1024,
+                      "pattern": "^/",
+                      "type": "string"
+                    },
+                    "maxItems": 32,
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "AnnounceProgress": {
+                    "default": false,
+                    "description": "Push the expanded progress text through the native player text-notification route whenever credited progress changes.",
+                    "type": "boolean"
+                  },
+                  "CompleteText": {
+                    "description": "Optional text shown when this objective reaches its required count.",
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "Count": {
+                    "maximum": 999,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "EventID": {
+                    "type": "string"
+                  },
+                  "Hidden": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "Id": {
+                    "type": "string"
+                  },
+                  "IncludeDerived": {
+                    "default": true,
+                    "type": "boolean"
+                  },
+                  "Location": {
+                    "description": "Optional native quest objective position [X,Y,Z]. Marker lifecycle is experimental.",
+                    "items": {
+                      "maximum": 100000000,
+                      "minimum": -100000000,
+                      "type": "number"
+                    },
+                    "maxItems": 3,
+                    "minItems": 3,
+                    "type": "array"
+                  },
+                  "Optional": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "ProgressText": {
+                    "description": "Live objective template. Supports {current}, {required}, {remaining}, and repeat-safe {run}; for example: Run {run}: kill {remaining} more goblins.",
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "RadiusMeters": {
+                    "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
+                    "maximum": 10000,
+                    "minimum": 0.01,
+                    "type": "number"
+                  },
+                  "SpawnID": {
+                    "type": "string"
+                  },
+                  "Text": {
+                    "type": "string"
+                  },
+                  "Type": {
+                    "const": "Kill"
+                  }
+                },
+                "required": [
+                  "Id",
+                  "Text",
+                  "Count",
+                  "Type",
+                  "AIClasses"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "dependencies": {
+                  "RadiusMeters": [
+                    "Location"
+                  ]
+                },
+                "description": "Positive inventory additions after acceptance. Any source counts; AOR checks player location. No items consumed at turn-in. Candidate requires multiplayer verification.",
+                "properties": {
+                  "AnnounceProgress": {
+                    "default": false,
+                    "description": "Push the expanded progress text through the native player text-notification route whenever credited progress changes.",
+                    "type": "boolean"
+                  },
+                  "CompleteText": {
+                    "description": "Optional text shown when this objective reaches its required count.",
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "Count": {
+                    "maximum": 999,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "Hidden": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "Id": {
+                    "type": "string"
+                  },
+                  "Item": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/",
+                    "type": "string"
+                  },
+                  "Location": {
+                    "description": "Optional native quest objective position [X,Y,Z]. Marker lifecycle is experimental.",
+                    "items": {
+                      "maximum": 100000000,
+                      "minimum": -100000000,
+                      "type": "number"
+                    },
+                    "maxItems": 3,
+                    "minItems": 3,
+                    "type": "array"
+                  },
+                  "Optional": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "ProgressText": {
+                    "description": "Live objective template. Supports {current}, {required}, {remaining}, and repeat-safe {run}; for example: Run {run}: kill {remaining} more goblins.",
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "RadiusMeters": {
+                    "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
+                    "maximum": 10000,
+                    "minimum": 0.01,
+                    "type": "number"
+                  },
+                  "Text": {
+                    "type": "string"
+                  },
+                  "Type": {
+                    "const": "Acquire"
+                  }
+                },
+                "required": [
+                  "Id",
+                  "Text",
+                  "Item",
+                  "Count",
+                  "Type"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "PersistenceID": {
+            "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+            "type": "string"
+          },
+          "Prerequisites": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "Repeat": {
+            "additionalProperties": false,
+            "description": "Cooldown starts at completion. UTC daily/weekly reset may be used alone or combined; all specified gates must pass. Never starts a new run automatically.",
+            "properties": {
+              "CooldownSeconds": {
+                "maximum": 31536000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "MaximumRewardMultiplier": {
+                "default": 1,
+                "description": "Required cap when RewardMultiplierPerRun is greater than zero.",
+                "maximum": 100,
+                "minimum": 1,
+                "type": "number"
+              },
+              "Reset": {
+                "additionalProperties": false,
+                "else": {
+                  "not": {
+                    "required": [
+                      "WeekdayUTC"
+                    ]
+                  }
+                },
+                "if": {
+                  "properties": {
+                    "Frequency": {
+                      "const": "Weekly"
+                    }
+                  }
+                },
+                "properties": {
+                  "Frequency": {
+                    "enum": [
+                      "Daily",
+                      "Weekly"
+                    ]
+                  },
+                  "HourUTC": {
+                    "default": 0,
+                    "maximum": 23,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "MinuteUTC": {
+                    "default": 0,
+                    "maximum": 59,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "WeekdayUTC": {
+                    "description": "Monday=0; required for Weekly, forbidden for Daily.",
+                    "maximum": 6,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "Frequency"
+                ],
+                "then": {
+                  "required": [
+                    "WeekdayUTC"
+                  ]
+                },
+                "type": "object"
+              },
+              "RewardMultiplierPerRun": {
+                "default": 0,
+                "description": "Additive multiplier applied for each run after the first.",
+                "maximum": 10,
+                "minimum": 0,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          },
+          "RepeatReward": {
+            "additionalProperties": false,
+            "properties": {
+              "Count": {
+                "maximum": 999,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "Item": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^/",
+                "type": "string"
+              },
+              "TimeOfDay": {
+                "default": "Any",
+                "description": "Hold delivery until the authoritative native time phase matches; quest progress and the unclaimed receipt remain intact.",
+                "enum": [
+                  "Any",
+                  "Day",
+                  "Night"
+                ]
+              }
+            },
+            "required": [
+              "Item",
+              "Count"
+            ],
+            "type": "object"
+          },
+          "Repeatable": {
+            "default": false,
+            "type": "boolean"
+          },
+          "ResultTiers": {
+            "description": "Highest unique Priority among matching entry/time conditions replaces the base Reward; never stacks.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "EntryID": {
+                  "type": "string"
+                },
+                "Id": {
+                  "type": "string"
+                },
+                "MaxElapsedSeconds": {
+                  "description": "Accept to confirmed kill-goal completion, or to first eligible fetch hand-in attempt. Includes offline time. Missing timing does not qualify.",
+                  "maximum": 31536000,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "Priority": {
+                  "maximum": 100000,
+                  "minimum": -100000,
+                  "type": "integer"
+                },
+                "RequiresObjectives": {
+                  "items": {
+                    "pattern": "^[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}$",
+                    "type": "string"
+                  },
+                  "maxItems": 128,
+                  "minItems": 1,
+                  "type": "array",
+                  "uniqueItems": true
+                },
+                "Reward": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "Count": {
+                      "maximum": 999,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "Item": {
+                      "maxLength": 1024,
+                      "minLength": 1,
+                      "pattern": "^/",
+                      "type": "string"
+                    },
+                    "TimeOfDay": {
+                      "default": "Any",
+                      "description": "Hold delivery until the authoritative native time phase matches; quest progress and the unclaimed receipt remain intact.",
+                      "enum": [
+                        "Any",
+                        "Day",
+                        "Night"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "Item",
+                    "Count"
+                  ],
+                  "type": "object"
+                }
+              },
+              "required": [
+                "Id",
+                "Priority",
+                "Reward"
+              ],
+              "type": "object"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "type": "array"
+          },
+          "Reward": {
+            "additionalProperties": false,
+            "properties": {
+              "Count": {
+                "maximum": 999,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "Item": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^/",
+                "type": "string"
+              },
+              "TimeOfDay": {
+                "default": "Any",
+                "description": "Hold delivery until the authoritative native time phase matches; quest progress and the unclaimed receipt remain intact.",
+                "enum": [
+                  "Any",
+                  "Day",
+                  "Night"
+                ]
+              }
+            },
+            "required": [
+              "Item",
+              "Count"
+            ],
+            "type": "object"
+          },
+          "Stages": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "Id": {
+                  "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                  "type": "string"
+                },
+                "Objectives": {
+                  "items": {
+                    "oneOf": [
+                      {
+                        "additionalProperties": false,
+                        "dependencies": {
+                          "RadiusMeters": [
+                            "Location"
+                          ]
+                        },
+                        "properties": {
+                          "AnnounceProgress": {
+                            "default": false,
+                            "description": "Push the expanded progress text through the native player text-notification route whenever credited progress changes.",
+                            "type": "boolean"
+                          },
+                          "CompleteText": {
+                            "description": "Optional text shown when this objective reaches its required count.",
+                            "maxLength": 1024,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "Count": {
+                            "maximum": 999,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "Hidden": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "Id": {
+                            "type": "string"
+                          },
+                          "Item": {
+                            "maxLength": 1024,
+                            "minLength": 1,
+                            "pattern": "^/",
+                            "type": "string"
+                          },
+                          "Location": {
+                            "description": "Optional native quest objective position [X,Y,Z]. Marker lifecycle is experimental.",
+                            "items": {
+                              "maximum": 100000000,
+                              "minimum": -100000000,
+                              "type": "number"
+                            },
+                            "maxItems": 3,
+                            "minItems": 3,
+                            "type": "array"
+                          },
+                          "Optional": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "ProgressText": {
+                            "description": "Live objective template. Supports {current}, {required}, {remaining}, and repeat-safe {run}; for example: Run {run}: kill {remaining} more goblins.",
+                            "maxLength": 1024,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "RadiusMeters": {
+                            "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
+                            "maximum": 10000,
+                            "minimum": 0.01,
+                            "type": "number"
+                          },
+                          "Text": {
+                            "type": "string"
+                          },
+                          "Type": {
+                            "const": "Collect"
+                          }
+                        },
+                        "required": [
+                          "Id",
+                          "Text",
+                          "Item",
+                          "Count"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "dependencies": {
+                          "RadiusMeters": [
+                            "Location"
+                          ],
+                          "SpawnID": [
+                            "EventID"
+                          ]
+                        },
+                        "description": "Kill objective: native counter keyed by objective Id; credited local authoritative player only. Candidate requires live death and reload verification.",
+                        "properties": {
+                          "AIClasses": {
+                            "items": {
+                              "maxLength": 1024,
+                              "pattern": "^/",
+                              "type": "string"
+                            },
+                            "maxItems": 32,
+                            "minItems": 1,
+                            "type": "array",
+                            "uniqueItems": true
+                          },
+                          "AnnounceProgress": {
+                            "default": false,
+                            "description": "Push the expanded progress text through the native player text-notification route whenever credited progress changes.",
+                            "type": "boolean"
+                          },
+                          "CompleteText": {
+                            "description": "Optional text shown when this objective reaches its required count.",
+                            "maxLength": 1024,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "Count": {
+                            "maximum": 999,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "EventID": {
+                            "type": "string"
+                          },
+                          "Hidden": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "Id": {
+                            "type": "string"
+                          },
+                          "IncludeDerived": {
+                            "default": true,
+                            "type": "boolean"
+                          },
+                          "Location": {
+                            "description": "Optional native quest objective position [X,Y,Z]. Marker lifecycle is experimental.",
+                            "items": {
+                              "maximum": 100000000,
+                              "minimum": -100000000,
+                              "type": "number"
+                            },
+                            "maxItems": 3,
+                            "minItems": 3,
+                            "type": "array"
+                          },
+                          "Optional": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "ProgressText": {
+                            "description": "Live objective template. Supports {current}, {required}, {remaining}, and repeat-safe {run}; for example: Run {run}: kill {remaining} more goblins.",
+                            "maxLength": 1024,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "RadiusMeters": {
+                            "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
+                            "maximum": 10000,
+                            "minimum": 0.01,
+                            "type": "number"
+                          },
+                          "SpawnID": {
+                            "type": "string"
+                          },
+                          "Text": {
+                            "type": "string"
+                          },
+                          "Type": {
+                            "const": "Kill"
+                          }
+                        },
+                        "required": [
+                          "Id",
+                          "Text",
+                          "Count",
+                          "Type",
+                          "AIClasses"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "dependencies": {
+                          "RadiusMeters": [
+                            "Location"
+                          ]
+                        },
+                        "description": "Positive inventory additions after acceptance. Any source counts; AOR checks player location. No items consumed at turn-in. Candidate requires multiplayer verification.",
+                        "properties": {
+                          "AnnounceProgress": {
+                            "default": false,
+                            "description": "Push the expanded progress text through the native player text-notification route whenever credited progress changes.",
+                            "type": "boolean"
+                          },
+                          "CompleteText": {
+                            "description": "Optional text shown when this objective reaches its required count.",
+                            "maxLength": 1024,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "Count": {
+                            "maximum": 999,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "Hidden": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "Id": {
+                            "type": "string"
+                          },
+                          "Item": {
+                            "maxLength": 1024,
+                            "minLength": 1,
+                            "pattern": "^/",
+                            "type": "string"
+                          },
+                          "Location": {
+                            "description": "Optional native quest objective position [X,Y,Z]. Marker lifecycle is experimental.",
+                            "items": {
+                              "maximum": 100000000,
+                              "minimum": -100000000,
+                              "type": "number"
+                            },
+                            "maxItems": 3,
+                            "minItems": 3,
+                            "type": "array"
+                          },
+                          "Optional": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "ProgressText": {
+                            "description": "Live objective template. Supports {current}, {required}, {remaining}, and repeat-safe {run}; for example: Run {run}: kill {remaining} more goblins.",
+                            "maxLength": 1024,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "RadiusMeters": {
+                            "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
+                            "maximum": 10000,
+                            "minimum": 0.01,
+                            "type": "number"
+                          },
+                          "Text": {
+                            "type": "string"
+                          },
+                          "Type": {
+                            "const": "Acquire"
+                          }
+                        },
+                        "required": [
+                          "Id",
+                          "Text",
+                          "Item",
+                          "Count",
+                          "Type"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "maxItems": 16,
+                  "minItems": 1,
+                  "type": "array"
+                }
+              },
+              "required": [
+                "Id",
+                "Objectives"
+              ],
+              "type": "object"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "type": "array"
+          },
+          "StartCost": {
+            "additionalProperties": false,
+            "properties": {
+              "Count": {
+                "maximum": 999,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "Item": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^/",
+                "type": "string"
+              }
+            },
+            "required": [
+              "Item",
+              "Count"
+            ],
+            "type": "object"
+          },
+          "TimeOfDay": {
+            "default": "Any",
+            "description": "Acceptance gate evaluated from the game's native time state. Active quest progress remains intact across later day/night transitions.",
+            "enum": [
+              "Any",
+              "Day",
+              "Night"
+            ]
+          },
+          "Title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "Id",
+          "PersistenceID",
+          "Title",
+          "Description",
+          "Reward"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "$declaration": {
+          "description": "Ownership declaration for PAK-cooked persistent content. RuneSchema verifies the live asset identity before recording it.",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "InternalName": {
+                  "description": "Optional cooked InternalName assertion. When omitted, RuneSchema reads it from the asset.",
+                  "maxLength": 1024,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "Kind": {
+                  "const": "Quest",
+                  "description": "Optional assertion; the containing loader determines this kind."
+                },
+                "Path": {
+                  "description": "Exact cooked object path shipped by the mod PAK.",
+                  "pattern": "^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$",
+                  "type": "string"
+                },
+                "PersistenceID": {
+                  "description": "Canonical PersistenceID baked into the cooked asset. RuneSchema verifies it against the loaded object.",
+                  "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "Path",
+                "PersistenceID"
+              ],
+              "type": "object"
+            },
+            {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "InternalName": {
+                    "description": "Optional cooked InternalName assertion. When omitted, RuneSchema reads it from the asset.",
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "Kind": {
+                    "const": "Quest",
+                    "description": "Optional assertion; the containing loader determines this kind."
+                  },
+                  "Path": {
+                    "description": "Exact cooked object path shipped by the mod PAK.",
+                    "pattern": "^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$",
+                    "type": "string"
+                  },
+                  "PersistenceID": {
+                    "description": "Canonical PersistenceID baked into the cooked asset. RuneSchema verifies it against the loaded object.",
+                    "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "Path",
+                  "PersistenceID"
+                ],
+                "type": "object"
+              },
+              "maxItems": 4096,
+              "minItems": 1,
+              "type": "array"
+            }
+          ]
+        }
+      },
+      "required": [
+        "$declaration"
+      ],
+      "type": "object"
+    }
+  ],
+  "description": "Structural authoring hints, not an exhaustive runtime validator. Asset paths, identities, reflected properties and event compatibility must be validated in game.",
+  "title": "RuneSchema /quests",
+  "x-runeschema-coverage": "structural",
+  "x-runeschema-starter-capabilities": {
+    "append": false,
+    "clone": false,
+    "patch": false,
+    "search": "loaded records"
+  }
+}

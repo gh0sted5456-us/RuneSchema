@@ -15,11 +15,24 @@ int main(int argc,char** argv){
     need(registrar.find("CleanRetiredCharacterSaves(retired)")!=registrar.npos,"owned content is not cleaned before character deserialization");
     need(registrar.find("runeschema-before-clean")!=registrar.npos,"pre-load save cleanup has no original backup");
     need(registrar.find("PlanOwned")!=registrar.npos,"pre-load cleanup is not constrained by the ownership ledger");
+    need(registrar.find("ScrubUnknownCharacterSaves(snapshot)")!=registrar.npos,
+        "registry-complete startup scrub is not connected to registration");
+    need(registrar.find("m_registryScrubCompleted")!=registrar.npos,
+        "registry-complete startup scrub is not bounded to one pass");
+    const auto publish=registrar.find("PublishRegistry(snapshot)");
+    const auto registryScrub=registrar.find("ScrubUnknownCharacterSaves(snapshot)",publish);
+    need(publish<registryScrub,
+        "startup scrub runs before the complete native registry is published");
+    need(registrar.find("quests.emplace(record.PersistenceID,record.Owner)")!=registrar.npos
+        && registrar.find("journal.emplace(record.PersistenceID,record.Owner)")!=registrar.npos,
+        "quest and journal cleanup is not constrained to the retired persistence identity");
     need(registrar.find("RegisterNativePreHook")<registrar.find("RegisterNativePostHook"),"registry restore must precede verified post-load scrub");
     need(registrar.find("GetNumItemsByData")!=registrar.npos && registrar.find("RemoveItemByData")!=registrar.npos,"native inventory scrub missing");
     need(registrar.find("verification.Result<int32>() != 0")!=registrar.npos,"item removal is not read-back verified");
     need(registrar.find("OWNED-ONLY")!=registrar.npos,"owned-only operator tag missing");
     need(registrar.find("RecipesUnlocked")!=registrar.npos && registrar.find("FScriptSetHelper")!=registrar.npos,"retired recipe unlock cleanup is missing");
+    need(registrar.find("NativeQuestCleanup::Run")!=registrar.npos,
+        "retired quest state is not cleaned through the native provider lane");
     need(registrar.find("IsActiveDeclarationPath")!=registrar.npos,"active cooked declarations are not admitted to native registration");
     const auto compare=registrar.find("OwnedContent::CompareSnapshot(path)");
     const auto pending=registrar.find("m_pendingProviderSnapshot = path",compare);

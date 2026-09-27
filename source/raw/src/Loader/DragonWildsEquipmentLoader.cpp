@@ -116,21 +116,44 @@ UObject* ResolveAsset(const std::string& path) {
 }
 
 void ApplyEffects(UObject* item,const EquipmentEffectRules::Assignment& rule) {
-    for(const auto& effect:rule.effects)if(!effect.starts_with('/') && !DefinitionRegistry::Effects.contains(effect))
-        throw std::runtime_error("unknown gameplay-effect alias: "+effect);
     auto* property=CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(item->GetClassPrivate(),TEXT("GrantedEffects")));
     if(!property)throw std::runtime_error("item does not expose a GrantedEffects array");
-    nlohmann::json effects=rule.effects;
+    nlohmann::json effects=nlohmann::json::array();
+    for(const auto& effect:rule.effects) {
+        if(effect.starts_with('/'))effects.push_back(effect);
+        else {
+            const auto found=DefinitionRegistry::Effects.find(effect);
+            if(found==DefinitionRegistry::Effects.end() || !found->second)
+                throw std::runtime_error("unknown gameplay-effect alias: "+effect);
+            effects.push_back(RC::to_string(found->second->GetPathName()));
+        }
+    }
     if(rule.mode==EquipmentEffectRules::Mode::Clear)effects=nlohmann::json::array();
     else if(rule.mode==EquipmentEffectRules::Mode::Append)effects=PropertyHelper::BuildAppendValue(property,effects);
     PropertyHelper::CopyJsonValueToContainer(item,property,effects);
 }
 
-void ApplyObjectField(UObject* item,const TCHAR* field,const std::optional<std::string>& value) {
+void ApplyField(UObject* item,const TCHAR* field,const std::optional<std::string>& value) {
     if(!value)return;
-    auto* property=CastField<FObjectPropertyBase>(PropertyHelper::GetPropertyByName(item->GetClassPrivate(),field));
+    auto* property=PropertyHelper::GetPropertyByName(item->GetClassPrivate(),field);
     if(!property)throw std::runtime_error("item does not expose the requested equipment field");
     PropertyHelper::CopyJsonValueToContainer(item,property,*value);
+}
+
+void ApplyReflectedProperties(UObject* item,const nlohmann::json& values) {
+    if(values.empty())return;
+    // Resolve the entire requested surface before the first write. This keeps
+    // misspellings and version-mismatched fields from producing partial rules.
+    std::vector<std::pair<FProperty*,const nlohmann::json*>> fields;
+    fields.reserve(values.size());
+    for(const auto& [name,value]:values.items()) {
+        auto* property=PropertyHelper::GetPropertyByName(
+            item->GetClassPrivate(),RC::to_generic_string(name));
+        if(!property)throw std::runtime_error("item does not expose reflected field: "+name);
+        fields.emplace_back(property,&value);
+    }
+    for(const auto& [property,value]:fields)
+        PropertyHelper::CopyJsonValueToContainer(item,property,*value);
 }
 }
 
@@ -148,13 +171,14 @@ void DragonWildsEquipmentLoader::OnLoad(const std::filesystem::path& path, const
 void DragonWildsEquipmentLoader::OnFinalizeLoad(const EEngineLifecyclePhase& phase) {
     if (phase != EEngineLifecyclePhase::PostEngineInit || m_finalized) return;
     m_finalized = true;
-    size_t effectItems=0;
+    size_t effectItems=0,errors=0;
     for(const auto& [path,rule]:m_rules.effects)try {
         auto* item=ResolveAsset(path);
         if(!item)throw std::runtime_error("item asset did not resolve");
         ApplyEffects(item,rule);
         ++effectItems;
     }catch(const std::exception& error) {
+        ++errors;
         PS::Log<LogLevel::Error>(TEXT("Equipment effects '{}': {}.\n"),RC::to_generic_string(path),PS::ToWideSafe(error.what()));
     }
     m_rules.effects.clear();
@@ -162,12 +186,14 @@ void DragonWildsEquipmentLoader::OnFinalizeLoad(const EEngineLifecyclePhase& pha
     for(const auto& [path,rule]:m_rules.items)try {
         auto* item=ResolveAsset(path);
         if(!item)throw std::runtime_error("item asset did not resolve");
-        ApplyObjectField(item,TEXT("AssociatedSkill"),rule.associatedSkill);
-        ApplyObjectField(item,TEXT("SkillUsed"),rule.skillUsed);
-        ApplyObjectField(item,TEXT("SkillPerkRequiredToEquip"),rule.skillPerkRequiredToEquip);
+        ApplyField(item,TEXT("AssociatedSkill"),rule.associatedSkill);
+        ApplyField(item,TEXT("SkillUsed"),rule.skillUsed);
+        ApplyField(item,TEXT("SkillPerkRequiredToEquip"),rule.skillPerkRequiredToEquip);
+        ApplyReflectedProperties(item,rule.properties);
         if(rule.grantedEffects)ApplyEffects(item,*rule.grantedEffects);
         ++configuredItems;
     }catch(const std::exception& error) {
+        ++errors;
         PS::Log<LogLevel::Error>(TEXT("Equipment item '{}': {}. Other item rules continue.\n"),RC::to_generic_string(path),PS::ToWideSafe(error.what()));
     }
     m_rules.items.clear();
@@ -190,11 +216,13 @@ void DragonWildsEquipmentLoader::OnFinalizeLoad(const EEngineLifecyclePhase& pha
         else PS::Log<LogLevel::Normal>(TEXT("[CAPABILITY][equipment.surge-native][inactive] {}; other equipment capabilities remain available.\n"), failure);
     }
     if (shadowveil.enabled || surgeEnabled)
-        PS::Log<LogLevel::Normal>(TEXT("Equipment ({}): {} Shadowveil wearables, {} Surge leg items enabled.\n"),
+        PS::Log<LogLevel::Verbose>(TEXT("[loader=equipment] lane={} shadowveil={} surge={}.\n"),
             (shadowveil.enabled ? shadowveil.server : surgeServer) ? TEXT("server") : TEXT("client"),
             shadowveil.enabled ? shadowveil.wearables : 0, surgeEnabled ? surgeCount : 0);
-    if(effectItems)PS::Log<LogLevel::Normal>(TEXT("Equipment effects: applied GrantedEffects to {} item assets.\n"),effectItems);
-    if(configuredItems)PS::Log<LogLevel::Normal>(TEXT("Equipment: configured skills, perks or effects on {} item assets.\n"),configuredItems);
+    const auto behaviorItems=(shadowveil.enabled?shadowveil.wearables:0)+(surgeEnabled?surgeCount:0);
+    if(effectItems||configuredItems||behaviorItems||errors)
+        PS::LoaderSummary("equipment",effectItems+configuredItems+behaviorItems,
+            0,effectItems+configuredItems+behaviorItems,0,errors);
     PS::Log<LogLevel::Verbose>(TEXT("[CAPABILITY][equipment] reflected item fields, GrantedEffects, cooked visuals, NPC equipment and native replication remain independent of optional native behavior bindings.\n"));
 }
 void DragonWildsEquipmentLoader::OnAutoReload(const RC::StringType&, const std::filesystem::path&) {

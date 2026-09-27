@@ -63,6 +63,9 @@ int main(int argc, char** argv)
         && playerRules.find("\"FacialHairPreset\"") != std::string::npos
         && playerRules.find("\"EyebrowColor\"") != std::string::npos,
         "player snapshots cover the canonical appearance handles");
+    Check(playerRules.find("if (error == \"player pawn or GUID was unavailable\") continue;") != std::string::npos
+        && playerRules.find("PS::Log<LogLevel::Verbose>(") != std::string::npos,
+        "normal pre-pawn appearance snapshot retries do not warn or fail");
     Check(registrar.find("Xbox WGS save detected") != std::string::npos
         && registrar.find("GamePassNative") != std::string::npos,
         "Game Pass cleanup uses the in-game provider path instead of direct JSON writes");
@@ -70,6 +73,9 @@ int main(int argc, char** argv)
         && registrar.find("\"safesave\" / \"backups\"") != std::string::npos
         && registrar.find("PruneLegacyCharacterBackups") != std::string::npos,
         "Steam SafeSave uses bounded off-directory backups and prunes legacy clutter");
+    Check(registrar.find("CharacterDocumentKind::ProfileOnly") != std::string::npos
+        && registrar.find("Skipped {} profile-only character document") != std::string::npos,
+        "Steam SafeSave recognizes profile-only character JSON without reporting degradation");
     Check(registrar.find("\"/Game/RuneSchema/\"") != std::string::npos
         && registrar.find("PublishRegistry") != std::string::npos,
         "runtime RuneSchema assets feed the live Safe Clean registry snapshot");

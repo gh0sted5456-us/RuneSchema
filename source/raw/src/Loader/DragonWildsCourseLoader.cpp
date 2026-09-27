@@ -769,7 +769,8 @@ namespace DragonWilds {
             }
         }
 
-        PS::Log<LogLevel::Normal>(STR("Courses: {} built, {} errors.\n"), succeeded, m_courses.size() - succeeded);
+        PS::LoaderSummary("courses", m_courses.size(), 0, 0,
+            succeeded, m_courses.size() - succeeded);
         StartPropTick();
     }
 

@@ -1,0 +1,169 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "description": "Structural authoring hints, not an exhaustive runtime validator. Asset paths, identities, reflected properties and event compatibility must be validated in game.",
+  "patternProperties": {
+    "^[^$]": {
+      "additionalProperties": true,
+      "properties": {
+        "AddTo": {
+          "description": "Place this recipe into station rows or merchant categories. Use exactly one of Table (legacy short name) or DataTable (exact cooked asset path).",
+          "items": {
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "oneOf": [
+                  {
+                    "not": {
+                      "required": [
+                        "DataTable"
+                      ]
+                    },
+                    "required": [
+                      "Table"
+                    ]
+                  },
+                  {
+                    "not": {
+                      "required": [
+                        "Table"
+                      ]
+                    },
+                    "required": [
+                      "DataTable"
+                    ]
+                  }
+                ]
+              },
+              {
+                "oneOf": [
+                  {
+                    "not": {
+                      "required": [
+                        "Category"
+                      ]
+                    },
+                    "required": [
+                      "Array"
+                    ]
+                  },
+                  {
+                    "not": {
+                      "required": [
+                        "Array"
+                      ]
+                    },
+                    "required": [
+                      "Category"
+                    ]
+                  }
+                ]
+              }
+            ],
+            "properties": {
+              "Array": {
+                "description": "Direct RecipeData object-array field on the selected row. Dragonwilds processing-station rows use Recipes. RuneSchema gives authored recipes a stable runtime identity and admits registered /assets clone outputs only when their PersistenceID and retained lifetime are verified.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "Category": {
+                "description": "LabeledRecipes category label used by native crafting stations and merchants.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "DataTable": {
+                "description": "Exact cooked DataTable object path, for example /Game/MyMod/Data/DT_MyStation.DT_MyStation. The asset is loaded on demand and also matched when serialized later.",
+                "pattern": "^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$",
+                "type": "string"
+              },
+              "Replaces": {
+                "description": "Optional existing recipe name to replace in Array instead of appending.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "Row": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "Table": {
+                "description": "Legacy DataTable object-name lookup. Retained for vanilla tables and existing definitions; use DataTable for a custom cooked table.",
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "Row"
+            ],
+            "type": "object"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "type": "array"
+        },
+        "Order": {
+          "description": "Optional sort position within the offer Category for RuneSchema and vanilla vendors. Lower numbers appear first; equal/missing positions retain source order.",
+          "maximum": 1000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "PersistenceID": {
+          "description": "Optional canonical save identity for a newly authored recipe. When omitted, RuneSchema derives a stable ID from the owning mod and recipe key. It is verified and recorded in SafeSave after registration.",
+          "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+          "type": "string"
+        },
+        "RuneSchemaVendors": {
+          "description": "Local store IDs or Mod:Id. Duplicate references collapse. Can be combined with VanillaVendors and legacy VendorID. Restart required.",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 128,
+          "type": "array"
+        },
+        "Unlock": {
+          "default": false,
+          "description": "Opt into automatic grants. False does not revoke learned recipes; AddTo alone never grants them.",
+          "type": "boolean"
+        },
+        "VanillaVendors": {
+          "description": "Native merchant Table object name and Row. Appends to the offer Category, never replaces native offers. Duplicate targets collapse.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "Row": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "Table": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "Table",
+              "Row"
+            ],
+            "type": "object"
+          },
+          "maxItems": 128,
+          "type": "array"
+        },
+        "VendorID": {
+          "description": "Contribute a store offer using a local store Id or Mod:Id. Requires Item, Currency and Price; permits Count and Category. Cannot be combined with ordinary recipe properties or Unlock. Restart required.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "title": "RuneSchema /recipes",
+  "type": "object",
+  "x-runeschema-coverage": "structural",
+  "x-runeschema-starter-capabilities": {
+    "append": false,
+    "clone": false,
+    "patch": false,
+    "search": "authored files"
+  }
+}

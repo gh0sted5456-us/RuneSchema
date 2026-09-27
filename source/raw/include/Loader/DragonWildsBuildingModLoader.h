@@ -43,6 +43,7 @@ namespace DragonWilds {
             RC::StringType Key;
             RC::StringType AssetPath;
             nlohmann::json Properties;
+            nlohmann::json Overrides;
             nlohmann::json Requirements;
             std::vector<Placement> Targets;
             bool InheritSourcePlacement = true;
@@ -85,6 +86,8 @@ namespace DragonWilds {
             const BuildingDefinition& definition);
         bool ApplyRequirements(RC::Unreal::UObject* building,
             const BuildingDefinition& definition);
+        bool ApplyOverrides(RC::Unreal::UObject* building,
+            const BuildingDefinition& definition, LoadResult& result);
         bool EnsureStabilityProfile(RC::Unreal::UObject* building);
         bool AddPersistenceIdentity(RC::Unreal::UObject* building);
         std::vector<Placement> FindSourcePlacements(RC::Unreal::UObject* source) const;

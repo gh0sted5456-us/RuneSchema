@@ -16,6 +16,11 @@ int Run() {
             {"QuestLocations",Json::array({{{"QuestLocationId","owned-location"}},{{"QuestLocationId","vanilla-location"}}})}}},
         {"Journal",{{"UnlockedEntries",Json::array({"book","vanilla"})},{"UnreadEntries",Json::array({"book"})},
             {"RuneSchemaOwnership",DragonWilds::JournalSave::EncodeNative({{"book","Example"}})},{"FutureNativeField",42}}}}}};
+    const Json profileOnly={{"Version",83},{"meta_data",{{"char_guid","profile"}}},
+        {"Customization",{{"CustomizationData",Json::object()}}},{"IsNewCharacter",true}};
+    Require(ClassifyCharacterDocument(source)==CharacterDocumentKind::Gameplay);
+    Require(ClassifyCharacterDocument(profileOnly)==CharacterDocumentKind::ProfileOnly);
+    Require(ClassifyCharacterDocument(Json::array())==CharacterDocumentKind::Unsupported);
     Require(Plan(source,{}).Save==source);
     Require(Plan(source,{"Example"}).Save==source);
     auto cleaned=Plan(source,{"Example"},true);
@@ -66,6 +71,11 @@ int Run() {
     Require(questErased.Save["GameProgress"]["QuestProgress"]["Quests"].size()==1);
     Require(questErased.Removed.end()!=std::find_if(questErased.Removed.begin(),questErased.Removed.end(),
         [](const auto& row){return row.value("Kind","")=="Quest/dialogue" && row.value("Id","")=="missing-quest";}));
+    auto unresolvedPending=missingQuest;
+    unresolvedPending["GameProgress"]["QuestProgress"]["Quests"][0]["QuestInts"]={
+        {{"QuestVariableName","RuneSchema.Phase"},{"QuestVariableValue",3}}};
+    Require(Plan(unresolvedPending,{},false,&registry,false,true).Save
+        ["GameProgress"]["QuestProgress"]["Quests"].size()==1);
     Require(Plan(preserved.Save,{},false,&registry).Save==preserved.Save);
     auto ownedSave=assetSave;
     ownedSave["GameProgress"]["Inventory"]["7"]={{"ItemData","missing-helmet"},{"Count",1}};
@@ -80,7 +90,7 @@ int Run() {
     const std::unordered_map<std::string,std::string> retiredItems={
         {"missing-helmet","BlackG"},{"missing-shield","BlackG"},{"missing-body","BlackG"}};
     const std::unordered_map<std::string,std::string> retiredRecipes={{"missing-recipe","BlackG"}};
-    const auto ownedCleaned=PlanOwned(ownedSave,retiredItems,retiredRecipes,{"BlackG"});
+    const auto ownedCleaned=PlanOwned(ownedSave,retiredItems,retiredRecipes);
     Require(!ownedCleaned.Save["GameProgress"]["Inventory"].contains("7"));
     Require(!ownedCleaned.Save["GameProgress"]["PersonalInventory"].contains("9"));
     Require(!ownedCleaned.Save["GameProgress"]["Loadout"].contains("Helmet"));
@@ -89,15 +99,16 @@ int Run() {
     Require(ownedCleaned.Save["GameProgress"]["Inventory"].contains("0"));
     Require(ownedCleaned.Save["GameProgress"]["Progress"]["ItemsPickedUp"]==Json::array({"unrelated"}));
     Require(ownedCleaned.Save["GameProgress"]["Progress"]["RecipesUnlocked"]==Json::array({"recipe1"}));
-    Require(PlanOwned(ownedCleaned.Save,retiredItems,retiredRecipes,{"BlackG"}).Save==ownedCleaned.Save);
-    Require(PlanOwned(ownedSave,{}, {},{}).Save==ownedSave);
+    Require(PlanOwned(ownedCleaned.Save,retiredItems,retiredRecipes).Save==ownedCleaned.Save);
+    Require(PlanOwned(ownedSave,{}, {}).Save==ownedSave);
     auto pendingOwned=ownedSave;
     const std::string retiredQuest="BBBBBBBBBBBBBBBBBBBBBA";
     auto pendingInts=DragonWilds::Quests::OwnershipVariables("BlackG",retiredQuest);
     pendingInts.push_back({{"QuestVariableName","RuneSchema.Phase"},{"QuestVariableValue",3}});
     pendingOwned["GameProgress"]["QuestProgress"]["Quests"].push_back(
         {{"QuestId",retiredQuest},{"QuestInts",pendingInts}});
-    const auto pendingRemoved=PlanOwned(pendingOwned,retiredItems,retiredRecipes,{"BlackG"});
+    const std::unordered_map<std::string,std::string> retiredQuests={{retiredQuest,"BlackG"}};
+    const auto pendingRemoved=PlanOwned(pendingOwned,retiredItems,retiredRecipes,retiredQuests);
     Require(pendingRemoved.Save["GameProgress"]["QuestProgress"]["Quests"].end()==
         std::find_if(pendingRemoved.Save["GameProgress"]["QuestProgress"]["Quests"].begin(),
             pendingRemoved.Save["GameProgress"]["QuestProgress"]["Quests"].end(),

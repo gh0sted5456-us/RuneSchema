@@ -23,11 +23,12 @@ int main(int argc, char** argv) {
     const auto mainLoader = Read(argv[4]);
     Require(recipes, "constexpr size_t detailLimit = 12");
     Require(recipes, "additional successful operation detail(s) omitted");
-    Require(recipes, "Recipes: {} created, {} edited, {} placed, {} error{}");
+    Require(recipes, "LoaderSummary(\"recipes\"");
     Require(assets, "constexpr size_t detailLimit = 8");
     Require(assets, "additional successful clone detail(s) omitted");
+    Require(assets, "LoaderSummary(\"assets\"");
     Require(blueprints, "additional successful change detail(s) omitted");
-    Require(blueprints, "Blueprints: {} change set(s) applied");
+    Require(blueprints, "LoaderSummary(\"blueprints\"");
     Require(mainLoader, "addedPakDirectories");
     std::cout << "Main-menu log budget contract passed.\n";
 }

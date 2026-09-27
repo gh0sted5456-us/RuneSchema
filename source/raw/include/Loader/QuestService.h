@@ -226,6 +226,7 @@ public:
         if(!subsystem)throw std::runtime_error("Quest subsystem has not initialized");
         Json manifest=Json::array();
         std::vector<OwnedContent::Record> verifiedDeclarations;
+        std::vector<OwnedContent::Record> runtimeOwned;
         auto* questType=ActorHelper::ResolveClass(TEXT("/Script/Dominion.QuestData"));
         if(!declarations.empty() && !questType)throw std::runtime_error("QuestData class unavailable for declarations");
         for(const auto& [id,record]:declarations) {
@@ -253,11 +254,19 @@ public:
             OwnedContent::Merge(OwnedContent::LedgerPath(PS::HostServices::StateDirectory()),verifiedDeclarations);
         for(const auto& [key,document]:definitions) {
             if(!assets.contains(key))assets.emplace(key,std::make_unique<NativeAsset>(catalog.Find("_",key),hidden.contains(key)));
-            assets.at(key)->EnsureIdentity(catalog.Find("_",key));
+            const auto& definition=catalog.Find("_",key);
+            assets.at(key)->EnsureIdentity(definition);
             const auto netId=QuestRegistry::NativeRegistry::Register(subsystem,instance,Asset(key));
             manifest.push_back({{"Key",key},{"NetId",netId},{"Definition",document}});
             assets.at(key)->MarkRegistered();
+            const auto separator=key.find(':');
+            if(separator==std::string::npos || separator==0)
+                throw std::runtime_error("Quest identity has no owning mod prefix: "+key);
+            runtimeOwned.push_back({"Quest",key.substr(0,separator),definition.PersistenceId,
+                definition.Key,key});
         }
+        if(!runtimeOwned.empty())
+            OwnedContent::Merge(OwnedContent::LedgerPath(PS::HostServices::StateDirectory()),runtimeOwned);
         networkManifest=std::move(manifest);
     }
     const Json& NetworkManifest() const {return networkManifest;}
