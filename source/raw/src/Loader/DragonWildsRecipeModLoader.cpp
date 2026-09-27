@@ -97,6 +97,59 @@ namespace DragonWilds {
         std::string Reason;
     };
 
+    static void VerifyRecipeItemAmounts(UObject* recipe,
+        std::string_view propertyName,const nlohmann::json& authored)
+    {
+        if(propertyName!="ItemsConsumed" && propertyName!="ItemsCreated")return;
+        // Patch directives intentionally describe only part of the finished
+        // collection. Full-array writes can and should round-trip exactly.
+        if(!authored.is_array())return;
+        if(authored.size()>256)
+            throw std::runtime_error(std::string(propertyName)
+                +" cannot contain more than 256 item amounts");
+
+        auto* array=CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(
+            recipe->GetClassPrivate(),RC::to_generic_string(propertyName)));
+        auto* element=array?CastField<FStructProperty>(array->GetInner()):nullptr;
+        auto* count=element&&element->GetStruct()?CastField<FNumericProperty>(
+            PropertyHelper::GetPropertyByName(element->GetStruct().Get(),TEXT("Count"))):nullptr;
+        auto* item=element&&element->GetStruct()?CastField<FObjectPropertyBase>(
+            PropertyHelper::GetPropertyByName(element->GetStruct().Get(),TEXT("ItemData"))):nullptr;
+        if(!array||!element||!count||!count->IsInteger()||!item)
+            throw std::runtime_error(std::string(propertyName)
+                +" does not expose the native ItemDataContainer contract");
+
+        std::size_t index=0;
+        UECustom::FScriptArrayHelper values(
+            array->ContainerPtrToValuePtr<FScriptArray>(recipe),array);
+        values.ForEachElement([&](void* value) {
+            if(index>=authored.size())
+                throw std::runtime_error(std::string(propertyName)
+                    +" retained more entries than were authored");
+            const auto& expected=authored.at(index);
+            if(!expected.is_object()||!expected.contains("ItemData")
+                ||!expected.contains("Count")||!expected.at("Count").is_number_integer())
+                throw std::runtime_error(std::string(propertyName)
+                    +" entries require ItemData and an integer Count");
+            const auto expectedCount=expected.at("Count").get<std::int64_t>();
+            if(expectedCount<1 || expectedCount>1'000'000)
+                throw std::runtime_error(std::string(propertyName)
+                    +" Count must be between 1 and 1000000");
+            const auto actualCount=count->GetSignedIntPropertyValue(
+                count->ContainerPtrToValuePtr<void>(value));
+            if(actualCount!=expectedCount)
+                throw std::runtime_error(std::string(propertyName)
+                    +" Count did not survive the reflected write");
+            if(!item->GetObjectPropertyValue(item->ContainerPtrToValuePtr<void>(value)))
+                throw std::runtime_error(std::string(propertyName)
+                    +" ItemData did not survive the reflected write");
+            ++index;
+        });
+        if(index!=authored.size())
+            throw std::runtime_error(std::string(propertyName)
+                +" retained fewer entries than were authored");
+    }
+
     static bool IsRootRetained(UObject* object)
     {
         if(!object||object->GetInternalIndex()<0)return false;
@@ -1128,6 +1181,7 @@ namespace DragonWilds {
                     propertyName,propertyValue);
                 PropertyHelper::CopyJsonValueToContainer(
                     reinterpret_cast<uint8*>(recipe), property, routed);
+                VerifyRecipeItemAmounts(recipe,propertyName,routed);
             }
             catch (const std::exception& e)
             {

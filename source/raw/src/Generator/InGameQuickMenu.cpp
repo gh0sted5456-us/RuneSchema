@@ -1026,9 +1026,17 @@ void InGameQuickMenu::RenderCanvas(UObject* canvas) {
         m_presentedFrameValid=true;
     }
     const auto& frame=m_presentedFrame;
-    // Capture only icon paths requested by the current painted frame. The
-    // cache is shared by every Helpy tab for this game session, bounded, and
-    // populated on the game thread without a catalogue-wide startup scan.
+    // Capture only icon paths requested by the current painted page. Loaded
+    // textures stay in the bounded session cache, but pending work from a page
+    // the user has already left is discarded. Rapid paging therefore cannot
+    // turn into a delayed catalogue-wide asset load.
+    std::unordered_set<std::string> visibleIconPaths;
+    for(const auto& draw:frame.draws)if(draw.kind==QuickUI::Draw::Kind::Icon&&!draw.text.empty())
+        visibleIconPaths.insert(draw.text);
+    std::erase_if(m_canvasIconQueue,[&](const std::string& path) {
+        if(visibleIconPaths.contains(path))return false;
+        m_queuedCanvasIcons.erase(path);return true;
+    });
     for(const auto& draw:frame.draws)if(draw.kind==QuickUI::Draw::Kind::Icon&&!draw.text.empty()
         &&!m_canvasIcons.contains(draw.text)&&!m_failedCanvasIcons.contains(draw.text)
         &&m_queuedCanvasIcons.insert(draw.text).second)m_canvasIconQueue.push_back(draw.text);

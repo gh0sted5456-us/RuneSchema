@@ -705,6 +705,10 @@ Placement rules:
   resolves back to the exact registered item. A duplicate identity,
   unregistered clone, incomplete recipe, or mismatched route rejects only that
   recipe placement before the station can retain it.
+- Ingredient and output `Count` values are exact quantities for both immediate
+  crafting and timed processing. RuneSchema reads every full `ItemsConsumed`
+  and `ItemsCreated` write back from the live `RecipeData`; missing entries or
+  changed counts reject the recipe before it reaches either station type.
 
 The verified vanilla station targets are:
 

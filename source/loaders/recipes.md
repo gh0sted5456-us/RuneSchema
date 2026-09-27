@@ -45,6 +45,12 @@ Placement rules:
   object paths. RuneSchema accepts a timed-processing output only after an
   `/assets` clone is fully registered and its persistent identity resolves back
   to that exact item.
+- `ItemsConsumed[].Count` and `ItemsCreated[].Count` are exact quantities per
+  operation for both crafting and processing. RuneSchema reads full-array
+  writes back from the live `RecipeData` and refuses placement if an entry or
+  count was not retained exactly.
+- The output asset still controls its own type and stack rules. An asset cooked
+  as `FuelItemData` remains fuel even if a recipe also uses it as a resource.
 
 The verified vanilla station targets are:
 

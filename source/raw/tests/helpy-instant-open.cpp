@@ -39,8 +39,9 @@ int main(int argc,char** argv){
         &&Has(ui,"panel({SurfaceInset,28,SurfaceWidth,664},ash)"),"tabs and overlays do not share one painted width");
     Check(Has(menu,"IconCacheLimit=256")&&Has(menu,"FirstFrameIconBudget=6")
         &&Has(menu,"SteadyIconBudget=2")
+        &&Has(menu,"visibleIconPaths")&&Has(menu,"std::erase_if(m_canvasIconQueue")
         &&Has(menu,"m_canvasIconQueue")&&Has(menu,"for(const auto& draw:frame.draws)"),
-        "smoothed visible-first session icon capture missing");
+        "page-scoped, smoothed session icon capture missing");
     Check(!Has(menu,"const auto frame=m_ui.Render(mx,my);bool loadedIcon=false"),
         "one-icon-per-frame loading throttle returned");
     Check(Has(host,"plugin.Manifest.Version")&&Has(host,"plugin.Manifest.ConsoleMessage"),"plugin announcement is manifest driven");

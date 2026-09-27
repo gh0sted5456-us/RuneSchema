@@ -91,6 +91,12 @@ int main(int argc, char** argv)
         "recipe ItemData does not enforce the path-first authoring contract");
     Need(loader, "Recipe ItemData path did not resolve to ItemData",
         "recipe ItemData paths are not resolved and type checked");
+    Need(loader, "VerifyRecipeItemAmounts(recipe,propertyName,routed)",
+        "recipe ingredient and output quantities are not verified after reflection writes");
+    Need(loader, "Count did not survive the reflected write",
+        "recipe count truncation is not rejected before station placement");
+    Need(loader, "retained fewer entries than were authored",
+        "recipe output loss is not rejected before station placement");
     Need(loader, "propertyName!=\"ItemsConsumed\" && propertyName!=\"ItemsCreated\"",
         "recipe routing is not scoped to native ingredient/output collections");
     Need(loader, "OnFinalizeLoad(", "recipe linking is no longer deferred until all clone assets load");

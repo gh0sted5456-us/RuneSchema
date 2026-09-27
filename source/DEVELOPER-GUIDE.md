@@ -135,7 +135,9 @@ Current implementation rules:
 - the model/request layer stays independent of the renderer;
 - layout, rendering, and hit testing share one logical coordinate system;
 - Canvas function lookups are cached;
-- icon loading is bounded and missing icons are negatively cached;
+- item artwork is requested only for the currently painted page; completed
+  textures remain in a bounded session cache while stale off-page requests are
+  discarded, and missing icons are negatively cached;
 - opening Helpy does not start a full UObject scan;
 - catalog parsing and preference writes stay out of the render callback.
 
