@@ -1,7 +1,6 @@
 #include "Utility/NativeFunctionHook.h"
 #include <cstring>
 #include <algorithm>
-#include <chrono>
 #include <limits>
 #include <map>
 #include <ranges>
@@ -24,9 +23,6 @@
 #include "Utility/Logging.h"
 #include "Core/SaveCleanup.h"
 #include "Core/SaveRegistrySnapshot.h"
-#include "Core/ConfigFiles.h"
-#include "Runtime/HostServices.h"
-#include "Runtime/Storefront.h"
 #include "Misc/DragonWildsDataRegistrar.h"
 
 using namespace RC;
@@ -61,6 +57,36 @@ namespace DragonWilds {
         TEXT("/Script/Dominion.DominionPlayerControllerBase:LoadStateFromJson"),
         TEXT("/Script/Dominion.DominionPlayerController:LoadStateFromJson"),
     };
+
+    static std::string RegistryFingerprint(
+        const PS::SaveCleanup::RegistrySnapshot& snapshot)
+    {
+        std::string result;
+        const auto append = [&](char label,
+            const std::unordered_set<std::string>& values) {
+            std::vector<std::string_view> sorted;
+            sorted.reserve(values.size());
+            for (const auto& value : values) sorted.push_back(value);
+            std::ranges::sort(sorted);
+            result.push_back(label);
+            result += std::to_string(sorted.size());
+            result.push_back(':');
+            for (const auto value : sorted)
+            {
+                result += std::to_string(value.size());
+                result.push_back('=');
+                result.append(value);
+            }
+            result.push_back(';');
+        };
+        append('I', snapshot.Items);
+        append('R', snapshot.Recipes);
+        append('Q', snapshot.Quests);
+        append('J', snapshot.Journals);
+        result += snapshot.QuestsComplete ? "Q1" : "Q0";
+        result += snapshot.JournalsComplete ? "J1" : "J0";
+        return result;
+    }
 
     void DragonWildsDataRegistrar::Initialize()
     {
@@ -116,6 +142,8 @@ namespace DragonWilds {
         m_characterJsonHook = Hook::ERROR_ID;
         for (const auto& [function, id] : m_functionHooks) if (function && id) function->UnregisterHook(id);
         m_functionHooks.clear();
+        m_registryCandidateFingerprint.clear();
+        m_registryCandidatePasses = 0;
         PS::SaveCleanup::PublishRegistry({});
     }
 
@@ -127,13 +155,11 @@ namespace DragonWilds {
 
         // Character JSON is hydrated during world startup. Restore every
         // loaded identity to the new world's subsystem before Dominion reads
-        // the character, then perform the file-backed Steam repair against
-        // that complete registry. The post pass catches assets loaded by
-        // InitGameState itself without delaying character hydration.
+        // the character. Save cleanup is performed only on the JSON value the
+        // game is about to hydrate; RuneSchema never rewrites the stored file.
         m_gameStateStartingHook = Hook::RegisterInitGameStatePreCallback(
             [this](Hook::TCallbackIterationData<void>&, AGameModeBase*) {
                 RegisterAll();
-                ScrubLocalCharacterFiles();
             }, options);
 
         options.HookName = TEXT("DataRegistrarGameStateReady");
@@ -334,118 +360,6 @@ namespace DragonWilds {
     }
 
 
-    void DragonWildsDataRegistrar::ScrubLocalCharacterFiles()
-    {
-        if (m_localCharacterSweepCompleted) return;
-        if (PS::Storefront::CurrentNativeLane()
-            != PS::Storefront::NativeLane::SteamNative)
-            return;
-
-        const auto registry = PS::SaveCleanup::ReadRegistry();
-        if (!registry || !registry->Ready())
-        {
-            PS::Log<LogLevel::Warning>(STR(
-                "[SAVE-CLEANER][DEFERRED] Character saves were not checked because the item and recipe registries are not complete.\n"));
-            return;
-        }
-
-        m_localCharacterSweepCompleted = true;
-        try
-        {
-            const auto localAppData = [] {
-                const auto required = ::GetEnvironmentVariableW(
-                    L"LOCALAPPDATA", nullptr, 0);
-                if (!required)
-                    throw std::runtime_error("LOCALAPPDATA is unavailable");
-                std::vector<wchar_t> value(required);
-                if (::GetEnvironmentVariableW(
-                        L"LOCALAPPDATA", value.data(), required) + 1
-                    != required)
-                    throw std::runtime_error(
-                        "LOCALAPPDATA changed while it was read");
-                return std::filesystem::path(value.data());
-            }();
-            const auto folder = localAppData / L"RSDragonwilds" / L"Saved"
-                / L"SaveCharacters";
-            if (!std::filesystem::is_directory(folder)) return;
-
-            const auto backupFolder = PS::HostServices::StateDirectory()
-                / "backups" / "save-pruning";
-            std::size_t files = 0;
-            std::size_t bytes = 0;
-            std::size_t repairedFiles = 0;
-            std::size_t removedReferences = 0;
-            for (const auto& entry : std::filesystem::directory_iterator(folder))
-            {
-                if (++files > 128)
-                    throw std::runtime_error(
-                        "character save directory exceeds 128 entries");
-                if (!entry.is_regular_file()
-                    || entry.path().extension() != L".json")
-                    continue;
-                const auto size = entry.file_size();
-                if (size > 8 * 1024 * 1024
-                    || (bytes += size) > 64 * 1024 * 1024)
-                    throw std::runtime_error(
-                        "character save scan exceeds its safety limit");
-
-                const auto modified = entry.last_write_time();
-                const auto text = PS::ConfigFiles::Read(
-                    entry.path(), 8 * 1024 * 1024);
-                if (entry.last_write_time() != modified)
-                    throw std::runtime_error(
-                        "a character save changed during validation");
-                auto source = nlohmann::json::parse(
-                    text, nullptr, true, true);
-                const auto kind = PS::SaveCleanup::ClassifyCharacterDocument(
-                    source);
-                if (kind == PS::SaveCleanup::CharacterDocumentKind::ProfileOnly)
-                    continue;
-                if (kind != PS::SaveCleanup::CharacterDocumentKind::Gameplay)
-                    throw std::runtime_error(
-                        "unsupported character save JSON layout");
-
-                const auto cleaned = PS::SaveCleanup::Plan(
-                    source, {}, false, registry.get(), false, true);
-                if (cleaned.Removed.empty()) continue;
-                if (entry.last_write_time() != modified)
-                    throw std::runtime_error(
-                        "a character save changed before replacement");
-
-                std::filesystem::create_directories(backupFolder);
-                const auto stamp = std::chrono::system_clock::now()
-                    .time_since_epoch().count();
-                auto backup = backupFolder / entry.path().filename();
-                backup += L"." + std::to_wstring(stamp) + L".bak";
-                std::filesystem::copy_file(entry.path(), backup,
-                    std::filesystem::copy_options::none);
-
-                const auto serialized = cleaned.Save.dump(2) + "\n";
-                PS::ConfigFiles::Write(entry.path(), serialized);
-                const auto verified = nlohmann::json::parse(
-                    PS::ConfigFiles::Read(entry.path(), 8 * 1024 * 1024),
-                    nullptr, true, true);
-                if (verified != cleaned.Save)
-                    throw std::runtime_error(
-                        "character save replacement failed verification");
-                ++repairedFiles;
-                removedReferences += cleaned.Removed.size();
-            }
-
-            if (removedReferences)
-                PS::Log<LogLevel::Normal>(STR(
-                    "[SAVE-CLEANER][VERIFIED] Removed {} unresolved persistence reference(s) from {} character save(s) before selection. Originals were backed up.\n"),
-                    removedReferences, repairedFiles);
-        }
-        catch (const std::exception& error)
-        {
-            PS::Log<LogLevel::Error>(STR(
-                "[SAVE-CLEANER][UNCHANGED] Character save pruning stopped safely: {}.\n"),
-                PS::ToWideSafe(error.what()));
-        }
-    }
-
-
     void DragonWildsDataRegistrar::RegisterAll()
     {
         PS::SaveCleanup::RegistrySnapshot snapshot;
@@ -503,7 +417,7 @@ namespace DragonWilds {
             });
         }
 
-        snapshot.QuestsComplete = questsReady;
+        snapshot.QuestsComplete = questsReady && !snapshot.Quests.empty();
         if (auto* journalClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
                 nullptr, nullptr, JournalSubsystemClassPath, false))
         {
@@ -530,10 +444,20 @@ namespace DragonWilds {
         }
         if (itemsReady && recipesReady)
         {
-            // The complete native view is diagnostic/manual-repair context.
-            // The completed live registries are the authority. Character
-            // cleanup removes identities that no longer resolve after every
-            // enabled mod has had an opportunity to register its content.
+            // Never prune from the first apparently complete view. A second
+            // identical capture must prove that late native and mod
+            // registration has settled. Any change immediately withdraws the
+            // prior snapshot, making character preflight a strict no-op.
+            const auto fingerprint = RegistryFingerprint(snapshot);
+            if (fingerprint != m_registryCandidateFingerprint)
+            {
+                m_registryCandidateFingerprint = fingerprint;
+                m_registryCandidatePasses = 1;
+                PS::SaveCleanup::PublishRegistry({});
+                return;
+            }
+            if (m_registryCandidatePasses < 2)
+                ++m_registryCandidatePasses;
             PS::SaveCleanup::PublishRegistry(snapshot);
             if (!m_registrySummaryReported)
             {
@@ -545,9 +469,13 @@ namespace DragonWilds {
             }
         }
         else
+        {
             // Never leave a previous world's registry available to Safe Clean
             // when the current world could not prove a complete item/recipe map.
+            m_registryCandidateFingerprint.clear();
+            m_registryCandidatePasses = 0;
             PS::SaveCleanup::PublishRegistry({});
+        }
     }
 
     void DragonWildsDataRegistrar::RegisterMissing(UClass* dataClass, UObject* subsystem)

@@ -58,13 +58,12 @@ int main(int argc, char** argv)
     Check(playerRules.find("if (error == \"player pawn or GUID was unavailable\") continue;") != std::string::npos
         && playerRules.find("PS::Log<LogLevel::Verbose>(") != std::string::npos,
         "normal pre-pawn appearance snapshot retries do not warn or fail");
-    Check(registrar.find("ScrubLocalCharacterFiles") != std::string::npos
-        && registrar.find("SaveCharacters") != std::string::npos
-        && registrar.find("ConfigFiles::Write") != std::string::npos,
-        "Steam character saves are pruned before character selection");
-    Check(registrar.find("NativeLane::SteamNative") != std::string::npos
-        && registrar.find("ScrubCharacterJsonBeforeLoad") != std::string::npos,
-        "file and provider save lanes stay separated");
+    Check(registrar.find("ScrubLocalCharacterFiles") == std::string::npos
+        && registrar.find("SaveCharacters") == std::string::npos
+        && registrar.find("ConfigFiles::Write") == std::string::npos,
+        "automatic cleanup writes directly to stored character files");
+    Check(registrar.find("ScrubCharacterJsonBeforeLoad") != std::string::npos,
+        "shared native character-load preflight is missing");
     Check(registrar.find("PublishRegistry") != std::string::npos
         && registrar.find("snapshot.Journals") != std::string::npos,
         "native item, recipe, quest, and journal registries feed pruning");
@@ -73,11 +72,13 @@ int main(int argc, char** argv)
         "Safe Clean exposes explicit live-registry orphan repair");
     const auto preRegistration=registrar.find("RegisterInitGameStatePreCallback");
     const auto registerAll=registrar.find("RegisterAll();",preRegistration);
-    const auto scrubFiles=registrar.find("ScrubLocalCharacterFiles();",registerAll);
-    Check(preRegistration != std::string::npos && registerAll < scrubFiles
+    Check(preRegistration != std::string::npos && registerAll != std::string::npos
         && registrar.find("OwnedContent::CompareSnapshot") == std::string::npos
         && registrar.find("OwnedContent::CommitSnapshot") == std::string::npos,
-        "automatic pruning follows pre-world registration without a manifest or ledger");
+        "automatic pruning does not follow pre-world registration without a manifest or ledger");
+    Check(registrar.find("fingerprint != m_registryCandidateFingerprint") != std::string::npos
+        && registrar.find("if (cleaned.Removed.empty()) return;") != std::string::npos,
+        "automatic pruning is not gated by a stable registry and a nonempty removal plan");
     Check(saveViewer.find("Character-save file browsing is unavailable for Xbox WGS storage") != std::string::npos,
         "the file viewer does not mistake Steam saves for Game Pass saves");
     std::cout << "Mutable state storage contract passed.\n";

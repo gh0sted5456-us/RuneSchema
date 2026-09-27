@@ -11,6 +11,11 @@ The cleanup order is deliberately small:
 
 Removing and later reinstalling a mod is treated as a fresh installation. Removed character state is not restored.
 
-Steam/GOG character JSON is repaired atomically with a backup before replacement. Game Pass uses the same registry decision at the native character JSON boundary; RuneSchema does not rewrite WGS containers directly.
+Steam/GOG and Game Pass use the same native character-load boundary. RuneSchema
+does not rewrite stored Steam character files or Xbox WGS containers. It waits
+for two identical complete registry captures, scans the JSON value the game is
+about to load, and changes that in-memory value only when an unresolved identity
+is actually removed. An unchanged character is a strict no-op. Dragonwilds then
+owns normal saving through the active storefront.
 
 World saves remain authoritative for placed structures. Dragonwilds stores a stable class GUID for each placed building piece. RuneSchema reconstructs active custom definitions in deterministic `PersistenceID` order and does not maintain a separate building manifest or retired placeholder history.

@@ -11,7 +11,8 @@
 
 - Removed the player-content ledger, declaration tag, restore history, and retired-content bookkeeping.
 - Enabled mods register their live identities first. RuneSchema then removes unresolved RuneSchema-supported identities before character hydration and lets Dragonwilds save normally.
-- Steam/GOG and Game Pass use the same cleanup decision through their storefront-specific save lanes. Xbox Game Save containers are not edited directly.
+- Steam/GOG and Game Pass use the same native character-load preflight. RuneSchema does not rewrite stored Steam character files or Xbox Game Save containers.
+- Cleanup requires two identical complete registry captures. If all identities resolve, the character JSON is left byte-for-byte untouched by RuneSchema.
 - Reinstalling a removed mod is treated as a fresh installation. Deleted mod state is not restored.
 - Building state relies on the native world save and stable building identities; RuneSchema no longer keeps a separate building manifest.
 

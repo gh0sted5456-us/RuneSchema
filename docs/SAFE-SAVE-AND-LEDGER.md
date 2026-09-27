@@ -4,7 +4,12 @@ RuneSchema uses the live game registries as the only authority for player-save c
 
 All enabled mods load first. RuneSchema then registers the available item, recipe, quest, and journal identities. Immediately before character hydration, unresolved saved identities are removed and the game continues with the cleaned character.
 
-Steam/GOG uses an atomic JSON replacement with a backup. Game Pass applies the same validation at the native JSON boundary without editing Xbox WGS containers.
+Steam/GOG and Game Pass use the same native character-load boundary. RuneSchema
+does not rewrite stored Steam character files or Xbox WGS containers. It waits
+for two identical complete registry captures, scans the JSON value the game is
+about to load, and changes that in-memory value only when an unresolved identity
+is actually removed. An unchanged character is a strict no-op. Dragonwilds then
+owns normal saving through the active storefront.
 
 Reinstalling removed content is a fresh installation; previously pruned state is not restored.
 

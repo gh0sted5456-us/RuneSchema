@@ -12,9 +12,9 @@ int main(int argc,char** argv){
         "automatic pruning still depends on an ownership ledger");
     need(mainLoader.find("OwnedContent::BeginSnapshot")==mainLoader.npos,
         "startup still creates an ownership ledger");
-    need(registrar.find("ScrubLocalCharacterFiles")!=registrar.npos
-        && registrar.find("ConfigFiles::Write")!=registrar.npos,
-        "pre-selection Steam pruning is missing");
+    need(registrar.find("ScrubLocalCharacterFiles")==registrar.npos
+        && registrar.find("ConfigFiles::Write")==registrar.npos,
+        "automatic cleanup still rewrites stored Steam character files");
     need(registrar.find("SaveCleanup::Plan(")!=registrar.npos
         && registrar.find("registry.get(), false, true")!=registrar.npos,
         "pruning is not driven by the completed native registry");
@@ -27,9 +27,11 @@ int main(int argc,char** argv){
         "provider-backed character JSON preflight is missing");
     const auto preRegistration=registrar.find("RegisterInitGameStatePreCallback");
     const auto registerAll=registrar.find("RegisterAll();",preRegistration);
-    const auto scrubFiles=registrar.find("ScrubLocalCharacterFiles();",registerAll);
-    need(preRegistration!=registrar.npos && registerAll<scrubFiles,
-        "pruning does not follow pre-world native registration");
-    need(registrar.find("[SAVE-CLEANER][VERIFIED] Removed")!=registrar.npos,
-        "compact verified pruning summary is missing");
+    need(preRegistration!=registrar.npos && registerAll!=registrar.npos,
+        "pre-world native registration is missing");
+    need(registrar.find("fingerprint != m_registryCandidateFingerprint")!=registrar.npos
+        && registrar.find("PublishRegistry({});\n                return;")!=registrar.npos,
+        "character cleanup can consume an unsettled registry snapshot");
+    need(registrar.find("if (cleaned.Removed.empty()) return;")!=registrar.npos,
+        "an unchanged character is not a strict no-op");
 }

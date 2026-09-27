@@ -30,13 +30,13 @@ namespace DragonWilds {
         RC::Unreal::Hook::GlobalCallbackId m_characterJsonHook = RC::Unreal::Hook::ERROR_ID;
         bool m_initialized = false;
         bool m_preflightingCharacterJson = false;
-        bool m_localCharacterSweepCompleted = false;
         bool m_registrySummaryReported = false;
+        std::string m_registryCandidateFingerprint;
+        unsigned m_registryCandidatePasses = 0;
 
         bool ResolveBindings();
         void ScrubCharacterJsonBeforeLoad(
             RC::Unreal::UFunction* function, void* parameters);
-        void ScrubLocalCharacterFiles();
         void InstallHooks();
         void RegisterAll();
         void RegisterMissing(RC::Unreal::UClass* dataClass, RC::Unreal::UObject* subsystem);
