@@ -29,6 +29,9 @@ class Service {
     bool reconcilingLocations=false;
     std::map<std::string,std::string> reportedMarkerStates;
     Json networkManifest=Json::array();
+    RC::Unreal::UObject* preparedInstance=nullptr;
+    RC::Unreal::UObject* preparedSubsystem=nullptr;
+    bool preparing=false;
     std::set<std::string> hidden;
     std::map<std::string,OwnedContent::Record> declarations;
     std::map<std::string,RC::Unreal::UObject*> declaredAssets;
@@ -224,6 +227,15 @@ public:
             subsystem=candidate;
         }
         if(!subsystem)throw std::runtime_error("Quest subsystem has not initialized");
+        // InitGameState has both pre and post notifications, and several runtime
+        // consumers can request quest readiness. A successfully prepared game
+        // instance must not be published into the same native maps again: the
+        // engine may normalize or replace map references between the two hooks.
+        if(preparedInstance==instance && preparedSubsystem==subsystem && !networkManifest.empty())return;
+        if(preparing)throw std::runtime_error("Quest registry preparation is already in progress");
+        preparing=true;
+        struct PreparingGuard {bool& Active;~PreparingGuard(){Active=false;}} preparingGuard{preparing};
+        networkManifest=Json::array();preparedInstance=nullptr;preparedSubsystem=nullptr;
         Json manifest=Json::array();
         std::vector<OwnedContent::Record> verifiedDeclarations;
         std::vector<OwnedContent::Record> runtimeOwned;
@@ -246,7 +258,11 @@ public:
                 || (record.InternalNameAsserted && actualName!=record.InternalName))
                 throw std::runtime_error("Cooked quest declaration identity mismatch: "+record.Source);
             object->SetRootSet();declaredAssets[id]=object;
-            const auto netId=QuestRegistry::NativeRegistry::Register(subsystem,instance,object);
+            uint16_t netId{};
+            try {netId=QuestRegistry::NativeRegistry::Register(subsystem,instance,object);}
+            catch(const std::exception& error) {
+                throw std::runtime_error("Declared quest '"+record.InternalName+"' registry preparation failed: "+error.what());
+            }
             manifest.push_back({{"Key",record.InternalName},{"NetId",netId},{"Declaration",record.Source}});
             auto verified=record;verified.InternalName=actualName;verifiedDeclarations.push_back(std::move(verified));
         }
@@ -256,7 +272,11 @@ public:
             if(!assets.contains(key))assets.emplace(key,std::make_unique<NativeAsset>(catalog.Find("_",key),hidden.contains(key)));
             const auto& definition=catalog.Find("_",key);
             assets.at(key)->EnsureIdentity(definition);
-            const auto netId=QuestRegistry::NativeRegistry::Register(subsystem,instance,Asset(key));
+            uint16_t netId{};
+            try {netId=QuestRegistry::NativeRegistry::Register(subsystem,instance,Asset(key));}
+            catch(const std::exception& error) {
+                throw std::runtime_error("Quest '"+key+"' registry preparation failed: "+error.what());
+            }
             manifest.push_back({{"Key",key},{"NetId",netId},{"Definition",document}});
             assets.at(key)->MarkRegistered();
             const auto separator=key.find(':');
@@ -267,7 +287,7 @@ public:
         }
         if(!runtimeOwned.empty())
             OwnedContent::Merge(OwnedContent::LedgerPath(PS::HostServices::StateDirectory()),runtimeOwned);
-        networkManifest=std::move(manifest);
+        networkManifest=std::move(manifest);preparedInstance=instance;preparedSubsystem=subsystem;
     }
     const Json& NetworkManifest() const {return networkManifest;}
 };

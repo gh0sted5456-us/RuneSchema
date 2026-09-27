@@ -72,7 +72,7 @@ class NativeRegistry {
         if(map->Num()<0 || map->Num()>65535 || map->GetMaxIndex()<0 || map->GetMaxIndex()>131072)
             throw std::runtime_error("Quest registry map exceeds bounds");
     }
-    static void Insert(FMapProperty* property,void* data,void* key,void* value) {
+    static void Insert(FMapProperty* property,void* data,void* key,void* value,const std::string& identity) {
         using namespace RC::Unreal;
         CheckMap(property,data);
         auto* map=static_cast<FScriptMap*>(data);
@@ -82,7 +82,8 @@ class NativeRegistry {
         UECustom::FScriptMapHelper helper(property,data);
         helper.ForEachPair([&](void* existingKey,void* existingValue){
             if(kp->Identical(existingKey,key)) {
-                if(found || !vp->Identical(existingValue,value))throw std::runtime_error("Quest registry identity is already occupied");
+                if(found || !vp->Identical(existingValue,value))
+                    throw std::runtime_error("Quest registry "+identity+" is already occupied by another object");
                 found=true;
             }
         });
@@ -101,7 +102,8 @@ class NativeRegistry {
         auto* object=ObjectProperty(property->GetValueProp(),quest);
         NativeValue value(object);
         CopyObjectReference(object,value.Data,quest);
-        Insert(property,data,const_cast<FString*>(&key),value.Data);
+        Insert(property,data,const_cast<FString*>(&key),value.Data,
+            "identity '"+RC::to_string(RC::StringType(*key))+"'");
     }
 public:
     static uint16_t Register(UObject* subsystem,UObject* gameInstance,UObject* quest) {
@@ -187,7 +189,8 @@ private:
             CopyObjectReference(inner,value.Data,quest);stagedArray.Add(value.Data);
             CopyObjectReference(reverseKey,key.Data,quest);
             NativeValue id(reverseValue);
-            idLayout.Write(id.Data,plan.Id);Insert(reverse,reverseStage.Data,key.Data,id.Data);
+            idLayout.Write(id.Data,plan.Id);Insert(reverse,reverseStage.Data,key.Data,id.Data,
+                "reverse identity for '"+RC::to_string(quest->GetPathName())+"'");
         }
         // No allocations or callbacks after publication starts. Stage destructors
         // release the old containers, not the newly published entries.
