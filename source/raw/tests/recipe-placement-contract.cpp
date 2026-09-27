@@ -13,7 +13,11 @@ static std::string Read(const char* path)
     }
     std::ostringstream value;
     value << file.rdbuf();
-    return value.str();
+    const auto raw = value.str();
+    std::string text;
+    text.reserve(raw.size());
+    for (const auto character : raw) if (character != '\r') text += character;
+    return text;
 }
 
 static void Need(const std::string& text, const std::string& token, const char* message)

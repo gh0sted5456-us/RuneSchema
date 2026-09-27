@@ -1,0 +1,11 @@
+{
+  "DT_WearableEquipment": {
+    "Cape_Trimmed_Skillcape_Magic": {
+      "Defense": 13,
+      "MeleeResistance": 5,
+      "RangedResistance": 8,
+      "MagicResistance": 17,
+      "MaxVitalShield": 0
+    }
+  }
+}

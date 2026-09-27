@@ -8,6 +8,8 @@ on:
     paths:
       - 'docs/**'
       - 'source/*.md'
+      - 'source/loaders/**'
+      - 'source/unreal-runeschema/**'
       - 'source/examples/**'
       - 'source/schemas/**'
       - 'source/raw/BASE-BUILDER-IMPORT.md'
@@ -43,11 +45,22 @@ jobs:
       - name: Install documentation dependencies
         run: pip install -r requirements-docs.txt
 
-      - name: Stage authoritative RuneSchema documentation
+      - name: Stage RuneSchema documentation
         shell: bash
         run: |
+          rm -f docs/RELEASE-*.md docs/CURRENT-RELEASE.md
+          rm -f docs/BASELINE-SUBSYSTEM-AUDIT.md
+          rm -f docs/BUILDING-CLONING-FMODEL-AUDIT.md
+          rm -f docs/GAMEPASS-SAVE-SYSTEM.md
+          rm -f docs/HELpy-REDESIGN-AUDIT.md
+          rm -f docs/NATIVE-HOOK-PARITY.md
+          rm -f docs/STARTUP-PERFORMANCE.md
           cp source/*.md docs/
           mv docs/README.md docs/OVERVIEW.md
+          rm -rf docs/loaders
+          cp -R source/loaders docs/loaders
+          rm -rf docs/unreal-runeschema
+          cp -R source/unreal-runeschema docs/unreal-runeschema
           rm -rf docs/examples docs/schemas
           cp -R source/examples docs/examples
           cp -R source/schemas docs/schemas
