@@ -1,142 +1,71 @@
-# Built-in save scrubbing and ownership ledger
+# Persistent-content cleanup
 
-Save scrubbing is part of RuneSchema startup. It is not an optional feature or
-a separate restore system. RuneSchema first loads active definitions and builds
-the same native item, recipe and quest registries used by the game. Only after
-those maps are complete does it remove unresolved persistent records. A partial
-registry can never authorize deletion.
+RuneSchema uses one small ownership vector, not a second save system. Player
+inventory, recipes, quests, journals, appearance, and progress remain in the
+game's native save.
 
-## What the ledger stores
+`OwnedContentLedger.json` contains only the persistent identities that
+successfully loaded on the preceding run, plus their loader kind and owner.
+It contains no player data, quantities, progress, or restorable mod content.
+The file is overwritten after a successful comparison; it is not a history.
 
-`OwnedContentLedger.json` is a compact snapshot of persistent identities that
-successfully loaded during the previous run. A record includes its kind,
-owning mod, persistence ID, and the minimal internal identity required for a
-safe comparison. It does not contain inventory quantities, player progress,
-save backups, or restorable copies of mod content.
+## Lifecycle
 
-The player save remains the only home for inventory, equipment, recipe
-unlocks, quest state, journal/lore unlocks and appearance. The ledger is not a
-second save system: it is only the smallest ownership snapshot needed to prove
-which exact missing IDs RuneSchema may remove on the next startup.
+1. Load every enabled mod and register its content.
+2. Add each successful persistent definition to the current identity vector.
+3. If any loader section fails, mark the vector incomplete and do no pruning.
+4. After native item, recipe, and quest registration finishes, compare the
+   current vector with the preceding successful vector.
+5. Treat only exact RuneSchema-owned IDs missing from the current vector as
+   retired.
+6. After the game hydrates the character, remove those exact retired IDs from
+   live native state and verify their absence.
+7. Commit the current vector only after all applicable cleanup is ready and
+   verified. If a component is not ready, retain the preceding vector and
+   retry at the next native load notification.
 
-Loaders record identities they create or explicitly receive through
-`$declaration`. Declarations are appropriate for cooked PAK content when the
-JSON loader cannot infer ownership safely. They mark ownership only; they do
-not change the cooked object.
+The important boundary is registration before pruning. A temporarily missing
+registry, failed mod section, or storefront-specific hook can never authorize
+deletion. Quest identities enter the current vector during loader processing,
+before quest subsystem preparation, so their registration cannot collide with
+a false retired placeholder.
 
-## Startup sequence
+## Storefront lanes
 
-1. RuneSchema discovers enabled mods and processes their loader files.
-2. Successful persistent definitions form the current snapshot.
-3. The previous snapshot is compared with the current one.
-4. A previous identity becomes retired when its owner is removed or disabled,
-   or when that specific definition or declaration disappears.
-5. Retired, ledger-confirmed RuneSchema identities become exact cleanup
-   candidates in both storefront lanes.
-6. After active custom data is inserted into the native maps, the first
-   complete item/recipe registry publication triggers one bounded menu-phase
-   pass. Inventory, loadout, item progress, recipe progress and complete quest
-   registries are scrubbed of unresolved identities before world entry.
-7. The new ownership snapshot is committed only after its applicable cleanup
-   transaction is verified.
+Steam/GOG and Game Pass use their own runtime detection and state locations,
+but the cleanup rule is identical: operate on the character's live native
+state after registration. Automatic cleanup does not edit Steam JSON files or
+the Xbox WGS container database directly.
 
-Cleanup is keyed by the exact retired `PersistenceID`, not merely by the mod
-folder. Removing one recipe, quest, journal entry, lore entry, building or item
-from an otherwise active mod cannot retire its siblings. The saved quest or
-journal ownership marker must also agree with the historical owner before that
-record is removed.
-
-Items, recipes, quests and buildings use the game's canonical 22-character
-identity form. Journal and lore use their native readable entry IDs, such as
-`RS_Journal_Dawnveil_Armor`; those IDs are intentionally preserved in both the
-player save and the minimal ownership snapshot.
-
-An active definition is retained because it is present in the final native
-registry. RuneSchema does not guess from a name prefix. Steam/GOG can also
-remove any nonempty inventory, equipment, item-progress, recipe-progress or
-quest identity that is absent from the complete native registry. Journal and
-lore remain exact ownership-ledger operations because the game does not expose
-an equivalent complete persistence map for those categories.
-
-## Equipped armor and inventory items
-
-If a player saved while wearing RuneSchema armor and then removes or disables
-the owning mod, the previous ledger supplies the exact `PersistenceID`.
-RuneSchema makes that retired identity temporarily resolvable during load,
-removes its inventory/personal-inventory record, removes the related equipped
-or loadout reference, and verifies that the item is absent. This prevents the
-save from retaining an equipment reference whose DataAsset no longer exists.
-
-The item is deleted, not archived. Reinstalling the mod later is a fresh
-installation and does not restore the removed item.
-
-## Steam/GOG transaction
-
-Steam/GOG character saves are ordinary JSON files under:
+The ownership vector is stored below RuneSchema's storefront-specific state
+directory in:
 
 ```text
-%LOCALAPPDATA%\RSDragonwilds\Saved\SaveCharacters
+settings/safesave/OwnedContentLedger.json
 ```
 
-Before deserialization, RuneSchema first applies exact retired ownership and
-then performs one registry-complete pass in the menu. It parses each bounded
-character file, verifies the resulting JSON, preserves the original under the
-RuneSchema state directory, writes atomically, and reads the result back. A
-failed parse, verification, backup, or write leaves the file unchanged or its
-original recoverable and reports a degraded result.
+## What is removed
 
-RuneSchema state is stored separately at:
+- Inventory/equipment items: exact retired `PersistenceID` only.
+- Recipe unlocks: exact retired recipe identity only.
+- Quest progress: exact retired quest identity with the matching RuneSchema
+  ownership marker only.
+- Categories without a verified live adapter are retained. Their presence
+  prevents final vector commit rather than triggering a speculative edit.
 
-```text
-%LOCALAPPDATA%\RSDragonwilds\Saved\RuneSchema\safesave\OwnedContentLedger.json
-```
+RuneSchema never automatically removes every ID missing from a partially
+available game registry. Reinstalling a removed mod is a fresh installation;
+deleted content is not restored.
 
-## Game Pass/WinGDK transaction
+## Cooked content
 
-The current Dragonwilds package family stores Xbox Game Save data beneath:
+Loader-created objects are recorded automatically. Cooked PAK content can use
+`$declaration` to state its path and `PersistenceID`. A declaration establishes
+RuneSchema ownership for later exact cleanup; it does not modify the asset.
 
-```text
-%LOCALAPPDATA%\Packages\JagexLimited.Dominion_srxstwq7wczqa\SystemAppData\wgs
-```
+## Author requirements
 
-Character `Qjson` payloads contain plain UTF-8 character JSON, but they are
-addressed through a WGS `containers.index`, GUID container directories, and
-blob tables. RuneSchema does not rewrite that database while the game and Xbox
-provider are active.
-
-Instead, RuneSchema registers retired item identities before the character is
-hydrated, removes supported retired state from the live player collections,
-reads those collections back, and lets the game's Xbox provider persist the
-clean result. The Game Pass ledger lives at:
-
-```text
-%LOCALAPPDATA%\Packages\<package-family>\LocalState\RSDragonwilds\Saved\RuneSchema\safesave\OwnedContentLedger.json
-```
-
-If an unsupported category is also pending, item and recipe cleanup still
-continues. The previous ledger remains uncommitted for the unsupported category
-so a later launch can retry it. That pending category cannot redirect Game Pass
-into Steam's file path.
-
-## Failure and recovery rules
-
-- Missing player components, failed native calls, failed read-back, malformed
-  save structure, or unavailable provider callbacks retain the previous
-  snapshot for retry.
-- The cleaner never converts an uncertain result into success.
-- Cleanup is idempotent: retrying an already absent owned identity is safe.
-- An unrelated mod failure does not disable cleanup for a verified item or
-  recipe category.
-- Game Pass and Steam ledgers remain separate after the one-time migration or
-  seed. One storefront cannot overwrite the other's current snapshot.
-
-## Author checklist
-
-- Give every persistent addition a stable `PersistenceID`.
-- Do not reuse a vanilla or another mod's persistence identity.
-- Ship the definition through the appropriate RuneSchema loader, or add a
-  `$declaration` for cooked persistent content.
-- Keep the owning mod folder name stable between releases.
-- Treat removal and reinstallation as destructive reset behavior.
-- Test a character with the item in inventory and equipped, then disable the
-  mod and confirm the save loads and the owned item disappears.
+- Give persistent content a stable, unique `PersistenceID`.
+- Never reuse a vanilla or another mod's identity.
+- Use a RuneSchema loader or `$declaration` for cooked persistent content.
+- Test removal with the content present in a character save.

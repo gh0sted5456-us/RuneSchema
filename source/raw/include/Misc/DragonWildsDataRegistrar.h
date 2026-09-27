@@ -18,10 +18,8 @@ namespace RC::Unreal {
 namespace DragonWilds {
     class DragonWildsDataRegistrar {
     public:
-        // Runs the file-backed, owned-content cleanup as soon as RuneSchema has
-        // finished discovering the active mod set.  This deliberately does not
-        // depend on a GameInstance or a player controller: character JSON must
-        // be clean before the game attempts to deserialize it.
+        // Freezes the fully loaded RuneSchema identity vector. Exact retired
+        // IDs are applied later to live character state through native APIs.
         void PrepareRetiredContent();
         void Initialize();
         void Shutdown();
@@ -33,16 +31,12 @@ namespace DragonWilds {
         RC::Unreal::Hook::GlobalCallbackId m_gameStateHook = RC::Unreal::Hook::ERROR_ID;
         bool m_initialized = false;
         bool m_retiredContentPrepared = false;
-        // One bounded registry-complete character pass per process. This is a
-        // core startup invariant, not an optional maintenance operation.
-        bool m_registryScrubCompleted = false;
-        // Steam JSON cleanup commits immediately after its atomic file pass.
-        // WinGDK must retain the previous ledger until the provider-backed
-        // live state has been scrubbed and read-back verified.
-        std::filesystem::path m_pendingProviderSnapshot;
-        std::set<std::string> m_pendingProviderUnsupportedKinds;
-        bool m_providerBlockReported = false;
-        bool m_providerPartialReported = false;
+        // Both storefront lanes use the same native live-state cleanup. The
+        // previous vector remains pending until every supported kind verifies.
+        std::filesystem::path m_pendingSnapshot;
+        std::set<std::string> m_pendingUnsupportedKinds;
+        bool m_cleanupBlockReported = false;
+        bool m_cleanupPartialReported = false;
         struct RetiredContent {
             RC::Unreal::UObject* Data = nullptr;
             std::string Kind;

@@ -1,15 +1,12 @@
 #pragma once
 #include "Loader/QuestSaveOwnership.h"
-#include "Loader/ModLoadOrder.h"
-#include "Loader/OwnedContentLedger.h"
-#include "Runtime/HostServices.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
 #include "Unreal/Core/HAL/UnrealMemory.hpp"
-#include <filesystem>
 #include <cstring>
+#include <map>
 
 namespace DragonWilds::Quests {
 using namespace RC::Unreal;
@@ -48,17 +45,13 @@ class NativeQuestCleanup {
         if(array.Num()<0 || array.Num()>4096 || (array.Num() && !array.GetData()))throw std::runtime_error("Quest cleanup array bounds invalid");
     }
 public:
-    static size_t Run(UObject* controller,const std::filesystem::path& mods) {
-        if(!controller || !controller->GetWorld())return 0;
+    struct Result { bool Ready=false; size_t Removed=0; };
+    static Result Run(UObject* controller,const std::map<std::string,std::string>& retired) {
+        if(!controller || !controller->GetWorld())return {};
         ActorHelper::FunctionCall authority(controller,TEXT("/Script/Engine.Actor:HasAuthority"));authority.Invoke();
-        if(!authority.Result<bool>())return 0;
+        if(!authority.Result<bool>())return {};
         auto* component=ActorHelper::GetObjectRef(controller,TEXT("QuestProgressComponent"));
-        if(!component || component->GetOuterPrivate()!=controller)return 0;
-        const auto activeOwners=ModLoadOrder::ActiveOwners(mods);
-        std::map<std::string,OwnedContent::Record> absentDeclarations;
-        for(const auto& record:OwnedContent::Absent(
-            OwnedContent::Read(OwnedContent::LedgerPath(PS::HostServices::StateDirectory())),activeOwners))
-            if(record.Kind=="Quest")absentDeclarations.emplace(record.PersistenceID,record);
+        if(!component || component->GetOuterPrivate()!=controller)return {};
         auto* property=ArrayProperty(component,TEXT("Quests"),TEXT("QuestProgress"),56);
         auto* inner=CastField<FStructProperty>(property->GetInner());auto* type=inner->GetStruct().Get();
         auto* dataField=Required<FObjectPropertyBase>(type,TEXT("Data"),0,8);
@@ -92,14 +85,15 @@ public:
                     const auto& text=identity->GetPropertyValue(identity->ContainerPtrToValuePtr<void>(asset));
                     const auto& chars=text.GetCharArray();
                     const auto assetId=chars.Num()>1 && chars.GetData()?RC::to_string(RC::StringType(chars.GetData(),chars.Num()-1)):std::string{};
-                    if(const auto declared=absentDeclarations.find(assetId);declared!=absentDeclarations.end()) {
-                        id=assetId;owner=declared->second.Owner;
+                    if(const auto declared=retired.find(assetId);declared!=retired.end()) {
+                        id=assetId;owner=declared->second;
                     }
                 }
             }
-            if(owner.empty()){retained.Add(row);continue;}
+            const auto retiredQuest=retired.find(id);
+            if(owner.empty() || retiredQuest==retired.end()
+                || retiredQuest->second!=owner){retained.Add(row);continue;}
             if(!allIds.insert(id).second)throw std::runtime_error("Duplicate owned quest identity; cleanup refused");
-            if(activeOwners.contains(owner)){retained.Add(row);continue;}
             for(const auto& variable:savedInts)if(variable.at("QuestVariableName")=="RuneSchema.Phase"
                 && (variable.at("QuestVariableValue")==2 || variable.at("QuestVariableValue")==3))
                 throw std::runtime_error("Removed mod has an unresolved quest exchange; records retained for recovery");
@@ -116,7 +110,7 @@ public:
             if(asset)removedAssets.insert(asset);
             removedIds.insert(id);locations.insert(rowLocations.begin(),rowLocations.end());
         }
-        if(removedIds.empty())return 0;
+        if(removedIds.empty())return {true,0};
         auto* visibility=ArrayProperty(component,TEXT("VisibilityTrackers"),TEXT("LocationVisibilityTracker"),0);
         auto* visibilityType=CastField<FStructProperty>(visibility->GetInner())->GetStruct().Get();
         const auto visibilityStride=visibility->GetInner()->GetElementSize();
@@ -151,7 +145,7 @@ public:
             property->CopyCompleteValue(&live,original.Data);visibility->CopyCompleteValue(&liveVisibility,oldVisibility.Data);
             std::memcpy(trackedPtr,&oldTracked,sizeof(oldTracked));throw;
         }
-        return removedIds.size();
+        return {true,removedIds.size()};
     }
 };
 }

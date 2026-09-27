@@ -35,6 +35,7 @@ inline bool SnapshotActive=false;
 inline std::filesystem::path SnapshotPath;
 inline std::map<std::string,Record> SnapshotPrevious;
 inline std::map<std::string,Record> SnapshotCurrent;
+inline bool SnapshotComplete=false;
 inline std::filesystem::path LedgerPath(const std::filesystem::path& settingsDirectory) {
     return settingsDirectory / "safesave" / "OwnedContentLedger.json";
 }
@@ -138,7 +139,13 @@ inline void BeginSnapshot(const std::filesystem::path& path) {
     SnapshotPath=path.lexically_normal();
     SnapshotPrevious=std::move(previous);
     SnapshotCurrent.clear();
+    SnapshotComplete=true;
     SnapshotActive=true;
+}
+
+inline void MarkSnapshotIncomplete() {
+    std::lock_guard lock(SnapshotMutex);
+    if(SnapshotActive)SnapshotComplete=false;
 }
 
 inline void Merge(const std::filesystem::path& path,const std::vector<Record>& current) {
@@ -168,6 +175,8 @@ inline std::vector<Record> CompareSnapshot(const std::filesystem::path& path) {
     std::lock_guard lock(SnapshotMutex);
     if(!SnapshotActive || path.lexically_normal()!=SnapshotPath)
         throw std::runtime_error("RuneSchema owned-content snapshot was not started");
+    if(!SnapshotComplete)
+        throw std::runtime_error("one or more mod sections did not load; pruning was skipped and the previous identity snapshot was retained");
     std::vector<Record> missing;
     for(const auto& [id,value]:SnapshotPrevious)
         if(!SnapshotCurrent.contains(id))missing.push_back(value);
@@ -182,18 +191,9 @@ inline void CommitSnapshot(const std::filesystem::path& path) {
     SnapshotPrevious.clear();
     SnapshotCurrent.clear();
     SnapshotPath.clear();
+    SnapshotComplete=false;
     SnapshotActive=false;
 }
-inline std::vector<Record> Absent(const std::vector<Record>& records,const std::set<std::string>& active) {
-    const auto key=[](std::string value){std::transform(value.begin(),value.end(),value.begin(),
-        [](unsigned char c){return static_cast<char>(std::tolower(c));});return value;};
-    std::set<std::string> activeKeys;
-    for(const auto& owner:active)activeKeys.insert(key(owner));
-    std::vector<Record> result;
-    for(const auto& value:records)if(!activeKeys.contains(key(value.Owner)))result.push_back(value);
-    return result;
-}
-
 inline bool LooksLikeItemClone(const std::string& destination,const std::string& source) {
     auto lower=[](std::string value){std::transform(value.begin(),value.end(),value.begin(),
         [](unsigned char c){return static_cast<char>(std::tolower(c));});return value;};
@@ -203,67 +203,4 @@ inline bool LooksLikeItemClone(const std::string& destination,const std::string&
         || origin.find("item_")!=std::string::npos;
 }
 
-inline std::vector<Record> DiscoverDisabledDefinitions(
-    const std::filesystem::path& mods,const std::set<std::string>& active) {
-    std::map<std::string,Record> found;
-    if(!std::filesystem::is_directory(mods))return {};
-    for(const auto& folder:std::filesystem::directory_iterator(mods)) {
-        if(!folder.is_directory())continue;
-        const auto owner=folder.path().filename().string();
-        if(active.contains(owner))continue;
-        const auto read=[&](const std::filesystem::path& path,const std::string& kind,bool clones) {
-        PS::JsonHelpers::ParseJsonFilesInPathIsolated(path,
-            [&](const nlohmann::json& document){
-                if(!document.is_object())return;
-                if(clones)for(const auto& [destination,value]:document.items()) {
-                    if(!value.is_object() || !value.contains("$Clone")
-                        || !value.at("$Clone").is_string())continue;
-                    const auto source=value.at("$Clone").get<std::string>();
-                    if(!LooksLikeItemClone(destination,source))continue;
-                    Record record{"Item",owner,value.value("PersistenceID",std::string{}),
-                        value.value("InternalName",std::string{}),destination};
-                    Validate(record);
-                    const auto existing=found.find(record.PersistenceID);
-                    if(existing!=found.end() && existing->second.Owner!=record.Owner)
-                        throw std::runtime_error("Disabled RuneSchema definitions reuse an owned identity");
-                    found[record.PersistenceID]=std::move(record);
-                }
-                for(auto record:Declarations(document,owner,kind)) {
-                    const auto existing=found.find(record.PersistenceID);
-                    if(existing!=found.end() && existing->second.Owner!=record.Owner)
-                        throw std::runtime_error("Disabled RuneSchema declarations reuse an owned identity");
-                    found[record.PersistenceID]=std::move(record);
-                }
-            },[](const std::filesystem::path&,const std::string&){});
-        };
-        read(folder.path()/"assets","",true);
-        read(folder.path()/"buildings","Building",false);
-        read(folder.path()/"quests","Quest",false);
-        read(folder.path()/"journal","Journal",false);
-        read(folder.path()/"lore","Lore",false);
-    }
-    std::vector<Record> result;for(auto& [id,value]:found)result.push_back(std::move(value));
-    return result;
-}
-
-inline std::vector<Record> ReadCloneManifest(const std::filesystem::path& path) {
-    if(!std::filesystem::exists(path))return {};
-    const auto document=nlohmann::json::parse(PS::ConfigFiles::Read(path,8*1024*1024));
-    if(!document.is_object() || document.value("Kind",std::string{})!="RuneSchemaCloneManifest"
-        || !document.contains("Records") || !document.at("Records").is_array()
-        || document.at("Records").size()>4096)
-        throw std::runtime_error("Unsupported RuneSchema clone manifest");
-    std::vector<Record> result;
-    for(const auto& row:document.at("Records")) {
-        if(!row.is_object() || !row.value("Registered",false))continue;
-        const auto source=row.value("SourceAsset",std::string{});
-        const auto destination=row.value("AssetPath",std::string{});
-        if(!LooksLikeItemClone(destination,source))continue;
-        Record record{"Item",row.value("CreatingMod",std::string{}),
-            row.value("PersistenceID",std::string{}),row.value("InternalName",std::string{}),
-            destination.empty()?source:destination};
-        Validate(record);result.push_back(std::move(record));
-    }
-    return result;
-}
 }

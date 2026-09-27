@@ -171,13 +171,20 @@ public:
     void Load(const std::string& mod,const Json& data) {
         if(data.is_object() && data.contains("$declaration")) {
             auto pendingDeclarations=declarations;
-            for(const auto& record:OwnedContent::Declarations(data,mod,"Quest")) {
+            const auto present=OwnedContent::Declarations(data,mod,"Quest");
+            for(const auto& record:present) {
                 const auto found=pendingDeclarations.find(record.PersistenceID);
                 if(found!=pendingDeclarations.end() && found->second.Owner!=record.Owner)
                     throw std::runtime_error("Quest declaration ownership transfer refused");
                 pendingDeclarations[record.PersistenceID]=record;
             }
             declarations=std::move(pendingDeclarations);
+            // Presence is recorded during definition loading, before the
+            // retired-ID comparison. Native verification still happens when
+            // the world registry is available; failure retains data rather
+            // than falsely pruning an installed quest.
+            OwnedContent::Merge(OwnedContent::LedgerPath(
+                PS::HostServices::StateDirectory()),present);
             if(data.size()==1)return;
             throw std::runtime_error("A quest $declaration document may contain only declaration metadata");
         }
@@ -188,6 +195,17 @@ public:
         };
         if(data.is_array())for(const auto& entry:data)add(entry);else add(data);
         catalog=std::move(pending);definitions=std::move(documents);
+        std::vector<OwnedContent::Record> present;
+        for(const auto& [key,document]:definitions) {
+            const auto& definition=catalog.Find("_",key);
+            const auto separator=key.find(':');
+            if(separator==std::string::npos || separator==0)
+                throw std::runtime_error("Quest identity has no owning mod prefix: "+key);
+            present.push_back({"Quest",key.substr(0,separator),definition.PersistenceId,
+                definition.Key,key});
+        }
+        if(!present.empty())OwnedContent::Merge(OwnedContent::LedgerPath(
+            PS::HostServices::StateDirectory()),present);
         for(const auto& [key,document]:definitions){const auto& q=catalog.Find("_",key);if(q.Marker)hasLocations=true;for(const auto& [id,entries]:q.Stages)for(const auto& entry:entries)if(entry.Marker)hasLocations=true;}
     }
     bool Empty() const {return definitions.empty() && declarations.empty();}
@@ -237,8 +255,6 @@ public:
         struct PreparingGuard {bool& Active;~PreparingGuard(){Active=false;}} preparingGuard{preparing};
         networkManifest=Json::array();preparedInstance=nullptr;preparedSubsystem=nullptr;
         Json manifest=Json::array();
-        std::vector<OwnedContent::Record> verifiedDeclarations;
-        std::vector<OwnedContent::Record> runtimeOwned;
         auto* questType=ActorHelper::ResolveClass(TEXT("/Script/Dominion.QuestData"));
         if(!declarations.empty() && !questType)throw std::runtime_error("QuestData class unavailable for declarations");
         for(const auto& [id,record]:declarations) {
@@ -264,10 +280,7 @@ public:
                 throw std::runtime_error("Declared quest '"+record.InternalName+"' registry preparation failed: "+error.what());
             }
             manifest.push_back({{"Key",record.InternalName},{"NetId",netId},{"Declaration",record.Source}});
-            auto verified=record;verified.InternalName=actualName;verifiedDeclarations.push_back(std::move(verified));
         }
-        if(!verifiedDeclarations.empty())
-            OwnedContent::Merge(OwnedContent::LedgerPath(PS::HostServices::StateDirectory()),verifiedDeclarations);
         for(const auto& [key,document]:definitions) {
             if(!assets.contains(key))assets.emplace(key,std::make_unique<NativeAsset>(catalog.Find("_",key),hidden.contains(key)));
             const auto& definition=catalog.Find("_",key);
@@ -279,14 +292,7 @@ public:
             }
             manifest.push_back({{"Key",key},{"NetId",netId},{"Definition",document}});
             assets.at(key)->MarkRegistered();
-            const auto separator=key.find(':');
-            if(separator==std::string::npos || separator==0)
-                throw std::runtime_error("Quest identity has no owning mod prefix: "+key);
-            runtimeOwned.push_back({"Quest",key.substr(0,separator),definition.PersistenceId,
-                definition.Key,key});
         }
-        if(!runtimeOwned.empty())
-            OwnedContent::Merge(OwnedContent::LedgerPath(PS::HostServices::StateDirectory()),runtimeOwned);
         networkManifest=std::move(manifest);preparedInstance=instance;preparedSubsystem=subsystem;
     }
     const Json& NetworkManifest() const {return networkManifest;}

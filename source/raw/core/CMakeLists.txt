@@ -213,7 +213,9 @@ if(PROJECT_IS_TOP_LEVEL)
     add_executable(owned-save-cleanup-contract ../tests/owned-save-cleanup-contract.cpp)
     add_test(NAME owned-save-cleanup-contract COMMAND owned-save-cleanup-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Misc/DragonWildsDataRegistrar.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/AssetProvenance.cpp")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/AssetProvenance.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/QuestService.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp")
     add_executable(item-grid-pagination ../tests/item-grid-pagination.cpp)
     add_test(NAME item-grid-pagination COMMAND item-grid-pagination
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Generator/SpawnToolsPanel.h"

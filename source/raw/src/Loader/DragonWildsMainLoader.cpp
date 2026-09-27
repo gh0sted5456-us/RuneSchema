@@ -268,10 +268,6 @@ namespace DragonWilds {
             PS::HostServices::StateDirectory()));
         InitializeMods(EEngineLifecyclePhase::PostEngineInit);
         LoadMods(EEngineLifecyclePhase::PostEngineInit);
-        // Active owners and their persistent IDs are now known.  Permanently
-        // remove records owned by absent/disabled mods before the character
-        // selection/load path can deserialize them.
-        m_dataRegistrar.PrepareRetiredContent();
         PS::StartupTrace::Mark("PostEngineInit complete");
     }
 
@@ -303,6 +299,10 @@ namespace DragonWilds {
         PS::StartupTrace::Mark("data registrar begin");
         try {m_dataRegistrar.Initialize();}
         catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][SERVICE:data-registrar] Registration/save cleanup unavailable: {}.\n"),PS::ToWideSafe(error.what()));}
+        // Freeze and compare ownership only after every loader has finished
+        // and the native item/recipe registries have accepted current content.
+        // Cleanup itself runs once against live character state after load.
+        m_dataRegistrar.PrepareRetiredContent();
         try {m_registryBridge.Start();}
         catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][SERVICE:registry-bridge] Networking bridge unavailable: {}.\n"),PS::ToWideSafe(error.what()));}
         PS::StartupTrace::Mark("GameInstanceInit loaders complete (deferred world work may remain)");
@@ -678,7 +678,7 @@ namespace DragonWilds {
                     loader->Load(path,owner,engineLifecyclePhase);
                 });
                 try {loader->FinalizeLoad(engineLifecyclePhase);}
-                catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL] Definition finalization failed: {}. Other loaders continue.\n"),RC::to_generic_string(kind),PS::ToWideSafe(error.what()));}
+                catch(const std::exception& error){OwnedContent::MarkSnapshotIncomplete();PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL] Definition finalization failed: {}. Other loaders continue.\n"),RC::to_generic_string(kind),PS::ToWideSafe(error.what()));}
             }
         }
         if (engineLifecyclePhase == EEngineLifecyclePhase::PostEngineInit && m_spawnLoader
@@ -720,7 +720,11 @@ namespace DragonWilds {
                     const auto loaderKind = loader->GetModFolderType();
                     PS::StartupTrace::Mark("load loader begin: " + RC::to_string(modName)
                         + "/" + loaderKind);
-                    if (!loader->Load(modPath, modName, engineLifecyclePhase)) modSuccessful=false;
+                    if (!loader->Load(modPath, modName, engineLifecyclePhase)) {
+                        modSuccessful=false;
+                        if(engineLifecyclePhase==EEngineLifecyclePhase::PostEngineInit)
+                            OwnedContent::MarkSnapshotIncomplete();
+                    }
                     PS::StartupTrace::Mark("load loader end: " + RC::to_string(modName)
                         + "/" + loaderKind);
                 }
@@ -733,6 +737,8 @@ namespace DragonWilds {
             }
             catch (const std::exception& e)
             {
+                if(engineLifecyclePhase==EEngineLifecyclePhase::PostEngineInit)
+                    OwnedContent::MarkSnapshotIncomplete();
                 PS::Log<LogLevel::Warning>(STR("[MOD:{}][PARTIAL] Metadata or discovery failed: {}. Other mods continue.\n"), modName, PS::ToWideSafe(e.what()));
             }
         });
@@ -741,10 +747,14 @@ namespace DragonWilds {
             PS::StartupTrace::Mark("finalize loader: " + loader->GetModFolderType());
             try { loader->FinalizeLoad(engineLifecyclePhase); }
             catch (const std::exception& e) {
+                if(engineLifecyclePhase==EEngineLifecyclePhase::PostEngineInit)
+                    OwnedContent::MarkSnapshotIncomplete();
                 PS::StartupTrace::Mark("ERROR finalize: " + loader->GetModFolderType());
                 PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL] Finalization failed: {}. Other loaders continue.\n"), RC::to_generic_string(loader->GetModFolderType()), PS::ToWideSafe(e.what()));
             }
             catch (...) {
+                if(engineLifecyclePhase==EEngineLifecyclePhase::PostEngineInit)
+                    OwnedContent::MarkSnapshotIncomplete();
                 PS::StartupTrace::Mark("ERROR finalize: " + loader->GetModFolderType());
                 PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL] Finalization failed after an unknown error. Other loaders continue.\n"), RC::to_generic_string(loader->GetModFolderType()));
             }

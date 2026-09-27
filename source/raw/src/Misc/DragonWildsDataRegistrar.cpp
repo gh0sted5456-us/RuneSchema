@@ -1,15 +1,10 @@
 #include "Utility/NativeFunctionHook.h"
 #include <cstring>
 #include <algorithm>
-#include <filesystem>
 #include <limits>
 #include <map>
 #include <unordered_set>
 #include <vector>
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <Windows.h>
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
 #include "Unreal/CoreUObject/UObject/FStrProperty.hpp"
@@ -25,14 +20,10 @@
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "Utility/Logging.h"
-#include "Core/ConfigFiles.h"
-#include "Core/SaveCleanup.h"
 #include "Core/SaveRegistrySnapshot.h"
 #include "Loader/OwnedContentLedger.h"
-#include "Loader/ModLoadOrder.h"
 #include "Loader/NativeQuestCleanup.h"
 #include "Runtime/HostServices.h"
-#include "Runtime/Storefront.h"
 #include "Misc/DragonWildsDataRegistrar.h"
 
 using namespace RC;
@@ -42,313 +33,6 @@ namespace DragonWilds {
     static constexpr const TCHAR* ItemDataClassPath = TEXT("/Script/Dominion.ItemData");
     static constexpr const TCHAR* RecipeDataClassPath = TEXT("/Script/Dominion.RecipeData");
     static constexpr const TCHAR* QuestDataClassPath = TEXT("/Script/Dominion.QuestData");
-
-    static std::filesystem::path CharacterSaveDirectory()
-    {
-        const auto required=GetEnvironmentVariableW(L"LOCALAPPDATA",nullptr,0);
-        if(!required)throw std::runtime_error("LOCALAPPDATA is unavailable");
-        std::vector<wchar_t> value(required);
-        if(GetEnvironmentVariableW(L"LOCALAPPDATA",value.data(),required)+1!=required)
-            throw std::runtime_error("LOCALAPPDATA changed while it was read");
-        return std::filesystem::path(value.data())/L"RSDragonwilds"/L"Saved"/L"SaveCharacters";
-    }
-
-    static std::filesystem::path PreserveCharacterSave(
-        const std::filesystem::path& path)
-    {
-        // SafeSave backups are recovery state, not game saves. Keep them out of
-        // SaveCharacters and rotate a small fixed history instead of creating
-        // an unbounded series of numbered .bak files beside every character.
-        constexpr unsigned BackupRetention = 3;
-        const auto folder = PS::HostServices::StateDirectory()
-            / "safesave" / "backups";
-        std::error_code error;
-        std::filesystem::create_directories(folder, error);
-        if (error)
-            throw std::system_error(error,
-                "Cannot create the RuneSchema SafeSave backup directory");
-
-        auto base = folder / path.filename();
-        base += L".before-clean.bak";
-        const auto slot = [&](unsigned index) {
-            auto value = base;
-            if (index) value += L"." + std::to_wstring(index);
-            return value;
-        };
-
-        auto pending = base;
-        pending += L".next";
-        std::filesystem::remove(pending, error);
-        if (error)
-            throw std::system_error(error,
-                "Cannot clear the pending RuneSchema SafeSave backup");
-        if (!std::filesystem::copy_file(path, pending,
-                std::filesystem::copy_options::overwrite_existing, error))
-        {
-            if (!error) error = std::make_error_code(std::errc::io_error);
-            throw std::system_error(error,
-                "Cannot preserve character save before cleanup");
-        }
-
-        try
-        {
-            for (unsigned index = BackupRetention - 1; index > 0; --index)
-            {
-                const auto from = slot(index - 1);
-                const auto to = slot(index);
-                const bool exists = std::filesystem::exists(from, error);
-                if (error)
-                    throw std::system_error(error,
-                        "Cannot inspect RuneSchema SafeSave backup rotation");
-                if (!exists) continue;
-
-                std::filesystem::remove(to, error);
-                if (error)
-                    throw std::system_error(error,
-                        "Cannot prune an old RuneSchema SafeSave backup");
-                std::filesystem::rename(from, to, error);
-                if (error)
-                    throw std::system_error(error,
-                        "Cannot rotate RuneSchema SafeSave backups");
-            }
-
-            std::filesystem::rename(pending, slot(0), error);
-            if (error)
-                throw std::system_error(error,
-                    "Cannot activate the new RuneSchema SafeSave backup");
-        }
-        catch (...)
-        {
-            std::error_code ignored;
-            std::filesystem::remove(pending, ignored);
-            throw;
-        }
-        return slot(0);
-    }
-
-    static void PruneLegacyCharacterBackups(
-        const std::filesystem::path& source)
-    {
-        const auto prefix=source.filename().wstring()
-            +L".runeschema-before-clean";
-        std::size_t removed=0;
-        std::error_code iterationError;
-        std::filesystem::directory_iterator it(source.parent_path(),iterationError);
-        if(iterationError)
-        {
-            PS::Log<LogLevel::Warning>(
-                STR("[SAVE-CLEANER] Could not inspect legacy backup files beside '{}': {}.\n"),
-                source.filename().native(),PS::ToWideSafe(iterationError.message().c_str()));
-            return;
-        }
-        for(const auto& entry:it)
-        {
-            std::error_code typeError;
-            if(!entry.is_regular_file(typeError) || typeError)continue;
-            const auto name=entry.path().filename().wstring();
-            if(name.size()<prefix.size()+4
-                || name.compare(0,prefix.size(),prefix)!=0
-                || name.compare(name.size()-4,4,L".bak")!=0)
-                continue;
-            std::error_code removeError;
-            if(std::filesystem::remove(entry.path(),removeError))++removed;
-            else if(removeError)
-                PS::Log<LogLevel::Warning>(
-                    STR("[SAVE-CLEANER] Could not remove legacy backup '{}': {}.\n"),
-                    entry.path().filename().native(),PS::ToWideSafe(removeError.message().c_str()));
-        }
-        if(removed)
-            PS::Log<LogLevel::Normal>(
-                STR("[SAVE-CLEANER] Removed {} legacy RuneSchema backup file(s) from SaveCharacters; recovery copies now live under Saved/RuneSchema/safesave/backups.\n"),
-                removed);
-    }
-
-    static bool CleanRetiredCharacterSaves(
-        const std::vector<OwnedContent::Record>& retired)
-    {
-        std::unordered_map<std::string,std::string> items,recipes,quests;
-        DragonWilds::JournalSave::Owners journal;
-        for(const auto& record:retired)
-        {
-            if(record.Kind=="Item")items.emplace(record.PersistenceID,record.Owner);
-            else if(record.Kind=="Recipe")recipes.emplace(record.PersistenceID,record.Owner);
-            else if(record.Kind=="Quest")quests.emplace(record.PersistenceID,record.Owner);
-            else if(record.Kind=="Journal" || record.Kind=="Lore")journal.emplace(record.PersistenceID,record.Owner);
-        }
-        if(items.empty() && recipes.empty() && quests.empty() && journal.empty())return true;
-        if (PS::Storefront::CurrentNativeLane() == PS::Storefront::NativeLane::GamePassNative)
-        {
-            // WinGDK persists this title through Xbox Game Save (WGS). Its
-            // provider database is not a directory of independently writable
-            // character JSON files. Keep the retired identities alive for the
-            // reflected post-load scrub below; the game then writes the clean
-            // state back through its active provider lock.
-            PS::Log<LogLevel::Verbose>(
-                STR("[SAVE-CLEANER][PROVIDER] Xbox WGS save detected at '{}'; using in-game owned-content cleanup instead of direct Steam JSON editing.\n"),
-                PS::HostServices::XboxSaveRoot().native());
-            return true;
-        }
-        const auto folder=CharacterSaveDirectory();
-        std::error_code statusError;
-        if(!std::filesystem::exists(folder,statusError))return true;
-        if(statusError || !std::filesystem::is_directory(folder,statusError) || statusError)
-            throw std::runtime_error("Character-save directory is unreadable");
-        std::size_t entries=0,files=0,bytes=0,changed=0,removed=0,profiles=0;
-        bool complete=true;
-        for(const auto& entry:std::filesystem::directory_iterator(folder))
-        {
-            if(++entries>512)throw std::runtime_error("Character-save directory exceeds 512 entries");
-            if(!entry.is_regular_file() || entry.path().extension()!=L".json")continue;
-            if(++files>64)throw std::runtime_error("Character-save directory exceeds 64 JSON files");
-            const auto size=entry.file_size();
-            if(size>8*1024*1024 || (bytes+=size)>64*1024*1024)
-                throw std::runtime_error("Character-save scan exceeds its bounded-read limit");
-            std::filesystem::path backup;
-            try
-            {
-                const auto source=nlohmann::json::parse(
-                    PS::ConfigFiles::Read(entry.path(),8*1024*1024));
-                const auto documentKind=PS::SaveCleanup::ClassifyCharacterDocument(source);
-                if(documentKind==PS::SaveCleanup::CharacterDocumentKind::ProfileOnly)
-                {
-                    // A profile-only character has no gameplay persistence to
-                    // prune. It remains eligible on later starts after the game
-                    // adds GameProgress to the same document.
-                    ++profiles;
-                    continue;
-                }
-                const auto plan=PS::SaveCleanup::PlanOwned(
-                    source,items,recipes,quests,journal);
-                if(plan.Removed.empty())continue;
-                const auto serialized=plan.Save.dump();
-                if(nlohmann::json::parse(serialized)!=plan.Save)
-                    throw std::runtime_error("Cleaned character save failed JSON verification");
-                backup=PreserveCharacterSave(entry.path());
-                PS::ConfigFiles::Write(entry.path(),serialized);
-                if(nlohmann::json::parse(PS::ConfigFiles::Read(
-                    entry.path(),8*1024*1024))!=plan.Save)
-                    throw std::runtime_error("Written character save failed verification");
-                PruneLegacyCharacterBackups(entry.path());
-                ++changed;removed+=plan.Removed.size();
-                PS::Log<LogLevel::Normal>(
-                    STR("[SAVE-CLEANER][OWNED-ONLY] Cleaned {} retired RuneSchema record(s) from '{}' before character deserialization. Backup: '{}'.\n"),
-                    plan.Removed.size(),entry.path().filename().native(),backup.native());
-            }
-            catch(const std::exception& error)
-            {
-                complete=false;
-                if(backup.empty())
-                    PS::Log<LogLevel::Error>(
-                        STR("[SAVE-CLEANER][DEGRADED] Character save '{}' was left unchanged: {}.\n"),
-                        entry.path().filename().native(),PS::ToWideSafe(error.what()));
-                else
-                    PS::Log<LogLevel::Error>(
-                        STR("[SAVE-CLEANER][DEGRADED] Cleanup of character save '{}' did not complete; its original is preserved at '{}': {}.\n"),
-                        entry.path().filename().native(),backup.native(),PS::ToWideSafe(error.what()));
-            }
-        }
-        if(changed)
-            PS::Log<LogLevel::Normal>(
-                STR("[SAVE-CLEANER][OWNED-ONLY] Pre-load cleanup completed for {} character save(s), removing {} ledger-confirmed record(s) from {} absent or disabled owner(s).\n"),
-                changed,removed,items.size()+recipes.size()+quests.size()+journal.size());
-        if(profiles)
-            PS::Log<LogLevel::Verbose>(
-                STR("[SAVE-CLEANER][STEAM] Skipped {} profile-only character document(s) with no gameplay persistence.\n"),
-                profiles);
-        return complete;
-    }
-
-    static bool ScrubUnknownCharacterSaves(
-        const PS::SaveCleanup::RegistrySnapshot& registry)
-    {
-        if (!registry.Ready())
-            throw std::runtime_error(
-                "persistent registries are incomplete; startup scrub refused");
-        if (PS::Storefront::CurrentNativeLane()
-            == PS::Storefront::NativeLane::GamePassNative)
-        {
-            // WGS containers are provider-owned. Missing RuneSchema content is
-            // removed through the post-load live adapters below; directly
-            // rewriting container blobs would bypass Xbox locking and checksums.
-            return true;
-        }
-
-        const auto folder = CharacterSaveDirectory();
-        std::error_code statusError;
-        if (!std::filesystem::exists(folder, statusError)) return true;
-        if (statusError || !std::filesystem::is_directory(folder, statusError)
-            || statusError)
-            throw std::runtime_error("character-save directory is unreadable");
-
-        std::size_t entries = 0, files = 0, bytes = 0;
-        std::size_t changed = 0, removed = 0, profiles = 0;
-        bool complete = true;
-        for (const auto& entry : std::filesystem::directory_iterator(folder))
-        {
-            if (++entries > 512)
-                throw std::runtime_error(
-                    "character-save directory exceeds 512 entries");
-            if (!entry.is_regular_file() || entry.path().extension() != L".json")
-                continue;
-            if (++files > 64)
-                throw std::runtime_error(
-                    "character-save directory exceeds 64 JSON files");
-            const auto size = entry.file_size();
-            if (size > 8 * 1024 * 1024 || (bytes += size) > 64 * 1024 * 1024)
-                throw std::runtime_error(
-                    "character-save scan exceeds its bounded-read limit");
-
-            std::filesystem::path backup;
-            try
-            {
-                const auto source = nlohmann::json::parse(
-                    PS::ConfigFiles::Read(entry.path(), 8 * 1024 * 1024));
-                const auto documentKind =
-                    PS::SaveCleanup::ClassifyCharacterDocument(source);
-                if (documentKind
-                    == PS::SaveCleanup::CharacterDocumentKind::ProfileOnly)
-                {
-                    ++profiles;
-                    continue;
-                }
-                const auto plan = PS::SaveCleanup::Plan(
-                    source, {}, false, &registry, false, true);
-                if (plan.Removed.empty()) continue;
-
-                const auto serialized = plan.Save.dump();
-                if (nlohmann::json::parse(serialized) != plan.Save)
-                    throw std::runtime_error(
-                        "scrubbed character save failed JSON verification");
-                backup = PreserveCharacterSave(entry.path());
-                PS::ConfigFiles::Write(entry.path(), serialized);
-                if (nlohmann::json::parse(PS::ConfigFiles::Read(
-                        entry.path(), 8 * 1024 * 1024)) != plan.Save)
-                    throw std::runtime_error(
-                        "written character save failed verification");
-                PruneLegacyCharacterBackups(entry.path());
-                ++changed;
-                removed += plan.Removed.size();
-            }
-            catch (const std::exception& error)
-            {
-                complete = false;
-                if (backup.empty())
-                    PS::Log<LogLevel::Error>(
-                        STR("[SAVE-SCRUB][DEGRADED] Character save '{}' was left unchanged: {}.\n"),
-                        entry.path().filename().native(),
-                        PS::ToWideSafe(error.what()));
-                else
-                    PS::Log<LogLevel::Error>(
-                        STR("[SAVE-SCRUB][DEGRADED] Character save '{}' retained its original at '{}': {}.\n"),
-                        entry.path().filename().native(), backup.native(),
-                        PS::ToWideSafe(error.what()));
-            }
-        }
-        PS::Log<LogLevel::Normal>(
-            STR("[SAVE-SCRUB] Registry-complete startup pass checked {} gameplay save(s), changed {}, and removed {} unresolved persistent record(s).\n"),
-            files - profiles, changed, removed);
-        return complete;
-    }
 
     static constexpr struct {
         const TCHAR* DataClassPath;
@@ -362,6 +46,7 @@ namespace DragonWilds {
     static constexpr const TCHAR* SaveLoadHookPaths[] = {
         TEXT("/Script/Dominion.DominionPlayerController:OnInventoryLoadedFromSave"),
         TEXT("/Script/Dominion.DominionPlayerController:OnPersonalInventoryLoadedFromSave"),
+        TEXT("/Script/Dominion.QuestProgressComponent:OnQuestsUpdated"),
     };
 
     static bool IsCustomDataPath(const RC::StringType& path)
@@ -381,7 +66,6 @@ namespace DragonWilds {
                 return;
             }
 
-            PrepareRetiredContent();
             InstallHooks();
             m_initialized = true;
         }
@@ -451,7 +135,10 @@ namespace DragonWilds {
             }, this);
             m_functionHooks.emplace_back(function, id);
             const auto postId = PS::RegisterNativePostHook(function, [](UnrealScriptFunctionCallableContext& context, void* customData) {
-                static_cast<DragonWildsDataRegistrar*>(customData)->ScrubRetiredContent(context.Context);
+                auto* target=context.Context;
+                auto* controller=target && target->GetClassPrivate()->GetFName()==FName(TEXT("QuestProgressComponent"),FNAME_Add)
+                    ? target->GetOuterPrivate():target;
+                static_cast<DragonWildsDataRegistrar*>(customData)->ScrubRetiredContent(controller);
             }, this);
             m_functionHooks.emplace_back(function, postId);
         }
@@ -470,13 +157,9 @@ namespace DragonWilds {
             // run; finalization returns only identities that disappeared and
             // atomically overwrites the snapshot with the current set.
             const auto retired=OwnedContent::CompareSnapshot(path);
-            if(!CleanRetiredCharacterSaves(retired))
-                throw std::runtime_error("one or more character saves could not be cleaned; the previous identity snapshot was retained for retry");
-            const bool providerCleanup = PS::Storefront::CurrentNativeLane()
-                == PS::Storefront::NativeLane::GamePassNative && !retired.empty();
-            if (providerCleanup)
+            if (!retired.empty())
             {
-                m_pendingProviderSnapshot = path;
+                m_pendingSnapshot = path;
                 for (const auto& record : retired)
                     // Building declarations live in world state, not the
                     // character provider. Quest state has a native live
@@ -484,9 +167,9 @@ namespace DragonWilds {
                     // serialized-state adapter.
                     if (record.Kind != "Item" && record.Kind != "Recipe"
                         && record.Kind != "Quest" && record.Kind != "Building")
-                        m_pendingProviderUnsupportedKinds.insert(record.Kind);
+                        m_pendingUnsupportedKinds.insert(record.Kind);
                 PS::Log<LogLevel::Normal>(
-                    STR("[SAVE-CLEANER][PROVIDER][PENDING] Retaining the previous Game Pass identity snapshot until provider-backed cleanup is read-back verified.\n"));
+                    STR("[SAVE-CLEANER][PENDING] {} exact RuneSchema identity removal(s) will be applied once to live character state after load.\n"),retired.size());
             }
             else
             {
@@ -522,8 +205,8 @@ namespace DragonWilds {
                     {item, record.Kind, record.Owner, record.PersistenceID});
             }
             if (!m_retiredContent.empty())
-                PS::Log<LogLevel::Normal>(
-                    STR("[SAVE-CLEANER][OWNED-ONLY] Prepared {} retired persistent-content tombstone(s) for disabled or removed RuneSchema mods.\n"),
+                PS::Log<LogLevel::Verbose>(
+                    STR("[SAVE-CLEANER] Prepared {} exact retired identity reference(s).\n"),
                     m_retiredContent.size());
         }
         catch (const std::exception& error)
@@ -536,23 +219,23 @@ namespace DragonWilds {
 
     void DragonWildsDataRegistrar::ScrubRetiredContent(UObject* controller)
     {
-        if (!controller || (m_retiredContent.empty() && m_pendingProviderSnapshot.empty())) return;
+        if (!controller || (m_retiredContent.empty() && m_pendingSnapshot.empty())) return;
         try
         {
-            if (!m_pendingProviderSnapshot.empty()
-                && !m_pendingProviderUnsupportedKinds.empty())
+            if (!m_pendingSnapshot.empty()
+                && !m_pendingUnsupportedKinds.empty())
             {
-                if (!m_providerBlockReported)
+                if (!m_cleanupBlockReported)
                 {
-                    m_providerBlockReported = true;
+                    m_cleanupBlockReported = true;
                     std::string kinds;
-                    for (const auto& kind : m_pendingProviderUnsupportedKinds)
+                    for (const auto& kind : m_pendingUnsupportedKinds)
                     {
                         if (!kinds.empty()) kinds += ", ";
                         kinds += kind;
                     }
                     PS::Log<LogLevel::Error>(
-                        STR("[SAVE-CLEANER][PROVIDER][PARTIAL] Game Pass cleanup has no verified live adapter for retired kind(s): {}. Supported item/recipe cleanup will continue, while the previous ledger is retained for the remaining kinds.\n"),
+                        STR("[SAVE-CLEANER][PARTIAL] No verified live adapter exists for retired kind(s): {}. Supported cleanup will continue and the previous ownership vector will be retained.\n"),
                         PS::ToWideSafe(kinds.c_str()));
                 }
             }
@@ -615,35 +298,35 @@ namespace DragonWilds {
             if(removedRecipes)
                 PS::Log<LogLevel::Normal>(STR("[SAVE-CLEANER][OWNED-ONLY] Removed {} retired recipe unlock identity(s); the next native save persists the clean progress state.\n"),removedRecipes);
             std::size_t removedQuests=0;
+            bool questsReady=true;
             if(std::any_of(m_retiredContent.begin(),m_retiredContent.end(),
                 [](const auto& value){return value.Kind=="Quest";}))
             {
-                const auto mods=std::filesystem::path(PS::HostServices::WorkingDirectory())
-                    / "Mods" / "RuneSchema" / "mods";
-                removedQuests=Quests::NativeQuestCleanup::Run(controller,mods);
+                std::map<std::string,std::string> retiredQuests;
+                for(const auto& retired:m_retiredContent)
+                    if(retired.Kind=="Quest")retiredQuests.emplace(retired.PersistenceID,retired.Owner);
+                const auto result=Quests::NativeQuestCleanup::Run(controller,retiredQuests);
+                questsReady=result.Ready;
+                removedQuests=result.Removed;
                 if(removedQuests)
                     PS::Log<LogLevel::Normal>(STR("[SAVE-CLEANER][OWNED-ONLY] Removed {} retired quest identity(s); the next native save persists the clean quest state.\n"),removedQuests);
             }
-            if (!m_pendingProviderSnapshot.empty())
+            if (!m_pendingSnapshot.empty())
             {
-                if (!m_pendingProviderUnsupportedKinds.empty())
+                if (!m_pendingUnsupportedKinds.empty() || !questsReady)
                 {
-                    if (!m_providerPartialReported)
+                    if (!m_cleanupPartialReported)
                     {
-                        m_providerPartialReported = true;
+                        m_cleanupPartialReported = true;
                         PS::Log<LogLevel::Normal>(
-                            STR("[SAVE-CLEANER][PROVIDER][VERIFIED-PARTIAL] Supported Game Pass item/recipe state was read-back verified. The previous ownership snapshot remains pending for unsupported save categories.\n"));
+                            STR("[SAVE-CLEANER][VERIFIED-PARTIAL] Ready live state was verified. The previous ownership vector remains pending until every retired category is available.\n"));
                     }
                     return;
                 }
-                // All owned item counts and recipe sets above were read back
-                // as absent. Only now may WinGDK replace its previous identity
-                // snapshot; a crash or missed provider event will retry on the
-                // next launch instead of forgetting the cleanup obligation.
-                OwnedContent::CommitSnapshot(m_pendingProviderSnapshot);
-                m_pendingProviderSnapshot.clear();
+                OwnedContent::CommitSnapshot(m_pendingSnapshot);
+                m_pendingSnapshot.clear();
                 PS::Log<LogLevel::Normal>(
-                    STR("[SAVE-CLEANER][PROVIDER][VERIFIED] Game Pass live cleanup was verified; the ownership snapshot is now committed.\n"));
+                    STR("[SAVE-CLEANER][VERIFIED] Live cleanup was verified; the ownership vector is now current.\n"));
             }
         }
         catch (const std::exception& error)
@@ -714,27 +397,11 @@ namespace DragonWilds {
         snapshot.QuestsComplete = questsReady;
         if (itemsReady && recipesReady)
         {
-            // Publish only a complete native view, then perform exactly one
-            // bounded pre-world pass. Custom registrations are already in the
-            // maps, so active mod content cannot be mistaken for an orphan.
+            // The complete native view is diagnostic/manual-repair context.
+            // Automatic pruning never treats registry-unknown content as
+            // removable; it uses only the exact previous/current RuneSchema
+            // identity snapshot after every mod section loaded successfully.
             PS::SaveCleanup::PublishRegistry(snapshot);
-            if (!m_registryScrubCompleted)
-            {
-                // Mark the process attempt before any I/O. A damaged file is
-                // reported and retried next launch, not rescanned by every
-                // subsequent world or inventory callback in this process.
-                m_registryScrubCompleted = true;
-                try
-                {
-                    (void)ScrubUnknownCharacterSaves(snapshot);
-                }
-                catch (const std::exception& error)
-                {
-                    PS::Log<LogLevel::Error>(
-                        STR("[SAVE-SCRUB][DEGRADED] Startup scrub was skipped and saves were left unchanged: {}.\n"),
-                        PS::ToWideSafe(error.what()));
-                }
-            }
         }
         else
             // Never leave a previous world's registry available to Safe Clean

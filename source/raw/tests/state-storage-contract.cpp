@@ -39,9 +39,6 @@ int main(int argc, char** argv)
         && host.find("LocalState") != std::string::npos
         && host.find("SystemAppData\\wgs") != std::string::npos,
         "Game Pass state is package-local and Xbox WGS is never treated as a normal save directory");
-    Check(host.find("XboxSaveRoot()") != std::string::npos
-        && registrar.find("HostServices::XboxSaveRoot()") != std::string::npos,
-        "Game Pass save diagnostics do not resolve the active package WGS root");
     Check(host.find("Preserve the Steam/GOG ledger") != std::string::npos,
         "the Game Pass ledger seed does not consume Steam state");
     Check(host.find("safesave") != std::string::npos
@@ -66,28 +63,20 @@ int main(int argc, char** argv)
     Check(playerRules.find("if (error == \"player pawn or GUID was unavailable\") continue;") != std::string::npos
         && playerRules.find("PS::Log<LogLevel::Verbose>(") != std::string::npos,
         "normal pre-pawn appearance snapshot retries do not warn or fail");
-    Check(registrar.find("Xbox WGS save detected") != std::string::npos
-        && registrar.find("GamePassNative") != std::string::npos,
-        "Game Pass cleanup uses the in-game provider path instead of direct JSON writes");
-    Check(registrar.find("BackupRetention = 3") != std::string::npos
-        && registrar.find("\"safesave\" / \"backups\"") != std::string::npos
-        && registrar.find("PruneLegacyCharacterBackups") != std::string::npos,
-        "Steam SafeSave uses bounded off-directory backups and prunes legacy clutter");
-    Check(registrar.find("CharacterDocumentKind::ProfileOnly") != std::string::npos
-        && registrar.find("Skipped {} profile-only character document") != std::string::npos,
-        "Steam SafeSave recognizes profile-only character JSON without reporting degradation");
+    Check(registrar.find("ConfigFiles::Write") == std::string::npos
+        && registrar.find("CharacterSaveDirectory") == std::string::npos,
+        "automatic cleanup must use live game state on both storefronts");
     Check(registrar.find("\"/Game/RuneSchema/\"") != std::string::npos
         && registrar.find("PublishRegistry") != std::string::npos,
         "runtime RuneSchema assets feed the live Safe Clean registry snapshot");
     Check(cleanupPanel.find("Remove invalid item/recipe/quest PersistenceIDs") != std::string::npos
         && cleanupPanel.find("ReadRegistry()") != std::string::npos,
         "Safe Clean exposes explicit live-registry orphan repair");
-    Check(registrar.find("OwnedContent::CommitSnapshot(m_pendingProviderSnapshot)") != std::string::npos
-        && registrar.find("[SAVE-CLEANER][PROVIDER][PENDING]") != std::string::npos,
-        "Game Pass retains its previous ledger until provider cleanup is verified");
-    Check(registrar.find("[SAVE-CLEANER][PROVIDER][VERIFIED-PARTIAL]") != std::string::npos
-        && registrar.find("item/recipe cleanup will continue") != std::string::npos,
-        "unsupported Game Pass categories do not prevent supported item/recipe cleanup");
+    Check(registrar.find("OwnedContent::CommitSnapshot(m_pendingSnapshot)") != std::string::npos
+        && registrar.find("[SAVE-CLEANER][PENDING]") != std::string::npos,
+        "the previous ownership vector is retained until live cleanup is verified");
+    Check(registrar.find("[SAVE-CLEANER][VERIFIED-PARTIAL]") != std::string::npos,
+        "unready categories do not erase the previous ownership vector");
     Check(saveViewer.find("Character-save file browsing is unavailable for Xbox WGS storage") != std::string::npos,
         "the file viewer does not mistake Steam saves for Game Pass saves");
     std::cout << "Mutable state storage contract passed.\n";

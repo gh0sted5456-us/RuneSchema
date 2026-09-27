@@ -467,8 +467,6 @@ namespace DragonWilds {
                             auto* owner=source->GetOuterPrivate();
                             if(!IsGameplayQuestController(owner))return;
                             if(static_cast<const uint8_t*>(parameters)[16]==1) {
-                            const auto removed=Quests::NativeQuestCleanup::Run(owner,std::filesystem::path(PS::HostServices::WorkingDirectory())/"Mods/RuneSchema/mods");
-                            if(removed)PS::Log<LogLevel::Normal>(STR("Quests: removed {} absent-mod records after player progress loaded.\n"),removed);
                             MigrateSavedProgress(owner);
                             }
                             if(m_quests.NetworkManifest().empty())PrepareQuests(owner);
@@ -1552,8 +1550,6 @@ namespace DragonWilds {
             if(!controller || !ActorHelper::GetObjectRef(controller,TEXT("QuestProgressComponent")))return;
             ++m_questLocationChecks;
             if(m_questLocationChecks==1) {
-                const auto removed=Quests::NativeQuestCleanup::Run(controller,std::filesystem::path(PS::HostServices::WorkingDirectory())/"Mods/RuneSchema/mods");
-                if(removed)PS::Log<LogLevel::Normal>(STR("Quests: removed {} owned records for absent mods from the active player; changes follow the normal game save.\n"),removed);
                 MigrateSavedProgress(controller);
             }
             PrepareQuests(controller);
