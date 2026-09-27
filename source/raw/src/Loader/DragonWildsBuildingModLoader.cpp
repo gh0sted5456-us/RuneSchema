@@ -31,6 +31,7 @@
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "SDK/Structs/Custom/FManagedValue.h"
+#include "SDK/Structs/Custom/FManagedStruct.h"
 #include "SDK/Structs/Custom/FScriptArrayHelper.h"
 #include "SDK/Structs/Custom/FScriptMapHelper.h"
 #include "SDK/Structs/Custom/FScriptSetHelper.h"
@@ -97,6 +98,26 @@ namespace DragonWilds {
             std::memcpy(words, guidData, sizeof(words));
             return std::format(STR("{:08X}-{:08X}-{:08X}-{:08X}"),
                 words[0], words[1], words[2], words[3]);
+        }
+
+        std::string OwnedProfileName(std::string_view prefix,
+            const RC::StringType& owner, const RC::StringType& key)
+        {
+            uint64_t hash = 14695981039346656037ull;
+            const auto add = [&](const std::string& value) {
+                for (const unsigned char byte : value)
+                {
+                    hash ^= byte;
+                    hash *= 1099511628211ull;
+                }
+                hash ^= 0xff;
+                hash *= 1099511628211ull;
+            };
+            add(RC::to_string(owner));
+            add(RC::to_string(key));
+            std::ostringstream result;
+            result << prefix << '_' << std::hex << std::setfill('0') << std::setw(16) << hash;
+            return result.str();
         }
 
         constexpr const TCHAR* UnlockHookPaths[] = {
@@ -544,7 +565,9 @@ namespace DragonWilds {
                 const auto& overrides=body.at("Overrides");
                 bool valid=overrides.is_object();
                 for(const auto& [section,value]:overrides.items()) {
-                    if(section!="Names"&&section!="Placement"&&section!="Processing")valid=false;
+                    if(section!="Names"&&section!="Placement"&&section!="Stability"
+                        &&section!="DerivedData"&&section!="Shelter"&&section!="Health"
+                        &&section!="Snapping"&&section!="Processing")valid=false;
                     if(!value.is_object())valid=false;
                 }
                 if(overrides.contains("Names"))for(const auto& [name,value]:overrides.at("Names").items())
@@ -552,6 +575,58 @@ namespace DragonWilds {
                 if(overrides.contains("Placement"))for(const auto& [name,value]:overrides.at("Placement").items()) {
                     if(name=="Profile")valid=valid&&value.is_string()&&!value.get<std::string>().empty();
                     else if(name=="RequiresFoundation"||name=="RequiresRoof"||name=="RequiresShelter")valid=valid&&value.is_boolean();
+                    else if(name=="bAllowUserHeightModification"||name=="bAllowUserRotationModification"
+                        ||name=="bCanOnlyBeSnapped"||name=="bForcePlugRotation"
+                        ||name=="bCanSharePlugWithSamePieces"||name=="bCanOnlyBePlacedOnDefinedSurface"
+                        ||name=="bCanOnlyBePlacedOnCertainPhysicalSurfaces"||name=="bOverrideRotationFromHitSurface"
+                        ||name=="bCanOnlyBePlacedOnGround"||name=="bOverrideProjectionNormal"
+                        ||name=="bShouldOffsetFromNonBuildingSurface"||name=="bAllowOverlappingWithBuildingPieces"
+                        ||name=="bForceBuildingBlockerOverlapDuringPlacement"||name=="bOverrideSnappingMode")
+                        valid=valid&&value.is_boolean();
+                    else if(name=="MagnetizingMultiplier"||name=="OverlappingBoundsMultiplier")
+                        valid=valid&&value.is_number()&&std::isfinite(value.get<double>())&&value.get<double>()>=0&&value.get<double>()<=100;
+                    else if(name=="SurfaceRotationOffset"||name=="SurfacePlacementNormal"||name=="OverrideProjectionNormal"
+                        ||name=="RegionBlockList")valid=valid&&value.is_object();
+                    else if(name=="AcceptedPhysicalSurfaces"||name=="OverlapExceptionFilter") {
+                        valid=valid&&value.is_array()&&value.size()<=128;
+                        if(value.is_array())for(const auto& entry:value)valid=valid&&entry.is_string();
+                    }
+                    else if(name=="SnappingModeOverride")valid=valid&&value.is_string()&&!value.get<std::string>().empty();
+                    else valid=false;
+                }
+                if(overrides.contains("Stability"))for(const auto& [name,value]:overrides.at("Stability").items()) {
+                    if(name=="Profile")valid=valid&&value.is_string()&&!value.get<std::string>().empty();
+                    else if(name=="MaxStability"||name=="MinStability"||name=="VerticalLoss"||name=="HorizontalLoss")
+                        valid=valid&&value.is_number()&&std::isfinite(value.get<double>())&&value.get<double>()>=0&&value.get<double>()<=1000000;
+                    else valid=false;
+                }
+                if(overrides.contains("DerivedData"))for(const auto& [name,value]:overrides.at("DerivedData").items()) {
+                    if(name=="PlacementZOffset"||name=="PhysicalSurfaceExtentNeg"||name=="PhysicalSurfaceExtentPos")
+                        valid=valid&&value.is_number()&&std::isfinite(value.get<double>())&&value.get<double>()>=-100000&&value.get<double>()<=100000;
+                    else valid=false;
+                }
+                if(overrides.contains("Shelter"))for(const auto& [name,value]:overrides.at("Shelter").items()) {
+                    if(name=="InteractionRequirements")valid=valid&&value.is_string()&&!value.get<std::string>().empty();
+                    else if(name=="bShelterCheckedOnPlacement"||name=="bIncludeNonBuildingPartActors")valid=valid&&value.is_boolean();
+                    else if(name=="RequiresRoofText"||name=="RequiresShelterText"||name=="RequiresNoRoofText"||name=="RequiresNoShelterText")valid=valid&&value.is_string();
+                    else if(name=="RoofRays"||name=="ShelterRays")valid=valid&&value.is_array()&&value.size()<=128;
+                    else if(name=="RoofTraceExclusionFilter"||name=="ShelterTraceExclusionFilter") {
+                        valid=valid&&value.is_array()&&value.size()<=128;
+                        if(value.is_array())for(const auto& entry:value)valid=valid&&entry.is_string();
+                    }
+                    else if(name=="SweepRayThickness"||name=="SweepRayDistance"||name=="ValidityPercentage")
+                        valid=valid&&value.is_number()&&std::isfinite(value.get<double>())&&value.get<double>()>=0&&value.get<double>()<=100000;
+                    else valid=false;
+                }
+                if(overrides.contains("Health"))for(const auto& [name,value]:overrides.at("Health").items()) {
+                    if(name=="MaxHealth")valid=valid&&value.is_number()&&std::isfinite(value.get<double>())&&value.get<double>()>0&&value.get<double>()<=100000000;
+                    else if(name=="bCanDie")valid=valid&&value.is_boolean();
+                    else valid=false;
+                }
+                if(overrides.contains("Snapping"))for(const auto& [name,value]:overrides.at("Snapping").items()) {
+                    if(name=="SnappingRadius"||name=="SnappingRadiusInBasicSnappingMode")
+                        valid=valid&&value.is_number()&&std::isfinite(value.get<double>())&&value.get<double>()>=0&&value.get<double>()<=100000;
+                    else if(name=="bUseSocketsForPlugGeneration")valid=valid&&value.is_boolean();
                     else valid=false;
                 }
                 if(overrides.contains("Processing"))for(const auto& [name,value]:overrides.at("Processing").items()) {
@@ -1104,6 +1179,37 @@ namespace DragonWilds {
             ++copied;
         }
 
+        // BuildingPieceData points at a shared cooked DerivedData asset.  A
+        // placement override must never rewrite that shared object because it
+        // would also change the vanilla source and every other piece using it.
+        // Give every RuneSchema clone a private transient copy instead.
+        UObject* privateDerived = nullptr;
+        for (const auto* field : { TEXT("DerivedData"), TEXT("BuildingPieceDerivedData") })
+        {
+            auto* property = CastField<FSoftObjectProperty>(
+                PropertyHelper::GetPropertyByName(source->GetClassPrivate(), field));
+            if (!property) continue;
+            auto* sourceSoft = property->ContainerPtrToValuePtr<UECustom::FSoftObjectPtr>(source);
+            if (!sourceSoft || sourceSoft->ObjectID.AssetPath.GetPackageName() == NAME_None) break;
+            auto* sourceDerived = LoadObject(sourceSoft->ObjectID.AssetPath.GetPackageName().ToString()
+                + TEXT(".") + sourceSoft->ObjectID.AssetPath.GetAssetName().ToString());
+            if (!sourceDerived || !sourceDerived->GetClassPrivate()) break;
+
+            FStaticConstructObjectParameters derivedParams(sourceDerived->GetClassPrivate(), transientPackage);
+            derivedParams.Name = FName(name + TEXT("_DerivedData"), FNAME_Add);
+            derivedParams.SetFlags = static_cast<EObjectFlags>(RF_Public | RF_Standalone | RF_Transactional);
+            privateDerived = UObjectGlobals::StaticConstructObject<UObject*>(derivedParams);
+            if (!privateDerived) break;
+            for (auto* derivedProperty : TFieldRange<FProperty>(
+                     sourceDerived->GetClassPrivate(), EFieldIterationFlags::Default))
+            {
+                if (!derivedProperty || derivedProperty->HasAnyPropertyFlags(unsafeFlags)) continue;
+                derivedProperty->CopyCompleteValue_InContainer(privateDerived, sourceDerived);
+            }
+            InitializeSoftObject(property->ContainerPtrToValuePtr<void>(created), privateDerived);
+            break;
+        }
+
         const auto stableIdentity = std::format(STR("RuneSchema:{}:{}"), owner, key);
         for (const auto* field : { TEXT("PersistenceID"), TEXT("InternalName") })
         {
@@ -1129,6 +1235,10 @@ namespace DragonWilds {
             return nullptr;
         }
         created->SetRootSet();
+        if(privateDerived) {
+            privateDerived->SetRootSet();
+            m_createdBuildings.push_back(privateDerived);
+        }
         m_createdBuildings.push_back(created);
         PS::Log<LogLevel::Verbose>(
             STR("{}: cloned building '{}' as '{}' using {} reflected properties.\n"),
@@ -1275,10 +1385,47 @@ namespace DragonWilds {
         auto* actorClass=resolveActorClass();
         auto* actorDefaults=actorClass?actorClass->GetClassDefaultObject().Get():nullptr;
         if(!actorClass||!actorDefaults)return fail("BuildableActor class/default object is unavailable");
+        const auto resolveDerived=[&]() -> UObject* {
+            for(const auto* field:{TEXT("BuildingPieceDerivedData"),TEXT("DerivedData")}) {
+                auto* property=PropertyHelper::GetPropertyByName(building->GetClassPrivate(),field);
+                if(auto* softProperty=CastField<FSoftObjectProperty>(property)) {
+                    auto* soft=softProperty->ContainerPtrToValuePtr<UECustom::FSoftObjectPtr>(building);
+                    if(soft&&soft->ObjectID.AssetPath.GetPackageName()!=NAME_None)
+                        return LoadObject(soft->ObjectID.AssetPath.GetPackageName().ToString()
+                            +TEXT(".")+soft->ObjectID.AssetPath.GetAssetName().ToString());
+                }
+                else if(auto* object=CastField<FObjectPropertyBase>(property))
+                    if(auto* value=object->GetObjectPropertyValue(object->ContainerPtrToValuePtr<void>(building)))return value;
+            }
+            return nullptr;
+        };
+        const auto findComponent=[&](const TCHAR* path) -> UObject* {
+            auto* componentClass=ActorHelper::ResolveClass(path);
+            TArray<UObject*> components;
+            if(componentClass)UECustom::UObjectGlobals::GetObjectsOfClass(componentClass,components,true);
+            for(auto* candidate:components)if(candidate) {
+                for(auto* outer=candidate->GetOuterPrivate();outer;outer=outer->GetOuterPrivate())
+                    if(outer==actorClass||outer==actorDefaults)return candidate;
+            }
+            return nullptr;
+        };
+        const auto applyFields=[&](void* container,auto* type,const nlohmann::json& values,
+            const std::unordered_set<std::string>& ignored={}) -> bool {
+            for(const auto& [name,value]:values.items()) {
+                if(ignored.contains(name))continue;
+                auto* property=type?PropertyHelper::GetPropertyByName(type,RC::to_generic_string(name)):nullptr;
+                if(!property)return false;
+                PropertyHelper::CopyJsonValueToContainer(container,property,value);
+            }
+            return true;
+        };
 
         std::string catalogue,world,interact,menu,stationRow;
         const auto& names=definition.Overrides.contains("Names")
             ?definition.Overrides.at("Names"):nlohmann::json::object();
+        if(definition.Clone&&!definition.Properties.contains("BuildableActor")
+            &&(names.contains("World")||names.contains("Interact")))
+            return fail("World/Interact name overrides on a $Clone require a private cooked BuildableActor; sharing the vanilla actor would rename the source piece");
         if(names.contains("Catalogue")) {
             catalogue=names.at("Catalogue").get<std::string>();
             if(!writeText(building,TEXT("DisplayName"),catalogue))return fail("BuildingPieceData.DisplayName is unavailable");
@@ -1302,55 +1449,152 @@ namespace DragonWilds {
             ?definition.Overrides.at("Placement"):nlohmann::json::object();
         std::string profile=placement.value("Profile",std::string{});
         if(placement.contains("RequiresFoundation")&&!placement.at("RequiresFoundation").get<bool>()&&profile.empty())profile="PropProfile";
-        if(!profile.empty()) {
-            UObject* profileOwner=building;
-            auto* handle=CastField<FStructProperty>(PropertyHelper::GetPropertyByName(
-                building->GetClassPrivate(),TEXT("PlacementProfileRowHandle")));
-            if(!handle)for(const auto* field:{TEXT("BuildingPieceDerivedData"),TEXT("DerivedData")}) {
-                auto* property=PropertyHelper::GetPropertyByName(building->GetClassPrivate(),field);
-                UObject* derived=nullptr;
-                if(auto* softProperty=CastField<FSoftObjectProperty>(property)) {
-                    auto* soft=softProperty->ContainerPtrToValuePtr<UECustom::FSoftObjectPtr>(building);
-                    if(soft&&soft->ObjectID.AssetPath.GetPackageName()!=NAME_None)
-                        derived=LoadObject(soft->ObjectID.AssetPath.GetPackageName().ToString()+TEXT(".")+soft->ObjectID.AssetPath.GetAssetName().ToString());
-                }
-                else if(auto* object=CastField<FObjectPropertyBase>(property))derived=object->GetObjectPropertyValue(object->ContainerPtrToValuePtr<void>(building));
-                if(derived) {
-                    auto* candidate=CastField<FStructProperty>(PropertyHelper::GetPropertyByName(derived->GetClassPrivate(),TEXT("PlacementProfileRowHandle")));
-                    if(candidate){profileOwner=derived;handle=candidate;break;}
-                }
+        UObject* profileOwner=building;
+        auto* placementHandle=CastField<FStructProperty>(PropertyHelper::GetPropertyByName(
+            building->GetClassPrivate(),TEXT("PlacementProfileRowHandle")));
+        if(!placementHandle)if(auto* derived=resolveDerived()) {
+            if(auto* candidate=CastField<FStructProperty>(PropertyHelper::GetPropertyByName(
+                derived->GetClassPrivate(),TEXT("PlacementProfileRowHandle")))) {
+                profileOwner=derived;placementHandle=candidate;
             }
-            auto* type=handle?handle->GetStruct().Get():nullptr;
-            auto* row=type?CastField<FNameProperty>(PropertyHelper::GetPropertyByName(type,TEXT("RowName"))):nullptr;
-            auto* tableField=type?CastField<FObjectPropertyBase>(PropertyHelper::GetPropertyByName(type,TEXT("DataTable"))):nullptr;
-            auto* data=handle?handle->ContainerPtrToValuePtr<void>(profileOwner):nullptr;
-            auto* table=tableField&&data?tableField->GetObjectPropertyValue(tableField->ContainerPtrToValuePtr<void>(data)):nullptr;
-            auto* dataTable=table&&table->IsA<UDataTable>()?static_cast<UDataTable*>(table):nullptr;
-            const FName requested(RC::to_generic_string(profile),FNAME_Find);
-            if(!row||!dataTable||requested==NAME_None||!dataTable->FindRowUnchecked(requested))
-                return fail("placement profile row '"+profile+"' is unavailable");
-            row->SetPropertyValue(row->ContainerPtrToValuePtr<void>(data),requested);
+        }
+        auto* placementHandleType=placementHandle?placementHandle->GetStruct().Get():nullptr;
+        auto* placementRow=placementHandleType?CastField<FNameProperty>(PropertyHelper::GetPropertyByName(placementHandleType,TEXT("RowName"))):nullptr;
+        auto* placementTableField=placementHandleType?CastField<FObjectPropertyBase>(PropertyHelper::GetPropertyByName(placementHandleType,TEXT("DataTable"))):nullptr;
+        auto* placementHandleData=placementHandle?placementHandle->ContainerPtrToValuePtr<void>(profileOwner):nullptr;
+        auto* placementTableObject=placementTableField&&placementHandleData
+            ?placementTableField->GetObjectPropertyValue(placementTableField->ContainerPtrToValuePtr<void>(placementHandleData)):nullptr;
+        auto* placementTable=placementTableObject&&placementTableObject->IsA<UDataTable>()
+            ?static_cast<UDataTable*>(placementTableObject):nullptr;
+        const std::unordered_set<std::string> placementControl{
+            "Profile","RequiresFoundation","RequiresRoof","RequiresShelter"};
+        bool hasPlacementFields=false;
+        for(const auto& [name,unused]:placement.items())
+            if(!placementControl.contains(name)){hasPlacementFields=true;break;}
+        if(!profile.empty()||hasPlacementFields) {
+            if(!placementRow||!placementTable||!placementTable->GetRowStruct())
+                return fail("placement profile handle is unavailable");
+            FName sourceRow=profile.empty()
+                ?placementRow->GetPropertyValue(placementRow->ContainerPtrToValuePtr<void>(placementHandleData))
+                :FName(RC::to_generic_string(profile),FNAME_Find);
+            auto* sourceData=sourceRow!=NAME_None?placementTable->FindRowUnchecked(sourceRow):nullptr;
+            if(!sourceData)return fail("placement profile row '"+(profile.empty()?RC::to_string(sourceRow.ToString()):profile)+"' is unavailable");
+            if(hasPlacementFields) {
+                try {
+                    auto* rowType=placementTable->GetRowStruct().Get();
+                    FManagedStruct owned(rowType);
+                    rowType->CopyScriptStruct(owned.GetData(),sourceData);
+                    if(!applyFields(owned.GetData(),rowType,placement,placementControl))
+                        return fail("placement profile layout differs from the mapped UE 5.6.1 fields");
+                    const auto generated=OwnedProfileName("RS_PLACE",definition.Owner,definition.Key);
+                    const FName generatedName(RC::to_generic_string(generated),FNAME_Add);
+                    const auto ownershipKey=RC::to_string(placementTable->GetPathName())+":"+generated;
+                    if(placementTable->FindRowUnchecked(generatedName)
+                        &&!m_ownedProfileRows.contains(ownershipKey))
+                        return fail("generated placement-profile row is already owned by external content");
+                    placementTable->AddRow(generatedName,*reinterpret_cast<FTableRowBase*>(owned.GetData()));
+                    m_ownedProfileRows.insert(ownershipKey);
+                    placementRow->SetPropertyValue(placementRow->ContainerPtrToValuePtr<void>(placementHandleData),generatedName);
+                    profile=generated;
+                } catch(const std::exception& error) {
+                    return fail("placement profile could not be written: "+std::string(error.what()));
+                }
+            } else {
+                placementRow->SetPropertyValue(
+                    placementRow->ContainerPtrToValuePtr<void>(placementHandleData),sourceRow);
+            }
         }
 
         if(placement.contains("RequiresFoundation")&&placement.at("RequiresFoundation").get<bool>()&&profile.empty())
             return fail("RequiresFoundation=true needs an explicit verified placement profile");
         const bool roof=placement.contains("RequiresRoof"),shelter=placement.contains("RequiresShelter");
-        if((roof&&placement.at("RequiresRoof").get<bool>())||(shelter&&placement.at("RequiresShelter").get<bool>()))
-            return fail("true shelter requirements need an explicit native requirement profile; false maps safely to InteractAnywhere");
+        const auto& derivedFields=definition.Overrides.contains("DerivedData")
+            ?definition.Overrides.at("DerivedData"):nlohmann::json::object();
+        if(!derivedFields.empty()) {
+            auto* derived=resolveDerived();
+            if(!derived)return fail("BuildingPieceDerivedData is unavailable");
+            try {if(!applyFields(derived,derived->GetClassPrivate(),derivedFields))
+                return fail("BuildingPieceDerivedData layout differs from the mapped UE 5.6.1 fields");}
+            catch(const std::exception& error){return fail("derived placement data could not be written: "+std::string(error.what()));}
+        }
+
+        auto shelterFields=definition.Overrides.contains("Shelter")
+            ?definition.Overrides.at("Shelter"):nlohmann::json::object();
         if(roof||shelter) {
-            auto* shelterClass=ActorHelper::ResolveClass(TEXT("/Script/Dominion.BuildingShelterComponent"));
-            TArray<UObject*> components;
-            if(shelterClass)UECustom::UObjectGlobals::GetObjectsOfClass(shelterClass,components,true);
-            UObject* component=nullptr;
-            for(auto* candidate:components)if(candidate) {
-                for(auto* outer=candidate->GetOuterPrivate();outer;outer=outer->GetOuterPrivate())
-                    if(outer==actorClass||outer==actorDefaults){component=candidate;break;}
-                if(component)break;
+            const bool requiresShelter=(roof&&placement.at("RequiresRoof").get<bool>())
+                ||(shelter&&placement.at("RequiresShelter").get<bool>());
+            shelterFields["InteractionRequirements"]=requiresShelter
+                ?"EBuildingRequirements::InteractInShelterOnly"
+                :"EBuildingRequirements::InteractAnywhere";
+        }
+        const auto actorComponentRequested=!shelterFields.empty()
+            ||definition.Overrides.contains("Health")||definition.Overrides.contains("Snapping");
+        if(actorComponentRequested&&definition.Clone&&!definition.Properties.contains("BuildableActor"))
+            return fail("actor-component overrides on a $Clone require a private cooked BuildableActor; sharing the vanilla actor would alter the source piece");
+        if(!shelterFields.empty()) {
+            auto* component=findComponent(TEXT("/Script/Dominion.BuildingShelterComponent"));
+            if(!component)return fail("BuildableActor has no BuildingShelterComponent");
+            try {if(!applyFields(component,component->GetClassPrivate(),shelterFields))
+                return fail("BuildingShelterComponent layout differs from the mapped UE 5.6.1 fields");}
+            catch(const std::exception& error){return fail("shelter fields could not be written: "+std::string(error.what()));}
+        }
+        if(definition.Overrides.contains("Health")) {
+            auto* component=findComponent(TEXT("/Script/Dominion.HealthComponent"));
+            if(!component)return fail("BuildableActor has no HealthComponent");
+            try {if(!applyFields(component,component->GetClassPrivate(),definition.Overrides.at("Health")))
+                return fail("HealthComponent layout differs from the mapped UE 5.6.1 fields");}
+            catch(const std::exception& error){return fail("health fields could not be written: "+std::string(error.what()));}
+        }
+        if(definition.Overrides.contains("Snapping")) {
+            auto* component=findComponent(TEXT("/Script/Dominion.BuildingSnapComponent"));
+            if(!component)return fail("BuildableActor has no BuildingSnapComponent");
+            try {if(!applyFields(component,component->GetClassPrivate(),definition.Overrides.at("Snapping")))
+                return fail("BuildingSnapComponent layout differs from the mapped UE 5.6.1 fields");}
+            catch(const std::exception& error){return fail("snapping fields could not be written: "+std::string(error.what()));}
+        }
+
+        const auto& stability=definition.Overrides.contains("Stability")
+            ?definition.Overrides.at("Stability"):nlohmann::json::object();
+        if(!stability.empty()) {
+            if(!EnsureStabilityProfile(building))return fail("stability profile table is unavailable");
+            auto* handle=CastField<FStructProperty>(PropertyHelper::GetPropertyByName(
+                building->GetClassPrivate(),TEXT("BuildingStabilityProfileRowHandle")));
+            auto* type=handle?handle->GetStruct().Get():nullptr;
+            auto* row=type?CastField<FNameProperty>(PropertyHelper::GetPropertyByName(type,TEXT("RowName"))):nullptr;
+            auto* tableField=type?CastField<FObjectPropertyBase>(PropertyHelper::GetPropertyByName(type,TEXT("DataTable"))):nullptr;
+            auto* data=handle?handle->ContainerPtrToValuePtr<void>(building):nullptr;
+            auto* tableObject=tableField&&data?tableField->GetObjectPropertyValue(tableField->ContainerPtrToValuePtr<void>(data)):nullptr;
+            auto* table=tableObject&&tableObject->IsA<UDataTable>()?static_cast<UDataTable*>(tableObject):nullptr;
+            const auto requested=stability.value("Profile",std::string{});
+            const FName sourceRow=requested.empty()
+                ?(row?row->GetPropertyValue(row->ContainerPtrToValuePtr<void>(data)):NAME_None)
+                :FName(RC::to_generic_string(requested),FNAME_Find);
+            auto* source=table&&sourceRow!=NAME_None?table->FindRowUnchecked(sourceRow):nullptr;
+            if(!row||!table||!table->GetRowStruct()||!source)
+                return fail("stability profile row '"+(requested.empty()?RC::to_string(sourceRow.ToString()):requested)+"' is unavailable");
+            const bool hasFields=stability.size()>(stability.contains("Profile")?1u:0u);
+            if(hasFields) {
+                try {
+                    auto* rowType=table->GetRowStruct().Get();
+                    FManagedStruct owned(rowType);
+                    rowType->CopyScriptStruct(owned.GetData(),source);
+                    if(!applyFields(owned.GetData(),rowType,stability,{"Profile"}))
+                        return fail("stability profile layout differs from the mapped UE 5.6.1 fields");
+                    const auto generated=OwnedProfileName("RS_STABLE",definition.Owner,definition.Key);
+                    const FName generatedName(RC::to_generic_string(generated),FNAME_Add);
+                    const auto ownershipKey=RC::to_string(table->GetPathName())+":"+generated;
+                    if(table->FindRowUnchecked(generatedName)
+                        &&!m_ownedProfileRows.contains(ownershipKey))
+                        return fail("generated stability-profile row is already owned by external content");
+                    table->AddRow(generatedName,*reinterpret_cast<FTableRowBase*>(owned.GetData()));
+                    m_ownedProfileRows.insert(ownershipKey);
+                    row->SetPropertyValue(row->ContainerPtrToValuePtr<void>(data),generatedName);
+                } catch(const std::exception& error) {
+                    return fail("stability profile could not be written: "+std::string(error.what()));
+                }
+            } else {
+                row->SetPropertyValue(row->ContainerPtrToValuePtr<void>(data),sourceRow);
             }
-            auto* requirement=component?PropertyHelper::GetPropertyByName(component->GetClassPrivate(),TEXT("InteractionRequirements")):nullptr;
-            if(!component||!requirement)return fail("BuildableActor has no BuildingShelterComponent.InteractionRequirements");
-            PropertyHelper::CopyJsonValueToContainer(component,requirement,
-                nlohmann::json("EBuildingRequirements::InteractAnywhere"));
         }
 
         const auto& processing=definition.Overrides.contains("Processing")
@@ -1430,6 +1674,12 @@ namespace DragonWilds {
     void DragonWildsBuildingModLoader::DiscardUncommittedClone(UObject* building)
     {
         if (!building) return;
+        const auto derivedName=building->GetName()+TEXT("_DerivedData");
+        for(auto* object:m_createdBuildings)if(object&&object->GetName()==derivedName)
+            object->ClearRootSet();
+        std::erase_if(m_createdBuildings,[&](UObject* object){
+            return object&&object->GetName()==derivedName;
+        });
         building->ClearRootSet();
         std::erase(m_createdBuildings, building);
     }

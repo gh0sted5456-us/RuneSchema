@@ -24,6 +24,11 @@ hard-coding vanilla page names.
 `$Clone` creates a new RuneSchema-owned building entry. It does not replace
 the source.
 
+RuneSchema also copies the source's `BuildingPieceDerivedData` into a private
+transient object for the clone. Placement-profile, placement-offset, and
+physical-surface changes therefore remain on the clone instead of rewriting
+the cooked source's shared derived data.
+
 When `AddTo` is omitted, the clone inherits the source's catalogue placement.
 Use `AddTo` when you want an explicit collection or page.
 
@@ -39,6 +44,11 @@ Do not place these fields inside `Properties`:
 
 RuneSchema owns those fields.
 
+To change a vanilla piece in place, use `Asset` instead of `$Clone` and apply
+the same top-level `Overrides`. Placement and stability numeric changes still
+use a private copied table row, so the selected shared vanilla profile is not
+rewritten globally.
+
 ## Replacement actors
 
 A custom `BuildableActor` must be a cooked generated class that derives from
@@ -50,6 +60,11 @@ Use a full generated-class path ending in `_C`.
 When a clone replaces the source actor and does not specify another
 representation mode, RuneSchema uses a managed-actor representation so clients
 render the replacement actor instead of the source's lightweight mesh.
+
+World/interact names and `Shelter`, `Health`, or `Snapping` overrides modify
+the actor class or its component templates. A `$Clone` using them must specify
+its own cooked `Properties.BuildableActor`; RuneSchema refuses to mutate the
+vanilla source actor through a clone.
 
 For differently sized props, author collision and local bounds in the cooked
 Blueprint. A source with a similar footprint is the safest clone base.

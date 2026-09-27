@@ -106,12 +106,54 @@ inline nlohmann::json LoaderSchemas() {
         {"Catalogue",{{"type","string"},{"minLength",1}}},{"World",{{"type","string"},{"minLength",1}}},
         {"Interact",{{"type","string"},{"minLength",1}}},{"Menu",{{"type","string"},{"minLength",1}}}
     }}};
-    buildingOverrides["properties"]["Placement"]={{"type","object"},{"additionalProperties",false},{"properties",{
-        {"Profile",{{"type","string"},{"minLength",1},{"description","Existing row in the building's cooked placement-profile table. PropProfile is the standard terrain-capable station profile."}}},
-        {"RequiresFoundation",{{"type","boolean"},{"description","False selects Profile, or PropProfile when Profile is omitted. True requires an explicit verified profile."}}},
-        {"RequiresRoof",{{"type","boolean"},{"description","False maps the actor's BuildingShelterComponent to InteractAnywhere."}}},
-        {"RequiresShelter",{{"type","boolean"},{"description","False maps the actor's BuildingShelterComponent to InteractAnywhere."}}}
+    json placementFields=json::object();
+    placementFields["Profile"]={{"type","string"},{"minLength",1},{"description","Existing row in the building's cooked placement-profile table. PropProfile is the standard terrain-capable station profile."}};
+    placementFields["RequiresFoundation"]={{"type","boolean"},{"description","False selects Profile, or PropProfile when Profile is omitted. True requires an explicit verified profile."}};
+    placementFields["RequiresRoof"]={{"type","boolean"},{"description","Compatibility alias. True selects InteractInShelterOnly; false selects InteractAnywhere."}};
+    placementFields["RequiresShelter"]={{"type","boolean"},{"description","Compatibility alias. True selects InteractInShelterOnly; false selects InteractAnywhere."}};
+    for(const auto* field:{"bAllowUserHeightModification","bAllowUserRotationModification","bCanOnlyBeSnapped","bForcePlugRotation","bCanSharePlugWithSamePieces","bCanOnlyBePlacedOnDefinedSurface","bCanOnlyBePlacedOnCertainPhysicalSurfaces","bOverrideRotationFromHitSurface","bCanOnlyBePlacedOnGround","bOverrideProjectionNormal","bShouldOffsetFromNonBuildingSurface","bAllowOverlappingWithBuildingPieces","bForceBuildingBlockerOverlapDuringPlacement","bOverrideSnappingMode"})placementFields[field]={{"type","boolean"}};
+    const json vectorFields={{"type","object"},{"additionalProperties",false},{"properties",{{"X",number},{"Y",number},{"Z",number}}}};
+    placementFields["SurfacePlacementNormal"]=vectorFields;
+    placementFields["OverrideProjectionNormal"]=vectorFields;
+    placementFields["SurfaceRotationOffset"]={{"type","object"},{"additionalProperties",false},{"properties",{{"Pitch",number},{"Yaw",number},{"Roll",number}}}};
+    placementFields["AcceptedPhysicalSurfaces"]={{"type","array"},{"maxItems",128},{"items",{{"type","string"}}}};
+    placementFields["OverlapExceptionFilter"]={{"type","array"},{"maxItems",128},{"items",{{"type","string"}}}};
+    placementFields["RegionBlockList"]={{"type","object"},{"description","Advanced native GameplayTagQuery object. Prefer copying a known-good FModel value."}};
+    placementFields["MagnetizingMultiplier"]={{"type","number"},{"minimum",0},{"maximum",100}};
+    placementFields["OverlappingBoundsMultiplier"]={{"type","number"},{"minimum",0},{"maximum",100}};
+    placementFields["SnappingModeOverride"]={{"enum",{"Basic","Advanced","Free","EBuildSnappingMode::Basic","EBuildSnappingMode::Advanced","EBuildSnappingMode::Free"}}};
+    buildingOverrides["properties"]["Placement"]={{"type","object"},{"additionalProperties",false},{"properties",std::move(placementFields)}};
+    buildingOverrides["properties"]["Stability"]={{"type","object"},{"additionalProperties",false},{"properties",{
+        {"Profile",{{"type","string"},{"minLength",1},{"description","Existing DT_StabilityProfile row used as the source."}}},
+        {"MaxStability",{{"type","number"},{"minimum",0},{"maximum",1000000}}},
+        {"MinStability",{{"type","number"},{"minimum",0},{"maximum",1000000}}},
+        {"VerticalLoss",{{"type","number"},{"minimum",0},{"maximum",1000000}}},
+        {"HorizontalLoss",{{"type","number"},{"minimum",0},{"maximum",1000000}}}
     }}};
+    buildingOverrides["properties"]["DerivedData"]={{"type","object"},{"additionalProperties",false},{"properties",{
+        {"PlacementZOffset",{{"type","number"},{"minimum",-100000},{"maximum",100000}}},
+        {"PhysicalSurfaceExtentNeg",{{"type","number"},{"minimum",-100000},{"maximum",100000}}},
+        {"PhysicalSurfaceExtentPos",{{"type","number"},{"minimum",-100000},{"maximum",100000}}}
+    }}};
+    json shelterFields=json::object();
+    shelterFields["InteractionRequirements"]={{"enum",{"InteractInShelterOnly","InteractExternallyOnly","InteractAnywhere","EBuildingRequirements::InteractInShelterOnly","EBuildingRequirements::InteractExternallyOnly","EBuildingRequirements::InteractAnywhere"}}};
+    shelterFields["bShelterCheckedOnPlacement"]={{"type","boolean"}};
+    shelterFields["bIncludeNonBuildingPartActors"]={{"type","boolean"}};
+    for(const auto* field:{"RequiresRoofText","RequiresShelterText","RequiresNoRoofText","RequiresNoShelterText"})shelterFields[field]={{"type","string"}};
+    const json rayArray={{"type","array"},{"maxItems",128},{"items",vectorFields}};
+    shelterFields["RoofRays"]=rayArray;shelterFields["ShelterRays"]=rayArray;
+    const json tagArray={{"type","array"},{"maxItems",128},{"items",{{"type","string"}}}};
+    shelterFields["RoofTraceExclusionFilter"]=tagArray;shelterFields["ShelterTraceExclusionFilter"]=tagArray;
+    for(const auto* field:{"SweepRayThickness","SweepRayDistance","ValidityPercentage"})shelterFields[field]={{"type","number"},{"minimum",0},{"maximum",100000}};
+    buildingOverrides["properties"]["Shelter"]={{"type","object"},{"additionalProperties",false},{"properties",std::move(shelterFields)},{"description","Actor-component settings. On $Clone, these require Properties.BuildableActor to name a private cooked actor."}};
+    buildingOverrides["properties"]["Health"]={{"type","object"},{"additionalProperties",false},{"properties",{
+        {"MaxHealth",{{"type","number"},{"exclusiveMinimum",0},{"maximum",100000000}}},{"bCanDie",{{"type","boolean"}}}
+    }},{"description","HealthComponent defaults. On $Clone, requires a private cooked BuildableActor."}};
+    buildingOverrides["properties"]["Snapping"]={{"type","object"},{"additionalProperties",false},{"properties",{
+        {"bUseSocketsForPlugGeneration",{{"type","boolean"}}},
+        {"SnappingRadius",{{"type","number"},{"minimum",0},{"maximum",100000}}},
+        {"SnappingRadiusInBasicSnappingMode",{{"type","number"},{"minimum",0},{"maximum",100000}}}
+    }},{"description","BuildingSnapComponent defaults. On $Clone, requires a private cooked BuildableActor."}};
     json buildingFuelRule={{"type","object"},{"additionalProperties",false},{"required",{"Mode"}},
         {"properties",json::object()},
         {"description","Mutate the processing row's AcceptedFuels array. Append preserves native fuels; authors should not repeat a fuel already present. Replace and Clear are explicit."}};

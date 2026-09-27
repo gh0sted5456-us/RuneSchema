@@ -231,15 +231,16 @@ as a separate build-menu entry.
       {"ItemData":"/Game/Gameplay/Items/ITEM_Log.ITEM_Log","Amount":4}
     ],
     "Overrides": {
-      "Processing": {
-        "AcceptedFuels": {
-          "Mode": "Append",
-          "Items": ["/Game/MyMod/Fuel/FUEL_Coal.FUEL_Coal"]
-        },
-        "MaxFuelSlots": 4,
-        "Rate": 1.25,
-        "AutoStartProcess": false
-      }
+      "Placement": {
+        "Profile": "WallPropProfile",
+        "bCanOnlyBeSnapped": false,
+        "bOverrideSnappingMode": true,
+        "SnappingModeOverride": "Advanced"
+      },
+      "Stability": {"Profile":"Tier2_Base","MaxStability":1800},
+      "DerivedData": {"PlacementZOffset":10},
+      "Shelter": {"InteractionRequirements":"InteractInShelterOnly"},
+      "Health": {"MaxHealth":2500}
     },
     "Unlock": true,
     "AddTo": {"Collection":"Modded Buildings","PageIndex":0}
@@ -255,7 +256,21 @@ Walkthrough:
 4. Replace the full requirements list when changing cost.
 5. Set `AddTo`, or omit it to inherit pages containing the clone source.
 6. Test placement, collision, navigation, save/reload, and deconstruction on
-   both host and client.
+both host and client.
+
+`Overrides.Placement` exposes all 23 mapped native `PlacementProfile` fields,
+including ground/surface restrictions, rotation, physical-surface filters,
+overlap filters, magnetizing, blocker checks, and snapping mode. Stability,
+derived placement offsets/extents, shelter rays and requirements, health, and
+snap radii have their own sections. RuneSchema copies placement/stability rows
+for the target instead of rewriting shared vanilla rows. A clone also gets
+private derived placement data. See the complete field table in
+[the buildings loader reference](loaders/buildings.md).
+
+Actor-component changes (`Shelter`, `Health`, `Snapping`, `Names.World`, and
+`Names.Interact`) require a private cooked `BuildableActor` on `$Clone` so a
+clone cannot alter the vanilla source actor. `Asset` intentionally edits the
+existing piece.
 
 For processing buildings, `Overrides.Processing` safely exposes the verified
 `DT_ProcessingStationDataTable` row fields: `Rate`, `AcceptedFuels`,

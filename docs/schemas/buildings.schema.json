@@ -89,6 +89,42 @@
                   "additionalProperties": false,
                   "description": "Optional direct-building presentation, placement, shelter and station-row overrides. Omitted fields preserve cooked values; every requested runtime target is verified before registration.",
                   "properties": {
+                    "DerivedData": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "PhysicalSurfaceExtentNeg": {
+                          "maximum": 100000,
+                          "minimum": -100000,
+                          "type": "number"
+                        },
+                        "PhysicalSurfaceExtentPos": {
+                          "maximum": 100000,
+                          "minimum": -100000,
+                          "type": "number"
+                        },
+                        "PlacementZOffset": {
+                          "maximum": 100000,
+                          "minimum": -100000,
+                          "type": "number"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "Health": {
+                      "additionalProperties": false,
+                      "description": "HealthComponent defaults. On $Clone, requires a private cooked BuildableActor.",
+                      "properties": {
+                        "MaxHealth": {
+                          "exclusiveMinimum": 0,
+                          "maximum": 100000000,
+                          "type": "number"
+                        },
+                        "bCanDie": {
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    },
                     "Names": {
                       "additionalProperties": false,
                       "properties": {
@@ -114,21 +150,146 @@
                     "Placement": {
                       "additionalProperties": false,
                       "properties": {
+                        "AcceptedPhysicalSurfaces": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 128,
+                          "type": "array"
+                        },
+                        "MagnetizingMultiplier": {
+                          "maximum": 100,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "OverlapExceptionFilter": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 128,
+                          "type": "array"
+                        },
+                        "OverlappingBoundsMultiplier": {
+                          "maximum": 100,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "OverrideProjectionNormal": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "X": {
+                              "type": "number"
+                            },
+                            "Y": {
+                              "type": "number"
+                            },
+                            "Z": {
+                              "type": "number"
+                            }
+                          },
+                          "type": "object"
+                        },
                         "Profile": {
                           "description": "Existing row in the building's cooked placement-profile table. PropProfile is the standard terrain-capable station profile.",
                           "minLength": 1,
                           "type": "string"
+                        },
+                        "RegionBlockList": {
+                          "description": "Advanced native GameplayTagQuery object. Prefer copying a known-good FModel value.",
+                          "type": "object"
                         },
                         "RequiresFoundation": {
                           "description": "False selects Profile, or PropProfile when Profile is omitted. True requires an explicit verified profile.",
                           "type": "boolean"
                         },
                         "RequiresRoof": {
-                          "description": "False maps the actor's BuildingShelterComponent to InteractAnywhere.",
+                          "description": "Compatibility alias. True selects InteractInShelterOnly; false selects InteractAnywhere.",
                           "type": "boolean"
                         },
                         "RequiresShelter": {
-                          "description": "False maps the actor's BuildingShelterComponent to InteractAnywhere.",
+                          "description": "Compatibility alias. True selects InteractInShelterOnly; false selects InteractAnywhere.",
+                          "type": "boolean"
+                        },
+                        "SnappingModeOverride": {
+                          "enum": [
+                            "Basic",
+                            "Advanced",
+                            "Free",
+                            "EBuildSnappingMode::Basic",
+                            "EBuildSnappingMode::Advanced",
+                            "EBuildSnappingMode::Free"
+                          ]
+                        },
+                        "SurfacePlacementNormal": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "X": {
+                              "type": "number"
+                            },
+                            "Y": {
+                              "type": "number"
+                            },
+                            "Z": {
+                              "type": "number"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "SurfaceRotationOffset": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "Pitch": {
+                              "type": "number"
+                            },
+                            "Roll": {
+                              "type": "number"
+                            },
+                            "Yaw": {
+                              "type": "number"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "bAllowOverlappingWithBuildingPieces": {
+                          "type": "boolean"
+                        },
+                        "bAllowUserHeightModification": {
+                          "type": "boolean"
+                        },
+                        "bAllowUserRotationModification": {
+                          "type": "boolean"
+                        },
+                        "bCanOnlyBePlacedOnCertainPhysicalSurfaces": {
+                          "type": "boolean"
+                        },
+                        "bCanOnlyBePlacedOnDefinedSurface": {
+                          "type": "boolean"
+                        },
+                        "bCanOnlyBePlacedOnGround": {
+                          "type": "boolean"
+                        },
+                        "bCanOnlyBeSnapped": {
+                          "type": "boolean"
+                        },
+                        "bCanSharePlugWithSamePieces": {
+                          "type": "boolean"
+                        },
+                        "bForceBuildingBlockerOverlapDuringPlacement": {
+                          "type": "boolean"
+                        },
+                        "bForcePlugRotation": {
+                          "type": "boolean"
+                        },
+                        "bOverrideProjectionNormal": {
+                          "type": "boolean"
+                        },
+                        "bOverrideRotationFromHitSurface": {
+                          "type": "boolean"
+                        },
+                        "bOverrideSnappingMode": {
+                          "type": "boolean"
+                        },
+                        "bShouldOffsetFromNonBuildingSurface": {
                           "type": "boolean"
                         }
                       },
@@ -239,6 +400,159 @@
                         "StopsWhenRecipeChanges": {
                           "description": "Writes native bStopsWhenRecipeChanges.",
                           "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "Shelter": {
+                      "additionalProperties": false,
+                      "description": "Actor-component settings. On $Clone, these require Properties.BuildableActor to name a private cooked actor.",
+                      "properties": {
+                        "InteractionRequirements": {
+                          "enum": [
+                            "InteractInShelterOnly",
+                            "InteractExternallyOnly",
+                            "InteractAnywhere",
+                            "EBuildingRequirements::InteractInShelterOnly",
+                            "EBuildingRequirements::InteractExternallyOnly",
+                            "EBuildingRequirements::InteractAnywhere"
+                          ]
+                        },
+                        "RequiresNoRoofText": {
+                          "type": "string"
+                        },
+                        "RequiresNoShelterText": {
+                          "type": "string"
+                        },
+                        "RequiresRoofText": {
+                          "type": "string"
+                        },
+                        "RequiresShelterText": {
+                          "type": "string"
+                        },
+                        "RoofRays": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "X": {
+                                "type": "number"
+                              },
+                              "Y": {
+                                "type": "number"
+                              },
+                              "Z": {
+                                "type": "number"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "maxItems": 128,
+                          "type": "array"
+                        },
+                        "RoofTraceExclusionFilter": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 128,
+                          "type": "array"
+                        },
+                        "ShelterRays": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "X": {
+                                "type": "number"
+                              },
+                              "Y": {
+                                "type": "number"
+                              },
+                              "Z": {
+                                "type": "number"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "maxItems": 128,
+                          "type": "array"
+                        },
+                        "ShelterTraceExclusionFilter": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 128,
+                          "type": "array"
+                        },
+                        "SweepRayDistance": {
+                          "maximum": 100000,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "SweepRayThickness": {
+                          "maximum": 100000,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "ValidityPercentage": {
+                          "maximum": 100000,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "bIncludeNonBuildingPartActors": {
+                          "type": "boolean"
+                        },
+                        "bShelterCheckedOnPlacement": {
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "Snapping": {
+                      "additionalProperties": false,
+                      "description": "BuildingSnapComponent defaults. On $Clone, requires a private cooked BuildableActor.",
+                      "properties": {
+                        "SnappingRadius": {
+                          "maximum": 100000,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "SnappingRadiusInBasicSnappingMode": {
+                          "maximum": 100000,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "bUseSocketsForPlugGeneration": {
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "Stability": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "HorizontalLoss": {
+                          "maximum": 1000000,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "MaxStability": {
+                          "maximum": 1000000,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "MinStability": {
+                          "maximum": 1000000,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "Profile": {
+                          "description": "Existing DT_StabilityProfile row used as the source.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "VerticalLoss": {
+                          "maximum": 1000000,
+                          "minimum": 0,
+                          "type": "number"
                         }
                       },
                       "type": "object"
@@ -470,6 +784,42 @@
                     "additionalProperties": false,
                     "description": "Optional direct-building presentation, placement, shelter and station-row overrides. Omitted fields preserve cooked values; every requested runtime target is verified before registration.",
                     "properties": {
+                      "DerivedData": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "PhysicalSurfaceExtentNeg": {
+                            "maximum": 100000,
+                            "minimum": -100000,
+                            "type": "number"
+                          },
+                          "PhysicalSurfaceExtentPos": {
+                            "maximum": 100000,
+                            "minimum": -100000,
+                            "type": "number"
+                          },
+                          "PlacementZOffset": {
+                            "maximum": 100000,
+                            "minimum": -100000,
+                            "type": "number"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "Health": {
+                        "additionalProperties": false,
+                        "description": "HealthComponent defaults. On $Clone, requires a private cooked BuildableActor.",
+                        "properties": {
+                          "MaxHealth": {
+                            "exclusiveMinimum": 0,
+                            "maximum": 100000000,
+                            "type": "number"
+                          },
+                          "bCanDie": {
+                            "type": "boolean"
+                          }
+                        },
+                        "type": "object"
+                      },
                       "Names": {
                         "additionalProperties": false,
                         "properties": {
@@ -495,21 +845,146 @@
                       "Placement": {
                         "additionalProperties": false,
                         "properties": {
+                          "AcceptedPhysicalSurfaces": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 128,
+                            "type": "array"
+                          },
+                          "MagnetizingMultiplier": {
+                            "maximum": 100,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "OverlapExceptionFilter": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 128,
+                            "type": "array"
+                          },
+                          "OverlappingBoundsMultiplier": {
+                            "maximum": 100,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "OverrideProjectionNormal": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "X": {
+                                "type": "number"
+                              },
+                              "Y": {
+                                "type": "number"
+                              },
+                              "Z": {
+                                "type": "number"
+                              }
+                            },
+                            "type": "object"
+                          },
                           "Profile": {
                             "description": "Existing row in the building's cooked placement-profile table. PropProfile is the standard terrain-capable station profile.",
                             "minLength": 1,
                             "type": "string"
+                          },
+                          "RegionBlockList": {
+                            "description": "Advanced native GameplayTagQuery object. Prefer copying a known-good FModel value.",
+                            "type": "object"
                           },
                           "RequiresFoundation": {
                             "description": "False selects Profile, or PropProfile when Profile is omitted. True requires an explicit verified profile.",
                             "type": "boolean"
                           },
                           "RequiresRoof": {
-                            "description": "False maps the actor's BuildingShelterComponent to InteractAnywhere.",
+                            "description": "Compatibility alias. True selects InteractInShelterOnly; false selects InteractAnywhere.",
                             "type": "boolean"
                           },
                           "RequiresShelter": {
-                            "description": "False maps the actor's BuildingShelterComponent to InteractAnywhere.",
+                            "description": "Compatibility alias. True selects InteractInShelterOnly; false selects InteractAnywhere.",
+                            "type": "boolean"
+                          },
+                          "SnappingModeOverride": {
+                            "enum": [
+                              "Basic",
+                              "Advanced",
+                              "Free",
+                              "EBuildSnappingMode::Basic",
+                              "EBuildSnappingMode::Advanced",
+                              "EBuildSnappingMode::Free"
+                            ]
+                          },
+                          "SurfacePlacementNormal": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "X": {
+                                "type": "number"
+                              },
+                              "Y": {
+                                "type": "number"
+                              },
+                              "Z": {
+                                "type": "number"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "SurfaceRotationOffset": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "Pitch": {
+                                "type": "number"
+                              },
+                              "Roll": {
+                                "type": "number"
+                              },
+                              "Yaw": {
+                                "type": "number"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "bAllowOverlappingWithBuildingPieces": {
+                            "type": "boolean"
+                          },
+                          "bAllowUserHeightModification": {
+                            "type": "boolean"
+                          },
+                          "bAllowUserRotationModification": {
+                            "type": "boolean"
+                          },
+                          "bCanOnlyBePlacedOnCertainPhysicalSurfaces": {
+                            "type": "boolean"
+                          },
+                          "bCanOnlyBePlacedOnDefinedSurface": {
+                            "type": "boolean"
+                          },
+                          "bCanOnlyBePlacedOnGround": {
+                            "type": "boolean"
+                          },
+                          "bCanOnlyBeSnapped": {
+                            "type": "boolean"
+                          },
+                          "bCanSharePlugWithSamePieces": {
+                            "type": "boolean"
+                          },
+                          "bForceBuildingBlockerOverlapDuringPlacement": {
+                            "type": "boolean"
+                          },
+                          "bForcePlugRotation": {
+                            "type": "boolean"
+                          },
+                          "bOverrideProjectionNormal": {
+                            "type": "boolean"
+                          },
+                          "bOverrideRotationFromHitSurface": {
+                            "type": "boolean"
+                          },
+                          "bOverrideSnappingMode": {
+                            "type": "boolean"
+                          },
+                          "bShouldOffsetFromNonBuildingSurface": {
                             "type": "boolean"
                           }
                         },
@@ -620,6 +1095,159 @@
                           "StopsWhenRecipeChanges": {
                             "description": "Writes native bStopsWhenRecipeChanges.",
                             "type": "boolean"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "Shelter": {
+                        "additionalProperties": false,
+                        "description": "Actor-component settings. On $Clone, these require Properties.BuildableActor to name a private cooked actor.",
+                        "properties": {
+                          "InteractionRequirements": {
+                            "enum": [
+                              "InteractInShelterOnly",
+                              "InteractExternallyOnly",
+                              "InteractAnywhere",
+                              "EBuildingRequirements::InteractInShelterOnly",
+                              "EBuildingRequirements::InteractExternallyOnly",
+                              "EBuildingRequirements::InteractAnywhere"
+                            ]
+                          },
+                          "RequiresNoRoofText": {
+                            "type": "string"
+                          },
+                          "RequiresNoShelterText": {
+                            "type": "string"
+                          },
+                          "RequiresRoofText": {
+                            "type": "string"
+                          },
+                          "RequiresShelterText": {
+                            "type": "string"
+                          },
+                          "RoofRays": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "X": {
+                                  "type": "number"
+                                },
+                                "Y": {
+                                  "type": "number"
+                                },
+                                "Z": {
+                                  "type": "number"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "maxItems": 128,
+                            "type": "array"
+                          },
+                          "RoofTraceExclusionFilter": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 128,
+                            "type": "array"
+                          },
+                          "ShelterRays": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "X": {
+                                  "type": "number"
+                                },
+                                "Y": {
+                                  "type": "number"
+                                },
+                                "Z": {
+                                  "type": "number"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "maxItems": 128,
+                            "type": "array"
+                          },
+                          "ShelterTraceExclusionFilter": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 128,
+                            "type": "array"
+                          },
+                          "SweepRayDistance": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "SweepRayThickness": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "ValidityPercentage": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "bIncludeNonBuildingPartActors": {
+                            "type": "boolean"
+                          },
+                          "bShelterCheckedOnPlacement": {
+                            "type": "boolean"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "Snapping": {
+                        "additionalProperties": false,
+                        "description": "BuildingSnapComponent defaults. On $Clone, requires a private cooked BuildableActor.",
+                        "properties": {
+                          "SnappingRadius": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "SnappingRadiusInBasicSnappingMode": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "bUseSocketsForPlugGeneration": {
+                            "type": "boolean"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "Stability": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "HorizontalLoss": {
+                            "maximum": 1000000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "MaxStability": {
+                            "maximum": 1000000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "MinStability": {
+                            "maximum": 1000000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "Profile": {
+                            "description": "Existing DT_StabilityProfile row used as the source.",
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "VerticalLoss": {
+                            "maximum": 1000000,
+                            "minimum": 0,
+                            "type": "number"
                           }
                         },
                         "type": "object"

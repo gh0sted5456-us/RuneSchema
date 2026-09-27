@@ -103,6 +103,18 @@ int RunLoaderSchemas(int argc,char** argv) {
         .at("properties").at("Overrides").at("properties").at("Processing").at("properties");
     assert(processing.contains("AcceptedFuels") && processing.contains("StartingFuelItem")
         && processing.contains("MaxFuelSlots") && processing.contains("AutoStartProcess"));
+    const auto& buildingOverrides=schemas.at("buildings").at("anyOf").at(0).at("anyOf").at(0)
+        .at("patternProperties").at("^[^$]").at("properties").at("Overrides").at("properties");
+    const auto& buildingPlacementFields=buildingOverrides.at("Placement").at("properties");
+    assert(buildingPlacementFields.contains("bCanOnlyBeSnapped")
+        && buildingPlacementFields.contains("AcceptedPhysicalSurfaces")
+        && buildingPlacementFields.contains("RegionBlockList")
+        && buildingPlacementFields.contains("SnappingModeOverride"));
+    assert(buildingOverrides.at("Stability").at("properties").contains("HorizontalLoss"));
+    assert(buildingOverrides.at("DerivedData").at("properties").contains("PlacementZOffset"));
+    assert(buildingOverrides.at("Shelter").at("properties").contains("RoofRays"));
+    assert(buildingOverrides.at("Health").at("properties").contains("MaxHealth"));
+    assert(buildingOverrides.at("Snapping").at("properties").contains("SnappingRadius"));
     const auto& declaration=schemas.at("assets").at("properties").at("$declaration");
     assert(declaration.at("oneOf").size()==2);
     assert(declaration.at("oneOf").at(0).at("properties").at("Kind").at("enum")==nlohmann::json::array({"Item","Recipe"}));

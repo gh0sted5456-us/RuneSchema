@@ -12,8 +12,33 @@
       "Placement": {
         "Profile": "PropProfile",
         "RequiresFoundation": false,
-        "RequiresRoof": false,
-        "RequiresShelter": false
+        "bAllowUserRotationModification": true,
+        "bCanOnlyBePlacedOnGround": true,
+        "bCanOnlyBeSnapped": false,
+        "bOverrideSnappingMode": true,
+        "SnappingModeOverride": "Free",
+        "MagnetizingMultiplier": 1.0,
+        "OverlappingBoundsMultiplier": 1.0
+      },
+      "Stability": {
+        "Profile": "Prop",
+        "MaxStability": 10.0,
+        "MinStability": 0.5
+      },
+      "DerivedData": {
+        "PlacementZOffset": 10.0
+      },
+      "Shelter": {
+        "InteractionRequirements": "InteractAnywhere",
+        "bShelterCheckedOnPlacement": false
+      },
+      "Health": {
+        "MaxHealth": 2500.0,
+        "bCanDie": true
+      },
+      "Snapping": {
+        "SnappingRadius": 150.0,
+        "SnappingRadiusInBasicSnappingMode": 100.0
       },
       "Processing": {
         "Rate": 1.0

@@ -126,6 +126,7 @@ namespace DragonWilds {
         std::unordered_map<RC::StringType, PS::WeakObjectHandle> m_buildingHandles;
         std::unordered_set<RC::StringType> m_applied;
         std::unordered_set<RC::StringType> m_unlocks;
+        std::unordered_set<std::string> m_ownedProfileRows;
         std::vector<RC::Unreal::UObject*> m_retiredBuildings;
         std::vector<RC::Unreal::UObject*> m_createdBuildings;
         NativeRegistrySnapshot m_nativeRegistrySnapshot;

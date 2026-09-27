@@ -53,6 +53,21 @@ int main(int argc,char** argv) {
         "station rows are not linked by their building relationship");
     require(loader.find("PlacementProfileRowHandle")!=std::string::npos,
         "placement profile override is missing");
+    require(loader.find("private transient copy")!=std::string::npos
+        && loader.find("_DerivedData")!=std::string::npos,
+        "clones can still mutate the vanilla source's shared derived placement data");
+    require(loader.find("RS_PLACE")!=std::string::npos
+        && loader.find("RS_STABLE")!=std::string::npos,
+        "per-building placement/stability profile rows are missing");
+    require(loader.find("already owned by external content")!=std::string::npos,
+        "generated profile rows can overwrite external content");
+    require(schema.find("bCanOnlyBePlacedOnGround")!=std::string::npos
+        && schema.find("RegionBlockList")!=std::string::npos
+        && schema.find("PhysicalSurfaceExtentNeg")!=std::string::npos,
+        "mapped placement surface is incomplete");
+    require(schema.find("bShelterCheckedOnPlacement")!=std::string::npos
+        && schema.find("SweepRayDistance")!=std::string::npos,
+        "mapped shelter surface is incomplete");
     require(loader.find("EBuildingRequirements::InteractAnywhere")!=std::string::npos,
         "shelter override does not use the verified native enum");
     require(schema.find("ProcessingRate multiplier")!=std::string::npos,
