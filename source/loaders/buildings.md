@@ -160,6 +160,30 @@ component's interaction requirement.
 changes create a private copied row. Native profiles range from `Prop` and
 `Stackable_Prop` through `Tier1_*`, `Tier2_*`, `Tier3_*`, and `FarmPlot`.
 
+A cooked `BuildingPieceData` may instead carry a row handle for a custom
+profile. Keep that handle pointed at the game's vanilla stability table and
+add the row through `/raw` before the building is registered:
+
+```jsonc
+{
+  "/Game/Gameplay/BaseBuilding_New/DT_StabilityProfile.DT_StabilityProfile": {
+    "CoinageGroundProp": {
+      "MaxStability": 1.0,
+      "MinStability": 0.0,
+      "VerticalLoss": 0.01,
+      "HorizontalLoss": 0.01
+    }
+  }
+}
+```
+
+Use the exact table path above or the exact short name `DT_StabilityProfile`.
+`StabilityProfileDataTable` is not a game table name and will not target the
+vanilla table. RuneSchema loads `/raw` before `/buildings`, then verifies that
+every building's selected stability row actually exists. A missing row rejects
+only that building and produces a `[BUILDING-STABILITY][MISSING]` error instead
+of allowing a broken stability handle into the catalogue.
+
 `Overrides.DerivedData` exposes `PlacementZOffset`,
 `PhysicalSurfaceExtentNeg`, and `PhysicalSurfaceExtentPos`. These are Unreal
 centimetres; `10.0` is 10 cm.

@@ -3,12 +3,7 @@
 #include "SDK/WeakObjectHandle.h"
 #include "Unreal/UObjectArray.hpp"
 #include "Utility/Logging.h"
-#include "Core/ConfigFiles.h"
-#include "Runtime/HostServices.h"
-#include "Loader/OwnedContentLedger.h"
 #include "Helpers/String.hpp"
-#include <chrono>
-#include <algorithm>
 #include <mutex>
 #include <unordered_map>
 
@@ -25,8 +20,7 @@ struct Entry {
 std::mutex mutex;
 std::unordered_map<RC::Unreal::UObject*,Entry> entries;
 bool warned{};
-bool dirty=true,rotated=false,writeFailed=false;
-const auto session=std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
+bool dirty=true;
 nlohmann::json Describe(const Entry& entry) {
     return {{"Kind","RuneSchemaAssetClone"},{"Confirmed",true},{"SourceAsset",entry.source},
         {"CreatingMod",entry.creator},{"LastCloneDefinitionSource",entry.lastSource},
@@ -82,31 +76,7 @@ nlohmann::json Lookup(RC::Unreal::UObject* object) {
 }
 void Flush() {
     std::lock_guard lock(mutex);
-    if(!dirty || writeFailed)return;
-    try {
-        std::vector<DragonWilds::OwnedContent::Record> owned;
-        for(const auto& [object,entry]:entries)if(entry.registered && !entry.persistenceId.empty())
-            owned.push_back({"Item",entry.creator,entry.persistenceId,entry.internalName,entry.source});
-        if(!owned.empty())DragonWilds::OwnedContent::Merge(
-            DragonWilds::OwnedContent::LedgerPath(HostServices::StateDirectory()),owned);
-        if(!PSConfig::Get()->IsDebugLoggingEnabled()){dirty=false;return;}
-        const auto folder=HostServices::ExportsDirectory();
-        const auto current=folder/"asset-clones-current.json",previous=folder/"asset-clones-previous.json";
-        nlohmann::json rows=nlohmann::json::array();
-        for(const auto& [object,entry]:entries)rows.push_back(Describe(entry));
-        std::sort(rows.begin(),rows.end(),[](const auto& a,const auto& b){return a.at("AssetPath")<b.at("AssetPath");});
-        const auto text=nlohmann::json{{"Kind","RuneSchemaCloneManifest"},{"Version",1},{"Session",session},
-            {"Coverage","Observed asset clones only; identities from clone definitions; diagnostic snapshot, never a restore source"},
-            {"RegistryLimitReached",warned},{"Records",rows}}.dump(2);
-        if(text.size()>8*1024*1024)throw std::runtime_error("Clone manifest exceeds 8 MiB.");
-        if(!rotated) {
-            if(std::filesystem::exists(current))ConfigFiles::Write(previous,ConfigFiles::Read(current,8*1024*1024));
-            rotated=true;
-        }
-        ConfigFiles::Write(current,text);dirty=false;
-    } catch(const std::exception&) {
-        writeFailed=true;Log<RC::LogLevel::Warning>(TEXT("Clone manifest write failed; disabled for this session. Existing files preserved where possible.\n"));
-    }
+    dirty=false;
 }
 void Clear() {std::lock_guard lock(mutex);entries.clear();warned=false;}
 }

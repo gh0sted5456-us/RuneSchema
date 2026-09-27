@@ -16,9 +16,10 @@ running storefront and selects the matching game support automatically.
 
 ## Save cleanup
 
-RuneSchema records only the persistent identities supplied by RuneSchema mods.
-After all enabled mods and the character have loaded, it removes matching
-records that belonged to a now-disabled, removed, or changed mod.
+RuneSchema does not maintain a player-content ledger or restore history.
+Enabled mods and cooked content register first. Before character hydration,
+RuneSchema removes applicable saved identities that do not resolve in the
+completed live registries.
 
 The current cleanup covers RuneSchema-owned:
 
@@ -28,11 +29,10 @@ The current cleanup covers RuneSchema-owned:
 - journal entries; and
 - lore entries.
 
-Steam/GOG and Game Pass now use the same process. RuneSchema changes the active
-character only after the game has loaded it, verifies each applicable category,
-and lets the game save through its normal storefront service. Xbox Game Save
-files are never edited directly. Unknown, vanilla, and unrecorded third-party
-content is left alone.
+Steam/GOG and Game Pass use the same cleanup decision through their
+storefront-specific save lanes, then let the game save normally. Xbox Game Save
+containers are never edited directly. Removing and reinstalling a mod is a fresh
+installation; previously removed state is not restored.
 
 ## Loader improvements
 

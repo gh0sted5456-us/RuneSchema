@@ -35,7 +35,6 @@
 #include "Loader/RecipeUnlockPolicy.h"
 #include "Loader/ItemIdentity.h"
 #include "Loader/DialogueSaveIdentity.h"
-#include "Loader/OwnedContentLedger.h"
 #include "Core/JsonPatchDirective.h"
 #include "Runtime/HostServices.h"
 
@@ -922,9 +921,6 @@ namespace DragonWilds {
                     PS::Log<LogLevel::Error>(STR("Recipe '{}' ownership identity did not verify; placement and unlock were refused.\n"),def.Key);
                     continue;
                 }
-                OwnedContent::Merge(OwnedContent::LedgerPath(
-                    PS::HostServices::StateDirectory()),{{"Recipe",RC::to_string(def.ModName),
-                        actualId,actualName,RC::to_string(recipe->GetPathName())}});
             }
 
             if (created)

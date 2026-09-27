@@ -13,6 +13,7 @@
 #include "nlohmann/json.hpp"
 #include "Runtime/HostServices.h"
 #include "Runtime/MappingBackbone.h"
+#include "Runtime/NetworkRoleNotice.h"
 #include "Generator/ToolRequest.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Helper/ActorHelper.h"
@@ -181,7 +182,7 @@ RegistryBridge::WorldContract RegistryBridge::ResolveWorldContract() const {
 
 void RegistryBridge::ResetWorld() {
     m_authorityComponent=nullptr;m_worldAuthorityComponent=nullptr;
-    m_pendingMode=nullptr;
+    m_pendingMode.Reset();
     m_retryElapsed=m_retryInterval=0.0f;
     m_seenRegistryRevision=m_seenActivationRevision=m_seenPersistentRevision=0;
     m_activeAuthorityGraph=nullptr;m_nativeAuthorityActionObserved=false;
@@ -624,7 +625,7 @@ bool RegistryBridge::Attach(AGameModeBase* mode) {
     DragonWilds::ActorHelper::FunctionCall(component,TEXT("/Script/Engine.ActorComponent:SetIsReplicated"))
         .Arg(TEXT("ShouldReplicate"),true).Invoke();
     m_authorityComponent=component;
-    m_pendingMode=nullptr;
+    m_pendingMode.Reset();
     // One bounded world-ready scan covers pawns whose BeginPlay preceded the
     // bridge. New pawns are handled by ObservePlayerLifecycle.
     EnsurePlayerBridges();
@@ -755,20 +756,21 @@ void RegistryBridge::ObserveAuthorityPost(UObject* source,UFunction* function) {
 }
 
 void RegistryBridge::RetryAttach(float deltaSeconds) {
-    if(!m_pendingMode || m_authorityComponent)return;
+    auto* pending=static_cast<AGameModeBase*>(m_pendingMode.Get());
+    if(!pending || m_authorityComponent){if(!pending)m_pendingMode.Reset();return;}
     m_retryElapsed+=std::max(0.0f,deltaSeconds);
     m_retryInterval+=std::max(0.0f,deltaSeconds);
     if(m_retryInterval<0.25f)return;
     m_retryInterval=0.0f;
     try {
-        if(Attach(m_pendingMode))return;
+        if(Attach(pending))return;
         if(m_retryElapsed>=30.0f) {
             PS::Log<LogLevel::Warning>(STR("Registry bridge deferred attachment timed out after 30 seconds; this world has no authoritative GameState.\n"));
-            m_pendingMode=nullptr;
+            m_pendingMode.Reset();
         }
     } catch(const std::exception& error) {
         PS::Log<LogLevel::Warning>(STR("Registry bridge unavailable: {}.\n"),PS::ToWideSafe(error.what()));
-        m_pendingMode=nullptr;
+        m_pendingMode.Reset();
     }
 }
 
@@ -777,11 +779,10 @@ void RegistryBridge::StartRetryTick() {
     Hook::FCallbackOptions options{};options.OwnerModName=TEXT("RuneSchema");
     options.HookName=TEXT("RegistryBridgeDeferredAttach");
     m_retryTick=Hook::RegisterEngineTickPostCallback(
-        [this](Hook::TCallbackIterationData<void>& iteration,UEngine*,float deltaSeconds,bool){
-            RetryAttach(deltaSeconds);
-            if(!m_pendingMode||m_authorityComponent){m_retryTick=Hook::ERROR_ID;iteration.RemoveSelf();}
+        [this](Hook::TCallbackIterationData<void>&,UEngine*,float deltaSeconds,bool){
+            if(m_pendingMode.Get() && !m_authorityComponent)RetryAttach(deltaSeconds);
         },options);
-    if(m_retryTick==Hook::ERROR_ID){m_pendingMode=nullptr;PS::Log<LogLevel::Warning>(STR("Registry bridge deferred attachment could not be scheduled.\n"));}
+    if(m_retryTick==Hook::ERROR_ID){m_pendingMode.Reset();PS::Log<LogLevel::Warning>(STR("Registry bridge deferred attachment could not be scheduled.\n"));}
 }
 
 void RegistryBridge::Observe(UObject* source,UFunction* function) {
@@ -940,8 +941,12 @@ void RegistryBridge::Start() {
     m_worldStarting=Hook::RegisterInitGameStatePreCallback([this](Hook::TCallbackIterationData<void>&,AGameModeBase*){ResetWorld();},options);
     options.HookName=TEXT("RegistryBridgeWorldReady");
     m_worldReady=Hook::RegisterInitGameStatePostCallback([this](Hook::TCallbackIterationData<void>&,AGameModeBase* mode){
-        m_pendingMode=mode;m_retryElapsed=m_retryInterval=0.0f;
-        try{if(!Attach(mode))StartRetryTick();}catch(const std::exception& error){m_pendingMode=nullptr;PS::Log<LogLevel::Warning>(STR("Registry bridge unavailable: {}.\n"),PS::ToWideSafe(error.what()));}
+        auto* world=mode?static_cast<UObject*>(mode)->GetWorld():nullptr;
+        if(!world || !IsGameplayRoleWorld(RC::to_string(world->GetPathName()))) {
+            m_pendingMode.Reset();return;
+        }
+        m_pendingMode.Assign(mode);m_retryElapsed=m_retryInterval=0.0f;
+        try{if(!Attach(mode))StartRetryTick();}catch(const std::exception& error){m_pendingMode.Reset();PS::Log<LogLevel::Warning>(STR("Registry bridge unavailable: {}.\n"),PS::ToWideSafe(error.what()));}
     },options);
     options.HookName=TEXT("RegistryAuthorityAction");
     m_authorityPre=Hook::RegisterProcessEventPreCallback([this](Hook::TCallbackIterationData<void>&,UObject* source,UFunction* function,void* parameters){
@@ -951,8 +956,10 @@ void RegistryBridge::Start() {
     m_processEvent=Hook::RegisterProcessEventPostCallback([this](Hook::TCallbackIterationData<void>&,UObject* source,UFunction* function,void* parameters){
         try{ObservePlayerLifecycle(source,function);ObserveAuthorityPost(source,function);Observe(source,function);ObserveClientTransport(source,function,parameters);}catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("Registry bridge update rejected: {}.\n"),PS::ToWideSafe(error.what()));}
     },options);
+    StartRetryTick();
     m_started=m_worldStarting!=Hook::ERROR_ID && m_worldReady!=Hook::ERROR_ID
-        && m_authorityPre!=Hook::ERROR_ID && m_processEvent!=Hook::ERROR_ID;
+        && m_authorityPre!=Hook::ERROR_ID && m_processEvent!=Hook::ERROR_ID
+        && m_retryTick!=Hook::ERROR_ID;
     if(!m_started){Stop();PS::Log<LogLevel::Warning>(STR("Registry bridge hooks could not be installed.\n"));}
 }
 

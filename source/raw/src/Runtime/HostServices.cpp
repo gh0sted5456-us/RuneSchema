@@ -42,58 +42,12 @@ namespace PS::HostServices {
             const auto family = PackageFamilyName();
             if (family.empty()) return {};
             // Xbox-managed saves live under SystemAppData\wgs. RuneSchema does
-            // not edit that provider database directly; its own ledger belongs
-            // in LocalState and native adapters clean provider payloads in-game.
+            // not edit that provider database directly; native adapters clean
+            // provider payloads in-game.
             return LocalAppDataDirectory() / L"Packages" / family / L"LocalState"
                 / L"RSDragonwilds" / L"Saved" / L"RuneSchema";
         }
 
-        void MigrateSafeSaveLedger(const std::filesystem::path& modDirectory,
-            const std::filesystem::path& stateDirectory) {
-            const auto destination = stateDirectory / "safesave" / "OwnedContentLedger.json";
-            if (std::filesystem::exists(destination)) return;
-            const std::filesystem::path candidates[] = {
-                modDirectory / "settings" / "safesave" / "OwnedContentLedger.json",
-                modDirectory / "settings" / "OwnedContentLedger.json",
-            };
-            for (const auto& source : candidates) {
-                if (!std::filesystem::is_regular_file(source)) continue;
-                std::filesystem::create_directories(destination.parent_path());
-                auto temporary = destination;
-                temporary += ".migrating";
-                std::error_code ignored;
-                std::filesystem::remove(temporary, ignored);
-                std::filesystem::copy_file(source, temporary,
-                    std::filesystem::copy_options::none);
-                if (std::filesystem::file_size(source) != std::filesystem::file_size(temporary)) {
-                    std::filesystem::remove(temporary, ignored);
-                    throw std::runtime_error("SafeSave ledger migration verification failed");
-                }
-                std::filesystem::rename(temporary, destination);
-                std::filesystem::remove(source, ignored);
-                return;
-            }
-        }
-
-        void SeedPackageLedger(const std::filesystem::path& stateDirectory) {
-            if (stateDirectory == LegacyStateDirectory()) return;
-            const auto destination = stateDirectory / "safesave" / "OwnedContentLedger.json";
-            const auto source = LegacyStateDirectory() / "safesave" / "OwnedContentLedger.json";
-            if (std::filesystem::exists(destination) || !std::filesystem::is_regular_file(source)) return;
-            std::filesystem::create_directories(destination.parent_path());
-            auto temporary = destination;
-            temporary += ".migrating";
-            std::error_code ignored;
-            std::filesystem::remove(temporary, ignored);
-            std::filesystem::copy_file(source, temporary, std::filesystem::copy_options::none);
-            if (std::filesystem::file_size(source) != std::filesystem::file_size(temporary)) {
-                std::filesystem::remove(temporary, ignored);
-                throw std::runtime_error("Game Pass SafeSave ledger seeding verification failed");
-            }
-            std::filesystem::rename(temporary, destination);
-            // Preserve the Steam/GOG ledger. The two storefront lanes diverge
-            // after this one-time seed and must never overwrite each other.
-        }
     }
     std::filesystem::path WorkingDirectory() {
         return RC::UE4SSProgram::get_program().get_working_directory();
@@ -128,8 +82,6 @@ namespace PS::HostServices {
     std::filesystem::path JobsDirectory() { return RuntimeDirectory() / "jobs"; }
     void MigrateLegacyLayout() {
         RuntimeLayout::Migrate(ModDirectory());
-        MigrateSafeSaveLedger(ModDirectory(), StateDirectory());
-        SeedPackageLedger(StateDirectory());
     }
     bool GuiEnabled() {
         // on_ui_init is the host's GUI capability boundary. Reading the

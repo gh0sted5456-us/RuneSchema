@@ -248,7 +248,7 @@ namespace DragonWilds {
         };
 
         struct PlayerAdjustmentState {
-            RC::Unreal::UObject* Pawn = nullptr;
+            PS::WeakObjectHandle Pawn;
             RC::Unreal::FVector BaseScale{1.0, 1.0, 1.0};
             RC::Unreal::FVector DesiredScale{1.0, 1.0, 1.0};
             bool HasDesiredScale = false;

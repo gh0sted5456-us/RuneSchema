@@ -6,6 +6,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include "SDK/WeakObjectHandle.h"
 #include "Unreal/Hooks.hpp"
 
 namespace RC::Unreal {
@@ -90,7 +91,7 @@ private:
     RC::Unreal::Hook::GlobalCallbackId m_retryTick = RC::Unreal::Hook::ERROR_ID;
     RC::Unreal::UObject* m_authorityComponent = nullptr;
     RC::Unreal::UObject* m_worldAuthorityComponent = nullptr;
-    RC::Unreal::AGameModeBase* m_pendingMode = nullptr;
+    PS::WeakObjectHandle m_pendingMode;
     float m_retryElapsed = 0.0f;
     float m_retryInterval = 0.0f;
     uint32_t m_seenRegistryRevision = 0;

@@ -5,7 +5,6 @@
 #include <cstdint>
 #include <cstring>
 #include <format>
-#include <fstream>
 #include <iomanip>
 #include <iterator>
 #include <limits>
@@ -40,8 +39,6 @@
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
 #include "Loader/DragonWildsBuildingModLoader.h"
-#include "Loader/OwnedContentLedger.h"
-#include "Runtime/HostServices.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -62,44 +59,6 @@ namespace DragonWilds {
         constexpr const TCHAR* StabilityProfilePath =
             TEXT("/Game/Gameplay/BaseBuilding_New/"
                  "DT_StabilityProfile.DT_StabilityProfile");
-        constexpr const TCHAR* RetiredStabilityProfileRow = TEXT("FarmPlot");
-        constexpr int BuildingManifestVersion = 1;
-
-        std::string OrderedFingerprint(const std::vector<UObject*>& objects)
-        {
-            uint64_t hash = 14695981039346656037ull;
-            const auto append = [&](const std::string& value, uint8_t separator) {
-                for (const auto byte : value)
-                {
-                    hash ^= static_cast<uint8_t>(byte);
-                    hash *= 1099511628211ull;
-                }
-                hash ^= separator;
-                hash *= 1099511628211ull;
-            };
-            for (auto* object : objects)
-            {
-                auto* property = CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
-                    object->GetClassPrivate(), TEXT("PersistenceID")));
-                if (!property) return {};
-                const auto id = property->GetPropertyValue(
-                    property->ContainerPtrToValuePtr<void>(object));
-                append(RC::to_string(*id), 0x1f);
-                append(RC::to_string(object->GetPathName()), 0x1e);
-            }
-            std::ostringstream output;
-            output << "fnv1a64:" << std::hex << std::setfill('0') << std::setw(16) << hash;
-            return output.str();
-        }
-
-        RC::StringType GuidString(const void* guidData)
-        {
-            uint32 words[4]{};
-            std::memcpy(words, guidData, sizeof(words));
-            return std::format(STR("{:08X}-{:08X}-{:08X}-{:08X}"),
-                words[0], words[1], words[2], words[3]);
-        }
-
         std::string OwnedProfileName(std::string_view prefix,
             const RC::StringType& owner, const RC::StringType& key)
         {
@@ -430,27 +389,6 @@ namespace DragonWilds {
             PS::Log<LogLevel::Error>(
                 STR("{}: building file must contain a JSON object.\n"), modName);
             return;
-        }
-
-        try {
-            for(const auto& record:OwnedContent::Declarations(data,RC::to_string(modName),"Building")) {
-                BuildingDefinition definition{};
-                definition.Owner=modName;
-                definition.Key=RC::to_generic_string(record.InternalName);
-                definition.AssetPath=RC::to_generic_string(record.Source);
-                definition.Declared=true;
-                definition.Unlock=false;
-                definition.DeclaredPersistenceID=record.PersistenceID;
-                definition.DeclaredInternalName=record.InternalName;
-                definition.DeclaredInternalNameAsserted=record.InternalNameAsserted;
-                auto existing=std::find_if(m_definitions.begin(),m_definitions.end(),[&](const auto& value){
-                    return value.Owner==definition.Owner && value.Key==definition.Key;});
-                if(existing==m_definitions.end())m_definitions.push_back(std::move(definition));
-                else *existing=std::move(definition);
-            }
-        } catch(const std::exception& error) {
-            PS::Log<LogLevel::Error>(STR("[SAVE-CLEANER][DECLARATION][LOADER:buildings][MOD:{}] Declaration rejected; other building records continue: {}.\n"),
-                modName,PS::ToWideSafe(error.what()));
         }
 
         if (data.contains("$Patch")) {
@@ -963,13 +901,6 @@ namespace DragonWilds {
             }
 
             m_applied.insert(identity);
-            if(definition.Declared) {
-                auto* name=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(building->GetClassPrivate(),TEXT("InternalName")));
-                const auto actualName=name?RC::to_string(*name->GetPropertyValue(name->ContainerPtrToValuePtr<void>(building))):std::string{};
-                OwnedContent::Merge(OwnedContent::LedgerPath(PS::HostServices::StateDirectory()),
-                    {{"Building",RC::to_string(definition.Owner),definition.DeclaredPersistenceID,
-                        actualName,RC::to_string(definition.AssetPath)}});
-            }
             result.Loaded++;
         }
 
@@ -1764,7 +1695,9 @@ namespace DragonWilds {
         auto* handleStruct = handleProperty ? handleProperty->GetStruct().Get() : nullptr;
         auto* tableProperty = handleStruct ? CastField<FObjectPropertyBase>(
             PropertyHelper::GetPropertyByName(handleStruct, TEXT("DataTable"))) : nullptr;
-        if (!handleProperty || !tableProperty)
+        auto* rowProperty = handleStruct ? CastField<FNameProperty>(
+            PropertyHelper::GetPropertyByName(handleStruct, TEXT("RowName"))) : nullptr;
+        if (!handleProperty || !tableProperty || !rowProperty)
         {
             return false;
         }
@@ -1773,21 +1706,36 @@ namespace DragonWilds {
         auto* tableAddress = tableProperty->ContainerPtrToValuePtr<void>(handle);
         UObject* currentTable = nullptr;
         std::memcpy(&currentTable, tableAddress, sizeof(currentTable));
-        if (currentTable)
+        if (!currentTable)
         {
-            return true;
+            auto* table = LoadObject(StabilityProfilePath);
+            if (!table || !table->IsA(UDataTable::StaticClass()))
+            {
+                return false;
+            }
+
+            std::memcpy(tableAddress, &table, sizeof(table));
+            currentTable = nullptr;
+            std::memcpy(&currentTable, tableAddress, sizeof(currentTable));
         }
 
-        auto* table = LoadObject(StabilityProfilePath);
-        if (!table)
+        if (!currentTable || !currentTable->IsA(UDataTable::StaticClass()))
         {
             return false;
         }
 
-        std::memcpy(tableAddress, &table, sizeof(table));
-        currentTable = nullptr;
-        std::memcpy(&currentTable, tableAddress, sizeof(currentTable));
-        return currentTable == table;
+        const auto rowName = rowProperty->GetPropertyValue(
+            rowProperty->ContainerPtrToValuePtr<void>(handle));
+        auto* table = static_cast<UDataTable*>(currentTable);
+        if (rowName == NAME_None || !table->FindRowUnchecked(rowName))
+        {
+            PS::Log<LogLevel::Error>(
+                STR("[BUILDING-STABILITY][MISSING] '{}' references row '{}' in '{}', but that row was not registered. Add the row to the vanilla DT_StabilityProfile table through /raw before /buildings loads.\n"),
+                building->GetName(), rowName.ToString(), table->GetPathName());
+            return false;
+        }
+
+        return true;
     }
 
     bool DragonWildsBuildingModLoader::AddPersistenceIdentity(UObject* building)
@@ -1821,89 +1769,9 @@ namespace DragonWilds {
         return true;
     }
 
-    bool DragonWildsBuildingModLoader::ResolveWorldRegistryPath(AGameModeBase* gameMode)
-    {
-        auto* persistenceClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
-            nullptr, nullptr, TEXT("/Script/Dominion.PersistenceSubsystem"));
-        if (!gameMode || !persistenceClass)
-        {
-            return false;
-        }
-
-        TArray<UObject*> candidates;
-        UECustom::UObjectGlobals::GetObjectsOfClass(persistenceClass, candidates, true);
-        UObject* persistence = nullptr;
-        for (auto* candidate : candidates)
-        {
-            if (!candidate || candidate->HasAnyFlags(static_cast<EObjectFlags>(
-                    RF_ClassDefaultObject | RF_ArchetypeObject)))
-            {
-                continue;
-            }
-            if (candidate->GetWorld() == gameMode->GetWorld())
-            {
-                if (persistence)
-                {
-                    PS::Log<LogLevel::Error>(
-                        STR("Building registry protection found multiple persistence subsystems for one world.\n"));
-                    return false;
-                }
-                persistence = candidate;
-            }
-        }
-        if (!persistence)
-        {
-            PS::Log<LogLevel::Error>(
-                STR("Building registry protection could not resolve this world's persistence subsystem.\n"));
-            return false;
-        }
-
-        auto* settingsProperty = CastField<FStructProperty>(PropertyHelper::GetPropertyByName(
-            persistence->GetClassPrivate(), TEXT("WorldSaveSettings")));
-        auto* guidProperty = settingsProperty ? CastField<FStructProperty>(
-            PropertyHelper::GetPropertyByName(
-                settingsProperty->GetStruct().Get(), TEXT("WorldSaveGuid"))) : nullptr;
-        if (!settingsProperty || !guidProperty || guidProperty->GetElementSize() != 16)
-        {
-            PS::Log<LogLevel::Error>(
-                STR("Building registry protection cannot read WorldSaveGuid.\n"));
-            return false;
-        }
-
-        auto* settings = settingsProperty->ContainerPtrToValuePtr<void>(persistence);
-        auto* guid = guidProperty->ContainerPtrToValuePtr<void>(settings);
-        uint8 guidBytes[16]{};
-        std::memcpy(guidBytes, guid, sizeof(guidBytes));
-        if (std::all_of(std::begin(guidBytes), std::end(guidBytes),
-                [](uint8 value) { return value == 0; }))
-        {
-            m_worldManifestPath.clear();
-            return false;
-        }
-
-        const auto guidString = GuidString(guid);
-        auto* systemLibrary = ActorHelper::ResolveObject(
-            TEXT("/Script/Engine.Default__KismetSystemLibrary"));
-        if (!systemLibrary)
-        {
-            return false;
-        }
-        auto savedDirectoryCall = ActorHelper::FunctionCall(systemLibrary,
-            TEXT("/Script/Engine.KismetSystemLibrary:GetProjectSavedDirectory"));
-        savedDirectoryCall.Invoke();
-        const auto savedDirectory = savedDirectoryCall.Result<FString>();
-        if (savedDirectory.GetCharArray().Num() <= 1)
-        {
-            return false;
-        }
-
-        m_worldManifestPath = std::filesystem::path(*savedDirectory)
-            / "RuneSchema" / RC::to_string(guidString) / "CustomBuildingData.json";
-        return true;
-    }
-
     bool DragonWildsBuildingModLoader::ProtectWorldRegistry(UObject* subsystem)
     {
+        if (!subsystem) return false;
         auto* subsystemClass = subsystem->GetClassPrivate();
         auto* arrayProperty = CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(
             subsystemClass, TEXT("NetIdToData")));
@@ -1913,343 +1781,88 @@ namespace DragonWilds {
             subsystemClass, TEXT("PersistenceIDToDataMap")));
         auto* internalMapProperty = CastField<FMapProperty>(PropertyHelper::GetPropertyByName(
             subsystemClass, TEXT("InternalNameToDataMap")));
-        if (!arrayProperty || !reverseProperty || !persistenceMapProperty || !internalMapProperty)
-        {
+        auto* arrayInner = arrayProperty
+            ? CastField<FObjectPropertyBase>(arrayProperty->GetInner()) : nullptr;
+        if (!arrayProperty || !arrayInner || arrayInner->GetElementSize() != sizeof(UObject*)
+            || !reverseProperty || !persistenceMapProperty || !internalMapProperty)
             return false;
-        }
 
-        auto* array = arrayProperty->ContainerPtrToValuePtr<FScriptArray>(subsystem);
-        const auto elementSize = arrayProperty->GetInner()->GetElementSize();
         struct ActiveDefinition {
-            const BuildingDefinition* Definition = nullptr;
             UObject* Object = nullptr;
             std::string PersistenceId;
             std::string InternalName;
-            std::string AssetPath;
         };
-        std::unordered_map<std::string, ActiveDefinition> activeById;
+        std::vector<ActiveDefinition> active;
+        std::unordered_set<std::string> activeIds;
+        std::unordered_set<UObject*> activeObjects;
         for (const auto& definition : m_definitions)
         {
             const auto identity = Identity(definition.Owner, definition.Key);
             if (!m_applied.contains(identity)) continue;
-
-            auto* object=GetValidBuilding(identity);
-            if(!object){PS::Log<LogLevel::Error>(STR("Building '{} / {}' has no valid retained object at registry protection.\n"),definition.Owner,definition.Key);return false;}
-            auto* idProperty = CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
-                object->GetClassPrivate(), TEXT("PersistenceID")));
-            auto* nameProperty = CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
-                object->GetClassPrivate(), TEXT("InternalName")));
-            if (!idProperty || !nameProperty)
-            {
-                PS::Log<LogLevel::Error>(
-                    STR("Building '{} / {}' resolved as '{}' but is missing required identity field(s): PersistenceID={}, InternalName={}.\n"),
-                    definition.Owner, definition.Key,
-                    object->GetClassPrivate()->GetPathName(),
-                    idProperty ? STR("yes") : STR("no"),
-                    nameProperty ? STR("yes") : STR("no"));
-                return false;
-            }
+            auto* object = GetValidBuilding(identity);
+            auto* idProperty = object ? CastField<FStrProperty>(
+                PropertyHelper::GetPropertyByName(
+                    object->GetClassPrivate(), TEXT("PersistenceID"))) : nullptr;
+            auto* nameProperty = object ? CastField<FStrProperty>(
+                PropertyHelper::GetPropertyByName(
+                    object->GetClassPrivate(), TEXT("InternalName"))) : nullptr;
+            if (!object || !idProperty || !nameProperty) return false;
             const auto idValue = idProperty->GetPropertyValue(
                 idProperty->ContainerPtrToValuePtr<void>(object));
             const auto nameValue = nameProperty->GetPropertyValue(
                 nameProperty->ContainerPtrToValuePtr<void>(object));
-            ActiveDefinition active{ &definition, object, RC::to_string(*idValue),
-                RC::to_string(*nameValue), RC::to_string(object->GetPathName()) };
-            if (active.PersistenceId.empty()
-                || !activeById.emplace(active.PersistenceId, active).second)
+            const auto id = RC::to_string(*idValue);
+            if (id.empty() || !activeIds.insert(id).second
+                || !activeObjects.insert(object).second)
             {
-                PS::Log<LogLevel::Error>(
-                    STR("Building registry protection found a duplicate/empty custom PersistenceID.\n"));
+                PS::Log<LogLevel::Error>(STR(
+                    "Buildings contain a duplicate or empty PersistenceID; deterministic registration aborted.\n"));
                 return false;
             }
+            active.push_back({object, id, RC::to_string(*nameValue)});
         }
-        std::unordered_map<UObject*, std::string> activeIdsByObject;
-        for (const auto& [id, active] : activeById)
-        {
-            activeIdsByObject.emplace(active.Object, id);
-        }
+        std::sort(active.begin(), active.end(),
+            [](const auto& left, const auto& right) {
+                return left.PersistenceId < right.PersistenceId;
+            });
 
-        std::vector<UObject*> current;
-        std::vector<std::string> currentIds;
-        std::unordered_map<std::string, int32> currentIndexById;
+        auto* array = arrayProperty->ContainerPtrToValuePtr<FScriptArray>(subsystem);
+        std::vector<UObject*> vanilla;
+        std::unordered_set<std::string> nativeIds;
         for (int32 index = 0; index < array->Num(); ++index)
         {
             UObject* object = nullptr;
             std::memcpy(&object,
-                static_cast<uint8*>(array->GetData()) + index * elementSize,
-                sizeof(object));
-            if (!object) return false;
-            auto* idProperty = CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
-                object->GetClassPrivate(), TEXT("PersistenceID")));
-            if (!idProperty) return false;
+                static_cast<uint8*>(array->GetData())
+                    + index * arrayInner->GetElementSize(), sizeof(object));
+            auto* idProperty = object ? CastField<FStrProperty>(
+                PropertyHelper::GetPropertyByName(
+                    object->GetClassPrivate(), TEXT("PersistenceID"))) : nullptr;
+            if (!object || !idProperty) return false;
             const auto idValue = idProperty->GetPropertyValue(
                 idProperty->ContainerPtrToValuePtr<void>(object));
             const auto id = RC::to_string(*idValue);
-            if (id.empty() || !currentIndexById.emplace(id, index).second)
+            if (id.empty() || !nativeIds.insert(id).second)
             {
-                PS::Log<LogLevel::Error>(
-                    STR("The live Building registry contains a duplicate/empty PersistenceID; protection aborted.\n"));
+                PS::Log<LogLevel::Error>(STR(
+                    "The native Building registry contains a duplicate or empty PersistenceID.\n"));
                 return false;
             }
-            current.push_back(object);
-            currentIds.push_back(id);
-        }
-        nlohmann::json manifest;
-        bool created = false;
-        if (std::filesystem::exists(m_worldManifestPath))
-        {
-            try
-            {
-                std::ifstream input(m_worldManifestPath);
-                manifest = nlohmann::json::parse(input, nullptr, true, true);
-            }
-            catch (const std::exception& error)
-            {
-                PS::Log<LogLevel::Error>(
-                    STR("CustomBuildingData.json is corrupt; registry protection was not applied: {}\n"),
-                    PS::ToWideSafe(error.what()));
-                return false;
-            }
-        }
-        else
-        {
-            if (activeById.empty()) return true;
-            created = true;
-            manifest = {
-                { "FormatVersion", BuildingManifestVersion },
-                { "VanillaDefinitionCount", 0 },
-                { "OrderedVanillaFingerprint", "" },
-                { "Records", nlohmann::json::array() },
-            };
+            if (!activeIds.contains(id) && !activeObjects.contains(object))
+                vanilla.push_back(object);
         }
 
-        if (!manifest.is_object()
-            || manifest.value("FormatVersion", 0) != BuildingManifestVersion
-            || !manifest.contains("VanillaDefinitionCount")
-            || (!manifest["VanillaDefinitionCount"].is_number_unsigned()
-                && (!manifest["VanillaDefinitionCount"].is_number_integer()
-                    || manifest["VanillaDefinitionCount"].get<int64_t>() < 0))
-            || !manifest.contains("OrderedVanillaFingerprint")
-            || !manifest["OrderedVanillaFingerprint"].is_string()
-            || !manifest.contains("Records") || !manifest["Records"].is_array())
+        std::vector<UObject*> desired = vanilla;
+        desired.reserve(vanilla.size() + active.size());
+        for (const auto& definition : active)
+            desired.push_back(definition.Object);
+        if (desired.size() > std::numeric_limits<uint16>::max())
         {
-            PS::Log<LogLevel::Error>(
-                STR("CustomBuildingData.json has an unsupported or invalid schema; registry untouched.\n"));
+            PS::Log<LogLevel::Error>(STR(
+                "Building registry exceeds the native network index limit.\n"));
             return false;
         }
-
-        std::vector<UObject*> vanilla;
-        for (int32 index = 0; index < static_cast<int32>(current.size()); ++index)
-        {
-            if (!activeById.contains(currentIds[index])) vanilla.push_back(current[index]);
-        }
-        const auto vanillaFingerprint = OrderedFingerprint(vanilla);
-        if (vanillaFingerprint.empty())
-        {
-            PS::Log<LogLevel::Error>(
-                STR("Building registry fingerprint could not be generated; registry untouched.\n"));
-            return false;
-        }
-
-        if (created)
-        {
-            manifest["VanillaDefinitionCount"] = vanilla.size();
-            manifest["OrderedVanillaFingerprint"] = vanillaFingerprint;
-            std::unordered_set<int32> usedIndices;
-            int32 nextIndex = static_cast<int32>(current.size());
-            for (const auto& definition : m_definitions)
-            {
-                const auto identity = Identity(definition.Owner, definition.Key);
-                if (!m_applied.contains(identity)) continue;
-
-                auto* object=GetValidBuilding(identity);
-                if(!object)return false;
-                const auto& active = activeById.at(activeIdsByObject.at(object));
-                auto foundIndex = currentIndexById.find(active.PersistenceId);
-                int32 index = foundIndex == currentIndexById.end() ? nextIndex++ : foundIndex->second;
-                if (!usedIndices.insert(index).second)
-                {
-                    PS::Log<LogLevel::Error>(
-                        STR("Building registry history produced a duplicate custom index; registry untouched.\n"));
-                    return false;
-                }
-                manifest["Records"].push_back({
-                    { "Owner", RC::to_string(definition.Owner) },
-                    { "Key", RC::to_string(definition.Key) },
-                    { "PersistenceID", active.PersistenceId },
-                    { "InternalName", active.InternalName },
-                    { "AssetPath", active.AssetPath },
-                    { "HistoricalIndex", index },
-                    { "State", "active" },
-                });
-            }
-        }
-        else if (manifest["VanillaDefinitionCount"].get<size_t>() != vanilla.size()
-            || manifest["OrderedVanillaFingerprint"].get<std::string>() != vanillaFingerprint)
-        {
-            PS::Log<LogLevel::Error>(
-                STR("Incompatible vanilla Building registry detected; world registry reconstruction aborted.\n"));
-            return false;
-        }
-
-        std::unordered_set<std::string> recordIds;
-        std::unordered_set<std::string> recordOwners;
-        std::unordered_set<int32> recordIndices;
-        auto& records = manifest["Records"];
-        for (auto& record : records)
-        {
-            if (!record.is_object() || !record.contains("Owner") || !record["Owner"].is_string()
-                || !record.contains("Key") || !record["Key"].is_string()
-                || !record.contains("PersistenceID") || !record["PersistenceID"].is_string()
-                || !record.contains("InternalName") || !record["InternalName"].is_string()
-                || !record.contains("AssetPath") || !record["AssetPath"].is_string()
-                || !record.contains("HistoricalIndex") || !record["HistoricalIndex"].is_number_integer()
-                || !record.contains("State") || !record["State"].is_string())
-            {
-                PS::Log<LogLevel::Error>(
-                    STR("CustomBuildingData.json contains an invalid record; registry untouched.\n"));
-                return false;
-            }
-            const auto id = record["PersistenceID"].get<std::string>();
-            const auto ownerKey = record["Owner"].get<std::string>() + "\n"
-                + record["Key"].get<std::string>();
-            const auto index = record["HistoricalIndex"].get<int32>();
-            const auto state = record["State"].get<std::string>();
-            if (id.empty() || index < 0 || (state != "active" && state != "retired")
-                || !recordIds.insert(id).second || !recordOwners.insert(ownerKey).second
-                || !recordIndices.insert(index).second)
-            {
-                PS::Log<LogLevel::Error>(
-                    STR("CustomBuildingData.json contains duplicate or invalid records; registry untouched.\n"));
-                return false;
-            }
-        }
-        const auto historicalSize = static_cast<int32>(vanilla.size() + records.size());
-        if (std::any_of(recordIndices.begin(), recordIndices.end(),
-                [&](int32 index) { return index >= historicalSize; }))
-        {
-            PS::Log<LogLevel::Error>(
-                STR("CustomBuildingData.json contains an out-of-range historical index; registry untouched.\n"));
-            return false;
-        }
-
-        for (const auto& [id, active] : activeById)
-        {
-            if (recordIds.contains(id)) continue;
-
-            const auto ownerKey = RC::to_string(active.Definition->Owner) + "\n"
-                + RC::to_string(active.Definition->Key);
-            if (recordOwners.contains(ownerKey))
-            {
-                PS::Log<LogLevel::Error>(
-                    STR("Custom Building '{} / {}' conflicts with an existing historical identity; registry untouched.\n"),
-                    active.Definition->Owner, active.Definition->Key);
-                return false;
-            }
-
-            const auto nextIndex = static_cast<int32>(vanilla.size() + records.size());
-            records.push_back({
-                { "Owner", RC::to_string(active.Definition->Owner) },
-                { "Key", RC::to_string(active.Definition->Key) },
-                { "PersistenceID", id }, { "InternalName", active.InternalName },
-                { "AssetPath", active.AssetPath }, { "HistoricalIndex", nextIndex },
-                { "State", "active" },
-            });
-            recordIds.insert(id);
-            recordOwners.insert(ownerKey);
-            recordIndices.insert(nextIndex);
-        }
-
-        const auto totalSize = static_cast<int32>(vanilla.size() + records.size());
-        if (totalSize > std::numeric_limits<uint16>::max())
-        {
-            PS::Log<LogLevel::Error>(
-                STR("Building registry exceeds the native index limit; registry untouched.\n"));
-            return false;
-        }
-        for (const auto& record : records)
-        {
-            const auto id = record["PersistenceID"].get<std::string>();
-            if (auto active = activeById.find(id); active != activeById.end())
-            {
-                const auto& value = active->second;
-                if (record["Owner"].get<std::string>() != RC::to_string(value.Definition->Owner)
-                    || record["Key"].get<std::string>() != RC::to_string(value.Definition->Key)
-                    || record["AssetPath"].get<std::string>() != value.AssetPath
-                    || record["InternalName"].get<std::string>() != value.InternalName)
-                {
-                    PS::Log<LogLevel::Error>(
-                        STR("Returning custom Building '{}' conflicts with its historical record; replacement aborted.\n"),
-                        RC::to_generic_string(id));
-                    return false;
-                }
-            }
-        }
-        std::vector<UObject*> desired(totalSize, nullptr);
-        m_retiredBuildings.clear();
-        int retired = 0;
-        int reclaimed = 0;
-        for (auto& record : records)
-        {
-            const auto id = record["PersistenceID"].get<std::string>();
-            const auto index = record["HistoricalIndex"].get<int32>();
-            if (index < 0 || index >= totalSize || desired[index])
-            {
-                PS::Log<LogLevel::Error>(
-                    STR("CustomBuildingData.json contains a conflicting historical index; registry untouched.\n"));
-                return false;
-            }
-            UObject* object = nullptr;
-            if (auto active = activeById.find(id); active != activeById.end())
-            {
-                const auto& value = active->second;
-                object = value.Object;
-                if (record["State"].get<std::string>() == "retired") ++reclaimed;
-                record["State"] = "active";
-            }
-            else
-            {
-                record["State"] = "retired";
-                ++retired;
-                object = CreateRetiredBuilding(record, index);
-                if (!object)
-                {
-                    PS::Log<LogLevel::Error>(
-                        STR("Retired Building creation failed; registry untouched.\n"));
-                    return false;
-                }
-                object->SetRootSet();
-                m_retiredBuildings.push_back(object);
-                PS::Log<LogLevel::Verbose>(STR("Created retired Building '{}' at historical index {}.\n"),
-                    RC::to_generic_string(id), index);
-            }
-            desired[index] = object;
-        }
-        auto vanillaIterator = vanilla.begin();
-        for (auto& slot : desired)
-        {
-            if (!slot)
-            {
-                if (vanillaIterator == vanilla.end())
-                {
-                    PS::Log<LogLevel::Error>(
-                        STR("Building registry history does not match the vanilla registry; reconstruction aborted.\n"));
-                    return false;
-                }
-                slot = *vanillaIterator++;
-            }
-        }
-        if (vanillaIterator != vanilla.end())
-        {
-            PS::Log<LogLevel::Error>(
-                STR("Building registry history does not match the vanilla registry; reconstruction aborted.\n"));
-            return false;
-        }
-
-        if (!CaptureNativeRegistry(subsystem))
-        {
-            return false;
-        }
+        if (!CaptureNativeRegistry(subsystem)) return false;
 
         UECustom::FScriptArrayHelper arrayHelper(array, arrayProperty);
         arrayHelper.Empty();
@@ -2275,7 +1888,8 @@ namespace DragonWilds {
             reverse.Remove(&object);
         }
 
-        const auto addStringMap = [&](FMapProperty* property, const FString& key, UObject* object) {
+        const auto addStringMap = [&](FMapProperty* property,
+            const FString& key, UObject* object) {
             UECustom::FScriptMapHelper map(
                 property, property->ContainerPtrToValuePtr<void>(subsystem));
             UECustom::FManagedValue pair;
@@ -2296,160 +1910,68 @@ namespace DragonWilds {
             std::memcpy(reverse.GetValuePtr(pair.GetData()), &netIndex, sizeof(netIndex));
             reverse.Add(pair);
 
-            auto* indexProperty = CastField<FNumericProperty>(PropertyHelper::GetPropertyByName(
-                object->GetClassPrivate(), TEXT("BuildingPieceDataIndex")));
-            auto* idProperty = CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
-                object->GetClassPrivate(), TEXT("PersistenceID")));
-            auto* nameProperty = CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
-                object->GetClassPrivate(), TEXT("InternalName")));
-            if (!indexProperty || !idProperty || !nameProperty) return false;
+            auto* indexProperty = CastField<FNumericProperty>(
+                PropertyHelper::GetPropertyByName(
+                    object->GetClassPrivate(), TEXT("BuildingPieceDataIndex")));
+            if (!indexProperty) return false;
             indexProperty->SetIntPropertyValue(
                 indexProperty->ContainerPtrToValuePtr<void>(object),
                 static_cast<int64>(index));
-            if (recordIndices.contains(index))
-            {
-                const auto id = idProperty->GetPropertyValue(
-                    idProperty->ContainerPtrToValuePtr<void>(object));
-                const auto name = nameProperty->GetPropertyValue(
-                    nameProperty->ContainerPtrToValuePtr<void>(object));
-                addStringMap(persistenceMapProperty, id, object);
-                addStringMap(internalMapProperty, id, object);
-                if (name.GetCharArray().Num() > 1) addStringMap(internalMapProperty, name, object);
-            }
         }
         reverse.Rehash();
 
-        bool valid = array->Num() == static_cast<int32>(desired.size());
-        for (int32 index = 0; index < array->Num(); ++index)
+        for (const auto& definition : active)
         {
-            auto* object = desired[index];
+            const FString id(RC::to_generic_string(definition.PersistenceId).c_str());
+            addStringMap(persistenceMapProperty, id, definition.Object);
+            addStringMap(internalMapProperty, id, definition.Object);
+            if (!definition.InternalName.empty())
+            {
+                const FString name(
+                    RC::to_generic_string(definition.InternalName).c_str());
+                addStringMap(internalMapProperty, name, definition.Object);
+            }
+        }
+
+        bool valid = array->Num() == static_cast<int32>(desired.size());
+        for (int32 index = 0; valid && index < array->Num(); ++index)
+        {
+            UObject* forward = nullptr;
+            std::memcpy(&forward,
+                static_cast<uint8*>(array->GetData())
+                    + index * arrayInner->GetElementSize(), sizeof(forward));
             int32 reverseIndex = -1;
             reverse.ForEachPair([&](void* key, void* value) {
                 UObject* candidate = nullptr;
                 std::memcpy(&candidate, key, sizeof(candidate));
-                if (candidate == object)
+                if (candidate == desired[index])
                 {
                     uint16 found = 0;
                     std::memcpy(&found, value, sizeof(found));
-                    reverseIndex = static_cast<int32>(found);
-                }
-            });
-            auto* indexProperty = CastField<FNumericProperty>(PropertyHelper::GetPropertyByName(
-                object->GetClassPrivate(), TEXT("BuildingPieceDataIndex")));
-            const auto reported = static_cast<int32>(indexProperty->GetSignedIntPropertyValue(
-                indexProperty->ContainerPtrToValuePtr<void>(object)));
-            UObject* forward = nullptr;
-            std::memcpy(&forward,
-                static_cast<uint8*>(array->GetData()) + index * elementSize,
-                sizeof(forward));
-            valid = valid && forward == object && reverseIndex == index && reported == index;
-        }
-        const auto stringMapMatches = [&](FMapProperty* property,
-                const FString& key, UObject* expected) {
-            UECustom::FScriptMapHelper map(
-                property, property->ContainerPtrToValuePtr<void>(subsystem));
-            int matches = 0;
-            map.ForEachPair([&](void* mapKey, void* mapValue) {
-                if (static_cast<FString*>(mapKey)->Equals(key))
-                {
-                    UObject* value = nullptr;
-                    std::memcpy(&value, mapValue, sizeof(value));
-                    if (value == expected) ++matches;
-                }
-            });
-            return matches == 1;
-        };
-        for (const auto& record : records)
-        {
-            const auto index = record["HistoricalIndex"].get<int32>();
-            auto* object = desired[index];
-            const FString id(RC::to_generic_string(
-                record["PersistenceID"].get<std::string>()).c_str());
-            const FString name(RC::to_generic_string(
-                record["InternalName"].get<std::string>()).c_str());
-            valid = valid && stringMapMatches(persistenceMapProperty, id, object)
-                && stringMapMatches(internalMapProperty, id, object)
-                && (name.GetCharArray().Num() <= 1
-                    || stringMapMatches(internalMapProperty, name, object));
-        }
-        for (const auto& [id, active] : activeById)
-        {
-            int32 matches = 0;
-            int32 installedIndex = -1;
-            for (int32 index = 0; index < array->Num(); ++index)
-            {
-                UObject* candidate = nullptr;
-                std::memcpy(&candidate,
-                    static_cast<uint8*>(array->GetData()) + index * elementSize,
-                    sizeof(candidate));
-                if (candidate == active.Object)
-                {
-                    ++matches;
-                    installedIndex = index;
-                }
-            }
-            auto* indexProperty = CastField<FNumericProperty>(PropertyHelper::GetPropertyByName(
-                active.Object->GetClassPrivate(), TEXT("BuildingPieceDataIndex")));
-            const auto reported = indexProperty ? static_cast<int32>(
-                indexProperty->GetSignedIntPropertyValue(
-                    indexProperty->ContainerPtrToValuePtr<void>(active.Object))) : -1;
-            int32 reverseIndex = -1;
-            reverse.ForEachPair([&](void* key, void* value) {
-                UObject* candidate = nullptr;
-                std::memcpy(&candidate, key, sizeof(candidate));
-                if (candidate == active.Object)
-                {
-                    uint16 found = 0; std::memcpy(&found, value, sizeof(found));
                     reverseIndex = found;
                 }
             });
-            const bool returningValid = matches == 1 && installedIndex == reported
-                && installedIndex == reverseIndex;
-            valid = valid && returningValid;
+            auto* indexProperty = CastField<FNumericProperty>(
+                PropertyHelper::GetPropertyByName(
+                    desired[index]->GetClassPrivate(), TEXT("BuildingPieceDataIndex")));
+            const auto reported = indexProperty ? static_cast<int32>(
+                indexProperty->GetSignedIntPropertyValue(
+                    indexProperty->ContainerPtrToValuePtr<void>(desired[index]))) : -1;
+            valid = forward == desired[index] && reverseIndex == index
+                && reported == index;
         }
         if (!valid)
         {
-            PS::Log<LogLevel::Error>(
-                STR("Custom Building registry reconstruction validation failed.\n"));
+            PS::Log<LogLevel::Error>(STR(
+                "Deterministic Building registry validation failed.\n"));
             return false;
         }
 
-        std::sort(records.begin(), records.end(), [](const auto& left, const auto& right) {
-            return left["HistoricalIndex"].template get<int32>()
-                < right["HistoricalIndex"].template get<int32>();
-        });
-        try
-        {
-            std::filesystem::create_directories(m_worldManifestPath.parent_path());
-            const auto temporary = m_worldManifestPath.string() + ".tmp";
-            std::ofstream output(temporary, std::ios::trunc);
-            output << manifest.dump(2);
-            output.close();
-            if (!output.good()) throw std::runtime_error("write failed");
-            std::filesystem::copy_file(temporary, m_worldManifestPath,
-                std::filesystem::copy_options::overwrite_existing);
-            std::filesystem::remove(temporary);
-        }
-        catch (const std::exception& error)
-        {
-            PS::Log<LogLevel::Error>(
-                STR("Could not persist CustomBuildingData.json: {}\n"), PS::ToWideSafe(error.what()));
-            return false;
-        }
-
-        if (reclaimed)
-        {
-            PS::Log<LogLevel::Normal>(STR("Buildings: {} active, {} retired, {} reclaimed, 0 errors.\n"),
-                activeById.size(), retired, reclaimed);
-        }
-        else
-        {
-            PS::Log<LogLevel::Normal>(STR("Buildings: {} active, {} retired, 0 errors.\n"),
-                activeById.size(), retired);
-        }
-        return valid;
+        PS::Log<LogLevel::Normal>(STR(
+            "Buildings: {} native, {} custom, deterministic PersistenceID order, 0 errors.\n"),
+            vanilla.size(), active.size());
+        return true;
     }
-
     std::vector<DragonWildsBuildingModLoader::Placement>
     DragonWildsBuildingModLoader::FindSourcePlacements(UObject* source) const
     {
@@ -2723,8 +2245,6 @@ namespace DragonWilds {
             return;
         }
 
-        if (!ResolveWorldRegistryPath(gameMode)) return;
-
         bool protectedRegistry = false;
         try
         {
@@ -2733,7 +2253,7 @@ namespace DragonWilds {
         catch (const std::exception& error)
         {
             PS::Log<LogLevel::Error>(
-                STR("Custom Building registry protection raised an error: {}\n"),
+                STR("Deterministic Building registry registration raised an error: {}\n"),
                 PS::ToWideSafe(error.what()));
         }
         if (!protectedRegistry)
@@ -2752,7 +2272,7 @@ namespace DragonWilds {
             }
 
             PS::Log<LogLevel::Error>(
-                STR("Custom Building registry protection failed; Building registration was aborted.\n"));
+                STR("Deterministic Building registry registration failed; Building registration was aborted.\n"));
             return;
         }
 
@@ -2900,137 +2420,6 @@ namespace DragonWilds {
         }
 
         return usable == 1 ? fallback : nullptr;
-    }
-
-    UObject* DragonWildsBuildingModLoader::CreateRetiredBuilding(
-        const nlohmann::json& record, int32 historicalIndex)
-    {
-        auto* stabilityTable = static_cast<UDataTable*>(LoadObject(StabilityProfilePath));
-        if (!stabilityTable || !stabilityTable->GetRowStruct())
-        {
-            PS::Log<LogLevel::Error>(
-                STR("Retired Building could not load the native stability table.\n"));
-            return nullptr;
-        }
-
-        const FName stabilityRow(RetiredStabilityProfileRow);
-        if (!stabilityTable->FindRowUnchecked(stabilityRow))
-        {
-            PS::Log<LogLevel::Error>(
-                STR("Retired Building stability profile row '{}' is unavailable.\n"),
-                RetiredStabilityProfileRow);
-            return nullptr;
-        }
-
-        auto* object = ActorHelper::ConstructTransientObject(m_buildingPieceClass,
-            std::format(STR("RuneSchema_RetiredBuilding_{}"), historicalIndex));
-        if (!object)
-        {
-            PS::Log<LogLevel::Error>(
-                STR("Retired Building construction failed.\n"));
-            return nullptr;
-        }
-        auto* objectClass = object->GetClassPrivate();
-        auto* idProperty = CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
-            objectClass, TEXT("PersistenceID")));
-        auto* nameProperty = CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
-            objectClass, TEXT("InternalName")));
-        auto* indexProperty = CastField<FNumericProperty>(PropertyHelper::GetPropertyByName(
-            objectClass, TEXT("BuildingPieceDataIndex")));
-        auto* stabilityProperty = CastField<FStructProperty>(PropertyHelper::GetPropertyByName(
-            objectClass, TEXT("BuildingStabilityProfileRowHandle")));
-        auto* pieceTagProperty = CastField<FStructProperty>(PropertyHelper::GetPropertyByName(
-            objectClass, TEXT("PieceTag")));
-        auto* representationProperty = PropertyHelper::GetPropertyByName(
-            objectClass, TEXT("RepresentationCategory"));
-        auto* actorProperty = CastField<FSoftObjectProperty>(PropertyHelper::GetPropertyByName(
-            objectClass, TEXT("BuildableActor")));
-        auto* proxyProperty = CastField<FStructProperty>(PropertyHelper::GetPropertyByName(
-            objectClass, TEXT("BuildingPieceProxyData")));
-        auto* farAwayProperty = CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(
-            objectClass, TEXT("bShouldBeVisibleFromFarAway")));
-        if (!idProperty || !nameProperty || !indexProperty || !stabilityProperty
-            || !pieceTagProperty || !representationProperty || !actorProperty
-            || !proxyProperty || !farAwayProperty)
-        {
-            PS::Log<LogLevel::Error>(
-                STR("Retired Building property layout is incompatible with RuneSchema.\n"));
-            return nullptr;
-        }
-
-        auto* stabilityStruct = stabilityProperty->GetStruct().Get();
-        auto* tableProperty = stabilityStruct ? CastField<FObjectPropertyBase>(
-            PropertyHelper::GetPropertyByName(stabilityStruct, TEXT("DataTable"))) : nullptr;
-        auto* rowProperty = stabilityStruct ? CastField<FNameProperty>(
-            PropertyHelper::GetPropertyByName(stabilityStruct, TEXT("RowName"))) : nullptr;
-        auto* tagStruct = pieceTagProperty->GetStruct().Get();
-        auto* tagNameProperty = tagStruct ? CastField<FNameProperty>(
-            PropertyHelper::GetPropertyByName(tagStruct, TEXT("TagName"))) : nullptr;
-        auto* proxyStruct = proxyProperty->GetStruct().Get();
-        auto* proxyMeshProperty = proxyStruct ? CastField<FSoftObjectProperty>(
-            PropertyHelper::GetPropertyByName(proxyStruct, TEXT("ProxyMesh"))) : nullptr;
-        if (!tableProperty || !rowProperty || !tagNameProperty || !proxyMeshProperty)
-        {
-            PS::Log<LogLevel::Error>(
-                STR("Retired Building nested property layout is incompatible with RuneSchema.\n"));
-            return nullptr;
-        }
-
-        const FString historicalId(RC::to_generic_string(
-            record["PersistenceID"].get<std::string>()).c_str());
-        const FString historicalName(RC::to_generic_string(
-            record["InternalName"].get<std::string>()).c_str());
-        idProperty->SetPropertyValue(idProperty->ContainerPtrToValuePtr<void>(object), historicalId);
-        nameProperty->SetPropertyValue(nameProperty->ContainerPtrToValuePtr<void>(object), historicalName);
-        indexProperty->SetIntPropertyValue(
-            indexProperty->ContainerPtrToValuePtr<void>(object),
-            static_cast<int64>(historicalIndex));
-
-        auto* stability = stabilityProperty->ContainerPtrToValuePtr<void>(object);
-        std::memcpy(tableProperty->ContainerPtrToValuePtr<void>(stability),
-            &stabilityTable, sizeof(stabilityTable));
-        rowProperty->SetPropertyValue(rowProperty->ContainerPtrToValuePtr<void>(stability),
-            stabilityRow);
-        PropertyHelper::CopyJsonValueToContainer(
-            object, representationProperty, "ManagedActor");
-        PropertyHelper::CopyJsonValueToContainer(object, farAwayProperty, false);
-
-        const auto& actor = *actorProperty->ContainerPtrToValuePtr<UECustom::FSoftObjectPtr>(object);
-        auto* proxy = proxyProperty->ContainerPtrToValuePtr<void>(object);
-        const auto& proxyMesh = *proxyMeshProperty->ContainerPtrToValuePtr<UECustom::FSoftObjectPtr>(proxy);
-        auto* tag = pieceTagProperty->ContainerPtrToValuePtr<void>(object);
-        const auto tagName = tagNameProperty->GetPropertyValue(
-            tagNameProperty->ContainerPtrToValuePtr<void>(tag));
-        UObject* verifiedTable = nullptr;
-        std::memcpy(&verifiedTable, tableProperty->ContainerPtrToValuePtr<void>(stability),
-            sizeof(verifiedTable));
-        const auto verifiedRow = rowProperty->GetPropertyValue(
-            rowProperty->ContainerPtrToValuePtr<void>(stability));
-        const auto actorPathEmpty = actor.ObjectID.AssetPath.GetPackageName() == NAME_None
-            && actor.ObjectID.AssetPath.GetAssetName() == NAME_None;
-        const auto proxyPathEmpty = proxyMesh.ObjectID.AssetPath.GetPackageName() == NAME_None
-            && proxyMesh.ObjectID.AssetPath.GetAssetName() == NAME_None;
-        const auto farAway = farAwayProperty->GetPropertyValue(
-            farAwayProperty->ContainerPtrToValuePtr<void>(object));
-        auto* representationEnum = CastField<FEnumProperty>(representationProperty);
-        auto* representationNumeric = representationEnum
-            ? representationEnum->GetUnderlyingProperty()
-            : CastField<FNumericProperty>(representationProperty);
-        const auto representation = representationNumeric
-            ? representationNumeric->GetSignedIntPropertyValue(
-                representationProperty->ContainerPtrToValuePtr<void>(object))
-            : int64{-1};
-        if (verifiedTable != stabilityTable || verifiedRow != stabilityRow
-            || !stabilityTable->FindRowUnchecked(verifiedRow)
-            || !actorPathEmpty || !proxyPathEmpty || !tagName.IsNone() || farAway
-            || representation != 1)
-        {
-            PS::Log<LogLevel::Error>(
-                STR("Retired Building critical-field validation failed.\n"));
-            return nullptr;
-        }
-
-        return object;
     }
 
     bool DragonWildsBuildingModLoader::CaptureNativeRegistry(UObject* subsystem)
@@ -3224,7 +2613,7 @@ namespace DragonWilds {
         {
             PS::Log<LogLevel::Error>(
                 STR("Native Building registry restoration audit failed; "
-                    "retired Buildings and snapshot retained for safety.\n"));
+                    "registry snapshot retained for safety.\n"));
             return false;
         }
         ClearWorldRegistryState();
@@ -3233,20 +2622,7 @@ namespace DragonWilds {
 
     void DragonWildsBuildingModLoader::ClearWorldRegistryState()
     {
-        const auto retired = m_retiredBuildings.size();
-        for (auto* building : m_retiredBuildings)
-        {
-            if (building && building->IsRootSet()) building->ClearRootSet();
-        }
-        m_retiredBuildings.clear();
         m_nativeRegistrySnapshot = {};
-        m_worldManifestPath.clear();
-        if (retired)
-        {
-            PS::Log<LogLevel::Verbose>(
-                STR("Released {} retired Building{} and cleared world registry state.\n"),
-                retired, retired == 1 ? STR("") : STR("s"));
-        }
     }
 
     UObject* DragonWildsBuildingModLoader::LoadObject(

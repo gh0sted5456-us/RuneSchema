@@ -47,7 +47,7 @@ int main(int argc, char** argv)
     }
 
     for (const auto* section : {
-        "## Runtime layout", "## Ordering", "## Cooked assets and `$declaration`",
+        "## Runtime layout", "## Ordering", "## Cooked assets and live registration",
         "## `/raw` and `/registry`", "## Storefront and mappings", "## Plugins",
         "## Multiplayer checklist", "## Failure isolation and log tags", "## Test sequence"
     }) Check(authoring.find(section) != std::string::npos, "authoring section missing");

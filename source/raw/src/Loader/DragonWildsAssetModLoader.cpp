@@ -17,7 +17,6 @@
 #include <algorithm>
 #include "Loader/AssetProvenance.h"
 #include "Loader/DragonWildsRecipeModLoader.h"
-#include "Loader/OwnedContentLedger.h"
 #include "Runtime/HostServices.h"
 #include "Utility/AssetAliases.h"
 #include "Loader/ItemIdentity.h"
@@ -783,12 +782,6 @@ namespace DragonWilds {
             return;
         }
 
-        try { RegisterDeclarations(data,modName); }
-        catch(const std::exception& error) {
-            PS::Log<LogLevel::Error>(STR("[SAVE-CLEANER][DECLARATION][MOD:{}] Declaration rejected; ordinary asset entries continue: {}.\n"),
-                modName,PS::ToWideSafe(error.what()));
-        }
-
         PS::AssetMetadata::Declaration documentMetadata;
         try { documentMetadata=PS::AssetMetadata::Read(data); }
         catch(const std::exception& e) {
@@ -873,31 +866,6 @@ namespace DragonWilds {
                 modName,
                 std::move(normalizedProperties), isPatch,metadata,true
             };
-            // Snapshot the authored identity during the cheap JSON pass.  Clone
-            // application can legitimately be deferred until GameInstanceInit;
-            // save cleanup must still know that this active mod owns the item
-            // before character deserialization begins.
-            if(!isPatch && pending.Properties.contains("$Clone")
-                && pending.Properties.contains("PersistenceID")
-                && pending.Properties.at("PersistenceID").is_string()
-                && pending.Properties.contains("InternalName")
-                && pending.Properties.at("InternalName").is_string()) {
-                const auto source=pending.Properties.at("$Clone").get<std::string>();
-                const auto destination=RC::to_string(pending.ObjectPath);
-                if(OwnedContent::LooksLikeItemClone(destination,source)) {
-                    try {
-                        OwnedContent::Record owned{"Item",RC::to_string(modName),
-                            pending.Properties.at("PersistenceID").get<std::string>(),
-                            pending.Properties.at("InternalName").get<std::string>(),destination};
-                        OwnedContent::Validate(owned);
-                        OwnedContent::Merge(OwnedContent::LedgerPath(
-                            PS::HostServices::StateDirectory()),{owned});
-                    } catch(const std::exception& error) {
-                        PS::Log<LogLevel::Error>(STR("[SAVE-CLEANER][MOD:{}] Clone identity '{}' was not tracked: {}.\n"),
-                            modName,pending.ObjectPath,PS::ToWideSafe(error.what()));
-                    }
-                }
-            }
             if (isPatch) WarnPatchConflicts(m_patchConflicts, "assets:" + RC::to_string(pending.ObjectPath),
                 pending.Properties, RC::to_string(modName), false);
             (isPatch ? m_pendingPatches : m_pendingAssets).push_back(std::move(pending));
@@ -1274,52 +1242,6 @@ namespace DragonWilds {
                 PS::Log<LogLevel::Warning>(STR("[LOADER:assets][PARTIAL][CHARACTER-MENU] Existing menu object={} was not updated: {}. New menus still use the class default.\n"),
                     instance?instance->GetPathName():STR("<null>"),PS::ToWideSafe(error.what()));
             }
-        }
-    }
-
-    void DragonWildsAssetModLoader::RegisterDeclarations(const nlohmann::json& data,const RC::StringType& modName)
-    {
-        auto declarations=OwnedContent::Declarations(data,RC::to_string(modName));
-        std::vector<UObject*> verifiedObjects;
-        verifiedObjects.reserve(declarations.size());
-        for(auto& declaration:declarations)
-        {
-            const auto path=RC::to_generic_string(declaration.Source);
-            auto* object=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,path.c_str(),false);
-            if(!object) {
-                auto soft=UECustom::TSoftObjectPtr<UObject>(UECustom::FSoftObjectPath(path));
-                object=UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
-            }
-            auto* expected=declaration.Kind=="Item"?m_itemDataClass:m_recipeDataClass;
-            if(!object || !expected || !object->IsA(expected))
-                throw std::runtime_error(declaration.Kind+" declaration did not resolve to the expected cooked asset class: "+declaration.Source);
-            auto* idProperty=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),TEXT("PersistenceID")));
-            auto* nameProperty=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),TEXT("InternalName")));
-            if(!idProperty || !nameProperty)throw std::runtime_error("Declared cooked asset is missing PersistenceID or InternalName");
-            const auto actualId=RC::to_string(*idProperty->GetPropertyValue(idProperty->ContainerPtrToValuePtr<void>(object)));
-            const auto actualName=RC::to_string(*nameProperty->GetPropertyValue(nameProperty->ContainerPtrToValuePtr<void>(object)));
-            if(actualId!=declaration.PersistenceID)
-                throw std::runtime_error("Declared PersistenceID does not match the cooked asset: "+declaration.Source);
-            if(actualName.empty())throw std::runtime_error("Declared cooked asset has an empty InternalName: "+declaration.Source);
-            // An omitted InternalName is represented by the path-derived object name.
-            // Accept that convenience value, but reject any explicit conflicting value.
-            const auto& raw=data.at("$declaration");
-            bool explicitName=false;
-            if(raw.is_object())explicitName=raw.contains("InternalName");
-            else for(const auto& row:raw)if(row.is_object() && row.value("Path",std::string{})==declaration.Source)explicitName=row.contains("InternalName");
-            if(explicitName && declaration.InternalName!=actualName)
-                throw std::runtime_error("Declared InternalName does not match the cooked asset: "+declaration.Source);
-            declaration.InternalName=actualName;
-            verifiedObjects.push_back(object);
-        }
-        if(!declarations.empty()) {
-            OwnedContent::Merge(OwnedContent::LedgerPath(PS::HostServices::StateDirectory()),declarations);
-            for(std::size_t index=0;index<declarations.size();++index) {
-                verifiedObjects[index]->SetRootSet();
-                OwnedContent::RegisterActiveDeclarationPath(declarations[index].Source);
-            }
-            PS::Log<LogLevel::Normal>(STR("[SAVE-CLEANER][DECLARATION][MOD:{}] Verified and recorded {} cooked persistent asset declaration(s).\n"),
-                modName,declarations.size());
         }
     }
 

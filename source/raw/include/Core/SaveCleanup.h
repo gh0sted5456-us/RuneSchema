@@ -48,13 +48,7 @@ inline void RequireCharacter(const Json& save) {
 inline Json JournalPayload(const Json& journal) {
     if(!journal.is_object())throw std::runtime_error("Unsupported journal save layout");
     auto result=journal;
-    if(journal.contains(DragonWilds::JournalSave::Manifest)) {
-        const auto& envelope=journal.at(DragonWilds::JournalSave::Manifest);
-        if(!envelope.is_array())throw std::runtime_error("Unsupported native journal ownership envelope");
-        const auto owners=DragonWilds::JournalSave::DecodeNative(envelope.get<std::vector<std::string>>());
-        result.erase(DragonWilds::JournalSave::Manifest);
-        DragonWilds::JournalSave::StoreOwnership(result,owners);
-    }
+    result.erase(DragonWilds::JournalSave::Manifest);
     return result;
 }
 inline void CheckPending(const Json& row) {
@@ -171,14 +165,24 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
     }
     if(game.contains("Journal")) {
         auto payload=JournalPayload(game.at("Journal"));
-        const auto owners=DragonWilds::JournalSave::ReadOwnership(payload);
-        for(const auto& [id,owner]:owners)++result.Owners[owner];
-        const auto cleaned=DragonWilds::JournalSave::RemoveAbsent(payload,selected,true);
-        auto native=cleaned.Journal;
-        if(game.at("Journal").contains(DragonWilds::JournalSave::Manifest))
-            native[DragonWilds::JournalSave::Manifest]=DragonWilds::JournalSave::EncodeNative(DragonWilds::JournalSave::ReadOwnership(cleaned.Journal));
-        for(const auto& id:cleaned.Removed)result.Removed.push_back({{"Kind","Journal/lore"},{"Id",id},{"Mod",owners.at(id)}});
-        game["Journal"]=std::move(native);
+        if(registry && registry->JournalsComplete) {
+            for(const auto* field:{"UnlockedEntries","UnreadEntries"}) {
+                if(!payload.contains(field))continue;
+                auto& entries=payload.at(field);
+                if(!entries.is_array() || entries.size()>65535)
+                    throw std::runtime_error("Invalid journal saved entry list");
+                for(auto it=entries.begin();it!=entries.end();) {
+                    if(!it->is_string())throw std::runtime_error("Invalid journal saved entry identity");
+                    const auto id=it->get<std::string>();
+                    DragonWilds::JournalSave::ValidateId(id);
+                    if(!registry->Journals.contains(id)) {
+                        result.Removed.push_back({{"Kind",field},{"Id",id},{"Mod","Registry-unknown (owner unavailable)"}});
+                        it=entries.erase(it);
+                    } else ++it;
+                }
+            }
+        }
+        game["Journal"]=std::move(payload);
     }
     return result;
 }

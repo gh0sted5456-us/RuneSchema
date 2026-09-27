@@ -2507,6 +2507,7 @@ namespace DragonWilds {
                 m_activeNameplateStates.clear();
                 m_observedActivities.clear();
                 m_pendingRespawns.clear();
+                m_playerAdjustments.clear();
                 m_nameplateRefreshElapsed = 0.0;
                 m_visualTimerElapsed = 0.0;
                 m_managedScaleElapsed = 0.0;
@@ -2775,6 +2776,7 @@ namespace DragonWilds {
                     m_activeNameplateStates.clear();
                     m_observedActivities.clear();
                     m_pendingRespawns.clear();
+                    m_playerAdjustments.clear();
                     m_nameplateRefreshElapsed = 0.0;
                 m_visualTimerElapsed = 0.0;
                 m_buildingTimeElapsed = 0.0;
@@ -3696,8 +3698,9 @@ namespace DragonWilds {
         for (auto state = m_playerAdjustments.begin();
             state != m_playerAdjustments.end();)
         {
-            auto* actor = state->Pawn && state->Pawn->IsA<AActor>()
-                ? static_cast<AActor*>(state->Pawn) : nullptr;
+            auto* pawn = state->Pawn.Get();
+            auto* actor = pawn && pawn->IsA<AActor>()
+                ? static_cast<AActor*>(pawn) : nullptr;
             if (!actor || actor->GetWorld() != m_readyWorld
                 || actor->HasAnyFlags(static_cast<EObjectFlags>(
                     RF_BeginDestroyed | RF_FinishDestroyed)))

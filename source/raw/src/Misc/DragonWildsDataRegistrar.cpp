@@ -1,6 +1,7 @@
 #include "Utility/NativeFunctionHook.h"
 #include <cstring>
 #include <algorithm>
+#include <chrono>
 #include <limits>
 #include <map>
 #include <ranges>
@@ -21,11 +22,11 @@
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "Utility/Logging.h"
+#include "Core/SaveCleanup.h"
 #include "Core/SaveRegistrySnapshot.h"
-#include "Loader/OwnedContentLedger.h"
-#include "Loader/NativeQuestCleanup.h"
-#include "Loader/QuestNativeRegistry.h"
+#include "Core/ConfigFiles.h"
 #include "Runtime/HostServices.h"
+#include "Runtime/Storefront.h"
 #include "Misc/DragonWildsDataRegistrar.h"
 
 using namespace RC;
@@ -56,13 +57,10 @@ namespace DragonWilds {
         JournalLoadedPath,
     };
 
-    static bool IsCustomDataPath(const RC::StringType& path)
-    {
-        return path.starts_with(TEXT("/Game/Mods/"))
-            || path.starts_with(TEXT("/Game/RuneSchema/"))
-            || path.starts_with(TEXT("/Engine/Transient"))
-            || OwnedContent::IsActiveDeclarationPath(RC::to_string(path));
-    }
+    static constexpr const TCHAR* CharacterJsonLoadHookPaths[] = {
+        TEXT("/Script/Dominion.DominionPlayerControllerBase:LoadStateFromJson"),
+        TEXT("/Script/Dominion.DominionPlayerController:LoadStateFromJson"),
+    };
 
     void DragonWildsDataRegistrar::Initialize()
     {
@@ -107,13 +105,17 @@ namespace DragonWilds {
 
     void DragonWildsDataRegistrar::Shutdown()
     {
-        if (m_gameStateHook != Hook::ERROR_ID) Hook::UnregisterCallback(m_gameStateHook);
-        m_gameStateHook = Hook::ERROR_ID;
+        if (m_gameStateStartingHook != Hook::ERROR_ID)
+            Hook::UnregisterCallback(m_gameStateStartingHook);
+        m_gameStateStartingHook = Hook::ERROR_ID;
+        if (m_gameStateReadyHook != Hook::ERROR_ID)
+            Hook::UnregisterCallback(m_gameStateReadyHook);
+        m_gameStateReadyHook = Hook::ERROR_ID;
+        if (m_characterJsonHook != Hook::ERROR_ID)
+            Hook::UnregisterCallback(m_characterJsonHook);
+        m_characterJsonHook = Hook::ERROR_ID;
         for (const auto& [function, id] : m_functionHooks) if (function && id) function->UnregisterHook(id);
         m_functionHooks.clear();
-        for (auto& retired : m_retiredContent)
-            if (retired.Data) retired.Data->ClearRootSet();
-        m_retiredContent.clear();
         PS::SaveCleanup::PublishRegistry({});
     }
 
@@ -121,9 +123,21 @@ namespace DragonWilds {
     {
         Hook::FCallbackOptions options{};
         options.OwnerModName = TEXT("RuneSchema");
-        options.HookName = TEXT("DataRegistrarInitGameState");
+        options.HookName = TEXT("DataRegistrarBeforeGameState");
 
-        m_gameStateHook = Hook::RegisterInitGameStatePostCallback(
+        // Character JSON is hydrated during world startup. Restore every
+        // loaded identity to the new world's subsystem before Dominion reads
+        // the character, then perform the file-backed Steam repair against
+        // that complete registry. The post pass catches assets loaded by
+        // InitGameState itself without delaying character hydration.
+        m_gameStateStartingHook = Hook::RegisterInitGameStatePreCallback(
+            [this](Hook::TCallbackIterationData<void>&, AGameModeBase*) {
+                RegisterAll();
+                ScrubLocalCharacterFiles();
+            }, options);
+
+        options.HookName = TEXT("DataRegistrarGameStateReady");
+        m_gameStateReadyHook = Hook::RegisterInitGameStatePostCallback(
             [this](Hook::TCallbackIterationData<void>&, AGameModeBase*) {
                 RegisterAll();
             }, options);
@@ -141,289 +155,296 @@ namespace DragonWilds {
                 static_cast<DragonWildsDataRegistrar*>(customData)->RegisterAll();
             }, this);
             m_functionHooks.emplace_back(function, id);
-            const auto postId = PS::RegisterNativePostHook(function, [](UnrealScriptFunctionCallableContext& context, void* customData) {
-                auto* target=context.Context;
-                auto* journalClass=ActorHelper::ResolveClass(TEXT("/Script/Dominion.JournalComponent"));
-                if(target && journalClass && target->IsA(journalClass)) {
-                    static_cast<DragonWildsDataRegistrar*>(customData)->ScrubRetiredJournal(target);
-                    return;
-                }
-                auto* questProgressClass=ActorHelper::ResolveClass(TEXT("/Script/Dominion.QuestProgressComponent"));
-                auto* controller=target && questProgressClass && target->IsA(questProgressClass)
-                    ? target->GetOuterPrivate():target;
-                static_cast<DragonWildsDataRegistrar*>(customData)->ScrubRetiredContent(controller);
-            }, this);
-            m_functionHooks.emplace_back(function, postId);
         }
-    }
 
-    void DragonWildsDataRegistrar::PrepareRetiredContent()
-    {
-        if(m_retiredContentPrepared)return;
-        m_retiredContentPrepared=true;
-        try
+        // Both storefronts eventually hydrate the same native character JSON.
+        // Repair it at that shared boundary, after every RuneSchema registry has
+        // been registered but before Dominion rejects an unresolved identity.
+        UFunction* characterJsonLoad = nullptr;
+        for (auto* hookPath : CharacterJsonLoadHookPaths)
         {
-            const auto path = OwnedContent::LedgerPath(
-                PS::HostServices::StateDirectory());
-            // The previous file is one compact snapshot, not an accumulating
-            // history. Loaders contributed the identities that succeeded this
-            // run; finalization returns only identities that disappeared and
-            // atomically overwrites the snapshot with the current set.
-            const auto retired=OwnedContent::CompareSnapshot(path);
-            if (!retired.empty())
+            auto* function = UECustom::UObjectGlobals::StaticFindObject<UFunction*>(
+                nullptr, nullptr, hookPath, false);
+            if (function && (function->GetFunctionFlags() & FUNC_Native))
             {
-                m_pendingSnapshot = path;
-                m_itemsVerified=std::ranges::none_of(retired,[](const auto& record){return record.Kind=="Item";});
-                m_recipesVerified=std::ranges::none_of(retired,[](const auto& record){return record.Kind=="Recipe";});
-                m_questsVerified=std::ranges::none_of(retired,[](const auto& record){return record.Kind=="Quest";});
-                m_journalVerified=std::ranges::none_of(retired,[](const auto& record){return record.Kind=="Journal" || record.Kind=="Lore";});
-                for (const auto& record : retired)
-                    // Building declarations live in world state, not the
-                    // character provider. Quest state has a native live
-                    // adapter below. Journal/lore use the same hydrated-state
-                    // cleanup path through JournalComponent.
-                    if (record.Kind != "Item" && record.Kind != "Recipe"
-                        && record.Kind != "Quest" && record.Kind != "Journal"
-                        && record.Kind != "Lore" && record.Kind != "Building")
-                        m_pendingUnsupportedKinds.insert(record.Kind);
+                characterJsonLoad = function;
+                break;
+            }
+        }
+        if (!characterJsonLoad)
+        {
+            std::vector<UFunction*> matches;
+            UObjectGlobals::ForEachUObject(
+                [&](UObject* object, int32_t, int32_t) -> LoopAction {
+                    if (!object || !object->IsA(UFunction::StaticClass()))
+                        return LoopAction::Continue;
+                    auto* function = static_cast<UFunction*>(object);
+                    if (function->GetFName()
+                            != FName(TEXT("LoadStateFromJson"), FNAME_Add)
+                        || !(function->GetFunctionFlags() & FUNC_Native)
+                        || !function->GetPathName().starts_with(
+                            TEXT("/Script/Dominion.")))
+                        return LoopAction::Continue;
+                    bool hasStringInput = false;
+                    for (auto* field : TFieldRange<FProperty>(
+                        function, EFieldIterationFlags::Default))
+                        if (CastField<FStrProperty>(field)
+                            && field->HasAnyPropertyFlags(CPF_Parm)
+                            && !field->HasAnyPropertyFlags(
+                                CPF_ReturnParm | CPF_OutParm))
+                            hasStringInput = true;
+                    if (hasStringInput) matches.push_back(function);
+                    return LoopAction::Continue;
+                });
+            if (matches.size() == 1) characterJsonLoad = matches.front();
+            else if (!matches.empty())
+                PS::Log<LogLevel::Warning>(STR(
+                    "Character save preflight found {} ambiguous native LoadStateFromJson functions; no hook was installed.\n"),
+                    matches.size());
+        }
+        if (characterJsonLoad)
+        {
+            const auto id = PS::RegisterNativePreHook(characterJsonLoad,
+                [this, characterJsonLoad](
+                    UnrealScriptFunctionCallableContext& context, void*) {
+                    RegisterAll();
+                    ScrubCharacterJsonBeforeLoad(
+                        characterJsonLoad, context.TheStack.Locals());
+                });
+            if (id != Hook::ERROR_ID)
+            {
+                m_functionHooks.emplace_back(characterJsonLoad, id);
                 PS::Log<LogLevel::Normal>(
-                    STR("[SAVE-CLEANER][PENDING] {} exact RuneSchema identity removal(s) will be applied once to live character state after load.\n"),retired.size());
+                    STR("Character save preflight enabled through '{}'.\n"),
+                    characterJsonLoad->GetPathName());
             }
-            else
-            {
-                OwnedContent::CommitSnapshot(path);
-            }
-            for (const auto& record : retired)
-            {
-                if(record.Kind!="Item" && record.Kind!="Recipe" && record.Kind!="Quest"
-                    && record.Kind!="Journal" && record.Kind!="Lore")continue;
-                const auto* classPath=record.Kind=="Item"?ItemDataClassPath:
-                    record.Kind=="Recipe"?RecipeDataClassPath:
-                    record.Kind=="Quest"?QuestDataClassPath:JournalDataClassPath;
-                auto* dataClass=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,classPath,false);
-                if(!dataClass)throw std::runtime_error("retired content class is unavailable");
-                auto* item = ActorHelper::ConstructTransientObject(dataClass,
-                    RC::to_generic_string("RuneSchema_Retired"+record.Kind+"_"
-                        + record.PersistenceID));
-                auto* persistence = item ? CastField<FStrProperty>(
-                    PropertyHelper::GetPropertyByName(
-                        item->GetClassPrivate(), TEXT("PersistenceID"))) : nullptr;
-                auto* internal = item ? CastField<FStrProperty>(
-                    PropertyHelper::GetPropertyByName(
-                        item->GetClassPrivate(), TEXT("InternalName"))) : nullptr;
-                if (!item || !persistence || !internal)
-                    throw std::runtime_error(
-                        "retired item identity layout is unavailable");
-                const FString id(RC::to_generic_string(record.PersistenceID).c_str());
-                const FString name(RC::to_generic_string(record.InternalName).c_str());
-                persistence->SetPropertyValue(
-                    persistence->ContainerPtrToValuePtr<void>(item), id);
-                internal->SetPropertyValue(
-                    internal->ContainerPtrToValuePtr<void>(item), name);
-                item->SetRootSet();
-                m_retiredContent.push_back(
-                    {item, record.Kind, record.Owner, record.PersistenceID});
-                if(record.Kind=="Journal" || record.Kind=="Lore") {
-                    auto* subsystemClass=UECustom::UObjectGlobals::StaticFindObject<UClass*>(
-                        nullptr,nullptr,JournalSubsystemClassPath,false);
-                    auto* subsystem=subsystemClass?FindSubsystemInstance(subsystemClass):nullptr;
-                    if(!subsystem || !subsystem->GetOuterPrivate())
-                        throw std::runtime_error("retired journal subsystem is unavailable");
-                    (void)QuestRegistry::NativeRegistry::RegisterJournal(
-                        subsystem,subsystem->GetOuterPrivate(),item);
-                }
-            }
-            if (!m_retiredContent.empty())
-                PS::Log<LogLevel::Verbose>(
-                    STR("[SAVE-CLEANER] Prepared {} exact retired identity reference(s).\n"),
-                    m_retiredContent.size());
         }
-        catch (const std::exception& error)
+        else
         {
-            PS::Log<LogLevel::Error>(
-                STR("[SAVE-CLEANER][DEGRADED] Owned-content tombstones were not prepared; save records were left untouched: {}.\n"),
-                PS::ToWideSafe(error.what()));
-        }
-    }
-
-    void DragonWildsDataRegistrar::ScrubRetiredContent(UObject* controller)
-    {
-        if (!controller || (m_retiredContent.empty() && m_pendingSnapshot.empty())) return;
-        try
-        {
-            if (!m_pendingSnapshot.empty()
-                && !m_pendingUnsupportedKinds.empty())
-            {
-                if (!m_cleanupBlockReported)
-                {
-                    m_cleanupBlockReported = true;
-                    std::string kinds;
-                    for (const auto& kind : m_pendingUnsupportedKinds)
+            Hook::FCallbackOptions preflightOptions{};
+            preflightOptions.OwnerModName = TEXT("RuneSchema");
+            preflightOptions.HookName = TEXT("CharacterJsonSavePreflight");
+            m_characterJsonHook = Hook::RegisterProcessEventPreCallback(
+                [this](Hook::TCallbackIterationData<void>&, UObject*,
+                    UFunction* function, void* parameters) {
+                    if (!function || !parameters || m_preflightingCharacterJson
+                        || function->GetFName()
+                            != FName(TEXT("LoadStateFromJson"), FNAME_Add)
+                        || !function->GetPathName().starts_with(
+                            TEXT("/Script/Dominion.")))
+                        return;
+                    m_preflightingCharacterJson = true;
+                    try
                     {
-                        if (!kinds.empty()) kinds += ", ";
-                        kinds += kind;
+                        RegisterAll();
+                        ScrubCharacterJsonBeforeLoad(function, parameters);
                     }
-                    PS::Log<LogLevel::Error>(
-                        STR("[SAVE-CLEANER][PARTIAL] No verified live adapter exists for retired kind(s): {}. Supported cleanup will continue and the previous ownership vector will be retained.\n"),
-                        PS::ToWideSafe(kinds.c_str()));
-                }
-            }
-            const bool hasItems=std::any_of(m_retiredContent.begin(),m_retiredContent.end(),[](const auto& value){return value.Kind=="Item";});
-            auto* inventoryProperty = hasItems ? CastField<FObjectPropertyBase>(
-                PropertyHelper::GetPropertyByName(controller->GetClassPrivate(), TEXT("InventoryComponent"))) : nullptr;
-            auto* inventory = inventoryProperty ? inventoryProperty->GetObjectPropertyValue(
-                inventoryProperty->ContainerPtrToValuePtr<void>(controller)) : nullptr;
-            if (hasItems && (!inventory || inventory->GetOuterPrivate() != controller))
-                throw std::runtime_error("player inventory ownership is unavailable");
-            std::size_t removedKinds = 0;
-            int64_t removedCount = 0;
-            for (const auto& retired : m_retiredContent)
+                    catch (const std::exception& error)
+                    {
+                        PS::Log<LogLevel::Error>(STR(
+                            "[SAVE-CLEANER][PREFLIGHT][UNCHANGED] Character JSON was not modified: {}.\n"),
+                            PS::ToWideSafe(error.what()));
+                    }
+                    catch (...) {}
+                    m_preflightingCharacterJson = false;
+                }, preflightOptions);
+            if (m_characterJsonHook != Hook::ERROR_ID)
+                PS::Log<LogLevel::Normal>(STR(
+                    "Character save preflight enabled through reflected game events.\n"));
+            else
+                PS::Log<LogLevel::Warning>(STR(
+                    "Character save preflight is unavailable; the reflected event hook could not be installed.\n"));
+        }
+    }
+
+    void DragonWildsDataRegistrar::ScrubCharacterJsonBeforeLoad(
+        UFunction* function, void* parameters)
+    {
+        if (!function || !parameters) return;
+        const auto registry = PS::SaveCleanup::ReadRegistry();
+        if (!registry || !registry->Ready()) return;
+
+        try
+        {
+            FStrProperty* jsonProperty = nullptr;
+            void* jsonAddress = nullptr;
+            nlohmann::json source;
+            for (auto* field : TFieldRange<FProperty>(
+                function, EFieldIterationFlags::Default))
             {
-                if(retired.Kind!="Item")continue;
-                ActorHelper::FunctionCall count(inventory,
-                    TEXT("/Script/Dominion.InventoryComponent:GetNumItemsByData"));
-                count.Arg(TEXT("ItemData"), retired.Data).Invoke();
-                const auto amount = count.Result<int32>();
-                if (amount <= 0) continue;
-                ActorHelper::FunctionCall remove(inventory,
-                    TEXT("/Script/Dominion.InventoryComponent:RemoveItemByData"));
-                remove.Arg(TEXT("ItemData"), retired.Data)
-                    .Arg(TEXT("Count"), amount).Invoke();
-                ActorHelper::FunctionCall verification(inventory,
-                    TEXT("/Script/Dominion.InventoryComponent:GetNumItemsByData"));
-                verification.Arg(TEXT("ItemData"), retired.Data).Invoke();
-                if (!remove.Result<bool>() || verification.Result<int32>() != 0)
+                if (!field->HasAnyPropertyFlags(CPF_Parm)
+                    || field->HasAnyPropertyFlags(CPF_ReturnParm | CPF_OutParm)
+                    || field->GetArrayDim() != 1
+                    || field->GetOffset_Internal() < 0
+                    || field->GetOffset_Internal() + field->GetElementSize()
+                        > function->GetParmsSize())
+                    continue;
+                auto* stringField = CastField<FStrProperty>(field);
+                if (!stringField) continue;
+                auto* address = stringField->ContainerPtrToValuePtr<void>(parameters);
+                const auto value = stringField->GetPropertyValue(address);
+                if (value.GetCharArray().Num() <= 1) continue;
+                const auto utf8 = RC::to_string(RC::StringType(*value));
+                if (utf8.find("\"GameProgress\"") == std::string::npos) continue;
+                auto parsed = nlohmann::json::parse(utf8, nullptr, true, true);
+                if (PS::SaveCleanup::ClassifyCharacterDocument(parsed)
+                    != PS::SaveCleanup::CharacterDocumentKind::Gameplay)
+                    continue;
+                if (jsonProperty)
                     throw std::runtime_error(
-                        "native inventory did not confirm owned-item removal");
-                ++removedKinds;
-                removedCount += amount;
-                PS::Log<LogLevel::Normal>(
-                    STR("[SAVE-CLEANER][OWNER:{}] Removed {} instance(s) of retired RuneSchema item '{}'.\n"),
-                    RC::to_generic_string(retired.Owner), amount,
-                    RC::to_generic_string(retired.PersistenceID));
+                        "character load exposed more than one gameplay JSON parameter");
+                jsonProperty = stringField;
+                jsonAddress = address;
+                source = std::move(parsed);
             }
-            std::size_t removedRecipes=0;
-            auto* progress=ActorHelper::GetObjectRef(controller,TEXT("ProgressComponent"));
-            const bool hasRecipes=std::any_of(m_retiredContent.begin(),m_retiredContent.end(),[](const auto& value){return value.Kind=="Recipe";});
-            if(hasRecipes && !progress)throw std::runtime_error("player recipe progress ownership is unavailable");
-            if(progress)for(const auto& retired:m_retiredContent)if(retired.Kind=="Recipe") {
-                bool removed=false;
-                for(const auto* name:{TEXT("RecipesUnlocked"),TEXT("RecipesUnlockedThatShouldNotPersist")}) {
-                    auto* property=CastField<FSetProperty>(PropertyHelper::GetPropertyByName(progress->GetClassPrivate(),name));
-                    auto* element=property?CastField<FObjectPropertyBase>(property->GetElementProp()):nullptr;
-                    if(!property || !element || element->GetElementSize()!=sizeof(UObject*))
-                        throw std::runtime_error("recipe unlock set layout is unavailable");
-                    UECustom::FScriptSetHelper set(property,property->ContainerPtrToValuePtr<void>(progress));
-                    UObject* value=retired.Data;
-                    removed=set.Remove(&value)||removed;
-                    if(set.Contains(&value))throw std::runtime_error("retired recipe removal verification failed");
-                }
-                if(removed)++removedRecipes;
-            }
-            if(hasItems)m_itemsVerified=true;
-            if(hasRecipes)m_recipesVerified=true;
-            if (removedKinds)
-                PS::Log<LogLevel::Normal>(
-                    STR("[SAVE-CLEANER][OWNED-ONLY] Removed {} item stack identity(s), {} total item(s); the next native save persists the clean inventory.\n"),
-                    removedKinds, removedCount);
-            if(removedRecipes)
-                PS::Log<LogLevel::Normal>(STR("[SAVE-CLEANER][OWNED-ONLY] Removed {} retired recipe unlock identity(s); the next native save persists the clean progress state.\n"),removedRecipes);
-            std::size_t removedQuests=0;
-            if(std::any_of(m_retiredContent.begin(),m_retiredContent.end(),
-                [](const auto& value){return value.Kind=="Quest";}))
+            if (!jsonProperty) return;
+
+            const auto cleaned = PS::SaveCleanup::Plan(
+                source, {}, false, registry.get(), false, true);
+            if (cleaned.Removed.empty()) return;
+
+            const auto serialized = cleaned.Save.dump();
+            const FString replacement(RC::to_generic_string(serialized).c_str());
+            jsonProperty->SetPropertyValue(jsonAddress, replacement);
+            const auto verified = RC::to_string(RC::StringType(
+                *jsonProperty->GetPropertyValue(jsonAddress)));
+            if (verified != serialized)
+                throw std::runtime_error(
+                    "clean character JSON did not survive reflected writeback");
+
+            std::map<std::string, std::size_t> counts;
+            for (const auto& row : cleaned.Removed)
+                ++counts[row.value("Kind", std::string("Unknown"))];
+            std::string summary;
+            for (const auto& [kind, count] : counts)
             {
-                std::map<std::string,std::string> retiredQuests;
-                for(const auto& retired:m_retiredContent)
-                    if(retired.Kind=="Quest")retiredQuests.emplace(retired.PersistenceID,retired.Owner);
-                const auto result=Quests::NativeQuestCleanup::Run(controller,retiredQuests);
-                m_questsVerified=result.Ready;
-                removedQuests=result.Removed;
-                if(removedQuests)
-                    PS::Log<LogLevel::Normal>(STR("[SAVE-CLEANER][OWNED-ONLY] Removed {} retired quest identity(s); the next native save persists the clean quest state.\n"),removedQuests);
+                if (!summary.empty()) summary += ", ";
+                summary += kind + "=" + std::to_string(count);
             }
-            TryCommitSnapshot();
+            PS::Log<LogLevel::Normal>(
+                STR("[SAVE-CLEANER][PREFLIGHT] Removed {} unresolved character reference(s) before load ({}).\n"),
+                cleaned.Removed.size(), PS::ToWideSafe(summary.c_str()));
         }
         catch (const std::exception& error)
         {
             PS::Log<LogLevel::Error>(
-                STR("[SAVE-CLEANER][DEGRADED] Retired RuneSchema content was retained because cleanup could not be verified: {}.\n"),
+                STR("[SAVE-CLEANER][PREFLIGHT][UNCHANGED] Character JSON was not modified: {}.\n"),
                 PS::ToWideSafe(error.what()));
         }
     }
 
-    void DragonWildsDataRegistrar::ScrubRetiredJournal(UObject* component)
-    {
-        if(!component || m_journalVerified || m_pendingSnapshot.empty())return;
-        try {
-            auto* componentClass=ActorHelper::ResolveClass(TEXT("/Script/Dominion.JournalComponent"));
-            auto* entryClass=ActorHelper::ResolveClass(TEXT("/Script/Dominion.JournalEntryData"));
-            if(!componentClass || !entryClass || !component->IsA(componentClass) || !component->GetWorld())
-                throw std::runtime_error("journal live state is not ready");
-            std::set<UObject*> retired;
-            for(const auto& value:m_retiredContent)
-                if(value.Kind=="Journal" || value.Kind=="Lore")retired.insert(value.Data);
-            if(retired.empty()){m_journalVerified=true;TryCommitSnapshot();return;}
-            struct Field {FArrayProperty* Property{};FScriptArray* Array{};std::vector<UObject*> Original;};
-            std::array<Field,2> fields{};
-            size_t removed=0;
-            for(size_t i=0;i<fields.size();++i) {
-                const auto* name=i?TEXT("UnreadJournalEntries"):TEXT("UnlockedJournalEntries");
-                auto* property=CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(component->GetClassPrivate(),name));
-                auto* inner=property?CastField<FObjectPropertyBase>(property->GetInner()):nullptr;
-                if(!property || property->GetElementSize()!=sizeof(FScriptArray) || property->GetArrayDim()!=1
-                    || !inner || inner->GetElementSize()!=sizeof(UObject*) || !inner->GetPropertyClass().Get()
-                    || !entryClass->IsChildOf(inner->GetPropertyClass().Get()))
-                    throw std::runtime_error("journal live array layout changed");
-                fields[i].Property=property;
-                fields[i].Array=property->ContainerPtrToValuePtr<FScriptArray>(component);
-                if(!fields[i].Array || fields[i].Array->Num()<0 || fields[i].Array->Num()>65535)
-                    throw std::runtime_error("journal live array bounds are invalid");
-                UECustom::FScriptArrayHelper view(fields[i].Array,property);
-                view.ForEachElement([&](void* element){fields[i].Original.push_back(inner->GetObjectPropertyValue(element));});
-            }
-            const auto restore=[&] {
-                for(auto& field:fields) {
-                    UECustom::FScriptArrayHelper view(field.Array,field.Property);view.Empty();
-                    for(auto* object:field.Original)view.Add(&object);
-                }
-            };
-            try {
-                for(auto& field:fields) {
-                    UECustom::FScriptArrayHelper view(field.Array,field.Property);view.Empty();
-                    for(auto* object:field.Original) {
-                        if(retired.contains(object)){++removed;continue;}
-                        view.Add(&object);
-                    }
-                    bool found=false;view.ForEachElement([&](void* element){
-                        auto* inner=CastField<FObjectPropertyBase>(field.Property->GetInner());
-                        if(retired.contains(inner->GetObjectPropertyValue(element)))found=true;
-                    });
-                    if(found)throw std::runtime_error("retired journal removal verification failed");
-                }
-            } catch(...) {restore();throw;}
-            m_journalVerified=true;
-            if(removed)PS::Log<LogLevel::Normal>(STR("[SAVE-CLEANER][OWNED-ONLY] Removed {} retired journal/lore reference(s); the next native save persists the clean journal state.\n"),removed);
-            TryCommitSnapshot();
-        } catch(const std::exception& error) {
-            PS::Log<LogLevel::Error>(STR("[SAVE-CLEANER][DEGRADED] Retired journal/lore content was retained because cleanup could not be verified: {}.\n"),PS::ToWideSafe(error.what()));
-        }
-    }
 
-    void DragonWildsDataRegistrar::TryCommitSnapshot()
+    void DragonWildsDataRegistrar::ScrubLocalCharacterFiles()
     {
-        if(m_pendingSnapshot.empty())return;
-        if(!m_pendingUnsupportedKinds.empty() || !m_itemsVerified || !m_recipesVerified
-            || !m_questsVerified || !m_journalVerified) {
-            if(!m_cleanupPartialReported) {
-                m_cleanupPartialReported=true;
-                PS::Log<LogLevel::Normal>(STR("[SAVE-CLEANER][VERIFIED-PARTIAL] Ready live state was verified. The previous ownership vector remains pending until every retired category is available.\n"));
-            }
+        if (m_localCharacterSweepCompleted) return;
+        if (PS::Storefront::CurrentNativeLane()
+            != PS::Storefront::NativeLane::SteamNative)
+            return;
+
+        const auto registry = PS::SaveCleanup::ReadRegistry();
+        if (!registry || !registry->Ready())
+        {
+            PS::Log<LogLevel::Warning>(STR(
+                "[SAVE-CLEANER][DEFERRED] Character saves were not checked because the item and recipe registries are not complete.\n"));
             return;
         }
-        OwnedContent::CommitSnapshot(m_pendingSnapshot);
-        m_pendingSnapshot.clear();
-        PS::Log<LogLevel::Normal>(STR("[SAVE-CLEANER][VERIFIED] Live cleanup was verified; the ownership vector is now current.\n"));
+
+        m_localCharacterSweepCompleted = true;
+        try
+        {
+            const auto localAppData = [] {
+                const auto required = ::GetEnvironmentVariableW(
+                    L"LOCALAPPDATA", nullptr, 0);
+                if (!required)
+                    throw std::runtime_error("LOCALAPPDATA is unavailable");
+                std::vector<wchar_t> value(required);
+                if (::GetEnvironmentVariableW(
+                        L"LOCALAPPDATA", value.data(), required) + 1
+                    != required)
+                    throw std::runtime_error(
+                        "LOCALAPPDATA changed while it was read");
+                return std::filesystem::path(value.data());
+            }();
+            const auto folder = localAppData / L"RSDragonwilds" / L"Saved"
+                / L"SaveCharacters";
+            if (!std::filesystem::is_directory(folder)) return;
+
+            const auto backupFolder = PS::HostServices::StateDirectory()
+                / "backups" / "save-pruning";
+            std::size_t files = 0;
+            std::size_t bytes = 0;
+            std::size_t repairedFiles = 0;
+            std::size_t removedReferences = 0;
+            for (const auto& entry : std::filesystem::directory_iterator(folder))
+            {
+                if (++files > 128)
+                    throw std::runtime_error(
+                        "character save directory exceeds 128 entries");
+                if (!entry.is_regular_file()
+                    || entry.path().extension() != L".json")
+                    continue;
+                const auto size = entry.file_size();
+                if (size > 8 * 1024 * 1024
+                    || (bytes += size) > 64 * 1024 * 1024)
+                    throw std::runtime_error(
+                        "character save scan exceeds its safety limit");
+
+                const auto modified = entry.last_write_time();
+                const auto text = PS::ConfigFiles::Read(
+                    entry.path(), 8 * 1024 * 1024);
+                if (entry.last_write_time() != modified)
+                    throw std::runtime_error(
+                        "a character save changed during validation");
+                auto source = nlohmann::json::parse(
+                    text, nullptr, true, true);
+                const auto kind = PS::SaveCleanup::ClassifyCharacterDocument(
+                    source);
+                if (kind == PS::SaveCleanup::CharacterDocumentKind::ProfileOnly)
+                    continue;
+                if (kind != PS::SaveCleanup::CharacterDocumentKind::Gameplay)
+                    throw std::runtime_error(
+                        "unsupported character save JSON layout");
+
+                const auto cleaned = PS::SaveCleanup::Plan(
+                    source, {}, false, registry.get(), false, true);
+                if (cleaned.Removed.empty()) continue;
+                if (entry.last_write_time() != modified)
+                    throw std::runtime_error(
+                        "a character save changed before replacement");
+
+                std::filesystem::create_directories(backupFolder);
+                const auto stamp = std::chrono::system_clock::now()
+                    .time_since_epoch().count();
+                auto backup = backupFolder / entry.path().filename();
+                backup += L"." + std::to_wstring(stamp) + L".bak";
+                std::filesystem::copy_file(entry.path(), backup,
+                    std::filesystem::copy_options::none);
+
+                const auto serialized = cleaned.Save.dump(2) + "\n";
+                PS::ConfigFiles::Write(entry.path(), serialized);
+                const auto verified = nlohmann::json::parse(
+                    PS::ConfigFiles::Read(entry.path(), 8 * 1024 * 1024),
+                    nullptr, true, true);
+                if (verified != cleaned.Save)
+                    throw std::runtime_error(
+                        "character save replacement failed verification");
+                ++repairedFiles;
+                removedReferences += cleaned.Removed.size();
+            }
+
+            if (removedReferences)
+                PS::Log<LogLevel::Normal>(STR(
+                    "[SAVE-CLEANER][VERIFIED] Removed {} unresolved persistence reference(s) from {} character save(s) before selection. Originals were backed up.\n"),
+                    removedReferences, repairedFiles);
+        }
+        catch (const std::exception& error)
+        {
+            PS::Log<LogLevel::Error>(STR(
+                "[SAVE-CLEANER][UNCHANGED] Character save pruning stopped safely: {}.\n"),
+                PS::ToWideSafe(error.what()));
+        }
     }
+
 
     void DragonWildsDataRegistrar::RegisterAll()
     {
@@ -483,13 +504,45 @@ namespace DragonWilds {
         }
 
         snapshot.QuestsComplete = questsReady;
+        if (auto* journalClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+                nullptr, nullptr, JournalSubsystemClassPath, false))
+        {
+            if (auto* journalSubsystem = FindSubsystemInstance(journalClass))
+            {
+                if (auto* journalMapProperty = CastField<FMapProperty>(
+                        PropertyHelper::GetPropertyByName(
+                            journalSubsystem->GetClassPrivate(),
+                            TEXT("PersistenceIDToDataMap"))))
+                {
+                    UECustom::FScriptMapHelper journalMap(
+                        journalMapProperty,
+                        journalMapProperty->ContainerPtrToValuePtr<void>(
+                            journalSubsystem));
+                    journalMap.ForEachPair([&](void* keyPtr, void*) {
+                        auto* key = static_cast<FString*>(keyPtr);
+                        if (key && key->GetCharArray().Num() > 1)
+                            snapshot.Journals.insert(RC::to_string(
+                                RC::StringType(**key)));
+                    });
+                    snapshot.JournalsComplete = !snapshot.Journals.empty();
+                }
+            }
+        }
         if (itemsReady && recipesReady)
         {
             // The complete native view is diagnostic/manual-repair context.
-            // Automatic pruning never treats registry-unknown content as
-            // removable; it uses only the exact previous/current RuneSchema
-            // identity snapshot after every mod section loaded successfully.
+            // The completed live registries are the authority. Character
+            // cleanup removes identities that no longer resolve after every
+            // enabled mod has had an opportunity to register its content.
             PS::SaveCleanup::PublishRegistry(snapshot);
+            if (!m_registrySummaryReported)
+            {
+                m_registrySummaryReported = true;
+                PS::Log<LogLevel::Verbose>(STR(
+                    "Persistence registry ready: items={}, recipes={}, quests={}, journal={}.\n"),
+                    snapshot.Items.size(), snapshot.Recipes.size(),
+                    snapshot.Quests.size(), snapshot.Journals.size());
+            }
         }
         else
             // Never leave a previous world's registry available to Safe Clean
@@ -524,11 +577,6 @@ namespace DragonWilds {
             try
             {
                 if (!candidate || candidate->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject | RF_ArchetypeObject)))
-                {
-                    continue;
-                }
-
-                if (!IsCustomDataPath(candidate->GetPathName()))
                 {
                     continue;
                 }

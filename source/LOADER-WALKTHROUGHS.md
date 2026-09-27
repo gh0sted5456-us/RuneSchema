@@ -483,7 +483,7 @@ entry, pages, icon, unlock, save, and reload.
 ```
 
 Open the entry from a supported dialogue lore action or unlock it normally.
-Cooked entries may use `$declaration` for ownership tracking.
+Cooked entries are discovered and registered from their live persistent identities; no ownership declaration is required.
 
 ## `nameplates`
 

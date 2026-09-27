@@ -21,24 +21,6 @@ inline nlohmann::json LoaderSchemas() {
         {"description","Unreal rotator in degrees. Use the named Pitch, Yaw and Roll fields."}};
     json result=json::object();
     for(const auto* name:{"assets","journal","lore"}) result[name]=map(record);
-    const json cookedDeclaration={{"type","object"},{"additionalProperties",false},{"required",{"Kind","Path","PersistenceID"}},
-        {"properties",{
-            {"Kind",{{"enum",{"Item","Recipe"}},{"description","Persistent native registry kind for /assets."}}},
-            {"Path",{{"type","string"},{"pattern","^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$"},{"description","Exact cooked object path shipped by the mod PAK."}}},
-            {"PersistenceID",{{"type","string"},{"pattern","^[A-Za-z0-9_-]{21}[AQgw]$"},{"description","Canonical PersistenceID baked into the cooked asset. RuneSchema verifies it against the loaded object."}}},
-            {"InternalName",{{"type","string"},{"minLength",1},{"maxLength",1024},{"description","Optional cooked InternalName assertion. When omitted, RuneSchema reads it from the asset."}}}
-        }}};
-    const auto declarationValue=[&](const std::string& kind) {
-        auto value=cookedDeclaration;
-        value["required"]={"Path","PersistenceID"};
-        value["properties"]["Kind"]={{"const",kind},{"description","Optional assertion; the containing loader determines this kind."}};
-        return json{{"oneOf",{value,json{{"type","array"},{"minItems",1},{"maxItems",4096},{"items",value}}}},
-            {"description","Ownership declaration for PAK-cooked persistent content. RuneSchema verifies the live asset identity before recording it."}};
-    };
-    const auto declarationDocument=[&](const std::string& kind) {
-        return json{{"type","object"},{"required",{"$declaration"}},{"additionalProperties",false},
-            {"properties",{{"$declaration",declarationValue(kind)}}}};
-    };
     for (const auto* name : {"journal", "lore"}) {
         auto& entry = result[name]["patternProperties"]["^[^$]"];
         auto& fields = entry["properties"];
@@ -64,8 +46,6 @@ inline nlohmann::json LoaderSchemas() {
             {"description","Place into any loaded native subcategory. For categories that support groups, Group.CreateIfMissing creates a mod-owned visible category within that native section."}};
     }
     result["lore"]["patternProperties"]["^[^$]"]["properties"]["Type"]={{"const","Lore"},{"default","Lore"}};
-    result["journal"]["properties"]["$declaration"]=declarationValue("Journal");
-    result["lore"]["properties"]["$declaration"]=declarationValue("Lore");
     json recipe=record;
     const json recipePlacement={{"type","object"},{"additionalProperties",false},{"required",{"Row"}},
         {"allOf",{
@@ -191,7 +171,7 @@ inline nlohmann::json LoaderSchemas() {
             {"Unlock",{{"type","boolean"},{"default",true},{"description","Session-unlock the separate cloned entry. False does not revoke an unlock already persisted by the game."}}},
             {"AddTo",{{"oneOf",{buildingPlacement,json{{"type","array"},{"minItems",1},{"maxItems",32},{"items",buildingPlacement}}}},
                 {"description","Optional explicit placement(s). When omitted, RuneSchema appends the clone to every page/collection containing its $Clone source."}}}}}};
-    result["buildings"]=many({{"anyOf",{map(buildingDefinition),patch,declarationDocument("Building")}}});
+    result["buildings"]=many({{"anyOf",{map(buildingDefinition),patch}}});
     result["courses"]=many(record);
     result["spawns"]={{"type","array"},{"items",record}};
     const json groundZ={{"anyOf",{json{{"type","number"}},json{{"type","string"},{"pattern","^\\$([+-][0-9]+(?:\\.[0-9]+)?)?$"}}}}};
@@ -556,7 +536,6 @@ inline nlohmann::json LoaderSchemas() {
         (*questSchema)["not"]["required"]={"StartCost","EntryOptions"};
         (*questSchema)["dependencies"]["Repeat"]={{"required",{"Repeatable"}},{"properties",{{"Repeatable",{{"const",true}}}}}};
     }
-    result["quests"]["anyOf"].push_back(declarationDocument("Quest"));
     json dialogueNode={{"type","object"},{"additionalProperties",false},{"required",{"Text","Choices"}},
         {"properties",{{"Text",{{"type","string"},{"minLength",1},{"maxLength",4096}}},{"Choices",{{"type","array"},{"minItems",1},{"maxItems",4},{"items",choice}}}}}};
     dialogueNode["properties"]["Pose"]=npc["properties"]["Pose"];
@@ -732,9 +711,6 @@ inline nlohmann::json LoaderSchemas() {
     asset["properties"]["Modded"]=moddedValue;
     result["assets"]={{"type","object"},{"patternProperties",{{"^(?!(?:RuneSchema|Modded)$)[^$]",asset}}},
         {"properties",{{"RuneSchema",authorFlag},{"Modded",moddedValue}}},{"additionalProperties",true}};
-    result["assets"]["properties"]["$declaration"]={{"oneOf",{cookedDeclaration,
-        json{{"type","array"},{"minItems",1},{"maxItems",4096},{"items",cookedDeclaration}}}},
-        {"description","Declare PAK-cooked ItemData or RecipeData without cloning or patching it. Verified declarations enter the scoped ownership ledger."}};
 
     json flatNameplate=nameplate;
     flatNameplate["required"]={"Id"};

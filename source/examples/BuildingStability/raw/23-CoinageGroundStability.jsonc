@@ -1,0 +1,12 @@
+// The cooked BuildingPieceData assets reference CoinageGroundProp in the
+// vanilla stability table. RuneSchema adds the row before /buildings runs.
+{
+  "/Game/Gameplay/BaseBuilding_New/DT_StabilityProfile.DT_StabilityProfile": {
+    "CoinageGroundProp": {
+      "MaxStability": 1.0,
+      "MinStability": 0.0,
+      "VerticalLoss": 0.01,
+      "HorizontalLoss": 0.01
+    }
+  }
+}

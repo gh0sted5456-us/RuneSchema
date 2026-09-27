@@ -95,14 +95,11 @@ namespace DragonWilds {
         void DiscardUncommittedClone(RC::Unreal::UObject* building);
         void RegisterHooks();
         void PrepareWorldState(RC::Unreal::AGameModeBase* gameMode);
-        bool ResolveWorldRegistryPath(RC::Unreal::AGameModeBase* gameMode);
         bool ProtectWorldRegistry(RC::Unreal::UObject* subsystem);
         bool RefreshBuildingReferencesForWorld();
         bool RefreshBuildingCatalogueForWorld();
         RC::Unreal::UObject* GetValidBuilding(const RC::StringType& identity) const;
         void RememberBuilding(const RC::StringType& identity, RC::Unreal::UObject* object);
-        RC::Unreal::UObject* CreateRetiredBuilding(
-            const nlohmann::json& record, RC::Unreal::int32 historicalIndex);
         bool CaptureNativeRegistry(RC::Unreal::UObject* subsystem);
         bool RestoreNativeRegistry();
         void ClearWorldRegistryState();
@@ -127,10 +124,8 @@ namespace DragonWilds {
         std::unordered_set<RC::StringType> m_applied;
         std::unordered_set<RC::StringType> m_unlocks;
         std::unordered_set<std::string> m_ownedProfileRows;
-        std::vector<RC::Unreal::UObject*> m_retiredBuildings;
         std::vector<RC::Unreal::UObject*> m_createdBuildings;
         NativeRegistrySnapshot m_nativeRegistrySnapshot;
-        std::filesystem::path m_worldManifestPath;
         bool m_hooksRegistered = false;
         RC::Unreal::Hook::GlobalCallbackId m_initGameStateCallbackId = RC::Unreal::Hook::ERROR_ID;
     };

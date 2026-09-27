@@ -18,9 +18,6 @@ namespace RC::Unreal {
 namespace DragonWilds {
     class DragonWildsDataRegistrar {
     public:
-        // Freezes the fully loaded RuneSchema identity vector. Exact retired
-        // IDs are applied later to live character state through native APIs.
-        void PrepareRetiredContent();
         void Initialize();
         void Shutdown();
         ~DragonWildsDataRegistrar() { Shutdown(); }
@@ -28,31 +25,18 @@ namespace DragonWilds {
     private:
         std::vector<std::pair<RC::Unreal::UClass*, RC::Unreal::UClass*>> m_bindings;
         std::vector<std::pair<RC::Unreal::UFunction*, int32_t>> m_functionHooks;
-        RC::Unreal::Hook::GlobalCallbackId m_gameStateHook = RC::Unreal::Hook::ERROR_ID;
+        RC::Unreal::Hook::GlobalCallbackId m_gameStateStartingHook = RC::Unreal::Hook::ERROR_ID;
+        RC::Unreal::Hook::GlobalCallbackId m_gameStateReadyHook = RC::Unreal::Hook::ERROR_ID;
+        RC::Unreal::Hook::GlobalCallbackId m_characterJsonHook = RC::Unreal::Hook::ERROR_ID;
         bool m_initialized = false;
-        bool m_retiredContentPrepared = false;
-        // Both storefront lanes use the same native live-state cleanup. The
-        // previous vector remains pending until every supported kind verifies.
-        std::filesystem::path m_pendingSnapshot;
-        std::set<std::string> m_pendingUnsupportedKinds;
-        bool m_cleanupBlockReported = false;
-        bool m_cleanupPartialReported = false;
-        bool m_itemsVerified = true;
-        bool m_recipesVerified = true;
-        bool m_questsVerified = true;
-        bool m_journalVerified = true;
-        struct RetiredContent {
-            RC::Unreal::UObject* Data = nullptr;
-            std::string Kind;
-            std::string Owner;
-            std::string PersistenceID;
-        };
-        std::vector<RetiredContent> m_retiredContent;
+        bool m_preflightingCharacterJson = false;
+        bool m_localCharacterSweepCompleted = false;
+        bool m_registrySummaryReported = false;
 
         bool ResolveBindings();
-        void ScrubRetiredContent(RC::Unreal::UObject* controller);
-        void ScrubRetiredJournal(RC::Unreal::UObject* component);
-        void TryCommitSnapshot();
+        void ScrubCharacterJsonBeforeLoad(
+            RC::Unreal::UFunction* function, void* parameters);
+        void ScrubLocalCharacterFiles();
         void InstallHooks();
         void RegisterAll();
         void RegisterMissing(RC::Unreal::UClass* dataClass, RC::Unreal::UObject* subsystem);

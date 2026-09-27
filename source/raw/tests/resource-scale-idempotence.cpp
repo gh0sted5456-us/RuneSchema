@@ -26,6 +26,13 @@ int main(int argc,char** argv) {
         "temporary resource creation can multiply with an authored root scale");
     Require(loader.find("ReconcileManagedActorScales(deltaSeconds)")!=std::string::npos,
         "managed actor scales are not reconciled from the engine tick");
+    Require(header.find("struct PlayerAdjustmentState {")!=std::string::npos
+        && header.find("PS::WeakObjectHandle Pawn;")!=std::string::npos,
+        "player scale reconciliation retains a raw pawn across world travel");
+    Require(loader.find("auto* pawn = state->Pawn.Get();")!=std::string::npos,
+        "player scale reconciliation does not serial-validate its pawn");
+    Require(loader.find("m_playerAdjustments.clear();")!=std::string::npos,
+        "player scale state is not cleared when the world changes");
     Require(loader.find("current.X() - authored.X()")!=std::string::npos
         && loader.find("actor->SetActorScale3D(authored)")!=std::string::npos,
         "managed actor scale is not restored as an absolute value");

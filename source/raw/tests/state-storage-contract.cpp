@@ -39,19 +39,14 @@ int main(int argc, char** argv)
         && host.find("LocalState") != std::string::npos
         && host.find("SystemAppData\\wgs") != std::string::npos,
         "Game Pass state is package-local and Xbox WGS is never treated as a normal save directory");
-    Check(host.find("Preserve the Steam/GOG ledger") != std::string::npos,
-        "the Game Pass ledger seed does not consume Steam state");
-    Check(host.find("safesave") != std::string::npos
-        && host.find("OwnedContentLedger.json") != std::string::npos,
-        "legacy SafeSave ledger migration exists");
-    Check(host.find(".migrating") != std::string::npos
-        && host.find("file_size(source) != std::filesystem::file_size(temporary)") != std::string::npos,
-        "SafeSave migration is staged and verified");
-    Check(mainLoader.find("HostServices::StateDirectory()") != std::string::npos,
-        "snapshot uses AppData state root");
-    Check(buildingLoader.find("GetProjectSavedDirectory") != std::string::npos
-        && buildingLoader.find("CustomBuildingData.json") != std::string::npos,
-        "world building data remains in the engine Saved directory");
+    Check(host.find("OwnedContentLedger.json") == std::string::npos,
+        "runtime state migration does not create or move an ownership ledger");
+    Check(mainLoader.find("OwnedContent::BeginSnapshot") == std::string::npos,
+        "automatic cleanup does not create an ownership ledger");
+    Check(buildingLoader.find("CustomBuildingData.json") == std::string::npos
+        && buildingLoader.find("HistoricalIndex") == std::string::npos
+        && buildingLoader.find("PersistenceId < right.PersistenceId") != std::string::npos,
+        "building registration is deterministic and does not create a world manifest");
     Check(playerRules.find("StateDirectory() / \"players\"") != std::string::npos
         && playerRules.find("RuneSchemaPlayerAppearanceSnapshot") != std::string::npos
         && playerRules.find("WriteOnceFallback") != std::string::npos,
@@ -63,20 +58,26 @@ int main(int argc, char** argv)
     Check(playerRules.find("if (error == \"player pawn or GUID was unavailable\") continue;") != std::string::npos
         && playerRules.find("PS::Log<LogLevel::Verbose>(") != std::string::npos,
         "normal pre-pawn appearance snapshot retries do not warn or fail");
-    Check(registrar.find("ConfigFiles::Write") == std::string::npos
-        && registrar.find("CharacterSaveDirectory") == std::string::npos,
-        "automatic cleanup must use live game state on both storefronts");
-    Check(registrar.find("\"/Game/RuneSchema/\"") != std::string::npos
-        && registrar.find("PublishRegistry") != std::string::npos,
-        "runtime RuneSchema assets feed the live Safe Clean registry snapshot");
+    Check(registrar.find("ScrubLocalCharacterFiles") != std::string::npos
+        && registrar.find("SaveCharacters") != std::string::npos
+        && registrar.find("ConfigFiles::Write") != std::string::npos,
+        "Steam character saves are pruned before character selection");
+    Check(registrar.find("NativeLane::SteamNative") != std::string::npos
+        && registrar.find("ScrubCharacterJsonBeforeLoad") != std::string::npos,
+        "file and provider save lanes stay separated");
+    Check(registrar.find("PublishRegistry") != std::string::npos
+        && registrar.find("snapshot.Journals") != std::string::npos,
+        "native item, recipe, quest, and journal registries feed pruning");
     Check(cleanupPanel.find("Remove invalid item/recipe/quest PersistenceIDs") != std::string::npos
         && cleanupPanel.find("ReadRegistry()") != std::string::npos,
         "Safe Clean exposes explicit live-registry orphan repair");
-    Check(registrar.find("OwnedContent::CommitSnapshot(m_pendingSnapshot)") != std::string::npos
-        && registrar.find("[SAVE-CLEANER][PENDING]") != std::string::npos,
-        "the previous ownership vector is retained until live cleanup is verified");
-    Check(registrar.find("[SAVE-CLEANER][VERIFIED-PARTIAL]") != std::string::npos,
-        "unready categories do not erase the previous ownership vector");
+    const auto preRegistration=registrar.find("RegisterInitGameStatePreCallback");
+    const auto registerAll=registrar.find("RegisterAll();",preRegistration);
+    const auto scrubFiles=registrar.find("ScrubLocalCharacterFiles();",registerAll);
+    Check(preRegistration != std::string::npos && registerAll < scrubFiles
+        && registrar.find("OwnedContent::CompareSnapshot") == std::string::npos
+        && registrar.find("OwnedContent::CommitSnapshot") == std::string::npos,
+        "automatic pruning follows pre-world registration without a manifest or ledger");
     Check(saveViewer.find("Character-save file browsing is unavailable for Xbox WGS storage") != std::string::npos,
         "the file viewer does not mistake Steam saves for Game Pass saves");
     std::cout << "Mutable state storage contract passed.\n";

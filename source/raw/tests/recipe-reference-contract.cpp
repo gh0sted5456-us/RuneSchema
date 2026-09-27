@@ -20,6 +20,6 @@ int main(int argc,char** argv) {
     require(source.find("static std::string RecipePersistenceId")!=std::string::npos
         && source.find("DialogueSave::PersistenceIdForSeed(\"Recipe/\"")!=std::string::npos,
         "Authored recipes do not receive a deterministic canonical persistence identity");
-    require(source.find("OwnedContent::Merge")!=std::string::npos,
-        "Registered authored recipes are not recorded for exact SafeSave cleanup");
+    require(source.find("OwnedContent::") == std::string::npos,
+        "Recipe persistence still depends on an ownership manifest");
 }

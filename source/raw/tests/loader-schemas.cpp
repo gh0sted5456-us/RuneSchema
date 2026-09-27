@@ -115,13 +115,10 @@ int RunLoaderSchemas(int argc,char** argv) {
     assert(buildingOverrides.at("Shelter").at("properties").contains("RoofRays"));
     assert(buildingOverrides.at("Health").at("properties").contains("MaxHealth"));
     assert(buildingOverrides.at("Snapping").at("properties").contains("SnappingRadius"));
-    const auto& declaration=schemas.at("assets").at("properties").at("$declaration");
-    assert(declaration.at("oneOf").size()==2);
-    assert(declaration.at("oneOf").at(0).at("properties").at("Kind").at("enum")==nlohmann::json::array({"Item","Recipe"}));
-    assert(declaration.at("oneOf").at(0).at("required")==nlohmann::json::array({"Kind","Path","PersistenceID"}));
-    assert(schemas.at("journal").at("properties").contains("$declaration"));
-    assert(schemas.at("lore").at("properties").contains("$declaration"));
-    assert(schemas.at("quests").at("anyOf").size()==3);
+    assert(schemas.at("assets").dump().find("\"$declaration\"")==std::string::npos);
+    assert(schemas.at("journal").dump().find("\"$declaration\"")==std::string::npos);
+    assert(schemas.at("lore").dump().find("\"$declaration\"")==std::string::npos);
+    assert(schemas.at("quests").at("anyOf").size()==2);
     const auto& recipePlacement=schemas.at("recipes").at("patternProperties").at("^[^$]")
         .at("properties").at("AddTo").at("items");
     assert(schemas.at("recipes").at("patternProperties").at("^[^$]").at("properties")

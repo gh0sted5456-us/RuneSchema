@@ -186,49 +186,45 @@ namespace {
         return result;
     }
     json World(UObject* controller) {
-        auto* cls=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Dominion.PersistenceSubsystem"));
-        if(!cls)throw std::runtime_error("World persistence subsystem unavailable.");
+        auto* cls=UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr,nullptr,TEXT("/Script/Dominion.BuildingPieceSubsystem"),false);
+        if(!cls)throw std::runtime_error("Building registry subsystem unavailable.");
         TArray<UObject*> objects;UECustom::UObjectGlobals::GetObjectsOfClass(cls,objects,true);
-        UObject* persistence=nullptr;
-        if(objects.Num()>64)throw std::runtime_error("World subsystem inventory exceeds viewer limit.");
-        for(auto* object:objects)if(object && object->GetWorld()==controller->GetWorld() && !object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject))) {
-            if(persistence)throw std::runtime_error("Ambiguous world persistence subsystem.");persistence=object;
+        UObject* subsystem=nullptr;
+        if(objects.Num()>64)throw std::runtime_error("Building subsystem inventory exceeds viewer limit.");
+        for(auto* object:objects)if(object && object->GetWorld()==controller->GetWorld()
+            && !object->HasAnyFlags(static_cast<EObjectFlags>(
+                RF_ClassDefaultObject|RF_ArchetypeObject))) {
+            if(subsystem)throw std::runtime_error("Ambiguous Building registry subsystem.");
+            subsystem=object;
         }
-        if(!persistence)throw std::runtime_error("Active world save unavailable on this client.");
-        auto* settings=CastField<FStructProperty>(PropertyHelper::GetPropertyByName(persistence->GetClassPrivate(),TEXT("WorldSaveSettings")));
-        auto* guid=settings?CastField<FStructProperty>(PropertyHelper::GetPropertyByName(settings->GetStruct().Get(),TEXT("WorldSaveGuid"))):nullptr;
-        if(!guid || guid->GetElementSize()!=16)throw std::runtime_error("Unsupported world save identity layout.");
-        uint32 lanes[4]{};std::memcpy(lanes,guid->ContainerPtrToValuePtr<void>(settings->ContainerPtrToValuePtr<void>(persistence)),sizeof(lanes));
-        const auto id=std::format("{:08X}-{:08X}-{:08X}-{:08X}",lanes[0],lanes[1],lanes[2],lanes[3]);
-        if(SaveReport::Guid(id).empty())throw std::runtime_error("Active world GUID unavailable.");
-        auto* library=ActorHelper::ResolveObject(TEXT("/Script/Engine.Default__KismetSystemLibrary"));
-        ActorHelper::FunctionCall saved(library,TEXT("/Script/Engine.KismetSystemLibrary:GetProjectSavedDirectory"));
-        saved.Invoke();const auto directory=saved.Result<FString>();
-        if(directory.GetCharArray().Num()<=1)throw std::runtime_error("Project save directory unavailable.");
-        const auto path=fs::path(*directory)/"RuneSchema"/id/"CustomBuildingData.json";
-        if(!fs::exists(path))throw std::runtime_error("No RuneSchema building registry exists for this world.");
-        const auto data=Read(path);
-        if(!data.contains("Records") || !data["Records"].is_array() || data["Records"].size()>4096)throw std::runtime_error("Unsupported building registry layout or size.");
+        if(!subsystem)throw std::runtime_error("Active Building registry unavailable.");
+        auto* property=CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(
+            subsystem->GetClassPrivate(),TEXT("NetIdToData")));
+        auto* inner=property?CastField<FObjectPropertyBase>(property->GetInner()):nullptr;
+        if(!property || !inner || inner->GetElementSize()!=sizeof(UObject*))
+            throw std::runtime_error("Unsupported Building registry layout.");
+        auto* array=property->ContainerPtrToValuePtr<FScriptArray>(subsystem);
+        if(array->Num()<0 || array->Num()>65535 || (array->Num()&&!array->GetData()))
+            throw std::runtime_error("Invalid Building registry bounds.");
         json rows=json::array();
-        for(const auto& record:data["Records"]) {
-            if(!record.is_object() || !record.contains("PersistenceID") || !record["PersistenceID"].is_string())
-                throw std::runtime_error("Invalid building registry record.");
-            json row={{"Origin","RuneSchema world registry"},{"DisplayName",nullptr}};
-            for(const auto* key:{"Owner","Key","PersistenceID","InternalName","AssetPath","State","HistoricalIndex"})
-                if(record.contains(key))row[key]=record[key];
+        for(int32 index=0;index<array->Num();++index) {
+            UObject* building=nullptr;
+            std::memcpy(&building,static_cast<uint8*>(array->GetData())
+                +index*inner->GetElementSize(),sizeof(building));
+            if(!building)continue;
+            json row={{"Origin","Live Building registry"},{"DisplayName",nullptr},
+                {"AssetPath",RC::to_string(building->GetPathName())},{"NetIndex",index}};
+            for(const auto* name:{TEXT("PersistenceID"),TEXT("InternalName")}) {
+                auto* field=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
+                    building->GetClassPrivate(),name));
+                if(field)row[RC::to_string(name)]=RC::to_string(*field->GetPropertyValue(
+                    field->ContainerPtrToValuePtr<void>(building)));
+            }
             rows.push_back(std::move(row));
         }
-        const auto historical=rows;
-        Resolve(rows,TEXT("/Script/Dominion.BuildingPieceData"));
-        for(size_t i=0;i<rows.size();++i) {
-            if(historical[i].contains("AssetPath"))rows[i]["RegisteredAssetPath"]=historical[i]["AssetPath"];
-            if(historical[i].contains("InternalName"))rows[i]["RegisteredInternalName"]=historical[i]["InternalName"];
-            rows[i]["Resolution"]=rows[i].value("Origin",std::string("Unresolved"));
-            rows[i]["Origin"]="RuneSchema world registry";
-            if(!rows[i].contains("InternalName") || rows[i]["InternalName"].is_null())if(historical[i].contains("InternalName"))rows[i]["InternalName"]=historical[i]["InternalName"];
-        }
-        return {{"Kind","RuneSchemaWorldRegistry1"},{"Rows",rows},{"Warnings",json::array()},
-            {"Coverage","Active-world RuneSchema building registration history only. Not proof of placed instances; no containers, terrain or full world save are scanned."}};
+        return {{"Kind","LiveBuildingRegistry1"},{"Rows",rows},{"Warnings",json::array()},
+            {"Coverage","Active-world BuildingPieceData registry. World saves remain authoritative for placed instances; no RuneSchema building manifest is used."}};
     }
 }
 #include "SaveCleanupPanel.inl"

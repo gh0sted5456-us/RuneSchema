@@ -11,6 +11,10 @@
             "minimum": 0,
             "type": "number"
           },
+          "AlwaysFaceCamera": {
+            "description": "Keep the native world-space nameplate facing the local camera.",
+            "type": "boolean"
+          },
           "Client": {
             "anyOf": [
               {
@@ -220,6 +224,10 @@
             },
             "type": "object"
           },
+          "OnlyShowNearby": {
+            "description": "Use the game's native distance visibility check with Distance as its range.",
+            "type": "boolean"
+          },
           "PixelHeight": {
             "maximum": 4096,
             "minimum": 1,
@@ -348,6 +356,10 @@
                 "maximum": 3600,
                 "minimum": 0,
                 "type": "number"
+              },
+              "AlwaysFaceCamera": {
+                "description": "Keep the native world-space nameplate facing the local camera.",
+                "type": "boolean"
               },
               "Client": {
                 "anyOf": [
@@ -552,6 +564,10 @@
                   }
                 },
                 "type": "object"
+              },
+              "OnlyShowNearby": {
+                "description": "Use the game's native distance visibility check with Distance as its range.",
+                "type": "boolean"
               },
               "PixelHeight": {
                 "maximum": 4096,

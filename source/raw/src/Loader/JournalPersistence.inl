@@ -40,8 +40,6 @@ struct JournalPersistence {
             if(!entries)throw std::runtime_error("Native journal entry list missing");
             result[key]=*entries;
         }
-        const auto metadata=Api->ReadArray(json,TEXT("RuneSchemaOwnership"));
-        if(metadata)JournalSave::StoreOwnership(result,JournalSave::DecodeNative(*metadata));
         return result;
     }
     static JournalSave::NativeFields Fields(const JournalSave::Json& value) {
@@ -61,19 +59,14 @@ struct JournalPersistence {
             ValidateInstance(persistence);
             if(!json || !json->Object || !json->Controller)throw std::runtime_error("Native journal JSON missing");
             auto payload=ReadPayload(json->Object);
-            const auto saved=JournalSave::ReadOwnership(payload);
             const auto current=CurrentOwners();
-            for(const auto& [id,owner]:saved) {
-                const auto found=current.find(id);
-                if(found!=current.end() && found->second!=owner)throw std::runtime_error("Saved journal ownership conflicts with loaded mod");
-            }
-            // Retired identity cleanup is performed against the hydrated live
-            // JournalComponent by the shared Steam/Game Pass lane. This bridge
-            // only preserves Steam ownership metadata and temporary mode.
             auto cleanedPayload=payload;
             if(!PS::PSConfig::Get()->GetSettings().persistence.journal)
                 cleanedPayload=JournalSave::RemoveCurrent(cleanedPayload,current);
             if(cleanedPayload!=payload)ReplacePayload(json->Object,payload,cleanedPayload);
+            const auto metadata=Api->ReadArray(json->Object,TEXT("RuneSchemaOwnership"));
+            if(metadata && !metadata->empty())
+                Api->WriteArray(json->Object,TEXT("RuneSchemaOwnership"),{});
         }catch(const std::exception& error) {
             Report("load",error.what());
             // This ABI consumes the incoming native shared reference on every
@@ -96,16 +89,10 @@ struct JournalPersistence {
             if(!PS::PSConfig::Get()->GetSettings().persistence.journal) {
                 const auto transient=JournalSave::RemoveCurrent(payload,current);
                 if(transient!=payload)ReplacePayload(held.Object(),payload,transient);
-                return true;
-            }
-            Owners included;
-            for(const auto* name:{"UnlockedEntries","UnreadEntries"})for(const auto& entry:payload.at(name)) {
-                const auto id=entry.get<std::string>();
-                if(const auto found=current.find(id);found!=current.end())included.emplace(*found);
             }
             const auto previous=Api->ReadArray(held.Object(),TEXT("RuneSchemaOwnership"));
-            if(!included.empty() || previous)
-                Api->WriteArray(held.Object(),TEXT("RuneSchemaOwnership"),JournalSave::EncodeNative(included));
+            if(previous && !previous->empty())
+                Api->WriteArray(held.Object(),TEXT("RuneSchemaOwnership"),{});
             return true;
         }catch(const std::exception& error) {
             Report("save",error.what());

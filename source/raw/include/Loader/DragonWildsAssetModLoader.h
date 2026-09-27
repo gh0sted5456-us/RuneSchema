@@ -81,7 +81,6 @@ namespace DragonWilds {
             const std::string& source);
         void ApplyObjectPatches(bool characterMenuReplay = false);
         void RegisterCharacterMenuPatchReplay();
-        void RegisterDeclarations(const nlohmann::json& data, const RC::StringType& modName);
         void Apply(RC::Unreal::UObject* object, const PendingAsset& pendingAsset, LoadResult& outResult);
         void ApplyDominionSpheres(RC::Unreal::UObject* owner,
             const nlohmann::json& definitions, LoadResult& outResult);

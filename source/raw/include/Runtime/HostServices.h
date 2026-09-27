@@ -6,8 +6,8 @@ namespace PS::HostServices {
     std::filesystem::path ModDirectory();
     std::filesystem::path SettingsDirectory();
     // Mutable compatibility state belongs beside the game's Saved data, not
-    // inside the installed UE4SS mod. This root is shared by SafeSave and the
-    // per-world building manifests.
+    // inside the installed UE4SS mod. This root is shared by runtime settings,
+    // backups, exports, and diagnostics.
     std::filesystem::path StateDirectory();
     // Provider-owned Xbox Game Save root. This is exposed for diagnostics and
     // format validation only; runtime cleanup must flow through the active

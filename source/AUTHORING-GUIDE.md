@@ -88,19 +88,14 @@ ue4ss/
 Release ZIPs intentionally omit `RuneSchema/mods`. Create that directory when
 installing content mods.
 
-RuneSchema keeps authored settings with the install, but its small content
-ownership record is stored with the game saves. Save cleanup uses
-`%LOCALAPPDATA%/RSDragonwilds/Saved/RuneSchema/safesave/OwnedContentLedger.json`;
-per-world building registry records remain under
-`Saved/RuneSchema/<WorldGuid>/CustomBuildingData.json`. On first launch, an
-older ownership record under `RuneSchema/settings` is checked and migrated.
-
-Steam/GOG and Game Pass use the same cleanup rule: RuneSchema waits for the
-game to load the character, removes only missing content that RuneSchema had
-previously recorded, verifies the result, and lets the game save normally.
-RuneSchema does not edit Xbox Game Save (`SystemAppData/wgs`) files directly.
-If a category cannot be checked safely, the previous ownership record is kept
-so cleanup can retry on the next launch.
+RuneSchema does not maintain a player-content ownership manifest. Steam/GOG
+and Game Pass use the same cleanup rule: RuneSchema loads every available mod,
+prepares the native item, recipe, quest, and journal registries, then removes
+only character-save identities that do not resolve. The game saves the cleaned
+character normally. Building pieces persist through the stable class GUID saved
+by Dragonwilds. RuneSchema keeps vanilla registry order and appends active
+custom pieces in deterministic `PersistenceID` order, so no separate per-world
+building manifest is required.
 
 Journal/lore and recipe loaders are enabled independently from save
 persistence. The default settings are:
@@ -179,36 +174,14 @@ the expected Unreal type.
 Not every loader supports every directive. The loader walkthrough marks the
 supported operations.
 
-## Cooked assets and `$declaration`
+## Cooked assets and live registration
 
-A cooked PAK can contain objects that RuneSchema did not create. Add a
-`$declaration` in a supported loader so RuneSchema knows which mod owns those
-objects. On the next load, RuneSchema compares the previous list with the
-active definitions and removes missing, previously owned save references after
-the game finishes loading. It never restores removed state.
-
-Supported declaration areas are:
-
-- `/assets`
-- `/buildings`
-- `/journal`
-- `/lore`
-- `/quests`
-
-Example:
-
-```json
-{
-  "$declaration": {
-    "Kind": "Item",
-    "Path": "/Game/MyMod/Items/ITEM_MySword.ITEM_MySword",
-    "PersistenceID": "stable-id-from-the-cooked-asset"
-  }
-}
-```
-
-Use the kind required by the selected loader. A declaration does not clone,
-patch, or load an object; it records ownership after the cooked path resolves.
+Cooked PAK assets need no ownership declaration. Reference them normally from
+the applicable loader using their full cooked object paths. After every mod is
+loaded, RuneSchema discovers the live persistent data objects and registers
+their identities with the native subsystems. Character cleanup uses those
+completed registries directly; no `$declaration`, ownership file, or restore
+history is involved.
 
 ## `/raw` and `/registry`
 

@@ -51,7 +51,6 @@
 #include "Loader/JournalJsonFieldContract.h"
 #include "Generator/NativeCallResolver.h"
 #include "Loader/QuestNativeRegistry.h"
-#include "Loader/OwnedContentLedger.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -216,23 +215,6 @@ namespace DragonWilds {
             return;
         }
 
-        try {
-            const auto kind=m_loreOnly?std::string("Lore"):std::string("Journal");
-            for(const auto& record:OwnedContent::Declarations(data,RC::to_string(modName),kind)) {
-                const auto key=RC::to_generic_string(record.Source);
-                JournalDef replacement{key,nlohmann::json::object(),modName,true,
-                    record.PersistenceID,record.InternalName};
-                replacement.DeclaredInternalNameAsserted=record.InternalNameAsserted;
-                auto found=std::find_if(m_defs.begin(),m_defs.end(),[&](const auto& value){return value.Key==key;});
-                if(found==m_defs.end())m_defs.push_back(std::move(replacement));
-                else *found=std::move(replacement);
-                m_rejectedEntries.erase(key);
-            }
-        } catch(const std::exception& error) {
-            PS::Log<LogLevel::Error>(STR("[SAVE-CLEANER][DECLARATION][LOADER:{}][MOD:{}] Declaration rejected; other records continue: {}.\n"),
-                m_loreOnly?TEXT("lore"):TEXT("journal"),modName,PS::ToWideSafe(error.what()));
-        }
-
         for (auto& [key, body] : data.items())
         {
             if (key.starts_with("$"))
@@ -381,9 +363,6 @@ namespace DragonWilds {
                     const auto actualId=RC::to_string(*persistence);
                     const auto actualName=RC::to_string(*name->GetPropertyValue(name->ContainerPtrToValuePtr<void>(entry)));
                     TrackOwnedId(entry,persistence,def.Owner,def.Declared);
-                    OwnedContent::Merge(OwnedContent::LedgerPath(PS::HostServices::StateDirectory()),
-                        {{m_loreOnly?"Lore":"Journal",RC::to_string(def.Owner),actualId,
-                            actualName,RC::to_string(def.Key)}});
                 }
 
                 const bool acquire=def.Body.value("UnlockOnAcquire",false);

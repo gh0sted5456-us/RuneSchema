@@ -8,8 +8,6 @@
 #include "Loader/DialogueSaveIdentity.h"
 #include "Loader/QuestStageRuntime.h"
 #include "Loader/EventDefinition.h"
-#include "Loader/OwnedContentLedger.h"
-#include "Runtime/HostServices.h"
 #include "SDK/Classes/KismetSystemLibrary.h"
 #include "SDK/Classes/TSoftObjectPtr.h"
 #include <map>
@@ -33,8 +31,6 @@ class Service {
     RC::Unreal::UObject* preparedSubsystem=nullptr;
     bool preparing=false;
     std::set<std::string> hidden;
-    std::map<std::string,OwnedContent::Record> declarations;
-    std::map<std::string,RC::Unreal::UObject*> declaredAssets;
 public:
     bool QuestOwnsEventArea(RC::Unreal::UObject* controller,const std::string& eventKey) const {
         if(!controller || eventKey.empty())return false;
@@ -169,25 +165,6 @@ public:
         }
     }
     void Load(const std::string& mod,const Json& data) {
-        if(data.is_object() && data.contains("$declaration")) {
-            auto pendingDeclarations=declarations;
-            const auto present=OwnedContent::Declarations(data,mod,"Quest");
-            for(const auto& record:present) {
-                const auto found=pendingDeclarations.find(record.PersistenceID);
-                if(found!=pendingDeclarations.end() && found->second.Owner!=record.Owner)
-                    throw std::runtime_error("Quest declaration ownership transfer refused");
-                pendingDeclarations[record.PersistenceID]=record;
-            }
-            declarations=std::move(pendingDeclarations);
-            // Presence is recorded during definition loading, before the
-            // retired-ID comparison. Native verification still happens when
-            // the world registry is available; failure retains data rather
-            // than falsely pruning an installed quest.
-            OwnedContent::Merge(OwnedContent::LedgerPath(
-                PS::HostServices::StateDirectory()),present);
-            if(data.size()==1)return;
-            throw std::runtime_error("A quest $declaration document may contain only declaration metadata");
-        }
         auto pending=catalog;auto documents=definitions;
         const auto add=[&](const Json& entry) {
             if(documents.size()>=128)throw std::runtime_error("Quest definition limit reached");
@@ -195,20 +172,9 @@ public:
         };
         if(data.is_array())for(const auto& entry:data)add(entry);else add(data);
         catalog=std::move(pending);definitions=std::move(documents);
-        std::vector<OwnedContent::Record> present;
-        for(const auto& [key,document]:definitions) {
-            const auto& definition=catalog.Find("_",key);
-            const auto separator=key.find(':');
-            if(separator==std::string::npos || separator==0)
-                throw std::runtime_error("Quest identity has no owning mod prefix: "+key);
-            present.push_back({"Quest",key.substr(0,separator),definition.PersistenceId,
-                definition.Key,key});
-        }
-        if(!present.empty())OwnedContent::Merge(OwnedContent::LedgerPath(
-            PS::HostServices::StateDirectory()),present);
         for(const auto& [key,document]:definitions){const auto& q=catalog.Find("_",key);if(q.Marker)hasLocations=true;for(const auto& [id,entries]:q.Stages)for(const auto& entry:entries)if(entry.Marker)hasLocations=true;}
     }
-    bool Empty() const {return definitions.empty() && declarations.empty();}
+    bool Empty() const {return definitions.empty();}
     bool HasKills() const {for(const auto& [key,document]:definitions){const auto& q=catalog.Find("_",key);if(q.Kill)return true;for(const auto& [id,entries]:q.Stages)for(const auto& e:entries)if(e.Kill)return true;}return false;}
     template<class Visit> void ForEachKill(Visit visit) const {for(const auto& [key,document]:definitions){const auto& def=catalog.Find("_",key);if(def.Kill || !def.Stages.empty())visit(key,def,document);}}
     const Json& Document(const std::string& key) const {return definitions.at(key);}
@@ -255,32 +221,6 @@ public:
         struct PreparingGuard {bool& Active;~PreparingGuard(){Active=false;}} preparingGuard{preparing};
         networkManifest=Json::array();preparedInstance=nullptr;preparedSubsystem=nullptr;
         Json manifest=Json::array();
-        auto* questType=ActorHelper::ResolveClass(TEXT("/Script/Dominion.QuestData"));
-        if(!declarations.empty() && !questType)throw std::runtime_error("QuestData class unavailable for declarations");
-        for(const auto& [id,record]:declarations) {
-            auto* object=UECustom::UObjectGlobals::StaticFindObject<RC::Unreal::UObject*>(nullptr,nullptr,
-                RC::to_generic_string(record.Source).c_str(),false);
-            if(!object) {
-                UECustom::TSoftObjectPtr<RC::Unreal::UObject> soft{UECustom::FSoftObjectPath(RC::to_generic_string(record.Source))};
-                object=UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
-            }
-            if(!object || !object->IsA(questType))throw std::runtime_error("Cooked quest declaration did not resolve to QuestData: "+record.Source);
-            const auto identity=[&](const TCHAR* name) {
-                auto* field=RC::Unreal::CastField<RC::Unreal::FStrProperty>(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),name));
-                return field?RC::to_string(*field->GetPropertyValue(field->ContainerPtrToValuePtr<void>(object))):std::string{};
-            };
-            const auto actualName=identity(TEXT("InternalName"));
-            if(identity(TEXT("PersistenceID"))!=record.PersistenceID || actualName.empty()
-                || (record.InternalNameAsserted && actualName!=record.InternalName))
-                throw std::runtime_error("Cooked quest declaration identity mismatch: "+record.Source);
-            object->SetRootSet();declaredAssets[id]=object;
-            uint16_t netId{};
-            try {netId=QuestRegistry::NativeRegistry::Register(subsystem,instance,object);}
-            catch(const std::exception& error) {
-                throw std::runtime_error("Declared quest '"+record.InternalName+"' registry preparation failed: "+error.what());
-            }
-            manifest.push_back({{"Key",record.InternalName},{"NetId",netId},{"Declaration",record.Source}});
-        }
         for(const auto& [key,document]:definitions) {
             if(!assets.contains(key))assets.emplace(key,std::make_unique<NativeAsset>(catalog.Find("_",key),hidden.contains(key)));
             const auto& definition=catalog.Find("_",key);

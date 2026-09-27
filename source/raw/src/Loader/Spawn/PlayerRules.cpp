@@ -2865,11 +2865,11 @@ namespace DragonWilds {
             }
 
             auto state = std::find_if(m_playerAdjustments.begin(), m_playerAdjustments.end(),
-                [&](const PlayerAdjustmentState& value) { return value.Pawn == pawn; });
+                [&](const PlayerAdjustmentState& value) { return value.Pawn.Get() == pawn; });
             if (state == m_playerAdjustments.end())
             {
                 PlayerAdjustmentState initial;
-                initial.Pawn = pawn;
+                initial.Pawn.Assign(pawn);
                 initial.BaseScale = static_cast<AActor*>(pawn)->GetActorScale3D();
                 m_playerAdjustments.push_back(std::move(initial));
                 state = std::prev(m_playerAdjustments.end());

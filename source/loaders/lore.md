@@ -23,7 +23,7 @@ Readable lore entries and pages using the journal registry.
 ```
 
 Open the entry from a supported dialogue lore action or unlock it normally.
-Cooked entries may use `$declaration` for ownership tracking.
+Cooked entries are registered from their live persistent identities; no ownership declaration is required.
 
 Lore uses the same persistence setting and missing-mod cleanup as journal
 entries on Steam/GOG and Game Pass.
@@ -32,7 +32,7 @@ entries on Steam/GOG and Game Pass.
 
 - `/lore` uses the journal registry but fixes the entry type to lore.
 - Lore may be unlocked normally or opened through a supported dialogue lore action.
-- Cooked entries may use `$declaration` for ownership tracking.
+- Cooked entries require no ownership declaration.
 
 ## FAQ
 

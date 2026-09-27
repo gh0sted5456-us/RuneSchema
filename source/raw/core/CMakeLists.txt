@@ -29,7 +29,7 @@ if(PROJECT_IS_TOP_LEVEL)
     endif()
     string(REPLACE "/DNDEBUG" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
     enable_testing()
-    foreach(test asset-aliases quest-definition quest-progress quest-native-contract quest-registry-plan spawn-radius quest-repeat-policy quest-save-ownership quest-receipt-journal quest-reward-tiers quest-stage-progress owned-content-ledger registry-patch-plan)
+    foreach(test asset-aliases quest-definition quest-progress quest-native-contract quest-registry-plan spawn-radius quest-repeat-policy quest-save-ownership quest-receipt-journal quest-reward-tiers quest-stage-progress registry-patch-plan)
         add_executable(${test} ../tests/${test}.cpp)
         target_link_libraries(${test} PRIVATE RuneSchemaJsonCore)
         if(MSVC)
@@ -206,6 +206,10 @@ if(PROJECT_IS_TOP_LEVEL)
     add_test(NAME building-clone-contract COMMAND building-clone-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsBuildingModLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Generator/LoaderSchemas.h")
+    add_executable(registry-bridge-lifecycle-contract ../tests/registry-bridge-lifecycle-contract.cpp)
+    add_test(NAME registry-bridge-lifecycle-contract COMMAND registry-bridge-lifecycle-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Runtime/RegistryBridge.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Runtime/RegistryBridge.h")
     add_executable(static-building-assembly-contract ../tests/static-building-assembly-contract.cpp)
     add_test(NAME static-building-assembly-contract COMMAND static-building-assembly-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsBuildingModLoader.cpp"

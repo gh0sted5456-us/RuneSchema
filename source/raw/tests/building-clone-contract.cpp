@@ -59,6 +59,9 @@ int main(int argc,char** argv) {
     require(loader.find("RS_PLACE")!=std::string::npos
         && loader.find("RS_STABLE")!=std::string::npos,
         "per-building placement/stability profile rows are missing");
+    require(loader.find("[BUILDING-STABILITY][MISSING]")!=std::string::npos
+        && loader.find("FindRowUnchecked(rowName)")!=std::string::npos,
+        "cooked building stability handles are not validated against the live vanilla table");
     require(loader.find("already owned by external content")!=std::string::npos,
         "generated profile rows can overwrite external content");
     require(schema.find("bCanOnlyBePlacedOnGround")!=std::string::npos
