@@ -44,7 +44,8 @@ int main(int argc, char** argv) {
     require(source.substr(persistence, hooks-persistence).find("catch (const std::exception& error)") != std::string::npos);
     require(source.find("JournalPersistence::Install(this,") != std::string::npos);
     require(source.find("NativeLane::GamePassNative") != std::string::npos);
-    require(source.find("WinGDK journal save-cleanup adapter is not verified") != std::string::npos);
+    require(source.find("temporary journal mode requires a verified WinGDK writer adapter") != std::string::npos);
+    require(source.find("Xbox persists the live component") != std::string::npos);
     require(source.find("StripUnusableIdsFromCharacterSave") == std::string::npos);
     require(source.find("SaveCharacters") == std::string::npos);
     const auto registered=source.find("RegisterEntry(entry,def.Owner);",apply);

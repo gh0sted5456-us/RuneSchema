@@ -51,7 +51,6 @@
 #include "Loader/JournalJsonFieldContract.h"
 #include "Generator/NativeCallResolver.h"
 #include "Loader/QuestNativeRegistry.h"
-#include "Loader/ModLoadOrder.h"
 #include "Loader/OwnedContentLedger.h"
 
 using namespace RC;
@@ -1116,12 +1115,15 @@ namespace DragonWilds {
 
     void DragonWildsJournalModLoader::InstallNativePersistence()
     {
-        // The journal JSON ABI is native and build-specific. The WinGDK
-        // reader/writer pair is known, but its JSON helper ABI is not yet a
-        // complete verified contract. Never run the Steam adapter in that
-        // process; unlock delivery below remains storefront-neutral.
-        if (PS::Storefront::CurrentNativeLane() == PS::Storefront::NativeLane::GamePassNative)
-            throw std::runtime_error("WinGDK journal save-cleanup adapter is not verified for this build");
+        // Cleanup itself is storefront-neutral and runs on hydrated live
+        // state. The Steam JSON bridge remains only for ownership metadata and
+        // optional temporary mode; Xbox persists the live component through
+        // its native provider without touching WGS directly.
+        if (PS::Storefront::CurrentNativeLane() == PS::Storefront::NativeLane::GamePassNative) {
+            if(!PS::PSConfig::Get()->GetSettings().persistence.journal)
+                throw std::runtime_error("temporary journal mode requires a verified WinGDK writer adapter");
+            return;
+        }
         JournalPersistence::Install(this, JournalSave::Owners(m_ownedIds.begin(),m_ownedIds.end()), m_journalComponentClass);
     }
 }

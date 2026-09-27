@@ -50,6 +50,8 @@ settings/safesave/OwnedContentLedger.json
 - Recipe unlocks: exact retired recipe identity only.
 - Quest progress: exact retired quest identity with the matching RuneSchema
   ownership marker only.
+- Journal and lore: exact retired RuneSchema identity removed from the
+  hydrated `JournalComponent` after its native persistence callback.
 - Categories without a verified live adapter are retained. Their presence
   prevents final vector commit rather than triggering a speculative edit.
 

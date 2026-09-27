@@ -25,7 +25,9 @@ Loaders record identities they create. Cooked persistent content can use
 4. A previous identity becomes retired when its owner is removed, disabled, or
    no longer declares that identity.
 5. Only retired, ledger-confirmed identities become cleanup candidates.
-6. The new ledger is committed after the applicable cleanup is verified.
+6. Items, recipes, quests, journal, and lore are cleaned from hydrated live
+   state through the same lifecycle on Steam/GOG and Game Pass.
+7. The new ledger is committed after the applicable cleanup is verified.
 
 A missing registry lookup by itself is not proof that content is safe to
 remove.

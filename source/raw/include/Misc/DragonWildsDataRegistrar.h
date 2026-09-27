@@ -37,6 +37,10 @@ namespace DragonWilds {
         std::set<std::string> m_pendingUnsupportedKinds;
         bool m_cleanupBlockReported = false;
         bool m_cleanupPartialReported = false;
+        bool m_itemsVerified = true;
+        bool m_recipesVerified = true;
+        bool m_questsVerified = true;
+        bool m_journalVerified = true;
         struct RetiredContent {
             RC::Unreal::UObject* Data = nullptr;
             std::string Kind;
@@ -47,6 +51,8 @@ namespace DragonWilds {
 
         bool ResolveBindings();
         void ScrubRetiredContent(RC::Unreal::UObject* controller);
+        void ScrubRetiredJournal(RC::Unreal::UObject* component);
+        void TryCommitSnapshot();
         void InstallHooks();
         void RegisterAll();
         void RegisterMissing(RC::Unreal::UClass* dataClass, RC::Unreal::UObject* subsystem);

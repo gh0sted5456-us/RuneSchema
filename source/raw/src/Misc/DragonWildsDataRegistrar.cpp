@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <limits>
 #include <map>
+#include <ranges>
 #include <unordered_set>
 #include <vector>
 #include "Unreal/CoreUObject/UObject/Class.hpp"
@@ -23,6 +24,7 @@
 #include "Core/SaveRegistrySnapshot.h"
 #include "Loader/OwnedContentLedger.h"
 #include "Loader/NativeQuestCleanup.h"
+#include "Loader/QuestNativeRegistry.h"
 #include "Runtime/HostServices.h"
 #include "Misc/DragonWildsDataRegistrar.h"
 
@@ -33,6 +35,10 @@ namespace DragonWilds {
     static constexpr const TCHAR* ItemDataClassPath = TEXT("/Script/Dominion.ItemData");
     static constexpr const TCHAR* RecipeDataClassPath = TEXT("/Script/Dominion.RecipeData");
     static constexpr const TCHAR* QuestDataClassPath = TEXT("/Script/Dominion.QuestData");
+    static constexpr const TCHAR* JournalDataClassPath = TEXT("/Script/Dominion.JournalEntryWorldData");
+    static constexpr const TCHAR* JournalSubsystemClassPath = TEXT("/Script/Dominion.JournalSubsystem");
+    static constexpr const TCHAR* JournalLoadedPath =
+        TEXT("/Script/Dominion.JournalComponent:Client_HandleJournalEntriesLoadedFromPersistence");
 
     static constexpr struct {
         const TCHAR* DataClassPath;
@@ -47,6 +53,7 @@ namespace DragonWilds {
         TEXT("/Script/Dominion.DominionPlayerController:OnInventoryLoadedFromSave"),
         TEXT("/Script/Dominion.DominionPlayerController:OnPersonalInventoryLoadedFromSave"),
         TEXT("/Script/Dominion.QuestProgressComponent:OnQuestsUpdated"),
+        JournalLoadedPath,
     };
 
     static bool IsCustomDataPath(const RC::StringType& path)
@@ -136,7 +143,13 @@ namespace DragonWilds {
             m_functionHooks.emplace_back(function, id);
             const auto postId = PS::RegisterNativePostHook(function, [](UnrealScriptFunctionCallableContext& context, void* customData) {
                 auto* target=context.Context;
-                auto* controller=target && target->GetClassPrivate()->GetFName()==FName(TEXT("QuestProgressComponent"),FNAME_Add)
+                auto* journalClass=ActorHelper::ResolveClass(TEXT("/Script/Dominion.JournalComponent"));
+                if(target && journalClass && target->IsA(journalClass)) {
+                    static_cast<DragonWildsDataRegistrar*>(customData)->ScrubRetiredJournal(target);
+                    return;
+                }
+                auto* questProgressClass=ActorHelper::ResolveClass(TEXT("/Script/Dominion.QuestProgressComponent"));
+                auto* controller=target && questProgressClass && target->IsA(questProgressClass)
                     ? target->GetOuterPrivate():target;
                 static_cast<DragonWildsDataRegistrar*>(customData)->ScrubRetiredContent(controller);
             }, this);
@@ -160,13 +173,18 @@ namespace DragonWilds {
             if (!retired.empty())
             {
                 m_pendingSnapshot = path;
+                m_itemsVerified=std::ranges::none_of(retired,[](const auto& record){return record.Kind=="Item";});
+                m_recipesVerified=std::ranges::none_of(retired,[](const auto& record){return record.Kind=="Recipe";});
+                m_questsVerified=std::ranges::none_of(retired,[](const auto& record){return record.Kind=="Quest";});
+                m_journalVerified=std::ranges::none_of(retired,[](const auto& record){return record.Kind=="Journal" || record.Kind=="Lore";});
                 for (const auto& record : retired)
                     // Building declarations live in world state, not the
                     // character provider. Quest state has a native live
-                    // adapter below. Journal/lore remain with their dedicated
-                    // serialized-state adapter.
+                    // adapter below. Journal/lore use the same hydrated-state
+                    // cleanup path through JournalComponent.
                     if (record.Kind != "Item" && record.Kind != "Recipe"
-                        && record.Kind != "Quest" && record.Kind != "Building")
+                        && record.Kind != "Quest" && record.Kind != "Journal"
+                        && record.Kind != "Lore" && record.Kind != "Building")
                         m_pendingUnsupportedKinds.insert(record.Kind);
                 PS::Log<LogLevel::Normal>(
                     STR("[SAVE-CLEANER][PENDING] {} exact RuneSchema identity removal(s) will be applied once to live character state after load.\n"),retired.size());
@@ -177,9 +195,11 @@ namespace DragonWilds {
             }
             for (const auto& record : retired)
             {
-                if(record.Kind!="Item" && record.Kind!="Recipe" && record.Kind!="Quest")continue;
+                if(record.Kind!="Item" && record.Kind!="Recipe" && record.Kind!="Quest"
+                    && record.Kind!="Journal" && record.Kind!="Lore")continue;
                 const auto* classPath=record.Kind=="Item"?ItemDataClassPath:
-                    record.Kind=="Recipe"?RecipeDataClassPath:QuestDataClassPath;
+                    record.Kind=="Recipe"?RecipeDataClassPath:
+                    record.Kind=="Quest"?QuestDataClassPath:JournalDataClassPath;
                 auto* dataClass=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,classPath,false);
                 if(!dataClass)throw std::runtime_error("retired content class is unavailable");
                 auto* item = ActorHelper::ConstructTransientObject(dataClass,
@@ -203,6 +223,15 @@ namespace DragonWilds {
                 item->SetRootSet();
                 m_retiredContent.push_back(
                     {item, record.Kind, record.Owner, record.PersistenceID});
+                if(record.Kind=="Journal" || record.Kind=="Lore") {
+                    auto* subsystemClass=UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+                        nullptr,nullptr,JournalSubsystemClassPath,false);
+                    auto* subsystem=subsystemClass?FindSubsystemInstance(subsystemClass):nullptr;
+                    if(!subsystem || !subsystem->GetOuterPrivate())
+                        throw std::runtime_error("retired journal subsystem is unavailable");
+                    (void)QuestRegistry::NativeRegistry::RegisterJournal(
+                        subsystem,subsystem->GetOuterPrivate(),item);
+                }
             }
             if (!m_retiredContent.empty())
                 PS::Log<LogLevel::Verbose>(
@@ -291,6 +320,8 @@ namespace DragonWilds {
                 }
                 if(removed)++removedRecipes;
             }
+            if(hasItems)m_itemsVerified=true;
+            if(hasRecipes)m_recipesVerified=true;
             if (removedKinds)
                 PS::Log<LogLevel::Normal>(
                     STR("[SAVE-CLEANER][OWNED-ONLY] Removed {} item stack identity(s), {} total item(s); the next native save persists the clean inventory.\n"),
@@ -298,7 +329,6 @@ namespace DragonWilds {
             if(removedRecipes)
                 PS::Log<LogLevel::Normal>(STR("[SAVE-CLEANER][OWNED-ONLY] Removed {} retired recipe unlock identity(s); the next native save persists the clean progress state.\n"),removedRecipes);
             std::size_t removedQuests=0;
-            bool questsReady=true;
             if(std::any_of(m_retiredContent.begin(),m_retiredContent.end(),
                 [](const auto& value){return value.Kind=="Quest";}))
             {
@@ -306,28 +336,12 @@ namespace DragonWilds {
                 for(const auto& retired:m_retiredContent)
                     if(retired.Kind=="Quest")retiredQuests.emplace(retired.PersistenceID,retired.Owner);
                 const auto result=Quests::NativeQuestCleanup::Run(controller,retiredQuests);
-                questsReady=result.Ready;
+                m_questsVerified=result.Ready;
                 removedQuests=result.Removed;
                 if(removedQuests)
                     PS::Log<LogLevel::Normal>(STR("[SAVE-CLEANER][OWNED-ONLY] Removed {} retired quest identity(s); the next native save persists the clean quest state.\n"),removedQuests);
             }
-            if (!m_pendingSnapshot.empty())
-            {
-                if (!m_pendingUnsupportedKinds.empty() || !questsReady)
-                {
-                    if (!m_cleanupPartialReported)
-                    {
-                        m_cleanupPartialReported = true;
-                        PS::Log<LogLevel::Normal>(
-                            STR("[SAVE-CLEANER][VERIFIED-PARTIAL] Ready live state was verified. The previous ownership vector remains pending until every retired category is available.\n"));
-                    }
-                    return;
-                }
-                OwnedContent::CommitSnapshot(m_pendingSnapshot);
-                m_pendingSnapshot.clear();
-                PS::Log<LogLevel::Normal>(
-                    STR("[SAVE-CLEANER][VERIFIED] Live cleanup was verified; the ownership vector is now current.\n"));
-            }
+            TryCommitSnapshot();
         }
         catch (const std::exception& error)
         {
@@ -335,6 +349,80 @@ namespace DragonWilds {
                 STR("[SAVE-CLEANER][DEGRADED] Retired RuneSchema content was retained because cleanup could not be verified: {}.\n"),
                 PS::ToWideSafe(error.what()));
         }
+    }
+
+    void DragonWildsDataRegistrar::ScrubRetiredJournal(UObject* component)
+    {
+        if(!component || m_journalVerified || m_pendingSnapshot.empty())return;
+        try {
+            auto* componentClass=ActorHelper::ResolveClass(TEXT("/Script/Dominion.JournalComponent"));
+            auto* entryClass=ActorHelper::ResolveClass(TEXT("/Script/Dominion.JournalEntryData"));
+            if(!componentClass || !entryClass || !component->IsA(componentClass) || !component->GetWorld())
+                throw std::runtime_error("journal live state is not ready");
+            std::set<UObject*> retired;
+            for(const auto& value:m_retiredContent)
+                if(value.Kind=="Journal" || value.Kind=="Lore")retired.insert(value.Data);
+            if(retired.empty()){m_journalVerified=true;TryCommitSnapshot();return;}
+            struct Field {FArrayProperty* Property{};FScriptArray* Array{};std::vector<UObject*> Original;};
+            std::array<Field,2> fields{};
+            size_t removed=0;
+            for(size_t i=0;i<fields.size();++i) {
+                const auto* name=i?TEXT("UnreadJournalEntries"):TEXT("UnlockedJournalEntries");
+                auto* property=CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(component->GetClassPrivate(),name));
+                auto* inner=property?CastField<FObjectPropertyBase>(property->GetInner()):nullptr;
+                if(!property || property->GetElementSize()!=sizeof(FScriptArray) || property->GetArrayDim()!=1
+                    || !inner || inner->GetElementSize()!=sizeof(UObject*) || !inner->GetPropertyClass().Get()
+                    || !entryClass->IsChildOf(inner->GetPropertyClass().Get()))
+                    throw std::runtime_error("journal live array layout changed");
+                fields[i].Property=property;
+                fields[i].Array=property->ContainerPtrToValuePtr<FScriptArray>(component);
+                if(!fields[i].Array || fields[i].Array->Num()<0 || fields[i].Array->Num()>65535)
+                    throw std::runtime_error("journal live array bounds are invalid");
+                UECustom::FScriptArrayHelper view(fields[i].Array,property);
+                view.ForEachElement([&](void* element){fields[i].Original.push_back(inner->GetObjectPropertyValue(element));});
+            }
+            const auto restore=[&] {
+                for(auto& field:fields) {
+                    UECustom::FScriptArrayHelper view(field.Array,field.Property);view.Empty();
+                    for(auto* object:field.Original)view.Add(&object);
+                }
+            };
+            try {
+                for(auto& field:fields) {
+                    UECustom::FScriptArrayHelper view(field.Array,field.Property);view.Empty();
+                    for(auto* object:field.Original) {
+                        if(retired.contains(object)){++removed;continue;}
+                        view.Add(&object);
+                    }
+                    bool found=false;view.ForEachElement([&](void* element){
+                        auto* inner=CastField<FObjectPropertyBase>(field.Property->GetInner());
+                        if(retired.contains(inner->GetObjectPropertyValue(element)))found=true;
+                    });
+                    if(found)throw std::runtime_error("retired journal removal verification failed");
+                }
+            } catch(...) {restore();throw;}
+            m_journalVerified=true;
+            if(removed)PS::Log<LogLevel::Normal>(STR("[SAVE-CLEANER][OWNED-ONLY] Removed {} retired journal/lore reference(s); the next native save persists the clean journal state.\n"),removed);
+            TryCommitSnapshot();
+        } catch(const std::exception& error) {
+            PS::Log<LogLevel::Error>(STR("[SAVE-CLEANER][DEGRADED] Retired journal/lore content was retained because cleanup could not be verified: {}.\n"),PS::ToWideSafe(error.what()));
+        }
+    }
+
+    void DragonWildsDataRegistrar::TryCommitSnapshot()
+    {
+        if(m_pendingSnapshot.empty())return;
+        if(!m_pendingUnsupportedKinds.empty() || !m_itemsVerified || !m_recipesVerified
+            || !m_questsVerified || !m_journalVerified) {
+            if(!m_cleanupPartialReported) {
+                m_cleanupPartialReported=true;
+                PS::Log<LogLevel::Normal>(STR("[SAVE-CLEANER][VERIFIED-PARTIAL] Ready live state was verified. The previous ownership vector remains pending until every retired category is available.\n"));
+            }
+            return;
+        }
+        OwnedContent::CommitSnapshot(m_pendingSnapshot);
+        m_pendingSnapshot.clear();
+        PS::Log<LogLevel::Normal>(STR("[SAVE-CLEANER][VERIFIED] Live cleanup was verified; the ownership vector is now current.\n"));
     }
 
     void DragonWildsDataRegistrar::RegisterAll()

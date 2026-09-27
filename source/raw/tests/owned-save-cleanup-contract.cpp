@@ -22,7 +22,13 @@ int main(int argc,char** argv){
     need(registrar.find("verification.Result<int32>() != 0")!=registrar.npos,"item cleanup is not read-back verified");
     need(registrar.find("RecipesUnlocked")!=registrar.npos && registrar.find("FScriptSetHelper")!=registrar.npos,"recipe cleanup missing");
     need(registrar.find("QuestProgressComponent:OnQuestsUpdated")!=registrar.npos,"quest cleanup has no ready-state retry");
-    need(registrar.find("questsReady=result.Ready")!=registrar.npos,"vector can commit before quest state is ready");
+    need(registrar.find("m_questsVerified=result.Ready")!=registrar.npos,"vector can commit before quest state is ready");
+    need(registrar.find("ScrubRetiredJournal")!=registrar.npos
+        && registrar.find("Client_HandleJournalEntriesLoadedFromPersistence")!=registrar.npos,
+        "journal/lore cleanup is not attached to hydrated live state");
+    need(registrar.find("m_journalVerified=true")!=registrar.npos
+        && registrar.find("!m_journalVerified")!=registrar.npos,
+        "ownership vector can commit before journal/lore cleanup verifies");
     const auto compare=registrar.find("OwnedContent::CompareSnapshot(path)");
     const auto pending=registrar.find("m_pendingSnapshot = path",compare);
     const auto commit=registrar.find("OwnedContent::CommitSnapshot(m_pendingSnapshot)",pending);

@@ -44,16 +44,6 @@ struct JournalPersistence {
         if(metadata)JournalSave::StoreOwnership(result,JournalSave::DecodeNative(*metadata));
         return result;
     }
-    static std::set<std::string> ConfirmAbsent(const Owners& owners) {
-        const auto mods=PS::HostServices::ModDirectory()/"mods";
-        const auto active=DragonWilds::ModLoadOrder::ActiveOwners(mods);
-        std::set<std::string> absent;
-        for(const auto& [id,mod]:owners) {
-            Quests::ValidateOwner(mod);
-            if(!active.contains(mod))absent.insert(mod);
-        }
-        return absent;
-    }
     static JournalSave::NativeFields Fields(const JournalSave::Json& value) {
         return {value.at("UnlockedEntries").get<std::vector<std::string>>(),
             value.at("UnreadEntries").get<std::vector<std::string>>(),
@@ -77,11 +67,10 @@ struct JournalPersistence {
                 const auto found=current.find(id);
                 if(found!=current.end() && found->second!=owner)throw std::runtime_error("Saved journal ownership conflicts with loaded mod");
             }
+            // Retired identity cleanup is performed against the hydrated live
+            // JournalComponent by the shared Steam/Game Pass lane. This bridge
+            // only preserves Steam ownership metadata and temporary mode.
             auto cleanedPayload=payload;
-            if(!saved.empty()) {
-                const auto cleaned=JournalSave::RemoveAbsent(payload,ConfirmAbsent(saved),true);
-                cleanedPayload=std::move(cleaned.Journal);
-            }
             if(!PS::PSConfig::Get()->GetSettings().persistence.journal)
                 cleanedPayload=JournalSave::RemoveCurrent(cleanedPayload,current);
             if(cleanedPayload!=payload)ReplacePayload(json->Object,payload,cleanedPayload);
