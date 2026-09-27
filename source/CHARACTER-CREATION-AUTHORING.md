@@ -43,6 +43,29 @@ All tables are below `/Game/Gameplay/Character/Player/Customization/`.
 | `FacialHairPreset` | `DT_Customization_FacialHairPresets` | 40 | 4 | Index/image |
 | `EyebrowColor` | `DT_Customization_EyebrowColor` | 8 | 4 | Color |
 
+## Grid columns
+
+`NumberOfColumns` is a writable field on each native category. The character
+option panel is 370 pixels wide; its 40-pixel buttons have 3 pixels of padding
+on each side. Eight columns occupy 368 pixels, so RuneSchema accepts values
+from 1 through 8 and rejects larger values that would overflow the native
+panel.
+
+Set the category width beside its option edits:
+
+```json
+{
+  "/Game/UI/MainMenu/CharacterCreate/Data/DA_CharacterOptionData.DA_CharacterOptionData_C": {
+    "CharacterOptionData[ECharacterOptionType::HairPreset].NumberOfColumns": 8
+  }
+}
+```
+
+The layout write is replayed when the character menu opens and is propagated
+to an existing option-data instance when one is already alive. It changes only
+the grid layout; it does not add, remove, or reorder choices. Use the same form
+with `FacialHairPreset`, `FaceType`, `EyeType`, or a color category.
+
 The exact row structure differs by table. Copy a verified row from the same
 table and change only fields exposed by that reflected row type.
 

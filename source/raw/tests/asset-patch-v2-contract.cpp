@@ -38,6 +38,8 @@ int main(int argc, char** argv) {
         throw std::runtime_error("Hair example must be identified by its DA_ target and owning mod folder");
     const auto target="/Game/UI/MainMenu/CharacterCreate/Data/DA_CharacterOptionData.DA_CharacterOptionData_C";
     const auto& body=example.at(target);
+    if(body.at("CharacterOptionData[ECharacterOptionType::HairPreset].NumberOfColumns")!=8)
+        throw std::runtime_error("Hair example lost its supported eight-column layout override");
     const auto path="CharacterOptionData[ECharacterOptionType::HairPreset].OptionData";
     const auto& operation=body.at(path);
     if(!operation.contains("$AppendUnique")
@@ -51,7 +53,9 @@ int main(int argc, char** argv) {
         || grouped.at("Value").at("FaceTypeCompatibility")!="all")
         throw std::runtime_error("Beard example lost its grouped forty-row merge contract");
     for(const auto* token:{"QueueObjectPatch", "ApplyObjectPatches", "ClassDefaultObject",
-            "RuneSchema.AssetPatch.v2", "RegistryPatch::Schema", "AppendUnique"})
+            "RuneSchema.AssetPatch.v2", "RegistryPatch::Schema", "AppendUnique",
+            "IsCharacterColumnPath", "ValidateCharacterColumnValue",
+            "[CHARACTER-LAYOUT][PROPAGATED]"})
         if(source.find(token)==std::string::npos)
             throw std::runtime_error(std::string("Asset loader contract is missing: ")+token);
 }

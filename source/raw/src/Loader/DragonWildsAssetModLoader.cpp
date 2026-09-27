@@ -85,6 +85,21 @@ namespace
             && path.ends_with("].OptionData");
     }
 
+    bool IsCharacterColumnPath(std::string_view path)
+    {
+        return (path.starts_with("CharacterOptionData[") || path.starts_with("CharacterOptions["))
+            && path.ends_with("].NumberOfColumns");
+    }
+
+    void ValidateCharacterColumnValue(const nlohmann::json& value)
+    {
+        if (!value.is_number_integer())
+            throw std::runtime_error("character customization NumberOfColumns must be an integer");
+        const auto columns=value.get<int>();
+        if (columns < 1 || columns > 8)
+            throw std::runtime_error("character customization NumberOfColumns must be between 1 and 8");
+    }
+
     void NormalizeCharacterOptionValue(nlohmann::json& value)
     {
         if (value.is_array())
@@ -178,6 +193,7 @@ namespace
                 operation["Value"] = authored;
             }
             if (IsCharacterOptionPath(path)) NormalizeCharacterOptionValue(operation["Value"]);
+            if (IsCharacterColumnPath(path)) ValidateCharacterColumnValue(operation["Value"]);
             operations.push_back(std::move(operation));
             if (operations.size() > 1024)
                 throw std::runtime_error("a DA_ target may contain at most 1024 field writes");
@@ -959,6 +975,7 @@ namespace DragonWilds {
                 }
                 else item={{"Op",operation},{"Path",property},{"Value",value}};
                 if (IsCharacterOptionPath(property)) NormalizeCharacterOptionValue(item["Value"]);
+                if (IsCharacterColumnPath(property)) ValidateCharacterColumnValue(item["Value"]);
                 if (patch.Identity.is_object() && patch.Identity.contains("property"))
                     item["IdentityPath"]=patch.Identity.at("property");
                 if (patch.Template.is_object() && patch.Template.contains("fromIndex"))
@@ -1106,6 +1123,13 @@ namespace DragonWilds {
                     throw std::runtime_error("operation must be Set, Merge, Append, AppendUnique, or MergeWhere");
                 auto member=ResolveMember(target,target->GetClassPrivate(),nullptr,
                     operation.at("Path").get<std::string>());
+                if (IsCharacterColumnPath(member.CanonicalPath))
+                {
+                    ValidateCharacterColumnValue(operation.at("Value"));
+                    auto* numeric=PropertyHelper::CastProperty<FNumericProperty>(member.Property);
+                    if (!numeric || !numeric->IsInteger())
+                        throw std::runtime_error("character customization NumberOfColumns is no longer an integer property");
+                }
                 if ((op=="Append"||op=="AppendUnique"||op=="MergeWhere")
                     && !PropertyHelper::CastProperty<FArrayProperty>(member.Property))
                     throw std::runtime_error("array operation path does not resolve to an array");
@@ -1206,15 +1230,29 @@ namespace DragonWilds {
             for (auto* instance : instances) try
             {
                 if (!instance || !IsReadyForPatch(instance)) continue;
-                int before=-1,after=-1,added=0,existing=0,verified=0;
+                int before=-1,after=-1,added=0,existing=0,verified=0,columnWrites=0;
                 for (const auto& patch : committedClassDefaults)
                 {
                     if (patch.ObjectPath!=seed.ObjectPath) continue;
                     for (const auto& operation : patch.Operations)
                     {
-                        if (operation.value("Op",std::string{})!="AppendUnique") continue;
+                        const auto op=operation.value("Op",std::string{});
+                        const auto authoredPath=operation.value("Path",std::string{});
+                        if (op=="Set" && IsCharacterColumnPath(authoredPath))
+                        {
+                            ValidateCharacterColumnValue(operation.at("Value"));
+                            const auto member=ResolveMember(instance,instance->GetClassPrivate(),nullptr,authoredPath);
+                            auto* numeric=PropertyHelper::CastProperty<FNumericProperty>(member.Property);
+                            if (!numeric || !numeric->IsInteger())
+                                throw std::runtime_error("character customization NumberOfColumns is no longer an integer property");
+                            PropertyHelper::CopyJsonValueToContainer(member.Container,member.Property,
+                                operation.at("Value"));
+                            ++columnWrites;
+                            continue;
+                        }
+                        if (op!="AppendUnique") continue;
                         const auto member=ResolveMember(instance,instance->GetClassPrivate(),nullptr,
-                            operation.at("Path").get<std::string>());
+                            authoredPath);
                         if (member.CanonicalPath.starts_with("CharacterOptionData[ECharacterOptionType::")
                             && member.CanonicalPath.ends_with("].OptionData"))
                             ValidateCharacterOptionHandle(operation);
@@ -1227,6 +1265,9 @@ namespace DragonWilds {
                     PS::Log<LogLevel::Normal>(STR("[CHARACTER-OPTIONS][PROPAGATED] object={} class={} count={}->{} added={} existing={} verified={} missing=0.\n"),
                         instance->GetPathName(),instance->GetClassPrivate()->GetPathName(),before,after,
                         added,existing,verified);
+                if (columnWrites)
+                    PS::Log<LogLevel::Normal>(STR("[CHARACTER-LAYOUT][PROPAGATED] object={} class={} columnWrites={}.\n"),
+                        instance->GetPathName(),instance->GetClassPrivate()->GetPathName(),columnWrites);
             }
             catch(const std::exception& error)
             {

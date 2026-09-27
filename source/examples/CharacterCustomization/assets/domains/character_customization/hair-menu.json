@@ -1,5 +1,6 @@
 {
   "/Game/UI/MainMenu/CharacterCreate/Data/DA_CharacterOptionData.DA_CharacterOptionData_C": {
+    "CharacterOptionData[ECharacterOptionType::HairPreset].NumberOfColumns": 8,
     "CharacterOptionData[ECharacterOptionType::HairPreset].OptionData": {
       "$AppendUnique": [
         {
