@@ -11,6 +11,7 @@
 #include <functional>
 #include <atomic>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <cstdint>
 
@@ -54,6 +55,7 @@ namespace DragonWilds {
         std::vector<nlohmann::json> m_pendingBlueprintPatches;
         std::vector<nlohmann::json> m_pathBlueprintPatches;
         std::vector<RuntimeWidgetRule> m_runtimeWidgetRules;
+        std::unordered_set<std::string> m_reportedRuntimeWidgetFailures;
         std::vector<PS::WeakObjectHandle> m_ghostRoots;
         std::unordered_map<std::string, GhostMaterials::Set> m_ghostMaterials;
         RC::Unreal::Hook::GlobalCallbackId m_worldTeardownCallbackId = RC::Unreal::Hook::ERROR_ID;

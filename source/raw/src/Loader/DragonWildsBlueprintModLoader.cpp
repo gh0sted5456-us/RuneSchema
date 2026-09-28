@@ -54,6 +54,7 @@ namespace DragonWilds {
         ActorInitializedObservers.clear();
 
         ClearWorldVisualEffects();
+        m_reportedRuntimeWidgetFailures.clear();
         m_runtimeWidgetRules.clear();
         m_modsMap.clear();
     }
@@ -514,11 +515,17 @@ namespace DragonWilds {
             try {
                 ApplyRuntimeWidgetRule(source, rule);
             } catch (const std::exception& error) {
-                PS::RoutineLog("blueprints",
-                    STR("Blueprint $RuntimeWidget '{}' from '{}' failed: {}.\n"),
-                    rule.WidgetPath,
-                    rule.ModName,
-                    PS::ToWideSafe(error.what()));
+                const auto failureKey = RC::to_string(rule.ModName)
+                    + ":" + RC::to_string(rule.WidgetPath)
+                    + ":" + error.what();
+                if (m_reportedRuntimeWidgetFailures.emplace(failureKey).second)
+                {
+                    PS::Log<LogLevel::Warning>(
+                        STR("Blueprint $RuntimeWidget '{}' from '{}' failed: {}. Further identical failures are suppressed.\n"),
+                        rule.WidgetPath,
+                        rule.ModName,
+                        PS::ToWideSafe(error.what()));
+                }
             }
         }
     }
