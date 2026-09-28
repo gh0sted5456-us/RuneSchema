@@ -52,6 +52,7 @@ namespace DragonWilds {
         ActorInitializedObservers.clear();
 
         ClearWorldVisualEffects();
+        m_runtimeWidgetRules.clear();
         m_modsMap.clear();
     }
 
@@ -104,11 +105,14 @@ namespace DragonWilds {
     void DragonWildsBlueprintModLoader::OnAutoReload(const std::filesystem::path::string_type& modName, const std::filesystem::path& modFilePath)
     {
         PS::JsonHelpers::ParseJsonFileInPath(modFilePath, [&](const nlohmann::json& data) {
-            const auto isPatch = [](const nlohmann::json& item) {
-                return item.is_object() && (item.contains("$Patch") || item.contains("$Target"));
+            const auto requiresRestart = [](const nlohmann::json& item) {
+                return item.is_object()
+                    && (item.contains("$Patch")
+                        || item.contains("$Target")
+                        || item.contains("$RuntimeWidget"));
             };
-            if (isPatch(data) || std::any_of(data.begin(), data.end(), isPatch)) {
-                PS::Log<LogLevel::Warning>(STR("Blueprint $Patch rules changed in {}. Restart the game to reload rules and existing actors.\n"), modName);
+            if (requiresRestart(data) || std::any_of(data.begin(), data.end(), requiresRestart)) {
+                PS::Log<LogLevel::Warning>(STR("Blueprint runtime/$Patch rules changed in {}. Restart the game to reload rules and existing objects.\n"), modName);
                 return;
             }
             LoadUnsafe(data);
@@ -282,16 +286,27 @@ namespace DragonWilds {
             }
 
             auto assetNameWide = RC::to_generic_string(assetName);
-            if (const auto patch = JsonPatchDirective::Parse(assetData, noProtected, "blueprint"))
+            nlohmann::json staticData = assetData;
+
+            if (assetData.is_object())
+            {
+                if (const auto runtime = assetData.find("$RuntimeWidget"); runtime != assetData.end())
+                {
+                    RegisterRuntimeWidgetRules(assetName, *runtime, modName);
+                    staticData.erase("$RuntimeWidget");
+                }
+            }
+
+            if (const auto patch = JsonPatchDirective::Parse(staticData, noProtected, "blueprint"))
             {
                 m_pendingBlueprintPatches.push_back({{patch->Reference, patch->Changes}});
                 WarnPatchConflicts(m_patchConflicts, "blueprints:" + patch->Reference, patch->Changes, RC::to_string(modName), false);
                 continue;
             }
-            if (!assetNameWide.starts_with(TEXT("/Game/")))
+            if (!assetNameWide.starts_with(TEXT("/Game/")) && !staticData.empty())
             {
                 auto assetFName = FName(assetNameWide, FNAME_Add);
-                auto newMod = DragonWildsBlueprintMod(assetFName, assetData);
+                auto newMod = DragonWildsBlueprintMod(assetFName, staticData);
                 auto it = m_modsMap.find(assetFName);
                 if (it != m_modsMap.end())
                 {
@@ -305,6 +320,48 @@ namespace DragonWilds {
                     m_modsMap.emplace(assetFName, newModContainer);
                 }
             }
+        }
+    }
+
+    void DragonWildsBlueprintModLoader::RegisterRuntimeWidgetRules(
+        const std::string& identity,
+        const nlohmann::json& runtimeWidgets,
+        const RC::StringType& modName)
+    {
+        if (!runtimeWidgets.is_object())
+            throw std::runtime_error("Blueprint $RuntimeWidget must be an object keyed by widget path");
+
+        auto classPath = identity;
+        if (classPath.starts_with("/Game/"))
+        {
+            if (classPath.find('.') == std::string::npos)
+            {
+                const auto name = classPath.substr(classPath.find_last_of('/') + 1);
+                classPath += "." + name + "_C";
+            }
+            if (!classPath.ends_with("_C"))
+                throw std::runtime_error("Blueprint $RuntimeWidget path must identify a generated class ending _C");
+        }
+        else
+        {
+            if (classPath.contains('/') || classPath.contains('.') || !classPath.ends_with("_C"))
+                throw std::runtime_error("Blueprint $RuntimeWidget requires a class name ending _C or a /Game/ class path");
+        }
+
+        const auto ownerClass = FName(to_generic_string(classPath), FNAME_Add);
+        for (const auto& [widgetPath, ruleData] : runtimeWidgets.items())
+        {
+            if (widgetPath.empty() || widgetPath.starts_with("$"))
+                throw std::runtime_error("Blueprint $RuntimeWidget widget path was invalid");
+            if (!ruleData.is_object())
+                throw std::runtime_error("Blueprint $RuntimeWidget rule must be an object");
+
+            m_runtimeWidgetRules.push_back({
+                ownerClass,
+                to_generic_string(widgetPath),
+                ruleData,
+                modName
+            });
         }
     }
 
@@ -403,7 +460,7 @@ namespace DragonWilds {
 
         for (auto& [propertyName, propertyValue] : data.items())
         {
-            if (propertyName == "$Append" || propertyName == "$VisualEffect")
+            if (propertyName == "$Append" || propertyName == "$VisualEffect" || propertyName == "$RuntimeWidget")
             {
                 continue;
             }

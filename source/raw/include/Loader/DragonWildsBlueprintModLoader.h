@@ -19,6 +19,13 @@ namespace UECustom {
 }
 
 namespace DragonWilds {
+    struct RuntimeWidgetRule {
+        RC::Unreal::FName OwnerClass;
+        RC::StringType WidgetPath;
+        nlohmann::json Data;
+        RC::StringType ModName;
+    };
+
     class DragonWildsBlueprintModLoader : public DragonWildsModLoaderBase {
     public:
         DragonWildsBlueprintModLoader();
@@ -46,12 +53,17 @@ namespace DragonWilds {
         std::vector<DragonWildsBlueprintMod> m_blueprintPatches;
         std::vector<nlohmann::json> m_pendingBlueprintPatches;
         std::vector<nlohmann::json> m_pathBlueprintPatches;
+        std::vector<RuntimeWidgetRule> m_runtimeWidgetRules;
         std::vector<PS::WeakObjectHandle> m_ghostRoots;
         std::unordered_map<std::string, GhostMaterials::Set> m_ghostMaterials;
         RC::Unreal::Hook::GlobalCallbackId m_worldTeardownCallbackId = RC::Unreal::Hook::ERROR_ID;
         void ApplyBlueprintVisualEffect(RC::Unreal::AActor* actor);
         void ClearWorldVisualEffects();
         void ApplyDeferredPatches(RC::Unreal::UObject* object);
+        void RegisterRuntimeWidgetRules(
+            const std::string& identity,
+            const nlohmann::json& runtimeWidgets,
+            const RC::StringType& modName);
 
         bool HookPostLoad();
         bool HookPostInitComponents();
