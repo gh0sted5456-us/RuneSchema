@@ -417,12 +417,77 @@ namespace DragonWilds {
         return current;
     }
 
+    void DragonWildsBlueprintModLoader::ApplyRuntimeWidgetBinding(
+        UObject* owner,
+        UObject* widget,
+        const RuntimeWidgetRule& rule)
+    {
+        const auto binding = rule.Data.find("$Bind");
+        if (binding == rule.Data.end()) return;
+        if (!binding->is_object())
+            throw std::runtime_error("Blueprint $RuntimeWidget $Bind must be an object");
+
+        const auto eventName = binding->value("Event", std::string{});
+        const auto functionName = binding->value("Function", std::string{});
+        const auto targetPath = binding->value("Target", std::string{});
+        if (eventName.empty() || functionName.empty())
+            throw std::runtime_error("Blueprint $RuntimeWidget $Bind requires Event and Function");
+
+        UObject* targetObject = owner;
+        if (!targetPath.empty() && targetPath != "." && targetPath != "$Owner")
+        {
+            targetObject = ResolveRuntimeWidgetPath(owner, to_generic_string(targetPath));
+        }
+        if (!targetObject)
+            throw std::runtime_error("Blueprint $RuntimeWidget $Bind target could not be resolved");
+
+        auto* delegateProperty = CastField<FMulticastDelegateProperty>(
+            PropertyHelper::GetPropertyByName(
+                widget->GetClassPrivate(),
+                to_generic_string(eventName)));
+        if (!delegateProperty)
+            throw std::runtime_error("Blueprint $RuntimeWidget $Bind Event is not a multicast delegate");
+
+        const auto functionFName = FName(to_generic_string(functionName), FNAME_Add);
+        auto* targetFunction = targetObject->GetFunctionByNameInChain(functionFName);
+        if (!targetFunction)
+            throw std::runtime_error("Blueprint $RuntimeWidget $Bind Function was not found on target");
+
+        auto& signaturePtr = delegateProperty->GetSignatureFunction();
+        auto* signature = signaturePtr.Get();
+        if (!signature)
+            throw std::runtime_error("Blueprint $RuntimeWidget delegate signature was unavailable");
+        if (signature->GetParmsSize() != targetFunction->GetParmsSize()
+            || static_cast<bool>(signature->GetReturnProperty())
+                != static_cast<bool>(targetFunction->GetReturnProperty()))
+            throw std::runtime_error("Blueprint $RuntimeWidget delegate/function signatures do not match");
+
+        void* propertyValue = delegateProperty->ContainerPtrToValuePtr<void>(widget);
+        auto* delegateValue = delegateProperty->GetMulticastDelegate(propertyValue);
+        if (!delegateValue)
+            throw std::runtime_error("Blueprint $RuntimeWidget delegate value was unavailable");
+
+        for (int32_t index = 0; index < delegateValue->Num(); ++index)
+        {
+            const auto& existing = delegateValue->InvocationList[index];
+            if (existing.GetUObject() == targetObject
+                && existing.GetFunctionName() == functionFName)
+                return;
+        }
+
+        FScriptDelegate scriptDelegate;
+        scriptDelegate.BindUFunction(targetObject, functionFName);
+        delegateProperty->AddDelegate(scriptDelegate, widget, propertyValue);
+    }
+
     void DragonWildsBlueprintModLoader::ApplyRuntimeWidgetRule(
         UObject* owner,
         const RuntimeWidgetRule& rule)
     {
         auto* target = ResolveRuntimeWidgetPath(owner, rule.WidgetPath);
         if (!target) return;
+
+        ApplyRuntimeWidgetBinding(owner, target, rule);
 
         auto properties = rule.Data;
         properties.erase("$Bind");

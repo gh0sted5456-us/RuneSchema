@@ -74,6 +74,10 @@ namespace DragonWilds {
         void ApplyRuntimeWidgetRule(
             RC::Unreal::UObject* owner,
             const RuntimeWidgetRule& rule);
+        void ApplyRuntimeWidgetBinding(
+            RC::Unreal::UObject* owner,
+            RC::Unreal::UObject* widget,
+            const RuntimeWidgetRule& rule);
 
         bool HookPostLoad();
         bool HookPostInitComponents();
