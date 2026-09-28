@@ -18,9 +18,13 @@ cmake_install.cmake
 *.obj
 *.pdb
 
-# Local packaging and runtime data
+# Local dependency cache, packaging and runtime data
+.cache/
 dist/
 plugins/
+clean-base/
+runtime/
+release/
 example-mods/
 RuneSchema/mods/
 RuneSchema/config/

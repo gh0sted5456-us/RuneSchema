@@ -11,17 +11,15 @@ if (-not (Test-Path -LiteralPath (Join-Path $BuildRoot 'source\raw\CMakeLists.tx
 }
 $SourceRoot = Join-Path $BuildRoot 'source'
 $RawSource = Join-Path $SourceRoot 'raw'
-$CleanBase = Join-Path $BuildRoot 'clean-base\RuneSchema'
-if (-not (Test-Path -LiteralPath $CleanBase -PathType Container)) {
-    $CleanBase = Join-Path $BuildRoot 'runtime\RuneSchema'
-}
-if (-not (Test-Path -LiteralPath $CleanBase -PathType Container)) {
-    throw 'RuneSchema runtime template was not found under clean-base\RuneSchema or runtime\RuneSchema.'
-}
+$DependencyCache = Join-Path $BuildRoot '.cache\dependencies'
+$CleanBase = Join-Path $DependencyCache 'runtime-template'
+$BuildDependencyArchive = Join-Path $DependencyCache 'RuneSchema-BuildDependencies-experimental.zip'
+$BuildDependencyUrl = 'https://github.com/gh0sted5456-us/RuneSchema/releases/download/experimental-build-deps/RuneSchema-BuildDependencies-experimental.zip'
+$BuildDependencySha256 = '11f5eba4403c24b8085976176af0a20e0f298468e9c52fabaaa99349818cbd2c'
 $BuildCache = Join-Path $PSScriptRoot 'cache'
 $DistRoot = Join-Path $BuildRoot 'dist'
 $LogRoot = Join-Path $PSScriptRoot 'logs'
-$Upx = Join-Path $SourceRoot 'tools\upx\upx.exe'
+$Upx = Join-Path $DependencyCache 'tools\upx\upx.exe'
 $Configuration = 'Game__Shipping__Win64'
 
 New-Item -ItemType Directory -Path $LogRoot -Force | Out-Null
@@ -33,6 +31,46 @@ try {
         if ($cmd) { return $cmd.Source }
         foreach ($hint in $Hints) { if (Test-Path -LiteralPath $hint -PathType Leaf) { return $hint } }
         return $null
+    }
+    function Assert-Sha256([string]$Path, [string]$Expected) {
+        if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
+        $actual = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actual -ne $Expected.ToLowerInvariant()) {
+            Write-Warning "Cached dependency hash mismatch; discarding $Path"
+            Remove-Item -LiteralPath $Path -Force
+            return $false
+        }
+        return $true
+    }
+    function Ensure-BuildDependencies {
+        if ((Test-Path -LiteralPath $CleanBase -PathType Container) -and
+            (Test-Path -LiteralPath $Upx -PathType Leaf)) {
+            return
+        }
+
+        New-Item -ItemType Directory -Path $DependencyCache -Force | Out-Null
+        if (-not (Assert-Sha256 $BuildDependencyArchive $BuildDependencySha256)) {
+            $temporary = "$BuildDependencyArchive.download"
+            Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+            Write-Host 'Downloading RuneSchema build dependencies...' -ForegroundColor Cyan
+            Invoke-WebRequest -Uri $BuildDependencyUrl -OutFile $temporary
+            $actual = (Get-FileHash -LiteralPath $temporary -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -ne $BuildDependencySha256.ToLowerInvariant()) {
+                Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+                throw 'Downloaded RuneSchema build dependency package failed SHA-256 verification.'
+            }
+            Move-Item -LiteralPath $temporary -Destination $BuildDependencyArchive -Force
+        }
+
+        Remove-Item -LiteralPath $CleanBase -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath (Join-Path $DependencyCache 'tools') -Recurse -Force -ErrorAction SilentlyContinue
+        Expand-Archive -LiteralPath $BuildDependencyArchive -DestinationPath $DependencyCache -Force
+
+        if (-not (Test-Path -LiteralPath $CleanBase -PathType Container) -or
+            -not (Test-Path -LiteralPath $Upx -PathType Leaf)) {
+            throw 'RuneSchema build dependency package did not contain the expected runtime-template/tools layout.'
+        }
+        Write-Host "Build dependencies ready in $DependencyCache" -ForegroundColor Green
     }
     function Initialize-MsvcEnvironment {
         if ($env:VCToolsInstallDir -and $env:WindowsSdkDir -and (Get-Command cl.exe -ErrorAction SilentlyContinue)) { return }
@@ -248,6 +286,7 @@ try {
         Write-Host "Created $zip" -ForegroundColor Green
     }
 
+    Ensure-BuildDependencies
     foreach ($required in @((Join-Path $RawSource 'CMakeLists.txt'), $CleanBase, $Upx)) {
         if (-not (Test-Path -LiteralPath $required)) { throw "Required build input is missing: $required" }
     }
@@ -291,17 +330,10 @@ try {
     New-Item -ItemType Directory -Path $pluginRoot -Force | Out-Null
     $package = Get-ChildItem -LiteralPath $DistRoot -Directory -Filter "RuneSchema-$Version-Universal" | Select-Object -First 1
     if (-not $package) { throw 'Universal package directory was not produced.' }
-    # Keep clean-base usable as the current unpacked runtime, not merely as a
-    # packaging template containing DLLs inherited from the previous version.
-    Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\dlls\main.dll') -Destination (Join-Path $CleanBase 'dlls\main.dll') -Force
-    Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\plugins\RuneSchema.Helpy\dll\RuneSchema.Helpy.dll') -Destination (Join-Path $CleanBase 'plugins\RuneSchema.Helpy\dll\RuneSchema.Helpy.dll') -Force
     Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\dlls') -Destination (Join-Path $pluginRoot 'Universal\dlls') -Recurse
     Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\plugins') -Destination (Join-Path $pluginRoot 'Universal\plugins') -Recurse
-    foreach ($runtime in @(
-        @{ Source = (Join-Path $BuildRoot 'runtime\steam-gog\UE4SS-3.0.1-f6d5f942-Steam-GOG.zip'); Name = 'UE4SS-3.0.1-f6d5f942-Steam-GOG.zip' },
-        @{ Source = (Join-Path $BuildRoot 'runtime\gamepass\UE4SS-3.0.1-f6d5f942-GamePass-WinGDK.zip'); Name = 'UE4SS-3.0.1-f6d5f942-GamePass-WinGDK.zip' }
-    )) { Copy-Item -LiteralPath $runtime.Source -Destination (Join-Path $DistRoot $runtime.Name) -Force }
     Write-Host "`n$Version build complete: $DistRoot" -ForegroundColor Green
+    Write-Host 'UE4SS storefront packages are distributed separately from RuneSchema build output.' -ForegroundColor DarkGray
 } catch {
     Write-Error $_
     exit 1

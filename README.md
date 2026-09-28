@@ -8,10 +8,25 @@ Runtime schema and data-editing framework for **RuneScape: Dragonwilds**.
 
 ## Downloads
 
-Current runtime packages, storefront bundles, hashes, and installation notes are
-kept under the repository's [release directory](release/).
+The repository is source-first. Compiled RuneSchema packages, storefront UE4SS
+bundles, build dependencies, hashes, and installation packages are published as
+separate GitHub Release assets:
 
-The universal runtime detects Steam/GOG and Game Pass/WinGDK automatically.
+https://github.com/gh0sted5456-us/RuneSchema/releases
+
+The universal RuneSchema runtime detects Steam/GOG and Game Pass/WinGDK
+automatically. UE4SS storefront packages are distributed separately so users
+do not repeatedly download the same runtime with every RuneSchema source
+snapshot.
+
+## Building
+
+Run `Build RuneSchema.bat` from the repository root.
+
+The builder downloads the small pinned build-dependency bundle on first use,
+verifies its SHA-256 hash, and caches it under `.cache/`. CMake/UE4SS source
+dependencies continue to be fetched by the normal build process. Generated
+packages are written to `dist/` and are not source-controlled.
 
 Authoring, loader, Unreal + RuneSchema, compatibility, API, and release
 documentation is maintained on the public documentation site above.
