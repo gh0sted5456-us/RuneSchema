@@ -45,6 +45,8 @@ namespace DragonWilds {
 
     DragonWildsBlueprintModLoader::~DragonWildsBlueprintModLoader()
     {
+        if (m_runtimeWidgetCallbackId != Hook::ERROR_ID)
+            Hook::UnregisterCallback(m_runtimeWidgetCallbackId);
         if (m_worldTeardownCallbackId != Hook::ERROR_ID)
             Hook::UnregisterCallback(m_worldTeardownCallbackId);
         ResetHooks();
@@ -160,10 +162,30 @@ namespace DragonWilds {
             if (m_worldTeardownCallbackId == Hook::ERROR_ID)
                 PS::Log<LogLevel::Warning>(
                     TEXT("Blueprint ghost world-teardown cleanup could not be registered.\n"));
+
+            Hook::FCallbackOptions runtimeOptions{};
+            runtimeOptions.OwnerModName = TEXT("RuneSchema");
+            runtimeOptions.HookName = TEXT("BlueprintRuntimeWidget");
+            m_runtimeWidgetCallbackId = Hook::RegisterProcessEventPostCallback(
+                [this](Hook::TCallbackIterationData<void>&, UObject* source, UFunction* function, void*) {
+                    try { ObserveRuntimeWidgetEvent(source, function); }
+                    catch (const std::exception& error) {
+                        PS::RoutineLog("blueprints",
+                            STR("Blueprint $RuntimeWidget event failed: {}.\n"),
+                            PS::ToWideSafe(error.what()));
+                    }
+                }, runtimeOptions);
+            if (m_runtimeWidgetCallbackId == Hook::ERROR_ID)
+                throw std::runtime_error("Blueprint $RuntimeWidget ProcessEvent observer registration failed");
+
             return true;
         }
         catch (...)
         {
+            if (m_runtimeWidgetCallbackId != Hook::ERROR_ID) {
+                Hook::UnregisterCallback(m_runtimeWidgetCallbackId);
+                m_runtimeWidgetCallbackId = Hook::ERROR_ID;
+            }
             ResetHooks();
             throw;
         }
@@ -362,6 +384,76 @@ namespace DragonWilds {
                 ruleData,
                 modName
             });
+        }
+    }
+
+    RC::Unreal::UObject* DragonWildsBlueprintModLoader::ResolveRuntimeWidgetPath(
+        UObject* owner,
+        const RC::StringType& widgetPath)
+    {
+        if (!owner || widgetPath.empty()) return nullptr;
+
+        UObject* current = owner;
+        size_t offset = 0;
+        while (offset < widgetPath.size())
+        {
+            const auto dot = widgetPath.find(TEXT('.'), offset);
+            const auto length = dot == RC::StringType::npos ? widgetPath.size() - offset : dot - offset;
+            if (!length) return nullptr;
+
+            const auto segment = widgetPath.substr(offset, length);
+            auto* objectProperty = CastField<FObjectProperty>(
+                PropertyHelper::GetPropertyByName(current->GetClassPrivate(), segment));
+            if (!objectProperty) return nullptr;
+
+            current = objectProperty->GetObjectPropertyValue(
+                objectProperty->ContainerPtrToValuePtr<void>(current));
+            if (!current) return nullptr;
+
+            if (dot == RC::StringType::npos) break;
+            offset = dot + 1;
+        }
+
+        return current;
+    }
+
+    void DragonWildsBlueprintModLoader::ApplyRuntimeWidgetRule(
+        UObject* owner,
+        const RuntimeWidgetRule& rule)
+    {
+        auto* target = ResolveRuntimeWidgetPath(owner, rule.WidgetPath);
+        if (!target) return;
+
+        auto properties = rule.Data;
+        properties.erase("$Bind");
+        if (properties.empty()) return;
+
+        ApplyData(properties, target, false);
+    }
+
+    void DragonWildsBlueprintModLoader::ObserveRuntimeWidgetEvent(
+        UObject* source,
+        UFunction*)
+    {
+        if (!source || m_runtimeWidgetRules.empty()) return;
+
+        auto* type = source->GetClassPrivate();
+        if (!type) return;
+        const auto name = type->GetNamePrivate();
+        const auto path = FName(type->GetPathName(), FNAME_Find);
+
+        for (const auto& rule : m_runtimeWidgetRules)
+        {
+            if (rule.OwnerClass != name && rule.OwnerClass != path) continue;
+            try {
+                ApplyRuntimeWidgetRule(source, rule);
+            } catch (const std::exception& error) {
+                PS::RoutineLog("blueprints",
+                    STR("Blueprint $RuntimeWidget '{}' from '{}' failed: {}.\n"),
+                    rule.WidgetPath,
+                    rule.ModName,
+                    PS::ToWideSafe(error.what()));
+            }
         }
     }
 

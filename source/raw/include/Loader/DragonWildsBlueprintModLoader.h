@@ -57,6 +57,7 @@ namespace DragonWilds {
         std::vector<PS::WeakObjectHandle> m_ghostRoots;
         std::unordered_map<std::string, GhostMaterials::Set> m_ghostMaterials;
         RC::Unreal::Hook::GlobalCallbackId m_worldTeardownCallbackId = RC::Unreal::Hook::ERROR_ID;
+        RC::Unreal::Hook::GlobalCallbackId m_runtimeWidgetCallbackId = RC::Unreal::Hook::ERROR_ID;
         void ApplyBlueprintVisualEffect(RC::Unreal::AActor* actor);
         void ClearWorldVisualEffects();
         void ApplyDeferredPatches(RC::Unreal::UObject* object);
@@ -64,6 +65,15 @@ namespace DragonWilds {
             const std::string& identity,
             const nlohmann::json& runtimeWidgets,
             const RC::StringType& modName);
+        void ObserveRuntimeWidgetEvent(
+            RC::Unreal::UObject* source,
+            RC::Unreal::UFunction* function);
+        RC::Unreal::UObject* ResolveRuntimeWidgetPath(
+            RC::Unreal::UObject* owner,
+            const RC::StringType& widgetPath);
+        void ApplyRuntimeWidgetRule(
+            RC::Unreal::UObject* owner,
+            const RuntimeWidgetRule& rule);
 
         bool HookPostLoad();
         bool HookPostInitComponents();
