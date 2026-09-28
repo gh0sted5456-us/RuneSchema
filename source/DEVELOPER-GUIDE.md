@@ -81,17 +81,18 @@ Loader activation and save persistence are separate.
 ```jsonc
 "persistence": {
   "characterCustomization": false,
-  "journal": true,
-  "recipes": true,
+  "journal": false,
+  "recipes": false,
   "quests": true
 }
 ```
 
-Journal, recipe, and quest persistence default to `true`. Automatic character
-customization persistence defaults to `false`. Loaders remain active when a
-matching persistence setting is disabled.
+Quest persistence defaults to `true`; automatic character customization
+persistence defaults to `false`. Journal/lore and recipe unlocks are always
+session-only, including when older settings contain persistence keys for them.
+Loaders remain active independently of persistence settings.
 
-Recipes use the game's transient recipe set when recipe persistence is off.
+Recipes use the game's transient recipe set.
 Journal/lore content can still register and appear without calling the native
 save-backed unlock path. Character customization loaders can stay active
 without applying automatic save-backed player appearance rules.

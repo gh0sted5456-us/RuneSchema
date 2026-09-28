@@ -144,6 +144,7 @@ namespace DragonWilds {
         m_functionHooks.clear();
         m_registryCandidateFingerprint.clear();
         m_registryCandidatePasses = 0;
+        m_checkedCharacters.clear();
         PS::SaveCleanup::PublishRegistry({});
     }
 
@@ -325,9 +326,20 @@ namespace DragonWilds {
             }
             if (!jsonProperty) return;
 
+            const auto characterId = source.contains("meta_data")
+                && source.at("meta_data").is_object()
+                ? source.at("meta_data").value("char_guid", std::string{})
+                : std::string{};
+            if (characterId.empty()
+                || m_checkedCharacters.contains(characterId))
+                return;
+
             const auto cleaned = PS::SaveCleanup::Plan(
-                source, {}, false, registry.get(), false, true);
-            if (cleaned.Removed.empty()) return;
+                source, {}, false, registry.get(), false, true, true);
+            if (cleaned.Removed.empty()) {
+                m_checkedCharacters.insert(characterId);
+                return;
+            }
 
             const auto serialized = cleaned.Save.dump();
             const FString replacement(RC::to_generic_string(serialized).c_str());
@@ -337,6 +349,7 @@ namespace DragonWilds {
             if (verified != serialized)
                 throw std::runtime_error(
                     "clean character JSON did not survive reflected writeback");
+            m_checkedCharacters.insert(characterId);
 
             std::map<std::string, std::size_t> counts;
             for (const auto& row : cleaned.Removed)
@@ -369,60 +382,78 @@ namespace DragonWilds {
 
         for (auto& [dataClass, subsystemClass] : m_bindings)
         {
-            auto* subsystem = FindSubsystemInstance(subsystemClass);
-            if (!subsystem)
+            TArray<UObject*> subsystems;
+            UECustom::UObjectGlobals::GetObjectsOfClass(
+                subsystemClass, subsystems, true);
+            bool foundSubsystem = false;
+            for (auto* subsystem : subsystems)
             {
-                PS::Log<LogLevel::Warning>(STR("No {} instance exists yet; {} assets cannot be registered.\n"),
+                if (!subsystem || subsystem->HasAnyFlags(
+                    static_cast<EObjectFlags>(
+                        RF_ClassDefaultObject | RF_ArchetypeObject
+                        | RF_BeginDestroyed | RF_FinishDestroyed)))
+                    continue;
+                foundSubsystem = true;
+
+                // An outgoing world may still own a subsystem when the next
+                // world starts. Populate every live instance so saved recipe
+                // identities cannot be written against only the old one.
+                RegisterMissing(dataClass, subsystem);
+
+                auto* idMapProperty = CastField<FMapProperty>(
+                    PropertyHelper::GetPropertyByName(
+                        subsystem->GetClassPrivate(),
+                        TEXT("PersistenceIDToDataMap")));
+                if (!idMapProperty) continue;
+
+                std::unordered_set<std::string>* target = nullptr;
+                const auto classPath = dataClass->GetPathName();
+                if (classPath == ItemDataClassPath)
+                {
+                    target = &snapshot.Items;
+                    itemsReady = true;
+                }
+                else if (classPath == RecipeDataClassPath)
+                {
+                    target = &snapshot.Recipes;
+                    recipesReady = true;
+                }
+                else if (classPath == QuestDataClassPath)
+                {
+                    target = &snapshot.Quests;
+                    questsReady = true;
+                }
+                if (!target) continue;
+
+                UECustom::FScriptMapHelper idMap(
+                    idMapProperty,
+                    idMapProperty->ContainerPtrToValuePtr<void>(subsystem));
+                idMap.ForEachPair([&](void* keyPtr, void*) {
+                    auto* key = static_cast<FString*>(keyPtr);
+                    if (key && key->GetCharArray().Num() > 1)
+                        target->insert(RC::to_string(RC::StringType(**key)));
+                });
+            }
+            if (!foundSubsystem)
+                PS::Log<LogLevel::Warning>(STR(
+                    "No {} instance exists yet; {} assets cannot be registered.\n"),
                     subsystemClass->GetName(), dataClass->GetName());
-                continue;
-            }
-
-            RegisterMissing(dataClass, subsystem);
-
-            // Safe Clean compares character-save identities against the same
-            // native maps the game actually uses. Capture only after custom
-            // registrations have been applied so successfully registered
-            // clones are considered valid too.
-            auto* idMapProperty = CastField<FMapProperty>(
-                PropertyHelper::GetPropertyByName(
-                    subsystem->GetClassPrivate(), TEXT("PersistenceIDToDataMap")));
-            if (!idMapProperty) continue;
-
-            std::unordered_set<std::string>* target = nullptr;
-            const auto classPath = dataClass->GetPathName();
-            if (classPath == ItemDataClassPath)
-            {
-                target = &snapshot.Items;
-                itemsReady = true;
-            }
-            else if (classPath == RecipeDataClassPath)
-            {
-                target = &snapshot.Recipes;
-                recipesReady = true;
-            }
-            else if (classPath == QuestDataClassPath)
-            {
-                target = &snapshot.Quests;
-                questsReady = true;
-            }
-            if (!target) continue;
-
-            UECustom::FScriptMapHelper idMap(
-                idMapProperty,
-                idMapProperty->ContainerPtrToValuePtr<void>(subsystem));
-            idMap.ForEachPair([&](void* keyPtr, void*) {
-                auto* key = static_cast<FString*>(keyPtr);
-                if (key && key->GetCharArray().Num() > 1)
-                    target->insert(RC::to_string(RC::StringType(**key)));
-            });
         }
 
         snapshot.QuestsComplete = questsReady && !snapshot.Quests.empty();
         if (auto* journalClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
                 nullptr, nullptr, JournalSubsystemClassPath, false))
         {
-            if (auto* journalSubsystem = FindSubsystemInstance(journalClass))
+            TArray<UObject*> journalSubsystems;
+            UECustom::UObjectGlobals::GetObjectsOfClass(
+                journalClass, journalSubsystems, true);
+            for (auto* journalSubsystem : journalSubsystems)
             {
+                if (!journalSubsystem || journalSubsystem->HasAnyFlags(
+                    static_cast<EObjectFlags>(
+                        RF_ClassDefaultObject | RF_ArchetypeObject
+                        | RF_BeginDestroyed | RF_FinishDestroyed)))
+                    continue;
                 if (auto* journalMapProperty = CastField<FMapProperty>(
                         PropertyHelper::GetPropertyByName(
                             journalSubsystem->GetClassPrivate(),

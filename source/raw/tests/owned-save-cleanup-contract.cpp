@@ -32,6 +32,6 @@ int main(int argc,char** argv){
     need(registrar.find("fingerprint != m_registryCandidateFingerprint")!=registrar.npos
         && registrar.find("PublishRegistry({});\n                return;")!=registrar.npos,
         "character cleanup can consume an unsettled registry snapshot");
-    need(registrar.find("if (cleaned.Removed.empty()) return;")!=registrar.npos,
+    need(registrar.find("if (cleaned.Removed.empty()) {")!=registrar.npos,
         "an unchanged character is not a strict no-op");
 }

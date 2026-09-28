@@ -68,4 +68,5 @@ For user recovery steps, see
 [Manual Save Recovery](MANUAL-SAVE-RECOVERY.md).
 
 For storefront detection, hook validation, WGS internals, and storefront-specific
-details, see the [Developer Guide](DEVELOPER-GUIDE.md).
+details, see the [Developer Guide](DEVELOPER-GUIDE.md) and the
+[side-by-side lane reference](STOREFRONT-LANES.md).

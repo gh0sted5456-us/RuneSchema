@@ -124,6 +124,14 @@ int Run() {
     Require(repaired.Save["GameProgress"]["QuestProgress"]["Quests"].size()==3);
     Require(repaired.Removed.end()==std::find_if(repaired.Removed.begin(),repaired.Removed.end(),
         [](const auto& row){return row.value("Mod","")=="Duplicate native record";}));
+    auto strictIdentity=damaged;
+    strictIdentity["GameProgress"]["Progress"]={{"RecipesUnlocked",{"missing","recipe1"}}};
+    const auto identityOnly=Plan(strictIdentity,{},false,&registry,false,true,true);
+    Require(identityOnly.Save["GameProgress"]["Inventory"].contains("broken"));
+    Require(identityOnly.Save["GameProgress"]["Loadout"].contains("broken"));
+    Require(identityOnly.Save["GameProgress"]["Progress"]["RecipesUnlocked"]==Json::array({"recipe1"}));
+    Require(identityOnly.Save["GameProgress"]["Journal"]["RuneSchemaOwnership"]
+        ==strictIdentity["GameProgress"]["Journal"]["RuneSchemaOwnership"]);
     auto strictDamaged=damaged;
     strictDamaged["GameProgress"]["QuestProgress"]["Quests"].push_back("opaque-third-party-row");
     Require(Plan(strictDamaged,{}).Save==strictDamaged);

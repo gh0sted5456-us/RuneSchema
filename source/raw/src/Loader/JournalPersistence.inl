@@ -61,50 +61,57 @@ struct JournalPersistence {
             auto payload=ReadPayload(json->Object);
             const auto current=CurrentOwners();
             auto cleanedPayload=payload;
-            if(!PS::PSConfig::Get()->GetSettings().persistence.journal)
-                cleanedPayload=JournalSave::RemoveCurrent(cleanedPayload,current);
+            if(const auto registry=PS::SaveCleanup::ReadRegistry();registry && registry->JournalsComplete) {
+                for(const auto* field:{"UnlockedEntries","UnreadEntries"}) {
+                    auto entries=cleanedPayload.at(field).get<std::vector<std::string>>();
+                    entries.erase(std::remove_if(entries.begin(),entries.end(),[&](const auto& id) {
+                        return !registry->Journals.contains(id);
+                    }),entries.end());
+                    cleanedPayload[field]=std::move(entries);
+                }
+            }
+            cleanedPayload=JournalSave::RemoveCurrent(cleanedPayload,current);
             if(cleanedPayload!=payload)ReplacePayload(json->Object,payload,cleanedPayload);
             const auto metadata=Api->ReadArray(json->Object,TEXT("RuneSchemaOwnership"));
             if(metadata && !metadata->empty())
                 Api->WriteArray(json->Object,TEXT("RuneSchemaOwnership"),{});
         }catch(const std::exception& error) {
             Report("load",error.what());
-            // This ABI consumes the incoming native shared reference on every
-            // return path, including a rejected load. Do not leak or double-call.
-            if(json)Api->release(json,1);
-            return false;
-        }catch(...) {Report("load","Unknown adapter failure");if(json)Api->release(json,1);return false;}
+            if(std::string_view(error.what()).find("rollback failed")!=std::string_view::npos) {
+                if(json)Api->release(json,1);
+                return false;
+            }
+        }catch(...) {Report("load","Unknown adapter failure");}
         return Reader.call<bool>(persistence,json,version);
     }
     static bool Write(void* persistence,Shared* json) {
-        bool called=false;
+        bool called=false,written=false;
         try {
             ValidateInstance(persistence);
             if(!json)throw std::runtime_error("Native journal JSON missing");
             JournalJsonBridge::Hold held(*Api,*json);
             called=true;
-            if(!Writer.call<bool>(persistence,json))return false;
+            written=Writer.call<bool>(persistence,json);
+            if(!written)return false;
             const auto payload=ReadPayload(held.Object());
             const auto current=CurrentOwners();
-            if(!PS::PSConfig::Get()->GetSettings().persistence.journal) {
-                const auto transient=JournalSave::RemoveCurrent(payload,current);
-                if(transient!=payload)ReplacePayload(held.Object(),payload,transient);
-            }
+            const auto transient=JournalSave::RemoveCurrent(payload,current);
+            if(transient!=payload)ReplacePayload(held.Object(),payload,transient);
             const auto previous=Api->ReadArray(held.Object(),TEXT("RuneSchemaOwnership"));
             if(previous && !previous->empty())
                 Api->WriteArray(held.Object(),TEXT("RuneSchemaOwnership"),{});
             return true;
         }catch(const std::exception& error) {
             Report("save",error.what());
+            if(std::string_view(error.what()).find("rollback failed")!=std::string_view::npos)return false;
         }catch(...) {Report("save","Unknown adapter failure");}
-        if(!called && json)Api->release(json,1);
-        return false;
+        return called?written:Writer.call<bool>(persistence,json);
     }
     static void Install(const void* source,Owners owners,UClass* type) {
         // Snapshot provenance, not callbacks into mutable loader containers.
         {std::lock_guard lock(Mutex);Sources[source]=std::move(owners);}
         if(Reader && Writer)return;
-        auto api=std::make_unique<JournalJsonBridge>();
+        auto api=std::make_unique<JournalJsonBridge>(type);
         for(const auto& [name,offset]:{std::pair{TEXT("UnlockedJournalEntries"),0xc8},std::pair{TEXT("UnreadJournalEntries"),0xd8}}) {
             auto* property=type?CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(type,name)):nullptr;
             auto* inner=property?CastField<FObjectPropertyBase>(property->GetInner()):nullptr;

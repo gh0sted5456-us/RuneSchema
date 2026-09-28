@@ -41,6 +41,7 @@
 #include "Runtime/HostServices.h"
 #include "Runtime/Storefront.h"
 #include "Core/JsonPatchDirective.h"
+#include "Core/SaveRegistrySnapshot.h"
 #include "Core/JournalPlacement.h"
 #include "Unreal/Property/FTextProperty.hpp"
 #include "Unreal/Core/HAL/UnrealMemory.hpp"
@@ -78,6 +79,22 @@ namespace DragonWilds {
     #include "JournalGroupPlacement.inl"
     #include "JournalHierarchy.inl"
     namespace {
+        bool RegisteredJournalEntry(UObject* entry)
+        {
+            if (!entry) return false;
+            const auto registry = PS::SaveCleanup::ReadRegistry();
+            if (!registry || !registry->JournalsComplete) return false;
+            auto* idProperty = CastField<FStrProperty>(
+                PropertyHelper::GetPropertyByName(
+                    entry->GetClassPrivate(), TEXT("PersistenceID")));
+            if (!idProperty) return false;
+            const auto id = idProperty->GetPropertyValue(
+                idProperty->ContainerPtrToValuePtr<void>(entry));
+            return id.GetCharArray().Num() > 1
+                && registry->Journals.contains(
+                    RC::to_string(RC::StringType(*id)));
+        }
+
         constexpr const TCHAR* EntryClassPaths[] = {
             TEXT("/Script/Dominion.JournalEntryKnowLoreData"),
             TEXT("/Script/Dominion.JournalEntryKnowPeopleData"),
@@ -389,9 +406,8 @@ namespace DragonWilds {
         if (!m_defs.empty())
             PS::LoaderSummary(m_loreOnly ? "lore" : "journal", result.EntriesReady,
                 result.EntriesReady, 0, result.Placements, result.ErrorCount);
-        // Native persistence cleanup is an optional safety adapter. A
-        // storefront-specific routine mismatch must not roll back journal
-        // registration, placement, or unlock delivery.
+        // Journal definitions still mount if the adapter is unavailable, but
+        // player unlock delivery waits until save filtering is verified.
         if (!m_ownedIds.empty()) {
             try {
                 InstallNativePersistence();
@@ -955,7 +971,7 @@ namespace DragonWilds {
     {
         // Temporary mode is runtime-visible on lanes where the native writer
         // adapter can exclude RuneSchema-owned IDs from the save payload.
-        if (!PS::PSConfig::Get()->GetSettings().persistence.journal && !m_nativePersistenceReady)
+        if (!m_nativePersistenceReady)
         {
             PS::RoutineLog("journal", STR("Journal/lore temporary unlocks are unavailable because the native save adapter is not ready; registered entries remain active.\n"));
             return;
@@ -977,7 +993,7 @@ namespace DragonWilds {
             }
 
             UObject* entry = found->second.Get();
-            if (!entry) {++unavailable;continue;}
+            if (!RegisteredJournalEntry(entry)) {++unavailable;continue;}
             try {
                 if(JournalPlayerAccess::EnsureUnlocked(journalComponent,entry))++added;
             }catch(const std::exception& error) {
@@ -1007,7 +1023,7 @@ namespace DragonWilds {
     void DragonWildsJournalModLoader::ObserveAcquisition(UObject* source,UFunction* function)
     {
         if(m_observingAcquisition || !source || !function || m_acquisitionUnlocks.empty()
-            || (!PS::PSConfig::Get()->GetSettings().persistence.journal && !m_nativePersistenceReady))return;
+            || !m_nativePersistenceReady)return;
         const auto path=function->GetPathName();
         UObject* controller=nullptr;bool credit=true;
         if(path==TEXT("/Game/Gameplay/Character/Player/BP_PlayerController.BP_PlayerController_C:OnInventoryChanged_BrokenItemFTUE"))
@@ -1048,7 +1064,8 @@ namespace DragonWilds {
         for(const auto& binding:m_acquisitionUnlocks) {
             if(!binding.Item || !added.contains(binding.Item->GetPathName()))continue;
             const auto entry=m_entries.find(binding.EntryKey);
-            if(entry!=m_entries.end())if(auto* object=entry->second.Get())
+            if(entry!=m_entries.end())if(auto* object=entry->second.Get();
+                RegisteredJournalEntry(object))
                 (void)JournalPlayerAccess::EnsureUnlocked(journal,object);
         }
     }
@@ -1094,15 +1111,6 @@ namespace DragonWilds {
 
     void DragonWildsJournalModLoader::InstallNativePersistence()
     {
-        // Cleanup itself is storefront-neutral and runs on hydrated live
-        // state. The Steam JSON bridge remains only for ownership metadata and
-        // optional temporary mode; Xbox persists the live component through
-        // its native provider without touching WGS directly.
-        if (PS::Storefront::CurrentNativeLane() == PS::Storefront::NativeLane::GamePassNative) {
-            if(!PS::PSConfig::Get()->GetSettings().persistence.journal)
-                throw std::runtime_error("temporary journal mode requires a verified WinGDK writer adapter");
-            return;
-        }
         JournalPersistence::Install(this, JournalSave::Owners(m_ownedIds.begin(),m_ownedIds.end()), m_journalComponentClass);
     }
 }

@@ -22,4 +22,7 @@ int main(int argc,char** argv) {
         "Authored recipes do not receive a deterministic canonical persistence identity");
     require(source.find("OwnedContent::") == std::string::npos,
         "Recipe persistence still depends on an ownership manifest");
+    require(source.find("registry->Recipes.contains(") != std::string::npos
+        && source.find("for (auto* recipe : registeredRecipes)") != std::string::npos,
+        "Unregistered recipe IDs can still enter the character unlock set");
 }

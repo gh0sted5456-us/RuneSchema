@@ -64,7 +64,8 @@ inline void CheckPending(const Json& row) {
 // Installed and absent owners are explicit selections; neither is inferred from an asset prefix.
 inline Preview Plan(const Json& source,const std::set<std::string>& requested,
     bool eraseProgress=false,const RegistrySnapshot* registry=nullptr,
-    bool removePendingOwned=false,bool pruneRegistryProgress=false) {
+    bool removePendingOwned=false,bool pruneRegistryProgress=false,
+    bool unresolvedOnly=false) {
     RequireCharacter(source);
     for(const auto& owner:requested)DragonWilds::Quests::ValidateOwner(owner);
     const std::set<std::string> selected=eraseProgress?requested:std::set<std::string>{};
@@ -80,6 +81,7 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
             for(auto it=entries.begin();it!=entries.end();) {
                 const auto& item=it.value();
                 if(!item.is_object() || (item.contains("ItemData") && !item.at("ItemData").is_string())) {
+                    if(unresolvedOnly) {++it;continue;}
                     result.Removed.push_back({{"Kind",section},{"Id",it.key()},{"Slot",it.key()},{"Mod","Malformed native record"}});
                     it=entries.erase(it);continue;
                 }
@@ -87,6 +89,7 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
                 bool remove=!id.empty() && !registry->Items.contains(id);
                 if(std::string_view(section)=="Loadout" && item.contains("PlayerInventoryItemIndex")) {
                     if(!item.at("PlayerInventoryItemIndex").is_number_integer()) {
+                        if(unresolvedOnly) {++it;continue;}
                         result.Removed.push_back({{"Kind",section},{"Id",it.key()},{"Slot",it.key()},{"Mod","Malformed equipped inventory index"}});
                         it=entries.erase(it);continue;
                     }
@@ -151,7 +154,7 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
             if(!progress.at("QuestTracked").is_string())throw std::runtime_error("Unsupported tracked quest identity");
             if(removed.contains(progress.at("QuestTracked").get<std::string>()))progress["QuestTracked"]="";
         }
-        if(progress.contains("QuestLocations") && !locations.empty()) {
+        if(!unresolvedOnly && progress.contains("QuestLocations") && !locations.empty()) {
             if(!progress.at("QuestLocations").is_array())throw std::runtime_error("Unsupported quest location save layout");
             auto kept=Json::array();
             for(const auto& row:progress.at("QuestLocations")) {
@@ -164,7 +167,10 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
         }
     }
     if(game.contains("Journal")) {
-        auto payload=JournalPayload(game.at("Journal"));
+        auto payload=unresolvedOnly?game.at("Journal"):
+            JournalPayload(game.at("Journal"));
+        if(!payload.is_object())
+            throw std::runtime_error("Unsupported journal save layout");
         if(registry && registry->JournalsComplete) {
             for(const auto* field:{"UnlockedEntries","UnreadEntries"}) {
                 if(!payload.contains(field))continue;

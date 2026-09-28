@@ -120,6 +120,9 @@ if(PROJECT_IS_TOP_LEVEL)
     add_test(NAME diagnostic-library COMMAND diagnostic-library)
     target_link_libraries(save-cleanup PRIVATE RuneSchemaJsonCore)
     add_test(NAME save-cleanup COMMAND save-cleanup)
+    add_executable(identity-only-cleanup ../tests/identity-only-cleanup.cpp)
+    target_link_libraries(identity-only-cleanup PRIVATE RuneSchemaJsonCore)
+    add_test(NAME identity-only-cleanup COMMAND identity-only-cleanup)
     target_link_libraries(quantum-banker PRIVATE RuneSchemaJsonCore)
     add_test(NAME quantum-banker COMMAND quantum-banker "${CMAKE_CURRENT_SOURCE_DIR}/../../extras/examples/QuantumBanker")
     add_executable(journal-placement ../tests/journal-placement.cpp)
@@ -130,7 +133,9 @@ if(PROJECT_IS_TOP_LEVEL)
     add_test(NAME journal-wingdk-lane COMMAND journal-wingdk-lane
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/JournalHierarchy.inl"
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/JournalWinGDKContract.h"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Generator/AppearanceWinGDKSignatures.h")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Generator/AppearanceWinGDKSignatures.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/JournalJsonBridge.inl"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsJournalModLoader.cpp")
     add_executable(main-menu-log-budget ../tests/main-menu-log-budget.cpp)
     add_test(NAME main-menu-log-budget COMMAND main-menu-log-budget
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRecipeModLoader.cpp"

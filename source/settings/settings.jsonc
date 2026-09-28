@@ -15,8 +15,6 @@
   },
   "persistence": {
     "characterCustomization": false,
-    "journal": true,
-    "recipes": true,
     "quests": true
   },
   "helpyAuthority": {

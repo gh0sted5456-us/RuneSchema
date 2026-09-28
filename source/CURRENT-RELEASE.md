@@ -94,8 +94,8 @@ installation; previously removed state is not restored.
 ```jsonc
 "persistence": {
   "characterCustomization": false,
-  "journal": true,
-  "recipes": true,
+  "journal": false,
+  "recipes": false,
   "quests": true
 }
 ```

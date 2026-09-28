@@ -103,17 +103,15 @@ persistence. The default settings are:
 ```jsonc
 "persistence": {
   "characterCustomization": false,
-  "journal": true,
-  "recipes": true,
   "quests": true
 }
 ```
 
-Journal, recipe, and quest saving are enabled by default. Turning one off keeps
-its loader active but prevents RuneSchema from making new progress in that
-category permanent. For example, a recipe can still be placed at a station
-without automatically saving it as unlocked. These controls do not change the
-matching entries under `loaders`.
+Quest saving is enabled by default. Journal, lore, and recipe definitions and
+unlocks are always session-only; referenced items still use their normal
+paths and persistence IDs. Old `persistence.journal` and
+`persistence.recipes` settings are ignored. Loader activation remains under
+`loaders`.
 
 With `characterCustomization` off, `/assets`, `/raw`, and character-option
 table extensions still load, but automatic appearance assignments authored in

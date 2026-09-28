@@ -29,11 +29,9 @@ Use `/journal` for recipe and discovery entries.
 Groups can be created where the native category supports them. Verify the
 entry, pages, icon, unlock, save, and reload.
 
-Journal saving is enabled by default. Steam/GOG and Game Pass both wait for the
-game to load the character before removing journal identities that belonged to
-a missing RuneSchema mod. Setting `persistence.journal` to `false` keeps the
-loader and placement active but prevents RuneSchema from permanently granting
-new journal/lore unlocks.
+Journal and lore definitions and unlocks are session-only. Steam/GOG and Game
+Pass remove obsolete RuneSchema journal identities already present in older
+saves after content registration. The loader and placement remain active.
 
 ## Simple rules
 

@@ -411,10 +411,7 @@ public:
             ImGui::SeparatorText("Progress persistence");
             ImGui::Checkbox("Save RuneSchema character customization", &settings.persistence.characterCustomization);
             ImGui::TextWrapped("Off by default. Character option and data-table loaders remain active, but automatic /players appearance assignments do not rewrite CustomizationSaveData.");
-            ImGui::Checkbox("Save RuneSchema journal/lore unlocks", &settings.persistence.journal);
-            ImGui::TextWrapped("On by default. Off keeps automatic RuneSchema journal/lore unlocks session-only when the storefront save adapter is available. Schema Unlock still controls immediate visibility.");
-            ImGui::Checkbox("Save RuneSchema recipe unlocks", &settings.persistence.recipes);
-            ImGui::TextWrapped("On by default. Off keeps automatic and consumable-granted RuneSchema recipe unlocks in the game's non-persistent recipe set.");
+            ImGui::TextWrapped("RuneSchema journal, lore, and recipe unlocks are session-only. Their definitions and referenced items load normally; these unlocks do not become character-save progress.");
             ImGui::Checkbox("Save RuneSchema quest progress", &settings.persistence.quests);
             ImGui::TextWrapped("On by default. Off leaves quest definitions available to other loaders but blocks RuneSchema quest actions because native quest progress is save-backed.");
             ImGui::SeparatorText("Server Helpy permissions");

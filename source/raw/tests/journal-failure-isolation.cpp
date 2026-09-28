@@ -9,7 +9,7 @@ int main(int argc, char** argv) {
     std::ifstream file(argv[1]);
     if (!file) throw std::runtime_error("Cannot read journal loader source");
     const std::string source{std::istreambuf_iterator<char>(file), {}};
-    const auto require = [](bool ok) { if (!ok) throw std::runtime_error("Journal lifecycle regression"); };
+#define require(ok) do { if (!(ok)) { std::cerr << "Journal lifecycle regression at line " << __LINE__ << '\n'; throw std::runtime_error("Journal lifecycle regression"); } } while (0)
     require(source.find("m_initialJournalApplied = result.ErrorCount == 0") == std::string::npos);
     require(source.find("m_initialJournalApplied = true;") != std::string::npos);
     const auto hook = source.find("PS::RegisterNativePostHook(function");
@@ -43,9 +43,8 @@ int main(int argc, char** argv) {
     require(persistence != std::string::npos && hooks != std::string::npos);
     require(source.substr(persistence, hooks-persistence).find("catch (const std::exception& error)") != std::string::npos);
     require(source.find("JournalPersistence::Install(this,") != std::string::npos);
-    require(source.find("NativeLane::GamePassNative") != std::string::npos);
-    require(source.find("temporary journal mode requires a verified WinGDK writer adapter") != std::string::npos);
-    require(source.find("Xbox persists the live component") != std::string::npos);
+    require(source.find("if (!m_nativePersistenceReady)") != std::string::npos);
+    require(source.find("JournalPlayerAccess::EnsureUnlocked(journalComponent,entry)") != std::string::npos);
     require(source.find("StripUnusableIdsFromCharacterSave") == std::string::npos);
     require(source.find("SaveCharacters") == std::string::npos);
     const auto registered=source.find("RegisterEntry(entry,def.Owner);",apply);

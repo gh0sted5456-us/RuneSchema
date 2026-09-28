@@ -3,6 +3,7 @@
 #include <string>
 #include <filesystem>
 #include <set>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 #include "Unreal/NameTypes.hpp"
@@ -31,6 +32,7 @@ namespace DragonWilds {
         bool m_initialized = false;
         bool m_preflightingCharacterJson = false;
         bool m_registrySummaryReported = false;
+        std::unordered_set<std::string> m_checkedCharacters;
         std::string m_registryCandidateFingerprint;
         unsigned m_registryCandidatePasses = 0;
 

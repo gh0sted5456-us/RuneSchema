@@ -35,6 +35,7 @@
 #include "Loader/RecipeUnlockPolicy.h"
 #include "Loader/ItemIdentity.h"
 #include "Loader/DialogueSaveIdentity.h"
+#include "Core/SaveRegistrySnapshot.h"
 #include "Core/JsonPatchDirective.h"
 #include "Runtime/HostServices.h"
 
@@ -283,14 +284,42 @@ namespace DragonWilds {
             return;
         }
 
+        // An unlock is serialized by PersistenceID. Do not put a RecipeData
+        // object into the player's save unless the native recipe registry has
+        // accepted that exact ID. A missing entry otherwise prevents the
+        // character from loading on the next world entry.
+        const auto registry = PS::SaveCleanup::ReadRegistry();
+        if (!registry)
+            return;
+        std::vector<UObject*> registeredRecipes;
+        registeredRecipes.reserve(recipes.size());
+        for (auto* recipe : recipes)
+        {
+            if (!recipe) continue;
+            auto* idProperty = CastField<FStrProperty>(
+                PropertyHelper::GetPropertyByName(
+                    recipe->GetClassPrivate(), TEXT("PersistenceID")));
+            if (!idProperty) continue;
+            const auto id = idProperty->GetPropertyValue(
+                idProperty->ContainerPtrToValuePtr<void>(recipe));
+            if (id.GetCharArray().Num() <= 1) continue;
+            if (registry->Recipes.contains(
+                    RC::to_string(RC::StringType(*id))))
+                registeredRecipes.push_back(recipe);
+        }
+        if (registeredRecipes.size() != recipes.size())
+        {
+            static std::atomic_bool reported = false;
+            if (!reported.exchange(true))
+                PS::Log<LogLevel::Warning>(STR(
+                    "[LOADER:recipes][DEGRADED] Unregistered recipe unlocks were withheld to protect the character save.\n"));
+        }
+
         // Dominion reads RecipesUnlocked to decide what the player can see.
         // RecipesUnlockedThatShouldNotPersist is only an exclusion marker used
         // by the save path; it is not a second runtime unlock collection.
         std::vector<const TCHAR*> targetSets{TEXT("RecipesUnlocked")};
-        if (!PS::PSConfig::Get()->GetSettings().persistence.recipes)
-        {
-            targetSets.push_back(TEXT("RecipesUnlockedThatShouldNotPersist"));
-        }
+        targetSets.push_back(TEXT("RecipesUnlockedThatShouldNotPersist"));
         for (auto* propertyName : targetSets)
         {
             auto* setProperty = CastField<FSetProperty>(PropertyHelper::GetPropertyByName(progressComponent->GetClassPrivate(), propertyName));
@@ -300,7 +329,7 @@ namespace DragonWilds {
             }
 
             UECustom::FScriptSetHelper helper(setProperty, setProperty->ContainerPtrToValuePtr<void>(progressComponent));
-            for (auto* recipe : recipes)
+            for (auto* recipe : registeredRecipes)
             {
                 helper.Add(&recipe);
             }
@@ -557,6 +586,7 @@ namespace DragonWilds {
             throw std::runtime_error("Current shop player has no valid world-owned ProgressComponent");
         std::vector<UObject*> recipes;
         nlohmann::json skipped=nlohmann::json::array();
+        const auto registry=PS::SaveCleanup::ReadRegistry();
         size_t index=0;
         for(const auto& item:items) {
             const auto slot=item.value("_RecipeSlot",std::to_string(index++));
@@ -565,6 +595,15 @@ namespace DragonWilds {
             const auto owned=m_vendorRecipeOwners.find(key);
             if(found==m_recipes.end() || owned==m_vendorRecipeOwners.end() || owned->second!=owner+":"+slot
                 || !m_propsApplied.contains(key) || !LiveRecipe(key)) {
+                skipped.push_back(RC::to_string(key));
+                continue;
+            }
+            auto* idProperty=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
+                found->second->GetClassPrivate(),TEXT("PersistenceID")));
+            const auto id=idProperty?idProperty->GetPropertyValue(
+                idProperty->ContainerPtrToValuePtr<void>(found->second)):FString{};
+            if(!registry || id.GetCharArray().Num()<=1
+                || !registry->Recipes.contains(RC::to_string(RC::StringType(*id)))) {
                 skipped.push_back(RC::to_string(key));
                 continue;
             }
@@ -580,8 +619,7 @@ namespace DragonWilds {
         // for the visible unlock set.  Store recipes must always be present in
         // RecipesUnlocked or the native menu cannot display them.
         std::vector<const TCHAR*> targetSets{TEXT("RecipesUnlocked")};
-        if (!PS::PSConfig::Get()->GetSettings().persistence.recipes)
-            targetSets.push_back(TEXT("RecipesUnlockedThatShouldNotPersist"));
+        targetSets.push_back(TEXT("RecipesUnlockedThatShouldNotPersist"));
         for(const auto* name:targetSets) {
             auto* property=CastField<FSetProperty>(PropertyHelper::GetPropertyByName(progress->GetClassPrivate(),name));
             auto* element=property?CastField<FObjectPropertyBase>(property->GetElementProp()):nullptr;
@@ -1527,7 +1565,6 @@ namespace DragonWilds {
         // RuneSchema recipe into Dominion's save-exclusion set as well. This
         // preserves the consumable's normal runtime behavior without making
         // the discovery permanent.
-        if (!PS::PSConfig::Get()->GetSettings().persistence.recipes)
         {
             auto* unlockedProperty=CastField<FSetProperty>(PropertyHelper::GetPropertyByName(
                 progressComponent->GetClassPrivate(),TEXT("RecipesUnlocked")));

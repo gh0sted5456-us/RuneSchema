@@ -2,13 +2,13 @@
 
 - Corrects lifecycle accounting so a section scheduled for a later engine
   phase, such as `/spawns`, does not falsely mark its mod `PARTIAL`.
-- Makes journal/lore, recipe, and quest persistence opt-out. They save by
-  default; the settings toggles disable their save mutations.
+- Journal/lore and recipe definitions and unlocks are session-only. Quest
+  persistence remains configurable.
 - Separates schema unlock policy from persistence. `Unlock` controls automatic
   runtime delivery. Journal/lore entries can remain session-only on a verified
   native save lane, while recipe unlocks use Dominion's non-persistent set.
-- Tracks RuneSchema recipes learned through native recipe-unlocker consumables
-  so the recipe persistence toggle also applies to on-use discoveries.
+- Marks RuneSchema recipes learned through native recipe-unlocker consumables
+  as session-only too.
 - Adds a documented `/assets` example that clones a native recipe-unlocker
   consumable and points `RecipesToUnlock` at the Dawnveil Paladin Plate recipe.
 - `RecipesToUnlock` now accepts an authored recipe name, an exact
