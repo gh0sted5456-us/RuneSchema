@@ -1,0 +1,23 @@
+// Restores the existing Game Pass / WinGDK Edit Appearance control.
+// The target widgets and native function already exist in the cooked game.
+{
+  "/Game/UI/MainMenu/WBP_MainMenu_CharacterSelect": {
+    "$RuntimeWidget": {
+      "Character.EditAppearanceButton": {
+        "Visibility": "Visible",
+        "bIsEnabled": true,
+        "RenderOpacity": 1.0,
+        "$Bind": {
+          "Event": "OnButtonBaseClicked",
+          "Target": "Character",
+          "Function": "GoToEditAppearance"
+        }
+      },
+      "InputLegend_EditAppearance": {
+        "Visibility": "Visible",
+        "bIsEnabled": true,
+        "RenderOpacity": 1.0
+      }
+    }
+  }
+}

@@ -25,6 +25,12 @@ changes labels on the existing character-creation widget.
 It demonstrates a focused `/blueprints` patch without creating a new
 Blueprint class.
 
+### Live widget behavior
+
+[Restore Appearance](examples/RestoreAppearance/blueprints/10-RestoreAppearance.jsonc)
+shows `$RuntimeWidget` changing live CommonUI widget state and binding an
+existing button event to an existing native menu function.
+
 ## Character customization
 
 ### Current direct authoring

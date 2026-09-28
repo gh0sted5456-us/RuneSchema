@@ -32,6 +32,18 @@
     "append": true,
     "clone": false,
     "patch": true,
-    "search": "loaded records"
+    "search": "loaded records",
+    "runtimeWidget": true
+  },
+  "x-runeschema-runtime-widget": {
+    "description": "Event-driven live widget property edits and optional multicast delegate binding.",
+    "owner": "Existing loaded widget Blueprint class name or /Game/ generated-class path.",
+    "widgetPath": "Dot-separated reflected object-property path from the live owner widget.",
+    "bind": {
+      "Event": "Reflected multicast delegate property on the target widget.",
+      "Target": "Optional dot-separated path from the owner; omit or use $Owner for the owner.",
+      "Function": "Reflected function on the selected target with a compatible delegate signature."
+    },
+    "hotReload": false
   }
 }
