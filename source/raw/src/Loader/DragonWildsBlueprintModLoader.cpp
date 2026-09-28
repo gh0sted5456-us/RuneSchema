@@ -448,8 +448,9 @@ namespace DragonWilds {
         if (!delegateProperty)
             throw std::runtime_error("Blueprint $RuntimeWidget $Bind Event is not a multicast delegate");
 
-        const auto functionFName = FName(to_generic_string(functionName), FNAME_Add);
-        auto* targetFunction = targetObject->GetFunctionByNameInChain(functionFName);
+        const auto functionNameWide = to_generic_string(functionName);
+        const auto functionFName = FName(functionNameWide, FNAME_Add);
+        auto* targetFunction = targetObject->GetFunctionByNameInChain(functionNameWide.c_str());
         if (!targetFunction)
             throw std::runtime_error("Blueprint $RuntimeWidget $Bind Function was not found on target");
 
