@@ -100,6 +100,56 @@ try {
         & $Exe @Arguments
         if ($LASTEXITCODE) { throw "$What failed (exit $LASTEXITCODE)." }
     }
+    function Get-ConfigureFingerprint([string]$SourceDirectory) {
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try {
+            $builder = [Text.StringBuilder]::new()
+
+            # CMake content controls the generated build graph.
+            Get-ChildItem -LiteralPath $SourceDirectory -Filter 'CMakeLists.txt' -File -Recurse |
+                Sort-Object FullName |
+                ForEach-Object {
+                    [void]$builder.AppendLine($_.FullName.Substring($SourceDirectory.Length).Replace('\','/'))
+                    [void]$builder.AppendLine((Get-Content -LiteralPath $_.FullName -Raw))
+                }
+
+            # Adding/removing/renaming a .cpp must force configure because the
+            # CMake source glob is intentionally not CONFIGURE_DEPENDS.
+            Get-ChildItem -LiteralPath (Join-Path $SourceDirectory 'src') -Filter '*.cpp' -File -Recurse |
+                Sort-Object FullName |
+                ForEach-Object {
+                    [void]$builder.AppendLine($_.FullName.Substring($SourceDirectory.Length).Replace('\','/'))
+                }
+
+            $bytes = [Text.Encoding]::UTF8.GetBytes($builder.ToString())
+            return ([Convert]::ToHexString($sha.ComputeHash($bytes))).ToLowerInvariant()
+        } finally {
+            $sha.Dispose()
+        }
+    }
+    function Ensure-CMakeConfigured(
+        [string]$SourceDirectory,
+        [string]$BuildDirectory,
+        [string[]]$ConfigureArguments,
+        [string]$Label
+    ) {
+        $stamp = Join-Path $BuildDirectory '.runeschema-configure.sha256'
+        $ninjaFile = Join-Path $BuildDirectory 'build.ninja'
+        $fingerprint = Get-ConfigureFingerprint $SourceDirectory
+        $prior = if (Test-Path -LiteralPath $stamp -PathType Leaf) {
+            (Get-Content -LiteralPath $stamp -Raw).Trim()
+        } else { '' }
+
+        if ((Test-Path -LiteralPath $ninjaFile -PathType Leaf) -and $prior -eq $fingerprint) {
+            Write-Host "=== Reuse configured $Label ===" -ForegroundColor DarkCyan
+            return
+        }
+
+        New-Item -ItemType Directory -Path $BuildDirectory -Force | Out-Null
+        Write-Host "=== Configure $Label ===" -ForegroundColor Cyan
+        Invoke-Checked 'cmake.exe' $ConfigureArguments "CMake configure for $Label"
+        Set-Content -LiteralPath $stamp -Value $fingerprint -Encoding ascii
+    }
     function Remove-SafeTree([string]$Path) {
         $resolved = [IO.Path]::GetFullPath($Path)
         $root = $BuildRoot.TrimEnd('\') + '\'
@@ -209,14 +259,24 @@ try {
         $ninja = Find-Exe 'ninja.exe' $ninjaHints
         if (-not $ninja) { throw 'Ninja was not found (Visual Studio C++ CMake tools include it).'}
         $env:PATH = "$(Split-Path $ninja);$env:PATH"
-        Write-Host "`n=== Configure universal RuneSchema ===" -ForegroundColor Cyan
-        $configureArgs = @('-S', $RawSource, '-B', $build, '-G', $generator, "-DCMAKE_BUILD_TYPE=$Configuration", '-DFETCHCONTENT_FULLY_DISCONNECTED=OFF', '-DFETCHCONTENT_UPDATES_DISCONNECTED=OFF')
-        Invoke-Checked 'cmake.exe' $configureArgs 'CMake configure for universal RuneSchema'
+        $ue4ssCheckout = Join-Path $build '_deps\ue4ss-src'
+        $updatesDisconnected = if (Test-Path -LiteralPath $ue4ssCheckout -PathType Container) { 'ON' } else { 'OFF' }
+        $configureArgs = @(
+            '-S', $RawSource,
+            '-B', $build,
+            '-G', $generator,
+            "-DCMAKE_BUILD_TYPE=$Configuration",
+            '-DFETCHCONTENT_FULLY_DISCONNECTED=OFF',
+            "-DFETCHCONTENT_UPDATES_DISCONNECTED=$updatesDisconnected",
+            '-Wno-dev',
+            '-Wno-deprecated'
+        )
+        Ensure-CMakeConfigured $RawSource $build $configureArgs 'universal RuneSchema'
         $targets = if ($OnlyPlugin) { @('RuneSchemaHelpyPlugin') } else { @('RuneSchema', 'RuneSchemaHelpyPlugin') }
         Write-Host $(if ($OnlyPlugin) { '=== Compile Helpy plugin only (RuneSchema.dll is untouched) ===' } else { '=== Compile universal RuneSchema ===' }) -ForegroundColor Cyan
         & cmake.exe --build $build --target $targets --parallel
         if ($LASTEXITCODE) {
-            Write-Warning 'Parallel build failed; retrying single-threaded with diagnostics.'
+            Write-Warning 'Parallel compile failed. Retrying the same generated Ninja graph single-threaded for diagnostics (no CMake reconfigure).'
             & cmake.exe --build $build --target $targets --parallel 1 --verbose
             if ($LASTEXITCODE) { throw "Universal build failed (serial retry exit $LASTEXITCODE)." }
         }
@@ -305,7 +365,18 @@ try {
     $jsonHeaders = Join-Path $dependencyRoot 'nlohmann_json-src\include'
     $glazeHeaders = Join-Path $dependencyRoot 'glaze-src\include'
     $contractBuild = Join-Path $BuildCache 'contracts'
-    Invoke-Checked 'cmake.exe' @('-S', (Join-Path $RawSource 'core'), '-B', $contractBuild, '-G', 'Ninja', "-DRUNESCHEMA_JSON_INCLUDE_DIR=$jsonHeaders", "-DRUNESCHEMA_GLAZE_INCLUDE_DIR=$glazeHeaders", '-DCMAKE_BUILD_TYPE=Release') 'Release contract test configure'
+    $contractSource = Join-Path $RawSource 'core'
+    $contractConfigureArgs = @(
+        '-S', $contractSource,
+        '-B', $contractBuild,
+        '-G', 'Ninja',
+        "-DRUNESCHEMA_JSON_INCLUDE_DIR=$jsonHeaders",
+        "-DRUNESCHEMA_GLAZE_INCLUDE_DIR=$glazeHeaders",
+        '-DCMAKE_BUILD_TYPE=Release',
+        '-Wno-dev',
+        '-Wno-deprecated'
+    )
+    Ensure-CMakeConfigured $contractSource $contractBuild $contractConfigureArgs 'release contract tests'
     $releaseContracts = if ($PluginOnly) { @('helpy-instant-open') } else { @('vendor-offers','loader-schemas','npc-catalog','player-activity-events',
         'quest-gameplay-owner','quest-native-contract','quest-definition','event-definition',
         'dialogue-definition','building-preview-safety','building-clone-contract','static-building-assembly-contract','owned-save-cleanup-contract','resource-additional-drops','resource-scale-idempotence','niagara-preset',

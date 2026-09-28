@@ -76,7 +76,12 @@ FetchContent_MakeAvailable(zydis)
 
 set(TARGET RuneSchema)
 
-file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS
+# Source discovery is intentionally performed at configure time only.
+# build/build.ps1 fingerprints the CMake inputs and .cpp file list and
+# reconfigures when either changes. Avoid CONFIGURE_DEPENDS here: with UE4SS's
+# large FetchContent graph it can make Ninja regenerate the full CMake project
+# during the same build, repeatedly printing UE4SS/UnrealVTableDumper setup.
+file(GLOB_RECURSE SRC_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 list(FILTER SRC_FILES EXCLUDE REGEX "/src/Core/")
