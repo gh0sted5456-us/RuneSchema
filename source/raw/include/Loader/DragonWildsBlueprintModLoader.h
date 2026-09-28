@@ -73,6 +73,13 @@ namespace DragonWilds {
         RC::Unreal::UObject* ResolveRuntimeWidgetPath(
             RC::Unreal::UObject* owner,
             const RC::StringType& widgetPath);
+        bool RuntimeWidgetPathContains(
+            RC::Unreal::UObject* owner,
+            RC::Unreal::UObject* candidate,
+            const RC::StringType& widgetPath);
+        RC::Unreal::UObject* FindRuntimeWidgetOwner(
+            RC::Unreal::UObject* source,
+            const RC::Unreal::FName& ownerClass);
         void ApplyRuntimeWidgetRule(
             RC::Unreal::UObject* owner,
             const RuntimeWidgetRule& rule);

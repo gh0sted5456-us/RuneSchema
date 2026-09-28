@@ -418,6 +418,58 @@ namespace DragonWilds {
         return current;
     }
 
+    bool DragonWildsBlueprintModLoader::RuntimeWidgetPathContains(
+        UObject* owner,
+        UObject* candidate,
+        const RC::StringType& widgetPath)
+    {
+        if (!owner || !candidate || widgetPath.empty()) return false;
+        if (owner == candidate) return true;
+
+        UObject* current = owner;
+        size_t offset = 0;
+        while (offset < widgetPath.size())
+        {
+            const auto dot = widgetPath.find(TEXT('.'), offset);
+            const auto length = dot == RC::StringType::npos ? widgetPath.size() - offset : dot - offset;
+            if (!length) return false;
+
+            const auto segment = widgetPath.substr(offset, length);
+            auto* objectProperty = CastField<FObjectProperty>(
+                PropertyHelper::GetPropertyByName(current->GetClassPrivate(), segment));
+            if (!objectProperty) return false;
+
+            current = objectProperty->GetObjectPropertyValue(
+                objectProperty->ContainerPtrToValuePtr<void>(current));
+            if (!current) return false;
+            if (current == candidate) return true;
+
+            if (dot == RC::StringType::npos) break;
+            offset = dot + 1;
+        }
+        return false;
+    }
+
+    UObject* DragonWildsBlueprintModLoader::FindRuntimeWidgetOwner(
+        UObject* source,
+        const FName& ownerClass)
+    {
+        UObject* current = source;
+        for (int depth = 0; current && depth < 16; ++depth)
+        {
+            auto* type = current->GetClassPrivate();
+            if (type)
+            {
+                const auto typeName = type->GetNamePrivate();
+                const auto typePath = FName(type->GetPathName(), FNAME_Find);
+                if (ownerClass == typeName || ownerClass == typePath)
+                    return current;
+            }
+            current = current->GetOuterPrivate();
+        }
+        return nullptr;
+    }
+
     void DragonWildsBlueprintModLoader::ApplyRuntimeWidgetBinding(
         UObject* owner,
         UObject* widget,
@@ -504,27 +556,41 @@ namespace DragonWilds {
     {
         if (!source || m_runtimeWidgetRules.empty()) return;
 
-        auto* type = source->GetClassPrivate();
-        if (!type) return;
-        const auto name = type->GetNamePrivate();
-        const auto path = FName(type->GetPathName(), FNAME_Find);
-
-        for (const auto& rule : m_runtimeWidgetRules)
+        std::unordered_set<UObject*> ownersToRefresh;
+        for (const auto& triggerRule : m_runtimeWidgetRules)
         {
-            if (rule.OwnerClass != name && rule.OwnerClass != path) continue;
-            try {
-                ApplyRuntimeWidgetRule(source, rule);
-            } catch (const std::exception& error) {
-                const auto failureKey = RC::to_string(rule.ModName)
-                    + ":" + RC::to_string(rule.WidgetPath)
-                    + ":" + error.what();
-                if (m_reportedRuntimeWidgetFailures.emplace(failureKey).second)
-                {
-                    PS::Log<LogLevel::Warning>(
-                        STR("Blueprint $RuntimeWidget '{}' from '{}' failed: {}. Further identical failures are suppressed.\n"),
-                        rule.WidgetPath,
-                        rule.ModName,
-                        PS::ToWideSafe(error.what()));
+            auto* owner = FindRuntimeWidgetOwner(source, triggerRule.OwnerClass);
+            if (!owner) continue;
+            if (source == owner
+                || RuntimeWidgetPathContains(owner, source, triggerRule.WidgetPath))
+                ownersToRefresh.emplace(owner);
+        }
+
+        for (auto* owner : ownersToRefresh)
+        {
+            auto* type = owner ? owner->GetClassPrivate() : nullptr;
+            if (!type) continue;
+            const auto ownerName = type->GetNamePrivate();
+            const auto ownerPath = FName(type->GetPathName(), FNAME_Find);
+
+            for (const auto& rule : m_runtimeWidgetRules)
+            {
+                if (rule.OwnerClass != ownerName && rule.OwnerClass != ownerPath)
+                    continue;
+                try {
+                    ApplyRuntimeWidgetRule(owner, rule);
+                } catch (const std::exception& error) {
+                    const auto failureKey = RC::to_string(rule.ModName)
+                        + ":" + RC::to_string(rule.WidgetPath)
+                        + ":" + error.what();
+                    if (m_reportedRuntimeWidgetFailures.emplace(failureKey).second)
+                    {
+                        PS::Log<LogLevel::Warning>(
+                            STR("Blueprint $RuntimeWidget '{}' from '{}' failed: {}. Further identical failures are suppressed.\n"),
+                            rule.WidgetPath,
+                            rule.ModName,
+                            PS::ToWideSafe(error.what()));
+                    }
                 }
             }
         }
