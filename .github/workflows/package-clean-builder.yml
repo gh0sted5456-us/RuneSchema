@@ -1,0 +1,33 @@
+name: Package clean builder snapshot
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - '.github/workflows/package-clean-builder.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout clean builder snapshot
+        uses: actions/checkout@v6
+        with:
+          ref: 4a400992a022b65ff54620f9a45b433fc8592fb8
+
+      - name: Create source ZIP
+        shell: bash
+        run: |
+          zip -r RuneSchema-experimental-clean-builder-4a40099.zip . \
+            -x ".git/*"
+
+      - name: Upload source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuneSchema-experimental-clean-builder-4a40099
+          path: RuneSchema-experimental-clean-builder-4a40099.zip
+          if-no-files-found: error
