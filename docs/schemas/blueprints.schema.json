@@ -42,8 +42,13 @@
     "bind": {
       "Event": "Reflected multicast delegate property on the target widget.",
       "Target": "Optional dot-separated path from the owner; omit or use $Owner for the owner.",
-      "Function": "Reflected function on the selected target with a compatible delegate signature."
+      "Function": "Reflected function on the selected target with a compatible delegate signature.",
+      "Compatibility": "Reflected parameter contract: count, direction, property type, referenced type/container element type, and return type. Raw ParmsSize/padding is ignored."
     },
-    "hotReload": false
+    "hotReload": false,
+    "storefront": {
+      "$Storefront": "Optional string or array: GamePass/WinGDK, Steam/SteamGOG/GOG, Any.",
+      "$SkipMessage": "Optional informational message emitted when a known storefront does not match."
+    }
   }
 }
