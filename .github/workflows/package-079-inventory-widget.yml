@@ -1,0 +1,31 @@
+name: Package RuneSchema 0.7.9 inventory and widget fixes
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - '.github/workflows/package-079-inventory-widget.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: f6d5757c7b4c98236ea8bbabf94ee1b18cd2b694
+
+      - name: Create source ZIP
+        shell: bash
+        run: |
+          zip -r RuneSchema-0.7.9-inventory-widget-fixes.zip . -x ".git/*"
+
+      - name: Upload source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuneSchema-0.7.9-inventory-widget-fixes
+          path: RuneSchema-0.7.9-inventory-widget-fixes.zip
+          if-no-files-found: error
