@@ -1,0 +1,31 @@
+name: Package RuneSchema 0.7.9 consolidated multiplayer build
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - '.github/workflows/package-079-consolidated-multiplayer.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: 4d99545e9b0090fd5f8b77ef6f6fbb13177cd3db
+
+      - name: Create source ZIP
+        shell: bash
+        run: |
+          zip -r RuneSchema-0.7.9-consolidated-multiplayer-build-ready.zip . -x ".git/*"
+
+      - name: Upload source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuneSchema-0.7.9-consolidated-multiplayer-build-ready
+          path: RuneSchema-0.7.9-consolidated-multiplayer-build-ready.zip
+          if-no-files-found: error
