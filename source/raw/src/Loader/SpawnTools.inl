@@ -57,11 +57,8 @@ namespace {
         auto* tagType=UECustom::UObjectGlobals::StaticFindObject<UScriptStruct*>(nullptr,nullptr,TEXT("/Script/GameplayTags.GameplayTagContainer"));
         if(!tagType)throw std::runtime_error("Inventory tag container unavailable");
         FManagedStruct tags(tagType);struct EmptyTags{uint8_t Bytes[32];} empty{};std::memcpy(&empty,tags.GetData(),sizeof(empty));
-        InventoryGrantPolicy::ScopedBackpackGrant routing(item);
         ActorHelper::FunctionCall give(inventory,givePath);give.Arg(TEXT("ItemData"),item).Arg(TEXT("Count"),count)
             .Arg(TEXT("DurabilityPercentage"),1.0f).Arg(TEXT("GameplayTags"),empty).Invoke();
-        if(routing.SuppressedHotbarRouting())
-            PS::Log<LogLevel::Verbose>(STR("Helpy Game Pass grant forced '{}' through normal inventory routing.\n"),item->GetPathName());
         ActorHelper::FunctionCall afterCall(inventory,countPath);afterCall.Arg(TEXT("ItemData"),item).Invoke();const auto after=afterCall.Result<int32_t>();
         if(!give.Result<bool>() || int64_t(after)-before!=count)throw std::runtime_error("Native inventory grant could not be confirmed");
     }
