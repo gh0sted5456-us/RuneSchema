@@ -25,4 +25,16 @@ int main(int argc,char** argv) {
     require(source.find("registry->Recipes.contains(") != std::string::npos
         && source.find("for (auto* recipe : registeredRecipes)") != std::string::npos,
         "Unregistered recipe IDs can still enter the character unlock set");
+    const auto storeBegin=source.find("DragonWildsRecipeModLoader::PrepareStoreForPlayer");
+    const auto storeEnd=source.find("void DragonWildsRecipeModLoader::OnLoad",storeBegin);
+    require(storeBegin!=std::string::npos && storeEnd!=std::string::npos,
+        "Vendor recipe availability implementation is missing");
+    const auto store=source.substr(storeBegin,storeEnd-storeBegin);
+    require(store.find("registry->Recipes.contains(")==std::string::npos,
+        "Transient vendor recipes still depend on the persistence registry snapshot");
+    require(store.find("RC::to_string(RC::StringType(*id))!=expectedIdentity")!=std::string::npos,
+        "Transient vendor recipes are not checked against their owned deterministic identity");
+    require(store.find("for(const auto& [vendorKey,_]:m_vendorRecipeOwners)")!=std::string::npos
+        && store.find("helper.Remove(&vendorRecipe)")!=std::string::npos,
+        "Previously opened vendor recipes can bleed into another store");
 }
