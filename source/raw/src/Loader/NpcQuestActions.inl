@@ -70,6 +70,7 @@ std::string DragonWildsNpcLoader::RunQuestAction(const DialogueCompletionBinding
         return "Quest abandoned. Its active progress and locations were reset.";
     }
     QuestProgress::Result result;
+    std::string inventoryStatus;
     const auto selectedTier=[&]{const auto index=receipt.EntryIndex();return Quests::SelectRewardTier(quest,index?quest.EntryOptions.at(index-1).Id:std::string{},receipt.Elapsed(),[&](const std::string& id){
         for(const auto& [stage,objectives]:quest.Stages)for(const auto& objective:objectives)
             if(objective.ObjectiveId==id)return native.GetInt(Quests::StageCounter(objective))==objective.Required.Count;
@@ -127,25 +128,15 @@ std::string DragonWildsNpcLoader::RunQuestAction(const DialogueCompletionBinding
             result=QuestProgress::Result::NotReady;
             if(active<quest.Stages.size()) {
                 std::map<std::string,int> amounts;std::vector<const Quests::Definition*> handIns;
-                const auto position=ActorHelper::GetActorLocation(static_cast<AActor*>(player));
-                bool inArea=true;
                 for(bool optional:{false,true})for(size_t i=0;i<quest.Stages[active].second.size();++i) {
                     const auto& objective=quest.Stages[active].second[i];
                     if(objective.Optional!=optional)continue;
                     if(objective.Kill || objective.Acquire || staged.Count(active,i)==objective.Required.Count)continue;
                     if(objective.Optional && DialogueInventory(controller,ActorHelper::ResolveObject(RC::to_generic_string(objective.Required.Item))).Count()<amounts[objective.Required.Item]+objective.Required.Count)continue;
-                    if(objective.Marker && objective.Marker->RadiusMeters) {
-                        const Quests::Stages::Area area{objective.Marker->Position,*objective.Marker->RadiusMeters};
-                        if(!area.Contains({position.X(),position.Y(),position.Z()})) {
-                            if(objective.Optional)continue;
-                            inArea=false;
-                        }
-                    }
                     amounts[objective.Required.Item]+=objective.Required.Count;
                     handIns.push_back(&objective);
                 }
                 if(!handIns.empty())result=receipt.StageExchange([&]{
-                    if(!inArea)return false;
                     for(const auto& [path,count]:amounts)if(DialogueInventory(controller,ActorHelper::ResolveObject(RC::to_generic_string(path))).Count()<count)return false;
                     return true;
                 },[&]{
@@ -185,7 +176,8 @@ std::string DragonWildsNpcLoader::RunQuestAction(const DialogueCompletionBinding
     } else {
         auto* required=ActorHelper::ResolveObject(RC::to_generic_string(quest.Required.Item));
         const DialogueInventory inventory(controller,required);
-        if(inventory.Count()>=quest.Required.Count)receipt.MarkObjectiveSatisfied();
+        const int carried=inventory.Count();
+        if(carried>=quest.Required.Count)receipt.MarkObjectiveSatisfied();
         const auto tierIndex=selectedTier();
         const auto& rewardSpec=Quests::RewardForRun(quest,receipt.Run(),tierIndex);
         auto* reward=ActorHelper::ResolveObject(RC::to_generic_string(rewardSpec.Item));
@@ -199,6 +191,8 @@ std::string DragonWildsNpcLoader::RunQuestAction(const DialogueCompletionBinding
             [&]{return inventory.Take(quest.Required.Count,current);},
             [&]{return rewardInventory.Give(rewardSpec.Count,current);},
             [&]{if(!current())return false;native.SetComplete(false);return current() && state()=="Complete";},tierIndex);
+        if(result==QuestProgress::Result::NotReady || result==QuestProgress::Result::AlreadyActive)
+            inventoryStatus=Quests::InventoryHandInStatus(carried,quest.Required.Count);
     }
     if(!current())throw std::runtime_error("Player or world changed during quest action");
     if(action.QuestAction=="Accept" && (result==QuestProgress::Result::Accepted || result==QuestProgress::Result::AlreadyActive)) {
@@ -220,7 +214,11 @@ std::string DragonWildsNpcLoader::RunQuestAction(const DialogueCompletionBinding
             const auto& objective=quest.Stages[active].second[i];
             if(objective.Hidden)continue;
             if(!message.empty())message+="\n";
-            message+=objective.ObjectiveText+" ("+std::to_string(staged.Count(active,i))+"/"+std::to_string(objective.Required.Count)+")";
+            int visible=staged.Count(active,i);
+            if(!objective.Kill && !objective.Acquire && visible<objective.Required.Count)
+                visible=std::min(objective.Required.Count,DialogueInventory(controller,
+                    ActorHelper::ResolveObject(RC::to_generic_string(objective.Required.Item))).Count());
+            message+=objective.ObjectiveText+" ("+std::to_string(visible)+"/"+std::to_string(objective.Required.Count)+")";
         }
         return message;
     }
@@ -235,6 +233,7 @@ std::string DragonWildsNpcLoader::RunQuestAction(const DialogueCompletionBinding
     if(result==QuestProgress::Result::Uncertain)
         PS::Log<LogLevel::Verbose>(STR("Quest recovery pending: quest='{}', phase={}, run={}, native='{}'. No inventory replay attempted.\n"),
             RC::to_generic_string(quest.Key),receipt.Phase(),receipt.Run(),RC::to_generic_string(state()));
+    if(!inventoryStatus.empty())return inventoryStatus;
     const auto text=result==QuestProgress::Result::NotReady?"Accept the quest first, bring the requested items, and make room for your reward.":
         result==QuestProgress::Result::Uncertain?"This quest exchange needs recovery checks before it can be repeated.":
         result==QuestProgress::Result::AlreadyComplete?(quest.Repeat.Enabled?"This run is complete. Accept again when its repeat schedule allows.":"You have already completed this quest and claimed its reward."):
