@@ -59,14 +59,13 @@ this exact executable build. Do not treat any WinGDK RVA as a Steam equivalent.
 
 ## Save behavior shared across lanes
 
-`/journal`, `/lore`, and `/recipes` register their definitions and unlocks for
-the current session only. They can refer to ordinary persistent item assets;
-the recipe/journal/lore unlock itself is not new permanent character progress.
-Recipes use the native `RecipesUnlockedThatShouldNotPersist` exclusion set.
-Journal/lore use the storefront-validated save bridge to omit RuneSchema
-unlocks, and previously saved orphaned IDs are pruned only after the complete
-registry is available. If that bridge is unavailable, temporary journal
-unlock delivery is withheld rather than written unsafely.
+`/journal` and `/lore` keep their existing transient save behavior. RuneSchema
+`/recipes` use the native persistent `RecipesUnlocked` set once the live
+RecipeData object has a valid PersistenceID. Recipe delivery is not gated by a
+lagging Safe Clean registry snapshot. If a supplying mod is later deleted,
+Safe Clean prunes orphaned recipe PersistenceIDs from character progress.
+Journal/lore continue to use the storefront-validated save bridge to omit
+temporary unlocks.
 
 Quests use the game's native quest registration and save path. Character
 customization and quest save behavior are the two explicit persistence
