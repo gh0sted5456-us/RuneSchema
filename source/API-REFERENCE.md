@@ -37,6 +37,7 @@ The loader recognizes this manifest contract:
   "ApiVersion": 1,
   "EntryPoint": "Example.Plugin.dll",
   "Enabled": true,
+  "MountPaks": true,
   "ConsoleMessage": "Example plugin loaded.",
   "Capabilities": ["example.ready"],
   "Connections": ["example.content"],
@@ -59,6 +60,7 @@ The loader recognizes this manifest contract:
 | `Connections` | no | At most 32 content/bridge tokens published after a successful load. |
 | `Dependencies` | no | Object of plugin ID to expected version, at most 32 entries. Missing or differently versioned optional dependencies are reported without stopping the plugin attempt. |
 | `Required` | legacy | Accepted for compatibility but does not override an explicit disable. Plugins remain optional to RuneSchema core. |
+| `MountPaks` | no | Defaults to `true`. Set `false` for DLL-only plugins; any stale `paks/` content is ignored. |
 
 `PackagedRoot` is rejected. PAKs use the fixed
 `paks/<PackageName>/<same-name>.pak/.ucas/.utoc` layout, and every container
