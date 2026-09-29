@@ -97,8 +97,8 @@ by Dragonwilds. RuneSchema keeps vanilla registry order and appends active
 custom pieces in deterministic `PersistenceID` order, so no separate per-world
 building manifest is required.
 
-Journal/lore and recipe loaders are enabled independently from save
-persistence. The default settings are:
+Loader activation and save handling are separate. The default persistence
+settings are:
 
 ```jsonc
 "persistence": {
@@ -107,11 +107,10 @@ persistence. The default settings are:
 }
 ```
 
-Quest saving is enabled by default. Journal, lore, and recipe definitions and
-unlocks are always session-only; referenced items still use their normal
-paths and persistence IDs. Old `persistence.journal` and
-`persistence.recipes` settings are ignored. Loader activation remains under
-`loaders`.
+Valid RuneSchema recipe unlocks may persist once their live RecipeData has a
+stable PersistenceID. Generated vendor recipes remain transient. Journal and
+lore definitions load normally and Safe Clean removes orphaned RuneSchema
+identities when their supplying content is no longer installed.
 
 With `characterCustomization` off, `/assets`, `/raw`, and character-option
 table extensions still load, but automatic appearance assignments authored in
@@ -134,6 +133,8 @@ a selection through the vanilla character editor remains a native game action.
 
 The mod directory name is the owner namespace. References may use a local ID
 inside the same mod or `OtherMod:Id` for an explicit cross-mod reference.
+
+RuneSchema content uses one definition in every network mode. Do not create separate single-player and multiplayer variants. The runtime chooses server authority or client presentation from the current world state.
 
 ## Ordering
 
@@ -186,8 +187,9 @@ history is involved.
 These folders solve different problems:
 
 - `/raw` creates or patches supported DataTable rows. It is data authoring.
-- `/registry` describes authority actions and client presentation for content
-  that both sides already have. It is a multiplayer bridge.
+- `/registry` pairs supported server actions with client presentation when a
+  feature needs an explicit network bridge. Normal RuneSchema content does not
+  need a multiplayer flag.
 
 Do not place DataTable patches in `/registry`, and do not use `/raw` as a
 replacement for spell or presentation synchronization.
@@ -279,10 +281,10 @@ unless that loader explicitly supports auto-reload.
 1. Start with one mod and one definition.
 2. Confirm the storefront line and loader announcement in `UE4SS.log`.
 3. Confirm every cooked path resolves.
-4. Test creation, save, reload, and removal in single player.
-5. Test a listen server with one client.
-6. Test a dedicated server if the feature is intended for one.
-7. Remove or disable the mod and verify only its declared or RuneSchema-owned
-   state is cleaned.
+4. Test creation, save, reload, and removal.
+5. If the mod is multiplayer-facing, test a host and client.
+6. Test a dedicated server when the feature depends on one.
+7. Remove or disable the mod and verify Safe Clean removes only unresolved
+   RuneSchema state.
 
 Do not use a production save for first-pass loader testing.
