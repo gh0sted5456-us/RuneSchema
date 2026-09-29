@@ -1,8 +1,10 @@
 // Restores the existing Game Pass / WinGDK Edit Appearance control.
-// The target widgets and native function already exist in the cooked game.
+// Steam/GOG already exposes the native flow, so the runtime rule is skipped there.
 {
   "/Game/UI/MainMenu/WBP_MainMenu_CharacterSelect": {
     "$RuntimeWidget": {
+      "$Storefront": "GamePass",
+      "$SkipMessage": "No need for this mod, please uninstall.",
       "Character.EditAppearanceButton": {
         "Visibility": "Visible",
         "bIsEnabled": true,
