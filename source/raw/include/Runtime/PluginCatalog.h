@@ -31,7 +31,14 @@ inline std::vector<fs::path> PakDirectories(const Plugin& plugin) {
     for(const auto& package:fs::directory_iterator(plugin.PaksRoot,fs::directory_options::skip_permission_denied,error)) {
         if(error)throw std::runtime_error("Unable to enumerate plugin paks: "+plugin.Id);
         if(package.is_symlink(error))throw std::runtime_error("Symlinks are not allowed under plugin paks: "+plugin.Id);
-        if(!package.is_directory(error))throw std::runtime_error("Only named package directories are allowed directly under paks/: "+plugin.Id);
+        if(!package.is_directory(error)) {
+            if(!package.is_regular_file(error))continue;
+            auto extension=package.path().extension().wstring();
+            std::transform(extension.begin(),extension.end(),extension.begin(),::towlower);
+            if(extension==L".pak"||extension==L".ucas"||extension==L".utoc")
+                throw std::runtime_error("Container files must be inside paks/<PackageName>/: "+plugin.Id);
+            continue; // Mod-manager markers and unrelated files are not plugin content.
+        }
         std::map<fs::path,uint8_t> triplets;
         for(const auto& file:fs::directory_iterator(package.path(),fs::directory_options::skip_permission_denied,error)) {
             if(error)throw std::runtime_error("Unable to enumerate plugin package: "+plugin.Id);
