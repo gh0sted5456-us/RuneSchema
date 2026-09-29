@@ -57,3 +57,17 @@ Pushes to this branch run the isolated `runtime-widget-v08-contract` on Windows.
 The lane intentionally avoids the full UE4SS bootstrap because the pinned UE4SS
 commit currently references the retired `Re-UE4SS/UEPseudo` submodule; that
 external dependency failure is unrelated to the 0.8 runtime-widget contract.
+
+## UE4SS source bootstrap
+
+The 0.8 builder now prepares the pinned UE4SS checkout before CMake configure.
+UE4SS's `UEPseudo` submodule is private, so local source builders must connect
+their GitHub account to Epic Games, accept the Epic organization invitation,
+and authenticate Git HTTPS. The builder rewrites UE4SS's SSH submodule URLs to
+HTTPS, validates UEPseudo access up front, initializes the pinned submodules, and
+passes the prepared tree through `FETCHCONTENT_SOURCE_DIR_UE4SS`.
+
+This keeps private-repository authentication out of CMake's nested FetchContent
+step and gives a direct setup error when the account has not been authorized.
+The isolated 0.8 contract workflow remains intentionally independent of the
+private UEPseudo repository.

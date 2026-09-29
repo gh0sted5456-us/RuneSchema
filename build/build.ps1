@@ -17,6 +17,9 @@ $CleanBase = Join-Path $DependencyCache 'runtime-template'
 $BuildDependencyArchive = Join-Path $DependencyCache 'RuneSchema-BuildDependencies-experimental.zip'
 $BuildDependencyUrl = 'https://github.com/gh0sted5456-us/RuneSchema/releases/download/experimental-build-deps/RuneSchema-BuildDependencies-experimental.zip'
 $BuildDependencySha256 = '11f5eba4403c24b8085976176af0a20e0f298468e9c52fabaaa99349818cbd2c'
+$UE4SSSource = Join-Path $DependencyCache 'ue4ss-source'
+$UE4SSRepository = 'https://github.com/UE4SS-RE/RE-UE4SS.git'
+$UEPseudoRepository = 'https://github.com/Re-UE4SS/UEPseudo.git'
 $BuildCache = Join-Path $PSScriptRoot 'cache'
 $DistRoot = Join-Path $BuildRoot 'dist'
 $LogRoot = Join-Path $PSScriptRoot 'logs'
@@ -104,7 +107,7 @@ try {
         & $Exe @Arguments
         if ($LASTEXITCODE) { throw "$What failed (exit $LASTEXITCODE)." }
     }
-    function Get-ConfigureFingerprint([string]$SourceDirectory) {
+    function Get-ConfigureFingerprint([string]$SourceDirectory, [string[]]$ConfigureArguments = @()) {
         $sha = [Security.Cryptography.SHA256]::Create()
         try {
             $builder = [Text.StringBuilder]::new()
@@ -131,6 +134,11 @@ try {
                     }
             }
 
+            [void]$builder.AppendLine('--- configure arguments ---')
+            foreach ($argument in $ConfigureArguments) {
+                [void]$builder.AppendLine($argument)
+            }
+
             $bytes = [Text.Encoding]::UTF8.GetBytes($builder.ToString())
             $hashBytes = $sha.ComputeHash($bytes)
             return (($hashBytes | ForEach-Object { $_.ToString('x2') }) -join '')
@@ -146,7 +154,7 @@ try {
     ) {
         $stamp = Join-Path $BuildDirectory '.runeschema-configure.sha256'
         $ninjaFile = Join-Path $BuildDirectory 'build.ninja'
-        $fingerprint = Get-ConfigureFingerprint $SourceDirectory
+        $fingerprint = Get-ConfigureFingerprint $SourceDirectory $ConfigureArguments
         $prior = if (Test-Path -LiteralPath $stamp -PathType Leaf) {
             (Get-Content -LiteralPath $stamp -Raw).Trim()
         } else { '' }
@@ -181,9 +189,17 @@ try {
         [IO.Directory]::Delete($extended, $true)
     }
     function Initialize-GitHubTransport {
-        # Fetch public UE4SS dependencies over HTTPS.
-        $env:GIT_TERMINAL_PROMPT = '0'
-        $env:GCM_INTERACTIVE = 'Never'
+        # UE4SS itself is public, but its UEPseudo submodule is private and
+        # requires the builder's GitHub account to have accepted the Epic Games
+        # organization invitation. Rewrite UE4SS's SSH submodule URLs to HTTPS
+        # so normal Git Credential Manager authentication works on Windows.
+        if ($env:GITHUB_ACTIONS -eq 'true') {
+            $env:GIT_TERMINAL_PROMPT = '0'
+            $env:GCM_INTERACTIVE = 'Never'
+        } else {
+            Remove-Item Env:GIT_TERMINAL_PROMPT -ErrorAction SilentlyContinue
+            Remove-Item Env:GCM_INTERACTIVE -ErrorAction SilentlyContinue
+        }
         $env:GIT_CONFIG_COUNT = '3'
         $env:GIT_CONFIG_KEY_0 = 'url.https://github.com/.insteadOf'
         $env:GIT_CONFIG_VALUE_0 = 'git@github.com:'
@@ -191,7 +207,74 @@ try {
         $env:GIT_CONFIG_VALUE_1 = 'ssh://git@github.com/'
         $env:GIT_CONFIG_KEY_2 = 'core.longpaths'
         $env:GIT_CONFIG_VALUE_2 = 'true'
-        Invoke-Checked 'git.exe' @('ls-remote', '--exit-code', 'https://github.com/UE4SS-RE/RE-UE4SS.git', 'HEAD') 'GitHub connectivity check'
+        Invoke-Checked 'git.exe' @('ls-remote', '--exit-code', $UE4SSRepository, 'HEAD') 'GitHub connectivity check'
+    }
+    function Get-UE4SSPinnedCommit {
+        $cmakeFile = Join-Path $RawSource 'CMakeLists.txt'
+        $text = Get-Content -LiteralPath $cmakeFile -Raw
+        $match = [regex]::Match($text, 'set\(RUNESCHEMA_UE4SS_TAG\s+"([0-9a-fA-F]{40})"')
+        if (-not $match.Success) {
+            throw 'Could not read RUNESCHEMA_UE4SS_TAG from source\raw\CMakeLists.txt.'
+        }
+        return $match.Groups[1].Value.ToLowerInvariant()
+    }
+    function Assert-UEPseudoAccess {
+        & git.exe ls-remote --exit-code $UEPseudoRepository HEAD *> $null
+        if ($LASTEXITCODE -eq 0) { return }
+
+        $message = @'
+RuneSchema cannot access UE4SS's private UEPseudo dependency.
+
+UE4SS requires source builders to:
+  1. Connect the same GitHub account to an Epic Games account.
+  2. Accept the Epic Games organization invitation on GitHub.
+  3. Sign in to GitHub through Git Credential Manager (HTTPS).
+
+After linking Epic/GitHub, check:
+  https://github.com/settings/organizations
+
+Then run Build RuneSchema.bat again.
+
+For CI, the workflow token must separately have access to UEPseudo; the normal
+GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
+'@
+        throw $message.Trim()
+    }
+    function Ensure-UE4SSSource {
+        $pin = Get-UE4SSPinnedCommit
+        $gitDirectory = Join-Path $UE4SSSource '.git'
+
+        if (-not (Test-Path -LiteralPath $gitDirectory -PathType Container)) {
+            if (Test-Path -LiteralPath $UE4SSSource) {
+                Remove-SafeTree $UE4SSSource
+            }
+            New-Item -ItemType Directory -Path $DependencyCache -Force | Out-Null
+            Write-Host "Preparing pinned UE4SS source ($pin)..." -ForegroundColor Cyan
+            Invoke-Checked 'git.exe' @('clone', '--filter=blob:none', '--no-checkout', $UE4SSRepository, $UE4SSSource) 'UE4SS source clone'
+        }
+
+        & git.exe -C $UE4SSSource cat-file -e "$pin^{commit}" 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Invoke-Checked 'git.exe' @('-C', $UE4SSSource, 'fetch', '--no-tags', 'origin', $pin) 'UE4SS pinned commit fetch'
+        }
+        Invoke-Checked 'git.exe' @('-C', $UE4SSSource, 'checkout', '--detach', '--force', $pin) 'UE4SS pinned checkout'
+        Invoke-Checked 'git.exe' @('-C', $UE4SSSource, 'submodule', 'sync', '--recursive') 'UE4SS submodule sync'
+
+        Assert-UEPseudoAccess
+        Write-Host 'Initializing UE4SS private/public submodules with the authenticated Git session...' -ForegroundColor Cyan
+        Invoke-Checked 'git.exe' @('-C', $UE4SSSource, 'submodule', 'update', '--init', '--recursive') 'UE4SS submodule initialization'
+
+        $pseudo = Join-Path $UE4SSSource 'deps\first\Unreal'
+        $patterns = Join-Path $UE4SSSource 'deps\first\patternsleuth'
+        if (-not (Test-Path -LiteralPath (Join-Path $pseudo '.git')) -and
+            -not (Test-Path -LiteralPath (Join-Path $pseudo 'CMakeLists.txt') -PathType Leaf)) {
+            throw 'UE4SS UEPseudo submodule did not initialize correctly.'
+        }
+        if (-not (Test-Path -LiteralPath $patterns -PathType Container)) {
+            throw 'UE4SS patternsleuth submodule did not initialize correctly.'
+        }
+        Write-Host "UE4SS source ready: $UE4SSSource" -ForegroundColor Green
+        return $pin
     }
     function Compress-DllBestEffort([string]$Dll) {
         $backup = "$Dll.uncompressed"
@@ -270,15 +353,17 @@ try {
         $ninja = Find-Exe 'ninja.exe' $ninjaHints
         if (-not $ninja) { throw 'Ninja was not found (Visual Studio C++ CMake tools include it).'}
         $env:PATH = "$(Split-Path $ninja);$env:PATH"
-        $ue4ssCheckout = Join-Path $build '_deps\ue4ss-src'
-        $updatesDisconnected = if (Test-Path -LiteralPath $ue4ssCheckout -PathType Container) { 'ON' } else { 'OFF' }
+        if (-not (Test-Path -LiteralPath $UE4SSSource -PathType Container)) {
+            throw 'Prepared UE4SS source is missing; Ensure-UE4SSSource must run before CMake configure.'
+        }
         $configureArgs = @(
             '-S', $RawSource,
             '-B', $build,
             '-G', $generator,
             "-DCMAKE_BUILD_TYPE=$Configuration",
             '-DFETCHCONTENT_FULLY_DISCONNECTED=OFF',
-            "-DFETCHCONTENT_UPDATES_DISCONNECTED=$updatesDisconnected",
+            '-DFETCHCONTENT_UPDATES_DISCONNECTED=ON',
+            "-DFETCHCONTENT_SOURCE_DIR_UE4SS=$UE4SSSource",
             '-DCMAKE_SUPPRESS_REGENERATION=ON',
             '-Wno-author',
             '-Wno-deprecated'
@@ -433,6 +518,8 @@ try {
     if (-not $cmake -or -not $git) { throw 'CMake and Git are required and must be on PATH.' }
     Initialize-MsvcEnvironment
     Initialize-GitHubTransport
+    $ue4ssPin = Ensure-UE4SSSource
+    Write-Host "RuneSchema will compile against pinned UE4SS $ue4ssPin." -ForegroundColor DarkCyan
     if ($Clean -and -not $PluginOnly) {
         foreach ($path in @($BuildCache, $DistRoot)) {
             Remove-SafeTree $path

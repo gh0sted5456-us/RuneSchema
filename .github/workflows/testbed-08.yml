@@ -26,10 +26,23 @@ jobs:
         shell: pwsh
         run: cmake -S source/raw/core -B build/cache/contracts-08 -G Ninja -DRUNESCHEMA_JSON_INCLUDE_DIR="$PWD/.cache/nlohmann-json/include" -DCMAKE_BUILD_TYPE=Release -DCMAKE_SUPPRESS_REGENERATION=ON
 
-      - name: Build 0.8 runtime-widget contract
+      - name: Build 0.8 contracts
         shell: pwsh
-        run: cmake --build build/cache/contracts-08 --target runtime-widget-v08-contract
+        run: cmake --build build/cache/contracts-08 --target runtime-widget-v08-contract ue4ss-bootstrap-contract
 
-      - name: Run 0.8 runtime-widget contract
+      - name: Run 0.8 contracts
         shell: pwsh
-        run: ctest --test-dir build/cache/contracts-08 --output-on-failure -R "^runtime-widget-v08-contract$"
+        run: ctest --test-dir build/cache/contracts-08 --output-on-failure -R "^(runtime-widget-v08-contract|ue4ss-bootstrap-contract)$"
+
+      - name: Package 0.8 demo mod
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path source/extras/examples/RuntimeWidget08/RuneSchema08Demo -DestinationPath dist/RuneSchema08Demo.zip -Force
+
+      - name: Upload 0.8 demo mod
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuneSchema08Demo
+          path: dist/RuneSchema08Demo.zip
+          if-no-files-found: error

@@ -1,0 +1,74 @@
+{
+  "/Game/UI/MainMenu/WBP_MainMenu_CharacterSelect": {
+    "$RuntimeWidget": {
+      "Character.EditAppearanceButton": {
+        "$When": "Resolved",
+        "Visibility": "Visible",
+        "bIsEnabled": true,
+        "$Call": {
+          "Function": "SetRenderOpacity",
+          "Args": {
+            "InOpacity": 1.0
+          }
+        }
+      }
+    },
+    "$RuntimeUI": {
+      "Schema08Status": {
+        "ZOrder": 95,
+        "$When": "Resolved",
+        "Root": {
+          "Type": "CanvasPanel",
+          "Name": "Schema08Canvas",
+          "Children": [
+            {
+              "Type": "Border",
+              "Name": "Schema08Border",
+              "BrushColor": {
+                "R": 0.03,
+                "G": 0.03,
+                "B": 0.03,
+                "A": 0.82
+              },
+              "Padding": {
+                "Left": 14,
+                "Top": 8,
+                "Right": 14,
+                "Bottom": 8
+              },
+              "Slot": {
+                "LayoutData": {
+                  "Offsets": {
+                    "Left": -220.0,
+                    "Top": 34.0,
+                    "Right": 440.0,
+                    "Bottom": 48.0
+                  },
+                  "Anchors": {
+                    "Minimum": { "X": 0.5, "Y": 0.0 },
+                    "Maximum": { "X": 0.5, "Y": 0.0 }
+                  },
+                  "Alignment": { "X": 0.0, "Y": 0.0 }
+                },
+                "bAutoSize": false
+              },
+              "Children": [
+                {
+                  "Type": "TextBlock",
+                  "Name": "Schema08Text",
+                  "Text": "RuneSchema 0.8",
+                  "$Call": {
+                    "Function": "SetText",
+                    "Args": {
+                      "InText": "RuneSchema 0.8 Runtime UI Active"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}
