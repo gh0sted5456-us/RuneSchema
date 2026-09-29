@@ -586,11 +586,11 @@ namespace DragonWilds {
             throw std::runtime_error("Current shop player has no valid world-owned ProgressComponent");
         std::vector<UObject*> recipes;
         nlohmann::json skipped=nlohmann::json::array();
-        const auto registry=PS::SaveCleanup::ReadRegistry();
         size_t index=0;
         for(const auto& item:items) {
             const auto slot=item.value("_RecipeSlot",std::to_string(index++));
-            const auto key=RC::to_generic_string("RSVendor_"+VendorOffers::Identity(owner,slot));
+            const auto expectedIdentity=VendorOffers::Identity(owner,slot);
+            const auto key=RC::to_generic_string("RSVendor_"+expectedIdentity);
             const auto found=m_recipes.find(key);
             const auto owned=m_vendorRecipeOwners.find(key);
             if(found==m_recipes.end() || owned==m_vendorRecipeOwners.end() || owned->second!=owner+":"+slot
@@ -602,8 +602,13 @@ namespace DragonWilds {
                 found->second->GetClassPrivate(),TEXT("PersistenceID")));
             const auto id=idProperty?idProperty->GetPropertyValue(
                 idProperty->ContainerPtrToValuePtr<void>(found->second)):FString{};
-            if(!registry || id.GetCharArray().Num()<=1
-                || !registry->Recipes.contains(RC::to_string(RC::StringType(*id)))) {
+            // Vendor recipes are owned, session-only objects created after the
+            // settled persistence snapshot. Requiring that snapshot here makes
+            // normal shops empty even though the runtime recipe is valid.
+            // Ownership, lease, and exact deterministic identity are the
+            // authority for this transient path.
+            if(id.GetCharArray().Num()<=1
+                || RC::to_string(RC::StringType(*id))!=expectedIdentity) {
                 skipped.push_back(RC::to_string(key));
                 continue;
             }
@@ -630,11 +635,18 @@ namespace DragonWilds {
         }
         for(const auto& [name,property]:sets) {
             UECustom::FScriptSetHelper helper(property,property->ContainerPtrToValuePtr<void>(progress));
-            size_t before=0,after=0;
+            size_t before=0,after=0,removed=0;
             for(auto* recipe:recipes)if(helper.Contains(&recipe))++before;
+            // The native menu consults the player's unlock set as well as the
+            // station row. Remove offers belonging to previously opened
+            // RuneSchema vendors so stock cannot bleed between stores or
+            // category tabs. Authored and vanilla recipes are untouched.
+            for(const auto& [vendorKey,_]:m_vendorRecipeOwners)
+                if(auto* vendorRecipe=LiveRecipe(vendorKey);
+                    vendorRecipe && helper.Remove(&vendorRecipe))++removed;
             for(auto* recipe:recipes)helper.Add(&recipe);
             for(auto* recipe:recipes)if(helper.Contains(&recipe))++after;
-            report["Sets"][RC::to_string(name)]={{"Before",before},{"After",after}};
+            report["Sets"][RC::to_string(name)]={{"Before",before},{"RemovedPreviousVendorOffers",removed},{"After",after}};
             if(after!=recipes.size())throw std::runtime_error("Store recipe availability verification failed");
         }
         return report;
