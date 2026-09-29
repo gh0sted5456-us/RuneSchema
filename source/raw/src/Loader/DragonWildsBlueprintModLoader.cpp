@@ -1,4 +1,5 @@
 #include <regex>
+#include <cctype>
 #include <Windows.h>
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
