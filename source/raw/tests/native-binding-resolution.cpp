@@ -40,6 +40,14 @@ int main(int argc, char** argv)
         "late Unreal-ready binding retry exists");
     Check(loader.find("normal GameInstance loading continues") != std::string::npos,
         "missing early binding is feature-scoped");
+    Check(loader.find("IsDebugLoggingEnabled") == std::string::npos,
+        "advanced logging never gates loader startup or execution");
+    const auto autoReloadSetup = loader.find("void DragonWildsMainLoader::SetupAutoReload()");
+    const auto autoReloadGate = loader.find("IsAutoReloadEnabled()");
+    Check(autoReloadSetup != std::string::npos && autoReloadGate > autoReloadSetup,
+        "auto reload setting gates only watcher setup, not initial loader startup");
+    Check(loader.find("WarnAboutUnknownFolders") == std::string::npos,
+        "unknown mod-manager folders are not linted during normal mod loading");
     Check(loader.find("Unable to initialize RuneSchema core, signature for UDataTable::Serialize") == std::string::npos,
         "obsolete fatal diagnostic removed");
     Check(loadOrder.find("create_directories(path.parent_path()") != std::string::npos,
