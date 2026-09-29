@@ -19,6 +19,7 @@
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "Core/JsonPatchDirective.h"
 #include "Loader/Spawn/RuntimeSupport.h"
+#include "Runtime/Storefront.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -36,6 +37,160 @@ namespace DragonWilds {
                 || !(memory.Protect&(PAGE_EXECUTE|PAGE_EXECUTE_READ|PAGE_EXECUTE_READWRITE|PAGE_EXECUTE_WRITECOPY)))
                 throw std::runtime_error("Blueprint lifecycle target is not executable: "+RC::to_string(name));
             return target;
+        }
+
+        bool RuntimePropertyTypeCompatible(FProperty* delegateProperty, FProperty* functionProperty)
+        {
+            if (!delegateProperty || !functionProperty) return delegateProperty == functionProperty;
+            if (delegateProperty->GetClass() != functionProperty->GetClass()
+                || delegateProperty->GetArrayDim() != functionProperty->GetArrayDim())
+                return false;
+
+            const auto sameFlag = [&](EPropertyFlags flag) {
+                return delegateProperty->HasAnyPropertyFlags(flag)
+                    == functionProperty->HasAnyPropertyFlags(flag);
+            };
+            if (!sameFlag(CPF_OutParm)
+                || !sameFlag(CPF_ReferenceParm)
+                || !sameFlag(CPF_ConstParm))
+                return false;
+
+            if (auto* left = CastField<FStructProperty>(delegateProperty))
+            {
+                auto* right = CastField<FStructProperty>(functionProperty);
+                return right && left->GetStruct() == right->GetStruct();
+            }
+
+            if (auto* left = CastField<FClassProperty>(delegateProperty))
+            {
+                auto* right = CastField<FClassProperty>(functionProperty);
+                return right
+                    && left->GetMetaClass().Get() == right->GetMetaClass().Get();
+            }
+
+            if (auto* left = CastField<FSoftClassProperty>(delegateProperty))
+            {
+                auto* right = CastField<FSoftClassProperty>(functionProperty);
+                return right
+                    && left->GetMetaClass().Get() == right->GetMetaClass().Get();
+            }
+
+            if (auto* left = CastField<FObjectPropertyBase>(delegateProperty))
+            {
+                auto* right = CastField<FObjectPropertyBase>(functionProperty);
+                return right
+                    && left->GetPropertyClass().Get() == right->GetPropertyClass().Get();
+            }
+
+            if (auto* left = CastField<FEnumProperty>(delegateProperty))
+            {
+                auto* right = CastField<FEnumProperty>(functionProperty);
+                return right && left->GetEnum() == right->GetEnum();
+            }
+
+            if (auto* left = CastField<FByteProperty>(delegateProperty))
+            {
+                auto* right = CastField<FByteProperty>(functionProperty);
+                return right && left->GetEnum().Get() == right->GetEnum().Get();
+            }
+
+            if (auto* left = CastField<FArrayProperty>(delegateProperty))
+            {
+                auto* right = CastField<FArrayProperty>(functionProperty);
+                return right && RuntimePropertyTypeCompatible(left->GetInner(), right->GetInner());
+            }
+
+            if (auto* left = CastField<FSetProperty>(delegateProperty))
+            {
+                auto* right = CastField<FSetProperty>(functionProperty);
+                return right && RuntimePropertyTypeCompatible(
+                    left->GetElementProp(), right->GetElementProp());
+            }
+
+            if (auto* left = CastField<FMapProperty>(delegateProperty))
+            {
+                auto* right = CastField<FMapProperty>(functionProperty);
+                return right
+                    && RuntimePropertyTypeCompatible(left->GetKeyProp(), right->GetKeyProp())
+                    && RuntimePropertyTypeCompatible(left->GetValueProp(), right->GetValueProp());
+            }
+
+            // Primitive reflected property classes already matched above. Raw
+            // byte offsets and ParmsSize are deliberately not part of delegate
+            // compatibility because Unreal may pad equivalent signatures
+            // differently between generated functions and delegate signatures.
+            return true;
+        }
+
+        std::vector<FProperty*> RuntimeCallableParameters(UFunction* function)
+        {
+            std::vector<FProperty*> result;
+            if (!function) return result;
+            for (auto* property : TFieldRange<FProperty>(
+                function, EFieldIterationFlags::Default))
+            {
+                if (property->HasAnyPropertyFlags(CPF_Parm)
+                    && !property->HasAnyPropertyFlags(CPF_ReturnParm))
+                    result.push_back(property);
+            }
+            return result;
+        }
+
+        bool RuntimeCallableCompatible(UFunction* delegateSignature, UFunction* targetFunction)
+        {
+            if (!delegateSignature || !targetFunction) return false;
+
+            const auto delegateParameters = RuntimeCallableParameters(delegateSignature);
+            const auto targetParameters = RuntimeCallableParameters(targetFunction);
+            if (delegateParameters.size() != targetParameters.size()) return false;
+
+            for (size_t index = 0; index < delegateParameters.size(); ++index)
+                if (!RuntimePropertyTypeCompatible(
+                    delegateParameters[index], targetParameters[index]))
+                    return false;
+
+            auto* delegateReturn = delegateSignature->GetReturnProperty();
+            auto* targetReturn = targetFunction->GetReturnProperty();
+            if (static_cast<bool>(delegateReturn) != static_cast<bool>(targetReturn))
+                return false;
+            return !delegateReturn
+                || RuntimePropertyTypeCompatible(delegateReturn, targetReturn);
+        }
+
+        bool RuntimeStorefrontTokenMatches(std::string token)
+        {
+            std::transform(token.begin(), token.end(), token.begin(),
+                [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+
+            const auto storefront = PS::Storefront::Current();
+            if (token == "any" || token == "all" || token == "universal") return true;
+            if (token == "gamepass" || token == "wingdk" || token == "xbox")
+                return storefront == PS::Storefront::Kind::GamePass;
+            if (token == "steam" || token == "steamgog" || token == "gog" || token == "win64")
+                return storefront == PS::Storefront::Kind::SteamGog;
+            if (token == "unknown")
+                return storefront == PS::Storefront::Kind::Unknown;
+            throw std::runtime_error("Blueprint $RuntimeWidget $Storefront contains an unsupported value");
+        }
+
+        bool RuntimeStorefrontMatches(const nlohmann::json& value)
+        {
+            if (value.is_string())
+                return RuntimeStorefrontTokenMatches(value.get<std::string>());
+            if (value.is_array())
+            {
+                if (value.empty())
+                    throw std::runtime_error("Blueprint $RuntimeWidget $Storefront array cannot be empty");
+                for (const auto& entry : value)
+                {
+                    if (!entry.is_string())
+                        throw std::runtime_error("Blueprint $RuntimeWidget $Storefront array must contain strings");
+                    if (RuntimeStorefrontTokenMatches(entry.get<std::string>()))
+                        return true;
+                }
+                return false;
+            }
+            throw std::runtime_error("Blueprint $RuntimeWidget $Storefront must be a string or array");
         }
     }
     DragonWildsBlueprintModLoader::DragonWildsBlueprintModLoader() : DragonWildsModLoaderBase("blueprints")
@@ -371,11 +526,27 @@ namespace DragonWilds {
                 throw std::runtime_error("Blueprint $RuntimeWidget requires a class name ending _C or a /Game/ class path");
         }
 
+        if (const auto storefront = runtimeWidgets.find("$Storefront");
+            storefront != runtimeWidgets.end() && !RuntimeStorefrontMatches(*storefront))
+        {
+            const auto message = runtimeWidgets.value("$SkipMessage", std::string{});
+            if (!message.empty() && PS::Storefront::Current() != PS::Storefront::Kind::Unknown)
+                PS::Log<LogLevel::Normal>(STR("[{}] {}\n"), modName, PS::ToWideSafe(message.c_str()));
+            else
+                PS::Log<LogLevel::Verbose>(
+                    STR("Blueprint $RuntimeWidget rules from '{}' skipped on storefront {}.\n"),
+                    modName,
+                    PS::ToWideSafe(PS::Storefront::Name(PS::Storefront::Current())));
+            return;
+        }
+
         const auto ownerClass = FName(to_generic_string(classPath), FNAME_Add);
         for (const auto& [widgetPath, ruleData] : runtimeWidgets.items())
         {
+            if (widgetPath == "$Storefront" || widgetPath == "$SkipMessage")
+                continue;
             if (widgetPath.empty() || widgetPath.starts_with("$"))
-                throw std::runtime_error("Blueprint $RuntimeWidget widget path was invalid");
+                throw std::runtime_error("Blueprint $RuntimeWidget metadata/widget path was invalid");
             if (!ruleData.is_object())
                 throw std::runtime_error("Blueprint $RuntimeWidget rule must be an object");
 
@@ -511,10 +682,8 @@ namespace DragonWilds {
         auto* signature = signaturePtr.Get();
         if (!signature)
             throw std::runtime_error("Blueprint $RuntimeWidget delegate signature was unavailable");
-        if (signature->GetParmsSize() != targetFunction->GetParmsSize()
-            || static_cast<bool>(signature->GetReturnProperty())
-                != static_cast<bool>(targetFunction->GetReturnProperty()))
-            throw std::runtime_error("Blueprint $RuntimeWidget delegate/function signatures do not match");
+        if (!RuntimeCallableCompatible(signature, targetFunction))
+            throw std::runtime_error("Blueprint $RuntimeWidget delegate/function reflected parameters do not match");
 
         void* propertyValue = delegateProperty->ContainerPtrToValuePtr<void>(widget);
         auto* delegateValue = delegateProperty->GetMulticastDelegate(propertyValue);
