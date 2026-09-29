@@ -1,7 +1,6 @@
 {
   "Id": "quantum_banker",
   "Type": "Prop",
-  "Multiplayer": true,
   "DisplayName": "Quantum Banker",
   "DialogueID": "quantum_banker_story",
   "VendorID": "quantum_exchange",
