@@ -18,3 +18,20 @@ If the normal character-select UI appears but the status panel does not, inspect
 the RuneSchema log for `$RuntimeUI` diagnostics. If the panel appears, the
 transient UMG construction, child/slot assembly, reflected property writes,
 viewport attach, and reflected function call path all executed.
+
+
+## Gamepass WidgetTree discovery test
+
+This revision replaces the direct `Character.EditAppearanceButton` runtime path
+with a scoped `$Find` rule:
+
+```jsonc
+"$Find": {
+  "Scope": "WidgetTree",
+  "Name": "EditAppearanceButton"
+}
+```
+
+The status banner is unchanged. On Gamepass, the next pass is successful if the
+existing Edit Appearance button becomes visible/enabled while the
+`RuneSchema 0.8 Runtime UI Active` banner still appears.
