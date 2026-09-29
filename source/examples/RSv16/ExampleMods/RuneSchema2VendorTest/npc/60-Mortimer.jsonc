@@ -1,6 +1,5 @@
 {
   "Id": "mortimer_debt_collector",
-  "Multiplayer": true,
   "Type": "Human",
   "DisplayName": "Mortimer, Undertaker of Unfinished Business",
   "DialogueID": "mortimer_collection",
