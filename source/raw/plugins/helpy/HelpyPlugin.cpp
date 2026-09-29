@@ -19,7 +19,7 @@
 namespace {
 HMODULE Module{};
 constexpr RuneSchemaPluginDescriptor Descriptor{sizeof(RuneSchemaPluginDescriptor),RUNESCHEMA_PLUGIN_API_VERSION,
-    "RuneSchema.Helpy","RuneSchema Helpy","0.7.5.9"};
+    "RuneSchema.Helpy","RuneSchema Helpy","0.7.9"};
 nlohmann::json EmbeddedCatalog() {
     nlohmann::json items=nlohmann::json::array(),definitions=nlohmann::json::array();
     for(const auto& entry:PS::F2Catalog::BundledPaths()) {
