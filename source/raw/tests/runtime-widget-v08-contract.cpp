@@ -52,6 +52,13 @@ int main(int argc, char** argv) {
     Require(source, "RF_ClassDefaultObject | RF_ArchetypeObject");
     Require(source, "Blueprint $RuntimeWidget $Find matched more than one live object");
     Require(source, "m_runtimeWidgetObservedTargets[discovered]");
+    Require(source, "RC::Unreal::UObjectGlobals::ForEachUObject");
+    Require(source, "SpawnRuntime::CallWorldContextGetter");
+    Require(source, "/Script/Engine.GameplayStatics:GetGameInstance");
+    if (source.find("UECustom::UObjectGlobals::ForEachUObject") != std::string::npos)
+        throw std::runtime_error("RuneSchema .8 must use RC::Unreal::UObjectGlobals::ForEachUObject");
+    if (source.find("OwningGameInstance") != std::string::npos)
+        throw std::runtime_error("RuneSchema .8 RuntimeUI must use the world-context GameInstance helper");
     Require(source, "Blueprint $RuntimeUI block exceeds the 16-widget safety limit");
     Require(source, "Blueprint $RuntimeUI tree exceeds the 64-node safety limit");
     Require(source, "/Script/UMG.UserWidget");

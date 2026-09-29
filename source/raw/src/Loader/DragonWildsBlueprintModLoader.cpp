@@ -932,7 +932,7 @@ namespace DragonWilds {
                 const auto wantedName = FName(widgetName, FNAME_Find);
                 if (wantedName != NAME_None)
                 {
-                    UECustom::UObjectGlobals::ForEachUObject(
+                    RC::Unreal::UObjectGlobals::ForEachUObject(
                         [&](UObject* candidate, int32_t, int32_t) -> LoopAction {
                             if (!RuntimeObjectUsable(candidate)
                                 || candidate->GetFName() != wantedName
@@ -1434,20 +1434,16 @@ namespace DragonWilds {
 
         try
         {
-            auto* world = owner ? owner->GetWorld() : nullptr;
-            if (!world)
+            if (!owner)
             {
                 m_runtimeUiActiveRules.erase(key);
                 return;
             }
 
-            auto* gameInstanceProperty = CastField<FObjectPropertyBase>(
-                PropertyHelper::GetPropertyByName(
-                    world->GetClassPrivate(), TEXT("OwningGameInstance")));
-            auto* gameInstance = gameInstanceProperty
-                ? gameInstanceProperty->GetObjectPropertyValue(
-                    gameInstanceProperty->ContainerPtrToValuePtr<void>(world))
-                : nullptr;
+            auto* gameInstance = SpawnRuntime::CallWorldContextGetter(
+                TEXT("/Script/Engine.GameplayStatics:GetGameInstance"),
+                TEXT("/Script/Engine.Default__GameplayStatics"),
+                owner);
             if (!RuntimeObjectUsable(gameInstance))
             {
                 m_runtimeUiActiveRules.erase(key);
