@@ -1,0 +1,31 @@
+name: Package RuneSchema 0.7.9 NPC multiplayer cleanup fix
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - '.github/workflows/package-079-npc-cleanup-fix.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: 7a361257139554b5388e61aa5fc72481cdf4c3e6
+
+      - name: Create source ZIP
+        shell: bash
+        run: |
+          zip -r RuneSchema-0.7.9-npc-multiplayer-cleanup-fix.zip . -x ".git/*"
+
+      - name: Upload source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuneSchema-0.7.9-npc-multiplayer-cleanup-fix
+          path: RuneSchema-0.7.9-npc-multiplayer-cleanup-fix.zip
+          if-no-files-found: error
