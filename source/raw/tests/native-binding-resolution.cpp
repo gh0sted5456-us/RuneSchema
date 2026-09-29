@@ -44,10 +44,13 @@ int main(int argc, char** argv)
         "advanced logging never gates loader startup or execution");
     const auto autoReloadSetup = loader.find("void DragonWildsMainLoader::SetupAutoReload()");
     const auto autoReloadGate = loader.find("IsAutoReloadEnabled()");
-    Check(autoReloadSetup != std::string::npos && autoReloadGate > autoReloadSetup,
+    Check(autoReloadSetup != std::string::npos && autoReloadGate != std::string::npos
+        && autoReloadGate > autoReloadSetup,
         "auto reload setting gates only watcher setup, not initial loader startup");
     Check(loader.find("WarnAboutUnknownFolders") == std::string::npos,
         "unknown mod-manager folders are not linted during normal mod loading");
+    Check(loader.find("[CORE][READY] RuneSchema loaders initialized.") != std::string::npos,
+        "core readiness is visible with standard logging");
     Check(loader.find("Unable to initialize RuneSchema core, signature for UDataTable::Serialize") == std::string::npos,
         "obsolete fatal diagnostic removed");
     Check(loadOrder.find("create_directories(path.parent_path()") != std::string::npos,
