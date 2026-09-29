@@ -49,7 +49,6 @@ powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command ^
   "  Write-Host '';" ^
   "  Write-Host 'FATAL BUILDER ERROR' -ForegroundColor Red;" ^
   "  Write-Host $_.Exception.ToString() -ForegroundColor Red;" ^
-  "  try { Add-Content -LiteralPath $log -Value ('FATAL BUILDER ERROR: ' + $_.Exception.ToString()) } catch {};" ^
   "  exit 1" ^
   "} finally {" ^
   "  try { Stop-Transcript | Out-Null } catch {}" ^
