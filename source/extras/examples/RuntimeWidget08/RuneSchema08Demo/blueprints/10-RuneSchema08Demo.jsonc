@@ -1,7 +1,11 @@
 {
   "/Game/UI/MainMenu/WBP_MainMenu_CharacterSelect": {
     "$RuntimeWidget": {
-      "Character.EditAppearanceButton": {
+      "EditAppearanceButton_GamepassFindTest": {
+        "$Find": {
+          "Scope": "WidgetTree",
+          "Name": "EditAppearanceButton"
+        },
         "$When": "Resolved",
         "Visibility": "Visible",
         "bIsEnabled": true,
