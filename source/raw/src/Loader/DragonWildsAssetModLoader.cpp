@@ -24,6 +24,7 @@
 #include <cmath>
 #include <cstring>
 #include <map>
+#include <limits>
 #include <string_view>
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Unreal/CoreUObject/UObject/FStrProperty.hpp"
@@ -650,6 +651,67 @@ namespace
         std::memcpy(map.GetValuePtr(pair.GetData()), &item, sizeof(item));
         map.Add(pair);
         map.Rehash();
+    }
+
+    int32_t EnsureItemNetworkIdentity(UObject* item, UObject* subsystem)
+    {
+        if (!item || !subsystem) return -1;
+        auto* subsystemClass = subsystem->GetClassPrivate();
+        auto* reverseProperty = CastField<FMapProperty>(
+            PropertyHelper::GetPropertyByName(subsystemClass, TEXT("DataToNetIdMap")));
+        auto* arrayProperty = CastField<FArrayProperty>(
+            PropertyHelper::GetPropertyByName(subsystemClass, TEXT("NetIdToData")));
+        if (!reverseProperty || !arrayProperty) return -1;
+
+        UECustom::FScriptMapHelper reverse(
+            reverseProperty, reverseProperty->ContainerPtrToValuePtr<void>(subsystem));
+        int32_t existingId = -1;
+        reverse.ForEachPair([&](void* keyPtr, void* valuePtr) {
+            UObject* existing = nullptr;
+            std::memcpy(&existing, keyPtr, sizeof(existing));
+            if (existing == item)
+            {
+                uint16 netId = 0;
+                std::memcpy(&netId, valuePtr, sizeof(netId));
+                existingId = static_cast<int32_t>(netId);
+            }
+        });
+        if (existingId >= 0) return existingId;
+
+        auto* array = arrayProperty->ContainerPtrToValuePtr<FScriptArray>(subsystem);
+        if (!array || array->Num() < 0
+            || array->Num() >= std::numeric_limits<uint16>::max())
+            return -1;
+
+        const auto netId = static_cast<uint16>(array->Num());
+        UECustom::FScriptArrayHelper arrayHelper(array, arrayProperty);
+        UECustom::FManagedValue value;
+        arrayHelper.InitializeValue(value);
+        std::memcpy(value.GetData(), &item, sizeof(item));
+        arrayHelper.Add(value);
+
+        UECustom::FManagedValue reversePair;
+        reverse.InitializePair(reversePair);
+        std::memcpy(reverse.GetKeyPtr(reversePair.GetData()), &item, sizeof(item));
+        std::memcpy(reverse.GetValuePtr(reversePair.GetData()), &netId, sizeof(netId));
+        reverse.Add(reversePair);
+        reverse.Rehash();
+
+        // Verify both directions before the item is exposed through string maps.
+        bool reverseVerified = false;
+        reverse.ForEachPair([&](void* keyPtr, void* valuePtr) {
+            UObject* existing = nullptr;
+            uint16 existingId = 0;
+            std::memcpy(&existing, keyPtr, sizeof(existing));
+            std::memcpy(&existingId, valuePtr, sizeof(existingId));
+            if (existing == item && existingId == netId) reverseVerified = true;
+        });
+        FScriptArrayHelper inspect(arrayProperty, array);
+        if (!reverseVerified || netId >= inspect.Num())
+            return -1;
+        UObject* arrayItem = nullptr;
+        std::memcpy(&arrayItem, inspect.GetRawPtr(netId), sizeof(arrayItem));
+        return arrayItem == item ? static_cast<int32_t>(netId) : -1;
     }
 }
 
@@ -1829,14 +1891,23 @@ namespace DragonWilds {
             return false;
         }
 
+        const auto netId = EnsureItemNetworkIdentity(item, subsystem);
+        if (netId < 0)
+        {
+            ClearItemIdentity(item, itemClass);
+            PS::Log<LogLevel::Error>(STR("Clone '{}': ItemSubsystem network identity registration failed; item was not registered.\n"),
+                pendingAsset.Target);
+            return false;
+        }
+
         AddMapEntry(persistenceMap, subsystem, persistenceId, item);
         AddMapEntry(internalMap, subsystem, persistenceId, item);
         if (internalName != persistenceId)
             AddMapEntry(internalMap, subsystem, internalName, item);
 
-        PS::Log<LogLevel::Verbose>(STR("Clone '{}': registered new item identity '{}' / '{}'.\n"),
+        PS::Log<LogLevel::Verbose>(STR("Clone '{}': registered new item identity '{}' / '{}' with NetId {}.\n"),
             pendingAsset.Target, RC::StringType(*persistenceId),
-            RC::StringType(*internalName));
+            RC::StringType(*internalName), netId);
         return true;
     }
 
