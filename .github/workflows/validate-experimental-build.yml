@@ -1,0 +1,33 @@
+name: Validate experimental Windows build
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - '.github/workflows/validate-experimental-build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: 5296408424841794c8df1958a108db8567037e82
+
+      - name: Build RuneSchema
+        shell: pwsh
+        run: |
+          & ".\build\build.ps1"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload dist
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuneSchema-experimental-validated
+          path: dist/*.zip
+          if-no-files-found: error
