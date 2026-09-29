@@ -152,7 +152,7 @@
         },
         "UnlockOnAcquire": {
           "default": false,
-          "description": "Unlock this entry when the owning player first receives its ItemData. If Unlock is omitted, acquisition mode suppresses the normal automatic unlock. With save persistence disabled, the verified storefront adapter keeps the unlock session-only.",
+          "description": "Unlock this entry when the owning player first receives its ItemData. If Unlock is omitted, acquisition mode suppresses the normal automatic unlock. Unlock delivery uses the active native journal/lore path; Safe Clean removes orphaned RuneSchema identities when supplying content is removed.",
           "type": "boolean"
         }
       },
