@@ -2,7 +2,6 @@
 {
   "Id": "cabbage_trader_cow",
   "Type": "AI",
-  "Multiplayer": true,
   "DisplayName": "Cabbage Trader",
   "VendorID": "cabbage_trader",
   "VisualSource": "/Game/Gameplay/NPCs/BP_BaseInteractableNPC.BP_BaseInteractableNPC_C",
