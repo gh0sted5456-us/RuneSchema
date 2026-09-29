@@ -6,6 +6,7 @@
 #include <unordered_set>
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
+#include "Utility/ModFolderLayout.h"
 
 namespace fs = std::filesystem;
 namespace {
@@ -125,7 +126,8 @@ namespace DragonWilds {
         if(!fs::is_directory(mods,error) || error)throw std::runtime_error("Mod path is not a readable directory; cleanup refused");
         std::vector<RC::StringType> discovered;
         for (const auto& entry : fs::directory_iterator(mods))
-            if (entry.is_directory()) discovered.push_back(entry.path().filename().native());
+            if (PS::ModFolderLayout::LooksLikeRuneSchemaMod(entry.path()))
+                discovered.push_back(entry.path().filename().native());
         std::set<std::string> active;
         for (const auto& owner : Resolve(mods, discovered)) active.insert(RC::to_string(owner));
         return active;
