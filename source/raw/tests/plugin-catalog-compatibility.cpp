@@ -1,5 +1,6 @@
 #include "Runtime/PluginCatalog.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
