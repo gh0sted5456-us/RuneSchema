@@ -32,6 +32,8 @@ int main(int argc, char** argv) {
     Require(source, "properties.erase(\"$Once\")");
     Require(source, "properties.erase(\"$Activate\")");
     Require(source, "Blueprint $RuntimeWidget $Call Args must be an object");
+    Require(source, "Blueprint $RuntimeWidget $Call does not support return-valued functions yet");
+    Require(source, "Blueprint $RuntimeWidget $Call does not support output parameters yet");
     Require(source, "Blueprint $RuntimeWidget $Activate target is not a CommonUI activatable widget");
     Require(source, "m_runtimeWidgetActiveRules.emplace(ruleKey)");
     Require(source, "ClearRuntimeWidgetState();");
