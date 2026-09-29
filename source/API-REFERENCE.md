@@ -63,6 +63,7 @@ The loader recognizes this manifest contract:
 `PackagedRoot` is rejected. PAKs use the fixed
 `paks/<PackageName>/<same-name>.pak/.ucas/.utoc` layout, and every container
 triplet must be complete. The catalog rejects symlinks inside `paks/`.
+Unrelated regular files are ignored; only supported container extensions participate in package validation.
 
 `plugins.txt` contains one `Plugin.Id: 1` or `Plugin.Id: 0` entry per line.
 It controls enablement and deterministic order. Dependencies refine that order;
