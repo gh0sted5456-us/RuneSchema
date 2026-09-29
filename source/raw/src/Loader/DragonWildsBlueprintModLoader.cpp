@@ -21,6 +21,7 @@
 #include "Core/JsonPatchDirective.h"
 #include "Loader/Spawn/RuntimeSupport.h"
 #include "Runtime/Storefront.h"
+#include <Unreal/CoreUObject/UObject/UnrealType.hpp>
 
 using namespace RC;
 using namespace RC::Unreal;
