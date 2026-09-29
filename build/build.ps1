@@ -5,7 +5,7 @@ param(
     [switch]$Tests
 )
 $ErrorActionPreference = 'Stop'
-$Version = '0.7.6.6'
+$Version = '0.7.9'
 $BuildRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 if (-not (Test-Path -LiteralPath (Join-Path $BuildRoot 'source\raw\CMakeLists.txt') -PathType Leaf)) {
     $BuildRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
