@@ -12,5 +12,6 @@
     "helpy.journal-quests",
     "authoring.live-preview",
     "authoring.export"
-  ]
+  ],
+  "MountPaks": false
 }
