@@ -42,8 +42,8 @@ int main(int argc, char** argv)
         "spawns", "strings", "vendors"
     }};
     for (const auto* name : names) {
-        const auto heading = std::string("## `") + name + "`";
-        Check(loaders.find(heading) != std::string::npos, "loader walkthrough missing");
+        const auto row = std::string("| `") + name + "` |";
+        Check(loaders.find(row) != std::string::npos, "loader reference entry missing");
     }
 
     for (const auto* section : {
@@ -54,6 +54,9 @@ int main(int argc, char** argv)
 
     Check(sourcePlugins.find("Required plugins cannot be disabled") == std::string::npos,
         "source plugins.txt has stale required-plugin wording");
+    Check(sourcePlugins.find("RSNetworking : 1") != std::string::npos
+        && sourcePlugins.find("RuneSchema.Networking : 1") == std::string::npos,
+        "source plugin order uses RSNetworking");
     Check(runtimePlugins.find("Required plugins cannot be disabled") == std::string::npos,
         "runtime plugins.txt has stale required-plugin wording");
 
@@ -79,7 +82,7 @@ int main(int argc, char** argv)
     for (const auto* field : {
         "SchemaVersion", "Id", "Name", "Version", "ApiVersion", "BuiltForRuneSchema",
         "EntryPoint", "Enabled", "ConsoleMessage", "Capabilities", "Connections",
-        "Dependencies", "Required", "plugins.txt"
+        "Dependencies", "Required", "MountPaks", "plugins.txt"
     }) Check(api.find(field) != std::string::npos, "plugin manifest field is undocumented");
     std::cout << "Documentation contract passed for " << names.size() << " loaders.\n";
 }
