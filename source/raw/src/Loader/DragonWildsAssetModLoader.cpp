@@ -1854,17 +1854,10 @@ namespace DragonWilds {
             PropertyHelper::GetPropertyByName(itemClass, TEXT("PersistenceID")));
         auto* internalProperty = PropertyHelper::CastProperty<FStrProperty>(
             PropertyHelper::GetPropertyByName(itemClass, TEXT("InternalName")));
-        auto* persistenceMap = PropertyHelper::CastProperty<FMapProperty>(
-            PropertyHelper::GetPropertyByName(
-                subsystem->GetClassPrivate(), TEXT("PersistenceIDToDataMap")));
-        auto* internalMap = PropertyHelper::CastProperty<FMapProperty>(
-            PropertyHelper::GetPropertyByName(
-                subsystem->GetClassPrivate(), TEXT("InternalNameToDataMap")));
-        if (!persistenceProperty || !internalProperty
-            || !persistenceMap || !internalMap)
+        if (!persistenceProperty || !internalProperty)
         {
             ClearItemIdentity(item, itemClass);
-            PS::Log<LogLevel::Error>(STR("Clone '{}': ItemSubsystem identity maps were unavailable; item was not registered.\n"),
+            PS::Log<LogLevel::Error>(STR("Clone '{}': identity fields were unavailable; item was not registered.\n"),
                 pendingAsset.Target);
             return false;
         }
@@ -1881,33 +1874,83 @@ namespace DragonWilds {
                 pendingAsset.Target);
             return false;
         }
-        if (MapContainsOther(persistenceMap, subsystem, persistenceId, item)
-            || MapContainsOther(internalMap, subsystem, persistenceId, item)
-            || MapContainsOther(internalMap, subsystem, internalName, item))
+
+        // WinGDK can retain an outgoing ItemSubsystem while the next world is
+        // starting. Register the clone in every live ItemSubsystem, matching
+        // DragonWildsDataRegistrar's cross-world policy, instead of trusting
+        // whichever instance GetObjectsOfClass happens to return first.
+        auto* subsystemClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr, nullptr, TEXT("/Script/Dominion.ItemSubsystem"), false);
+        TArray<UObject*> discovered;
+        if (subsystemClass)
+            UECustom::UObjectGlobals::GetObjectsOfClass(subsystemClass, discovered, true);
+
+        std::vector<UObject*> candidates;
+        candidates.push_back(subsystem);
+        for (auto* candidate : discovered)
+        {
+            if (!candidate || candidate->HasAnyFlags(static_cast<EObjectFlags>(
+                    RF_ClassDefaultObject | RF_ArchetypeObject
+                    | RF_BeginDestroyed | RF_FinishDestroyed)))
+                continue;
+            if (std::find(candidates.begin(), candidates.end(), candidate)
+                == candidates.end())
+                candidates.push_back(candidate);
+        }
+
+        size_t registeredCount = 0;
+        int32_t firstNetId = -1;
+        for (auto* candidate : candidates)
+        {
+            auto* persistenceMap = PropertyHelper::CastProperty<FMapProperty>(
+                PropertyHelper::GetPropertyByName(
+                    candidate->GetClassPrivate(), TEXT("PersistenceIDToDataMap")));
+            auto* internalMap = PropertyHelper::CastProperty<FMapProperty>(
+                PropertyHelper::GetPropertyByName(
+                    candidate->GetClassPrivate(), TEXT("InternalNameToDataMap")));
+            if (!persistenceMap || !internalMap) continue;
+
+            if (MapContainsOther(persistenceMap, candidate, persistenceId, item)
+                || MapContainsOther(internalMap, candidate, persistenceId, item)
+                || MapContainsOther(internalMap, candidate, internalName, item))
+            {
+                PS::Log<LogLevel::Warning>(STR(
+                    "Clone '{}': skipped one live ItemSubsystem because its identity maps point at a different object.\n"),
+                    pendingAsset.Target);
+                continue;
+            }
+
+            const auto netId = EnsureItemNetworkIdentity(item, candidate);
+            if (netId < 0)
+            {
+                PS::Log<LogLevel::Warning>(STR(
+                    "Clone '{}': skipped one live ItemSubsystem because network identity registration failed.\n"),
+                    pendingAsset.Target);
+                continue;
+            }
+
+            AddMapEntry(persistenceMap, candidate, persistenceId, item);
+            AddMapEntry(internalMap, candidate, persistenceId, item);
+            if (internalName != persistenceId)
+                AddMapEntry(internalMap, candidate, internalName, item);
+
+            if (firstNetId < 0) firstNetId = netId;
+            ++registeredCount;
+        }
+
+        if (!registeredCount)
         {
             ClearItemIdentity(item, itemClass);
-            PS::Log<LogLevel::Error>(STR("Clone '{}': PersistenceID or InternalName collides with another item; clone was not registered.\n"),
+            PS::Log<LogLevel::Error>(STR(
+                "Clone '{}': no live ItemSubsystem accepted its identity/network registration.\n"),
                 pendingAsset.Target);
             return false;
         }
 
-        const auto netId = EnsureItemNetworkIdentity(item, subsystem);
-        if (netId < 0)
-        {
-            ClearItemIdentity(item, itemClass);
-            PS::Log<LogLevel::Error>(STR("Clone '{}': ItemSubsystem network identity registration failed; item was not registered.\n"),
-                pendingAsset.Target);
-            return false;
-        }
-
-        AddMapEntry(persistenceMap, subsystem, persistenceId, item);
-        AddMapEntry(internalMap, subsystem, persistenceId, item);
-        if (internalName != persistenceId)
-            AddMapEntry(internalMap, subsystem, internalName, item);
-
-        PS::Log<LogLevel::Verbose>(STR("Clone '{}': registered new item identity '{}' / '{}' with NetId {}.\n"),
+        PS::Log<LogLevel::Verbose>(STR(
+            "Clone '{}': registered item identity '{}' / '{}' across {} live ItemSubsystem instance(s); first NetId {}.\n"),
             pendingAsset.Target, RC::StringType(*persistenceId),
-            RC::StringType(*internalName), netId);
+            RC::StringType(*internalName), registeredCount, firstNetId);
         return true;
     }
 
