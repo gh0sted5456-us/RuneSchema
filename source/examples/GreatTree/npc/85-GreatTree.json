@@ -1,7 +1,6 @@
 {
   "Id": "great_tree",
   "Type": "Resource",
-  "Multiplayer": true,
   "DisplayName": "The Great Tree",
   "Mesh": "/Game/Art/Env/Landscape/Foliage/Trees/Maple/SM_MapleTree_01.SM_MapleTree_01",
   "Scale": 15,
