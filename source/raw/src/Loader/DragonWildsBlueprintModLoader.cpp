@@ -22,6 +22,7 @@
 #include "Loader/Spawn/RuntimeSupport.h"
 #include "Runtime/Storefront.h"
 #include <Unreal/CoreUObject/UObject/UnrealType.hpp>
+#include <Unreal/Property/FEnumProperty.hpp>
 
 using namespace RC;
 using namespace RC::Unreal;
