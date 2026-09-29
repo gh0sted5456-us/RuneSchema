@@ -1,0 +1,31 @@
+name: Package RuntimeWidget enum-header source
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - '.github/workflows/package-runtimewidget-enumheader.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: c5045d476bd18cc47ec453f2f63f60ad5dc5b093
+
+      - name: Create source ZIP
+        shell: bash
+        run: |
+          zip -r RuneSchema-experimental-runtimewidget-enumheader.zip . -x ".git/*"
+
+      - name: Upload source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuneSchema-experimental-runtimewidget-enumheader
+          path: RuneSchema-experimental-runtimewidget-enumheader.zip
+          if-no-files-found: error
