@@ -1571,7 +1571,7 @@ namespace DragonWilds {
     void DragonWildsNpcLoader::QueueClientReplica(AActor* actor)
     {
         if(!actor || actor->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed)))return;
-        if(std::none_of(m_definitions.begin(),m_definitions.end(),[&](const auto& d){return d.Enabled && d.Multiplayer
+        if(std::none_of(m_definitions.begin(),m_definitions.end(),[&](const auto& d){return d.Enabled
             && (actor->GetClassPrivate()->GetPathName()==RC::to_generic_string(d.BaseActorClassPath));})) {
             if(!PresentEventIdentity)return;
             auto* identity=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,NpcIdentity::ClassPath,false);
@@ -1647,7 +1647,7 @@ namespace DragonWilds {
         auto* matched=FindClientDefinition(actor);
         if(!matched)return false;
         auto& definition=*matched;
-        if(!NpcNetwork::Supported(definition.Multiplayer,definition.Human,definition.Resource,
+        if(!NpcNetwork::Supported(definition.Human,definition.Resource,
             definition.Stage==VendorPolicy::VendorStage::Merchant,!definition.DialogueKey.empty(),!definition.RequiredFlag.empty(),!definition.LoreEntry.empty(),definition.Stage==VendorPolicy::VendorStage::Visual))return false;
         if(PS::Network::Detect(actor).Mode!=PS::Network::Role::Client)return false;
         ActorHelper::FunctionCall authority(actor,TEXT("/Script/Engine.Actor:HasAuthority"));authority.Invoke();
