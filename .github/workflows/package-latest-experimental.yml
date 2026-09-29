@@ -1,0 +1,33 @@
+name: Package latest experimental runtime widget build
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - '.github/workflows/package-latest-experimental.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact experimental snapshot
+        uses: actions/checkout@v6
+        with:
+          ref: 08de287fcdaa14ca6417aeee74f71ab7473ef6d4
+
+      - name: Create source ZIP
+        shell: bash
+        run: |
+          zip -r RuneSchema-experimental-runtimewidget-08de287.zip . \
+            -x ".git/*"
+
+      - name: Upload source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuneSchema-experimental-runtimewidget-08de287
+          path: RuneSchema-experimental-runtimewidget-08de287.zip
+          if-no-files-found: error
