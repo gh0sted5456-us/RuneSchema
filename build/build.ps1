@@ -338,7 +338,7 @@ try {
         $payload = Join-Path $packageRoot 'RuneSchema.Helpy'
         if (Test-Path $packageRoot) { Remove-Item -LiteralPath $packageRoot -Recurse -Force }
         New-Item -ItemType Directory -Path $payload -Force | Out-Null
-        $helpyTemplate = Join-Path $CleanBase 'plugins\RuneSchema.Helpy'
+        $helpyTemplate = Join-Path $SourceRoot 'plugins\RuneSchema.Helpy'
         if (Test-Path -LiteralPath $helpyTemplate -PathType Container) {
             Get-ChildItem -LiteralPath $helpyTemplate -Force | ForEach-Object {
                 Copy-Item -LiteralPath $_.FullName -Destination $payload -Recurse -Force
@@ -380,6 +380,19 @@ try {
             New-Item -ItemType Directory -Path $requiredDirectory -Force | Out-Null
         }
         if ($IncludePlugins) {
+            # Plugin source is authoritative. Never let a cached runtime
+            # template resurrect retired plugin names, PAKs, or manifests.
+            $payloadPlugins = Join-Path $payload 'plugins'
+            if (Test-Path -LiteralPath $payloadPlugins) {
+                Remove-Item -LiteralPath $payloadPlugins -Recurse -Force
+            }
+            New-Item -ItemType Directory -Path $payloadPlugins -Force | Out-Null
+            $sourcePlugins = Join-Path $SourceRoot 'plugins'
+            if (Test-Path -LiteralPath $sourcePlugins -PathType Container) {
+                Get-ChildItem -LiteralPath $sourcePlugins -Force | ForEach-Object {
+                    Copy-Item -LiteralPath $_.FullName -Destination $payloadPlugins -Recurse -Force
+                }
+            }
             New-Item -ItemType Directory -Path (Join-Path $payload 'plugins\RuneSchema.Helpy\dll') -Force | Out-Null
         }
 
