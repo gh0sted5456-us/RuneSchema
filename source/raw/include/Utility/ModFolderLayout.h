@@ -1,5 +1,6 @@
 #pragma once
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -23,6 +24,17 @@ inline std::string FoldAscii(std::string value) { return AsciiLower(std::move(va
 
 inline bool EqualsInsensitive(std::string_view left, std::string_view right) {
     return AsciiLower(std::string(left)) == AsciiLower(std::string(right));
+}
+
+inline constexpr std::array<std::string_view,23> ContentDirectories{{
+    "assets","blueprints","buildings","courses","dialogue","effects","enums",
+    "equipment","events","journal","lore","nameplates","niagara","npc","players",
+    "quests","raw","recipes","registry","spawns","strings","vendors","paks"
+}};
+
+inline bool IsContentDirectoryName(std::string_view value) {
+    return std::any_of(ContentDirectories.begin(),ContentDirectories.end(),
+        [&](std::string_view candidate){return EqualsInsensitive(value,candidate);});
 }
 
 // Resolve one immediate loader directory without relying on the host file
@@ -69,6 +81,23 @@ inline std::filesystem::path FindChildDirectory(
         found = entry.path();
     }
     return found;
+}
+
+inline bool ContainsLegacyPakContent(const std::filesystem::path& folder, std::error_code& error);
+inline bool LooksLikeRuneSchemaMod(const std::filesystem::path& folder) {
+    namespace fs = std::filesystem;
+    std::error_code error;
+    if(!fs::is_directory(folder,error)||error||fs::is_symlink(fs::symlink_status(folder,error)))return false;
+    fs::directory_iterator current(folder,fs::directory_options::skip_permission_denied,error),end;
+    while(!error&&current!=end) {
+        std::error_code typeError;
+        if(current->is_directory(typeError)&&!typeError
+            && IsContentDirectoryName(current->path().filename().string()))return true;
+        current.increment(error);
+    }
+    if(error)return false;
+    std::error_code legacyError;
+    return ContainsLegacyPakContent(folder,legacyError)&&!legacyError;
 }
 
 inline bool ContainsLegacyPakContent(const std::filesystem::path& folder, std::error_code& error) {
