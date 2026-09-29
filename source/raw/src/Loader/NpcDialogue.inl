@@ -368,8 +368,33 @@ bool DragonWildsNpcLoader::DialogueGateAllows(const DialogueCompletionBinding& a
                 if(!Quests::StageReceiptActive(native,m_quests.Document(action.GateQuest)))return false;
                 const auto progress=Quests::StageProgress(native,quest,read("RuneSchema.Run"));
                 const auto index=progress.ActiveStage();complete=index==quest.Stages.size();
-                if(!complete)stage=quest.Stages[index].first;
+                if(!complete) {
+                    stage=quest.Stages[index].first;
+                    const auto inventory=[&](const Quests::Definition& objective) {
+                        auto* item=ActorHelper::ResolveObject(
+                            RC::to_generic_string(objective.Required.Item));
+                        return DialogueInventory(controller,item).Count();
+                    };
+                    const auto& objectives=quest.Stages[index].second;
+                    const auto plan=Quests::SelectHandIns(objectives,
+                        [&](size_t objective){return progress.Count(index,objective);},
+                        [](const Quests::Definition&){return true;},inventory);
+                    complete=true;
+                    for(size_t objective=0;objective<objectives.size();++objective) {
+                        const auto& value=objectives[objective];
+                        if(value.Optional || progress.Count(index,objective)==value.Required.Count)continue;
+                        if(value.Kill || value.Acquire
+                            || std::find(plan.Objectives.begin(),plan.Objectives.end(),objective)==plan.Objectives.end()) {
+                            complete=false;
+                            break;
+                        }
+                    }
+                }
             } else if(quest.Kill || quest.Acquire)complete=read(quest.ObjectiveId)>=quest.Required.Count;
+            else {
+                auto* item=ActorHelper::ResolveObject(RC::to_generic_string(quest.Required.Item));
+                complete=DialogueInventory(controller,item).Count()>=quest.Required.Count;
+            }
         }
         if(conditions.contains("Stage") && (visible!="Active" || stage!=conditions.at("Stage").get<std::string>()))return false;
         if(conditions.contains("ObjectivesComplete") && complete!=conditions.at("ObjectivesComplete").get<bool>())return false;
