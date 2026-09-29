@@ -1,0 +1,54 @@
+name: Publish RuneSchema 0.7.9
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/publish-079.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build RuneSchema
+        shell: cmd
+        run: call "Build RuneSchema.bat"
+
+      - name: Publish 0.7.9
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          @'
+          RuneSchema 0.7.9
+
+          - One RuneSchema runtime for Steam/GOG and Game Pass/WinGDK.
+          - RuneSchema content uses one definition in standalone and multiplayer.
+          - NPC definitions no longer use a Multiplayer flag.
+          - Normal RuneSchema recipe unlocks may persist with Safe Clean handling removed-mod identities.
+          - Runtime item clones complete native registration before inventory and recipe use.
+          - Storefront, native lane, mapping state, and RuneSchema version remain visible in startup logs.
+
+          Universal includes the bundled optional plugins. Core omits them.
+          '@ | Set-Content -LiteralPath release-notes-079.md -Encoding UTF8
+
+          $tag = 'v0.7.9'
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --target "${{ github.sha }}" --title "RuneSchema 0.7.9" --notes-file release-notes-079.md
+          } else {
+            gh release edit $tag --title "RuneSchema 0.7.9" --notes-file release-notes-079.md --latest
+          }
+
+          Get-ChildItem dist -Filter '*.zip' | ForEach-Object {
+            gh release upload $tag $_.FullName --clobber
+          }
+
+          gh release edit $tag --latest
