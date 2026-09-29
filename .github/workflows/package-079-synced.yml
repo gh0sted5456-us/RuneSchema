@@ -1,0 +1,31 @@
+name: Package RuneSchema 0.7.9 synced source
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - '.github/workflows/package-079-synced.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fd3920a8b21596994e8c94edd4e076502a99f641
+
+      - name: Create source ZIP
+        shell: bash
+        run: |
+          zip -r RuneSchema-0.7.9-experimental-synced-build-ready.zip . -x ".git/*"
+
+      - name: Upload source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuneSchema-0.7.9-experimental-synced-build-ready
+          path: RuneSchema-0.7.9-experimental-synced-build-ready.zip
+          if-no-files-found: error
