@@ -80,7 +80,6 @@
 #include "Loader/GameplayTestContext.h"
 #include "Core/ConfigFiles.h"
 #include "Runtime/HostServices.h"
-#include "Loader/InventoryGrantPolicy.h"
 
 using namespace RC;
 using namespace RC::Unreal;
