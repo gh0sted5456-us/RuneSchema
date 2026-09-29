@@ -649,11 +649,6 @@
                 "None"
               ]
             },
-            "Multiplayer": {
-              "default": true,
-              "description": "Enabled by default. Set false only for an explicitly local NPC. Matching cooked assets and RuneSchema definitions must be installed on server and clients.",
-              "type": "boolean"
-            },
             "NoInteract": {
               "default": false,
               "description": "Disable interaction and suppress VendorID, DialogueID, LoreID and LoreEntry bindings without changing collision.",
@@ -1780,11 +1775,6 @@
                   "Pawn",
                   "None"
                 ]
-              },
-              "Multiplayer": {
-                "default": true,
-                "description": "Enabled by default. Set false only for an explicitly local NPC. Matching cooked assets and RuneSchema definitions must be installed on server and clients.",
-                "type": "boolean"
               },
               "NoInteract": {
                 "default": false,
@@ -2920,11 +2910,6 @@
                     "None"
                   ]
                 },
-                "Multiplayer": {
-                  "default": true,
-                  "description": "Enabled by default. Set false only for an explicitly local NPC. Matching cooked assets and RuneSchema definitions must be installed on server and clients.",
-                  "type": "boolean"
-                },
                 "NoInteract": {
                   "default": false,
                   "description": "Disable interaction and suppress VendorID, DialogueID, LoreID and LoreEntry bindings without changing collision.",
@@ -4051,11 +4036,6 @@
                       "Pawn",
                       "None"
                     ]
-                  },
-                  "Multiplayer": {
-                    "default": true,
-                    "description": "Enabled by default. Set false only for an explicitly local NPC. Matching cooked assets and RuneSchema definitions must be installed on server and clients.",
-                    "type": "boolean"
                   },
                   "NoInteract": {
                     "default": false,
