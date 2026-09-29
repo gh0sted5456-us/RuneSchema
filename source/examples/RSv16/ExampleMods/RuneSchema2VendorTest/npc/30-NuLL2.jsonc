@@ -1,6 +1,5 @@
 {
   "Id": "null2_blacksmith",
-  "Multiplayer": true,
   "Type": "Human",
   "DisplayName": "NuLL the Aspiring Blacksmith",
   "DialogueID": "null_forge",
