@@ -53,6 +53,7 @@ int main()
         "ApiVersion": 999,
         "BuiltForRuneSchema": "0.1.0",
         "EntryPoint": "missing-alpha.dll",
+        "MountPaks": false,
         "Dependencies": { "Beta": "1.0.0" }
     })");
     Write(beta / "plugin.json", R"({
@@ -82,8 +83,9 @@ int main()
             || line.find("random-nexus-file") != std::string::npos || line.find("UnrelatedFolder") != std::string::npos;
     }), "mod-manager debris is silently ignored");
     for (const auto& plugin : plugins) {
-        Check(PS::PluginCatalog::PakDirectories(plugin).size() == 1,
-            "complete PAK triplet remains independently mountable");
+        const auto packs=PS::PluginCatalog::PakDirectories(plugin);
+        if(plugin.Id=="Alpha") Check(packs.empty(),"MountPaks false ignores stale native-plugin package content");
+        else Check(packs.size()==1,"complete PAK triplet remains independently mountable");
     }
 
     bool missingDependency = false;
@@ -94,6 +96,17 @@ int main()
     }
     Check(missingDependency, "missing dependency is diagnosed without suppressing discovery");
     Check(cycle, "dependency cycle falls back to deterministic best-effort order");
+
+    const auto migrationRoot=root/"migration";
+    const auto legacy=migrationRoot/"RuneSchema.Networking";
+    const auto renamed=migrationRoot/"RSNetworking";
+    Write(legacy/"plugin.json",R"({"SchemaVersion":1,"Id":"RuneSchema.Networking","Version":"0.7.8"})");
+    Write(renamed/"plugin.json",R"({"SchemaVersion":1,"Id":"RSNetworking","Version":"0.7.9"})");
+    AddPakTriplet(legacy);AddPakTriplet(renamed);
+    Write(migrationRoot/"plugins.txt","RuneSchema.Networking:0\nRSNetworking:1\n");
+    const auto migrated=PS::PluginCatalog::Discover(migrationRoot);
+    Check(migrated.size()==1&&migrated[0].Id=="RSNetworking","renamed networking plugin suppresses leftover legacy folder");
+    Check(migrated[0].Enabled,"new RSNetworking order entry wins after legacy alias normalization");
 
     std::cout << "Plugin catalog compatibility contract passed.\n";
 }
