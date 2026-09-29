@@ -29,9 +29,12 @@ int main(int argc,char** argv){
         }
         prop["NoInteract"]=false;
         NpcCatalog active;active.AddNpc("test",prop);
+        auto legacyMode=prop;legacyMode["Id"]="legacy-mode";legacyMode["Multiplayer"]=false;
+        NpcCatalog legacy;legacy.AddNpc("test",legacyMode);
+        const auto legacyResolved=legacy.Resolve();
+        assert(legacyResolved.size()==1 && !legacyResolved[0].Data.contains("Multiplayer"));
         assert(Rejects([&]{active.Resolve();}));
-        assert(DragonWilds::NpcNetwork::Supported(true,false,true,false,false,false,false,true));
-        assert(!DragonWilds::NpcNetwork::Supported(false,false,true,false,false,false,false,true));
+        assert(DragonWilds::NpcNetwork::Supported(false,true,false,false,false,false,true));
         prop["NoInteract"]=true;
         for(const auto* phase:{"Any","Day","Night"}) {
             auto timed=prop;timed["Id"]=std::string("table-")+phase;timed["TimeOfDay"]=phase;
@@ -104,7 +107,7 @@ int main(int argc,char** argv){
         const auto npc=Json::parse(npcFile,nullptr,true,true),shop=Json::parse(shopFile);
         NpcCatalog packaged;packaged.AddStore("RuneSchemaMultiplayerTest",shop);packaged.AddNpc("RuneSchemaMultiplayerTest",npc);
         const auto definitions=packaged.Resolve();
-        assert(definitions.size()==1 && definitions[0].Data.at("Multiplayer")==true);
+        assert(definitions.size()==1 && !definitions[0].Data.contains("Multiplayer"));
         assert(definitions[0].Data.at("Stage")=="Merchant");
         assert(!definitions[0].Data.contains("DialogueID") && !definitions[0].Data.contains("RequiresFlag"));
         assert(definitions[0].Data.at("Items").size()==1);
@@ -173,7 +176,7 @@ int main(int argc,char** argv){
     assert(props.Resolve()[0].Data["Type"]=="Prop");
     assert(DragonWilds::HumanNpc::UsesStaticMesh(prop));
     assert(!DragonWilds::HumanNpc::IsHuman(prop));
-    auto loreProp=prop;loreProp["LoreEntry"]="RuneSchema_TestLore";loreProp["Multiplayer"]=true;
+    auto loreProp=prop;loreProp["LoreEntry"]="RuneSchema_TestLore";
     NpcCatalog books;books.AddNpc("Test",loreProp);
     const auto book=books.Resolve()[0].Data;
     assert(book["Stage"]=="Interaction" && book["InteractionProperties"]["InteractionPrompt"]=="Examine");
