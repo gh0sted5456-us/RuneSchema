@@ -538,11 +538,12 @@ block and verify it on every client.
 
 `/npc` creates persistent AI, human, or resource-style actors.
 
+NPC definitions are network-mode agnostic: the same authored record is used in standalone and multiplayer worlds. Server authority and client presentation are selected automatically at runtime.
+
 ```jsonc
 {
   "Id": "merchant",
   "Type": "AI",
-  "Multiplayer": true,
   "DisplayName": "Merchant",
   "VendorID": "shop",
   "DialogueID": "hello",
