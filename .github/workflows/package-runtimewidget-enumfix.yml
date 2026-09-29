@@ -1,0 +1,31 @@
+name: Package RuntimeWidget enum-fix source
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - '.github/workflows/package-runtimewidget-enumfix.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: f6aa5302015e6d6e8be2b7a9930884d781c85536
+
+      - name: Create source ZIP
+        shell: bash
+        run: |
+          zip -r RuneSchema-experimental-runtimewidget-enumfix.zip . -x ".git/*"
+
+      - name: Upload source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuneSchema-experimental-runtimewidget-enumfix
+          path: RuneSchema-experimental-runtimewidget-enumfix.zip
+          if-no-files-found: error
