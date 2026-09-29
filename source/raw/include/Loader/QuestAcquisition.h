@@ -16,4 +16,10 @@ public:
         return credit && !created && count>before?count-before:0;
     }
 };
+
+inline std::string InventoryHandInStatus(int carried,int required) {
+    if(carried<0 || required<1)throw std::runtime_error("Invalid retrieval quest inventory status");
+    return "Items carried: "+std::to_string(carried)+"/"+std::to_string(required)
+        +". Bring the requested items and leave room for your reward.";
+}
 }
