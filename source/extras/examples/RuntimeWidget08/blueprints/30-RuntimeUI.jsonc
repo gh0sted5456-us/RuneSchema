@@ -1,0 +1,27 @@
+{
+  "/Game/UI/MainMenu/WBP_MainMenu_CharacterSelect": {
+    "$RuntimeUI": {
+      "SchemaNotice": {
+        "ZOrder": 95,
+        "$When": "Construct",
+        "Root": {
+          "Type": "Border",
+          "Name": "NoticeBorder",
+          "Padding": {
+            "Left": 12,
+            "Top": 8,
+            "Right": 12,
+            "Bottom": 8
+          },
+          "Children": [
+            {
+              "Type": "TextBlock",
+              "Name": "NoticeText",
+              "Text": "RuneSchema 0.8 test bed"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -32,6 +32,18 @@ namespace DragonWilds {
         PS::WeakObjectHandle Owner;
     };
 
+    struct RuntimeUiRule {
+        RC::Unreal::FName OwnerClass;
+        std::string Name;
+        nlohmann::json Data;
+        RC::StringType ModName;
+    };
+
+    struct RuntimeUiInstance {
+        PS::WeakObjectHandle Owner;
+        PS::WeakObjectHandle Widget;
+    };
+
     class DragonWildsBlueprintModLoader : public DragonWildsModLoaderBase {
     public:
         DragonWildsBlueprintModLoader();
@@ -60,10 +72,16 @@ namespace DragonWilds {
         std::vector<nlohmann::json> m_pendingBlueprintPatches;
         std::vector<nlohmann::json> m_pathBlueprintPatches;
         std::vector<RuntimeWidgetRule> m_runtimeWidgetRules;
+        std::vector<RuntimeUiRule> m_runtimeUiRules;
         std::unordered_set<std::string> m_reportedRuntimeWidgetFailures;
+        std::unordered_set<std::string> m_reportedRuntimeUiFailures;
         std::unordered_set<std::string> m_runtimeWidgetActiveRules;
         std::unordered_set<std::string> m_runtimeWidgetCompletedRules;
         std::unordered_map<RC::Unreal::UObject*, RuntimeWidgetObservedTarget> m_runtimeWidgetObservedTargets;
+        std::unordered_set<std::string> m_runtimeUiActiveRules;
+        std::unordered_map<std::string, RuntimeUiInstance> m_runtimeUiInstances;
+        uint64_t m_runtimeUiGeneration = 0;
+        bool m_runtimeUiTearingDown = false;
         std::vector<PS::WeakObjectHandle> m_ghostRoots;
         std::unordered_map<std::string, GhostMaterials::Set> m_ghostMaterials;
         RC::Unreal::Hook::GlobalCallbackId m_worldTeardownCallbackId = RC::Unreal::Hook::ERROR_ID;
@@ -71,10 +89,15 @@ namespace DragonWilds {
         void ApplyBlueprintVisualEffect(RC::Unreal::AActor* actor);
         void ClearWorldVisualEffects();
         void ClearRuntimeWidgetState();
+        void ClearRuntimeUiInstances();
         void ApplyDeferredPatches(RC::Unreal::UObject* object);
         void RegisterRuntimeWidgetRules(
             const std::string& identity,
             const nlohmann::json& runtimeWidgets,
+            const RC::StringType& modName);
+        void RegisterRuntimeUiRules(
+            const std::string& identity,
+            const nlohmann::json& runtimeUi,
             const RC::StringType& modName);
         void ObserveRuntimeWidgetEvent(
             RC::Unreal::UObject* source,
@@ -105,6 +128,9 @@ namespace DragonWilds {
         bool RuntimeWidgetRuleMatchesEvent(
             const RuntimeWidgetRule& rule,
             RC::Unreal::UFunction* function);
+        bool RuntimeUiRuleMatchesEvent(
+            const RuntimeUiRule& rule,
+            RC::Unreal::UFunction* function);
         std::string RuntimeWidgetRuleKey(
             RC::Unreal::UObject* owner,
             const RuntimeWidgetRule& rule) const;
@@ -122,6 +148,19 @@ namespace DragonWilds {
             RC::Unreal::UObject* owner,
             RC::Unreal::UObject* widget,
             const RuntimeWidgetRule& rule);
+        std::string RuntimeUiRuleKey(const RuntimeUiRule& rule) const;
+        void ApplyRuntimeUiRule(
+            RC::Unreal::UObject* owner,
+            const RuntimeUiRule& rule,
+            RC::Unreal::UFunction* function);
+        RC::Unreal::UObject* BuildRuntimeUiNode(
+            RC::Unreal::UObject* owner,
+            RC::Unreal::UObject* widgetTree,
+            const nlohmann::json& node,
+            const RuntimeUiRule& rule,
+            size_t depth,
+            size_t& budget,
+            std::unordered_set<std::string>& names);
 
         bool HookPostLoad();
         bool HookPostInitComponents();

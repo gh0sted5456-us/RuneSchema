@@ -239,6 +239,26 @@ namespace DragonWilds {
             return false;
         }
 
+        bool RuntimeUiNameValid(const std::string& name)
+        {
+            if (name.empty() || name.size() > 64) return false;
+            return std::all_of(name.begin(), name.end(), [](unsigned char value) {
+                return std::isalnum(value) || value == '_';
+            });
+        }
+
+        const TCHAR* RuntimeUiPrimitivePath(std::string type)
+        {
+            std::transform(type.begin(), type.end(), type.begin(),
+                [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+            if (type == "canvaspanel" || type == "canvas") return TEXT("/Script/UMG.CanvasPanel");
+            if (type == "border") return TEXT("/Script/UMG.Border");
+            if (type == "textblock" || type == "text") return TEXT("/Script/UMG.TextBlock");
+            if (type == "image") return TEXT("/Script/UMG.Image");
+            if (type == "button") return TEXT("/Script/UMG.Button");
+            return nullptr;
+        }
+
         bool RuntimeStorefrontTokenMatches(std::string token)
         {
             std::transform(token.begin(), token.end(), token.begin(),
@@ -291,9 +311,12 @@ namespace DragonWilds {
         ActorInitializedObservers.clear();
 
         ClearWorldVisualEffects();
+        ClearRuntimeUiInstances();
         ClearRuntimeWidgetState();
         m_reportedRuntimeWidgetFailures.clear();
+        m_reportedRuntimeUiFailures.clear();
         m_runtimeWidgetRules.clear();
+        m_runtimeUiRules.clear();
         m_modsMap.clear();
     }
 
@@ -310,6 +333,27 @@ namespace DragonWilds {
         m_runtimeWidgetActiveRules.clear();
         m_runtimeWidgetCompletedRules.clear();
         m_runtimeWidgetObservedTargets.clear();
+    }
+
+    void DragonWildsBlueprintModLoader::ClearRuntimeUiInstances()
+    {
+        m_runtimeUiTearingDown = true;
+        for (auto& [key, instance] : m_runtimeUiInstances)
+        {
+            auto* widget = instance.Widget.Get();
+            if (!widget) continue;
+            try
+            {
+                const auto functionName = RC::StringType(TEXT("RemoveFromParent"));
+                auto* function = widget->GetFunctionByNameInChain(functionName.c_str());
+                if (function && function->GetParmsSize() == 0)
+                    ActorHelper::FunctionCall(widget, function).Invoke();
+            }
+            catch (...) {}
+        }
+        m_runtimeUiInstances.clear();
+        m_runtimeUiActiveRules.clear();
+        m_runtimeUiTearingDown = false;
     }
 
     void DragonWildsBlueprintModLoader::SetActorInitializedObserver(
@@ -357,7 +401,8 @@ namespace DragonWilds {
                 return item.is_object()
                     && (item.contains("$Patch")
                         || item.contains("$Target")
-                        || item.contains("$RuntimeWidget"));
+                        || item.contains("$RuntimeWidget")
+                        || item.contains("$RuntimeUI"));
             };
             if (requiresRestart(data) || std::any_of(data.begin(), data.end(), requiresRestart)) {
                 PS::Log<LogLevel::Warning>(STR("Blueprint runtime/$Patch rules changed in {}. Restart the game to reload rules and existing objects.\n"), modName);
@@ -404,6 +449,7 @@ namespace DragonWilds {
             m_worldTeardownCallbackId = Hook::RegisterInitGameStatePreCallback(
                 [this](Hook::TCallbackIterationData<void>&, AGameModeBase*) {
                     ClearWorldVisualEffects();
+                    ClearRuntimeUiInstances();
                     ClearRuntimeWidgetState();
                 }, options);
             if (m_worldTeardownCallbackId == Hook::ERROR_ID)
@@ -564,6 +610,11 @@ namespace DragonWilds {
                     RegisterRuntimeWidgetRules(assetName, *runtime, modName);
                     staticData.erase("$RuntimeWidget");
                 }
+                if (const auto runtimeUi = assetData.find("$RuntimeUI"); runtimeUi != assetData.end())
+                {
+                    RegisterRuntimeUiRules(assetName, *runtimeUi, modName);
+                    staticData.erase("$RuntimeUI");
+                }
             }
 
             if (const auto patch = JsonPatchDirective::Parse(staticData, noProtected, "blueprint"))
@@ -644,6 +695,66 @@ namespace DragonWilds {
             m_runtimeWidgetRules.push_back({
                 ownerClass,
                 to_generic_string(widgetPath),
+                ruleData,
+                modName
+            });
+        }
+    }
+
+    void DragonWildsBlueprintModLoader::RegisterRuntimeUiRules(
+        const std::string& identity,
+        const nlohmann::json& runtimeUi,
+        const RC::StringType& modName)
+    {
+        if (!runtimeUi.is_object())
+            throw std::runtime_error("Blueprint $RuntimeUI must be an object keyed by UI name");
+
+        auto classPath = identity;
+        if (classPath.starts_with("/Game/"))
+        {
+            if (classPath.find('.') == std::string::npos)
+            {
+                const auto name = classPath.substr(classPath.find_last_of('/') + 1);
+                classPath += "." + name + "_C";
+            }
+            if (!classPath.ends_with("_C"))
+                throw std::runtime_error("Blueprint $RuntimeUI path must identify a generated class ending _C");
+        }
+        else
+        {
+            if (classPath.contains('/') || classPath.contains('.') || !classPath.ends_with("_C"))
+                throw std::runtime_error("Blueprint $RuntimeUI requires a class name ending _C or a /Game/ class path");
+        }
+
+        if (const auto storefront = runtimeUi.find("$Storefront");
+            storefront != runtimeUi.end() && !RuntimeStorefrontMatches(*storefront))
+        {
+            const auto message = runtimeUi.value("$SkipMessage", std::string{});
+            if (!message.empty() && PS::Storefront::Current() != PS::Storefront::Kind::Unknown)
+                PS::Log<LogLevel::Normal>(STR("[{}] {}\n"), modName, PS::ToWideSafe(message.c_str()));
+            return;
+        }
+
+        const auto ownerClass = FName(to_generic_string(classPath), FNAME_Add);
+        size_t count = 0;
+        for (const auto& [uiName, ruleData] : runtimeUi.items())
+        {
+            if (uiName == "$Storefront" || uiName == "$SkipMessage")
+                continue;
+            if (!RuntimeUiNameValid(uiName))
+                throw std::runtime_error("Blueprint $RuntimeUI names must use only letters, numbers, and underscores");
+            if (!ruleData.is_object())
+                throw std::runtime_error("Blueprint $RuntimeUI rule must be an object");
+            if (++count > 16)
+                throw std::runtime_error("Blueprint $RuntimeUI block exceeds the 16-widget safety limit");
+
+            const auto root = ruleData.find("Root");
+            if (root == ruleData.end() || !root->is_object())
+                throw std::runtime_error("Blueprint $RuntimeUI rule requires a Root object");
+
+            m_runtimeUiRules.push_back({
+                ownerClass,
+                uiName,
                 ruleData,
                 modName
             });
@@ -980,6 +1091,19 @@ namespace DragonWilds {
         throw std::runtime_error("Blueprint $RuntimeWidget $When Function must be a string or array");
     }
 
+    bool DragonWildsBlueprintModLoader::RuntimeUiRuleMatchesEvent(
+        const RuntimeUiRule& rule,
+        UFunction* function)
+    {
+        RuntimeWidgetRule proxy{
+            rule.OwnerClass,
+            {},
+            rule.Data,
+            rule.ModName
+        };
+        return RuntimeWidgetRuleMatchesEvent(proxy, function);
+    }
+
     std::string DragonWildsBlueprintModLoader::RuntimeWidgetRuleKey(
         UObject* owner,
         const RuntimeWidgetRule& rule) const
@@ -1150,6 +1274,258 @@ namespace DragonWilds {
         delegateProperty->AddDelegate(scriptDelegate, widget, propertyValue);
     }
 
+    std::string DragonWildsBlueprintModLoader::RuntimeUiRuleKey(
+        const RuntimeUiRule& rule) const
+    {
+        return "ui:" + std::to_string(reinterpret_cast<uintptr_t>(&rule))
+            + ":" + RC::to_string(rule.ModName)
+            + ":" + rule.Name;
+    }
+
+    UObject* DragonWildsBlueprintModLoader::BuildRuntimeUiNode(
+        UObject* owner,
+        UObject* widgetTree,
+        const nlohmann::json& node,
+        const RuntimeUiRule& rule,
+        size_t depth,
+        size_t& budget,
+        std::unordered_set<std::string>& names)
+    {
+        if (!node.is_object())
+            throw std::runtime_error("Blueprint $RuntimeUI nodes must be objects");
+        if (depth > 8)
+            throw std::runtime_error("Blueprint $RuntimeUI tree exceeds the depth safety limit");
+        if (++budget > 64)
+            throw std::runtime_error("Blueprint $RuntimeUI tree exceeds the 64-node safety limit");
+
+        const auto type = node.value("Type", std::string{});
+        const auto classPath = RuntimeUiPrimitivePath(type);
+        if (!classPath)
+            throw std::runtime_error("Blueprint $RuntimeUI Type must be CanvasPanel, Border, TextBlock, Image, or Button");
+
+        auto name = node.value("Name", std::string{});
+        if (name.empty())
+            name = "RuneSchemaNode_" + std::to_string(budget);
+        if (!RuntimeUiNameValid(name))
+            throw std::runtime_error("Blueprint $RuntimeUI node names must use only letters, numbers, and underscores");
+        if (!names.emplace(name).second)
+            throw std::runtime_error("Blueprint $RuntimeUI node names must be unique within the tree");
+
+        auto* widgetClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr, nullptr, classPath, false);
+        if (!widgetClass)
+            throw std::runtime_error("Blueprint $RuntimeUI primitive class was unavailable");
+
+        FStaticConstructObjectParameters params(widgetClass, widgetTree);
+        params.Name = FName(to_generic_string(name), FNAME_Add);
+        params.SetFlags = static_cast<EObjectFlags>(RF_Transactional);
+        auto* widget = UObjectGlobals::StaticConstructObject<UObject*>(params);
+        if (!widget)
+            throw std::runtime_error("Blueprint $RuntimeUI failed to construct a widget node");
+
+        m_runtimeWidgetObservedTargets[widget] = {
+            PS::WeakObject(widget),
+            PS::WeakObject(owner)
+        };
+
+        auto properties = node;
+        properties.erase("Type");
+        properties.erase("Name");
+        properties.erase("Children");
+        properties.erase("Slot");
+        properties.erase("$Bind");
+        properties.erase("$Call");
+        properties.erase("$When");
+        properties.erase("$Once");
+        properties.erase("$Activate");
+        properties.erase("$Find");
+        if (!properties.empty())
+            ApplyData(properties, widget, false);
+
+        if (const auto children = node.find("Children"); children != node.end())
+        {
+            if (!children->is_array())
+                throw std::runtime_error("Blueprint $RuntimeUI Children must be an array");
+            if (children->size() > 32)
+                throw std::runtime_error("Blueprint $RuntimeUI node exceeds the 32-child safety limit");
+
+            std::string loweredType = type;
+            std::transform(loweredType.begin(), loweredType.end(), loweredType.begin(),
+                [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+            if ((loweredType == "textblock" || loweredType == "text" || loweredType == "image")
+                && !children->empty())
+                throw std::runtime_error("Blueprint $RuntimeUI leaf widgets cannot contain Children");
+            if ((loweredType == "border" || loweredType == "button")
+                && children->size() > 1)
+                throw std::runtime_error("Blueprint $RuntimeUI single-content widgets accept at most one child");
+
+            for (const auto& childData : *children)
+            {
+                auto* child = BuildRuntimeUiNode(
+                    owner, widgetTree, childData, rule, depth + 1, budget, names);
+
+                const auto addChildName = RC::StringType(TEXT("AddChild"));
+                auto* addChildFunction = widget->GetFunctionByNameInChain(
+                    addChildName.c_str());
+                if (!addChildFunction)
+                    throw std::runtime_error("Blueprint $RuntimeUI parent does not support child widgets");
+
+                ActorHelper::FunctionCall addChild(widget, addChildFunction);
+                addChild.Arg(TEXT("Content"), child).Invoke();
+                auto* slot = addChild.Result<UObject*>();
+
+                if (const auto slotData = childData.find("Slot");
+                    slotData != childData.end())
+                {
+                    if (!slotData->is_object())
+                        throw std::runtime_error("Blueprint $RuntimeUI Slot must be an object");
+                    if (!slot)
+                        throw std::runtime_error("Blueprint $RuntimeUI child slot was unavailable");
+                    ApplyData(*slotData, slot, false);
+                }
+            }
+        }
+
+        RuntimeWidgetRule actionRule{
+            rule.OwnerClass,
+            to_generic_string(name),
+            node,
+            rule.ModName
+        };
+        ApplyRuntimeWidgetBinding(owner, widget, actionRule);
+        ApplyRuntimeWidgetCalls(owner, widget, actionRule);
+        return widget;
+    }
+
+    void DragonWildsBlueprintModLoader::ApplyRuntimeUiRule(
+        UObject* owner,
+        const RuntimeUiRule& rule,
+        UFunction* function)
+    {
+        if (m_runtimeUiTearingDown
+            || !RuntimeUiRuleMatchesEvent(rule, function))
+            return;
+
+        const auto key = RuntimeUiRuleKey(rule);
+        if (const auto existing = m_runtimeUiInstances.find(key);
+            existing != m_runtimeUiInstances.end())
+        {
+            auto* existingOwner = existing->second.Owner.Get();
+            auto* existingWidget = existing->second.Widget.Get();
+            if (existingOwner && existingWidget)
+                return;
+
+            if (existingWidget)
+            {
+                try
+                {
+                    const auto removeName = RC::StringType(TEXT("RemoveFromParent"));
+                    auto* remove = existingWidget->GetFunctionByNameInChain(removeName.c_str());
+                    if (remove && remove->GetParmsSize() == 0)
+                        ActorHelper::FunctionCall(existingWidget, remove).Invoke();
+                }
+                catch (...) {}
+            }
+            m_runtimeUiInstances.erase(existing);
+        }
+
+        if (!m_runtimeUiActiveRules.emplace(key).second)
+            return;
+
+        try
+        {
+            auto* world = owner ? owner->GetWorld() : nullptr;
+            if (!world)
+            {
+                m_runtimeUiActiveRules.erase(key);
+                return;
+            }
+
+            auto* gameInstanceProperty = CastField<FObjectPropertyBase>(
+                PropertyHelper::GetPropertyByName(
+                    world->GetClassPrivate(), TEXT("OwningGameInstance")));
+            auto* gameInstance = gameInstanceProperty
+                ? gameInstanceProperty->GetObjectPropertyValue(
+                    gameInstanceProperty->ContainerPtrToValuePtr<void>(world))
+                : nullptr;
+            if (!RuntimeObjectUsable(gameInstance))
+            {
+                m_runtimeUiActiveRules.erase(key);
+                return;
+            }
+
+            const auto zOrder = rule.Data.value("ZOrder", 95);
+            if (!rule.Data.at("Root").is_object()
+                || zOrder < -1000 || zOrder > 10000)
+                throw std::runtime_error("Blueprint $RuntimeUI ZOrder is outside the supported range");
+
+            auto* userWidgetClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+                nullptr, nullptr, TEXT("/Script/UMG.UserWidget"), false);
+            auto* widgetTreeClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+                nullptr, nullptr, TEXT("/Script/UMG.WidgetTree"), false);
+            if (!userWidgetClass || !widgetTreeClass)
+                throw std::runtime_error("Blueprint $RuntimeUI required UMG classes were unavailable");
+
+            const auto generation = ++m_runtimeUiGeneration;
+            const auto runtimeName = "RuneSchemaUI_" + rule.Name + "_"
+                + std::to_string(generation);
+            FStaticConstructObjectParameters widgetParams(userWidgetClass, gameInstance);
+            widgetParams.Name = FName(to_generic_string(runtimeName), FNAME_Add);
+            widgetParams.SetFlags = static_cast<EObjectFlags>(RF_Transactional);
+            auto* userWidget = UObjectGlobals::StaticConstructObject<UObject*>(widgetParams);
+            if (!userWidget)
+                throw std::runtime_error("Blueprint $RuntimeUI failed to construct its UserWidget");
+
+            FStaticConstructObjectParameters treeParams(widgetTreeClass, userWidget);
+            treeParams.Name = FName(to_generic_string(runtimeName + "_Tree"), FNAME_Add);
+            treeParams.SetFlags = static_cast<EObjectFlags>(RF_Transactional);
+            auto* widgetTree = UObjectGlobals::StaticConstructObject<UObject*>(treeParams);
+            if (!widgetTree)
+                throw std::runtime_error("Blueprint $RuntimeUI failed to construct its WidgetTree");
+
+            ActorHelper::SetObjectRef(userWidget, TEXT("WidgetTree"), widgetTree);
+
+            if (const auto properties = rule.Data.find("Properties");
+                properties != rule.Data.end())
+            {
+                if (!properties->is_object())
+                    throw std::runtime_error("Blueprint $RuntimeUI Properties must be an object");
+                ApplyData(*properties, userWidget, false);
+            }
+
+            size_t budget = 0;
+            std::unordered_set<std::string> names;
+            auto* root = BuildRuntimeUiNode(
+                owner, widgetTree, rule.Data.at("Root"), rule, 0, budget, names);
+            ActorHelper::SetObjectRef(widgetTree, TEXT("RootWidget"), root);
+
+            m_runtimeWidgetObservedTargets[userWidget] = {
+                PS::WeakObject(userWidget),
+                PS::WeakObject(owner)
+            };
+
+            const auto addToViewportName = RC::StringType(TEXT("AddToViewport"));
+            auto* addToViewport = userWidget->GetFunctionByNameInChain(
+                addToViewportName.c_str());
+            if (!addToViewport)
+                throw std::runtime_error("Blueprint $RuntimeUI AddToViewport was unavailable");
+            ActorHelper::FunctionCall(userWidget, addToViewport)
+                .Arg(TEXT("ZOrder"), static_cast<int32_t>(zOrder)).Invoke();
+
+            m_runtimeUiInstances.insert_or_assign(key, RuntimeUiInstance{
+                PS::WeakObject(owner),
+                PS::WeakObject(userWidget)
+            });
+        }
+        catch (...)
+        {
+            m_runtimeUiActiveRules.erase(key);
+            throw;
+        }
+
+        m_runtimeUiActiveRules.erase(key);
+    }
+
     void DragonWildsBlueprintModLoader::ApplyRuntimeWidgetRule(
         UObject* owner,
         const RuntimeWidgetRule& rule)
@@ -1211,7 +1587,7 @@ namespace DragonWilds {
         UObject* source,
         UFunction* function)
     {
-        if (!source || m_runtimeWidgetRules.empty()) return;
+        if (!source || (m_runtimeWidgetRules.empty() && m_runtimeUiRules.empty())) return;
 
         std::unordered_set<UObject*> ownersToRefresh;
 
@@ -1232,6 +1608,11 @@ namespace DragonWilds {
             if (!owner) continue;
             if (source == owner
                 || RuntimeWidgetPathContains(owner, source, triggerRule.WidgetPath))
+                ownersToRefresh.emplace(owner);
+        }
+        for (const auto& uiRule : m_runtimeUiRules)
+        {
+            if (auto* owner = FindRuntimeWidgetOwner(source, uiRule.OwnerClass))
                 ownersToRefresh.emplace(owner);
         }
 
@@ -1259,6 +1640,29 @@ namespace DragonWilds {
                         PS::Log<LogLevel::Warning>(
                             STR("Blueprint $RuntimeWidget '{}' from '{}' failed: {}. Further identical failures are suppressed.\n"),
                             rule.WidgetPath,
+                            rule.ModName,
+                            PS::ToWideSafe(error.what()));
+                    }
+                }
+            }
+
+            for (const auto& rule : m_runtimeUiRules)
+            {
+                if (rule.OwnerClass != ownerName && rule.OwnerClass != ownerPath)
+                    continue;
+                try
+                {
+                    ApplyRuntimeUiRule(owner, rule, function);
+                }
+                catch (const std::exception& error)
+                {
+                    const auto failureKey = RC::to_string(rule.ModName)
+                        + ":" + rule.Name + ":" + error.what();
+                    if (m_reportedRuntimeUiFailures.emplace(failureKey).second)
+                    {
+                        PS::Log<LogLevel::Warning>(
+                            STR("Blueprint $RuntimeUI '{}' from '{}' failed: {}. Further identical failures are suppressed.\n"),
+                            PS::ToWideSafe(rule.Name.c_str()),
                             rule.ModName,
                             PS::ToWideSafe(error.what()));
                     }
@@ -1362,7 +1766,8 @@ namespace DragonWilds {
 
         for (auto& [propertyName, propertyValue] : data.items())
         {
-            if (propertyName == "$Append" || propertyName == "$VisualEffect" || propertyName == "$RuntimeWidget")
+            if (propertyName == "$Append" || propertyName == "$VisualEffect"
+                || propertyName == "$RuntimeWidget" || propertyName == "$RuntimeUI")
             {
                 continue;
             }

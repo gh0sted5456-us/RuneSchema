@@ -37,16 +37,18 @@ partially constructed Slate trees can be present in global scans.
 
 ## Phase 3 — RuneSchema-owned transient UMG
 
-Planned after discovery is stable:
+Implemented first slice:
 
 - `$RuntimeUI` owns a transient UUserWidget + WidgetTree.
-- Small supported primitive set first: CanvasPanel, Border, TextBlock, Image,
-  Button, and common slots.
-- Explicit ownership, viewport Z order, teardown, and duplicate prevention.
+- Explicit primitive whitelist: CanvasPanel, Border, TextBlock, Image, Button.
+- Recursive child construction with reflected panel-slot properties.
+- Existing `$Bind` and test-bed `$Call` can operate on created nodes.
+- 64-node / depth-8 / 32-children structural limits and exact safe names.
+- Explicit viewport Z order, weak ownership, duplicate prevention, and teardown.
 - No attempt to synthesize arbitrary Blueprint bytecode.
 
-The goal is to cover overlays, notifications, lightweight controls, and similar
-UI without requiring Lua or a cooked WBP while keeping full Blueprint creation
+This covers overlays, notifications, lightweight controls, and similar UI
+without requiring Lua or a cooked WBP while keeping full Blueprint creation
 outside RuneSchema's runtime schema contract.
 
 ## Test-bed CI

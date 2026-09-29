@@ -193,6 +193,56 @@ dead UObject pointer. The tracking table is cleared on world teardown.
 
 There is intentionally no general `FindAllOf(UserWidget)` authoring path.
 
+## RuneSchema-owned transient UI
+
+The 0.8 test bed also accepts a separate `$RuntimeUI` block on an existing
+owner widget class. This does **not** create a Blueprint class. RuneSchema owns a
+transient `UUserWidget`, its `WidgetTree`, viewport lifetime, and cleanup.
+
+```jsonc
+{
+  "/Game/UI/MainMenu/WBP_MainMenu_CharacterSelect": {
+    "$RuntimeUI": {
+      "SchemaNotice": {
+        "ZOrder": 95,
+        "$When": "Construct",
+        "Root": {
+          "Type": "Border",
+          "Name": "NoticeBorder",
+          "Padding": { "Left": 12, "Top": 8, "Right": 12, "Bottom": 8 },
+          "Children": [
+            {
+              "Type": "TextBlock",
+              "Name": "NoticeText",
+              "Text": "RuneSchema 0.8 test bed"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
+```
+
+The first implementation deliberately whitelists only `CanvasPanel`,
+`Border`, `TextBlock`, `Image`, and `Button`. A tree is limited to
+64 nodes, depth 8, and 32 children per panel. `Border` and `Button` accept
+one child; `TextBlock` and `Image` are leaves. UI and node names must contain
+only letters, numbers, and underscores.
+
+Each child may provide a `Slot` object. RuneSchema applies those reflected
+properties to the panel slot returned by `AddChild`. Node properties are
+otherwise applied with the normal reflected Blueprint property writer.
+
+Runtime-created nodes may use the existing `$Bind` and test-bed `$Call`
+directives. This lets a transient Button bind an existing reflected multicast
+event to an existing owner function without synthesizing Blueprint bytecode.
+
+`Properties` applies reflected fields to the transient `UUserWidget` itself.
+`ZOrder` is limited to -1000 through 10000. Instances are weak-owned, one live
+instance per runtime-UI rule, removed from the viewport on world teardown, and
+recreated only after the prior owner/widget lifetime has ended.
+
 ## Simple rules
 
 - Use `/blueprints` only for supported reflected defaults on an existing loaded class or component.
@@ -203,6 +253,7 @@ There is intentionally no general `FindAllOf(UserWidget)` authoring path.
 - Test bed: `$Activate` is only valid when the target exposes CommonUI `ActivateWidget` / `DeactivateWidget`.
 - Test bed: `$Find` is fallback-only and limited to `WidgetTree`, `HUDWidgetRefs`, or CommonUI `WidgetList` discovery.
 - Test bed: ambiguous `$Find` results fail closed; no live widget is selected by guesswork.
+- Test bed: `$RuntimeUI` creates only RuneSchema-owned transient UMG from the explicit primitive whitelist; it does not create Blueprint classes.
 - Delegate and function reflected parameter contracts must be compatible; raw parameter-buffer size is not used as the compatibility test.
 - Use optional `$Storefront` metadata when a live UI rule is only meaningful on one storefront.
 - Confirm every field, widget path, event, and function against live reflection.

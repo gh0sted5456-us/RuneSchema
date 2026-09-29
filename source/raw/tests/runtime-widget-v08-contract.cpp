@@ -28,6 +28,10 @@ int main(int argc, char** argv) {
     Require(header, "RuntimeWidgetObservedTarget");
     Require(header, "FindRuntimeWidgetTarget");
     Require(header, "m_runtimeWidgetObservedTargets");
+    Require(header, "RuntimeUiRule");
+    Require(header, "RuntimeUiInstance");
+    Require(header, "m_runtimeUiInstances");
+    Require(header, "BuildRuntimeUiNode");
 
     Require(source, "ActorHelper::FunctionCall");
     Require(source, "properties.erase(\"$Call\")");
@@ -48,6 +52,19 @@ int main(int argc, char** argv) {
     Require(source, "RF_ClassDefaultObject | RF_ArchetypeObject");
     Require(source, "Blueprint $RuntimeWidget $Find matched more than one live object");
     Require(source, "m_runtimeWidgetObservedTargets[discovered]");
+    Require(source, "Blueprint $RuntimeUI block exceeds the 16-widget safety limit");
+    Require(source, "Blueprint $RuntimeUI tree exceeds the 64-node safety limit");
+    Require(source, "/Script/UMG.UserWidget");
+    Require(source, "/Script/UMG.WidgetTree");
+    Require(source, "/Script/UMG.CanvasPanel");
+    Require(source, "/Script/UMG.Border");
+    Require(source, "/Script/UMG.TextBlock");
+    Require(source, "/Script/UMG.Image");
+    Require(source, "/Script/UMG.Button");
+    Require(source, "AddToViewport");
+    Require(source, "RemoveFromParent");
+    Require(source, "m_runtimeUiActiveRules.emplace(key)");
+    Require(source, "propertyName == \"$RuntimeWidget\" || propertyName == \"$RuntimeUI\"");
 
     Require(docs, "RuneSchema .8 test-bed runtime actions");
     Require(docs, "`$Call`");
@@ -56,6 +73,9 @@ int main(int argc, char** argv) {
     Require(docs, "`$RuntimeUI`");
     Require(docs, "## Scoped runtime discovery");
     Require(docs, "There is intentionally no general `FindAllOf(UserWidget)` authoring path.");
+    Require(docs, "## RuneSchema-owned transient UI");
+    Require(docs, "64 nodes");
+    Require(docs, "does **not** create a Blueprint class");
 
     std::cout << "RuneSchema .8 runtime-widget contract passed.\n";
 }
