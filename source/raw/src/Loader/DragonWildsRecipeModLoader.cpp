@@ -555,7 +555,7 @@ namespace DragonWilds {
         m_propsApplied.insert(key);
         m_unlock.insert(key);
         RegisterHooks();
-        if(auto* progress=FindProgressComponent())ApplyUnlocks(progress);
+        ApplyUnlocksToAllProgressComponents();
         return recipe;
     }
 
@@ -671,10 +671,7 @@ namespace DragonWilds {
 
         ApplyAll();
 
-        if (auto* progressComponent = FindProgressComponent())
-        {
-            ApplyUnlocks(progressComponent);
-        }
+        ApplyUnlocksToAllProgressComponents();
     }
 
     bool DragonWildsRecipeModLoader::CanInitialize(const EEngineLifecyclePhase& engineLifecyclePhase)
@@ -1561,6 +1558,31 @@ namespace DragonWilds {
         // Safe Clean owns the deleted-mod/orphaned PersistenceID recovery path,
         // so valid live recipes are not mirrored into Dominion's non-persistent
         // exclusion set.
+    }
+
+    void DragonWildsRecipeModLoader::ApplyUnlocksToAllProgressComponents()
+    {
+        if (!m_progressComponentClass) return;
+
+        TArray<UObject*> components;
+        UECustom::UObjectGlobals::GetObjectsOfClass(
+            m_progressComponentClass, components, true);
+
+        size_t applied = 0;
+        for (auto* component : components)
+        {
+            if (!component || component->HasAnyFlags(static_cast<EObjectFlags>(
+                    RF_ClassDefaultObject | RF_ArchetypeObject
+                    | RF_BeginDestroyed | RF_FinishDestroyed)))
+                continue;
+            ApplyUnlocks(component);
+            ++applied;
+        }
+
+        if (applied > 1)
+            PS::Log<LogLevel::Verbose>(STR(
+                "Recipes: applied unlocks to {} live ProgressComponent instance(s) to cover world transition overlap.\n"),
+                applied);
     }
 
     UObject* DragonWildsRecipeModLoader::FindProgressComponent()
