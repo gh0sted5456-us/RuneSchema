@@ -83,9 +83,9 @@ namespace DragonWilds {
                     && left->GetPropertyClass().Get() == right->GetPropertyClass().Get();
             }
 
-            if (auto* left = CastField<FEnumProperty>(delegateProperty))
+            if (auto* left = PropertyHelper::CastProperty<FEnumProperty>(delegateProperty))
             {
-                auto* right = CastField<FEnumProperty>(functionProperty);
+                auto* right = PropertyHelper::CastProperty<FEnumProperty>(functionProperty);
                 return right && left->GetEnum() == right->GetEnum();
             }
 
