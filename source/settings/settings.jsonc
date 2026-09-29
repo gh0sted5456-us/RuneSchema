@@ -1,5 +1,5 @@
 // RuneSchema settings. Edit with the game closed, then restart.
-// Advanced logging controls detail; advanced runtime unlocks authoring and diagnostics.
+// Advanced logging changes output detail only. Auto reload controls file watching only; neither setting gates initial RuneSchema startup.
 // Plugin-owned settings live below plugins/<PluginId>/settings/.
 {
   "enableAutoReload": false,
