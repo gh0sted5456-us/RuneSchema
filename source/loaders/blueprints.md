@@ -55,12 +55,36 @@ Runtime rules are event-driven through the existing ProcessEvent observer. They
 do not create a polling timer. Delegate bindings are deduplicated by target
 object and function.
 
+Delegate compatibility is based on reflected parameter contracts rather than raw
+`ParmsSize`. RuneSchema compares parameter count, direction, reflected property
+type, referenced object/class/struct/enum type, nested container element types,
+and return type. Equivalent signatures are therefore allowed even when Unreal
+pads their parameter buffers differently.
+
+A whole `$RuntimeWidget` block can be storefront-gated:
+
+```json
+"$RuntimeWidget": {
+  "$Storefront": "GamePass",
+  "$SkipMessage": "No need for this mod, please uninstall.",
+  "Character.EditAppearanceButton": {
+    "Visibility": "Visible"
+  }
+}
+```
+
+`$Storefront` accepts `"GamePass"`/`"WinGDK"`,
+`"Steam"`/`"SteamGOG"`/`"GOG"`, `"Any"`, or an array of those
+values. A mismatched block is not registered. `$SkipMessage` is optional and
+is emitted only when the running storefront is known.
+
 ## Simple rules
 
 - Use `/blueprints` only for supported reflected defaults on an existing loaded class or component.
 - Use `$RuntimeWidget` only for existing live widget-tree objects.
 - `$Bind.Event` must be a reflected multicast delegate and `$Bind.Function` must resolve on the selected target.
-- Delegate and function signatures must be compatible.
+- Delegate and function reflected parameter contracts must be compatible; raw parameter-buffer size is not used as the compatibility test.
+- Use optional `$Storefront` metadata when a live UI rule is only meaningful on one storefront.
 - Confirm every field, widget path, event, and function against live reflection.
 - Restart after changing class defaults or `$RuntimeWidget` rules. Cook a Blueprint in a PAK when a new class is required.
 
