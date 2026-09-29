@@ -1,72 +1,61 @@
 # Compatibility
 
-RuneSchema supports Steam/GOG and Game Pass/WinGDK with one storefront-aware runtime.
+RuneSchema uses one storefront-aware runtime for Steam/GOG and Game Pass/WinGDK.
 
 ## Storefronts
 
-### Steam / GOG
+At startup RuneSchema detects the running game and logs the selected native
+binding lane. Steam-only native patterns are never reused on a detected WinGDK
+build.
 
-RuneSchema uses the Steam/GOG support path when the running game is the
-Steam/GOG build.
-
-### Game Pass / WinGDK
-
-RuneSchema uses the WinGDK runtime lane. Steam-only byte patterns are not used
-on Game Pass.
-
-Xbox Game Save data is managed by the Xbox app. RuneSchema does not edit those
-files as though they were Steam character files.
-
-## Mappings
-
-RuneSchema looks for an optional `.usmap` in these locations:
-
-1. `Mods/RuneSchema/dlls/mappings`
-2. the UE4SS root
-3. `ue4ss/mappings`
-4. older RuneSchema mapping locations kept for compatibility
-
-Mappings improve field names, type information, and diagnostics. The loaded
-game still decides whether a requested object or field is available.
-
-## Plugins
-
-Plugins are optional.
-
-A plugin built for an incompatible RuneSchema version can be skipped without
-disabling RuneSchema itself. Valid plugin PAK content can remain independent
-from an optional plugin DLL.
-
-Helpy is not required by the loader system.
+The JSON loaders are shared between storefronts.
 
 ## Multiplayer
 
-Gameplay mutations remain server-owned. Clients need the cooked assets required
-for anything they render.
+RuneSchema content is network-mode agnostic. Authors do not add a
+`Multiplayer` or single-player flag.
 
-`/registry` connects server actions with client presentation, but a registry
-entry does not bypass server validation.
+The server owns gameplay mutations such as inventory, purchases, quests,
+spawning, buildings, AI, drops and events. Clients render replicated state and
+the cooked assets installed locally.
 
-## Native feature fallback
-
-Some features need a storefront-specific game function. If RuneSchema cannot
-verify that function for the current game build, it leaves only that feature
-off and continues loading unrelated content.
-
-A game update may therefore temporarily affect one native feature without
-breaking normal JSON authoring.
+`/registry` is for features that need an explicit server action paired with
+client presentation. It does not bypass server validation.
 
 ## Saves
 
-SafeSave removes only content with recorded RuneSchema ownership.
+Steam and Game Pass store character data differently, but RuneSchema applies the
+same cleanup decision at the game character-load boundary.
 
-Steam/GOG and Game Pass store saves differently, but RuneSchema applies the
-same ownership and cleanup rules after the game loads a character. Do not use
-Steam file-editing instructions on Xbox Game Save files.
+RuneSchema does not treat Xbox Game Save provider files as ordinary Steam JSON
+files and does not edit WGS containers directly.
 
-For user recovery steps, see
-[Manual Save Recovery](MANUAL-SAVE-RECOVERY.md).
+Safe Clean removes unresolved RuneSchema identities after active content has
+registered. Vanilla and unrelated third-party identities are outside that rule.
 
-For storefront detection, hook validation, WGS internals, and storefront-specific
-details, see the [Developer Guide](DEVELOPER-GUIDE.md) and the
-[side-by-side lane reference](STOREFRONT-LANES.md).
+## Mappings
+
+`Mappings.usmap` is optional. RuneSchema uses live reflection as the final
+authority and uses mappings for better names, diagnostics and tooling.
+
+The canonical location is:
+
+```text
+Mods/RuneSchema/dlls/mappings/Mappings.usmap
+```
+
+Compatibility locations are still read for existing installs.
+
+## Plugins
+
+Plugins are optional. A plugin failure or version mismatch does not disable
+RuneSchema core. Helpy is not required by the loader system.
+
+## Native feature fallback
+
+Some features depend on storefront-specific game functions. If RuneSchema cannot
+verify one of those functions after a game update, only that feature is disabled
+where possible.
+
+See the [Developer Guide](DEVELOPER-GUIDE.md) for implementation details and
+[Manual Save Recovery](MANUAL-SAVE-RECOVERY.md) for recovery steps.
