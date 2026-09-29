@@ -104,8 +104,11 @@ namespace {
             FManagedStruct tags(tagType);
             struct EmptyTags {uint8_t Bytes[32];} empty{};
             std::memcpy(&empty,tags.GetData(),sizeof(empty));
+            InventoryGrantPolicy::ScopedBackpackGrant routing(Item);
             ActorHelper::FunctionCall call(Inventory,GivePath);
             call.Arg(TEXT("ItemData"),Item).Arg(TEXT("Count"),count).Arg(TEXT("DurabilityPercentage"),1.0f).Arg(TEXT("GameplayTags"),empty).Invoke();
+            if(routing.SuppressedHotbarRouting())
+                PS::Log<LogLevel::Verbose>(STR("Game Pass quest reward forced '{}' through normal inventory routing.\n"),Item->GetPathName());
             const bool success=call.Result<bool>();
             if(!current())throw std::runtime_error("World changed after reward delivery; receipt remains pending");
             const auto after=Count();
