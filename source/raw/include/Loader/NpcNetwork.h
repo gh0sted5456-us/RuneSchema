@@ -7,8 +7,8 @@ inline constexpr unsigned ClientArrivalAttempts=40;
 inline bool ClientComponentsReady(int interactions,int stations,bool merchant=true) {
     return interactions==1 && stations==(merchant?1:0);
 }
-inline bool NeedsIdentityReplacement(bool multiplayer,std::string_view actual,std::string_view expected) {
-    return multiplayer && !expected.empty() && actual!=expected;
+inline bool NeedsIdentityReplacement(bool networkedWorld,std::string_view actual,std::string_view expected) {
+    return networkedWorld && !expected.empty() && actual!=expected;
 }
 inline std::string ActorName(std::string_view definition) {
     const auto words=VendorIdentity::ForOwner(definition);
@@ -23,9 +23,9 @@ inline std::string GameplayFingerprint(const std::string& mod,nlohmann::json def
         definition.erase(field);
     return "gameplay-v1:"+ActorName(mod+":"+definition.dump());
 }
-inline bool Supported(bool enabled,bool human,bool resource,bool merchant,bool dialogue,bool locked,bool lore=false,bool visual=false) {
+inline bool Supported(bool human,bool resource,bool merchant,bool dialogue,bool locked,bool lore=false,bool visual=false) {
     (void)human;(void)resource;(void)locked;
-    return enabled && (merchant || dialogue || lore || visual);
+    return merchant || dialogue || lore || visual;
 }
 inline std::string DialogueFingerprint(const std::string& base,const nlohmann::json& dialogues,const nlohmann::json& quests) {
     if(base.empty() || !dialogues.is_object() || dialogues.empty() || !quests.is_array() || quests.empty())
