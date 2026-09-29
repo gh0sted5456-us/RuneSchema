@@ -2,7 +2,6 @@
 // Scale 3; Z is ground plus a small burial offset for the authored mesh pivot.
 {
   "Id": "granite_interminable",
-  "Multiplayer": true,
   "Type": "Resource",
   "DisplayName": "Granite the Interminable",
   "DialogueID": "granite_story",
