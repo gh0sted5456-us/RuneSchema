@@ -1,6 +1,5 @@
 {
   "Id": "grumble_stone_debt",
-  "Multiplayer": true,
   "Type": "AI",
   "DisplayName": "Grumble, Collector of Grievances",
   "VisualSource": "/Game/Gameplay/AI/GoblinFaction/MeleeGoblin/BP_AI_MeleeGoblin_Character.BP_AI_MeleeGoblin_Character_C",
