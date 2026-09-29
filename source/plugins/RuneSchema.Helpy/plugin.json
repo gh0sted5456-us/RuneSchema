@@ -1,8 +1,8 @@
 {
   "SchemaVersion": 1,
   "Id": "RuneSchema.Helpy",
-  "Version": "0.7.5.9",
-  "BuiltForRuneSchema": "0.7.5.9",
+  "Version": "0.7.9",
+  "BuiltForRuneSchema": "0.7.9",
   "EntryPoint": "RuneSchema.Helpy.dll",
   "ConsoleMessage": "Helpy is ready with its embedded instant-open catalog. Use the configured hotkey to open it.",
   "Capabilities": [
@@ -12,9 +12,5 @@
     "helpy.journal-quests",
     "authoring.live-preview",
     "authoring.export"
-  ],
-  "CookedObjects": [
-    "/RuneSchema/UI/Icons/Badges/T_Badge_Runeschema",
-    "/RuneSchema/UI/Icons/Badges/T_Badge_Ue4ss"
   ]
 }
