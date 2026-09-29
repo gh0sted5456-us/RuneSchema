@@ -658,9 +658,9 @@ namespace
         if (!item || !subsystem) return -1;
         auto* subsystemClass = subsystem->GetClassPrivate();
         auto* reverseProperty = CastField<FMapProperty>(
-            PropertyHelper::GetPropertyByName(subsystemClass, TEXT("DataToNetIdMap")));
+            DragonWilds::PropertyHelper::GetPropertyByName(subsystemClass, TEXT("DataToNetIdMap")));
         auto* arrayProperty = CastField<FArrayProperty>(
-            PropertyHelper::GetPropertyByName(subsystemClass, TEXT("NetIdToData")));
+            DragonWilds::PropertyHelper::GetPropertyByName(subsystemClass, TEXT("NetIdToData")));
         if (!reverseProperty || !arrayProperty) return -1;
 
         UECustom::FScriptMapHelper reverse(
