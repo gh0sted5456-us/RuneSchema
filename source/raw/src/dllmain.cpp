@@ -249,7 +249,7 @@ public:
         for(const auto& connection:m_pluginHost.Connections())
             PS::Log<LogLevel::Normal>(TEXT("Plugin connection enabled: {}\n"),PS::ToWideSafe(connection.c_str()));
         if(!m_pluginHost.HasCapability("bridge.registry"))
-            PS::Log<LogLevel::Normal>(TEXT("RuneSchema.Networking is not active. Local loaders remain enabled.\n"));
+            PS::Log<LogLevel::Normal>(TEXT("RSNetworking is not active. Local loaders remain enabled.\n"));
         if(m_pluginHost.HasCapability("helpy.navigation"))try {
             const auto about=m_pluginHost.Call("RuneSchema.Core","helpy.about","{}");
             PS::Log<LogLevel::Normal>(TEXT("Helpy plugin service: {}\n"),PS::ToWideSafe(about.c_str()));
