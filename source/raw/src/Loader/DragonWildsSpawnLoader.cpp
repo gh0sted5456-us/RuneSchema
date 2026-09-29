@@ -79,7 +79,6 @@ using namespace DragonWilds::SpawnRuntime;
 #include "Core/JsonPatchDirective.h"
 #include "Core/JsonLoadOrderMerge.h"
 #include "Runtime/HostServices.h"
-#include "Loader/InventoryGrantPolicy.h"
 
 using namespace RC;
 using namespace RC::Unreal;
