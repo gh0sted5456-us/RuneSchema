@@ -77,7 +77,6 @@ namespace DragonWilds {
 
         void InitializeMods(EEngineLifecyclePhase engineLifecyclePhase);
         void LoadMods(EEngineLifecyclePhase engineLifecyclePhase);
-        void WarnAboutUnknownFolders(const std::filesystem::path& modPath, const RC::StringType& modName);
     private:
         static std::filesystem::path GetModsPath();
 
