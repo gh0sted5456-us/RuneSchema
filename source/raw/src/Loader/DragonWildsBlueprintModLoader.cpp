@@ -83,10 +83,19 @@ namespace DragonWilds {
                     && left->GetPropertyClass().Get() == right->GetPropertyClass().Get();
             }
 
-            if (auto* left = PropertyHelper::CastProperty<FEnumProperty>(delegateProperty))
+            if (PropertyHelper::IsPropertyA(
+                    delegateProperty, DragonWilds::StaticClassStorage::EnumPropertyStaticClass))
             {
-                auto* right = PropertyHelper::CastProperty<FEnumProperty>(functionProperty);
-                return right && left->GetEnum() == right->GetEnum();
+                if (!PropertyHelper::IsPropertyA(
+                        functionProperty, DragonWilds::StaticClassStorage::EnumPropertyStaticClass))
+                    return false;
+
+                // UE4SS 3.0.1 exposes FEnumProperty layout but does not mark it
+                // as an FFieldDerivative for CastField's concept constraints.
+                // Runtime field-class verification above makes this cast safe.
+                auto* left = reinterpret_cast<FEnumProperty*>(delegateProperty);
+                auto* right = reinterpret_cast<FEnumProperty*>(functionProperty);
+                return left->GetEnum() == right->GetEnum();
             }
 
             if (auto* left = CastField<FByteProperty>(delegateProperty))
