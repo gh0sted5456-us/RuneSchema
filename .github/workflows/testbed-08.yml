@@ -1,0 +1,37 @@
+name: RuneSchema 0.8 test bed
+
+on:
+  push:
+    branches:
+      - RuneSchema-0.8-test-bed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-contracts:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout test bed
+        uses: actions/checkout@v6
+
+      - name: Build and run RuneSchema contracts
+        shell: cmd
+        run: call "Build RuneSchema.bat" -Tests
+
+      - name: Upload 0.8 test-bed packages
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuneSchema-0.8-test-bed
+          path: dist/*.zip
+          if-no-files-found: warn
+
+      - name: Upload builder diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuneSchema-0.8-test-bed-build-logs
+          path: build/logs/
+          if-no-files-found: warn
