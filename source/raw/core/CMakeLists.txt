@@ -45,7 +45,9 @@ if(PROJECT_IS_TOP_LEVEL)
     endif()
     add_test(NAME quest-inventory-routing COMMAND quest-inventory-routing
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/NpcQuestCompletion.inl"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/NpcQuestAcquisition.inl")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/NpcQuestAcquisition.inl"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/NpcQuestActions.inl"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/NpcDialogue.inl")
     add_test(NAME staged-quest-example COMMAND quest-definition "${CMAKE_CURRENT_SOURCE_DIR}/../../extras/examples/StagedQuest/quests/70-TwoPatrols.json")
     add_executable(tree-quest ../tests/tree-quest.cpp)
     target_link_libraries(tree-quest PRIVATE RuneSchemaJsonCore)
