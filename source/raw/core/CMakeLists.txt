@@ -144,6 +144,11 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsAssetModLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsBlueprintModLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp")
+    add_executable(runtime-widget-v08-contract ../tests/runtime-widget-v08-contract.cpp)
+    add_test(NAME runtime-widget-v08-contract COMMAND runtime-widget-v08-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/DragonWildsBlueprintModLoader.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsBlueprintModLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../loaders/blueprints.md")
     add_executable(persistence-mode-contract ../tests/persistence-mode-contract.cpp)
     add_test(NAME persistence-mode-contract COMMAND persistence-mode-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Utility/Config.h"

@@ -1,0 +1,18 @@
+{
+  "/Game/UI/MainMenu/WBP_MainMenu_CharacterSelect": {
+    "$RuntimeWidget": {
+      "Character.EditAppearanceButton": {
+        "$When": { "Function": ["Construct", "OnActivated"] },
+        "$Once": true,
+        "Visibility": "Visible",
+        "bIsEnabled": true,
+        "RenderOpacity": 1.0,
+        "$Bind": {
+          "Event": "OnButtonBaseClicked",
+          "Target": "Character",
+          "Function": "GoToEditAppearance"
+        }
+      }
+    }
+  }
+}

@@ -78,11 +78,90 @@ A whole `$RuntimeWidget` block can be storefront-gated:
 values. A mismatched block is not registered. `$SkipMessage` is optional and
 is emitted only when the running storefront is known.
 
+## RuneSchema .8 test-bed runtime actions
+
+The `RuneSchema-0.8-test-bed` branch expands `$RuntimeWidget` with reflected
+runtime actions. These directives are experimental and are not part of the
+stable 0.7.x contract.
+
+### `$Call`
+
+`$Call` invokes an existing reflected function on the live target, the owner,
+or another object reachable from the owner. RuneSchema resolves the live
+`UFunction`, verifies every named JSON argument is a reflected input parameter,
+uses the shared `ActorHelper::FunctionCall` parameter lifecycle, and dispatches
+through `ProcessEvent`.
+
+```jsonc
+"$RuntimeWidget": {
+  "SomePanel": {
+    "$Call": {
+      "Target": "$Self",
+      "Function": "SetRenderOpacity",
+      "Args": {
+        "InOpacity": 1.0
+      }
+    }
+  }
+}
+```
+
+`Target` defaults to `"$Self"`. Use `"$Owner"` for the owning widget or a
+dot-separated owner path for another reflected object. `$Call` may also be an
+array to run several calls in order. Return values are intentionally not exposed
+in the first test-bed implementation.
+
+### `$When` and `$Once`
+
+`$When` gates a rule on the ProcessEvent function that caused the runtime
+refresh. It accepts one function name, an object with `Function`, or an array
+of function names. `"Any"`, `"Always"`, and `"Resolved"` retain the normal
+event-driven behavior.
+
+```jsonc
+"$RuntimeWidget": {
+  "Character.EditAppearanceButton": {
+    "$When": { "Function": ["Construct", "OnActivated"] },
+    "$Once": true,
+    "Visibility": "Visible"
+  }
+}
+```
+
+`$Once` is tracked per live owner and rule until world teardown. Runtime
+actions have a re-entrancy guard because `$Call` and CommonUI activation
+generate ProcessEvent traffic themselves.
+
+### `$Activate`
+
+`$Activate: true` calls `ActivateWidget()`; `$Activate: false` calls
+`DeactivateWidget()`. The directive fails closed when those reflected
+functions are not present, so ordinary widgets are not treated as CommonUI
+activatables.
+
+```jsonc
+"$RuntimeWidget": {
+  "PauseScreen": {
+    "$When": "Resolved",
+    "$Once": true,
+    "$Activate": true
+  }
+}
+```
+
+The next .8 phases are intentionally separate: safe scoped discovery
+(`WidgetTree` / `HUDWidgetRefs` / CommonUI containers) before any global
+fallback, followed by a RuneSchema-owned `$RuntimeUI` tree for transient UMG.
+Do not use unrestricted global widget sweeps as an authoring primitive.
+
 ## Simple rules
 
 - Use `/blueprints` only for supported reflected defaults on an existing loaded class or component.
 - Use `$RuntimeWidget` only for existing live widget-tree objects.
 - `$Bind.Event` must be a reflected multicast delegate and `$Bind.Function` must resolve on the selected target.
+- Test bed: `$Call` only invokes reflected functions and every named `Args` entry must resolve to an input parameter.
+- Test bed: use `$When` and `$Once` for lifecycle-sensitive runtime actions; recursive ProcessEvent re-entry is suppressed per rule.
+- Test bed: `$Activate` is only valid when the target exposes CommonUI `ActivateWidget` / `DeactivateWidget`.
 - Delegate and function reflected parameter contracts must be compatible; raw parameter-buffer size is not used as the compatibility test.
 - Use optional `$Storefront` metadata when a live UI rule is only meaningful on one storefront.
 - Confirm every field, widget path, event, and function against live reflection.

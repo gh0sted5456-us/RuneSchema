@@ -8,6 +8,7 @@
 #include "Unreal/AActor.hpp"
 #include "Helpers/String.hpp"
 #include "SDK/Helper/PropertyHelper.h"
+#include "SDK/Helper/ActorHelper.h"
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
 #include "Utility/InlineHook.h"
@@ -231,6 +232,7 @@ namespace DragonWilds {
         ActorInitializedObservers.clear();
 
         ClearWorldVisualEffects();
+        ClearRuntimeWidgetState();
         m_reportedRuntimeWidgetFailures.clear();
         m_runtimeWidgetRules.clear();
         m_modsMap.clear();
@@ -242,6 +244,12 @@ namespace DragonWilds {
             if (auto* material=ref.Get()) if (material->IsRootSet()) material->ClearRootSet();
         m_ghostRoots.clear();
         m_ghostMaterials.clear();
+    }
+
+    void DragonWildsBlueprintModLoader::ClearRuntimeWidgetState()
+    {
+        m_runtimeWidgetActiveRules.clear();
+        m_runtimeWidgetCompletedRules.clear();
     }
 
     void DragonWildsBlueprintModLoader::SetActorInitializedObserver(
@@ -336,6 +344,7 @@ namespace DragonWilds {
             m_worldTeardownCallbackId = Hook::RegisterInitGameStatePreCallback(
                 [this](Hook::TCallbackIterationData<void>&, AGameModeBase*) {
                     ClearWorldVisualEffects();
+                    ClearRuntimeWidgetState();
                 }, options);
             if (m_worldTeardownCallbackId == Hook::ERROR_ID)
                 PS::Log<LogLevel::Warning>(
@@ -663,6 +672,159 @@ namespace DragonWilds {
         return nullptr;
     }
 
+    UObject* DragonWildsBlueprintModLoader::ResolveRuntimeWidgetCallTarget(
+        UObject* owner,
+        UObject* widget,
+        const std::string& targetPath)
+    {
+        if (targetPath.empty() || targetPath == "." || targetPath == "$Self"
+            || targetPath == "$Target")
+            return widget;
+        if (targetPath == "$Owner")
+            return owner;
+        return ResolveRuntimeWidgetPath(owner, to_generic_string(targetPath));
+    }
+
+    bool DragonWildsBlueprintModLoader::RuntimeWidgetRuleMatchesEvent(
+        const RuntimeWidgetRule& rule,
+        UFunction* function)
+    {
+        const auto when = rule.Data.find("$When");
+        if (when == rule.Data.end()) return true;
+
+        const auto matchesName = [&](const std::string& expected) {
+            std::string lowered = expected;
+            std::transform(lowered.begin(), lowered.end(), lowered.begin(),
+                [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+            if (lowered == "any" || lowered == "always" || lowered == "resolved")
+                return true;
+            return function && RC::to_string(function->GetName()) == expected;
+        };
+
+        if (when->is_string())
+            return matchesName(when->get<std::string>());
+
+        if (!when->is_object())
+            throw std::runtime_error("Blueprint $RuntimeWidget $When must be a function name or object");
+
+        const auto functionFilter = when->find("Function");
+        if (functionFilter == when->end())
+            throw std::runtime_error("Blueprint $RuntimeWidget $When object requires Function");
+
+        if (functionFilter->is_string())
+            return matchesName(functionFilter->get<std::string>());
+        if (functionFilter->is_array())
+        {
+            if (functionFilter->empty())
+                throw std::runtime_error("Blueprint $RuntimeWidget $When Function array cannot be empty");
+            for (const auto& entry : *functionFilter)
+            {
+                if (!entry.is_string())
+                    throw std::runtime_error("Blueprint $RuntimeWidget $When Function array must contain strings");
+                if (matchesName(entry.get<std::string>())) return true;
+            }
+            return false;
+        }
+
+        throw std::runtime_error("Blueprint $RuntimeWidget $When Function must be a string or array");
+    }
+
+    std::string DragonWildsBlueprintModLoader::RuntimeWidgetRuleKey(
+        UObject* owner,
+        const RuntimeWidgetRule& rule) const
+    {
+        return std::to_string(reinterpret_cast<uintptr_t>(owner))
+            + ":" + RC::to_string(rule.ModName)
+            + ":" + RC::to_string(rule.WidgetPath);
+    }
+
+    void DragonWildsBlueprintModLoader::ApplyRuntimeWidgetActivation(
+        UObject* widget,
+        const RuntimeWidgetRule& rule)
+    {
+        const auto activation = rule.Data.find("$Activate");
+        if (activation == rule.Data.end()) return;
+        if (!activation->is_boolean())
+            throw std::runtime_error("Blueprint $RuntimeWidget $Activate must be true or false");
+
+        const auto functionName = activation->get<bool>()
+            ? RC::StringType(TEXT("ActivateWidget"))
+            : RC::StringType(TEXT("DeactivateWidget"));
+        auto* function = widget->GetFunctionByNameInChain(functionName.c_str());
+        if (!function)
+            throw std::runtime_error("Blueprint $RuntimeWidget $Activate target is not a CommonUI activatable widget");
+
+        if (function->GetParmsSize() != 0)
+            throw std::runtime_error("Blueprint $RuntimeWidget activation function has an unexpected parameter contract");
+
+        ActorHelper::FunctionCall(widget, function).Invoke();
+    }
+
+    void DragonWildsBlueprintModLoader::ApplyRuntimeWidgetCalls(
+        UObject* owner,
+        UObject* widget,
+        const RuntimeWidgetRule& rule)
+    {
+        const auto calls = rule.Data.find("$Call");
+        if (calls == rule.Data.end()) return;
+
+        const auto invoke = [&](const nlohmann::json& callData) {
+            if (!callData.is_object())
+                throw std::runtime_error("Blueprint $RuntimeWidget $Call entries must be objects");
+
+            const auto functionName = callData.value("Function", std::string{});
+            if (functionName.empty())
+                throw std::runtime_error("Blueprint $RuntimeWidget $Call requires Function");
+
+            const auto targetPath = callData.value("Target", std::string{"$Self"});
+            auto* targetObject = ResolveRuntimeWidgetCallTarget(owner, widget, targetPath);
+            if (!targetObject)
+                throw std::runtime_error("Blueprint $RuntimeWidget $Call target could not be resolved");
+
+            const auto functionNameWide = to_generic_string(functionName);
+            auto* targetFunction = targetObject->GetFunctionByNameInChain(functionNameWide.c_str());
+            if (!targetFunction)
+                throw std::runtime_error("Blueprint $RuntimeWidget $Call Function was not found on target");
+
+            auto args = callData.find("Args");
+            if (args != callData.end() && !args->is_object())
+                throw std::runtime_error("Blueprint $RuntimeWidget $Call Args must be an object");
+
+            ActorHelper::FunctionCall call(targetObject, targetFunction);
+            if (args != callData.end())
+            {
+                for (const auto& [argName, argValue] : args->items())
+                {
+                    const auto argNameWide = to_generic_string(argName);
+                    auto* property = targetFunction->FindProperty(FName(argNameWide, FNAME_Find));
+                    if (!property
+                        || !property->HasAnyPropertyFlags(CPF_Parm)
+                        || property->HasAnyPropertyFlags(CPF_ReturnParm))
+                        throw std::runtime_error(std::format(
+                            "Blueprint $RuntimeWidget $Call argument '{}' is not an input parameter",
+                            argName));
+                    call.JsonArg(argNameWide.c_str(), argValue);
+                }
+            }
+            call.Invoke();
+        };
+
+        if (calls->is_object())
+        {
+            invoke(*calls);
+            return;
+        }
+        if (calls->is_array())
+        {
+            if (calls->empty())
+                throw std::runtime_error("Blueprint $RuntimeWidget $Call array cannot be empty");
+            for (const auto& call : *calls) invoke(call);
+            return;
+        }
+
+        throw std::runtime_error("Blueprint $RuntimeWidget $Call must be an object or array");
+    }
+
     void DragonWildsBlueprintModLoader::ApplyRuntimeWidgetBinding(
         UObject* owner,
         UObject* widget,
@@ -732,21 +894,61 @@ namespace DragonWilds {
         UObject* owner,
         const RuntimeWidgetRule& rule)
     {
-        auto* target = ResolveRuntimeWidgetPath(owner, rule.WidgetPath);
-        if (!target) return;
+        const auto ruleKey = RuntimeWidgetRuleKey(owner, rule);
 
-        ApplyRuntimeWidgetBinding(owner, target, rule);
+        bool runOnce = false;
+        if (const auto once = rule.Data.find("$Once"); once != rule.Data.end())
+        {
+            if (!once->is_boolean())
+                throw std::runtime_error("Blueprint $RuntimeWidget $Once must be true or false");
+            runOnce = once->get<bool>();
+            if (runOnce && m_runtimeWidgetCompletedRules.contains(ruleKey))
+                return;
+        }
 
-        auto properties = rule.Data;
-        properties.erase("$Bind");
-        if (properties.empty()) return;
+        // $Call and $Activate themselves dispatch ProcessEvent. Never let the
+        // post-observer recursively execute the same rule while it is active.
+        if (!m_runtimeWidgetActiveRules.emplace(ruleKey).second)
+            return;
 
-        ApplyData(properties, target, false);
+        try
+        {
+            auto* target = ResolveRuntimeWidgetPath(owner, rule.WidgetPath);
+            if (!target)
+            {
+                m_runtimeWidgetActiveRules.erase(ruleKey);
+                return;
+            }
+
+            ApplyRuntimeWidgetBinding(owner, target, rule);
+
+            auto properties = rule.Data;
+            properties.erase("$Bind");
+            properties.erase("$Call");
+            properties.erase("$When");
+            properties.erase("$Once");
+            properties.erase("$Activate");
+            if (!properties.empty())
+                ApplyData(properties, target, false);
+
+            ApplyRuntimeWidgetActivation(target, rule);
+            ApplyRuntimeWidgetCalls(owner, target, rule);
+
+            if (runOnce)
+                m_runtimeWidgetCompletedRules.emplace(ruleKey);
+        }
+        catch (...)
+        {
+            m_runtimeWidgetActiveRules.erase(ruleKey);
+            throw;
+        }
+
+        m_runtimeWidgetActiveRules.erase(ruleKey);
     }
 
     void DragonWildsBlueprintModLoader::ObserveRuntimeWidgetEvent(
         UObject* source,
-        UFunction*)
+        UFunction* function)
     {
         if (!source || m_runtimeWidgetRules.empty()) return;
 
@@ -772,6 +974,8 @@ namespace DragonWilds {
                 if (rule.OwnerClass != ownerName && rule.OwnerClass != ownerPath)
                     continue;
                 try {
+                    if (!RuntimeWidgetRuleMatchesEvent(rule, function))
+                        continue;
                     ApplyRuntimeWidgetRule(owner, rule);
                 } catch (const std::exception& error) {
                     const auto failureKey = RC::to_string(rule.ModName)

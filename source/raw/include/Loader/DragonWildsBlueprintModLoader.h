@@ -56,12 +56,15 @@ namespace DragonWilds {
         std::vector<nlohmann::json> m_pathBlueprintPatches;
         std::vector<RuntimeWidgetRule> m_runtimeWidgetRules;
         std::unordered_set<std::string> m_reportedRuntimeWidgetFailures;
+        std::unordered_set<std::string> m_runtimeWidgetActiveRules;
+        std::unordered_set<std::string> m_runtimeWidgetCompletedRules;
         std::vector<PS::WeakObjectHandle> m_ghostRoots;
         std::unordered_map<std::string, GhostMaterials::Set> m_ghostMaterials;
         RC::Unreal::Hook::GlobalCallbackId m_worldTeardownCallbackId = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::Hook::GlobalCallbackId m_runtimeWidgetCallbackId = RC::Unreal::Hook::ERROR_ID;
         void ApplyBlueprintVisualEffect(RC::Unreal::AActor* actor);
         void ClearWorldVisualEffects();
+        void ClearRuntimeWidgetState();
         void ApplyDeferredPatches(RC::Unreal::UObject* object);
         void RegisterRuntimeWidgetRules(
             const std::string& identity,
@@ -80,8 +83,25 @@ namespace DragonWilds {
         RC::Unreal::UObject* FindRuntimeWidgetOwner(
             RC::Unreal::UObject* source,
             const RC::Unreal::FName& ownerClass);
+        RC::Unreal::UObject* ResolveRuntimeWidgetCallTarget(
+            RC::Unreal::UObject* owner,
+            RC::Unreal::UObject* widget,
+            const std::string& targetPath);
+        bool RuntimeWidgetRuleMatchesEvent(
+            const RuntimeWidgetRule& rule,
+            RC::Unreal::UFunction* function);
+        std::string RuntimeWidgetRuleKey(
+            RC::Unreal::UObject* owner,
+            const RuntimeWidgetRule& rule) const;
         void ApplyRuntimeWidgetRule(
             RC::Unreal::UObject* owner,
+            const RuntimeWidgetRule& rule);
+        void ApplyRuntimeWidgetCalls(
+            RC::Unreal::UObject* owner,
+            RC::Unreal::UObject* widget,
+            const RuntimeWidgetRule& rule);
+        void ApplyRuntimeWidgetActivation(
+            RC::Unreal::UObject* widget,
             const RuntimeWidgetRule& rule);
         void ApplyRuntimeWidgetBinding(
             RC::Unreal::UObject* owner,
