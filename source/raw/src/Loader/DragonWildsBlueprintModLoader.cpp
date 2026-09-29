@@ -154,19 +154,29 @@ namespace DragonWilds {
 
             const auto delegateParameters = RuntimeCallableParameters(delegateSignature);
             const auto targetParameters = RuntimeCallableParameters(targetFunction);
-            if (delegateParameters.size() != targetParameters.size()) return false;
 
-            for (size_t index = 0; index < delegateParameters.size(); ++index)
+            // Match UE4SS's delegate Add behavior without permitting an unsafe
+            // target that requires arguments the delegate will never provide.
+            // Unreal can pass a larger delegate parameter buffer to a function
+            // that consumes only its leading subset; the extra event arguments
+            // are simply unused by the target UFunction.
+            if (targetParameters.size() > delegateParameters.size()) return false;
+
+            for (size_t index = 0; index < targetParameters.size(); ++index)
                 if (!RuntimePropertyTypeCompatible(
                     delegateParameters[index], targetParameters[index]))
                     return false;
 
             auto* delegateReturn = delegateSignature->GetReturnProperty();
             auto* targetReturn = targetFunction->GetReturnProperty();
-            if (static_cast<bool>(delegateReturn) != static_cast<bool>(targetReturn))
+
+            // A target must not introduce a return value when the delegate has
+            // none. If both have one, keep strict reflected type compatibility.
+            if (!delegateReturn && targetReturn) return false;
+            if (delegateReturn && targetReturn
+                && !RuntimePropertyTypeCompatible(delegateReturn, targetReturn))
                 return false;
-            return !delegateReturn
-                || RuntimePropertyTypeCompatible(delegateReturn, targetReturn);
+            return true;
         }
 
         bool RuntimeStorefrontTokenMatches(std::string token)
