@@ -8,6 +8,7 @@ host_h = (ROOT / "raw" / "include" / "Runtime" / "PluginHost.h").read_text(encod
 host_cpp = (ROOT / "raw" / "src" / "Runtime" / "PluginHost.cpp").read_text(encoding="utf-8")
 helpy = (ROOT / "raw" / "plugins" / "helpy" / "HelpyPlugin.cpp").read_text(encoding="utf-8")
 network_manifest = (ROOT / "plugins" / "RSNetworking" / "plugin.json").read_text(encoding="utf-8")
+helpy_manifest = (ROOT / "plugins" / "RuneSchema.Helpy" / "plugin.json").read_text(encoding="utf-8")
 
 checks = {
     "main delegates UI init": "m_pluginHost.OnUiInit()" in main,
@@ -22,6 +23,8 @@ checks = {
     "Helpy target compiles quick menu": "add_library(RuneSchemaHelpyPlugin" in cmake and "src/Generator/InGameQuickMenu.cpp" in cmake,
     "networking is not a DLL target": "RuneSchemaNetworkingPlugin" not in cmake,
     "networking manifest is content-only": '"EntryPoint"' not in network_manifest,
+    "networking plugin renamed": '"Id": "RSNetworking"' in network_manifest,
+    "Helpy is DLL-only": '"MountPaks": false' in helpy_manifest,
     "networking uses fixed paks layout": '"PackagedRoot"' not in network_manifest,
     "main retains registry bridge dependency": 'bridge.registry' in main,
 }
