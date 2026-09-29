@@ -118,6 +118,7 @@ namespace DragonWilds {
 
         void RegisterHooks();
         void ApplyUnlocks(RC::Unreal::UObject* progressComponent);
+        void ApplyUnlocksToAllProgressComponents();
         RC::Unreal::UObject* FindProgressComponent();
     };
 }
