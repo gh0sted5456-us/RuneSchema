@@ -929,7 +929,6 @@ namespace DragonWilds {
         NpcMarkers::Validate(data);
         for(const auto* key:{"Map","OverheadIcon"})if(data.contains(key))definition.Markers[key]=data.at(key);
         definition.Human=HumanNpc::IsHuman(data);
-        definition.Multiplayer=ReadBool(data,"Multiplayer",true);
         if(data.contains("TimeOfDay")) {
             if(!data.at("TimeOfDay").is_string())throw std::runtime_error("TimeOfDay must be Any, Day, or Night");
             definition.Time=TimeOfDay::Parse(data.at("TimeOfDay").get<std::string>());
@@ -1866,9 +1865,9 @@ namespace DragonWilds {
                     continue;
                 }
             }
-            if(multiplayer && !NpcNetwork::Supported(definition.Multiplayer,definition.Human,definition.Resource,
+            if(multiplayer && !NpcNetwork::Supported(definition.Human,definition.Resource,
                 definition.Stage==VendorPolicy::VendorStage::Merchant,!definition.DialogueKey.empty(),!definition.RequiredFlag.empty(),!definition.LoreEntry.empty(),definition.Stage==VendorPolicy::VendorStage::Visual)) {
-                WarnOnce("network-unsupported:"+key,RC::to_generic_string("NPC '"+key+"' requires Multiplayer=true for multiplayer; skipped."));
+                WarnOnce("network-unsupported:"+key,RC::to_generic_string("NPC '"+key+"' is not supported by the multiplayer NPC runtime; skipped."));
                 definition.SpawnGate.Begin();continue;
             }
             if(network.Mode==PS::Network::Role::Client) {
