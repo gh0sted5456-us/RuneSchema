@@ -46,21 +46,19 @@ int main(int argc, char** argv) {
         "Journal acquisition does not use the native inventory count contract");
     Require(journal.find("|| !m_nativePersistenceReady)return;") != std::string::npos,
         "Journal acquisition is not guarded when transient filtering is unavailable");
-    Require(recipes.find("RecipesUnlockedThatShouldNotPersist") != std::string::npos,
-        "Transient recipe unlock set is not used");
-    Require(recipes.find("std::vector<const TCHAR*> targetSets{TEXT(\"RecipesUnlocked\")}") != std::string::npos,
-        "Runtime recipes must always enter the visible unlock set");
-    Require(recipes.find("targetSets.push_back(TEXT(\"RecipesUnlockedThatShouldNotPersist\"));") != std::string::npos,
-        "Nonpersistent recipes must be marked for save exclusion");
+    Require(recipes.find("progressComponent->GetClassPrivate(), TEXT(\"RecipesUnlocked\")") != std::string::npos,
+        "Runtime recipes must enter the native persistent unlock set");
+    Require(recipes.find("SaveCleanup::ReadRegistry()") == std::string::npos,
+        "Recipe unlock delivery must not be gated by a lagging Safe Clean registry snapshot");
     Require(recipes.find("GetSettings().persistence.recipes") == std::string::npos,
         "Recipe persistence must not be configurable");
     Require(recipes.find("if (m_hooksActive || m_recipes.empty())") != std::string::npos,
         "Recipe-unlocker consumables are not observed when automatic unlock is disabled");
-    Require(recipes.find("if(recipe && unlocked.Contains(&recipe))transient.Add(&recipe);") != std::string::npos,
-        "Consumable-granted RuneSchema recipes are not marked transient");
+    Require(recipes.find("valid live recipes are not mirrored into Dominion's non-persistent") != std::string::npos,
+        "Recipe persistence policy comment is missing");
     Require(quests.find("GetSettings().persistence.quests") != std::string::npos,
         "Quest actions are not gated by the quest persistence setting");
     Require(players.find("GetSettings().persistence.characterCustomization") != std::string::npos,
         "Automatic character-customization writes are not independently gated");
-    std::cout << "Journal and recipe unlocks remain transient without disabling their loaders.\n";
+    std::cout << "Journal unlocks remain transient; RuneSchema recipe unlocks persist with Safe Clean orphan recovery.\n";
 }
