@@ -41,10 +41,10 @@ nlohmann::json DragonWildsNpcLoader::HelpyNpcDocument(const VendorDefinition& so
         throw std::runtime_error("Permanent copies of legacy custom proxy classes need an explicit /npc conversion.");
     auto doc=nlohmann::json::object();
     for(const auto* field:{"DisplayName","VisualSource","Mesh","Materials","IdleAnimation","HideMesh","NoInteract","HideName",
-        "Location","Rotation","Scale","Enabled","EnableCollision","MeshCollision","Type","Appearance","Equipment","Pose","DialoguePose","Ghost","VisualEffect","Map","OverheadIcon","VendorID","DialogueID","LoreID","LoreEntry","QuestID","Multiplayer","TimeOfDay"})
+        "Location","Rotation","Scale","Enabled","EnableCollision","MeshCollision","Type","Appearance","Equipment","Pose","DialoguePose","Ghost","VisualEffect","Map","OverheadIcon","VendorID","DialogueID","LoreID","LoreEntry","QuestID","TimeOfDay"})
         if(source.HelpySource.contains(field))doc[field]=source.HelpySource[field];
     if(doc.contains("LoreID"))doc.erase("LoreEntry"); // Resolve() adds the runtime alias; authored copies keep the preferred reference.
-    doc["Id"]=id;doc["Enabled"]=true;doc["TimeOfDay"]="Any";doc["Multiplayer"]=source.Multiplayer;
+    doc["Id"]=id;doc["Enabled"]=true;doc["TimeOfDay"]="Any";
     if(!source.DialogueKey.empty())doc["DialogueID"]=source.DialogueKey;
     if(!source.LoreEntry.empty() && !doc.contains("LoreID"))doc["LoreEntry"]=source.LoreEntry; // Legacy/global lore reference.
     if(!source.QuestKey.empty())doc["QuestID"]=source.QuestKey;
@@ -184,7 +184,7 @@ nlohmann::json DragonWildsNpcLoader::SpawnHelpyNpc(const nlohmann::json& request
     auto& d=*copy;
     auto document=permanent?HelpyNpcDocument(d,stem):nlohmann::json{};
     d.Id=stem;d.ModName="runeschema";d.HelpyTemporary=!permanent;
-    d.Time=TimeOfDay::Requirement::Any;d.Multiplayer=true;d.SpawnGate.ResetForMap();
+    d.Time=TimeOfDay::Requirement::Any;d.SpawnGate.ResetForMap();
     if(!name.empty())d.DisplayName=name;
     for(auto& value:d.SpawnScale)value=scale;
     if(std::any_of(m_definitions.begin(),m_definitions.end(),[&](const auto& e){return e.ModName==d.ModName&&e.Id==d.Id;}))
