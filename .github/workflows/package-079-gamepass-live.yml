@@ -1,0 +1,31 @@
+name: Package RuneSchema 0.7.9 GamePass live-instance fix
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - '.github/workflows/package-079-gamepass-live.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: bd1c9595b90f666882fc64f5d70ecf3f7702471c
+
+      - name: Create source ZIP
+        shell: bash
+        run: |
+          zip -r RuneSchema-0.7.9-gamepass-live-instance-fix.zip . -x ".git/*"
+
+      - name: Upload source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuneSchema-0.7.9-gamepass-live-instance-fix
+          path: RuneSchema-0.7.9-gamepass-live-instance-fix.zip
+          if-no-files-found: error
