@@ -214,6 +214,11 @@ namespace DragonWilds {
 
         std::advance(it, 1);
         auto folderType = PS::ModFolderLayout::AsciiLower(it->string());
+        const bool supportedFolder = folderType == "players" || folderType == "nameplates"
+            || std::any_of(m_loaders.begin(), m_loaders.end(), [&](const auto& loader) {
+                return PS::ModFolderLayout::EqualsInsensitive(loader->GetModFolderType(), folderType);
+            });
+        if (!supportedFolder) return;
 
         std::ifstream f(filePath);
         if (f.peek() == std::ifstream::traits_type::eof()) {
@@ -515,11 +520,6 @@ namespace DragonWilds {
                             }
                         }
 
-                        if (!handled)
-                        {
-                            PS::Log<LogLevel::Warning>(STR("No loader found for folder '{}'.\n"),
-                                RC::to_generic_string(pendingAutoReload.FolderType));
-                        }
                     }
                     catch (const std::exception& e)
                     {
@@ -702,11 +702,6 @@ namespace DragonWilds {
                 bool modSuccessful=true;
                 PS::StartupTrace::Mark("load mod: " + RC::to_string(modName));
 
-                if (engineLifecyclePhase == EEngineLifecyclePhase::PostEngineInit)
-                {
-                    WarnAboutUnknownFolders(modPath, modName);
-                }
-
                 for (auto& loader : m_loaders)
                 {
                     if(loader->GetModFolderType()=="effects" || loader->GetModFolderType()=="niagara")continue;
@@ -779,59 +774,6 @@ namespace DragonWilds {
             });
             try {m_spawnLoader->FinalizePlayerRules();}
             catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[LOADER:players][PARTIAL] Finalization failed: {}. Other loaders continue.\n"),PS::ToWideSafe(error.what()));}
-        }
-    }
-
-    void DragonWildsMainLoader::WarnAboutUnknownFolders(const fs::path& modPath, const RC::StringType& modName)
-    {
-        for (const auto& entry : fs::directory_iterator(modPath))
-        {
-            if (!entry.is_directory())
-            {
-                continue;
-            }
-
-            auto folderType = entry.path().filename().string();
-            if (PS::ModFolderLayout::EqualsInsensitive(folderType,PS::ModFolderLayout::PakDirectory)
-                || PS::ModFolderLayout::EqualsInsensitive(folderType,"players")
-                || PS::ModFolderLayout::EqualsInsensitive(folderType,"nameplates"))
-            {
-                continue;
-            }
-
-            auto known = std::any_of(m_loaders.begin(), m_loaders.end(),
-                [&](const auto& loader) {
-                    return PS::ModFolderLayout::EqualsInsensitive(loader->GetModFolderType(),folderType);
-                });
-            if (known)
-            {
-                continue;
-            }
-
-            std::error_code error;
-            if (PS::ModFolderLayout::ContainsLegacyPakContent(entry.path(), error))
-            {
-                continue;
-            }
-            if (error)
-            {
-                PS::Log<LogLevel::Warning>(STR("{}: could not inspect folder '{}': {}\n"),
-                    modName, RC::to_generic_string(folderType), PS::ToWideSafe(error.message().c_str()));
-                continue;
-            }
-
-            RC::StringType knownFolders;
-            for (auto& loader : m_loaders)
-            {
-                if (!knownFolders.empty())
-                {
-                    knownFolders += STR(", ");
-                }
-                knownFolders += RC::to_generic_string(loader->GetModFolderType());
-            }
-
-            PS::Log<LogLevel::Warning>(STR("{}: unknown folder '{}'. JSON folders: {}, players, nameplates. Put cooked packs in paks/<pack-name>/.\n"),
-                modName, RC::to_generic_string(folderType), knownFolders);
         }
     }
 
