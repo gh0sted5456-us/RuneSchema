@@ -255,21 +255,9 @@ namespace DragonWilds {
         if (!m_orderResolved) {
             std::vector<RC::StringType> discovered;
             if (fs::exists(modsPath))
-                for (const auto& entry : fs::directory_iterator(modsPath)) {
-                    if (!entry.is_directory() || entry.is_symlink()) continue;
-                    const auto modRoot = entry.path();
-                    bool recognized = fs::is_regular_file(modRoot / "ID.txt")
-                        || PS::ModFolderLayout::ResolveLoaderDirectory(modRoot, PS::ModFolderLayout::PakDirectory).has_value()
-                        || PS::ModFolderLayout::ResolveLoaderDirectory(modRoot, "players").has_value()
-                        || PS::ModFolderLayout::ResolveLoaderDirectory(modRoot, "nameplates").has_value();
-                    if (!recognized)
-                        for (const auto& loader : m_loaders)
-                            if (PS::ModFolderLayout::ResolveLoaderDirectory(modRoot, loader->GetModFolderType()).has_value()) {
-                                recognized = true;
-                                break;
-                            }
-                    if (recognized) discovered.push_back(modRoot.filename().native());
-                }
+                for (const auto& entry : fs::directory_iterator(modsPath))
+                    if (PS::ModFolderLayout::LooksLikeRuneSchemaMod(entry.path()))
+                        discovered.push_back(entry.path().filename().native());
             m_orderedMods = ModLoadOrder::Resolve(modsPath, discovered);
             m_orderResolved = true;
             for (const auto& name : m_orderedMods)
