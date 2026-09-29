@@ -8,11 +8,12 @@ Persistent interactable AI, human, and resource-style actors.
 
 `/npc` creates persistent AI, human, or resource-style actors.
 
+NPC content is multiplayer-capable by default. Do not add a singleplayer or multiplayer flag; the same definition is used in standalone, listen-server, client, and dedicated-server worlds.
+
 ```jsonc
 {
   "Id": "merchant",
   "Type": "AI",
-  "Multiplayer": true,
   "DisplayName": "Merchant",
   "VendorID": "shop",
   "DialogueID": "hello",
