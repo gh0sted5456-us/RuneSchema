@@ -64,6 +64,11 @@ int main()
     })");
     AddPakTriplet(alpha);
     AddPakTriplet(beta);
+    Write(alpha / "paks" / "__folder_managed_by_vortex");
+    Write(alpha / "paks" / "README.txt", "ignored");
+    Write(alpha / "paks" / "CompatibilityContent" / "meta.ini", "ignored");
+    Write(root / "random-nexus-file.txt", "ignored");
+    Write(root / "UnrelatedFolder" / "readme.md", "ignored");
     Write(root / "plugins.txt", "Alpha:1\nBeta:1\n");
 
     std::vector<std::string> diagnostics;
@@ -71,6 +76,10 @@ int main()
     Check(plugins.size() == 2, "mismatched and cyclic plugins remain discoverable");
     Check(!plugins[0].EntryPoint.empty() || !plugins[1].EntryPoint.empty(),
         "missing optional native entry point remains represented");
+    Check(diagnostics.empty() || std::none_of(diagnostics.begin(), diagnostics.end(), [](const auto& line) {
+        return line.find("vortex") != std::string::npos || line.find("README.txt") != std::string::npos
+            || line.find("random-nexus-file") != std::string::npos || line.find("UnrelatedFolder") != std::string::npos;
+    }), "mod-manager debris is silently ignored");
     for (const auto& plugin : plugins) {
         Check(PS::PluginCatalog::PakDirectories(plugin).size() == 1,
             "complete PAK triplet remains independently mountable");
