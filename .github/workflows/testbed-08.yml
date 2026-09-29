@@ -56,17 +56,37 @@ jobs:
         shell: pwsh
         run: ctest --test-dir build/cache/contracts-08 --output-on-failure -R "^(runtime-widget-v08-contract|ue4ss-bootstrap-contract)$"
 
-      - name: Package 0.8 build folder
+      - name: Package full 0.8 source tree
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force dist | Out-Null
-          Compress-Archive -Path build -DestinationPath dist/RuneSchema08-build-folder.zip -Force
+          $stageRoot = Join-Path $PWD "dist/RuneSchema-0.8-test-bed"
+          Remove-Item -Recurse -Force $stageRoot -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $stageRoot | Out-Null
 
-      - name: Upload 0.8 build folder
+          Get-ChildItem -Force $PWD | Where-Object {
+            $_.Name -notin @(".git", "dist", ".cache")
+          } | ForEach-Object {
+            Copy-Item -LiteralPath $_.FullName -Destination $stageRoot -Recurse -Force
+          }
+
+          $required = @(
+            (Join-Path $stageRoot "Build RuneSchema.bat"),
+            (Join-Path $stageRoot "build/build.ps1"),
+            (Join-Path $stageRoot "source/raw/CMakeLists.txt")
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Full source package is missing required compile input: $path"
+            }
+          }
+
+          Compress-Archive -Path $stageRoot -DestinationPath "dist/RuneSchema-0.8-test-bed-full-source.zip" -Force
+
+      - name: Upload full 0.8 source tree
         uses: actions/upload-artifact@v4
         with:
-          name: RuneSchema08-build-folder
-          path: dist/RuneSchema08-build-folder.zip
+          name: RuneSchema-0.8-test-bed-full-source
+          path: dist/RuneSchema-0.8-test-bed-full-source.zip
           if-no-files-found: error
 
       - name: Package 0.8 demo mod
