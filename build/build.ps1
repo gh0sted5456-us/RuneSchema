@@ -288,11 +288,37 @@ try {
         Write-Host $(if ($OnlyPlugin) { '=== Compile Helpy plugin only (RuneSchema.dll is untouched) ===' } else { '=== Compile universal RuneSchema ===' }) -ForegroundColor Cyan
         Write-Host 'Ninja auto-regeneration is disabled; build.ps1 owns all CMake reconfiguration.' -ForegroundColor DarkGray
 
-        & $ninja -C $build @targets
-        if ($LASTEXITCODE) {
+        function Invoke-NinjaCaptured([string[]]$Arguments, [string]$Label) {
+            $stdout = Join-Path $LogRoot 'ninja-stdout.log'
+            $stderr = Join-Path $LogRoot 'ninja-stderr.log'
+            Remove-Item -LiteralPath $stdout,$stderr -Force -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Path $LogRoot -Force | Out-Null
+
+            $process = Start-Process -FilePath $ninja -ArgumentList $Arguments -NoNewWindow -Wait -PassThru `
+                -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+
+            if (Test-Path -LiteralPath $stdout) {
+                Get-Content -LiteralPath $stdout | ForEach-Object { Write-Host $_ }
+            }
+            if (Test-Path -LiteralPath $stderr) {
+                Get-Content -LiteralPath $stderr | ForEach-Object { Write-Host $_ -ForegroundColor DarkYellow }
+            }
+
+            if ($process.ExitCode -ne 0) {
+                Write-Host "$Label failed with exit code $($process.ExitCode)." -ForegroundColor Red
+                Write-Host "Ninja stdout: $stdout" -ForegroundColor DarkGray
+                Write-Host "Ninja stderr: $stderr" -ForegroundColor DarkGray
+            }
+            return $process.ExitCode
+        }
+
+        $parallelArgs = @('-C', $build) + $targets
+        $parallelExit = Invoke-NinjaCaptured $parallelArgs 'Parallel Ninja compile'
+        if ($parallelExit -ne 0) {
             Write-Warning 'Parallel Ninja compile failed. Retrying the same generated graph single-threaded with verbose diagnostics.'
-            & $ninja -C $build -j 1 -v @targets
-            if ($LASTEXITCODE) { throw "Universal build failed (serial retry exit $LASTEXITCODE)." }
+            $serialArgs = @('-C', $build, '-j', '1', '-v') + $targets
+            $serialExit = Invoke-NinjaCaptured $serialArgs 'Serial Ninja compile'
+            if ($serialExit -ne 0) { throw "Universal build failed (serial retry exit $serialExit)." }
         }
         $core = if ($OnlyPlugin) { $null } else { Join-Path $build 'RuneSchema.dll' }
         if (-not $OnlyPlugin) {
