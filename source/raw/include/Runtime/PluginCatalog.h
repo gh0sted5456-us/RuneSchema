@@ -17,14 +17,14 @@ namespace fs = std::filesystem;
 struct Plugin {
     std::string Id,Name,Version,BuiltForRuneSchema,ConsoleMessage;
     int ApiVersion=0;
-    bool Enabled=true,Required=false;
+    bool Enabled=true,Required=false,MountPaks=true;
     fs::path Root,DllRoot,PaksRoot,ScriptsRoot,EntryPoint;
     std::vector<std::string> Capabilities,Connections;
     std::vector<std::pair<std::string,std::string>> Dependencies;
 };
 struct OrderEntry { std::string Id;bool Enabled=true;size_t Position=0; };
 inline std::vector<fs::path> PakDirectories(const Plugin& plugin) {
-    std::vector<fs::path> result;std::error_code error;
+    std::vector<fs::path> result;if(!plugin.MountPaks)return result;std::error_code error;
     if(!fs::exists(plugin.PaksRoot,error))return result;
     if(!fs::is_directory(plugin.PaksRoot,error)||fs::is_symlink(fs::symlink_status(plugin.PaksRoot,error)))
         throw std::runtime_error("Plugin paks path is not a safe directory: "+plugin.Id);
@@ -90,7 +90,8 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
         plugin.Version=data.at("Version").get<std::string>();plugin.ApiVersion=data.value("ApiVersion",1);
         plugin.BuiltForRuneSchema=data.value("BuiltForRuneSchema",std::string{});
         plugin.ConsoleMessage=data.value("ConsoleMessage",std::string{});
-        plugin.Enabled=data.value("Enabled",true);plugin.Required=data.value("Required",false);plugin.Root=folder.path();
+        plugin.Enabled=data.value("Enabled",true);plugin.Required=data.value("Required",false);
+        plugin.MountPaks=data.value("MountPaks",true);plugin.Root=folder.path();
         if(!Token(plugin.Id)||!Token(plugin.Version)||(!plugin.BuiltForRuneSchema.empty()&&!Token(plugin.BuiltForRuneSchema))
             ||plugin.Name.empty()||plugin.Name.size()>128||plugin.ConsoleMessage.size()>512
             ||plugin.ConsoleMessage.find_first_of("\r\n")!=std::string::npos||!ids.emplace(plugin.Id).second)
@@ -125,6 +126,11 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
             if(diagnostics)diagnostics->push_back(folder.path().filename().string()+": rejected by an unknown manifest error");
         }
     }
+    // 0.7.9 renamed RuneSchema.Networking to RSNetworking. If an old
+    // installation leaves the legacy folder behind, prefer the new plugin and
+    // ignore the retired copy instead of registering duplicate capabilities.
+    const bool hasRsNetworking=std::any_of(result.begin(),result.end(),[](const auto& plugin){return plugin.Id=="RSNetworking";});
+    if(hasRsNetworking)std::erase_if(result,[](const auto& plugin){return plugin.Id=="RuneSchema.Networking";});
     const auto requested=ReadOrder(root);std::unordered_map<std::string,OrderEntry> requestedById;
     for(const auto& entry:requested)requestedById.emplace(entry.Id,entry);
     for(auto& plugin:result)if(const auto found=requestedById.find(plugin.Id);found!=requestedById.end()) {
