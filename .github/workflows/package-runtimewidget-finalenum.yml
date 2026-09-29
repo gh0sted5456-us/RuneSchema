@@ -1,0 +1,31 @@
+name: Package RuntimeWidget final enum include source
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - '.github/workflows/package-runtimewidget-finalenum.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: 503642df761cfa46f954a78af2a18ceed718a21f
+
+      - name: Create source ZIP
+        shell: bash
+        run: |
+          zip -r RuneSchema-experimental-runtimewidget-finalenum.zip . -x ".git/*"
+
+      - name: Upload source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuneSchema-experimental-runtimewidget-finalenum
+          path: RuneSchema-experimental-runtimewidget-finalenum.zip
+          if-no-files-found: error
