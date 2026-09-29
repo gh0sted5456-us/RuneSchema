@@ -255,8 +255,21 @@ namespace DragonWilds {
         if (!m_orderResolved) {
             std::vector<RC::StringType> discovered;
             if (fs::exists(modsPath))
-                for (const auto& entry : fs::directory_iterator(modsPath))
-                    if (entry.is_directory()) discovered.push_back(entry.path().filename().native());
+                for (const auto& entry : fs::directory_iterator(modsPath)) {
+                    if (!entry.is_directory() || entry.is_symlink()) continue;
+                    const auto modRoot = entry.path();
+                    bool recognized = fs::is_regular_file(modRoot / "ID.txt")
+                        || PS::ModFolderLayout::ResolveLoaderDirectory(modRoot, PS::ModFolderLayout::PakDirectory).has_value()
+                        || PS::ModFolderLayout::ResolveLoaderDirectory(modRoot, "players").has_value()
+                        || PS::ModFolderLayout::ResolveLoaderDirectory(modRoot, "nameplates").has_value();
+                    if (!recognized)
+                        for (const auto& loader : m_loaders)
+                            if (PS::ModFolderLayout::ResolveLoaderDirectory(modRoot, loader->GetModFolderType()).has_value()) {
+                                recognized = true;
+                                break;
+                            }
+                    if (recognized) discovered.push_back(modRoot.filename().native());
+                }
             m_orderedMods = ModLoadOrder::Resolve(modsPath, discovered);
             m_orderResolved = true;
             for (const auto& name : m_orderedMods)
@@ -811,8 +824,13 @@ namespace DragonWilds {
             pakRoots.push_back(runeSchemaRoot/"plugins");
         }
         const auto modsRoot=GetModsPath();std::vector<RC::StringType> discovered;
-        if(fs::is_directory(modsRoot))for(const auto& entry:fs::directory_iterator(modsRoot))
-            if(entry.is_directory()&&!entry.is_symlink())discovered.push_back(entry.path().filename().native());
+        if(fs::is_directory(modsRoot))for(const auto& entry:fs::directory_iterator(modsRoot)) {
+            if(!entry.is_directory()||entry.is_symlink())continue;
+            std::error_code scanError;
+            const auto paks=PS::ModFolderLayout::ResolveLoaderDirectory(entry.path(),PS::ModFolderLayout::PakDirectory);
+            const bool legacy=PS::ModFolderLayout::ContainsLegacyPakContent(entry.path(),scanError);
+            if((paks.has_value()||legacy)&&!scanError)discovered.push_back(entry.path().filename().native());
+        }
         try {for(const auto& name:ModLoadOrder::Resolve(modsRoot,discovered))pakRoots.push_back(modsRoot/name);}
         catch(const std::exception& error) {
             PS::Log<LogLevel::Error>(STR("Mod pak order rejected; using the mods root fallback: {}\n"),PS::ToWideSafe(error.what()));
