@@ -16,12 +16,6 @@ jobs:
       - name: Checkout test bed
         uses: actions/checkout@v6
 
-      - name: Fetch JSON headers
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force .cache | Out-Null
-          git clone --depth 1 --branch v3.11.3 https://github.com/nlohmann/json.git .cache/nlohmann-json
-
       - name: Validate RuneSchema builder syntax
         shell: pwsh
         run: |
@@ -32,6 +26,23 @@ jobs:
             $errors | ForEach-Object { Write-Error $_.Message }
             exit 1
           }
+
+      - name: Fetch JSON headers
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force .cache | Out-Null
+          $ok = $false
+          1..3 | ForEach-Object {
+            if ($ok) { return }
+            Remove-Item -Recurse -Force .cache/nlohmann-json -ErrorAction SilentlyContinue
+            git clone --depth 1 --branch v3.11.3 https://github.com/nlohmann/json.git .cache/nlohmann-json
+            if ($LASTEXITCODE -eq 0) {
+              $ok = $true
+            } else {
+              Start-Sleep -Seconds 3
+            }
+          }
+          if (-not $ok) { throw "Could not fetch nlohmann/json after three attempts." }
 
       - name: Configure contract tests
         shell: pwsh
