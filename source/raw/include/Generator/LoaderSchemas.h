@@ -30,7 +30,7 @@ inline nlohmann::json LoaderSchemas() {
         fields["Image"]={{"type",{"string","object","null"}},{"description","Cooked image reference using the native Image field. The asset must load and match the live property class."}};
         fields["PageDescriptions"]={{"type","array"},{"items",{{"type","object"},{"properties",{{"Description",localizedText}}},{"additionalProperties",true}}}};
         fields["Unlock"]={{"type","boolean"},{"default",true},{"description","Unlock the journal entry, not its crafting recipe. False does not revoke previous discovery."}};
-        fields["UnlockOnAcquire"]={{"type","boolean"},{"default",false},{"description","Unlock this entry when the owning player first receives its ItemData. If Unlock is omitted, acquisition mode suppresses the normal automatic unlock. With save persistence disabled, the verified storefront adapter keeps the unlock session-only."}};
+        fields["UnlockOnAcquire"]={{"type","boolean"},{"default",false},{"description","Unlock this entry when the owning player first receives its ItemData. If Unlock is omitted, acquisition mode suppresses the normal automatic unlock. Unlock delivery uses the active native journal/lore path; Safe Clean removes orphaned RuneSchema identities when supplying content is removed."}};
         fields["RecipeData"]={{"type",{"string","object"}},{"description","Required for Recipe entries; full asset path or unique loaded recipe name."}};
         fields["ItemData"]={{"type",{"string","object"}},{"description","Recipe output item. Inferred only when ItemsCreated has one distinct item."}};
         fields["StationTableRowHandle"]={{"type","object"},{"required",{"DataTable","RowName"}},{"properties",{{"DataTable",text},{"RowName",text}}},{"additionalProperties",false}};
