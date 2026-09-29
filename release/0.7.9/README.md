@@ -2,22 +2,22 @@
 
 RuneSchema 0.7.9 uses one runtime for Steam/GOG and Game Pass/WinGDK.
 
-## Packages
+## Current package state
 
-| Package | Bytes | SHA-256 |
-|---|---:|---|
-| `RuneSchema-0.7.9-Core.zip` | 3440565 | `75C245D908CC8A38CDFDAE7DF895E32B9C4EB04EA73E3E61E252D2108B5DDB77` |
-| `RuneSchema-0.7.9-Universal.zip` | 3915425 | `9EF75607EF7E4D26DD4F65F0E4AE72CAC99C94B4FEA22CF2FDC78C63001C2B05` |
+The 0.7.9 source changed after the previous local Core and Universal packages
+were built. Rebuild from the current branch before publishing release assets.
+Record package sizes and SHA-256 hashes here only after that build succeeds.
 
 ## Notes
 
+- Advanced logging controls detail only; it never gates RuneSchema startup or loaders.
+- Auto reload controls the file watcher only; initial loading is independent.
+- Non-JSON/JSONC files and unrelated mod-manager folders are ignored by mod loaders.
+- Plugin package discovery ignores unrelated files that are not supported container content.
+- Helpy is a DLL-only plugin and does not mount PAK content.
+- The networking plugin is named `RSNetworking`; leftover `RuneSchema.Networking`
+  folders from older installs are ignored when the renamed plugin is present.
 - One RuneSchema content definition is used in standalone and multiplayer.
-- NPC definitions no longer use a `Multiplayer` field.
 - Steam/GOG and Game Pass/WinGDK keep separate native binding lanes selected at runtime.
-- Runtime item clones complete native ItemSubsystem registration before inventory and recipe use.
 - Normal RuneSchema recipe unlocks may persist once the live RecipeData has a valid PersistenceID.
-- Generated vendor recipes remain transient.
-- Safe Clean removes orphaned RuneSchema identities after content registration.
-- Startup logs continue to report RuneSchema version, storefront, native lane, mapping status, and network role.
-
-Universal includes the optional bundled plugins. Core omits them.
+- Safe Clean uses the same filtered active-mod discovery as the loader system.
