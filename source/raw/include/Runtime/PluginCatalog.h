@@ -69,7 +69,12 @@ inline std::vector<OrderEntry> ReadOrder(const fs::path& root) {
         const auto idLast=id.find_last_not_of(" \t\r\n");id.resize(idLast==std::string::npos?0:idLast+1);
         const auto valueFirst=value.find_first_not_of(" \t\r\n"),valueLast=value.find_last_not_of(" \t\r\n");
         value=valueFirst==std::string::npos?std::string{}:value.substr(valueFirst,valueLast-valueFirst+1);
-        if(!Token(id)||(value!="0"&&value!="1")||!seen.emplace(id).second)throw std::runtime_error("Invalid or duplicate plugins.txt entry: "+id);
+        if(id=="RuneSchema.Networking")id="RSNetworking";
+        if(!Token(id)||(value!="0"&&value!="1"))throw std::runtime_error("Invalid plugins.txt entry: "+id);
+        if(!seen.emplace(id).second) {
+            for(auto& existing:result)if(existing.Id==id){existing.Enabled=value=="1";break;}
+            continue;
+        }
         result.push_back({std::move(id),value=="1",position++});
     }
     return result;
