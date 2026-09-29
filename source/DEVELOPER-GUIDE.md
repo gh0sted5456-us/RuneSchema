@@ -6,8 +6,8 @@ usually only need the [Authoring Guide](AUTHORING-GUIDE.md) and
 
 ## Runtime layout
 
-RuneSchema ships one `main.dll` with separate Steam/GOG and Game Pass/WinGDK
-native lanes.
+RuneSchema ships one `main.dll`. Steam/GOG and Game Pass/WinGDK use separate
+native binding lanes selected at runtime.
 
 Core rules:
 
@@ -88,14 +88,16 @@ Loader activation and save persistence are separate.
 ```
 
 Quest persistence defaults to `true`; automatic character customization
-persistence defaults to `false`. Journal/lore and recipe unlocks are always
-session-only, including when older settings contain persistence keys for them.
-Loaders remain active independently of persistence settings.
+persistence defaults to `false`. Loader activation remains independent from
+save handling.
 
-Recipes use the game's transient recipe set.
-Journal/lore content can still register and appear without calling the native
-save-backed unlock path. Character customization loaders can stay active
-without applying automatic save-backed player appearance rules.
+Normal RuneSchema recipes may enter the native persistent unlock set after the
+live RecipeData has a valid PersistenceID. Generated vendor recipes stay in the
+game's transient recipe path. Safe Clean handles orphaned RuneSchema recipe,
+journal, lore, quest, and item identities after content registration.
+
+Character customization loaders can remain active without applying automatic
+save-backed player appearance rules.
 
 ## Build and package flow
 
