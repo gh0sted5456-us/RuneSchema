@@ -734,6 +734,7 @@ namespace DragonWilds {
         const RuntimeWidgetRule& rule) const
     {
         return std::to_string(reinterpret_cast<uintptr_t>(owner))
+            + ":" + std::to_string(reinterpret_cast<uintptr_t>(&rule))
             + ":" + RC::to_string(rule.ModName)
             + ":" + RC::to_string(rule.WidgetPath);
     }
@@ -785,6 +786,14 @@ namespace DragonWilds {
             auto* targetFunction = targetObject->GetFunctionByNameInChain(functionNameWide.c_str());
             if (!targetFunction)
                 throw std::runtime_error("Blueprint $RuntimeWidget $Call Function was not found on target");
+
+            if (targetFunction->GetReturnProperty())
+                throw std::runtime_error("Blueprint $RuntimeWidget $Call does not support return-valued functions yet");
+            for (auto* property : RuntimeCallableParameters(targetFunction))
+            {
+                if (property->HasAnyPropertyFlags(CPF_OutParm))
+                    throw std::runtime_error("Blueprint $RuntimeWidget $Call does not support output parameters yet");
+            }
 
             auto args = callData.find("Args");
             if (args != callData.end() && !args->is_object())
