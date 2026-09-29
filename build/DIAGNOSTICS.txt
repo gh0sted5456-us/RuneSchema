@@ -1,0 +1,15 @@
+RuneSchema builder diagnostics
+
+The root launcher remains open on failure and writes:
+    build\logs\launcher-latest.log
+
+The launcher starts logging before build.ps1 is parsed, so PowerShell startup,
+parse, dependency, CMake, Ninja, packaging, and normal build failures are visible.
+
+Clean builder behavior:
+- PowerShell 5.1-compatible configuration fingerprinting.
+- CMake automatic regeneration is disabled.
+- build.ps1 owns reconfiguration through its CMake/source fingerprint.
+- Normal builds skip internal contract tests.
+- Use Build RuneSchema.bat -Tests for the supported local contract suite.
+- runtime-template contents are assembled into the RuneSchema payload explicitly.
