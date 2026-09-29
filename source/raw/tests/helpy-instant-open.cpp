@@ -46,7 +46,7 @@ int main(int argc,char** argv){
         "one-icon-per-frame loading throttle returned");
     Check(Has(host,"plugin.Manifest.Version")&&Has(host,"plugin.Manifest.ConsoleMessage"),"plugin announcement is manifest driven");
     Check(Has(entry,"RC::Output::send<RC::LogLevel::Normal>")&&Has(entry,"Runtime storefront:"),"storefront is visible in standard logs");
-    Check(Has(entry,"RuneSchema.Networking is not active. Local loaders remain enabled."),"plugins are optional to RuneSchema core");
+    Check(Has(entry,"RSNetworking is not active. Local loaders remain enabled."),"plugins are optional to RuneSchema core");
     Check(Has(storefront,"GetCurrentPackageFullName")&&Has(storefront,"UE4SS_Signatures")&&Has(storefront,"WinGDK/Windows package executable path"),"storefront pivot combines package, path, and signature evidence");
     Check(Has(catalog,"A missing DLL does not hide the manifest or its PAKs.")&&Has(catalog,"loading without it"),"plugin DLL and dependency mismatches do not suppress PAK discovery");
     std::cout<<checks<<" Helpy instant-open/plugin announcement checks passed.\n";
