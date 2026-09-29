@@ -701,12 +701,15 @@ namespace DragonWilds {
             throw std::runtime_error("Blueprint $RuntimeWidget $Bind Function was not found on target");
 
         auto& signaturePtr = delegateProperty->GetSignatureFunction();
-        auto* signature = signaturePtr.Get();
-        if (!signature)
+        if (!signaturePtr.Get())
             throw std::runtime_error("Blueprint $RuntimeWidget delegate signature was unavailable");
-        if (!RuntimeCallableCompatible(signature, targetFunction))
-            throw std::runtime_error("Blueprint $RuntimeWidget delegate/function reflected parameters do not match");
 
+        // Mirror UE4SS XMulticastDelegateProperty::Add: once the delegate,
+        // target object, and target UFunction have all resolved, bind the
+        // FScriptDelegate directly. UE4SS does not impose an additional
+        // reflected-parameter equality gate here, and valid Blueprint events
+        // can expose wrapper/signature metadata that differs from the native
+        // target function even though Unreal accepts the binding.
         void* propertyValue = delegateProperty->ContainerPtrToValuePtr<void>(widget);
         auto* delegateValue = delegateProperty->GetMulticastDelegate(propertyValue);
         if (!delegateValue)
