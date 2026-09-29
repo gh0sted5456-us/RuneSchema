@@ -46,3 +46,10 @@ Planned after discovery is stable:
 The goal is to cover overlays, notifications, lightweight controls, and similar
 UI without requiring Lua or a cooked WBP while keeping full Blueprint creation
 outside RuneSchema's runtime schema contract.
+
+## Test-bed CI
+
+Pushes to this branch run the isolated `runtime-widget-v08-contract` on Windows.
+The lane intentionally avoids the full UE4SS bootstrap because the pinned UE4SS
+commit currently references the retired `Re-UE4SS/UEPseudo` submodule; that
+external dependency failure is unrelated to the 0.8 runtime-widget contract.
