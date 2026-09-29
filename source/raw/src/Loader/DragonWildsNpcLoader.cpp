@@ -1710,8 +1710,8 @@ namespace DragonWilds {
             if(found)throw std::runtime_error("Duplicate local RuneSchema NPC definition");
             found=&definition;
         }
-        if(!found || !found->Enabled || !found->Multiplayer)
-            throw std::runtime_error("Server NPC identity has no enabled multiplayer definition on this client");
+        if(!found || !found->Enabled)
+            throw std::runtime_error("Server NPC identity has no enabled RuneSchema definition on this client");
         if(NetworkDefinitionFingerprint(actor,*found)!=identity.Fingerprint)
             throw std::runtime_error("Server/client NPC or dialogue/quest registry mismatch (server="+identity.Fingerprint+", client="+NetworkDefinitionFingerprint(actor,*found)+"); presentation refused");
         return found;
