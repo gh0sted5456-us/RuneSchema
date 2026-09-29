@@ -22,6 +22,17 @@ jobs:
           New-Item -ItemType Directory -Force .cache | Out-Null
           git clone --depth 1 --branch v3.11.3 https://github.com/nlohmann/json.git .cache/nlohmann-json
 
+      - name: Validate RuneSchema builder syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/build/build.ps1", [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+
       - name: Configure contract tests
         shell: pwsh
         run: cmake -S source/raw/core -B build/cache/contracts-08 -G Ninja -DRUNESCHEMA_JSON_INCLUDE_DIR="$PWD/.cache/nlohmann-json/include" -DCMAKE_BUILD_TYPE=Release -DCMAKE_SUPPRESS_REGENERATION=ON
