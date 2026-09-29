@@ -49,46 +49,50 @@ public:
         try {return npcs.contains(Reference(mod,ref));}catch(...) {return false;}
     }
     void AddNpc(const std::string& mod, const Json& data) {
-        Require(data, {"Id","DisplayName","VisualSource","Mesh","Materials","IdleAnimation","HideMesh","NoInteract","HideName",
-            "Location","Rotation","Scale","Enabled","EnableCollision","MeshCollision","Type","Appearance","Equipment","HideWeapon","Pose","DialoguePose","Ghost","VisualEffect","Map","OverheadIcon","VendorID","DialogueID","LoreID","LoreEntry","QuestID","Multiplayer","TimeOfDay"});
-        const auto key=Key(mod,data.at("Id").get<std::string>());
-        HumanNpc::Validate(data);
+        auto normalized=data;
+        // Pre-0.7.9 compatibility: the old Multiplayer flag no longer changes
+        // behavior. One NPC definition now serves standalone and multiplayer.
+        normalized.erase("Multiplayer");
+        Require(normalized, {"Id","DisplayName","VisualSource","Mesh","Materials","IdleAnimation","HideMesh","NoInteract","HideName",
+            "Location","Rotation","Scale","Enabled","EnableCollision","MeshCollision","Type","Appearance","Equipment","HideWeapon","Pose","DialoguePose","Ghost","VisualEffect","Map","OverheadIcon","VendorID","DialogueID","LoreID","LoreEntry","QuestID","TimeOfDay"});
+        const auto& source=normalized;
+        const auto key=Key(mod,source.at("Id").get<std::string>());
+        HumanNpc::Validate(source);
         for(const auto* field:{"NoInteract","HideName"})
-            if(data.contains(field) && !data[field].is_boolean())throw std::runtime_error(std::string(field)+" must be boolean");
-        if(data.contains("HideMesh") && (!data["HideMesh"].is_boolean() || data.value("Type",std::string{})!="Prop"))
+            if(source.contains(field) && !data[field].is_boolean())throw std::runtime_error(std::string(field)+" must be boolean");
+        if(source.contains("HideMesh") && (!source["HideMesh"].is_boolean() || source.value("Type",std::string{})!="Prop"))
             throw std::runtime_error("HideMesh requires Type Prop and a boolean");
-        if(data.contains("VisualEffect"))NpcVisualEffect::Validate(data.at("VisualEffect"));
-        if(data.contains("LoreID") && data.contains("LoreEntry"))
+        if(source.contains("VisualEffect"))NpcVisualEffect::Validate(source.at("VisualEffect"));
+        if(source.contains("LoreID") && source.contains("LoreEntry"))
             throw std::runtime_error("Use LoreID for a /lore definition or LoreEntry for a legacy/global entry, not both");
-        if(data.contains("LoreID"))Reference(mod,data.at("LoreID").get<std::string>());
-        if(data.contains("QuestID"))Reference(mod,data.at("QuestID").get<std::string>());
-        if(data.contains("LoreEntry") || data.contains("LoreID")) {
-            const auto& entry=data.contains("LoreEntry")?data.at("LoreEntry"):data.at("LoreID");
+        if(source.contains("LoreID"))Reference(mod,source.at("LoreID").get<std::string>());
+        if(source.contains("QuestID"))Reference(mod,source.at("QuestID").get<std::string>());
+        if(source.contains("LoreEntry") || source.contains("LoreID")) {
+            const auto& entry=source.contains("LoreEntry")?source.at("LoreEntry"):source.at("LoreID");
             if(!entry.is_string() || entry.get_ref<const std::string&>().empty() || entry.get_ref<const std::string&>().size()>1024
                 || entry.get_ref<const std::string&>().find_first_of("\r\n\t")!=std::string::npos)
                 throw std::runtime_error("LoreEntry requires a journal/lore entry ID or cooked asset path");
-            if(data.contains("DialogueID") || data.contains("VendorID"))throw std::runtime_error("Direct LoreEntry cannot share the primary interaction with DialogueID or VendorID");
+            if(source.contains("DialogueID") || source.contains("VendorID"))throw std::runtime_error("Direct LoreEntry cannot share the primary interaction with DialogueID or VendorID");
         }
         NpcMarkers::Validate(data);
-        if(data.contains("Multiplayer") && !data["Multiplayer"].is_boolean())throw std::runtime_error("Multiplayer must be boolean");
-        if(data.contains("TimeOfDay")) {
-            if(!data["TimeOfDay"].is_string())throw std::runtime_error("TimeOfDay must be Any, Day, or Night");
-            (void)TimeOfDay::Parse(data["TimeOfDay"].get<std::string>());
+        if(source.contains("TimeOfDay")) {
+            if(!source["TimeOfDay"].is_string())throw std::runtime_error("TimeOfDay must be Any, Day, or Night");
+            (void)TimeOfDay::Parse(source["TimeOfDay"].get<std::string>());
         }
-        if(data.contains("EnableCollision") && !data["EnableCollision"].is_boolean())
+        if(source.contains("EnableCollision") && !source["EnableCollision"].is_boolean())
             throw std::runtime_error("EnableCollision must be boolean");
-        const auto collision=data.value("MeshCollision",std::string("Native"));
+        const auto collision=source.value("MeshCollision",std::string("Native"));
         if(collision!="Native" && collision!="Pawn" && collision!="None")
             throw std::runtime_error("MeshCollision must be Native, Pawn or None");
         if(HumanNpc::IsHuman(data) && collision=="Pawn")
             throw std::runtime_error("Human previews use actor capsule collision; MeshCollision Pawn is for AI visuals");
-        if(data.contains("DialogueID")) {
-            Reference(mod,data.at("DialogueID").get<std::string>());
+        if(source.contains("DialogueID")) {
+            Reference(mod,source.at("DialogueID").get<std::string>());
         }
-        if(data.contains("VendorID"))Reference(mod,data.at("VendorID").get<std::string>());
-        if (!data.contains("Location") || (!HumanNpc::IsHuman(data) && !data.contains("VisualSource") && !data.contains("Mesh")))
+        if(source.contains("VendorID"))Reference(mod,source.at("VendorID").get<std::string>());
+        if (!source.contains("Location") || (!HumanNpc::IsHuman(data) && !source.contains("VisualSource") && !source.contains("Mesh")))
             throw std::runtime_error("NPC requires Location and Mesh or VisualSource");
-        if (!npcs.emplace(key,Entry{mod,data}).second)throw std::runtime_error("Duplicate NPC: "+key);
+        if (!npcs.emplace(key,Entry{mod,source}).second)throw std::runtime_error("Duplicate NPC: "+key);
     }
     void AddStore(const std::string& mod, const Json& data) {
         if(data.contains("Npcs"))throw std::runtime_error("Move /vendors.Npcs bindings to VendorID on each /npc definition");
