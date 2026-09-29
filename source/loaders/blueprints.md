@@ -108,8 +108,9 @@ through `ProcessEvent`.
 
 `Target` defaults to `"$Self"`. Use `"$Owner"` for the owning widget or a
 dot-separated owner path for another reflected object. `$Call` may also be an
-array to run several calls in order. Return values are intentionally not exposed
-in the first test-bed implementation.
+array to run several calls in order. The first test-bed implementation is
+deliberately input-only: functions with return values or reflected output
+parameters are rejected until their result lifetime is explicitly modeled.
 
 ### `$When` and `$Once`
 
