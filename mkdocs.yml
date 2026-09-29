@@ -91,7 +91,7 @@ nav:
       - Overview: OVERVIEW.md
       - Authoring Guide: AUTHORING-GUIDE.md
       - Examples: EXAMPLES.md
-      - Ask RuneSchema: ASK-RUNESCHEMA.md
+      - Current Release: CURRENT-RELEASE.md
   - Loaders:
       - Overview: LOADER-WALKTHROUGHS.md
       - Assets: loaders/assets.md
@@ -116,22 +116,18 @@ nav:
       - Spawns: loaders/spawns.md
       - Strings: loaders/strings.md
       - Vendors: loaders/vendors.md
-  - Authoring:
+  - Guides:
       - Character Creation: CHARACTER-CREATION-AUTHORING.md
       - Registry & DataTables: REGISTRY-PATCHING.md
       - Building & Cloning: BUILDING-CLONING.md
-      - Save Cleanup & Ownership: SAFE-SAVE-AND-LEDGER.md
-  - Unreal + RuneSchema:
-      - Overview: unreal-runeschema/index.md
+      - Unreal + RuneSchema: unreal-runeschema/index.md
       - Stations, Quests & Recipes: unreal-runeschema/stations-quests-recipes.md
   - Compatibility:
-      - Overview: COMPATIBILITY-BACKBONE.md
+      - Runtime & Multiplayer: COMPATIBILITY-BACKBONE.md
+      - Safe Clean: SAFE-SAVE-AND-LEDGER.md
       - Manual Save Recovery: MANUAL-SAVE-RECOVERY.md
-  - Release:
-      - Current Release: CURRENT-RELEASE.md
   - Developers:
       - Developer Guide: DEVELOPER-GUIDE.md
       - Plugin API: API-REFERENCE.md
       - JSON Schemas: SCHEMAS.md
       - Base Builder Import: raw/BASE-BUILDER-IMPORT.md
-      - Documentation Map: DOCUMENTATION-INDEX.md
