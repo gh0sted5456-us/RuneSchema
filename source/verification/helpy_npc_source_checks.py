@@ -47,7 +47,7 @@ check('expired actor does not leave presentation records','m_applied.erase(lease
 check('remaining NPC cleanup survives unknown exception','another NPC must still be dismissed' in bridge)
 check('permanent authoring extends existing allowlist only','value!="npc"' in read('include/Runtime/AuthoredFile.h'))
 check('source definition preserved and new document validated','NpcCatalog validate;validate.AddNpc' in bridge and 'Original NPC authoring definition is unavailable.' in bridge)
-check('existing network flag preserved for permanent definition','doc["Multiplayer"]=source.Multiplayer' in bridge and 'if(!permanent)d.Multiplayer=false' in bridge)
+check('npc authoring has one automatic network mode','"Multiplayer"' not in bridge and '.Multiplayer' not in bridge)
 check('no file emission on timed branch','file=std::make_unique<PS::Authoring::StagedFile>("npc",stem,document)' in bridge and 'if(permanent) {\n        document["Location"]' in bridge)
 check('failed setup cannot be reported completed','SavedActivationIncomplete' in bridge and 'std::current_exception()' in bridge and 'entry.Enabled=false' in bridge)
 check('vanilla spawn permission explicitly closed','row["TemporaryAllowed"]=false;row["PermanentAllowed"]=false' in catalog and 'Vanilla NPCs remain browsable in this cycle.' in bridge)
