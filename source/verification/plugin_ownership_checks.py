@@ -7,7 +7,7 @@ main = (ROOT / "raw" / "src" / "dllmain.cpp").read_text(encoding="utf-8")
 host_h = (ROOT / "raw" / "include" / "Runtime" / "PluginHost.h").read_text(encoding="utf-8")
 host_cpp = (ROOT / "raw" / "src" / "Runtime" / "PluginHost.cpp").read_text(encoding="utf-8")
 helpy = (ROOT / "raw" / "plugins" / "helpy" / "HelpyPlugin.cpp").read_text(encoding="utf-8")
-network_manifest = (ROOT / "plugins" / "RuneSchema.Networking" / "plugin.json").read_text(encoding="utf-8")
+network_manifest = (ROOT / "plugins" / "RSNetworking" / "plugin.json").read_text(encoding="utf-8")
 
 checks = {
     "main delegates UI init": "m_pluginHost.OnUiInit()" in main,
