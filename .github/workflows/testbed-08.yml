@@ -56,6 +56,19 @@ jobs:
         shell: pwsh
         run: ctest --test-dir build/cache/contracts-08 --output-on-failure -R "^(runtime-widget-v08-contract|ue4ss-bootstrap-contract)$"
 
+      - name: Package 0.8 build folder
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path build -DestinationPath dist/RuneSchema08-build-folder.zip -Force
+
+      - name: Upload 0.8 build folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuneSchema08-build-folder
+          path: dist/RuneSchema08-build-folder.zip
+          if-no-files-found: error
+
       - name: Package 0.8 demo mod
         shell: pwsh
         run: |
