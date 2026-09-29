@@ -27,6 +27,11 @@ namespace DragonWilds {
         RC::StringType ModName;
     };
 
+    struct RuntimeWidgetObservedTarget {
+        PS::WeakObjectHandle Target;
+        PS::WeakObjectHandle Owner;
+    };
+
     class DragonWildsBlueprintModLoader : public DragonWildsModLoaderBase {
     public:
         DragonWildsBlueprintModLoader();
@@ -58,6 +63,7 @@ namespace DragonWilds {
         std::unordered_set<std::string> m_reportedRuntimeWidgetFailures;
         std::unordered_set<std::string> m_runtimeWidgetActiveRules;
         std::unordered_set<std::string> m_runtimeWidgetCompletedRules;
+        std::unordered_map<RC::Unreal::UObject*, RuntimeWidgetObservedTarget> m_runtimeWidgetObservedTargets;
         std::vector<PS::WeakObjectHandle> m_ghostRoots;
         std::unordered_map<std::string, GhostMaterials::Set> m_ghostMaterials;
         RC::Unreal::Hook::GlobalCallbackId m_worldTeardownCallbackId = RC::Unreal::Hook::ERROR_ID;
@@ -83,6 +89,15 @@ namespace DragonWilds {
         RC::Unreal::UObject* FindRuntimeWidgetOwner(
             RC::Unreal::UObject* source,
             const RC::Unreal::FName& ownerClass);
+        RC::Unreal::UObject* ResolveRuntimeWidgetTarget(
+            RC::Unreal::UObject* owner,
+            const RuntimeWidgetRule& rule);
+        RC::Unreal::UObject* FindRuntimeWidgetTarget(
+            RC::Unreal::UObject* owner,
+            const RuntimeWidgetRule& rule);
+        bool RuntimeWidgetSelectorMatches(
+            RC::Unreal::UObject* candidate,
+            const nlohmann::json& selector) const;
         RC::Unreal::UObject* ResolveRuntimeWidgetCallTarget(
             RC::Unreal::UObject* owner,
             RC::Unreal::UObject* widget,

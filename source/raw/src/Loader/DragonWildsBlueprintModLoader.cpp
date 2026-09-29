@@ -180,6 +180,65 @@ namespace DragonWilds {
             return true;
         }
 
+        bool RuntimeObjectUsable(UObject* object)
+        {
+            return object
+                && object->GetClassPrivate()
+                && !object->HasAnyFlags(static_cast<EObjectFlags>(
+                    RF_ClassDefaultObject | RF_ArchetypeObject
+                    | RF_BeginDestroyed | RF_FinishDestroyed
+                    | RF_NeedLoad | RF_NeedPostLoad | RF_NeedInitialization));
+        }
+
+        std::vector<UObject*> RuntimeObjectArrayValues(
+            UObject* container,
+            const RC::StringType& propertyName,
+            int32_t maximum = 512)
+        {
+            std::vector<UObject*> result;
+            if (!RuntimeObjectUsable(container)) return result;
+
+            auto* arrayProperty = CastField<FArrayProperty>(
+                PropertyHelper::GetPropertyByName(
+                    container->GetClassPrivate(), propertyName));
+            auto* objectInner = arrayProperty
+                ? CastField<FObjectPropertyBase>(arrayProperty->GetInner())
+                : nullptr;
+            if (!arrayProperty || !objectInner
+                || arrayProperty->GetArrayDim() != 1
+                || objectInner->GetElementSize() != sizeof(UObject*))
+                return result;
+
+            FScriptArrayHelper helper(
+                arrayProperty,
+                arrayProperty->ContainerPtrToValuePtr<void>(container));
+            if (helper.Num() < 0 || helper.Num() > maximum)
+                throw std::runtime_error(std::format(
+                    "Runtime widget object array '{}' exceeded the safety limit",
+                    RC::to_string(propertyName)));
+
+            result.reserve(static_cast<size_t>(helper.Num()));
+            for (int32_t index = 0; index < helper.Num(); ++index)
+            {
+                auto* value = objectInner->GetObjectPropertyValue(helper.GetRawPtr(index));
+                if (RuntimeObjectUsable(value))
+                    result.push_back(value);
+            }
+            return result;
+        }
+
+        bool RuntimeOuterChainContains(UObject* candidate, UObject* expectedOuter)
+        {
+            if (!candidate || !expectedOuter) return false;
+            auto* current = candidate->GetOuterPrivate();
+            for (int depth = 0; current && depth < 16; ++depth)
+            {
+                if (current == expectedOuter) return true;
+                current = current->GetOuterPrivate();
+            }
+            return false;
+        }
+
         bool RuntimeStorefrontTokenMatches(std::string token)
         {
             std::transform(token.begin(), token.end(), token.begin(),
@@ -250,6 +309,7 @@ namespace DragonWilds {
     {
         m_runtimeWidgetActiveRules.clear();
         m_runtimeWidgetCompletedRules.clear();
+        m_runtimeWidgetObservedTargets.clear();
     }
 
     void DragonWildsBlueprintModLoader::SetActorInitializedObserver(
@@ -672,6 +732,197 @@ namespace DragonWilds {
         return nullptr;
     }
 
+    bool DragonWildsBlueprintModLoader::RuntimeWidgetSelectorMatches(
+        UObject* candidate,
+        const nlohmann::json& selector) const
+    {
+        if (!RuntimeObjectUsable(candidate)) return false;
+
+        const auto name = selector.value("Name", std::string{});
+        const auto className = selector.value("Class", std::string{});
+        if (name.empty() && className.empty())
+            throw std::runtime_error("Blueprint $RuntimeWidget $Find requires Name or Class");
+
+        if (!name.empty())
+        {
+            const auto wanted = FName(to_generic_string(name), FNAME_Find);
+            if (wanted == NAME_None || candidate->GetFName() != wanted)
+                return false;
+        }
+
+        if (!className.empty())
+        {
+            auto* type = candidate->GetClassPrivate();
+            if (!type) return false;
+            const auto actualName = RC::to_string(type->GetName());
+            const auto actualPath = RC::to_string(type->GetPathName());
+            if (className != actualName && className != actualPath)
+                return false;
+        }
+
+        return true;
+    }
+
+    UObject* DragonWildsBlueprintModLoader::FindRuntimeWidgetTarget(
+        UObject* owner,
+        const RuntimeWidgetRule& rule)
+    {
+        const auto find = rule.Data.find("$Find");
+        if (find == rule.Data.end()) return nullptr;
+        if (!find->is_object())
+            throw std::runtime_error("Blueprint $RuntimeWidget $Find must be an object");
+
+        auto scope = find->value("Scope", std::string{});
+        std::transform(scope.begin(), scope.end(), scope.begin(),
+            [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+        if (scope.empty())
+            throw std::runtime_error("Blueprint $RuntimeWidget $Find requires Scope");
+
+        const auto name = find->value("Name", std::string{});
+        const auto className = find->value("Class", std::string{});
+        if (name.empty() && className.empty())
+            throw std::runtime_error("Blueprint $RuntimeWidget $Find requires Name or Class");
+
+        std::vector<UObject*> matches;
+        std::unordered_set<UObject*> seen;
+        const auto addMatch = [&](UObject* candidate) {
+            if (!RuntimeWidgetSelectorMatches(candidate, *find)) return;
+            if (seen.emplace(candidate).second)
+                matches.push_back(candidate);
+        };
+
+        if (scope == "widgettree" || scope == "widget-tree")
+        {
+            if (name.empty())
+                throw std::runtime_error("Blueprint $RuntimeWidget WidgetTree discovery requires Name");
+
+            auto* treeProperty = CastField<FObjectPropertyBase>(
+                PropertyHelper::GetPropertyByName(
+                    owner->GetClassPrivate(), TEXT("WidgetTree")));
+            auto* widgetTree = treeProperty
+                ? treeProperty->GetObjectPropertyValue(
+                    treeProperty->ContainerPtrToValuePtr<void>(owner))
+                : nullptr;
+            if (!RuntimeObjectUsable(widgetTree)) return nullptr;
+
+            const auto widgetName = to_generic_string(name);
+            const auto directPath = std::format(
+                STR("{}.{}"), widgetTree->GetPathName(), widgetName);
+            if (auto* direct = UECustom::UObjectGlobals::StaticFindObject(
+                    nullptr, nullptr, directPath.c_str(), false);
+                RuntimeObjectUsable(direct)
+                    && RuntimeOuterChainContains(direct, widgetTree))
+            {
+                addMatch(direct);
+            }
+
+            if (matches.empty())
+            {
+                const auto wantedName = FName(widgetName, FNAME_Find);
+                if (wantedName != NAME_None)
+                {
+                    UECustom::UObjectGlobals::ForEachUObject(
+                        [&](UObject* candidate, int32_t, int32_t) -> LoopAction {
+                            if (!RuntimeObjectUsable(candidate)
+                                || candidate->GetFName() != wantedName
+                                || !RuntimeOuterChainContains(candidate, widgetTree))
+                                return LoopAction::Continue;
+                            addMatch(candidate);
+                            return matches.size() > 1
+                                ? LoopAction::Break : LoopAction::Continue;
+                        });
+                }
+            }
+        }
+        else if (scope == "hud")
+        {
+            auto* controllerClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+                nullptr, nullptr, TEXT("/Script/Dominion.DominionPlayerController"));
+            if (!controllerClass) return nullptr;
+
+            auto* ownerWorld = owner->GetWorld();
+            TArray<UObject*> controllers;
+            UECustom::UObjectGlobals::GetObjectsOfClass(
+                controllerClass, controllers, true);
+            if (controllers.Num() > 64)
+                throw std::runtime_error("Blueprint $RuntimeWidget HUD discovery exceeded the controller safety limit");
+
+            for (auto* controller : controllers)
+            {
+                if (!RuntimeObjectUsable(controller)
+                    || (ownerWorld && controller->GetWorld() != ownerWorld))
+                    continue;
+
+                auto* hudProperty = CastField<FObjectPropertyBase>(
+                    PropertyHelper::GetPropertyByName(
+                        controller->GetClassPrivate(), TEXT("MyHUD")));
+                auto* hud = hudProperty
+                    ? hudProperty->GetObjectPropertyValue(
+                        hudProperty->ContainerPtrToValuePtr<void>(controller))
+                    : nullptr;
+                if (!RuntimeObjectUsable(hud)) continue;
+
+                for (auto* candidate : RuntimeObjectArrayValues(
+                        hud, TEXT("HUDWidgetRefs"), 256))
+                    addMatch(candidate);
+            }
+        }
+        else if (scope == "commonui" || scope == "common-ui"
+            || scope == "activatable")
+        {
+            auto* containerClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+                nullptr, nullptr,
+                TEXT("/Script/CommonUI.CommonActivatableWidgetContainerBase"));
+            if (!containerClass) return nullptr;
+
+            auto* ownerWorld = owner->GetWorld();
+            TArray<UObject*> containers;
+            UECustom::UObjectGlobals::GetObjectsOfClass(
+                containerClass, containers, true);
+            if (containers.Num() > 128)
+                throw std::runtime_error("Blueprint $RuntimeWidget CommonUI discovery exceeded the container safety limit");
+
+            for (auto* container : containers)
+            {
+                if (!RuntimeObjectUsable(container)
+                    || (ownerWorld && container->GetWorld()
+                        && container->GetWorld() != ownerWorld))
+                    continue;
+
+                for (auto* candidate : RuntimeObjectArrayValues(
+                        container, TEXT("WidgetList"), 256))
+                    addMatch(candidate);
+            }
+        }
+        else
+        {
+            throw std::runtime_error(
+                "Blueprint $RuntimeWidget $Find Scope must be WidgetTree, HUD, or CommonUI");
+        }
+
+        if (matches.size() > 1)
+            throw std::runtime_error("Blueprint $RuntimeWidget $Find matched more than one live object");
+        return matches.empty() ? nullptr : matches.front();
+    }
+
+    UObject* DragonWildsBlueprintModLoader::ResolveRuntimeWidgetTarget(
+        UObject* owner,
+        const RuntimeWidgetRule& rule)
+    {
+        if (auto* direct = ResolveRuntimeWidgetPath(owner, rule.WidgetPath))
+            return direct;
+
+        auto* discovered = FindRuntimeWidgetTarget(owner, rule);
+        if (discovered)
+        {
+            m_runtimeWidgetObservedTargets[discovered] = {
+                PS::WeakObject(discovered),
+                PS::WeakObject(owner)
+            };
+        }
+        return discovered;
+    }
+
     UObject* DragonWildsBlueprintModLoader::ResolveRuntimeWidgetCallTarget(
         UObject* owner,
         UObject* widget,
@@ -922,7 +1173,7 @@ namespace DragonWilds {
 
         try
         {
-            auto* target = ResolveRuntimeWidgetPath(owner, rule.WidgetPath);
+            auto* target = ResolveRuntimeWidgetTarget(owner, rule);
             if (!target)
             {
                 m_runtimeWidgetActiveRules.erase(ruleKey);
@@ -937,6 +1188,7 @@ namespace DragonWilds {
             properties.erase("$When");
             properties.erase("$Once");
             properties.erase("$Activate");
+            properties.erase("$Find");
             if (!properties.empty())
                 ApplyData(properties, target, false);
 
@@ -962,6 +1214,18 @@ namespace DragonWilds {
         if (!source || m_runtimeWidgetRules.empty()) return;
 
         std::unordered_set<UObject*> ownersToRefresh;
+
+        if (const auto observed = m_runtimeWidgetObservedTargets.find(source);
+            observed != m_runtimeWidgetObservedTargets.end())
+        {
+            auto* trackedTarget = observed->second.Target.Get();
+            auto* trackedOwner = observed->second.Owner.Get();
+            if (trackedTarget == source && trackedOwner)
+                ownersToRefresh.emplace(trackedOwner);
+            else
+                m_runtimeWidgetObservedTargets.erase(observed);
+        }
+
         for (const auto& triggerRule : m_runtimeWidgetRules)
         {
             auto* owner = FindRuntimeWidgetOwner(source, triggerRule.OwnerClass);

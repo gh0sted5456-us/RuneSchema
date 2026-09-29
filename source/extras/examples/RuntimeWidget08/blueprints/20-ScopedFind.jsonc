@@ -1,0 +1,22 @@
+{
+  "/Game/UI/HUD/WBP_HUD_RootWidget": {
+    "$RuntimeWidget": {
+      "InventorySearch": {
+        "$Find": {
+          "Scope": "HUD",
+          "Class": "WBP_HUD_Inventory_C"
+        },
+        "$When": "Resolved",
+        "Visibility": "Visible"
+      },
+      "PauseSearch": {
+        "$Find": {
+          "Scope": "CommonUI",
+          "Class": "WBP_PauseMenu_C"
+        },
+        "$Once": true,
+        "$Activate": true
+      }
+    }
+  }
+}

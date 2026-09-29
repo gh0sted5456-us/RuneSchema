@@ -155,6 +155,44 @@ The next .8 phases are intentionally separate: safe scoped discovery
 fallback, followed by a RuneSchema-owned `$RuntimeUI` tree for transient UMG.
 Do not use unrestricted global widget sweeps as an authoring primitive.
 
+## Scoped runtime discovery
+
+The 0.8 test bed adds `$Find` as a fallback when the ordinary dot-separated
+widget path cannot resolve. RuneSchema always tries the direct path first.
+
+```jsonc
+"$RuntimeWidget": {
+  "InventorySearch": {
+    "$Find": {
+      "Scope": "HUD",
+      "Class": "WBP_HUD_Inventory_C"
+    },
+    "Visibility": "Visible"
+  }
+}
+```
+
+Supported scopes are deliberately narrow:
+
+- `WidgetTree` — searches only below the owner's live `WidgetTree`. An exact
+  `Name` is required; the implementation tries the exact object path first and
+  only uses an exact-name/outer-chain fallback.
+- `HUD` — resolves live Dominion player controllers for the owner's world and
+  walks only each HUD's reflected `HUDWidgetRefs` array.
+- `CommonUI` — enumerates only loaded
+  `CommonActivatableWidgetContainerBase` instances and walks their reflected
+  `WidgetList` arrays.
+
+`Name` and `Class` are exact selectors. At least one is required. If more
+than one live object matches, RuneSchema rejects the rule instead of choosing
+one. CDOs, archetypes, loading objects, and objects being destroyed are excluded.
+
+A discovered target is weak-tracked back to its owner so later ProcessEvent
+traffic from that target can refresh the same runtime rules without retaining a
+dead UObject pointer. The tracking table is cleared on world teardown.
+
+There is intentionally no general `FindAllOf(UserWidget)` authoring path.
+
 ## Simple rules
 
 - Use `/blueprints` only for supported reflected defaults on an existing loaded class or component.
@@ -163,6 +201,8 @@ Do not use unrestricted global widget sweeps as an authoring primitive.
 - Test bed: `$Call` only invokes reflected functions and every named `Args` entry must resolve to an input parameter.
 - Test bed: use `$When` and `$Once` for lifecycle-sensitive runtime actions; recursive ProcessEvent re-entry is suppressed per rule.
 - Test bed: `$Activate` is only valid when the target exposes CommonUI `ActivateWidget` / `DeactivateWidget`.
+- Test bed: `$Find` is fallback-only and limited to `WidgetTree`, `HUDWidgetRefs`, or CommonUI `WidgetList` discovery.
+- Test bed: ambiguous `$Find` results fail closed; no live widget is selected by guesswork.
 - Delegate and function reflected parameter contracts must be compatible; raw parameter-buffer size is not used as the compatibility test.
 - Use optional `$Storefront` metadata when a live UI rule is only meaningful on one storefront.
 - Confirm every field, widget path, event, and function against live reflection.

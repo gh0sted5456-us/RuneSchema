@@ -22,13 +22,15 @@ RuneSchema native runtime systems.
 
 ## Phase 2 — safe discovery
 
-Planned next:
+Implemented:
 
 1. Existing dot-separated owner paths remain the preferred target mechanism.
-2. Add scoped discovery for the owner's WidgetTree.
-3. Add HUD discovery through known live HUD references.
-4. Add CommonUI container/activatable discovery with CDO and stale-instance filtering.
-5. Do not expose unrestricted `FindAllOf(UserWidget)` as a general authoring primitive.
+2. `$Find.Scope = "WidgetTree"` is an exact-name fallback below the owner's live tree.
+3. `$Find.Scope = "HUD"` walks only live `HUDWidgetRefs` for the owner's world.
+4. `$Find.Scope = "CommonUI"` walks only CommonUI container `WidgetList` arrays.
+5. CDOs, archetypes, loading/destroying objects, oversized source arrays, and ambiguous matches fail closed.
+6. Discovered targets are weak-tracked back to their live owner for later ProcessEvent refreshes.
+7. There is no unrestricted `FindAllOf(UserWidget)` authoring primitive.
 
 The RSDW tooling showed why this boundary matters: CDOs, pooled widgets, and
 partially constructed Slate trees can be present in global scans.
