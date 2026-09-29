@@ -1,0 +1,31 @@
+name: Package RuntimeWidget verified-enum source
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - '.github/workflows/package-runtimewidget-verifiedenum.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ecaa9569bca773f9862fab87a4d90ae384693146
+
+      - name: Create source ZIP
+        shell: bash
+        run: |
+          zip -r RuneSchema-experimental-runtimewidget-verifiedenum.zip . -x ".git/*"
+
+      - name: Upload source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuneSchema-experimental-runtimewidget-verifiedenum
+          path: RuneSchema-experimental-runtimewidget-verifiedenum.zip
+          if-no-files-found: error
