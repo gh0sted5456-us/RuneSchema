@@ -284,18 +284,30 @@ namespace DragonWilds {
             return;
         }
 
-        // An unlock is serialized by PersistenceID. Do not put a RecipeData
-        // object into the player's save unless the native recipe registry has
-        // accepted that exact ID. A missing entry otherwise prevents the
-        // character from loading on the next world entry.
-        const auto registry = PS::SaveCleanup::ReadRegistry();
-        if (!registry)
-            return;
-        std::vector<UObject*> registeredRecipes;
-        registeredRecipes.reserve(recipes.size());
+        // RuneSchema owns the runtime RecipeData objects passed here. A settled
+        // SaveCleanup registry snapshot may lag the live recipe loader, so it
+        // must not be used as an admission gate for normal recipe discovery.
+        // Persist the live recipe identity now; Safe Clean already removes
+        // orphaned recipe PersistenceIDs if the supplying mod is later deleted.
+        auto* setProperty = CastField<FSetProperty>(
+            PropertyHelper::GetPropertyByName(
+                progressComponent->GetClassPrivate(), TEXT("RecipesUnlocked")));
+        if (!setProperty)
+        {
+            throw std::runtime_error("RecipesUnlocked set is unavailable");
+        }
+
+        auto* element = CastField<FObjectPropertyBase>(setProperty->GetElementProp());
+        if (!element || element->GetElementSize() != sizeof(UObject*))
+        {
+            throw std::runtime_error("RecipesUnlocked element layout changed");
+        }
+
+        UECustom::FScriptSetHelper unlocked(
+            setProperty, setProperty->ContainerPtrToValuePtr<void>(progressComponent));
         for (auto* recipe : recipes)
         {
-            if (!recipe) continue;
+            if (!recipe || !recipe->GetClassPrivate()) continue;
             auto* idProperty = CastField<FStrProperty>(
                 PropertyHelper::GetPropertyByName(
                     recipe->GetClassPrivate(), TEXT("PersistenceID")));
@@ -303,36 +315,9 @@ namespace DragonWilds {
             const auto id = idProperty->GetPropertyValue(
                 idProperty->ContainerPtrToValuePtr<void>(recipe));
             if (id.GetCharArray().Num() <= 1) continue;
-            if (registry->Recipes.contains(
-                    RC::to_string(RC::StringType(*id))))
-                registeredRecipes.push_back(recipe);
-        }
-        if (registeredRecipes.size() != recipes.size())
-        {
-            static std::atomic_bool reported = false;
-            if (!reported.exchange(true))
-                PS::Log<LogLevel::Warning>(STR(
-                    "[LOADER:recipes][DEGRADED] Unregistered recipe unlocks were withheld to protect the character save.\n"));
-        }
-
-        // Dominion reads RecipesUnlocked to decide what the player can see.
-        // RecipesUnlockedThatShouldNotPersist is only an exclusion marker used
-        // by the save path; it is not a second runtime unlock collection.
-        std::vector<const TCHAR*> targetSets{TEXT("RecipesUnlocked")};
-        targetSets.push_back(TEXT("RecipesUnlockedThatShouldNotPersist"));
-        for (auto* propertyName : targetSets)
-        {
-            auto* setProperty = CastField<FSetProperty>(PropertyHelper::GetPropertyByName(progressComponent->GetClassPrivate(), propertyName));
-            if (!setProperty)
-            {
-                continue;
-            }
-
-            UECustom::FScriptSetHelper helper(setProperty, setProperty->ContainerPtrToValuePtr<void>(progressComponent));
-            for (auto* recipe : registeredRecipes)
-            {
-                helper.Add(&recipe);
-            }
+            const auto identity = RC::to_string(RC::StringType(*id));
+            if (!IsCanonicalPersistenceId(identity)) continue;
+            unlocked.Add(&recipe);
         }
     }
 
@@ -1572,33 +1557,10 @@ namespace DragonWilds {
 
         AddRecipeUnlocks(progressComponent, recipes);
 
-        // Native recipe-unlocker consumables add their targets after use.
-        // When persistence is disabled, mirror every currently unlocked
-        // RuneSchema recipe into Dominion's save-exclusion set as well. This
-        // preserves the consumable's normal runtime behavior without making
-        // the discovery permanent.
-        {
-            auto* unlockedProperty=CastField<FSetProperty>(PropertyHelper::GetPropertyByName(
-                progressComponent->GetClassPrivate(),TEXT("RecipesUnlocked")));
-            auto* transientProperty=CastField<FSetProperty>(PropertyHelper::GetPropertyByName(
-                progressComponent->GetClassPrivate(),TEXT("RecipesUnlockedThatShouldNotPersist")));
-            auto* unlockedElement=unlockedProperty?CastField<FObjectPropertyBase>(unlockedProperty->GetElementProp()):nullptr;
-            auto* transientElement=transientProperty?CastField<FObjectPropertyBase>(transientProperty->GetElementProp()):nullptr;
-            if(!unlockedProperty || !transientProperty || !unlockedElement || !transientElement
-                || unlockedElement->GetElementSize()!=sizeof(UObject*) || transientElement->GetElementSize()!=sizeof(UObject*))
-            {
-                static std::atomic_bool reported=false;
-                if(!reported.exchange(true))PS::Log<LogLevel::Warning>(STR(
-                    "[FEATURE:recipe-transient-unlocks][UNAVAILABLE] Native unlock-set layout changed; consumable discoveries may persist.\n"));
-                return;
-            }
-            UECustom::FScriptSetHelper unlocked(unlockedProperty,
-                unlockedProperty->ContainerPtrToValuePtr<void>(progressComponent));
-            UECustom::FScriptSetHelper transient(transientProperty,
-                transientProperty->ContainerPtrToValuePtr<void>(progressComponent));
-            for(const auto& [key,recipe]:m_recipes)
-                if(recipe && unlocked.Contains(&recipe))transient.Add(&recipe);
-        }
+        // RuneSchema recipe discoveries are intentionally allowed to persist.
+        // Safe Clean owns the deleted-mod/orphaned PersistenceID recovery path,
+        // so valid live recipes are not mirrored into Dominion's non-persistent
+        // exclusion set.
     }
 
     UObject* DragonWildsRecipeModLoader::FindProgressComponent()
