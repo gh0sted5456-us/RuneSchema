@@ -1,0 +1,2 @@
+This builder disables CMake automatic regeneration inside Ninja.
+CMake reconfiguration is controlled only by build.ps1's source/CMake fingerprint.
