@@ -89,7 +89,6 @@ namespace DragonWilds {
             nlohmann::json HelpySource;
             bool HelpyTemporary=false;
             bool Human=false;
-            bool Multiplayer=true;
             TimeOfDay::Requirement Time=TimeOfDay::Requirement::Any;
             std::string NetworkActorName;
             std::string NetworkGameplayFingerprint;
