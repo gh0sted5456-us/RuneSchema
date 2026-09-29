@@ -51,3 +51,24 @@ Use build.bat -PluginOnly to rebuild and package Helpy without compiling or
 replacing the main RuneSchema DLL.
 
 Signing is optional and never blocks package creation.
+
+NORMAL BUILD VS TESTS
+---------------------
+The normal builder no longer treats RuneSchema's internal contract-test suite
+as a dependency of producing packages.
+
+Normal:
+    Build RuneSchema.bat
+
+This compiles RuneSchema, performs the UE4SS ABI audit, and produces the Core
+and Universal packages.
+
+Optional local contracts:
+    Build RuneSchema.bat -Tests
+
+The old documentation-contract is not part of the local package gate because it
+references the retired clean-base runtime tree. trace-job-contract is also kept
+out of normal local packaging because it is a diagnostic/internal contract and
+must not prevent a valid DLL from being packaged.
+
+CI can run those specialized checks separately.
