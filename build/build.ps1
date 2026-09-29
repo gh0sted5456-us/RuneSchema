@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [switch]$Clean,
-    [switch]$PluginOnly
+    [switch]$PluginOnly,
+    [switch]$Tests
 )
 $ErrorActionPreference = 'Stop'
 $Version = '0.7.6.6'
@@ -22,9 +23,12 @@ $LogRoot = Join-Path $PSScriptRoot 'logs'
 $Upx = Join-Path $DependencyCache 'tools\upx\upx.exe'
 $Configuration = 'Game__Shipping__Win64'
 
-New-Item -ItemType Directory -Path $LogRoot -Force | Out-Null
-$log = Join-Path $LogRoot ("build-{0:yyyyMMdd-HHmmss}.log" -f (Get-Date))
-Start-Transcript -LiteralPath $log | Out-Null
+$OwnTranscript = -not [bool]$env:RUNESCHEMA_OUTER_TRANSCRIPT
+if ($OwnTranscript) {
+    New-Item -ItemType Directory -Path $LogRoot -Force | Out-Null
+    $log = Join-Path $LogRoot ("build-{0:yyyyMMdd-HHmmss}.log" -f (Get-Date))
+    Start-Transcript -LiteralPath $log | Out-Null
+}
 try {
     function Find-Exe([string]$Name, [string[]]$Hints = @()) {
         $cmd = Get-Command $Name -ErrorAction SilentlyContinue
@@ -113,16 +117,23 @@ try {
                     [void]$builder.AppendLine((Get-Content -LiteralPath $_.FullName -Raw))
                 }
 
-            # Adding/removing/renaming a .cpp must force configure because the
-            # CMake source glob is intentionally not CONFIGURE_DEPENDS.
-            Get-ChildItem -LiteralPath (Join-Path $SourceDirectory 'src') -Filter '*.cpp' -File -Recurse |
-                Sort-Object FullName |
-                ForEach-Object {
-                    [void]$builder.AppendLine($_.FullName.Substring($SourceDirectory.Length).Replace('\','/'))
-                }
+            # Adding/removing/renaming a .cpp must force configure for source
+            # trees that discover files by glob. Smaller subprojects such as
+            # source\raw\core do not have their own src directory; their
+            # CMakeLists explicitly names sources, so the CMake file hash is
+            # sufficient to detect graph changes.
+            $sourceCppRoot = Join-Path $SourceDirectory 'src'
+            if (Test-Path -LiteralPath $sourceCppRoot -PathType Container) {
+                Get-ChildItem -LiteralPath $sourceCppRoot -Filter '*.cpp' -File -Recurse |
+                    Sort-Object FullName |
+                    ForEach-Object {
+                        [void]$builder.AppendLine($_.FullName.Substring($SourceDirectory.Length).Replace('\','/'))
+                    }
+            }
 
             $bytes = [Text.Encoding]::UTF8.GetBytes($builder.ToString())
-            return ([Convert]::ToHexString($sha.ComputeHash($bytes))).ToLowerInvariant()
+            $hashBytes = $sha.ComputeHash($bytes)
+            return (($hashBytes | ForEach-Object { $_.ToString('x2') }) -join '')
         } finally {
             $sha.Dispose()
         }
@@ -268,16 +279,19 @@ try {
             "-DCMAKE_BUILD_TYPE=$Configuration",
             '-DFETCHCONTENT_FULLY_DISCONNECTED=OFF',
             "-DFETCHCONTENT_UPDATES_DISCONNECTED=$updatesDisconnected",
-            '-Wno-dev',
+            '-DCMAKE_SUPPRESS_REGENERATION=ON',
+            '-Wno-author',
             '-Wno-deprecated'
         )
         Ensure-CMakeConfigured $RawSource $build $configureArgs 'universal RuneSchema'
         $targets = if ($OnlyPlugin) { @('RuneSchemaHelpyPlugin') } else { @('RuneSchema', 'RuneSchemaHelpyPlugin') }
         Write-Host $(if ($OnlyPlugin) { '=== Compile Helpy plugin only (RuneSchema.dll is untouched) ===' } else { '=== Compile universal RuneSchema ===' }) -ForegroundColor Cyan
-        & cmake.exe --build $build --target $targets --parallel
+        Write-Host 'Ninja auto-regeneration is disabled; build.ps1 owns all CMake reconfiguration.' -ForegroundColor DarkGray
+
+        & $ninja -C $build @targets
         if ($LASTEXITCODE) {
-            Write-Warning 'Parallel compile failed. Retrying the same generated Ninja graph single-threaded for diagnostics (no CMake reconfigure).'
-            & cmake.exe --build $build --target $targets --parallel 1 --verbose
+            Write-Warning 'Parallel Ninja compile failed. Retrying the same generated graph single-threaded with verbose diagnostics.'
+            & $ninja -C $build -j 1 -v @targets
             if ($LASTEXITCODE) { throw "Universal build failed (serial retry exit $LASTEXITCODE)." }
         }
         $core = if ($OnlyPlugin) { $null } else { Join-Path $build 'RuneSchema.dll' }
@@ -297,8 +311,14 @@ try {
         $packageRoot = Join-Path $DistRoot $name
         $payload = Join-Path $packageRoot 'RuneSchema.Helpy'
         if (Test-Path $packageRoot) { Remove-Item -LiteralPath $packageRoot -Recurse -Force }
-        New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
-        Copy-Item -LiteralPath (Join-Path $CleanBase 'plugins\RuneSchema.Helpy') -Destination $payload -Recurse
+        New-Item -ItemType Directory -Path $payload -Force | Out-Null
+        $helpyTemplate = Join-Path $CleanBase 'plugins\RuneSchema.Helpy'
+        if (Test-Path -LiteralPath $helpyTemplate -PathType Container) {
+            Get-ChildItem -LiteralPath $helpyTemplate -Force | ForEach-Object {
+                Copy-Item -LiteralPath $_.FullName -Destination $payload -Recurse -Force
+            }
+        }
+        New-Item -ItemType Directory -Path (Join-Path $payload 'dll') -Force | Out-Null
         Copy-Item -LiteralPath $HelpyDll -Destination (Join-Path $payload 'dll\RuneSchema.Helpy.dll') -Force
         $state = Compress-DllBestEffort (Join-Path $payload 'dll\RuneSchema.Helpy.dll')
         @{ File = 'dll\RuneSchema.Helpy.dll'; State = $state } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $payload 'DLL-COMPRESSION.json') -Encoding utf8
@@ -315,8 +335,28 @@ try {
         $packageRoot = Join-Path $DistRoot $Name
         $payload = Join-Path $packageRoot 'RuneSchema'
         if (Test-Path $packageRoot) { Remove-Item -LiteralPath $packageRoot -Recurse -Force }
-        New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
-        Copy-Item -LiteralPath $CleanBase -Destination $packageRoot -Recurse
+
+        # Build dependencies store the package template under the neutral
+        # directory name "runtime-template". Do not copy that directory name
+        # into dist; create the intended RuneSchema payload explicitly and copy
+        # the template CONTENTS into it.
+        New-Item -ItemType Directory -Path $payload -Force | Out-Null
+        Get-ChildItem -LiteralPath $CleanBase -Force | ForEach-Object {
+            Copy-Item -LiteralPath $_.FullName -Destination $payload -Recurse -Force
+        }
+
+        # Guarantee package directories required by the current build even if a
+        # future slim dependency template omits an empty directory.
+        foreach ($requiredDirectory in @(
+            (Join-Path $payload 'dlls'),
+            (Join-Path $payload 'settings')
+        )) {
+            New-Item -ItemType Directory -Path $requiredDirectory -Force | Out-Null
+        }
+        if ($IncludePlugins) {
+            New-Item -ItemType Directory -Path (Join-Path $payload 'plugins\RuneSchema.Helpy\dll') -Force | Out-Null
+        }
+
         # UE4SS enable marker.
         Set-Content -LiteralPath (Join-Path $payload 'enabled.txt') -Value '' -Encoding ascii
         $mods = Join-Path $payload 'mods'
@@ -361,31 +401,57 @@ try {
     }
     New-Item -ItemType Directory -Path $BuildCache, $DistRoot -Force | Out-Null
     $universal = Invoke-UniversalBuild -OnlyPlugin:$PluginOnly
-    $dependencyRoot = Join-Path $universal.Build '_deps'
-    $jsonHeaders = Join-Path $dependencyRoot 'nlohmann_json-src\include'
-    $glazeHeaders = Join-Path $dependencyRoot 'glaze-src\include'
-    $contractBuild = Join-Path $BuildCache 'contracts'
-    $contractSource = Join-Path $RawSource 'core'
-    $contractConfigureArgs = @(
-        '-S', $contractSource,
-        '-B', $contractBuild,
-        '-G', 'Ninja',
-        "-DRUNESCHEMA_JSON_INCLUDE_DIR=$jsonHeaders",
-        "-DRUNESCHEMA_GLAZE_INCLUDE_DIR=$glazeHeaders",
-        '-DCMAKE_BUILD_TYPE=Release',
-        '-Wno-dev',
-        '-Wno-deprecated'
-    )
-    Ensure-CMakeConfigured $contractSource $contractBuild $contractConfigureArgs 'release contract tests'
-    $releaseContracts = if ($PluginOnly) { @('helpy-instant-open') } else { @('vendor-offers','loader-schemas','npc-catalog','player-activity-events',
-        'quest-gameplay-owner','quest-native-contract','quest-definition','event-definition',
-        'dialogue-definition','building-preview-safety','building-clone-contract','static-building-assembly-contract','owned-save-cleanup-contract','resource-additional-drops','resource-scale-idempotence','niagara-preset',
-        'time-of-day-contract','registry-patch-plan','registry-bridge-lifecycle-contract','json-document','asset-patch-v2-contract','helpy-instant-open','plugin-catalog-compatibility','documentation-contract','recipe-placement-contract','trace-job-contract','loader-folder-case','usmap-index','native-binding-resolution',
-        'vendor-category-refresh-contract','storefront-lanes','state-storage-contract','equipment-storefront-lane','native-contract','journal-failure-isolation',
-        'journal-wingdk-lane','journal-save-ownership','loader-lifecycle-contract','recipe-reference-contract','main-menu-log-budget','config-settings','persistence-mode-contract','preview-refresh-contract') }
-    Invoke-Checked 'cmake.exe' (@('--build', $contractBuild, '--target') + $releaseContracts + @('--parallel', '1')) 'Release contract test build'
-    $contractPattern = '^(' + (($releaseContracts | ForEach-Object {[regex]::Escape($_)}) -join '|') + ')$'
-    Invoke-Checked 'ctest.exe' @('--test-dir', $contractBuild, '--output-on-failure', '-R', $contractPattern) 'Release contract tests'
+    if ($Tests) {
+        Write-Host "`n=== Optional RuneSchema contract tests ===" -ForegroundColor Cyan
+        $dependencyRoot = Join-Path $universal.Build '_deps'
+        $jsonHeaders = Join-Path $dependencyRoot 'nlohmann_json-src\include'
+        $glazeHeaders = Join-Path $dependencyRoot 'glaze-src\include'
+        $contractBuild = Join-Path $BuildCache 'contracts'
+        $contractSource = Join-Path $RawSource 'core'
+        $contractConfigureArgs = @(
+            '-S', $contractSource,
+            '-B', $contractBuild,
+            '-G', 'Ninja',
+            "-DRUNESCHEMA_JSON_INCLUDE_DIR=$jsonHeaders",
+            "-DRUNESCHEMA_GLAZE_INCLUDE_DIR=$glazeHeaders",
+            '-DCMAKE_BUILD_TYPE=Release',
+            '-DCMAKE_SUPPRESS_REGENERATION=ON',
+            '-Wno-author',
+            '-Wno-deprecated'
+        )
+        Ensure-CMakeConfigured $contractSource $contractBuild $contractConfigureArgs 'release contract tests'
+
+        $releaseContracts = if ($PluginOnly) {
+            @('helpy-instant-open')
+        } else {
+            @(
+                'vendor-offers','loader-schemas','npc-catalog','player-activity-events',
+                'quest-gameplay-owner','quest-native-contract','quest-definition','event-definition',
+                'dialogue-definition','building-preview-safety','building-clone-contract',
+                'static-building-assembly-contract','owned-save-cleanup-contract',
+                'resource-additional-drops','resource-scale-idempotence','niagara-preset',
+                'time-of-day-contract','registry-patch-plan','registry-bridge-lifecycle-contract',
+                'json-document','asset-patch-v2-contract','helpy-instant-open',
+                'plugin-catalog-compatibility','recipe-placement-contract',
+                'loader-folder-case','usmap-index','native-binding-resolution',
+                'vendor-category-refresh-contract','storefront-lanes','state-storage-contract',
+                'equipment-storefront-lane','native-contract','journal-failure-isolation',
+                'journal-wingdk-lane','journal-save-ownership','loader-lifecycle-contract',
+                'recipe-reference-contract','main-menu-log-budget','config-settings',
+                'persistence-mode-contract','preview-refresh-contract'
+            )
+        }
+
+        & ninja.exe -C $contractBuild -j 1 @releaseContracts
+        if ($LASTEXITCODE) { throw "Optional contract test build failed (exit $LASTEXITCODE)." }
+
+        $contractPattern = '^(' + (($releaseContracts | ForEach-Object {[regex]::Escape($_)}) -join '|') + ')$'
+        Invoke-Checked 'ctest.exe' @('--test-dir', $contractBuild, '--output-on-failure', '-R', $contractPattern) 'Optional contract tests'
+    } else {
+        Write-Host "`nSkipping internal contract tests for normal package build." -ForegroundColor DarkGray
+        Write-Host "Run Build RuneSchema.bat -Tests to execute the supported local contract suite." -ForegroundColor DarkGray
+    }
+
     $helpy = $universal.Helpy
     if (-not (Test-Path $helpy -PathType Leaf)) { throw "Built Helpy DLL not found: $helpy" }
     if ($PluginOnly) {
@@ -409,5 +475,7 @@ try {
     Write-Error $_
     exit 1
 } finally {
-    Stop-Transcript | Out-Null
+    if ($OwnTranscript) {
+        try { Stop-Transcript | Out-Null } catch {}
+    }
 }
