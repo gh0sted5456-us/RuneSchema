@@ -19,6 +19,9 @@ support automatically.
 - Vendor-generated recipes remain transient.
 - Safe Clean removes orphaned RuneSchema identities when the supplying mod is
   no longer installed.
+- Advanced logging changes log detail only; auto reload controls file watching only. Neither setting gates initial startup or loader execution.
+- Unsupported files and mod-manager bookkeeping folders are ignored unless they are valid RuneSchema loader/plugin inputs.
+- The networking content plugin is named `RSNetworking`. Helpy is DLL-only and does not mount PAK content.
 - Steam/GOG and Game Pass use the same JSON loaders and cleanup rules while
   keeping storefront-specific native bindings separate.
 
