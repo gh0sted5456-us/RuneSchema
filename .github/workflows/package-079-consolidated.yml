@@ -1,0 +1,31 @@
+name: Package consolidated RuneSchema 0.7.9 experimental
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - '.github/workflows/package-079-consolidated.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: 64ae1d0ace919b7ac3acc4de91487c9ea6786f37
+
+      - name: Create source ZIP
+        shell: bash
+        run: |
+          zip -r RuneSchema-0.7.9-consolidated-experimental-build-ready.zip . -x ".git/*"
+
+      - name: Upload source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuneSchema-0.7.9-consolidated-experimental-build-ready
+          path: RuneSchema-0.7.9-consolidated-experimental-build-ready.zip
+          if-no-files-found: error
