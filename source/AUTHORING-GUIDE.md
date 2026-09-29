@@ -161,6 +161,7 @@ the expected Unreal type.
 ## JSON rules
 
 - `.json` and `.jsonc` are accepted.
+- Other file types are ignored. Mod-manager markers, readmes, backups, and unrelated folders do not participate in loader discovery.
 - JSONC may contain comments.
 - Duplicate keys are rejected.
 - Use full cooked object paths when two loaded objects can share a short name.
