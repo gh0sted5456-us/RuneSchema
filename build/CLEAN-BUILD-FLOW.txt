@@ -1,0 +1,15 @@
+RuneSchema clean local build flow
+
+Build RuneSchema.bat
+  1. Acquire/cache small build-template dependency bundle
+  2. Configure CMake once when required
+  3. Compile RuneSchema + Helpy
+  4. Perform UE4SS ABI audit
+  5. Package Core + Universal
+  6. Finish
+
+Build RuneSchema.bat -Tests
+  Performs the same build plus the supported local contract suite.
+
+Internal/legacy documentation and diagnostic contracts are not package
+dependencies.
