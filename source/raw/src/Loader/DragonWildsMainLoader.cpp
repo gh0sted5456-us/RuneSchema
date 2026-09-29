@@ -621,6 +621,7 @@ namespace DragonWilds {
                     pending.size() - replayed);
             PS::StartupTrace::Mark("early table replay: " + std::to_string(replayed) + "/" + std::to_string(pending.size()));
             PS::StartupTrace::Mark("InitCore complete");
+            PS::Log<LogLevel::Normal>(STR("[CORE][READY] RuneSchema loaders initialized. Advanced logging and auto-reload are optional.\n"));
             return true;
         } catch (const std::exception& error) {
             m_readiness.Fail();
