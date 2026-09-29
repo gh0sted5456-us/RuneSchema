@@ -2,13 +2,9 @@
 
 **Folder:** `RuneSchema/mods/<ModName>/npc/`
 
-Persistent interactable AI, human, and resource-style actors.
+Creates persistent interactable AI, human, resource-style actors, and merchants.
 
 [← Loader reference](../LOADER-WALKTHROUGHS.md)
-
-`/npc` creates persistent AI, human, or resource-style actors.
-
-NPC content is multiplayer-capable by default. Do not add a singleplayer or multiplayer flag; the same definition is used in standalone, listen-server, client, and dedicated-server worlds.
 
 ```jsonc
 {
@@ -18,41 +14,39 @@ NPC content is multiplayer-capable by default. Do not add a singleplayer or mult
   "VendorID": "shop",
   "DialogueID": "hello",
   "VisualSource": "/Game/Gameplay/NPCs/BP_BaseInteractableNPC.BP_BaseInteractableNPC_C",
-  "Location": [1000, 2000, "$+10"],
-  "PowerLevel": 20
+  "Location": [1000, 2000, "$+10"]
 }
 ```
 
-Choose one actor role, provide a compatible visual source, and bind dialogue or
-vendor IDs. `HideWeapon` can suppress inherited weapon presentation. Prefer
-`/buildings` or `/spawns` for static architecture rather than using an NPC as a
-prop.
+NPC definitions use one network-neutral format. Do not add a `Multiplayer`
+field. In standalone RuneSchema runs the definition locally; in multiplayer the
+server owns creation and clients prepare the replicated presentation.
 
-## Simple rules
+## Rules
 
-- `/npc` creates persistent AI, human, or resource-style actors.
-- Choose one actor role, use a compatible visual source, and bind dialogue or vendor IDs as needed.
-- Prefer `/buildings` or `/spawns` for static architecture.
+- Choose a compatible actor role and visual source.
+- Bind `VendorID`, `DialogueID`, `QuestID`, or lore only when needed.
+- `HideWeapon` suppresses inherited weapon presentation on supported human NPCs.
+- Use `/buildings` for buildable architecture and `/spawns` for general world
+  placement rather than using NPCs as generic props.
 
 ## FAQ
 
-### FAQ-NPC-001 — Can an NPC definition act as a merchant? {#faq-npc-001}
+### Can an NPC act as a merchant?
 
-Yes. Bind a RuneSchema vendor with `VendorID`, and optionally bind dialogue
-with `DialogueID`.
+Yes. Bind a RuneSchema store with `VendorID`. `DialogueID` is optional.
 
-### FAQ-NPC-002 — Should I use NPC for a static prop or building? {#faq-npc-002}
+### Do I need separate single-player and multiplayer NPC files?
 
-Normally no. Use `/buildings` for buildable content or `/spawns` for
-supported world placement.
+No. Use one definition.
 
-### FAQ-NPC-003 — Can I hide a weapon inherited from the visual source? {#faq-npc-003}
+### Can I hide an inherited weapon?
 
-Yes. `HideWeapon` can suppress inherited weapon presentation.
+Yes, on supported human NPCs, with `HideWeapon`.
 
-## Working examples
+## Example
 
-- [Great Tree: resource-style world actor](../examples/GreatTree/npc/85-GreatTree.json)
+- [Great Tree](../examples/GreatTree/npc/85-GreatTree.json)
 
 ---
 
