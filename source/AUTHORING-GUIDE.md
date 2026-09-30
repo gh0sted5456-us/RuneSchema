@@ -139,9 +139,11 @@ RuneSchema content uses one definition in every network mode. Do not create sepa
 ## Ordering
 
 RuneSchema reads mods from top to bottom in `mods/runeschema.txt`. A value of
-`0` disables the mod. Files within a loader folder are read in path order, so
-numeric prefixes such as `10-Items.jsonc` and `20-Recipes.jsonc` make intent
-clear.
+`0` disables the mod. Explicit rows are authoritative and are not re-sorted by
+folder prefix. Prefix tiers are used only for unlisted/default discovery; an
+omitted `AA_` folder is implicit-first and an omitted `ZZ_` folder is
+implicit-last. Files within a loader folder are read in path order, so numeric
+prefixes such as `10-Items.jsonc` and `20-Recipes.jsonc` make intent clear.
 
 The runtime creates loaders in this order:
 
@@ -245,8 +247,10 @@ If a plugin DLL cannot safely use the current RuneSchema plugin interface,
 RuneSchema skips that DLL. The plugin's complete PAK containers can still
 mount. A missing dependency does not disable RuneSchema core.
 
-Set a plugin to `0` in `plugins.txt` to disable it. This also overrides the
-legacy `Required` manifest field.
+Set a plugin to `0` in `plugins.txt` to disable it. Entries are the preferred
+load order from top to bottom. A declared dependency may move its provider
+earlier so the dependency exists before the consumer; otherwise the file order
+is preserved. This also overrides the legacy `Required` manifest field.
 
 ## Multiplayer checklist
 
