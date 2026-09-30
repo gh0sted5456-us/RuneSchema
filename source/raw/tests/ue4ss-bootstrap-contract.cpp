@@ -27,6 +27,10 @@ int main(int argc, char** argv) {
     Require(build, "ENABLE_IDE_SOURCE_VISIBILITY=OFF");
     Require(build, "core UE4SS only (UVTD and IDE source indexing disabled)");
     Require(build, "Discarding incomplete CMake configure state");
+    Require(build, "RUNESCHEMA_BUILD_CACHE");
+    Require(build, "[IO.Path]::GetTempPath()");
+    Require(build, "Short generated build cache:");
+    Require(build, "$allowedRoots = @($BuildRoot, $BuildCache)");
     Require(build, "https://github.com/Re-UE4SS/UEPseudo.git");
     Require(build, "https://github.com/settings/organizations");
     Require(build, "GITHUB_ACTIONS");
