@@ -71,3 +71,11 @@ This keeps private-repository authentication out of CMake's nested FetchContent
 step and gives a direct setup error when the account has not been authorized.
 The isolated 0.8 contract workflow remains intentionally independent of the
 private UEPseudo repository.
+
+## Gamepass Edit Appearance proof
+
+The Restore Appearance test now uses the 0.8 transient-UMG lane on Gamepass.
+RuneSchema creates its own Button on the character-select owner and binds
+`OnClicked` directly to `Character.GoToEditAppearance`. Steam/GOG remains
+native and is skipped by storefront gating. This avoids relying on the missing
+Gamepass `Character.EditAppearanceButton` object.
