@@ -43,7 +43,7 @@ powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command ^
   "try {" ^
   "  Start-Transcript -LiteralPath $log -Append | Out-Null;" ^
   "  Write-Host ('Launching: ' + $env:RUNESCHEMA_BUILD_SCRIPT);" ^
-  "  & $env:RUNESCHEMA_BUILD_SCRIPT %*;" ^
+  "  & $env:RUNESCHEMA_BUILD_SCRIPT -UpdateMappings %*;" ^
   "  if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }" ^
   "} catch {" ^
   "  Write-Host '';" ^

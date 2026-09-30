@@ -2,7 +2,8 @@
 param(
     [switch]$Clean,
     [switch]$PluginOnly,
-    [switch]$Tests
+    [switch]$Tests,
+    [switch]$UpdateMappings
 )
 $ErrorActionPreference = 'Stop'
 $Version = '0.7.7.0'
@@ -38,6 +39,11 @@ $DistRoot = Join-Path $BuildRoot 'dist'
 $LogRoot = Join-Path $PSScriptRoot 'logs'
 $Upx = Join-Path $DependencyCache 'tools\upx\upx.exe'
 $Configuration = 'Game__Shipping__Win64'
+$MappingsRepository = 'RSDWArchive/RSDWArchive'
+$MappingsRef = 'main'
+$MappingsLock = Join-Path $PSScriptRoot 'mappings.lock.json'
+$MappingsCache = Join-Path $DependencyCache 'mappings'
+$MaximumMappingsBytes = 16MB
 
 $OwnTranscript = -not [bool]$env:RUNESCHEMA_OUTER_TRANSCRIPT
 if ($OwnTranscript) {
@@ -61,6 +67,100 @@ try {
             return $false
         }
         return $true
+    }
+    function Get-GitHubHeaders {
+        $headers = @{ 'User-Agent' = 'RuneSchema-Builder' }
+        if ($env:GITHUB_TOKEN) { $headers.Authorization = "Bearer $($env:GITHUB_TOKEN)" }
+        return $headers
+    }
+    function Update-MappingsLock {
+        Write-Host 'Discovering the newest RSDWArchive USMAP...' -ForegroundColor Cyan
+        $headers = Get-GitHubHeaders
+        $api = "https://api.github.com/repos/$MappingsRepository"
+        $commit = Invoke-RestMethod -Uri "$api/commits/$MappingsRef" -Headers $headers
+        $commitSha = [string]$commit.sha
+        if ($commitSha -notmatch '^[0-9a-f]{40}$') { throw 'RSDWArchive returned an invalid commit SHA.' }
+
+        # Windows PowerShell 5.1 emits a JSON top-level array as one Object[];
+        # do not wrap it again or the directory entries become a nested array.
+        $root = Invoke-RestMethod -Uri "$api/contents?ref=$commitSha" -Headers $headers
+        $versions = @($root | Where-Object {
+            $_.type -eq 'dir' -and $_.name -match '^\d+\.\d+\.\d+\.\d+$'
+        } | ForEach-Object {
+            [pscustomobject]@{ Name = [string]$_.name; Version = [version]($_.name) }
+        } | Sort-Object Version -Descending)
+        if (-not $versions) { throw 'RSDWArchive does not contain a versioned mapping directory.' }
+
+        $version = $versions[0].Name
+        $entries = Invoke-RestMethod -Uri "$api/contents/$version/usmap`?ref=$commitSha" -Headers $headers
+        $maps = @($entries | Where-Object { $_.type -eq 'file' -and $_.name -match '\.usmap$' })
+        if ($maps.Count -ne 1) {
+            throw "Expected exactly one USMAP in RSDWArchive $version/usmap; found $($maps.Count)."
+        }
+        $map = $maps[0]
+        $declaredSize = [int64]$map.size
+        if ($declaredSize -le 0 -or $declaredSize -gt $MaximumMappingsBytes) {
+            throw "RSDWArchive USMAP size $declaredSize is outside the allowed range."
+        }
+
+        New-Item -ItemType Directory -Path $MappingsCache -Force | Out-Null
+        $temporary = Join-Path $MappingsCache 'Mappings.usmap.download'
+        Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+        Invoke-WebRequest -Uri $map.download_url -Headers $headers -OutFile $temporary
+        $downloadedSize = (Get-Item -LiteralPath $temporary).Length
+        if ($downloadedSize -ne $declaredSize) {
+            Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+            throw "RSDWArchive USMAP size changed during download ($downloadedSize instead of $declaredSize)."
+        }
+        $sha256 = (Get-FileHash -LiteralPath $temporary -Algorithm SHA256).Hash.ToLowerInvariant()
+        $cacheFile = Join-Path $MappingsCache "$sha256.usmap"
+        Move-Item -LiteralPath $temporary -Destination $cacheFile -Force
+
+        $lock = [ordered]@{
+            Schema = 1
+            Repository = $MappingsRepository
+            Ref = $MappingsRef
+            Commit = $commitSha
+            Version = $version
+            File = [string]$map.name
+            GitBlobSha = [string]$map.sha
+            Size = $declaredSize
+            Sha256 = $sha256
+            DownloadUrl = [string]$map.download_url
+        }
+        $lock | ConvertTo-Json | Set-Content -LiteralPath $MappingsLock -Encoding utf8
+        Write-Host "Locked RSDWArchive $version/$($map.name) at $commitSha." -ForegroundColor Green
+        return [pscustomobject]$lock
+    }
+    function Ensure-Mappings {
+        $lock = if ($UpdateMappings) {
+            Update-MappingsLock
+        } else {
+            if (-not (Test-Path -LiteralPath $MappingsLock -PathType Leaf)) {
+                throw "Mappings lock is missing: $MappingsLock. Run Build RuneSchema.bat to create it."
+            }
+            Get-Content -LiteralPath $MappingsLock -Raw | ConvertFrom-Json
+        }
+        if ($lock.Repository -ne $MappingsRepository -or $lock.Sha256 -notmatch '^[0-9a-fA-F]{64}$' -or
+            [int64]$lock.Size -le 0 -or [int64]$lock.Size -gt $MaximumMappingsBytes) {
+            throw "Mappings lock is invalid: $MappingsLock"
+        }
+
+        New-Item -ItemType Directory -Path $MappingsCache -Force | Out-Null
+        $cacheFile = Join-Path $MappingsCache "$($lock.Sha256.ToLowerInvariant()).usmap"
+        if (-not (Assert-Sha256 $cacheFile $lock.Sha256)) {
+            $temporary = "$cacheFile.download"
+            Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+            Write-Host "Downloading locked RSDWArchive USMAP $($lock.Version)..." -ForegroundColor Cyan
+            Invoke-WebRequest -Uri $lock.DownloadUrl -Headers (Get-GitHubHeaders) -OutFile $temporary
+            if ((Get-Item -LiteralPath $temporary).Length -ne [int64]$lock.Size -or
+                -not (Assert-Sha256 $temporary $lock.Sha256)) {
+                Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+                throw 'Downloaded RSDWArchive USMAP failed size or SHA-256 verification.'
+            }
+            Move-Item -LiteralPath $temporary -Destination $cacheFile -Force
+        }
+        [pscustomobject]@{ Path = $cacheFile; Lock = $lock }
     }
     function Ensure-BuildDependencies {
         if ((Test-Path -LiteralPath $CleanBase -PathType Container) -and
@@ -465,7 +565,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         Copy-Item -LiteralPath $payload -Destination $pluginRoot -Recurse
         Write-Host "Created plugin-only package $zip; RuneSchema.dll was not built or replaced." -ForegroundColor Green
     }
-    function New-Package([string]$Name, [string]$CoreDll, [string]$HelpyDll, [bool]$IncludePlugins = $true) {
+    function New-Package([string]$Name, [string]$CoreDll, [string]$HelpyDll, [object]$Mappings, [bool]$IncludePlugins = $true) {
         $packageRoot = Join-Path $DistRoot $Name
         $payload = Join-Path $packageRoot 'RuneSchema'
         if (Test-Path $packageRoot) { Remove-Item -LiteralPath $packageRoot -Recurse -Force }
@@ -516,6 +616,10 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
             if (Test-Path $optionalPlugins) { Remove-Item -LiteralPath $optionalPlugins -Recurse -Force }
         }
         Copy-Item -LiteralPath $CoreDll -Destination (Join-Path $payload 'dlls\main.dll') -Force
+        $mappingDirectory = Join-Path $payload 'dlls\mappings'
+        New-Item -ItemType Directory -Path $mappingDirectory -Force | Out-Null
+        Copy-Item -LiteralPath $Mappings.Path -Destination (Join-Path $mappingDirectory 'Mappings.usmap') -Force
+        $Mappings.Lock | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $payload 'settings\MAPPINGS-SOURCE.json') -Encoding utf8
         if ($IncludePlugins) {
             Copy-Item -LiteralPath $HelpyDll -Destination (Join-Path $payload 'plugins\RuneSchema.Helpy\dll\RuneSchema.Helpy.dll') -Force
         }
@@ -541,6 +645,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
     if (-not $cmake -or -not $git) { throw 'CMake and Git are required and must be on PATH.' }
     Initialize-MsvcEnvironment
     Initialize-GitHubTransport
+    $mappings = if ($PluginOnly) { $null } else { Ensure-Mappings }
     $ue4ssPin = Ensure-UE4SSSource
     Write-Host "RuneSchema will compile against pinned UE4SS $ue4ssPin." -ForegroundColor DarkCyan
     if ($Clean -and -not $PluginOnly) {
@@ -608,9 +713,9 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         Write-Host "`n$Version Helpy-only build complete: $DistRoot" -ForegroundColor Green
         return
     }
-    New-Package "RuneSchema-$Version-Universal" $universal.Core $helpy $true
+    New-Package "RuneSchema-$Version-Universal" $universal.Core $helpy $mappings $true
     # Plugin-free runtime.
-    New-Package "RuneSchema-$Version-Core" $universal.Core $helpy $false
+    New-Package "RuneSchema-$Version-Core" $universal.Core $helpy $mappings $false
     $pluginRoot = Join-Path $BuildRoot 'plugins'
     if (Test-Path $pluginRoot) { Remove-Item -LiteralPath $pluginRoot -Recurse -Force }
     New-Item -ItemType Directory -Path $pluginRoot -Force | Out-Null
