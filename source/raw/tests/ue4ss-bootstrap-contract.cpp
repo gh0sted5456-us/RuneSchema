@@ -31,6 +31,11 @@ int main(int argc, char** argv) {
     Require(build, "[IO.Path]::GetTempPath()");
     Require(build, "Short generated build cache:");
     Require(build, "$allowedRoots = @($BuildRoot, $BuildCache)");
+    Require(build, "Prepare-EmbeddedUE4SSCMake");
+    Require(build, "skipped IDE header/source bookkeeping");
+    Require(build, "skipped global IDE target organization");
+    Require(build, "source scan complete");
+    Require(build, "core target configuration complete");
     Require(build, "https://github.com/Re-UE4SS/UEPseudo.git");
     Require(build, "https://github.com/settings/organizations");
     Require(build, "GITHUB_ACTIONS");
