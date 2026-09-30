@@ -20,7 +20,22 @@ $BuildDependencySha256 = '11f5eba4403c24b8085976176af0a20e0f298468e9c52fabaaa993
 $UE4SSSource = Join-Path $DependencyCache 'ue4ss-source'
 $UE4SSRepository = 'https://github.com/UE4SS-RE/RE-UE4SS.git'
 $UEPseudoRepository = 'https://github.com/Re-UE4SS/UEPseudo.git'
-$BuildCache = Join-Path $PSScriptRoot 'cache'
+
+# CMake FetchContent creates extremely deep stamp/subbuild paths. Keep generated
+# build state in a short per-checkout temp path so normal Downloads/Desktop/
+# OneDrive extraction paths cannot hit the legacy 260-character Win32 limit.
+$BuildCacheSeed = [Text.Encoding]::UTF8.GetBytes($BuildRoot.ToLowerInvariant())
+$BuildCacheHasher = [Security.Cryptography.SHA256]::Create()
+try {
+    $BuildCacheDigest = (($BuildCacheHasher.ComputeHash($BuildCacheSeed) | ForEach-Object { $_.ToString('x2') }) -join '')
+} finally {
+    $BuildCacheHasher.Dispose()
+}
+if ($env:RUNESCHEMA_BUILD_CACHE) {
+    $BuildCache = [IO.Path]::GetFullPath($env:RUNESCHEMA_BUILD_CACHE)
+} else {
+    $BuildCache = Join-Path ([IO.Path]::GetTempPath()) ("RSB-" + $BuildCacheDigest.Substring(0,12))
+}
 $DistRoot = Join-Path $BuildRoot 'dist'
 $LogRoot = Join-Path $PSScriptRoot 'logs'
 $Upx = Join-Path $DependencyCache 'tools\upx\upx.exe'
@@ -181,8 +196,17 @@ try {
     }
     function Remove-SafeTree([string]$Path) {
         $resolved = [IO.Path]::GetFullPath($Path)
-        $root = $BuildRoot.TrimEnd('\') + '\'
-        if (-not $resolved.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) {
+        $allowedRoots = @($BuildRoot, $BuildCache)
+        $safe = $false
+        foreach ($candidate in $allowedRoots) {
+            $root = [IO.Path]::GetFullPath($candidate).TrimEnd('\')
+            if ($resolved.Equals($root, [StringComparison]::OrdinalIgnoreCase) -or
+                $resolved.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase)) {
+                $safe = $true
+                break
+            }
+        }
+        if (-not $safe) {
             throw "Refusing unsafe clean path: $resolved"
         }
         if (-not (Test-Path -LiteralPath $resolved)) { return }
@@ -366,6 +390,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         if (-not (Test-Path -LiteralPath $UE4SSSource -PathType Container)) {
             throw 'Prepared UE4SS source is missing; Ensure-UE4SSSource must run before CMake configure.'
         }
+        Write-Host "Short generated build cache: $BuildCache" -ForegroundColor DarkCyan
         $configureArgs = @(
             '-S', $RawSource,
             '-B', $build,
