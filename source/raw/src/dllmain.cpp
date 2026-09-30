@@ -432,7 +432,7 @@ public:
             ImGui::TextWrapped("Settings: settings/settings.jsonc | Live jobs: runtime/live/jobs | Live state: runtime/live/saved");
             ImGui::TextWrapped("Hotloading applies supported JSON changes while the game is running. Blueprint patches and ghost appearance changes still require a restart.");
             ImGui::SeparatorText("Load-order prefixes");
-            ImGui::TextWrapped("AA_ loads first, then numeric prefixes such as 00_ and 01_ in ascending order, ordinary folders, and ZZ_ last. AA_ and ZZ_ folders are implied enabled and are omitted from generated runeschema.jsonc files unless you add an explicit override.");
+            ImGui::TextWrapped("AA_ loads first, then numeric prefixes such as 00_ and 01_ in ascending order, ordinary folders, and ZZ_ last. AA_ and ZZ_ folders are implied enabled and are omitted from generated runeschema.txt files unless you add an explicit override.");
         } else {
             ImGui::SeparatorText("About RuneSchema");
             ImGui::Text("RuneSchema %s", PS::BuildInfo::Version);
@@ -628,20 +628,20 @@ public:
         ImGui::PushID("Load order");
         static LoadOrderEditorState editor;
         const auto modsRoot = RuneSchemaModsRoot();
-        ImGui::SeparatorText("runeschema.jsonc load order");
-        ImGui::Checkbox("Use runeschema.jsonc", &settings.loadOrder.enabled);
+        ImGui::SeparatorText("runeschema.txt load order");
+        ImGui::Checkbox("Use runeschema.txt", &settings.loadOrder.enabled);
         ImGui::Checkbox("Create the file automatically", &settings.loadOrder.autoCreate);
         if(ImGui::CollapsingHeader("Advanced file handling")) {
         ImGui::Checkbox("Add new folders and remove missing folders", &settings.loadOrder.reconcileFolders);
         ImGui::Checkbox("Preserve comments when reconciling", &settings.loadOrder.preserveComments);
-        ImGui::Checkbox("Require true/false Enabled values", &settings.loadOrder.strictValues);
+        ImGui::Checkbox("Only accept 0 or 1", &settings.loadOrder.strictValues);
         ImGui::Checkbox("Sort folders when no order file is used", &settings.loadOrder.deterministicFallback);
         }
-         ImGui::TextWrapped("Folder order is top-to-bottom. Set Enabled to false to disable a mod. Directive documents are queued and applied after ordinary definitions.");
+         ImGui::TextWrapped("Folder order is top-to-bottom. Set a mod to 0 to disable it. Directive documents are queued and applied after ordinary definitions.");
          ImGui::Text("Directive syntax:");
          ImGui::SameLine(); ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "$Patch");
          ImGui::SameLine(); ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.25f, 1.0f), "$Target");
-        ImGui::TextWrapped("Priority tiers: AA_ first; 00_, 01_, and other numeric prefixes ascending; ordinary folders; ZZ_ last. AA_ and ZZ_ folders are enabled implicitly and stay out of the generated file. Add an explicit entry to runeschema.jsonc with Enabled false to disable it or true to keep an explicit enable override. Changes take effect on the next game load.");
+        ImGui::TextWrapped("Priority tiers: AA_ first; 00_, 01_, and other numeric prefixes ascending; ordinary folders; ZZ_ last. AA_ and ZZ_ folders are enabled implicitly and stay out of the generated file. Add one to runeschema.txt manually with 0 to disable it or 1 to keep an explicit enable override. Changes take effect on the next game load.");
         if (ImGui::Button("Reload from disk") || !editor.loaded)
             RefreshLoadOrderEditor(editor, modsRoot, settings.loadOrder.strictValues);
         ImGui::SameLine();
@@ -656,8 +656,8 @@ public:
             const bool saved = settings.loadOrder.preserveComments && std::filesystem::exists(path)
                 ? DragonWilds::ModLoadOrder::SavePreservingComments(path, entries)
                 : DragonWilds::ModLoadOrder::Save(path, entries);
-            editor.status = saved ? "Saved runeschema.jsonc. The new order takes effect on the next game load."
-                                  : "Could not save runeschema.jsonc; see the RuneSchema log.";
+            editor.status = saved ? "Saved runeschema.txt. The new order takes effect on the next game load."
+                                  : "Could not save runeschema.txt; see the RuneSchema log.";
             editor.dirty = !saved;
         }
         if (!editor.status.empty()) ImGui::TextWrapped("%s", editor.status.c_str());

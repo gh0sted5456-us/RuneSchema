@@ -1,0 +1,4 @@
+; RuneSchema plugin load order. Loaded top to bottom after dependencies.
+; Use 1 to enable and 0 to disable. This overrides the legacy Required flag.
+RSNetworking : 1
+RuneSchema.Helpy : 1

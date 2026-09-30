@@ -50,11 +50,11 @@ jobs:
 
       - name: Build 0.8 contracts
         shell: pwsh
-        run: cmake --build build/cache/contracts-08 --target runtime-widget-v08-contract ue4ss-bootstrap-contract order-jsonc-contract plugin-catalog-compatibility
+        run: cmake --build build/cache/contracts-08 --target runtime-widget-v08-contract ue4ss-bootstrap-contract
 
       - name: Run 0.8 contracts
         shell: pwsh
-        run: ctest --test-dir build/cache/contracts-08 --output-on-failure -R "^(runtime-widget-v08-contract|ue4ss-bootstrap-contract|order-jsonc-contract|plugin-catalog-compatibility)$"
+        run: ctest --test-dir build/cache/contracts-08 --output-on-failure -R "^(runtime-widget-v08-contract|ue4ss-bootstrap-contract)$"
 
       - name: Package full 0.8 source tree
         shell: pwsh

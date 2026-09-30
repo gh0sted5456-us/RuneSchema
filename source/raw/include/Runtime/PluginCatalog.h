@@ -58,8 +58,8 @@ inline bool Token(const std::string& value) {
         return std::isalnum(c)||c=='.'||c=='_'||c=='-';
     });
 }
-inline std::vector<OrderEntry> ReadLegacyOrder(const fs::path& path) {
-    std::vector<OrderEntry> result;if(!fs::is_regular_file(path))return result;
+inline std::vector<OrderEntry> ReadOrder(const fs::path& root) {
+    const auto path=root/"plugins.txt";std::vector<OrderEntry> result;if(!fs::is_regular_file(path))return result;
     if(fs::file_size(path)>256*1024)throw std::runtime_error("plugins.txt exceeds 256 KiB");
     std::ifstream stream(path);std::string line;size_t position=0;std::unordered_set<std::string> seen;
     while(std::getline(stream,line)) {
@@ -71,62 +71,13 @@ inline std::vector<OrderEntry> ReadLegacyOrder(const fs::path& path) {
         value=valueFirst==std::string::npos?std::string{}:value.substr(valueFirst,valueLast-valueFirst+1);
         if(id=="RuneSchema.Networking")id="RSNetworking";
         if(!Token(id)||(value!="0"&&value!="1"))throw std::runtime_error("Invalid plugins.txt entry: "+id);
-        if(!seen.emplace(id).second){for(auto& existing:result)if(existing.Id==id){existing.Enabled=value=="1";break;}continue;}
+        if(!seen.emplace(id).second) {
+            for(auto& existing:result)if(existing.Id==id){existing.Enabled=value=="1";break;}
+            continue;
+        }
         result.push_back({std::move(id),value=="1",position++});
     }
     return result;
-}
-inline std::vector<OrderEntry> ReadJsoncOrder(const fs::path& path) {
-    std::vector<OrderEntry> result;if(!fs::is_regular_file(path))return result;
-    if(fs::file_size(path)>256*1024)throw std::runtime_error("plugins.jsonc exceeds 256 KiB");
-    std::ifstream stream(path);auto data=nlohmann::json::parse(stream,nullptr,true,true);
-    if(!data.is_object()||!data.contains("Plugins")||!data.at("Plugins").is_array())
-        throw std::runtime_error("plugins.jsonc requires a Plugins array");
-    if(data.at("Plugins").size()>1024)throw std::runtime_error("plugins.jsonc exceeds the 1024-entry safety limit");
-    size_t position=0;std::unordered_set<std::string> seen;
-    for(const auto& item:data.at("Plugins")) {
-        if(!item.is_object()||!item.contains("Id")||!item.at("Id").is_string())
-            throw std::runtime_error("plugins.jsonc entries require a string Id");
-        auto id=item.at("Id").get<std::string>();if(id=="RuneSchema.Networking")id="RSNetworking";
-        if(!Token(id))throw std::runtime_error("Invalid plugins.jsonc Id: "+id);
-        bool enabled=true;
-        if(item.contains("Enabled")) {
-            if(!item.at("Enabled").is_boolean())throw std::runtime_error("plugins.jsonc Enabled must be true or false: "+id);
-            enabled=item.at("Enabled").get<bool>();
-        }
-        if(!seen.emplace(id).second){for(auto& existing:result)if(existing.Id==id){existing.Enabled=enabled;break;}continue;}
-        result.push_back({std::move(id),enabled,position++});
-    }
-    return result;
-}
-inline bool WriteJsoncOrder(const fs::path& path,const std::vector<OrderEntry>& entries) {
-    std::error_code error;fs::create_directories(path.parent_path(),error);if(error)return false;
-    nlohmann::ordered_json data;data["Plugins"]=nlohmann::ordered_json::array();
-    for(const auto& entry:entries)data["Plugins"].push_back({{"Id",entry.Id},{"Enabled",entry.Enabled}});
-    std::ofstream stream(path,std::ios::trunc);if(!stream)return false;
-    stream<<"// RuneSchema plugin order. Entries are loaded top to bottom after dependencies.\n"
-             "// Set Enabled to false to disable a plugin. JSONC comments are allowed.\n"
-          <<data.dump(2)<<'\n';
-    return static_cast<bool>(stream);
-}
-inline std::vector<OrderEntry> ReadOrder(const fs::path& root) {
-    const auto current=root/"plugins.jsonc",legacy=root/"plugins.txt";
-    if(!fs::is_regular_file(current)&&fs::is_regular_file(legacy)) {
-        auto entries=ReadLegacyOrder(legacy);
-        if(WriteJsoncOrder(current,entries)) {
-            try {
-                auto migrated=ReadJsoncOrder(current);
-                std::error_code error;fs::remove(legacy,error);
-                return migrated;
-            } catch(...) {
-                std::error_code error;fs::remove(current,error);
-            }
-        }
-        return entries;
-    }
-    auto entries=ReadJsoncOrder(current);
-    if(fs::is_regular_file(legacy)){std::error_code error;fs::remove(legacy,error);}
-    return entries;
 }
 inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string>* diagnostics=nullptr) {
     std::vector<Plugin> result;if(!fs::is_directory(root))return result;
@@ -189,7 +140,7 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
     for(const auto& entry:requested)requestedById.emplace(entry.Id,entry);
     for(auto& plugin:result)if(const auto found=requestedById.find(plugin.Id);found!=requestedById.end()) {
         if(plugin.Required&&!found->second.Enabled&&diagnostics)
-            diagnostics->push_back(plugin.Id+": legacy Required flag ignored; explicit plugins.jsonc disable wins and RuneSchema core remains independent");
+            diagnostics->push_back(plugin.Id+": legacy Required flag ignored; explicit plugins.txt disable wins and RuneSchema core remains independent");
         plugin.Enabled=plugin.Enabled&&found->second.Enabled;
     }
     std::sort(result.begin(),result.end(),[&](const auto& a,const auto& b){

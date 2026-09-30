@@ -24,7 +24,7 @@ checks = {
     "players use late aggregation": "RegisterAppearanceSource" in main and "FinalizePlayerRules" in main,
     "nameplates use late aggregation": "LoadNameplateDefinitions" in main and "FinalizeNameplateDefinitions" in main,
     "loader exceptions isolated": "Loader {} initialization failed" in main and "Failed to load {}/{}" in main,
-    "plugin order file parsed": 'root/"plugins.jsonc"' in catalog and "ReadOrder(root)" in catalog,
+    "plugin order file parsed": 'root/"plugins.txt"' in catalog and "ReadOrder(root)" in catalog,
     "fixed plugin directories": 'plugin.Root/"dll"' in catalog and 'plugin.Root/"paks"' in catalog and 'plugin.Root/"scripts"' in catalog,
     "obsolete packaged root rejected": 'PackagedRoot is obsolete' in catalog,
     "docs ignored by runtime": '/"docs"' not in catalog and '/"docs"' not in main,

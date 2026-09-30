@@ -75,9 +75,8 @@ ue4ss/
       ├─ settings/
       │  └─ settings.jsonc
       ├─ plugins/                    optional
-       │  └─ plugins.jsonc
       └─ mods/
-         ├─ runeschema.jsonc
+         ├─ runeschema.txt
          └─ MyMod/
             ├─ ID.txt               optional distribution metadata
             ├─ paks/
@@ -127,9 +126,8 @@ a selection through the vanilla character editor remains a native game action.
 4. Put cooked containers under
    `paks/<PackageName>/<PackageName>.pak|.ucas|.utoc`. All three files are
    required.
-5. Add `MyMod` to the ordered `Mods` array in `mods/runeschema.jsonc` with
-   `"Enabled": true`, or let RuneSchema reconcile the order file when that
-   setting is enabled.
+5. Add `MyMod : 1` to `mods/runeschema.txt`, or let RuneSchema reconcile the
+   order file when that setting is enabled.
 6. Install the same content mod and cooked containers on the server and every
    client for multiplayer use.
 
@@ -140,27 +138,10 @@ RuneSchema content uses one definition in every network mode. Do not create sepa
 
 ## Ordering
 
-RuneSchema reads mods from top to bottom in the `Mods` array in
-`mods/runeschema.jsonc`. Set `"Enabled": false` to disable a mod. Files
-within a loader folder are read in path order, so
+RuneSchema reads mods from top to bottom in `mods/runeschema.txt`. A value of
+`0` disables the mod. Files within a loader folder are read in path order, so
 numeric prefixes such as `10-Items.jsonc` and `20-Recipes.jsonc` make intent
 clear.
-
-Example:
-
-```jsonc
-{
-  // Loaded top to bottom.
-  "Mods": [
-    { "Id": "MyMod", "Enabled": true },
-    { "Id": "AnotherMod", "Enabled": false }
-  ]
-}
-```
-
-On first startup after upgrading, a legacy `runeschema.txt` is converted to
-`runeschema.jsonc`. RuneSchema removes the old file only after the new JSONC
-file has been written and parsed successfully.
 
 The runtime creates loaders in this order:
 
@@ -250,7 +231,7 @@ with Blueprint-generated types included when possible.
 ## Plugins
 
 Plugins are optional. RuneSchema loads manifests from `RuneSchema/plugins`,
-then uses `plugins/plugins.jsonc` for order and enablement.
+then uses `plugins/plugins.txt` for order and enablement.
 
 A plugin can provide:
 
@@ -264,20 +245,8 @@ If a plugin DLL cannot safely use the current RuneSchema plugin interface,
 RuneSchema skips that DLL. The plugin's complete PAK containers can still
 mount. A missing dependency does not disable RuneSchema core.
 
-Set `"Enabled": false` for a plugin entry in `plugins.jsonc` to disable it.
-This also overrides the legacy `Required` manifest field.
-
-Legacy `plugins.txt` is migrated the same way: RuneSchema writes
-`plugins.jsonc`, validates it, then removes the old text file.
-
-```jsonc
-{
-  "Plugins": [
-    { "Id": "RSNetworking", "Enabled": true },
-    { "Id": "RuneSchema.Helpy", "Enabled": true }
-  ]
-}
-```
+Set a plugin to `0` in `plugins.txt` to disable it. This also overrides the
+legacy `Required` manifest field.
 
 ## Multiplayer checklist
 

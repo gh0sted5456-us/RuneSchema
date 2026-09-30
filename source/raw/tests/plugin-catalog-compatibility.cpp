@@ -71,13 +71,7 @@ int main()
     Write(alpha / "paks" / "CompatibilityContent" / "meta.ini", "ignored");
     Write(root / "random-nexus-file.txt", "ignored");
     Write(root / "UnrelatedFolder" / "readme.md", "ignored");
-    Write(root / "plugins.jsonc", R"(// plugin order
-{
-  "Plugins": [
-    { "Id": "Alpha", "Enabled": true },
-    { "Id": "Beta", "Enabled": true }
-  ]
-})");
+    Write(root / "plugins.txt", "Alpha:1\nBeta:1\n");
 
     std::vector<std::string> diagnostics;
     const auto plugins = PS::PluginCatalog::Discover(root, &diagnostics);
@@ -111,8 +105,6 @@ int main()
     AddPakTriplet(legacy);AddPakTriplet(renamed);
     Write(migrationRoot/"plugins.txt","RuneSchema.Networking:0\nRSNetworking:1\n");
     const auto migrated=PS::PluginCatalog::Discover(migrationRoot);
-    Check(fs::is_regular_file(migrationRoot/"plugins.jsonc"),"legacy plugins.txt migrates to plugins.jsonc");
-    Check(!fs::exists(migrationRoot/"plugins.txt"),"legacy plugins.txt is removed after successful migration");
     Check(migrated.size()==1&&migrated[0].Id=="RSNetworking","renamed networking plugin suppresses leftover legacy folder");
     Check(migrated[0].Enabled,"new RSNetworking order entry wins after legacy alias normalization");
 

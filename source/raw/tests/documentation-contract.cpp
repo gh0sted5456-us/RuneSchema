@@ -27,12 +27,13 @@ static void Check(bool value, const char* message)
 
 int main(int argc, char** argv)
 {
-    Check(argc == 6, "five documentation inputs supplied");
+    Check(argc == 7, "six documentation inputs supplied");
     const auto authoring = Read(argv[1]);
     const auto loaders = Read(argv[2]);
     const auto sourcePlugins = Read(argv[3]);
-    const auto api = Read(argv[4]);
-    const auto apiHeader = Read(argv[5]);
+    const auto runtimePlugins = Read(argv[4]);
+    const auto api = Read(argv[5]);
+    const auto apiHeader = Read(argv[6]);
 
     constexpr std::array<const char*, 22> names{{
         "assets", "blueprints", "buildings", "courses", "dialogue", "effects",
@@ -52,10 +53,12 @@ int main(int argc, char** argv)
     }) Check(authoring.find(section) != std::string::npos, "authoring section missing");
 
     Check(sourcePlugins.find("Required plugins cannot be disabled") == std::string::npos,
-        "source plugins.jsonc has stale required-plugin wording");
-    Check(sourcePlugins.find("\"Id\": \"RSNetworking\"") != std::string::npos
-        && sourcePlugins.find("\"Id\": \"RuneSchema.Networking\"") == std::string::npos,
+        "source plugins.txt has stale required-plugin wording");
+    Check(sourcePlugins.find("RSNetworking : 1") != std::string::npos
+        && sourcePlugins.find("RuneSchema.Networking : 1") == std::string::npos,
         "source plugin order uses RSNetworking");
+    Check(runtimePlugins.find("Required plugins cannot be disabled") == std::string::npos,
+        "runtime plugins.txt has stale required-plugin wording");
 
     for (const auto* symbol : {
         "RUNESCHEMA_PLUGIN_API_VERSION", "RUNESCHEMA_PLUGIN_MAX_MESSAGE",
@@ -79,7 +82,7 @@ int main(int argc, char** argv)
     for (const auto* field : {
         "SchemaVersion", "Id", "Name", "Version", "ApiVersion", "BuiltForRuneSchema",
         "EntryPoint", "Enabled", "ConsoleMessage", "Capabilities", "Connections",
-        "Dependencies", "Required", "MountPaks", "plugins.jsonc"
+        "Dependencies", "Required", "MountPaks", "plugins.txt"
     }) Check(api.find(field) != std::string::npos, "plugin manifest field is undocumented");
     std::cout << "Documentation contract passed for " << names.size() << " loaders.\n";
 }

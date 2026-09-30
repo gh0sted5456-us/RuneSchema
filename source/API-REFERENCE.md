@@ -54,7 +54,7 @@ The loader recognizes this manifest contract:
 | `ApiVersion` | no | Defaults to API 1. The DLL descriptor is authoritative for safe ABI calls. |
 | `BuiltForRuneSchema` | no | Optional informational compatibility token; never an API/ABI load gate. |
 | `EntryPoint` | no | DLL filename directly under `dll/`. Omit for a content-only plugin. |
-| `Enabled` | no | Manifest default; defaults to true. `plugins.jsonc` can still disable it. |
+| `Enabled` | no | Manifest default; defaults to true. `plugins.txt` can still disable it. |
 | `ConsoleMessage` | no | Single-line message, maximum 512 characters. |
 | `Capabilities` | no | At most 64 unique-style tokens. A native plugin must register every declared capability during initialization. |
 | `Connections` | no | At most 32 content/bridge tokens published after a successful load. |
@@ -67,25 +67,10 @@ The loader recognizes this manifest contract:
 triplet must be complete. The catalog rejects symlinks inside `paks/`.
 Unrelated regular files are ignored; only supported container extensions participate in package validation.
 
-`plugins.jsonc` contains an ordered `Plugins` array. Each entry has an `Id`
-and an optional boolean `Enabled` field. JSONC comments are accepted. It
-controls enablement and deterministic order. Dependencies refine that order;
+`plugins.txt` contains one `Plugin.Id: 1` or `Plugin.Id: 0` entry per line.
+It controls enablement and deterministic order. Dependencies refine that order;
 cycles fall back to manifest order. A DLL failure does not prevent a complete
 PAK triplet from being discovered and mounted.
-
-Example:
-
-```jsonc
-{
-  "Plugins": [
-    { "Id": "RSNetworking", "Enabled": true },
-    { "Id": "RuneSchema.Helpy", "Enabled": true }
-  ]
-}
-```
-
-A legacy `plugins.txt` is converted once on startup and deleted only after the
-new `plugins.jsonc` has been written and parsed successfully.
 
 Required DLL exports:
 
@@ -115,7 +100,7 @@ Do not allow a C++ exception to cross any export or callback boundary.
 
 ## Load sequence
 
-1. RuneSchema reads `plugin.json` and `plugins.jsonc`.
+1. RuneSchema reads `plugin.json` and `plugins.txt`.
 2. Complete PAK triplets are discovered independently from the DLL.
 3. RuneSchema loads the DLL and resolves the three required exports.
 4. `RuneSchemaPlugin_Query` returns the descriptor.
