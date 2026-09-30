@@ -364,11 +364,15 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
             '-DFETCHCONTENT_FULLY_DISCONNECTED=OFF',
             '-DFETCHCONTENT_UPDATES_DISCONNECTED=ON',
             "-DFETCHCONTENT_SOURCE_DIR_UE4SS=$UE4SSSource",
+            '-DUE4SS_PROJECTS=UE4SS',
+            '-DENABLE_IDE_SOURCE_VISIBILITY=OFF',
             '-DCMAKE_SUPPRESS_REGENERATION=ON',
             '-Wno-author',
             '-Wno-deprecated'
         )
+        Write-Host 'RuneSchema embedded UE4SS mode: core UE4SS only (UVTD and IDE source indexing disabled).' -ForegroundColor DarkGray
         Ensure-CMakeConfigured $RawSource $build $configureArgs 'universal RuneSchema'
+        Write-Host 'UE4SS/RuneSchema CMake configure completed; starting compile.' -ForegroundColor Green
         $targets = if ($OnlyPlugin) { @('RuneSchemaHelpyPlugin') } else { @('RuneSchema', 'RuneSchemaHelpyPlugin') }
         Write-Host $(if ($OnlyPlugin) { '=== Compile Helpy plugin only (RuneSchema.dll is untouched) ===' } else { '=== Compile universal RuneSchema ===' }) -ForegroundColor Cyan
         Write-Host 'Ninja auto-regeneration is disabled; build.ps1 owns all CMake reconfiguration.' -ForegroundColor DarkGray
