@@ -28,8 +28,10 @@ namespace DragonWilds {
         RC::Unreal::Hook::GlobalCallbackId m_gameStateStartingHook = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::Hook::GlobalCallbackId m_gameStateReadyHook = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::Hook::GlobalCallbackId m_characterJsonHook = RC::Unreal::Hook::ERROR_ID;
+        RC::Unreal::UFunction* m_characterJsonLoadFunction = nullptr;
         bool m_initialized = false;
         bool m_preflightingCharacterJson = false;
+        bool m_characterJsonBindingWarningReported = false;
         bool m_registrySummaryReported = false;
         bool m_startupCleanupPending = true;
         bool m_cleanupDeferredReported = false;
@@ -39,6 +41,7 @@ namespace DragonWilds {
         bool ResolveBindings();
         void ScrubCharacterJsonBeforeLoad(RC::Unreal::UObject* context,
             RC::Unreal::UFunction* function, void* parameters);
+        bool EnsureCharacterJsonPreflightHook();
         void InstallHooks();
         void RegisterAll();
         void RegisterMissing(RC::Unreal::UClass* dataClass, RC::Unreal::UObject* subsystem);

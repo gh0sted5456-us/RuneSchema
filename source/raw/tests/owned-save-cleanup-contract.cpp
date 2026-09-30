@@ -26,9 +26,15 @@ int main(int argc,char** argv){
     need(registrar.find("ScrubCharacterJsonBeforeLoad")!=registrar.npos,
         "provider-backed character JSON preflight is missing");
     need(registrar.find("m_startupCleanupPending")!=registrar.npos
-        && registrar.find("FrontEnd")!=registrar.npos
-        && registrar.find("MainMenu")!=registrar.npos,
-        "automatic cleanup is not constrained to initial front-end startup");
+        && registrar.find("EnsureCharacterJsonPreflightHook")!=registrar.npos
+        && registrar.find("[SAVE-CLEANER][BOUNDARY-READY]")!=registrar.npos,
+        "automatic cleanup cannot late-bind the first eligible character load");
+    const auto registerAllDefinition=registrar.find(
+        "void DragonWildsDataRegistrar::RegisterAll()");
+    need(registerAllDefinition!=registrar.npos
+        && registrar.find("EnsureCharacterJsonPreflightHook();",
+            registerAllDefinition)!=registrar.npos,
+        "native character preflight is not retried after Dominion loads");
     const auto readyGate=registrar.find("if (!registry || !registry->Ready())");
     const auto consume=registrar.find("m_startupCleanupPending = false;",readyGate);
     const auto plan=registrar.find("SaveCleanup::Plan(",consume);

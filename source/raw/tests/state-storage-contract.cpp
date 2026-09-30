@@ -67,9 +67,9 @@ int main(int argc, char** argv)
     Check(registrar.find("ScrubCharacterJsonBeforeLoad") != std::string::npos,
         "shared native character-load preflight is missing");
     Check(registrar.find("m_startupCleanupPending") != std::string::npos
-        && registrar.find("FrontEnd") != std::string::npos
-        && registrar.find("MainMenu") != std::string::npos,
-        "automatic recovery is not limited to the initial front-end session");
+        && registrar.find("EnsureCharacterJsonPreflightHook") != std::string::npos
+        && registrar.find("[SAVE-CLEANER][BOUNDARY-READY]") != std::string::npos,
+        "automatic recovery cannot reach the first eligible native character load");
     Check(registrar.find("PublishRegistry") != std::string::npos
         && registrar.find("snapshot.Journals") != std::string::npos,
         "native item, recipe, quest, and journal registries feed pruning");
