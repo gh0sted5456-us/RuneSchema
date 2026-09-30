@@ -13,7 +13,12 @@
 #include "Unreal/Hooks.hpp"
 #include "Unreal/UObject.hpp"
 #include "Unreal/UObjectGlobals.hpp"
+#include "Unreal/World.hpp"
+#include "Unreal/Engine/UDataTable.hpp"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
+#include "SDK/Classes/KismetSystemLibrary.h"
+#include "SDK/Classes/TSoftObjectPtr.h"
+#include "SDK/Structs/FSoftObjectPath.h"
 #include "SDK/Structs/Custom/FManagedValue.h"
 #include "SDK/Structs/Custom/FScriptArrayHelper.h"
 #include "SDK/Structs/Custom/FScriptMapHelper.h"
@@ -23,6 +28,8 @@
 #include "Utility/Logging.h"
 #include "Core/SaveCleanup.h"
 #include "Core/SaveRegistrySnapshot.h"
+#include "Core/ConfigFiles.h"
+#include "Runtime/HostServices.h"
 #include "Misc/DragonWildsDataRegistrar.h"
 
 using namespace RC;
@@ -58,6 +65,32 @@ namespace DragonWilds {
         TEXT("/Script/Dominion.DominionPlayerController:LoadStateFromJson"),
     };
 
+    static bool ValidAppearanceReference(
+        const std::string& tablePath, const std::string& rowName)
+    {
+        if (tablePath.empty() || rowName.empty()) return false;
+        const auto path = RC::to_generic_string(tablePath);
+        auto* object = UECustom::UObjectGlobals::StaticFindObject<UObject*>(
+            nullptr, nullptr, path.c_str(), false);
+        if (!object)
+        {
+            UECustom::TSoftObjectPtr<UObject> soft{UECustom::FSoftObjectPath(path)};
+            object = UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
+        }
+        if (!object || !object->IsA(UDataTable::StaticClass())) return false;
+        const FName row(RC::to_generic_string(rowName), FNAME_Find);
+        return row != NAME_None
+            && static_cast<UDataTable*>(object)->FindRowUnchecked(row);
+    }
+
+    static std::optional<nlohmann::json> ReadDefaultCharacterAppearance()
+    {
+        const auto path = PS::HostServices::StateDirectory().parent_path()
+            / "SaveCharacters" / "Default.json";
+        if (!std::filesystem::is_regular_file(path)) return std::nullopt;
+        return nlohmann::json::parse(PS::ConfigFiles::Read(path, 256 * 1024));
+    }
+
     static std::string RegistryFingerprint(
         const PS::SaveCleanup::RegistrySnapshot& snapshot)
     {
@@ -92,6 +125,8 @@ namespace DragonWilds {
     {
         if (!m_initialized)
         {
+            m_startupCleanupOpen = true;
+            m_checkedCharacters.clear();
             if (!ResolveBindings())
             {
                 return;
@@ -145,6 +180,7 @@ namespace DragonWilds {
         m_registryCandidateFingerprint.clear();
         m_registryCandidatePasses = 0;
         m_checkedCharacters.clear();
+        m_startupCleanupOpen = false;
         PS::SaveCleanup::PublishRegistry({});
     }
 
@@ -159,7 +195,14 @@ namespace DragonWilds {
         // the character. Save cleanup is performed only on the JSON value the
         // game is about to hydrate; RuneSchema never rewrites the stored file.
         m_gameStateStartingHook = Hook::RegisterInitGameStatePreCallback(
-            [this](Hook::TCallbackIterationData<void>&, AGameModeBase*) {
+            [this](Hook::TCallbackIterationData<void>&, AGameModeBase* mode) {
+                if (mode && mode->GetWorld())
+                {
+                    const auto name = mode->GetWorld()->GetName();
+                    if (name.find(TEXT("FrontEnd")) == RC::StringType::npos
+                        && name.find(TEXT("MainMenu")) == RC::StringType::npos)
+                        m_startupCleanupOpen = false;
+                }
                 RegisterAll();
             }, options);
 
@@ -236,7 +279,8 @@ namespace DragonWilds {
                     UnrealScriptFunctionCallableContext& context, void*) {
                     RegisterAll();
                     ScrubCharacterJsonBeforeLoad(
-                        characterJsonLoad, context.TheStack.Locals());
+                        context.Context, characterJsonLoad,
+                        context.TheStack.Locals());
                 });
             if (id != Hook::ERROR_ID)
             {
@@ -252,7 +296,7 @@ namespace DragonWilds {
             preflightOptions.OwnerModName = TEXT("RuneSchema");
             preflightOptions.HookName = TEXT("CharacterJsonSavePreflight");
             m_characterJsonHook = Hook::RegisterProcessEventPreCallback(
-                [this](Hook::TCallbackIterationData<void>&, UObject*,
+                [this](Hook::TCallbackIterationData<void>&, UObject* source,
                     UFunction* function, void* parameters) {
                     if (!function || !parameters || m_preflightingCharacterJson
                         || function->GetFName()
@@ -264,7 +308,7 @@ namespace DragonWilds {
                     try
                     {
                         RegisterAll();
-                        ScrubCharacterJsonBeforeLoad(function, parameters);
+                        ScrubCharacterJsonBeforeLoad(source, function, parameters);
                     }
                     catch (const std::exception& error)
                     {
@@ -285,11 +329,19 @@ namespace DragonWilds {
     }
 
     void DragonWildsDataRegistrar::ScrubCharacterJsonBeforeLoad(
-        UFunction* function, void* parameters)
+        UObject* context, UFunction* function, void* parameters)
     {
-        if (!function || !parameters) return;
+        if (!m_startupCleanupOpen || !context || !function || !parameters) return;
+        auto* world = context->GetWorld();
+        if (!world) return;
+        const auto worldName = world->GetName();
+        if (worldName.find(TEXT("FrontEnd")) == RC::StringType::npos
+            && worldName.find(TEXT("MainMenu")) == RC::StringType::npos)
+        {
+            m_startupCleanupOpen = false;
+            return;
+        }
         const auto registry = PS::SaveCleanup::ReadRegistry();
-        if (!registry || !registry->Ready()) return;
 
         try
         {
@@ -334,8 +386,18 @@ namespace DragonWilds {
                 || m_checkedCharacters.contains(characterId))
                 return;
 
-            const auto cleaned = PS::SaveCleanup::Plan(
-                source, {}, false, registry.get(), false, true, true);
+            PS::SaveCleanup::Preview cleaned{source};
+            if (registry && registry->Ready())
+                cleaned = PS::SaveCleanup::Plan(
+                    cleaned.Save, {}, false, registry.get(), false, true, true);
+            if (const auto defaults = ReadDefaultCharacterAppearance())
+            {
+                auto appearance = PS::SaveCleanup::RepairInvalidAppearance(
+                    cleaned.Save, *defaults, ValidAppearanceReference);
+                for (auto& row : appearance.Removed)
+                    cleaned.Removed.push_back(std::move(row));
+                cleaned.Save = std::move(appearance.Save);
+            }
             if (cleaned.Removed.empty()) {
                 m_checkedCharacters.insert(characterId);
                 return;
@@ -361,7 +423,7 @@ namespace DragonWilds {
                 summary += kind + "=" + std::to_string(count);
             }
             PS::Log<LogLevel::Normal>(
-                STR("[SAVE-CLEANER][PREFLIGHT] Removed {} unresolved character reference(s) before load ({}).\n"),
+                STR("[SAVE-CLEANER][PREFLIGHT] Repaired {} validated startup character load blocker(s) ({}).\n"),
                 cleaned.Removed.size(), PS::ToWideSafe(summary.c_str()));
         }
         catch (const std::exception& error)

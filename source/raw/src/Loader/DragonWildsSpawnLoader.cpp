@@ -2511,7 +2511,7 @@ namespace DragonWilds {
                 m_nameplateRefreshElapsed = 0.0;
                 m_visualTimerElapsed = 0.0;
                 m_managedScaleElapsed = 0.0;
-                m_playerAppearanceSnapshotElapsed = 0.0;
+                m_playerAppearanceReconcileElapsed = 0.0;
                 m_sharedSpawnVisuals.clear();
                 for (const auto& ref : m_rootedVisualEffectMaterials)
                     if (auto* material=ref.Get()) if (material->IsRootSet()) material->ClearRootSet();
@@ -2529,7 +2529,7 @@ namespace DragonWilds {
                 PumpItemIcons();
                 PumpSpawnTools();
                 ReconcileManagedActorScales(deltaSeconds);
-                CapturePlayerAppearanceSnapshots(deltaSeconds);
+                ReconcileDeclaredPlayerAppearance(deltaSeconds);
                 ReconcileTimedBuildingProps(deltaSeconds);
                 RetryPendingAINames(deltaSeconds);
                 PumpClientSpawnVisuals(deltaSeconds);
@@ -2781,7 +2781,7 @@ namespace DragonWilds {
                 m_visualTimerElapsed = 0.0;
                 m_buildingTimeElapsed = 0.0;
                     m_managedScaleElapsed = 0.0;
-                    m_playerAppearanceSnapshotElapsed = 0.0;
+                    m_playerAppearanceReconcileElapsed = 0.0;
                     m_sharedSpawnVisuals.clear();
                     for (const auto& ref : m_rootedVisualEffectMaterials)
                         if (auto* material=ref.Get()) if (material->IsRootSet()) material->ClearRootSet();

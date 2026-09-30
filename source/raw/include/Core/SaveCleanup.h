@@ -193,6 +193,50 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
     return result;
 }
 
+template<class Validator>
+inline Preview RepairInvalidAppearance(const Json& source,const Json& defaults,
+    Validator&& valid) {
+    RequireCharacter(source);
+    if(ClassifyCharacterDocument(defaults)!=CharacterDocumentKind::ProfileOnly)
+        throw std::runtime_error("Default character appearance document is invalid");
+    Preview result{source};
+    auto customization=[](Json& document)->Json* {
+        if(!document.contains("Customization") || !document.at("Customization").is_object())return nullptr;
+        auto& root=document.at("Customization");
+        if(!root.contains("CustomizationData") || !root.at("CustomizationData").is_object())return nullptr;
+        return &root.at("CustomizationData");
+    };
+    auto* current=customization(result.Save);
+    auto copy=defaults;
+    auto* fallback=customization(copy);
+    if(!current || !fallback || fallback->empty() || fallback->size()>32)
+        throw std::runtime_error("Character appearance layout is unsupported");
+    const auto read=[](const Json& value,std::string& table,std::string& row) {
+        if(!value.is_object())return false;
+        const auto tableIt=value.find("dataTable"),rowIt=value.find("rowName");
+        if(tableIt==value.end() || rowIt==value.end()
+            || !tableIt->is_string() || !rowIt->is_string())return false;
+        table=tableIt->get<std::string>();row=rowIt->get<std::string>();
+        return !table.empty() && !row.empty();
+    };
+    for(const auto& [field,defaultValue]:fallback->items()) {
+        std::string defaultTable,defaultRow;
+        if(!read(defaultValue,defaultTable,defaultRow) || !valid(defaultTable,defaultRow))
+            throw std::runtime_error("Default character appearance reference is unavailable: "+field);
+        const auto found=current->find(field);
+        // A missing BodyType is not evidence that gender was customized.
+        // Leave it to Dominion.  An existing but invalid custom BodyType is
+        // repaired from Default.json (male_A_01) like any other bad handle.
+        if(found==current->end() && field=="BodyType")continue;
+        std::string table,row;
+        if(found!=current->end() && read(*found,table,row) && valid(table,row))continue;
+        (*current)[field]=defaultValue;
+        result.Removed.push_back({{"Kind","Appearance"},{"Field",field},
+            {"Id",table+"#"+row},{"Replacement",defaultTable+"#"+defaultRow}});
+    }
+    return result;
+}
+
 // Automatic cleanup is deliberately narrower than the diagnostic registry
 // repair above. It accepts only historical RuneSchema identities whose owner
 // has been confirmed absent or explicitly disabled. Unknown third-party and

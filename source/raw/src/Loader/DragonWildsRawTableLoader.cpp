@@ -770,6 +770,15 @@ namespace DragonWilds {
             }
             else
             {
+                // Older hair-preset packs used Name as an author-facing label.
+                // The current FHairPreset row schema no longer stores it; the
+                // actual selectable label lives in CharacterOptions instead.
+                // Keep this compatibility exception narrow so real schema
+                // drift in every other field remains visible.
+                const auto tablePath = RC::to_string(datatable->GetPathName());
+                if (key == "Name"
+                    && tablePath == CharacterCustomization::HairPresets)
+                    continue;
                 outResult.ErrorCount++;
                 PS::Log<LogLevel::Warning>(STR("Property '{}' not found in Row '{}' in {}.\n"),
                     keyWide, rowName.ToString(), datatable->GetNamePrivate().ToString());

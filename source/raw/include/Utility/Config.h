@@ -59,6 +59,11 @@ namespace PS {
         bool enabled = false;
     };
 
+    struct AdvancedDiagnosticSettings {
+        // Observational export only. Save recovery never reads this ledger.
+        bool persistenceLedger = false;
+    };
+
     struct PluginSettings {
         // "normal" logs compatibility notices normally, "quiet" emits them
         // only with advanced logging, and "off" suppresses them.
@@ -105,6 +110,7 @@ namespace PS {
         SpawnBehaviorSettings spawnBehavior{};
         NpcDiagnosticSettings npcDiagnostics{};
         DiagnosticJobSettings diagnosticJobs{};
+        AdvancedDiagnosticSettings diagnostics{};
         PluginSettings plugins{};
         PersistenceSettings persistence{};
         HelpyAuthoritySettings helpyAuthority{};

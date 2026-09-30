@@ -59,9 +59,12 @@ int RunConfigSettings() {
     assert(!DecodeSettings("{}").npcDiagnostics.statusExport);
     assert(!DecodeSettings("{}").npcDiagnostics.interactionTraceExport);
     assert(!DecodeSettings("{}").diagnosticJobs.enabled);
+    assert(!DecodeSettings("{}").diagnostics.persistenceLedger);
     auto jobSettings=DecodeSettings(R"({"advancedRuntime":true,"diagnosticJobs":{"enabled":true}})");
     assert(jobSettings.advancedRuntime && jobSettings.diagnosticJobs.enabled);
+    jobSettings.diagnostics.persistenceLedger=true;
     assert(DecodeSettings(EncodeSettings(jobSettings)).diagnosticJobs.enabled);
+    assert(DecodeSettings(EncodeSettings(jobSettings)).diagnostics.persistenceLedger);
     assert(!DecodeSettings(R"({"advancedLogging":true})").npcDiagnostics.statusExport);
     auto diagnosticSettings=DecodeSettings(R"({"npcDiagnostics":{"statusExport":true,"interactionTraceExport":false}})");
     assert(diagnosticSettings.npcDiagnostics.statusExport && !diagnosticSettings.npcDiagnostics.interactionTraceExport);

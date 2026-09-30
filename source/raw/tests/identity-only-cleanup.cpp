@@ -37,4 +37,35 @@ int main()
         throw std::runtime_error("Identity-only cleanup changed unrelated character data");
     if (Plan(cleaned.Save, {}, false, &registry, false, true, true).Save != cleaned.Save)
         throw std::runtime_error("Identity-only cleanup is not idempotent");
+
+    const Json defaultAppearance = {
+        {"meta_data", Json::object()},
+        {"Customization", {{"CustomizationData", {
+            {"BodyType", {{"dataTable", "body"}, {"rowName", "male_A_01"}}},
+            {"HairPreset", {{"dataTable", "hair"}, {"rowName", "default_hair"}}}
+        }}}}
+    };
+    auto appearanceSource = source;
+    appearanceSource["Customization"]["CustomizationData"] = {
+        {"BodyType", {{"dataTable", "body"}, {"rowName", "female_B_02"}}},
+        {"HairPreset", {{"dataTable", "hair"}, {"rowName", "missing_mod_hair"}}}
+    };
+    const auto repaired = RepairInvalidAppearance(appearanceSource, defaultAppearance,
+        [](const std::string&, const std::string& row) {
+            return row == "male_A_01" || row == "female_B_02"
+                || row == "default_hair";
+        });
+    const auto& appearance = repaired.Save.at("Customization").at("CustomizationData");
+    if (appearance.at("BodyType").at("rowName") != "female_B_02"
+        || appearance.at("HairPreset").at("rowName") != "default_hair"
+        || repaired.Removed.size() != 1)
+        throw std::runtime_error("Appearance repair changed a valid custom field");
+
+    appearanceSource["Customization"]["CustomizationData"].erase("BodyType");
+    const auto missingBody = RepairInvalidAppearance(appearanceSource, defaultAppearance,
+        [](const std::string&, const std::string& row) {
+            return row == "male_A_01" || row == "default_hair";
+        });
+    if (missingBody.Save.at("Customization").at("CustomizationData").contains("BodyType"))
+        throw std::runtime_error("Missing BodyType was rewritten without evidence of a custom value");
 }

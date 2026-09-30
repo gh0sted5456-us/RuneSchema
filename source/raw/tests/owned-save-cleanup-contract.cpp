@@ -25,6 +25,12 @@ int main(int argc,char** argv){
         "one or more persistent identity registries are absent");
     need(registrar.find("ScrubCharacterJsonBeforeLoad")!=registrar.npos,
         "provider-backed character JSON preflight is missing");
+    need(registrar.find("m_startupCleanupOpen")!=registrar.npos
+        && registrar.find("FrontEnd")!=registrar.npos
+        && registrar.find("MainMenu")!=registrar.npos,
+        "automatic cleanup is not constrained to initial front-end startup");
+    need(registrar.find("PersistenceDiagnosticLedger")==registrar.npos,
+        "cleanup depends on the optional diagnostic ledger");
     const auto preRegistration=registrar.find("RegisterInitGameStatePreCallback");
     const auto registerAll=registrar.find("RegisterAll();",preRegistration);
     need(preRegistration!=registrar.npos && registerAll!=registrar.npos,

@@ -89,10 +89,23 @@ namespace {
         return fields;
     }
 
-    constexpr std::array<std::string_view, 8> SnapshotAppearanceFields{
+    constexpr std::array<std::string_view, 8> CanonicalAppearanceFields{
         "BodyType", "FaceType", "HairPreset", "FacialHairPreset",
         "SkinTone", "HairColor", "EyeColor", "EyebrowColor"
     };
+
+    bool IsValidAppearanceReference(
+        const std::string& dataTablePath, const std::string& rowName)
+    {
+        if (dataTablePath.empty() || rowName.empty()) return false;
+        auto* resolved = DragonWilds::ActorHelper::ResolveObject(
+            DragonWilds::ActorHelper::NormalizeObjectPath(
+                RC::to_generic_string(dataTablePath)));
+        if (!resolved || !resolved->IsA(UDataTable::StaticClass())) return false;
+        const FName row(RC::to_generic_string(rowName), FNAME_Find);
+        return row != NAME_None
+            && static_cast<UDataTable*>(resolved)->FindRowUnchecked(row);
+    }
 
     void ValidateReflectedPatch(const nlohmann::json& patch,const std::string& label,size_t maximum=128)
     {
@@ -1103,17 +1116,6 @@ namespace DragonWilds {
         return PS::HostServices::StateDirectory() / "players";
     }
 
-    fs::path DragonWildsSpawnLoader::GetPlayerAppearanceSnapshotPath(
-        const std::string& playerGuid)
-    {
-        if (playerGuid.empty() || playerGuid.size() > 128
-            || !std::all_of(playerGuid.begin(), playerGuid.end(), [](unsigned char value) {
-                return std::isalnum(value) || value == '-' || value == '_';
-            }))
-            return {};
-        return GetPlayerAppearanceDirectory() / (playerGuid + ".json");
-    }
-
     void DragonWildsSpawnLoader::LoadAppearanceProvenance()
     {
         if (m_appearanceProvenanceLoaded) return;
@@ -1268,98 +1270,26 @@ namespace DragonWilds {
         }
     }
 
-    bool DragonWildsSpawnLoader::EnsurePlayerAppearanceSnapshot(
-        UObject* pawn, const std::string& playerGuid, bool replace,
-        std::string& error)
+    bool DragonWildsSpawnLoader::ReadDefaultPlayerAppearance(
+        const std::string& field, std::string& dataTablePath,
+        std::string& rowName, std::string& error) const
     {
-        const auto path = GetPlayerAppearanceSnapshotPath(playerGuid);
-        if (!pawn || path.empty())
-        {
-            error = "player pawn or GUID was unavailable";
-            return false;
-        }
-        if (!replace && fs::is_regular_file(path)) return true;
-
-        nlohmann::json fields = nlohmann::json::object();
-        for (const auto fieldView : SnapshotAppearanceFields)
-        {
-            const std::string field(fieldView);
-            std::string table;
-            std::string row;
-            std::string fieldError;
-            if (!ReadPlayerAppearance(pawn, field, table, row, nullptr, fieldError))
-            {
-                error = field + ": " + fieldError;
-                return false;
-            }
-            fields[field] = {{"DataTable", table}, {"RowName", row}};
-        }
-
-        const nlohmann::json document{
-            {"Kind", "RuneSchemaPlayerAppearanceSnapshot"},
-            {"SchemaVersion", 1},
-            {"PlayerGuid", playerGuid},
-            {"Policy", "WriteOnceFallback"},
-            {"Fields", std::move(fields)},
-        };
-        const auto temporary = fs::path(path.string() + ".tmp");
+        const auto path = PS::HostServices::StateDirectory().parent_path()
+            / "SaveCharacters" / "Default.json";
         try
         {
-            fs::create_directories(path.parent_path());
-            {
-                std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
-                if (!output) throw std::runtime_error("snapshot temporary file could not be opened");
-                output << document.dump(2) << '\n';
-                if (!output.good()) throw std::runtime_error("snapshot write failed");
-            }
-            if (!replace && fs::is_regular_file(path))
-            {
-                std::error_code ignored;
-                fs::remove(temporary, ignored);
-                return true;
-            }
-            fs::copy_file(temporary, path, fs::copy_options::overwrite_existing);
-            std::error_code ignored;
-            fs::remove(temporary, ignored);
-            PS::RoutineLog("players",
-                STR("Saved appearance-only fallback for player {}.\n"),
-                PS::ToWideSafe(playerGuid.c_str()));
-            return true;
-        }
-        catch (const std::exception& exception)
-        {
-            std::error_code ignored;
-            fs::remove(temporary, ignored);
-            error = exception.what();
-            return false;
-        }
-    }
-
-    bool DragonWildsSpawnLoader::ReadPlayerAppearanceSnapshot(
-        const std::string& playerGuid, const std::string& field,
-        std::string& dataTablePath, std::string& rowName, std::string& error) const
-    {
-        const auto path = GetPlayerAppearanceSnapshotPath(playerGuid);
-        try
-        {
-            if (path.empty() || !fs::is_regular_file(path))
-                throw std::runtime_error("appearance snapshot was unavailable");
+            if (!fs::is_regular_file(path))
+                throw std::runtime_error("Default.json was unavailable");
             if (fs::file_size(path) > 256 * 1024)
-                throw std::runtime_error("appearance snapshot exceeded its size limit");
+                throw std::runtime_error("Default.json exceeded its size limit");
             std::ifstream input(path, std::ios::binary);
             const auto document = nlohmann::json::parse(input, nullptr, true, true);
-            if (!document.is_object()
-                || document.value("Kind", std::string{}) != "RuneSchemaPlayerAppearanceSnapshot"
-                || document.value("SchemaVersion", 0) != 1
-                || document.value("PlayerGuid", std::string{}) != playerGuid
-                || !document.contains("Fields") || !document.at("Fields").is_object()
-                || !document.at("Fields").contains(field))
-                throw std::runtime_error("appearance snapshot had an invalid schema");
-            const auto& value = document.at("Fields").at(field);
-            dataTablePath = value.at("DataTable").get<std::string>();
-            rowName = value.at("RowName").get<std::string>();
+            const auto& fields = document.at("Customization").at("CustomizationData");
+            const auto& value = fields.at(field);
+            dataTablePath = value.at("dataTable").get<std::string>();
+            rowName = value.at("rowName").get<std::string>();
             if (dataTablePath.empty() || rowName.empty())
-                throw std::runtime_error("appearance snapshot field was empty");
+                throw std::runtime_error("Default.json appearance field was empty");
             return true;
         }
         catch (const std::exception& exception)
@@ -1375,7 +1305,7 @@ namespace DragonWilds {
         if (!pawn || playerGuid.empty() || m_appearanceSources.empty()) return false;
         LoadAppearanceProvenance();
         bool changed = false;
-        for (const auto fieldView : SnapshotAppearanceFields)
+        for (const auto fieldView : CanonicalAppearanceFields)
         {
             const std::string field(fieldView);
             std::string currentTable;
@@ -1410,7 +1340,7 @@ namespace DragonWilds {
                     fallbackTable = known->second.second;
                     fallbackRow = authoredFallback->second;
                 }
-                else if (!ReadPlayerAppearanceSnapshot(playerGuid, field,
+                else if (!ReadDefaultPlayerAppearance(field,
                     fallbackTable, fallbackRow, ignored)) continue;
                 if (ActorHelper::NormalizeObjectPath(RC::to_generic_string(fallbackTable))
                         == normalizedCurrent && fallbackRow == currentRow)
@@ -1434,12 +1364,12 @@ namespace DragonWilds {
         return changed;
     }
 
-    void DragonWildsSpawnLoader::CapturePlayerAppearanceSnapshots(double deltaSeconds)
+    void DragonWildsSpawnLoader::ReconcileDeclaredPlayerAppearance(double deltaSeconds)
     {
-        m_playerAppearanceSnapshotElapsed += deltaSeconds;
-        if (m_playerAppearanceSnapshotElapsed < 1.0 || !m_readyWorld
+        m_playerAppearanceReconcileElapsed += deltaSeconds;
+        if (m_playerAppearanceReconcileElapsed < 1.0 || !m_readyWorld
             || !GetGameMode(m_readyWorld)) return;
-        m_playerAppearanceSnapshotElapsed = 0.0;
+        m_playerAppearanceReconcileElapsed = 0.0;
         for (const auto& player : GetConnectedPlayersInLoadOrder())
         {
             if (player.Guid.empty()) continue;
@@ -1452,19 +1382,6 @@ namespace DragonWilds {
                     controller, STR("/Script/Engine.Controller:K2_GetPawn"));
                 getPawn.Invoke();
                 auto* pawn = getPawn.Result<UObject*>();
-                std::string error;
-                if (!EnsurePlayerAppearanceSnapshot(pawn, player.Guid, false, error))
-                {
-                    // Controllers are visible before their pawn/customization
-                    // state is authoritative during startup and travel. This is
-                    // an expected retry state, not a user-facing warning.
-                    if (error == "player pawn or GUID was unavailable") continue;
-                    const auto key = "appearance-snapshot\n" + player.Guid + "\n" + error;
-                    if (m_reportedPlayerRuleFailures.insert(key).second)
-                        PS::Log<LogLevel::Verbose>(
-                            STR("Appearance snapshot for player {} deferred: {}\n"),
-                            PS::ToWideSafe(player.Guid.c_str()), PS::ToWideSafe(error.c_str()));
-                }
                 ObserveDeclaredAppearance(pawn, player.Guid);
             }
             catch (...) {}
@@ -2659,28 +2576,43 @@ namespace DragonWilds {
                     controller, STR("/Script/Engine.Controller:K2_GetPawn"));
                 pawnCall.Invoke();
                 auto* pawn = pawnCall.Result<UObject*>();
+                std::string currentTable;
+                std::string currentRow;
+                std::string readError;
+                const bool currentReadable = ReadPlayerAppearance(
+                    pawn, record->Field, currentTable, currentRow,
+                    nullptr, readError);
+                const bool currentValid = currentReadable
+                    ? IsValidAppearanceReference(currentTable, currentRow)
+                    : IsValidAppearanceReference(record->AppliedDataTablePath,
+                        record->AppliedRowName);
+                if (currentValid)
+                {
+                    // The inactive owner is not enough reason to rewrite a
+                    // healthy selection.  Only an actually unresolved custom
+                    // handle is replaced.
+                    ++record;
+                    continue;
+                }
                 bool changed = false;
                 UObject* customization = nullptr;
                 std::string error;
-                if (!WritePlayerAppearance(pawn, record->Field,
-                    record->FallbackDataTablePath, record->FallbackRowName,
-                    changed, &customization, error))
+                std::string defaultTable;
+                std::string defaultRow;
+                std::string defaultError;
+                if (!ReadDefaultPlayerAppearance(record->Field,
+                        defaultTable, defaultRow, defaultError)
+                    || !WritePlayerAppearance(pawn, record->Field,
+                        defaultTable, defaultRow, changed, &customization, error))
                 {
-                    std::string snapshotTable;
-                    std::string snapshotRow;
-                    std::string snapshotError;
-                    if (!ReadPlayerAppearanceSnapshot(record->PlayerGuid, record->Field,
-                            snapshotTable, snapshotRow, snapshotError)
-                        || !WritePlayerAppearance(pawn, record->Field,
-                            snapshotTable, snapshotRow, changed, &customization, error))
-                    {
-                        PS::Log<LogLevel::Error>(
-                            STR("Appearance fallback for player {} field {} failed: {}\n"),
-                            PS::ToWideSafe(record->PlayerGuid.c_str()),
-                            PS::ToWideSafe(record->Field.c_str()), PS::ToWideSafe(error.c_str()));
-                        ++record;
-                        continue;
-                    }
+                    PS::Log<LogLevel::Error>(
+                        STR("Appearance fallback for player {} field {} failed: {} {}\n"),
+                        PS::ToWideSafe(record->PlayerGuid.c_str()),
+                        PS::ToWideSafe(record->Field.c_str()),
+                        PS::ToWideSafe(defaultError.c_str()),
+                        PS::ToWideSafe(error.c_str()));
+                    ++record;
+                    continue;
                 }
                 if (changed && customization)
                 {
@@ -2821,16 +2753,6 @@ namespace DragonWilds {
             {
                 result = "the selected player has no active pawn";
                 return false;
-            }
-            if (!resolvedPlayerGuid.empty())
-            {
-                std::string snapshotError;
-                if (!EnsurePlayerAppearanceSnapshot(
-                    pawn, resolvedPlayerGuid, false, snapshotError))
-                    PS::Log<LogLevel::Warning>(
-                        STR("Appearance fallback capture for player {} was deferred: {}\n"),
-                        PS::ToWideSafe(resolvedPlayerGuid.c_str()),
-                        PS::ToWideSafe(snapshotError.c_str()));
             }
             bool nativeApplied=true;
             try {

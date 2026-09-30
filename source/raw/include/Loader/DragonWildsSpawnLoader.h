@@ -445,7 +445,7 @@ namespace DragonWilds {
         double m_visualTimerElapsed = 0.0;
         double m_buildingTimeElapsed = 0.0;
         double m_managedScaleElapsed = 0.0;
-        double m_playerAppearanceSnapshotElapsed = 0.0;
+        double m_playerAppearanceReconcileElapsed = 0.0;
         RC::Unreal::Hook::GlobalCallbackId m_activityObserver = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::Hook::GlobalCallbackId m_respawnObserver = RC::Unreal::Hook::ERROR_ID;
         struct PendingRespawn {
@@ -484,7 +484,7 @@ namespace DragonWilds {
         std::pair<bool,std::string> VerifyToolBuildingCandidate(RC::Unreal::UObject* building,const SpawnInfo& spawn,RC::Unreal::UWorld* world) const;
         void ReconcileTimedBuildingProps(float deltaSeconds);
         void ReconcileManagedActorScales(double deltaSeconds);
-        void CapturePlayerAppearanceSnapshots(double deltaSeconds);
+        void ReconcileDeclaredPlayerAppearance(double deltaSeconds);
         bool ObserveDeclaredAppearance(RC::Unreal::UObject* pawn,
             const std::string& playerGuid);
         RC::Unreal::UClass* ResolveClass(const RC::StringType& classPath);
@@ -573,11 +573,9 @@ namespace DragonWilds {
         std::vector<PlayerLoadOrderEntry> GetConnectedPlayersInLoadOrder();
         void LoadAppearanceProvenance();
         bool SaveAppearanceProvenance(std::string& error);
-        bool EnsurePlayerAppearanceSnapshot(RC::Unreal::UObject* pawn,
-            const std::string& playerGuid, bool replace, std::string& error);
-        bool ReadPlayerAppearanceSnapshot(const std::string& playerGuid,
-            const std::string& field, std::string& dataTablePath,
-            std::string& rowName, std::string& error) const;
+        bool ReadDefaultPlayerAppearance(const std::string& field,
+            std::string& dataTablePath, std::string& rowName,
+            std::string& error) const;
         void ReconcileAppearanceFallbacks(
             const std::unordered_map<std::string, std::string>& activeOwners,
             bool declaredOnly = false);
@@ -591,8 +589,6 @@ namespace DragonWilds {
             RC::Unreal::UObject** customization, std::string& error);
         static std::filesystem::path GetAppearanceProvenancePath();
         static std::filesystem::path GetPlayerAppearanceDirectory();
-        static std::filesystem::path GetPlayerAppearanceSnapshotPath(
-            const std::string& playerGuid);
         static std::filesystem::path GetNativeRespawnStatePath();
     };
 }

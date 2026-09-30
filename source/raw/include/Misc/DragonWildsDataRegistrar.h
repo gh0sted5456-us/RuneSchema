@@ -32,12 +32,13 @@ namespace DragonWilds {
         bool m_initialized = false;
         bool m_preflightingCharacterJson = false;
         bool m_registrySummaryReported = false;
+        bool m_startupCleanupOpen = true;
         std::unordered_set<std::string> m_checkedCharacters;
         std::string m_registryCandidateFingerprint;
         unsigned m_registryCandidatePasses = 0;
 
         bool ResolveBindings();
-        void ScrubCharacterJsonBeforeLoad(
+        void ScrubCharacterJsonBeforeLoad(RC::Unreal::UObject* context,
             RC::Unreal::UFunction* function, void* parameters);
         void InstallHooks();
         void RegisterAll();

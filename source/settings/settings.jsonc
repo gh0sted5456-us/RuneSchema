@@ -8,6 +8,9 @@
   "diagnosticJobs": {
     "enabled": false
   },
+  "diagnostics": {
+    "persistenceLedger": false
+  },
   "colorCodeLoaderAnnotations": true,
   "enableExperimentalDropScaling": false,
   "plugins": {

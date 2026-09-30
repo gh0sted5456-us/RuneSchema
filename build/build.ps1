@@ -687,7 +687,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
                 'time-of-day-contract','registry-patch-plan','registry-bridge-lifecycle-contract',
                 'json-document','asset-patch-v2-contract','helpy-instant-open',
                 'plugin-catalog-compatibility','recipe-placement-contract',
-                'loader-folder-case','usmap-index','native-binding-resolution',
+                'loader-folder-case','usmap-index','native-binding-resolution','identity-only-cleanup','persistence-diagnostic-ledger',
                 'vendor-category-refresh-contract','storefront-lanes','state-storage-contract',
                 'equipment-storefront-lane','native-contract','journal-failure-isolation',
                 'journal-wingdk-lane','journal-save-ownership','loader-lifecycle-contract',

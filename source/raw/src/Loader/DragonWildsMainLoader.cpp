@@ -13,6 +13,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include "Unreal/Engine/UDataTable.hpp"
+#include "Core/PersistenceDiagnosticLedger.h"
 #include "Unreal/Hooks.hpp"
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
@@ -776,6 +777,27 @@ namespace DragonWilds {
             });
             try {m_spawnLoader->FinalizePlayerRules();}
             catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[LOADER:players][PARTIAL] Finalization failed: {}. Other loaders continue.\n"),PS::ToWideSafe(error.what()));}
+        }
+        if (engineLifecyclePhase == EEngineLifecyclePhase::GameInstanceInit
+            && PS::PSConfig::Get()->GetSettings().advancedRuntime
+            && PS::PSConfig::Get()->GetSettings().diagnostics.persistenceLedger)
+        {
+            try
+            {
+                const auto output = PS::HostServices::ReferencesDirectory()
+                    / "PersistenceLedger.json";
+                PS::PersistenceDiagnostics::Write(
+                    GetModsPath(), m_orderedMods, output);
+                PS::Log<LogLevel::Normal>(
+                    STR("Persistence diagnostic ledger written to '{}'. It is not a cleanup authority.\n"),
+                    output.native());
+            }
+            catch (const std::exception& error)
+            {
+                PS::Log<LogLevel::Warning>(
+                    STR("Persistence diagnostic ledger was not written: {}\n"),
+                    PS::ToWideSafe(error.what()));
+            }
         }
     }
 

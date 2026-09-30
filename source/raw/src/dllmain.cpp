@@ -407,6 +407,8 @@ public:
             ImGui::Checkbox("Enable diagnostic jobs (restart required)", &settings.diagnosticJobs.enabled);
             ImGui::TextWrapped("Trace jobs are defined by JSON/JSONC profiles under settings/jobs. Event results are written under runtime/live/jobs/exports without console spam unless a profile explicitly enables consoleEvents.");
             ImGui::TextWrapped("Jobs run from settings/jobs recursively and do not require a player. Turning Advanced diagnostics off disables every job.");
+            ImGui::Checkbox("Export persistence ledger (restart required)", &settings.diagnostics.persistenceLedger);
+            ImGui::TextWrapped("Writes a diagnostic inventory of RuneSchema mod PersistenceIDs, InternalNames, owners, and source paths. The ledger is never used for cleanup or loading decisions.");
             ImGui::EndDisabled();
             ImGui::SeparatorText("Progress persistence");
             ImGui::Checkbox("Save RuneSchema character customization", &settings.persistence.characterCustomization);

@@ -47,23 +47,29 @@ int main(int argc, char** argv)
         && buildingLoader.find("HistoricalIndex") == std::string::npos
         && buildingLoader.find("PersistenceId < right.PersistenceId") != std::string::npos,
         "building registration is deterministic and does not create a world manifest");
-    Check(playerRules.find("StateDirectory() / \"players\"") != std::string::npos
-        && playerRules.find("RuneSchemaPlayerAppearanceSnapshot") != std::string::npos
-        && playerRules.find("WriteOnceFallback") != std::string::npos,
-        "appearance-only write-once player snapshots use LocalAppData");
-    Check(playerRules.find("SnapshotAppearanceFields") != std::string::npos
+    Check(playerRules.find("RuneSchemaPlayerAppearanceSnapshot") == std::string::npos
+        && playerRules.find("WriteOnceFallback") == std::string::npos
+        && playerRules.find("SaveCharacters\" / \"Default.json") != std::string::npos,
+        "appearance recovery does not retain player snapshots and uses Default.json");
+    Check(playerRules.find("CanonicalAppearanceFields") != std::string::npos
         && playerRules.find("\"FacialHairPreset\"") != std::string::npos
         && playerRules.find("\"EyebrowColor\"") != std::string::npos,
-        "player snapshots cover the canonical appearance handles");
-    Check(playerRules.find("if (error == \"player pawn or GUID was unavailable\") continue;") != std::string::npos
-        && playerRules.find("PS::Log<LogLevel::Verbose>(") != std::string::npos,
-        "normal pre-pawn appearance snapshot retries do not warn or fail");
+        "Default.json recovery covers the canonical appearance handles");
+    Check(playerRules.find("IsValidAppearanceReference") != std::string::npos
+        && playerRules.find("ReadDefaultPlayerAppearance") != std::string::npos,
+        "appearance is replaced only after validation fails");
     Check(registrar.find("ScrubLocalCharacterFiles") == std::string::npos
-        && registrar.find("SaveCharacters") == std::string::npos
         && registrar.find("ConfigFiles::Write") == std::string::npos,
         "automatic cleanup writes directly to stored character files");
+    Check(registrar.find("Default.json") != std::string::npos
+        && registrar.find("ConfigFiles::Read") != std::string::npos,
+        "appearance recovery does not read the canonical default profile");
     Check(registrar.find("ScrubCharacterJsonBeforeLoad") != std::string::npos,
         "shared native character-load preflight is missing");
+    Check(registrar.find("m_startupCleanupOpen") != std::string::npos
+        && registrar.find("FrontEnd") != std::string::npos
+        && registrar.find("MainMenu") != std::string::npos,
+        "automatic recovery is not limited to the initial front-end session");
     Check(registrar.find("PublishRegistry") != std::string::npos
         && registrar.find("snapshot.Journals") != std::string::npos,
         "native item, recipe, quest, and journal registries feed pruning");
