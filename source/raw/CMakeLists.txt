@@ -89,6 +89,7 @@ list(FILTER SRC_FILES EXCLUDE REGEX "/src/Generator/InGameQuickMenu\\.cpp$")
 
 add_library(${TARGET} SHARED
     ${SRC_FILES}
+    src/Core/AppearanceDefaults.cpp
     src/Core/CharacterEntryRecovery.cpp
     src/Core/PersistencePruner.cpp)
 

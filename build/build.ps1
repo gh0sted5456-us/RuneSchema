@@ -612,6 +612,18 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         )) {
             New-Item -ItemType Directory -Path $requiredDirectory -Force | Out-Null
         }
+        $sourceDefaults = Join-Path $SourceRoot 'settings\defaults'
+        if (Test-Path -LiteralPath $sourceDefaults -PathType Container) {
+            $payloadDefaults = Join-Path $payload 'settings\defaults'
+            New-Item -ItemType Directory -Path $payloadDefaults -Force | Out-Null
+            Get-ChildItem -LiteralPath $sourceDefaults -Force | ForEach-Object {
+                Copy-Item -LiteralPath $_.FullName -Destination $payloadDefaults -Recurse -Force
+            }
+        }
+        $sourceSettingsFile = Join-Path $SourceRoot 'settings\settings.jsonc'
+        if (Test-Path -LiteralPath $sourceSettingsFile -PathType Leaf) {
+            Copy-Item -LiteralPath $sourceSettingsFile -Destination (Join-Path $payload 'settings\settings.jsonc') -Force
+        }
         if ($IncludePlugins) {
             # Plugin source is authoritative. Never let a cached runtime
             # template resurrect retired plugin names, PAKs, or manifests.
@@ -707,6 +719,8 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
                 'vendor-offers','loader-schemas','npc-catalog','player-activity-events',
                 'quest-gameplay-owner','quest-native-contract','quest-definition','event-definition',
                 'character-entry-recovery-contract',
+                'appearance-defaults-contract',
+                'save-snapshot-restore',
                 'dialogue-definition','building-preview-safety','building-clone-contract',
                 'static-building-assembly-contract','owned-save-cleanup-contract',
                 'resource-additional-drops','resource-scale-idempotence','niagara-preset',

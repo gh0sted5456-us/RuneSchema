@@ -23,7 +23,7 @@ static void Check(bool value, const char* message)
 
 int main(int argc, char** argv)
 {
-    Check(argc >= 9, "host, loaders, player rules, registrar, save viewer, cleanup panel, and pruner supplied");
+    Check(argc >= 10, "host, loaders, player rules, registrar, save viewer, cleanup panel, pruner, and appearance defaults supplied");
     const auto host = Read(argv[1]);
     const auto mainLoader = Read(argv[2]);
     const auto buildingLoader = Read(argv[3]);
@@ -32,6 +32,7 @@ int main(int argc, char** argv)
     const auto saveViewer = Read(argv[6]);
     const auto cleanupPanel = Read(argv[7]);
     const auto pruner = Read(argv[8]);
+    const auto appearanceDefaults = Read(argv[9]);
     Check(host.find("RSDragonwilds") != std::string::npos
         && host.find("Saved") != std::string::npos
         && host.find("RuneSchema") != std::string::npos,
@@ -50,8 +51,8 @@ int main(int argc, char** argv)
         "building registration is deterministic and does not create a world manifest");
     Check(playerRules.find("RuneSchemaPlayerAppearanceSnapshot") == std::string::npos
         && playerRules.find("WriteOnceFallback") == std::string::npos
-        && playerRules.find("SaveCharacters\" / \"Default.json") != std::string::npos,
-        "appearance recovery does not retain player snapshots and uses Default.json");
+        && playerRules.find("AppearanceDefaults::Load") != std::string::npos,
+        "appearance recovery does not retain player snapshots and use shared defaults");
     Check(playerRules.find("CanonicalAppearanceFields") != std::string::npos
         && playerRules.find("\"FacialHairPreset\"") != std::string::npos
         && playerRules.find("\"EyebrowColor\"") != std::string::npos,
@@ -62,9 +63,10 @@ int main(int argc, char** argv)
     Check(registrar.find("ScrubLocalCharacterFiles") == std::string::npos
         && registrar.find("ConfigFiles::Write") == std::string::npos,
         "automatic cleanup writes directly to stored character files");
-    Check(pruner.find("Default.json") != std::string::npos
-        && pruner.find("ConfigFiles::Read") != std::string::npos,
-        "appearance recovery does not read the canonical default profile");
+    Check(pruner.find("AppearanceDefaults::Load") != std::string::npos
+        && appearanceDefaults.find("male_A_01") != std::string::npos
+        && appearanceDefaults.find("SettingsDirectory() / \"defaults\" / \"Default.json\"") != std::string::npos,
+        "appearance recovery does not use baked defaults with the settings override");
     Check(registrar.find("ScrubCharacterJsonBeforeLoad") != std::string::npos,
         "shared native character-load preflight is missing");
     Check(pruner.find("s_cleanupConsumedForProcess") != std::string::npos
@@ -86,7 +88,7 @@ int main(int argc, char** argv)
     Check(registrar.find("fingerprint != m_registryCandidateFingerprint") != std::string::npos
         && pruner.find("m_checkedCharacters") == std::string::npos
         && pruner.find("s_cleanupConsumedForProcess.exchange(") != std::string::npos
-        && pruner.find("if (cleaned.Removed.empty())") != std::string::npos,
+        && pruner.find("if (cleaned.Removed.empty() && restoredSections.empty())") != std::string::npos,
         "automatic pruning is not globally gated by a stable registry and a nonempty removal plan");
     Check(registrar.find("for (auto* subsystem : subsystems)") != std::string::npos
         && registrar.find("registrationsComplete = RegisterMissing(dataClass, subsystem)") != std::string::npos,

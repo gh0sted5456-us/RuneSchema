@@ -45,6 +45,7 @@
 #include "Loader/PlayerAttributeNames.h"
 #include "Core/JsonPatchDirective.h"
 #include "Core/JsonLoadOrderMerge.h"
+#include "Core/AppearanceDefaults.h"
 #include "Runtime/HostServices.h"
 
 using namespace RC;
@@ -1274,29 +1275,32 @@ namespace DragonWilds {
         const std::string& field, std::string& dataTablePath,
         std::string& rowName, std::string& error) const
     {
-        const auto path = PS::HostServices::StateDirectory().parent_path()
-            / "SaveCharacters" / "Default.json";
-        try
-        {
-            if (!fs::is_regular_file(path))
-                throw std::runtime_error("Default.json was unavailable");
-            if (fs::file_size(path) > 256 * 1024)
-                throw std::runtime_error("Default.json exceeded its size limit");
-            std::ifstream input(path, std::ios::binary);
-            const auto document = nlohmann::json::parse(input, nullptr, true, true);
-            const auto& fields = document.at("Customization").at("CustomizationData");
-            const auto& value = fields.at(field);
-            dataTablePath = value.at("dataTable").get<std::string>();
-            rowName = value.at("rowName").get<std::string>();
-            if (dataTablePath.empty() || rowName.empty())
-                throw std::runtime_error("Default.json appearance field was empty");
-            return true;
+        const auto defaults = PS::AppearanceDefaults::Load(
+            PS::PSConfig::Get()->GetSettings().defaults.appearanceOverrideEnabled);
+        static bool overrideWarningReported = false;
+        if (!defaults.Notice.empty() && !overrideWarningReported) {
+            overrideWarningReported = true;
+            PS::Log<LogLevel::Warning>(STR(
+                "[APPEARANCE-DEFAULTS][OVERRIDE-IGNORED] {}. Using the DLL's built-in male/A defaults.\n"),
+                PS::ToWideSafe(defaults.Notice.c_str()));
         }
-        catch (const std::exception& exception)
-        {
-            error = exception.what();
-            return false;
+        if (PS::AppearanceDefaults::ReadField(defaults.Document, field,
+                dataTablePath, rowName, error)
+            && IsValidAppearanceReference(dataTablePath, rowName)) return true;
+        if (defaults.External) {
+            if (!overrideWarningReported) {
+                overrideWarningReported = true;
+                PS::Log<LogLevel::Warning>(STR(
+                    "[APPEARANCE-DEFAULTS][OVERRIDE-IGNORED] settings/defaults/Default.json field '{}' did not resolve in the live table. Using the DLL's built-in male/A value.\n"),
+                    PS::ToWideSafe(field.c_str()));
+            }
+            if (PS::AppearanceDefaults::ReadField(
+                    PS::AppearanceDefaults::BuiltIn(), field,
+                    dataTablePath, rowName, error)
+                && IsValidAppearanceReference(dataTablePath, rowName)) return true;
         }
+        error = "the built-in male/A appearance field did not resolve in the live table: " + field;
+        return false;
     }
 
     bool DragonWildsSpawnLoader::ObserveDeclaredAppearance(

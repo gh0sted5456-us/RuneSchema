@@ -1,16 +1,16 @@
 #include "Core/PersistencePruner.h"
 
-#include <filesystem>
 #include <map>
-#include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
 #include <utility>
-#include "Core/ConfigFiles.h"
+#include <vector>
+#include "Core/AppearanceDefaults.h"
 #include "Core/SaveCleanup.h"
 #include "Core/SaveRegistrySnapshot.h"
-#include "Runtime/HostServices.h"
+#include "Core/SaveSnapshotRestore.h"
+#include "Utility/Config.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Classes/KismetSystemLibrary.h"
 #include "SDK/Classes/TSoftObjectPtr.h"
@@ -44,14 +44,6 @@ bool ValidAppearanceReference(const std::string& tablePath,
     const FName row(RC::to_generic_string(rowName), FNAME_Find);
     return row != NAME_None
         && static_cast<UDataTable*>(object)->FindRowUnchecked(row);
-}
-
-std::optional<nlohmann::json> ReadDefaultCharacterAppearance()
-{
-    const auto path = HostServices::StateDirectory().parent_path()
-        / "SaveCharacters" / "Default.json";
-    if (!std::filesystem::is_regular_file(path)) return std::nullopt;
-    return nlohmann::json::parse(ConfigFiles::Read(path, 256 * 1024));
 }
 
 void ReportValidatedSavedItems(const nlohmann::json& source,
@@ -131,6 +123,28 @@ void PersistencePruner::PruneBeforeCharacterLoad(
             : std::string{};
         if (characterId.empty()) return;
 
+        const auto& defaultSettings = PSConfig::Get()->GetSettings().defaults;
+        std::vector<std::string> restoredSections;
+        if (defaultSettings.restoration.enabled) {
+            const auto snapshot = AppearanceDefaults::Load(true);
+            if (!snapshot.External) {
+                Log<LogLevel::Warning>(STR(
+                    "[SNAPSHOT-RESTORE][SKIPPED] {}. Mandatory orphan pruning will continue without restoring save sections.\n"),
+                    ToWideSafe(snapshot.Notice.c_str()));
+            } else {
+                try {
+                    auto restored = SaveSnapshotRestore::Apply(
+                        source, snapshot.Document, defaultSettings.restoration);
+                    source = std::move(restored.Save);
+                    restoredSections = std::move(restored.Sections);
+                } catch (const std::exception& error) {
+                    Log<LogLevel::Error>(STR(
+                        "[SNAPSHOT-RESTORE][SKIPPED] No save section was restored: {}. Mandatory orphan pruning will continue.\n"),
+                        ToWideSafe(error.what()));
+                }
+            }
+        }
+
         ReportValidatedSavedItems(source, *registry);
         if (s_cleanupConsumedForProcess.exchange(
                 true, std::memory_order_acq_rel)) return;
@@ -138,14 +152,31 @@ void PersistencePruner::PruneBeforeCharacterLoad(
         SaveCleanup::Preview cleaned{source};
         cleaned = SaveCleanup::Plan(
             cleaned.Save, {}, false, registry.get(), false, true, true);
-        if (const auto defaults = ReadDefaultCharacterAppearance()) {
-            auto appearance = SaveCleanup::RepairInvalidAppearance(
-                cleaned.Save, *defaults, ValidAppearanceReference);
-            for (auto& row : appearance.Removed)
-                cleaned.Removed.push_back(std::move(row));
-            cleaned.Save = std::move(appearance.Save);
+        const auto defaults = AppearanceDefaults::Load(
+            defaultSettings.appearanceOverrideEnabled);
+        if (!defaults.Notice.empty()) Log<LogLevel::Warning>(STR(
+            "[PERSISTENCE-PRUNER][DEFAULT-OVERRIDE-IGNORED] {}. Using the DLL's built-in male/A defaults.\n"),
+            ToWideSafe(defaults.Notice.c_str()));
+        const auto repairWith = [&](const nlohmann::json& document) {
+            return SaveCleanup::RepairInvalidAppearance(
+                cleaned.Save, document, ValidAppearanceReference);
+        };
+        SaveCleanup::Preview appearance{cleaned.Save};
+        bool usedExternalDefaults = defaults.External;
+        try {
+            appearance = repairWith(defaults.Document);
+        } catch (const std::exception& error) {
+            if (!defaults.External) throw;
+            usedExternalDefaults = false;
+            Log<LogLevel::Warning>(STR(
+                "[PERSISTENCE-PRUNER][DEFAULT-OVERRIDE-IGNORED] settings/defaults/Default.json contains an unavailable live table or row: {}. Using the DLL's built-in male/A defaults.\n"),
+                ToWideSafe(error.what()));
+            appearance = repairWith(AppearanceDefaults::BuiltIn());
         }
-        if (cleaned.Removed.empty()) {
+        for (auto& row : appearance.Removed)
+            cleaned.Removed.push_back(std::move(row));
+        cleaned.Save = std::move(appearance.Save);
+        if (cleaned.Removed.empty() && restoredSections.empty()) {
             Log<LogLevel::Verbose>(STR(
                 "[PERSISTENCE-PRUNER][CHECKED] Every applicable persistence ID resolved; no persistence data was changed.\n"));
             return;
@@ -158,6 +189,17 @@ void PersistencePruner::PruneBeforeCharacterLoad(
             *jsonProperty->GetPropertyValue(jsonAddress)));
         if (verified != serialized) throw std::runtime_error(
             "clean character JSON did not survive reflected writeback");
+
+        if (!restoredSections.empty()) {
+            std::string restoredSummary;
+            for (const auto& section : restoredSections) {
+                if (!restoredSummary.empty()) restoredSummary += ", ";
+                restoredSummary += section;
+            }
+            Log<LogLevel::Warning>(STR(
+                "[SNAPSHOT-RESTORE][APPLIED] Restored selected section(s) from settings/defaults/Default.json: {}. Active character identity metadata was preserved; supported item, recipe, quest, and journal persistence IDs were checked against live registries.\n"),
+                ToWideSafe(restoredSummary.c_str()));
+        }
 
         std::map<std::string, std::size_t> counts;
         std::size_t orphanCount = 0;
@@ -183,8 +225,9 @@ void PersistencePruner::PruneBeforeCharacterLoad(
             "[PERSISTENCE-PRUNER][ORPHANS-REMOVED] Removed {} unresolved persistence reference(s) ({}). Resolved IDs were retained. Pruning will not run again until game restart.\n"),
             orphanCount, ToWideSafe(summary.c_str()));
         if (appearanceCount) Log<LogLevel::Warning>(STR(
-            "[PERSISTENCE-PRUNER][APPEARANCE-REPAIRED] Replaced {} invalid appearance handle(s) from Default.json.\n"),
-            appearanceCount);
+            "[PERSISTENCE-PRUNER][APPEARANCE-REPAIRED] Replaced {} invalid appearance handle(s) using {} defaults.\n"),
+            appearanceCount, usedExternalDefaults
+                ? STR("settings/defaults/Default.json") : STR("built-in male/A"));
     } catch (const std::exception& error) {
         Log<LogLevel::Error>(STR(
             "[PERSISTENCE-PRUNER][UNCHANGED] Character JSON was not modified: {}.\n"),

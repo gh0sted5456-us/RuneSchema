@@ -20,6 +20,20 @@
     "characterCustomization": false,
     "quests": true
   },
+  "defaults": {
+    "appearanceOverrideEnabled": false,
+    "restoration": {
+      "enabled": false,
+      "appearance": false,
+      "inventory": false,
+      "personalInventory": false,
+      "loadout": false,
+      "unlockProgress": false,
+      "quests": false,
+      "journalLore": false,
+      "remainingGameProgress": false
+    }
+  },
   "helpyAuthority": {
     "allowClientItemGrants": false,
     "allowClientTemporarySpawns": false,

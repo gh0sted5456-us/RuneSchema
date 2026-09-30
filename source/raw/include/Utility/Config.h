@@ -80,6 +80,25 @@ namespace PS {
         bool quests = true;
     };
 
+    struct DefaultRestorationSettings {
+        bool enabled = false;
+        bool appearance = false;
+        bool inventory = false;
+        bool personalInventory = false;
+        bool loadout = false;
+        bool unlockProgress = false;
+        bool quests = false;
+        bool journalLore = false;
+        // Copies GameProgress keys not owned by the explicit categories above.
+        // Character identity metadata is never copied.
+        bool remainingGameProgress = false;
+    };
+
+    struct DefaultCharacterSettings {
+        bool appearanceOverrideEnabled = false;
+        DefaultRestorationSettings restoration{};
+    };
+
     struct HelpyAuthoritySettings {
         // Client Helpy requests are always server-executed and independently
         // validated. Permanent authoring/export operations are never accepted.
@@ -113,6 +132,7 @@ namespace PS {
         AdvancedDiagnosticSettings diagnostics{};
         PluginSettings plugins{};
         PersistenceSettings persistence{};
+        DefaultCharacterSettings defaults{};
         HelpyAuthoritySettings helpyAuthority{};
     };
 

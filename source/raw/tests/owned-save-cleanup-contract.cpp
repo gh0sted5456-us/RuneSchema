@@ -64,8 +64,10 @@ int main(int argc,char** argv){
         && registrar.find("does not round-trip to one live data asset")!=registrar.npos
         && registrar.find("duplicate PersistenceID resolves to multiple live assets")!=registrar.npos,
         "cleanup readiness ignores a loaded asset that failed identity round-trip, uniqueness, primary, or network registration");
-    need(pruner.find("if (cleaned.Removed.empty()) {")!=pruner.npos,
-        "an unchanged character is not a strict no-op");
+    need(pruner.find("if (cleaned.Removed.empty() && restoredSections.empty()) {")!=pruner.npos,
+        "an unchanged, unrestored character is not a strict no-op");
+    need(pruner.find("SaveSnapshotRestore::Apply(") < pruner.find("SaveCleanup::Plan("),
+        "restored persistence IDs can bypass mandatory live-registry pruning");
     need(registrar.find("m_pruner.PruneBeforeCharacterLoad")!=registrar.npos
         && registrar.find("SaveCleanup::Plan(")==registrar.npos,
         "persistence pruning is not isolated from live-registry registration");
