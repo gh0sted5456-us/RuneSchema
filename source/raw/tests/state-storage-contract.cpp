@@ -66,7 +66,7 @@ int main(int argc, char** argv)
         "appearance recovery does not read the canonical default profile");
     Check(registrar.find("ScrubCharacterJsonBeforeLoad") != std::string::npos,
         "shared native character-load preflight is missing");
-    Check(registrar.find("m_startupCleanupOpen") != std::string::npos
+    Check(registrar.find("m_startupCleanupPending") != std::string::npos
         && registrar.find("FrontEnd") != std::string::npos
         && registrar.find("MainMenu") != std::string::npos,
         "automatic recovery is not limited to the initial front-end session");
@@ -83,9 +83,10 @@ int main(int argc, char** argv)
         && registrar.find("OwnedContent::CommitSnapshot") == std::string::npos,
         "automatic pruning does not follow pre-world registration without a manifest or ledger");
     Check(registrar.find("fingerprint != m_registryCandidateFingerprint") != std::string::npos
-        && registrar.find("m_checkedCharacters.contains(characterId)") != std::string::npos
+        && registrar.find("m_checkedCharacters") == std::string::npos
+        && registrar.find("m_startupCleanupPending = false;") != std::string::npos
         && registrar.find("if (cleaned.Removed.empty())") != std::string::npos,
-        "automatic pruning is not gated by a stable registry and a nonempty removal plan");
+        "automatic pruning is not globally gated by a stable registry and a nonempty removal plan");
     Check(registrar.find("for (auto* subsystem : subsystems)") != std::string::npos
         && registrar.find("RegisterMissing(dataClass, subsystem);") != std::string::npos,
         "a world transition can leave a live native registry unpopulated");

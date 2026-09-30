@@ -125,8 +125,8 @@ namespace DragonWilds {
     {
         if (!m_initialized)
         {
-            m_startupCleanupOpen = true;
-            m_checkedCharacters.clear();
+            m_startupCleanupPending = true;
+            m_cleanupDeferredReported = false;
             if (!ResolveBindings())
             {
                 return;
@@ -179,8 +179,8 @@ namespace DragonWilds {
         m_functionHooks.clear();
         m_registryCandidateFingerprint.clear();
         m_registryCandidatePasses = 0;
-        m_checkedCharacters.clear();
-        m_startupCleanupOpen = false;
+        m_startupCleanupPending = false;
+        m_cleanupDeferredReported = false;
         PS::SaveCleanup::PublishRegistry({});
     }
 
@@ -201,7 +201,7 @@ namespace DragonWilds {
                     const auto name = mode->GetWorld()->GetName();
                     if (name.find(TEXT("FrontEnd")) == RC::StringType::npos
                         && name.find(TEXT("MainMenu")) == RC::StringType::npos)
-                        m_startupCleanupOpen = false;
+                        m_startupCleanupPending = false;
                 }
                 RegisterAll();
             }, options);
@@ -331,17 +331,27 @@ namespace DragonWilds {
     void DragonWildsDataRegistrar::ScrubCharacterJsonBeforeLoad(
         UObject* context, UFunction* function, void* parameters)
     {
-        if (!m_startupCleanupOpen || !context || !function || !parameters) return;
+        if (!m_startupCleanupPending || !context || !function || !parameters) return;
         auto* world = context->GetWorld();
         if (!world) return;
         const auto worldName = world->GetName();
         if (worldName.find(TEXT("FrontEnd")) == RC::StringType::npos
             && worldName.find(TEXT("MainMenu")) == RC::StringType::npos)
         {
-            m_startupCleanupOpen = false;
+            m_startupCleanupPending = false;
             return;
         }
         const auto registry = PS::SaveCleanup::ReadRegistry();
+        if (!registry || !registry->Ready())
+        {
+            if (!m_cleanupDeferredReported)
+            {
+                m_cleanupDeferredReported = true;
+                PS::Log<LogLevel::Warning>(STR(
+                    "[SAVE-CLEANER][DEFERRED] Initial character cleanup is waiting for the complete, stable item and recipe registries. No character data was changed.\n"));
+            }
+            return;
+        }
 
         try
         {
@@ -382,14 +392,18 @@ namespace DragonWilds {
                 && source.at("meta_data").is_object()
                 ? source.at("meta_data").value("char_guid", std::string{})
                 : std::string{};
-            if (characterId.empty()
-                || m_checkedCharacters.contains(characterId))
-                return;
+            if (characterId.empty()) return;
+
+            // The early cleaner was safe because its completion latch was set
+            // only after the live registries were complete. Preserve that
+            // invariant at the shared load boundary, but consume it globally:
+            // this process gets exactly one eligible startup cleanup attempt,
+            // regardless of later character, world, or menu transitions.
+            m_startupCleanupPending = false;
 
             PS::SaveCleanup::Preview cleaned{source};
-            if (registry && registry->Ready())
-                cleaned = PS::SaveCleanup::Plan(
-                    cleaned.Save, {}, false, registry.get(), false, true, true);
+            cleaned = PS::SaveCleanup::Plan(
+                cleaned.Save, {}, false, registry.get(), false, true, true);
             if (const auto defaults = ReadDefaultCharacterAppearance())
             {
                 auto appearance = PS::SaveCleanup::RepairInvalidAppearance(
@@ -399,7 +413,8 @@ namespace DragonWilds {
                 cleaned.Save = std::move(appearance.Save);
             }
             if (cleaned.Removed.empty()) {
-                m_checkedCharacters.insert(characterId);
+                PS::Log<LogLevel::Verbose>(STR(
+                    "[SAVE-CLEANER][CHECKED] Initial character load contained no orphaned persistence references or invalid appearance handles.\n"));
                 return;
             }
 
@@ -411,20 +426,33 @@ namespace DragonWilds {
             if (verified != serialized)
                 throw std::runtime_error(
                     "clean character JSON did not survive reflected writeback");
-            m_checkedCharacters.insert(characterId);
-
             std::map<std::string, std::size_t> counts;
+            std::size_t orphanCount = 0;
+            std::size_t appearanceCount = 0;
             for (const auto& row : cleaned.Removed)
-                ++counts[row.value("Kind", std::string("Unknown"))];
+            {
+                const auto kind = row.value("Kind", std::string("Unknown"));
+                if (kind == "Appearance") ++appearanceCount;
+                else
+                {
+                    ++orphanCount;
+                    ++counts[kind];
+                }
+            }
             std::string summary;
             for (const auto& [kind, count] : counts)
             {
                 if (!summary.empty()) summary += ", ";
                 summary += kind + "=" + std::to_string(count);
             }
-            PS::Log<LogLevel::Normal>(
-                STR("[SAVE-CLEANER][PREFLIGHT] Repaired {} validated startup character load blocker(s) ({}).\n"),
-                cleaned.Removed.size(), PS::ToWideSafe(summary.c_str()));
+            if (orphanCount)
+                PS::Log<LogLevel::Warning>(
+                    STR("[SAVE-CLEANER][ORPHANS-REMOVED] Removed {} truly orphaned persistence reference(s) after the startup registries stabilized ({}). This cleanup will not run again until the game is restarted.\n"),
+                    orphanCount, PS::ToWideSafe(summary.c_str()));
+            if (appearanceCount)
+                PS::Log<LogLevel::Warning>(
+                    STR("[SAVE-CLEANER][APPEARANCE-REPAIRED] Replaced {} invalid appearance handle(s) from Default.json.\n"),
+                    appearanceCount);
         }
         catch (const std::exception& error)
         {

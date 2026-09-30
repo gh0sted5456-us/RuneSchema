@@ -25,10 +25,19 @@ int main(int argc,char** argv){
         "one or more persistent identity registries are absent");
     need(registrar.find("ScrubCharacterJsonBeforeLoad")!=registrar.npos,
         "provider-backed character JSON preflight is missing");
-    need(registrar.find("m_startupCleanupOpen")!=registrar.npos
+    need(registrar.find("m_startupCleanupPending")!=registrar.npos
         && registrar.find("FrontEnd")!=registrar.npos
         && registrar.find("MainMenu")!=registrar.npos,
         "automatic cleanup is not constrained to initial front-end startup");
+    const auto readyGate=registrar.find("if (!registry || !registry->Ready())");
+    const auto consume=registrar.find("m_startupCleanupPending = false;",readyGate);
+    const auto plan=registrar.find("SaveCleanup::Plan(",consume);
+    need(readyGate!=registrar.npos && consume!=registrar.npos
+        && plan!=registrar.npos && readyGate<consume && consume<plan,
+        "startup cleanup is not globally consumed after registry readiness and before mutation");
+    need(registrar.find("m_checkedCharacters")==registrar.npos
+        && registrar.find("[SAVE-CLEANER][ORPHANS-REMOVED]")!=registrar.npos,
+        "cleanup is still per-character or no longer warns when orphaned IDs are removed");
     need(registrar.find("PersistenceDiagnosticLedger")==registrar.npos,
         "cleanup depends on the optional diagnostic ledger");
     const auto preRegistration=registrar.find("RegisterInitGameStatePreCallback");
