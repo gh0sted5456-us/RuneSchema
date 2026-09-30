@@ -23,6 +23,9 @@ int main(int argc, char** argv) {
     Require(build, "Ensure-UE4SSSource");
     Require(build, "Assert-UEPseudoAccess");
     Require(build, "FETCHCONTENT_SOURCE_DIR_UE4SS");
+    Require(build, "UE4SS_PROJECTS=UE4SS");
+    Require(build, "ENABLE_IDE_SOURCE_VISIBILITY=OFF");
+    Require(build, "core UE4SS only (UVTD and IDE source indexing disabled)");
     Require(build, "https://github.com/Re-UE4SS/UEPseudo.git");
     Require(build, "https://github.com/settings/organizations");
     Require(build, "GITHUB_ACTIONS");
