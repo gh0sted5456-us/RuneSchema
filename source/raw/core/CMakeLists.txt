@@ -157,7 +157,8 @@ if(PROJECT_IS_TOP_LEVEL)
     add_test(NAME load-order-authority-contract COMMAND load-order-authority-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/ModLoadOrder.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Runtime/PluginCatalog.h")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Runtime/PluginCatalog.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Runtime/PluginHost.cpp")
     add_executable(persistence-mode-contract ../tests/persistence-mode-contract.cpp)
     add_test(NAME persistence-mode-contract COMMAND persistence-mode-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Utility/Config.h"
