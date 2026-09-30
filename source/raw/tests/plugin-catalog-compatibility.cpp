@@ -97,6 +97,31 @@ int main()
     Check(missingDependency, "missing dependency is diagnosed without suppressing discovery");
     Check(cycle, "dependency cycle falls back to deterministic best-effort order");
 
+    // plugins.txt is the explicit preferred order. Dependencies may move a
+    // provider earlier, but otherwise the file order must be preserved.
+    const auto orderRoot=root/"order";
+    for(const auto* id:{"AlphaOrder","BetaOrder","GammaOrder"}) {
+        const auto folder=orderRoot/id;
+        Write(folder/"plugin.json",
+            std::string("{\"SchemaVersion\":1,\"Id\":\"")+id+"\",\"Version\":\"1.0.0\"}");
+    }
+    Write(orderRoot/"plugins.txt","GammaOrder:1\nAlphaOrder:1\nBetaOrder:1\n");
+    const auto ordered=PS::PluginCatalog::Discover(orderRoot);
+    Check(ordered.size()==3,"ordered plugin fixture is complete");
+    Check(ordered[0].Id=="GammaOrder"&&ordered[1].Id=="AlphaOrder"&&ordered[2].Id=="BetaOrder",
+        "plugins.txt top-to-bottom order is preserved when dependencies do not constrain it");
+
+    const auto dependencyRoot=root/"dependency-order";
+    Write(dependencyRoot/"Consumer"/"plugin.json",
+        R"({"SchemaVersion":1,"Id":"Consumer","Version":"1.0.0","Dependencies":{"Provider":"1.0.0"}})");
+    Write(dependencyRoot/"Provider"/"plugin.json",
+        R"({"SchemaVersion":1,"Id":"Provider","Version":"1.0.0"})");
+    Write(dependencyRoot/"plugins.txt","Consumer:1\nProvider:1\n");
+    const auto dependencyOrdered=PS::PluginCatalog::Discover(dependencyRoot);
+    Check(dependencyOrdered.size()==2,"dependency-order plugin fixture is complete");
+    Check(dependencyOrdered[0].Id=="Provider"&&dependencyOrdered[1].Id=="Consumer",
+        "plugin dependencies are the only supported reason to override preferred plugins.txt order");
+
     const auto migrationRoot=root/"migration";
     const auto legacy=migrationRoot/"RuneSchema.Networking";
     const auto renamed=migrationRoot/"RSNetworking";
