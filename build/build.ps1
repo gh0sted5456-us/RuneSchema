@@ -332,11 +332,32 @@ endif()
 
         $root = Get-Content -LiteralPath $rootCMake -Raw
         if ($root -notmatch 'RuneSchema embedded UE4SS: skipped global IDE target organization') {
-            # Match only the standalone CMake command. The pinned UE4SS file
-            # also mentions organize_all_targets() in a comment, and a plain
-            # string Replace would splice CMake syntax into that comment.
-            $globalPattern = '(?m)^organize_all_targets\(\)\s*        }
-
+            # Find the actual standalone CMake command by line, not by raw token.
+            # The same token is also mentioned in a comment in the pinned source.
+            $rootLines = [regex]::Split($root, '\r?\n')
+            $globalIndexes = @()
+            for ($i = 0; $i -lt $rootLines.Count; $i++) {
+                if ($rootLines[$i].Trim() -eq 'organize_all_targets()') {
+                    $globalIndexes += $i
+                }
+            }
+            if ($globalIndexes.Count -ne 1) {
+                throw "Pinned UE4SS global organize marker changed; expected exactly one standalone command, found $($globalIndexes.Count)."
+            }
+            $globalReplacement = @(
+                'if(ENABLE_IDE_SOURCE_VISIBILITY)',
+                '    organize_all_targets()',
+                'else()',
+                '    message(STATUS "RuneSchema embedded UE4SS: skipped global IDE target organization")',
+                'endif()'
+            )
+            $index = $globalIndexes[0]
+            $before = if ($index -gt 0) { @($rootLines[0..($index - 1)]) } else { @() }
+            $after = if ($index + 1 -lt $rootLines.Count) { @($rootLines[($index + 1)..($rootLines.Count - 1)]) } else { @() }
+            $rootLines = @($before) + $globalReplacement + @($after)
+            $root = $rootLines -join [Environment]::NewLine
+            Set-Content -LiteralPath $rootCMake -Value $root -Encoding utf8
+        }
         Write-Host 'Prepared minimal embedded UE4SS CMake graph with progress markers.' -ForegroundColor DarkCyan
     }
     function Ensure-UE4SSSource {
