@@ -274,6 +274,79 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
 '@
         throw $message.Trim()
     }
+    function Prepare-EmbeddedUE4SSCMake {
+        # UE4SS carries IDE/export bookkeeping that RuneSchema's headless Ninja
+        # embedding does not need. Trim only that CMake metadata and add visible
+        # milestones so first configure never looks dead after the version banner.
+        $ue4ssCMake = Join-Path $UE4SSSource 'UE4SS\CMakeLists.txt'
+        $rootCMake = Join-Path $UE4SSSource 'CMakeLists.txt'
+        if (-not (Test-Path -LiteralPath $ue4ssCMake -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $rootCMake -PathType Leaf)) {
+            throw 'Prepared UE4SS CMake files are unavailable.'
+        }
+
+        $leaf = Get-Content -LiteralPath $ue4ssCMake -Raw
+        if ($leaf -notmatch 'RuneSchema embedded UE4SS: source scan complete') {
+            $versionLine = 'message("UE4SS Version: ${UE4SS_LIB_VERSION_MAJOR}.${UE4SS_LIB_VERSION_MINOR}.${UE4SS_LIB_VERSION_HOTFIX}.${UE4SS_LIB_VERSION_PRERELEASE}.${UE4SS_LIB_VERSION_BETA} (${UE4SS_LIB_BUILD_GITSHA})")'
+            if (-not $leaf.Contains($versionLine)) { throw 'Pinned UE4SS version marker changed.' }
+            $leaf = $leaf.Replace($versionLine, $versionLine + [Environment]::NewLine + 'message(STATUS "RuneSchema embedded UE4SS: scanning core source files...")')
+
+            $headersLine = 'file(GLOB_RECURSE UE4SS_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/include/**.hpp")'
+            if (-not $leaf.Contains($headersLine)) { throw 'Pinned UE4SS header scan marker changed.' }
+            $leaf = $leaf.Replace($headersLine, $headersLine + [Environment]::NewLine + 'message(STATUS "RuneSchema embedded UE4SS: source scan complete")')
+
+            $libraryLine = 'add_library(UE4SS SHARED ${UE4SS_SOURCES})'
+            if (-not $leaf.Contains($libraryLine)) { throw 'Pinned UE4SS target marker changed.' }
+            $leaf = $leaf.Replace($libraryLine, $libraryLine + [Environment]::NewLine + 'message(STATUS "RuneSchema embedded UE4SS: core target created")')
+
+            $idePattern = '(?s)# Add headers as sources for IDE integration\s+target_sources\(UE4SS PUBLIC.*?# Organize in IDE\s+source_group\(TREE "\$\{CMAKE_CURRENT_LIST_DIR\}" FILES \$\{UE4SS_SOURCES\} \$\{UE4SS_HEADERS\}\)'
+            $ideReplacement = @'
+# IDE/export source bookkeeping is omitted for RuneSchema's headless Ninja embedding.
+if(ENABLE_IDE_SOURCE_VISIBILITY)
+    target_sources(UE4SS PUBLIC
+        FILE_SET ue4ss_headers TYPE HEADERS
+        BASE_DIRS include
+        FILES ${UE4SS_HEADERS}
+    )
+    source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${UE4SS_SOURCES} ${UE4SS_HEADERS})
+else()
+    message(STATUS "RuneSchema embedded UE4SS: skipped IDE header/source bookkeeping")
+endif()
+'@
+            $patched = [regex]::Replace($leaf, $idePattern, $ideReplacement, 1)
+            if ($patched -eq $leaf) { throw 'Pinned UE4SS IDE bookkeeping block changed.' }
+            $leaf = $patched
+
+            $organizeLine = 'organize_targets("^UE4SS$" "RE-UE4SS")'
+            if (-not $leaf.Contains($organizeLine)) { throw 'Pinned UE4SS organize marker changed.' }
+            $organizeReplacement = @'
+if(ENABLE_IDE_SOURCE_VISIBILITY)
+    organize_targets("^UE4SS$" "RE-UE4SS")
+else()
+    message(STATUS "RuneSchema embedded UE4SS: core target configuration complete")
+endif()
+'@
+            $leaf = $leaf.Replace($organizeLine, $organizeReplacement)
+            Set-Content -LiteralPath $ue4ssCMake -Value $leaf -Encoding utf8
+        }
+
+        $root = Get-Content -LiteralPath $rootCMake -Raw
+        if ($root -notmatch 'RuneSchema embedded UE4SS: skipped global IDE target organization') {
+            $globalLine = 'organize_all_targets()'
+            if (-not $root.Contains($globalLine)) { throw 'Pinned UE4SS global organize marker changed.' }
+            $globalReplacement = @'
+if(ENABLE_IDE_SOURCE_VISIBILITY)
+    organize_all_targets()
+else()
+    message(STATUS "RuneSchema embedded UE4SS: skipped global IDE target organization")
+endif()
+'@
+            $root = $root.Replace($globalLine, $globalReplacement)
+            Set-Content -LiteralPath $rootCMake -Value $root -Encoding utf8
+        }
+
+        Write-Host 'Prepared minimal embedded UE4SS CMake graph with progress markers.' -ForegroundColor DarkCyan
+    }
     function Ensure-UE4SSSource {
         $pin = Get-UE4SSPinnedCommit
         $gitDirectory = Join-Path $UE4SSSource '.git'
@@ -307,6 +380,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         if (-not (Test-Path -LiteralPath $patterns -PathType Container)) {
             throw 'UE4SS patternsleuth submodule did not initialize correctly.'
         }
+        Prepare-EmbeddedUE4SSCMake
         Write-Host "UE4SS source ready: $UE4SSSource" -ForegroundColor Green
         return $pin
     }
