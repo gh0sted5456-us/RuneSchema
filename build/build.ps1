@@ -58,9 +58,19 @@ try {
         foreach ($hint in $Hints) { if (Test-Path -LiteralPath $hint -PathType Leaf) { return $hint } }
         return $null
     }
+    function Get-Sha256Hex([string]$Path) {
+        $stream = [IO.File]::OpenRead($Path)
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try {
+            return (($sha.ComputeHash($stream) | ForEach-Object { $_.ToString('x2') }) -join '')
+        } finally {
+            $sha.Dispose()
+            $stream.Dispose()
+        }
+    }
     function Assert-Sha256([string]$Path, [string]$Expected) {
         if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
-        $actual = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+        $actual = Get-Sha256Hex $Path
         if ($actual -ne $Expected.ToLowerInvariant()) {
             Write-Warning "Cached dependency hash mismatch; discarding $Path"
             Remove-Item -LiteralPath $Path -Force
@@ -112,7 +122,7 @@ try {
             Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
             throw "RSDWArchive USMAP size changed during download ($downloadedSize instead of $declaredSize)."
         }
-        $sha256 = (Get-FileHash -LiteralPath $temporary -Algorithm SHA256).Hash.ToLowerInvariant()
+        $sha256 = Get-Sha256Hex $temporary
         $cacheFile = Join-Path $MappingsCache "$sha256.usmap"
         Move-Item -LiteralPath $temporary -Destination $cacheFile -Force
 
@@ -174,7 +184,7 @@ try {
             Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
             Write-Host 'Downloading RuneSchema build dependencies...' -ForegroundColor Cyan
             Invoke-WebRequest -Uri $BuildDependencyUrl -OutFile $temporary
-            $actual = (Get-FileHash -LiteralPath $temporary -Algorithm SHA256).Hash.ToLowerInvariant()
+            $actual = Get-Sha256Hex $temporary
             if ($actual -ne $BuildDependencySha256.ToLowerInvariant()) {
                 Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
                 throw 'Downloaded RuneSchema build dependency package failed SHA-256 verification.'
@@ -437,8 +447,8 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
                     $download = Join-Path $PSScriptRoot 'signer\signer.exe'
                     New-Item -ItemType Directory -Path (Split-Path $download) -Force | Out-Null
                     Invoke-WebRequest -Uri $env:RUNESCHEMA_SIGNER_URL -OutFile $download
-                    $actual = (Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash
-                    if ($actual -ne $env:RUNESCHEMA_SIGNER_SHA256) { throw 'Downloaded signer SHA-256 did not match the configured pin.' }
+                    $actual = Get-Sha256Hex $download
+                    if ($actual -ne $env:RUNESCHEMA_SIGNER_SHA256.ToLowerInvariant()) { throw 'Downloaded signer SHA-256 did not match the configured pin.' }
                     $signer = $download
                     Write-Host 'Pinned GitHub signer downloaded and verified.'
                 } catch { Write-Warning "Could not obtain configured GitHub signer; continuing unsigned: $_" }
@@ -502,8 +512,23 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
             Remove-Item -LiteralPath $stdout,$stderr -Force -ErrorAction SilentlyContinue
             New-Item -ItemType Directory -Path $LogRoot -Force | Out-Null
 
-            $process = Start-Process -FilePath $ninja -ArgumentList $Arguments -NoNewWindow -Wait -PassThru `
-                -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+            # Windows PowerShell 5's Start-Process -Wait follows descendants;
+            # Cargo helpers can outlive a completed Ninja process and strand
+            # the builder after a successful link. The native call operator
+            # waits for Ninja itself and leaves its exact status in LASTEXITCODE.
+            $savedErrorPreference = $ErrorActionPreference
+            try {
+                # Cargo writes ordinary progress to stderr. Under the script's
+                # fail-fast preference PowerShell 5 promotes that text to a
+                # terminating NativeCommandError even when Cargo succeeds.
+                $ErrorActionPreference = 'Continue'
+                $nativeOutput = & $ninja @Arguments 2>&1
+                $exitCode = $LASTEXITCODE
+                $nativeOutput | Set-Content -LiteralPath $stdout -Encoding utf8
+                Set-Content -LiteralPath $stderr -Value '' -Encoding utf8
+            } finally {
+                $ErrorActionPreference = $savedErrorPreference
+            }
 
             if (Test-Path -LiteralPath $stdout) {
                 Get-Content -LiteralPath $stdout | ForEach-Object { Write-Host $_ }
@@ -512,12 +537,12 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
                 Get-Content -LiteralPath $stderr | ForEach-Object { Write-Host $_ -ForegroundColor DarkYellow }
             }
 
-            if ($process.ExitCode -ne 0) {
-                Write-Host "$Label failed with exit code $($process.ExitCode)." -ForegroundColor Red
+            if ($exitCode -ne 0) {
+                Write-Host "$Label failed with exit code $exitCode." -ForegroundColor Red
                 Write-Host "Ninja stdout: $stdout" -ForegroundColor DarkGray
                 Write-Host "Ninja stderr: $stderr" -ForegroundColor DarkGray
             }
-            return $process.ExitCode
+            return $exitCode
         }
 
         $parallelArgs = @('-C', $build) + $targets
@@ -713,6 +738,8 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         Write-Host "`n$Version Helpy-only build complete: $DistRoot" -ForegroundColor Green
         return
     }
+    Copy-Item -LiteralPath $universal.Core `
+        -Destination (Join-Path $DistRoot "RuneSchema-$Version.dll") -Force
     New-Package "RuneSchema-$Version-Universal" $universal.Core $helpy $mappings $true
     # Plugin-free runtime.
     New-Package "RuneSchema-$Version-Core" $universal.Core $helpy $mappings $false

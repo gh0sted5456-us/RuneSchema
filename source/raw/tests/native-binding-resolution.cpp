@@ -84,5 +84,16 @@ int main(int argc, char** argv)
         "missing storefront override preserves UE4SS host bindings");
     Check(entrypoint.find("Native binding lane:") != std::string::npos,
         "selected lane is announced for diagnostics");
+    Check(entrypoint.find("DllMain") == std::string::npos
+        && entrypoint.find("return new RuneSchema();") != std::string::npos,
+        "RuneSchema performs startup only when UE4SS calls start_mod (mods.txt authority)");
+    Check(entrypoint.find("[RuneSchema][DID-NOT-START][CONSTRUCTION]") != std::string::npos
+        && entrypoint.find("MainLoader.AbortStartup(\"unreal-init\"") != std::string::npos,
+        "fatal construction and Unreal lifecycle failures are not annotated");
+    Check(loader.find("[RuneSchema][DID-NOT-START][CORE]") != std::string::npos
+        && loader.find("All RuneSchema runtime hooks and services were stopped") != std::string::npos
+        && loader.find("[DEGRADED][SERVICE:data-registrar]") != std::string::npos
+        && loader.find("RuneSchema will not prune this run") != std::string::npos,
+        "fatal core shutdown or degraded persistence startup is not correctly classified");
     std::cout << "Native binding resolution contract passed.\n";
 }

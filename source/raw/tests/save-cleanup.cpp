@@ -49,6 +49,9 @@ int Run() {
     assetSave["GameProgress"]["Inventory"]["1"]={{"ItemData","item1"}};
     assetSave["GameProgress"]["Loadout"]={{"Head",{{"PlayerInventoryItemIndex",0}}},{"Body",{{"PlayerInventoryItemIndex",1}}}};
     assetSave["GameProgress"]["Progress"]={{"ItemsPickedUp",{"unrelated","item1"}},{"RecipesUnlocked",{"missing","recipe1"}}};
+    assetSave["GameProgress"]["Progress"]["BuildingsUnlocked"]={"unresolved-but-no-complete-building-registry"};
+    assetSave["GameProgress"]["Progress"]["SpellsUnlocked"]={"unresolved-but-no-complete-spell-registry"};
+    assetSave["GameProgress"]["Progress"]["PlayerHooksTriggered"]={"unresolved-but-no-complete-hook-registry"};
     // The automatic ownership-only mode must preserve every unowned record,
     // including unresolved third-party assets and equipment.
     Require(Plan(assetSave,{}).Save==assetSave);
@@ -63,6 +66,9 @@ int Run() {
     const auto orphanPruned=Plan(assetSave,{},false,&registry,false,true);
     Require(orphanPruned.Save["GameProgress"]["Progress"]["RecipesUnlocked"]==Json::array({"recipe1"}));
     Require(orphanPruned.Save["GameProgress"]["Progress"]["ItemsPickedUp"]==Json::array({"item1"}));
+    Require(orphanPruned.Save["GameProgress"]["Progress"]["BuildingsUnlocked"]==assetSave["GameProgress"]["Progress"]["BuildingsUnlocked"]);
+    Require(orphanPruned.Save["GameProgress"]["Progress"]["SpellsUnlocked"]==assetSave["GameProgress"]["Progress"]["SpellsUnlocked"]);
+    Require(orphanPruned.Save["GameProgress"]["Progress"]["PlayerHooksTriggered"]==assetSave["GameProgress"]["Progress"]["PlayerHooksTriggered"]);
     Require(orphanPruned.Save["GameProgress"]["QuestProgress"]==assetSave["GameProgress"]["QuestProgress"]);
     auto missingQuest=assetSave;
     missingQuest["GameProgress"]["QuestProgress"]["Quests"][0]["QuestId"]="missing-quest";
@@ -71,6 +77,17 @@ int Run() {
     Require(questErased.Save["GameProgress"]["QuestProgress"]["Quests"].size()==1);
     Require(questErased.Removed.end()!=std::find_if(questErased.Removed.begin(),questErased.Removed.end(),
         [](const auto& row){return row.value("Kind","")=="Quest/dialogue" && row.value("Id","")=="missing-quest";}));
+    auto trackedOnly=assetSave;
+    trackedOnly["GameProgress"]["QuestProgress"]["QuestTracked"]="missing-tracked";
+    const auto trackedCleaned=Plan(trackedOnly,{},false,&registry,false,true,true);
+    Require(trackedCleaned.Save["GameProgress"]["QuestProgress"]["QuestTracked"]=="");
+    Require(trackedCleaned.Removed.end()!=std::find_if(trackedCleaned.Removed.begin(),trackedCleaned.Removed.end(),
+        [](const auto& row){return row.value("Kind","")=="Quest tracked" && row.value("Id","")=="missing-tracked";}));
+    auto duplicateMissing=missingQuest;
+    duplicateMissing["GameProgress"]["QuestProgress"]["Quests"].push_back(
+        duplicateMissing["GameProgress"]["QuestProgress"]["Quests"][0]);
+    Require(Plan(duplicateMissing,{},false,&registry,false,true,true).Save
+        ["GameProgress"]["QuestProgress"]["Quests"].size()==1);
     auto unresolvedPending=missingQuest;
     unresolvedPending["GameProgress"]["QuestProgress"]["Quests"][0]["QuestInts"]={
         {{"QuestVariableName","RuneSchema.Phase"},{"QuestVariableValue",3}}};

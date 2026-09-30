@@ -19,6 +19,7 @@ namespace DragonWilds {
     class DragonWildsDataRegistrar {
     public:
         void Initialize();
+        bool IsInitialized() const { return m_initialized; }
         void Shutdown();
         ~DragonWildsDataRegistrar() { Shutdown(); }
 
@@ -44,7 +45,7 @@ namespace DragonWilds {
         bool EnsureCharacterJsonPreflightHook();
         void InstallHooks();
         void RegisterAll();
-        void RegisterMissing(RC::Unreal::UClass* dataClass, RC::Unreal::UObject* subsystem);
+        bool RegisterMissing(RC::Unreal::UClass* dataClass, RC::Unreal::UObject* subsystem);
         int32_t EnsureNetworkIdentity(
             RC::Unreal::UObject* dataAsset, RC::Unreal::UObject* subsystem);
         RC::Unreal::UObject* FindSubsystemInstance(RC::Unreal::UClass* subsystemClass);

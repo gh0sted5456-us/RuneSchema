@@ -187,6 +187,9 @@ namespace DragonWilds {
                     m_coreStartupComplete.store(true,std::memory_order_release);
                     m_coreStartupCallbackId=Hook::ERROR_ID;
                     iteration.RemoveSelf();
+                } else if(m_coreStartupFailed.load(std::memory_order_acquire)) {
+                    m_coreStartupCallbackId=Hook::ERROR_ID;
+                    iteration.RemoveSelf();
                 }
             },startupOptions);
         if(m_coreStartupCallbackId==Hook::ERROR_ID)
@@ -301,8 +304,14 @@ namespace DragonWilds {
         }
 
         PS::StartupTrace::Mark("data registrar begin");
-        try {m_dataRegistrar.Initialize();}
-        catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][SERVICE:data-registrar] Registration/save cleanup unavailable: {}.\n"),PS::ToWideSafe(error.what()));}
+        try {
+            m_dataRegistrar.Initialize();
+            if(!m_dataRegistrar.IsInitialized())
+                throw std::runtime_error("required live persistence registry bindings are unavailable");
+        }
+        catch(const std::exception& error){
+            PS::Log<LogLevel::Error>(STR("[DEGRADED][SERVICE:data-registrar] Registration/save cleanup unavailable: {}. RuneSchema will not prune this run.\n"),PS::ToWideSafe(error.what()));
+        }
         try {m_registryBridge.Start();}
         catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][SERVICE:registry-bridge] Networking bridge unavailable: {}.\n"),PS::ToWideSafe(error.what()));}
         PS::StartupTrace::Mark("GameInstanceInit loaders complete (deferred world work may remain)");
@@ -577,7 +586,8 @@ namespace DragonWilds {
         const auto begin = m_readiness.Begin();
         if (begin == Gate::BeginResult::Wait) return m_readiness.IsActive();
         if (begin == Gate::BeginResult::Overflow) {
-            PS::Log<LogLevel::Error>(STR("Early table queue exceeded 4096 entries; loader initialization stopped.\n"));
+            constexpr auto reason = "Early table queue exceeded 4096 entries";
+            FailStartup(reason);
             return false;
         }
         try {
@@ -627,8 +637,41 @@ namespace DragonWilds {
             return true;
         } catch (const std::exception& error) {
             m_readiness.Fail();
-            PS::Log<LogLevel::Error>(STR("Readiness-gated initialization failed: {}\n"), PS::ToWideSafe(error.what()));
+            FailStartup(error.what());
             return false;
+        }
+    }
+
+    void DragonWildsMainLoader::FailStartup(const std::string& reason)
+    {
+        AbortStartup("core", reason);
+    }
+
+    void DragonWildsMainLoader::AbortStartup(const std::string& stage, const std::string& reason)
+    {
+        if (m_coreStartupFailed.exchange(true,std::memory_order_acq_rel)) return;
+        m_fileWatcher.reset();
+        DatatableSerialize_Hook = {};
+        GameInstanceInit_Hook = {};
+        GetPakFolders_Hook = {};
+        DatatableSerializeCallbacks.clear();
+        GameInstanceInitCallbacks.clear();
+        m_registryBridge.Stop();
+        m_dataRegistrar.Shutdown();
+        m_loaders.clear();
+        m_stringLoader = nullptr;
+        m_buildingLoader = nullptr;
+        m_spawnLoader = nullptr;
+        PS::StartupTrace::Fatal(stage,reason);
+        if (stage == "core") {
+            PS::Log<LogLevel::Error>(STR("[RuneSchema][DID-NOT-START][CORE] {}. All RuneSchema runtime hooks and services were stopped.\n"),
+                PS::ToWideSafe(reason.c_str()));
+        } else {
+            PS::Log<LogLevel::Error>(STR("[RuneSchema][DID-NOT-START] stage={} reason={}. All RuneSchema runtime hooks and services were stopped.\n"),
+                PS::ToWideSafe(stage.c_str()),PS::ToWideSafe(reason.c_str()));
+        }
+        if (m_fatalStartupHandler) {
+            try { m_fatalStartupHandler(reason); } catch (...) {}
         }
     }
 

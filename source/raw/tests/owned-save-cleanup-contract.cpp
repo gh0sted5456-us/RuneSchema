@@ -42,8 +42,12 @@ int main(int argc,char** argv){
         && plan!=registrar.npos && readyGate<consume && consume<plan,
         "startup cleanup is not globally consumed after registry readiness and before mutation");
     need(registrar.find("m_checkedCharacters")==registrar.npos
-        && registrar.find("[SAVE-CLEANER][ORPHANS-REMOVED]")!=registrar.npos,
+        && registrar.find("[SAVE-CLEANER][ORPHANS-REMOVED]")!=registrar.npos
+        && registrar.find("[SAVE-CLEANER][ORPHAN-REMOVED]")!=registrar.npos,
         "cleanup is still per-character or no longer warns when orphaned IDs are removed");
+    need(registrar.find("[SAVE-CLEANER][REGISTRY-VALIDATED]")!=registrar.npos
+        && registrar.find("base game plus loaded paks")!=registrar.npos,
+        "loaded-pak item IDs are not visibly retained from the live registry");
     need(registrar.find("PersistenceDiagnosticLedger")==registrar.npos,
         "cleanup depends on the optional diagnostic ledger");
     const auto preRegistration=registrar.find("RegisterInitGameStatePreCallback");
@@ -53,6 +57,13 @@ int main(int argc,char** argv){
     need(registrar.find("fingerprint != m_registryCandidateFingerprint")!=registrar.npos
         && registrar.find("PublishRegistry({});\n                return;")!=registrar.npos,
         "character cleanup can consume an unsettled registry snapshot");
+    need(registrar.find("registrationsComplete = RegisterMissing")!=registrar.npos
+        && registrar.find("itemsReady && recipesReady && registrationsComplete")!=registrar.npos
+        && registrar.find("primary persistence registry rejected the asset")!=registrar.npos
+        && registrar.find("network registry rejected the asset")!=registrar.npos
+        && registrar.find("does not round-trip to one live data asset")!=registrar.npos
+        && registrar.find("duplicate PersistenceID resolves to multiple live assets")!=registrar.npos,
+        "cleanup readiness ignores a loaded asset that failed identity round-trip, uniqueness, primary, or network registration");
     need(registrar.find("if (cleaned.Removed.empty()) {")!=registrar.npos,
         "an unchanged character is not a strict no-op");
 }

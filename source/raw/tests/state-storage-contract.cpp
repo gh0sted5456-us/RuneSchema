@@ -88,7 +88,7 @@ int main(int argc, char** argv)
         && registrar.find("if (cleaned.Removed.empty())") != std::string::npos,
         "automatic pruning is not globally gated by a stable registry and a nonempty removal plan");
     Check(registrar.find("for (auto* subsystem : subsystems)") != std::string::npos
-        && registrar.find("RegisterMissing(dataClass, subsystem);") != std::string::npos,
+        && registrar.find("registrationsComplete = RegisterMissing(dataClass, subsystem)") != std::string::npos,
         "a world transition can leave a live native registry unpopulated");
     Check(saveViewer.find("Character-save file browsing is unavailable for Xbox WGS storage") != std::string::npos,
         "the file viewer does not mistake Steam saves for Game Pass saves");

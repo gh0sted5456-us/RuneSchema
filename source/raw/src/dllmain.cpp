@@ -304,6 +304,7 @@ public:
 
     auto on_ui_init() -> void override
     {
+        if (m_startupFailed.load(std::memory_order_acquire)) return;
         PS::StartupTrace::Mark("UE4SS on_ui_init begin");
         if (!PS::HostServices::GuiEnabled())
         {
@@ -833,13 +834,28 @@ public:
 
     auto on_unreal_init() -> void override
     {
-        PS::StartupTrace::Mark("UE4SS on_unreal_init begin");
-        MainLoader.Initialize();
-        m_pluginHost.OnUnrealInit();
-        PS::StartupTrace::Mark("UE4SS on_unreal_init complete");
-        m_unrealReady = true;
-        m_networkRoleMonitor.Start();
-        PS::RuntimeJobs::Initialize();
+        if (m_startupFailed.load(std::memory_order_acquire)) return;
+        try {
+            PS::StartupTrace::Mark("UE4SS on_unreal_init begin");
+            MainLoader.SetFatalStartupHandler([this](std::string) {
+                m_startupFailed.store(true,std::memory_order_release);
+                m_networkRoleMonitor.Stop();
+                PS::RuntimeJobs::Shutdown();
+                m_pluginHost.Shutdown();
+            });
+            MainLoader.Initialize();
+            m_pluginHost.OnUnrealInit();
+            PS::StartupTrace::Mark("UE4SS on_unreal_init complete");
+            m_unrealReady = true;
+            m_networkRoleMonitor.Start();
+            PS::RuntimeJobs::Initialize();
+        } catch (const std::exception& error) {
+            m_startupFailed.store(true,std::memory_order_release);
+            MainLoader.AbortStartup("unreal-init",error.what());
+        } catch (...) {
+            m_startupFailed.store(true,std::memory_order_release);
+            MainLoader.AbortStartup("unreal-init","unknown exception");
+        }
     }
 
     void ActivateTools()
@@ -885,6 +901,7 @@ private:
     std::string m_schemaStatus;
     std::string m_schemaExportName;
     std::atomic<bool> m_unrealReady = false;
+    std::atomic<bool> m_startupFailed = false;
     Hook::GlobalCallbackId m_apiExportCallbackId = Hook::ERROR_ID;
         Hook::GlobalCallbackId m_toolsWorldCallbackId = Hook::ERROR_ID;
 };
@@ -894,7 +911,17 @@ extern "C"
 {
     RuneSchema_API RC::CppUserModBase* start_mod()
     {
-        return new RuneSchema();
+        try {
+            return new RuneSchema();
+        } catch (const std::exception& error) {
+            PS::StartupTrace::Fatal("construction",error.what());
+            try { PS::Log<LogLevel::Error>(STR("[RuneSchema][DID-NOT-START][CONSTRUCTION] {}.\n"),PS::ToWideSafe(error.what())); } catch (...) {}
+            return nullptr;
+        } catch (...) {
+            PS::StartupTrace::Fatal("construction","unknown exception");
+            try { PS::Log<LogLevel::Error>(STR("[RuneSchema][DID-NOT-START][CONSTRUCTION] Unknown exception.\n")); } catch (...) {}
+            return nullptr;
+        }
     }
 
     RuneSchema_API void uninstall_mod(RC::CppUserModBase* mod)

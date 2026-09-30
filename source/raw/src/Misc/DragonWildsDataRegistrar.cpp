@@ -4,6 +4,7 @@
 #include <limits>
 #include <map>
 #include <ranges>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 #include "Unreal/CoreUObject/UObject/Class.hpp"
@@ -119,6 +120,33 @@ namespace DragonWilds {
         result += snapshot.QuestsComplete ? "Q1" : "Q0";
         result += snapshot.JournalsComplete ? "J1" : "J0";
         return result;
+    }
+
+    static void ReportValidatedSavedItems(
+        const nlohmann::json& source,
+        const PS::SaveCleanup::RegistrySnapshot& registry)
+    {
+        if (!source.contains("GameProgress")
+            || !source.at("GameProgress").is_object())
+            return;
+        const auto& game = source.at("GameProgress");
+        std::set<std::pair<std::string, std::string>> reported;
+        for (const auto* section : { "Inventory", "PersonalInventory", "Loadout" })
+        {
+            if (!game.contains(section) || !game.at(section).is_object()) continue;
+            for (const auto& entry : game.at(section).items())
+            {
+                const auto& row = entry.value();
+                if (!row.is_object()) continue;
+                const auto id = row.value("ItemData", std::string{});
+                if (id.empty() || !registry.Items.contains(id)
+                    || !reported.emplace(section, id).second)
+                    continue;
+                PS::Log<LogLevel::Verbose>(
+                    STR("[SAVE-CLEANER][REGISTRY-VALIDATED] Retaining {} persistence ID '{}' because it is present in the completed live item registry (base game plus loaded paks).\n"),
+                    PS::ToWideSafe(section), PS::ToWideSafe(id.c_str()));
+            }
+        }
     }
 
     void DragonWildsDataRegistrar::Initialize()
@@ -387,6 +415,12 @@ namespace DragonWilds {
                 : std::string{};
             if (characterId.empty()) return;
 
+            // A loaded pak participates in the same live subsystem map as base
+            // game content. Report positive item matches so diagnostics prove
+            // that modded equipment was retained for that reason; never infer
+            // orphan status from a vanilla catalog or an optional ledger.
+            ReportValidatedSavedItems(source, *registry);
+
             // The early cleaner was safe because its completion latch was set
             // only after the live registries were complete. Preserve that
             // invariant at the shared load boundary, but consume it globally:
@@ -430,6 +464,11 @@ namespace DragonWilds {
                 {
                     ++orphanCount;
                     ++counts[kind];
+                    const auto id = row.value("Id", std::string("<unknown>"));
+                    PS::Log<LogLevel::Warning>(
+                        STR("[SAVE-CLEANER][ORPHAN-REMOVED] {} persistence ID '{}' was absent from the completed live registry.\n"),
+                        PS::ToWideSafe(kind.c_str()),
+                        PS::ToWideSafe(id.c_str()));
                 }
             }
             std::string summary;
@@ -463,6 +502,7 @@ namespace DragonWilds {
         bool itemsReady = false;
         bool recipesReady = false;
         bool questsReady = false;
+        bool registrationsComplete = true;
 
         for (auto& [dataClass, subsystemClass] : m_bindings)
         {
@@ -482,7 +522,8 @@ namespace DragonWilds {
                 // An outgoing world may still own a subsystem when the next
                 // world starts. Populate every live instance so saved recipe
                 // identities cannot be written against only the old one.
-                RegisterMissing(dataClass, subsystem);
+                registrationsComplete = RegisterMissing(dataClass, subsystem)
+                    && registrationsComplete;
 
                 auto* idMapProperty = CastField<FMapProperty>(
                     PropertyHelper::GetPropertyByName(
@@ -519,9 +560,12 @@ namespace DragonWilds {
                 });
             }
             if (!foundSubsystem)
+            {
+                registrationsComplete = false;
                 PS::Log<LogLevel::Warning>(STR(
                     "No {} instance exists yet; {} assets cannot be registered.\n"),
                     subsystemClass->GetName(), dataClass->GetName());
+            }
         }
 
         snapshot.QuestsComplete = questsReady && !snapshot.Quests.empty();
@@ -557,7 +601,7 @@ namespace DragonWilds {
                 }
             }
         }
-        if (itemsReady && recipesReady)
+        if (itemsReady && recipesReady && registrationsComplete)
         {
             // Never prune from the first apparently complete view. A second
             // identical capture must prove that late native and mod
@@ -578,7 +622,7 @@ namespace DragonWilds {
             {
                 m_registrySummaryReported = true;
                 PS::Log<LogLevel::Verbose>(STR(
-                    "Persistence registry ready: items={}, recipes={}, quests={}, journal={}.\n"),
+                    "Persistence registry ready from base game and loaded paks: items={}, recipes={}, quests={}, journal={}.\n"),
                     snapshot.Items.size(), snapshot.Recipes.size(),
                     snapshot.Quests.size(), snapshot.Journals.size());
             }
@@ -586,29 +630,55 @@ namespace DragonWilds {
         else
         {
             // Never leave a previous world's registry available to Safe Clean
-            // when the current world could not prove a complete item/recipe map.
+            // when the current world could not prove complete item/recipe maps
+            // and successful primary + network registration for loaded assets.
             m_registryCandidateFingerprint.clear();
             m_registryCandidatePasses = 0;
             PS::SaveCleanup::PublishRegistry({});
         }
     }
 
-    void DragonWildsDataRegistrar::RegisterMissing(UClass* dataClass, UObject* subsystem)
+    bool DragonWildsDataRegistrar::RegisterMissing(UClass* dataClass, UObject* subsystem)
     {
         auto* idMapProperty = CastField<FMapProperty>(PropertyHelper::GetPropertyByName(subsystem->GetClassPrivate(), TEXT("PersistenceIDToDataMap")));
         if (!idMapProperty)
         {
             PS::Log<LogLevel::Warning>(STR("PersistenceIDToDataMap was not found on {}.\n"), subsystem->GetClassPrivate()->GetName());
-            return;
+            return false;
         }
 
-        std::unordered_set<RC::StringType> known;
+        bool complete = true;
+
+        std::unordered_map<RC::StringType, UObject*> known;
         UECustom::FScriptMapHelper idMap(idMapProperty, idMapProperty->ContainerPtrToValuePtr<void>(subsystem));
-        idMap.ForEachPair([&](void* keyPtr, void*) {
+        idMap.ForEachPair([&](void* keyPtr, void* valuePtr) {
             auto* key = static_cast<FString*>(keyPtr);
-            if (key->GetCharArray().Num() > 1)
+            UObject* value = nullptr;
+            std::memcpy(&value, valuePtr, sizeof(value));
+            if (key->GetCharArray().Num() > 1 && value)
             {
-                known.insert(RC::StringType(**key));
+                const auto identity = RC::StringType(**key);
+                auto* property = value->GetClassPrivate()
+                    ? CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
+                        value->GetClassPrivate(), TEXT("PersistenceID")))
+                    : nullptr;
+                const auto roundTrip = property
+                    ? property->GetPropertyValue(
+                        property->ContainerPtrToValuePtr<void>(value))
+                    : FString{};
+                if (!property || roundTrip.GetCharArray().Num() <= 1
+                    || RC::StringType(*roundTrip) != identity
+                    || !known.emplace(identity, value).second)
+                {
+                    complete = false;
+                    PS::Log<LogLevel::Error>(STR(
+                        "Persistence registry entry '{}' does not round-trip to one live data asset; startup cleanup is disabled.\n"),
+                        **key);
+                }
+            }
+            else
+            {
+                complete = false;
             }
         });
 
@@ -642,9 +712,12 @@ namespace DragonWilds {
                 auto idString = RC::StringType(*persistenceId);
                 candidate->SetRootSet();
 
-                if (!known.contains(idString))
+                const auto existing = known.find(idString);
+                if (existing == known.end())
                 {
-                    InsertIntoMap(subsystem, TEXT("PersistenceIDToDataMap"), persistenceId, candidate);
+                    if (!InsertIntoMap(subsystem, TEXT("PersistenceIDToDataMap"), persistenceId, candidate))
+                        throw std::runtime_error(
+                            "primary persistence registry rejected the asset");
                     InsertIntoMap(subsystem, TEXT("InternalNameToDataMap"), persistenceId, candidate);
 
                     if (auto* nameProperty = CastField<FStrProperty>(PropertyHelper::GetPropertyByName(candidateClass, TEXT("InternalName"))))
@@ -656,8 +729,11 @@ namespace DragonWilds {
                         }
                     }
 
-                    known.insert(idString);
+                    known.emplace(idString, candidate);
                 }
+                else if (existing->second != candidate)
+                    throw std::runtime_error(
+                        "duplicate PersistenceID resolves to multiple live assets");
 
                 if (EnsureNetworkIdentity(candidate, subsystem) < 0)
                 {
@@ -666,10 +742,12 @@ namespace DragonWilds {
             }
             catch (const std::exception& e)
             {
+                complete = false;
                 PS::Log<LogLevel::Error>(STR("Failed registering '{}': {}\n"),
                     candidate ? candidate->GetName() : STR("<null>"), PS::ToWideSafe(e.what()));
             }
         }
+        return complete;
     }
 
     int32_t DragonWildsDataRegistrar::EnsureNetworkIdentity(

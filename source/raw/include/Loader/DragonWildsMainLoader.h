@@ -3,6 +3,8 @@
 #include <vector>
 #include <atomic>
 #include <functional>
+#include <string>
+#include <utility>
 #include "Loader/DragonWildsModLoaderBase.h"
 #include "Misc/DragonWildsDataRegistrar.h"
 #include "SDK/Classes/Custom/UDataTableStore.h"
@@ -37,6 +39,9 @@ namespace DragonWilds {
 		void PreInitialize();
 
 		void Initialize();
+        void AbortStartup(const std::string& stage, const std::string& reason);
+        void SetFatalStartupHandler(std::function<void(std::string)> handler)
+        { m_fatalStartupHandler = std::move(handler); }
 	private:
         std::vector<std::unique_ptr<DragonWildsModLoaderBase>> m_loaders;
 
@@ -72,6 +77,7 @@ namespace DragonWilds {
         void SetupAlternativePakPathReader();
 
         bool InitCore();
+        void FailStartup(const std::string& reason);
 
         void RegisterLoader(std::unique_ptr<DragonWildsModLoaderBase> newLoader);
 
@@ -90,6 +96,8 @@ namespace DragonWilds {
         bool m_orderResolved = false;
         std::atomic<bool> m_gameInstanceLoadersStarted{false};
         std::atomic<bool> m_coreStartupComplete{false};
+        std::atomic<bool> m_coreStartupFailed{false};
+        std::function<void(std::string)> m_fatalStartupHandler;
         RC::Unreal::Hook::GlobalCallbackId m_coreStartupCallbackId = RC::Unreal::Hook::ERROR_ID;
         std::vector<RC::StringType> m_orderedMods;
 

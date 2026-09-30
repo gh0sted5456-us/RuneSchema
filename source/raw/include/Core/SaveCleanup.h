@@ -130,12 +130,13 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
                 retained.push_back(row);continue;
             }
             const auto id=row.at("QuestId").get<std::string>();
-            if(!ids.insert(id).second) {
+            const bool duplicate=!ids.insert(id).second;
+            const bool registryOrphan=registry && registry->QuestsComplete && !registry->Quests.contains(id);
+            if(duplicate && !registryOrphan) {
                 retained.push_back(row);continue;
             }
             const auto owner=DragonWilds::Quests::OwnedBy(row);
             if(!owner.empty())++result.Owners[owner];
-            const bool registryOrphan=registry && registry->QuestsComplete && !registry->Quests.contains(id);
             if(!registryOrphan && (owner.empty() || !selected.contains(owner))){retained.push_back(row);continue;}
             // An identity absent from the complete native registry cannot be
             // resumed, so stale phase markers must not preserve it. The
@@ -152,7 +153,14 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
         progress["Quests"]=std::move(retained);
         if(progress.contains("QuestTracked")) {
             if(!progress.at("QuestTracked").is_string())throw std::runtime_error("Unsupported tracked quest identity");
-            if(removed.contains(progress.at("QuestTracked").get<std::string>()))progress["QuestTracked"]="";
+            const auto tracked=progress.at("QuestTracked").get<std::string>();
+            const bool unresolvedTracked=registry && registry->QuestsComplete
+                && !tracked.empty() && !registry->Quests.contains(tracked);
+            if(removed.contains(tracked) || unresolvedTracked) {
+                if(unresolvedTracked && !removed.contains(tracked))
+                    result.Removed.push_back({{"Kind","Quest tracked"},{"Id",tracked},{"Mod","Registry-unknown (owner unavailable)"}});
+                progress["QuestTracked"]="";
+            }
         }
         if(!unresolvedOnly && progress.contains("QuestLocations") && !locations.empty()) {
             if(!progress.at("QuestLocations").is_array())throw std::runtime_error("Unsupported quest location save layout");
