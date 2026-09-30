@@ -148,7 +148,8 @@ if(PROJECT_IS_TOP_LEVEL)
     add_test(NAME runtime-widget-v08-contract COMMAND runtime-widget-v08-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/DragonWildsBlueprintModLoader.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsBlueprintModLoader.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../loaders/blueprints.md")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../loaders/blueprints.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../examples/RestoreAppearance/blueprints/10-RestoreAppearance.jsonc")
     add_executable(ue4ss-bootstrap-contract ../tests/ue4ss-bootstrap-contract.cpp)
     add_test(NAME ue4ss-bootstrap-contract COMMAND ue4ss-bootstrap-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/build.ps1"
