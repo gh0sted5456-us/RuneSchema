@@ -68,9 +68,11 @@ triplet must be complete. The catalog rejects symlinks inside `paks/`.
 Unrelated regular files are ignored; only supported container extensions participate in package validation.
 
 `plugins.txt` contains one `Plugin.Id: 1` or `Plugin.Id: 0` entry per line.
-It controls enablement and deterministic order. Dependencies refine that order;
-cycles fall back to manifest order. A DLL failure does not prevent a complete
-PAK triplet from being discovered and mounted.
+It controls enablement and the preferred top-to-bottom order. That order is
+preserved unless a declared dependency requires its provider to load first.
+Unlisted plugins are appended deterministically; dependency cycles use the
+preferred order as the best-effort fallback. A DLL failure does not prevent a
+complete PAK triplet from being discovered and mounted.
 
 Required DLL exports:
 
