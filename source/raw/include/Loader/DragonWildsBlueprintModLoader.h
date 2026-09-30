@@ -90,6 +90,7 @@ namespace DragonWilds {
         void ClearWorldVisualEffects();
         void ClearRuntimeWidgetState();
         void ClearRuntimeUiInstances();
+        void RemoveRuntimeUiInstancesForOwner(RC::Unreal::UObject* owner);
         void ApplyDeferredPatches(RC::Unreal::UObject* object);
         void RegisterRuntimeWidgetRules(
             const std::string& identity,
