@@ -5,7 +5,7 @@
 
 namespace DragonWilds::CharacterCustomizationLayout {
 inline constexpr int MaximumColumns = 8;
-inline constexpr std::size_t MaximumRowsPerColumn = 16;
+inline constexpr std::size_t MaximumRowsPerColumn = 12;
 
 inline int RequiredColumns(std::size_t optionCount, int currentColumns)
 {

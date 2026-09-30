@@ -17,8 +17,9 @@ int main(int argc, char** argv) {
     const auto beard=nlohmann::json::parse(Read(argv[3]));
     const auto source=Read(argv[4]);
     using DragonWilds::CharacterCustomizationLayout::RequiredColumns;
-    if(RequiredColumns(48,4)!=4 || RequiredColumns(76,4)!=5
-        || RequiredColumns(100,5)!=7 || RequiredColumns(1000,4)!=8
+    if(RequiredColumns(48,4)!=4 || RequiredColumns(49,4)!=5
+        || RequiredColumns(76,4)!=7 || RequiredColumns(85,4)!=8
+        || RequiredColumns(100,5)!=8 || RequiredColumns(1000,4)!=8
         || RequiredColumns(24,8)!=8)
         throw std::runtime_error("Dynamic character customization column policy regressed");
     for(const auto* token:{"IsDirectDataAssetPatch", "DirectDataAssetOperations",
