@@ -32,9 +32,7 @@ FetchContent_Declare(
     # compiles one DLL per supported host from this shared RuneSchema source.
     GIT_TAG ${RUNESCHEMA_UE4SS_TAG}
 )
-message(STATUS "RuneSchema: configuring pinned UE4SS core dependency (UVTD is disabled for embedded builds)")
 FetchContent_MakeAvailable(UE4SS)
-message(STATUS "RuneSchema: pinned UE4SS core dependency configured")
 
 if(MSVC AND TARGET UE4SS)
     target_link_options(UE4SS PRIVATE "/PDBALTPATH:UE4SS.pdb")
