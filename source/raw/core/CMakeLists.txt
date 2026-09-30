@@ -153,6 +153,12 @@ if(PROJECT_IS_TOP_LEVEL)
     add_test(NAME ue4ss-bootstrap-contract COMMAND ue4ss-bootstrap-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/build.ps1"
         "${CMAKE_CURRENT_SOURCE_DIR}/../CMakeLists.txt")
+    add_executable(order-jsonc-contract ../tests/order-jsonc-contract.cpp)
+    add_test(NAME order-jsonc-contract COMMAND order-jsonc-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/ModLoadOrder.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Runtime/PluginCatalog.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/dllmain.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../plugins/plugins.jsonc")
     add_executable(persistence-mode-contract ../tests/persistence-mode-contract.cpp)
     add_test(NAME persistence-mode-contract COMMAND persistence-mode-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Utility/Config.h"
@@ -278,8 +284,7 @@ if(PROJECT_IS_TOP_LEVEL)
     add_test(NAME documentation-contract COMMAND documentation-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../../AUTHORING-GUIDE.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../LOADER-WALKTHROUGHS.md"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../plugins/plugins.txt"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../../clean-base/RuneSchema/plugins/plugins.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../plugins/plugins.jsonc"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../API-REFERENCE.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Runtime/RuneSchemaPluginApi.h")
     add_executable(recipe-placement-contract ../tests/recipe-placement-contract.cpp)
