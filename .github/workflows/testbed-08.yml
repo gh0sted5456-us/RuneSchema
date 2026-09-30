@@ -69,6 +69,11 @@ jobs:
             Copy-Item -LiteralPath $_.FullName -Destination $stageRoot -Recurse -Force
           }
 
+          # Keep the full buildable source tree, but never ship machine/CI-specific
+          # generated CMake/Ninja state. The recipient must configure locally.
+          Remove-Item -Recurse -Force (Join-Path $stageRoot "build/cache") -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force (Join-Path $stageRoot "build/logs") -ErrorAction SilentlyContinue
+
           $required = @(
             (Join-Path $stageRoot "Build RuneSchema.bat"),
             (Join-Path $stageRoot "build/build.ps1"),
