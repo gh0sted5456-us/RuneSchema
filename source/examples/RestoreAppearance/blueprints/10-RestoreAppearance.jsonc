@@ -1,52 +1,40 @@
-// Game Pass / WinGDK does not expose the native Edit Appearance button.
-// RuneSchema 0.8 creates a transient replacement and routes it into the
-// existing Character.GoToEditAppearance flow. Steam/GOG is left untouched.
+// Restore the game's own cooked Edit Appearance controls on Gamepass/WinGDK.
+// No transient $RuntimeUI and no synthetic click binding are needed: the native
+// WBP_DomControllerPromptButton already carries IA_UI_EditAppearance.
 {
   "/Game/UI/MainMenu/WBP_MainMenu_CharacterSelect": {
-    "$RuntimeUI": {
+    "$RuntimeWidget": {
       "$Storefront": "GamePass",
-      "RestoreEditAppearance": {
-        "ZOrder": 96,
+
+      "Character.EditAppearanceButtonSBox": {
         "$When": "Resolved",
-        "Root": {
-          "Type": "CanvasPanel",
-          "Name": "RestoreAppearanceCanvas",
-          "Children": [
-            {
-              "Type": "Button",
-              "Name": "RuneSchemaEditAppearanceButton",
-              "bIsEnabled": true,
-              "$Bind": {
-                "Event": "OnClicked",
-                "Target": "Character",
-                "Function": "GoToEditAppearance"
-              },
-              "Slot": {
-                "LayoutData": {
-                  "Offsets": {
-                    "Left": -130.0,
-                    "Top": -150.0,
-                    "Right": 260.0,
-                    "Bottom": 44.0
-                  },
-                  "Anchors": {
-                    "Minimum": { "X": 0.5, "Y": 1.0 },
-                    "Maximum": { "X": 0.5, "Y": 1.0 }
-                  },
-                  "Alignment": { "X": 0.0, "Y": 0.0 }
-                },
-                "bAutoSize": false
-              },
-              "Children": [
-                {
-                  "Type": "TextBlock",
-                  "Name": "RuneSchemaEditAppearanceText",
-                  "Text": "EDIT APPEARANCE"
-                }
-              ]
-            }
-          ]
-        }
+        "$Find": {
+          "Scope": "WidgetTree",
+          "Name": "EditAppearanceButtonSBox"
+        },
+        "Visibility": "Visible"
+      },
+
+      "Character.EditAppearanceButton": {
+        "$When": "Resolved",
+        "$Find": {
+          "Scope": "WidgetTree",
+          "Name": "EditAppearanceButton"
+        },
+        "Visibility": "Visible",
+        "bIsEnabled": true,
+        "RenderOpacity": 1.0
+      },
+
+      "InputLegend_EditAppearance": {
+        "$When": "Resolved",
+        "$Find": {
+          "Scope": "WidgetTree",
+          "Name": "InputLegend_EditAppearance"
+        },
+        "Visibility": "Visible",
+        "bIsEnabled": true,
+        "RenderOpacity": 1.0
       }
     }
   }
