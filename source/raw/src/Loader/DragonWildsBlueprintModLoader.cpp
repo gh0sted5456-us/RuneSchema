@@ -356,6 +356,46 @@ namespace DragonWilds {
         m_runtimeUiTearingDown = false;
     }
 
+    void DragonWildsBlueprintModLoader::RemoveRuntimeUiInstancesForOwner(UObject* owner)
+    {
+        if (!owner || m_runtimeUiTearingDown) return;
+
+        m_runtimeUiTearingDown = true;
+        for (auto it = m_runtimeUiInstances.begin(); it != m_runtimeUiInstances.end();)
+        {
+            auto* instanceOwner = it->second.Owner.Get();
+            if (instanceOwner != owner)
+            {
+                ++it;
+                continue;
+            }
+
+            if (auto* widget = it->second.Widget.Get())
+            {
+                try
+                {
+                    const auto removeName = RC::StringType(TEXT("RemoveFromParent"));
+                    auto* remove = widget->GetFunctionByNameInChain(removeName.c_str());
+                    if (remove && remove->GetParmsSize() == 0)
+                        ActorHelper::FunctionCall(widget, remove).Invoke();
+                }
+                catch (...) {}
+            }
+            it = m_runtimeUiInstances.erase(it);
+        }
+
+        for (auto it = m_runtimeWidgetObservedTargets.begin();
+             it != m_runtimeWidgetObservedTargets.end();)
+        {
+            if (it->second.Owner.Get() == owner)
+                it = m_runtimeWidgetObservedTargets.erase(it);
+            else
+                ++it;
+        }
+
+        m_runtimeUiTearingDown = false;
+    }
+
     void DragonWildsBlueprintModLoader::SetActorInitializedObserver(
         std::function<void(AActor*)> observer)
     {
@@ -1585,6 +1625,35 @@ namespace DragonWilds {
     {
         if (!source || (m_runtimeWidgetRules.empty() && m_runtimeUiRules.empty())) return;
 
+        // RuntimeUI is viewport-owned, but its logical lifetime is the live
+        // owner screen. Character-select deactivation does not tear down the
+        // UWorld, so remove transient UI when that owner closes instead of
+        // letting it leak into later menus/gameplay.
+        if (function)
+        {
+            const auto eventName = RC::to_string(function->GetName());
+            const bool ownerClosing =
+                eventName == "Destruct"
+                || eventName == "NativeDestruct"
+                || eventName == "OnDeactivated"
+                || eventName == "BP_OnDeactivated";
+            if (ownerClosing)
+            {
+                bool removedOwnerUi = false;
+                for (const auto& uiRule : m_runtimeUiRules)
+                {
+                    auto* owner = FindRuntimeWidgetOwner(source, uiRule.OwnerClass);
+                    if (owner == source)
+                    {
+                        RemoveRuntimeUiInstancesForOwner(owner);
+                        removedOwnerUi = true;
+                    }
+                }
+                if (removedOwnerUi)
+                    return;
+            }
+        }
+
         std::unordered_set<UObject*> ownersToRefresh;
 
         if (const auto observed = m_runtimeWidgetObservedTargets.find(source);
@@ -1600,10 +1669,12 @@ namespace DragonWilds {
 
         for (const auto& triggerRule : m_runtimeWidgetRules)
         {
-            auto* owner = FindRuntimeWidgetOwner(source, triggerRule.OwnerClass);
-            if (!owner) continue;
-            if (source == owner
-                || RuntimeWidgetPathContains(owner, source, triggerRule.WidgetPath))
+            // A native widget can be collapsed before it emits any useful
+            // ProcessEvent traffic of its own. Once an event originates
+            // anywhere inside the matching live owner hierarchy, refresh the
+            // owner's runtime rules and let exact path/$Find resolution decide
+            // whether the target exists. Re-entry is still guarded per rule.
+            if (auto* owner = FindRuntimeWidgetOwner(source, triggerRule.OwnerClass))
                 ownersToRefresh.emplace(owner);
         }
         for (const auto& uiRule : m_runtimeUiRules)
