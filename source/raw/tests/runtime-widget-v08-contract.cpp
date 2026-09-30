@@ -88,14 +88,18 @@ int main(int argc, char** argv) {
     Require(docs, "## RuneSchema-owned transient UI");
     Require(docs, "64 nodes");
     Require(docs, "does **not** create a Blueprint class");
-    Require(restoreAppearance, "\"$RuntimeUI\"");
+    Require(restoreAppearance, "\"$RuntimeWidget\"");
     Require(restoreAppearance, "\"$Storefront\": \"GamePass\"");
-    Require(restoreAppearance, "\"Type\": \"Button\"");
-    Require(restoreAppearance, "\"Event\": \"OnClicked\"");
-    Require(restoreAppearance, "\"Target\": \"Character\"");
-    Require(restoreAppearance, "\"Function\": \"GoToEditAppearance\"");
-    if (restoreAppearance.find("Character.EditAppearanceButton") != std::string::npos)
-        throw std::runtime_error("Restore Appearance must not depend on the missing Gamepass cooked button");
+    Require(restoreAppearance, "\"Character.EditAppearanceButtonSBox\"");
+    Require(restoreAppearance, "\"Character.EditAppearanceButton\"");
+    Require(restoreAppearance, "\"InputLegend_EditAppearance\"");
+    Require(restoreAppearance, "\"Name\": \"EditAppearanceButtonSBox\"");
+    Require(restoreAppearance, "\"Name\": \"EditAppearanceButton\"");
+    Require(restoreAppearance, "\"Name\": \"InputLegend_EditAppearance\"");
+    if (restoreAppearance.find("\"$RuntimeUI\"") != std::string::npos)
+        throw std::runtime_error("Restore Appearance must use the native cooked widget, not transient RuntimeUI");
+    if (restoreAppearance.find("\"$Bind\"") != std::string::npos)
+        throw std::runtime_error("Restore Appearance must keep the native IA_UI_EditAppearance action wiring");
 
     std::cout << "RuneSchema .8 runtime-widget contract passed.\n";
 }
