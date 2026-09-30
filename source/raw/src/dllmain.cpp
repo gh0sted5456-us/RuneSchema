@@ -641,7 +641,7 @@ public:
          ImGui::Text("Directive syntax:");
          ImGui::SameLine(); ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "$Patch");
          ImGui::SameLine(); ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.25f, 1.0f), "$Target");
-        ImGui::TextWrapped("Priority tiers: AA_ first; 00_, 01_, and other numeric prefixes ascending; ordinary folders; ZZ_ last. AA_ and ZZ_ folders are enabled implicitly and stay out of the generated file. Add one to runeschema.txt manually with 0 to disable it or 1 to keep an explicit enable override. Changes take effect on the next game load.");
+        ImGui::TextWrapped("Explicit runeschema.txt rows load top-to-bottom exactly as written. Prefix tiers are used only for unlisted/default discovery. Omitted AA_ folders remain implicit-first and omitted ZZ_ folders implicit-last; explicitly listing either makes its row authoritative. Changes take effect on the next game load.");
         if (ImGui::Button("Reload from disk") || !editor.loaded)
             RefreshLoadOrderEditor(editor, modsRoot, settings.loadOrder.strictValues);
         ImGui::SameLine();
