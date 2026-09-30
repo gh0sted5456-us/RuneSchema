@@ -23,7 +23,12 @@ jobs:
           $errors = $null
           [System.Management.Automation.Language.Parser]::ParseFile("$PWD/build/build.ps1", [ref]$tokens, [ref]$errors) | Out-Null
           if ($errors.Count -gt 0) {
-            $errors | ForEach-Object { Write-Error $_.Message }
+            $errors | ForEach-Object {
+              $line = $_.Extent.StartLineNumber
+              $column = $_.Extent.StartColumnNumber
+              Write-Host ("PowerShell parse error at line {0}, column {1}: {2}" -f $line, $column, $_.Message) -ForegroundColor Red
+              Write-Host ("  " + $_.Extent.Text) -ForegroundColor DarkYellow
+            }
             exit 1
           }
 
