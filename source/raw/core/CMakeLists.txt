@@ -153,6 +153,11 @@ if(PROJECT_IS_TOP_LEVEL)
     add_test(NAME ue4ss-bootstrap-contract COMMAND ue4ss-bootstrap-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/build.ps1"
         "${CMAKE_CURRENT_SOURCE_DIR}/../CMakeLists.txt")
+    add_executable(load-order-authority-contract ../tests/load-order-authority-contract.cpp)
+    add_test(NAME load-order-authority-contract COMMAND load-order-authority-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/ModLoadOrder.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Runtime/PluginCatalog.h")
     add_executable(persistence-mode-contract ../tests/persistence-mode-contract.cpp)
     add_test(NAME persistence-mode-contract COMMAND persistence-mode-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Utility/Config.h"
