@@ -243,6 +243,36 @@ event to an existing owner function without synthesizing Blueprint bytecode.
 instance per runtime-UI rule, removed from the viewport on world teardown, and
 recreated only after the prior owner/widget lifetime has ended.
 
+## Gamepass Edit Appearance replacement
+
+Steam/GOG already exposes the native Edit Appearance control. On Gamepass /
+WinGDK, RuneSchema 0.8 can create a transient replacement instead of depending
+on a cooked button that is not present in the live character-select tree.
+
+The Restore Appearance example uses a Gamepass-gated `$RuntimeUI` CanvasPanel
+with a transient `Button`. Its reflected `OnClicked` delegate is bound
+directly to `Character.GoToEditAppearance`, so the game still owns the actual
+character-editor transition.
+
+```jsonc
+"$RuntimeUI": {
+  "$Storefront": "GamePass",
+  "RestoreEditAppearance": {
+    "Root": {
+      "Type": "Button",
+      "$Bind": {
+        "Event": "OnClicked",
+        "Target": "Character",
+        "Function": "GoToEditAppearance"
+      }
+    }
+  }
+}
+```
+
+This path intentionally does not modify Steam/GOG and does not require
+`Character.EditAppearanceButton` to exist on Gamepass.
+
 ## Simple rules
 
 - Use `/blueprints` only for supported reflected defaults on an existing loaded class or component.
@@ -281,7 +311,7 @@ It does not create new widgets or functions.
 ## Working examples
 
 - [Fixed Menu: character-creation labels](../examples/FixedMenu/blueprints/character_creation_text.jsonc)
-- [Restore Appearance: live CommonUI button and native action](../examples/RestoreAppearance/blueprints/10-RestoreAppearance.jsonc)
+- [Restore Appearance: Gamepass-only transient button routed to the native character editor](../examples/RestoreAppearance/blueprints/10-RestoreAppearance.jsonc)
 
 ---
 
