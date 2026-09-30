@@ -159,7 +159,7 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
     std::vector<Plugin> ordered;ordered.reserve(result.size());std::vector<bool> emitted(result.size());
     bool progress=true;while(progress){progress=false;for(size_t i=0;i<result.size();++i)if(valid[i]&&!emitted[i]&&indegree[i]==0){emitted[i]=true;progress=true;ordered.push_back(result[i]);for(size_t consumer=0;consumer<result.size();++consumer)if(valid[consumer]&&!emitted[consumer])for(const auto& dependency:result[consumer].Dependencies)if(dependency.first==result[i].Id&&indegree[consumer])--indegree[consumer];}}
     for(size_t i=0;i<result.size();++i)if(valid[i]&&!emitted[i]) {
-        if(diagnostics)diagnostics->push_back(result[i].Id+": dependency cycle detected; using manifest order");
+        if(diagnostics)diagnostics->push_back(result[i].Id+": dependency cycle detected; using preferred plugins.txt order");
         ordered.push_back(result[i]);
     }
     return ordered;
