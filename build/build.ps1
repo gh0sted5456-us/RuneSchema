@@ -706,6 +706,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
             @(
                 'vendor-offers','loader-schemas','npc-catalog','player-activity-events',
                 'quest-gameplay-owner','quest-native-contract','quest-definition','event-definition',
+                'character-entry-recovery-contract',
                 'dialogue-definition','building-preview-safety','building-clone-contract',
                 'static-building-assembly-contract','owned-save-cleanup-contract',
                 'resource-additional-drops','resource-scale-idempotence','niagara-preset',

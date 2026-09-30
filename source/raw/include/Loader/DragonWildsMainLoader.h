@@ -6,6 +6,7 @@
 #include <string>
 #include <utility>
 #include "Loader/DragonWildsModLoaderBase.h"
+#include "Core/CharacterEntryRecovery.h"
 #include "Misc/DragonWildsDataRegistrar.h"
 #include "SDK/Classes/Custom/UDataTableStore.h"
 #include "safetyhook.hpp"
@@ -54,6 +55,7 @@ namespace DragonWilds {
         UECustom::UDataTableRegistry m_datatableRegistry;
 
         DragonWildsDataRegistrar m_dataRegistrar;
+        CharacterEntryRecovery m_characterEntryRecovery;
         PS::Network::RegistryBridge m_registryBridge;
 
         void AutoReload(const std::filesystem::path& filePath);

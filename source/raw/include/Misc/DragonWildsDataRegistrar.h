@@ -7,6 +7,7 @@
 #include <vector>
 #include "Unreal/NameTypes.hpp"
 #include "Unreal/Hooks.hpp"
+#include "Core/PersistencePruner.h"
 
 namespace RC::Unreal {
     class UObject;
@@ -34,8 +35,7 @@ namespace DragonWilds {
         bool m_preflightingCharacterJson = false;
         bool m_characterJsonBindingWarningReported = false;
         bool m_registrySummaryReported = false;
-        bool m_startupCleanupPending = true;
-        bool m_cleanupDeferredReported = false;
+        PS::PersistencePruner m_pruner;
         std::string m_registryCandidateFingerprint;
         unsigned m_registryCandidatePasses = 0;
 

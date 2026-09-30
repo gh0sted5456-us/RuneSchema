@@ -23,7 +23,7 @@ static void Check(bool value, const char* message)
 
 int main(int argc, char** argv)
 {
-    Check(argc >= 8, "host, loaders, player rules, registrar, save viewer, and cleanup panel supplied");
+    Check(argc >= 9, "host, loaders, player rules, registrar, save viewer, cleanup panel, and pruner supplied");
     const auto host = Read(argv[1]);
     const auto mainLoader = Read(argv[2]);
     const auto buildingLoader = Read(argv[3]);
@@ -31,6 +31,7 @@ int main(int argc, char** argv)
     const auto registrar = Read(argv[5]);
     const auto saveViewer = Read(argv[6]);
     const auto cleanupPanel = Read(argv[7]);
+    const auto pruner = Read(argv[8]);
     Check(host.find("RSDragonwilds") != std::string::npos
         && host.find("Saved") != std::string::npos
         && host.find("RuneSchema") != std::string::npos,
@@ -61,14 +62,14 @@ int main(int argc, char** argv)
     Check(registrar.find("ScrubLocalCharacterFiles") == std::string::npos
         && registrar.find("ConfigFiles::Write") == std::string::npos,
         "automatic cleanup writes directly to stored character files");
-    Check(registrar.find("Default.json") != std::string::npos
-        && registrar.find("ConfigFiles::Read") != std::string::npos,
+    Check(pruner.find("Default.json") != std::string::npos
+        && pruner.find("ConfigFiles::Read") != std::string::npos,
         "appearance recovery does not read the canonical default profile");
     Check(registrar.find("ScrubCharacterJsonBeforeLoad") != std::string::npos,
         "shared native character-load preflight is missing");
-    Check(registrar.find("m_startupCleanupPending") != std::string::npos
+    Check(pruner.find("s_cleanupConsumedForProcess") != std::string::npos
         && registrar.find("EnsureCharacterJsonPreflightHook") != std::string::npos
-        && registrar.find("[SAVE-CLEANER][BOUNDARY-READY]") != std::string::npos,
+        && registrar.find("[PERSISTENCE-PRUNER][BOUNDARY-READY]") != std::string::npos,
         "automatic recovery cannot reach the first eligible native character load");
     Check(registrar.find("PublishRegistry") != std::string::npos
         && registrar.find("snapshot.Journals") != std::string::npos,
@@ -83,9 +84,9 @@ int main(int argc, char** argv)
         && registrar.find("OwnedContent::CommitSnapshot") == std::string::npos,
         "automatic pruning does not follow pre-world registration without a manifest or ledger");
     Check(registrar.find("fingerprint != m_registryCandidateFingerprint") != std::string::npos
-        && registrar.find("m_checkedCharacters") == std::string::npos
-        && registrar.find("m_startupCleanupPending = false;") != std::string::npos
-        && registrar.find("if (cleaned.Removed.empty())") != std::string::npos,
+        && pruner.find("m_checkedCharacters") == std::string::npos
+        && pruner.find("s_cleanupConsumedForProcess.exchange(") != std::string::npos
+        && pruner.find("if (cleaned.Removed.empty())") != std::string::npos,
         "automatic pruning is not globally gated by a stable registry and a nonempty removal plan");
     Check(registrar.find("for (auto* subsystem : subsystems)") != std::string::npos
         && registrar.find("registrationsComplete = RegisterMissing(dataClass, subsystem)") != std::string::npos,

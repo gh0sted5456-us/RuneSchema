@@ -2,7 +2,6 @@
 #include <cstring>
 #include <algorithm>
 #include <limits>
-#include <map>
 #include <ranges>
 #include <unordered_map>
 #include <unordered_set>
@@ -17,9 +16,6 @@
 #include "Unreal/World.hpp"
 #include "Unreal/Engine/UDataTable.hpp"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
-#include "SDK/Classes/KismetSystemLibrary.h"
-#include "SDK/Classes/TSoftObjectPtr.h"
-#include "SDK/Structs/FSoftObjectPath.h"
 #include "SDK/Structs/Custom/FManagedValue.h"
 #include "SDK/Structs/Custom/FScriptArrayHelper.h"
 #include "SDK/Structs/Custom/FScriptMapHelper.h"
@@ -29,8 +25,6 @@
 #include "Utility/Logging.h"
 #include "Core/SaveCleanup.h"
 #include "Core/SaveRegistrySnapshot.h"
-#include "Core/ConfigFiles.h"
-#include "Runtime/HostServices.h"
 #include "Misc/DragonWildsDataRegistrar.h"
 
 using namespace RC;
@@ -66,32 +60,6 @@ namespace DragonWilds {
         TEXT("/Script/Dominion.DominionPlayerController:LoadStateFromJson"),
     };
 
-    static bool ValidAppearanceReference(
-        const std::string& tablePath, const std::string& rowName)
-    {
-        if (tablePath.empty() || rowName.empty()) return false;
-        const auto path = RC::to_generic_string(tablePath);
-        auto* object = UECustom::UObjectGlobals::StaticFindObject<UObject*>(
-            nullptr, nullptr, path.c_str(), false);
-        if (!object)
-        {
-            UECustom::TSoftObjectPtr<UObject> soft{UECustom::FSoftObjectPath(path)};
-            object = UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
-        }
-        if (!object || !object->IsA(UDataTable::StaticClass())) return false;
-        const FName row(RC::to_generic_string(rowName), FNAME_Find);
-        return row != NAME_None
-            && static_cast<UDataTable*>(object)->FindRowUnchecked(row);
-    }
-
-    static std::optional<nlohmann::json> ReadDefaultCharacterAppearance()
-    {
-        const auto path = PS::HostServices::StateDirectory().parent_path()
-            / "SaveCharacters" / "Default.json";
-        if (!std::filesystem::is_regular_file(path)) return std::nullopt;
-        return nlohmann::json::parse(PS::ConfigFiles::Read(path, 256 * 1024));
-    }
-
     static std::string RegistryFingerprint(
         const PS::SaveCleanup::RegistrySnapshot& snapshot)
     {
@@ -122,39 +90,11 @@ namespace DragonWilds {
         return result;
     }
 
-    static void ReportValidatedSavedItems(
-        const nlohmann::json& source,
-        const PS::SaveCleanup::RegistrySnapshot& registry)
-    {
-        if (!source.contains("GameProgress")
-            || !source.at("GameProgress").is_object())
-            return;
-        const auto& game = source.at("GameProgress");
-        std::set<std::pair<std::string, std::string>> reported;
-        for (const auto* section : { "Inventory", "PersonalInventory", "Loadout" })
-        {
-            if (!game.contains(section) || !game.at(section).is_object()) continue;
-            for (const auto& entry : game.at(section).items())
-            {
-                const auto& row = entry.value();
-                if (!row.is_object()) continue;
-                const auto id = row.value("ItemData", std::string{});
-                if (id.empty() || !registry.Items.contains(id)
-                    || !reported.emplace(section, id).second)
-                    continue;
-                PS::Log<LogLevel::Verbose>(
-                    STR("[SAVE-CLEANER][REGISTRY-VALIDATED] Retaining {} persistence ID '{}' because it is present in the completed live item registry (base game plus loaded paks).\n"),
-                    PS::ToWideSafe(section), PS::ToWideSafe(id.c_str()));
-            }
-        }
-    }
-
     void DragonWildsDataRegistrar::Initialize()
     {
         if (!m_initialized)
         {
-            m_startupCleanupPending = true;
-            m_cleanupDeferredReported = false;
+            m_pruner.PrepareForStartup();
             if (!ResolveBindings())
             {
                 return;
@@ -209,8 +149,6 @@ namespace DragonWilds {
         m_functionHooks.clear();
         m_registryCandidateFingerprint.clear();
         m_registryCandidatePasses = 0;
-        m_startupCleanupPending = false;
-        m_cleanupDeferredReported = false;
         PS::SaveCleanup::PublishRegistry({});
     }
 
@@ -277,7 +215,7 @@ namespace DragonWilds {
                     catch (const std::exception& error)
                     {
                         PS::Log<LogLevel::Error>(STR(
-                            "[SAVE-CLEANER][PREFLIGHT][UNCHANGED] Character JSON was not modified: {}.\n"),
+                            "[PERSISTENCE-PRUNER][PREFLIGHT][UNCHANGED] Character JSON was not modified: {}.\n"),
                             PS::ToWideSafe(error.what()));
                     }
                     catch (...) {}
@@ -336,7 +274,7 @@ namespace DragonWilds {
             {
                 m_characterJsonBindingWarningReported = true;
                 PS::Log<LogLevel::Warning>(STR(
-                    "[SAVE-CLEANER][BOUNDARY-DEFERRED] Found {} ambiguous native LoadStateFromJson functions; retrying when Dominion finishes loading.\n"),
+                    "[PERSISTENCE-PRUNER][BOUNDARY-DEFERRED] Found {} ambiguous native LoadStateFromJson functions; retrying when Dominion finishes loading.\n"),
                     matches.size());
             }
         }
@@ -353,7 +291,7 @@ namespace DragonWilds {
         m_characterJsonLoadFunction = characterJsonLoad;
         m_functionHooks.emplace_back(characterJsonLoad, id);
         PS::Log<LogLevel::Normal>(
-            STR("[SAVE-CLEANER][BOUNDARY-READY] Native character preflight enabled through '{}'.\n"),
+            STR("[PERSISTENCE-PRUNER][BOUNDARY-READY] Mandatory native character preflight enabled through '{}'.\n"),
             characterJsonLoad->GetPathName());
         return true;
     }
@@ -361,139 +299,8 @@ namespace DragonWilds {
     void DragonWildsDataRegistrar::ScrubCharacterJsonBeforeLoad(
         UObject* context, UFunction* function, void* parameters)
     {
-        if (!m_startupCleanupPending || !context || !function || !parameters) return;
-        const auto registry = PS::SaveCleanup::ReadRegistry();
-        if (!registry || !registry->Ready())
-        {
-            if (!m_cleanupDeferredReported)
-            {
-                m_cleanupDeferredReported = true;
-                PS::Log<LogLevel::Warning>(STR(
-                    "[SAVE-CLEANER][DEFERRED] Initial character cleanup is waiting for the complete, stable item and recipe registries. No character data was changed.\n"));
-            }
-            return;
-        }
-
-        try
-        {
-            FStrProperty* jsonProperty = nullptr;
-            void* jsonAddress = nullptr;
-            nlohmann::json source;
-            for (auto* field : TFieldRange<FProperty>(
-                function, EFieldIterationFlags::Default))
-            {
-                if (!field->HasAnyPropertyFlags(CPF_Parm)
-                    || field->HasAnyPropertyFlags(CPF_ReturnParm | CPF_OutParm)
-                    || field->GetArrayDim() != 1
-                    || field->GetOffset_Internal() < 0
-                    || field->GetOffset_Internal() + field->GetElementSize()
-                        > function->GetParmsSize())
-                    continue;
-                auto* stringField = CastField<FStrProperty>(field);
-                if (!stringField) continue;
-                auto* address = stringField->ContainerPtrToValuePtr<void>(parameters);
-                const auto value = stringField->GetPropertyValue(address);
-                if (value.GetCharArray().Num() <= 1) continue;
-                const auto utf8 = RC::to_string(RC::StringType(*value));
-                if (utf8.find("\"GameProgress\"") == std::string::npos) continue;
-                auto parsed = nlohmann::json::parse(utf8, nullptr, true, true);
-                if (PS::SaveCleanup::ClassifyCharacterDocument(parsed)
-                    != PS::SaveCleanup::CharacterDocumentKind::Gameplay)
-                    continue;
-                if (jsonProperty)
-                    throw std::runtime_error(
-                        "character load exposed more than one gameplay JSON parameter");
-                jsonProperty = stringField;
-                jsonAddress = address;
-                source = std::move(parsed);
-            }
-            if (!jsonProperty) return;
-
-            const auto characterId = source.contains("meta_data")
-                && source.at("meta_data").is_object()
-                ? source.at("meta_data").value("char_guid", std::string{})
-                : std::string{};
-            if (characterId.empty()) return;
-
-            // A loaded pak participates in the same live subsystem map as base
-            // game content. Report positive item matches so diagnostics prove
-            // that modded equipment was retained for that reason; never infer
-            // orphan status from a vanilla catalog or an optional ledger.
-            ReportValidatedSavedItems(source, *registry);
-
-            // The early cleaner was safe because its completion latch was set
-            // only after the live registries were complete. Preserve that
-            // invariant at the shared load boundary, but consume it globally:
-            // this process gets exactly one eligible startup cleanup attempt,
-            // regardless of later character, world, or menu transitions.
-            m_startupCleanupPending = false;
-
-            PS::SaveCleanup::Preview cleaned{source};
-            cleaned = PS::SaveCleanup::Plan(
-                cleaned.Save, {}, false, registry.get(), false, true, true);
-            if (const auto defaults = ReadDefaultCharacterAppearance())
-            {
-                auto appearance = PS::SaveCleanup::RepairInvalidAppearance(
-                    cleaned.Save, *defaults, ValidAppearanceReference);
-                for (auto& row : appearance.Removed)
-                    cleaned.Removed.push_back(std::move(row));
-                cleaned.Save = std::move(appearance.Save);
-            }
-            if (cleaned.Removed.empty()) {
-                PS::Log<LogLevel::Verbose>(STR(
-                    "[SAVE-CLEANER][CHECKED] Initial character load contained no orphaned persistence references or invalid appearance handles.\n"));
-                return;
-            }
-
-            const auto serialized = cleaned.Save.dump();
-            const FString replacement(RC::to_generic_string(serialized).c_str());
-            jsonProperty->SetPropertyValue(jsonAddress, replacement);
-            const auto verified = RC::to_string(RC::StringType(
-                *jsonProperty->GetPropertyValue(jsonAddress)));
-            if (verified != serialized)
-                throw std::runtime_error(
-                    "clean character JSON did not survive reflected writeback");
-            std::map<std::string, std::size_t> counts;
-            std::size_t orphanCount = 0;
-            std::size_t appearanceCount = 0;
-            for (const auto& row : cleaned.Removed)
-            {
-                const auto kind = row.value("Kind", std::string("Unknown"));
-                if (kind == "Appearance") ++appearanceCount;
-                else
-                {
-                    ++orphanCount;
-                    ++counts[kind];
-                    const auto id = row.value("Id", std::string("<unknown>"));
-                    PS::Log<LogLevel::Warning>(
-                        STR("[SAVE-CLEANER][ORPHAN-REMOVED] {} persistence ID '{}' was absent from the completed live registry.\n"),
-                        PS::ToWideSafe(kind.c_str()),
-                        PS::ToWideSafe(id.c_str()));
-                }
-            }
-            std::string summary;
-            for (const auto& [kind, count] : counts)
-            {
-                if (!summary.empty()) summary += ", ";
-                summary += kind + "=" + std::to_string(count);
-            }
-            if (orphanCount)
-                PS::Log<LogLevel::Warning>(
-                    STR("[SAVE-CLEANER][ORPHANS-REMOVED] Removed {} truly orphaned persistence reference(s) after the startup registries stabilized ({}). This cleanup will not run again until the game is restarted.\n"),
-                    orphanCount, PS::ToWideSafe(summary.c_str()));
-            if (appearanceCount)
-                PS::Log<LogLevel::Warning>(
-                    STR("[SAVE-CLEANER][APPEARANCE-REPAIRED] Replaced {} invalid appearance handle(s) from Default.json.\n"),
-                    appearanceCount);
-        }
-        catch (const std::exception& error)
-        {
-            PS::Log<LogLevel::Error>(
-                STR("[SAVE-CLEANER][PREFLIGHT][UNCHANGED] Character JSON was not modified: {}.\n"),
-                PS::ToWideSafe(error.what()));
-        }
+        m_pruner.PruneBeforeCharacterLoad(context, function, parameters);
     }
-
 
     void DragonWildsDataRegistrar::RegisterAll()
     {

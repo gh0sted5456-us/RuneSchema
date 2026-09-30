@@ -136,6 +136,7 @@ namespace DragonWilds {
         GameInstanceInitCallbacks.clear();
         m_registryBridge.Stop();
         m_dataRegistrar.Shutdown();
+        m_characterEntryRecovery.Shutdown();
 
         if (AutoReloadCallbackId != Hook::ERROR_ID)
         {
@@ -159,6 +160,7 @@ namespace DragonWilds {
 
     void DragonWildsMainLoader::PreInitialize()
     {
+        m_characterEntryRecovery.Initialize();
         HookDatatableSerialize();
         SetupAlternativePakPathReader();
     }
@@ -658,6 +660,7 @@ namespace DragonWilds {
         GameInstanceInitCallbacks.clear();
         m_registryBridge.Stop();
         m_dataRegistrar.Shutdown();
+        m_characterEntryRecovery.Shutdown();
         m_loaders.clear();
         m_stringLoader = nullptr;
         m_buildingLoader = nullptr;

@@ -1,0 +1,194 @@
+#include "Core/PersistencePruner.h"
+
+#include <filesystem>
+#include <map>
+#include <optional>
+#include <set>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include "Core/ConfigFiles.h"
+#include "Core/SaveCleanup.h"
+#include "Core/SaveRegistrySnapshot.h"
+#include "Runtime/HostServices.h"
+#include "SDK/Classes/Custom/UObjectGlobals.h"
+#include "SDK/Classes/KismetSystemLibrary.h"
+#include "SDK/Classes/TSoftObjectPtr.h"
+#include "SDK/Structs/FSoftObjectPath.h"
+#include "Utility/Logging.h"
+#include "Unreal/CoreUObject/UObject/Class.hpp"
+#include "Unreal/CoreUObject/UObject/FStrProperty.hpp"
+#include "Unreal/CoreUObject/UObject/UnrealType.hpp"
+#include "Unreal/Engine/UDataTable.hpp"
+#include "Unreal/NameTypes.hpp"
+#include "Unreal/UFunctionStructs.hpp"
+#include "Unreal/UObject.hpp"
+
+using namespace RC;
+using namespace RC::Unreal;
+
+namespace PS {
+namespace {
+bool ValidAppearanceReference(const std::string& tablePath,
+    const std::string& rowName)
+{
+    if (tablePath.empty() || rowName.empty()) return false;
+    const auto path = RC::to_generic_string(tablePath);
+    auto* object = UECustom::UObjectGlobals::StaticFindObject<UObject*>(
+        nullptr, nullptr, path.c_str(), false);
+    if (!object) {
+        UECustom::TSoftObjectPtr<UObject> soft{UECustom::FSoftObjectPath(path)};
+        object = UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
+    }
+    if (!object || !object->IsA(UDataTable::StaticClass())) return false;
+    const FName row(RC::to_generic_string(rowName), FNAME_Find);
+    return row != NAME_None
+        && static_cast<UDataTable*>(object)->FindRowUnchecked(row);
+}
+
+std::optional<nlohmann::json> ReadDefaultCharacterAppearance()
+{
+    const auto path = HostServices::StateDirectory().parent_path()
+        / "SaveCharacters" / "Default.json";
+    if (!std::filesystem::is_regular_file(path)) return std::nullopt;
+    return nlohmann::json::parse(ConfigFiles::Read(path, 256 * 1024));
+}
+
+void ReportValidatedSavedItems(const nlohmann::json& source,
+    const SaveCleanup::RegistrySnapshot& registry)
+{
+    if (!source.contains("GameProgress")
+        || !source.at("GameProgress").is_object()) return;
+    const auto& game = source.at("GameProgress");
+    std::set<std::pair<std::string, std::string>> reported;
+    for (const auto* section : {"Inventory", "PersonalInventory", "Loadout"}) {
+        if (!game.contains(section) || !game.at(section).is_object()) continue;
+        for (const auto& entry : game.at(section).items()) {
+            const auto& row = entry.value();
+            if (!row.is_object()) continue;
+            const auto id = row.value("ItemData", std::string{});
+            if (id.empty() || !registry.Items.contains(id)
+                || !reported.emplace(section, id).second) continue;
+            Log<LogLevel::Verbose>(STR(
+                "[PERSISTENCE-PRUNER][RESOLVED] Retaining {} persistence ID '{}' because it resolves in the applicable live registry. Origin is irrelevant (native, loaded pak, or RuneSchema loader).\n"),
+                ToWideSafe(section), ToWideSafe(id.c_str()));
+        }
+    }
+}
+}
+
+void PersistencePruner::PrepareForStartup() noexcept
+{
+    m_cleanupDeferredReported = false;
+}
+
+void PersistencePruner::PruneBeforeCharacterLoad(
+    UObject* context, UFunction* function, void* parameters)
+{
+    if (s_cleanupConsumedForProcess.load(std::memory_order_acquire)
+        || !context || !function || !parameters) return;
+    const auto registry = SaveCleanup::ReadRegistry();
+    if (!registry || !registry->Ready()) {
+        if (!m_cleanupDeferredReported) {
+            m_cleanupDeferredReported = true;
+            Log<LogLevel::Warning>(STR(
+                "[PERSISTENCE-PRUNER][DEFERRED] Waiting for complete applicable live registries. No persistence ID or character field was changed.\n"));
+        }
+        return;
+    }
+
+    try {
+        FStrProperty* jsonProperty = nullptr;
+        void* jsonAddress = nullptr;
+        nlohmann::json source;
+        for (auto* field : TFieldRange<FProperty>(
+            function, EFieldIterationFlags::Default)) {
+            if (!field->HasAnyPropertyFlags(CPF_Parm)
+                || field->HasAnyPropertyFlags(CPF_ReturnParm | CPF_OutParm)
+                || field->GetArrayDim() != 1 || field->GetOffset_Internal() < 0
+                || field->GetOffset_Internal() + field->GetElementSize()
+                    > function->GetParmsSize()) continue;
+            auto* stringField = CastField<FStrProperty>(field);
+            if (!stringField) continue;
+            auto* address = stringField->ContainerPtrToValuePtr<void>(parameters);
+            const auto value = stringField->GetPropertyValue(address);
+            if (value.GetCharArray().Num() <= 1) continue;
+            const auto utf8 = RC::to_string(RC::StringType(*value));
+            if (utf8.find("\"GameProgress\"") == std::string::npos) continue;
+            auto parsed = nlohmann::json::parse(utf8, nullptr, true, true);
+            if (SaveCleanup::ClassifyCharacterDocument(parsed)
+                != SaveCleanup::CharacterDocumentKind::Gameplay) continue;
+            if (jsonProperty) throw std::runtime_error(
+                "character load exposed more than one gameplay JSON parameter");
+            jsonProperty = stringField;
+            jsonAddress = address;
+            source = std::move(parsed);
+        }
+        if (!jsonProperty) return;
+        const auto characterId = source.contains("meta_data")
+            && source.at("meta_data").is_object()
+            ? source.at("meta_data").value("char_guid", std::string{})
+            : std::string{};
+        if (characterId.empty()) return;
+
+        ReportValidatedSavedItems(source, *registry);
+        if (s_cleanupConsumedForProcess.exchange(
+                true, std::memory_order_acq_rel)) return;
+
+        SaveCleanup::Preview cleaned{source};
+        cleaned = SaveCleanup::Plan(
+            cleaned.Save, {}, false, registry.get(), false, true, true);
+        if (const auto defaults = ReadDefaultCharacterAppearance()) {
+            auto appearance = SaveCleanup::RepairInvalidAppearance(
+                cleaned.Save, *defaults, ValidAppearanceReference);
+            for (auto& row : appearance.Removed)
+                cleaned.Removed.push_back(std::move(row));
+            cleaned.Save = std::move(appearance.Save);
+        }
+        if (cleaned.Removed.empty()) {
+            Log<LogLevel::Verbose>(STR(
+                "[PERSISTENCE-PRUNER][CHECKED] Every applicable persistence ID resolved; no persistence data was changed.\n"));
+            return;
+        }
+
+        const auto serialized = cleaned.Save.dump();
+        const FString replacement(RC::to_generic_string(serialized).c_str());
+        jsonProperty->SetPropertyValue(jsonAddress, replacement);
+        const auto verified = RC::to_string(RC::StringType(
+            *jsonProperty->GetPropertyValue(jsonAddress)));
+        if (verified != serialized) throw std::runtime_error(
+            "clean character JSON did not survive reflected writeback");
+
+        std::map<std::string, std::size_t> counts;
+        std::size_t orphanCount = 0;
+        std::size_t appearanceCount = 0;
+        for (const auto& row : cleaned.Removed) {
+            const auto kind = row.value("Kind", std::string("Unknown"));
+            if (kind == "Appearance") ++appearanceCount;
+            else {
+                ++orphanCount;
+                ++counts[kind];
+                const auto id = row.value("Id", std::string("<unknown>"));
+                Log<LogLevel::Warning>(STR(
+                    "[PERSISTENCE-PRUNER][ORPHAN-REMOVED] {} persistence ID '{}' did not resolve in its complete applicable live registry.\n"),
+                    ToWideSafe(kind.c_str()), ToWideSafe(id.c_str()));
+            }
+        }
+        std::string summary;
+        for (const auto& [kind, count] : counts) {
+            if (!summary.empty()) summary += ", ";
+            summary += kind + "=" + std::to_string(count);
+        }
+        if (orphanCount) Log<LogLevel::Warning>(STR(
+            "[PERSISTENCE-PRUNER][ORPHANS-REMOVED] Removed {} unresolved persistence reference(s) ({}). Resolved IDs were retained. Pruning will not run again until game restart.\n"),
+            orphanCount, ToWideSafe(summary.c_str()));
+        if (appearanceCount) Log<LogLevel::Warning>(STR(
+            "[PERSISTENCE-PRUNER][APPEARANCE-REPAIRED] Replaced {} invalid appearance handle(s) from Default.json.\n"),
+            appearanceCount);
+    } catch (const std::exception& error) {
+        Log<LogLevel::Error>(STR(
+            "[PERSISTENCE-PRUNER][UNCHANGED] Character JSON was not modified: {}.\n"),
+            ToWideSafe(error.what()));
+    }
+}
+}

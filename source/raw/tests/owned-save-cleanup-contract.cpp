@@ -4,8 +4,8 @@
 #include <string>
 static std::string Read(const char* path){std::ifstream f(path);if(!f)throw std::runtime_error("source unavailable");return {std::istreambuf_iterator<char>(f),{}};}
 int main(int argc,char** argv){
-    if(argc!=5)throw std::runtime_error("registrar, provenance, quest service, and main loader sources required");
-    const auto registrar=Read(argv[1]),provenance=Read(argv[2]),quests=Read(argv[3]),mainLoader=Read(argv[4]);
+    if(argc!=6)throw std::runtime_error("registrar, provenance, quest service, main loader, and pruner sources required");
+    const auto registrar=Read(argv[1]),provenance=Read(argv[2]),quests=Read(argv[3]),mainLoader=Read(argv[4]),pruner=Read(argv[5]);
     const auto need=[](bool ok,const char* text){if(!ok)throw std::runtime_error(text);};
     need(registrar.find("OwnedContent::CompareSnapshot")==registrar.npos
         && registrar.find("OwnedContent::CommitSnapshot")==registrar.npos,
@@ -15,8 +15,8 @@ int main(int argc,char** argv){
     need(registrar.find("ScrubLocalCharacterFiles")==registrar.npos
         && registrar.find("ConfigFiles::Write")==registrar.npos,
         "automatic cleanup still rewrites stored Steam character files");
-    need(registrar.find("SaveCleanup::Plan(")!=registrar.npos
-        && registrar.find("registry.get(), false, true")!=registrar.npos,
+    need(pruner.find("SaveCleanup::Plan(")!=pruner.npos
+        && pruner.find("registry.get(), false, true, true")!=pruner.npos,
         "pruning is not driven by the completed native registry");
     need(registrar.find("snapshot.Items")!=registrar.npos
         && registrar.find("snapshot.Recipes")!=registrar.npos
@@ -25,9 +25,9 @@ int main(int argc,char** argv){
         "one or more persistent identity registries are absent");
     need(registrar.find("ScrubCharacterJsonBeforeLoad")!=registrar.npos,
         "provider-backed character JSON preflight is missing");
-    need(registrar.find("m_startupCleanupPending")!=registrar.npos
+    need(pruner.find("s_cleanupConsumedForProcess")!=pruner.npos
         && registrar.find("EnsureCharacterJsonPreflightHook")!=registrar.npos
-        && registrar.find("[SAVE-CLEANER][BOUNDARY-READY]")!=registrar.npos,
+        && registrar.find("[PERSISTENCE-PRUNER][BOUNDARY-READY]")!=registrar.npos,
         "automatic cleanup cannot late-bind the first eligible character load");
     const auto registerAllDefinition=registrar.find(
         "void DragonWildsDataRegistrar::RegisterAll()");
@@ -35,20 +35,20 @@ int main(int argc,char** argv){
         && registrar.find("EnsureCharacterJsonPreflightHook();",
             registerAllDefinition)!=registrar.npos,
         "native character preflight is not retried after Dominion loads");
-    const auto readyGate=registrar.find("if (!registry || !registry->Ready())");
-    const auto consume=registrar.find("m_startupCleanupPending = false;",readyGate);
-    const auto plan=registrar.find("SaveCleanup::Plan(",consume);
-    need(readyGate!=registrar.npos && consume!=registrar.npos
-        && plan!=registrar.npos && readyGate<consume && consume<plan,
+    const auto readyGate=pruner.find("if (!registry || !registry->Ready())");
+    const auto consume=pruner.find("s_cleanupConsumedForProcess.exchange(",readyGate);
+    const auto plan=pruner.find("SaveCleanup::Plan(",consume);
+    need(readyGate!=pruner.npos && consume!=pruner.npos
+        && plan!=pruner.npos && readyGate<consume && consume<plan,
         "startup cleanup is not globally consumed after registry readiness and before mutation");
-    need(registrar.find("m_checkedCharacters")==registrar.npos
-        && registrar.find("[SAVE-CLEANER][ORPHANS-REMOVED]")!=registrar.npos
-        && registrar.find("[SAVE-CLEANER][ORPHAN-REMOVED]")!=registrar.npos,
+    need(pruner.find("m_checkedCharacters")==pruner.npos
+        && pruner.find("[PERSISTENCE-PRUNER][ORPHANS-REMOVED]")!=pruner.npos
+        && pruner.find("[PERSISTENCE-PRUNER][ORPHAN-REMOVED]")!=pruner.npos,
         "cleanup is still per-character or no longer warns when orphaned IDs are removed");
-    need(registrar.find("[SAVE-CLEANER][REGISTRY-VALIDATED]")!=registrar.npos
-        && registrar.find("base game plus loaded paks")!=registrar.npos,
+    need(pruner.find("[PERSISTENCE-PRUNER][RESOLVED]")!=pruner.npos
+        && pruner.find("Origin is irrelevant")!=pruner.npos,
         "loaded-pak item IDs are not visibly retained from the live registry");
-    need(registrar.find("PersistenceDiagnosticLedger")==registrar.npos,
+    need(pruner.find("PersistenceDiagnosticLedger")==pruner.npos,
         "cleanup depends on the optional diagnostic ledger");
     const auto preRegistration=registrar.find("RegisterInitGameStatePreCallback");
     const auto registerAll=registrar.find("RegisterAll();",preRegistration);
@@ -64,6 +64,9 @@ int main(int argc,char** argv){
         && registrar.find("does not round-trip to one live data asset")!=registrar.npos
         && registrar.find("duplicate PersistenceID resolves to multiple live assets")!=registrar.npos,
         "cleanup readiness ignores a loaded asset that failed identity round-trip, uniqueness, primary, or network registration");
-    need(registrar.find("if (cleaned.Removed.empty()) {")!=registrar.npos,
+    need(pruner.find("if (cleaned.Removed.empty()) {")!=pruner.npos,
         "an unchanged character is not a strict no-op");
+    need(registrar.find("m_pruner.PruneBeforeCharacterLoad")!=registrar.npos
+        && registrar.find("SaveCleanup::Plan(")==registrar.npos,
+        "persistence pruning is not isolated from live-registry registration");
 }

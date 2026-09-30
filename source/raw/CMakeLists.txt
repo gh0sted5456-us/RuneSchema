@@ -87,7 +87,10 @@ file(GLOB_RECURSE SRC_FILES
 list(FILTER SRC_FILES EXCLUDE REGEX "/src/Core/")
 list(FILTER SRC_FILES EXCLUDE REGEX "/src/Generator/InGameQuickMenu\\.cpp$")
 
-add_library(${TARGET} SHARED ${SRC_FILES})
+add_library(${TARGET} SHARED
+    ${SRC_FILES}
+    src/Core/CharacterEntryRecovery.cpp
+    src/Core/PersistencePruner.cpp)
 
 # API-1 Helpy native plugin. All Helpy UI/input ownership lives in this optional
 # binary; multiplayer orchestration remains in the mandatory RuneSchema target.

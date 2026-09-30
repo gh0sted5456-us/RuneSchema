@@ -245,6 +245,12 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Misc/DragonWildsDataRegistrar.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/AssetProvenance.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/QuestService.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Core/PersistencePruner.cpp")
+    add_executable(character-entry-recovery-contract ../tests/character-entry-recovery-contract.cpp)
+    add_test(NAME character-entry-recovery-contract COMMAND character-entry-recovery-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Core/CharacterEntryRecovery.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/SDK/DragonWildsSignatures.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp")
     add_executable(item-grid-pagination ../tests/item-grid-pagination.cpp)
     add_test(NAME item-grid-pagination COMMAND item-grid-pagination
@@ -338,7 +344,8 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/Spawn/PlayerRules.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Misc/DragonWildsDataRegistrar.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Generator/SaveViewer.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Generator/SaveCleanupPanel.inl")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Generator/SaveCleanupPanel.inl"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Core/PersistencePruner.cpp")
     add_executable(equipment-storefront-lane ../tests/equipment-storefront-lane.cpp)
     add_test(NAME equipment-storefront-lane COMMAND equipment-storefront-lane
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsEquipmentLoader.cpp"
