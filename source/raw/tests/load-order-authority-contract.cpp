@@ -19,10 +19,11 @@ static void Forbid(const std::string& source, const char* text) {
 }
 
 int main(int argc, char** argv) {
-    if (argc != 4) throw std::runtime_error("Mod order, main loader, and plugin catalog inputs are required");
+    if (argc != 5) throw std::runtime_error("Mod order, main loader, plugin catalog, and plugin host inputs are required");
     const auto modOrder = Read(argv[1]);
     const auto mainLoader = Read(argv[2]);
     const auto pluginCatalog = Read(argv[3]);
+    const auto pluginHost = Read(argv[4]);
 
     Require(modOrder, "Explicit runeschema.txt order is authoritative");
     Require(modOrder, "resolved.insert(resolved.end(), entries.begin(), entries.end())");
@@ -35,6 +36,8 @@ int main(int argc, char** argv) {
     Require(pluginCatalog, "left->second.Position<right->second.Position");
     Require(pluginCatalog, "dependency.first==result[i].Id");
     Require(pluginCatalog, "dependency cycle detected; using preferred plugins.txt order");
+    Require(pluginHost, "manifests=PluginCatalog::Discover(root");
+    Require(pluginHost, "for(const auto& manifest:manifests)");
 
     std::cout << "Load-order authority contract passed.\n";
 }
