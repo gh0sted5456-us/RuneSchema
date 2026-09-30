@@ -101,3 +101,15 @@ jobs:
           name: RuneSchema08Demo
           path: dist/RuneSchema08Demo.zip
           if-no-files-found: error
+
+      - name: Package Gamepass Restore Appearance test
+        shell: pwsh
+        run: |
+          Compress-Archive -Path source/examples/RestoreAppearance -DestinationPath dist/RestoreAppearance-Gamepass-0.8.zip -Force
+
+      - name: Upload Gamepass Restore Appearance test
+        uses: actions/upload-artifact@v4
+        with:
+          name: RestoreAppearance-Gamepass-0.8
+          path: dist/RestoreAppearance-Gamepass-0.8.zip
+          if-no-files-found: error
