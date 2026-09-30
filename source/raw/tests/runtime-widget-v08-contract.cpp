@@ -16,10 +16,11 @@ static void Require(const std::string& source, const char* text) {
 }
 
 int main(int argc, char** argv) {
-    if (argc != 4) throw std::runtime_error("Header, implementation, and Blueprint docs are required");
+    if (argc != 5) throw std::runtime_error("Header, implementation, Blueprint docs, and Restore Appearance example are required");
     const auto header = Read(argv[1]);
     const auto source = Read(argv[2]);
     const auto docs = Read(argv[3]);
+    const auto restoreAppearance = Read(argv[4]);
 
     Require(header, "m_runtimeWidgetActiveRules");
     Require(header, "m_runtimeWidgetCompletedRules");
@@ -83,6 +84,14 @@ int main(int argc, char** argv) {
     Require(docs, "## RuneSchema-owned transient UI");
     Require(docs, "64 nodes");
     Require(docs, "does **not** create a Blueprint class");
+    Require(restoreAppearance, "\"$RuntimeUI\"");
+    Require(restoreAppearance, "\"$Storefront\": \"GamePass\"");
+    Require(restoreAppearance, "\"Type\": \"Button\"");
+    Require(restoreAppearance, "\"Event\": \"OnClicked\"");
+    Require(restoreAppearance, "\"Target\": \"Character\"");
+    Require(restoreAppearance, "\"Function\": \"GoToEditAppearance\"");
+    if (restoreAppearance.find("Character.EditAppearanceButton") != std::string::npos)
+        throw std::runtime_error("Restore Appearance must not depend on the missing Gamepass cooked button");
 
     std::cout << "RuneSchema .8 runtime-widget contract passed.\n";
 }
