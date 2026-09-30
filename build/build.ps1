@@ -164,6 +164,16 @@ try {
             return
         }
 
+        $cmakeCache = Join-Path $BuildDirectory 'CMakeCache.txt'
+        $configureIncomplete = (Test-Path -LiteralPath $cmakeCache -PathType Leaf) -and (
+            -not (Test-Path -LiteralPath $stamp -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $ninjaFile -PathType Leaf)
+        )
+        if ($configureIncomplete) {
+            Write-Host "Discarding incomplete CMake configure state for $Label..." -ForegroundColor Yellow
+            Remove-SafeTree $BuildDirectory
+        }
+
         New-Item -ItemType Directory -Path $BuildDirectory -Force | Out-Null
         Write-Host "=== Configure $Label ===" -ForegroundColor Cyan
         Invoke-Checked 'cmake.exe' $ConfigureArguments "CMake configure for $Label"
