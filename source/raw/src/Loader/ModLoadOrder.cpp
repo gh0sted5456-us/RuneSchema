@@ -77,41 +77,67 @@ namespace DragonWilds {
         return static_cast<bool>(output);
     }
     std::vector<RC::StringType> ModLoadOrder::Resolve(const fs::path& mods, const std::vector<RC::StringType>& discovered) {
-        auto sorted = discovered; std::sort(sorted.begin(), sorted.end());
+        // Explicit runeschema.txt order is authoritative. Prefix policy is only
+        // a deterministic fallback for discovered mods that are not explicitly listed.
+        auto fallback = discovered;
+        std::sort(fallback.begin(), fallback.end());
+        ModOrderPolicy::Apply(fallback, [](const auto& name) -> const auto& { return name; });
+
         const auto& settings = PS::PSConfig::Get()->GetLoadOrderSettings();
         if (!settings.enabled) {
-            auto result = settings.deterministicFallback ? sorted : discovered;
-            ModOrderPolicy::Apply(result, [](const auto& name) -> const auto& { return name; });
-            return result;
+            return settings.deterministicFallback ? fallback : discovered;
         }
-        const auto path = GetOrderPath(mods); const bool existed = fs::exists(path);
+
+        const auto path = GetOrderPath(mods);
+        const bool existed = fs::exists(path);
         if (!existed && !settings.autoCreate) {
-            ModOrderPolicy::Apply(sorted, [](const auto& name) -> const auto& { return name; });
-            return sorted;
+            return settings.deterministicFallback ? fallback : discovered;
         }
+
         auto entries = Load(path, settings.strictValues);
+
         std::unordered_set<RC::StringType> present(discovered.begin(), discovered.end());
         const auto before = entries.size();
-        entries.erase(std::remove_if(entries.begin(), entries.end(), [&](const auto& e) { return !present.contains(e.Name); }), entries.end());
+        entries.erase(std::remove_if(entries.begin(), entries.end(),
+            [&](const auto& e) { return !present.contains(e.Name); }), entries.end());
         bool changed = entries.size() != before;
-        std::unordered_set<RC::StringType> known; for (const auto& e : entries) known.insert(e.Name);
-        for (const auto& name : sorted) {
+
+        std::unordered_set<RC::StringType> known;
+        for (const auto& e : entries) known.insert(e.Name);
+
+        // Unlisted ordinary/numeric mods are appended in deterministic fallback
+        // order. Existing runeschema.txt rows never move.
+        for (const auto& name : fallback) {
             if (!ModOrderPolicy::ShouldAutoPersist(name) || !known.insert(name).second) continue;
             entries.push_back({name, true});
             changed = true;
         }
-        changed = ModOrderPolicy::Apply(entries, [](const auto& e) -> const auto& { return e.Name; }) || changed;
+
         if (!existed || (settings.reconcileFolders && changed))
             settings.preserveComments && existed ? SavePreservingComments(path, entries) : Save(path, entries);
-        auto resolved = entries;
-        known.clear();
-        for (const auto& entry : resolved) known.insert(entry.Name);
-        for (const auto& name : sorted) {
-            if (ModOrderPolicy::IsImplicit(name) && known.insert(name).second)
+
+        // AA_/ZZ_ folders are implicit when omitted. Keep that convenience
+        // without re-sorting explicit rows: omitted AA_ goes before the file,
+        // omitted ZZ_ goes after it. If explicitly listed, its exact row wins.
+        std::vector<ModOrderEntry> resolved;
+        resolved.reserve(entries.size() + fallback.size());
+
+        for (const auto& name : fallback) {
+            if (!ModOrderPolicy::IsImplicit(name) || known.contains(name)) continue;
+            if (ModOrderPolicy::Priority(name) == 0)
                 resolved.push_back({name, true});
         }
-        ModOrderPolicy::Apply(resolved, [](const auto& e) -> const auto& { return e.Name; });
+
+        resolved.insert(resolved.end(), entries.begin(), entries.end());
+
+        for (const auto& name : fallback) {
+            if (!ModOrderPolicy::IsImplicit(name) || known.contains(name)) continue;
+            if (ModOrderPolicy::Priority(name) != 0)
+                resolved.push_back({name, true});
+        }
+
         std::vector<RC::StringType> result;
+        result.reserve(resolved.size());
         for (const auto& e : resolved) {
             if (e.Enabled) result.push_back(e.Name);
             else PS::Log<RC::LogLevel::Normal>(STR("Skipping mod '{}' (disabled in runeschema.txt).\n"), e.Name);
