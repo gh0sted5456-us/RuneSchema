@@ -34,6 +34,8 @@ int main(int argc, char** argv) {
     Require(build, "Prepare-EmbeddedUE4SSCMake");
     Require(build, "skipped IDE header/source bookkeeping");
     Require(build, "skipped global IDE target organization");
+    Require(build, "expected exactly one standalone command");
+    Require(build, "(?m)^organize_all_targets\\(\\)\\s*$");
     Require(build, "source scan complete");
     Require(build, "core target configuration complete");
     Require(build, "https://github.com/Re-UE4SS/UEPseudo.git");
@@ -43,5 +45,5 @@ int main(int argc, char** argv) {
     Require(build, "submodule', 'update', '--init', '--recursive");
     Require(build, "Get-ConfigureFingerprint $SourceDirectory $ConfigureArguments");
 
-    std::cout << "UE4SS bootstrap contract passed.\n";
+    if (build.find("$root.Replace($globalLine, $globalReplacement)") != std::string::npos)\n        throw std::runtime_error("UE4SS bootstrap must not plain-replace organize_all_targets() because the token also appears in comments");\n    std::cout << "UE4SS bootstrap contract passed.\n";
 }
