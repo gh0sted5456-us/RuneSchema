@@ -34,7 +34,7 @@ int main(int argc, char** argv) {
 
     Require(pluginCatalog, "left->second.Position<right->second.Position");
     Require(pluginCatalog, "dependency.first==result[i].Id");
-    Require(pluginCatalog, "dependency cycle detected; using manifest order");
+    Require(pluginCatalog, "dependency cycle detected; using preferred plugins.txt order");
 
     std::cout << "Load-order authority contract passed.\n";
 }
