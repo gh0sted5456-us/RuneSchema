@@ -1,4 +1,5 @@
 #include "nlohmann/json.hpp"
+#include "Loader/CharacterCustomizationLayout.h"
 #include <fstream>
 #include <stdexcept>
 #include <string>
@@ -15,6 +16,11 @@ int main(int argc, char** argv) {
     const auto example=nlohmann::json::parse(Read(argv[2]));
     const auto beard=nlohmann::json::parse(Read(argv[3]));
     const auto source=Read(argv[4]);
+    using DragonWilds::CharacterCustomizationLayout::RequiredColumns;
+    if(RequiredColumns(48,4)!=4 || RequiredColumns(76,4)!=5
+        || RequiredColumns(100,5)!=7 || RequiredColumns(1000,4)!=8
+        || RequiredColumns(24,8)!=8)
+        throw std::runtime_error("Dynamic character customization column policy regressed");
     for(const auto* token:{"IsDirectDataAssetPatch", "DirectDataAssetOperations",
             "target.ends_with(\"_C\")", "DataHandle.RowName", "TemplateIndex",
             "$MergeWhere", "SelectorPath", "SelectorValues",
@@ -55,6 +61,7 @@ int main(int argc, char** argv) {
     for(const auto* token:{"QueueObjectPatch", "ApplyObjectPatches", "ClassDefaultObject",
             "RuneSchema.AssetPatch.v2", "RegistryPatch::Schema", "AppendUnique",
             "IsCharacterColumnPath", "ValidateCharacterColumnValue",
+            "AdjustCharacterOptionColumns", "[CHARACTER-LAYOUT][DYNAMIC]",
             "[CHARACTER-LAYOUT][PROPAGATED]"})
         if(source.find(token)==std::string::npos)
             throw std::runtime_error(std::string("Asset loader contract is missing: ")+token);

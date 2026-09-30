@@ -6,6 +6,7 @@
 #include "Runtime/AuthoredFile.h"
 #include "Runtime/HelpyBundlePublish.h"
 #include "Loader/AssetAuthoringMetadata.h"
+#include "Loader/CharacterCustomizationLayout.h"
 #include "Generator/ClonePresentation.h"
 #include "SDK/Helper/CookedAssetLookup.h"
 #include "SDK/Helper/ItemAppearanceMetadata.h"
@@ -484,6 +485,49 @@ namespace
         if (result.After != result.Before + result.Added)
             throw std::runtime_error("Append operation count verification failed");
         return result;
+    }
+
+    struct CharacterLayoutResult
+    {
+        int Options = 0;
+        int Before = 0;
+        int After = 0;
+    };
+
+    CharacterLayoutResult AdjustCharacterOptionColumns(
+        UObject* target, const std::string& optionPath)
+    {
+        if (!target || !IsCharacterOptionPath(optionPath)) return {};
+        auto options=ResolveMember(target,target->GetClassPrivate(),nullptr,optionPath);
+        auto* arrayProperty=DragonWilds::PropertyHelper::CastProperty<FArrayProperty>(
+            options.Property);
+        if (!arrayProperty)
+            throw std::runtime_error("character customization OptionData is no longer an array");
+        auto columnPath=optionPath.substr(0,
+            optionPath.size()-std::string_view("OptionData").size())+"NumberOfColumns";
+        auto columns=ResolveMember(target,target->GetClassPrivate(),nullptr,columnPath);
+        auto* numeric=DragonWilds::PropertyHelper::CastProperty<FNumericProperty>(
+            columns.Property);
+        if (!numeric || !numeric->IsInteger())
+            throw std::runtime_error(
+                "character customization NumberOfColumns is no longer an integer property");
+        auto* arrayAddress=arrayProperty->ContainerPtrToValuePtr<void>(options.Container);
+        FScriptArrayHelper inspect(arrayProperty,arrayAddress);
+        if (inspect.Num()<0)
+            throw std::runtime_error(
+                "character customization OptionData has an invalid element count");
+        auto* columnAddress=numeric->ContainerPtrToValuePtr<void>(columns.Container);
+        const auto before=static_cast<int>(numeric->GetSignedIntPropertyValue(columnAddress));
+        const auto after=DragonWilds::CharacterCustomizationLayout::RequiredColumns(
+            static_cast<std::size_t>(inspect.Num()),before);
+        if (after!=before)
+        {
+            numeric->SetIntPropertyValue(columnAddress,static_cast<RC::Unreal::int64>(after));
+            if (numeric->GetSignedIntPropertyValue(columnAddress)!=after)
+                throw std::runtime_error(
+                    "dynamic character customization column write did not persist");
+        }
+        return {inspect.Num(),before,after};
     }
 
     int MergeWhere(const ResolvedMember& member, const nlohmann::json& operation)
@@ -1176,8 +1220,19 @@ namespace DragonWilds {
                     throw std::runtime_error("operation requires Value");
                 if (operation.Op=="Set")
                 {
-                    PropertyHelper::CopyJsonValueToContainer(operation.Member.Container,
-                        operation.Member.Property,operation.Body.at("Value"));
+                    if (IsCharacterColumnPath(operation.Member.CanonicalPath))
+                    {
+                        auto* numeric=PropertyHelper::CastProperty<FNumericProperty>(
+                            operation.Member.Property);
+                        auto* address=numeric->ContainerPtrToValuePtr<void>(
+                            operation.Member.Container);
+                        const auto current=numeric->GetSignedIntPropertyValue(address);
+                        const auto requested=operation.Body.at("Value").get<int64_t>();
+                        numeric->SetIntPropertyValue(address,std::max(current,requested));
+                    }
+                    else PropertyHelper::CopyJsonValueToContainer(
+                        operation.Member.Container,operation.Member.Property,
+                        operation.Body.at("Value"));
                     ++writes;
                 }
                 else if (operation.Op=="Merge")
@@ -1197,14 +1252,25 @@ namespace DragonWilds {
                 }
                 else
                 {
-                    const auto characterOption = operation.Member.CanonicalPath.starts_with(
-                        "CharacterOptionData[ECharacterOptionType::")
-                        && operation.Member.CanonicalPath.ends_with("].OptionData");
+                    const auto characterOption = IsCharacterOptionPath(
+                        operation.Member.CanonicalPath);
                     if (operation.Op=="AppendUnique" && characterOption)
                         ValidateCharacterOptionHandle(operation.Body);
                     const auto outcome=AppendValues(operation.Member,operation.Body,
                         operation.Op=="AppendUnique");
                     writes += outcome.Added;
+                    if (characterOption)
+                    {
+                        const auto layout=AdjustCharacterOptionColumns(
+                            target,operation.Member.CanonicalPath);
+                        if (layout.After!=layout.Before)
+                            PS::Log<LogLevel::Normal>(STR(
+                                "[CHARACTER-LAYOUT][DYNAMIC] target={} field={} options={} columns={}->{} maxRowsPerColumn={}.\n"),
+                                target->GetPathName(),
+                                RC::to_generic_string(operation.Member.CanonicalPath),
+                                layout.Options,layout.Before,layout.After,
+                                DragonWilds::CharacterCustomizationLayout::MaximumRowsPerColumn);
+                    }
                     if (operation.Op=="AppendUnique")
                     {
                         PS::Log<LogLevel::Normal>(STR("[LOADER:assets][OK][MOD:{}] target={} field={} identity=DataHandle.RowName:{} count={}->{} added={} existing={}.\n"),
@@ -1275,18 +1341,22 @@ namespace DragonWilds {
                             auto* numeric=PropertyHelper::CastProperty<FNumericProperty>(member.Property);
                             if (!numeric || !numeric->IsInteger())
                                 throw std::runtime_error("character customization NumberOfColumns is no longer an integer property");
-                            PropertyHelper::CopyJsonValueToContainer(member.Container,member.Property,
-                                operation.at("Value"));
+                            auto* address=numeric->ContainerPtrToValuePtr<void>(member.Container);
+                            const auto current=numeric->GetSignedIntPropertyValue(address);
+                            const auto requested=operation.at("Value").get<int64_t>();
+                            numeric->SetIntPropertyValue(address,std::max(current,requested));
                             ++columnWrites;
                             continue;
                         }
                         if (op!="AppendUnique") continue;
                         const auto member=ResolveMember(instance,instance->GetClassPrivate(),nullptr,
                             authoredPath);
-                        if (member.CanonicalPath.starts_with("CharacterOptionData[ECharacterOptionType::")
-                            && member.CanonicalPath.ends_with("].OptionData"))
+                        if (IsCharacterOptionPath(member.CanonicalPath))
                             ValidateCharacterOptionHandle(operation);
                         const auto outcome=AppendValues(member,operation,true);
+                        const auto layout=AdjustCharacterOptionColumns(
+                            instance,member.CanonicalPath);
+                        if(layout.After!=layout.Before)++columnWrites;
                         if(before<0)before=outcome.Before;after=outcome.After;
                         added+=outcome.Added;existing+=outcome.Existing;++verified;
                     }
