@@ -2,8 +2,8 @@
   "SchemaVersion": 1,
   "Id": "RSNetworking",
   "Name": "RSNetworking",
-  "Version": "0.7.9",
-  "BuiltForRuneSchema": "0.7.9",
+  "Version": "0.7.7.0",
+  "BuiltForRuneSchema": "0.7.7.0",
   "ConsoleMessage": "RuneSchema networking bridge content is available.",
   "Capabilities": [
     "bridge.registry",

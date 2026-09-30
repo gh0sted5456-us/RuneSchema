@@ -53,7 +53,8 @@ outside RuneSchema's runtime schema contract.
 
 ## Test-bed CI
 
-Pushes to this branch run the isolated `runtime-widget-v08-contract` on Windows.
+Pushes to this branch and to `experimental` run the isolated
+`runtime-widget-v08-contract` on Windows.
 The lane intentionally avoids the full UE4SS bootstrap because the pinned UE4SS
 commit currently references the retired `Re-UE4SS/UEPseudo` submodule; that
 external dependency failure is unrelated to the 0.8 runtime-widget contract.
@@ -74,8 +75,11 @@ private UEPseudo repository.
 
 ## Gamepass Edit Appearance proof
 
-The Restore Appearance test now uses the 0.8 transient-UMG lane on Gamepass.
-RuneSchema creates its own Button on the character-select owner and binds
-`OnClicked` directly to `Character.GoToEditAppearance`. Steam/GOG remains
-native and is skipped by storefront gating. This avoids relying on the missing
-Gamepass `Character.EditAppearanceButton` object.
+The Restore Appearance test now uses the game's cooked controls rather than a
+transient RuneSchema button. Gamepass exposes the button beneath
+`WBP_MainMenu_CharSelect_C` and the input legend beneath
+`WBP_MainMenu_CharacterSelect_C`, so the example targets both observed live
+owners. It reveals `EditAppearanceButtonSBox`, `EditAppearanceButton`, and
+`InputLegend_EditAppearance`. The native button retains its existing
+`IA_UI_EditAppearance` action wiring; no synthetic `$Bind` is installed.
+Steam/GOG remains native and is skipped by storefront gating.

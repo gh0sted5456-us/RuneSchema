@@ -1,6 +1,6 @@
-# RuneSchema 0.7.9
+# RuneSchema 0.7.7.0
 
-RuneSchema 0.7.9 uses one `main.dll` for Steam/GOG and Game Pass/WinGDK.
+RuneSchema 0.7.7.0 uses one `main.dll` for Steam/GOG and Game Pass/WinGDK.
 The runtime detects the storefront at startup and selects the matching native
 support automatically.
 

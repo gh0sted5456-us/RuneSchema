@@ -243,35 +243,36 @@ event to an existing owner function without synthesizing Blueprint bytecode.
 instance per runtime-UI rule, removed from the viewport on world teardown, and
 recreated only after the prior owner/widget lifetime has ended.
 
-## Gamepass Edit Appearance replacement
+## Gamepass Edit Appearance restoration
 
 Steam/GOG already exposes the native Edit Appearance control. On Gamepass /
-WinGDK, RuneSchema 0.8 can create a transient replacement instead of depending
-on a cooked button that is not present in the live character-select tree.
-
-The Restore Appearance example uses a Gamepass-gated `$RuntimeUI` CanvasPanel
-with a transient `Button`. Its reflected `OnClicked` delegate is bound
-directly to `Character.GoToEditAppearance`, so the game still owns the actual
-character-editor transition.
+WinGDK, the cooked controls exist under two live character-select owners but
+start hidden. The Restore Appearance example uses Gamepass-gated
+`$RuntimeWidget` rules to reveal the existing button container, button, and
+input legend.
 
 ```jsonc
-"$RuntimeUI": {
-  "$Storefront": "GamePass",
-  "RestoreEditAppearance": {
-    "Root": {
-      "Type": "Button",
-      "$Bind": {
-        "Event": "OnClicked",
-        "Target": "Character",
-        "Function": "GoToEditAppearance"
-      }
+"WBP_MainMenu_CharSelect_C": {
+  "$RuntimeWidget": {
+    "$Storefront": "GamePass",
+    "Character.EditAppearanceButton": {
+      "$When": "Resolved",
+      "$Find": {
+        "Scope": "WidgetTree",
+        "Name": "EditAppearanceButton"
+      },
+      "Visibility": "Visible",
+      "bIsEnabled": true,
+      "RenderOpacity": 1.0
     }
   }
 }
 ```
 
-This path intentionally does not modify Steam/GOG and does not require
-`Character.EditAppearanceButton` to exist on Gamepass.
+The button retains its native `IA_UI_EditAppearance` action and CommonUI
+appearance, so the example does not install a synthetic `$Bind`. A second rule
+on `WBP_MainMenu_CharacterSelect_C` reveals `InputLegend_EditAppearance`.
+This path intentionally does not modify Steam/GOG.
 
 ## Simple rules
 

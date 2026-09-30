@@ -1,9 +1,9 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
-title RuneSchema 0.7.0 Builder - Visual Studio 2026
+title RuneSchema 0.7.7.0 Builder - Visual Studio 2026
 
 REM ============================================================
-REM RuneSchema 0.7.0 - normalized runtime contract
+REM RuneSchema 0.7.7.0 - normalized runtime contract
 REM
 REM Source:
 REM   raw beside this BAT (the existing project, built in place)

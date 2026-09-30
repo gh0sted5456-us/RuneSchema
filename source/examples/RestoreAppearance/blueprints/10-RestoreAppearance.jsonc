@@ -2,7 +2,7 @@
 // No transient $RuntimeUI and no synthetic click binding are needed: the native
 // WBP_DomControllerPromptButton already carries IA_UI_EditAppearance.
 {
-  "/Game/UI/MainMenu/WBP_MainMenu_CharacterSelect": {
+  "WBP_MainMenu_CharSelect_C": {
     "$RuntimeWidget": {
       "$Storefront": "GamePass",
 
@@ -24,7 +24,13 @@
         "Visibility": "Visible",
         "bIsEnabled": true,
         "RenderOpacity": 1.0
-      },
+      }
+    }
+  },
+
+  "WBP_MainMenu_CharacterSelect_C": {
+    "$RuntimeWidget": {
+      "$Storefront": "GamePass",
 
       "InputLegend_EditAppearance": {
         "$When": "Resolved",

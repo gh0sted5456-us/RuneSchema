@@ -9,7 +9,7 @@ hide:
 <img class="rs-hero__banner" src="assets/images/runeschema-banner.png" alt="RuneSchema">
 
 <div class="rs-hero__eyebrow">
-<span class="rs-version">RuneSchema 0.7.9</span>
+<span class="rs-version">RuneSchema 0.7.7.0</span>
 <span class="rs-platform rs-platform--steam">Steam / GOG</span>
 <span class="rs-platform rs-platform--gamepass">Game Pass / WinGDK</span>
 </div>

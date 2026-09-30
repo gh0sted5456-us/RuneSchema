@@ -1,9 +1,10 @@
-name: RuneSchema 0.8 test bed
+name: RuneSchema 0.7.7.0 experimental contracts
 
 on:
   push:
     branches:
       - RuneSchema-0.8-test-bed
+      - experimental
   workflow_dispatch:
 
 permissions:
@@ -64,7 +65,7 @@ jobs:
       - name: Package full 0.8 source tree
         shell: pwsh
         run: |
-          $stageRoot = Join-Path $PWD "dist/RuneSchema-0.8-test-bed"
+          $stageRoot = Join-Path $PWD "dist/RuneSchema-0.7.7.0-experimental"
           Remove-Item -Recurse -Force $stageRoot -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force $stageRoot | Out-Null
 
@@ -90,13 +91,13 @@ jobs:
             }
           }
 
-          Compress-Archive -Path $stageRoot -DestinationPath "dist/RuneSchema-0.8-test-bed-full-source.zip" -Force
+          Compress-Archive -Path $stageRoot -DestinationPath "dist/RuneSchema-0.7.7.0-experimental-full-source.zip" -Force
 
       - name: Upload full 0.8 source tree
         uses: actions/upload-artifact@v4
         with:
-          name: RuneSchema-0.8-test-bed-full-source
-          path: dist/RuneSchema-0.8-test-bed-full-source.zip
+          name: RuneSchema-0.7.7.0-experimental-full-source
+          path: dist/RuneSchema-0.7.7.0-experimental-full-source.zip
           if-no-files-found: error
 
       - name: Package 0.8 demo mod
@@ -115,11 +116,11 @@ jobs:
       - name: Package Gamepass Restore Appearance test
         shell: pwsh
         run: |
-          Compress-Archive -Path source/examples/RestoreAppearance -DestinationPath dist/RestoreAppearance-Gamepass-0.8.zip -Force
+          Compress-Archive -Path source/examples/RestoreAppearance -DestinationPath dist/RestoreAppearance-Gamepass-0.7.7.0.zip -Force
 
       - name: Upload Gamepass Restore Appearance test
         uses: actions/upload-artifact@v4
         with:
-          name: RestoreAppearance-Gamepass-0.8
-          path: dist/RestoreAppearance-Gamepass-0.8.zip
+          name: RestoreAppearance-Gamepass-0.7.7.0
+          path: dist/RestoreAppearance-Gamepass-0.7.7.0.zip
           if-no-files-found: error

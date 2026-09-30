@@ -90,6 +90,8 @@ int main(int argc, char** argv) {
     Require(docs, "does **not** create a Blueprint class");
     Require(restoreAppearance, "\"$RuntimeWidget\"");
     Require(restoreAppearance, "\"$Storefront\": \"GamePass\"");
+    Require(restoreAppearance, "\"WBP_MainMenu_CharSelect_C\"");
+    Require(restoreAppearance, "\"WBP_MainMenu_CharacterSelect_C\"");
     Require(restoreAppearance, "\"Character.EditAppearanceButtonSBox\"");
     Require(restoreAppearance, "\"Character.EditAppearanceButton\"");
     Require(restoreAppearance, "\"InputLegend_EditAppearance\"");
@@ -100,6 +102,8 @@ int main(int argc, char** argv) {
         throw std::runtime_error("Restore Appearance must use the native cooked widget, not transient RuntimeUI");
     if (restoreAppearance.find("\"$Bind\"") != std::string::npos)
         throw std::runtime_error("Restore Appearance must keep the native IA_UI_EditAppearance action wiring");
+    if (restoreAppearance.find("/Game/UI/MainMenu/WBP_MainMenu_CharacterSelect") != std::string::npos)
+        throw std::runtime_error("Restore Appearance must target the two observed live Gamepass owner classes");
 
     std::cout << "RuneSchema .8 runtime-widget contract passed.\n";
 }
