@@ -72,6 +72,10 @@ int main(int argc, char** argv) {
     Require(source, "AddToViewport");
     Require(source, "RemoveFromParent");
     Require(source, "m_runtimeUiActiveRules.emplace(key)");
+    Require(source, "RemoveRuntimeUiInstancesForOwner");
+    Require(source, "eventName == \"Destruct\"");
+    Require(source, "eventName == \"OnDeactivated\"");
+    Require(source, "A native widget can be collapsed before it emits any useful");
     Require(source, "propertyName == \"$RuntimeWidget\" || propertyName == \"$RuntimeUI\"");
 
     Require(docs, "RuneSchema .8 test-bed runtime actions");
