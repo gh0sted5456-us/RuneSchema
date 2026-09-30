@@ -420,9 +420,12 @@ public:
             ImGui::SeparatorText("Default character recovery");
             ImGui::Checkbox("Use settings/defaults/Default.json for appearance", &settings.defaults.appearanceOverrideEnabled);
             ImGui::TextWrapped("Off uses RuneSchema's baked male/A safety profile. If enabled but the external file is missing or invalid, RuneSchema safely falls back to the baked profile.");
-            ImGui::Checkbox("Restore selected save sections from Default.json", &settings.defaults.restoration.enabled);
-            ImGui::TextWrapped("Disabled by default. At the one-time startup recovery boundary, selected sections are copied from settings/defaults/Default.json before unresolved persistence IDs are pruned. Character identity metadata is never copied.");
-            ImGui::BeginDisabled(!settings.defaults.restoration.enabled);
+            ImGui::Checkbox("Safely merge selected Default.json baselines", &settings.defaults.restoration.enabled);
+            ImGui::TextWrapped("Disabled by default. Valid live progress remains authoritative; missing baseline entries and structure are merged before unresolved persistence IDs are pruned.");
+            ImGui::Checkbox("Reset selected sections once on next launch", &settings.defaults.restoration.resetOnce);
+            ImGui::TextWrapped("Destructive one-shot replacement for the first eligible character loaded that launch. RuneSchema persists this toggle back to off during startup before any character can be reset. If that write fails, the reset is refused.");
+            ImGui::BeginDisabled(!settings.defaults.restoration.enabled
+                && !settings.defaults.restoration.resetOnce);
             ImGui::Checkbox("Restore appearance", &settings.defaults.restoration.appearance);
             ImGui::Checkbox("Restore inventory", &settings.defaults.restoration.inventory);
             ImGui::Checkbox("Restore personal inventory", &settings.defaults.restoration.personalInventory);

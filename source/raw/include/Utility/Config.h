@@ -82,6 +82,9 @@ namespace PS {
 
     struct DefaultRestorationSettings {
         bool enabled = false;
+        // One-shot destructive replacement of the selected categories. This
+        // is persisted back to false during startup before it can be consumed.
+        bool resetOnce = false;
         bool appearance = false;
         bool inventory = false;
         bool personalInventory = false;
@@ -156,6 +159,8 @@ namespace PS {
 
         const PSConfigSettings& GetSettings() const;
 
+        bool ConsumeDefaultResetOnce() noexcept;
+
         bool Save();
         const std::string& GetStatus() const { return m_status; }
 
@@ -167,5 +172,6 @@ namespace PS {
         PSConfigSettings m_settings;
         std::string m_status;
         bool m_preserveOriginal = false;
+        bool m_defaultResetOnceRequested = false;
     };
 }

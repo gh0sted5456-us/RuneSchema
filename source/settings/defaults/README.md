@@ -25,19 +25,29 @@ override never controls persistence-ID pruning.
 
 ## Restore selected save sections
 
-`defaults.restoration.enabled` is a separate, disabled-by-default recovery
-feature. For this mode, `Default.json` must be a complete gameplay character
-JSON containing `GameProgress`. You can copy a known-good loose character save
-here and rename it `Default.json`. Keep the original backup elsewhere.
+`defaults.restoration.enabled` is a separate, disabled-by-default safe baseline
+merge. For this mode, `Default.json` must be a complete gameplay character JSON
+containing `GameProgress`. You can copy a known-good loose character save here
+and rename it `Default.json`. Keep the original backup elsewhere.
 
-Enable only the restoration categories you intend to copy: appearance,
+Enable only the restoration categories you intend to repair: appearance,
 inventory, personal inventory, loadout, item/recipe progress, quests,
-journal/lore, or remaining `GameProgress` fields. Selecting every category
-restores the complete gameplay snapshot while retaining the active character's
-`meta_data`, including its GUID and name.
+journal/lore, or remaining `GameProgress` fields. In safe merge mode, valid live
+state wins: missing keyed entries are added, set-like progress is unioned, and
+existing scalar progress is retained. The baseline never deletes healthy live
+progress.
 
-Restoration occurs once at the startup character boundary. RuneSchema performs
-the copy in memory, then runs mandatory live-registry pruning over the result,
+`defaults.restoration.resetOnce` is the separate destructive option. When set,
+the selected categories are replaced from the snapshot for the first eligible
+character loaded on the next RuneSchema launch. RuneSchema writes
+`resetOnce: false` back to settings before character
+loading; if that write fails, the reset is refused. Selecting every category
+for a one-shot reset restores the complete gameplay snapshot while still
+retaining the active character's `meta_data`, including its GUID and name.
+
+Restoration occurs at the once-per-process startup character boundary.
+RuneSchema builds the merge or reset in memory, then runs mandatory
+live-registry pruning over the result,
 and finally performs one reflected writeback. If the snapshot or any requested
 section is missing, no restoration category is applied and normal pruning
 continues.

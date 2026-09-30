@@ -76,9 +76,17 @@ namespace PS {
     PSConfigSettings& PSConfig::GetMutableSettings() { return m_settings; }
     const PSConfigSettings& PSConfig::GetSettings() const { return m_settings; }
 
+    bool PSConfig::ConsumeDefaultResetOnce() noexcept
+    {
+        const bool requested = m_defaultResetOnceRequested;
+        m_defaultResetOnceRequested = false;
+        return requested;
+    }
+
     void PSConfig::Load()
     {
         m_settings = PSConfigSettings{};
+        m_defaultResetOnceRequested = false;
         m_preserveOriginal = true;
         const auto configFile = GetSettingsPath() / "settings.jsonc";
         std::string contents;
@@ -100,9 +108,21 @@ namespace PS {
             if(m_settings.plugins.compatibilityNotices!="normal"&&m_settings.plugins.compatibilityNotices!="quiet"&&m_settings.plugins.compatibilityNotices!="off")
                 throw std::runtime_error("Invalid plugins.compatibilityNotices; use normal, quiet, or off");
             m_preserveOriginal = false;
+            const bool resetRequested = m_settings.defaults.restoration.resetOnce;
+            if (resetRequested) {
+                m_settings.defaults.restoration.resetOnce = false;
+                if (!Save()) {
+                    PS::Log<RC::LogLevel::Error>(STR(
+                        "One-shot Default.json reset was refused because RuneSchema could not persist resetOnce=false before character loading.\n"));
+                    return;
+                }
+                m_defaultResetOnceRequested = true;
+            }
             if(contents.find("// RuneSchema settings.")==std::string::npos)
                 ConfigFiles::Write(configFile,EncodeSettings(m_settings));
-            m_status = "Configuration loaded.";
+            m_status = resetRequested
+                ? "Configuration loaded; one-shot Default.json reset armed and resetOnce returned to false."
+                : "Configuration loaded.";
             PS::Log<RC::LogLevel::Normal>(STR("Config loaded.\n"));
         } catch (const std::exception& error) {
             PS::Log<RC::LogLevel::Error>(STR("Invalid configuration; recovering with defaults: {}\n"), RC::to_generic_string(error.what()));

@@ -1,6 +1,7 @@
 #include "Core/PersistencePruner.h"
 
 #include <map>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -123,9 +124,12 @@ void PersistencePruner::PruneBeforeCharacterLoad(
             : std::string{};
         if (characterId.empty()) return;
 
-        const auto& defaultSettings = PSConfig::Get()->GetSettings().defaults;
+        auto* config = PSConfig::Get();
+        const bool resetOnce = config->ConsumeDefaultResetOnce();
+        const auto& defaultSettings = config->GetSettings().defaults;
         std::vector<std::string> restoredSections;
-        if (defaultSettings.restoration.enabled) {
+        std::optional<nlohmann::json> restorationAppearanceDefaults;
+        if (defaultSettings.restoration.enabled || resetOnce) {
             const auto snapshot = AppearanceDefaults::Load(true);
             if (!snapshot.External) {
                 Log<LogLevel::Warning>(STR(
@@ -134,9 +138,13 @@ void PersistencePruner::PruneBeforeCharacterLoad(
             } else {
                 try {
                     auto restored = SaveSnapshotRestore::Apply(
-                        source, snapshot.Document, defaultSettings.restoration);
+                        source, snapshot.Document, defaultSettings.restoration,
+                        resetOnce ? SaveSnapshotRestore::Mode::ReplaceSelected
+                            : SaveSnapshotRestore::Mode::MergeBaseline);
                     source = std::move(restored.Save);
                     restoredSections = std::move(restored.Sections);
+                    if (defaultSettings.restoration.appearance)
+                        restorationAppearanceDefaults = snapshot.Document;
                 } catch (const std::exception& error) {
                     Log<LogLevel::Error>(STR(
                         "[SNAPSHOT-RESTORE][SKIPPED] No save section was restored: {}. Mandatory orphan pruning will continue.\n"),
@@ -152,8 +160,13 @@ void PersistencePruner::PruneBeforeCharacterLoad(
         SaveCleanup::Preview cleaned{source};
         cleaned = SaveCleanup::Plan(
             cleaned.Save, {}, false, registry.get(), false, true, true);
-        const auto defaults = AppearanceDefaults::Load(
+        auto defaults = AppearanceDefaults::Load(
             defaultSettings.appearanceOverrideEnabled);
+        if (restorationAppearanceDefaults) {
+            defaults.Document = *restorationAppearanceDefaults;
+            defaults.External = true;
+            defaults.Notice.clear();
+        }
         if (!defaults.Notice.empty()) Log<LogLevel::Warning>(STR(
             "[PERSISTENCE-PRUNER][DEFAULT-OVERRIDE-IGNORED] {}. Using the DLL's built-in male/A defaults.\n"),
             ToWideSafe(defaults.Notice.c_str()));
@@ -197,7 +210,8 @@ void PersistencePruner::PruneBeforeCharacterLoad(
                 restoredSummary += section;
             }
             Log<LogLevel::Warning>(STR(
-                "[SNAPSHOT-RESTORE][APPLIED] Restored selected section(s) from settings/defaults/Default.json: {}. Active character identity metadata was preserved; supported item, recipe, quest, and journal persistence IDs were checked against live registries.\n"),
+                "[SNAPSHOT-RESTORE][APPLIED] {} selected section(s) from settings/defaults/Default.json: {}. Active character identity metadata was preserved; supported item, recipe, quest, and journal persistence IDs were checked against live registries.\n"),
+                resetOnce ? STR("Reset") : STR("Merged baseline into"),
                 ToWideSafe(restoredSummary.c_str()));
         }
 

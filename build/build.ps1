@@ -721,6 +721,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
                 'character-entry-recovery-contract',
                 'appearance-defaults-contract',
                 'save-snapshot-restore',
+                'one-shot-default-reset-contract',
                 'dialogue-definition','building-preview-safety','building-clone-contract',
                 'static-building-assembly-contract','owned-save-cleanup-contract',
                 'resource-additional-drops','resource-scale-idempotence','niagara-preset',

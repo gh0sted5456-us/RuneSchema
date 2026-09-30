@@ -38,9 +38,11 @@ int RunConfigSettings() {
     assert(DecodeSettings("{}").persistence.quests);
     assert(!DecodeSettings("{}").defaults.appearanceOverrideEnabled);
     assert(!DecodeSettings("{}").defaults.restoration.enabled);
-    auto defaultSettings=DecodeSettings(R"({"defaults":{"appearanceOverrideEnabled":true,"restoration":{"enabled":true,"inventory":true,"quests":true}}})");
+    assert(!DecodeSettings("{}").defaults.restoration.resetOnce);
+    auto defaultSettings=DecodeSettings(R"({"defaults":{"appearanceOverrideEnabled":true,"restoration":{"enabled":true,"resetOnce":true,"inventory":true,"quests":true}}})");
     assert(defaultSettings.defaults.appearanceOverrideEnabled
         && defaultSettings.defaults.restoration.enabled
+        && defaultSettings.defaults.restoration.resetOnce
         && defaultSettings.defaults.restoration.inventory
         && defaultSettings.defaults.restoration.quests
         && !defaultSettings.defaults.restoration.journalLore);

@@ -24,6 +24,7 @@
     "appearanceOverrideEnabled": false,
     "restoration": {
       "enabled": false,
+      "resetOnce": false,
       "appearance": false,
       "inventory": false,
       "personalInventory": false,

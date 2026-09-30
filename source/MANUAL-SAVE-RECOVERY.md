@@ -93,9 +93,12 @@ Otherwise it logs the rejection and uses the baked profile. This appearance
 profile is separate from persistence-ID pruning.
 
 The same path can hold a complete known-good character snapshot. The disabled-
-by-default `defaults.restoration` settings select which appearance, inventory,
-loadout, progress, quest, journal/lore, or remaining gameplay sections are
-restored once at startup. RuneSchema always preserves the active character's
+by-default `defaults.restoration.enabled` setting safely merges missing baseline
+data into selected appearance, inventory, loadout, progress, quest,
+journal/lore, or remaining gameplay sections without overwriting healthy live
+progress. `defaults.restoration.resetOnce` instead replaces the selected
+sections on the next launch, then automatically persists itself back to false
+before character loading. RuneSchema always preserves the active character's
 identity metadata and prunes unresolved restored persistence IDs afterward.
 
 ### Validate the edited file
