@@ -50,6 +50,14 @@ int main(int argc,char** argv){
         "loaded-pak item IDs are not visibly retained from the live registry");
     need(pruner.find("PersistenceDiagnosticLedger")==pruner.npos,
         "cleanup depends on the optional diagnostic ledger");
+    const auto fallback=registrar.find(
+        "m_characterJsonHook = Hook::RegisterProcessEventPreCallback");
+    const auto fallbackGuard=registrar.find("if (!function",fallback);
+    const auto preGuardDiscovery=registrar.find(
+        "EnsureCharacterJsonPreflightHook();",fallback);
+    need(fallback!=registrar.npos && fallbackGuard!=registrar.npos
+        && (preGuardDiscovery==registrar.npos || preGuardDiscovery>fallbackGuard),
+        "global ProcessEvent fallback performs native-hook discovery before filtering the event");
     const auto preRegistration=registrar.find("RegisterInitGameStatePreCallback");
     const auto registerAll=registrar.find("RegisterAll();",preRegistration);
     need(preRegistration!=registrar.npos && registerAll!=registrar.npos,

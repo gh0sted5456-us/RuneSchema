@@ -199,13 +199,15 @@ namespace DragonWilds {
             m_characterJsonHook = Hook::RegisterProcessEventPreCallback(
                 [this](Hook::TCallbackIterationData<void>&, UObject* source,
                     UFunction* function, void* parameters) {
-                    EnsureCharacterJsonPreflightHook();
                     if (!function || !parameters || m_preflightingCharacterJson
                         || function->GetFName()
                             != FName(TEXT("LoadStateFromJson"), FNAME_Add)
                         || !function->GetPathName().starts_with(
                             TEXT("/Script/Dominion.")))
                         return;
+                    // This is a global ProcessEvent fallback. Never perform
+                    // discovery before this exact filter: discovery can scan
+                    // every UObject for each unrelated gameplay event.
                     m_preflightingCharacterJson = true;
                     try
                     {
