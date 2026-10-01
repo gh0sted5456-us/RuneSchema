@@ -38,6 +38,15 @@ int main(int argc,char** argv){
         && registrar.find("s_playerStateLoadHook")==registrar.npos
         && registrar.find("ProcessPlayerStateLoadPreflight")==registrar.npos,
         "mandatory pruning reintroduced an unsafe executable inline detour");
+    const auto mandatoryPreflight=registrar.find(
+        "if (!EnsureCharacterJsonPreflightHook())");
+    const auto auxiliaryHooks=registrar.find(
+        "for (auto* hookPath : SaveLoadHookPaths)");
+    need(mandatoryPreflight!=registrar.npos && auxiliaryHooks!=registrar.npos
+        && mandatoryPreflight<auxiliaryHooks
+        && registrar.find("was isolated after registration failed",
+            auxiliaryHooks)!=registrar.npos,
+        "an auxiliary registry hook can prevent mandatory character preflight");
     const auto registerAllDefinition=registrar.find(
         "void DragonWildsDataRegistrar::RegisterAll()");
     need(registerAllDefinition!=registrar.npos

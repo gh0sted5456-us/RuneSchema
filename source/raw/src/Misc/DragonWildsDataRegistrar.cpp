@@ -184,21 +184,6 @@ namespace DragonWilds {
                 RegisterAll();
             }, options);
 
-        for (auto* hookPath : SaveLoadHookPaths)
-        {
-            auto* function = UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr, nullptr, hookPath);
-            if (!function)
-            {
-                PS::Log<LogLevel::Warning>(STR("Save load hook '{}' was not found.\n"), hookPath);
-                continue;
-            }
-
-            const auto id = PS::RegisterNativePreHook(function, [](UnrealScriptFunctionCallableContext& context, void* customData) {
-                static_cast<DragonWildsDataRegistrar*>(customData)->RegisterAll();
-            }, this);
-            m_functionHooks.emplace_back(function, id);
-        }
-
         // Use UE4SS-managed UFunction hooks only. Direct inline detours at the
         // ProcessPlayerStateLoad executable address are unsafe across current
         // Steam/WinGDK builds and must never be installed by the pruner.
@@ -239,6 +224,48 @@ namespace DragonWilds {
             else
                 PS::Log<LogLevel::Warning>(STR(
                     "Character save preflight is unavailable; the reflected event hook could not be installed.\n"));
+        }
+
+        // Auxiliary registry-refresh hooks are best-effort. Install them only
+        // after the mandatory character boundary, and isolate every path so a
+        // malformed or changed UFunction cannot disable save preflight.
+        for (auto* hookPath : SaveLoadHookPaths)
+        {
+            try
+            {
+                auto* function = UECustom::UObjectGlobals::StaticFindObject<UFunction*>(
+                    nullptr, nullptr, hookPath);
+                if (!function)
+                {
+                    PS::Log<LogLevel::Warning>(STR(
+                        "Save load hook '{}' was not found.\n"), hookPath);
+                    continue;
+                }
+
+                const auto id = PS::RegisterNativePreHook(function,
+                    [](UnrealScriptFunctionCallableContext&, void* customData) {
+                        static_cast<DragonWildsDataRegistrar*>(
+                            customData)->RegisterAll();
+                    }, this);
+                if (id != Hook::ERROR_ID)
+                    m_functionHooks.emplace_back(function, id);
+                else
+                    PS::Log<LogLevel::Warning>(STR(
+                        "Save load hook '{}' could not be registered.\n"),
+                        hookPath);
+            }
+            catch (const std::exception& error)
+            {
+                PS::Log<LogLevel::Warning>(STR(
+                    "Save load hook '{}' was isolated after registration failed: {}.\n"),
+                    hookPath, PS::ToWideSafe(error.what()));
+            }
+            catch (...)
+            {
+                PS::Log<LogLevel::Warning>(STR(
+                    "Save load hook '{}' was isolated after registration failed.\n"),
+                    hookPath);
+            }
         }
     }
 
