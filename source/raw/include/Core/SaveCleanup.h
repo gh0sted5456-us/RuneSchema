@@ -234,7 +234,7 @@ inline Preview RepairInvalidAppearance(const Json& source,const Json& defaults,
         const auto found=current->find(field);
         // A missing BodyType is not evidence that gender was customized.
         // Leave it to Dominion.  An existing but invalid custom BodyType is
-        // repaired from Default.json (male_A_01) like any other bad handle.
+        // repaired from the baked male/A profile like any other bad handle.
         if(found==current->end() && field=="BodyType")continue;
         std::string table,row;
         if(found!=current->end() && read(*found,table,row) && valid(table,row))continue;

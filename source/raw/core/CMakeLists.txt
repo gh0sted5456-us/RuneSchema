@@ -256,18 +256,7 @@ if(PROJECT_IS_TOP_LEVEL)
     add_test(NAME appearance-defaults-contract COMMAND appearance-defaults-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Core/AppearanceDefaults.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Core/PersistencePruner.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/Spawn/PlayerRules.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/build.ps1"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../settings/defaults/README.md"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../settings/defaults/Default.example.jsonc")
-    add_executable(save-snapshot-restore ../tests/save-snapshot-restore.cpp)
-    target_link_libraries(save-snapshot-restore PRIVATE RuneSchemaJsonCore)
-    add_test(NAME save-snapshot-restore COMMAND save-snapshot-restore)
-    add_executable(one-shot-default-reset-contract ../tests/one-shot-default-reset-contract.cpp)
-    add_test(NAME one-shot-default-reset-contract COMMAND one-shot-default-reset-contract
-        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Utility/Config.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Core/PersistencePruner.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../src/dllmain.cpp")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/Spawn/PlayerRules.cpp")
     add_executable(item-grid-pagination ../tests/item-grid-pagination.cpp)
     add_test(NAME item-grid-pagination COMMAND item-grid-pagination
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Generator/SpawnToolsPanel.h"

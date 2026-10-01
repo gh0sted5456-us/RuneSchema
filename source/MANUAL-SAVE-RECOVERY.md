@@ -87,30 +87,10 @@ For example, the native no-hair selection is:
 Do not guess a beard, face, body, or color row. Those choices can be body-type
 or preset specific. Copy the exact field object from a working vanilla save.
 
-RuneSchema normally repairs unresolved appearance handles from a male/A profile
-baked into the DLL. No character snapshot or external JSON is required.
-
-Advanced users can provide a complete override at:
-
-```text
-UE4SS\Mods\RuneSchema\settings\defaults\Default.json
-```
-
-Copy `settings\defaults\Default.example.jsonc` to `Default.json`, enable
-`defaults.appearanceOverrideEnabled`, and follow the README in that directory.
-RuneSchema accepts the override only when all eight
-canonical fields are present and every table/row resolves in the live game.
-Otherwise it logs the rejection and uses the baked profile. This appearance
-profile is separate from persistence-ID pruning.
-
-The same path can hold a complete known-good character snapshot. The disabled-
-by-default `defaults.restoration.enabled` setting safely merges missing baseline
-data into selected appearance, inventory, loadout, progress, quest,
-journal/lore, or remaining gameplay sections without overwriting healthy live
-progress. `defaults.restoration.resetOnce` instead replaces the selected
-sections on the next launch, then automatically persists itself back to false
-before character loading. RuneSchema always preserves the active character's
-identity metadata and prunes unresolved restored persistence IDs afterward.
+RuneSchema repairs unresolved appearance handles from a male/A safety profile
+baked into the DLL. No character snapshot, external `Default.json`, or periodic
+in-world appearance callback is used. Repair occurs only at the once-per-process
+character-load preflight after all applicable live registries are ready.
 
 ### Validate the edited file
 

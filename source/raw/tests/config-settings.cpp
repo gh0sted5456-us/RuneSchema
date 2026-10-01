@@ -37,17 +37,6 @@ int RunConfigSettings() {
     assert(!DecodeSettings("{}").persistence.characterCustomization);
     assert(!DecodeSettings("{}").persistence.allowCorruptCharacterEntry);
     assert(DecodeSettings("{}").persistence.quests);
-    assert(!DecodeSettings("{}").defaults.appearanceOverrideEnabled);
-    assert(!DecodeSettings("{}").defaults.restoration.enabled);
-    assert(!DecodeSettings("{}").defaults.restoration.resetOnce);
-    auto defaultSettings=DecodeSettings(R"({"defaults":{"appearanceOverrideEnabled":true,"restoration":{"enabled":true,"resetOnce":true,"inventory":true,"quests":true}}})");
-    assert(defaultSettings.defaults.appearanceOverrideEnabled
-        && defaultSettings.defaults.restoration.enabled
-        && defaultSettings.defaults.restoration.resetOnce
-        && defaultSettings.defaults.restoration.inventory
-        && defaultSettings.defaults.restoration.quests
-        && !defaultSettings.defaults.restoration.journalLore);
-    assert(DecodeSettings(EncodeSettings(defaultSettings)).defaults.restoration.inventory);
     auto persistenceSettings=DecodeSettings(R"({"persistence":{"characterCustomization":true,"allowCorruptCharacterEntry":true,"journal":true,"recipes":true,"quests":false}})");
     assert(persistenceSettings.persistence.characterCustomization
         && persistenceSettings.persistence.allowCorruptCharacterEntry

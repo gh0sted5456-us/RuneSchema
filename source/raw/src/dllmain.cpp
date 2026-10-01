@@ -421,24 +421,6 @@ public:
             ImGui::TextWrapped("Normal RuneSchema recipe unlocks may persist once their live RecipeData has a valid PersistenceID. Generated vendor recipes remain transient. Safe Clean removes orphaned RuneSchema progress after content registration.");
             ImGui::Checkbox("Save RuneSchema quest progress", &settings.persistence.quests);
             ImGui::TextWrapped("On by default. Off leaves quest definitions available to other loaders but blocks RuneSchema quest actions because native quest progress is save-backed.");
-            ImGui::SeparatorText("Default character recovery");
-            ImGui::Checkbox("Use settings/defaults/Default.json for appearance", &settings.defaults.appearanceOverrideEnabled);
-            ImGui::TextWrapped("Off uses RuneSchema's baked male/A safety profile. If enabled but the external file is missing or invalid, RuneSchema safely falls back to the baked profile.");
-            ImGui::Checkbox("Safely merge selected Default.json baselines", &settings.defaults.restoration.enabled);
-            ImGui::TextWrapped("Disabled by default. Valid live progress remains authoritative; missing baseline entries and structure are merged before unresolved persistence IDs are pruned.");
-            ImGui::Checkbox("Reset selected sections once on next launch", &settings.defaults.restoration.resetOnce);
-            ImGui::TextWrapped("Destructive one-shot replacement for the first eligible character loaded that launch. RuneSchema persists this toggle back to off during startup before any character can be reset. If that write fails, the reset is refused.");
-            ImGui::BeginDisabled(!settings.defaults.restoration.enabled
-                && !settings.defaults.restoration.resetOnce);
-            ImGui::Checkbox("Restore appearance", &settings.defaults.restoration.appearance);
-            ImGui::Checkbox("Restore inventory", &settings.defaults.restoration.inventory);
-            ImGui::Checkbox("Restore personal inventory", &settings.defaults.restoration.personalInventory);
-            ImGui::Checkbox("Restore loadout", &settings.defaults.restoration.loadout);
-            ImGui::Checkbox("Restore item and recipe progress", &settings.defaults.restoration.unlockProgress);
-            ImGui::Checkbox("Restore quest progress", &settings.defaults.restoration.quests);
-            ImGui::Checkbox("Restore journal and lore", &settings.defaults.restoration.journalLore);
-            ImGui::Checkbox("Restore remaining GameProgress sections", &settings.defaults.restoration.remainingGameProgress);
-            ImGui::EndDisabled();
             ImGui::SeparatorText("Server Helpy permissions");
             ImGui::TextWrapped("These permissions are disabled by default. Allowed client requests are executed and validated by server authority; clients can never export files or create permanent placements through this bridge.");
             ImGui::Checkbox("Allow client item grants", &settings.helpyAuthority.allowClientItemGrants);
