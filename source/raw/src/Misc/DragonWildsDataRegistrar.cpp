@@ -1,6 +1,9 @@
 #include "Utility/NativeFunctionHook.h"
+#include <Windows.h>
+#include <chrono>
 #include <cstring>
 #include <algorithm>
+#include <fstream>
 #include <limits>
 #include <ranges>
 #include <unordered_map>
@@ -23,14 +26,134 @@
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "Utility/Logging.h"
+#include "Core/ConfigFiles.h"
 #include "Core/SaveCleanup.h"
 #include "Core/SaveRegistrySnapshot.h"
+#include "Runtime/Storefront.h"
 #include "Misc/DragonWildsDataRegistrar.h"
 
 using namespace RC;
 using namespace RC::Unreal;
 
 namespace DragonWilds {
+    namespace {
+        constexpr std::size_t CharacterSaveLimit = 8 * 1024 * 1024;
+
+        struct CharacterText {
+            std::string Utf8;
+            bool Utf16Le = false;
+        };
+
+        CharacterText DecodeCharacterText(const std::string& bytes)
+        {
+            if (bytes.size() < 2
+                || static_cast<unsigned char>(bytes[0]) != 0xff
+                || static_cast<unsigned char>(bytes[1]) != 0xfe)
+                return {bytes, false};
+            if ((bytes.size() - 2) % sizeof(wchar_t))
+                throw std::runtime_error("UTF-16 character save has an incomplete code unit");
+            std::wstring wide((bytes.size() - 2) / sizeof(wchar_t), L'\0');
+            std::memcpy(wide.data(), bytes.data() + 2,
+                wide.size() * sizeof(wchar_t));
+            const auto length = WideCharToMultiByte(CP_UTF8,
+                WC_ERR_INVALID_CHARS, wide.data(), static_cast<int>(wide.size()),
+                nullptr, 0, nullptr, nullptr);
+            if (length <= 0) throw std::runtime_error(
+                "UTF-16 character save could not be decoded");
+            std::string utf8(length, '\0');
+            if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
+                    wide.data(), static_cast<int>(wide.size()), utf8.data(),
+                    length, nullptr, nullptr) != length)
+                throw std::runtime_error("UTF-16 character save decoding changed");
+            return {std::move(utf8), true};
+        }
+
+        std::string EncodeCharacterText(const nlohmann::json& document,
+            bool utf16Le)
+        {
+            auto text = document.dump(1, '\t', false,
+                nlohmann::json::error_handler_t::strict);
+            if (!utf16Le) return text;
+            const auto length = MultiByteToWideChar(CP_UTF8,
+                MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()),
+                nullptr, 0);
+            if (length <= 0) throw std::runtime_error(
+                "Clean character save could not be encoded as UTF-16");
+            std::wstring wide(length, L'\0');
+            if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+                    text.data(), static_cast<int>(text.size()), wide.data(),
+                    length) != length)
+                throw std::runtime_error("Clean character save encoding changed");
+            std::string encoded("\xff\xfe", 2);
+            encoded.append(reinterpret_cast<const char*>(wide.data()),
+                wide.size() * sizeof(wchar_t));
+            return encoded;
+        }
+
+        nlohmann::json ParseCharacterText(const std::string& bytes)
+        {
+            const auto decoded = DecodeCharacterText(bytes);
+            return nlohmann::json::parse(decoded.Utf8, nullptr, true, true);
+        }
+
+        std::filesystem::path LocalCharacterSaveDirectory()
+        {
+            const auto required = GetEnvironmentVariableW(
+                L"LOCALAPPDATA", nullptr, 0);
+            if (!required) throw std::runtime_error("LOCALAPPDATA is unavailable");
+            std::vector<wchar_t> value(required);
+            if (GetEnvironmentVariableW(L"LOCALAPPDATA", value.data(), required)
+                    + 1 != required)
+                throw std::runtime_error("LOCALAPPDATA changed while it was read");
+            return std::filesystem::path(value.data()) / L"RSDragonwilds"
+                / L"Saved" / L"SaveCharacters";
+        }
+
+        std::filesystem::path BackupCharacterSave(
+            const std::filesystem::path& source)
+        {
+            auto backup = source;
+            backup += L".runeschema-startup-" + std::to_wstring(
+                std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count())
+                + L".bak";
+            if (!std::filesystem::copy_file(source, backup,
+                    std::filesystem::copy_options::none))
+                throw std::runtime_error("Character save backup was not created");
+            return backup;
+        }
+
+        void ReplaceCharacterSave(const std::filesystem::path& path,
+            const std::string& original, const nlohmann::json& clean,
+            bool utf16Le)
+        {
+            const auto encoded = EncodeCharacterText(clean, utf16Le);
+            if (ParseCharacterText(encoded) != clean)
+                throw std::runtime_error("Clean character save failed pre-write verification");
+            if (PS::ConfigFiles::Read(path, CharacterSaveLimit) != original)
+                throw std::runtime_error("Character save changed during cleanup");
+            const auto backup = BackupCharacterSave(path);
+            try {
+                PS::ConfigFiles::Write(path, encoded);
+                if (ParseCharacterText(PS::ConfigFiles::Read(
+                        path, CharacterSaveLimit)) != clean)
+                    throw std::runtime_error(
+                        "Character save failed post-write verification");
+            } catch (...) {
+                try {
+                    if (PS::ConfigFiles::Read(path, CharacterSaveLimit)
+                            != original)
+                        PS::ConfigFiles::Write(path, original);
+                } catch (...) {
+                    PS::Log<LogLevel::Error>(STR(
+                        "[PERSISTENCE-PRUNER][FATAL-RESTORE] '{}' could not be restored automatically; use backup '{}'.\n"),
+                        path.filename().wstring(), backup.filename().wstring());
+                }
+                throw;
+            }
+        }
+    }
+
     static constexpr const TCHAR* ItemDataClassPath = TEXT("/Script/Dominion.ItemData");
     static constexpr const TCHAR* RecipeDataClassPath = TEXT("/Script/Dominion.RecipeData");
     static constexpr const TCHAR* QuestDataClassPath = TEXT("/Script/Dominion.QuestData");
@@ -109,6 +232,88 @@ namespace DragonWilds {
         }
 
         RegisterAll();
+        if (!m_startupSaveCleanupAttempted)
+        {
+            // The old 0.6/early-0.7 cleaner ran here. Capture twice so a
+            // changing or partially populated live registry cannot authorize
+            // a file edit.
+            RegisterAll();
+            CleanLocalCharacterSavesOnce();
+        }
+    }
+
+    void DragonWildsDataRegistrar::CleanLocalCharacterSavesOnce()
+    {
+        m_startupSaveCleanupAttempted = true;
+        if (PS::Storefront::CurrentNativeLane()
+            == PS::Storefront::NativeLane::GamePassNative)
+        {
+            PS::Log<LogLevel::Normal>(STR(
+                "[PERSISTENCE-PRUNER][STARTUP][PROVIDER-DEFERRED] Xbox WGS character files were not edited directly.\n"));
+            return;
+        }
+
+        const auto registry = PS::SaveCleanup::ReadRegistry();
+        if (!registry || !registry->Ready())
+        {
+            PS::Log<LogLevel::Warning>(STR(
+                "[PERSISTENCE-PRUNER][STARTUP][UNCHANGED] Complete stable item and recipe registries were unavailable; no character file was modified.\n"));
+            return;
+        }
+
+        std::size_t scanned = 0;
+        std::size_t changed = 0;
+        std::size_t removed = 0;
+        std::uintmax_t bytes = 0;
+        const auto directory = LocalCharacterSaveDirectory();
+        if (!std::filesystem::is_directory(directory)) return;
+        for (const auto& entry : std::filesystem::directory_iterator(directory))
+        {
+            if (!entry.is_regular_file() || entry.path().extension() != L".json")
+                continue;
+            if (++scanned > 64 || (bytes += entry.file_size()) > 64 * 1024 * 1024)
+                throw std::runtime_error(
+                    "Character save directory exceeds safe startup cleanup limits");
+            try
+            {
+                const auto original = PS::ConfigFiles::Read(
+                    entry.path(), CharacterSaveLimit);
+                const auto decoded = DecodeCharacterText(original);
+                const auto source = nlohmann::json::parse(
+                    decoded.Utf8, nullptr, true, true);
+                if (PS::SaveCleanup::ClassifyCharacterDocument(source)
+                    != PS::SaveCleanup::CharacterDocumentKind::Gameplay)
+                    continue;
+                const auto plan = PS::SaveCleanup::Plan(source, {}, false,
+                    registry.get(), false, true, true);
+                if (plan.Removed.empty()) continue;
+                ReplaceCharacterSave(entry.path(), original, plan.Save,
+                    decoded.Utf16Le);
+                ++changed;
+                removed += plan.Removed.size();
+                for (const auto& row : plan.Removed)
+                    PS::Log<LogLevel::Warning>(STR(
+                        "[PERSISTENCE-PRUNER][STARTUP][ORPHAN-REMOVED] {} '{}' from '{}'.\n"),
+                        PS::ToWideSafe(row.value("Kind", std::string("Unknown")).c_str()),
+                        PS::ToWideSafe(row.value("Id", std::string("<unknown>")).c_str()),
+                        entry.path().filename().wstring());
+            }
+            catch (const std::exception& error)
+            {
+                PS::Log<LogLevel::Error>(STR(
+                    "[PERSISTENCE-PRUNER][STARTUP][UNCHANGED] '{}' was not modified: {}.\n"),
+                    entry.path().filename().wstring(),
+                    PS::ToWideSafe(error.what()));
+            }
+        }
+        if (changed)
+            PS::Log<LogLevel::Warning>(STR(
+                "[PERSISTENCE-PRUNER][STARTUP][COMPLETE] Atomically removed {} unresolved persistence reference(s) from {} character save(s). Cleanup will not run again until game restart.\n"),
+                removed, changed);
+        else
+            PS::Log<LogLevel::Verbose>(STR(
+                "[PERSISTENCE-PRUNER][STARTUP][CHECKED] {} character save(s) checked; every applicable persistence ID resolved.\n"),
+                scanned);
     }
 
     bool DragonWildsDataRegistrar::ResolveBindings()

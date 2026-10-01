@@ -106,6 +106,32 @@ class NativeRegistry {
             "identity '"+RC::to_string(RC::StringType(*key))+"'");
     }
 public:
+    static bool ResolvesPersistenceIdentity(UObject* subsystem,UObject* quest,bool journal=false) {
+        using namespace RC::Unreal;
+        auto* type=ActorHelper::ResolveClass(journal?TEXT("/Script/Dominion.JournalSubsystem"):TEXT("/Script/Dominion.QuestDataSubsystem"));
+        auto* dataType=ActorHelper::ResolveClass(journal?TEXT("/Script/Dominion.JournalEntryData"):TEXT("/Script/Dominion.QuestData"));
+        if(!subsystem || !quest || !type || !dataType || !subsystem->IsA(type) || !quest->IsA(dataType))
+            throw std::runtime_error("Quest persistence lookup owner/type mismatch");
+        auto* identity=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(quest->GetClassPrivate(),TEXT("PersistenceID")));
+        auto* ids=CastField<FMapProperty>(PropertyHelper::GetPropertyByName(subsystem->GetClassPrivate(),TEXT("PersistenceIDToDataMap")));
+        if(!identity || identity->GetArrayDim()!=1 || !ids || !CastField<FStrProperty>(ids->GetKeyProp()))
+            throw std::runtime_error("Quest persistence lookup layout changed");
+        auto* value=ObjectProperty(ids->GetValueProp(),quest);
+        const auto& text=identity->GetPropertyValue(identity->ContainerPtrToValuePtr<void>(quest));
+        const auto& chars=text.GetCharArray();
+        if(chars.Num()<=1 || chars.Num()>1025 || !chars.GetData() || chars.GetData()[chars.Num()-1]!=0)
+            throw std::runtime_error("Quest persistence identity is malformed");
+        const FString key(RC::StringType(chars.GetData(),chars.Num()-1).c_str());
+        auto* data=ids->ContainerPtrToValuePtr<void>(subsystem);CheckMap(ids,data);
+        bool found=false,matched=false;
+        UECustom::FScriptMapHelper view(ids,data);
+        view.ForEachPair([&](void* existingKey,void* existingValue) {
+            if(!ids->GetKeyProp()->Identical(existingKey,const_cast<FString*>(&key)))return;
+            if(found)throw std::runtime_error("Quest persistence identity is duplicated");
+            found=true;matched=value->GetObjectPropertyValue(existingValue)==quest;
+        });
+        return found && matched;
+    }
     static uint16_t Register(UObject* subsystem,UObject* gameInstance,UObject* quest) {
         return RegisterAsset(subsystem,gameInstance,quest,false);
     }

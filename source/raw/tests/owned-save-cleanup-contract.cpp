@@ -12,9 +12,11 @@ int main(int argc,char** argv){
         "automatic pruning still depends on an ownership ledger");
     need(mainLoader.find("OwnedContent::BeginSnapshot")==mainLoader.npos,
         "startup still creates an ownership ledger");
-    need(registrar.find("ScrubLocalCharacterFiles")==registrar.npos
-        && registrar.find("ConfigFiles::Write")==registrar.npos,
-        "automatic cleanup still rewrites stored Steam character files");
+    need(registrar.find("CleanLocalCharacterSavesOnce")!=registrar.npos
+        && registrar.find("ConfigFiles::Write(path, encoded)")!=registrar.npos
+        && registrar.find("BackupCharacterSave(path)")!=registrar.npos
+        && registrar.find("failed post-write verification")!=registrar.npos,
+        "startup cleanup is missing verified backup-first atomic replacement");
     need(pruner.find("SaveCleanup::Plan(")!=pruner.npos
         && pruner.find("registry.get(), false, true, true")!=pruner.npos,
         "pruning is not driven by the completed native registry");
@@ -23,8 +25,23 @@ int main(int argc,char** argv){
         && registrar.find("snapshot.Quests")!=registrar.npos
         && registrar.find("snapshot.Journals")!=registrar.npos,
         "one or more persistent identity registries are absent");
+    const auto firstCapture=registrar.find("RegisterAll();");
+    const auto secondCapture=registrar.find("RegisterAll();",firstCapture+1);
+    const auto startupCleanup=registrar.find("CleanLocalCharacterSavesOnce();",
+        secondCapture);
+    need(firstCapture!=registrar.npos && secondCapture!=registrar.npos
+        && startupCleanup!=registrar.npos && firstCapture<secondCapture
+        && secondCapture<startupCleanup,
+        "startup file cleanup is not gated by two stable registry captures");
+    need(registrar.find("GamePassNative")!=registrar.npos
+        && registrar.find("PROVIDER-DEFERRED")!=registrar.npos,
+        "startup cleaner can rewrite Xbox WGS provider storage");
     need(registrar.find("ScrubCharacterJsonBeforeLoad")!=registrar.npos,
         "provider-backed character JSON preflight is missing");
+    need(quests.find("ResolvesPersistenceIdentity")!=quests.npos
+        && quests.find("[QUEST-REGISTRY][REENTRY]")!=quests.npos
+        && quests.find("preparedInstance==instance")!=quests.npos,
+        "same-instance world reentry can skip validation of live quest persistence identities");
     need(registrar.find("ProcessPlayerStateLoad")!=registrar.npos
         && registrar.find("OnPersistentStoreLoadPlayerResult")!=registrar.npos
         && registrar.find("LoadStateFromJson")!=registrar.npos,
@@ -94,6 +111,7 @@ int main(int argc,char** argv){
         "automatic pruning still contains snapshot restoration machinery");
     need(registrar.find("m_pruner.PruneBeforeCharacterLoad")!=registrar.npos
         && pruner.find("PruneCharacterJson(value)")!=pruner.npos
-        && registrar.find("SaveCleanup::Plan(")==registrar.npos,
-        "persistence pruning is not isolated from live-registry registration");
+        && registrar.find("SaveCleanup::Plan(source")!=registrar.npos
+        && registrar.find("registry.get(), false, true, true")!=registrar.npos,
+        "startup and provider-boundary pruning do not share the unresolved-only plan");
 }

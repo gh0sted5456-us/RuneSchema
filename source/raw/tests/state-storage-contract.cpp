@@ -61,9 +61,12 @@ int main(int argc, char** argv)
     Check(playerRules.find("IsValidAppearanceReference") != std::string::npos
         && playerRules.find("ReadDefaultPlayerAppearance") != std::string::npos,
         "appearance is replaced only after validation fails");
-    Check(registrar.find("ScrubLocalCharacterFiles") == std::string::npos
-        && registrar.find("ConfigFiles::Write") == std::string::npos,
-        "automatic cleanup writes directly to stored character files");
+    Check(registrar.find("CleanLocalCharacterSavesOnce") != std::string::npos
+        && registrar.find("BackupCharacterSave") != std::string::npos
+        && registrar.find("ConfigFiles::Write(path, encoded)") != std::string::npos
+        && registrar.find("GamePassNative") != std::string::npos
+        && registrar.find("PROVIDER-DEFERRED") != std::string::npos,
+        "Steam startup cleanup is not atomic or can rewrite Xbox WGS storage");
     Check(pruner.find("AppearanceDefaults::BuiltIn") != std::string::npos
         && appearanceDefaults.find("male_A_01") != std::string::npos
         && appearanceDefaults.find("Default.json") == std::string::npos,

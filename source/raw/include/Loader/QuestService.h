@@ -211,11 +211,22 @@ public:
             subsystem=candidate;
         }
         if(!subsystem)throw std::runtime_error("Quest subsystem has not initialized");
-        // InitGameState has both pre and post notifications, and several runtime
-        // consumers can request quest readiness. A successfully prepared game
-        // instance must not be published into the same native maps again: the
-        // engine may normalize or replace map references between the two hooks.
-        if(preparedInstance==instance && preparedSubsystem==subsystem && !networkManifest.empty())return;
+        // InitGameState has both pre and post notifications, and front-end to
+        // gameplay travel can reuse the same GameInstance/subsystem pointers
+        // after their identity maps were cleared. Pointer identity alone is
+        // therefore not proof that a saved quest PersistenceID still resolves.
+        if(preparedInstance==instance && preparedSubsystem==subsystem && !networkManifest.empty()) {
+            bool resolves=true;
+            for(const auto& [key,document]:definitions) {
+                const auto found=assets.find(key);
+                if(found==assets.end() || !QuestRegistry::NativeRegistry::ResolvesPersistenceIdentity(
+                        subsystem,found->second->Get())) {resolves=false;break;}
+            }
+            if(resolves)return;
+            PS::Log<RC::LogLevel::Warning>(STR(
+                "[QUEST-REGISTRY][REENTRY] Live quest identity maps were reset; re-registering {} RuneSchema quest(s) before character load.\n"),
+                definitions.size());
+        }
         if(preparing)throw std::runtime_error("Quest registry preparation is already in progress");
         preparing=true;
         struct PreparingGuard {bool& Active;~PreparingGuard(){Active=false;}} preparingGuard{preparing};

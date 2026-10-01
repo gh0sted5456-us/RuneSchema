@@ -169,6 +169,7 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsJournalModLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRecipeModLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/NpcQuestActions.inl"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/NativeDialogueSave.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/Spawn/PlayerRules.cpp")
     add_executable(loader-lifecycle-contract ../tests/loader-lifecycle-contract.cpp)
     add_test(NAME loader-lifecycle-contract COMMAND loader-lifecycle-contract

@@ -15,12 +15,13 @@ static void Require(bool value, const char* message) {
 }
 
 int main(int argc, char** argv) {
-    if (argc != 6) throw std::runtime_error("Config, journal, recipe, quest and player sources are required");
+    if (argc != 7) throw std::runtime_error("Config, journal, recipe, quest, dialogue and player sources are required");
     const auto config = Read(argv[1]);
     const auto journal = Read(argv[2]);
     const auto recipes = Read(argv[3]);
     const auto quests = Read(argv[4]);
-    const auto players = Read(argv[5]);
+    const auto dialogue = Read(argv[5]);
+    const auto players = Read(argv[6]);
     Require(config.find("bool characterCustomization = false;") != std::string::npos,
         "Character-customization persistence must default off");
     const auto persistenceStart=config.find("struct PersistenceSettings");
@@ -46,19 +47,26 @@ int main(int argc, char** argv) {
         "Journal acquisition does not use the native inventory count contract");
     Require(journal.find("|| !m_nativePersistenceReady)return;") != std::string::npos,
         "Journal acquisition is not guarded when transient filtering is unavailable");
-    Require(recipes.find("progressComponent->GetClassPrivate(), TEXT(\"RecipesUnlocked\")") != std::string::npos,
-        "Runtime recipes must enter the native persistent unlock set");
+    Require(recipes.find("TEXT(\"RecipesUnlocked\"), TEXT(\"RecipesUnlockedThatShouldNotPersist\")") != std::string::npos,
+        "Runtime recipes must enter the native visible unlock set");
+    Require(recipes.find("TEXT(\"RecipesUnlockedThatShouldNotPersist\")") != std::string::npos
+        && recipes.find("Publish each automatic recipe into the visible set and the native") != std::string::npos,
+        "Automatic recipe unlocks can still leak transient mod IDs into character saves");
     Require(recipes.find("SaveCleanup::ReadRegistry()") == std::string::npos,
         "Recipe unlock delivery must not be gated by a lagging Safe Clean registry snapshot");
     Require(recipes.find("GetSettings().persistence.recipes") == std::string::npos,
         "Recipe persistence must not be configurable");
     Require(recipes.find("if (m_hooksActive || m_recipes.empty())") != std::string::npos,
         "Recipe-unlocker consumables are not observed when automatic unlock is disabled");
-    Require(recipes.find("valid live recipes are not mirrored into Dominion's non-persistent") != std::string::npos,
+    Require(recipes.find("Explicit game progression remains free to learn persistent recipes") != std::string::npos,
         "Recipe persistence policy comment is missing");
     Require(quests.find("GetSettings().persistence.quests") != std::string::npos,
         "Quest actions are not gated by the quest persistence setting");
+    Require(dialogue.find("if(!hasProgress)return;") != std::string::npos
+        && dialogue.find("if(!native.IsInitialized())return false;") != std::string::npos
+        && dialogue.find("if(!initialized)InitializeForWrite();") != std::string::npos,
+        "Dialogue loading can still auto-create hidden Ungiven quest records");
     Require(players.find("GetSettings().persistence.characterCustomization") != std::string::npos,
         "Automatic character-customization writes are not independently gated");
-    std::cout << "Journal unlocks remain transient; RuneSchema recipe unlocks persist with Safe Clean orphan recovery.\n";
+    std::cout << "Automatic journal and recipe unlocks remain transient; explicit progression may persist.\n";
 }

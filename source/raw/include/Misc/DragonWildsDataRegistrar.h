@@ -33,6 +33,7 @@ namespace DragonWilds {
         bool m_initialized = false;
         bool m_preflightingCharacterJson = false;
         bool m_registrySummaryReported = false;
+        bool m_startupSaveCleanupAttempted = false;
         PS::PersistencePruner m_pruner;
         std::string m_registryCandidateFingerprint;
         unsigned m_registryCandidatePasses = 0;
@@ -42,6 +43,7 @@ namespace DragonWilds {
             RC::Unreal::UFunction* function, void* parameters);
         void InstallHooks();
         void RegisterAll();
+        void CleanLocalCharacterSavesOnce();
         bool RegisterMissing(RC::Unreal::UClass* dataClass, RC::Unreal::UObject* subsystem);
         int32_t EnsureNetworkIdentity(
             RC::Unreal::UObject* dataAsset, RC::Unreal::UObject* subsystem);
