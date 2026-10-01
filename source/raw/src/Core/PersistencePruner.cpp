@@ -77,20 +77,10 @@ void PersistencePruner::PruneBeforeCharacterLoad(
 {
     if (s_cleanupConsumedForProcess.load(std::memory_order_acquire)
         || !context || !function || !parameters) return;
-    const auto registry = SaveCleanup::ReadRegistry();
-    if (!registry || !registry->Ready()) {
-        if (!m_cleanupDeferredReported) {
-            m_cleanupDeferredReported = true;
-            Log<LogLevel::Warning>(STR(
-                "[PERSISTENCE-PRUNER][DEFERRED] Waiting for complete applicable live registries. No persistence ID or character field was changed.\n"));
-        }
-        return;
-    }
 
     try {
         FStrProperty* jsonProperty = nullptr;
         void* jsonAddress = nullptr;
-        nlohmann::json source;
         for (auto* field : TFieldRange<FProperty>(
             function, EFieldIterationFlags::Default)) {
             if (!field->HasAnyPropertyFlags(CPF_Parm)
@@ -112,14 +102,44 @@ void PersistencePruner::PruneBeforeCharacterLoad(
                 "character load exposed more than one gameplay JSON parameter");
             jsonProperty = stringField;
             jsonAddress = address;
-            source = std::move(parsed);
         }
         if (!jsonProperty) return;
+        auto value = jsonProperty->GetPropertyValue(jsonAddress);
+        PruneCharacterJson(value);
+        jsonProperty->SetPropertyValue(jsonAddress, value);
+    } catch (const std::exception& error) {
+        Log<LogLevel::Error>(STR(
+            "[PERSISTENCE-PRUNER][UNCHANGED] Character JSON was not modified: {}.\n"),
+            ToWideSafe(error.what()));
+    }
+}
+
+void PersistencePruner::PruneCharacterJson(FString& characterJson)
+{
+    if (s_cleanupConsumedForProcess.load(std::memory_order_acquire)
+        || characterJson.GetCharArray().Num() <= 1) return;
+
+    try {
+        const auto utf8 = RC::to_string(RC::StringType(*characterJson));
+        if (utf8.find("\"GameProgress\"") == std::string::npos) return;
+        auto source = nlohmann::json::parse(utf8, nullptr, true, true);
+        if (SaveCleanup::ClassifyCharacterDocument(source)
+            != SaveCleanup::CharacterDocumentKind::Gameplay) return;
         const auto characterId = source.contains("meta_data")
             && source.at("meta_data").is_object()
             ? source.at("meta_data").value("char_guid", std::string{})
             : std::string{};
         if (characterId.empty()) return;
+
+        const auto registry = SaveCleanup::ReadRegistry();
+        if (!registry || !registry->Ready()) {
+            if (!m_cleanupDeferredReported) {
+                m_cleanupDeferredReported = true;
+                Log<LogLevel::Warning>(STR(
+                    "[PERSISTENCE-PRUNER][DEFERRED] Waiting for complete applicable live registries. No persistence ID or character field was changed.\n"));
+            }
+            return;
+        }
 
         ReportValidatedSavedItems(source, *registry);
         if (s_cleanupConsumedForProcess.exchange(
@@ -143,12 +163,10 @@ void PersistencePruner::PruneBeforeCharacterLoad(
         }
 
         const auto serialized = cleaned.Save.dump();
-        const FString replacement(RC::to_generic_string(serialized).c_str());
-        jsonProperty->SetPropertyValue(jsonAddress, replacement);
-        const auto verified = RC::to_string(RC::StringType(
-            *jsonProperty->GetPropertyValue(jsonAddress)));
+        characterJson = FString(RC::to_generic_string(serialized).c_str());
+        const auto verified = RC::to_string(RC::StringType(*characterJson));
         if (verified != serialized) throw std::runtime_error(
-            "clean character JSON did not survive reflected writeback");
+            "clean character JSON did not survive native writeback");
 
         std::map<std::string, std::size_t> counts;
         std::size_t orphanCount = 0;

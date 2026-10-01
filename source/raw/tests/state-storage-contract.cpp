@@ -71,8 +71,9 @@ int main(int argc, char** argv)
     Check(registrar.find("ScrubCharacterJsonBeforeLoad") != std::string::npos,
         "shared native character-load preflight is missing");
     Check(pruner.find("s_cleanupConsumedForProcess") != std::string::npos
-        && registrar.find("EnsureCharacterJsonPreflightHook") != std::string::npos
-        && registrar.find("[PERSISTENCE-PRUNER][BOUNDARY-READY]") != std::string::npos,
+        && registrar.find("InstallNativeCharacterJsonPreflightHook") != std::string::npos
+        && registrar.find("[PERSISTENCE-PRUNER][NATIVE-BOUNDARY-READY]") != std::string::npos
+        && registrar.find("m_pruner.PruneCharacterJson(*playerState)") != std::string::npos,
         "automatic recovery cannot reach the first eligible native character load");
     Check(registrar.find("PublishRegistry") != std::string::npos
         && registrar.find("snapshot.Journals") != std::string::npos,
