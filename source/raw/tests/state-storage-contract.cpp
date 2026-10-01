@@ -23,7 +23,7 @@ static void Check(bool value, const char* message)
 
 int main(int argc, char** argv)
 {
-    Check(argc >= 10, "host, loaders, player rules, registrar, save viewer, cleanup panel, pruner, and appearance defaults supplied");
+    Check(argc >= 11, "host, loaders, player rules, registrar, save viewer, cleanup panel, pruner, appearance defaults, and native boundary supplied");
     const auto host = Read(argv[1]);
     const auto mainLoader = Read(argv[2]);
     const auto buildingLoader = Read(argv[3]);
@@ -33,6 +33,7 @@ int main(int argc, char** argv)
     const auto cleanupPanel = Read(argv[7]);
     const auto pruner = Read(argv[8]);
     const auto appearanceDefaults = Read(argv[9]);
+    const auto recovery = Read(argv[10]);
     Check(host.find("RSDragonwilds") != std::string::npos
         && host.find("Saved") != std::string::npos
         && host.find("RuneSchema") != std::string::npos,
@@ -68,14 +69,14 @@ int main(int argc, char** argv)
         && appearanceDefaults.find("male_A_01") != std::string::npos
         && appearanceDefaults.find("Default.json") == std::string::npos,
         "appearance recovery does not exclusively use baked defaults");
-    Check(registrar.find("ScrubCharacterJsonBeforeLoad") != std::string::npos,
+    Check(recovery.find("m_pruner.PruneCharacterJson(*playerState)") != std::string::npos,
         "shared native character-load preflight is missing");
     Check(pruner.find("s_cleanupConsumedForProcess") != std::string::npos
-        && registrar.find("Hook::RegisterProcessEventPreCallback") != std::string::npos
-        && registrar.find("[PERSISTENCE-PRUNER][REFLECTED-BOUNDARY-READY]") != std::string::npos
+        && recovery.find("PS::InstallInlineHook(PlayerStateHook") != std::string::npos
+        && recovery.find("[PERSISTENCE-PRUNER][NATIVE-BOUNDARY-READY]") != std::string::npos
         && registrar.find("ForEachUObject") == std::string::npos
-        && registrar.find("InstallInlineHook") == std::string::npos,
-        "automatic recovery is missing its reflected load boundary or uses an unsafe inline detour");
+        && registrar.find("RegisterProcessEventPreCallback") == std::string::npos,
+        "automatic recovery is missing its early native load boundary or retained the global reflected callback");
     Check(registrar.find("PublishRegistry") != std::string::npos
         && registrar.find("snapshot.Journals") != std::string::npos,
         "native item, recipe, quest, and journal registries feed pruning");

@@ -246,7 +246,8 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/AssetProvenance.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/QuestService.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Core/PersistencePruner.cpp")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Core/PersistencePruner.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Core/CharacterEntryRecovery.cpp")
     add_executable(character-entry-recovery-contract ../tests/character-entry-recovery-contract.cpp)
     add_test(NAME character-entry-recovery-contract COMMAND character-entry-recovery-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Core/CharacterEntryRecovery.cpp"
@@ -351,7 +352,8 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Generator/SaveViewer.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Generator/SaveCleanupPanel.inl"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Core/PersistencePruner.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Core/AppearanceDefaults.cpp")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Core/AppearanceDefaults.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Core/CharacterEntryRecovery.cpp")
     add_executable(equipment-storefront-lane ../tests/equipment-storefront-lane.cpp)
     add_test(NAME equipment-storefront-lane COMMAND equipment-storefront-lane
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsEquipmentLoader.cpp"

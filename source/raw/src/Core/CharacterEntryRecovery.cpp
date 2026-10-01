@@ -3,6 +3,7 @@
 #include "SDK/DragonWildsSignatures.h"
 #include "Utility/InlineHook.h"
 #include "Utility/Logging.h"
+#include "Unreal/FString.hpp"
 
 #include <Windows.h>
 #include <TlHelp32.h>
@@ -51,36 +52,37 @@ void CharacterEntryRecovery::Initialize()
         return;
     }
 
-    auto* validation = SignatureManager::GetSignature("CharacterSave::Validate");
     auto* playerState = SignatureManager::GetSignature(
         "UPersistenceSubsystem::ProcessPlayerStateLoad");
 
-    const bool validationReady = ValidationHook
-        || PS::InstallInlineHook(ValidationHook, validation,
-            reinterpret_cast<void*>(&ValidateCharacter));
+    // Install while UE4SS is still in its early-hook phase. Patching this
+    // function after game threads can execute it races live native code.
+    m_pruner.PrepareForStartup();
+    ActiveInstance = this;
     const bool playerStateReady = PlayerStateHook
         || PS::InstallInlineHook(PlayerStateHook, playerState,
             reinterpret_cast<void*>(&ProcessPlayerStateLoad));
 
-    if (validationReady && playerStateReady) {
+    if (playerStateReady) {
         PS::Log<LogLevel::Normal>(STR(
-            "[SAVE-ENTRY][READY] Opt-in character validation and ProcessPlayerStateLoad recovery are active. Native loading still runs; only their final acceptance result is recovered.\n"));
+            "[PERSISTENCE-PRUNER][NATIVE-BOUNDARY-READY] ProcessPlayerStateLoad was hooked during early initialization. Character JSON will be checked once, immediately before native hydration. Native acceptance remains unchanged.\n"));
     } else {
+        ActiveInstance = nullptr;
         PS::Log<LogLevel::Error>(STR(
-            "[DEGRADED][SERVICE:character-entry-recovery] Opt-in character-entry recovery is incomplete (validation={}, player-state={}). RuneSchema pruning remains independent and will never delete against an incomplete registry.\n"),
-            validationReady, playerStateReady);
+            "[DEGRADED][SERVICE:persistence-pruner] The native ProcessPlayerStateLoad boundary could not be installed. RuneSchema will not modify character JSON.\n"));
     }
 }
 
 void CharacterEntryRecovery::Shutdown()
 {
+    ActiveInstance = nullptr;
     ValidationHook = {};
     PlayerStateHook = {};
 }
 
 bool CharacterEntryRecovery::IsActive() const noexcept
 {
-    return ValidationHook && PlayerStateHook;
+    return PlayerStateHook.operator bool();
 }
 
 bool CharacterEntryRecovery::ValidateCharacter(
@@ -95,13 +97,19 @@ bool CharacterEntryRecovery::ValidateCharacter(
 }
 
 bool CharacterEntryRecovery::ProcessPlayerStateLoad(
-    void* first, void* second, void* third, void* fourth)
+    void* subsystem, std::int32_t result, void* characterInfo,
+    RC::Unreal::FString* playerState)
 {
+    // Steam 100.6 preserves EDX as the 32-bit load result, R8 as character
+    // metadata, and R9 as the FString player-state document. Treating EDX as
+    // a pointer corrupts the native call.
+    if (ActiveInstance && playerState)
+        ActiveInstance->m_pruner.PruneCharacterJson(*playerState);
+
     const bool accepted = PlayerStateHook.call<bool>(
-        first, second, third, fourth);
-    if (!accepted)
-        PS::Log<LogLevel::Warning>(STR(
-            "[SAVE-ENTRY][PLAYER-STATE-RECOVERED] ProcessPlayerStateLoad reported failure after running; RuneSchema allowed world entry to continue. No save fields were changed by this recovery hook.\n"));
-    return true;
+        subsystem, result, characterInfo, playerState);
+    if (!accepted) PS::Log<LogLevel::Warning>(STR(
+        "[SAVE-ENTRY][NATIVE-REJECTED] ProcessPlayerStateLoad still rejected the character after safe pruning. RuneSchema did not override native acceptance.\n"));
+    return accepted;
 }
 }

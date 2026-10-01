@@ -55,15 +55,6 @@ namespace DragonWilds {
         JournalLoadedPath,
     };
 
-    static bool IsCharacterJsonLoadFunction(UFunction* function)
-    {
-        if (!function) return false;
-        const auto name = function->GetFName();
-        return name == FName(TEXT("ProcessPlayerStateLoad"), FNAME_Add)
-            || name == FName(TEXT("OnPersistentStoreLoadPlayerResult"), FNAME_Add)
-            || name == FName(TEXT("LoadStateFromJson"), FNAME_Add);
-    }
-
     static std::string RegistryFingerprint(
         const PS::SaveCleanup::RegistrySnapshot& snapshot)
     {
@@ -144,9 +135,6 @@ namespace DragonWilds {
         if (m_gameStateReadyHook != Hook::ERROR_ID)
             Hook::UnregisterCallback(m_gameStateReadyHook);
         m_gameStateReadyHook = Hook::ERROR_ID;
-        if (m_characterJsonHook != Hook::ERROR_ID)
-            Hook::UnregisterCallback(m_characterJsonHook);
-        m_characterJsonHook = Hook::ERROR_ID;
         for (const auto& [function, id] : m_functionHooks) if (function && id) function->UnregisterHook(id);
         m_functionHooks.clear();
         m_registryCandidateFingerprint.clear();
@@ -175,45 +163,8 @@ namespace DragonWilds {
                 RegisterAll();
             }, options);
 
-        // Register the filtered UE4SS ProcessEvent callback directly. Do not
-        // scan every UObject or attach executable inline detours during
-        // startup: both paths have proven unsafe across current storefronts.
-        Hook::FCallbackOptions preflightOptions{};
-        preflightOptions.OwnerModName = TEXT("RuneSchema");
-        preflightOptions.HookName = TEXT("CharacterJsonSavePreflight");
-        m_characterJsonHook = Hook::RegisterProcessEventPreCallback(
-            [this](Hook::TCallbackIterationData<void>&, UObject* source,
-                UFunction* function, void* parameters) {
-                if (!parameters || m_preflightingCharacterJson
-                    || !IsCharacterJsonLoadFunction(function)
-                    || !function->GetPathName().starts_with(
-                        TEXT("/Script/Dominion.")))
-                    return;
-                m_preflightingCharacterJson = true;
-                try
-                {
-                    RegisterAll();
-                    ScrubCharacterJsonBeforeLoad(source, function, parameters);
-                }
-                catch (const std::exception& error)
-                {
-                    PS::Log<LogLevel::Error>(STR(
-                        "[PERSISTENCE-PRUNER][PREFLIGHT][UNCHANGED] Character JSON was not modified: {}.\n"),
-                        PS::ToWideSafe(error.what()));
-                }
-                catch (...) {}
-                m_preflightingCharacterJson = false;
-            }, preflightOptions);
-        if (m_characterJsonHook != Hook::ERROR_ID)
-            PS::Log<LogLevel::Normal>(STR(
-                "[PERSISTENCE-PRUNER][REFLECTED-BOUNDARY-READY] Character save preflight enabled through filtered game events.\n"));
-        else
-            PS::Log<LogLevel::Warning>(STR(
-                "[PERSISTENCE-PRUNER][REFLECTED-BOUNDARY-UNAVAILABLE] Character save preflight could not be installed.\n"));
-
-        // Auxiliary registry-refresh hooks are best-effort. Install them only
-        // after the mandatory character boundary, and isolate every path so a
-        // malformed or changed UFunction cannot disable save preflight.
+        // The mandatory character boundary is installed during PreInitialize.
+        // These best-effort hooks only keep its live-registry snapshot current.
         for (auto* hookPath : SaveLoadHookPaths)
         {
             try
@@ -252,12 +203,6 @@ namespace DragonWilds {
                     hookPath);
             }
         }
-    }
-
-    void DragonWildsDataRegistrar::ScrubCharacterJsonBeforeLoad(
-        UObject* context, UFunction* function, void* parameters)
-    {
-        m_pruner.PruneBeforeCharacterLoad(context, function, parameters);
     }
 
     void DragonWildsDataRegistrar::RegisterAll()
