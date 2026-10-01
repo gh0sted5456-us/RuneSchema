@@ -1,5 +1,4 @@
 #include "Utility/NativeFunctionHook.h"
-#include "Utility/InlineHook.h"
 #include <cstring>
 #include <algorithm>
 #include <limits>
@@ -23,7 +22,6 @@
 #include "SDK/Structs/Custom/FScriptSetHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Helper/ActorHelper.h"
-#include "SDK/DragonWildsSignatures.h"
 #include "Utility/Logging.h"
 #include "Core/SaveCleanup.h"
 #include "Core/SaveRegistrySnapshot.h"
@@ -147,11 +145,6 @@ namespace DragonWilds {
 
     void DragonWildsDataRegistrar::Shutdown()
     {
-        if (s_activeRegistrar == this)
-        {
-            s_playerStateLoadHook = {};
-            s_activeRegistrar = nullptr;
-        }
         if (m_gameStateStartingHook != Hook::ERROR_ID)
             Hook::UnregisterCallback(m_gameStateStartingHook);
         m_gameStateStartingHook = Hook::ERROR_ID;
@@ -206,12 +199,10 @@ namespace DragonWilds {
             m_functionHooks.emplace_back(function, id);
         }
 
-        // ProcessPlayerStateLoad receives the final character JSON by FString
-        // reference before Dominion parses it. The signature manager selects
-        // an independently verified Steam or WinGDK pattern. Reflected hooks
-        // remain a storefront-independent fallback only.
-        if (!InstallNativeCharacterJsonPreflightHook()
-            && !EnsureCharacterJsonPreflightHook())
+        // Use UE4SS-managed UFunction hooks only. Direct inline detours at the
+        // ProcessPlayerStateLoad executable address are unsafe across current
+        // Steam/WinGDK builds and must never be installed by the pruner.
+        if (!EnsureCharacterJsonPreflightHook())
         {
             Hook::FCallbackOptions preflightOptions{};
             preflightOptions.OwnerModName = TEXT("RuneSchema");
@@ -249,60 +240,6 @@ namespace DragonWilds {
                 PS::Log<LogLevel::Warning>(STR(
                     "Character save preflight is unavailable; the reflected event hook could not be installed.\n"));
         }
-    }
-
-    bool DragonWildsDataRegistrar::InstallNativeCharacterJsonPreflightHook()
-    {
-        if (s_playerStateLoadHook && s_activeRegistrar == this) return true;
-        SignatureManager::InitializeOnly({
-            "UPersistenceSubsystem::ProcessPlayerStateLoad"});
-        auto* target = SignatureManager::GetSignature(
-            "UPersistenceSubsystem::ProcessPlayerStateLoad");
-        if (!target || !PS::InstallInlineHook(
-                s_playerStateLoadHook, target,
-                reinterpret_cast<void*>(&ProcessPlayerStateLoadPreflight)))
-        {
-            PS::Log<LogLevel::Warning>(STR(
-                "[PERSISTENCE-PRUNER][NATIVE-BOUNDARY-UNAVAILABLE] ProcessPlayerStateLoad did not resolve; RuneSchema will try its reflected preflight boundary.\n"));
-            return false;
-        }
-        s_activeRegistrar = this;
-        const auto source = SignatureManager::GetSource(
-            "UPersistenceSubsystem::ProcessPlayerStateLoad");
-        PS::Log<LogLevel::Normal>(STR(
-            "[PERSISTENCE-PRUNER][NATIVE-BOUNDARY-READY] Mandatory pre-parse cleanup is attached to ProcessPlayerStateLoad via {}. The game's native result is preserved.\n"),
-            PS::ToWideSafe(source.c_str()));
-        return true;
-    }
-
-    bool DragonWildsDataRegistrar::ProcessPlayerStateLoadPreflight(
-        void* subsystem, int32_t result, void* characterInfo,
-        FString* playerState)
-    {
-        auto* registrar = s_activeRegistrar;
-        if (registrar && playerState)
-        {
-            try
-            {
-                registrar->RegisterAll();
-                registrar->m_pruner.PruneCharacterJson(*playerState);
-            }
-            catch (const std::exception& error)
-            {
-                PS::Log<LogLevel::Error>(STR(
-                    "[PERSISTENCE-PRUNER][NATIVE-PREFLIGHT][UNCHANGED] Cleanup failed before native load: {}.\n"),
-                    PS::ToWideSafe(error.what()));
-            }
-            catch (...)
-            {
-                PS::Log<LogLevel::Error>(STR(
-                    "[PERSISTENCE-PRUNER][NATIVE-PREFLIGHT][UNCHANGED] Cleanup failed before native load with an unknown error.\n"));
-            }
-        }
-        // Pruning never gatekeeps entry or forces acceptance. Dominion receives
-        // its original arguments and remains authoritative for the result.
-        return s_playerStateLoadHook.call<bool>(
-            subsystem, result, characterInfo, playerState);
     }
 
     bool DragonWildsDataRegistrar::EnsureCharacterJsonPreflightHook()

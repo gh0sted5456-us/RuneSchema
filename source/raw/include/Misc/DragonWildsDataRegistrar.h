@@ -5,7 +5,6 @@
 #include <set>
 #include <utility>
 #include <vector>
-#include <safetyhook.hpp>
 #include "Unreal/NameTypes.hpp"
 #include "Unreal/Hooks.hpp"
 #include "Core/PersistencePruner.h"
@@ -41,10 +40,6 @@ namespace DragonWilds {
         unsigned m_registryCandidatePasses = 0;
 
         bool ResolveBindings();
-        bool InstallNativeCharacterJsonPreflightHook();
-        static bool ProcessPlayerStateLoadPreflight(void* subsystem,
-            int32_t result, void* characterInfo,
-            RC::Unreal::FString* playerState);
         void ScrubCharacterJsonBeforeLoad(RC::Unreal::UObject* context,
             RC::Unreal::UFunction* function, void* parameters);
         bool EnsureCharacterJsonPreflightHook();
@@ -56,9 +51,6 @@ namespace DragonWilds {
         RC::Unreal::UObject* FindSubsystemInstance(RC::Unreal::UClass* subsystemClass);
         bool InsertIntoMap(RC::Unreal::UObject* subsystem, const RC::StringType& mapName,
             const RC::Unreal::FString& key, RC::Unreal::UObject* value);
-
-        static inline SafetyHookInline s_playerStateLoadHook;
-        static inline DragonWildsDataRegistrar* s_activeRegistrar = nullptr;
 
     };
 }

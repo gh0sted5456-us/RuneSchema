@@ -31,30 +31,19 @@ int main(int argc,char** argv){
         && registrar.find("OnPersistentStoreLoadPlayerResult")!=registrar.npos,
         "character preflight does not bind the native persistent-store player JSON result");
     need(pruner.find("s_cleanupConsumedForProcess")!=pruner.npos
-        && registrar.find("InstallNativeCharacterJsonPreflightHook")!=registrar.npos
-        && registrar.find("[PERSISTENCE-PRUNER][NATIVE-BOUNDARY-READY]")!=registrar.npos,
-        "automatic cleanup cannot attach to the first eligible native character load");
+        && registrar.find("EnsureCharacterJsonPreflightHook")!=registrar.npos
+        && registrar.find("[PERSISTENCE-PRUNER][BOUNDARY-READY]")!=registrar.npos,
+        "automatic cleanup cannot attach to an eligible reflected character load");
+    need(registrar.find("InstallInlineHook")==registrar.npos
+        && registrar.find("s_playerStateLoadHook")==registrar.npos
+        && registrar.find("ProcessPlayerStateLoadPreflight")==registrar.npos,
+        "mandatory pruning reintroduced an unsafe executable inline detour");
     const auto registerAllDefinition=registrar.find(
         "void DragonWildsDataRegistrar::RegisterAll()");
     need(registerAllDefinition!=registrar.npos
         && registrar.find("EnsureCharacterJsonPreflightHook();",
             registerAllDefinition)==registrar.npos,
         "registry refresh still performs repeated global native-hook discovery");
-    const auto nativeBoundary=registrar.find(
-        "bool DragonWildsDataRegistrar::ProcessPlayerStateLoadPreflight(");
-    const auto nativePrune=registrar.find(
-        "m_pruner.PruneCharacterJson(*playerState)",nativeBoundary);
-    const auto nativeCall=registrar.find(
-        "s_playerStateLoadHook.call<bool>",nativeBoundary);
-    const auto reflectedBoundary=registrar.find(
-        "bool DragonWildsDataRegistrar::EnsureCharacterJsonPreflightHook()",
-        nativeBoundary);
-    const auto forcedAccept=registrar.find("return true;",nativeBoundary);
-    need(nativeBoundary!=registrar.npos && nativePrune!=registrar.npos
-        && nativeCall!=registrar.npos && nativePrune<nativeCall
-        && reflectedBoundary!=registrar.npos
-        && (forcedAccept==registrar.npos || forcedAccept>reflectedBoundary),
-        "native pruning does not run before Dominion or overrides its acceptance result");
     const auto readyGate=pruner.find("if (!registry || !registry->Ready())");
     const auto consume=pruner.find("s_cleanupConsumedForProcess.exchange(",readyGate);
     const auto plan=pruner.find("SaveCleanup::Plan(",consume);
@@ -98,7 +87,7 @@ int main(int argc,char** argv){
         && pruner.find("Default.json")==pruner.npos,
         "automatic pruning still contains snapshot restoration machinery");
     need(registrar.find("m_pruner.PruneBeforeCharacterLoad")!=registrar.npos
-        && registrar.find("m_pruner.PruneCharacterJson")!=registrar.npos
+        && pruner.find("PruneCharacterJson(value)")!=pruner.npos
         && registrar.find("SaveCleanup::Plan(")==registrar.npos,
         "persistence pruning is not isolated from live-registry registration");
 }
