@@ -25,21 +25,20 @@ int main(int argc,char** argv){
         "one or more persistent identity registries are absent");
     need(registrar.find("ScrubCharacterJsonBeforeLoad")!=registrar.npos,
         "provider-backed character JSON preflight is missing");
-    need(registrar.find(
-            "/Script/Dominion.PersistenceSubsystem:OnPersistentStoreLoadPlayerResult")
-            !=registrar.npos
-        && registrar.find("OnPersistentStoreLoadPlayerResult")!=registrar.npos,
-        "character preflight does not bind the native persistent-store player JSON result");
+    need(registrar.find("ProcessPlayerStateLoad")!=registrar.npos
+        && registrar.find("OnPersistentStoreLoadPlayerResult")!=registrar.npos
+        && registrar.find("LoadStateFromJson")!=registrar.npos,
+        "character preflight does not filter the known player JSON boundaries");
     need(pruner.find("s_cleanupConsumedForProcess")!=pruner.npos
-        && registrar.find("EnsureCharacterJsonPreflightHook")!=registrar.npos
-        && registrar.find("[PERSISTENCE-PRUNER][BOUNDARY-READY]")!=registrar.npos,
+        && registrar.find("Hook::RegisterProcessEventPreCallback")!=registrar.npos
+        && registrar.find("[PERSISTENCE-PRUNER][REFLECTED-BOUNDARY-READY]")!=registrar.npos,
         "automatic cleanup cannot attach to an eligible reflected character load");
     need(registrar.find("InstallInlineHook")==registrar.npos
         && registrar.find("s_playerStateLoadHook")==registrar.npos
         && registrar.find("ProcessPlayerStateLoadPreflight")==registrar.npos,
         "mandatory pruning reintroduced an unsafe executable inline detour");
     const auto mandatoryPreflight=registrar.find(
-        "if (!EnsureCharacterJsonPreflightHook())");
+        "m_characterJsonHook = Hook::RegisterProcessEventPreCallback");
     const auto auxiliaryHooks=registrar.find(
         "for (auto* hookPath : SaveLoadHookPaths)");
     need(mandatoryPreflight!=registrar.npos && auxiliaryHooks!=registrar.npos
@@ -50,8 +49,8 @@ int main(int argc,char** argv){
     const auto registerAllDefinition=registrar.find(
         "void DragonWildsDataRegistrar::RegisterAll()");
     need(registerAllDefinition!=registrar.npos
-        && registrar.find("EnsureCharacterJsonPreflightHook();",
-            registerAllDefinition)==registrar.npos,
+        && registrar.find("EnsureCharacterJsonPreflightHook")==registrar.npos
+        && registrar.find("ForEachUObject")==registrar.npos,
         "registry refresh still performs repeated global native-hook discovery");
     const auto readyGate=pruner.find("if (!registry || !registry->Ready())");
     const auto consume=pruner.find("s_cleanupConsumedForProcess.exchange(",readyGate);
@@ -71,10 +70,8 @@ int main(int argc,char** argv){
     const auto fallback=registrar.find(
         "m_characterJsonHook = Hook::RegisterProcessEventPreCallback");
     const auto fallbackGuard=registrar.find("if (!parameters",fallback);
-    const auto preGuardDiscovery=registrar.find(
-        "EnsureCharacterJsonPreflightHook();",fallback);
     need(fallback!=registrar.npos && fallbackGuard!=registrar.npos
-        && (preGuardDiscovery==registrar.npos || preGuardDiscovery>fallbackGuard),
+        && registrar.find("ForEachUObject")==registrar.npos,
         "global ProcessEvent fallback performs native-hook discovery before filtering the event");
     const auto preRegistration=registrar.find("RegisterInitGameStatePreCallback");
     const auto registerAll=registrar.find("RegisterAll();",preRegistration);

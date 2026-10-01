@@ -55,13 +55,6 @@ namespace DragonWilds {
         JournalLoadedPath,
     };
 
-    static constexpr const TCHAR* CharacterJsonLoadHookPaths[] = {
-        TEXT("/Script/Dominion.PersistenceSubsystem:ProcessPlayerStateLoad"),
-        TEXT("/Script/Dominion.PersistenceSubsystem:OnPersistentStoreLoadPlayerResult"),
-        TEXT("/Script/Dominion.DominionPlayerControllerBase:LoadStateFromJson"),
-        TEXT("/Script/Dominion.DominionPlayerController:LoadStateFromJson"),
-    };
-
     static bool IsCharacterJsonLoadFunction(UFunction* function)
     {
         if (!function) return false;
@@ -154,8 +147,6 @@ namespace DragonWilds {
         if (m_characterJsonHook != Hook::ERROR_ID)
             Hook::UnregisterCallback(m_characterJsonHook);
         m_characterJsonHook = Hook::ERROR_ID;
-        m_characterJsonLoadFunction = nullptr;
-        m_characterJsonBindingWarningReported = false;
         for (const auto& [function, id] : m_functionHooks) if (function && id) function->UnregisterHook(id);
         m_functionHooks.clear();
         m_registryCandidateFingerprint.clear();
@@ -184,47 +175,41 @@ namespace DragonWilds {
                 RegisterAll();
             }, options);
 
-        // Use UE4SS-managed UFunction hooks only. Direct inline detours at the
-        // ProcessPlayerStateLoad executable address are unsafe across current
-        // Steam/WinGDK builds and must never be installed by the pruner.
-        if (!EnsureCharacterJsonPreflightHook())
-        {
-            Hook::FCallbackOptions preflightOptions{};
-            preflightOptions.OwnerModName = TEXT("RuneSchema");
-            preflightOptions.HookName = TEXT("CharacterJsonSavePreflight");
-            m_characterJsonHook = Hook::RegisterProcessEventPreCallback(
-                [this](Hook::TCallbackIterationData<void>&, UObject* source,
-                    UFunction* function, void* parameters) {
-                    if (!parameters || m_preflightingCharacterJson
-                        || !IsCharacterJsonLoadFunction(function)
-                        || !function->GetPathName().starts_with(
-                            TEXT("/Script/Dominion.")))
-                        return;
-                    // This is a global ProcessEvent fallback. Never perform
-                    // discovery before this exact filter: discovery can scan
-                    // every UObject for each unrelated gameplay event.
-                    m_preflightingCharacterJson = true;
-                    try
-                    {
-                        RegisterAll();
-                        ScrubCharacterJsonBeforeLoad(source, function, parameters);
-                    }
-                    catch (const std::exception& error)
-                    {
-                        PS::Log<LogLevel::Error>(STR(
-                            "[PERSISTENCE-PRUNER][PREFLIGHT][UNCHANGED] Character JSON was not modified: {}.\n"),
-                            PS::ToWideSafe(error.what()));
-                    }
-                    catch (...) {}
-                    m_preflightingCharacterJson = false;
-                }, preflightOptions);
-            if (m_characterJsonHook != Hook::ERROR_ID)
-                PS::Log<LogLevel::Normal>(STR(
-                    "Character save preflight enabled through reflected game events.\n"));
-            else
-                PS::Log<LogLevel::Warning>(STR(
-                    "Character save preflight is unavailable; the reflected event hook could not be installed.\n"));
-        }
+        // Register the filtered UE4SS ProcessEvent callback directly. Do not
+        // scan every UObject or attach executable inline detours during
+        // startup: both paths have proven unsafe across current storefronts.
+        Hook::FCallbackOptions preflightOptions{};
+        preflightOptions.OwnerModName = TEXT("RuneSchema");
+        preflightOptions.HookName = TEXT("CharacterJsonSavePreflight");
+        m_characterJsonHook = Hook::RegisterProcessEventPreCallback(
+            [this](Hook::TCallbackIterationData<void>&, UObject* source,
+                UFunction* function, void* parameters) {
+                if (!parameters || m_preflightingCharacterJson
+                    || !IsCharacterJsonLoadFunction(function)
+                    || !function->GetPathName().starts_with(
+                        TEXT("/Script/Dominion.")))
+                    return;
+                m_preflightingCharacterJson = true;
+                try
+                {
+                    RegisterAll();
+                    ScrubCharacterJsonBeforeLoad(source, function, parameters);
+                }
+                catch (const std::exception& error)
+                {
+                    PS::Log<LogLevel::Error>(STR(
+                        "[PERSISTENCE-PRUNER][PREFLIGHT][UNCHANGED] Character JSON was not modified: {}.\n"),
+                        PS::ToWideSafe(error.what()));
+                }
+                catch (...) {}
+                m_preflightingCharacterJson = false;
+            }, preflightOptions);
+        if (m_characterJsonHook != Hook::ERROR_ID)
+            PS::Log<LogLevel::Normal>(STR(
+                "[PERSISTENCE-PRUNER][REFLECTED-BOUNDARY-READY] Character save preflight enabled through filtered game events.\n"));
+        else
+            PS::Log<LogLevel::Warning>(STR(
+                "[PERSISTENCE-PRUNER][REFLECTED-BOUNDARY-UNAVAILABLE] Character save preflight could not be installed.\n"));
 
         // Auxiliary registry-refresh hooks are best-effort. Install them only
         // after the mandatory character boundary, and isolate every path so a
@@ -267,71 +252,6 @@ namespace DragonWilds {
                     hookPath);
             }
         }
-    }
-
-    bool DragonWildsDataRegistrar::EnsureCharacterJsonPreflightHook()
-    {
-        if (m_characterJsonLoadFunction) return true;
-        UFunction* characterJsonLoad = nullptr;
-        for (auto* hookPath : CharacterJsonLoadHookPaths)
-        {
-            auto* function = UECustom::UObjectGlobals::StaticFindObject<UFunction*>(
-                nullptr, nullptr, hookPath, false);
-            if (function && (function->GetFunctionFlags() & FUNC_Native))
-            {
-                characterJsonLoad = function;
-                break;
-            }
-        }
-        if (!characterJsonLoad)
-        {
-            std::vector<UFunction*> matches;
-            UObjectGlobals::ForEachUObject(
-                [&](UObject* object, int32_t, int32_t) -> LoopAction {
-                    if (!object || !object->IsA(UFunction::StaticClass()))
-                        return LoopAction::Continue;
-                    auto* function = static_cast<UFunction*>(object);
-                    if (!IsCharacterJsonLoadFunction(function)
-                        || !(function->GetFunctionFlags() & FUNC_Native)
-                        || !function->GetPathName().starts_with(
-                            TEXT("/Script/Dominion.")))
-                        return LoopAction::Continue;
-                    bool hasStringInput = false;
-                    for (auto* field : TFieldRange<FProperty>(
-                        function, EFieldIterationFlags::Default))
-                        if (CastField<FStrProperty>(field)
-                            && field->HasAnyPropertyFlags(CPF_Parm)
-                            && !field->HasAnyPropertyFlags(
-                                CPF_ReturnParm | CPF_OutParm))
-                            hasStringInput = true;
-                    if (hasStringInput) matches.push_back(function);
-                    return LoopAction::Continue;
-                });
-            if (matches.size() == 1) characterJsonLoad = matches.front();
-            else if (!matches.empty() && !m_characterJsonBindingWarningReported)
-            {
-                m_characterJsonBindingWarningReported = true;
-                PS::Log<LogLevel::Warning>(STR(
-                    "[PERSISTENCE-PRUNER][BOUNDARY-DEFERRED] Found {} ambiguous native LoadStateFromJson functions; retrying when Dominion finishes loading.\n"),
-                    matches.size());
-            }
-        }
-        if (!characterJsonLoad) return false;
-        const auto id = PS::RegisterNativePreHook(characterJsonLoad,
-            [this, characterJsonLoad](
-                UnrealScriptFunctionCallableContext& context, void*) {
-                RegisterAll();
-                ScrubCharacterJsonBeforeLoad(
-                    context.Context, characterJsonLoad,
-                    context.TheStack.Locals());
-            });
-        if (id == Hook::ERROR_ID) return false;
-        m_characterJsonLoadFunction = characterJsonLoad;
-        m_functionHooks.emplace_back(characterJsonLoad, id);
-        PS::Log<LogLevel::Normal>(
-            STR("[PERSISTENCE-PRUNER][BOUNDARY-READY] Mandatory native character preflight enabled through '{}'.\n"),
-            characterJsonLoad->GetPathName());
-        return true;
     }
 
     void DragonWildsDataRegistrar::ScrubCharacterJsonBeforeLoad(

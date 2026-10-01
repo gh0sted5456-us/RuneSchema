@@ -71,8 +71,9 @@ int main(int argc, char** argv)
     Check(registrar.find("ScrubCharacterJsonBeforeLoad") != std::string::npos,
         "shared native character-load preflight is missing");
     Check(pruner.find("s_cleanupConsumedForProcess") != std::string::npos
-        && registrar.find("EnsureCharacterJsonPreflightHook") != std::string::npos
-        && registrar.find("[PERSISTENCE-PRUNER][BOUNDARY-READY]") != std::string::npos
+        && registrar.find("Hook::RegisterProcessEventPreCallback") != std::string::npos
+        && registrar.find("[PERSISTENCE-PRUNER][REFLECTED-BOUNDARY-READY]") != std::string::npos
+        && registrar.find("ForEachUObject") == std::string::npos
         && registrar.find("InstallInlineHook") == std::string::npos,
         "automatic recovery is missing its reflected load boundary or uses an unsafe inline detour");
     Check(registrar.find("PublishRegistry") != std::string::npos
