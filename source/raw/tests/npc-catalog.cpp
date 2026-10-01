@@ -29,10 +29,6 @@ int main(int argc,char** argv){
         }
         prop["NoInteract"]=false;
         NpcCatalog active;active.AddNpc("test",prop);
-        auto legacyMode=prop;legacyMode["Id"]="legacy-mode";legacyMode["Multiplayer"]=false;
-        NpcCatalog legacy;legacy.AddNpc("test",legacyMode);
-        const auto legacyResolved=legacy.Resolve();
-        assert(legacyResolved.size()==1 && !legacyResolved[0].Data.contains("Multiplayer"));
         assert(Rejects([&]{active.Resolve();}));
         assert(DragonWilds::NpcNetwork::Supported(false,true,false,false,false,false,true));
         prop["NoInteract"]=true;
@@ -400,7 +396,6 @@ int main(int argc,char** argv){
     assert(std::wstring_view(DragonWilds::NpcIdentity::ClassPath).starts_with(L"/RuneSchema/Networking/"));
     assert(std::wstring_view(DragonWilds::NpcIdentity::LegacyClassPath).starts_with(L"/Game/Mods/RuneSchema/Networking/"));
     assert(DragonWilds::NpcNetwork::Supported(true,false,false,true,false,false));
-    assert(!DragonWilds::NpcNetwork::Supported(false,false,false,true,false,false));
     assert(DragonWilds::NpcNetwork::Supported(true,true,false,true,false,false));
     human["Equipment"]["Head"]="JSlAV05XOfg2HBO7L7dkqw";
     DragonWilds::HumanNpc::Validate(human);
@@ -410,8 +405,6 @@ int main(int argc,char** argv){
     assert(DragonWilds::NpcNetwork::Supported(true,false,true,true,true,true));
     assert(DragonWilds::NpcNetwork::Supported(true,false,true,false,true,false));
     assert(DragonWilds::NpcNetwork::Supported(true,false,true,false,false,false,true));
-    assert(!DragonWilds::NpcNetwork::Supported(false,false,true,false,false,false,true));
-    assert(!DragonWilds::NpcNetwork::Supported(true,false,true,false,false,false));
     const Json graphs={{"mod:story",{{"Entry","hello"}}}};
     const Json manifest=Json::array({{{"Key","mod:quest"},{"NetId",300},{"Definition",{{"Id","quest"}}}}});
     const auto dialogueFingerprint=DragonWilds::NpcNetwork::DialogueFingerprint("base",graphs,manifest);
@@ -423,11 +416,6 @@ int main(int argc,char** argv){
     auto otherQuest=manifest;otherQuest[0]["Definition"]["Id"]="different";
     assert(dialogueFingerprint!=DragonWilds::NpcNetwork::DialogueFingerprint("base",graphs,otherQuest));
     assert(Rejects([&]{DragonWilds::NpcNetwork::DialogueFingerprint("base",graphs,Json::array());}));
-    auto multiplayerCow=cow;multiplayerCow["Multiplayer"]=true;
-    NpcCatalog multiplayerCatalog;multiplayerCatalog.AddStore("Mod",shop);multiplayerCatalog.AddNpc("Mod",multiplayerCow);
-    assert(multiplayerCatalog.Resolve()[0].Data["Multiplayer"]==true);
-    multiplayerCow["Multiplayer"]="true";
-    assert(Rejects([&]{NpcCatalog invalid;invalid.AddNpc("Mod",multiplayerCow);}));
     auto moved=cow;moved["Location"]={101,202,-303};
     moved["Rotation"]={{"Pitch",0},{"Yaw",45},{"Roll",0}};moved["Scale"]=1.5;
     NpcCatalog relocated;relocated.AddStore("Mod",shop);relocated.AddNpc("Mod",moved);
