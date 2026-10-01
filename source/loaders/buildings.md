@@ -46,6 +46,14 @@ as a separate build-menu entry.
       "Snapping": {
         "SnappingRadius": 150.0,
         "SnappingRadiusInBasicSnappingMode": 100.0
+      },
+      "Actor": {
+        "bReplicates": true
+      },
+      "Components": {
+        "BuildingSnapComponent": {
+          "SnappingRadius": 150.0
+        }
       }
     },
     "Unlock": true,
@@ -73,6 +81,12 @@ For compatible processing buildings, `Overrides.Processing` can append,
 replace, or clear accepted fuels and can set fuel slots, processing rate, and
 automatic start. RuneSchema rejects unsupported fields without discarding an
 otherwise valid building definition.
+
+Every override section also accepts exact reflected native field names. The
+documented names are the portable, verified surface; extra fields are resolved
+against the live game type before that section is written. A missing field or
+incompatible value rejects the building instead of silently guessing. This
+lets new game fields be overridden without waiting for a RuneSchema release.
 
 ## Existing pieces and clones
 
@@ -209,6 +223,34 @@ filters are arrays of gameplay-tag strings.
 `Overrides.Health` exposes `MaxHealth` and `bCanDie` from `HealthComponent`.
 `Overrides.Snapping` exposes `bUseSocketsForPlugGeneration`, `SnappingRadius`,
 and `SnappingRadiusInBasicSnappingMode` from `BuildingSnapComponent`.
+
+## Full reflected overrides
+
+The specialized sections are shortcuts for the common building systems, but
+they are not hard caps:
+
+- `Properties` writes any reflected `BuildingPieceData` field except the
+  RuneSchema-managed identity, index, requirements, and profile handles.
+- `Placement`, `Stability`, and `DerivedData` accept additional exact native
+  field names. Placement and stability changes are made on private
+  RuneSchema-owned rows, never the selected vanilla row.
+- `Shelter`, `Health`, and `Snapping` accept additional exact fields on their
+  corresponding component templates.
+- `Actor` writes exact reflected fields on the buildable actor class default.
+- `Components` maps a component class to exact reflected fields. A short key
+  such as `BuildingSnapComponent` means
+  `/Script/Dominion.BuildingSnapComponent`; a full `/Script/...` path is also
+  accepted.
+- `Station` writes exact reflected fields on the single crafting or processing
+  station row linked to the building. `StationBuildingPieceData` is protected
+  so an override cannot sever the registry relationship.
+
+Actor and component templates are shared by every piece using that actor. A
+`$Clone` that uses `Actor`, `Components`, `Shelter`, `Health`, or `Snapping`
+must therefore provide a private cooked `Properties.BuildableActor`. Direct
+`Asset` definitions intentionally change their existing actor. Prefer the
+documented fields for cross-version mods; use FModel or RuneSchema inspection
+output to copy exact native JSON shapes for advanced fields.
 
 ## Simple rules
 
