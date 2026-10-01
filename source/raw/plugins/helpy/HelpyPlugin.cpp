@@ -19,7 +19,7 @@
 namespace {
 HMODULE Module{};
 constexpr RuneSchemaPluginDescriptor Descriptor{sizeof(RuneSchemaPluginDescriptor),RUNESCHEMA_PLUGIN_API_VERSION,
-    "RuneSchema.Helpy","RuneSchema Helpy","0.7.7.0"};
+    "RuneSchema.Helpy","RuneSchema Helpy","0.7.7.1"};
 nlohmann::json EmbeddedCatalog() {
     nlohmann::json items=nlohmann::json::array(),definitions=nlohmann::json::array();
     for(const auto& entry:PS::F2Catalog::BundledPaths()) {
@@ -60,7 +60,7 @@ bool CallCore(State* state,const nlohmann::json& request,nlohmann::json& respons
     try{response=nlohmann::json::parse(output);return true;}catch(...){return false;}
 }
 int32_t RS_PLUGIN_CALL About(void*,const char*,char* response,uint32_t capacity,uint32_t* size) {
-    constexpr char value[]=R"({"plugin":"RuneSchema.Helpy","version":"0.7.7.0","ui":"plugin-dll","umg":false})";
+    constexpr char value[]=R"({"plugin":"RuneSchema.Helpy","version":"0.7.7.1","ui":"plugin-dll","umg":false})";
     if(!size)return RS_PLUGIN_INVALID_ARGUMENT;*size=static_cast<uint32_t>(sizeof(value));
     if(capacity<sizeof(value))return RS_PLUGIN_BUFFER_TOO_SMALL;std::memcpy(response,value,sizeof(value));return RS_PLUGIN_OK;
 }

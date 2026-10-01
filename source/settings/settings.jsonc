@@ -21,6 +21,14 @@
     "allowCorruptCharacterEntry": false,
     "quests": true
   },
+  "defaultRecovery": {
+    "enabled": false,
+    "useExternalDefault": false,
+    "appearance": true,
+    "quests": false,
+    "items": false,
+    "progress": false
+  },
   "helpyAuthority": {
     "allowClientItemGrants": false,
     "allowClientTemporarySpawns": false,

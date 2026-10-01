@@ -11,7 +11,13 @@ using Json=nlohmann::json;
 struct Preview {
     Json Save;
     Json Removed=Json::array();
+    Json Restored=Json::array();
     std::map<std::string,size_t> Owners;
+};
+struct BaselineMergeOptions {
+    bool Items=false;
+    bool Quests=false;
+    bool Progress=false;
 };
 enum class CharacterDocumentKind {
     Gameplay,
@@ -214,11 +220,18 @@ inline Preview RepairInvalidAppearance(const Json& source,const Json& defaults,
         if(!root.contains("CustomizationData") || !root.at("CustomizationData").is_object())return nullptr;
         return &root.at("CustomizationData");
     };
-    auto* current=customization(result.Save);
     auto copy=defaults;
     auto* fallback=customization(copy);
-    if(!current || !fallback || fallback->empty() || fallback->size()>32)
+    if(!fallback || fallback->empty() || fallback->size()>32)
         throw std::runtime_error("Character appearance layout is unsupported");
+    if(!result.Save.contains("Customization")
+        || !result.Save.at("Customization").is_object())
+        result.Save["Customization"]=Json::object();
+    auto& customizationRoot=result.Save["Customization"];
+    if(!customizationRoot.contains("CustomizationData")
+        || !customizationRoot.at("CustomizationData").is_object())
+        customizationRoot["CustomizationData"]=Json::object();
+    auto* current=&customizationRoot["CustomizationData"];
     const auto read=[](const Json& value,std::string& table,std::string& row) {
         if(!value.is_object())return false;
         const auto tableIt=value.find("dataTable"),rowIt=value.find("rowName");
@@ -241,6 +254,155 @@ inline Preview RepairInvalidAppearance(const Json& source,const Json& defaults,
         (*current)[field]=defaultValue;
         result.Removed.push_back({{"Kind","Appearance"},{"Field",field},
             {"Id",table+"#"+row},{"Replacement",defaultTable+"#"+defaultRow}});
+    }
+    return result;
+}
+
+inline Json AppearanceProfile(const Json& document) {
+    if(!document.is_object() || !document.contains("Customization")
+        || !document.at("Customization").is_object())
+        throw std::runtime_error("Default character document has no appearance profile");
+    return Json{{"meta_data",Json::object()},
+        {"Customization",document.at("Customization")}};
+}
+
+// Additive baseline recovery is intentionally narrower than a generic JSON
+// merge. Existing live values always win, and persistence-bearing entries are
+// accepted only when they resolve in the same complete registries used by
+// mandatory orphan pruning.
+inline Preview MergeBaseline(const Json& source,const Json& baseline,
+    const RegistrySnapshot& registry,const BaselineMergeOptions& options) {
+    RequireCharacter(source);
+    RequireCharacter(baseline);
+    if(!registry.Ready())
+        throw std::runtime_error("Live persistence registries are incomplete; baseline merge refused");
+    Preview result{source};
+    auto& live=result.Save.at("GameProgress");
+    const auto& base=baseline.at("GameProgress");
+    const auto record=[&](const char* kind,const std::string& id) {
+        result.Restored.push_back({{"Kind",kind},{"Id",id}});
+    };
+    const auto validItem=[&](const Json& row) {
+        if(!row.is_object() || !row.contains("ItemData")
+            || !row.at("ItemData").is_string())return false;
+        const auto id=row.at("ItemData").get<std::string>();
+        return !id.empty() && registry.Items.contains(id);
+    };
+    if(options.Items) {
+        for(const auto* section:{"Inventory","PersonalInventory"}) {
+            if(!base.contains(section))continue;
+            if(!base.at(section).is_object())
+                throw std::runtime_error(std::string("Default ")+section+" layout is unsupported");
+            if(!live.contains(section))live[section]=Json::object();
+            if(!live.at(section).is_object())
+                throw std::runtime_error(std::string("Live ")+section+" layout is unsupported");
+            for(const auto& [slot,row]:base.at(section).items()) {
+                if(live.at(section).contains(slot) || !validItem(row))continue;
+                live[section][slot]=row;
+                record(section,row.at("ItemData").get<std::string>());
+            }
+        }
+        if(base.contains("Loadout")) {
+            if(!base.at("Loadout").is_object())
+                throw std::runtime_error("Default Loadout layout is unsupported");
+            if(!live.contains("Loadout"))live["Loadout"]=Json::object();
+            if(!live.at("Loadout").is_object())
+                throw std::runtime_error("Live Loadout layout is unsupported");
+            for(const auto& [slot,row]:base.at("Loadout").items()) {
+                if(live.at("Loadout").contains(slot) || !row.is_object())continue;
+                bool safe=validItem(row);
+                std::string id=safe?row.at("ItemData").get<std::string>():std::string{};
+                if(!safe && row.contains("PlayerInventoryItemIndex")
+                    && row.at("PlayerInventoryItemIndex").is_number_integer()
+                    && live.contains("Inventory") && live.at("Inventory").is_object()) {
+                    const auto inventorySlot=std::to_string(
+                        row.at("PlayerInventoryItemIndex").get<int>());
+                    const auto found=live.at("Inventory").find(inventorySlot);
+                    safe=found!=live.at("Inventory").end() && validItem(*found);
+                    if(safe)id=found->at("ItemData").get<std::string>();
+                }
+                if(!safe)continue;
+                live["Loadout"][slot]=row;
+                record("Loadout",id);
+            }
+        }
+    }
+    if(options.Progress && base.contains("Progress")) {
+        if(!base.at("Progress").is_object())
+            throw std::runtime_error("Default Progress layout is unsupported");
+        if(!live.contains("Progress"))live["Progress"]=Json::object();
+        if(!live.at("Progress").is_object())
+            throw std::runtime_error("Live Progress layout is unsupported");
+        for(const auto* field:{"ItemsPickedUp","MilestoneMaterialsPickedUp",
+            "RecipesUnlocked","RecipesNew"}) {
+            if(!base.at("Progress").contains(field))continue;
+            const auto& additions=base.at("Progress").at(field);
+            if(!additions.is_array())
+                throw std::runtime_error(std::string("Default ")+field+" list is unsupported");
+            if(!live.at("Progress").contains(field))live["Progress"][field]=Json::array();
+            auto& target=live["Progress"][field];
+            if(!target.is_array())
+                throw std::runtime_error(std::string("Live ")+field+" list is unsupported");
+            const auto& known=std::string_view(field).starts_with("Recipes")
+                ?registry.Recipes:registry.Items;
+            std::set<std::string> present;
+            for(const auto& value:target)if(value.is_string())present.insert(value.get<std::string>());
+            for(const auto& value:additions) {
+                if(!value.is_string())continue;
+                const auto id=value.get<std::string>();
+                if(!known.contains(id) || !present.insert(id).second)continue;
+                target.push_back(id);record(field,id);
+            }
+        }
+    }
+    if(options.Quests && base.contains("QuestProgress")) {
+        if(!base.at("QuestProgress").is_object())
+            throw std::runtime_error("Default QuestProgress layout is unsupported");
+        if(!live.contains("QuestProgress"))live["QuestProgress"]=Json::object();
+        auto& target=live["QuestProgress"];
+        const auto& additions=base.at("QuestProgress");
+        if(!target.is_object())throw std::runtime_error("Live QuestProgress layout is unsupported");
+        if(!target.contains("Quests"))target["Quests"]=Json::array();
+        if(!target.at("Quests").is_array())throw std::runtime_error("Live quest list is unsupported");
+        std::set<std::string> present;
+        for(const auto& row:target.at("Quests"))
+            if(row.is_object() && row.contains("QuestId") && row.at("QuestId").is_string())
+                present.insert(row.at("QuestId").get<std::string>());
+        if(additions.contains("Quests")) {
+            if(!additions.at("Quests").is_array())throw std::runtime_error("Default quest list is unsupported");
+            for(const auto& row:additions.at("Quests")) {
+                if(!row.is_object() || !row.contains("QuestId") || !row.at("QuestId").is_string()
+                    || !row.contains("QuestInts") || !row.at("QuestInts").is_array())continue;
+                const auto id=row.at("QuestId").get<std::string>();
+                if(!registry.QuestsComplete || !registry.Quests.contains(id)
+                    || !present.insert(id).second)continue;
+                target["Quests"].push_back(row);record("Quest/dialogue",id);
+            }
+        }
+        const auto tracked=additions.value("QuestTracked",std::string{});
+        if((!target.contains("QuestTracked") || target.value("QuestTracked",std::string{}).empty())
+            && !tracked.empty() && registry.QuestsComplete && registry.Quests.contains(tracked)) {
+            target["QuestTracked"]=tracked;record("Quest tracked",tracked);
+        }
+        if(additions.contains("QuestLocations")) {
+            if(!additions.at("QuestLocations").is_array())
+                throw std::runtime_error("Default quest location list is unsupported");
+            if(!target.contains("QuestLocations"))target["QuestLocations"]=Json::array();
+            if(!target.at("QuestLocations").is_array())
+                throw std::runtime_error("Live quest location list is unsupported");
+            std::set<std::string> locations;
+            for(const auto& row:target.at("QuestLocations"))
+                if(row.is_object() && row.contains("QuestLocationId")
+                    && row.at("QuestLocationId").is_string())
+                    locations.insert(row.at("QuestLocationId").get<std::string>());
+            for(const auto& row:additions.at("QuestLocations")) {
+                if(!row.is_object() || !row.contains("QuestLocationId")
+                    || !row.at("QuestLocationId").is_string())continue;
+                const auto id=row.at("QuestLocationId").get<std::string>();
+                if(id.empty() || !locations.insert(id).second)continue;
+                target["QuestLocations"].push_back(row);record("Quest location",id);
+            }
+        }
     }
     return result;
 }

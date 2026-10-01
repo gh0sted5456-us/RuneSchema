@@ -6,7 +6,7 @@ param(
     [switch]$UpdateMappings
 )
 $ErrorActionPreference = 'Stop'
-$Version = '0.7.7.0'
+$Version = '0.7.7.1'
 $BuildRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 if (-not (Test-Path -LiteralPath (Join-Path $BuildRoot 'source\raw\CMakeLists.txt') -PathType Leaf)) {
     $BuildRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -608,13 +608,18 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         # future slim dependency template omits an empty directory.
         foreach ($requiredDirectory in @(
             (Join-Path $payload 'dlls'),
-            (Join-Path $payload 'settings')
+            (Join-Path $payload 'settings'),
+            (Join-Path $payload 'settings\defaults')
         )) {
             New-Item -ItemType Directory -Path $requiredDirectory -Force | Out-Null
         }
         $sourceSettingsFile = Join-Path $SourceRoot 'settings\settings.jsonc'
         if (Test-Path -LiteralPath $sourceSettingsFile -PathType Leaf) {
             Copy-Item -LiteralPath $sourceSettingsFile -Destination (Join-Path $payload 'settings\settings.jsonc') -Force
+        }
+        $defaultsReadme = Join-Path $SourceRoot 'settings\defaults\README.md'
+        if (Test-Path -LiteralPath $defaultsReadme -PathType Leaf) {
+            Copy-Item -LiteralPath $defaultsReadme -Destination (Join-Path $payload 'settings\defaults\README.md') -Force
         }
         if ($IncludePlugins) {
             # Plugin source is authoritative. Never let a cached runtime

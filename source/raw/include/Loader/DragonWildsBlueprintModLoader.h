@@ -142,6 +142,9 @@ namespace DragonWilds {
             RC::Unreal::UObject* owner,
             RC::Unreal::UObject* widget,
             const RuntimeWidgetRule& rule);
+        void ApplyRuntimeWidgetTextStyle(
+            RC::Unreal::UObject* widget,
+            const RuntimeWidgetRule& rule);
         void ApplyRuntimeWidgetActivation(
             RC::Unreal::UObject* widget,
             const RuntimeWidgetRule& rule);

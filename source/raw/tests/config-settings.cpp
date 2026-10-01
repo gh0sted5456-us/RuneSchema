@@ -37,6 +37,19 @@ int RunConfigSettings() {
     assert(!DecodeSettings("{}").persistence.characterCustomization);
     assert(!DecodeSettings("{}").persistence.allowCorruptCharacterEntry);
     assert(DecodeSettings("{}").persistence.quests);
+    assert(!DecodeSettings("{}").defaultRecovery.enabled);
+    assert(!DecodeSettings("{}").defaultRecovery.useExternalDefault);
+    assert(DecodeSettings("{}").defaultRecovery.appearance);
+    assert(!DecodeSettings("{}").defaultRecovery.quests);
+    assert(!DecodeSettings("{}").defaultRecovery.items);
+    assert(!DecodeSettings("{}").defaultRecovery.progress);
+    auto recoverySettings=DecodeSettings(R"({"defaultRecovery":{"enabled":true,"useExternalDefault":true,"appearance":false,"quests":true,"items":true,"progress":true}})");
+    assert(recoverySettings.defaultRecovery.enabled
+        && recoverySettings.defaultRecovery.useExternalDefault
+        && !recoverySettings.defaultRecovery.appearance
+        && recoverySettings.defaultRecovery.quests
+        && recoverySettings.defaultRecovery.items
+        && recoverySettings.defaultRecovery.progress);
     auto persistenceSettings=DecodeSettings(R"({"persistence":{"characterCustomization":true,"allowCorruptCharacterEntry":true,"journal":true,"recipes":true,"quests":false}})");
     assert(persistenceSettings.persistence.characterCustomization
         && persistenceSettings.persistence.allowCorruptCharacterEntry

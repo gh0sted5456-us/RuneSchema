@@ -25,6 +25,7 @@ int main(int argc, char** argv) {
     Require(header, "m_runtimeWidgetActiveRules");
     Require(header, "m_runtimeWidgetCompletedRules");
     Require(header, "ApplyRuntimeWidgetCalls");
+    Require(header, "ApplyRuntimeWidgetTextStyle");
     Require(header, "RuntimeWidgetRuleMatchesEvent");
     Require(header, "RuntimeWidgetObservedTarget");
     Require(header, "FindRuntimeWidgetTarget");
@@ -39,6 +40,9 @@ int main(int argc, char** argv) {
     Require(source, "properties.erase(\"$When\")");
     Require(source, "properties.erase(\"$Once\")");
     Require(source, "properties.erase(\"$Activate\")");
+    Require(source, "properties.erase(\"$TextStyle\")");
+    Require(source, "SynchronizeProperties");
+    Require(source, "Blueprint $RuntimeWidget $TextStyle target is not a synchronizable text widget");
     Require(source, "Blueprint $RuntimeWidget $Call Args must be an object");
     Require(source, "Blueprint $RuntimeWidget $Call does not support return-valued functions yet");
     Require(source, "Blueprint $RuntimeWidget $Call does not support output parameters yet");
@@ -82,6 +86,7 @@ int main(int argc, char** argv) {
     Require(docs, "`$Call`");
     Require(docs, "`$When` and `$Once`");
     Require(docs, "`$Activate`");
+    Require(docs, "`$TextStyle`");
     Require(docs, "`$RuntimeUI`");
     Require(docs, "## Scoped runtime discovery");
     Require(docs, "There is intentionally no general `FindAllOf(UserWidget)` authoring path.");

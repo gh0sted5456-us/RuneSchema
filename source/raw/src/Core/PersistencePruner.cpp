@@ -1,12 +1,14 @@
 #include "Core/PersistencePruner.h"
 
 #include <map>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 #include "Core/AppearanceDefaults.h"
+#include "Core/ConfigFiles.h"
 #include "Core/SaveCleanup.h"
 #include "Core/SaveRegistrySnapshot.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
@@ -14,6 +16,8 @@
 #include "SDK/Classes/TSoftObjectPtr.h"
 #include "SDK/Structs/FSoftObjectPath.h"
 #include "Utility/Logging.h"
+#include "Utility/Config.h"
+#include "Runtime/HostServices.h"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Unreal/CoreUObject/UObject/FStrProperty.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
@@ -63,6 +67,29 @@ void ReportValidatedSavedItems(const nlohmann::json& source,
                 "[PERSISTENCE-PRUNER][RESOLVED] Retaining {} persistence ID '{}' because it resolves in the applicable live registry. Origin is irrelevant (native, loaded pak, or RuneSchema loader).\n"),
                 ToWideSafe(section), ToWideSafe(id.c_str()));
         }
+    }
+}
+
+std::optional<nlohmann::json> ReadExternalBaseline()
+{
+    constexpr std::size_t MaximumDefaultBytes = 8 * 1024 * 1024;
+    const auto path = HostServices::SettingsDirectory()
+        / "defaults" / "default.json";
+    try {
+        auto document = nlohmann::json::parse(
+            ConfigFiles::Read(path, MaximumDefaultBytes), nullptr, true, true);
+        if (SaveCleanup::ClassifyCharacterDocument(document)
+            == SaveCleanup::CharacterDocumentKind::Unsupported)
+            throw std::runtime_error(
+                "expected a native gameplay save or profile-only character document");
+        Log<LogLevel::Normal>(STR(
+            "[DEFAULT-RECOVERY][LOADED] Read the exact baseline file settings/defaults/default.json. No directory scan was performed.\n"));
+        return document;
+    } catch (const std::exception& error) {
+        Log<LogLevel::Warning>(STR(
+            "[DEFAULT-RECOVERY][FALLBACK] settings/defaults/default.json was unavailable or invalid: {}. Only the baked appearance profile remains available.\n"),
+            ToWideSafe(error.what()));
+        return std::nullopt;
     }
 }
 }
@@ -148,15 +175,60 @@ void PersistencePruner::PruneCharacterJson(FString& characterJson)
         SaveCleanup::Preview cleaned{source};
         cleaned = SaveCleanup::Plan(
             cleaned.Save, {}, false, registry.get(), false, true, true);
-        const auto repairWith = [&](const nlohmann::json& document) {
-            return SaveCleanup::RepairInvalidAppearance(
-                cleaned.Save, document, ValidAppearanceReference);
-        };
-        auto appearance = repairWith(AppearanceDefaults::BuiltIn());
-        for (auto& row : appearance.Removed)
-            cleaned.Removed.push_back(std::move(row));
-        cleaned.Save = std::move(appearance.Save);
-        if (cleaned.Removed.empty()) {
+        nlohmann::json restored = nlohmann::json::array();
+        const auto recovery = PSConfig::Get()->GetSettings().defaultRecovery;
+        std::optional<nlohmann::json> external;
+        if (recovery.enabled && recovery.useExternalDefault)
+            external = ReadExternalBaseline();
+
+        if (recovery.enabled && recovery.appearance) {
+            const auto repair = [&](const nlohmann::json& document) {
+                return SaveCleanup::RepairInvalidAppearance(cleaned.Save,
+                    SaveCleanup::AppearanceProfile(document),
+                    ValidAppearanceReference);
+            };
+            SaveCleanup::Preview appearance{cleaned.Save};
+            bool usedExternal = false;
+            if (external) {
+                try {
+                    appearance = repair(*external);
+                    usedExternal = true;
+                } catch (const std::exception& error) {
+                    Log<LogLevel::Warning>(STR(
+                        "[DEFAULT-RECOVERY][APPEARANCE-FALLBACK] External appearance baseline was rejected: {}. Using the DLL's baked profile.\n"),
+                        ToWideSafe(error.what()));
+                }
+            }
+            if (!usedExternal) appearance = repair(AppearanceDefaults::BuiltIn());
+            for (auto& row : appearance.Removed) {
+                restored.push_back(row);
+                cleaned.Removed.push_back(std::move(row));
+            }
+            cleaned.Save = std::move(appearance.Save);
+        }
+
+        if (recovery.enabled && external
+            && SaveCleanup::ClassifyCharacterDocument(*external)
+                == SaveCleanup::CharacterDocumentKind::Gameplay
+            && (recovery.items || recovery.quests || recovery.progress)) {
+            try {
+                const auto merged = SaveCleanup::MergeBaseline(cleaned.Save,
+                    *external, *registry, {
+                        .Items = recovery.items,
+                        .Quests = recovery.quests,
+                        .Progress = recovery.progress,
+                    });
+                cleaned.Save = merged.Save;
+                for (const auto& row : merged.Restored)
+                    restored.push_back(row);
+            } catch (const std::exception& error) {
+                Log<LogLevel::Warning>(STR(
+                    "[DEFAULT-RECOVERY][MERGE-SKIPPED] External baseline sections were not merged: {}. Mandatory orphan pruning remains active.\n"),
+                    ToWideSafe(error.what()));
+            }
+        }
+
+        if (cleaned.Removed.empty() && restored.empty()) {
             Log<LogLevel::Verbose>(STR(
                 "[PERSISTENCE-PRUNER][CHECKED] Every applicable persistence ID resolved; no persistence data was changed.\n"));
             return;
@@ -192,8 +264,11 @@ void PersistencePruner::PruneCharacterJson(FString& characterJson)
             "[PERSISTENCE-PRUNER][ORPHANS-REMOVED] Removed {} unresolved persistence reference(s) ({}). Resolved IDs were retained. Pruning will not run again until game restart.\n"),
             orphanCount, ToWideSafe(summary.c_str()));
         if (appearanceCount) Log<LogLevel::Warning>(STR(
-            "[PERSISTENCE-PRUNER][APPEARANCE-REPAIRED] Replaced {} invalid appearance handle(s) using the DLL's built-in male/A safety profile.\n"),
+            "[DEFAULT-RECOVERY][APPEARANCE-REPAIRED] Replaced {} missing or invalid appearance handle(s) from the selected validated baseline.\n"),
             appearanceCount);
+        if (!restored.empty()) Log<LogLevel::Warning>(STR(
+            "[DEFAULT-RECOVERY][MERGED] Added {} missing baseline record(s). Existing live values and progress were preserved.\n"),
+            restored.size());
     } catch (const std::exception& error) {
         Log<LogLevel::Error>(STR(
             "[PERSISTENCE-PRUNER][UNCHANGED] Character JSON was not modified: {}.\n"),

@@ -421,6 +421,18 @@ public:
             ImGui::TextWrapped("Normal RuneSchema recipe unlocks may persist once their live RecipeData has a valid PersistenceID. Generated vendor recipes remain transient. Safe Clean removes orphaned RuneSchema progress after content registration.");
             ImGui::Checkbox("Save RuneSchema quest progress", &settings.persistence.quests);
             ImGui::TextWrapped("On by default. Off leaves quest definitions available to other loaders but blocks RuneSchema quest actions because native quest progress is save-backed.");
+            ImGui::SeparatorText("Default baseline recovery");
+            ImGui::Checkbox("Enable baseline recovery (restart required)", &settings.defaultRecovery.enabled);
+            ImGui::TextWrapped("Off by default. When enabled, RuneSchema fills only missing or invalid selected fields after live-registry orphan pruning. Healthy live values and later progress always win.");
+            ImGui::BeginDisabled(!settings.defaultRecovery.enabled);
+            ImGui::Checkbox("Use settings/defaults/default.json", &settings.defaultRecovery.useExternalDefault);
+            ImGui::TextWrapped("Reads that exact file once; there is no defaults-folder scan. A missing or invalid file falls back only to the DLL's baked appearance safety profile.");
+            ImGui::Checkbox("Recover appearance", &settings.defaultRecovery.appearance);
+            ImGui::Checkbox("Merge missing baseline quests", &settings.defaultRecovery.quests);
+            ImGui::Checkbox("Merge missing baseline items", &settings.defaultRecovery.items);
+            ImGui::Checkbox("Merge missing baseline progress", &settings.defaultRecovery.progress);
+            ImGui::EndDisabled();
+            ImGui::TextWrapped("Corrupt-entry bypass is separate and never enabled by baseline recovery.");
             ImGui::SeparatorText("Server Helpy permissions");
             ImGui::TextWrapped("These permissions are disabled by default. Allowed client requests are executed and validated by server authority; clients can never export files or create permanent placements through this bridge.");
             ImGui::Checkbox("Allow client item grants", &settings.helpyAuthority.allowClientItemGrants);

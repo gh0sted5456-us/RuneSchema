@@ -1,4 +1,4 @@
-RuneSchema 0.7.7.0 builder
+RuneSchema 0.7.7.1 builder
 
 Run build.bat from this folder (or Build RuneSchema.bat from the repository
 root) to build RuneSchema.

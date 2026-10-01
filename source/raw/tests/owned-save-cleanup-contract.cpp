@@ -104,11 +104,12 @@ int main(int argc,char** argv){
         && registrar.find("does not round-trip to one live data asset")!=registrar.npos
         && registrar.find("duplicate PersistenceID resolves to multiple live assets")!=registrar.npos,
         "cleanup readiness ignores a loaded asset that failed identity round-trip, uniqueness, primary, or network registration");
-    need(pruner.find("if (cleaned.Removed.empty()) {")!=pruner.npos,
+    need(pruner.find("if (cleaned.Removed.empty() && restored.empty()) {")!=pruner.npos,
         "an unchanged character is not a strict no-op");
     need(pruner.find("SaveSnapshotRestore")==pruner.npos
-        && pruner.find("Default.json")==pruner.npos,
-        "automatic pruning still contains snapshot restoration machinery");
+        && pruner.find("defaultRecovery")!=pruner.npos
+        && pruner.find("MergeBaseline")!=pruner.npos,
+        "baseline recovery is missing or old snapshot replacement machinery returned");
     need(registrar.find("m_pruner.PruneBeforeCharacterLoad")!=registrar.npos
         && pruner.find("PruneCharacterJson(value)")!=pruner.npos
         && registrar.find("SaveCleanup::Plan(source")!=registrar.npos

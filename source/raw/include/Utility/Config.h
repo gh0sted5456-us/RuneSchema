@@ -83,6 +83,19 @@ namespace PS {
         bool quests = true;
     };
 
+    struct DefaultRecoverySettings {
+        // Recovery is an opt-in merge. It never replaces a healthy live save.
+        bool enabled = false;
+        // Read exactly settings/defaults/default.json once during startup
+        // recovery. Missing or invalid files fall back to the baked appearance
+        // profile and never enable progress restoration implicitly.
+        bool useExternalDefault = false;
+        bool appearance = true;
+        bool quests = false;
+        bool items = false;
+        bool progress = false;
+    };
+
     struct HelpyAuthoritySettings {
         // Client Helpy requests are always server-executed and independently
         // validated. Permanent authoring/export operations are never accepted.
@@ -116,6 +129,7 @@ namespace PS {
         AdvancedDiagnosticSettings diagnostics{};
         PluginSettings plugins{};
         PersistenceSettings persistence{};
+        DefaultRecoverySettings defaultRecovery{};
         HelpyAuthoritySettings helpyAuthority{};
     };
 

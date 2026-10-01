@@ -69,8 +69,10 @@ int main(int argc, char** argv)
         "Steam startup cleanup is not atomic or can rewrite Xbox WGS storage");
     Check(pruner.find("AppearanceDefaults::BuiltIn") != std::string::npos
         && appearanceDefaults.find("male_A_01") != std::string::npos
-        && appearanceDefaults.find("Default.json") == std::string::npos,
-        "appearance recovery does not exclusively use baked defaults");
+        && appearanceDefaults.find("Default.json") == std::string::npos
+        && pruner.find("settings/defaults/default.json") != std::string::npos
+        && pruner.find("defaultRecovery") != std::string::npos,
+        "appearance recovery lacks baked defaults or isolated opt-in external selection");
     Check(registrar.find("ScrubCharacterJsonBeforeLoad") != std::string::npos,
         "shared native character-load preflight is missing");
     Check(pruner.find("s_cleanupConsumedForProcess") != std::string::npos
@@ -94,7 +96,7 @@ int main(int argc, char** argv)
     Check(registrar.find("fingerprint != m_registryCandidateFingerprint") != std::string::npos
         && pruner.find("m_checkedCharacters") == std::string::npos
         && pruner.find("s_cleanupConsumedForProcess.exchange(") != std::string::npos
-        && pruner.find("if (cleaned.Removed.empty())") != std::string::npos,
+        && pruner.find("if (cleaned.Removed.empty() && restored.empty())") != std::string::npos,
         "automatic pruning is not globally gated by a stable registry and a nonempty removal plan");
     Check(registrar.find("for (auto* subsystem : subsystems)") != std::string::npos
         && registrar.find("registrationsComplete = RegisterMissing(dataClass, subsystem)") != std::string::npos,

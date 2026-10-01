@@ -28,9 +28,11 @@ int main(int argc, char** argv)
         "the DLL does not contain a canonical male/A appearance profile");
     Need(defaults.find("Default.json") == defaults.npos
             && defaults.find("SettingsDirectory") == defaults.npos,
-        "appearance recovery still depends on an external defaults file");
-    Need(pruner.find("AppearanceDefaults::BuiltIn()") != pruner.npos,
-        "load-time repair does not use baked defaults");
+        "the baked appearance profile unexpectedly depends on an external file");
+    Need(pruner.find("AppearanceDefaults::BuiltIn()") != pruner.npos
+            && pruner.find("settings/defaults/default.json") != pruner.npos
+            && pruner.find("defaultRecovery") != pruner.npos,
+        "load-time repair does not provide opt-in external recovery with baked fallback");
     Need(players.find("AppearanceDefaults::BuiltIn()") != players.npos
             && players.find("IsValidAppearanceReference") != players.npos,
         "runtime appearance recovery does not validate overrides before baked fallback");

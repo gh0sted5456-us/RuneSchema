@@ -1249,6 +1249,53 @@ namespace DragonWilds {
         throw std::runtime_error("Blueprint $RuntimeWidget $Call must be an object or array");
     }
 
+    void DragonWildsBlueprintModLoader::ApplyRuntimeWidgetTextStyle(
+        UObject* widget,
+        const RuntimeWidgetRule& rule)
+    {
+        const auto style = rule.Data.find("$TextStyle");
+        if (style == rule.Data.end()) return;
+        if (!style->is_object() || style->empty())
+            throw std::runtime_error("Blueprint $RuntimeWidget $TextStyle must be a non-empty object");
+
+        nlohmann::json properties = nlohmann::json::object();
+        const auto copy = [&](const char* authored, const char* reflected) {
+            const auto found = style->find(authored);
+            if (found != style->end()) properties[reflected] = *found;
+        };
+        if (const auto color = style->find("Color"); color != style->end())
+        {
+            if (!color->is_object())
+                throw std::runtime_error("Blueprint $RuntimeWidget $TextStyle Color must be an RGBA object");
+            properties["ColorAndOpacity"] = color->contains("SpecifiedColor")
+                ? *color : nlohmann::json{{"SpecifiedColor", *color}};
+        }
+        copy("ColorAndOpacity", "ColorAndOpacity");
+        copy("Font", "Font");
+        copy("ShadowColor", "ShadowColorAndOpacity");
+        copy("ShadowColorAndOpacity", "ShadowColorAndOpacity");
+        copy("ShadowOffset", "ShadowOffset");
+        copy("MinDesiredWidth", "MinDesiredWidth");
+        copy("AutoWrapText", "AutoWrapText");
+        copy("Justification", "Justification");
+
+        static const std::unordered_set<std::string> supported{
+            "Color", "ColorAndOpacity", "Font", "ShadowColor",
+            "ShadowColorAndOpacity", "ShadowOffset", "MinDesiredWidth",
+            "AutoWrapText", "Justification"
+        };
+        for (const auto& [name, value] : style->items())
+            if (!supported.contains(name))
+                throw std::runtime_error(std::format(
+                    "Blueprint $RuntimeWidget $TextStyle member '{}' is unsupported", name));
+
+        ApplyData(properties, widget, false);
+        auto* synchronize = widget->GetFunctionByNameInChain(TEXT("SynchronizeProperties"));
+        if (!synchronize || synchronize->GetParmsSize() != 0)
+            throw std::runtime_error("Blueprint $RuntimeWidget $TextStyle target is not a synchronizable text widget");
+        ActorHelper::FunctionCall(widget, synchronize).Invoke();
+    }
+
     void DragonWildsBlueprintModLoader::ApplyRuntimeWidgetBinding(
         UObject* owner,
         UObject* widget,
@@ -1601,9 +1648,11 @@ namespace DragonWilds {
             properties.erase("$Once");
             properties.erase("$Activate");
             properties.erase("$Find");
+            properties.erase("$TextStyle");
             if (!properties.empty())
                 ApplyData(properties, target, false);
 
+            ApplyRuntimeWidgetTextStyle(target, rule);
             ApplyRuntimeWidgetActivation(target, rule);
             ApplyRuntimeWidgetCalls(owner, target, rule);
 

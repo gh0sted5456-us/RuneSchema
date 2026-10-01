@@ -1,10 +1,21 @@
-# RuneSchema 0.7.7.0
+# RuneSchema 0.7.7.1
 
-RuneSchema 0.7.7.0 uses one `main.dll` for Steam/GOG and Game Pass/WinGDK.
+RuneSchema 0.7.7.1 uses one `main.dll` for Steam/GOG and Game Pass/WinGDK.
 The runtime detects the storefront at startup and selects the matching native
 support automatically.
 
 ## What changed
+
+- Mandatory startup pruning remains registry-driven and removes only
+  persistence identities absent from their complete applicable live registry.
+- Optional baseline recovery is disabled by default. It can use the baked
+  appearance profile or exactly `settings/defaults/default.json`, and only
+  adds missing validated records while preserving healthy live progress.
+- Appearance, item, quest, and progress baseline categories have independent
+  toggles. Corrupt-entry bypass remains separate and quarantined.
+- `$RuntimeWidget.$TextStyle` can apply native UMG font, color, shadow, wrap,
+  width, and justification fields at owner-scoped runtime events without a
+  polling scan.
 
 - RuneSchema content uses one authoring definition for standalone and
   multiplayer. NPCs no longer use a `Multiplayer` field.

@@ -150,6 +150,38 @@ activatables.
 }
 ```
 
+### `$TextStyle`
+
+`$TextStyle` changes a specific live UMG text widget when its normal runtime
+event fires. It uses the same owner-scoped target resolution as the rest of
+`$RuntimeWidget`, performs no global widget scan, and calls the widget's native
+`SynchronizeProperties()` once after the reflected fields are updated. Pair it
+with `$Once: true` when the style does not need to be reapplied after later
+native refreshes.
+
+```jsonc
+"$RuntimeWidget": {
+  "Header.TitleText": {
+    "$When": ["Construct", "OnActivated"],
+    "$Once": true,
+    "$TextStyle": {
+      "Color": { "R": 0.9, "G": 0.72, "B": 0.25, "A": 1.0 },
+      "Font": { "Size": 28, "LetterSpacing": 25 },
+      "ShadowColor": { "R": 0.0, "G": 0.0, "B": 0.0, "A": 0.75 },
+      "ShadowOffset": { "X": 1.0, "Y": 2.0 }
+    }
+  }
+}
+```
+
+Supported fields are `Color` (friendly RGBA alias), `ColorAndOpacity` (raw
+`FSlateColor`), `Font` (partial `FSlateFontInfo`, so changing only `Size`
+preserves other fields), `ShadowColor`, `ShadowColorAndOpacity`, `ShadowOffset`,
+`MinDesiredWidth`, `AutoWrapText`, and `Justification`. Font assets and
+materials may be supplied through the ordinary reflected `Font` fields when a
+specific game font is desired. Unknown members fail closed instead of being
+silently ignored.
+
 The next .8 phases are intentionally separate: safe scoped discovery
 (`WidgetTree` / `HUDWidgetRefs` / CommonUI containers) before any global
 fallback, followed by a RuneSchema-owned `$RuntimeUI` tree for transient UMG.
