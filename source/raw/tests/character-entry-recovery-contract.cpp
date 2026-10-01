@@ -25,17 +25,17 @@ int main(int argc, char** argv)
     const auto validationCall = recovery.find("ValidationHook.call<bool>");
     const auto validationAccept = recovery.find("return true;", validationCall);
     const auto playerCall = recovery.find("PlayerStateHook.call<bool>");
-    const auto playerResult = recovery.find("return accepted;", playerCall);
+    const auto playerAccept = recovery.find("return true;", playerCall);
     Need(validationCall != recovery.npos && validationAccept != recovery.npos
             && validationCall < validationAccept,
         "character validation is not allowed only after native validation runs");
-    Need(playerCall != recovery.npos && playerResult != recovery.npos
-            && playerCall < playerResult,
-        "mandatory pruning boundary must preserve the native loader result");
-    Need(recovery.find("std::int32_t result") != recovery.npos
-            && recovery.find("m_pruner.PruneCharacterJson(*playerState)")
-                != recovery.npos,
-        "player-state load ABI or native JSON preflight regressed");
+    Need(playerCall != recovery.npos && playerAccept != recovery.npos
+            && playerCall < playerAccept,
+        "player-state loading is not allowed only after the native loader runs");
+    Need(recovery.find("json") == recovery.npos
+            && recovery.find("ConfigFiles") == recovery.npos
+            && recovery.find("SaveCleanup") == recovery.npos,
+        "entry recovery must never mutate or clean save data");
     Need(recovery.find("intro") == recovery.npos
             && recovery.find("video") == recovery.npos,
         "unrelated intro-skip behavior leaked into entry recovery");
@@ -48,9 +48,8 @@ int main(int argc, char** argv)
         "entry recovery signatures are not embedded for native lanes");
     const auto gate = loader.find(
         "GetSettings().persistence.allowCorruptCharacterEntry");
-    const auto earlyBoundary = loader.find(
-        "m_characterEntryRecovery.Initialize();");
-    Need(earlyBoundary != loader.npos && earlyBoundary < gate
-            && loader.find("[SAVE-ENTRY][QUARANTINED]", gate) != loader.npos,
-        "native pruning must install early while acceptance override remains quarantined");
+    Need(gate != loader.npos
+            && loader.find("[SAVE-ENTRY][QUARANTINED]", gate) != loader.npos
+            && loader.find("m_characterEntryRecovery.Initialize();") == loader.npos,
+        "unsafe native entry hooks must remain quarantined");
 }

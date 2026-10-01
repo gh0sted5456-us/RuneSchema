@@ -4,8 +4,8 @@
 #include <string>
 static std::string Read(const char* path){std::ifstream f(path);if(!f)throw std::runtime_error("source unavailable");return {std::istreambuf_iterator<char>(f),{}};}
 int main(int argc,char** argv){
-    if(argc!=7)throw std::runtime_error("registrar, provenance, quest service, main loader, pruner, and native boundary sources required");
-    const auto registrar=Read(argv[1]),provenance=Read(argv[2]),quests=Read(argv[3]),mainLoader=Read(argv[4]),pruner=Read(argv[5]),recovery=Read(argv[6]);
+    if(argc!=6)throw std::runtime_error("registrar, provenance, quest service, main loader, and pruner sources required");
+    const auto registrar=Read(argv[1]),provenance=Read(argv[2]),quests=Read(argv[3]),mainLoader=Read(argv[4]),pruner=Read(argv[5]);
     const auto need=[](bool ok,const char* text){if(!ok)throw std::runtime_error(text);};
     need(registrar.find("OwnedContent::CompareSnapshot")==registrar.npos
         && registrar.find("OwnedContent::CommitSnapshot")==registrar.npos,
@@ -23,17 +23,26 @@ int main(int argc,char** argv){
         && registrar.find("snapshot.Quests")!=registrar.npos
         && registrar.find("snapshot.Journals")!=registrar.npos,
         "one or more persistent identity registries are absent");
+    need(registrar.find("ScrubCharacterJsonBeforeLoad")!=registrar.npos,
+        "provider-backed character JSON preflight is missing");
+    need(registrar.find("ProcessPlayerStateLoad")!=registrar.npos
+        && registrar.find("OnPersistentStoreLoadPlayerResult")!=registrar.npos
+        && registrar.find("LoadStateFromJson")!=registrar.npos,
+        "character preflight does not filter the known player JSON boundaries");
     need(pruner.find("s_cleanupConsumedForProcess")!=pruner.npos
-        && recovery.find("m_pruner.PruneCharacterJson(*playerState)")!=recovery.npos
-        && recovery.find("[PERSISTENCE-PRUNER][NATIVE-BOUNDARY-READY]")!=recovery.npos,
-        "automatic cleanup cannot attach to the native character load");
-    need(registrar.find("RegisterProcessEventPreCallback")==registrar.npos,
-        "dead global reflected callback was reintroduced");
-    const auto mandatoryPreflight=recovery.find(
-        "PS::InstallInlineHook(PlayerStateHook");
+        && registrar.find("Hook::RegisterProcessEventPreCallback")!=registrar.npos
+        && registrar.find("[PERSISTENCE-PRUNER][REFLECTED-BOUNDARY-READY]")!=registrar.npos,
+        "automatic cleanup cannot attach to an eligible reflected character load");
+    need(registrar.find("InstallInlineHook")==registrar.npos
+        && registrar.find("s_playerStateLoadHook")==registrar.npos
+        && registrar.find("ProcessPlayerStateLoadPreflight")==registrar.npos,
+        "mandatory pruning reintroduced an unsafe executable inline detour");
+    const auto mandatoryPreflight=registrar.find(
+        "m_characterJsonHook = Hook::RegisterProcessEventPreCallback");
     const auto auxiliaryHooks=registrar.find(
         "for (auto* hookPath : SaveLoadHookPaths)");
-    need(mandatoryPreflight!=recovery.npos && auxiliaryHooks!=registrar.npos
+    need(mandatoryPreflight!=registrar.npos && auxiliaryHooks!=registrar.npos
+        && mandatoryPreflight<auxiliaryHooks
         && registrar.find("was isolated after registration failed",
             auxiliaryHooks)!=registrar.npos,
         "an auxiliary registry hook can prevent mandatory character preflight");
@@ -58,8 +67,12 @@ int main(int argc,char** argv){
         "loaded-pak item IDs are not visibly retained from the live registry");
     need(pruner.find("PersistenceDiagnosticLedger")==pruner.npos,
         "cleanup depends on the optional diagnostic ledger");
-    need(registrar.find("ForEachUObject")==registrar.npos,
-        "registry refresh performs repeated global native-hook discovery");
+    const auto fallback=registrar.find(
+        "m_characterJsonHook = Hook::RegisterProcessEventPreCallback");
+    const auto fallbackGuard=registrar.find("if (!parameters",fallback);
+    need(fallback!=registrar.npos && fallbackGuard!=registrar.npos
+        && registrar.find("ForEachUObject")==registrar.npos,
+        "global ProcessEvent fallback performs native-hook discovery before filtering the event");
     const auto preRegistration=registrar.find("RegisterInitGameStatePreCallback");
     const auto registerAll=registrar.find("RegisterAll();",preRegistration);
     need(preRegistration!=registrar.npos && registerAll!=registrar.npos,
@@ -79,7 +92,8 @@ int main(int argc,char** argv){
     need(pruner.find("SaveSnapshotRestore")==pruner.npos
         && pruner.find("Default.json")==pruner.npos,
         "automatic pruning still contains snapshot restoration machinery");
-    need(recovery.find("m_pruner.PruneCharacterJson(*playerState)")!=recovery.npos
+    need(registrar.find("m_pruner.PruneBeforeCharacterLoad")!=registrar.npos
+        && pruner.find("PruneCharacterJson(value)")!=pruner.npos
         && registrar.find("SaveCleanup::Plan(")==registrar.npos,
         "persistence pruning is not isolated from live-registry registration");
 }

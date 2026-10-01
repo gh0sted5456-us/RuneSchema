@@ -29,13 +29,17 @@ namespace DragonWilds {
         std::vector<std::pair<RC::Unreal::UFunction*, int32_t>> m_functionHooks;
         RC::Unreal::Hook::GlobalCallbackId m_gameStateStartingHook = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::Hook::GlobalCallbackId m_gameStateReadyHook = RC::Unreal::Hook::ERROR_ID;
+        RC::Unreal::Hook::GlobalCallbackId m_characterJsonHook = RC::Unreal::Hook::ERROR_ID;
         bool m_initialized = false;
+        bool m_preflightingCharacterJson = false;
         bool m_registrySummaryReported = false;
         PS::PersistencePruner m_pruner;
         std::string m_registryCandidateFingerprint;
         unsigned m_registryCandidatePasses = 0;
 
         bool ResolveBindings();
+        void ScrubCharacterJsonBeforeLoad(RC::Unreal::UObject* context,
+            RC::Unreal::UFunction* function, void* parameters);
         void InstallHooks();
         void RegisterAll();
         bool RegisterMissing(RC::Unreal::UClass* dataClass, RC::Unreal::UObject* subsystem);

@@ -160,9 +160,6 @@ namespace DragonWilds {
 
     void DragonWildsMainLoader::PreInitialize()
     {
-        // Patch the native boundary before game threads can execute it. Its
-        // callback runs later, when character selection occurs.
-        m_characterEntryRecovery.Initialize();
         if (PS::PSConfig::Get()->GetSettings().persistence.allowCorruptCharacterEntry)
             PS::Log<LogLevel::Error>(STR(
                 "[SAVE-ENTRY][QUARANTINED] Corrupt-character entry recovery was requested but was not installed. Crash dumps identified an unsafe ProcessPlayerStateLoad ABI; native character acceptance remains unchanged.\n"));
