@@ -25,6 +25,11 @@ int main(int argc,char** argv){
         "one or more persistent identity registries are absent");
     need(registrar.find("ScrubCharacterJsonBeforeLoad")!=registrar.npos,
         "provider-backed character JSON preflight is missing");
+    need(registrar.find(
+            "/Script/Dominion.PersistenceSubsystem:OnPersistentStoreLoadPlayerResult")
+            !=registrar.npos
+        && registrar.find("OnPersistentStoreLoadPlayerResult")!=registrar.npos,
+        "character preflight does not bind the native persistent-store player JSON result");
     need(pruner.find("s_cleanupConsumedForProcess")!=pruner.npos
         && registrar.find("EnsureCharacterJsonPreflightHook")!=registrar.npos
         && registrar.find("[PERSISTENCE-PRUNER][BOUNDARY-READY]")!=registrar.npos,
@@ -52,7 +57,7 @@ int main(int argc,char** argv){
         "cleanup depends on the optional diagnostic ledger");
     const auto fallback=registrar.find(
         "m_characterJsonHook = Hook::RegisterProcessEventPreCallback");
-    const auto fallbackGuard=registrar.find("if (!function",fallback);
+    const auto fallbackGuard=registrar.find("if (!parameters",fallback);
     const auto preGuardDiscovery=registrar.find(
         "EnsureCharacterJsonPreflightHook();",fallback);
     need(fallback!=registrar.npos && fallbackGuard!=registrar.npos

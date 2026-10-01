@@ -56,9 +56,18 @@ namespace DragonWilds {
     };
 
     static constexpr const TCHAR* CharacterJsonLoadHookPaths[] = {
+        TEXT("/Script/Dominion.PersistenceSubsystem:OnPersistentStoreLoadPlayerResult"),
         TEXT("/Script/Dominion.DominionPlayerControllerBase:LoadStateFromJson"),
         TEXT("/Script/Dominion.DominionPlayerController:LoadStateFromJson"),
     };
+
+    static bool IsCharacterJsonLoadFunction(UFunction* function)
+    {
+        if (!function) return false;
+        const auto name = function->GetFName();
+        return name == FName(TEXT("OnPersistentStoreLoadPlayerResult"), FNAME_Add)
+            || name == FName(TEXT("LoadStateFromJson"), FNAME_Add);
+    }
 
     static std::string RegistryFingerprint(
         const PS::SaveCleanup::RegistrySnapshot& snapshot)
@@ -199,9 +208,8 @@ namespace DragonWilds {
             m_characterJsonHook = Hook::RegisterProcessEventPreCallback(
                 [this](Hook::TCallbackIterationData<void>&, UObject* source,
                     UFunction* function, void* parameters) {
-                    if (!function || !parameters || m_preflightingCharacterJson
-                        || function->GetFName()
-                            != FName(TEXT("LoadStateFromJson"), FNAME_Add)
+                    if (!parameters || m_preflightingCharacterJson
+                        || !IsCharacterJsonLoadFunction(function)
                         || !function->GetPathName().starts_with(
                             TEXT("/Script/Dominion.")))
                         return;
@@ -254,8 +262,7 @@ namespace DragonWilds {
                     if (!object || !object->IsA(UFunction::StaticClass()))
                         return LoopAction::Continue;
                     auto* function = static_cast<UFunction*>(object);
-                    if (function->GetFName()
-                            != FName(TEXT("LoadStateFromJson"), FNAME_Add)
+                    if (!IsCharacterJsonLoadFunction(function)
                         || !(function->GetFunctionFlags() & FUNC_Native)
                         || !function->GetPathName().starts_with(
                             TEXT("/Script/Dominion.")))
