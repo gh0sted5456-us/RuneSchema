@@ -284,8 +284,21 @@ namespace DragonWilds {
                 if (PS::SaveCleanup::ClassifyCharacterDocument(source)
                     != PS::SaveCleanup::CharacterDocumentKind::Gameplay)
                     continue;
+                // This pass runs during GameInstance startup, before the
+                // InitGameState pre-callback can register transient
+                // RuneSchema quest assets (including the hidden per-mod
+                // dialogue state quest).  Item and recipe registries are
+                // already complete here, but treating the early native quest
+                // or journal view as complete can purge a valid RuneSchema
+                // PersistenceID before character hydration.  Those two
+                // categories are therefore validated only by the reflected
+                // character-load preflight after all live registrations have
+                // settled.
+                auto startupRegistry = *registry;
+                startupRegistry.QuestsComplete = false;
+                startupRegistry.JournalsComplete = false;
                 const auto plan = PS::SaveCleanup::Plan(source, {}, false,
-                    registry.get(), false, true, true);
+                    &startupRegistry, false, true, true);
                 if (plan.Removed.empty()) continue;
                 ReplaceCharacterSave(entry.path(), original, plan.Save,
                     decoded.Utf16Le);

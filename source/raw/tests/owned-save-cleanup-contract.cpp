@@ -113,6 +113,8 @@ int main(int argc,char** argv){
     need(registrar.find("m_pruner.PruneBeforeCharacterLoad")!=registrar.npos
         && pruner.find("PruneCharacterJson(value)")!=pruner.npos
         && registrar.find("SaveCleanup::Plan(source")!=registrar.npos
-        && registrar.find("registry.get(), false, true, true")!=registrar.npos,
+        && registrar.find("startupRegistry.QuestsComplete = false")!=registrar.npos
+        && registrar.find("startupRegistry.JournalsComplete = false")!=registrar.npos
+        && registrar.find("&startupRegistry, false, true, true")!=registrar.npos,
         "startup and provider-boundary pruning do not share the unresolved-only plan");
 }

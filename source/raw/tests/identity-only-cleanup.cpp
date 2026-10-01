@@ -22,6 +22,12 @@ int main()
         {"Progress", {
             {"RecipesUnlocked", {"recipe0", "OadLWKUdVipKGcLFngpvFw"}},
             {"RecipesNew", {"recipe1"}}}},
+        {"QuestProgress", {
+            {"QuestTracked", "missing-dialogue-state"},
+            {"Quests", Json::array({{
+                {"QuestId", "missing-dialogue-state"},
+                {"QuestInts", Json::array()}}})},
+            {"QuestLocations", Json::array()}}},
         {"Journal", {
             {"UnlockedEntries", {"known-journal", "missing-journal"}},
             {"UnreadEntries", {"known-journal"}},
@@ -39,6 +45,17 @@ int main()
         throw std::runtime_error("Identity-only cleanup changed unrelated character data");
     if (Plan(cleaned.Save, {}, false, &registry, false, true, true).Save != cleaned.Save)
         throw std::runtime_error("Identity-only cleanup is not idempotent");
+
+    auto earlyRegistry = registry;
+    earlyRegistry.QuestsComplete = false;
+    earlyRegistry.JournalsComplete = false;
+    const auto early = Plan(source, {}, false, &earlyRegistry, false, true, true);
+    if (early.Save.at("GameProgress").at("QuestProgress")
+            != source.at("GameProgress").at("QuestProgress")
+        || early.Save.at("GameProgress").at("Journal")
+            != source.at("GameProgress").at("Journal"))
+        throw std::runtime_error(
+            "Early registry cleanup changed quest/dialogue or journal state");
 
     const Json defaultAppearance = {
         {"meta_data", Json::object()},
