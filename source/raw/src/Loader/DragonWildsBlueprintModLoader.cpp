@@ -1259,30 +1259,62 @@ namespace DragonWilds {
             throw std::runtime_error("Blueprint $RuntimeWidget $TextStyle must be a non-empty object");
 
         nlohmann::json properties = nlohmann::json::object();
+        nlohmann::json richTextStyle = nlohmann::json::object();
+        const bool hasRichTextOverride = PropertyHelper::GetPropertyByName(
+            widget->GetClassPrivate(), TEXT("DefaultTextStyleOverride")) != nullptr;
         const auto copy = [&](const char* authored, const char* reflected) {
             const auto found = style->find(authored);
             if (found != style->end()) properties[reflected] = *found;
+        };
+        const auto copyVisual = [&](const char* authored, const char* reflected) {
+            const auto found = style->find(authored);
+            if (found == style->end()) return;
+            if (hasRichTextOverride)
+                richTextStyle[reflected] = *found;
+            else
+                properties[reflected] = *found;
         };
         if (const auto color = style->find("Color"); color != style->end())
         {
             if (!color->is_object())
                 throw std::runtime_error("Blueprint $RuntimeWidget $TextStyle Color must be an RGBA object");
-            properties["ColorAndOpacity"] = color->contains("SpecifiedColor")
+            auto reflectedColor = color->contains("SpecifiedColor")
                 ? *color : nlohmann::json{{"SpecifiedColor", *color}};
+            if (hasRichTextOverride)
+                richTextStyle["ColorAndOpacity"] = std::move(reflectedColor);
+            else
+                properties["ColorAndOpacity"] = std::move(reflectedColor);
         }
-        copy("ColorAndOpacity", "ColorAndOpacity");
-        copy("Font", "Font");
-        copy("ShadowColor", "ShadowColorAndOpacity");
-        copy("ShadowColorAndOpacity", "ShadowColorAndOpacity");
-        copy("ShadowOffset", "ShadowOffset");
+        copyVisual("ColorAndOpacity", "ColorAndOpacity");
+        copyVisual("Font", "Font");
+        copyVisual("ShadowColor", "ShadowColorAndOpacity");
+        copyVisual("ShadowColorAndOpacity", "ShadowColorAndOpacity");
+        copyVisual("ShadowOffset", "ShadowOffset");
         copy("MinDesiredWidth", "MinDesiredWidth");
         copy("AutoWrapText", "AutoWrapText");
         copy("Justification", "Justification");
+        copy("Text", "Text");
+        copy("TextStyleSet", "TextStyleSet");
+        copy("DecoratorClasses", "DecoratorClasses");
+        copy("TextTransformPolicy", "TextTransformPolicy");
+        copy("LineHeightPercentage", "LineHeightPercentage");
+        copy("WrapTextAt", "WrapTextAt");
+        copy("Margin", "Margin");
+
+        if (!richTextStyle.empty())
+        {
+            properties["DefaultTextStyleOverride"] = std::move(richTextStyle);
+            if (PropertyHelper::GetPropertyByName(
+                    widget->GetClassPrivate(), TEXT("bOverrideDefaultStyle")))
+                properties["bOverrideDefaultStyle"] = true;
+        }
 
         static const std::unordered_set<std::string> supported{
             "Color", "ColorAndOpacity", "Font", "ShadowColor",
             "ShadowColorAndOpacity", "ShadowOffset", "MinDesiredWidth",
-            "AutoWrapText", "Justification"
+            "AutoWrapText", "Justification", "Text", "TextStyleSet",
+            "DecoratorClasses", "TextTransformPolicy", "LineHeightPercentage",
+            "WrapTextAt", "Margin"
         };
         for (const auto& [name, value] : style->items())
             if (!supported.contains(name))

@@ -182,6 +182,88 @@ materials may be supplied through the ordinary reflected `Font` fields when a
 specific game font is desired. Unknown members fail closed instead of being
 silently ignored.
 
+Rich-text widgets use the same directive. RuneSchema detects
+`DefaultTextStyleOverride`, writes font/color/shadow fields into that nested
+`FTextBlockStyle`, and enables `bOverrideDefaultStyle`. `TextStyleSet`, `Text`,
+`DecoratorClasses`, `TextTransformPolicy`, `LineHeightPercentage`, `WrapTextAt`,
+and `Margin` are also supported. `TextStyleSet` accepts a cooked data-table
+object path. Supplying `Text` is an explicit full replacement and may contain
+markup such as `<Red>warning</>` when the selected style table defines that row.
+RuneSchema never searches and rewrites words inside live localized text.
+
+### Dragonwilds text target map (0.11.1 export)
+
+The following owner and widget names come from the
+[public 0.11.1 RSDW export](https://github.com/RSDWArchive/0.11.1/tree/main/json/RSDragonwilds/Content/UI).
+Use an exact direct path when it resolves; otherwise use `$Find` with
+`"Scope": "WidgetTree"` and the exact widget name. This keeps each rule scoped
+to its live owner and avoids a global UMG scan.
+
+| Display | Blueprint owner | Exact widget | Native text type | Capability |
+| --- | --- | --- | --- | --- |
+| World interaction item name | `/Game/UI/HUD/WBP_HUD_InteractionPrompt` | `ItemNameTextBlock` | `TextBlock` | Whole-widget font/color |
+| World interaction description | `/Game/UI/HUD/WBP_HUD_InteractionPrompt` | `ItemAdditionalDescriptionTextBlock` | `DomTextBlock` | Whole-widget font/color |
+| World interaction inventory state | `/Game/UI/HUD/WBP_HUD_InteractionPrompt` | `InventoryStateTextBlock` | `TextBlock` | Whole-widget font/color |
+| Interaction input label | `/Game/UI/InputLegend/WBP_InputLegend_RichText_InputEntry` | `LabelRichText` | `DomRichTextBlock` | Whole-widget styling, style table, markup |
+| Journal category titles | `/Game/UI/InGameMenus/TopNavScreens/Journal/WBP_JournalMenu` | `K_Title`, `R_Title`, `W_Title` and matching `*Highlight` widgets | `WBP_DomTextBlock` | Whole-widget font/color |
+| Journal detail category | `/Game/UI/InGameMenus/TopNavScreens/Journal/WBP_JournalDetailScreen` | `Text_Category`, `Text_SubCategory` | `WBP_DomTextBlock` | Whole-widget font/color |
+| Journal body description | `/Game/UI/InGameMenus/TopNavScreens/Journal/WBP_Journal_InfoPaginated` | `DescriptionText` | `WBP_DomTextBlock` | Whole-widget font/color only |
+| Journal knowledge heading | `/Game/UI/InGameMenus/TopNavScreens/Journal/Entries/WBP_JournalEntry_Knowledge` | `Text_Header` | `WBP_DomTextBlock` | Whole-widget font/color |
+| Journal recipe heading | `/Game/UI/InGameMenus/TopNavScreens/Journal/Entries/WBP_JournalEntry_Recipe` | `Text_Header` | `WBP_DomTextBlock` | Whole-widget font/color |
+| Journal world heading | `/Game/UI/InGameMenus/TopNavScreens/Journal/Entries/WBP_JournalEntry_World` | `Text_Header` | `WBP_DomTextBlock` | Whole-widget font/color |
+
+Dragonwilds ships these relevant rich-text style tables:
+
+- `/Game/UI/Styles/Texts/RTUIS_InputPromptTextStyles`
+- `/Game/UI/Styles/Texts/RTUIS_JournalRichTextStyles`
+- `/Game/UI/Styles/Texts/RTUIS_QuestDescriptionTextStyles`
+- `/Game/UI/Styles/Texts/RTUIS_RichTextStyles`
+
+The exported journal body widgets are `DomTextBlock`, not
+`DomRichTextBlock`. Their font and color can be changed safely, but per-word
+color cannot be added without the game exposing a rich-text target (or a cooked
+replacement widget). RuneSchema deliberately does not attempt to mutate a live
+widget into a different native class.
+
+Example: style the existing rich-text interaction label without replacing its
+dynamic localized text:
+
+```jsonc
+{
+  "/Game/UI/InputLegend/WBP_InputLegend_RichText_InputEntry": {
+    "$RuntimeWidget": {
+      "LabelRichText": {
+        "$When": ["Construct", "OnInitialized"],
+        "$TextStyle": {
+          "Color": { "R": 0.9, "G": 0.72, "B": 0.25, "A": 1.0 },
+          "Font": { "Size": 15, "LetterSpacing": 10 },
+          "TextStyleSet": "/Game/UI/Styles/Texts/RTUIS_InputPromptTextStyles.RTUIS_InputPromptTextStyles"
+        }
+      }
+    }
+  }
+}
+```
+
+Example: style the journal description as one field:
+
+```jsonc
+{
+  "/Game/UI/InGameMenus/TopNavScreens/Journal/WBP_Journal_InfoPaginated": {
+    "$RuntimeWidget": {
+      "DescriptionText": {
+        "$Find": { "Scope": "WidgetTree", "Name": "DescriptionText" },
+        "$When": ["Construct", "OnActivated"],
+        "$TextStyle": {
+          "Color": { "R": 0.82, "G": 0.9, "B": 0.78, "A": 1.0 },
+          "Font": { "Size": 18 }
+        }
+      }
+    }
+  }
+}
+```
+
 The next .8 phases are intentionally separate: safe scoped discovery
 (`WidgetTree` / `HUDWidgetRefs` / CommonUI containers) before any global
 fallback, followed by a RuneSchema-owned `$RuntimeUI` tree for transient UMG.

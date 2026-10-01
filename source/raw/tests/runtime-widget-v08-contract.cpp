@@ -41,6 +41,10 @@ int main(int argc, char** argv) {
     Require(source, "properties.erase(\"$Once\")");
     Require(source, "properties.erase(\"$Activate\")");
     Require(source, "properties.erase(\"$TextStyle\")");
+    Require(source, "DefaultTextStyleOverride");
+    Require(source, "bOverrideDefaultStyle");
+    Require(source, "copy(\"TextStyleSet\", \"TextStyleSet\")");
+    Require(source, "copy(\"Text\", \"Text\")");
     Require(source, "SynchronizeProperties");
     Require(source, "Blueprint $RuntimeWidget $TextStyle target is not a synchronizable text widget");
     Require(source, "Blueprint $RuntimeWidget $Call Args must be an object");
