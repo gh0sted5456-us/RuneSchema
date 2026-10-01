@@ -18,6 +18,7 @@
   },
   "persistence": {
     "characterCustomization": false,
+    "allowCorruptCharacterEntry": false,
     "quests": true
   },
   "defaults": {

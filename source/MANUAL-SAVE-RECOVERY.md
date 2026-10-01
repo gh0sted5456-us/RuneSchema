@@ -4,6 +4,17 @@ Use this procedure only when RuneSchema's automatic owned-content or appearance
 cleanup cannot load the character far enough to repair it. Manual editing is a
 last-resort recovery path, not the normal uninstall workflow.
 
+## Rejected/corrupt character entry
+
+`persistence.allowCorruptCharacterEntry` is reserved for an emergency
+compatibility switch and is disabled by default. It is currently quarantined:
+crash-dump analysis identified an unsafe native `ProcessPlayerStateLoad` ABI.
+RuneSchema refuses the setting even if it is manually enabled and leaves native
+character acceptance unchanged.
+
+The standalone `CorruptCharacterBypass` DLL must not be combined with a future
+RuneSchema implementation. Duplicate-provider detection remains in place.
+
 ## Safety rules
 
 1. Close RuneScape: Dragonwilds completely. Do not edit a save while the game,

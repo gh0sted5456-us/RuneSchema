@@ -39,11 +39,17 @@ int main(int argc, char** argv)
     Need(recovery.find("intro") == recovery.npos
             && recovery.find("video") == recovery.npos,
         "unrelated intro-skip behavior leaked into entry recovery");
+    Need(recovery.find("CreateToolhelp32Snapshot") != recovery.npos
+            && recovery.find("corruptcharacterbypass") != recovery.npos,
+        "standalone bypass conflict detection is missing");
     Need(signatures.find("CharacterSave::Validate") != signatures.npos
             && signatures.find("UPersistenceSubsystem::ProcessPlayerStateLoad")
                 != signatures.npos,
         "entry recovery signatures are not embedded for native lanes");
-    Need(loader.find("m_characterEntryRecovery.Initialize();") != loader.npos
-            && loader.find("IsCharacterEntryRecoveryEnabled") == loader.npos,
-        "mandatory entry recovery is missing or gated by a setting");
+    const auto gate = loader.find(
+        "GetSettings().persistence.allowCorruptCharacterEntry");
+    Need(gate != loader.npos
+            && loader.find("[SAVE-ENTRY][QUARANTINED]", gate) != loader.npos
+            && loader.find("m_characterEntryRecovery.Initialize();") == loader.npos,
+        "unsafe native entry hooks must remain quarantined");
 }

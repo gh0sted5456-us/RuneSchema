@@ -160,7 +160,12 @@ namespace DragonWilds {
 
     void DragonWildsMainLoader::PreInitialize()
     {
-        m_characterEntryRecovery.Initialize();
+        if (PS::PSConfig::Get()->GetSettings().persistence.allowCorruptCharacterEntry)
+            PS::Log<LogLevel::Error>(STR(
+                "[SAVE-ENTRY][QUARANTINED] Corrupt-character entry recovery was requested but was not installed. Crash dumps identified an unsafe ProcessPlayerStateLoad ABI; native character acceptance remains unchanged.\n"));
+        else
+            PS::Log<LogLevel::Normal>(STR(
+                "[SAVE-ENTRY][DISABLED] Corrupt-character entry recovery is disabled by default. Native character acceptance remains unchanged.\n"));
         HookDatatableSerialize();
         SetupAlternativePakPathReader();
     }

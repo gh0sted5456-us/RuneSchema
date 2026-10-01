@@ -74,6 +74,9 @@ namespace PS {
         // Automatic /players appearance assignments stay read-only while
         // false. Character option/table loaders remain active.
         bool characterCustomization = false;
+        // Emergency compatibility path; disabled unless explicitly requested.
+        // Never stack it over the standalone CorruptCharacterBypass mod.
+        bool allowCorruptCharacterEntry = false;
         // Native quest progress is inherently save-backed. When false,
         // RuneSchema quest definitions remain loaded but player quest actions
         // are disabled so they cannot mutate the save.

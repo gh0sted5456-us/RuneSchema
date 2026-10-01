@@ -35,6 +35,7 @@ int RunConfigSettings() {
     assert(!settings.colorCodeLoaderAnnotations);
     assert(!DecodeSettings("{}").advancedLogging);
     assert(!DecodeSettings("{}").persistence.characterCustomization);
+    assert(!DecodeSettings("{}").persistence.allowCorruptCharacterEntry);
     assert(DecodeSettings("{}").persistence.quests);
     assert(!DecodeSettings("{}").defaults.appearanceOverrideEnabled);
     assert(!DecodeSettings("{}").defaults.restoration.enabled);
@@ -47,8 +48,9 @@ int RunConfigSettings() {
         && defaultSettings.defaults.restoration.quests
         && !defaultSettings.defaults.restoration.journalLore);
     assert(DecodeSettings(EncodeSettings(defaultSettings)).defaults.restoration.inventory);
-    auto persistenceSettings=DecodeSettings(R"({"persistence":{"characterCustomization":true,"journal":true,"recipes":true,"quests":false}})");
+    auto persistenceSettings=DecodeSettings(R"({"persistence":{"characterCustomization":true,"allowCorruptCharacterEntry":true,"journal":true,"recipes":true,"quests":false}})");
     assert(persistenceSettings.persistence.characterCustomization
+        && persistenceSettings.persistence.allowCorruptCharacterEntry
         && !persistenceSettings.persistence.quests);
     const auto encodedPersistence=EncodeSettings(persistenceSettings);
     const auto persistenceStart=encodedPersistence.find("\"persistence\"");
@@ -57,6 +59,7 @@ int RunConfigSettings() {
     const auto persistenceBlock=encodedPersistence.substr(persistenceStart,persistenceEnd-persistenceStart);
     assert(persistenceBlock.find("\"journal\"")==std::string::npos);
     assert(persistenceBlock.find("\"recipes\"")==std::string::npos);
+    assert(persistenceBlock.find("\"allowCorruptCharacterEntry\"")!=std::string::npos);
     Rejects([&]{DecodeSettings(R"({"persistence":{"characterCustomization":"yes"}})");});
     assert(DecodeSettings("{}").authoringTools);
     assert(DecodeSettings("{}").loaders.dialogue);

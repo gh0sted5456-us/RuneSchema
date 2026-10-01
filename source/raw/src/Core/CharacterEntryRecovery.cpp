@@ -4,12 +4,52 @@
 #include "Utility/InlineHook.h"
 #include "Utility/Logging.h"
 
+#include <Windows.h>
+#include <TlHelp32.h>
+
+#include <algorithm>
+#include <cwctype>
+#include <string>
+
 using namespace RC;
+
+namespace {
+bool StandaloneBypassLoaded()
+{
+    const auto snapshot = CreateToolhelp32Snapshot(
+        TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, GetCurrentProcessId());
+    if (snapshot == INVALID_HANDLE_VALUE) return false;
+
+    MODULEENTRY32W module{};
+    module.dwSize = sizeof(module);
+    bool found = false;
+    if (Module32FirstW(snapshot, &module)) {
+        do {
+            std::wstring path{module.szExePath};
+            std::transform(path.begin(), path.end(), path.begin(),
+                [](wchar_t value) { return std::towlower(value); });
+            if (path.find(L"\\mods\\corruptcharacterbypass\\")
+                != std::wstring::npos) {
+                found = true;
+                break;
+            }
+        } while (Module32NextW(snapshot, &module));
+    }
+    CloseHandle(snapshot);
+    return found;
+}
+}
 
 namespace DragonWilds {
 void CharacterEntryRecovery::Initialize()
 {
     if (IsActive()) return;
+
+    if (StandaloneBypassLoaded()) {
+        PS::Log<LogLevel::Warning>(STR(
+            "[SAVE-ENTRY][CONFLICT] Standalone CorruptCharacterBypass is already loaded; RuneSchema will not install duplicate character-entry hooks. Disable the standalone mod before enabling RuneSchema's integrated recovery.\n"));
+        return;
+    }
 
     auto* validation = SignatureManager::GetSignature("CharacterSave::Validate");
     auto* playerState = SignatureManager::GetSignature(
@@ -24,10 +64,10 @@ void CharacterEntryRecovery::Initialize()
 
     if (validationReady && playerStateReady) {
         PS::Log<LogLevel::Normal>(STR(
-            "[SAVE-ENTRY][READY] Character validation and ProcessPlayerStateLoad recovery are active. Native loading still runs; only their final acceptance result is recovered.\n"));
+            "[SAVE-ENTRY][READY] Opt-in character validation and ProcessPlayerStateLoad recovery are active. Native loading still runs; only their final acceptance result is recovered.\n"));
     } else {
         PS::Log<LogLevel::Error>(STR(
-            "[DEGRADED][SERVICE:character-entry-recovery] Mandatory character-entry recovery is incomplete (validation={}, player-state={}). RuneSchema pruning remains independent and will never delete against an incomplete registry.\n"),
+            "[DEGRADED][SERVICE:character-entry-recovery] Opt-in character-entry recovery is incomplete (validation={}, player-state={}). RuneSchema pruning remains independent and will never delete against an incomplete registry.\n"),
             validationReady, playerStateReady);
     }
 }

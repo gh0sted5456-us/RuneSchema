@@ -414,6 +414,10 @@ public:
             ImGui::SeparatorText("Progress persistence");
             ImGui::Checkbox("Save RuneSchema character customization", &settings.persistence.characterCustomization);
             ImGui::TextWrapped("Off by default. Character option and data-table loaders remain active, but automatic /players appearance assignments do not rewrite CustomizationSaveData.");
+            ImGui::BeginDisabled();
+            ImGui::Checkbox("Allow rejected/corrupt character entry (quarantined)", &settings.persistence.allowCorruptCharacterEntry);
+            ImGui::EndDisabled();
+            ImGui::TextWrapped("Temporarily unavailable: crash-dump analysis identified an unsafe native ProcessPlayerStateLoad ABI. RuneSchema will refuse this setting even if manually enabled, leaving native character acceptance unchanged.");
             ImGui::TextWrapped("Normal RuneSchema recipe unlocks may persist once their live RecipeData has a valid PersistenceID. Generated vendor recipes remain transient. Safe Clean removes orphaned RuneSchema progress after content registration.");
             ImGui::Checkbox("Save RuneSchema quest progress", &settings.persistence.quests);
             ImGui::TextWrapped("On by default. Off leaves quest definitions available to other loaders but blocks RuneSchema quest actions because native quest progress is save-backed.");
