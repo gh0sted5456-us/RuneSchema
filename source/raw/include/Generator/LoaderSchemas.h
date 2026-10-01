@@ -80,7 +80,7 @@ inline nlohmann::json LoaderSchemas() {
     const json buildingRequirement={{"type","object"},{"additionalProperties",false},{"required",{"ItemData","Amount"}},
         {"properties",{{"ItemData",{{"type","string"},{"minLength",1}}},{"Amount",{{"type","integer"},{"minimum",1}}}}}};
     json buildingOverrides={{"type","object"},{"additionalProperties",false},
-        {"description","Optional direct-building presentation, placement, shelter and station-row overrides. Omitted fields preserve cooked values; every requested runtime target is verified before registration. Specialized sections accept additional exact native field names when they resolve in the live reflected type."},
+        {"description","Optional direct-building presentation, placement, shelter and station-row overrides. Omitted fields preserve cooked values; every requested runtime target is verified before registration."},
         {"properties",json::object()}};
     buildingOverrides["properties"]["Names"]={{"type","object"},{"additionalProperties",false},{"properties",{
         {"Catalogue",{{"type","string"},{"minLength",1}}},{"World",{{"type","string"},{"minLength",1}}},
@@ -102,16 +102,15 @@ inline nlohmann::json LoaderSchemas() {
     placementFields["MagnetizingMultiplier"]={{"type","number"},{"minimum",0},{"maximum",100}};
     placementFields["OverlappingBoundsMultiplier"]={{"type","number"},{"minimum",0},{"maximum",100}};
     placementFields["SnappingModeOverride"]={{"enum",{"Basic","Advanced","Free","EBuildSnappingMode::Basic","EBuildSnappingMode::Advanced","EBuildSnappingMode::Free"}}};
-    buildingOverrides["properties"]["Placement"]={{"type","object"},{"additionalProperties",true},{"properties",std::move(placementFields)},
-        {"description","Private placement-profile row override. Documented fields are portable; additional names are accepted only when they resolve to reflected fields in the live game row."}};
-    buildingOverrides["properties"]["Stability"]={{"type","object"},{"additionalProperties",true},{"properties",{
+    buildingOverrides["properties"]["Placement"]={{"type","object"},{"additionalProperties",false},{"properties",std::move(placementFields)}};
+    buildingOverrides["properties"]["Stability"]={{"type","object"},{"additionalProperties",false},{"properties",{
         {"Profile",{{"type","string"},{"minLength",1},{"description","Existing DT_StabilityProfile row used as the source."}}},
         {"MaxStability",{{"type","number"},{"minimum",0},{"maximum",1000000}}},
         {"MinStability",{{"type","number"},{"minimum",0},{"maximum",1000000}}},
         {"VerticalLoss",{{"type","number"},{"minimum",0},{"maximum",1000000}}},
         {"HorizontalLoss",{{"type","number"},{"minimum",0},{"maximum",1000000}}}
     }}};
-    buildingOverrides["properties"]["DerivedData"]={{"type","object"},{"additionalProperties",true},{"properties",{
+    buildingOverrides["properties"]["DerivedData"]={{"type","object"},{"additionalProperties",false},{"properties",{
         {"PlacementZOffset",{{"type","number"},{"minimum",-100000},{"maximum",100000}}},
         {"PhysicalSurfaceExtentNeg",{{"type","number"},{"minimum",-100000},{"maximum",100000}}},
         {"PhysicalSurfaceExtentPos",{{"type","number"},{"minimum",-100000},{"maximum",100000}}}
@@ -126,11 +125,11 @@ inline nlohmann::json LoaderSchemas() {
     const json tagArray={{"type","array"},{"maxItems",128},{"items",{{"type","string"}}}};
     shelterFields["RoofTraceExclusionFilter"]=tagArray;shelterFields["ShelterTraceExclusionFilter"]=tagArray;
     for(const auto* field:{"SweepRayThickness","SweepRayDistance","ValidityPercentage"})shelterFields[field]={{"type","number"},{"minimum",0},{"maximum",100000}};
-    buildingOverrides["properties"]["Shelter"]={{"type","object"},{"additionalProperties",true},{"properties",std::move(shelterFields)},{"description","BuildingShelterComponent settings. Documented fields are portable; reflected native fields are also accepted. On $Clone, requires a private cooked BuildableActor."}};
-    buildingOverrides["properties"]["Health"]={{"type","object"},{"additionalProperties",true},{"properties",{
+    buildingOverrides["properties"]["Shelter"]={{"type","object"},{"additionalProperties",false},{"properties",std::move(shelterFields)},{"description","Actor-component settings. On $Clone, these require Properties.BuildableActor to name a private cooked actor."}};
+    buildingOverrides["properties"]["Health"]={{"type","object"},{"additionalProperties",false},{"properties",{
         {"MaxHealth",{{"type","number"},{"exclusiveMinimum",0},{"maximum",100000000}}},{"bCanDie",{{"type","boolean"}}}
     }},{"description","HealthComponent defaults. On $Clone, requires a private cooked BuildableActor."}};
-    buildingOverrides["properties"]["Snapping"]={{"type","object"},{"additionalProperties",true},{"properties",{
+    buildingOverrides["properties"]["Snapping"]={{"type","object"},{"additionalProperties",false},{"properties",{
         {"bUseSocketsForPlugGeneration",{{"type","boolean"}}},
         {"SnappingRadius",{{"type","number"},{"minimum",0},{"maximum",100000}}},
         {"SnappingRadiusInBasicSnappingMode",{{"type","number"},{"minimum",0},{"maximum",100000}}}
@@ -148,7 +147,7 @@ inline nlohmann::json LoaderSchemas() {
     assignedFuel["properties"]["Mode"]={{"enum",{"Replace","Append"}}};
     buildingFuelRule["oneOf"].push_back(std::move(clearFuel));
     buildingFuelRule["oneOf"].push_back(std::move(assignedFuel));
-    buildingOverrides["properties"]["Processing"]={{"type","object"},{"additionalProperties",true},{"properties",{
+    buildingOverrides["properties"]["Processing"]={{"type","object"},{"additionalProperties",false},{"properties",{
         {"Rate",{{"type","number"},{"exclusiveMinimum",0},{"maximum",100},{"description","ProcessingRate multiplier on the single station row that references this building. Recipe Min/MaxProcessingTime still takes precedence for per-recipe duration."}}},
         {"AcceptedFuels",buildingFuelRule},
         {"StartingFuelItem",{{"type",{"string","null"}},{"description","Optional starting FuelItemData object path; null preserves an explicitly empty starter slot."}}},
@@ -161,20 +160,12 @@ inline nlohmann::json LoaderSchemas() {
         {"CanProcessBeStartedThroughUI",{{"type","boolean"},{"description","Writes native bCanProcessBeStartedThroughUI."}}},
         {"AutoStartProcess",{{"type","boolean"},{"description","Writes native bAutoStartProcess."}}}
     }}};
-    buildingOverrides["properties"]["Actor"]={{"type","object"},{"additionalProperties",true},
-        {"description","Exact reflected fields on the BuildableActor class default object. A $Clone must supply its own cooked Properties.BuildableActor."}};
-    buildingOverrides["properties"]["Components"]={{"type","object"},{"additionalProperties",{
-        {"type","object"},{"additionalProperties",true}}},
-        {"description","Component-class to reflected-field map. Keys may be full /Script/... class paths or Dominion class names. A $Clone must supply its own cooked Properties.BuildableActor."}};
-    buildingOverrides["properties"]["Station"]={{"type","object"},{"additionalProperties",true},
-        {"not",{{"required",{"StationBuildingPieceData"}}}},
-        {"description","Exact reflected fields on the one crafting/processing station row linked to this building. StationBuildingPieceData is protected."}};
     const json buildingDefinition={{"type","object"},{"additionalProperties",false},
         {"oneOf",{json{{"required",{"$Clone"}},{"not",{{"required",{"Asset"}}}}},
                    json{{"required",{"Asset"}},{"not",{{"required",{"$Clone"}}}}}}},
         {"properties",{{"$Clone",{{"type","string"},{"pattern","^/"},{"description","Clone a cooked BuildingPieceData asset. The clone receives a new RuneSchema identity and remains a separate build-menu entry."}}},
             {"Asset",{{"type","string"},{"pattern","^/"},{"description","Register an existing BuildingPieceData asset; use $Clone when changing the actor or cost."}}},
-            {"Properties",{{"type","object"},{"additionalProperties",true},{"description","Reflected BuildingPieceData overrides. PersistenceID, InternalName, BuildingPieceDataIndex, Requirements, and placement/stability row handles are managed and rejected here. A BuildableActor override must be a cooked BP_BaseBuilding_BaseActor child."}}},
+            {"Properties",{{"type","object"},{"additionalProperties",true},{"description","Reflected BuildingPieceData overrides. PersistenceID, InternalName, BuildingPieceDataIndex and Requirements are managed and rejected here. A BuildableActor override must be a cooked BP_BaseBuilding_BaseActor child."}}},
             {"Overrides",buildingOverrides},
             {"Requirements",{{"type","array"},{"maxItems",64},{"items",buildingRequirement},{"description","Complete replacement build cost. Every item must resolve before the clone is registered."}}},
             {"Unlock",{{"type","boolean"},{"default",true},{"description","Session-unlock the separate cloned entry. False does not revoke an unlock already persisted by the game."}}},

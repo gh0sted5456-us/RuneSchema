@@ -42,9 +42,6 @@
       },
       "Processing": {
         "Rate": 1.0
-      },
-      "Station": {
-        "InfluenceRange": 2500.0
       }
     }
   }

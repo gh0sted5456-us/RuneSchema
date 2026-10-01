@@ -71,14 +71,6 @@ int main(int argc,char** argv) {
     require(schema.find("bShelterCheckedOnPlacement")!=std::string::npos
         && schema.find("SweepRayDistance")!=std::string::npos,
         "mapped shelter surface is incomplete");
-    require(loader.find("definition.Overrides.contains(\"Actor\")")!=std::string::npos
-        && loader.find("definition.Overrides.contains(\"Components\")")!=std::string::npos,
-        "generic actor/component override surface is missing");
-    require(loader.find("definition.Overrides.contains(\"Station\")")!=std::string::npos
-        && loader.find("StationBuildingPieceData")!=std::string::npos,
-        "generic station-row override surface or relationship protection is missing");
-    require(schema.find("additional exact native field names")!=std::string::npos,
-        "forward-compatible reflected override behavior is undocumented");
     require(loader.find("EBuildingRequirements::InteractAnywhere")!=std::string::npos,
         "shelter override does not use the verified native enum");
     require(schema.find("ProcessingRate multiplier")!=std::string::npos,

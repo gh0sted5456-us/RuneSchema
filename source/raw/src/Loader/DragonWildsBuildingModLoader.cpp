@@ -440,8 +440,7 @@ namespace DragonWilds {
                 bool safe = true;
                 for (const auto* protectedField : {
                          "PersistenceID", "InternalName", "BuildingPieceDataIndex",
-                         "Requirements", "PlacementProfileRowHandle",
-                         "BuildingStabilityProfileRowHandle" })
+                         "Requirements" })
                 {
                     if (definition.Properties.contains(protectedField))
                     {
@@ -506,8 +505,7 @@ namespace DragonWilds {
                 for(const auto& [section,value]:overrides.items()) {
                     if(section!="Names"&&section!="Placement"&&section!="Stability"
                         &&section!="DerivedData"&&section!="Shelter"&&section!="Health"
-                        &&section!="Snapping"&&section!="Processing"&&section!="Actor"
-                        &&section!="Components"&&section!="Station")valid=false;
+                        &&section!="Snapping"&&section!="Processing")valid=false;
                     if(!value.is_object())valid=false;
                 }
                 if(overrides.contains("Names"))for(const auto& [name,value]:overrides.at("Names").items())
@@ -532,18 +530,18 @@ namespace DragonWilds {
                         if(value.is_array())for(const auto& entry:value)valid=valid&&entry.is_string();
                     }
                     else if(name=="SnappingModeOverride")valid=valid&&value.is_string()&&!value.get<std::string>().empty();
-                    // Other names are native PlacementProfile fields. They are
-                    // resolved against the live row struct before any are written.
+                    else valid=false;
                 }
                 if(overrides.contains("Stability"))for(const auto& [name,value]:overrides.at("Stability").items()) {
                     if(name=="Profile")valid=valid&&value.is_string()&&!value.get<std::string>().empty();
                     else if(name=="MaxStability"||name=="MinStability"||name=="VerticalLoss"||name=="HorizontalLoss")
                         valid=valid&&value.is_number()&&std::isfinite(value.get<double>())&&value.get<double>()>=0&&value.get<double>()<=1000000;
-                    // Other names are version-specific native stability fields.
+                    else valid=false;
                 }
                 if(overrides.contains("DerivedData"))for(const auto& [name,value]:overrides.at("DerivedData").items()) {
                     if(name=="PlacementZOffset"||name=="PhysicalSurfaceExtentNeg"||name=="PhysicalSurfaceExtentPos")
                         valid=valid&&value.is_number()&&std::isfinite(value.get<double>())&&value.get<double>()>=-100000&&value.get<double>()<=100000;
+                    else valid=false;
                 }
                 if(overrides.contains("Shelter"))for(const auto& [name,value]:overrides.at("Shelter").items()) {
                     if(name=="InteractionRequirements")valid=valid&&value.is_string()&&!value.get<std::string>().empty();
@@ -556,10 +554,12 @@ namespace DragonWilds {
                     }
                     else if(name=="SweepRayThickness"||name=="SweepRayDistance"||name=="ValidityPercentage")
                         valid=valid&&value.is_number()&&std::isfinite(value.get<double>())&&value.get<double>()>=0&&value.get<double>()<=100000;
+                    else valid=false;
                 }
                 if(overrides.contains("Health"))for(const auto& [name,value]:overrides.at("Health").items()) {
                     if(name=="MaxHealth")valid=valid&&value.is_number()&&std::isfinite(value.get<double>())&&value.get<double>()>0&&value.get<double>()<=100000000;
                     else if(name=="bCanDie")valid=valid&&value.is_boolean();
+                    else valid=false;
                 }
                 if(overrides.contains("Snapping"))for(const auto& [name,value]:overrides.at("Snapping").items()) {
                     if(name=="SnappingRadius"||name=="SnappingRadiusInBasicSnappingMode")
@@ -586,12 +586,8 @@ namespace DragonWilds {
                     else if(name=="MaxResourceSlots")valid=valid&&value.is_number_integer()&&value.get<int64_t>()>=1&&value.get<int64_t>()<=64;
                     else if(name=="InfluenceRange")valid=valid&&value.is_number()&&std::isfinite(value.get<double>())&&value.get<double>()>=0&&value.get<double>()<=100000;
                     else if(name=="IgnitesBurning"||name=="StopsWhenRecipeChanges"||name=="CanProcessBeStartedThroughUI"||name=="AutoStartProcess")valid=valid&&value.is_boolean();
-                    // Other names are exact reflected station-row fields.
+                    else valid=false;
                 }
-                if(overrides.contains("Components"))for(const auto& [component,fields]:overrides.at("Components").items())
-                    valid=valid&&!component.empty()&&fields.is_object();
-                if(overrides.contains("Station")&&overrides.at("Station").contains("StationBuildingPieceData"))
-                    valid=false;
                 if(!valid) {
                     PS::Log<LogLevel::Error>(STR("{}: Building '{}.Overrides' contains an unsupported field or value.\n"),modName,definition.Key);
                     continue;
@@ -710,8 +706,6 @@ namespace DragonWilds {
                     if (property == "PersistenceID" || property == "InternalName"
                         || property == "BuildingPieceDataIndex"
                         || property == "Requirements"
-                        || property == "PlacementProfileRowHandle"
-                        || property == "BuildingStabilityProfileRowHandle"
                         || (property == "BuildableActor" && !propertyValue.is_string()))
                     {
                         PS::Log<LogLevel::Error>(STR("{}: Building patch '{}.Properties.{}' violates the managed clone contract.\n"),
@@ -1263,8 +1257,7 @@ namespace DragonWilds {
     bool DragonWildsBuildingModLoader::ApplyProperties(
         UObject* building, const BuildingDefinition& definition, LoadResult& result)
     {
-        std::vector<std::pair<FProperty*, const nlohmann::json*>> resolved;
-        resolved.reserve(definition.Properties.size());
+        bool valid = true;
         for (const auto& [name, value] : definition.Properties.items())
         {
             auto propertyName = RC::to_generic_string(name);
@@ -1276,25 +1269,19 @@ namespace DragonWilds {
                     STR("Building '{}': property '{}' was not found.\n"),
                     definition.Key, propertyName);
                 result.Errors++;
+                valid = false;
                 continue;
             }
 
-            resolved.emplace_back(property, &value);
-        }
-        if (resolved.size() != definition.Properties.size()) return false;
-
-        bool valid = true;
-        for (const auto& [property, value] : resolved)
-        {
             try
             {
-                PropertyHelper::CopyJsonValueToContainer(building, property, *value);
+                PropertyHelper::CopyJsonValueToContainer(building, property, value);
             }
             catch (const std::exception& error)
             {
                 PS::Log<LogLevel::Error>(
                     STR("Building '{}': failed to set '{}': {}\n"),
-                    definition.Key, property->GetName(), PS::ToWideSafe(error.what()));
+                    definition.Key, propertyName, PS::ToWideSafe(error.what()));
                 result.Errors++;
                 valid = false;
             }
@@ -1355,16 +1342,12 @@ namespace DragonWilds {
         };
         const auto applyFields=[&](void* container,auto* type,const nlohmann::json& values,
             const std::unordered_set<std::string>& ignored={}) -> bool {
-            std::vector<std::pair<FProperty*,const nlohmann::json*>> resolved;
-            resolved.reserve(values.size());
             for(const auto& [name,value]:values.items()) {
                 if(ignored.contains(name))continue;
                 auto* property=type?PropertyHelper::GetPropertyByName(type,RC::to_generic_string(name)):nullptr;
                 if(!property)return false;
-                resolved.emplace_back(property,&value);
+                PropertyHelper::CopyJsonValueToContainer(container,property,value);
             }
-            for(const auto& [property,value]:resolved)
-                PropertyHelper::CopyJsonValueToContainer(container,property,*value);
             return true;
         };
 
@@ -1476,15 +1459,9 @@ namespace DragonWilds {
                 :"EBuildingRequirements::InteractAnywhere";
         }
         const auto actorComponentRequested=!shelterFields.empty()
-            ||definition.Overrides.contains("Health")||definition.Overrides.contains("Snapping")
-            ||definition.Overrides.contains("Actor")||definition.Overrides.contains("Components");
+            ||definition.Overrides.contains("Health")||definition.Overrides.contains("Snapping");
         if(actorComponentRequested&&definition.Clone&&!definition.Properties.contains("BuildableActor"))
             return fail("actor-component overrides on a $Clone require a private cooked BuildableActor; sharing the vanilla actor would alter the source piece");
-        if(definition.Overrides.contains("Actor")) {
-            try {if(!applyFields(actorDefaults,actorDefaults->GetClassPrivate(),definition.Overrides.at("Actor")))
-                return fail("BuildableActor defaults do not expose every requested Actor field");}
-            catch(const std::exception& error){return fail("actor fields could not be written: "+std::string(error.what()));}
-        }
         if(!shelterFields.empty()) {
             auto* component=findComponent(TEXT("/Script/Dominion.BuildingShelterComponent"));
             if(!component)return fail("BuildableActor has no BuildingShelterComponent");
@@ -1505,18 +1482,6 @@ namespace DragonWilds {
             try {if(!applyFields(component,component->GetClassPrivate(),definition.Overrides.at("Snapping")))
                 return fail("BuildingSnapComponent layout differs from the mapped UE 5.6.1 fields");}
             catch(const std::exception& error){return fail("snapping fields could not be written: "+std::string(error.what()));}
-        }
-        if(definition.Overrides.contains("Components")) {
-            for(const auto& [componentName,fields]:definition.Overrides.at("Components").items()) {
-                auto componentPath=componentName.starts_with("/")
-                    ?componentName:"/Script/Dominion."+componentName;
-                auto componentPathWide=RC::to_generic_string(componentPath);
-                auto* component=findComponent(componentPathWide.c_str());
-                if(!component)return fail("BuildableActor has no component of class '"+componentPath+"'");
-                try {if(!applyFields(component,component->GetClassPrivate(),fields))
-                    return fail("component '"+componentPath+"' does not expose every requested field");}
-                catch(const std::exception& error){return fail("component '"+componentPath+"' fields could not be written: "+std::string(error.what()));}
-            }
         }
 
         const auto& stability=definition.Overrides.contains("Stability")
@@ -1565,9 +1530,7 @@ namespace DragonWilds {
 
         const auto& processing=definition.Overrides.contains("Processing")
             ?definition.Overrides.at("Processing"):nlohmann::json::object();
-        const auto& station=definition.Overrides.contains("Station")
-            ?definition.Overrides.at("Station"):nlohmann::json::object();
-        const bool needsStation=names.contains("Menu")||!processing.empty()||!station.empty();
+        const bool needsStation=names.contains("Menu")||!processing.empty();
         size_t matches=0;
         if(needsStation) {
             menu=names.value("Menu",std::string{});
@@ -1601,10 +1564,6 @@ namespace DragonWilds {
                         if(processing.contains("AcceptedFuels")
                             && !CastField<FArrayProperty>(stationField("AcceptedFuels")))
                             return fail("station row AcceptedFuels is unavailable or is not an array");
-                        for(const auto& [name,value]:station.items())
-                            if(name=="StationBuildingPieceData"||!PropertyHelper::GetPropertyByName(
-                                rowType,RC::to_generic_string(name)))
-                                return fail("station row does not expose writable field '"+name+"'");
                         if(!menu.empty()) {
                             bool named=false;
                             for(const auto* field:{TEXT("DisplayName"),TEXT("StationDisplayName"),TEXT("Name")})
@@ -1633,8 +1592,6 @@ namespace DragonWilds {
                             if(name=="Rate"||name=="AcceptedFuels")continue;
                             PropertyHelper::CopyJsonValueToContainer(rowData,stationField(name.c_str()),value);
                         }
-                        if(!station.empty()&&!applyFields(rowData,rowType,station))
-                            return fail("station row does not expose every requested Station field");
                     }
                 }
             if(matches!=1)return fail(matches?"building is linked by multiple station rows":"no station row references this building");

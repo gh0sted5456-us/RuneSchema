@@ -115,12 +115,6 @@ int RunLoaderSchemas(int argc,char** argv) {
     assert(buildingOverrides.at("Shelter").at("properties").contains("RoofRays"));
     assert(buildingOverrides.at("Health").at("properties").contains("MaxHealth"));
     assert(buildingOverrides.at("Snapping").at("properties").contains("SnappingRadius"));
-    assert(buildingOverrides.contains("Actor")
-        && buildingOverrides.contains("Components")
-        && buildingOverrides.contains("Station"));
-    assert(buildingOverrides.at("Placement").at("additionalProperties").get<bool>()
-        && buildingOverrides.at("Stability").at("additionalProperties").get<bool>()
-        && buildingOverrides.at("DerivedData").at("additionalProperties").get<bool>());
     assert(schemas.at("assets").dump().find("\"$declaration\"")==std::string::npos);
     assert(schemas.at("journal").dump().find("\"$declaration\"")==std::string::npos);
     assert(schemas.at("lore").dump().find("\"$declaration\"")==std::string::npos);
