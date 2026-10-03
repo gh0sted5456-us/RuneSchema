@@ -48,6 +48,7 @@
 #include "Loader/DragonWildsAssetModLoader.h"
 #include "Loader/RegistryPatchPlan.h"
 #include "Core/JsonPatchDirective.h"
+#include "Core/RegistryProvenance.h"
 #include "Loader/PlayerGhost.h"
 
 using namespace RC;
@@ -684,7 +685,7 @@ namespace
         return collision;
     }
 
-    void AddMapEntry(FMapProperty* mapProperty, UObject* subsystem,
+    bool AddMapEntry(FMapProperty* mapProperty, UObject* subsystem,
         const FString& key, UObject* item)
     {
         UECustom::FScriptMapHelper map(
@@ -695,6 +696,14 @@ namespace
         std::memcpy(map.GetValuePtr(pair.GetData()), &item, sizeof(item));
         map.Add(pair);
         map.Rehash();
+        bool verified = false;
+        map.ForEachPair([&](void* keyPointer, void* valuePointer) {
+            if (*static_cast<FString*>(keyPointer) != key) return;
+            UObject* mapped = nullptr;
+            std::memcpy(&mapped, valuePointer, sizeof(mapped));
+            if (mapped == item) verified = true;
+        });
+        return verified;
     }
 
     int32_t EnsureItemNetworkIdentity(UObject* item, UObject* subsystem)
@@ -1945,6 +1954,13 @@ namespace DragonWilds {
             return false;
         }
 
+        // Record authored provenance before native registration. The startup
+        // registrar uses this durable identity set to distinguish RuneSchema
+        // JSON clones from cooked/base-or-PAK ItemData without relying on
+        // transient UObject addresses or package-name guesses.
+        PS::RegistryProvenance::AnnounceRuneSchemaItem(
+            RC::to_string(RC::StringType(*persistenceId)));
+
         // WinGDK can retain an outgoing ItemSubsystem while the next world is
         // starting. Register the clone in every live ItemSubsystem, matching
         // DragonWildsDataRegistrar's cross-world policy, instead of trusting
@@ -1999,10 +2015,21 @@ namespace DragonWilds {
                 continue;
             }
 
-            AddMapEntry(persistenceMap, candidate, persistenceId, item);
-            AddMapEntry(internalMap, candidate, persistenceId, item);
+            const bool primaryVerified = AddMapEntry(
+                persistenceMap, candidate, persistenceId, item);
+            bool internalVerified = AddMapEntry(
+                internalMap, candidate, persistenceId, item);
             if (internalName != persistenceId)
-                AddMapEntry(internalMap, candidate, internalName, item);
+                internalVerified = AddMapEntry(
+                    internalMap, candidate, internalName, item)
+                    && internalVerified;
+            if (!primaryVerified || !internalVerified)
+            {
+                PS::Log<LogLevel::Error>(STR(
+                    "Clone '{}': native item identity maps failed post-insert round-trip verification.\n"),
+                    pendingAsset.Target);
+                continue;
+            }
 
             if (firstNetId < 0) firstNetId = netId;
             ++registeredCount;
@@ -2017,8 +2044,8 @@ namespace DragonWilds {
             return false;
         }
 
-        PS::Log<LogLevel::Verbose>(STR(
-            "Clone '{}': registered item identity '{}' / '{}' across {} live ItemSubsystem instance(s); first NetId {}.\n"),
+        PS::Log<LogLevel::Normal>(STR(
+            "[REGISTRY][ITEM][ADDED] source=runeschema asset='{}' PersistenceID='{}' InternalName='{}' subsystemCount={} firstNetworkId={} verified=true.\n"),
             pendingAsset.Target, RC::StringType(*persistenceId),
             RC::StringType(*internalName), registeredCount, firstNetId);
         return true;

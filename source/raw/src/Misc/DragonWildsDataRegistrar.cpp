@@ -2,8 +2,11 @@
 #include <Windows.h>
 #include <chrono>
 #include <cstring>
+#include <cctype>
 #include <algorithm>
+#include <array>
 #include <fstream>
+#include <filesystem>
 #include <limits>
 #include <ranges>
 #include <unordered_map>
@@ -19,6 +22,9 @@
 #include "Unreal/World.hpp"
 #include "Unreal/Engine/UDataTable.hpp"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
+#include "SDK/Classes/KismetSystemLibrary.h"
+#include "SDK/Classes/TSoftClassPtr.h"
+#include "SDK/Structs/FSoftObjectPath.h"
 #include "SDK/Structs/Custom/FManagedValue.h"
 #include "SDK/Structs/Custom/FScriptArrayHelper.h"
 #include "SDK/Structs/Custom/FScriptMapHelper.h"
@@ -27,10 +33,15 @@
 #include "SDK/Helper/ActorHelper.h"
 #include "Utility/Logging.h"
 #include "Core/ConfigFiles.h"
+#include "Core/RegistryProvenance.h"
 #include "Core/SaveCleanup.h"
 #include "Core/SaveRegistrySnapshot.h"
 #include "Runtime/Storefront.h"
+#include "Runtime/HostServices.h"
 #include "Misc/DragonWildsDataRegistrar.h"
+#include "Unreal/UAssetRegistryHelpers.hpp"
+#include "Unreal/UAssetRegistry.hpp"
+#include "Unreal/FAssetData.hpp"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -94,6 +105,80 @@ namespace DragonWilds {
         {
             const auto decoded = DecodeCharacterText(bytes);
             return nlohmann::json::parse(decoded.Utf8, nullptr, true, true);
+        }
+
+        std::string LowerAscii(std::string value)
+        {
+            std::ranges::transform(value, value.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            return value;
+        }
+
+        std::unordered_set<std::string> MountedModRootNames()
+        {
+            std::unordered_set<std::string> roots;
+            const auto mods = PS::HostServices::WorkingDirectory()
+                / L"Mods" / L"RuneSchema" / L"mods";
+            std::error_code error;
+            if (!std::filesystem::is_directory(mods, error)) return roots;
+            for (std::filesystem::recursive_directory_iterator iterator(
+                    mods, std::filesystem::directory_options::skip_permission_denied,
+                    error), end;
+                iterator != end && !error; iterator.increment(error))
+            {
+                const auto& entry = *iterator;
+                if (entry.is_directory(error))
+                {
+                    roots.insert(LowerAscii(
+                        entry.path().filename().string()));
+                    continue;
+                }
+                if (!entry.is_regular_file(error)
+                    || LowerAscii(entry.path().extension().string()) != ".pak")
+                    continue;
+                auto stem = LowerAscii(entry.path().stem().string());
+                if (stem.ends_with("_p")) stem.resize(stem.size() - 2);
+                if (!stem.empty()) roots.insert(std::move(stem));
+            }
+            return roots;
+        }
+
+        bool IsMountedModPackage(const std::string& package,
+            const std::unordered_set<std::string>& roots)
+        {
+            const auto lower = LowerAscii(package);
+            if (lower.starts_with("/game/mods/")
+                || lower.starts_with("/game/runeschema/"))
+                return true;
+            if (lower.size() < 3 || lower.front() != '/') return false;
+            const auto slash = lower.find('/', 1);
+            if (slash == std::string::npos) return false;
+            return roots.contains(lower.substr(1, slash - 1));
+        }
+
+        bool IsPersistenceAssetClass(const std::string& assetClass)
+        {
+            static const std::unordered_set<std::string> classes{
+                "ItemData", "RecipeData", "QuestData",
+                "JournalEntryWorldData", "DominionSpellData",
+                "UtilitySpellData", "HeldEquipmentEffectData"
+            };
+            return classes.contains(assetClass);
+        }
+
+        std::string AssetClassName(FAssetData& asset)
+        {
+            auto value = RC::to_string(
+                asset.AssetClassPath().GetAssetName().ToString());
+            // Modern UE builds retain the legacy AssetClass FName but can
+            // expose an empty AssetClassPath through compatibility wrappers.
+            if (value.empty() || value == "None")
+                value = RC::to_string(asset.AssetClass().ToString());
+            const auto separator = value.find_last_of("./:");
+            if (separator != std::string::npos)
+                value.erase(0, separator + 1);
+            return value;
         }
 
         std::filesystem::path LocalCharacterSaveDirectory()
@@ -165,17 +250,25 @@ namespace DragonWilds {
     static constexpr struct {
         const TCHAR* DataClassPath;
         const TCHAR* SubsystemClassPath;
+        const TCHAR* ExcludedClassPath;
+        bool CleanupAuthority;
+        const TCHAR* StatusTag;
     } RegistryBindings[] = {
-        { TEXT("/Script/Dominion.ItemData"),   TEXT("/Script/Dominion.ItemSubsystem") },
-        { TEXT("/Script/Dominion.RecipeData"), TEXT("/Script/Dominion.RecipeSubsystem") },
-        { TEXT("/Script/Dominion.QuestData"),  TEXT("/Script/Dominion.QuestDataSubsystem") },
-    };
-
-    static constexpr const TCHAR* SaveLoadHookPaths[] = {
-        TEXT("/Script/Dominion.DominionPlayerController:OnInventoryLoadedFromSave"),
-        TEXT("/Script/Dominion.DominionPlayerController:OnPersonalInventoryLoadedFromSave"),
-        TEXT("/Script/Dominion.QuestProgressComponent:OnQuestsUpdated"),
-        JournalLoadedPath,
+        { TEXT("/Script/Dominion.ItemData"), TEXT("/Script/Dominion.ItemSubsystem"), nullptr, true, TEXT("ITEM") },
+        { TEXT("/Script/Dominion.RecipeData"), TEXT("/Script/Dominion.RecipeSubsystem"), nullptr, true, TEXT("RECIPE") },
+        { TEXT("/Script/Dominion.QuestData"), TEXT("/Script/Dominion.QuestDataSubsystem"), nullptr, true, TEXT("QUEST") },
+        // Combat spells derive directly from DominionSpellData. Utility spells
+        // form a derived branch and must never receive combat net IDs as well.
+        { TEXT("/Script/Dominion.DominionSpellData"),
+            TEXT("/Script/Dominion.CombatSpellDataSubsystem"),
+            TEXT("/Script/Dominion.UtilitySpellData"), false,
+            TEXT("COMBAT-SPELL") },
+        { TEXT("/Script/Dominion.UtilitySpellData"),
+            TEXT("/Script/Dominion.UtilitySpellDataSubsystem"), nullptr, false,
+            TEXT("UTILITY-SPELL") },
+        { TEXT("/Script/Dominion.HeldEquipmentEffectData"),
+            TEXT("/Script/Dominion.HeldEquipmentEffectDataSubsystem"), nullptr, false,
+            TEXT("EQUIPMENT-EFFECT") },
     };
 
     static bool IsCharacterJsonLoadFunction(UFunction* function)
@@ -185,6 +278,15 @@ namespace DragonWilds {
         return name == FName(TEXT("ProcessPlayerStateLoad"), FNAME_Add)
             || name == FName(TEXT("OnPersistentStoreLoadPlayerResult"), FNAME_Add)
             || name == FName(TEXT("LoadStateFromJson"), FNAME_Add);
+    }
+
+    static bool IsCombatComponentReadyFunction(UFunction* function)
+    {
+        if (!function) return false;
+        const auto path = function->GetPathName();
+        return path == TEXT("/Script/Engine.PlayerController:ClientRestart")
+            || path == TEXT("/Script/Dominion.DominionPlayerController:OnInventoryLoadedFromSave")
+            || path == TEXT("/Script/Dominion.DominionPlayerController:OnPersonalInventoryLoadedFromSave");
     }
 
     static std::string RegistryFingerprint(
@@ -219,27 +321,27 @@ namespace DragonWilds {
 
     void DragonWildsDataRegistrar::Initialize()
     {
-        if (!m_initialized)
-        {
-            m_pruner.PrepareForStartup();
-            if (!ResolveBindings())
-            {
-                return;
-            }
+        // Registry mutation is process-startup work, not world lifecycle work.
+        // Re-running it while an outgoing world is being destroyed can touch
+        // stale subsystem maps and destabilize menu -> world re-entry.
+        if (m_initialized) return;
 
-            InstallHooks();
-            m_initialized = true;
-        }
+        m_pruner.PrepareForStartup();
+        if (!ResolveBindings()) return;
+
+        PreloadMountedPersistenceAssets();
+
+        InstallHooks();
+        m_initialized = true;
 
         RegisterAll();
-        if (!m_startupSaveCleanupAttempted)
-        {
-            // The old 0.6/early-0.7 cleaner ran here. Capture twice so a
-            // changing or partially populated live registry cannot authorize
-            // a file edit.
-            RegisterAll();
-            CleanLocalCharacterSavesOnce();
-        }
+        // Capture twice during this single startup boundary so only an
+        // identical, settled registry can authorize pruning. Nothing refreshes
+        // or mutates the registries on later menu/world transitions.
+        RegisterAll();
+        CleanLocalCharacterSavesOnce();
+        PS::Log<LogLevel::Normal>(STR(
+            "[REGISTRY][LIFECYCLE][SEALED] Startup registration completed once for this game execution; world transitions are read-only.\n"));
     }
 
     void DragonWildsDataRegistrar::CleanLocalCharacterSavesOnce()
@@ -331,18 +433,30 @@ namespace DragonWilds {
 
     bool DragonWildsDataRegistrar::ResolveBindings()
     {
-        for (auto& binding : RegistryBindings)
+        for (const auto& binding : RegistryBindings)
         {
             auto* dataClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr, nullptr, binding.DataClassPath);
             auto* subsystemClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr, nullptr, binding.SubsystemClassPath);
+            auto* excludedClass = binding.ExcludedClassPath
+                ? UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+                    nullptr, nullptr, binding.ExcludedClassPath)
+                : nullptr;
             if (!dataClass || !subsystemClass)
             {
                 PS::Log<LogLevel::Warning>(STR("Registry pair {} -> {} was not found and won't be handled.\n"),
                     binding.DataClassPath, binding.SubsystemClassPath);
                 continue;
             }
+            if (binding.ExcludedClassPath && !excludedClass)
+            {
+                PS::Log<LogLevel::Warning>(STR(
+                    "Registry exclusion {} was not found; {} registration is disabled to prevent cross-registry IDs.\n"),
+                    binding.ExcludedClassPath, binding.DataClassPath);
+                continue;
+            }
 
-            m_bindings.emplace_back(dataClass, subsystemClass);
+            m_bindings.push_back({dataClass, subsystemClass, excludedClass,
+                binding.CleanupAuthority, binding.StatusTag});
         }
 
         if (m_bindings.empty())
@@ -354,48 +468,208 @@ namespace DragonWilds {
         return true;
     }
 
+    void DragonWildsDataRegistrar::PreloadMountedPersistenceAssets()
+    {
+        // PAK mounting only exposes package metadata. Unreal does not create a
+        // UObject until something references the asset, so GetObjectsOfClass
+        // alone misses otherwise-unreferenced mod ItemData/RecipeData/etc.
+        // Restrict preloading to persistence classes in RuneSchema-owned mount
+        // namespaces; loading every cooked asset caused unacceptable stalls.
+        TArray<FAssetData> assets;
+        try
+        {
+            // UE4SS's metadata-readiness flag is an inline implementation
+            // detail. Reading it from a separately linked mod DLL observes a
+            // different module-local copy, so use the live registry call as
+            // the readiness probe instead.
+            auto interface = UAssetRegistryHelpers::GetAssetRegistry();
+            auto* registry = static_cast<UAssetRegistry*>(interface.ObjectPointer);
+            if (!registry || !registry->GetAllAssets(assets, true)
+                || assets.Num() < 0 || assets.Num() > 262144)
+                throw std::runtime_error(
+                    "mounted registry unavailable or outside the 262144-record safety bound");
+        }
+        catch (const std::exception& error)
+        {
+            PS::Log<LogLevel::Warning>(STR(
+                "[REGISTRY][PAK-DISCOVERY][SKIPPED] Live Asset Registry query failed: {}; already-loaded PAK assets will still be registered.\n"),
+                PS::ToWideSafe(error.what()));
+            return;
+        }
+        catch (...)
+        {
+            PS::Log<LogLevel::Warning>(STR(
+                "[REGISTRY][PAK-DISCOVERY][SKIPPED] Live Asset Registry query failed with an unknown error; already-loaded PAK assets will still be registered.\n"));
+            return;
+        }
+
+        const auto roots = MountedModRootNames();
+        // A single large content pack can legitimately contain ten thousand
+        // ItemData assets. Stay below the uint16 network-ID ceiling while
+        // leaving enough headroom for the native registry and other mods.
+        constexpr std::size_t MaxPersistencePreloads = 32768;
+        constexpr std::size_t PersistenceLoadTranche = 512;
+        std::vector<FAssetData*> candidates;
+        candidates.reserve(1024);
+        std::unordered_set<std::string> candidatePaths;
+        std::unordered_map<std::string, std::size_t> mountedClassCounts;
+        std::unordered_map<std::string, std::size_t> registryRootCounts;
+        std::size_t mountedRecords = 0;
+        std::size_t unreadableRecords = 0;
+        for (auto& asset : assets)
+        {
+            try
+            {
+                const auto package = RC::to_string(asset.PackageName().ToString());
+                if (package.size() > 1 && package.size() <= 2048 && package.front() == '/')
+                {
+                    const auto slash = package.find('/', 1);
+                    const auto root = LowerAscii(package.substr(1,
+                        slash == std::string::npos ? std::string::npos : slash - 1));
+                    if (!root.empty() && (registryRootCounts.contains(root)
+                            || registryRootCounts.size() < 256))
+                        ++registryRootCounts[root];
+                }
+                if (!IsMountedModPackage(package, roots)) continue;
+                ++mountedRecords;
+                auto assetClass = AssetClassName(asset);
+                if (assetClass.empty()) assetClass = "<missing>";
+                ++mountedClassCounts[assetClass];
+                if (!IsPersistenceAssetClass(assetClass)) continue;
+                const auto name = RC::to_string(asset.AssetName().ToString());
+                if (name.empty() || !candidatePaths.emplace(package + "." + name).second)
+                    continue;
+                candidates.push_back(&asset);
+            }
+            catch (...)
+            {
+                ++unreadableRecords;
+                continue;
+            }
+            if (candidates.size() > MaxPersistencePreloads)
+            {
+                PS::Log<LogLevel::Error>(STR(
+                    "[REGISTRY][PAK-DISCOVERY][ABORTED] {} mod persistence assets exceed the safe ceiling of {}; no partial catalog was loaded.\n"),
+                    candidates.size(), MaxPersistencePreloads);
+                return;
+            }
+        }
+
+        const auto discovered = candidates.size();
+        if (!discovered)
+        {
+            std::vector<std::pair<std::string, std::size_t>> classes(
+                mountedClassCounts.begin(), mountedClassCounts.end());
+            std::ranges::sort(classes, [](const auto& left, const auto& right) {
+                return left.second != right.second
+                    ? left.second > right.second : left.first < right.first;
+            });
+            std::string distribution;
+            for (std::size_t index = 0; index < std::min<std::size_t>(classes.size(), 12); ++index)
+            {
+                if (!distribution.empty()) distribution += ", ";
+                distribution += classes[index].first + "=" + std::to_string(classes[index].second);
+            }
+            if (distribution.empty()) distribution = "<none>";
+            std::vector<std::pair<std::string, std::size_t>> registryRoots(
+                registryRootCounts.begin(), registryRootCounts.end());
+            std::ranges::sort(registryRoots, [](const auto& left, const auto& right) {
+                return left.second != right.second
+                    ? left.second > right.second : left.first < right.first;
+            });
+            std::string rootDistribution;
+            for (std::size_t index = 0; index < std::min<std::size_t>(registryRoots.size(), 16); ++index)
+            {
+                if (!rootDistribution.empty()) rootDistribution += ", ";
+                rootDistribution += registryRoots[index].first + "="
+                    + std::to_string(registryRoots[index].second);
+            }
+            if (rootDistribution.empty()) rootDistribution = "<none>";
+            PS::Log<LogLevel::Warning>(STR(
+                "[REGISTRY][PAK-DISCOVERY][NO-CANDIDATES] registry_records={} mounted_records={} configured_roots={} unreadable={} registry_roots='{}' mounted_classes='{}'.\n"),
+                assets.Num(), mountedRecords, roots.size(), unreadableRecords,
+                PS::ToWideSafe(rootDistribution.c_str()),
+                PS::ToWideSafe(distribution.c_str()));
+        }
+        std::size_t loaded = 0;
+        std::size_t alreadyLoaded = 0;
+        std::size_t failed = 0;
+        std::size_t failureDetails = 0;
+        constexpr std::size_t FailureDetailLimit = 12;
+        for (std::size_t trancheStart = 0; trancheStart < candidates.size();
+            trancheStart += PersistenceLoadTranche)
+        {
+            const auto trancheEnd = std::min(candidates.size(),
+                trancheStart + PersistenceLoadTranche);
+            for (auto index = trancheStart; index < trancheEnd; ++index)
+            {
+                auto& asset = *candidates[index];
+                const auto assetClass = AssetClassName(asset);
+                const auto package = RC::to_string(asset.PackageName().ToString());
+                const auto name = RC::to_string(asset.AssetName().ToString());
+                const auto path = package + "." + name;
+                const auto widePath = PS::ToWideSafe(path.c_str());
+                auto* object = UECustom::UObjectGlobals::StaticFindObject<UObject*>(
+                    nullptr, nullptr, widePath.c_str(), false);
+                if (object)
+                {
+                    ++alreadyLoaded;
+                    continue;
+                }
+                object = UAssetRegistryHelpers::GetAsset(asset);
+                if (object) ++loaded;
+                else
+                {
+                    ++failed;
+                    if (failureDetails++ < FailureDetailLimit)
+                        PS::Log<LogLevel::Warning>(STR(
+                            "[REGISTRY][PAK-DISCOVERY][UNRESOLVED] class='{}' asset='{}'.\n"),
+                            PS::ToWideSafe(assetClass.c_str()),
+                            PS::ToWideSafe(path.c_str()));
+                }
+            }
+        }
+
+        if (failureDetails > FailureDetailLimit)
+            PS::Log<LogLevel::Warning>(STR(
+                "[REGISTRY][PAK-DISCOVERY][UNRESOLVED-SUMMARY] {} additional unresolved assets omitted from the log.\n"),
+                failureDetails - FailureDetailLimit);
+
+        PS::Log<LogLevel::Normal>(STR(
+            "[REGISTRY][PAK-DISCOVERY][SUMMARY] registry_records={} mounted_records={} roots={} unreadable={} persistence_assets={} tranches={} tranche_size={} newly_loaded={} already_loaded={} unresolved={} verified={}.\n"),
+            assets.Num(), mountedRecords, roots.size(), unreadableRecords, discovered,
+            (discovered + PersistenceLoadTranche - 1) / PersistenceLoadTranche,
+            PersistenceLoadTranche, loaded, alreadyLoaded, failed,
+            failed == 0 ? TEXT("true") : TEXT("false"));
+    }
+
     void DragonWildsDataRegistrar::Shutdown()
     {
-        if (m_gameStateStartingHook != Hook::ERROR_ID)
-            Hook::UnregisterCallback(m_gameStateStartingHook);
-        m_gameStateStartingHook = Hook::ERROR_ID;
-        if (m_gameStateReadyHook != Hook::ERROR_ID)
-            Hook::UnregisterCallback(m_gameStateReadyHook);
-        m_gameStateReadyHook = Hook::ERROR_ID;
         if (m_characterJsonHook != Hook::ERROR_ID)
             Hook::UnregisterCallback(m_characterJsonHook);
         m_characterJsonHook = Hook::ERROR_ID;
-        for (const auto& [function, id] : m_functionHooks) if (function && id) function->UnregisterHook(id);
-        m_functionHooks.clear();
+        if (m_combatLifecycleHook != Hook::ERROR_ID)
+            Hook::UnregisterCallback(m_combatLifecycleHook);
+        m_combatLifecycleHook = Hook::ERROR_ID;
         m_registryCandidateFingerprint.clear();
         m_registryCandidatePasses = 0;
+        for (auto* attack : m_ownedAdditionalWeaponAttackRoots)
+            if (attack && attack->IsRootSet()) attack->ClearRootSet();
+        m_ownedAdditionalWeaponAttackRoots.clear();
+        m_additionalWeaponAttackClasses.clear();
+        m_additionalWeaponsReadyReported = false;
+        m_additionalWeaponsIncompleteReported = false;
+        m_registryStatusReported.clear();
+        m_registryWaitingReported.clear();
+        m_registrySummaryReported = false;
         PS::SaveCleanup::PublishRegistry({});
     }
 
     void DragonWildsDataRegistrar::InstallHooks()
     {
-        Hook::FCallbackOptions options{};
-        options.OwnerModName = TEXT("RuneSchema");
-        options.HookName = TEXT("DataRegistrarBeforeGameState");
-
-        // Character JSON is hydrated during startup and the first world
-        // transition. Restore every loaded identity before Dominion reads the
-        // character. Save cleanup is performed only on the JSON value the game
-        // is about to hydrate; RuneSchema never rewrites the stored file.
-        m_gameStateStartingHook = Hook::RegisterInitGameStatePreCallback(
-            [this](Hook::TCallbackIterationData<void>&, AGameModeBase* mode) {
-                RegisterAll();
-            }, options);
-
-        options.HookName = TEXT("DataRegistrarGameStateReady");
-        m_gameStateReadyHook = Hook::RegisterInitGameStatePostCallback(
-            [this](Hook::TCallbackIterationData<void>&, AGameModeBase*) {
-                RegisterAll();
-            }, options);
-
         // Register the filtered UE4SS ProcessEvent callback directly. Do not
-        // scan every UObject or attach executable inline detours during
-        // startup: both paths have proven unsafe across current storefronts.
+        // refresh registries here: this hook consumes the immutable startup
+        // snapshot and may run on every character/world load.
         Hook::FCallbackOptions preflightOptions{};
         preflightOptions.OwnerModName = TEXT("RuneSchema");
         preflightOptions.HookName = TEXT("CharacterJsonSavePreflight");
@@ -410,7 +684,6 @@ namespace DragonWilds {
                 m_preflightingCharacterJson = true;
                 try
                 {
-                    RegisterAll();
                     ScrubCharacterJsonBeforeLoad(source, function, parameters);
                 }
                 catch (const std::exception& error)
@@ -429,47 +702,32 @@ namespace DragonWilds {
             PS::Log<LogLevel::Warning>(STR(
                 "[PERSISTENCE-PRUNER][REFLECTED-BOUNDARY-UNAVAILABLE] Character save preflight could not be installed.\n"));
 
-        // Auxiliary registry-refresh hooks are best-effort. Install them only
-        // after the mandatory character boundary, and isolate every path so a
-        // malformed or changed UFunction cannot disable save preflight.
-        for (auto* hookPath : SaveLoadHookPaths)
-        {
-            try
-            {
-                auto* function = UECustom::UObjectGlobals::StaticFindObject<UFunction*>(
-                    nullptr, nullptr, hookPath);
-                if (!function)
-                {
-                    PS::Log<LogLevel::Warning>(STR(
-                        "Save load hook '{}' was not found.\n"), hookPath);
-                    continue;
-                }
-
-                const auto id = PS::RegisterNativePreHook(function,
-                    [](UnrealScriptFunctionCallableContext&, void* customData) {
-                        static_cast<DragonWildsDataRegistrar*>(
-                            customData)->RegisterAll();
-                    }, this);
-                if (id != Hook::ERROR_ID)
-                    m_functionHooks.emplace_back(function, id);
-                else
-                    PS::Log<LogLevel::Warning>(STR(
-                        "Save load hook '{}' could not be registered.\n"),
-                        hookPath);
-            }
-            catch (const std::exception& error)
-            {
-                PS::Log<LogLevel::Warning>(STR(
-                    "Save load hook '{}' was isolated after registration failed: {}.\n"),
-                    hookPath, PS::ToWideSafe(error.what()));
-            }
-            catch (...)
-            {
-                PS::Log<LogLevel::Warning>(STR(
-                    "Save load hook '{}' was isolated after registration failed.\n"),
-                    hookPath);
-            }
-        }
+        // Runtime attack collections are component state, not persistence
+        // registries. Apply the already-resolved ordered classes after a
+        // player controller becomes world-ready, scoped to that exact world.
+        // This lane may run for each new world but never refreshes ItemData,
+        // recipes, quests, spells, or the pruning snapshot.
+        Hook::FCallbackOptions combatOptions{};
+        combatOptions.OwnerModName = TEXT("RuneSchema");
+        combatOptions.HookName = TEXT("CombatComponentWorldReady");
+        m_combatLifecycleHook = Hook::RegisterProcessEventPostCallback(
+            [this](Hook::TCallbackIterationData<void>&, UObject* source,
+                UFunction* function, void*) {
+                if (!source || !IsCombatComponentReadyFunction(function))
+                    return;
+                auto* world = source->GetWorld();
+                if (!world || world->HasAnyFlags(static_cast<EObjectFlags>(
+                        RF_BeginDestroyed | RF_FinishDestroyed))
+                    || world->GetPathName().contains(TEXT("L_FrontEnd")))
+                    return;
+                BootstrapCombatRegistries(world);
+            }, combatOptions);
+        if (m_combatLifecycleHook != Hook::ERROR_ID)
+            PS::Log<LogLevel::Normal>(STR(
+                "[LIFECYCLE][COMBAT-COMPONENT][READY] World-scoped attack collection lane installed.\n"));
+        else
+            PS::Log<LogLevel::Warning>(STR(
+                "[LIFECYCLE][COMBAT-COMPONENT][UNAVAILABLE] Custom attack collections cannot attach to new player components.\n"));
     }
 
     void DragonWildsDataRegistrar::ScrubCharacterJsonBeforeLoad(
@@ -480,18 +738,32 @@ namespace DragonWilds {
 
     void DragonWildsDataRegistrar::RegisterAll()
     {
+        BootstrapCombatRegistries();
+
         PS::SaveCleanup::RegistrySnapshot snapshot;
         bool itemsReady = false;
         bool recipesReady = false;
         bool questsReady = false;
+        // The settled live registries remain authoritative. PAK discovery is
+        // a one-time loading aid, not a second ownership or pruning ledger.
         bool registrationsComplete = true;
 
-        for (auto& [dataClass, subsystemClass] : m_bindings)
+        for (const auto& binding : m_bindings)
         {
+            auto* dataClass = binding.DataClass;
+            auto* subsystemClass = binding.SubsystemClass;
+            const bool itemBinding = dataClass->GetPathName()
+                == ItemDataClassPath;
+            RegistrationStats registrationStats{};
             TArray<UObject*> subsystems;
             UECustom::UObjectGlobals::GetObjectsOfClass(
                 subsystemClass, subsystems, true);
             bool foundSubsystem = false;
+            bool bindingVerified = true;
+            bool foundIdentityMap = false;
+            std::size_t liveSubsystems = 0;
+            std::size_t bindingAdded = 0;
+            std::size_t persistenceIds = 0;
             for (auto* subsystem : subsystems)
             {
                 if (!subsystem || subsystem->HasAnyFlags(
@@ -500,18 +772,35 @@ namespace DragonWilds {
                         | RF_BeginDestroyed | RF_FinishDestroyed)))
                     continue;
                 foundSubsystem = true;
+                ++liveSubsystems;
 
-                // An outgoing world may still own a subsystem when the next
-                // world starts. Populate every live instance so saved recipe
-                // identities cannot be written against only the old one.
-                registrationsComplete = RegisterMissing(dataClass, subsystem)
-                    && registrationsComplete;
+                // Startup is the only mutation boundary. Verify every live
+                // GameInstance registry now; later world transitions consume
+                // the sealed snapshot without revisiting subsystem objects.
+                std::size_t added = 0;
+                const auto registered = RegisterMissing(dataClass, subsystem,
+                    binding.ExcludedClass, binding.StatusTag, &added,
+                    itemBinding ? &registrationStats : nullptr);
+                bindingAdded += added;
+                bindingVerified = registered && bindingVerified;
+                if (added)
+                    PS::Log<LogLevel::Normal>(STR(
+                        "[REGISTRY][{}][ADDED] count={} subsystem='{}' verified={}.\n"),
+                        binding.StatusTag, added,
+                        subsystem->GetClassPrivate()->GetName(), registered);
+                if (binding.CleanupAuthority)
+                    registrationsComplete = registered && registrationsComplete;
 
                 auto* idMapProperty = CastField<FMapProperty>(
                     PropertyHelper::GetPropertyByName(
                         subsystem->GetClassPrivate(),
                         TEXT("PersistenceIDToDataMap")));
-                if (!idMapProperty) continue;
+                if (!idMapProperty)
+                {
+                    bindingVerified = false;
+                    continue;
+                }
+                foundIdentityMap = true;
 
                 std::unordered_set<std::string>* target = nullptr;
                 const auto classPath = dataClass->GetPathName();
@@ -530,23 +819,68 @@ namespace DragonWilds {
                     target = &snapshot.Quests;
                     questsReady = true;
                 }
-                if (!target) continue;
-
                 UECustom::FScriptMapHelper idMap(
                     idMapProperty,
                     idMapProperty->ContainerPtrToValuePtr<void>(subsystem));
                 idMap.ForEachPair([&](void* keyPtr, void*) {
                     auto* key = static_cast<FString*>(keyPtr);
                     if (key && key->GetCharArray().Num() > 1)
-                        target->insert(RC::to_string(RC::StringType(**key)));
+                    {
+                        ++persistenceIds;
+                        if (target)
+                            target->insert(RC::to_string(
+                                RC::StringType(**key)));
+                    }
                 });
             }
-            if (!foundSubsystem)
+            if (!foundSubsystem && binding.CleanupAuthority)
             {
                 registrationsComplete = false;
-                PS::Log<LogLevel::Warning>(STR(
-                    "No {} instance exists yet; {} assets cannot be registered.\n"),
-                    subsystemClass->GetName(), dataClass->GetName());
+                const auto statusKey = RC::to_string(
+                    RC::StringType(binding.StatusTag));
+                if (!m_registryWaitingReported.contains(statusKey))
+                {
+                    m_registryWaitingReported.insert(statusKey);
+                    PS::Log<LogLevel::Warning>(STR(
+                        "[REGISTRY][{}][WAITING] subsystem='{}' is not live; registration and pruning authority remain disabled.\n"),
+                        binding.StatusTag, subsystemClass->GetName());
+                }
+            }
+            else if (!foundSubsystem)
+            {
+                const auto statusKey = RC::to_string(
+                    RC::StringType(binding.StatusTag));
+                if (!m_registryWaitingReported.contains(statusKey))
+                {
+                    m_registryWaitingReported.insert(statusKey);
+                    PS::Log<LogLevel::Normal>(STR(
+                        "[REGISTRY][{}][WAITING] subsystem='{}' is not live yet; registration will retry.\n"),
+                        binding.StatusTag, subsystemClass->GetName());
+                }
+            }
+            else
+            {
+                const auto statusKey = RC::to_string(
+                    RC::StringType(binding.StatusTag));
+                if (!m_registryStatusReported.contains(statusKey))
+                {
+                    m_registryStatusReported.insert(statusKey);
+                    PS::Log<LogLevel::Normal>(STR(
+                        "[REGISTRY][{}][SUMMARY] live_subsystems={} persistence_ids={} added={} verified={}.\n"),
+                        binding.StatusTag, liveSubsystems, persistenceIds,
+                        bindingAdded, bindingVerified && foundIdentityMap);
+                    if (itemBinding)
+                        PS::Log<LogLevel::Normal>(STR(
+                            "[REGISTRY][ITEM][PROVENANCE] cooked_or_pak_existing={} runeschema_existing={} cooked_or_pak_added={} runeschema_added={} rejected={} unresolved_runeschema={} verified={}.\n"),
+                            registrationStats.ExistingCookedOrPak,
+                            registrationStats.ExistingRuneSchema,
+                            registrationStats.AddedCookedOrPak,
+                            registrationStats.AddedRuneSchema,
+                            registrationStats.Rejected,
+                            registrationStats.UnresolvedRuneSchema,
+                            registrationStats.Rejected == 0
+                                && registrationStats.UnresolvedRuneSchema == 0);
+                }
             }
         }
 
@@ -603,8 +937,8 @@ namespace DragonWilds {
             if (!m_registrySummaryReported)
             {
                 m_registrySummaryReported = true;
-                PS::Log<LogLevel::Verbose>(STR(
-                    "Persistence registry ready from base game and loaded paks: items={}, recipes={}, quests={}, journal={}.\n"),
+                PS::Log<LogLevel::Normal>(STR(
+                    "[REGISTRY][PERSISTENCE-PRUNER][READY] base game and loaded paks: items={}, recipes={}, quests={}, journal={}.\n"),
                     snapshot.Items.size(), snapshot.Recipes.size(),
                     snapshot.Quests.size(), snapshot.Journals.size());
             }
@@ -620,8 +954,145 @@ namespace DragonWilds {
         }
     }
 
-    bool DragonWildsDataRegistrar::RegisterMissing(UClass* dataClass, UObject* subsystem)
+    void DragonWildsDataRegistrar::BootstrapCombatRegistries(UWorld* world)
     {
+        static constexpr const TCHAR* ComponentClassPath =
+            TEXT("/Script/Dominion.PlayerMeleeAttackComponent");
+        static constexpr std::array<const TCHAR*, 16> AttackClassPaths{{
+            TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Spear/BP_Player_Spear_Attack1.BP_Player_Spear_Attack1_C"),
+            TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Spear/BP_Player_Spear_Attack2.BP_Player_Spear_Attack2_C"),
+            TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Spear/BP_Player_Spear_Attack2_ShortComboEnd.BP_Player_Spear_Attack2_ShortComboEnd_C"),
+            TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Spear/BP_Player_Spear_Attack3.BP_Player_Spear_Attack3_C"),
+            TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Spear/BP_Player_Spear_Attack4.BP_Player_Spear_Attack4_C"),
+            TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Spear/BP_Player_Spear_SpecialAction.BP_Player_Spear_SpecialAction_C"),
+            TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Spear/BP_Player_Spear_SprintAttack.BP_Player_Spear_SprintAttack_C"),
+            TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Spear/BP_Player_Spear_VisceralAttack.BP_Player_Spear_VisceralAttack_C"),
+            TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Hoplite/BP_Player_Hoplite_Attack1.BP_Player_Hoplite_Attack1_C"),
+            TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Hoplite/BP_Player_Hoplite_Attack2.BP_Player_Hoplite_Attack2_C"),
+            TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Hoplite/BP_Player_Hoplite_Attack2_ShortComboEnd.BP_Player_Hoplite_Attack2_ShortComboEnd_C"),
+            TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Hoplite/BP_Player_Hoplite_Attack3.BP_Player_Hoplite_Attack3_C"),
+            TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Hoplite/BP_Player_Hoplite_Attack4.BP_Player_Hoplite_Attack4_C"),
+            TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Hoplite/BP_Player_Hoplite_SpecialAction.BP_Player_Hoplite_SpecialAction_C"),
+            TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Hoplite/BP_Player_Hoplite_SprintAttack.BP_Player_Hoplite_SprintAttack_C"),
+            TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Hoplite/BP_Player_Hoplite_VisceralAttack.BP_Player_Hoplite_VisceralAttack_C"),
+        }};
+
+        if (m_additionalWeaponAttackClasses.empty())
+        {
+            std::vector<UClass*> resolved;
+            std::vector<UClass*> ownedRoots;
+            resolved.reserve(AttackClassPaths.size());
+            ownedRoots.reserve(AttackClassPaths.size());
+            for (const auto* path : AttackClassPaths)
+            {
+                auto* attack = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+                    nullptr, nullptr, path, false);
+                if (!attack)
+                    attack = UECustom::UKismetSystemLibrary::LoadClassAsset_Blocking(
+                        UECustom::TSoftClassPtr<UObject>(
+                            UECustom::FSoftObjectPath(RC::StringType(path))));
+                if (!attack)
+                {
+                    for (auto* owned : ownedRoots)
+                        if (owned && owned->IsRootSet()) owned->ClearRootSet();
+                    // The first class missing means the optional PAK is not
+                    // mounted. A partially present package is unsafe because
+                    // attack replication uses collection indices.
+                    if (!resolved.empty() && !m_additionalWeaponsIncompleteReported)
+                    {
+                        PS::Log<LogLevel::Warning>(STR(
+                            "[AdditionalWeapons] Bootstrap deferred: only {}/{} ordered attack classes resolved; no component was modified.\n"),
+                            resolved.size(), AttackClassPaths.size());
+                        m_additionalWeaponsIncompleteReported = true;
+                    }
+                    return;
+                }
+                // These class assets are retained across menu -> world
+                // transitions. A native vector is invisible to Unreal GC;
+                // without an owned root the cached pointer can become stale
+                // after the first world's component releases its reference.
+                if (!attack->IsRootSet())
+                {
+                    attack->SetRootSet();
+                    ownedRoots.push_back(attack);
+                }
+                resolved.push_back(attack);
+            }
+            m_additionalWeaponAttackClasses = std::move(resolved);
+            m_ownedAdditionalWeaponAttackRoots = std::move(ownedRoots);
+        }
+
+        if (!world)
+        {
+            if (!m_additionalWeaponsReadyReported)
+            {
+                PS::Log<LogLevel::Normal>(STR(
+                    "[COMBAT-REGISTRY][MELEE-ATTACK][RESOLVED] AdditionalWeapons: {} ordered attack classes loaded; awaiting a gameplay player component.\n"),
+                    m_additionalWeaponAttackClasses.size());
+                m_additionalWeaponsReadyReported = true;
+            }
+            return;
+        }
+
+        auto* componentClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr, nullptr, ComponentClassPath, false);
+        if (!componentClass) return;
+
+        TArray<UObject*> components;
+        UECustom::UObjectGlobals::GetObjectsOfClass(componentClass, components, true);
+        std::size_t changedComponents = 0;
+        std::size_t addedClasses = 0;
+        for (auto* component : components)
+        {
+            if (!component || component->HasAnyFlags(static_cast<EObjectFlags>(
+                    RF_ClassDefaultObject | RF_ArchetypeObject
+                    | RF_BeginDestroyed | RF_FinishDestroyed)))
+                continue;
+            if (component->GetWorld() != world) continue;
+            auto* property = CastField<FArrayProperty>(
+                PropertyHelper::GetPropertyByName(component->GetClassPrivate(),
+                    TEXT("AttackDataCollection")));
+            if (!property || !CastField<FClassProperty>(property->GetInner())
+                || property->GetInner()->GetElementSize() != sizeof(UClass*))
+                continue;
+            auto* array = property->ContainerPtrToValuePtr<FScriptArray>(component);
+            if (!array || array->Num() < 0) continue;
+            UECustom::FScriptArrayHelper helper(array, property);
+            bool changed = false;
+            for (auto* attack : m_additionalWeaponAttackClasses)
+            {
+                bool present = false;
+                helper.ForEachElement([&](void* value) {
+                    UClass* existing = nullptr;
+                    std::memcpy(&existing, value, sizeof(existing));
+                    if (existing == attack) present = true;
+                });
+                if (present) continue;
+                UECustom::FManagedValue value;
+                helper.InitializeValue(value);
+                std::memcpy(value.GetData(), &attack, sizeof(attack));
+                helper.Add(value);
+                changed = true;
+                ++addedClasses;
+            }
+            if (changed) ++changedComponents;
+        }
+        if (addedClasses || !m_additionalWeaponsReadyReported)
+        {
+            PS::Log<LogLevel::Normal>(STR(
+                "[COMBAT-REGISTRY][MELEE-ATTACK][{}] AdditionalWeapons: {} ordered attack classes; updated {} live melee component(s), appended {} class reference(s).\n"),
+                addedClasses ? TEXT("ADDED") : TEXT("READY"),
+                m_additionalWeaponAttackClasses.size(), changedComponents,
+                addedClasses);
+            m_additionalWeaponsReadyReported = true;
+        }
+    }
+
+    bool DragonWildsDataRegistrar::RegisterMissing(UClass* dataClass,
+        UObject* subsystem, UClass* excludedClass, const TCHAR* statusTag,
+        std::size_t* addedCount, RegistrationStats* stats)
+    {
+        if (addedCount) *addedCount = 0;
         auto* idMapProperty = CastField<FMapProperty>(PropertyHelper::GetPropertyByName(subsystem->GetClassPrivate(), TEXT("PersistenceIDToDataMap")));
         if (!idMapProperty)
         {
@@ -664,8 +1135,24 @@ namespace DragonWilds {
             }
         });
 
+        if (stats)
+        {
+            for (const auto& [identity, unused] : known)
+            {
+                (void)unused;
+                if (PS::RegistryProvenance::IsRuneSchemaItem(
+                        RC::to_string(identity)))
+                    ++stats->ExistingRuneSchema;
+                else
+                    ++stats->ExistingCookedOrPak;
+            }
+        }
+
         TArray<UObject*> candidates;
         UECustom::UObjectGlobals::GetObjectsOfClass(dataClass, candidates, true);
+        constexpr std::size_t IdentityDetailLimit = 12;
+        std::size_t identityDetailLines = 0;
+        std::size_t identityDetailsOmitted = 0;
 
         for (auto* candidate : candidates)
         {
@@ -675,6 +1162,7 @@ namespace DragonWilds {
                 {
                     continue;
                 }
+                if (excludedClass && candidate->IsA(excludedClass)) continue;
 
                 auto* candidateClass = candidate->GetClassPrivate();
                 auto* idProperty = CastField<FStrProperty>(PropertyHelper::GetPropertyByName(candidateClass, TEXT("PersistenceID")));
@@ -692,22 +1180,33 @@ namespace DragonWilds {
                 }
 
                 auto idString = RC::StringType(*persistenceId);
+                const bool runeSchemaAuthored = stats
+                    && PS::RegistryProvenance::IsRuneSchemaItem(
+                        RC::to_string(idString));
                 candidate->SetRootSet();
 
                 const auto existing = known.find(idString);
+                const bool inserted = existing == known.end();
                 if (existing == known.end())
                 {
                     if (!InsertIntoMap(subsystem, TEXT("PersistenceIDToDataMap"), persistenceId, candidate))
                         throw std::runtime_error(
                             "primary persistence registry rejected the asset");
-                    InsertIntoMap(subsystem, TEXT("InternalNameToDataMap"), persistenceId, candidate);
+                    if (!InsertIntoMap(subsystem, TEXT("InternalNameToDataMap"),
+                            persistenceId, candidate))
+                        throw std::runtime_error(
+                            "internal-name registry rejected the persistence identity");
 
                     if (auto* nameProperty = CastField<FStrProperty>(PropertyHelper::GetPropertyByName(candidateClass, TEXT("InternalName"))))
                     {
                         auto internalName = nameProperty->GetPropertyValue(nameProperty->ContainerPtrToValuePtr<void>(candidate));
                         if (internalName.GetCharArray().Num() > 1 && RC::StringType(*internalName) != idString)
                         {
-                            InsertIntoMap(subsystem, TEXT("InternalNameToDataMap"), internalName, candidate);
+                            if (!InsertIntoMap(subsystem,
+                                    TEXT("InternalNameToDataMap"), internalName,
+                                    candidate))
+                                throw std::runtime_error(
+                                    "internal-name registry rejected the authored name");
                         }
                     }
 
@@ -717,16 +1216,56 @@ namespace DragonWilds {
                     throw std::runtime_error(
                         "duplicate PersistenceID resolves to multiple live assets");
 
-                if (EnsureNetworkIdentity(candidate, subsystem) < 0)
+                const auto networkId = EnsureNetworkIdentity(candidate, subsystem);
+                if (networkId < 0)
                 {
                     throw std::runtime_error("network registry rejected the asset");
+                }
+                if (inserted)
+                {
+                    if (addedCount) ++*addedCount;
+                    if (stats)
+                    {
+                        if (runeSchemaAuthored) ++stats->AddedRuneSchema;
+                        else ++stats->AddedCookedOrPak;
+                    }
+                    if (identityDetailLines < IdentityDetailLimit)
+                    {
+                        ++identityDetailLines;
+                        PS::Log<LogLevel::Verbose>(STR(
+                            "[REGISTRY][{}][IDENTITY] source={} PersistenceID='{}' asset='{}' subsystem='{}' networkId={}.\n"),
+                            statusTag,
+                            runeSchemaAuthored ? TEXT("runeschema")
+                                               : TEXT("cooked-or-pak"),
+                            *persistenceId, candidate->GetPathName(),
+                            subsystem->GetClassPrivate()->GetName(), networkId);
+                    }
+                    else ++identityDetailsOmitted;
                 }
             }
             catch (const std::exception& e)
             {
                 complete = false;
+                if (stats) ++stats->Rejected;
                 PS::Log<LogLevel::Error>(STR("Failed registering '{}': {}\n"),
                     candidate ? candidate->GetName() : STR("<null>"), PS::ToWideSafe(e.what()));
+            }
+        }
+        if (identityDetailsOmitted)
+            PS::Log<LogLevel::Verbose>(STR(
+                "[REGISTRY][{}][IDENTITY-SUMMARY] {} additional registered identities omitted; aggregate counts follow.\n"),
+                statusTag, identityDetailsOmitted);
+        if (stats)
+        {
+            for (const auto& identity :
+                PS::RegistryProvenance::RuneSchemaItems())
+            {
+                if (known.contains(RC::to_generic_string(identity))) continue;
+                ++stats->UnresolvedRuneSchema;
+                complete = false;
+                PS::Log<LogLevel::Error>(STR(
+                    "[REGISTRY][ITEM][UNRESOLVED-RUNESCHEMA] PersistenceID='{}' was announced by RuneSchema but did not resolve in the live ItemData registry.\n"),
+                    RC::to_generic_string(identity));
             }
         }
         return complete;
@@ -749,23 +1288,25 @@ namespace DragonWilds {
 
         UECustom::FScriptMapHelper reverse(
             reverseProperty, reverseProperty->ContainerPtrToValuePtr<void>(subsystem));
+        auto* array = arrayProperty->ContainerPtrToValuePtr<FScriptArray>(subsystem);
+        if (!array || array->Num() < 0) return -1;
         int32_t existingId = -1;
-        reverse.ForEachPair([&](void* keyPtr, void* valuePtr) {
-            UObject* existing = nullptr;
-            std::memcpy(&existing, keyPtr, sizeof(existing));
-            if (existing == dataAsset)
-            {
-                uint16 netId = 0;
-                std::memcpy(&netId, valuePtr, sizeof(netId));
-                existingId = static_cast<int32_t>(netId);
-            }
-        });
+        if (auto* value = reverse.FindValue(&dataAsset))
+        {
+            uint16 netId = 0;
+            std::memcpy(&netId, value, sizeof(netId));
+            existingId = static_cast<int32_t>(netId);
+        }
         if (existingId >= 0)
         {
-            return existingId;
+            if (existingId >= array->Num()) return -1;
+            FScriptArrayHelper inspect(arrayProperty, array);
+            UObject* roundTrip = nullptr;
+            std::memcpy(&roundTrip, inspect.GetRawPtr(existingId),
+                sizeof(roundTrip));
+            return roundTrip == dataAsset ? existingId : -1;
         }
 
-        auto* array = arrayProperty->ContainerPtrToValuePtr<FScriptArray>(subsystem);
         UECustom::FScriptArrayHelper arrayHelper(array, arrayProperty);
         if (array->Num() >= std::numeric_limits<uint16>::max())
         {
@@ -783,8 +1324,19 @@ namespace DragonWilds {
         std::memcpy(reverse.GetKeyPtr(reversePair.GetData()), &dataAsset, sizeof(dataAsset));
         std::memcpy(reverse.GetValuePtr(reversePair.GetData()), &netId, sizeof(netId));
         reverse.Add(reversePair);
-        reverse.Rehash();
-        return static_cast<int32_t>(netId);
+
+        bool reverseVerified = false;
+        if (auto* value = reverse.FindValue(&dataAsset))
+        {
+            uint16 existingId = 0;
+            std::memcpy(&existingId, value, sizeof(existingId));
+            reverseVerified = existingId == netId;
+        }
+        FScriptArrayHelper inspect(arrayProperty, array);
+        if (!reverseVerified || netId >= inspect.Num()) return -1;
+        UObject* roundTrip = nullptr;
+        std::memcpy(&roundTrip, inspect.GetRawPtr(netId), sizeof(roundTrip));
+        return roundTrip == dataAsset ? static_cast<int32_t>(netId) : -1;
     }
 
     UObject* DragonWildsDataRegistrar::FindSubsystemInstance(UClass* subsystemClass)
@@ -822,7 +1374,9 @@ namespace DragonWilds {
         *static_cast<UObject**>(helper.GetValuePtr(pair.GetData())) = value;
 
         helper.Add(pair);
-        helper.Rehash();
-        return true;
+        auto* stored = helper.FindValue(&key);
+        UObject* existingValue = nullptr;
+        if (stored) std::memcpy(&existingValue, stored, sizeof(existingValue));
+        return existingValue == value;
     }
 }

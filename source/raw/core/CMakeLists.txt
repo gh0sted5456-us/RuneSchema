@@ -244,10 +244,11 @@ if(PROJECT_IS_TOP_LEVEL)
     add_executable(owned-save-cleanup-contract ../tests/owned-save-cleanup-contract.cpp)
     add_test(NAME owned-save-cleanup-contract COMMAND owned-save-cleanup-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Misc/DragonWildsDataRegistrar.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/AssetProvenance.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Core/RegistryProvenance.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/QuestService.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Core/PersistencePruner.cpp")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Core/PersistencePruner.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsAssetModLoader.cpp")
     add_executable(character-entry-recovery-contract ../tests/character-entry-recovery-contract.cpp)
     add_test(NAME character-entry-recovery-contract COMMAND character-entry-recovery-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Core/CharacterEntryRecovery.cpp"

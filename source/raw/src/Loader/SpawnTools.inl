@@ -400,7 +400,7 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
             // nodes so ore/stone variants are available before their cell has
             // streamed. Limit this to mining packages and validate the live
             // class contract before admitting an entry.
-            if(bFAssetDataAvailable) {
+            {
                 auto registryInterface=UAssetRegistryHelpers::GetAssetRegistry();
                 auto* registry=static_cast<UAssetRegistry*>(registryInterface.ObjectPointer);
                 TArray<FAssetData> assets;

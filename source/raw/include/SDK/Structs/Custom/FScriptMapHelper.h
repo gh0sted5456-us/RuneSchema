@@ -16,6 +16,8 @@ namespace UECustom {
 
         bool Update(void* PairPtrToUpdate);
 
+        void* FindValue(const void* KeyToFind) const;
+
         bool Remove(void* KeyToRemove);
 
         void InitializePair(UECustom::FManagedValue& PairPtr);

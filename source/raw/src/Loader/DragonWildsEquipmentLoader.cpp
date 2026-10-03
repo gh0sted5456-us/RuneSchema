@@ -31,6 +31,12 @@ uintptr_t ImageBase{};
 uint32_t ExecutableTimestamp{},ExecutableImageSize{};
 const NativeHookContract::Profile<SurgeNative::Site>* SelectedProfile{};
 
+bool UsesGamePassSurgeContract() noexcept {
+    return SelectedProfile
+        && SelectedProfile->timestamp == SurgeNative::GamePassTimestamp
+        && SelectedProfile->imageSize == SurgeNative::GamePassImageSize;
+}
+
 UObject* ObjectRef(UObject* owner, const TCHAR* name) {
     if (!owner || !owner->GetClassPrivate()) return nullptr;
     auto* field = CastField<FObjectPropertyBase>(PropertyHelper::GetPropertyByName(owner->GetClassPrivate(), name));
@@ -66,9 +72,9 @@ void Select(safetyhook::Context& c) { if (WearsSurgeLegs(c.rbx, 0)) c.rcx = (c.r
 void ValidateRequest(safetyhook::Context& c) { if (WearsSurgeLegs(c.rcx - 0xc0, 1)) c.rip = ImageBase + SelectedProfile->sites[1].resume; }
 void StaminaGate(safetyhook::Context& c) { if (WearsSurgeLegs(c.rbx, 2)) c.rip = ImageBase + SelectedProfile->sites[2].resume; }
 void StaminaQuery(safetyhook::Context& c) { if (WearsSurgeLegs(c.rbx, 3)) c.rip = ImageBase + SelectedProfile->sites[3].resume; }
-void StaminaCost(safetyhook::Context& c) { if (WearsSurgeLegs(c.rdi, 4)) c.rip = ImageBase + SelectedProfile->sites[4].resume; }
-void Animation(safetyhook::Context& c) { if (WearsSurgeLegs(c.rbx, 5)) c.rip = ImageBase + SelectedProfile->sites[5].resume; }
-void ServerCharges(safetyhook::Context& c) { if (WearsSurgeLegs(c.rdi - 0xc0, 6)) c.rip = ImageBase + SelectedProfile->sites[6].resume; }
+void StaminaCost(safetyhook::Context& c) { if (WearsSurgeLegs(UsesGamePassSurgeContract() ? c.rbx : c.rdi, 4)) c.rip = ImageBase + SelectedProfile->sites[4].resume; }
+void Animation(safetyhook::Context& c) { if (WearsSurgeLegs(UsesGamePassSurgeContract() ? c.rsi : c.rbx, 5)) c.rip = ImageBase + SelectedProfile->sites[5].resume; }
+void ServerCharges(safetyhook::Context& c) { if (WearsSurgeLegs((UsesGamePassSurgeContract() ? c.rbp : c.rdi) - 0xc0, 6)) c.rip = ImageBase + SelectedProfile->sites[6].resume; }
 void ClientCharges(safetyhook::Context& c) { if (WearsSurgeLegs(c.rbx - 0xc0, 7)) c.rip = ImageBase + SelectedProfile->sites[7].resume; }
 constexpr safetyhook::MidHookFn Callbacks[]{Select, ValidateRequest, StaminaGate, StaminaQuery, StaminaCost, Animation, ServerCharges, ClientCharges};
 
@@ -85,13 +91,19 @@ bool Install(const TCHAR*& failure) {
     if (nt->Signature != IMAGE_NT_SIGNATURE || nt->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64) return false;
     ExecutableTimestamp=nt->FileHeader.TimeDateStamp;
     ExecutableImageSize=nt->OptionalHeader.SizeOfImage;
-    if (PS::Storefront::CurrentNativeLane() != PS::Storefront::NativeLane::SteamNative) {
-        failure = TEXT("Surge/Dash native contract is currently verified only for the isolated Steam/GOG lane");
+    const auto lane = PS::Storefront::CurrentNativeLane();
+    if (lane != PS::Storefront::NativeLane::SteamNative
+        && lane != PS::Storefront::NativeLane::GamePassNative) {
+        failure = TEXT("Surge/Dash native contract requires a verified Steam/GOG or Game Pass lane");
         return false;
     }
     failure = TEXT("unsupported executable build");
     SelectedProfile = NativeHookContract::Select(ExecutableTimestamp, ExecutableImageSize, SurgeNative::Profiles);
     if (!SelectedProfile) return false;
+    if ((lane == PS::Storefront::NativeLane::GamePassNative) != UsesGamePassSurgeContract()) {
+        failure = TEXT("Surge/Dash native contract does not match the active storefront lane");
+        return false;
+    }
     failure = TEXT("native hook or resume bytes differ");
     if (!NativeHookContract::Validate(std::span(reinterpret_cast<const unsigned char*>(ImageBase), SelectedProfile->imageSize), SelectedProfile->sites)) return false;
     failure = TEXT("native hook creation failed");

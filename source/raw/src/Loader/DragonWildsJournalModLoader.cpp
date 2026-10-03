@@ -404,8 +404,16 @@ namespace DragonWilds {
         }
 
         if (!m_defs.empty())
+        {
             PS::LoaderSummary(m_loreOnly ? "lore" : "journal", result.EntriesReady,
                 result.EntriesReady, 0, result.Placements, result.ErrorCount);
+            if (result.EntriesReady)
+                PS::Log<LogLevel::Normal>(STR(
+                    "[REGISTRY][{}][ADDED] count={} placements={} errors={} verified={}.\n"),
+                    m_loreOnly ? TEXT("LORE") : TEXT("JOURNAL"),
+                    result.EntriesReady, result.Placements, result.ErrorCount,
+                    result.ErrorCount == 0);
+        }
         // Journal definitions still mount if the adapter is unavailable, but
         // player unlock delivery waits until save filtering is verified.
         if (!m_ownedIds.empty()) {

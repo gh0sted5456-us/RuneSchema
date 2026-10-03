@@ -22,11 +22,21 @@ std::vector<std::pair<RC::StringType, ShadowveilRules::ActionMask>> WearablePath
 ShadowveilRules::ActionMask EnabledActions{};
 static_assert(std::size(ShadowveilNative::Sites) == std::size(ShadowveilRules::ActionNames));
 static_assert(std::size(ShadowveilNative::ServerSites) == std::size(ShadowveilNative::Sites));
+static_assert(std::size(ShadowveilNative::LatestSteamSites) == std::size(ShadowveilNative::Sites));
+static_assert(std::size(ShadowveilNative::LatestGamePassSites) == std::size(ShadowveilNative::Sites));
 std::atomic<bool> Active{false};
 std::atomic<unsigned> Observed{0};
 uintptr_t ImageBase{};
 uint32_t ExecutableTimestamp{},ExecutableImageSize{};
 const NativeHookContract::Profile<ShadowveilNative::Site>* SelectedProfile{};
+
+bool UsesGamePassShadowveilContract() noexcept {
+    if (!SelectedProfile) return false;
+    return (SelectedProfile->timestamp == ShadowveilNative::GamePassTimestamp
+            && SelectedProfile->imageSize == ShadowveilNative::GamePassImageSize)
+        || (SelectedProfile->timestamp == ShadowveilNative::LatestGamePassTimestamp
+            && SelectedProfile->imageSize == ShadowveilNative::LatestGamePassImageSize);
+}
 
 UObject* ObjectRef(UObject* owner, const TCHAR* name) {
     if (!owner || !owner->GetClassPrivate()) return nullptr;
@@ -97,8 +107,7 @@ bool Install(const TCHAR*& failure) {
     failure = TEXT("unsupported executable build");
     SelectedProfile = NativeHookContract::Select(ExecutableTimestamp, ExecutableImageSize, ShadowveilNative::Profiles);
     if (!SelectedProfile) return false;
-    const bool gamePassProfile = SelectedProfile->timestamp == ShadowveilNative::GamePassTimestamp
-        && SelectedProfile->imageSize == ShadowveilNative::GamePassImageSize;
+    const bool gamePassProfile = UsesGamePassShadowveilContract();
     const auto lane = PS::Storefront::CurrentNativeLane();
     if ((gamePassProfile && lane != PS::Storefront::NativeLane::GamePassNative)
         || (!gamePassProfile && lane == PS::Storefront::NativeLane::GamePassNative)) {
@@ -131,7 +140,7 @@ EquipmentShadowveilStatus InitializeEquipmentShadowveil(const ShadowveilRules::R
     const TCHAR* failure{};
     if (Install(failure)) {
         const bool server=SelectedProfile->timestamp == ShadowveilNative::ServerTimestamp;
-        const bool gamePass=SelectedProfile->timestamp == ShadowveilNative::GamePassTimestamp;
+        const bool gamePass=UsesGamePassShadowveilContract();
         PS::Log<LogLevel::Verbose>(TEXT("Equipment Shadowveil ({}): {} wearables; 5 native binding sites validated.\n"),
             server ? TEXT("server") : gamePass ? TEXT("gamepass") : TEXT("steam-gog"), WearablePaths.size());
         return {WearablePaths.size(),true,server};

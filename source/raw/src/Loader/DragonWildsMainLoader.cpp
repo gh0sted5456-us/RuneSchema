@@ -192,6 +192,13 @@ namespace DragonWilds {
                 if(m_coreStartupComplete.load(std::memory_order_acquire)
                     || InitCore()) {
                     m_coreStartupComplete.store(true,std::memory_order_release);
+                    // GameInstance::Init may already have completed before the
+                    // game-thread readiness fallback finished InitCore.  In
+                    // that race the inline hook cannot fire again, so enter
+                    // the GameInstance loader phase here as well.  The atomic
+                    // once gate keeps the normal hook and this fallback from
+                    // ever running registration twice.
+                    SetupGameInstanceInitLoadersOnce();
                     m_coreStartupCallbackId=Hook::ERROR_ID;
                     iteration.RemoveSelf();
                 } else if(m_coreStartupFailed.load(std::memory_order_acquire)) {
@@ -881,8 +888,9 @@ namespace DragonWilds {
                 for(const auto& package:PS::PluginCatalog::PakDirectories(plugin))pakRoots.push_back(package);
             }
         } catch(const std::exception& error) {
-            PS::Log<LogLevel::Error>(STR("Plugin pak order rejected; using the plugin root fallback: {}\n"),PS::ToWideSafe(error.what()));
-            pakRoots.push_back(runeSchemaRoot/"plugins");
+            PS::Log<LogLevel::Error>(STR(
+                "Plugin pak order rejected; no plugin PAK directories were added (fail-closed): {}\n"),
+                PS::ToWideSafe(error.what()));
         }
         const auto modsRoot=GetModsPath();std::vector<RC::StringType> discovered;
         if(fs::is_directory(modsRoot))for(const auto& entry:fs::directory_iterator(modsRoot)) {
@@ -894,8 +902,9 @@ namespace DragonWilds {
         }
         try {for(const auto& name:ModLoadOrder::Resolve(modsRoot,discovered))pakRoots.push_back(modsRoot/name);}
         catch(const std::exception& error) {
-            PS::Log<LogLevel::Error>(STR("Mod pak order rejected; using the mods root fallback: {}\n"),PS::ToWideSafe(error.what()));
-            pakRoots.push_back(modsRoot);
+            PS::Log<LogLevel::Error>(STR(
+                "Mod pak order rejected; no mod PAK directories were added (fail-closed): {}\n"),
+                PS::ToWideSafe(error.what()));
         }
         std::unordered_set<std::wstring> registered;
         size_t addedPakDirectories = 0;

@@ -4,14 +4,21 @@
 #include <string>
 static std::string Read(const char* path){std::ifstream f(path);if(!f)throw std::runtime_error("source unavailable");return {std::istreambuf_iterator<char>(f),{}};}
 int main(int argc,char** argv){
-    if(argc!=6)throw std::runtime_error("registrar, provenance, quest service, main loader, and pruner sources required");
-    const auto registrar=Read(argv[1]),provenance=Read(argv[2]),quests=Read(argv[3]),mainLoader=Read(argv[4]),pruner=Read(argv[5]);
+    if(argc!=7)throw std::runtime_error("registrar, provenance, quest service, main loader, pruner, and asset loader sources required");
+    const auto registrar=Read(argv[1]),provenance=Read(argv[2]),quests=Read(argv[3]),mainLoader=Read(argv[4]),pruner=Read(argv[5]),assetLoader=Read(argv[6]);
     const auto need=[](bool ok,const char* text){if(!ok)throw std::runtime_error(text);};
     need(registrar.find("OwnedContent::CompareSnapshot")==registrar.npos
         && registrar.find("OwnedContent::CommitSnapshot")==registrar.npos,
         "automatic pruning still depends on an ownership ledger");
     need(mainLoader.find("OwnedContent::BeginSnapshot")==mainLoader.npos,
         "startup still creates an ownership ledger");
+    const auto fallbackHook=mainLoader.find("HookName=TEXT(\"CoreStartupFallback\")");
+    const auto fallbackPhase=mainLoader.find(
+        "SetupGameInstanceInitLoadersOnce();",fallbackHook);
+    const auto fallbackRemoval=mainLoader.find("iteration.RemoveSelf();",fallbackHook);
+    need(fallbackHook!=mainLoader.npos && fallbackPhase!=mainLoader.npos
+        && fallbackRemoval!=mainLoader.npos && fallbackPhase<fallbackRemoval,
+        "game-thread core fallback can retire before item registration and save pruning start");
     need(registrar.find("CleanLocalCharacterSavesOnce")!=registrar.npos
         && registrar.find("ConfigFiles::Write(path, encoded)")!=registrar.npos
         && registrar.find("BackupCharacterSave(path)")!=registrar.npos
@@ -58,11 +65,13 @@ int main(int argc,char** argv){
         "m_characterJsonHook = Hook::RegisterProcessEventPreCallback");
     const auto auxiliaryHooks=registrar.find(
         "for (auto* hookPath : SaveLoadHookPaths)");
-    need(mandatoryPreflight!=registrar.npos && auxiliaryHooks!=registrar.npos
-        && mandatoryPreflight<auxiliaryHooks
-        && registrar.find("was isolated after registration failed",
-            auxiliaryHooks)!=registrar.npos,
-        "an auxiliary registry hook can prevent mandatory character preflight");
+    const auto preflightEnd=registrar.find(
+        "void DragonWildsDataRegistrar::ScrubCharacterJsonBeforeLoad",
+        mandatoryPreflight);
+    need(mandatoryPreflight!=registrar.npos && auxiliaryHooks==registrar.npos
+        && preflightEnd!=registrar.npos
+        && registrar.find("RegisterAll();",mandatoryPreflight)==registrar.npos,
+        "character preflight can refresh registries during a world transition");
     const auto registerAllDefinition=registrar.find(
         "void DragonWildsDataRegistrar::RegisterAll()");
     need(registerAllDefinition!=registrar.npos
@@ -90,20 +99,76 @@ int main(int argc,char** argv){
     need(fallback!=registrar.npos && fallbackGuard!=registrar.npos
         && registrar.find("ForEachUObject")==registrar.npos,
         "global ProcessEvent fallback performs native-hook discovery before filtering the event");
-    const auto preRegistration=registrar.find("RegisterInitGameStatePreCallback");
-    const auto registerAll=registrar.find("RegisterAll();",preRegistration);
-    need(preRegistration!=registrar.npos && registerAll!=registrar.npos,
-        "pre-world native registration is missing");
+    need(registrar.find("RegisterInitGameStatePreCallback")==registrar.npos
+        && registrar.find("SaveLoadHookPaths")==registrar.npos
+        && registrar.find("[REGISTRY][LIFECYCLE][SEALED]")!=registrar.npos,
+        "registry mutation is not sealed to the one-time startup boundary");
     need(registrar.find("fingerprint != m_registryCandidateFingerprint")!=registrar.npos
         && registrar.find("PublishRegistry({});\n                return;")!=registrar.npos,
         "character cleanup can consume an unsettled registry snapshot");
-    need(registrar.find("registrationsComplete = RegisterMissing")!=registrar.npos
+    need(registrar.find("const auto registered = RegisterMissing")!=registrar.npos
+        && registrar.find("if (binding.CleanupAuthority)")!=registrar.npos
+        && registrar.find("registrationsComplete = registered && registrationsComplete")!=registrar.npos
         && registrar.find("itemsReady && recipesReady && registrationsComplete")!=registrar.npos
         && registrar.find("primary persistence registry rejected the asset")!=registrar.npos
         && registrar.find("network registry rejected the asset")!=registrar.npos
         && registrar.find("does not round-trip to one live data asset")!=registrar.npos
         && registrar.find("duplicate PersistenceID resolves to multiple live assets")!=registrar.npos,
         "cleanup readiness ignores a loaded asset that failed identity round-trip, uniqueness, primary, or network registration");
+    need(registrar.find("CombatSpellDataSubsystem")!=registrar.npos
+        && registrar.find("UtilitySpellDataSubsystem")!=registrar.npos
+        && registrar.find("HeldEquipmentEffectDataSubsystem")!=registrar.npos
+        && registrar.find("false,")!=registrar.npos,
+        "combat persistence registries are missing or can become cleanup authority");
+    need(registrar.find("[REGISTRY][{}][ADDED]")!=registrar.npos
+        && registrar.find("[REGISTRY][{}][IDENTITY]")!=registrar.npos
+        && registrar.find("TEXT(\"ITEM\")")!=registrar.npos
+        && registrar.find("TEXT(\"RECIPE\")")!=registrar.npos
+        && registrar.find("TEXT(\"QUEST\")")!=registrar.npos
+        && registrar.find("TEXT(\"COMBAT-SPELL\")")!=registrar.npos
+        && registrar.find("TEXT(\"UTILITY-SPELL\")")!=registrar.npos
+        && registrar.find("TEXT(\"EQUIPMENT-EFFECT\")")!=registrar.npos
+        && registrar.find("PersistenceID='{}'")!=registrar.npos
+        && registrar.find("networkId={}")!=registrar.npos
+        && registrar.find("[COMBAT-REGISTRY][MELEE-ATTACK][{}]")!=registrar.npos,
+        "new combat registry identities are not announced with actionable status");
+    need(provenance.find("AnnounceRuneSchemaItem")!=provenance.npos
+        && provenance.find("RuneSchemaItems")!=provenance.npos
+        && assetLoader.find("RegistryProvenance::AnnounceRuneSchemaItem")!=assetLoader.npos
+        && assetLoader.find("source=runeschema")!=assetLoader.npos
+        && registrar.find("[REGISTRY][ITEM][PROVENANCE]")!=registrar.npos
+        && registrar.find("[REGISTRY][ITEM][UNRESOLVED-RUNESCHEMA]")!=registrar.npos
+        && registrar.find("cooked_or_pak_added")!=registrar.npos,
+        "item registration does not verify or report RuneSchema versus cooked/PAK provenance");
+    need(registrar.find("[REGISTRY][LIFECYCLE][SEALED]")!=registrar.npos
+        && registrar.find("world transitions are read-only")!=registrar.npos,
+        "one-time registry lifecycle is not announced");
+    const auto pakPreload=registrar.find("PreloadMountedPersistenceAssets();");
+    const auto firstRegistration=registrar.find("RegisterAll();",pakPreload);
+    need(pakPreload!=registrar.npos && firstRegistration!=registrar.npos
+        && pakPreload<firstRegistration
+        && registrar.find("MaxPersistencePreloads = 32768")!=registrar.npos
+        && registrar.find("PersistenceLoadTranche = 512")!=registrar.npos
+        && registrar.find("UAssetRegistryHelpers::GetAsset(asset)")!=registrar.npos
+        && registrar.find("[REGISTRY][PAK-DISCOVERY][SUMMARY]")!=registrar.npos
+        && registrar.find("bFAssetDataAvailable")==registrar.npos
+        && registrar.find("Live Asset Registry query failed")!=registrar.npos
+        && registrar.find("asset.AssetClass().ToString()")!=registrar.npos
+        && registrar.find("[REGISTRY][PAK-DISCOVERY][NO-CANDIDATES]")!=registrar.npos
+        && registrar.find("mounted_records={}")!=registrar.npos
+        && registrar.find("FailureDetailLimit = 12")!=registrar.npos
+        && registrar.find("m_pakDiscoveryComplete")==registrar.npos
+        && registrar.find("registrationsComplete = true")!=registrar.npos,
+        "mounted persistence assets are not bounded, condensed, and loaded before registry sealing");
+    need(registrar.find("[LIFECYCLE][COMBAT-COMPONENT][READY]")!=registrar.npos
+        && registrar.find("Hook::RegisterProcessEventPostCallback")!=registrar.npos
+        && registrar.find("IsCombatComponentReadyFunction")!=registrar.npos
+        && registrar.find("component->GetWorld() != world")!=registrar.npos
+        && registrar.find("m_ownedAdditionalWeaponAttackRoots")!=registrar.npos
+        && registrar.find("attack->SetRootSet()")!=registrar.npos
+        && registrar.find("attack->ClearRootSet()")!=registrar.npos
+        && registrar.find("MELEE-ATTACK][RESOLVED]")!=registrar.npos,
+        "custom attack classes are not separated into an idempotent world-component lifecycle lane");
     need(pruner.find("if (cleaned.Removed.empty() && restored.empty()) {")!=pruner.npos,
         "an unchanged character is not a strict no-op");
     need(pruner.find("SaveSnapshotRestore")==pruner.npos

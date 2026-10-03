@@ -33,22 +33,34 @@ namespace UECustom {
 
     void FScriptMapHelper::Add(void* PairPtrToAdd)
     {
-        if (Update(PairPtrToAdd)) return;
-
-        auto Index = ScriptMap->AddUninitialized(MapLayout);
-        uint8* PairPtr = static_cast<uint8*>(ScriptMap->GetData(Index, MapLayout));
-
-        void* KeyPtr = PairPtr;
-        void* ValuePtr = PairPtr + MapLayout.ValueOffset;
-
-        KeyProperty->InitializeValue(KeyPtr);
-        ValueProperty->InitializeValue(ValuePtr);
-
         void* KeyPtrToAdd = PairPtrToAdd;
         void* ValuePtrToAdd = static_cast<uint8*>(PairPtrToAdd) + MapLayout.ValueOffset;
-
-        FMemory::Memcpy(KeyPtr, KeyPtrToAdd, KeyProperty->GetElementSize());
-        FMemory::Memcpy(ValuePtr, ValuePtrToAdd, ValueProperty->GetElementSize());
+        const auto construct = [](FProperty* property, const void* source,
+                                   void* destination) {
+            property->InitializeValue(destination);
+            property->CopySingleValue(destination, source);
+        };
+        const auto destruct = [](FProperty* property, void* value) {
+            property->DestroyValue(value);
+        };
+        ScriptMap->Add(KeyPtrToAdd, ValuePtrToAdd, MapLayout,
+            [this](const void* source) {
+                return KeyProperty->GetValueTypeHash(source);
+            },
+            [this](const void* left, const void* right) {
+                return KeyProperty->Identical(left, right);
+            },
+            [this, KeyPtrToAdd, construct](void* destination) {
+                construct(KeyProperty, KeyPtrToAdd, destination);
+            },
+            [this, ValuePtrToAdd, construct](void* destination) {
+                construct(ValueProperty, ValuePtrToAdd, destination);
+            },
+            [this, ValuePtrToAdd](void* destination) {
+                ValueProperty->CopySingleValue(destination, ValuePtrToAdd);
+            },
+            [this, destruct](void* value) { destruct(KeyProperty, value); },
+            [this, destruct](void* value) { destruct(ValueProperty, value); });
     }
 
     void FScriptMapHelper::Add(UECustom::FManagedValue& PairPtr)
@@ -65,28 +77,22 @@ namespace UECustom {
             throw std::runtime_error("Failed to update TMap entry due to invalid ScriptMap.");
         }
 
-        void* KeyPtrToUpdate = PairPtrToUpdate;
-        void* ValuePtrToUpdate = static_cast<uint8*>(PairPtrToUpdate) + MapLayout.ValueOffset;
+        void* value = FindValue(PairPtrToUpdate);
+        if (!value) return false;
+        ValueProperty->CopySingleValue(value,
+            static_cast<uint8*>(PairPtrToUpdate) + MapLayout.ValueOffset);
+        return true;
+    }
 
-        for (auto Index = 0; Index < ScriptMap->GetMaxIndex(); ++Index)
-        {
-            if (!ScriptMap->IsValidIndex(Index)) {
-                continue;
-            }
-
-            uint8* PairPtr = (uint8*)ScriptMap->GetData(Index, MapLayout);
-            void* KeyPtr = PairPtr;
-            void* ValuePtr = PairPtr + MapLayout.ValueOffset;
-
-            if (KeyProperty->Identical(KeyPtr, KeyPtrToUpdate))
-            {
-                FMemory::Memcpy(KeyPtr, KeyPtrToUpdate, KeyProperty->GetElementSize());
-                FMemory::Memcpy(ValuePtr, ValuePtrToUpdate, ValueProperty->GetElementSize());
-                return true;
-            }
-        }
-
-        return false;
+    void* FScriptMapHelper::FindValue(const void* KeyToFind) const
+    {
+        return ScriptMap->FindValue(KeyToFind, MapLayout,
+            [this](const void* source) {
+                return KeyProperty->GetValueTypeHash(source);
+            },
+            [this](const void* left, const void* right) {
+                return KeyProperty->Identical(left, right);
+            });
     }
 
     bool FScriptMapHelper::Remove(void* KeyToRemove)
@@ -98,23 +104,19 @@ namespace UECustom {
             throw std::runtime_error("Failed to remove TMap entry due to invalid ScriptMap.");
         }
 
-        for (auto Index = 0; Index < ScriptMap->GetMaxIndex(); ++Index)
-        {
-            if (!ScriptMap->IsValidIndex(Index)) {
-                continue;
-            }
-
-            uint8* PairPtr = (uint8*)ScriptMap->GetData(Index, MapLayout);
-            void* KeyPtr = PairPtr;
-
-            if (KeyProperty->Identical(KeyPtr, KeyToRemove))
-            {
-                ScriptMap->RemoveAt(Index, MapLayout);
-                return true;
-            }
-        }
-
-        return false;
+        const auto index = ScriptMap->FindPairIndex(KeyToRemove, MapLayout,
+            [this](const void* source) {
+                return KeyProperty->GetValueTypeHash(source);
+            },
+            [this](const void* left, const void* right) {
+                return KeyProperty->Identical(left, right);
+            });
+        if (index == INDEX_NONE) return false;
+        auto* pair = static_cast<uint8*>(ScriptMap->GetData(index, MapLayout));
+        ValueProperty->DestroyValue(pair + MapLayout.ValueOffset);
+        KeyProperty->DestroyValue(pair);
+        ScriptMap->RemoveAt(index, MapLayout);
+        return true;
     }
 
     void FScriptMapHelper::InitializePair(UECustom::FManagedValue& PairPtr)

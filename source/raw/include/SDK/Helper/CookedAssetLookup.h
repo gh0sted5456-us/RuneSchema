@@ -35,10 +35,16 @@ template<class Text> std::string NativeString(const Text& value) {
     return {};
 }
 template<class Asset> std::string AssetClass(Asset& asset) {
-    if constexpr(requires {asset.AssetClassPath().GetAssetName().ToString();})return NativeString(asset.AssetClassPath().GetAssetName().ToString());
-    else if constexpr(requires {asset.AssetClassPath().ToString();})return NativeString(asset.AssetClassPath().ToString());
-    else if constexpr(requires {asset.AssetClass().ToString();})return NativeString(asset.AssetClass().ToString());
-    else return {};
+    std::string value;
+    if constexpr(requires {asset.AssetClassPath().GetAssetName().ToString();})
+        value=NativeString(asset.AssetClassPath().GetAssetName().ToString());
+    else if constexpr(requires {asset.AssetClassPath().ToString();})
+        value=NativeString(asset.AssetClassPath().ToString());
+    if(value.empty()||value=="None") {
+        if constexpr(requires {asset.AssetClass().ToString();})
+            value=NativeString(asset.AssetClass().ToString());
+    }
+    return value;
 }
 inline void Invalidate() {std::scoped_lock lock(Mutex);Ready=false;Paths.clear();ClassPaths.clear();Visuals.clear();Skipped=0;}
 inline void Build(RC::Unreal::TArray<RC::Unreal::FAssetData>& assets) {
@@ -63,7 +69,6 @@ inline bool ContainsReference(const std::string& path) {std::scoped_lock lock(Mu
 inline bool Available() {std::scoped_lock lock(Mutex);return Ready;}
 inline void Refresh() {
     using namespace RC::Unreal;
-    if(!bFAssetDataAvailable){Invalidate();throw std::runtime_error("Cooked-asset registry metadata is unavailable; only verified loaded-package assets are eligible");}
     auto interface=UAssetRegistryHelpers::GetAssetRegistry();auto* registry=static_cast<UAssetRegistry*>(interface.ObjectPointer);
     TArray<FAssetData> assets;
     if(!registry||!registry->GetAllAssets(assets,true)){Invalidate();throw std::runtime_error("Cannot verify cooked assets against the mounted registry");}

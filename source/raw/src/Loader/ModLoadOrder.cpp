@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <fstream>
 #include <stdexcept>
+#include <unordered_map>
 #include <unordered_set>
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
@@ -20,6 +21,9 @@ namespace {
         for (auto c : v) out.push_back(c < 0x80 ? static_cast<char>(c) : '?');
         return out;
     }
+    std::string FoldName(const RC::StringType& name) {
+        return PS::ModFolderLayout::FoldAscii(Narrow(name));
+    }
 }
 
 namespace DragonWilds {
@@ -33,7 +37,8 @@ namespace DragonWilds {
             auto name = Trim(text.substr(0, colon)); auto value = Trim(text.substr(colon + 1));
             if (name.empty()) continue;
             if (strict && value != STR("0") && value != STR("1")) {
-                PS::Log<RC::LogLevel::Warning>(STR("Invalid runeschema.txt value for '{}'; expected 0 or 1. Disabled.\n"), name);
+                PS::Log<RC::LogLevel::Warning>(STR("Invalid {} value for '{}'; expected 0 or 1. Disabled.\n"),
+                    path.filename().native(), name);
                 entries.push_back({name, false}); continue;
             }
             entries.push_back({name, value != STR("0")});
@@ -77,38 +82,81 @@ namespace DragonWilds {
         return static_cast<bool>(output);
     }
     std::vector<RC::StringType> ModLoadOrder::Resolve(const fs::path& mods, const std::vector<RC::StringType>& discovered) {
-        // Explicit runeschema.txt order is authoritative. Prefix policy is only
-        // a deterministic fallback for discovered mods that are not explicitly listed.
+        // Explicit runeschema.txt order is authoritative. Never alphabetize
+        // discovery: newly found mods are appended in the order supplied by
+        // the directory scan, while every existing user-arranged row stays in
+        // exactly the same position.
         auto fallback = discovered;
-        std::sort(fallback.begin(), fallback.end());
-        ModOrderPolicy::Apply(fallback, [](const auto& name) -> const auto& { return name; });
-
-        const auto& settings = PS::PSConfig::Get()->GetLoadOrderSettings();
-        if (!settings.enabled) {
-            return settings.deterministicFallback ? fallback : discovered;
-        }
-
         const auto path = GetOrderPath(mods);
         const bool existed = fs::exists(path);
+        const auto& settings = PS::PSConfig::Get()->GetLoadOrderSettings();
+        auto entries = existed ? Load(path, settings.strictValues)
+                               : std::vector<ModOrderEntry>{};
+
+        // runeschema.txt is an enablement authority even when its optional
+        // ordering/reconciliation feature is disabled. A disabled row wins
+        // over every duplicate spelling of the same Windows folder name.
+        std::unordered_set<std::string> explicitlyDisabled;
+        for (const auto& entry : entries)
+            if (!entry.Enabled) explicitlyDisabled.insert(FoldName(entry.Name));
+        const auto filterExplicitlyDisabled = [&](const std::vector<RC::StringType>& names) {
+            std::vector<RC::StringType> allowed;
+            allowed.reserve(names.size());
+            for (const auto& name : names) {
+                if (!explicitlyDisabled.contains(FoldName(name))) allowed.push_back(name);
+                else PS::Log<RC::LogLevel::Normal>(STR(
+                    "Skipping mod '{}' (disabled in RuneSchema/mods/runeschema.txt).\n"), name);
+            }
+            return allowed;
+        };
+
+        if (!settings.enabled) {
+            return filterExplicitlyDisabled(
+                settings.deterministicFallback ? fallback : discovered);
+        }
+
         if (!existed && !settings.autoCreate) {
             return settings.deterministicFallback ? fallback : discovered;
         }
 
-        auto entries = Load(path, settings.strictValues);
+        std::unordered_map<std::string, RC::StringType> discoveredByName;
+        discoveredByName.reserve(discovered.size());
+        for (const auto& name : discovered)
+            discoveredByName.try_emplace(FoldName(name), name);
 
-        std::unordered_set<RC::StringType> present(discovered.begin(), discovered.end());
-        const auto before = entries.size();
-        entries.erase(std::remove_if(entries.begin(), entries.end(),
-            [&](const auto& e) { return !present.contains(e.Name); }), entries.end());
-        bool changed = entries.size() != before;
+        std::vector<ModOrderEntry> normalized;
+        normalized.reserve(entries.size());
+        std::unordered_map<std::string, std::size_t> normalizedIndex;
+        bool changed = false;
+        for (const auto& entry : entries) {
+            const auto key = FoldName(entry.Name);
+            const auto discoveredEntry = discoveredByName.find(key);
+            if (discoveredEntry == discoveredByName.end()) {
+                changed = true;
+                continue;
+            }
+            const auto [position, inserted] = normalizedIndex.try_emplace(
+                key, normalized.size());
+            if (!inserted) {
+                // Zero wins across duplicate rows, regardless of casing.
+                normalized[position->second].Enabled =
+                    normalized[position->second].Enabled && entry.Enabled;
+                changed = true;
+                continue;
+            }
+            normalized.push_back({discoveredEntry->second, entry.Enabled});
+            changed = changed || entry.Name != discoveredEntry->second;
+        }
+        entries = std::move(normalized);
 
-        std::unordered_set<RC::StringType> known;
-        for (const auto& e : entries) known.insert(e.Name);
+        std::unordered_set<std::string> known;
+        for (const auto& entry : entries) known.insert(FoldName(entry.Name));
 
-        // Unlisted ordinary/numeric mods are appended in deterministic fallback
-        // order. Existing runeschema.txt rows never move.
+        // Unlisted ordinary/numeric mods are appended in discovery order.
+        // Existing runeschema.txt rows never move.
         for (const auto& name : fallback) {
-            if (!ModOrderPolicy::ShouldAutoPersist(name) || !known.insert(name).second) continue;
+            if (!ModOrderPolicy::ShouldAutoPersist(name)
+                || !known.insert(FoldName(name)).second) continue;
             entries.push_back({name, true});
             changed = true;
         }
@@ -123,7 +171,8 @@ namespace DragonWilds {
         resolved.reserve(entries.size() + fallback.size());
 
         for (const auto& name : fallback) {
-            if (!ModOrderPolicy::IsImplicit(name) || known.contains(name)) continue;
+            if (!ModOrderPolicy::IsImplicit(name)
+                || known.contains(FoldName(name))) continue;
             if (ModOrderPolicy::Priority(name) == 0)
                 resolved.push_back({name, true});
         }
@@ -131,7 +180,8 @@ namespace DragonWilds {
         resolved.insert(resolved.end(), entries.begin(), entries.end());
 
         for (const auto& name : fallback) {
-            if (!ModOrderPolicy::IsImplicit(name) || known.contains(name)) continue;
+            if (!ModOrderPolicy::IsImplicit(name)
+                || known.contains(FoldName(name))) continue;
             if (ModOrderPolicy::Priority(name) != 0)
                 resolved.push_back({name, true});
         }
@@ -140,7 +190,8 @@ namespace DragonWilds {
         result.reserve(resolved.size());
         for (const auto& e : resolved) {
             if (e.Enabled) result.push_back(e.Name);
-            else PS::Log<RC::LogLevel::Normal>(STR("Skipping mod '{}' (disabled in runeschema.txt).\n"), e.Name);
+            else PS::Log<RC::LogLevel::Normal>(STR(
+                "Skipping mod '{}' (disabled in RuneSchema/mods/runeschema.txt).\n"), e.Name);
         }
         return result;
     }

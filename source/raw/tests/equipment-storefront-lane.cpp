@@ -27,8 +27,10 @@ int main(int argc, char** argv)
     const auto equipment = Read(argv[1]);
     const auto shadowveil = Read(argv[2]);
     Check(equipment.find("NativeLane::SteamNative") != std::string::npos
-        && equipment.find("Surge/Dash native contract is currently verified only") != std::string::npos,
-        "Dash/Surge hooks are explicitly isolated to the Steam/GOG lane");
+        && equipment.find("NativeLane::GamePassNative") != std::string::npos
+        && equipment.find("UsesGamePassSurgeContract") != std::string::npos
+        && equipment.find("Surge/Dash native contract does not match the active storefront lane") != std::string::npos,
+        "Dash/Surge hooks select only the verified profile for the active Steam/GOG or Game Pass lane");
     Check(equipment.find("GrantedEffects") != std::string::npos
         && equipment.find("LoadAsset_Blocking") != std::string::npos,
         "Windstep and other cooked GrantedEffects remain reflection-driven and storefront-neutral");

@@ -27,11 +27,23 @@ int main(int argc, char** argv) {
 
     Require(modOrder, "Explicit runeschema.txt order is authoritative");
     Require(modOrder, "resolved.insert(resolved.end(), entries.begin(), entries.end())");
+    Require(modOrder, "Unlisted ordinary/numeric mods are appended in discovery order");
+    Require(modOrder, "A disabled row wins");
+    Require(modOrder, "Zero wins across duplicate rows");
+    Require(modOrder, "FoldName(entry.Name)");
+    Require(modOrder, "disabled in RuneSchema/mods/runeschema.txt");
+    Forbid(modOrder, "UE4SS Mods/mods.txt");
     Forbid(modOrder, "ModOrderPolicy::Apply(entries");
     Forbid(modOrder, "ModOrderPolicy::Apply(resolved");
+    Forbid(modOrder, "ModOrderPolicy::Apply(fallback");
+    Forbid(modOrder, "std::sort(fallback");
 
     Require(mainLoader, "m_orderedMods = ModLoadOrder::Resolve(modsPath, discovered)");
     Require(mainLoader, "for(const auto& name:ModLoadOrder::Resolve(modsRoot,discovered))pakRoots.push_back(modsRoot/name)");
+    Require(mainLoader, "no mod PAK directories were added (fail-closed)");
+    Require(mainLoader, "no plugin PAK directories were added (fail-closed)");
+    Forbid(mainLoader, "pakRoots.push_back(modsRoot);");
+    Forbid(mainLoader, "pakRoots.push_back(runeSchemaRoot/\"plugins\");");
 
     Require(pluginCatalog, "left->second.Position<right->second.Position");
     Require(pluginCatalog, "dependency.first==result[i].Id");

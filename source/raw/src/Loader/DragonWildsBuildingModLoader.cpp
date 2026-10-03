@@ -1968,8 +1968,8 @@ namespace DragonWilds {
         }
 
         PS::Log<LogLevel::Normal>(STR(
-            "Buildings: {} native, {} custom, deterministic PersistenceID order, 0 errors.\n"),
-            vanilla.size(), active.size());
+            "[REGISTRY][BUILDING][ADDED] count={} native={} deterministicPersistenceOrder=true verified=true.\n"),
+            active.size(), vanilla.size());
         return true;
     }
     std::vector<DragonWildsBuildingModLoader::Placement>

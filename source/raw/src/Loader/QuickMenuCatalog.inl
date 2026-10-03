@@ -121,10 +121,16 @@ template<class Text> std::string ToolNativeString(const Text& value) {
     return {};
 }
 template<class Asset> std::string ToolAssetClass(Asset& asset) {
-    if constexpr(requires {asset.AssetClassPath().GetAssetName().ToString();})return ToolNativeString(asset.AssetClassPath().GetAssetName().ToString());
-    else if constexpr(requires {asset.AssetClassPath().ToString();})return ToolNativeString(asset.AssetClassPath().ToString());
-    else if constexpr(requires {asset.AssetClass().ToString();})return ToolNativeString(asset.AssetClass().ToString());
-    else return {};
+    std::string value;
+    if constexpr(requires {asset.AssetClassPath().GetAssetName().ToString();})
+        value=ToolNativeString(asset.AssetClassPath().GetAssetName().ToString());
+    else if constexpr(requires {asset.AssetClassPath().ToString();})
+        value=ToolNativeString(asset.AssetClassPath().ToString());
+    if(value.empty()||value=="None") {
+        if constexpr(requires {asset.AssetClass().ToString();})
+            value=ToolNativeString(asset.AssetClass().ToString());
+    }
+    return value;
 }
 // Public reference requests contain paths only and run off the game thread.
 // This job is joined explicitly by the spawn-loader destructor before DLL unload.
@@ -295,7 +301,6 @@ struct ToolCatalogIndex {
         return result;
     }
     void ScanRegistry() {
-        if(!bFAssetDataAvailable){referenceStatus="Host registry layout unavailable; validating exact-path hints.";return;}
         TArray<FAssetData> assets;
         auto interface=UAssetRegistryHelpers::GetAssetRegistry();auto* registry=static_cast<UAssetRegistry*>(interface.ObjectPointer);
         if(!registry||!registry->GetAllAssets(assets,true)||assets.Num()<=0||assets.Num()>262144)
