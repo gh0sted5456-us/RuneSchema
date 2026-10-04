@@ -22,6 +22,10 @@ int main(int argc,char** argv) {
         "Authored recipes do not receive a deterministic canonical persistence identity");
     require(source.find("OwnedContent::") == std::string::npos,
         "Recipe persistence still depends on an ownership manifest");
+    require(source.find("LargeRecipeWorkloadWarningThreshold = 1000")!=std::string::npos
+        && source.find("m_recipeDefs.size() > LargeRecipeWorkloadWarningThreshold")!=std::string::npos
+        && source.find("Loading will continue normally without limits")!=std::string::npos,
+        "Large recipe workloads are not warned without gatekeeping");
     const auto storeBegin=source.find("DragonWildsRecipeModLoader::PrepareStoreForPlayer");
     const auto storeEnd=source.find("void DragonWildsRecipeModLoader::OnLoad",storeBegin);
     require(storeBegin!=std::string::npos && storeEnd!=std::string::npos,

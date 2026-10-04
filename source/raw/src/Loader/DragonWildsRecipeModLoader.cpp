@@ -48,6 +48,7 @@ namespace DragonWilds {
     static constexpr const TCHAR* ProgressComponentClassPath = TEXT("/Script/Dominion.ProgressComponent");
     static constexpr const TCHAR* PlayerControllerClassPath = TEXT("/Script/Dominion.DominionPlayerController");
     static constexpr const TCHAR* ServerCraftRecipePath = TEXT("/Script/Dominion.InventoryController:Server_CraftRecipe");
+    static constexpr std::size_t LargeRecipeWorkloadWarningThreshold = 1000;
 
     static constexpr const TCHAR* ClientUnlockHookPaths[] = {
         TEXT("/Script/Dominion.ProgressComponent:Client_HandleNewRecipesLoadedFromPersistence"),
@@ -897,6 +898,15 @@ namespace DragonWilds {
         if (m_recipeDefs.empty())
         {
             return;
+        }
+
+        if (!m_largeRecipeWorkloadWarned
+            && m_recipeDefs.size() > LargeRecipeWorkloadWarningThreshold)
+        {
+            m_largeRecipeWorkloadWarned = true;
+            PS::Log<LogLevel::Warning>(STR(
+                "[RECIPES][LARGE-WORKLOAD] {} RuneSchema recipe definitions were discovered (warning threshold: {}). Loading will continue normally without limits.\n"),
+                m_recipeDefs.size(), LargeRecipeWorkloadWarningThreshold);
         }
 
         // Build the PersistenceID -> ItemData route once per recipe batch.

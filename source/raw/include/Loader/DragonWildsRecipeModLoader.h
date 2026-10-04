@@ -69,6 +69,7 @@ namespace DragonWilds {
         std::vector<RecipeDef> m_recipeDefs;
         std::vector<NpcCatalog::StoreOffer> m_storeOffers;
         bool m_autoReloading = false;
+        bool m_largeRecipeWorkloadWarned = false;
         struct PendingPatch { RC::StringType ModName; std::string Reference; nlohmann::json Changes; };
         std::vector<PendingPatch> m_pendingPatches;
         std::unordered_map<RC::StringType, RC::Unreal::UObject*> m_recipes;
