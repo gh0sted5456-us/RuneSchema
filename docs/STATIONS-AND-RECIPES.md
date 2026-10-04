@@ -98,6 +98,12 @@ station supports or deliberately add a new category tested with that interface.
 
 ## Add a recipe to a processing station
 
+RuneSchema resolves the requested station table and row, verifies that the
+named field is a compatible native RecipeData array, performs the insertion,
+and then reads the live row back. The placement is accepted only when the
+recipe appears exactly once. A missing `Replaces` target or a failed readback
+is reported as an error instead of a successful recipe load.
+
 ```json
 {
   "RECIPE_GoldenIngot": {

@@ -1005,7 +1005,13 @@ namespace DragonWilds {
             for (auto& placement : def.Placements)
             {
                 auto* datatable = ResolvePlacementTable(placement);
-                if (datatable && Place(it->second, placement, datatable))
+                if (!datatable)
+                {
+                    ++result.ErrorCount;
+                    continue;
+                }
+                bool verified = false;
+                if (Place(it->second, placement, datatable, &verified))
                 {
                     ++placed;
                     if (detailLines < detailLimit) {
@@ -1014,6 +1020,7 @@ namespace DragonWilds {
                         ++detailLines;
                     } else ++omittedDetails;
                 }
+                if (!verified) ++result.ErrorCount;
             }
         }
 
@@ -1075,7 +1082,8 @@ namespace DragonWilds {
                 const bool matches = placement.DataTable.empty()
                     ? placement.Table == tableName
                     : placement.DataTable == tablePath;
-                if (matches && Place(it->second, placement, datatable))
+                bool verified = false;
+                if (matches && Place(it->second, placement, datatable, &verified))
                 {
                     placed++;
                 }
@@ -1284,8 +1292,11 @@ namespace DragonWilds {
         return placements;
     }
 
-    bool DragonWildsRecipeModLoader::Place(UObject* recipe, const Placement& placement, RC::Unreal::UDataTable* datatable)
+    bool DragonWildsRecipeModLoader::Place(UObject* recipe,
+        const Placement& placement, RC::Unreal::UDataTable* datatable,
+        bool* verified)
     {
+        if (verified) *verified = false;
         const auto reportFailure = [&](const std::string& reason) {
             const auto key = RC::to_string(recipe->GetPathName()) + "\n"
                 + PlacementTableLabel(placement) + "\n" + RC::to_string(placement.Row)
@@ -1321,9 +1332,16 @@ namespace DragonWilds {
         {
             if (!placement.Category.empty())
             {
-                return PlaceInCategory(recipe, rowStruct.Get(), row, placement.Category);
+                const auto changed = PlaceInCategory(
+                    recipe, rowStruct.Get(), row, placement.Category);
+                if (verified) *verified = true;
+                return changed;
             }
-            return PlaceInArray(recipe, rowStruct.Get(), row, placement.Array, placement.Replaces);
+            const auto changed = PlaceInArray(
+                recipe, rowStruct.Get(), row, placement.Array,
+                placement.Replaces);
+            if (verified) *verified = true;
+            return changed;
         }
         catch (const std::exception& e)
         {
@@ -1449,6 +1467,7 @@ namespace DragonWilds {
         if (!array || array->Num() < 0 || (array->Num() && !array->GetData()))
             throw std::runtime_error("RecipeData array storage is invalid");
 
+        int32 replacementIndex = -1;
         if (array->GetData())
         {
             auto* data = static_cast<uint8*>(array->GetData());
@@ -1462,26 +1481,57 @@ namespace DragonWilds {
                     return false;
                 }
 
-                if (!replaces.empty() && existing && existing->GetFName() == FName(replaces,FNAME_Add))
-                {
-                    UObject* recipePtr = recipe;
-                    FMemory::Memcpy(data + i * elementSize, &recipePtr, sizeof(recipePtr));
-                    return true;
-                }
+                if (replacementIndex < 0 && !replaces.empty() && existing
+                    && existing->GetFName() == FName(replaces,FNAME_Add))
+                    replacementIndex = i;
             }
         }
 
         if (!replaces.empty())
         {
-            return false;
+            if (replacementIndex < 0)
+                throw std::runtime_error(
+                    "Replaces target was not found in processing station array");
+            auto* data = static_cast<uint8*>(array->GetData());
+            UObject* recipePtr = recipe;
+            FMemory::Memcpy(data + replacementIndex * elementSize,
+                &recipePtr, sizeof(recipePtr));
+            int32 retained = 0;
+            for (int32 i = 0; i < array->Num(); ++i)
+            {
+                UObject* stored = nullptr;
+                FMemory::Memcpy(&stored, data + i * elementSize,
+                    sizeof(stored));
+                if (stored == recipe) ++retained;
+            }
+            if (retained != 1)
+                throw std::runtime_error(
+                    "processing station replacement did not retain the RecipeData reference exactly once");
+            return true;
         }
 
+        const auto countBefore = array->Num();
         UECustom::FScriptArrayHelper helper(array, arrayProp);
         UECustom::FManagedValue value;
         helper.InitializeValue(value);
         UObject* recipePtr = recipe;
         FMemory::Memcpy(value.GetData(), &recipePtr, sizeof(recipePtr));
         helper.Add(value);
+        if (array->Num() != countBefore + 1 || !array->GetData())
+            throw std::runtime_error(
+                "processing station array size did not increase exactly once");
+        int32 retained = 0;
+        auto* verifiedData = static_cast<uint8*>(array->GetData());
+        for (int32 i = 0; i < array->Num(); ++i)
+        {
+            UObject* stored = nullptr;
+            FMemory::Memcpy(&stored, verifiedData + i * elementSize,
+                sizeof(stored));
+            if (stored == recipe) ++retained;
+        }
+        if (retained != 1)
+            throw std::runtime_error(
+                "processing station did not retain the RecipeData reference exactly once");
         return true;
     }
 

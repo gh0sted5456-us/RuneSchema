@@ -46,10 +46,14 @@ int main(int argc, char** argv)
     Need(loader,
         "const bool hasOneLayout = placement.Category.empty() != placement.Array.empty();",
         "runtime does not enforce one placement layout");
-    Need(loader, "PlaceInCategory(recipe, rowStruct.Get(), row, placement.Category)",
+    Need(loader, "const auto changed = PlaceInCategory(",
         "crafting/merchant category placement disappeared");
-    Need(loader, "PlaceInArray(recipe, rowStruct.Get(), row, placement.Array, placement.Replaces)",
+    Need(loader, "const auto changed = PlaceInArray(",
         "processing array placement disappeared");
+    Need(loader, "Place(it->second, placement, datatable, &verified)",
+        "requested recipe placements are not tracked through verification");
+    Need(loader, "if (!verified) ++result.ErrorCount;",
+        "a rejected processing-station placement can still report a clean recipe load");
     Need(loader, "LoadAsset_Blocking(soft)",
         "exact custom DataTable targets are no longer loaded on demand");
     Need(loader, "PlaceForTable(datatable)",
@@ -75,6 +79,14 @@ int main(int argc, char** argv)
     Need(loader, "if(m_invalidRecipes.contains(identity))continue;",
         "invalid recipe placement is not blocked during initial and replay placement");
     Need(loader, "sizeof(UObject*)", "processing array element size is not checked");
+    Need(loader, "processing station array size did not increase exactly once",
+        "processing-station insertion count is not verified after the native array write");
+    Need(loader, "processing station did not retain the RecipeData reference exactly once",
+        "processing-station insertion is not read back from the live row");
+    Need(loader, "processing station replacement did not retain the RecipeData reference exactly once",
+        "processing-station replacement is not read back from the live row");
+    Need(loader, "Replaces target was not found in processing station array",
+        "a missing processing-station replacement target is silently accepted");
     Need(properties, "String references carry no separate ObjectName",
         "moved RuneSchema string paths no longer receive stable-name relocation fallback");
     Need(properties, "object->IsA(expectedClass)",
