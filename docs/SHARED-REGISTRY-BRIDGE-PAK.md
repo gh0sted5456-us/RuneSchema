@@ -10,6 +10,11 @@ It is a template for registry declarations, not a global table that every mod
 edits. Each mod creates and cooks its own data-asset instance. This lets many
 content PAKs register together without replacing one another.
 
+The complete runtime triplet is included and enabled in the RuneSchema
+Universal package as the `RuneSchema.RegistryBridge` plugin. It is optional for
+players whose installed mods do not use it. The Core package does not include
+it.
+
 ## What the shared bridge solves
 
 Mounting a PAK makes its files available, but Dragonwilds does not automatically
@@ -154,6 +159,16 @@ If the game begins registering the same cooked content by itself, RuneSchema
 recognizes it as already present. It does not append a duplicate.
 
 ## Enabling and disabling
+
+The shared runtime bridge itself is controlled in
+`RuneSchema/plugins/plugins.txt`:
+
+```text
+RuneSchema.RegistryBridge : 1
+```
+
+Set it to `0` only when no enabled content mod uses a
+`DA_RuneSchemaRegistry_*` asset based on the shared bridge.
 
 The content PAK and its RuneSchema mod folder should be controlled by the same
 entry in `runeschema.txt`. A mod marked `0` must not contribute its bridge asset

@@ -636,6 +636,18 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
                 }
             }
             New-Item -ItemType Directory -Path (Join-Path $payload 'plugins\RuneSchema.Helpy\dll') -Force | Out-Null
+
+            # The Universal package promises a usable shared registry bridge.
+            # Reject partial containers: a .pak without its matching IoStore
+            # files can appear present while failing to mount in the game.
+            $bridgeContainer = Join-Path $payload 'plugins\RuneSchema.RegistryBridge\paks\RegistryBridge'
+            foreach ($bridgeFile in @('RegistryBridge_P.pak', 'RegistryBridge_P.utoc', 'RegistryBridge_P.ucas')) {
+                $bridgePath = Join-Path $bridgeContainer $bridgeFile
+                if (-not (Test-Path -LiteralPath $bridgePath -PathType Leaf) -or
+                    (Get-Item -LiteralPath $bridgePath).Length -le 0) {
+                    throw "Universal package is missing registry bridge runtime file: $bridgePath"
+                }
+            }
         }
 
         # UE4SS enable marker.

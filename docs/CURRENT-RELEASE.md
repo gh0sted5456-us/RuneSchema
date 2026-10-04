@@ -67,6 +67,23 @@ so an author can distinguish a missing PAK from a bad object path.
 
 [Learn how to create PAK content](PAK-CONTENT-GUIDE.md).
 
+## Optional bridges are included in Universal
+
+The Universal package now includes the complete shared registry bridge PAK and
+the RSNetworking bridge. They are separate plugins, so players can turn either
+one off without disabling RuneSchema.
+
+The registry bridge gives PAK authors a shared base for declaring the items,
+recipes, spells, and attacks their own cooked mod supplies. RSNetworking gives
+mods a shared path for supported multiplayer presentation and identity work.
+Neither bridge invents missing content, replaces the game's save format, or
+forces RuneSchema's optional weapon fallback on.
+
+The Core package remains plugin-free. Choose it when no installed mod requires
+one of the optional bridges.
+
+[See what each optional bridge does](OPTIONAL-BRIDGES.md).
+
 ## What RuneSchema does not do
 
 RuneSchema cannot repair a PAK that was cooked with missing files or incorrect

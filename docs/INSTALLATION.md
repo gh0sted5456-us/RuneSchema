@@ -15,6 +15,11 @@ You need:
 
 Close the game before replacing RuneSchema, UE4SS, or any PAK files.
 
+Choose **Universal** for the normal installation. It includes RuneSchema's
+optional registry, networking, and Helpy plugins. Choose **Core** only when you
+want the RuneSchema program without any optional plugins. The Core package can
+still load ordinary RuneSchema mods and their PAKs.
+
 ## RuneSchema folder location
 
 RuneSchema belongs inside the UE4SS `Mods` folder:
@@ -30,6 +35,18 @@ ue4ss/
 
 The exact folders above `ue4ss` depend on the store installation. Do not move
 the contents of `RuneSchema/mods` into the game's ordinary PAK folder.
+
+The Universal package also has a `RuneSchema/plugins` folder. Its
+`plugins.txt` file controls the optional components shipped with RuneSchema:
+
+```text
+RuneSchema.RegistryBridge : 1
+RSNetworking : 1
+RuneSchema.Helpy : 1
+```
+
+Use `0` to keep one optional plugin from loading. Do not delete only one file
+from a PAK triplet; disable the plugin or remove its whole folder instead.
 
 ## Enable RuneSchema itself
 
@@ -75,6 +92,11 @@ the patches that depend on them.
 7. Read `UE4SS.log` for the RuneSchema startup summary.
 8. Test world entry, menu return, and world re-entry.
 
+If you previously installed the Universal package, keep your preferred values
+from `RuneSchema/plugins/plugins.txt` when updating. See
+[Optional bridges](OPTIONAL-BRIDGES.md) before disabling a bridge required by a
+content mod.
+
 ## Confirm a successful start
 
 The log should show that RuneSchema started and reached its content-loading
@@ -92,4 +114,3 @@ RuneSchema should not load at all.
 Disabling RuneSchema also disables its save cleanup. If a character contains
 references to removed mod content, restore that content or re-enable RuneSchema
 before trying to load the character.
-

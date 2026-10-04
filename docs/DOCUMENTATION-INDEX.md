@@ -6,9 +6,10 @@ Use this page to find the shortest path to the information you need.
 
 1. [What is new in 0.7.7.2](CURRENT-RELEASE.md)
 2. [Install or update RuneSchema](INSTALLATION.md)
-3. [Platform and multiplayer support](COMPATIBILITY.md)
-4. [Save cleanup and safe mod removal](SAFE-SAVE-AND-LEDGER.md)
-5. [Troubleshooting](TROUBLESHOOTING.md)
+3. [Choose optional bridges](OPTIONAL-BRIDGES.md)
+4. [Platform and multiplayer support](COMPATIBILITY.md)
+5. [Save cleanup and safe mod removal](SAFE-SAVE-AND-LEDGER.md)
+6. [Troubleshooting](TROUBLESHOOTING.md)
 
 ## New mod authors
 
