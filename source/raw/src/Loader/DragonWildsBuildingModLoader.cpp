@@ -1072,7 +1072,7 @@ namespace DragonWilds {
                 valid=false;
                 continue;
             }
-            PS::Log<LogLevel::Normal>(
+            PS::Log<LogLevel::Verbose>(
                 STR("[BUILDING-ASSET][WORLD] owner='{}' key='{}' configured='{}' object='{}' class='{}' action={} root={} PersistenceID='{}' InternalName='{}'.\n"),
                 definition.Owner,definition.Key,definition.AssetPath,object->GetPathName(),type->GetPathName(),
                 previous==object?TEXT("reused"):TEXT("re-resolved"),object->IsRootSet(),
@@ -2303,7 +2303,7 @@ namespace DragonWilds {
                 return false;
             }
             for(const auto& placement:placements)if(!AddToMenu(building,placement))return false;
-            PS::Log<LogLevel::Normal>(STR("[BUILDING-CATALOGUE][VERIFIED] owner='{}' key='{}' placements={} object='{}'.\n"),
+            PS::Log<LogLevel::Verbose>(STR("[BUILDING-CATALOGUE][VERIFIED] owner='{}' key='{}' placements={} object='{}'.\n"),
                 definition.Owner,RC::to_generic_string(definition.Key),placements.size(),building->GetPathName());
         }
         return true;

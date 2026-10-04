@@ -30,7 +30,8 @@ modify the game merely because its PAK mounted.
 - Preserve stable ordering for replicated combat collections.
 - Reject invalid or incomplete manifests without partially changing the game.
 - Register process-wide data once per game execution.
-- Attach world-owned component collections safely when those components exist.
+- Install validated combat collections once on the component defaults before
+  gameplay components are created.
 - Produce concise status summaries without logging thousands of success lines.
 - Keep save pruning dependent on complete live registries, not on the manifest.
 
@@ -70,7 +71,7 @@ use different authorities.
 | Utility spells | `UtilitySpellDataSubsystem` | Known |
 | Held-equipment effects | `HeldEquipmentEffectDataSubsystem` | Known |
 | Player melee attacks | `PlayerMeleeAttackComponent.AttackDataCollection` | Experimental and order-sensitive |
-| Player ranged attacks | `PlayerRangedAttackComponent.AttackDataCollection` plus the equipped `PlayerRangedAttackCollection` | Experimental and order-sensitive |
+| Player ranged attacks | Registered `HeldEquipmentData.RangedAttackCollection`, cached by `PlayerRangedAttackComponent` when equipped | Item-owned; RuneSchema admits only its complete quick/full attack-data pair |
 | Player magic | Combat/utility spell subsystem maps plus the equipped `PlayerMagicAttackCollection` | Spell registries supported; equipment collection is a selector, not a separate global registry |
 | AI attacks and abilities | `DominionAISubsystem.ActionAttackRegistry` with separate action, attack, and ranged-attack arrays/maps | Layout known; safe lifecycle mutation still requires a runtime audit |
 | Buildings | Building catalogues and DataTable collections | Separate registration model |
@@ -80,6 +81,9 @@ index and order driven, which makes partial or differently ordered registration
 unsafe for multiplayer.
 
 ## Cooked asset contract
+
+For the recommended shared base plus one mod-owned data asset per PAK, follow
+the [shared registry bridge PAK walkthrough](SHARED-REGISTRY-BRIDGE-PAK.md).
 
 RuneSchema already recognizes cooked registry assets whose names begin with
 `RSREG_` or `DA_RuneSchemaRegistry`. The manifest should extend that cooked
@@ -105,9 +109,7 @@ declarations:
       "/AdditionalWeapons/Attacks/BP_Spear_Attack1.BP_Spear_Attack1_C",
       "/AdditionalWeapons/Attacks/BP_Spear_Attack2.BP_Spear_Attack2_C"
     ],
-    "RangedAttackClasses": [
-      "/AdditionalWeapons/Flintlocks/Attacks/BP_Flintlock_Single_Shot.BP_Flintlock_Single_Shot_C"
-    ]
+    "RangedAttackClasses": []
   }
 }
 ```
@@ -131,6 +133,14 @@ rejected. The current accepted fields are exactly:
 - `EquipmentEffects`
 - `MeleeAttackClasses`
 - `RangedAttackClasses`
+
+`RangedAttackClasses` is retained for schema compatibility but is deferred at
+runtime. Dragonwilds does not expose a global player-ranged class registry.
+Ranged weapons must be registered as items and carry their own cooked
+`HeldEquipmentData.RangedAttackCollection`. RuneSchema resolves that
+collection's class default object after the item registry settles and admits
+only a complete `QuickAttackData`/`FullAttackData` class pair. It never appends
+the lower-level shot or action implementation classes.
 
 Do not put magic spell classes in either attack-class lane. Magic uses the
 `CombatSpells` and `UtilitySpells` identity registries. A weapon's cooked
@@ -256,23 +266,27 @@ authoritative subsystem instances are ready.
 They must not be re-registered merely because the player returns to the menu or
 enters another world.
 
-### World-owned player components
+### Player combat component defaults
 
 Melee, ranged, or other player combat components can be recreated with a new
-world or player pawn. RuneSchema may attach an already validated ordered class
-collection when a new compatible gameplay component becomes ready.
+world or player pawn. RuneSchema installs an already validated ordered class
+collection on the compatible component's class default once per game execution.
+If the first gameplay world's component was constructed before registration
+settled, RuneSchema may apply that same complete plan to the first world's live
+component once. New worlds must inherit the settled default collection.
 
-This attachment must be:
+This registration must be:
 
 - idempotent;
-- limited to the current live world;
-- skipped for class defaults, archetypes, and destroying objects;
-- free of retained raw component pointers after the component or world dies;
+- completed on the component class default, with an optional, disabled-by-default
+  one-shot fallback for pre-existing components in the first gameplay world;
+- read-only after RuneSchema observes a different gameplay world;
+- free of retained raw component pointers after a component or world dies;
 - based on the immutable validated manifest plan rather than a fresh global
   discovery pass.
 
-Attaching to a new component is not permission to rebuild every process-wide
-registry.
+Entering another world is not permission to mutate a combat component or
+rebuild any process-wide registry.
 
 ## Object lifetime safety
 
@@ -423,13 +437,15 @@ gatekeep the mod.
 ### Phase 3: ranged combat
 
 - Steam mapping confirms `PlayerRangedAttackComponent` inherits the shared
-  `PlayerAttackComponent.AttackDataCollection` array.
-- Add `RangedAttackClasses` as a complete ordered lane and attach it only to
-  live ranged components.
-- Keep `HeldEquipmentData.RangedAttackCollection` intact; it selects the
-  equipped weapon's quick/full attack data and is not a global registry.
-- Verify the same reflected layout on Game Pass before promotion from
-  experimental.
+  `PlayerAttackComponent.AttackDataCollection` array, but inheritance alone
+  does not make that array a global ranged registry.
+- The authoritative player-ranged path is the registered
+  `HeldEquipmentData.RangedAttackCollection`, which supplies quick/full attack
+  data and is cached by the live ranged component when the item is equipped.
+- RuneSchema validates this path after ItemData registration and admits only
+  complete quick/full attack-data pairs to the live ranged component. Shot and
+  action implementation classes are never inserted.
+- Verify the same reflected layout on Game Pass before changing this model.
 
 ### Phase 4: AI attacks and abilities
 
@@ -472,8 +488,8 @@ At minimum, test:
 
 ## Open questions
 
-1. Does the current Game Pass build retain the Steam layout of
-   `PlayerRangedAttackComponent.AttackDataCollection`?
+1. Does the current Game Pass build retain the Steam item-owned
+   `HeldEquipmentData.RangedAttackCollection` layout?
 2. Which AI families share the verified `AIActionAttackRegistry`, and at what
    lifecycle point is its `UpdateCache` safe to invoke?
 3. Can the existing cooked registry DataAsset class carry typed soft arrays, or

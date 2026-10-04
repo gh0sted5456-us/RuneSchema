@@ -90,17 +90,28 @@ combat magic, utility magic, and equipment effects. A weapon appearing in the
 item list does not prove that its combat classes joined the correct collection.
 
 RuneSchema has verified subsystem lanes for combat spells, utility spells, and
-held-equipment effects. Cooked manifests can also declare complete ordered
-`MeleeAttackClasses` and `RangedAttackClasses` collections. Magic does not use
-either class lane: declare its persistent spell data through `CombatSpells` or
-`UtilitySpells`, while the cooked weapon keeps its normal magic attack
-collection reference.
+held-equipment effects. Cooked manifests can declare a complete ordered
+`MeleeAttackClasses` collection. Ranged weapons do not share an equivalent
+global player registry: register the cooked `HeldEquipmentData` item and keep
+its `RangedAttackCollection` reference intact. RuneSchema resolves the
+collection defaults after item registration and admits only its complete
+quick/full attack-data pair to the live ranged component; it never inserts
+lower-level shot classes. Magic similarly keeps its normal weapon-owned attack
+collection while persistent spell data is declared through `CombatSpells` or
+`UtilitySpells`.
 
-These combat lanes are experimental and must resolve completely before
-RuneSchema changes a live component. Read the
+The melee class lane remains experimental and must resolve completely before
+RuneSchema changes the process-scoped component default. A component that was
+already constructed in the first gameplay world may receive the same complete
+plan once; later worlds are read-only and inherit the default. Read the
 [cooked PAK registry manifest guide](COOKED-PAK-REGISTRY-MANIFEST.md) before
 building a new custom attack family around them. AI attack registration is
 still undergoing lifecycle validation.
+
+For a cooked content mod, the
+[shared registry bridge PAK walkthrough](SHARED-REGISTRY-BRIDGE-PAK.md) shows
+how to ship one mod-owned registry declaration without thousands of loose
+pointer files.
 
 Custom attacks are still more demanding than a new mesh or balance change. Test:
 

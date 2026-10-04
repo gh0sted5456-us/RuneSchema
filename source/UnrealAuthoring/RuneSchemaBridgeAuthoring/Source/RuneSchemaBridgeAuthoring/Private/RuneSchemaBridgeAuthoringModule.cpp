@@ -8,6 +8,7 @@
 #include "Subsystems/EditorAssetSubsystem.h"
 #include "Editor.h"
 #include "Engine/Blueprint.h"
+#include "Engine/DataAsset.h"
 #include "Components/ActorComponent.h"
 #include "UObject/Package.h"
 
@@ -21,6 +22,7 @@ constexpr TCHAR WorldPath[] = TEXT("/RuneSchema/Networking/BPC_RuneSchemaWorldBr
 constexpr TCHAR PluginConnectionPath[] = TEXT("/RuneSchema/Networking/Extensions/BPC_RuneSchemaPluginConnection.BPC_RuneSchemaPluginConnection");
 constexpr TCHAR PluginStatePath[] = TEXT("/RuneSchema/Networking/Extensions/BPC_RuneSchemaPluginState.BPC_RuneSchemaPluginState");
 constexpr TCHAR PluginPresentationPath[] = TEXT("/RuneSchema/Networking/Extensions/BPC_RuneSchemaPluginPresentation.BPC_RuneSchemaPluginPresentation");
+constexpr TCHAR ContentRegistryBridgePath[] = TEXT("/RuneSchema/Registry/PDA_RuneSchemaRegistryBridgeBase.PDA_RuneSchemaRegistryBridgeBase");
 struct PinSpec { const TCHAR* Name; FName Category; };
 struct EventSpec { const TCHAR* Name; EFunctionFlags Flags; TArray<PinSpec> Pins; int32 Y; };
 
@@ -92,6 +94,36 @@ UBlueprint* EnsureComponentBlueprint(const TCHAR* ObjectPath, const TCHAR* Packa
     return Blueprint;
 }
 
+UBlueprint* EnsureContentRegistryBridge()
+{
+    UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, ContentRegistryBridgePath);
+    if (!Blueprint)
+    {
+        UPackage* Package = CreatePackage(TEXT("/RuneSchema/Registry/PDA_RuneSchemaRegistryBridgeBase"));
+        if (!Package) return nullptr;
+        Blueprint = FKismetEditorUtilities::CreateBlueprint(
+            UPrimaryDataAsset::StaticClass(), Package,
+            TEXT("PDA_RuneSchemaRegistryBridgeBase"), BPTYPE_Normal,
+            UBlueprint::StaticClass(), UBlueprintGeneratedClass::StaticClass(),
+            TEXT("RuneSchemaBridgeAuthoring"));
+    }
+    if (!Blueprint
+        || !EnsureVariable(Blueprint, TEXT("RegistryOwner"),
+            UEdGraphSchema_K2::PC_String, CPF_Edit | CPF_BlueprintVisible)
+        || !EnsureVariable(Blueprint, TEXT("RuneSchemaRegistryJson"),
+            UEdGraphSchema_K2::PC_String, CPF_Edit | CPF_BlueprintVisible))
+        return nullptr;
+    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+    FKismetEditorUtilities::CompileBlueprint(
+        Blueprint, EBlueprintCompileOptions::SkipGarbageCollection);
+    UEditorAssetSubsystem* Assets = GEditor
+        ? GEditor->GetEditorSubsystem<UEditorAssetSubsystem>() : nullptr;
+    if (Blueprint->Status == BS_Error || !Assets
+        || !Assets->SaveLoadedAsset(Blueprint, false))
+        return nullptr;
+    return Blueprint;
+}
+
 bool MigrateCoreAssets()
 {
     UEditorAssetSubsystem* Assets = GEditor ? GEditor->GetEditorSubsystem<UEditorAssetSubsystem>() : nullptr;
@@ -145,6 +177,12 @@ bool AuthorBlueprint(const TCHAR* Path, const TArray<EventSpec>& Specs)
 bool AuthorBridges()
 {
     if (!MigrateCoreAssets()) return false;
+    if (!EnsureContentRegistryBridge())
+    {
+        UE_LOG(LogRuneSchemaBridgeAuthoring, Error,
+            TEXT("Could not author the shared cooked-content registry bridge."));
+        return false;
+    }
     const EFunctionFlags Common = FUNC_BlueprintEvent | FUNC_Net | FUNC_NetReliable | FUNC_Public;
     const TArray<EventSpec> RegistryEvents{
         {TEXT("ServerRequestRegistryAction"), Common | FUNC_NetServer, {{TEXT("ActionKey"), UEdGraphSchema_K2::PC_String}}, 256},

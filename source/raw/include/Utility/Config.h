@@ -42,6 +42,16 @@ namespace PS {
         bool vendors = true;
     };
 
+    struct CombatFallbackSettings {
+        // Optional weapon/combat registration helpers only. Persistence data
+        // registries and save cleanup never consult these switches.
+        bool enabled = false;
+        bool additionalWeapons = true;
+        bool manifestMelee = true;
+        bool rangedEquipment = true;
+        bool initialWorldMutation = false;
+    };
+
     struct SpawnBehaviorSettings {
         bool enableNativeRoaming = true;
         double defaultRoamRadius = 800.0;
@@ -123,6 +133,7 @@ namespace PS {
         bool enableExperimentalDropScaling = false;
         LoadOrderSettings loadOrder{};
         LoaderActivationSettings loaders{};
+        CombatFallbackSettings combatFallback{};
         SpawnBehaviorSettings spawnBehavior{};
         NpcDiagnosticSettings npcDiagnostics{};
         DiagnosticJobSettings diagnosticJobs{};

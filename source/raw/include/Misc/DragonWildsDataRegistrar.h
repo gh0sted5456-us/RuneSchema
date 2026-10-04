@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <filesystem>
 #include <set>
@@ -62,8 +63,9 @@ namespace DragonWilds {
         bool m_startupSaveCleanupAttempted = false;
         bool m_additionalWeaponsReadyReported = false;
         bool m_additionalWeaponsIncompleteReported = false;
-        bool m_flintlocksReadyReported = false;
-        bool m_flintlocksIncompleteReported = false;
+        bool m_rangedEquipmentReported = false;
+        bool m_rangedEquipmentConflictReported = false;
+        bool m_initialCombatFallbackAttempted = false;
         std::set<std::string> m_registryStatusReported;
         std::set<std::string> m_registryWaitingReported;
         PS::PersistencePruner m_pruner;
@@ -71,10 +73,9 @@ namespace DragonWilds {
         unsigned m_registryCandidatePasses = 0;
         std::vector<RC::Unreal::UClass*> m_additionalWeaponAttackClasses;
         std::vector<RC::Unreal::UClass*> m_ownedAdditionalWeaponAttackRoots;
-        std::vector<RC::Unreal::UClass*> m_flintlockAttackClasses;
-        std::vector<RC::Unreal::UClass*> m_ownedFlintlockAttackRoots;
         std::vector<ManifestAttackCollection> m_manifestMeleeCollections;
         std::vector<ManifestAttackCollection> m_manifestRangedCollections;
+        std::vector<ManifestAttackCollection> m_registeredRangedCollections;
         std::set<RC::Unreal::UObject*> m_rejectedManifestAssets;
 
         bool ResolveBindings();

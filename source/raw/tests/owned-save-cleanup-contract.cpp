@@ -130,7 +130,9 @@ int main(int argc,char** argv){
         && registrar.find("TEXT(\"EQUIPMENT-EFFECT\")")!=registrar.npos
         && registrar.find("PersistenceID='{}'")!=registrar.npos
         && registrar.find("networkId={}")!=registrar.npos
-        && registrar.find("[COMBAT-REGISTRY][MELEE-ATTACK][{}]")!=registrar.npos,
+        && registrar.find("[COMBAT-REGISTRY][{}][{}]")!=registrar.npos
+        && registrar.find("TEXT(\"MELEE-ATTACK\")")!=registrar.npos
+        && registrar.find("TEXT(\"RANGED-EQUIPMENT\")")!=registrar.npos,
         "new combat registry identities are not announced with actionable status");
     need(provenance.find("AnnounceRuneSchemaItem")!=provenance.npos
         && provenance.find("RuneSchemaItems")!=provenance.npos
@@ -167,8 +169,18 @@ int main(int argc,char** argv){
         && registrar.find("m_ownedAdditionalWeaponAttackRoots")!=registrar.npos
         && registrar.find("attack->SetRootSet()")!=registrar.npos
         && registrar.find("attack->ClearRootSet()")!=registrar.npos
-        && registrar.find("MELEE-ATTACK][RESOLVED]")!=registrar.npos,
-        "custom attack classes are not separated into an idempotent world-component lifecycle lane");
+        && registrar.find("m_initialCombatFallbackAttempted")!=registrar.npos
+        && registrar.find("INITIAL-WORLD-FALLBACK")!=registrar.npos
+        && registrar.find("combat.enabled && combat.initialWorldMutation")!=registrar.npos
+        && registrar.find("m_initialCombatFallbackAttempted = true")!=registrar.npos
+        && registrar.find("GetClassDefaultObject().Get()")!=registrar.npos
+        && registrar.find("const bool defaultTemplate = world == nullptr")!=registrar.npos
+        && registrar.find("defaultTemplate\n                || allowInitialWorldFallback")!=registrar.npos
+        && registrar.find("declared->IsChildOf(expectedAttackClass)")!=registrar.npos
+        && registrar.find("runtime mutation is intentionally disabled")!=registrar.npos
+        && registrar.find("QuickAttackData")!=registrar.npos
+        && registrar.find("FullAttackData")!=registrar.npos,
+        "custom melee and item-owned ranged attacks are not installed once on component defaults with read-only world validation");
     need(pruner.find("if (cleaned.Removed.empty() && restored.empty()) {")!=pruner.npos,
         "an unchanged character is not a strict no-op");
     need(pruner.find("SaveSnapshotRestore")==pruner.npos

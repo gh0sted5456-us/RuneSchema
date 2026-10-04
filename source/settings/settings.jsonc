@@ -46,6 +46,13 @@
     "strictValues": true,
     "deterministicFallback": true
   },
+  "combatFallback": {
+    "enabled": false,
+    "additionalWeapons": true,
+    "manifestMelee": true,
+    "rangedEquipment": true,
+    "initialWorldMutation": false
+  },
   "loaders": {
     "assets": true,
     "blueprints": true,

@@ -2044,7 +2044,7 @@ namespace DragonWilds {
             return false;
         }
 
-        PS::Log<LogLevel::Normal>(STR(
+        PS::Log<LogLevel::Verbose>(STR(
             "[REGISTRY][ITEM][ADDED] source=runeschema asset='{}' PersistenceID='{}' InternalName='{}' subsystemCount={} firstNetworkId={} verified=true.\n"),
             pendingAsset.Target, RC::StringType(*persistenceId),
             RC::StringType(*internalName), registeredCount, firstNetId);

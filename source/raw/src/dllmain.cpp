@@ -411,6 +411,16 @@ public:
             ImGui::Checkbox("Export persistence ledger (restart required)", &settings.diagnostics.persistenceLedger);
             ImGui::TextWrapped("Writes a diagnostic inventory of RuneSchema mod PersistenceIDs, InternalNames, owners, and source paths. The ledger is never used for cleanup or loading decisions.");
             ImGui::EndDisabled();
+            ImGui::SeparatorText("Optional combat fallback");
+            ImGui::Checkbox("Enable combat fallback helpers (restart required)", &settings.combatFallback.enabled);
+            ImGui::TextWrapped("These switches affect only RuneSchema's optional weapon attack helpers. Item, recipe, quest, spell persistence, and save cleanup registries are not changed by them.");
+            ImGui::BeginDisabled(!settings.combatFallback.enabled);
+            ImGui::Checkbox("AdditionalWeapons melee bridge", &settings.combatFallback.additionalWeapons);
+            ImGui::Checkbox("Cooked-manifest melee collections", &settings.combatFallback.manifestMelee);
+            ImGui::Checkbox("Item-owned ranged collections", &settings.combatFallback.rangedEquipment);
+            ImGui::Checkbox("Allow first-world live component mutation", &settings.combatFallback.initialWorldMutation);
+            ImGui::TextWrapped("Turn the last option off to keep startup component-default registration but prevent RuneSchema from changing combat components that already exist in the first gameplay world.");
+            ImGui::EndDisabled();
             ImGui::SeparatorText("Progress persistence");
             ImGui::Checkbox("Save RuneSchema character customization", &settings.persistence.characterCustomization);
             ImGui::TextWrapped("Off by default. Character option and data-table loaders remain active, but automatic /players appearance assignments do not rewrite CustomizationSaveData.");

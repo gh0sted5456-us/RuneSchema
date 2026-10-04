@@ -22,8 +22,10 @@ Use this page to find the shortest path to the information you need.
 1. [Create new PAK content](PAK-CONTENT-GUIDE.md)
 2. [Create weapons and items](WEAPONS-AND-ITEMS.md)
 3. [Create stations and recipes](STATIONS-AND-RECIPES.md)
-4. [Plan authoritative combat and magic registration](COOKED-PAK-REGISTRY-MANIFEST.md)
-5. [Troubleshoot mounting and registration](TROUBLESHOOTING.md)
+4. [Create a shared registry bridge asset](SHARED-REGISTRY-BRIDGE-PAK.md)
+5. [Plan authoritative combat and magic registration](COOKED-PAK-REGISTRY-MANIFEST.md)
+6. [Configure optional combat fallback helpers](COMBAT-FALLBACK-SETTINGS.md)
+7. [Troubleshoot mounting and registration](TROUBLESHOOTING.md)
 
 The public website describes the supported release in plain language. Historical
 experiments and internal implementation notes remain in Git history.

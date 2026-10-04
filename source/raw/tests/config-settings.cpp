@@ -88,6 +88,17 @@ int RunConfigSettings() {
     assert(DecodeSettings(EncodeSettings(diagnosticSettings)).npcDiagnostics.interactionTraceExport);
     Rejects([&]{DecodeSettings(R"({"npcDiagnostics":{"statusExport":"yes"}})");});
     assert(DecodeSettings("{}").colorCodeLoaderAnnotations);
+    assert(!DecodeSettings("{}").combatFallback.enabled);
+    assert(DecodeSettings("{}").combatFallback.additionalWeapons);
+    assert(DecodeSettings("{}").combatFallback.manifestMelee);
+    assert(DecodeSettings("{}").combatFallback.rangedEquipment);
+    assert(!DecodeSettings("{}").combatFallback.initialWorldMutation);
+    auto combatSettings=DecodeSettings(R"({"combatFallback":{"additionalWeapons":false,"rangedEquipment":false,"initialWorldMutation":false}})");
+    assert(!combatSettings.combatFallback.additionalWeapons);
+    assert(combatSettings.combatFallback.manifestMelee);
+    assert(!combatSettings.combatFallback.rangedEquipment);
+    assert(!combatSettings.combatFallback.initialWorldMutation);
+    assert(!DecodeSettings(EncodeSettings(combatSettings)).combatFallback.initialWorldMutation);
     assert(DecodeSettings(R"({"loaders":{"retired_feature":true,"assets":false}})").loaders.assets == false);
     ConfigFiles::Write(file, EncodeSettings(settings));
     assert(DecodeSettings(ConfigFiles::Read(file)).advancedLogging);

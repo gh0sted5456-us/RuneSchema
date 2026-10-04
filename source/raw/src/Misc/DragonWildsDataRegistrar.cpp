@@ -32,6 +32,7 @@
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "Utility/Logging.h"
+#include "Utility/Config.h"
 #include "Core/ConfigFiles.h"
 #include "Core/CookedPakRegistryManifest.h"
 #include "Core/RegistryProvenance.h"
@@ -330,6 +331,11 @@ namespace DragonWilds {
         m_pruner.PrepareForStartup();
         if (!ResolveBindings()) return;
 
+        const auto& combat = PS::PSConfig::Get()->GetSettings().combatFallback;
+        PS::Log<LogLevel::Normal>(STR(
+            "[COMBAT-REGISTRY][FALLBACK-SETTINGS] enabled={} additional_weapons={} manifest_melee={} ranged_equipment={} initial_world_mutation={}; persistence registries are unaffected.\n"),
+            combat.enabled, combat.additionalWeapons, combat.manifestMelee,
+            combat.rangedEquipment, combat.initialWorldMutation);
         PreloadMountedPersistenceAssets();
 
         InstallHooks();
@@ -476,13 +482,17 @@ namespace DragonWilds {
         // alone misses otherwise-unreferenced mod ItemData/RecipeData/etc.
         // Restrict preloading to persistence classes in RuneSchema-owned mount
         // namespaces; loading every cooked asset caused unacceptable stalls.
+        const auto& combat = PS::PSConfig::Get()->GetSettings().combatFallback;
         const auto manifests = PS::CookedPakRegistryManifest::Snapshot();
         for (const auto& manifest : manifests)
         {
             const auto collectAttackLane = [&](const std::string& lane,
                 const std::vector<std::string>& paths,
                 std::vector<ManifestAttackCollection>& collections) {
-                if (paths.empty()) return;
+                if (paths.empty() || !combat.enabled
+                    || (lane == "MeleeAttackClasses" && !combat.manifestMelee)
+                    || (lane == "RangedAttackClasses" && !combat.rangedEquipment))
+                    return;
                 const auto duplicate = std::ranges::find_if(
                     collections, [&](const auto& existing) {
                         return existing.Owner == manifest.Owner
@@ -665,7 +675,7 @@ namespace DragonWilds {
                     + std::to_string(registryRoots[index].second);
             }
             if (rootDistribution.empty()) rootDistribution = "<none>";
-            PS::Log<LogLevel::Warning>(STR(
+            PS::Log<LogLevel::Verbose>(STR(
                 "[REGISTRY][PAK-DISCOVERY][NO-CANDIDATES] registry_records={} mounted_records={} configured_roots={} unreadable={} registry_roots='{}' mounted_classes='{}'.\n"),
                 assets.Num(), mountedRecords, roots.size(), unreadableRecords,
                 PS::ToWideSafe(rootDistribution.c_str()),
@@ -735,25 +745,20 @@ namespace DragonWilds {
         m_registryCandidatePasses = 0;
         for (auto* attack : m_ownedAdditionalWeaponAttackRoots)
             if (attack && attack->IsRootSet()) attack->ClearRootSet();
-        for (auto* attack : m_ownedFlintlockAttackRoots)
-            if (attack && attack->IsRootSet()) attack->ClearRootSet();
         m_ownedAdditionalWeaponAttackRoots.clear();
         m_additionalWeaponAttackClasses.clear();
-        m_ownedFlintlockAttackRoots.clear();
-        m_flintlockAttackClasses.clear();
         for (auto& collection : m_manifestMeleeCollections)
             for (auto* attack : collection.OwnedRoots)
                 if (attack && attack->IsRootSet()) attack->ClearRootSet();
         m_manifestMeleeCollections.clear();
-        for (auto& collection : m_manifestRangedCollections)
-            for (auto* attack : collection.OwnedRoots)
-                if (attack && attack->IsRootSet()) attack->ClearRootSet();
         m_manifestRangedCollections.clear();
+        m_registeredRangedCollections.clear();
         m_rejectedManifestAssets.clear();
         m_additionalWeaponsReadyReported = false;
         m_additionalWeaponsIncompleteReported = false;
-        m_flintlocksReadyReported = false;
-        m_flintlocksIncompleteReported = false;
+        m_rangedEquipmentReported = false;
+        m_rangedEquipmentConflictReported = false;
+        m_initialCombatFallbackAttempted = false;
         m_registryStatusReported.clear();
         m_registryWaitingReported.clear();
         m_registrySummaryReported = false;
@@ -797,32 +802,49 @@ namespace DragonWilds {
             PS::Log<LogLevel::Warning>(STR(
                 "[PERSISTENCE-PRUNER][REFLECTED-BOUNDARY-UNAVAILABLE] Character save preflight could not be installed.\n"));
 
-        // Runtime attack collections are component state, not persistence
-        // registries. Apply the already-resolved ordered classes after a
-        // player controller becomes world-ready, scoped to that exact world.
-        // This lane may run for each new world but never refreshes ItemData,
-        // recipes, quests, spells, or the pruning snapshot.
-        Hook::FCallbackOptions combatOptions{};
-        combatOptions.OwnerModName = TEXT("RuneSchema");
-        combatOptions.HookName = TEXT("CombatComponentWorldReady");
-        m_combatLifecycleHook = Hook::RegisterProcessEventPostCallback(
-            [this](Hook::TCallbackIterationData<void>&, UObject* source,
-                UFunction* function, void*) {
-                if (!source || !IsCombatComponentReadyFunction(function))
-                    return;
-                auto* world = source->GetWorld();
-                if (!world || world->HasAnyFlags(static_cast<EObjectFlags>(
-                        RF_BeginDestroyed | RF_FinishDestroyed))
-                    || world->GetPathName().contains(TEXT("L_FrontEnd")))
-                    return;
-                BootstrapCombatRegistries(world);
-            }, combatOptions);
-        if (m_combatLifecycleHook != Hook::ERROR_ID)
-            PS::Log<LogLevel::Normal>(STR(
-                "[LIFECYCLE][COMBAT-COMPONENT][READY] World-scoped attack collection lane installed.\n"));
+        // The verified melee attack collection is component state, not a
+        // persistence registry. Apply its already-resolved ordered classes
+        // after a player controller becomes world-ready, scoped to that world.
+        // Ranged combat is item-owned. Only the complete quick/full attack
+        // data pair discovered from each registered equipment collection is
+        // admitted here; shot/action implementation classes are never used.
+        // This optional lane gets one attempt in the first gameplay world and
+        // never refreshes ItemData, recipes, quests, spells, or the pruning
+        // snapshot. Startup CDO registration does not require this hook.
+        const auto& combat = PS::PSConfig::Get()->GetSettings().combatFallback;
+        if (combat.enabled && combat.initialWorldMutation
+            && (combat.additionalWeapons
+                || combat.manifestMelee || combat.rangedEquipment))
+        {
+            Hook::FCallbackOptions combatOptions{};
+            combatOptions.OwnerModName = TEXT("RuneSchema");
+            combatOptions.HookName = TEXT("CombatComponentWorldReady");
+            m_combatLifecycleHook = Hook::RegisterProcessEventPostCallback(
+                [this](Hook::TCallbackIterationData<void>&, UObject* source,
+                    UFunction* function, void*) {
+                    if (!source || m_initialCombatFallbackAttempted
+                        || !IsCombatComponentReadyFunction(function))
+                        return;
+                    auto* world = source->GetWorld();
+                    if (!world || world->HasAnyFlags(static_cast<EObjectFlags>(
+                            RF_BeginDestroyed | RF_FinishDestroyed))
+                        || world->GetPathName().contains(TEXT("L_FrontEnd")))
+                        return;
+                    // Close the lane before touching live component state so a
+                    // nested or later lifecycle callback cannot re-enter it.
+                    m_initialCombatFallbackAttempted = true;
+                    BootstrapCombatRegistries(world);
+                }, combatOptions);
+            if (m_combatLifecycleHook != Hook::ERROR_ID)
+                PS::Log<LogLevel::Normal>(STR(
+                    "[LIFECYCLE][COMBAT-COMPONENT][READY] One-shot first-world melee and ranged fallback installed.\n"));
+            else
+                PS::Log<LogLevel::Warning>(STR(
+                    "[LIFECYCLE][COMBAT-COMPONENT][UNAVAILABLE] Custom melee attack collections cannot attach to new player components.\n"));
+        }
         else
-            PS::Log<LogLevel::Warning>(STR(
-                "[LIFECYCLE][COMBAT-COMPONENT][UNAVAILABLE] Custom attack collections cannot attach to new player components.\n"));
+            PS::Log<LogLevel::Normal>(STR(
+                "[LIFECYCLE][COMBAT-COMPONENT][DISABLED] Live combat component mutation is disabled; startup registration and save preflight remain active.\n"));
     }
 
     void DragonWildsDataRegistrar::ScrubCharacterJsonBeforeLoad(
@@ -833,12 +855,20 @@ namespace DragonWilds {
 
     void DragonWildsDataRegistrar::RegisterAll()
     {
+        const auto& combat = PS::PSConfig::Get()->GetSettings().combatFallback;
         BootstrapCombatRegistries();
 
         PS::SaveCleanup::RegistrySnapshot snapshot;
         bool itemsReady = false;
         bool recipesReady = false;
         bool questsReady = false;
+        std::size_t rangedEquipmentCollections = 0;
+        std::size_t rangedQuickAttacks = 0;
+        std::size_t rangedFullAttacks = 0;
+        std::size_t rangedIncompleteCollections = 0;
+        bool rangedEquipmentLayoutVerified = false;
+        std::unordered_set<UObject*> rangedCollectionsSeen;
+        std::vector<ManifestAttackCollection> rangedDiscoveredCollections;
         // The settled live registries remain authoritative. PAK discovery is
         // a one-time loading aid, not a second ownership or pruning ledger.
         bool registrationsComplete = true;
@@ -917,7 +947,7 @@ namespace DragonWilds {
                 UECustom::FScriptMapHelper idMap(
                     idMapProperty,
                     idMapProperty->ContainerPtrToValuePtr<void>(subsystem));
-                idMap.ForEachPair([&](void* keyPtr, void*) {
+                idMap.ForEachPair([&](void* keyPtr, void* valuePtr) {
                     auto* key = static_cast<FString*>(keyPtr);
                     if (key && key->GetCharArray().Num() > 1)
                     {
@@ -926,6 +956,57 @@ namespace DragonWilds {
                             target->insert(RC::to_string(
                                 RC::StringType(**key)));
                     }
+                    if (!itemBinding || !valuePtr || !combat.enabled
+                        || !combat.rangedEquipment) return;
+                    UObject* item = nullptr;
+                    std::memcpy(&item, valuePtr, sizeof(item));
+                    if (!item || !item->GetClassPrivate()) return;
+                    auto* rangedField = CastField<FObjectPropertyBase>(
+                        PropertyHelper::GetPropertyByName(item->GetClassPrivate(),
+                            TEXT("RangedAttackCollection")));
+                    if (!rangedField) return;
+                    rangedEquipmentLayoutVerified = true;
+                    auto* collection = rangedField->GetObjectPropertyValue(
+                        rangedField->ContainerPtrToValuePtr<void>(item));
+                    if (!collection || !collection->GetClassPrivate()) return;
+                    if (!rangedCollectionsSeen.insert(collection).second) return;
+                    ++rangedEquipmentCollections;
+                    auto* collectionData = collection;
+                    if (collection->IsA<UClass>())
+                        collectionData = static_cast<UClass*>(collection)
+                            ->GetClassDefaultObject().Get();
+                    if (!collectionData || !collectionData->GetClassPrivate())
+                    {
+                        ++rangedIncompleteCollections;
+                        return;
+                    }
+                    const auto readAttack = [&](const TCHAR* propertyName) {
+                        auto* field = CastField<FObjectPropertyBase>(
+                            PropertyHelper::GetPropertyByName(
+                                collectionData->GetClassPrivate(), propertyName));
+                        return field ? field->GetObjectPropertyValue(
+                            field->ContainerPtrToValuePtr<void>(collectionData)) : nullptr;
+                    };
+                    auto* quickObject = readAttack(TEXT("QuickAttackData"));
+                    auto* fullObject = readAttack(TEXT("FullAttackData"));
+                    auto* quickClass = quickObject && quickObject->IsA<UClass>()
+                        ? static_cast<UClass*>(quickObject) : nullptr;
+                    auto* fullClass = fullObject && fullObject->IsA<UClass>()
+                        ? static_cast<UClass*>(fullObject) : nullptr;
+                    const bool hasQuick = quickClass != nullptr;
+                    const bool hasFull = fullClass != nullptr;
+                    rangedQuickAttacks += hasQuick ? 1 : 0;
+                    rangedFullAttacks += hasFull ? 1 : 0;
+                    rangedIncompleteCollections += hasQuick && hasFull ? 0 : 1;
+                    if (!hasQuick || !hasFull) return;
+                    ManifestAttackCollection discovered;
+                    discovered.Owner = RC::to_string(collection->GetPathName());
+                    discovered.Source = RC::to_string(item->GetPathName());
+                    discovered.Lane = "RangedEquipmentCollection";
+                    discovered.Classes.push_back(quickClass);
+                    if (fullClass != quickClass)
+                        discovered.Classes.push_back(fullClass);
+                    rangedDiscoveredCollections.push_back(std::move(discovered));
                 });
             }
             if (!foundSubsystem && binding.CleanupAuthority)
@@ -1029,6 +1110,19 @@ namespace DragonWilds {
             if (m_registryCandidatePasses < 2)
                 ++m_registryCandidatePasses;
             PS::SaveCleanup::PublishRegistry(snapshot);
+            m_registeredRangedCollections = std::move(rangedDiscoveredCollections);
+            // Registration is process-scoped.  Install complete ranged pairs on
+            // the component default before a gameplay pawn is constructed;
+            // subsequent world callbacks only validate inherited state.
+            BootstrapCombatRegistries();
+            if (!m_rangedEquipmentReported && rangedEquipmentLayoutVerified)
+            {
+                m_rangedEquipmentReported = true;
+                PS::Log<LogLevel::Normal>(STR(
+                    "[COMBAT-REGISTRY][RANGED-EQUIPMENT][READY] unique_collections={} quick_attacks={} full_attacks={} incomplete_collections={}; authority=ItemData->HeldEquipmentData.RangedAttackCollection; only complete quick/full PlayerAttackData pairs may attach to the process-scoped component default.\n"),
+                    rangedEquipmentCollections, rangedQuickAttacks,
+                    rangedFullAttacks, rangedIncompleteCollections);
+            }
             if (!m_registrySummaryReported)
             {
                 m_registrySummaryReported = true;
@@ -1051,10 +1145,19 @@ namespace DragonWilds {
 
     void DragonWildsDataRegistrar::BootstrapCombatRegistries(UWorld* world)
     {
+        const auto& combat = PS::PSConfig::Get()->GetSettings().combatFallback;
+        if (!combat.enabled)
+            return;
         static constexpr const TCHAR* MeleeComponentClassPath =
             TEXT("/Script/Dominion.PlayerMeleeAttackComponent");
         static constexpr const TCHAR* RangedComponentClassPath =
             TEXT("/Script/Dominion.PlayerRangedAttackComponent");
+
+        const bool allowInitialWorldFallback = world
+            && combat.initialWorldMutation && m_initialCombatFallbackAttempted;
+        if (allowInitialWorldFallback)
+            PS::Log<LogLevel::Normal>(STR(
+                "[COMBAT-REGISTRY][INITIAL-WORLD-FALLBACK][ATTEMPT] Applying the settled startup registration to pre-existing combat components once.\n"));
         static constexpr std::array<const TCHAR*, 16> AdditionalWeaponAttackClassPaths{{
             TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Spear/BP_Player_Spear_Attack1.BP_Player_Spear_Attack1_C"),
             TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Spear/BP_Player_Spear_Attack2.BP_Player_Spear_Attack2_C"),
@@ -1072,11 +1175,6 @@ namespace DragonWilds {
             TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Hoplite/BP_Player_Hoplite_SpecialAction.BP_Player_Hoplite_SpecialAction_C"),
             TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Hoplite/BP_Player_Hoplite_SprintAttack.BP_Player_Hoplite_SprintAttack_C"),
             TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Hoplite/BP_Player_Hoplite_VisceralAttack.BP_Player_Hoplite_VisceralAttack_C"),
-        }};
-        static constexpr std::array<const TCHAR*, 3> FlintlockAttackClassPaths{{
-            TEXT("/Game/Mods/AdditionalWeapons/Flintlocks/Gameplay/Attacks/BP_Flintlock_Single_Shot.BP_Flintlock_Single_Shot_C"),
-            TEXT("/Game/Mods/AdditionalWeapons/Flintlocks/Gameplay/Attacks/BP_Flintlock_Dual_RightShot.BP_Flintlock_Dual_RightShot_C"),
-            TEXT("/Game/Mods/AdditionalWeapons/Flintlocks/Gameplay/Attacks/BP_Flintlock_Dual_LeftShot.BP_Flintlock_Dual_LeftShot_C"),
         }};
         const auto resolveAttackCollection = [&](const auto& paths,
             std::vector<UClass*>& classes, std::vector<UClass*>& retainedRoots,
@@ -1126,15 +1224,12 @@ namespace DragonWilds {
             return true;
         };
 
-        const bool additionalWeaponsReady = resolveAttackCollection(
-            AdditionalWeaponAttackClassPaths, m_additionalWeaponAttackClasses,
-            m_ownedAdditionalWeaponAttackRoots, m_additionalWeaponsIncompleteReported,
-            TEXT("AdditionalWeapons"));
-        const bool flintlocksReady = resolveAttackCollection(
-            FlintlockAttackClassPaths, m_flintlockAttackClasses,
-            m_ownedFlintlockAttackRoots, m_flintlocksIncompleteReported,
-            TEXT("Flintlocks"));
-
+        const bool additionalWeaponsReady = combat.additionalWeapons
+            && resolveAttackCollection(
+                AdditionalWeaponAttackClassPaths, m_additionalWeaponAttackClasses,
+                m_ownedAdditionalWeaponAttackRoots,
+                m_additionalWeaponsIncompleteReported,
+                TEXT("AdditionalWeapons"));
         const auto resolveManifestCollection = [&](ManifestAttackCollection& collection) {
             if (!collection.Classes.empty()) return true;
             std::vector<UClass*> resolved;
@@ -1175,15 +1270,23 @@ namespace DragonWilds {
             return true;
         };
         bool anyMeleeManifestReady = false;
-        for (auto& collection : m_manifestMeleeCollections)
-            anyMeleeManifestReady = resolveManifestCollection(collection)
-                || anyMeleeManifestReady;
-        bool anyRangedManifestReady = false;
-        for (auto& collection : m_manifestRangedCollections)
-            anyRangedManifestReady = resolveManifestCollection(collection)
-                || anyRangedManifestReady;
-        if (!additionalWeaponsReady && !flintlocksReady
-            && !anyMeleeManifestReady && !anyRangedManifestReady)
+        if (combat.manifestMelee)
+            for (auto& collection : m_manifestMeleeCollections)
+                anyMeleeManifestReady = resolveManifestCollection(collection)
+                    || anyMeleeManifestReady;
+        if (combat.rangedEquipment)
+            for (auto& collection : m_manifestRangedCollections)
+        {
+            if (collection.IncompleteReported) continue;
+            PS::Log<LogLevel::Warning>(STR(
+                "[PAK-REGISTRY][RANGED-EQUIPMENT][DEFERRED] owner='{}' lane='{}' entries={}; player ranged combat is item-owned, so no live component was modified. Register the HeldEquipmentData item and keep its RangedAttackCollection reference intact.\n"),
+                PS::ToWideSafe(collection.Owner.c_str()),
+                PS::ToWideSafe(collection.Lane.c_str()),
+                collection.Paths.size());
+            collection.IncompleteReported = true;
+        }
+        if (!additionalWeaponsReady && !anyMeleeManifestReady
+            && m_registeredRangedCollections.empty())
             return;
 
         const auto attachLane = [&](const TCHAR* componentClassPath,
@@ -1192,54 +1295,65 @@ namespace DragonWilds {
             const std::vector<UClass*>& builtInClasses,
             bool& builtInReadyReported, bool& builtInConflictReported,
             std::vector<ManifestAttackCollection>& collections) {
-            if (!world)
-            {
-                if (builtInReady && !builtInReadyReported)
-                {
-                    PS::Log<LogLevel::Normal>(STR(
-                        "[COMBAT-REGISTRY][{}][RESOLVED] {}: {} ordered attack classes loaded; awaiting a gameplay player component.\n"),
-                        laneTag, builtInOwner, builtInClasses.size());
-                    builtInReadyReported = true;
-                }
-                for (auto& collection : collections)
-                {
-                    if (collection.Classes.empty() || collection.ReadyReported) continue;
-                    PS::Log<LogLevel::Normal>(STR(
-                        "[PAK-REGISTRY][{}][RESOLVED] owner='{}' ordered_classes={}; awaiting a gameplay player component.\n"),
-                        laneTag, PS::ToWideSafe(collection.Owner.c_str()),
-                        collection.Classes.size());
-                    collection.ReadyReported = true;
-                }
-                return;
-            }
-
             auto* componentClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
                 nullptr, nullptr, componentClassPath, false);
             if (!componentClass) return;
 
+            const bool defaultTemplate = world == nullptr;
+            const bool allowMutation = defaultTemplate
+                || allowInitialWorldFallback;
             TArray<UObject*> components;
-            UECustom::UObjectGlobals::GetObjectsOfClass(componentClass, components, true);
+            if (defaultTemplate)
+            {
+                if (auto* componentDefault = componentClass->GetClassDefaultObject().Get())
+                    components.Add(componentDefault);
+            }
+            else
+            {
+                UECustom::UObjectGlobals::GetObjectsOfClass(
+                    componentClass, components, true);
+            }
             std::size_t builtInChangedComponents = 0;
             std::size_t builtInAddedClasses = 0;
             for (auto* component : components)
             {
                 if (!component || component->HasAnyFlags(static_cast<EObjectFlags>(
-                        RF_ClassDefaultObject | RF_ArchetypeObject
-                        | RF_BeginDestroyed | RF_FinishDestroyed)))
+                        RF_BeginDestroyed | RF_FinishDestroyed)))
                     continue;
-                if (component->GetWorld() != world) continue;
+                if (!defaultTemplate
+                    && (component->HasAnyFlags(static_cast<EObjectFlags>(
+                            RF_ClassDefaultObject | RF_ArchetypeObject))
+                        || component->GetWorld() != world))
+                    continue;
                 auto* property = CastField<FArrayProperty>(
                     PropertyHelper::GetPropertyByName(component->GetClassPrivate(),
                         TEXT("AttackDataCollection")));
-                if (!property || !CastField<FClassProperty>(property->GetInner())
+                auto* classProperty = property
+                    ? CastField<FClassProperty>(property->GetInner()) : nullptr;
+                if (!property || !classProperty
                     || property->GetInner()->GetElementSize() != sizeof(UClass*))
                     continue;
+                auto* expectedAttackClass = classProperty->GetMetaClass().Get();
+                if (!expectedAttackClass) continue;
                 auto* array = property->ContainerPtrToValuePtr<FScriptArray>(component);
                 if (!array || array->Num() < 0) continue;
                 UECustom::FScriptArrayHelper helper(array, property);
-                struct AppendResult { std::size_t Added = 0; bool Conflict = false; };
+                struct AppendResult {
+                    std::size_t Added = 0;
+                    bool Conflict = false;
+                    bool Missing = false;
+                };
                 const auto appendCollection = [&](const std::vector<UClass*>& classes) {
                     AppendResult result;
+                    for (auto* declared : classes)
+                    {
+                        if (!declared
+                            || !declared->IsChildOf(expectedAttackClass))
+                        {
+                            result.Conflict = true;
+                            return result;
+                        }
+                    }
                     std::vector<std::size_t> positions;
                     std::size_t index = 0;
                     helper.ForEachElement([&](void* value) {
@@ -1282,6 +1396,11 @@ namespace DragonWilds {
                         }
                         return result;
                     }
+                    if (!allowMutation)
+                    {
+                        result.Missing = true;
+                        return result;
+                    }
                     for (auto* attack : classes)
                     {
                         UECustom::FManagedValue value;
@@ -1307,17 +1426,41 @@ namespace DragonWilds {
                         laneTag, builtInOwner);
                     builtInConflictReported = true;
                 }
+                if (builtInResult.Missing && !builtInConflictReported)
+                {
+                    PS::Log<LogLevel::Warning>(STR(
+                        "[COMBAT-REGISTRY][{}][MISSING] {} was not inherited by this world's {} component; runtime mutation is intentionally disabled.\n"),
+                        laneTag, builtInOwner, componentLabel);
+                    builtInConflictReported = true;
+                }
                 for (auto& collection : collections)
                 {
                     if (collection.Classes.empty()) continue;
+                    const auto* collectionTag = collection.Lane
+                        == "RangedEquipmentCollection"
+                        ? TEXT("COMBAT-REGISTRY") : TEXT("PAK-REGISTRY");
                     const auto result = appendCollection(collection.Classes);
                     if (result.Conflict)
                     {
                         if (!collection.ConflictReported)
                         {
                             PS::Log<LogLevel::Error>(STR(
-                                "[PAK-REGISTRY][{}][CONFLICT] owner='{}': declared collection is partially present or out of order; live collection was not modified.\n"),
-                                laneTag, PS::ToWideSafe(collection.Owner.c_str()));
+                                "[{}][{}][CONFLICT] owner='{}': declared collection is partially present or out of order; live collection was not modified.\n"),
+                                collectionTag, laneTag,
+                                PS::ToWideSafe(collection.Owner.c_str()));
+                            collection.ConflictReported = true;
+                        }
+                        continue;
+                    }
+                    if (result.Missing)
+                    {
+                        if (!collection.ConflictReported)
+                        {
+                            PS::Log<LogLevel::Warning>(STR(
+                                "[{}][{}][MISSING] owner='{}': collection was not inherited by this world's {} component; runtime mutation is intentionally disabled.\n"),
+                                collectionTag, laneTag,
+                                PS::ToWideSafe(collection.Owner.c_str()),
+                                componentLabel);
                             collection.ConflictReported = true;
                         }
                         continue;
@@ -1325,8 +1468,9 @@ namespace DragonWilds {
                     if (result.Added || !collection.ReadyReported)
                     {
                         PS::Log<LogLevel::Normal>(STR(
-                            "[PAK-REGISTRY][{}][{}] owner='{}' ordered_classes={} appended={}; live collection is authoritative.\n"),
-                            laneTag, result.Added ? TEXT("ADDED") : TEXT("READY"),
+                            "[{}][{}][{}] owner='{}' ordered_classes={} appended={}; component default is authoritative.\n"),
+                            collectionTag, laneTag,
+                            result.Added ? TEXT("ADDED") : TEXT("READY"),
                             PS::ToWideSafe(collection.Owner.c_str()),
                             collection.Classes.size(), result.Added);
                         collection.ReadyReported = true;
@@ -1338,22 +1482,26 @@ namespace DragonWilds {
                 && (builtInAddedClasses || !builtInReadyReported))
             {
                 PS::Log<LogLevel::Normal>(STR(
-                    "[COMBAT-REGISTRY][{}][{}] {}: {} ordered attack classes; updated {} live {} component(s), appended {} class reference(s).\n"),
+                    "[COMBAT-REGISTRY][{}][{}] {}: {} ordered attack classes; updated {} {} {} target(s), appended {} class reference(s).\n"),
                     laneTag, builtInAddedClasses ? TEXT("ADDED") : TEXT("READY"),
                     builtInOwner, builtInClasses.size(), builtInChangedComponents,
+                    defaultTemplate ? TEXT("default") : TEXT("initial-world live"),
                     componentLabel, builtInAddedClasses);
                 builtInReadyReported = true;
             }
         };
 
-        attachLane(MeleeComponentClassPath, TEXT("MELEE-ATTACK"), TEXT("melee"),
-            TEXT("AdditionalWeapons"), additionalWeaponsReady,
-            m_additionalWeaponAttackClasses, m_additionalWeaponsReadyReported,
-            m_additionalWeaponsIncompleteReported, m_manifestMeleeCollections);
-        attachLane(RangedComponentClassPath, TEXT("RANGED-ATTACK"), TEXT("ranged"),
-            TEXT("Flintlocks"), flintlocksReady, m_flintlockAttackClasses,
-            m_flintlocksReadyReported, m_flintlocksIncompleteReported,
-            m_manifestRangedCollections);
+        if (combat.additionalWeapons || combat.manifestMelee)
+            attachLane(MeleeComponentClassPath, TEXT("MELEE-ATTACK"), TEXT("melee"),
+                TEXT("AdditionalWeapons"), additionalWeaponsReady,
+                m_additionalWeaponAttackClasses, m_additionalWeaponsReadyReported,
+                m_additionalWeaponsIncompleteReported, m_manifestMeleeCollections);
+        static const std::vector<UClass*> NoBuiltInRangedClasses;
+        if (combat.rangedEquipment)
+            attachLane(RangedComponentClassPath, TEXT("RANGED-EQUIPMENT"),
+                TEXT("ranged"), TEXT("Item-owned ranged equipment"), false,
+                NoBuiltInRangedClasses, m_rangedEquipmentReported,
+                m_rangedEquipmentConflictReported, m_registeredRangedCollections);
     }
 
     bool DragonWildsDataRegistrar::RegisterMissing(UClass* dataClass,
@@ -1452,10 +1600,9 @@ namespace DragonWilds {
                 const bool runeSchemaAuthored = stats
                     && PS::RegistryProvenance::IsRuneSchemaItem(
                         RC::to_string(idString));
-                candidate->SetRootSet();
-
                 const auto existing = known.find(idString);
                 const bool inserted = existing == known.end();
+                candidate->SetRootSet();
                 if (existing == known.end())
                 {
                     if (!InsertIntoMap(subsystem, TEXT("PersistenceIDToDataMap"), persistenceId, candidate))
