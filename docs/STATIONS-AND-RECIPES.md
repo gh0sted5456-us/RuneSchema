@@ -172,6 +172,12 @@ station or save-aware recipe list. RuneSchema can:
 - report missing station rows and item paths clearly;
 - remove a saved recipe reference if the mod is later removed.
 
+For a very large cooked recipe catalogue, bake recipe-to-item and
+recipe-to-station relationships into the PAK instead of producing thousands of
+RuneSchema recipe references. More than 1,000 authored recipes produces one
+advisory warning but does not stop loading. Large PAK authors should also read
+the [cooked PAK registry manifest design](COOKED-PAK-REGISTRY-MANIFEST.md).
+
 ## Station and recipe test checklist
 
 1. Confirm the station PAK mounts.

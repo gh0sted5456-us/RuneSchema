@@ -85,9 +85,19 @@ an item that appears in the inventory but fails when equipped or attacked with.
 
 ## Add custom attacks carefully
 
-RuneSchema prepares supported melee, ranged, magic, utility, and equipment-effect
-lists during startup. That makes it possible for PAK content to join the same
-game systems as native content.
+Dragonwilds uses different authorities for melee attacks, ranged attacks,
+combat magic, utility magic, and equipment effects. A weapon appearing in the
+item list does not prove that its combat classes joined the correct collection.
+
+RuneSchema currently has verified subsystem lanes for combat spells, utility
+spells, and held-equipment effects, plus a specialized AdditionalWeapons melee
+bootstrap. Generic ranged and AI ability lanes still require live-reflection
+confirmation.
+
+The proposed long-term solution is a cooked PAK registry manifest with atomic
+registration and a multiplayer fingerprint. Read the
+[cooked PAK registry manifest design](COOKED-PAK-REGISTRY-MANIFEST.md) before
+building a new custom attack family around that planned contract.
 
 Custom attacks are still more demanding than a new mesh or balance change. Test:
 

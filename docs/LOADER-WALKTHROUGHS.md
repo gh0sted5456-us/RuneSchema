@@ -54,9 +54,17 @@ The `registry` folder supports presentation and action declarations used by
 specific RuneSchema features. It does not replace the game's item or recipe
 lists and should not be filled with every PAK asset.
 
-To make a cooked item available, use its exact path in `assets` or in a recipe.
-RuneSchema also scans supported saved-content classes in enabled PAK mods and
-adds valid entries to the matching live game list.
+For an ordinary-sized mod, make a cooked item available by using its exact path
+in `assets` or in a recipe. For a large catalogue, bake normal item, recipe,
+station, and unlock relationships into the PAK rather than creating thousands
+of empty loader files.
+
+Custom combat, magic, and equipment data can require different authoritative
+game registries. The planned generic solution is one cooked manifest per PAK,
+with atomic validation and multiplayer order checks. See the
+[cooked PAK registry manifest design](COOKED-PAK-REGISTRY-MANIFEST.md). It is a
+design target; the guide identifies which lanes are currently verified and
+which still require live reflection.
 
 ## File order inside a folder
 
@@ -74,4 +82,3 @@ Create a separate compatibility folder when two independent mods need a small
 bridge. Put it after both mods in `runeschema.txt` and keep it limited to the
 required changes. This lets either base mod update without hiding which files
 belong to the bridge.
-

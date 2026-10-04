@@ -227,6 +227,23 @@ packs to an existing enemy loot DataTable.
 If RuneSchema receives more than 1,000 recipe definitions, it prints one
 advisory warning with the count and continues loading without limits.
 
+## Advanced authoritative registries
+
+Items, recipes, spells, equipment effects, and attack classes do not all use
+one universal Dragonwilds registry. Some use persistence maps while combat
+classes can use ordered component collections whose indices must match in
+multiplayer.
+
+The proposed cooked PAK manifest gives a large mod one compact declaration of
+the assets that must join those authoritative lanes. It uses complete
+validation, atomic registration, stable ordering, and a server/client
+fingerprint instead of scanning every loaded Unreal object.
+
+This generic manifest is a design target, not a claim that every ranged or AI
+lane is already supported. Read the complete
+[cooked PAK registry manifest design](COOKED-PAK-REGISTRY-MANIFEST.md) before
+planning custom combat or magic around it.
+
 ## Test before release
 
 1. Test the PAK with no RuneSchema recipe and confirm the mount message.
