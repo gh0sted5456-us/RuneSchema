@@ -1,42 +1,28 @@
-# Documentation map
+# RuneSchema documentation map
 
-## Mod authors
+Use this page to find the shortest path to the information you need.
 
-Start with these pages:
+## Players and server owners
 
-1. [Authoring Guide](AUTHORING-GUIDE.md) — install layout, mod structure, ordering, cooked assets, mappings, multiplayer, logs, and testing.
-2. [Loader Reference](LOADER-WALKTHROUGHS.md) — loader selection, rules, examples, and FAQ.
-3. [Example Library](EXAMPLES.md) — focused working patterns.
-4. [Ask RuneSchema](ASK-RUNESCHEMA.md) — searches the curated loader FAQ.
+1. [What is new in 0.7.7.1](CURRENT-RELEASE.md)
+2. [Install or update RuneSchema](INSTALLATION.md)
+3. [Platform and multiplayer support](COMPATIBILITY.md)
+4. [Save cleanup and safe mod removal](SAFE-SAVE-AND-LEDGER.md)
+5. [Troubleshooting](TROUBLESHOOTING.md)
 
-Focused authoring pages:
+## New mod authors
 
-- [Character Creation](CHARACTER-CREATION-AUTHORING.md)
-- [Registry & DataTables](REGISTRY-PATCHING.md)
-- [Building Cloning](BUILDING-CLONING.md)
-- [Save Cleanup & Ownership](SAFE-SAVE-AND-LEDGER.md)
-- [Compatibility](COMPATIBILITY-BACKBONE.md)
-- [Manual Save Recovery](MANUAL-SAVE-RECOVERY.md)
-- [Unreal + RuneSchema](unreal-runeschema/index.md)
+1. [Create your first RuneSchema mod](AUTHORING-GUIDE.md)
+2. [Learn what each folder does](LOADER-WALKTHROUGHS.md)
+3. [Study the example library](EXAMPLES.md)
+4. [Use the JSON schemas for field checking](SCHEMAS.md)
 
-## Current release
+## PAK authors
 
-- [Current Release](CURRENT-RELEASE.md) — public release summary and package types.
+1. [Create new PAK content](PAK-CONTENT-GUIDE.md)
+2. [Create weapons and items](WEAPONS-AND-ITEMS.md)
+3. [Create stations and recipes](STATIONS-AND-RECIPES.md)
+4. [Troubleshoot mounting and registration](TROUBLESHOOTING.md)
 
-Historical development checkpoints remain in Git history rather than the public
-manual.
-
-## Developers
-
-- [Developer Guide](DEVELOPER-GUIDE.md) — runtime lanes, native hooks, save handling, build/package flow, Helpy internals, and profiling.
-- [Plugin API](API-REFERENCE.md) — native plugin interface and services.
-- [JSON Schemas](SCHEMAS.md) — strict machine-readable authoring contracts.
-- [Base Builder Import](raw/BASE-BUILDER-IMPORT.md) — advanced assembly import details.
-
-## Machine-readable material
-
-- `schemas/` — JSON schemas.
-- `examples/` — authoring and integration examples.
-
-Public authoring pages describe current behavior. Implementation history belongs
-in Git history or the Developer Guide.
+The public website describes the supported release in plain language. Historical
+experiments and internal implementation notes remain in Git history.

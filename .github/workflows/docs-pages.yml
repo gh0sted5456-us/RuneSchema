@@ -45,29 +45,13 @@ jobs:
       - name: Install documentation dependencies
         run: pip install -r requirements-docs.txt
 
-      - name: Stage RuneSchema documentation
+      - name: Stage examples and schemas
         shell: bash
         run: |
-          rm -f docs/RELEASE-*.md docs/CURRENT-RELEASE.md
-          rm -f docs/BASELINE-SUBSYSTEM-AUDIT.md
-          rm -f docs/BUILDING-CLONING-FMODEL-AUDIT.md
-          rm -f docs/GAMEPASS-SAVE-SYSTEM.md
-          rm -f docs/HELpy-REDESIGN-AUDIT.md
-          rm -f docs/NATIVE-HOOK-PARITY.md
-          rm -f docs/STARTUP-PERFORMANCE.md
-          cp source/*.md docs/
-          mv docs/README.md docs/OVERVIEW.md
-          rm -rf docs/loaders
-          cp -R source/loaders docs/loaders
-          rm -rf docs/unreal-runeschema
-          cp -R source/unreal-runeschema docs/unreal-runeschema
           rm -rf docs/examples
           cp -R source/examples docs/examples
           mkdir -p docs/schemas
           cp -R source/schemas/. docs/schemas/
-          mkdir -p docs/raw/include/Runtime
-          cp source/raw/BASE-BUILDER-IMPORT.md docs/raw/BASE-BUILDER-IMPORT.md
-          cp source/raw/include/Runtime/RuneSchemaPluginApi.h docs/raw/include/Runtime/RuneSchemaPluginApi.h
 
       - name: Build documentation
         run: mkdocs build --strict

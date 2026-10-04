@@ -87,47 +87,19 @@ copyright: >-
 
 nav:
   - Home: index.md
-  - Getting Started:
-      - Overview: OVERVIEW.md
-      - Authoring Guide: AUTHORING-GUIDE.md
-      - Examples: EXAMPLES.md
-      - Current Release: CURRENT-RELEASE.md
-  - Loaders:
-      - Overview: LOADER-WALKTHROUGHS.md
-      - Assets: loaders/assets.md
-      - Blueprints: loaders/blueprints.md
-      - Buildings: loaders/buildings.md
-      - Courses: loaders/courses.md
-      - Dialogue: loaders/dialogue.md
-      - Effects: loaders/effects.md
-      - Enums: loaders/enums.md
-      - Equipment: loaders/equipment.md
-      - Events: loaders/events.md
-      - Journal: loaders/journal.md
-      - Lore: loaders/lore.md
-      - Nameplates: loaders/nameplates.md
-      - Niagara: loaders/niagara.md
-      - NPC: loaders/npc.md
-      - Players: loaders/players.md
-      - Quests: loaders/quests.md
-      - Raw / DataTables: loaders/raw.md
-      - Recipes: loaders/recipes.md
-      - Registry: loaders/registry.md
-      - Spawns: loaders/spawns.md
-      - Strings: loaders/strings.md
-      - Vendors: loaders/vendors.md
-  - Guides:
-      - Character Creation: CHARACTER-CREATION-AUTHORING.md
-      - Registry & DataTables: REGISTRY-PATCHING.md
-      - Building & Cloning: BUILDING-CLONING.md
-      - Unreal + RuneSchema: unreal-runeschema/index.md
-      - Stations, Quests & Recipes: unreal-runeschema/stations-quests-recipes.md
-  - Compatibility:
-      - Runtime & Multiplayer: COMPATIBILITY-BACKBONE.md
-      - Safe Clean: SAFE-SAVE-AND-LEDGER.md
-      - Manual Save Recovery: MANUAL-SAVE-RECOVERY.md
-  - Developers:
-      - Developer Guide: DEVELOPER-GUIDE.md
-      - Plugin API: API-REFERENCE.md
+  - Monday Update:
+      - What Is New: CURRENT-RELEASE.md
+      - Install or Update: INSTALLATION.md
+      - Platform and Multiplayer: COMPATIBILITY.md
+      - Save Safety: SAFE-SAVE-AND-LEDGER.md
+  - Create Mods:
+      - First RuneSchema Mod: AUTHORING-GUIDE.md
+      - Create PAK Content: PAK-CONTENT-GUIDE.md
+      - Create Weapons and Items: WEAPONS-AND-ITEMS.md
+      - Create Stations and Recipes: STATIONS-AND-RECIPES.md
+      - Loader Folder Guide: LOADER-WALKTHROUGHS.md
+      - Example Library: EXAMPLES.md
+  - Help:
+      - Troubleshooting: TROUBLESHOOTING.md
+      - Documentation Map: DOCUMENTATION-INDEX.md
       - JSON Schemas: SCHEMAS.md
-      - Base Builder Import: raw/BASE-BUILDER-IMPORT.md
