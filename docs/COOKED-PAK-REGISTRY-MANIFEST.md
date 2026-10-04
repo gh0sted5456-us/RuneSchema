@@ -3,9 +3,9 @@
 !!! warning "Experimental in 0.7.7.1"
     The first native-first manifest slice is available on the experimental
     branch. Items, recipes, quests, combat spells, utility spells,
-    held-equipment effects, and ordered player melee classes are supported.
-    Ranged and AI collections remain unavailable until their authoritative
-    component layouts are confirmed in live reflection.
+    held-equipment effects, and ordered player melee and ranged classes are
+    supported. AI collections remain unavailable until their authoritative
+    lifecycle is confirmed in live reflection.
 
 ## Purpose
 
@@ -70,8 +70,9 @@ use different authorities.
 | Utility spells | `UtilitySpellDataSubsystem` | Known |
 | Held-equipment effects | `HeldEquipmentEffectDataSubsystem` | Known |
 | Player melee attacks | `PlayerMeleeAttackComponent.AttackDataCollection` | Experimental and order-sensitive |
-| Player ranged attacks | Exact component and collection require live-reflection confirmation | Not yet generic |
-| AI attacks and abilities | May be stored on AI archetypes or class-specific components | Requires reflection audit |
+| Player ranged attacks | `PlayerRangedAttackComponent.AttackDataCollection` plus the equipped `PlayerRangedAttackCollection` | Experimental and order-sensitive |
+| Player magic | Combat/utility spell subsystem maps plus the equipped `PlayerMagicAttackCollection` | Spell registries supported; equipment collection is a selector, not a separate global registry |
+| AI attacks and abilities | `DominionAISubsystem.ActionAttackRegistry` with separate action, attack, and ranged-attack arrays/maps | Layout known; safe lifecycle mutation still requires a runtime audit |
 | Buildings | Building catalogues and DataTable collections | Separate registration model |
 
 Map-based registries are primarily identity driven. Attack collections can be
@@ -103,6 +104,9 @@ declarations:
     "MeleeAttackClasses": [
       "/AdditionalWeapons/Attacks/BP_Spear_Attack1.BP_Spear_Attack1_C",
       "/AdditionalWeapons/Attacks/BP_Spear_Attack2.BP_Spear_Attack2_C"
+    ],
+    "RangedAttackClasses": [
+      "/AdditionalWeapons/Flintlocks/Attacks/BP_Flintlock_Single_Shot.BP_Flintlock_Single_Shot_C"
     ]
   }
 }
@@ -126,6 +130,12 @@ rejected. The current accepted fields are exactly:
 - `UtilitySpells`
 - `EquipmentEffects`
 - `MeleeAttackClasses`
+- `RangedAttackClasses`
+
+Do not put magic spell classes in either attack-class lane. Magic uses the
+`CombatSpells` and `UtilitySpells` identity registries. A weapon's cooked
+`HeldEquipmentData.MagicAttackCollection` then maps its equipped magic ammo to
+those registered starter spells.
 
 ## PAK author responsibilities
 
@@ -412,10 +422,14 @@ gatekeep the mod.
 
 ### Phase 3: ranged combat
 
-- Inspect the current Steam and Game Pass live classes.
-- Identify the authoritative ranged component, collection property, entry
-  class, ordering rules, and replication behavior.
-- Add the lane only after both storefront layouts are verified.
+- Steam mapping confirms `PlayerRangedAttackComponent` inherits the shared
+  `PlayerAttackComponent.AttackDataCollection` array.
+- Add `RangedAttackClasses` as a complete ordered lane and attach it only to
+  live ranged components.
+- Keep `HeldEquipmentData.RangedAttackCollection` intact; it selects the
+  equipped weapon's quick/full attack data and is not a global registry.
+- Verify the same reflected layout on Game Pass before promotion from
+  experimental.
 
 ### Phase 4: AI attacks and abilities
 
@@ -437,7 +451,9 @@ gatekeep the mod.
 At minimum, test:
 
 - a complete melee manifest;
+- a complete ranged manifest;
 - one missing melee class with zero partial insertion;
+- one missing ranged class with zero partial insertion;
 - duplicate attack paths;
 - wrong-class entries;
 - already-present native entries;
@@ -456,16 +472,15 @@ At minimum, test:
 
 ## Open questions
 
-1. What are the exact current ranged component and collection names on Steam
-   and Game Pass?
-2. Are ranged class indices replicated directly or resolved through another
-   data asset?
-3. Which AI families share an authoritative ability structure?
-4. Can the existing cooked registry DataAsset class carry typed soft arrays, or
+1. Does the current Game Pass build retain the Steam layout of
+   `PlayerRangedAttackComponent.AttackDataCollection`?
+2. Which AI families share the verified `AIActionAttackRegistry`, and at what
+   lifecycle point is its `UpdateCache` safe to invoke?
+3. Can the existing cooked registry DataAsset class carry typed soft arrays, or
    should version 1 retain a strictly validated embedded JSON string?
-5. Which native subsystem function should assign network IDs for each
+4. Which native subsystem function should assign network IDs for each
    map-based lane?
-6. Should a multiplayer manifest mismatch disable only the affected lane or
+5. Should a multiplayer manifest mismatch disable only the affected lane or
    prevent the player from joining?
 
 These questions must be answered with live reflection and multiplayer testing,

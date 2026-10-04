@@ -42,9 +42,10 @@ namespace DragonWilds {
             bool CleanupAuthority = false;
             const RC::Unreal::TCHAR* StatusTag{};
         };
-        struct ManifestMeleeCollection {
+        struct ManifestAttackCollection {
             std::string Owner;
             std::string Source;
+            std::string Lane;
             std::vector<std::string> Paths;
             std::vector<RC::Unreal::UClass*> Classes;
             std::vector<RC::Unreal::UClass*> OwnedRoots;
@@ -72,7 +73,8 @@ namespace DragonWilds {
         std::vector<RC::Unreal::UClass*> m_ownedAdditionalWeaponAttackRoots;
         std::vector<RC::Unreal::UClass*> m_flintlockAttackClasses;
         std::vector<RC::Unreal::UClass*> m_ownedFlintlockAttackRoots;
-        std::vector<ManifestMeleeCollection> m_manifestMeleeCollections;
+        std::vector<ManifestAttackCollection> m_manifestMeleeCollections;
+        std::vector<ManifestAttackCollection> m_manifestRangedCollections;
         std::set<RC::Unreal::UObject*> m_rejectedManifestAssets;
 
         bool ResolveBindings();

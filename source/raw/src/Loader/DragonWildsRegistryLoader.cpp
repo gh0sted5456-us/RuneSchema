@@ -209,8 +209,8 @@ void DragonWildsRegistryLoader::LoadDocument(const json& input,const std::string
     PS::CookedPakRegistryManifest::Manifest nativeManifest;
     if(PS::CookedPakRegistryManifest::Publish(document,owner,source,&nativeManifest)) {
         std::size_t assetCount=0;for(const auto& lane:nativeManifest.AssetLanes)assetCount+=lane.Paths.size();
-        PS::Log<RC::LogLevel::Normal>(STR("[PAK-REGISTRY][DECLARED] owner='{}' asset_paths={} melee_classes={} fingerprint={:016x} source='{}'.\n"),
-            PS::ToWideSafe(owner.c_str()),assetCount,nativeManifest.MeleeAttackClasses.size(),nativeManifest.Fingerprint,PS::ToWideSafe(source.c_str()));
+        PS::Log<RC::LogLevel::Normal>(STR("[PAK-REGISTRY][DECLARED] owner='{}' asset_paths={} melee_classes={} ranged_classes={} fingerprint={:016x} source='{}'.\n"),
+            PS::ToWideSafe(owner.c_str()),assetCount,nativeManifest.MeleeAttackClasses.size(),nativeManifest.RangedAttackClasses.size(),nativeManifest.Fingerprint,PS::ToWideSafe(source.c_str()));
     }
     std::size_t ordinal=0;for(const auto& entry:document["Entries"]) {++ordinal;
         const auto id=entry.is_object()?entry.value("Id",std::string("<missing Id>")):std::string("<non-object>");

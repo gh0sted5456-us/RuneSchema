@@ -479,17 +479,23 @@ namespace DragonWilds {
         const auto manifests = PS::CookedPakRegistryManifest::Snapshot();
         for (const auto& manifest : manifests)
         {
-            if (!manifest.MeleeAttackClasses.empty())
-            {
+            const auto collectAttackLane = [&](const std::string& lane,
+                const std::vector<std::string>& paths,
+                std::vector<ManifestAttackCollection>& collections) {
+                if (paths.empty()) return;
                 const auto duplicate = std::ranges::find_if(
-                    m_manifestMeleeCollections, [&](const auto& existing) {
+                    collections, [&](const auto& existing) {
                         return existing.Owner == manifest.Owner
                             && existing.Source == manifest.Source;
                     });
-                if (duplicate == m_manifestMeleeCollections.end())
-                    m_manifestMeleeCollections.push_back({manifest.Owner,
-                        manifest.Source, manifest.MeleeAttackClasses});
-            }
+                if (duplicate == collections.end())
+                    collections.push_back({manifest.Owner, manifest.Source,
+                        lane, paths});
+            };
+            collectAttackLane("MeleeAttackClasses", manifest.MeleeAttackClasses,
+                m_manifestMeleeCollections);
+            collectAttackLane("RangedAttackClasses", manifest.RangedAttackClasses,
+                m_manifestRangedCollections);
 
             for (const auto& lane : manifest.AssetLanes)
             {
@@ -739,6 +745,10 @@ namespace DragonWilds {
             for (auto* attack : collection.OwnedRoots)
                 if (attack && attack->IsRootSet()) attack->ClearRootSet();
         m_manifestMeleeCollections.clear();
+        for (auto& collection : m_manifestRangedCollections)
+            for (auto* attack : collection.OwnedRoots)
+                if (attack && attack->IsRootSet()) attack->ClearRootSet();
+        m_manifestRangedCollections.clear();
         m_rejectedManifestAssets.clear();
         m_additionalWeaponsReadyReported = false;
         m_additionalWeaponsIncompleteReported = false;
@@ -1041,8 +1051,10 @@ namespace DragonWilds {
 
     void DragonWildsDataRegistrar::BootstrapCombatRegistries(UWorld* world)
     {
-        static constexpr const TCHAR* ComponentClassPath =
+        static constexpr const TCHAR* MeleeComponentClassPath =
             TEXT("/Script/Dominion.PlayerMeleeAttackComponent");
+        static constexpr const TCHAR* RangedComponentClassPath =
+            TEXT("/Script/Dominion.PlayerRangedAttackComponent");
         static constexpr std::array<const TCHAR*, 16> AdditionalWeaponAttackClassPaths{{
             TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Spear/BP_Player_Spear_Attack1.BP_Player_Spear_Attack1_C"),
             TEXT("/Game/Mods/AdditionalWeapons/Gameplay/Attacks/Spear/BP_Player_Spear_Attack2.BP_Player_Spear_Attack2_C"),
@@ -1066,7 +1078,6 @@ namespace DragonWilds {
             TEXT("/Game/Mods/AdditionalWeapons/Flintlocks/Gameplay/Attacks/BP_Flintlock_Dual_RightShot.BP_Flintlock_Dual_RightShot_C"),
             TEXT("/Game/Mods/AdditionalWeapons/Flintlocks/Gameplay/Attacks/BP_Flintlock_Dual_LeftShot.BP_Flintlock_Dual_LeftShot_C"),
         }};
-
         const auto resolveAttackCollection = [&](const auto& paths,
             std::vector<UClass*>& classes, std::vector<UClass*>& retainedRoots,
             bool& incompleteReported, const TCHAR* owner) {
@@ -1124,7 +1135,7 @@ namespace DragonWilds {
             m_ownedFlintlockAttackRoots, m_flintlocksIncompleteReported,
             TEXT("Flintlocks"));
 
-        const auto resolveManifestCollection = [&](ManifestMeleeCollection& collection) {
+        const auto resolveManifestCollection = [&](ManifestAttackCollection& collection) {
             if (!collection.Classes.empty()) return true;
             std::vector<UClass*> resolved;
             std::vector<UClass*> roots;
@@ -1144,8 +1155,9 @@ namespace DragonWilds {
                     if (!collection.IncompleteReported)
                     {
                         PS::Log<LogLevel::Error>(STR(
-                            "[PAK-REGISTRY][REJECTED] owner='{}' lane='MeleeAttackClasses' resolved={}/{} missing='{}'; no component was modified.\n"),
-                            PS::ToWideSafe(collection.Owner.c_str()), resolved.size(),
+                            "[PAK-REGISTRY][REJECTED] owner='{}' lane='{}' resolved={}/{} missing='{}'; no component was modified.\n"),
+                            PS::ToWideSafe(collection.Owner.c_str()),
+                            PS::ToWideSafe(collection.Lane.c_str()), resolved.size(),
                             collection.Paths.size(), widePath);
                         collection.IncompleteReported = true;
                     }
@@ -1162,198 +1174,186 @@ namespace DragonWilds {
             collection.OwnedRoots = std::move(roots);
             return true;
         };
-        bool anyManifestReady = false;
+        bool anyMeleeManifestReady = false;
         for (auto& collection : m_manifestMeleeCollections)
-            anyManifestReady = resolveManifestCollection(collection) || anyManifestReady;
-        if (!additionalWeaponsReady && !flintlocksReady && !anyManifestReady) return;
-
-        if (!world)
-        {
-            const auto reportResolved = [](const TCHAR* owner,
-                const std::vector<UClass*>& classes, bool& reported) {
-                if (classes.empty() || reported) return;
-                PS::Log<LogLevel::Normal>(STR(
-                    "[COMBAT-REGISTRY][MELEE-ATTACK][RESOLVED] {}: {} ordered attack classes loaded; awaiting a gameplay player component.\n"),
-                    owner, classes.size());
-                reported = true;
-            };
-            if (additionalWeaponsReady)
-            {
-                reportResolved(TEXT("AdditionalWeapons"),
-                    m_additionalWeaponAttackClasses, m_additionalWeaponsReadyReported);
-            }
-            if (flintlocksReady)
-            {
-                reportResolved(TEXT("Flintlocks"),
-                    m_flintlockAttackClasses, m_flintlocksReadyReported);
-            }
-            for (auto& collection : m_manifestMeleeCollections)
-            {
-                if (collection.Classes.empty() || collection.ReadyReported) continue;
-                PS::Log<LogLevel::Normal>(STR(
-                    "[PAK-REGISTRY][MELEE-ATTACK][RESOLVED] owner='{}' ordered_classes={}; awaiting a gameplay player component.\n"),
-                    PS::ToWideSafe(collection.Owner.c_str()), collection.Classes.size());
-                collection.ReadyReported = true;
-            }
+            anyMeleeManifestReady = resolveManifestCollection(collection)
+                || anyMeleeManifestReady;
+        bool anyRangedManifestReady = false;
+        for (auto& collection : m_manifestRangedCollections)
+            anyRangedManifestReady = resolveManifestCollection(collection)
+                || anyRangedManifestReady;
+        if (!additionalWeaponsReady && !flintlocksReady
+            && !anyMeleeManifestReady && !anyRangedManifestReady)
             return;
-        }
 
-        auto* componentClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
-            nullptr, nullptr, ComponentClassPath, false);
-        if (!componentClass) return;
-
-        TArray<UObject*> components;
-        UECustom::UObjectGlobals::GetObjectsOfClass(componentClass, components, true);
-        std::size_t additionalChangedComponents = 0;
-        std::size_t additionalAddedClasses = 0;
-        std::size_t flintlockChangedComponents = 0;
-        std::size_t flintlockAddedClasses = 0;
-        for (auto* component : components)
-        {
-            if (!component || component->HasAnyFlags(static_cast<EObjectFlags>(
-                    RF_ClassDefaultObject | RF_ArchetypeObject
-                    | RF_BeginDestroyed | RF_FinishDestroyed)))
-                continue;
-            if (component->GetWorld() != world) continue;
-            auto* property = CastField<FArrayProperty>(
-                PropertyHelper::GetPropertyByName(component->GetClassPrivate(),
-                    TEXT("AttackDataCollection")));
-            if (!property || !CastField<FClassProperty>(property->GetInner())
-                || property->GetInner()->GetElementSize() != sizeof(UClass*))
-                continue;
-            auto* array = property->ContainerPtrToValuePtr<FScriptArray>(component);
-            if (!array || array->Num() < 0) continue;
-            UECustom::FScriptArrayHelper helper(array, property);
-            struct AppendResult { std::size_t Added = 0; bool Conflict = false; };
-            const auto appendCollection = [&](const std::vector<UClass*>& classes) {
-                AppendResult result;
-                std::vector<std::size_t> positions;
-                std::size_t index = 0;
-                helper.ForEachElement([&](void* value) {
-                    UClass* existing = nullptr;
-                    std::memcpy(&existing, value, sizeof(existing));
-                    const auto declared = std::ranges::find(classes, existing);
-                    if (declared != classes.end())
-                        positions.push_back(index);
-                    ++index;
-                });
-                if (!positions.empty())
-                {
-                    if (positions.size() != classes.size()) result.Conflict = true;
-                    else
-                    {
-                        std::size_t prior = 0;
-                        bool first = true;
-                        for (auto* declared : classes)
-                        {
-                            std::size_t found = 0;
-                            bool present = false;
-                            std::size_t scanIndex = 0;
-                            helper.ForEachElement([&](void* value) {
-                                UClass* existing = nullptr;
-                                std::memcpy(&existing, value, sizeof(existing));
-                                if (!present && existing == declared)
-                                {
-                                    found = scanIndex;
-                                    present = true;
-                                }
-                                ++scanIndex;
-                            });
-                            if (!present || (!first && found <= prior))
-                            {
-                                result.Conflict = true;
-                                break;
-                            }
-                            prior = found;
-                            first = false;
-                        }
-                    }
-                    return result;
-                }
-                for (auto* attack : classes)
-                {
-                    UECustom::FManagedValue value;
-                    helper.InitializeValue(value);
-                    std::memcpy(value.GetData(), &attack, sizeof(attack));
-                    helper.Add(value);
-                    ++result.Added;
-                }
-                return result;
-            };
-            const auto additionalResult = additionalWeaponsReady
-                ? appendCollection(m_additionalWeaponAttackClasses) : AppendResult{};
-            const auto flintlockResult = flintlocksReady
-                ? appendCollection(m_flintlockAttackClasses) : AppendResult{};
-            if (additionalResult.Added)
+        const auto attachLane = [&](const TCHAR* componentClassPath,
+            const TCHAR* laneTag, const TCHAR* componentLabel,
+            const TCHAR* builtInOwner, bool builtInReady,
+            const std::vector<UClass*>& builtInClasses,
+            bool& builtInReadyReported, bool& builtInConflictReported,
+            std::vector<ManifestAttackCollection>& collections) {
+            if (!world)
             {
-                ++additionalChangedComponents;
-                additionalAddedClasses += additionalResult.Added;
-            }
-            if (flintlockResult.Added)
-            {
-                ++flintlockChangedComponents;
-                flintlockAddedClasses += flintlockResult.Added;
-            }
-            if (additionalResult.Conflict && !m_additionalWeaponsIncompleteReported)
-            {
-                PS::Log<LogLevel::Error>(STR(
-                    "[COMBAT-REGISTRY][MELEE-ATTACK][CONFLICT] AdditionalWeapons is partially present or out of order; live collection was not modified.\n"));
-                m_additionalWeaponsIncompleteReported = true;
-            }
-            if (flintlockResult.Conflict && !m_flintlocksIncompleteReported)
-            {
-                PS::Log<LogLevel::Error>(STR(
-                    "[COMBAT-REGISTRY][MELEE-ATTACK][CONFLICT] Flintlocks is partially present or out of order; live collection was not modified.\n"));
-                m_flintlocksIncompleteReported = true;
-            }
-            for (auto& collection : m_manifestMeleeCollections)
-            {
-                if (collection.Classes.empty()) continue;
-                const auto result = appendCollection(collection.Classes);
-                if (result.Conflict)
-                {
-                    if (!collection.ConflictReported)
-                    {
-                        PS::Log<LogLevel::Error>(STR(
-                            "[PAK-REGISTRY][MELEE-ATTACK][CONFLICT] owner='{}': declared collection is partially present or out of order; live collection was not modified.\n"),
-                            PS::ToWideSafe(collection.Owner.c_str()));
-                        collection.ConflictReported = true;
-                    }
-                    continue;
-                }
-                if (result.Added || !collection.ReadyReported)
+                if (builtInReady && !builtInReadyReported)
                 {
                     PS::Log<LogLevel::Normal>(STR(
-                        "[PAK-REGISTRY][MELEE-ATTACK][{}] owner='{}' ordered_classes={} appended={}; live collection is authoritative.\n"),
-                        result.Added ? TEXT("ADDED") : TEXT("READY"),
-                        PS::ToWideSafe(collection.Owner.c_str()),
-                        collection.Classes.size(), result.Added);
+                        "[COMBAT-REGISTRY][{}][RESOLVED] {}: {} ordered attack classes loaded; awaiting a gameplay player component.\n"),
+                        laneTag, builtInOwner, builtInClasses.size());
+                    builtInReadyReported = true;
+                }
+                for (auto& collection : collections)
+                {
+                    if (collection.Classes.empty() || collection.ReadyReported) continue;
+                    PS::Log<LogLevel::Normal>(STR(
+                        "[PAK-REGISTRY][{}][RESOLVED] owner='{}' ordered_classes={}; awaiting a gameplay player component.\n"),
+                        laneTag, PS::ToWideSafe(collection.Owner.c_str()),
+                        collection.Classes.size());
                     collection.ReadyReported = true;
                 }
+                return;
             }
-        }
-        const auto reportAttached = [](const TCHAR* owner,
-            const std::vector<UClass*>& classes, std::size_t changedComponents,
-            std::size_t addedClasses, bool& reported) {
-            if (classes.empty() || (!addedClasses && reported)) return;
-            PS::Log<LogLevel::Normal>(STR(
-                "[COMBAT-REGISTRY][MELEE-ATTACK][{}] {}: {} ordered attack classes; updated {} live melee component(s), appended {} class reference(s).\n"),
-                addedClasses ? TEXT("ADDED") : TEXT("READY"),
-                owner, classes.size(), changedComponents, addedClasses);
-            reported = true;
+
+            auto* componentClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+                nullptr, nullptr, componentClassPath, false);
+            if (!componentClass) return;
+
+            TArray<UObject*> components;
+            UECustom::UObjectGlobals::GetObjectsOfClass(componentClass, components, true);
+            std::size_t builtInChangedComponents = 0;
+            std::size_t builtInAddedClasses = 0;
+            for (auto* component : components)
+            {
+                if (!component || component->HasAnyFlags(static_cast<EObjectFlags>(
+                        RF_ClassDefaultObject | RF_ArchetypeObject
+                        | RF_BeginDestroyed | RF_FinishDestroyed)))
+                    continue;
+                if (component->GetWorld() != world) continue;
+                auto* property = CastField<FArrayProperty>(
+                    PropertyHelper::GetPropertyByName(component->GetClassPrivate(),
+                        TEXT("AttackDataCollection")));
+                if (!property || !CastField<FClassProperty>(property->GetInner())
+                    || property->GetInner()->GetElementSize() != sizeof(UClass*))
+                    continue;
+                auto* array = property->ContainerPtrToValuePtr<FScriptArray>(component);
+                if (!array || array->Num() < 0) continue;
+                UECustom::FScriptArrayHelper helper(array, property);
+                struct AppendResult { std::size_t Added = 0; bool Conflict = false; };
+                const auto appendCollection = [&](const std::vector<UClass*>& classes) {
+                    AppendResult result;
+                    std::vector<std::size_t> positions;
+                    std::size_t index = 0;
+                    helper.ForEachElement([&](void* value) {
+                        UClass* existing = nullptr;
+                        std::memcpy(&existing, value, sizeof(existing));
+                        if (std::ranges::find(classes, existing) != classes.end())
+                            positions.push_back(index);
+                        ++index;
+                    });
+                    if (!positions.empty())
+                    {
+                        if (positions.size() != classes.size()) result.Conflict = true;
+                        else
+                        {
+                            std::size_t prior = 0;
+                            bool first = true;
+                            for (auto* declared : classes)
+                            {
+                                std::size_t found = 0;
+                                bool present = false;
+                                std::size_t scanIndex = 0;
+                                helper.ForEachElement([&](void* value) {
+                                    UClass* existing = nullptr;
+                                    std::memcpy(&existing, value, sizeof(existing));
+                                    if (!present && existing == declared)
+                                    {
+                                        found = scanIndex;
+                                        present = true;
+                                    }
+                                    ++scanIndex;
+                                });
+                                if (!present || (!first && found <= prior))
+                                {
+                                    result.Conflict = true;
+                                    break;
+                                }
+                                prior = found;
+                                first = false;
+                            }
+                        }
+                        return result;
+                    }
+                    for (auto* attack : classes)
+                    {
+                        UECustom::FManagedValue value;
+                        helper.InitializeValue(value);
+                        std::memcpy(value.GetData(), &attack, sizeof(attack));
+                        helper.Add(value);
+                        ++result.Added;
+                    }
+                    return result;
+                };
+
+                const auto builtInResult = builtInReady
+                    ? appendCollection(builtInClasses) : AppendResult{};
+                if (builtInResult.Added)
+                {
+                    ++builtInChangedComponents;
+                    builtInAddedClasses += builtInResult.Added;
+                }
+                if (builtInResult.Conflict && !builtInConflictReported)
+                {
+                    PS::Log<LogLevel::Error>(STR(
+                        "[COMBAT-REGISTRY][{}][CONFLICT] {} is partially present or out of order; live collection was not modified.\n"),
+                        laneTag, builtInOwner);
+                    builtInConflictReported = true;
+                }
+                for (auto& collection : collections)
+                {
+                    if (collection.Classes.empty()) continue;
+                    const auto result = appendCollection(collection.Classes);
+                    if (result.Conflict)
+                    {
+                        if (!collection.ConflictReported)
+                        {
+                            PS::Log<LogLevel::Error>(STR(
+                                "[PAK-REGISTRY][{}][CONFLICT] owner='{}': declared collection is partially present or out of order; live collection was not modified.\n"),
+                                laneTag, PS::ToWideSafe(collection.Owner.c_str()));
+                            collection.ConflictReported = true;
+                        }
+                        continue;
+                    }
+                    if (result.Added || !collection.ReadyReported)
+                    {
+                        PS::Log<LogLevel::Normal>(STR(
+                            "[PAK-REGISTRY][{}][{}] owner='{}' ordered_classes={} appended={}; live collection is authoritative.\n"),
+                            laneTag, result.Added ? TEXT("ADDED") : TEXT("READY"),
+                            PS::ToWideSafe(collection.Owner.c_str()),
+                            collection.Classes.size(), result.Added);
+                        collection.ReadyReported = true;
+                    }
+                }
+            }
+
+            if (builtInReady
+                && (builtInAddedClasses || !builtInReadyReported))
+            {
+                PS::Log<LogLevel::Normal>(STR(
+                    "[COMBAT-REGISTRY][{}][{}] {}: {} ordered attack classes; updated {} live {} component(s), appended {} class reference(s).\n"),
+                    laneTag, builtInAddedClasses ? TEXT("ADDED") : TEXT("READY"),
+                    builtInOwner, builtInClasses.size(), builtInChangedComponents,
+                    componentLabel, builtInAddedClasses);
+                builtInReadyReported = true;
+            }
         };
-        if (additionalWeaponsReady)
-        {
-            reportAttached(TEXT("AdditionalWeapons"),
-                m_additionalWeaponAttackClasses, additionalChangedComponents,
-                additionalAddedClasses, m_additionalWeaponsReadyReported);
-        }
-        if (flintlocksReady)
-        {
-            reportAttached(TEXT("Flintlocks"), m_flintlockAttackClasses,
-                flintlockChangedComponents, flintlockAddedClasses,
-                m_flintlocksReadyReported);
-        }
+
+        attachLane(MeleeComponentClassPath, TEXT("MELEE-ATTACK"), TEXT("melee"),
+            TEXT("AdditionalWeapons"), additionalWeaponsReady,
+            m_additionalWeaponAttackClasses, m_additionalWeaponsReadyReported,
+            m_additionalWeaponsIncompleteReported, m_manifestMeleeCollections);
+        attachLane(RangedComponentClassPath, TEXT("RANGED-ATTACK"), TEXT("ranged"),
+            TEXT("Flintlocks"), flintlocksReady, m_flintlockAttackClasses,
+            m_flintlocksReadyReported, m_flintlocksIncompleteReported,
+            m_manifestRangedCollections);
     }
 
     bool DragonWildsDataRegistrar::RegisterMissing(UClass* dataClass,

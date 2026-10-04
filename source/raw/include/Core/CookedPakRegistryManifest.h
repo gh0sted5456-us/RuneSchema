@@ -22,6 +22,7 @@ namespace PS::CookedPakRegistryManifest {
         std::string Source;
         std::vector<Lane> AssetLanes;
         std::vector<std::string> MeleeAttackClasses;
+        std::vector<std::string> RangedAttackClasses;
         std::uint64_t Fingerprint = 0;
     };
 
@@ -92,9 +93,9 @@ namespace PS::CookedPakRegistryManifest {
         const auto& native = document.at("NativeRegistries");
         if (!native.is_object())
             throw std::runtime_error("NativeRegistries must be an object");
-        static constexpr std::array<const char*, 7> Allowed{{
+        static constexpr std::array<const char*, 8> Allowed{{
             "Items", "Recipes", "Quests", "CombatSpells", "UtilitySpells",
-            "EquipmentEffects", "MeleeAttackClasses"}};
+            "EquipmentEffects", "MeleeAttackClasses", "RangedAttackClasses"}};
         for (const auto& [key, unused] : native.items())
         {
             (void)unused;
@@ -115,6 +116,8 @@ namespace PS::CookedPakRegistryManifest {
         }
         result.MeleeAttackClasses = Detail::ReadPaths(
             native, "MeleeAttackClasses", total);
+        result.RangedAttackClasses = Detail::ReadPaths(
+            native, "RangedAttackClasses", total);
         if (!total)
             throw std::runtime_error("NativeRegistries must declare at least one path");
 
@@ -127,6 +130,8 @@ namespace PS::CookedPakRegistryManifest {
         }
         Detail::Hash(hash, "MeleeAttackClasses");
         for (const auto& path : result.MeleeAttackClasses) Detail::Hash(hash, path);
+        Detail::Hash(hash, "RangedAttackClasses");
+        for (const auto& path : result.RangedAttackClasses) Detail::Hash(hash, path);
         result.Fingerprint = hash;
 
         std::scoped_lock lock(Detail::Mutex);

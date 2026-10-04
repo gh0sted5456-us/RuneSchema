@@ -14,7 +14,9 @@ int main()
                 "/Example/Items/ITEM_Test.ITEM_Test"})},
             {"MeleeAttackClasses", nlohmann::json::array({
                 "/Example/Combat/BP_Attack1.BP_Attack1_C",
-                "/Example/Combat/BP_Attack2.BP_Attack2_C"})}
+                "/Example/Combat/BP_Attack2.BP_Attack2_C"})},
+            {"RangedAttackClasses", nlohmann::json::array({
+                "/Example/Combat/BP_RangedAttack.BP_RangedAttack_C"})}
         }}
     };
     Manifest published;
@@ -22,6 +24,7 @@ int main()
     assert(published.AssetLanes.size() == 1);
     assert(published.AssetLanes[0].Paths.size() == 1);
     assert(published.MeleeAttackClasses.size() == 2);
+    assert(published.RangedAttackClasses.size() == 1);
     assert(published.Fingerprint != 0);
     assert(Snapshot().size() == 1);
 

@@ -89,15 +89,18 @@ Dragonwilds uses different authorities for melee attacks, ranged attacks,
 combat magic, utility magic, and equipment effects. A weapon appearing in the
 item list does not prove that its combat classes joined the correct collection.
 
-RuneSchema currently has verified subsystem lanes for combat spells, utility
-spells, and held-equipment effects, plus a specialized AdditionalWeapons melee
-bootstrap. Generic ranged and AI ability lanes still require live-reflection
-confirmation.
+RuneSchema has verified subsystem lanes for combat spells, utility spells, and
+held-equipment effects. Cooked manifests can also declare complete ordered
+`MeleeAttackClasses` and `RangedAttackClasses` collections. Magic does not use
+either class lane: declare its persistent spell data through `CombatSpells` or
+`UtilitySpells`, while the cooked weapon keeps its normal magic attack
+collection reference.
 
-The proposed long-term solution is a cooked PAK registry manifest with atomic
-registration and a multiplayer fingerprint. Read the
-[cooked PAK registry manifest design](COOKED-PAK-REGISTRY-MANIFEST.md) before
-building a new custom attack family around that planned contract.
+These combat lanes are experimental and must resolve completely before
+RuneSchema changes a live component. Read the
+[cooked PAK registry manifest guide](COOKED-PAK-REGISTRY-MANIFEST.md) before
+building a new custom attack family around them. AI attack registration is
+still undergoing lifecycle validation.
 
 Custom attacks are still more demanding than a new mesh or balance change. Test:
 
