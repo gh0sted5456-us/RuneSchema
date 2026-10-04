@@ -150,6 +150,37 @@ when more than one manifest is intentionally supported.
 
 Registration must use a two-stage transaction.
 
+## Native-first reconciliation
+
+The manifest is an **ensure-present declaration**, not proof that RuneSchema
+owns an entry. Dragonwilds' live registry remains authoritative.
+
+RuneSchema must wait for the applicable native startup lane to settle and then
+classify every manifest entry as one of these outcomes:
+
+| Live result | RuneSchema action |
+| --- | --- |
+| The identity or class is already present and points to the same object | Accept it as `native-already-present`; do not write, root, or claim ownership |
+| The identity is absent and the manifest object is fully valid | Add it through the verified lane |
+| The identity exists but points to a different object | Reject the manifest lane as a conflict |
+| An ordered class is already present in the expected relative order | Accept it without appending a duplicate |
+| Only part of an order-sensitive collection is present | Reject that collection unless a verified native insertion rule proves the final indices are safe |
+| The game registry is not yet complete | Defer without changing the registry or enabling cleanup for that category |
+
+This prevents duplication if a future Dragonwilds build begins registering a
+PAK's content automatically. RuneSchema becomes a compatibility backstop rather
+than a competing registrar.
+
+Provenance is diagnostic only. An entry that was already present remains native
+or PAK-owned; RuneSchema records only entries it actually inserted. Save cleanup
+continues to use the final live registry and never deletes an identity merely
+because RuneSchema did not insert it.
+
+For multiplayer, the handshake should compare the final effective identities
+and order after reconciliation, not only the manifest text. That catches a case
+where identical manifests produce different live indices because one platform
+or game build registered content natively and another did not.
+
 ### Stage 1: resolve and validate
 
 RuneSchema builds an in-memory plan without mutating live registries.
