@@ -5,6 +5,7 @@
 #include <fstream>
 #include <stdexcept>
 #include "Core/ConfigFiles.h"
+#include "Core/CookedPakRegistryManifest.h"
 #include "Runtime/HostServices.h"
 #include "Runtime/RegistryBridge.h"
 #include "Utility/Config.h"
@@ -101,6 +102,7 @@ bool DragonWildsRegistryLoader::CanInitialize(const EEngineLifecyclePhase& phase
 
 bool DragonWildsRegistryLoader::OnInitialize() {
     m_modEntries=json::array();m_audit=json::array();m_keys.clear();
+    PS::CookedPakRegistryManifest::Reset();
     return true;
 }
 
@@ -198,10 +200,18 @@ nlohmann::json DragonWildsRegistryLoader::NormalizeEntry(const json& entry,const
 
 void DragonWildsRegistryLoader::LoadDocument(const json& input,const std::string& owner,const std::string& source) {
     const auto document=AuthorDocument(input);
-    Fields(document,{"SchemaVersion","Entries"},"registry document");
+    Fields(document,{"SchemaVersion","Entries","NativeRegistries"},"registry document");
     if(document.value("SchemaVersion",0)!=1 || !document.contains("Entries") || !document["Entries"].is_array()
         || document["Entries"].size()>MaxEntriesPerDocument)
         throw std::runtime_error("registry document requires SchemaVersion 1 and at most 256 Entries");
+    if(document.contains("NativeRegistries") && !source.starts_with("pak:"))
+        throw std::runtime_error("NativeRegistries is accepted only from a cooked RSREG_ or DA_RuneSchemaRegistry asset inside a PAK");
+    PS::CookedPakRegistryManifest::Manifest nativeManifest;
+    if(PS::CookedPakRegistryManifest::Publish(document,owner,source,&nativeManifest)) {
+        std::size_t assetCount=0;for(const auto& lane:nativeManifest.AssetLanes)assetCount+=lane.Paths.size();
+        PS::Log<RC::LogLevel::Normal>(STR("[PAK-REGISTRY][DECLARED] owner='{}' asset_paths={} melee_classes={} fingerprint={:016x} source='{}'.\n"),
+            PS::ToWideSafe(owner.c_str()),assetCount,nativeManifest.MeleeAttackClasses.size(),nativeManifest.Fingerprint,PS::ToWideSafe(source.c_str()));
+    }
     std::size_t ordinal=0;for(const auto& entry:document["Entries"]) {++ordinal;
         const auto id=entry.is_object()?entry.value("Id",std::string("<missing Id>")):std::string("<non-object>");
         try {auto normalized=NormalizeEntry(entry,owner);

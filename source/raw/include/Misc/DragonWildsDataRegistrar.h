@@ -42,6 +42,16 @@ namespace DragonWilds {
             bool CleanupAuthority = false;
             const RC::Unreal::TCHAR* StatusTag{};
         };
+        struct ManifestMeleeCollection {
+            std::string Owner;
+            std::string Source;
+            std::vector<std::string> Paths;
+            std::vector<RC::Unreal::UClass*> Classes;
+            std::vector<RC::Unreal::UClass*> OwnedRoots;
+            bool ReadyReported = false;
+            bool IncompleteReported = false;
+            bool ConflictReported = false;
+        };
         std::vector<RegistryBinding> m_bindings;
         RC::Unreal::Hook::GlobalCallbackId m_characterJsonHook = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::Hook::GlobalCallbackId m_combatLifecycleHook = RC::Unreal::Hook::ERROR_ID;
@@ -51,6 +61,8 @@ namespace DragonWilds {
         bool m_startupSaveCleanupAttempted = false;
         bool m_additionalWeaponsReadyReported = false;
         bool m_additionalWeaponsIncompleteReported = false;
+        bool m_flintlocksReadyReported = false;
+        bool m_flintlocksIncompleteReported = false;
         std::set<std::string> m_registryStatusReported;
         std::set<std::string> m_registryWaitingReported;
         PS::PersistencePruner m_pruner;
@@ -58,6 +70,10 @@ namespace DragonWilds {
         unsigned m_registryCandidatePasses = 0;
         std::vector<RC::Unreal::UClass*> m_additionalWeaponAttackClasses;
         std::vector<RC::Unreal::UClass*> m_ownedAdditionalWeaponAttackRoots;
+        std::vector<RC::Unreal::UClass*> m_flintlockAttackClasses;
+        std::vector<RC::Unreal::UClass*> m_ownedFlintlockAttackRoots;
+        std::vector<ManifestMeleeCollection> m_manifestMeleeCollections;
+        std::set<RC::Unreal::UObject*> m_rejectedManifestAssets;
 
         bool ResolveBindings();
         void PreloadMountedPersistenceAssets();

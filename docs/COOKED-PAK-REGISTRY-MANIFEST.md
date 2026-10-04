@@ -1,10 +1,11 @@
 # Cooked PAK authoritative registry manifest
 
-!!! warning "Design proposal"
-    This document describes the planned generic manifest system. It is not a
-    promise that every combat, ranged, magic, or AI registry lane is already
-    available in the current release. The known lanes and outstanding
-    reflection work are identified below.
+!!! warning "Experimental in 0.7.7.1"
+    The first native-first manifest slice is available on the experimental
+    branch. Items, recipes, quests, combat spells, utility spells,
+    held-equipment effects, and ordered player melee classes are supported.
+    Ranged and AI collections remain unavailable until their authoritative
+    component layouts are confirmed in live reflection.
 
 ## Purpose
 
@@ -12,7 +13,7 @@ Large Dragonwilds content packs should be able to carry their gameplay content
 through the native cooked PAK route without requiring thousands of RuneSchema
 JSON files that repeat individual object paths.
 
-The proposed solution is one small cooked registry manifest inside each PAK.
+The solution is one small cooked registry manifest inside each PAK.
 The manifest declares which cooked assets must join Dragonwilds' authoritative
 gameplay registries. RuneSchema discovers the manifest, validates every entry,
 and commits only a complete and safe registration plan.
@@ -64,11 +65,11 @@ use different authorities.
 | Items | `ItemSubsystem.PersistenceIDToDataMap` | Known |
 | Recipes | `RecipeSubsystem.PersistenceIDToDataMap` | Known |
 | Quests | `QuestDataSubsystem.PersistenceIDToDataMap` | Known |
-| Journal and lore | `JournalSubsystem` live identity map | Known |
+| Journal and lore | `JournalSubsystem` live identity map | Known, not in the first manifest slice |
 | Combat spells | `CombatSpellDataSubsystem` | Known |
 | Utility spells | `UtilitySpellDataSubsystem` | Known |
 | Held-equipment effects | `HeldEquipmentEffectDataSubsystem` | Known |
-| Player melee attacks | `PlayerMeleeAttackComponent.AttackDataCollection` | Known and order-sensitive |
+| Player melee attacks | `PlayerMeleeAttackComponent.AttackDataCollection` | Experimental and order-sensitive |
 | Player ranged attacks | Exact component and collection require live-reflection confirmation | Not yet generic |
 | AI attacks and abilities | May be stored on AI archetypes or class-specific components | Requires reflection audit |
 | Buildings | Building catalogues and DataTable collections | Separate registration model |
@@ -77,18 +78,20 @@ Map-based registries are primarily identity driven. Attack collections can be
 index and order driven, which makes partial or differently ordered registration
 unsafe for multiplayer.
 
-## Proposed cooked asset
+## Cooked asset contract
 
 RuneSchema already recognizes cooked registry assets whose names begin with
 `RSREG_` or `DA_RuneSchemaRegistry`. The manifest should extend that cooked
 asset contract rather than introduce thousands of external files.
 
-One conceptual representation is:
+The string stored in `RuneSchemaRegistryJson` or `RegistryJson` uses this
+shape. `Entries` may be empty when the asset is used only for native registry
+declarations:
 
 ```json
 {
   "SchemaVersion": 1,
-  "Owner": "AdditionalWeapons",
+  "Entries": [],
   "NativeRegistries": {
     "Items": [],
     "Recipes": [],
@@ -100,16 +103,29 @@ One conceptual representation is:
     "MeleeAttackClasses": [
       "/AdditionalWeapons/Attacks/BP_Spear_Attack1.BP_Spear_Attack1_C",
       "/AdditionalWeapons/Attacks/BP_Spear_Attack2.BP_Spear_Attack2_C"
-    ],
-    "RangedAttackClasses": [],
-    "AIAttackClasses": []
+    ]
   }
 }
 ```
 
-This JSON is illustrative. It can be stored as a validated string property in
-the cooked registry DataAsset, matching the existing cooked registry mechanism.
-The released schema must define exact field names, limits, and supported lanes.
+The cooked asset name must begin with `RSREG_` or
+`DA_RuneSchemaRegistry`. Set its separate `RegistryOwner` string property to a
+stable mod identifier. Assets mounted under `/Game` require that explicit
+owner. `NativeRegistries` is deliberately rejected in loose `/registry` JSON;
+the declaration must come from the PAK that owns the content.
+
+Each lane accepts at most 4,096 unique cooked object paths, with a combined
+limit of 16,384 paths per manifest. Unknown lanes, duplicate paths, invalid
+mount paths, wrong object classes, and incomplete ordered collections are
+rejected. The current accepted fields are exactly:
+
+- `Items`
+- `Recipes`
+- `Quests`
+- `CombatSpells`
+- `UtilitySpells`
+- `EquipmentEffects`
+- `MeleeAttackClasses`
 
 ## PAK author responsibilities
 
@@ -148,7 +164,7 @@ when more than one manifest is intentionally supported.
 
 ## Validation and atomic commit
 
-Registration must use a two-stage transaction.
+Registration uses a two-stage transaction.
 
 ## Native-first reconciliation
 
