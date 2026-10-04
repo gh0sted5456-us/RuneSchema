@@ -273,7 +273,7 @@ void DragonWildsRegistryLoader::WriteMerged() {
     m_bridge.SetRegistrySnapshot(merged.dump());
     if(PS::PSConfig::Get()->GetSettings().advancedRuntime)
         PS::ConfigFiles::Write(PS::HostServices::ExportsDirectory()/"RegistryManifestAudit.json",
-            json{{"Build","0.7.7.1"},{"Accepted",m_modEntries.size()},{"Entries",m_audit}}.dump(2)+"\n");
+            json{{"Build","0.7.7.2"},{"Accepted",m_modEntries.size()},{"Entries",m_audit}}.dump(2)+"\n");
     PS::LoaderSummary("registry",m_modEntries.size(),0,m_modEntries.size(),0,0);
 }
 

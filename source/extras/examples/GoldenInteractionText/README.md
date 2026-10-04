@@ -29,7 +29,7 @@ automatically:
 GoldenInteractionText : 1
 ```
 
-Restart Dragonwilds after installation. This mod requires RuneSchema 0.7.7.1
+Restart Dragonwilds after installation. This mod requires RuneSchema 0.7.7.2
 or a later build that supports `$RuntimeWidget.$TextStyle`.
 
 ## Customize the color
@@ -40,4 +40,3 @@ current normalized RGBA color is:
 ```json
 { "R": 0.95, "G": 0.72, "B": 0.18, "A": 1.0 }
 ```
-

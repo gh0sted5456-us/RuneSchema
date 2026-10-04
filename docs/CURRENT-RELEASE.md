@@ -1,4 +1,4 @@
-# RuneSchema 0.7.7.1 Monday update
+# RuneSchema 0.7.7.2 Monday update
 
 This build has been promoted from experimental to the main release line for
 Monday, October 5, 2026. It focuses on dependable
@@ -24,6 +24,9 @@ large change to your mod list.
   of pushing entries into broken rows or columns.
 - Mod authors can change supported menu text, fonts, and colors. The included
   golden interaction-text example is a starting point.
+- Processing-station recipe placement is now read back from the live station
+  row. Missing replacement targets and rejected native array writes are
+  reported as errors instead of clean recipe loads.
 
 ## Save cleanup is narrower and safer
 

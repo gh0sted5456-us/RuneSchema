@@ -4,7 +4,7 @@ Use this page to find the shortest path to the information you need.
 
 ## Players and server owners
 
-1. [What is new in 0.7.7.1](CURRENT-RELEASE.md)
+1. [What is new in 0.7.7.2](CURRENT-RELEASE.md)
 2. [Install or update RuneSchema](INSTALLATION.md)
 3. [Platform and multiplayer support](COMPATIBILITY.md)
 4. [Save cleanup and safe mod removal](SAFE-SAVE-AND-LEDGER.md)

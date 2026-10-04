@@ -1,6 +1,6 @@
 # Cooked PAK authoritative registry manifest
 
-!!! warning "Experimental in 0.7.7.1"
+!!! warning "Experimental in 0.7.7.2"
     The first native-first manifest slice is available on the experimental
     branch. Items, recipes, quests, combat spells, utility spells,
     held-equipment effects, and ordered player melee and ranged classes are

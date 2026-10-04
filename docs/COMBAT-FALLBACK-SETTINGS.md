@@ -1,6 +1,6 @@
 # Optional combat fallback settings
 
-RuneSchema 0.7.7.1 can turn its optional weapon-registration helpers on or off
+RuneSchema 0.7.7.2 can turn its optional weapon-registration helpers on or off
 without changing item, recipe, quest, spell-persistence, or save-cleanup
 registries.
 

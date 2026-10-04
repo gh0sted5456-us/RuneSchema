@@ -1,6 +1,6 @@
-# RuneSchema 0.7.7.1
+# RuneSchema 0.7.7.2
 
-RuneSchema 0.7.7.1 uses one `main.dll` for Steam/GOG and Game Pass/WinGDK.
+RuneSchema 0.7.7.2 uses one `main.dll` for Steam/GOG and Game Pass/WinGDK.
 The runtime detects the storefront at startup and selects the matching native
 support automatically.
 
@@ -27,6 +27,8 @@ support automatically.
   replace their `Items to Drop` contents.
 - RuneSchema recipe unlocks may persist normally once their live RecipeData has
   a valid PersistenceID.
+- Processing-station recipe placement is verified by reading the live station
+  row back; rejected inserts and missing replacement targets count as errors.
 - Vendor-generated recipes remain transient.
 - Safe Clean removes orphaned RuneSchema identities when the supplying mod is
   no longer installed.
