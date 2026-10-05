@@ -84,6 +84,12 @@ int main(int argc, char** argv)
         "missing storefront override preserves UE4SS host bindings");
     Check(entrypoint.find("Native binding lane:") != std::string::npos,
         "selected lane is announced for diagnostics");
+    Check(storefront.find("DedicatedServer") != std::string::npos,
+        "dedicated server executable detection is explicit");
+    Check(entrypoint.find("[SERVER][SAFE-MODE]") != std::string::npos
+        && entrypoint.find("if (!storefront.DedicatedServer)") != std::string::npos
+        && entrypoint.find("|| PS::Storefront::IsDedicatedServer()) return;") != std::string::npos,
+        "dedicated server suppresses native GUI/client plugin startup");
     Check(entrypoint.find("DllMain") == std::string::npos
         && entrypoint.find("return new RuneSchema();") != std::string::npos,
         "RuneSchema performs startup only when UE4SS calls start_mod (mods.txt authority)");
@@ -95,5 +101,11 @@ int main(int argc, char** argv)
         && loader.find("[DEGRADED][SERVICE:data-registrar]") != std::string::npos
         && loader.find("RuneSchema will not prune this run") != std::string::npos,
         "fatal core shutdown or degraded persistence startup is not correctly classified");
+    Check(loader.find("[SERVER][REGISTRIES-READY]") != std::string::npos,
+        "dedicated server registry readiness is announced explicitly");
+    Check(loader.find("DedicatedServerRegistryReady") != std::string::npos
+        && loader.find("[SERVER][REGISTRY-DEFERRED]") != std::string::npos
+        && loader.find("m_dedicatedServerWorldReady.load") != std::string::npos,
+        "dedicated server cloning and registration wait for InitGameState readiness");
     std::cout << "Native binding resolution contract passed.\n";
 }

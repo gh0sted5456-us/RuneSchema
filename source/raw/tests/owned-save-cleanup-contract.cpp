@@ -21,9 +21,15 @@ int main(int argc,char** argv){
         "game-thread core fallback can retire before item registration and save pruning start");
     need(registrar.find("CleanLocalCharacterSavesOnce")!=registrar.npos
         && registrar.find("ConfigFiles::Write(path, encoded)")!=registrar.npos
-        && registrar.find("BackupCharacterSave(path)")!=registrar.npos
+        && registrar.find("BackupCharacterSave(path, original)")!=registrar.npos
         && registrar.find("failed post-write verification")!=registrar.npos,
         "startup cleanup is missing verified backup-first atomic replacement");
+    need(registrar.find("CharacterBackupRetention = 5")!=registrar.npos
+        && registrar.find("OwnedCharacterBackups(source)")!=registrar.npos
+        && registrar.find("[PERSISTENCE-BACKUP][REUSED]")!=registrar.npos
+        && registrar.find("PruneCharacterBackups(path)")!=registrar.npos
+        && registrar.find("[PERSISTENCE-BACKUP][PRUNED]")!=registrar.npos,
+        "RuneSchema character backups are not deduplicated and retention bounded");
     need(pruner.find("SaveCleanup::Plan(")!=pruner.npos
         && pruner.find("registry.get(), false, true, true")!=pruner.npos,
         "pruning is not driven by the completed native registry");
@@ -84,6 +90,11 @@ int main(int argc,char** argv){
     need(readyGate!=pruner.npos && consume!=pruner.npos
         && plan!=pruner.npos && readyGate<consume && consume<plan,
         "startup cleanup is not globally consumed after registry readiness and before mutation");
+    need(pruner.find("const bool dedicatedServer = Storefront::IsDedicatedServer()")
+            !=pruner.npos
+        && pruner.find("if (!dedicatedServer && s_cleanupConsumedForProcess.exchange(")
+            !=pruner.npos,
+        "dedicated servers cannot validate every incoming character payload independently");
     need(pruner.find("m_checkedCharacters")==pruner.npos
         && pruner.find("[PERSISTENCE-PRUNER][ORPHANS-REMOVED]")!=pruner.npos
         && pruner.find("[PERSISTENCE-PRUNER][ORPHAN-REMOVED]")!=pruner.npos,
@@ -142,6 +153,11 @@ int main(int argc,char** argv){
         && registrar.find("[REGISTRY][ITEM][UNRESOLVED-RUNESCHEMA]")!=registrar.npos
         && registrar.find("cooked_or_pak_added")!=registrar.npos,
         "item registration does not verify or report RuneSchema versus cooked/PAK provenance");
+    need(assetLoader.find("networkId=deferred-to-settled-registrar")!=assetLoader.npos
+        && assetLoader.find("const bool networkDeferred = PS::Storefront::IsDedicatedServer()")!=assetLoader.npos
+        && assetLoader.find("auto* stored = map.FindValue(&key)")!=assetLoader.npos
+        && assetLoader.find("reverse.Rehash()") == assetLoader.npos,
+        "dedicated-server clones still interleave raw network-map growth or map insertion is not round-trip verified");
     need(registrar.find("[REGISTRY][LIFECYCLE][SEALED]")!=registrar.npos
         && registrar.find("world transitions are read-only")!=registrar.npos,
         "one-time registry lifecycle is not announced");

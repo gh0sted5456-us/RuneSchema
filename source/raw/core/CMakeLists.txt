@@ -237,6 +237,12 @@ if(PROJECT_IS_TOP_LEVEL)
     add_test(NAME registry-bridge-lifecycle-contract COMMAND registry-bridge-lifecycle-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Runtime/RegistryBridge.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Runtime/RegistryBridge.h")
+    add_executable(presentation-transport-contract ../tests/presentation-transport-contract.cpp)
+    add_test(NAME presentation-transport-contract COMMAND presentation-transport-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Runtime/RegistryBridge.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Runtime/RegistryBridge.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRegistryLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../plugins/RSNetworking/paks/Networking/Networking_P.pak")
     add_executable(static-building-assembly-contract ../tests/static-building-assembly-contract.cpp)
     add_test(NAME static-building-assembly-contract COMMAND static-building-assembly-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsBuildingModLoader.cpp"

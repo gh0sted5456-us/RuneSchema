@@ -51,6 +51,7 @@ using namespace RC::Unreal;
 namespace DragonWilds {
     namespace {
         constexpr std::size_t CharacterSaveLimit = 8 * 1024 * 1024;
+        constexpr std::size_t CharacterBackupRetention = 5;
 
         struct CharacterText {
             std::string Utf8;
@@ -196,9 +197,57 @@ namespace DragonWilds {
                 / L"Saved" / L"SaveCharacters";
         }
 
-        std::filesystem::path BackupCharacterSave(
+        struct CharacterBackup {
+            std::filesystem::path Path;
+            std::filesystem::file_time_type Modified{};
+        };
+
+        std::vector<CharacterBackup> OwnedCharacterBackups(
             const std::filesystem::path& source)
         {
+            std::vector<CharacterBackup> backups;
+            const auto parent = source.parent_path();
+            const auto prefix = source.filename().wstring()
+                + L".runeschema-startup-";
+            std::error_code error;
+            for (std::filesystem::directory_iterator iterator(
+                    parent, std::filesystem::directory_options::skip_permission_denied,
+                    error), end;
+                iterator != end && !error; iterator.increment(error))
+            {
+                const auto& entry = *iterator;
+                std::error_code entryError;
+                if (!entry.is_regular_file(entryError)) continue;
+                const auto name = entry.path().filename().wstring();
+                if (!name.starts_with(prefix) || !name.ends_with(L".bak"))
+                    continue;
+                backups.push_back({entry.path(), entry.last_write_time(entryError)});
+            }
+            std::ranges::sort(backups, [](const auto& left, const auto& right) {
+                return left.Modified > right.Modified;
+            });
+            return backups;
+        }
+
+        std::filesystem::path BackupCharacterSave(
+            const std::filesystem::path& source, const std::string& original)
+        {
+            for (const auto& existing : OwnedCharacterBackups(source))
+            {
+                try
+                {
+                    if (PS::ConfigFiles::Read(existing.Path, CharacterSaveLimit)
+                            == original)
+                    {
+                        PS::Log<LogLevel::Verbose>(STR(
+                            "[PERSISTENCE-BACKUP][REUSED] '{}'.\n"),
+                            existing.Path.filename().wstring());
+                        return existing.Path;
+                    }
+                }
+                catch (...) {}
+            }
+
             auto backup = source;
             backup += L".runeschema-startup-" + std::to_wstring(
                 std::chrono::duration_cast<std::chrono::microseconds>(
@@ -210,6 +259,28 @@ namespace DragonWilds {
             return backup;
         }
 
+        void PruneCharacterBackups(const std::filesystem::path& source)
+        {
+            auto backups = OwnedCharacterBackups(source);
+            std::size_t removed = 0;
+            for (std::size_t index = CharacterBackupRetention;
+                index < backups.size(); ++index)
+            {
+                std::error_code error;
+                if (std::filesystem::remove(backups[index].Path, error)) ++removed;
+                else if (error)
+                    PS::Log<LogLevel::Warning>(STR(
+                        "[PERSISTENCE-BACKUP][RETAINED] Old RuneSchema backup '{}' could not be removed: {}.\n"),
+                        backups[index].Path.filename().wstring(),
+                        PS::ToWideSafe(error.message()));
+            }
+            if (removed)
+                PS::Log<LogLevel::Normal>(STR(
+                    "[PERSISTENCE-BACKUP][PRUNED] removed={} retained={} character='{}'.\n"),
+                    removed, std::min(backups.size(), CharacterBackupRetention),
+                    source.filename().wstring());
+        }
+
         void ReplaceCharacterSave(const std::filesystem::path& path,
             const std::string& original, const nlohmann::json& clean,
             bool utf16Le)
@@ -219,13 +290,14 @@ namespace DragonWilds {
                 throw std::runtime_error("Clean character save failed pre-write verification");
             if (PS::ConfigFiles::Read(path, CharacterSaveLimit) != original)
                 throw std::runtime_error("Character save changed during cleanup");
-            const auto backup = BackupCharacterSave(path);
+            const auto backup = BackupCharacterSave(path, original);
             try {
                 PS::ConfigFiles::Write(path, encoded);
                 if (ParseCharacterText(PS::ConfigFiles::Read(
                         path, CharacterSaveLimit)) != clean)
                     throw std::runtime_error(
                         "Character save failed post-write verification");
+                PruneCharacterBackups(path);
             } catch (...) {
                 try {
                     if (PS::ConfigFiles::Read(path, CharacterSaveLimit)

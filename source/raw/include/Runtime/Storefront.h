@@ -18,6 +18,7 @@ namespace PS::Storefront {
         std::filesystem::path SignatureRoot;
         bool HasPackageIdentity{};
         bool HasGamePassSignatures{};
+        bool DedicatedServer{};
     };
 
     inline std::wstring Lower(std::wstring value)
@@ -55,6 +56,9 @@ namespace PS::Storefront {
             result.SignatureRoot / L"StaticConstructObject.lua", error);
 
         const auto path = Lower(executable.wstring());
+        const auto filename = Lower(executable.filename().wstring());
+        result.DedicatedServer = filename == L"rsdragonwildsserver-win64-shipping.exe"
+            || filename.ends_with(L"server-win64-shipping.exe");
         if (path.find(L"\\wingdk\\") != std::wstring::npos
             || path.find(L"-wingdk-") != std::wstring::npos
             || path.find(L"windowsapps") != std::wstring::npos
@@ -96,6 +100,11 @@ namespace PS::Storefront {
     inline Kind Current() noexcept
     {
         return CurrentDetection().Value;
+    }
+
+    inline bool IsDedicatedServer() noexcept
+    {
+        return CurrentDetection().DedicatedServer;
     }
 
     inline const char* Name(Kind value) noexcept

@@ -19,6 +19,7 @@
 #include "Loader/AssetProvenance.h"
 #include "Loader/DragonWildsRecipeModLoader.h"
 #include "Runtime/HostServices.h"
+#include "Runtime/Storefront.h"
 #include "Utility/AssetAliases.h"
 #include "Loader/ItemIdentity.h"
 #include <cctype>
@@ -695,15 +696,10 @@ namespace
         *static_cast<FString*>(map.GetKeyPtr(pair.GetData())) = key;
         std::memcpy(map.GetValuePtr(pair.GetData()), &item, sizeof(item));
         map.Add(pair);
-        map.Rehash();
-        bool verified = false;
-        map.ForEachPair([&](void* keyPointer, void* valuePointer) {
-            if (*static_cast<FString*>(keyPointer) != key) return;
-            UObject* mapped = nullptr;
-            std::memcpy(&mapped, valuePointer, sizeof(mapped));
-            if (mapped == item) verified = true;
-        });
-        return verified;
+        auto* stored = map.FindValue(&key);
+        UObject* mapped = nullptr;
+        if (stored) std::memcpy(&mapped, stored, sizeof(mapped));
+        return mapped == item;
     }
 
     int32_t EnsureItemNetworkIdentity(UObject* item, UObject* subsystem)
@@ -748,17 +744,15 @@ namespace
         std::memcpy(reverse.GetKeyPtr(reversePair.GetData()), &item, sizeof(item));
         std::memcpy(reverse.GetValuePtr(reversePair.GetData()), &netId, sizeof(netId));
         reverse.Add(reversePair);
-        reverse.Rehash();
 
         // Verify both directions before the item is exposed through string maps.
         bool reverseVerified = false;
-        reverse.ForEachPair([&](void* keyPtr, void* valuePtr) {
-            UObject* existing = nullptr;
+        if (auto* stored = reverse.FindValue(&item))
+        {
             uint16 existingId = 0;
-            std::memcpy(&existing, keyPtr, sizeof(existing));
-            std::memcpy(&existingId, valuePtr, sizeof(existingId));
-            if (existing == item && existingId == netId) reverseVerified = true;
-        });
+            std::memcpy(&existingId, stored, sizeof(existingId));
+            reverseVerified = existingId == netId;
+        }
         FScriptArrayHelper inspect(arrayProperty, array);
         if (!reverseVerified || netId >= inspect.Num())
             return -1;
@@ -840,7 +834,11 @@ namespace DragonWilds {
 
     bool DragonWildsAssetModLoader::OnInitialize()
     {
-        RegisterCharacterMenuPatchReplay();
+        if (!PS::Storefront::IsDedicatedServer())
+            RegisterCharacterMenuPatchReplay();
+        else
+            PS::Log<LogLevel::Normal>(STR(
+                "[SERVER][ASSET-CLONING] Runtime item cloning and live registry insertion remain enabled; character-menu patch replay is suppressed.\n"));
         m_dataAssetClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
             nullptr, nullptr, TEXT("/Script/Engine.DataAsset"), false);
 
@@ -2006,8 +2004,17 @@ namespace DragonWilds {
                 continue;
             }
 
-            const auto netId = EnsureItemNetworkIdentity(item, candidate);
-            if (netId < 0)
+            // Dedicated servers publish network IDs after every clone has
+            // completed identity/property construction. Interleaving TArray
+            // and reverse-map growth with repeated UObject cloning can expose
+            // an unsettled server ItemSubsystem to its own registration
+            // callbacks. Persistence/internal maps are installed now so
+            // recipes can resolve outputs; DragonWildsDataRegistrar assigns
+            // and verifies all network IDs in one settled startup batch.
+            const bool networkDeferred = PS::Storefront::IsDedicatedServer();
+            const auto netId = networkDeferred
+                ? -1 : EnsureItemNetworkIdentity(item, candidate);
+            if (!networkDeferred && netId < 0)
             {
                 PS::Log<LogLevel::Warning>(STR(
                     "Clone '{}': skipped one live ItemSubsystem because network identity registration failed.\n"),
@@ -2031,7 +2038,7 @@ namespace DragonWilds {
                 continue;
             }
 
-            if (firstNetId < 0) firstNetId = netId;
+            if (!networkDeferred && firstNetId < 0) firstNetId = netId;
             ++registeredCount;
         }
 
@@ -2044,10 +2051,16 @@ namespace DragonWilds {
             return false;
         }
 
-        PS::Log<LogLevel::Verbose>(STR(
-            "[REGISTRY][ITEM][ADDED] source=runeschema asset='{}' PersistenceID='{}' InternalName='{}' subsystemCount={} firstNetworkId={} verified=true.\n"),
-            pendingAsset.Target, RC::StringType(*persistenceId),
-            RC::StringType(*internalName), registeredCount, firstNetId);
+        if (PS::Storefront::IsDedicatedServer())
+            PS::Log<LogLevel::Verbose>(STR(
+                "[REGISTRY][ITEM][IDENTITY-READY] source=runeschema asset='{}' PersistenceID='{}' InternalName='{}' subsystemCount={} networkId=deferred-to-settled-registrar verified=true.\n"),
+                pendingAsset.Target, RC::StringType(*persistenceId),
+                RC::StringType(*internalName), registeredCount);
+        else
+            PS::Log<LogLevel::Verbose>(STR(
+                "[REGISTRY][ITEM][ADDED] source=runeschema asset='{}' PersistenceID='{}' InternalName='{}' subsystemCount={} firstNetworkId={} verified=true.\n"),
+                pendingAsset.Target, RC::StringType(*persistenceId),
+                RC::StringType(*internalName), registeredCount, firstNetId);
         return true;
     }
 

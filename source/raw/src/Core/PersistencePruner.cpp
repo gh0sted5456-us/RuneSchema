@@ -18,6 +18,7 @@
 #include "Utility/Logging.h"
 #include "Utility/Config.h"
 #include "Runtime/HostServices.h"
+#include "Runtime/Storefront.h"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Unreal/CoreUObject/UObject/FStrProperty.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
@@ -102,7 +103,9 @@ void PersistencePruner::PrepareForStartup() noexcept
 void PersistencePruner::PruneBeforeCharacterLoad(
     UObject* context, UFunction* function, void* parameters)
 {
-    if (s_cleanupConsumedForProcess.load(std::memory_order_acquire)
+    const bool dedicatedServer = Storefront::IsDedicatedServer();
+    if ((!dedicatedServer
+            && s_cleanupConsumedForProcess.load(std::memory_order_acquire))
         || !context || !function || !parameters) return;
 
     try {
@@ -143,7 +146,9 @@ void PersistencePruner::PruneBeforeCharacterLoad(
 
 void PersistencePruner::PruneCharacterJson(FString& characterJson)
 {
-    if (s_cleanupConsumedForProcess.load(std::memory_order_acquire)
+    const bool dedicatedServer = Storefront::IsDedicatedServer();
+    if ((!dedicatedServer
+            && s_cleanupConsumedForProcess.load(std::memory_order_acquire))
         || characterJson.GetCharArray().Num() <= 1) return;
 
     try {
@@ -169,7 +174,11 @@ void PersistencePruner::PruneCharacterJson(FString& characterJson)
         }
 
         ReportValidatedSavedItems(source, *registry);
-        if (s_cleanupConsumedForProcess.exchange(
+        // A client performs one automatic cleanup per game execution. A
+        // dedicated server must validate every incoming character payload:
+        // the process serves multiple players, and retries resend the original
+        // client document rather than the server's prior in-memory rewrite.
+        if (!dedicatedServer && s_cleanupConsumedForProcess.exchange(
                 true, std::memory_order_acq_rel)) return;
 
         SaveCleanup::Preview cleaned{source};

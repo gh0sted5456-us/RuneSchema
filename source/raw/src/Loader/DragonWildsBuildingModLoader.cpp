@@ -38,6 +38,7 @@
 #include "SDK/Structs/FSoftObjectPtr.h"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
+#include "Runtime/Storefront.h"
 #include "Loader/DragonWildsBuildingModLoader.h"
 
 using namespace RC;
@@ -84,6 +85,10 @@ namespace DragonWilds {
                  "Client_HandleNewBuildingPiecesLoadedFromPersistence"),
             TEXT("/Script/Dominion.ProgressComponent:Client_OnBuildingsUnlocked"),
         };
+        constexpr const TCHAR* PlayerRestartPath =
+            TEXT("/Script/Engine.PlayerController:ClientRestart");
+        constexpr float BuildingRecoveryIntervalSeconds = 0.25f;
+        constexpr float BuildingRecoveryTimeoutSeconds = 15.0f;
         bool SameSoftObject(const UECustom::FSoftObjectPtr& soft, UObject* object)
         {
             if (!object)
@@ -214,6 +219,8 @@ namespace DragonWilds {
             Hook::UnregisterCallback(m_initGameStateCallbackId);
         if (m_unlockGameStateCallbackId != Hook::ERROR_ID)
             Hook::UnregisterCallback(m_unlockGameStateCallbackId);
+        if (m_recoveryTickCallbackId != Hook::ERROR_ID)
+            Hook::UnregisterCallback(m_recoveryTickCallbackId);
     }
 
     void DragonWildsBuildingModLoader::ReadDefinitions(
@@ -917,7 +924,7 @@ namespace DragonWilds {
         }
 
         RegisterHooks();
-        ApplyUnlocksToWorld();
+        ApplyUnlocksToWorld(nullptr, !PS::Storefront::IsDedicatedServer());
 
         if (result.Loaded || result.Errors)
         {
@@ -2165,9 +2172,26 @@ namespace DragonWilds {
             PS::RegisterNativePostHook(function,
                 [](UnrealScriptFunctionCallableContext& context, void* customData) {
                     static_cast<DragonWildsBuildingModLoader*>(customData)
-                        ->ApplyUnlocks(context.Context);
+                        ->TryWorldRecovery(context.Context, "progress-callback");
                 },
                 this);
+        }
+
+        if (auto* function = UECustom::UObjectGlobals::StaticFindObject<UFunction*>(
+                nullptr, nullptr, PlayerRestartPath))
+        {
+            PS::RegisterNativePostHook(function,
+                [](UnrealScriptFunctionCallableContext& context, void* customData) {
+                    static_cast<DragonWildsBuildingModLoader*>(customData)
+                        ->TryWorldRecovery(context.Context, "player-restart");
+                },
+                this);
+        }
+        else
+        {
+            PS::Log<LogLevel::Warning>(STR(
+                "Building late-world fallback hook '{}' was not found.\n"),
+                PlayerRestartPath);
         }
 
         Hook::FCallbackOptions options{};
@@ -2175,7 +2199,25 @@ namespace DragonWilds {
         options.HookName = TEXT("BuildingLoaderInitGameState");
         m_initGameStateCallbackId = Hook::RegisterInitGameStatePreCallback(
             [this](Hook::TCallbackIterationData<void>&, AGameModeBase* gameMode) {
-                PrepareWorldState(gameMode);
+                ScheduleWorldRecovery(gameMode);
+                try
+                {
+                    if (!EnsureWorldState(gameMode))
+                        m_lastRecoveryFailure = "native building registry was not ready";
+                }
+                catch (const std::exception& error)
+                {
+                    m_lastRecoveryFailure = error.what();
+                    PS::Log<LogLevel::Warning>(STR(
+                        "[BUILDING-RECOVERY][DEFERRED] Pre-initialization registration raised '{}'; bounded recovery remains armed.\n"),
+                        PS::ToWideSafe(error.what()));
+                }
+                catch (...)
+                {
+                    m_lastRecoveryFailure = "unknown pre-initialization exception";
+                    PS::Log<LogLevel::Warning>(STR(
+                        "[BUILDING-RECOVERY][DEFERRED] Pre-initialization registration raised an unknown exception; bounded recovery remains armed.\n"));
+                }
             },
             options);
 
@@ -2191,7 +2233,7 @@ namespace DragonWilds {
         unlockOptions.HookName = TEXT("BuildingLoaderUnlockInitGameState");
         m_unlockGameStateCallbackId = Hook::RegisterInitGameStatePostCallback(
             [this](Hook::TCallbackIterationData<void>&, AGameModeBase* gameMode) {
-                ApplyUnlocksToWorld(gameMode);
+                TryWorldRecovery(gameMode, "world-ready");
             },
             unlockOptions);
         if (m_unlockGameStateCallbackId == Hook::ERROR_ID)
@@ -2200,10 +2242,25 @@ namespace DragonWilds {
                 STR("Building post-initialization unlock callback could not be registered; native progress callbacks remain active.\n"));
         }
 
+        Hook::FCallbackOptions retryOptions{};
+        retryOptions.OwnerModName = TEXT("RuneSchema");
+        retryOptions.HookName = TEXT("BuildingLoaderBoundedRecovery");
+        m_recoveryTickCallbackId = Hook::RegisterEngineTickPostCallback(
+            [this](Hook::TCallbackIterationData<void>&, UEngine*,
+                float deltaSeconds, bool) {
+                if (m_pendingWorldContext.Get()) RetryWorldRecovery(deltaSeconds);
+            },
+            retryOptions);
+        if (m_recoveryTickCallbackId == Hook::ERROR_ID)
+        {
+            PS::Log<LogLevel::Warning>(STR(
+                "Building bounded recovery could not be scheduled; normal world and player callbacks remain active.\n"));
+        }
+
         m_hooksRegistered = true;
     }
 
-    void DragonWildsBuildingModLoader::PrepareWorldState(AGameModeBase* gameMode)
+    bool DragonWildsBuildingModLoader::PrepareWorldState(UObject* worldContext)
     {
         // The frontend may unload/reload package-owned assets before this
         // callback. Re-resolve both catalogue and direct definitions before
@@ -2212,10 +2269,10 @@ namespace DragonWilds {
         if(!m_catalogue||!RefreshBuildingReferencesForWorld()||!RefreshBuildingCatalogueForWorld())
         {
             PS::Log<LogLevel::Error>(STR("Buildings cannot be registered because one or more retained assets failed world-boundary validation.\n"));
-            return;
+            return false;
         }
 
-        auto* subsystem = FindBuildingSubsystem(gameMode);
+        auto* subsystem = FindBuildingSubsystem(worldContext);
         auto* arrayProperty = subsystem ? CastField<FArrayProperty>(
             PropertyHelper::GetPropertyByName(
                 subsystem->GetClassPrivate(), TEXT("NetIdToData"))) : nullptr;
@@ -2226,7 +2283,7 @@ namespace DragonWilds {
         {
             PS::Log<LogLevel::Error>(
                 STR("Buildings cannot be registered because the native registry is unavailable.\n"));
-            return;
+            return false;
         }
 
         // InitGameState can run again against the same persistent subsystem
@@ -2239,7 +2296,7 @@ namespace DragonWilds {
             {
                 PS::Log<LogLevel::Error>(
                     STR("Building registry refresh could not restore its prior native baseline.\n"));
-                return;
+                return false;
             }
             PS::Log<LogLevel::Normal>(
                 STR("[BUILDING-REGISTRY][REFRESH] Restored the persistent subsystem baseline before reconstruction.\n"));
@@ -2255,7 +2312,7 @@ namespace DragonWilds {
         {
             PS::Log<LogLevel::Error>(
                 STR("Buildings were not registered because the native registry is incomplete.\n"));
-            return;
+            return false;
         }
 
         bool protectedRegistry = false;
@@ -2286,13 +2343,151 @@ namespace DragonWilds {
 
             PS::Log<LogLevel::Error>(
                 STR("Deterministic Building registry registration failed; Building registration was aborted.\n"));
-            return;
+            return false;
         }
 
         // Registry reconstruction belongs to the pre-initialization lane.
         // Player progress components are selected and updated by the matching
         // post callback, after the new world has finished replacing any stale
         // frontend/previous-world components.
+        return true;
+    }
+
+    bool DragonWildsBuildingModLoader::EnsureWorldState(UObject* worldContext)
+    {
+        if (!worldContext || !worldContext->GetWorld()) return false;
+
+        if (auto* registered = m_registeredWorldContext.Get();
+            m_worldRegistryReady
+            && registered
+            && registered->GetWorld() == worldContext->GetWorld())
+            return true;
+
+        m_worldRegistryReady = false;
+        if (!PrepareWorldState(worldContext)) return false;
+        m_registeredWorldContext.Assign(worldContext);
+        m_worldRegistryReady = true;
+        return true;
+    }
+
+    void DragonWildsBuildingModLoader::ScheduleWorldRecovery(UObject* worldContext)
+    {
+        if (!worldContext || !worldContext->GetWorld()) return;
+
+        auto* pending = m_pendingWorldContext.Get();
+        if (pending && pending->GetWorld() == worldContext->GetWorld()) return;
+
+        auto* registered = m_registeredWorldContext.Get();
+        if (!registered || registered->GetWorld() != worldContext->GetWorld())
+            m_worldRegistryReady = false;
+
+        m_pendingWorldContext.Assign(worldContext);
+        m_recoveryElapsed = 0.0f;
+        m_recoveryInterval = 0.0f;
+        m_lastRecoveryFailure.clear();
+    }
+
+    bool DragonWildsBuildingModLoader::TryWorldRecovery(
+        UObject* worldContext, const char* source)
+    {
+        if (!worldContext || !worldContext->GetWorld()) return false;
+        ScheduleWorldRecovery(worldContext);
+
+        try
+        {
+            if (!EnsureWorldState(worldContext))
+            {
+                m_lastRecoveryFailure = "native building registry was not ready";
+                return false;
+            }
+
+            const bool reportDeferred = !source
+                || std::strcmp(source, "bounded-retry") != 0;
+            if (!ApplyUnlocksToWorld(worldContext, reportDeferred))
+            {
+                if (PS::Storefront::IsDedicatedServer()
+                    && source && std::strcmp(source, "world-ready") == 0)
+                {
+                    // A headless world normally has no player ProgressComponent
+                    // during InitGameState. The native progress and ClientRestart
+                    // callbacks will re-arm recovery when a player actually joins.
+                    m_pendingWorldContext.Reset();
+                    m_recoveryElapsed = 0.0f;
+                    m_recoveryInterval = 0.0f;
+                    m_lastRecoveryFailure.clear();
+                    PS::Log<LogLevel::Normal>(STR(
+                        "[SERVER][BUILDING-UNLOCK][AWAITING-PLAYER] World registry is ready; unlock delivery will begin when a player ProgressComponent becomes available.\n"));
+                    return true;
+                }
+                m_lastRecoveryFailure = "live player ProgressComponent was not ready";
+                return false;
+            }
+
+            const bool recoveredLate = m_recoveryElapsed > 0.0f
+                || (source && std::strcmp(source, "world-ready") != 0);
+            m_pendingWorldContext.Reset();
+            m_recoveryElapsed = 0.0f;
+            m_recoveryInterval = 0.0f;
+            m_lastRecoveryFailure.clear();
+            if (recoveredLate)
+            {
+                PS::Log<LogLevel::Normal>(STR(
+                    "[BUILDING-RECOVERY][VERIFIED] source='{}' registry=true unlocks=true; bounded recovery stopped.\n"),
+                    PS::ToWideSafe(source ? source : "unknown"));
+            }
+            return true;
+        }
+        catch (const std::exception& error)
+        {
+            m_lastRecoveryFailure = error.what();
+            if (!source || std::strcmp(source, "bounded-retry") != 0)
+            {
+                PS::Log<LogLevel::Warning>(STR(
+                    "[BUILDING-RECOVERY][DEFERRED] source='{}' raised '{}'; bounded recovery remains armed.\n"),
+                    PS::ToWideSafe(source ? source : "unknown"),
+                    PS::ToWideSafe(error.what()));
+            }
+        }
+        catch (...)
+        {
+            m_lastRecoveryFailure = "unknown world recovery exception";
+            if (!source || std::strcmp(source, "bounded-retry") != 0)
+            {
+                PS::Log<LogLevel::Warning>(STR(
+                    "[BUILDING-RECOVERY][DEFERRED] source='{}' raised an unknown exception; bounded recovery remains armed.\n"),
+                    PS::ToWideSafe(source ? source : "unknown"));
+            }
+        }
+        return false;
+    }
+
+    void DragonWildsBuildingModLoader::RetryWorldRecovery(float deltaSeconds)
+    {
+        auto* worldContext = m_pendingWorldContext.Get();
+        if (!worldContext)
+        {
+            m_pendingWorldContext.Reset();
+            return;
+        }
+
+        const auto elapsed = std::max(0.0f, deltaSeconds);
+        m_recoveryElapsed += elapsed;
+        m_recoveryInterval += elapsed;
+        if (m_recoveryInterval < BuildingRecoveryIntervalSeconds) return;
+        m_recoveryInterval = 0.0f;
+
+        if (TryWorldRecovery(worldContext, "bounded-retry")) return;
+        if (m_recoveryElapsed < BuildingRecoveryTimeoutSeconds) return;
+
+        PS::Log<LogLevel::Warning>(STR(
+            "[BUILDING-RECOVERY][TIMEOUT] Recovery stopped after {} seconds: {}. Buildings remain isolated; other RuneSchema systems continue.\n"),
+            BuildingRecoveryTimeoutSeconds,
+            PS::ToWideSafe(m_lastRecoveryFailure.empty()
+                ? "world readiness could not be verified"
+                : m_lastRecoveryFailure.c_str()));
+        m_pendingWorldContext.Reset();
+        m_recoveryElapsed = 0.0f;
+        m_recoveryInterval = 0.0f;
     }
 
     bool DragonWildsBuildingModLoader::RefreshBuildingCatalogueForWorld()
@@ -2322,11 +2517,11 @@ namespace DragonWilds {
         return true;
     }
 
-    void DragonWildsBuildingModLoader::ApplyUnlocks(UObject* progressComponent)
+    bool DragonWildsBuildingModLoader::ApplyUnlocks(UObject* progressComponent)
     {
         if (!progressComponent || m_unlocks.empty())
         {
-            return;
+            return false;
         }
 
         std::vector<UObject*> buildings;
@@ -2334,6 +2529,7 @@ namespace DragonWilds {
         {
             if(auto* building=GetValidBuilding(key))buildings.push_back(building);
         }
+        if (buildings.empty()) return false;
 
         auto* unlockedProperty = CastField<FArrayProperty>(
             PropertyHelper::GetPropertyByName(
@@ -2427,11 +2623,27 @@ namespace DragonWilds {
             PS::Log<LogLevel::Error>(STR(
                 "[BUILDING-UNLOCK][FAILED] component='{}' requested={} visible={} session_only={}.\n"),
                 progressComponent->GetPathName(), buildings.size(), visible, sessionOnly);
-            return;
+            return false;
         }
 
         if (!newlyUnlocked.empty())
-            NotifyBuildingUnlocks(progressComponent, newlyUnlocked);
+        {
+            try
+            {
+                NotifyBuildingUnlocks(progressComponent, newlyUnlocked);
+            }
+            catch (const std::exception& error)
+            {
+                PS::Log<LogLevel::Warning>(STR(
+                    "Building unlock state was verified, but its UI notification raised '{}'.\n"),
+                    PS::ToWideSafe(error.what()));
+            }
+            catch (...)
+            {
+                PS::Log<LogLevel::Warning>(STR(
+                    "Building unlock state was verified, but its UI notification raised an unknown exception.\n"));
+            }
+        }
 
         if (!newlyUnlocked.empty())
         {
@@ -2446,11 +2658,13 @@ namespace DragonWilds {
                 "[BUILDING-UNLOCK][UNCHANGED] component='{}' already contains all {} requested building(s).\n"),
                 progressComponent->GetPathName(), buildings.size());
         }
+        return true;
     }
 
-    void DragonWildsBuildingModLoader::ApplyUnlocksToWorld(UObject* worldContext)
+    size_t DragonWildsBuildingModLoader::ApplyUnlocksToWorld(
+        UObject* worldContext, bool reportDeferred)
     {
-        if (!m_progressComponentClass || m_unlocks.empty()) return;
+        if (!m_progressComponentClass || m_unlocks.empty()) return 0;
 
         auto* targetWorld = worldContext ? worldContext->GetWorld() : nullptr;
         TArray<UObject*> candidates;
@@ -2466,16 +2680,16 @@ namespace DragonWilds {
                 continue;
             if (targetWorld && candidate->GetWorld() != targetWorld)
                 continue;
-            ApplyUnlocks(candidate);
-            ++applied;
+            if (ApplyUnlocks(candidate)) ++applied;
         }
 
-        if (!applied)
+        if (!applied && reportDeferred)
         {
             PS::Log<LogLevel::Verbose>(STR(
                 "[BUILDING-UNLOCK][DEFERRED] No live ProgressComponent was ready for world '{}'; native progress callbacks remain active.\n"),
                 worldContext ? worldContext->GetPathName() : TEXT("<any>"));
         }
+        return applied;
     }
 
     void DragonWildsBuildingModLoader::NotifyBuildingUnlocks(

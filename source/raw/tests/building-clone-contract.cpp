@@ -54,6 +54,26 @@ int main(int argc,char** argv) {
         "building unlock delivery no longer notifies the native build-menu path");
     require(loader.find("[BUILDING-UNLOCK][VERIFIED]")!=std::string::npos,
         "building unlock delivery has no verification diagnostic");
+    require(loader.find("BuildingLoaderBoundedRecovery")!=std::string::npos
+        && loader.find("BuildingRecoveryTimeoutSeconds = 15.0f")!=std::string::npos,
+        "late building readiness is not covered by a bounded one-shot recovery window");
+    require(loader.find("ApplyUnlocksToWorld(worldContext, reportDeferred)")!=std::string::npos
+        && loader.find("if (!applied && reportDeferred)")!=std::string::npos,
+        "bounded building recovery can spam a deferred diagnostic on every retry");
+    require(loader.find("[SERVER][BUILDING-UNLOCK][AWAITING-PLAYER]")!=std::string::npos
+        && loader.find("std::strcmp(source, \"world-ready\") == 0")!=std::string::npos
+        && loader.find("ApplyUnlocksToWorld(nullptr, !PS::Storefront::IsDedicatedServer())")
+            !=std::string::npos,
+        "headless server startup treats the expected absence of a player as a recovery failure");
+    require(loader.find("if (m_pendingWorldContext.Get()) RetryWorldRecovery(deltaSeconds)")
+        !=std::string::npos,
+        "building recovery tick performs continuous work after recovery completes");
+    require(loader.find("/Script/Engine.PlayerController:ClientRestart")!=std::string::npos,
+        "building recovery has no event-driven fallback when InitGameState delivery is missed");
+    require(loader.find("[BUILDING-RECOVERY][TIMEOUT]")!=std::string::npos
+        && loader.find("Buildings remain isolated; other RuneSchema systems continue")
+            !=std::string::npos,
+        "bounded building recovery does not report an isolated timeout");
     require(schema.find("appends the clone to every page/collection containing its $Clone source")!=std::string::npos,
         "inherited menu behavior is undocumented in schema");
     require(schema.find("Complete replacement build cost")!=std::string::npos,

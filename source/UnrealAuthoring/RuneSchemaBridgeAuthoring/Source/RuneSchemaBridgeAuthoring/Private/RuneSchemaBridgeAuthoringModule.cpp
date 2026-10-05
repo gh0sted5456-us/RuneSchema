@@ -185,6 +185,7 @@ bool AuthorBridges()
     }
     const EFunctionFlags Common = FUNC_BlueprintEvent | FUNC_Net | FUNC_NetReliable | FUNC_Public;
     const TArray<EventSpec> RegistryEvents{
+        {TEXT("OnRep_IdentityPayload"), FUNC_BlueprintEvent | FUNC_Public, {}, 128},
         {TEXT("ServerRequestRegistryAction"), Common | FUNC_NetServer, {{TEXT("ActionKey"), UEdGraphSchema_K2::PC_String}}, 256},
         {TEXT("ServerRequestRuneSchemaAction"), Common | FUNC_NetServer,
             {{TEXT("Channel"), UEdGraphSchema_K2::PC_String}, {TEXT("EntityId"), UEdGraphSchema_K2::PC_String},
@@ -211,8 +212,12 @@ bool AuthorBridges()
             {{TEXT("Channel"), UEdGraphSchema_K2::PC_String}, {TEXT("EntityId"), UEdGraphSchema_K2::PC_String},
              {TEXT("Payload"), UEdGraphSchema_K2::PC_String}, {TEXT("Revision"), UEdGraphSchema_K2::PC_Int64}}, 256}
     };
-    UBlueprint* Identity = LoadObject<UBlueprint>(nullptr, IdentityPath);
-    if (!Identity
+    UBlueprint* Registry = EnsureComponentBlueprint(RegistryPath,
+        TEXT("/RuneSchema/Networking/BPC_RuneSchemaRegistryBridge"),TEXT("BPC_RuneSchemaRegistryBridge"));
+    UBlueprint* Identity = EnsureComponentBlueprint(IdentityPath,
+        TEXT("/RuneSchema/Networking/BPC_RuneSchemaIdentity"),TEXT("BPC_RuneSchemaIdentity"));
+    if (!Registry || !Identity
+        || !EnsureVariable(Registry,TEXT("IdentityPayload"),UEdGraphSchema_K2::PC_String,CPF_Net,TEXT("OnRep_IdentityPayload"))
         || !EnsureVariable(Identity,TEXT("DurableStateEnvelope"),UEdGraphSchema_K2::PC_String,CPF_Net)
         || !EnsureVariable(Identity,TEXT("DurableStateRevision"),UEdGraphSchema_K2::PC_Int,CPF_Net,TEXT("OnRep_DurableStateRevision")))
         return false;

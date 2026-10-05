@@ -97,10 +97,12 @@ namespace DragonWilds {
         PS::UnrealReadinessGate<RC::Unreal::UDataTable*> m_readiness;
         bool m_orderResolved = false;
         std::atomic<bool> m_gameInstanceLoadersStarted{false};
+        std::atomic<bool> m_dedicatedServerWorldReady{false};
         std::atomic<bool> m_coreStartupComplete{false};
         std::atomic<bool> m_coreStartupFailed{false};
         std::function<void(std::string)> m_fatalStartupHandler;
         RC::Unreal::Hook::GlobalCallbackId m_coreStartupCallbackId = RC::Unreal::Hook::ERROR_ID;
+        RC::Unreal::Hook::GlobalCallbackId m_dedicatedServerReadyCallbackId = RC::Unreal::Hook::ERROR_ID;
         std::vector<RC::StringType> m_orderedMods;
 
         static inline std::vector<std::function<void(RC::Unreal::UDataTable*)>> DatatableSerializeCallbacks;

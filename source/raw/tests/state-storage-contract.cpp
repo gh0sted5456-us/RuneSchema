@@ -96,8 +96,10 @@ int main(int argc, char** argv)
     Check(registrar.find("fingerprint != m_registryCandidateFingerprint") != std::string::npos
         && pruner.find("m_checkedCharacters") == std::string::npos
         && pruner.find("s_cleanupConsumedForProcess.exchange(") != std::string::npos
+        && pruner.find("if (!dedicatedServer && s_cleanupConsumedForProcess.exchange(")
+            != std::string::npos
         && pruner.find("if (cleaned.Removed.empty() && restored.empty())") != std::string::npos,
-        "automatic pruning is not globally gated by a stable registry and a nonempty removal plan");
+        "automatic pruning is not client-global/server-per-payload gated by a stable registry and a nonempty removal plan");
     Check(registrar.find("for (auto* subsystem : subsystems)") != std::string::npos
         && registrar.find("const auto registered = RegisterMissing") != std::string::npos
         && registrar.find("registrationsComplete = registered && registrationsComplete") != std::string::npos

@@ -26,6 +26,7 @@
 #include "SDK/UnrealOffsets.h"
 #include "Runtime/HostServices.h"
 #include "Runtime/PluginCatalog.h"
+#include "Runtime/Storefront.h"
 #include "Loader/DragonWildsRawTableLoader.h"
 #include "Loader/DragonWildsAssetModLoader.h"
 #include "Loader/DragonWildsBlueprintModLoader.h"
@@ -144,6 +145,8 @@ namespace DragonWilds {
         }
         if (m_coreStartupCallbackId != Hook::ERROR_ID)
             Hook::UnregisterCallback(m_coreStartupCallbackId);
+        if (m_dedicatedServerReadyCallbackId != Hook::ERROR_ID)
+            Hook::UnregisterCallback(m_dedicatedServerReadyCallbackId);
 
         AutoReloadWorkPending.store(false);
         AutoReloadCallbackId = Hook::ERROR_ID;
@@ -178,7 +181,34 @@ namespace DragonWilds {
         // that was already installed successfully.
         if (DatatableSerializeCallbacks.empty())
             HookDatatableSerialize();
-        HookGameInstanceInit();
+        if (!PS::Storefront::IsDedicatedServer())
+            HookGameInstanceInit();
+        else
+        {
+            Hook::FCallbackOptions serverOptions{};
+            serverOptions.OwnerModName=TEXT("RuneSchema");
+            serverOptions.HookName=TEXT("DedicatedServerRegistryReady");
+            m_dedicatedServerReadyCallbackId=Hook::RegisterInitGameStatePostCallback(
+                [this](Hook::TCallbackIterationData<void>& iteration,AGameModeBase* gameMode) {
+                    if (!gameMode || !gameMode->GetWorld()) return;
+                    m_dedicatedServerWorldReady.store(true,std::memory_order_release);
+                    if (InitCore()) {
+                        m_coreStartupComplete.store(true,std::memory_order_release);
+                        SetupGameInstanceInitLoadersOnce();
+                        m_dedicatedServerReadyCallbackId=Hook::ERROR_ID;
+                        iteration.RemoveSelf();
+                    } else if (m_coreStartupFailed.load(std::memory_order_acquire)) {
+                        m_dedicatedServerReadyCallbackId=Hook::ERROR_ID;
+                        iteration.RemoveSelf();
+                    }
+                },serverOptions);
+            if (m_dedicatedServerReadyCallbackId==Hook::ERROR_ID)
+                PS::Log<LogLevel::Error>(STR(
+                    "[SERVER][REGISTRY-DEFERRED][UNAVAILABLE] InitGameState boundary could not be installed; authoritative registration will remain inactive rather than mutate an unsettled server subsystem.\n"));
+            else
+                PS::Log<LogLevel::Normal>(STR(
+                    "[SERVER][REGISTRY-DEFERRED] Runtime cloning and registration will begin after the dedicated server reaches InitGameState.\n"));
+        }
         // GameInstance::Init and the optional DataTable hook remain the earliest
         // paths.  A game-thread tick is the storefront-agnostic fallback.  It
         // avoids initializing loaders in on_unreal_init before their target
@@ -198,7 +228,9 @@ namespace DragonWilds {
                     // the GameInstance loader phase here as well.  The atomic
                     // once gate keeps the normal hook and this fallback from
                     // ever running registration twice.
-                    SetupGameInstanceInitLoadersOnce();
+                    if (!PS::Storefront::IsDedicatedServer()
+                        || m_dedicatedServerWorldReady.load(std::memory_order_acquire))
+                        SetupGameInstanceInitLoadersOnce();
                     m_coreStartupCallbackId=Hook::ERROR_ID;
                     iteration.RemoveSelf();
                 } else if(m_coreStartupFailed.load(std::memory_order_acquire)) {
@@ -322,6 +354,9 @@ namespace DragonWilds {
             m_dataRegistrar.Initialize();
             if(!m_dataRegistrar.IsInitialized())
                 throw std::runtime_error("required live persistence registry bindings are unavailable");
+            if (PS::Storefront::IsDedicatedServer())
+                PS::Log<LogLevel::Normal>(STR(
+                    "[SERVER][REGISTRIES-READY] Live persistence registries, cooked PAK discovery and configured combat registration completed.\n"));
         }
         catch(const std::exception& error){
             PS::Log<LogLevel::Error>(STR("[DEGRADED][SERVICE:data-registrar] Registration/save cleanup unavailable: {}. RuneSchema will not prune this run.\n"),PS::ToWideSafe(error.what()));

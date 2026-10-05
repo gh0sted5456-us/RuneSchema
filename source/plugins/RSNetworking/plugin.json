@@ -9,6 +9,9 @@
     "bridge.registry",
     "bridge.world",
     "bridge.identity",
+    "bridge.plugin-connection",
+    "bridge.plugin-state",
+    "bridge.plugin-presentation",
     "presentation.dialogue-cue",
     "presentation.registry",
     "presentation.world-state"
@@ -16,6 +19,9 @@
   "CookedObjects": [
     "/RuneSchema/Networking/BPC_RuneSchemaRegistryBridge",
     "/RuneSchema/Networking/BPC_RuneSchemaWorldBridge",
-    "/RuneSchema/Networking/BPC_RuneSchemaIdentity"
+    "/RuneSchema/Networking/BPC_RuneSchemaIdentity",
+    "/RuneSchema/Networking/Extensions/BPC_RuneSchemaPluginConnection",
+    "/RuneSchema/Networking/Extensions/BPC_RuneSchemaPluginState",
+    "/RuneSchema/Networking/Extensions/BPC_RuneSchemaPluginPresentation"
   ]
 }

@@ -25,6 +25,7 @@ namespace {
 using json=nlohmann::json;
 constexpr std::size_t MaxEntriesPerDocument=256;
 constexpr std::size_t MaxPresentationsPerEntry=64;
+constexpr std::size_t MaxPresentationKeysPerConsumer=256;
 constexpr std::size_t MaxCookedRegistryBytes=256*1024;
 
 bool Identifier(const std::string& value) {
@@ -59,6 +60,13 @@ json AuthorDocument(const json& source) {
             if(row.contains("spell"))entry["Spell"]=row["spell"];
             if(row.contains("presentation")){entry["Presentation"]=json::array();for(const auto& p:row["presentation"]){json out={{"Phase",p.value("module",std::string{})},{"Class",p.value("path",std::string{})},{"Classification",p.value("classification",std::string{})}};if(p.contains("socket"))out["Socket"]=p["socket"];if(p.contains("parameters"))out["Parameters"]=p["parameters"];entry["Presentation"].push_back(std::move(out));}}
             if(row.contains("authority")){const auto& a=row["authority"];entry["Authority"]={{"Action",a.value("action",std::string{})},{"GraphClass",a.value("graphClass",std::string{})},{"Function",a.value("function",std::string("Trigger"))},{"Bindings",a.value("bindings",json::object())}};if(a.contains("dataAsset"))entry["Authority"]["DataAsset"]=a["dataAsset"];}
+            if(row.contains("consumer")) {
+                const auto& c=row["consumer"];
+                entry["Consumer"]={{"Connection",c.value("connection",std::string{})},
+                    {"Class",c.value("class",std::string{})},
+                    {"Function",c.value("function",std::string("OnRuneSchemaPresentation"))},
+                    {"AllowedKeys",c.value("allowedKeys",json::array())}};
+            }
             if(row.contains("metadata"))entry["Metadata"]=row["metadata"];entries.push_back(std::move(entry));
         }return {{"SchemaVersion",1},{"Entries",std::move(entries)}};
     }
@@ -107,7 +115,7 @@ bool DragonWildsRegistryLoader::OnInitialize() {
 }
 
 nlohmann::json DragonWildsRegistryLoader::NormalizeEntry(const json& entry,const std::string& owner) {
-    Fields(entry,{"Id","Kind","Spell","Presentation","Authority","Metadata"},"registry entry");
+    Fields(entry,{"Id","Kind","Spell","Presentation","Authority","Consumer","Metadata"},"registry entry");
     const auto id=entry.value("Id",std::string{});
     const auto kind=entry.value("Kind",std::string{});
     if(!Identifier(id))throw std::runtime_error("registry Id must use letters, numbers, dot, dash or underscore");
@@ -124,8 +132,8 @@ nlohmann::json DragonWildsRegistryLoader::NormalizeEntry(const json& entry,const
             throw std::runtime_error("registry Spell must be a supported cooked asset path");
         result["spell"]=entry["Spell"];
     }
-    if(!entry.contains("Presentation") && !entry.contains("Authority"))
-        throw std::runtime_error("registry entry requires Presentation or Authority");
+    if(!entry.contains("Presentation") && !entry.contains("Authority") && !entry.contains("Consumer"))
+        throw std::runtime_error("registry entry requires Presentation, Authority or Consumer");
     if(entry.contains("Presentation") && (!entry["Presentation"].is_array()
         || entry["Presentation"].size()>MaxPresentationsPerEntry))
         throw std::runtime_error("registry Presentation must contain at most 64 entries");
@@ -189,6 +197,27 @@ nlohmann::json DragonWildsRegistryLoader::NormalizeEntry(const json& entry,const
         }
         result["authority"]={{"action",action},{"graphClass",graph},{"function",function},{"bindings",bindings}};
         if(!asset.empty())result["authority"]["dataAsset"]=asset;
+    }
+    if(entry.contains("Consumer")) {
+        const auto& consumer=entry["Consumer"];
+        Fields(consumer,{"Connection","Class","Function","AllowedKeys"},"registry consumer");
+        const auto connection=consumer.value("Connection",std::string{});
+        const auto classPath=consumer.value("Class",std::string{});
+        const auto function=consumer.value("Function",std::string{"OnRuneSchemaPresentation"});
+        if(!Identifier(connection))throw std::runtime_error("registry Consumer Connection is invalid");
+        if(!AssetPath(classPath)||!classPath.ends_with("_C"))
+            throw std::runtime_error("registry Consumer Class must be a cooked Blueprint class path");
+        if(!Identifier(function))throw std::runtime_error("registry Consumer Function is invalid");
+        if(!consumer.contains("AllowedKeys")||!consumer["AllowedKeys"].is_array()
+            || consumer["AllowedKeys"].empty()||consumer["AllowedKeys"].size()>MaxPresentationKeysPerConsumer)
+            throw std::runtime_error("registry Consumer AllowedKeys requires 1 to 256 identifiers");
+        json allowed=json::array();std::unordered_set<std::string> unique;
+        for(const auto& value:consumer["AllowedKeys"]) {
+            if(!value.is_string()||!Identifier(value.get<std::string>()))
+                throw std::runtime_error("registry Consumer AllowedKeys contains an invalid identifier");
+            if(unique.insert(value.get<std::string>()).second)allowed.push_back(value);
+        }
+        result["consumer"]={{"connection",connection},{"class",classPath},{"function",function},{"allowedKeys",std::move(allowed)}};
     }
     if(entry.contains("Metadata")) {
         if(!entry["Metadata"].is_object() || entry["Metadata"].dump().size()>4096)

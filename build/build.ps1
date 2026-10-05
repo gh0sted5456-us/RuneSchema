@@ -733,6 +733,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
                 'static-building-assembly-contract','owned-save-cleanup-contract',
                 'resource-additional-drops','resource-scale-idempotence','niagara-preset',
                 'time-of-day-contract','registry-patch-plan','cooked-pak-registry-manifest','registry-bridge-lifecycle-contract',
+                'presentation-transport-contract',
                 'json-document','asset-patch-v2-contract','helpy-instant-open',
                 'plugin-catalog-compatibility','recipe-placement-contract',
                 'loader-folder-case','usmap-index','native-binding-resolution','identity-only-cleanup','persistence-diagnostic-ledger',

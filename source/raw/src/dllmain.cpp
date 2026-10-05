@@ -242,23 +242,28 @@ public:
         auto config = PS::PSConfig::Get();
         PS::StartupTrace::Mark("config load begin");
         config->Load();
-        const auto pluginRoot=std::filesystem::path(PS::HostServices::WorkingDirectory())/"Mods"/"RuneSchema"/"plugins";
-        m_pluginHost.Load(pluginRoot);
-        for(const auto& message:m_pluginHost.Diagnostics())
-            PS::Log<LogLevel::Normal>(TEXT("Plugin host: {}\n"),PS::ToWideSafe(message.c_str()));
-        for(const auto& connection:m_pluginHost.Connections())
-            PS::Log<LogLevel::Normal>(TEXT("Plugin connection enabled: {}\n"),PS::ToWideSafe(connection.c_str()));
-        if(!m_pluginHost.HasCapability("bridge.registry"))
-            PS::Log<LogLevel::Normal>(TEXT("RSNetworking is not active. Local loaders remain enabled.\n"));
-        if(m_pluginHost.HasCapability("helpy.navigation"))try {
-            const auto about=m_pluginHost.Call("RuneSchema.Core","helpy.about","{}");
-            PS::Log<LogLevel::Normal>(TEXT("Helpy plugin service: {}\n"),PS::ToWideSafe(about.c_str()));
-        } catch(const std::exception& error) {
-            PS::Log<LogLevel::Warning>(TEXT("Helpy plugin service validation failed: {}\n"),PS::ToWideSafe(error.what()));
+        const auto& storefront=PS::Storefront::CurrentDetection();
+        if (!storefront.DedicatedServer) {
+            const auto pluginRoot=std::filesystem::path(PS::HostServices::WorkingDirectory())/"Mods"/"RuneSchema"/"plugins";
+            m_pluginHost.Load(pluginRoot);
+            for(const auto& message:m_pluginHost.Diagnostics())
+                PS::Log<LogLevel::Normal>(TEXT("Plugin host: {}\n"),PS::ToWideSafe(message.c_str()));
+            for(const auto& connection:m_pluginHost.Connections())
+                PS::Log<LogLevel::Normal>(TEXT("Plugin connection enabled: {}\n"),PS::ToWideSafe(connection.c_str()));
+            if(!m_pluginHost.HasCapability("bridge.registry"))
+                PS::Log<LogLevel::Normal>(TEXT("RSNetworking is not active. Local loaders remain enabled.\n"));
+            if(m_pluginHost.HasCapability("helpy.navigation"))try {
+                const auto about=m_pluginHost.Call("RuneSchema.Core","helpy.about","{}");
+                PS::Log<LogLevel::Normal>(TEXT("Helpy plugin service: {}\n"),PS::ToWideSafe(about.c_str()));
+            } catch(const std::exception& error) {
+                PS::Log<LogLevel::Warning>(TEXT("Helpy plugin service validation failed: {}\n"),PS::ToWideSafe(error.what()));
+            }
+        } else {
+            PS::Log<LogLevel::Normal>(TEXT(
+                "[SERVER][SAFE-MODE] Dedicated server executable detected. Native GUI/client plugins are suppressed; authoritative registry loaders remain enabled.\n"));
         }
         PS::UE4SSCompatibility::Report();
         // Storefront selection controls native signature lookup.
-        const auto& storefront=PS::Storefront::CurrentDetection();
         RC::Output::send<RC::LogLevel::Normal>(TEXT("[RuneSchema] Runtime storefront: {} | reason: {} | package profile: Universal.\n"),
             PS::ToWideSafe(PS::Storefront::Name(storefront.Value)),storefront.Reason);
         RC::Output::send<RC::LogLevel::Normal>(TEXT("[RuneSchema] Native binding lane: {}.\n"),
@@ -304,7 +309,8 @@ public:
 
     auto on_ui_init() -> void override
     {
-        if (m_startupFailed.load(std::memory_order_acquire)) return;
+        if (m_startupFailed.load(std::memory_order_acquire)
+            || PS::Storefront::IsDedicatedServer()) return;
         PS::StartupTrace::Mark("UE4SS on_ui_init begin");
         if (!PS::HostServices::GuiEnabled())
         {
@@ -870,11 +876,14 @@ public:
                 m_pluginHost.Shutdown();
             });
             MainLoader.Initialize();
-            m_pluginHost.OnUnrealInit();
+            if (!PS::Storefront::IsDedicatedServer())
+                m_pluginHost.OnUnrealInit();
             PS::StartupTrace::Mark("UE4SS on_unreal_init complete");
             m_unrealReady = true;
-            m_networkRoleMonitor.Start();
-            PS::RuntimeJobs::Initialize();
+            if (!PS::Storefront::IsDedicatedServer()) {
+                m_networkRoleMonitor.Start();
+                PS::RuntimeJobs::Initialize();
+            }
         } catch (const std::exception& error) {
             m_startupFailed.store(true,std::memory_order_release);
             MainLoader.AbortStartup("unreal-init",error.what());

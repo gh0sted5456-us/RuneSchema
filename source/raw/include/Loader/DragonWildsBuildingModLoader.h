@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <functional>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -94,7 +95,12 @@ namespace DragonWilds {
         bool AddToMenu(RC::Unreal::UObject* building, const Placement& placement);
         void DiscardUncommittedClone(RC::Unreal::UObject* building);
         void RegisterHooks();
-        void PrepareWorldState(RC::Unreal::AGameModeBase* gameMode);
+        bool PrepareWorldState(RC::Unreal::UObject* worldContext);
+        bool EnsureWorldState(RC::Unreal::UObject* worldContext);
+        bool TryWorldRecovery(RC::Unreal::UObject* worldContext,
+            const char* source);
+        void ScheduleWorldRecovery(RC::Unreal::UObject* worldContext);
+        void RetryWorldRecovery(float deltaSeconds);
         bool ProtectWorldRegistry(RC::Unreal::UObject* subsystem);
         bool RefreshBuildingReferencesForWorld();
         bool RefreshBuildingCatalogueForWorld();
@@ -103,8 +109,10 @@ namespace DragonWilds {
         bool CaptureNativeRegistry(RC::Unreal::UObject* subsystem);
         bool RestoreNativeRegistry();
         void ClearWorldRegistryState();
-        void ApplyUnlocks(RC::Unreal::UObject* progressComponent);
-        void ApplyUnlocksToWorld(RC::Unreal::UObject* worldContext = nullptr);
+        bool ApplyUnlocks(RC::Unreal::UObject* progressComponent);
+        size_t ApplyUnlocksToWorld(
+            RC::Unreal::UObject* worldContext = nullptr,
+            bool reportDeferred = true);
         void NotifyBuildingUnlocks(RC::Unreal::UObject* progressComponent,
             const std::vector<RC::Unreal::UObject*>& buildings) const;
         RC::Unreal::UObject* FindBuildingSubsystem(
@@ -131,5 +139,12 @@ namespace DragonWilds {
         bool m_hooksRegistered = false;
         RC::Unreal::Hook::GlobalCallbackId m_initGameStateCallbackId = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::Hook::GlobalCallbackId m_unlockGameStateCallbackId = RC::Unreal::Hook::ERROR_ID;
+        RC::Unreal::Hook::GlobalCallbackId m_recoveryTickCallbackId = RC::Unreal::Hook::ERROR_ID;
+        PS::WeakObjectHandle m_registeredWorldContext;
+        PS::WeakObjectHandle m_pendingWorldContext;
+        float m_recoveryElapsed = 0.0f;
+        float m_recoveryInterval = 0.0f;
+        bool m_worldRegistryReady = false;
+        std::string m_lastRecoveryFailure;
     };
 }

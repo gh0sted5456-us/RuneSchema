@@ -27,4 +27,6 @@ int main(int argc,char** argv) {
     assert(loader.find("/Script/Dominion.DominionShape_Sphere") != std::string::npos);
     assert(loader.find("candidate->GetOuterPrivate() != current") != std::string::npos);
     assert(loader.find("DominionShape_Sphere Radius did not match after update") != std::string::npos);
+    assert(loader.find("[SERVER][ASSET-CLONING]") != std::string::npos);
+    assert(loader.find("if (!PS::Storefront::IsDedicatedServer())") != std::string::npos);
 }
