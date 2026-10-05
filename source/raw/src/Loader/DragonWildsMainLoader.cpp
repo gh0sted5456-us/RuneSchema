@@ -14,6 +14,7 @@
 #include <unordered_set>
 #include "Unreal/Engine/UDataTable.hpp"
 #include "Core/PersistenceDiagnosticLedger.h"
+#include "Core/MountedModRegistryOwners.h"
 #include "Unreal/Hooks.hpp"
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
@@ -928,6 +929,7 @@ namespace DragonWilds {
                 PS::ToWideSafe(error.what()));
         }
         const auto modsRoot=GetModsPath();std::vector<RC::StringType> discovered;
+        PS::MountedModRegistryOwners::Reset();
         if(fs::is_directory(modsRoot))for(const auto& entry:fs::directory_iterator(modsRoot)) {
             if(!entry.is_directory()||entry.is_symlink())continue;
             std::error_code scanError;
@@ -935,7 +937,12 @@ namespace DragonWilds {
             const bool legacy=PS::ModFolderLayout::ContainsLegacyPakContent(entry.path(),scanError);
             if((paks.has_value()||legacy)&&!scanError)discovered.push_back(entry.path().filename().native());
         }
-        try {for(const auto& name:ModLoadOrder::Resolve(modsRoot,discovered))pakRoots.push_back(modsRoot/name);}
+        try {for(const auto& name:ModLoadOrder::Resolve(modsRoot,discovered)) {
+            pakRoots.push_back(modsRoot/name);
+            const auto owner=RC::to_string(name);
+            if(!PS::MountedModRegistryOwners::Remember(owner))
+                PS::Log<LogLevel::Verbose>(STR("Mod folder '{}' cannot use conventional cooked-registry fallback; use Asset Registry metadata or an underscore-only folder name.\n"),name);
+        }}
         catch(const std::exception& error) {
             PS::Log<LogLevel::Error>(STR(
                 "Mod pak order rejected; no mod PAK directories were added (fail-closed): {}\n"),

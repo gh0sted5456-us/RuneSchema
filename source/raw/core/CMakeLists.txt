@@ -251,6 +251,12 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Runtime/RegistryBridge.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRegistryLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../../docs/SUMMONING-AUTHORITY-BRIDGE.md")
+    add_executable(cooked-registry-discovery-contract ../tests/cooked-registry-discovery-contract.cpp)
+    add_test(NAME cooked-registry-discovery-contract COMMAND cooked-registry-discovery-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRegistryLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Core/MountedModRegistryOwners.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../docs/SHARED-REGISTRY-BRIDGE-PAK.md")
     add_executable(static-building-assembly-contract ../tests/static-building-assembly-contract.cpp)
     add_test(NAME static-building-assembly-contract COMMAND static-building-assembly-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsBuildingModLoader.cpp"

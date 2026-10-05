@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include "Core/ConfigFiles.h"
 #include "Core/CookedPakRegistryManifest.h"
+#include "Core/MountedModRegistryOwners.h"
 #include "Runtime/HostServices.h"
 #include "Runtime/RegistryBridge.h"
 #include "Utility/Config.h"
@@ -276,17 +277,43 @@ void DragonWildsRegistryLoader::OnLoad(const std::filesystem::path& path,const R
 void DragonWildsRegistryLoader::LoadCookedRegistries() {
     TArray<FAssetData> assets;auto interface=UAssetRegistryHelpers::GetAssetRegistry();auto* registry=static_cast<UAssetRegistry*>(interface.ObjectPointer);
     if(!registry||!registry->GetAllAssets(assets,true)||assets.Num()<0||assets.Num()>262144)throw std::runtime_error("mounted Asset Registry is unavailable or outside the safe bound");
-    for(auto& asset:assets)try {
-        const auto name=RC::to_string(asset.AssetName().ToString());if(!name.starts_with("DA_RuneSchemaRegistry")&&!name.starts_with("RSREG_"))continue;
-        const auto package=RC::to_string(asset.PackageName().ToString()),path=package+"."+name;auto* object=ActorHelper::ResolveObject(PS::ToWideSafe(path.c_str()));
+    std::set<std::string> loaded;
+    const auto consume=[&](UObject* object,const std::string& path,const std::string& expectedOwner) {
         if(!object)throw std::runtime_error("cooked registry asset could not be loaded");
         auto read=[&](const TCHAR* field)->std::string{auto* property=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),field));if(!property)return {};const auto& value=property->GetPropertyValue(property->ContainerPtrToValuePtr<void>(object));const auto& chars=value.GetCharArray();if(chars.Num()<1||!chars.GetData()||chars.GetData()[chars.Num()-1]!=0||chars.Num()>static_cast<int32_t>(MaxCookedRegistryBytes+1))throw std::runtime_error("cooked registry string is invalid or exceeds 256 KiB");return RC::to_string(RC::StringType(chars.GetData(),chars.Num()-1));};
         auto document=read(TEXT("RuneSchemaRegistryJson"));if(document.empty())document=read(TEXT("RegistryJson"));if(document.empty())throw std::runtime_error("asset requires a RuneSchemaRegistryJson or RegistryJson string property");
-        auto owner=read(TEXT("RegistryOwner"));if(owner.empty()){if(package.size()>2&&package[0]=='/'){const auto slash=package.find('/',1);owner=package.substr(1,slash==std::string::npos?slash:slash-1);}if(owner=="Game")throw std::runtime_error("assets under /Game require an explicit RegistryOwner string");}
+        auto owner=read(TEXT("RegistryOwner"));if(owner.empty()) {
+            if(!expectedOwner.empty())throw std::runtime_error("conventional cooked registry asset requires an explicit RegistryOwner");
+            if(path.size()>2&&path[0]=='/') {const auto slash=path.find('/',1);owner=path.substr(1,slash==std::string::npos?slash:slash-1);}
+            if(owner=="Game")throw std::runtime_error("assets under /Game require an explicit RegistryOwner string");
+        }
         if(!Identifier(owner)||owner=="RuneSchema"||owner=="FModel")throw std::runtime_error("cooked RegistryOwner is invalid or reserved");
+        if(!expectedOwner.empty()&&owner!=expectedOwner)throw std::runtime_error("conventional cooked registry owner does not match its enabled mod folder");
         LoadDocument(json::parse(document),owner,"pak:"+path);
+        loaded.insert(path);
         PS::Log<RC::LogLevel::Normal>(STR("Registry: discovered cooked registry asset '{}' owned by '{}'.\n"),PS::ToWideSafe(path.c_str()),PS::ToWideSafe(owner.c_str()));
-    }catch(const std::exception& error){const auto name=RC::to_string(asset.AssetName().ToString());const auto package=RC::to_string(asset.PackageName().ToString());m_audit.push_back({{"Owner","<cooked>"},{"Source","pak:"+package+"."+name},{"Status","Rejected"},{"Reason",error.what()}});PS::Log<RC::LogLevel::Error>(STR("Cooked registry asset '{}' rejected: {}.\n"),PS::ToWideSafe((package+"."+name).c_str()),PS::ToWideSafe(error.what()));}
+    };
+    const auto reject=[&](const std::string& path,const std::exception& error) {
+        m_audit.push_back({{"Owner","<cooked>"},{"Source","pak:"+path},{"Status","Rejected"},{"Reason",error.what()}});
+        PS::Log<RC::LogLevel::Error>(STR("Cooked registry asset '{}' rejected: {}.\n"),PS::ToWideSafe(path.c_str()),PS::ToWideSafe(error.what()));
+    };
+    for(auto& asset:assets) {
+        const auto name=RC::to_string(asset.AssetName().ToString());if(!name.starts_with("DA_RuneSchemaRegistry")&&!name.starts_with("RSREG_"))continue;
+        const auto package=RC::to_string(asset.PackageName().ToString()),path=package+"."+name;
+        try {consume(ActorHelper::ResolveObject(PS::ToWideSafe(path.c_str())),path,{});}
+        catch(const std::exception& error){reject(path,error);}
+    }
+    std::size_t conventional=0;
+    for(const auto& owner:PS::MountedModRegistryOwners::Snapshot()) {
+        const auto name="DA_RuneSchemaRegistry_"+owner;
+        const auto path="/Game/Mods/"+owner+"/Registry/"+name+"."+name;
+        if(loaded.contains(path))continue;
+        auto* object=ActorHelper::ResolveObject(PS::ToWideSafe(path.c_str()));
+        if(!object)continue;
+        try {consume(object,path,owner);++conventional;}
+        catch(const std::exception& error){reject(path,error);}
+    }
+    if(conventional)PS::Log<RC::LogLevel::Normal>(STR("Registry: directly loaded {} conventional cooked declaration{} missing from Asset Registry metadata.\n"),conventional,conventional==1?TEXT(""):TEXT("s"));
 }
 
 void DragonWildsRegistryLoader::WriteMerged() {

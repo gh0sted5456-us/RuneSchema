@@ -68,6 +68,32 @@ For each content mod:
 The shared base belongs only in RuneSchema's PAK. The mod-owned data-asset
 instance belongs in the mod's PAK.
 
+### IoStore packages without Asset Registry metadata
+
+Some manually assembled IoStore containers do not contribute their cooked
+declaration to the game's `Asset Registry` metadata. RuneSchema cannot safely
+enumerate arbitrary UTOC internals or guess gameplay paths. For these packages,
+use the deterministic declaration path:
+
+```text
+/Game/Mods/<ModFolder>/Registry/DA_RuneSchemaRegistry_<ModFolder>
+```
+
+The complete object path repeats the asset name after the dot. For a RuneSchema
+mod folder named `Bard`, that is:
+
+```text
+/Game/Mods/Bard/Registry/DA_RuneSchemaRegistry_Bard.DA_RuneSchemaRegistry_Bard
+```
+
+`ModFolder` may contain only letters, numbers, and underscores and is capped at
+64 characters for this fallback. The cooked asset must set `RegistryOwner` to
+that exact folder name. RuneSchema directly loads only this one bounded path
+for each enabled mod in the resolved load order. Missing paths are ignored;
+owner mismatches are rejected. The declaration may still reference gameplay
+assets under a different permanent namespace, which preserves existing save
+and object paths.
+
 ## Authoring files and runtime files
 
 RuneSchema distributes the bridge in two forms:
