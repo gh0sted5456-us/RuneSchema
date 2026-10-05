@@ -1,0 +1,47 @@
+RUNESCHEMA - NEXUS LICENSING ALIGNMENT
+
+Apply this wording only to the community continuation's page and packages.
+Do not edit the original author's page or claim rights to third-party work.
+
+READY-TO-PASTE LICENSE AND OWNERSHIP TEXT
+
+RuneSchema is an RSDW Modding Community project. Luke (gh0sted5456-us) is the
+author of the community continuation; the team supports updates, testing,
+and maintenance.
+
+Original RuneSchema code and accompanying documentation owned by, or
+licensed with authority by, RSDW Modding Community are licensed under the
+MIT License. Copyright (c) 2026 RSDW Modding Community.
+
+You may use, modify, fork, and redistribute that MIT-covered work, including
+compiled versions, provided the applicable copyright and permission notices
+are retained. Individual permission is not required for uses authorized by MIT.
+
+Include the LICENSE, LICENSING.md, THIRD_PARTY_NOTICES.md, and applicable
+licenses/ files with redistributed packages. Preserve the PalSchema and
+UE4SS notices and any other applicable upstream terms.
+
+Historical RuneSchema is credited to Snorkles. The PalSchema foundation is
+credited to Okaetsu. These credits are separate from ownership of the
+community continuation; the community's MIT grant does not relicense
+third-party historical additions, game assets, or engine material.
+
+The software license does not grant third-party game or trademark rights
+or permit false claims that a fork is an official community release.
+
+License: https://github.com/gh0sted5456-us/RuneSchema/blob/main/LICENSE
+Scope: https://github.com/gh0sted5456-us/RuneSchema/blob/main/LICENSING.md
+Notices: https://github.com/gh0sted5456-us/RuneSchema/blob/main/THIRD_PARTY_NOTICES.md
+
+PERMISSIONS PANEL
+
+For the MIT-covered code, set modification, redistribution/reupload, and
+reuse permissions to allow use with the required notices; remove blanket
+"ask permission first" and "no reuploads" restrictions on that code.
+Use custom permission text to distinguish separately licensed assets.
+Do not add a non-commercial restriction to the software's MIT grant; game
+publisher rules remain a separate matter.
+
+Check the actual downloadable ZIPs and include the full applicable notices.
+A page edit alone does not repair missing notices in an existing archive.
+The GitHub change does not update this Nexus page or its toggles automatically.

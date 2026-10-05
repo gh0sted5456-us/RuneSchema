@@ -83,7 +83,7 @@ extra:
       name: RuneSchema on GitHub
 
 copyright: >-
-  RuneSchema documentation · Original RuneSchema by Snorkles · PalSchema foundation by Okaetsu
+  Copyright (c) 2026 RSDW Modding Community · MIT for covered original code and documentation · Upstream rights retained
 
 nav:
   - Home: index.md
@@ -107,3 +107,4 @@ nav:
       - Troubleshooting: TROUBLESHOOTING.md
       - Documentation Map: DOCUMENTATION-INDEX.md
       - JSON Schemas: SCHEMAS.md
+      - Licensing and Ownership: LICENSING.md

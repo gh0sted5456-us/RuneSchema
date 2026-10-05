@@ -58,6 +58,11 @@ set "BUILD_EXIT=%ERRORLEVEL%"
 
 if not "%BUILD_EXIT%"=="0" goto :failed
 
+echo Adding project and upstream license notices to build packages...
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%package-licenses.ps1" -FinalizeBuild >> "%LAUNCH_LOG%" 2>&1
+set "BUILD_EXIT=%ERRORLEVEL%"
+if not "%BUILD_EXIT%"=="0" goto :failed
+
 >> "%LAUNCH_LOG%" echo.
 >> "%LAUNCH_LOG%" echo Builder completed successfully with exit code 0.
 exit /b 0

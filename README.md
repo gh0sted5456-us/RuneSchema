@@ -31,5 +31,17 @@ packages are written to `dist/` and are not source-controlled.
 Authoring, loader, Unreal + RuneSchema, compatibility, API, and release
 documentation is maintained on the public documentation site above.
 
-Based on the original RuneSchema by Snorkles. Maintained by members of the RSDW
-Modding Community. PalSchema foundation by Okaetsu.
+## Ownership and license
+
+RuneSchema is an **RSDW Modding Community** project. Luke (gh0sted5456-us) is
+the author of the community continuation; the team supports updates, testing,
+and maintenance.
+
+Original software and documentation owned by, or licensed with authority by,
+RSDW Modding Community are available under the [MIT License](LICENSE).
+Copyright (c) 2026 RSDW Modding Community. Third-party and historical material
+retain their own applicable rights and terms; see [license scope](LICENSING.md)
+and [third-party notices](THIRD_PARTY_NOTICES.md).
+
+Historical credit: original RuneSchema by Snorkles; PalSchema foundation by
+Okaetsu. These credits are not a transfer of upstream copyright.
