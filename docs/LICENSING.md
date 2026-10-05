@@ -1,9 +1,12 @@
-# Licensing and ownership
+# Licensing and community credits
 
-RuneSchema is an **RSDW Modding Community** project. Luke (gh0sted5456-us) is
-the author of the community continuation; the team supports updates, testing,
-and maintenance. Historical RuneSchema is credited to Snorkles, and the
-PalSchema foundation is credited to Okaetsu.
+RuneSchema is developed and maintained by the **RSDW Modding Community**.
+Credited members are **Jonesing4Space, NuLLZz, Snorkles, and CHP**. The original
+RuneSchema work began within the community and is credited to Snorkles in the
+[consolidated member credits](https://github.com/gh0sted5456-us/RuneSchema/blob/main/AUTHORS.md).
+
+Official repository and distribution work are published under **gh0sted5456-us**.
+The PalSchema foundation is credited separately to Okaetsu.
 
 ## RuneSchema's code license
 
@@ -17,17 +20,20 @@ commercial use of covered code, provided the required notices are preserved.
 It does not require advance permission for each fork or modification.
 
 - [Canonical MIT license](https://github.com/gh0sted5456-us/RuneSchema/blob/main/LICENSE)
-- [License scope and ownership](https://github.com/gh0sted5456-us/RuneSchema/blob/main/LICENSING.md)
+- [License scope](https://github.com/gh0sted5456-us/RuneSchema/blob/main/LICENSING.md)
 - [Third-party notices](https://github.com/gh0sted5456-us/RuneSchema/blob/main/THIRD_PARTY_NOTICES.md)
 - [Contributor terms](https://github.com/gh0sted5456-us/RuneSchema/blob/main/CONTRIBUTING.md)
 
-## Upstream rights remain separate
+## Rights and attribution
+
+Member credits recognize the community's history and contributions. They do
+not themselves transfer copyright or supply a missing permission grant for
+existing work. The MIT grant is limited to work the community owns or is
+authorized to license, as described in the scope document.
 
 PalSchema's and UE4SS's applicable MIT notices remain intact. The root MIT
-file does not relicense their submodules, historical third-party additions,
-UPX, game assets, or Epic Games engine material. An unavailable author account
-does not establish a transfer of copyright. Resolve any unverified inherited
-portion's permission before treating that portion as MIT-covered.
+file does not override component licenses or relicense UPX, game assets,
+Epic Games engine material, or other separately licensed content.
 
 The code license is not permission to impersonate the official project, and
 it does not grant third-party trademark, game, or engine rights. No extra
@@ -35,8 +41,11 @@ non-commercial restriction is being added to MIT-covered software.
 
 ## Downloads
 
-Current packaging helpers carry the project license, scope document, and
-upstream notices into newly generated packages. Maintainers must still
-review component-specific requirements. Older releases and Nexus uploads
-are not changed automatically. Each distributed copy must retain the
-applicable notices.
+Newly generated packages include `LICENSE`, `AUTHORS.md`, `LICENSING.md`,
+`CONTRIBUTING.md`, `THIRD_PARTY_NOTICES.md`, and the applicable `licenses/`
+files. The same member credits travel with Core, Universal, Helpy, source,
+and example packages handled by the licensing helper.
+
+Maintainers must still review component-specific requirements. Older releases
+and Nexus uploads are not changed automatically. Each distributed copy must
+retain the applicable notices.

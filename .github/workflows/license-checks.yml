@@ -4,6 +4,12 @@ on:
   pull_request:
     paths:
       - 'LICENSE'
+      - 'AUTHORS.md'
+      - 'CONTRIBUTING.md'
+      - 'README.md'
+      - 'source/README.md'
+      - 'docs/LICENSING.md'
+      - 'docs/NEXUS-LICENSING.txt'
       - 'LICENSING.md'
       - 'THIRD_PARTY_NOTICES.md'
       - 'licenses/**'
@@ -15,6 +21,12 @@ on:
     branches: [main, experimental]
     paths:
       - 'LICENSE'
+      - 'AUTHORS.md'
+      - 'CONTRIBUTING.md'
+      - 'README.md'
+      - 'source/README.md'
+      - 'docs/LICENSING.md'
+      - 'docs/NEXUS-LICENSING.txt'
       - 'LICENSING.md'
       - 'THIRD_PARTY_NOTICES.md'
       - 'licenses/**'

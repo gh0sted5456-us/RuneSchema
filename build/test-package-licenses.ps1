@@ -11,16 +11,24 @@ function Assert-Archive([string]$Path, [string]$Prefix) {
     $archive = [IO.Compression.ZipFile]::OpenRead($Path)
     try {
         $entries = @($archive.Entries | ForEach-Object { $_.FullName.Replace('\','/') })
-        foreach ($name in @('LICENSE', 'LICENSING.md', 'THIRD_PARTY_NOTICES.md',
+        foreach ($name in @('LICENSE', 'AUTHORS.md', 'LICENSING.md', 'CONTRIBUTING.md', 'THIRD_PARTY_NOTICES.md',
             'licenses/PalSchema-MIT.txt', 'licenses/UE4SS-MIT.txt', 'licenses/nlohmann-json-MIT.txt')) {
             Assert-True ($entries -contains "$Prefix/$name") "Missing $Prefix/$name in $Path"
         }
         Assert-True (($entries | Select-Object -Unique).Count -eq $entries.Count) 'Duplicate ZIP entries.'
+        foreach ($name in @('LICENSE', 'AUTHORS.md', 'LICENSING.md', 'CONTRIBUTING.md', 'THIRD_PARTY_NOTICES.md',
+            'licenses/PalSchema-MIT.txt', 'licenses/UE4SS-MIT.txt', 'licenses/nlohmann-json-MIT.txt')) {
+            $entry = $archive.Entries | Where-Object { $_.FullName.Replace('\','/') -eq "$Prefix/$name" } | Select-Object -First 1
+            $reader = [IO.StreamReader]::new($entry.Open())
+            try { $actual = $reader.ReadToEnd() } finally { $reader.Dispose() }
+            $expected = Get-Content -LiteralPath (Join-Path $repository $name) -Raw
+            Assert-True ($actual -ceq $expected) "Packaged text differs from repository: $Prefix/$name"
+        }
     } finally { $archive.Dispose() }
 }
 try {
     New-Item -ItemType Directory -Path $fixture -Force | Out-Null
-    foreach ($name in @('LICENSE', 'LICENSING.md', 'THIRD_PARTY_NOTICES.md', 'licenses')) {
+    foreach ($name in @('LICENSE', 'AUTHORS.md', 'LICENSING.md', 'CONTRIBUTING.md', 'THIRD_PARTY_NOTICES.md', 'licenses')) {
         Copy-Item -LiteralPath (Join-Path $repository $name) -Destination $fixture -Recurse -Force
     }
     $fixtureBuild = Join-Path $fixture 'build'
@@ -60,16 +68,29 @@ try {
         Assert-True ((Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash -eq $before[$binary]) 'Binary bytes changed.'
     }
     Assert-True (Test-Path -LiteralPath (Join-Path $fixture 'dist/RuneSchema-test-1-Universal/RuneSchema/plugins/RuneSchema.Helpy/LICENSE')) 'Nested Helpy notice missing.'
+    $nested = Join-Path $fixture 'dist/RuneSchema-test-1-Universal/RuneSchema/plugins/RuneSchema.Helpy'
+    foreach ($name in @('AUTHORS.md', 'CONTRIBUTING.md')) {
+        Assert-True (Test-Path -LiteralPath (Join-Path $nested $name)) "Nested Helpy $name missing."
+    }
+    $credits = Get-Content -LiteralPath (Join-Path $fixture 'AUTHORS.md') -Raw
+    foreach ($member in @('Jonesing4Space', 'NuLLZz', 'Snorkles', 'CHP', 'gh0sted5456-us')) {
+        Assert-True ($credits.Contains($member)) "Required community credit or publisher missing: $member"
+    }
     $example = Join-Path $fixture 'example/ExampleMod'
     New-Item -ItemType Directory -Path $example -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $example 'example.json') -Value '{}' -Encoding ascii
     & $helper -RepositoryRoot $fixture -PayloadRoot $example -ArchivePath (Join-Path $fixture 'example.zip')
     Assert-Archive (Join-Path $fixture 'example.zip') 'ExampleMod'
+    Remove-Item -LiteralPath (Join-Path $fixture 'AUTHORS.md') -Force
+    $failed = $false
+    try { & $helper -RepositoryRoot $fixture -PayloadRoot $example } catch { $failed = $true }
+    Assert-True $failed 'Missing community credits were not rejected.'
+    Copy-Item -LiteralPath (Join-Path $repository 'AUTHORS.md') -Destination $fixture
     Remove-Item -LiteralPath (Join-Path $fixture 'LICENSE') -Force
     $failed = $false
     try { & $helper -RepositoryRoot $fixture -PayloadRoot $example } catch { $failed = $true }
     Assert-True $failed 'Missing project license was not rejected.'
-    Write-Host 'PASS: package layout, repeated runs, notice preservation, dependencies, binary hashes, examples, and missing-license handling.' -ForegroundColor Green
+    Write-Host 'PASS: community credits, exact notice text, package layout, repeated runs, notice preservation, dependencies, binary hashes, examples, and missing-notice handling.' -ForegroundColor Green
 } finally {
     $env:RUNESCHEMA_BUILD_CACHE = $oldBuildCache
     Remove-Item -LiteralPath $fixture -Recurse -Force -ErrorAction SilentlyContinue

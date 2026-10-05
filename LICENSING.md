@@ -1,12 +1,17 @@
 # RuneSchema licensing and ownership
 
-## Project ownership
+## Community and publication
 
-RuneSchema is an RSDW Modding Community project. RSDW Modding Community owns
-its original RuneSchema work. Luke (gh0sted5456-us) is the author of the
-community continuation; the team supports updates, testing, and maintenance.
-This statement records the project owner's declaration. It is not a copyright
-assignment from any other person or project.
+RuneSchema began within the RSDW Modding Community and is developed and
+maintained as a community project. Credited members are **Jonesing4Space,
+NuLLZz, Snorkles, and CHP**; the consolidated roster and historical credit are
+in [AUTHORS.md](AUTHORS.md). Official repository and distribution work are
+published under **gh0sted5456-us** at
+https://github.com/gh0sted5456-us/RuneSchema.
+
+RSDW Modding Community owns its original RuneSchema work, as declared by the
+project owner. Community attribution does not itself transfer a member's
+copyright or establish a license for that member's contribution.
 
 ## MIT grant and its scope
 
@@ -23,16 +28,14 @@ permission. A root MIT file, repository location, filename, or project credit
 does not override those terms. See [Third-party notices](THIRD_PARTY_NOTICES.md).
 Where coverage differs, use the license attached to the relevant component.
 
-## Historical RuneSchema material
+## Existing contributions
 
-The original RuneSchema is credited to Snorkles. That historical credit is
-separate from the ownership and authorship of the community continuation.
-This MIT grant does not assert ownership of, or create a new grant for,
-third-party historical contributions. Preserve the license or permission
-applicable to the version actually incorporated. Where an inherited portion's
-permission has not been established, maintainers must resolve its provenance
-before representing that portion as MIT-covered or redistributing it.
-An unavailable account is not evidence of a copyright assignment or license.
+Community credits include the original RuneSchema work by Snorkles. Preserve
+applicable author notices and the license or permission attached to the
+revision incorporated. Neither this roster nor the root license supplies a
+missing grant for a contribution the community does not own or have authority
+to license. Any such permission must be established before that contribution
+is represented as MIT-covered or redistributed.
 
 ## Names, logos, and game or engine content
 
@@ -48,8 +51,8 @@ no non-commercial restriction is being added to the MIT-covered code.
 
 ## Distribution
 
-Our release packaging includes `LICENSE`, `LICENSING.md`,
-`THIRD_PARTY_NOTICES.md`, and the relevant `licenses/` contents. This is the
+Our release packaging includes `LICENSE`, `AUTHORS.md`, `LICENSING.md`,
+`CONTRIBUTING.md`, `THIRD_PARTY_NOTICES.md`, and the relevant `licenses/` contents. This is the
 project's packaging practice, not an additional condition on the MIT grant.
 Downstream obligations are those in the applicable component licenses.
 Preserve required upstream copyright and permission notices rather than

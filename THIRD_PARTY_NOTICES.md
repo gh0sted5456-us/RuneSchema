@@ -45,12 +45,12 @@ Preserve embedded notices in the vendored header as well. This copied notice
 records the fetched version; it does not replace any different notice in a
 vendored or future version.
 
-## Historical RuneSchema
+## Community credits
 
-The original RuneSchema is credited to Snorkles. The continuation's ownership
-statement does not transfer or erase rights in historical third-party work.
-The permissions for any retained historical portion must be established from
-its source release, license, or other valid grant. See `LICENSING.md`.
+RuneSchema's community member credits, including the original work by
+Snorkles, are consolidated in `AUTHORS.md`. That roster is separate from
+this dependency inventory. See `LICENSING.md` for the scope of the project's
+grant and the treatment of existing contributions.
 
 ## Other build and runtime components
 

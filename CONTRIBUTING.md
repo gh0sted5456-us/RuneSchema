@@ -1,8 +1,9 @@
 # Contributing to RuneSchema
 
-RuneSchema is owned and maintained as an RSDW Modding Community project.
-Luke (gh0sted5456-us) leads the community continuation. The team coordinates
-updates, testing, and releases.
+RuneSchema is developed and maintained by the RSDW Modding Community.
+The team coordinates updates, testing, and releases. See `AUTHORS.md` for
+community credits. Official repository and distribution work are published
+under `gh0sted5456-us`.
 
 ## License for new contributions
 

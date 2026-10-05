@@ -11,7 +11,7 @@ param(
 # Packaging only. This script does not change compiled code or game behavior.
 $ErrorActionPreference = 'Stop'
 $RepositoryRoot = [IO.Path]::GetFullPath($RepositoryRoot)
-$required = @('LICENSE', 'LICENSING.md', 'THIRD_PARTY_NOTICES.md',
+$required = @('LICENSE', 'AUTHORS.md', 'LICENSING.md', 'CONTRIBUTING.md', 'THIRD_PARTY_NOTICES.md',
     'licenses/PalSchema-MIT.txt', 'licenses/UE4SS-MIT.txt',
     'licenses/nlohmann-json-MIT.txt')
 foreach ($relative in $required) {
@@ -115,7 +115,7 @@ function Collect-DependencyNotices {
 
 try {
     New-Item -ItemType Directory -Path $bundle -Force | Out-Null
-    foreach ($name in @('LICENSE', 'LICENSING.md', 'THIRD_PARTY_NOTICES.md')) {
+    foreach ($name in @('LICENSE', 'AUTHORS.md', 'LICENSING.md', 'CONTRIBUTING.md', 'THIRD_PARTY_NOTICES.md')) {
         Copy-Item -LiteralPath (Join-Path $RepositoryRoot $name) -Destination $bundle -Force
     }
     Copy-Item -LiteralPath (Join-Path $RepositoryRoot 'licenses') -Destination $bundle -Recurse -Force

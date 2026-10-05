@@ -1,36 +1,39 @@
 RUNESCHEMA - NEXUS LICENSING ALIGNMENT
 
-Apply this wording only to the community continuation's page and packages.
-Do not edit the original author's page or claim rights to third-party work.
+Apply this wording to the community's page and packages. Do not edit pages
+outside the publishing account's control or claim rights to third-party work.
 
-READY-TO-PASTE LICENSE AND OWNERSHIP TEXT
+READY-TO-PASTE LICENSE AND COMMUNITY TEXT
 
-RuneSchema is an RSDW Modding Community project. Luke (gh0sted5456-us) is the
-author of the community continuation; the team supports updates, testing,
-and maintenance.
+RuneSchema is developed and maintained by the RSDW Modding Community.
+Credited members: Jonesing4Space, NuLLZz, Snorkles, and CHP.
+Official repository and distribution work are published under gh0sted5456-us.
 
-Original RuneSchema code and accompanying documentation owned by, or
-licensed with authority by, RSDW Modding Community are licensed under the
-MIT License. Copyright (c) 2026 RSDW Modding Community.
+Copyright (c) 2026 RSDW Modding Community.
+Original RuneSchema software and accompanying documentation owned by, or
+licensed with authority by, the community are available under the MIT License.
 
 You may use, modify, fork, and redistribute that MIT-covered work, including
 compiled versions, provided the applicable copyright and permission notices
 are retained. Individual permission is not required for uses authorized by MIT.
 
-Our release packages include LICENSE, LICENSING.md, THIRD_PARTY_NOTICES.md,
-and applicable licenses/ files. Keeping this bundle together is recommended;
-it does not add conditions to MIT. Redistributors must preserve the required
-PalSchema, UE4SS, and other applicable copyright and permission notices and
-comply with the relevant upstream licenses.
+Our release packages include LICENSE, AUTHORS.md, LICENSING.md, CONTRIBUTING.md,
+THIRD_PARTY_NOTICES.md, and applicable licenses/ files. Keeping this bundle
+together is recommended; it does not add conditions to MIT. Redistributors
+must preserve the required upstream notices and comply with the relevant
+component licenses.
 
-Historical RuneSchema is credited to Snorkles. The PalSchema foundation is
-credited to Okaetsu. These credits are separate from ownership of the
-community continuation; the community's MIT grant does not relicense
-third-party historical additions, game assets, or engine material.
+The consolidated community credits include the original RuneSchema work by
+Snorkles. The PalSchema foundation is credited to Okaetsu. UE4SS and other
+upstream components retain their own copyrights and applicable licenses.
+Member credits do not themselves transfer copyright or supply a missing
+license grant; the scope document explains the rights covered by this release.
 
 The software license does not grant third-party game or trademark rights
 or permit false claims that a fork is an official community release.
 
+Repository: https://github.com/gh0sted5456-us/RuneSchema
+Credits: https://github.com/gh0sted5456-us/RuneSchema/blob/main/AUTHORS.md
 License: https://github.com/gh0sted5456-us/RuneSchema/blob/main/LICENSE
 Scope: https://github.com/gh0sted5456-us/RuneSchema/blob/main/LICENSING.md
 Notices: https://github.com/gh0sted5456-us/RuneSchema/blob/main/THIRD_PARTY_NOTICES.md
