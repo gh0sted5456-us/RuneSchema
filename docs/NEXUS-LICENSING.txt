@@ -17,9 +17,11 @@ You may use, modify, fork, and redistribute that MIT-covered work, including
 compiled versions, provided the applicable copyright and permission notices
 are retained. Individual permission is not required for uses authorized by MIT.
 
-Include the LICENSE, LICENSING.md, THIRD_PARTY_NOTICES.md, and applicable
-licenses/ files with redistributed packages. Preserve the PalSchema and
-UE4SS notices and any other applicable upstream terms.
+Our release packages include LICENSE, LICENSING.md, THIRD_PARTY_NOTICES.md,
+and applicable licenses/ files. Keeping this bundle together is recommended;
+it does not add conditions to MIT. Redistributors must preserve the required
+PalSchema, UE4SS, and other applicable copyright and permission notices and
+comply with the relevant upstream licenses.
 
 Historical RuneSchema is credited to Snorkles. The PalSchema foundation is
 credited to Okaetsu. These credits are separate from ownership of the
