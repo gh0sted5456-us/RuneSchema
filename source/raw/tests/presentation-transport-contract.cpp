@@ -10,8 +10,9 @@ static std::string Read(const char* path) {
 }
 
 int main(int argc,char** argv) {
-    if(argc!=5)throw std::runtime_error("Expected RegistryBridge source/header, RegistryLoader source and networking PAK");
+    if(argc!=7)throw std::runtime_error("Expected RegistryBridge source/header, RegistryLoader source, networking PAK and ActorHelper source/header");
     const auto source=Read(argv[1]),header=Read(argv[2]),loader=Read(argv[3]),pak=Read(argv[4]);
+    const auto actorHeader=Read(argv[5]),actorSource=Read(argv[6]);
     const auto require=[](bool value,const char* message) {
         if(!value)throw std::runtime_error(std::string("Presentation transport regression: ")+message);
     };
@@ -42,4 +43,9 @@ int main(int argc,char** argv) {
     require(pak.find("BPC_RuneSchemaPluginPresentation.uasset")!=std::string::npos
         &&pak.find("Content/Networking/Extensions/")!=std::string::npos,
         "the packaged networking bridge does not contain the presentation component");
+    require(actorHeader.find("Arg(const RC::CharType* Name, const std::string& Value)")!=std::string::npos
+        &&actorHeader.find("return StringArg(Name, Value);")!=std::string::npos,
+        "reflected Unreal string arguments can fall through to raw byte copying");
+    require(actorSource.find("return JsonArg(Name, nlohmann::json(Value));")!=std::string::npos,
+        "reflected Unreal strings do not use property initialization and cleanup");
 }

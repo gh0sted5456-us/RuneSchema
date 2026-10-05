@@ -64,6 +64,18 @@ namespace DragonWilds::ActorHelper {
             return *this;
         }
 
+        // Unreal string parameters own an FString allocation. Never copy the
+        // bytes of a C++ std::string into that reflected slot: apart from
+        // producing an invalid FString, a trailing string parameter can be
+        // larger than the remaining live parameter buffer. Route strings
+        // through reflected initialization and cleanup instead.
+        FunctionCall& Arg(const RC::CharType* Name, const std::string& Value)
+        {
+            return StringArg(Name, Value);
+        }
+
+        FunctionCall& StringArg(const RC::CharType* Name, const std::string& Value);
+
         FunctionCall& SoftObjectArg(const RC::CharType* Name, RC::Unreal::UObject* Value);
         FunctionCall& JsonArg(const RC::CharType* Name, const nlohmann::json& Value);
 

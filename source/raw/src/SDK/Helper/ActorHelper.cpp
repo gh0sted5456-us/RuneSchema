@@ -350,6 +350,11 @@ namespace DragonWilds::ActorHelper {
         std::memcpy(m_params.data() + property->GetOffset_Internal(), Data, Size);
     }
 
+    FunctionCall& FunctionCall::StringArg(const CharType* Name, const std::string& Value)
+    {
+        return JsonArg(Name, nlohmann::json(Value));
+    }
+
     FunctionCall& FunctionCall::SoftObjectArg(const CharType* Name, UObject* Value)
     {
         auto* property = m_function->FindProperty(FName(Name, FNAME_Find));
