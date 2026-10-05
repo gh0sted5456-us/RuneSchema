@@ -63,5 +63,16 @@ Contributor build and packaging notes are in the
 The public documentation describes the current supported release. Historical
 development checkpoints remain in Git history instead of the public guide.
 
-Based on the original RuneSchema by Snorkles. PalSchema foundation by Okaetsu.
-Maintained by members of the RSDW Modding Community.
+## Community and license
+
+RuneSchema is developed and maintained by the **RSDW Modding Community**.
+Credited members: **Jonesing4Space, NuLLZz, Snorkles, and CHP**.
+Published under **gh0sted5456-us**. See [community credits](../AUTHORS.md).
+
+Copyright (c) 2026 RSDW Modding Community. Original software and documentation
+owned by, or licensed with authority by, the community are available under the
+[MIT License](../LICENSE). See [license scope](../LICENSING.md) and
+[third-party notices](../THIRD_PARTY_NOTICES.md) for component-specific terms.
+
+PalSchema foundation by Okaetsu. UE4SS and other dependencies retain their
+original copyright and license notices.

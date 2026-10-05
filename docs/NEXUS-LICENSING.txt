@@ -1,0 +1,52 @@
+RUNESCHEMA - NEXUS LICENSING ALIGNMENT
+
+Apply this wording to the community's page and packages. Do not edit pages
+outside the publishing account's control or claim rights to third-party work.
+
+READY-TO-PASTE LICENSE AND COMMUNITY TEXT
+
+RuneSchema is developed and maintained by the RSDW Modding Community.
+Credited members: Jonesing4Space, NuLLZz, Snorkles, and CHP.
+Official repository and distribution work are published under gh0sted5456-us.
+
+Copyright (c) 2026 RSDW Modding Community.
+Original RuneSchema software and accompanying documentation owned by, or
+licensed with authority by, the community are available under the MIT License.
+
+You may use, modify, fork, and redistribute that MIT-covered work, including
+compiled versions, provided the applicable copyright and permission notices
+are retained. Individual permission is not required for uses authorized by MIT.
+
+Our release packages include LICENSE, AUTHORS.md, LICENSING.md, CONTRIBUTING.md,
+THIRD_PARTY_NOTICES.md, and applicable licenses/ files. Keeping this bundle
+together is recommended; it does not add conditions to MIT. Redistributors
+must preserve the required upstream notices and comply with the relevant
+component licenses.
+
+The consolidated community credits include the original RuneSchema work by
+Snorkles. The PalSchema foundation is credited to Okaetsu. UE4SS and other
+upstream components retain their own copyrights and applicable licenses.
+Member credits do not themselves transfer copyright or supply a missing
+license grant; the scope document explains the rights covered by this release.
+
+The software license does not grant third-party game or trademark rights
+or permit false claims that a fork is an official community release.
+
+Repository: https://github.com/gh0sted5456-us/RuneSchema
+Credits: https://github.com/gh0sted5456-us/RuneSchema/blob/main/AUTHORS.md
+License: https://github.com/gh0sted5456-us/RuneSchema/blob/main/LICENSE
+Scope: https://github.com/gh0sted5456-us/RuneSchema/blob/main/LICENSING.md
+Notices: https://github.com/gh0sted5456-us/RuneSchema/blob/main/THIRD_PARTY_NOTICES.md
+
+PERMISSIONS PANEL
+
+For the MIT-covered code, set modification, redistribution/reupload, and
+reuse permissions to allow use with the required notices; remove blanket
+"ask permission first" and "no reuploads" restrictions on that code.
+Use custom permission text to distinguish separately licensed assets.
+Do not add a non-commercial restriction to the software's MIT grant; game
+publisher rules remain a separate matter.
+
+Check the actual downloadable ZIPs and include the full applicable notices.
+A page edit alone does not repair missing notices in an existing archive.
+The GitHub change does not update this Nexus page or its toggles automatically.

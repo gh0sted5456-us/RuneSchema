@@ -91,7 +91,7 @@ jobs:
             }
           }
 
-          Compress-Archive -Path $stageRoot -DestinationPath "dist/RuneSchema-0.7.7.0-experimental-full-source.zip" -Force
+          & ./build/package-licenses.ps1 -PayloadRoot $stageRoot -ArchivePath "dist/RuneSchema-0.7.7.0-experimental-full-source.zip"
 
       - name: Upload full 0.8 source tree
         uses: actions/upload-artifact@v4
@@ -104,7 +104,11 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          Compress-Archive -Path source/extras/examples/RuntimeWidget08/RuneSchema08Demo -DestinationPath dist/RuneSchema08Demo.zip -Force
+          $demoStage = Join-Path $PWD "dist/license-stage/RuneSchema08Demo"
+          Remove-Item -LiteralPath $demoStage -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path (Split-Path -Parent $demoStage) -Force | Out-Null
+          Copy-Item -LiteralPath source/extras/examples/RuntimeWidget08/RuneSchema08Demo -Destination $demoStage -Recurse
+          & ./build/package-licenses.ps1 -PayloadRoot $demoStage -ArchivePath dist/RuneSchema08Demo.zip
 
       - name: Upload 0.8 demo mod
         uses: actions/upload-artifact@v4
@@ -116,7 +120,11 @@ jobs:
       - name: Package Gamepass Restore Appearance test
         shell: pwsh
         run: |
-          Compress-Archive -Path source/examples/RestoreAppearance -DestinationPath dist/RestoreAppearance-Gamepass-0.7.7.0.zip -Force
+          $appearanceStage = Join-Path $PWD "dist/license-stage/RestoreAppearance"
+          Remove-Item -LiteralPath $appearanceStage -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path (Split-Path -Parent $appearanceStage) -Force | Out-Null
+          Copy-Item -LiteralPath source/examples/RestoreAppearance -Destination $appearanceStage -Recurse
+          & ./build/package-licenses.ps1 -PayloadRoot $appearanceStage -ArchivePath dist/RestoreAppearance-Gamepass-0.7.7.0.zip
 
       - name: Upload Gamepass Restore Appearance test
         uses: actions/upload-artifact@v4
