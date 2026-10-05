@@ -10,6 +10,19 @@ It is a template for registry declarations, not a global table that every mod
 edits. Each mod creates and cooks its own data-asset instance. This lets many
 content PAKs register together without replacing one another.
 
+## Bridge boundary
+
+RuneSchema's cooked bridge PAKs provide transport and registration boundaries;
+they do not own another mod's gameplay. Every mod that uses a bridge must cook
+its own complete Blueprints, data, and content into its own PAK. Authors should
+reuse the game's existing Blueprint behavior wherever it already works and use
+RuneSchema only for the missing registration, authority, or replication step.
+
+Do not move mod-specific attacks, spells, followers, audio behavior, or other
+gameplay into RuneSchema's shared PAKs. The mod-owned Blueprint remains the
+source of truth and the bridge carries only stable identifiers and validated
+requests.
+
 The complete runtime triplet is included and enabled in the RuneSchema
 Universal package as the `RuneSchema.RegistryBridge` plugin. It is optional for
 players whose installed mods do not use it. The Core package does not include

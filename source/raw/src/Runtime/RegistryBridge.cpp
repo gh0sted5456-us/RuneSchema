@@ -1,5 +1,6 @@
 #include "Runtime/RegistryBridge.h"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cctype>
@@ -20,6 +21,7 @@
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
+#include "SDK/Structs/Custom/FManagedStruct.h"
 #include "Utility/Logging.h"
 #include "Unreal/AActor.hpp"
 #include "Unreal/AGameModeBase.hpp"
@@ -71,6 +73,24 @@ std::string AssetPackage(std::string path) {
     const auto dot=path.find('.',slash==std::string::npos?0:slash);
     if(dot!=std::string::npos)path.resize(dot);
     return path;
+}
+
+UObject* ControllerPawn(UObject* controller) {
+    if(!controller)return nullptr;
+    DragonWilds::ActorHelper::FunctionCall pawn(controller,TEXT("/Script/Engine.Controller:K2_GetPawn"));
+    pawn.Invoke();return pawn.Result<UObject*>();
+}
+
+bool ActorAuthority(UObject* actor) {
+    if(!actor||!actor->IsA<AActor>())return false;
+    DragonWilds::ActorHelper::FunctionCall authority(actor,TEXT("/Script/Engine.Actor:HasAuthority"));
+    authority.Invoke();return authority.Result<bool>();
+}
+
+bool LocalController(UObject* controller) {
+    if(!controller)return false;
+    DragonWilds::ActorHelper::FunctionCall local(controller,TEXT("/Script/Engine.Controller:IsLocalController"));
+    local.Invoke();return local.Result<bool>();
 }
 
 template<class T> T* Field(UClass* type,const TCHAR* name,EPropertyFlags required) {
@@ -222,6 +242,7 @@ void RegistryBridge::ResetWorld() {
     m_manifestFingerprint.clear();m_activationEnvelope.clear();m_persistentStateEnvelope.clear();
     m_registryRevision=m_activationRevision=m_persistentRevision=0;
     m_outboundRevision=0;m_requestWindows.clear();m_worldInstances.clear();m_worldLedgerRevision=0;
+    m_consumptionPermits.clear();m_pendingAuthorityActions.clear();m_pendingClientActions.clear();m_lastAuthorityDeferred=false;
     m_presentationConsumers.clear();m_presentationAuthorityRevisions.clear();m_presentationClientRevisions.clear();
 }
 
@@ -269,7 +290,8 @@ void RegistryBridge::LoadAuthorityActions() {
         if(!entry.contains("authority") || !entry["authority"].is_object())continue;
         const auto& authority=entry["authority"];
         const auto graph=authority.value("graphClass",std::string{}),action=authority.value("action",std::string{}),asset=authority.value("dataAsset",std::string{});
-        if(graph.empty() || (action!="SpawnFollower" && action!="ExecuteGraph") || (action=="SpawnFollower" && asset.empty()))
+        if(graph.empty() || (action!="SpawnFollower" && action!="ExecuteGraph" && action!="ConsumedItemAuthority")
+            || ((action=="SpawnFollower"||action=="ConsumedItemAuthority") && asset.empty()))
             throw std::runtime_error("Registry authority action is malformed");
         AuthorityAction candidate{action,asset,entry.value("key",std::string{}),graph,authority.value("function",std::string{"Trigger"}),{}};
         if(authority.contains("bindings") && authority["bindings"].is_object())
@@ -293,7 +315,8 @@ void RegistryBridge::LoadAuthorityActions() {
             }
         };
         remember(entry.value("spell",entry.value("package",std::string{})));
-        remember(candidate.DataAsset);remember(candidate.GraphClass);
+        remember(candidate.DataAsset);
+        if(candidate.Action!="ConsumedItemAuthority")remember(candidate.GraphClass);
         if(entry.contains("metadata") && entry["metadata"].is_object()
             && entry["metadata"].contains("selectors") && entry["metadata"]["selectors"].is_array())
             for(const auto& selector:entry["metadata"]["selectors"])
@@ -379,6 +402,116 @@ void RegistryBridge::ObserveSelectionNotify(UObject* source,UFunction* function,
     const auto components=static_cast<AActor*>(caster)->GetComponentsByClass(contract.Type);
     if(!components.Num())throw std::runtime_error("Owned player registry bridge has not replicated yet");
     ForwardRegistryRequest(components[0],selectedKey);
+}
+
+void RegistryBridge::ObserveConsumedItemAuthority(UObject* source,UFunction* function,void* parameters) {
+    if(!source||!function||!parameters)return;
+    const auto selected=m_authoritySelectionPaths.find(AssetPackage(RC::to_string(source->GetPathName())));
+    if(selected==m_authoritySelectionPaths.end())return;
+    const auto actionAt=m_authorityActions.find(selected->second);
+    if(actionAt==m_authorityActions.end()||actionAt->second.Action!="ConsumedItemAuthority")return;
+    const auto& action=actionAt->second;
+    if(source->GetClassPrivate()->GetPathName()!=PS::ToWideSafe(action.GraphClass.c_str())
+        ||RC::to_string(function->GetFName().ToString())!=action.EntryFunction)return;
+    auto* controllerField=CastField<FObjectPropertyBase>(function->FindProperty(FName(TEXT("PlayerController"),FNAME_Find)));
+    if(!controllerField||controllerField->GetArrayDim()!=1||controllerField->GetOffset_Internal()<0
+        ||static_cast<size_t>(controllerField->GetOffset_Internal())+sizeof(UObject*)>function->GetParmsSize())
+        throw std::runtime_error("Consumed-item callback controller contract changed");
+    auto* controller=controllerField->GetObjectPropertyValue(controllerField->ContainerPtrToValuePtr<void>(parameters));
+    auto* caster=ControllerPawn(controller);
+    if(!caster||!caster->IsA<AActor>())throw std::runtime_error("Consumed-item callback has no owned player pawn");
+    if(ActorAuthority(caster))return;
+    if(!LocalController(controller))throw std::runtime_error("Consumed-item callback did not originate from the owning client");
+    const auto duplicate=std::find_if(m_pendingClientActions.begin(),m_pendingClientActions.end(),
+        [&](const PendingClientAction& pending){return pending.Caster.Get()==caster&&pending.Key==action.Key;});
+    if(duplicate==m_pendingClientActions.end())m_pendingClientActions.push_back({PS::WeakObjectHandle(caster),action.Key,0.5f,5.0f});
+}
+
+void RegistryBridge::ObserveInventoryRemoval(UObject* source,UFunction* function,void* parameters) {
+    if(!source||!function||!parameters||function->GetPathName()!=TEXT("/Script/Dominion.InventoryComponent:RemoveItemByData"))return;
+    auto* itemField=CastField<FObjectPropertyBase>(function->FindProperty(FName(TEXT("ItemData"),FNAME_Find)));
+    auto* countField=CastField<FIntProperty>(function->FindProperty(FName(TEXT("Count"),FNAME_Find)));
+    auto* resultField=CastField<FBoolProperty>(function->GetReturnProperty());
+    if(function->GetParmsSize()!=13||!itemField||!countField||!resultField
+        ||itemField->GetOffset_Internal()!=0||countField->GetOffset_Internal()!=8||resultField->GetOffset_Internal()!=12
+        ||!resultField->IsNativeBool())throw std::runtime_error("Consumed-item inventory-removal contract changed");
+    if(!resultField->GetPropertyValue(resultField->ContainerPtrToValuePtr<void>(parameters)))return;
+    const auto count=countField->GetPropertyValue(countField->ContainerPtrToValuePtr<void>(parameters));
+    auto* item=itemField->GetObjectPropertyValue(itemField->ContainerPtrToValuePtr<void>(parameters));
+    if(count!=1||!item)return;
+    const auto selected=m_authoritySelectionPaths.find(AssetPackage(RC::to_string(item->GetPathName())));
+    if(selected==m_authoritySelectionPaths.end())return;
+    const auto actionAt=m_authorityActions.find(selected->second);
+    if(actionAt==m_authorityActions.end()||actionAt->second.Action!="ConsumedItemAuthority"
+        ||AssetPackage(actionAt->second.DataAsset)!=AssetPackage(RC::to_string(item->GetPathName())))return;
+    auto* controller=source->GetOuterPrivate();auto* caster=ControllerPawn(controller);
+    if(!caster||!ActorAuthority(caster))throw std::runtime_error("Consumed-item removal was not owned by an authoritative player");
+    const auto permitKey=RC::to_string(caster->GetPathName())+"|"+actionAt->second.Key;
+    auto& permit=m_consumptionPermits[permitKey];permit.Count=std::min<uint32_t>(permit.Count+1,4);
+    permit.Expires=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+}
+
+bool RegistryBridge::ConsumeAuthorityPermit(UObject* caster,const AuthorityAction& action) {
+    if(!caster||action.Action!="ConsumedItemAuthority")return false;
+    const auto key=RC::to_string(caster->GetPathName())+"|"+action.Key;
+    const auto found=m_consumptionPermits.find(key);const auto now=std::chrono::steady_clock::now();
+    if(found==m_consumptionPermits.end())return false;
+    if(found->second.Expires<now||found->second.Count==0){m_consumptionPermits.erase(found);return false;}
+    if(--found->second.Count==0)m_consumptionPermits.erase(found);
+    return true;
+}
+
+void RegistryBridge::InvokeConsumedItemAuthority(UObject* caster,const AuthorityAction& action) {
+    auto* graphType=DragonWilds::ActorHelper::ResolveClass(PS::ToWideSafe(action.GraphClass.c_str()));
+    auto* item=DragonWilds::ActorHelper::ResolveObject(PS::ToWideSafe(action.DataAsset.c_str()));
+    if(!graphType||!item||!item->IsA(graphType))throw std::runtime_error("Consumed ItemData does not match its registered cooked callback class");
+    DragonWilds::ActorHelper::FunctionCall getController(caster,TEXT("/Script/Engine.Pawn:GetController"));
+    getController.Invoke();auto* controller=getController.Result<UObject*>();
+    if(!controller||controller->GetWorld()!=caster->GetWorld())throw std::runtime_error("Consumed-item authority controller is unavailable");
+    const auto entry=PS::ToWideSafe(action.EntryFunction.c_str());
+    auto* callback=item->GetFunctionByNameInChain(entry.c_str());
+    auto* controllerField=callback?CastField<FObjectPropertyBase>(callback->FindProperty(FName(TEXT("PlayerController"),FNAME_Find))):nullptr;
+    auto* tagsField=callback?CastField<FStructProperty>(callback->FindProperty(FName(TEXT("ItemGameplayTags"),FNAME_Find))):nullptr;
+    auto* tagsType=tagsField?tagsField->GetStruct().Get():nullptr;
+    if(!callback||callback->GetParmsSize()!=40||!controllerField||controllerField->GetOffset_Internal()!=0
+        ||controllerField->GetElementSize()!=8||!controller->IsA(controllerField->GetPropertyClass().Get())
+        ||!tagsField||tagsField->GetOffset_Internal()!=8||tagsField->GetElementSize()!=32||!tagsType
+        ||tagsType->GetPathName()!=TEXT("/Script/GameplayTags.GameplayTagContainer"))
+        throw std::runtime_error("Consumed-item success function layout changed");
+    DragonWilds::FManagedStruct tags(tagsType);struct EmptyTags{uint8_t Bytes[32];} empty{};
+    std::memcpy(&empty,tags.GetData(),sizeof(empty));
+    DragonWilds::ActorHelper::FunctionCall invoke(item,callback);
+    invoke.Arg(TEXT("PlayerController"),controller).Arg(TEXT("ItemGameplayTags"),empty).Invoke();
+}
+
+void RegistryBridge::TickAuthorityActions(float deltaSeconds) {
+    const auto elapsed=std::max(0.0f,deltaSeconds);const auto now=std::chrono::steady_clock::now();
+    for(auto at=m_consumptionPermits.begin();at!=m_consumptionPermits.end();)
+        if(at->second.Expires<now||at->second.Count==0)at=m_consumptionPermits.erase(at);else ++at;
+    for(auto at=m_pendingClientActions.begin();at!=m_pendingClientActions.end();) {
+        at->Delay-=elapsed;at->Remaining-=elapsed;auto* caster=at->Caster.Get();bool sent=false;
+        if(!caster||at->Remaining<=0.0f){at=m_pendingClientActions.erase(at);continue;}
+        if(at->Delay<=0.0f)try {
+            const auto contract=ResolveContract();const auto components=static_cast<AActor*>(caster)->GetComponentsByClass(contract.Type);
+            if(components.Num()){ForwardRegistryRequest(components[0],at->Key);sent=true;}
+        }catch(...){}
+        if(sent)at=m_pendingClientActions.erase(at);else ++at;
+    }
+    for(auto at=m_pendingAuthorityActions.begin();at!=m_pendingAuthorityActions.end();) {
+        at->Remaining-=elapsed;auto* caster=at->Caster.Get();
+        if(!caster||at->Remaining<=0.0f) {
+            RecordDiagnostic("consumable.authority",at->Key,0,"expired","No matching authoritative item removal arrived.");
+            at=m_pendingAuthorityActions.erase(at);continue;
+        }
+        const auto action=m_authorityActions.find(at->Key);
+        if(action==m_authorityActions.end()){at=m_pendingAuthorityActions.erase(at);continue;}
+        const auto permitKey=RC::to_string(caster->GetPathName())+"|"+at->Key;
+        const auto permit=m_consumptionPermits.find(permitKey);
+        if(permit==m_consumptionPermits.end()||permit->second.Expires<now||permit->second.Count==0){++at;continue;}
+        const auto selected=action->second;at=m_pendingAuthorityActions.erase(at);
+        try{m_lastAuthorityDeferred=false;InvokeAuthorityActionForCaster(caster,selected);}
+        catch(const std::exception& error){RecordDiagnostic("consumable.authority",selected.Key,0,"rejected",error.what());}
+    }
 }
 
 UObject* RegistryBridge::EnsureBridgeComponent(AActor* actor,bool publishRegistry) {
@@ -611,7 +744,10 @@ void RegistryBridge::HandleGenericRequest(UObject* source,UFunction* function,vo
         if(channel=="registry.action") {
             if(action!="execute")throw std::runtime_error("Unsupported registry action verb");
             const auto found=m_authorityActions.find(entity);if(found==m_authorityActions.end())throw std::runtime_error("Registry action key is not registered");
-            InvokeAuthorityActionForCaster(caster,found->second);SendReceipt(source,channel,entity,revision,true,"Registry action executed by authority.");return;
+            m_lastAuthorityDeferred=false;InvokeAuthorityActionForCaster(caster,found->second);
+            SendReceipt(source,channel,entity,revision,true,m_lastAuthorityDeferred
+                ?"Registry action accepted pending authoritative item consumption."
+                :"Registry action executed by authority.");return;
         }
         if(channel=="quest.control") {
             if(!QuestControl)throw std::runtime_error("Quest authority service is unavailable");
@@ -924,6 +1060,7 @@ bool RegistryBridge::Attach(AGameModeBase* mode) {
 
 void RegistryBridge::ObserveAuthorityPre(UObject* source,UFunction* function,void* parameters) {
     if(!source || !function)return;
+    ObserveConsumedItemAuthority(source,function,parameters);
     ObserveSelectionNotify(source,function,parameters);
     const auto name=function->GetFName();
     if(name==FName(TEXT("ServerRequestRuneSchemaAction"),FNAME_Add)) {HandleGenericRequest(source,function,parameters);return;}
@@ -979,6 +1116,15 @@ void RegistryBridge::InvokeAuthorityActionForCaster(UObject* caster,const Author
     if(!caster || !actorClass || !caster->IsA(actorClass))throw std::runtime_error("registry authority request has no actor Caster");
     DragonWilds::ActorHelper::FunctionCall authority(caster,TEXT("/Script/Engine.Actor:HasAuthority"));authority.Invoke();
     if(!authority.Result<bool>())return;
+    if(action.Action=="ConsumedItemAuthority") {
+        if(!ConsumeAuthorityPermit(caster,action)) {
+            const auto duplicate=std::find_if(m_pendingAuthorityActions.begin(),m_pendingAuthorityActions.end(),
+                [&](const PendingAuthorityAction& pending){return pending.Caster.Get()==caster&&pending.Key==action.Key;});
+            if(duplicate==m_pendingAuthorityActions.end())m_pendingAuthorityActions.push_back({PS::WeakObjectHandle(caster),action.Key,5.0f});
+            m_lastAuthorityDeferred=true;return;
+        }
+        InvokeConsumedItemAuthority(caster,action);PublishActionActivation(caster,action);return;
+    }
     if(action.Action!="SpawnFollower" && action.Action!="ExecuteGraph")throw std::runtime_error("authority action is unsupported");
     auto* graphType=DragonWilds::ActorHelper::ResolveClass(PS::ToWideSafe(action.GraphClass.c_str()));
     if(!graphType || DragonWilds::ActorHelper::IsAbstract(graphType))
@@ -1027,8 +1173,9 @@ void RegistryBridge::PublishActionActivation(UObject* caster,const AuthorityActi
             PS::ToWideSafe(action.Key.c_str()));
 }
 
-void RegistryBridge::ObserveAuthorityPost(UObject* source,UFunction* function) {
+void RegistryBridge::ObserveAuthorityPost(UObject* source,UFunction* function,void* parameters) {
     if(!source || !function)return;
+    ObserveInventoryRemoval(source,function,parameters);
     const auto path=RC::to_string(source->GetClassPrivate()->GetPathName());
     const auto found=std::find_if(m_authorityActions.begin(),m_authorityActions.end(),[&](const auto& row){return row.second.GraphClass==path;});
     if(found==m_authorityActions.end() || RC::to_string(function->GetFName().ToString())!=found->second.EntryFunction)return;
@@ -1070,6 +1217,7 @@ void RegistryBridge::StartRetryTick() {
     options.HookName=TEXT("RegistryBridgeDeferredAttach");
     m_retryTick=Hook::RegisterEngineTickPostCallback(
         [this](Hook::TCallbackIterationData<void>&,UEngine*,float deltaSeconds,bool){
+            TickAuthorityActions(deltaSeconds);
             if(m_pendingMode.Get() && !m_authorityComponent)RetryAttach(deltaSeconds);
         },options);
     if(m_retryTick==Hook::ERROR_ID){m_pendingMode.Reset();PS::Log<LogLevel::Warning>(STR("Registry bridge deferred attachment could not be scheduled.\n"));}
@@ -1250,7 +1398,7 @@ void RegistryBridge::Start() {
     },options);
     options.HookName=TEXT("RegistryBridgeRepNotify");
     m_processEvent=Hook::RegisterProcessEventPostCallback([this](Hook::TCallbackIterationData<void>&,UObject* source,UFunction* function,void* parameters){
-        try{ObservePlayerLifecycle(source,function);ObserveAuthorityPost(source,function);Observe(source,function);ObserveClientTransport(source,function,parameters);ObservePresentationTransport(source,function,parameters);}catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("Registry bridge update rejected: {}.\n"),PS::ToWideSafe(error.what()));}
+        try{ObservePlayerLifecycle(source,function);ObserveAuthorityPost(source,function,parameters);Observe(source,function);ObserveClientTransport(source,function,parameters);ObservePresentationTransport(source,function,parameters);}catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("Registry bridge update rejected: {}.\n"),PS::ToWideSafe(error.what()));}
     },options);
     StartRetryTick();
     m_started=m_worldStarting!=Hook::ERROR_ID && m_worldReady!=Hook::ERROR_ID

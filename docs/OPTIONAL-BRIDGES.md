@@ -73,9 +73,11 @@ Authors can follow the [shared registry bridge PAK walkthrough](SHARED-REGISTRY-
 ## RSNetworking
 
 RSNetworking supplies cooked bridge objects for mods that use RuneSchema's
-supported multiplayer identity, world-state, dialogue-cue, or registry
-presentation paths. It does not make an otherwise single-player mod
-multiplayer-safe by itself.
+supported multiplayer identity, world-state, dialogue-cue, registry
+presentation, or validated authority paths. It does not make an otherwise
+single-player mod multiplayer-safe by itself. The mod must remain
+self-contained and own the complete gameplay Blueprint; the networking PAK is
+only the bridge across the boundary the game does not already cover.
 
 For gameplay content, the server and every client should use the same mod
 versions, PAKs, enabled bridges, and load order. If a mod does not name

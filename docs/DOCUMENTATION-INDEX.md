@@ -26,7 +26,8 @@ Use this page to find the shortest path to the information you need.
 4. [Create a shared registry bridge asset](SHARED-REGISTRY-BRIDGE-PAK.md)
 5. [Plan authoritative combat and magic registration](COOKED-PAK-REGISTRY-MANIFEST.md)
 6. [Configure optional combat fallback helpers](COMBAT-FALLBACK-SETTINGS.md)
-7. [Troubleshoot mounting and registration](TROUBLESHOOTING.md)
+7. [Bridge a self-contained summoning mod](SUMMONING-AUTHORITY-BRIDGE.md)
+8. [Troubleshoot mounting and registration](TROUBLESHOOTING.md)
 
 The public website describes the supported release in plain language. Historical
 experiments and internal implementation notes remain in Git history.

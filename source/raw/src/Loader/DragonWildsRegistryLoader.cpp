@@ -122,7 +122,8 @@ nlohmann::json DragonWildsRegistryLoader::NormalizeEntry(const json& entry,const
     if(kind!="SpellPresentation" && kind!="UtilitySpellPresentation" && kind!="SkillPresentation"
         && kind!="GameplayEffectPresentation" && kind!="EquipmentPresentation"
         && kind!="PersistentEffect" && kind!="WeatherPresentation"
-        && kind!="WorldPresentation" && kind!="AudioPresentation" && kind!="CosmeticWrapper")
+        && kind!="WorldPresentation" && kind!="AudioPresentation" && kind!="CosmeticWrapper"
+        && kind!="GameplayAuthority")
         throw std::runtime_error("registry Kind is unsupported");
     const auto key=owner+":"+id;
     if(m_keys.contains(key))throw std::runtime_error("duplicate registry key '"+key+"'");
@@ -164,7 +165,7 @@ nlohmann::json DragonWildsRegistryLoader::NormalizeEntry(const json& entry,const
         const auto& authority=entry["Authority"];
         Fields(authority,{"Action","GraphClass","DataAsset","Function","Bindings"},"registry authority");
         const auto action=authority.value("Action",std::string{});
-        if(action!="SpawnFollower" && action!="ExecuteGraph")
+        if(action!="SpawnFollower" && action!="ExecuteGraph" && action!="ConsumedItemAuthority")
             throw std::runtime_error("registry Authority Action is unsupported");
         const auto graph=authority.value("GraphClass",std::string{});
         if(!AssetPath(graph) || !graph.ends_with("_C"))
@@ -192,6 +193,10 @@ nlohmann::json DragonWildsRegistryLoader::NormalizeEntry(const json& entry,const
             if(bindings.contains("Follower Data Asset") && bindings["Follower Data Asset"]!=asset)
                 throw std::runtime_error("SpawnFollower DataAsset conflicts with its named binding");
             bindings["Follower Data Asset"]=asset;
+        } else if(action=="ConsumedItemAuthority") {
+            if(asset.empty())throw std::runtime_error("ConsumedItemAuthority requires the cooked consumed ItemData as DataAsset");
+            if(function!="OnConsumeSuccess")throw std::runtime_error("ConsumedItemAuthority must use the native consume-success callback");
+            if(!bindings.empty())throw std::runtime_error("ConsumedItemAuthority does not accept client-selectable bindings");
         } else if(bindings.empty()) {
             throw std::runtime_error("ExecuteGraph authority requires at least one named asset binding");
         }

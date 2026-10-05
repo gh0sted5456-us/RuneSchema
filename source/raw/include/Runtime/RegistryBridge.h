@@ -118,6 +118,25 @@ private:
     // action.  The client resolves these from its live player components at
     // the attack notify boundary; paths are never accepted from the wire.
     std::unordered_map<std::string,std::string> m_authoritySelectionPaths;
+    struct ConsumptionPermit {
+        uint32_t Count = 0;
+        std::chrono::steady_clock::time_point Expires{};
+    };
+    struct PendingAuthorityAction {
+        PS::WeakObjectHandle Caster;
+        std::string Key;
+        float Remaining = 5.0f;
+    };
+    struct PendingClientAction {
+        PS::WeakObjectHandle Caster;
+        std::string Key;
+        float Delay = 0.5f;
+        float Remaining = 5.0f;
+    };
+    std::unordered_map<std::string,ConsumptionPermit> m_consumptionPermits;
+    std::vector<PendingAuthorityAction> m_pendingAuthorityActions;
+    std::vector<PendingClientAction> m_pendingClientActions;
+    bool m_lastAuthorityDeferred = false;
     RC::Unreal::UObject* m_activeAuthorityGraph = nullptr;
     bool m_nativeAuthorityActionObserved = false;
     std::string m_manifestFingerprint;
@@ -161,7 +180,12 @@ private:
     void ObserveAuthorityPre(RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
     void ObservePresentationPre(RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
     void ObserveSelectionNotify(RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
-    void ObserveAuthorityPost(RC::Unreal::UObject* source,RC::Unreal::UFunction* function);
+    void ObserveAuthorityPost(RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
+    void ObserveConsumedItemAuthority(RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
+    void ObserveInventoryRemoval(RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
+    void TickAuthorityActions(float deltaSeconds);
+    bool ConsumeAuthorityPermit(RC::Unreal::UObject* caster,const AuthorityAction& action);
+    void InvokeConsumedItemAuthority(RC::Unreal::UObject* caster,const AuthorityAction& action);
     void HandleGenericRequest(RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
     void ObserveClientTransport(RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
     void ObservePresentationTransport(RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
