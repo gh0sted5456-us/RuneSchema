@@ -48,10 +48,13 @@ no non-commercial restriction is being added to the MIT-covered code.
 
 ## Distribution
 
-Distribute `LICENSE`, `LICENSING.md`, `THIRD_PARTY_NOTICES.md`, and the relevant
-`licenses/` contents with covered source or binary packages. Preserve existing
-upstream notices rather than replacing their authors with the project name.
-An acknowledgment or an upstream URL alone is not a substitute for license text.
+Our release packaging includes `LICENSE`, `LICENSING.md`,
+`THIRD_PARTY_NOTICES.md`, and the relevant `licenses/` contents. This is the
+project's packaging practice, not an additional condition on the MIT grant.
+Downstream obligations are those in the applicable component licenses.
+Preserve required upstream copyright and permission notices rather than
+replacing their authors with the project name. An acknowledgment or an
+upstream URL alone is not a substitute for the required notice text.
 
 The supported `Build RuneSchema.bat` launcher finalizes the generated Core,
 Universal, and Helpy ZIPs through `build/package-licenses.ps1`. The same helper
