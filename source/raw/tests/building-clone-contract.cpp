@@ -43,6 +43,17 @@ int main(int argc,char** argv) {
         "fresh world catalogue does not replay custom menu placements");
     require(loader.find("[BUILDING-CATALOGUE][VERIFIED]")!=std::string::npos,
         "world catalogue replay has no acceptance diagnostic");
+    require(loader.find("RegisterInitGameStatePreCallback")!=std::string::npos
+        && loader.find("RegisterInitGameStatePostCallback")!=std::string::npos,
+        "building registry and player unlock work no longer use separate lifecycle lanes");
+    require(loader.find("candidate->GetWorld() != targetWorld")!=std::string::npos,
+        "building unlock delivery is not restricted to the active gameplay world");
+    require(loader.find("RF_BeginDestroyed | RF_FinishDestroyed")!=std::string::npos,
+        "building unlock delivery can select a destroyed transition component");
+    require(loader.find("BP_OnBuildingsUnlocked")!=std::string::npos,
+        "building unlock delivery no longer notifies the native build-menu path");
+    require(loader.find("[BUILDING-UNLOCK][VERIFIED]")!=std::string::npos,
+        "building unlock delivery has no verification diagnostic");
     require(schema.find("appends the clone to every page/collection containing its $Clone source")!=std::string::npos,
         "inherited menu behavior is undocumented in schema");
     require(schema.find("Complete replacement build cost")!=std::string::npos,

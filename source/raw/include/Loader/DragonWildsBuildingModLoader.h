@@ -104,7 +104,9 @@ namespace DragonWilds {
         bool RestoreNativeRegistry();
         void ClearWorldRegistryState();
         void ApplyUnlocks(RC::Unreal::UObject* progressComponent);
-        RC::Unreal::UObject* FindProgressComponent() const;
+        void ApplyUnlocksToWorld(RC::Unreal::UObject* worldContext = nullptr);
+        void NotifyBuildingUnlocks(RC::Unreal::UObject* progressComponent,
+            const std::vector<RC::Unreal::UObject*>& buildings) const;
         RC::Unreal::UObject* FindBuildingSubsystem(
             RC::Unreal::UObject* worldContext = nullptr) const;
         RC::Unreal::UObject* LoadObject(const RC::StringType& path) const;
@@ -128,5 +130,6 @@ namespace DragonWilds {
         NativeRegistrySnapshot m_nativeRegistrySnapshot;
         bool m_hooksRegistered = false;
         RC::Unreal::Hook::GlobalCallbackId m_initGameStateCallbackId = RC::Unreal::Hook::ERROR_ID;
+        RC::Unreal::Hook::GlobalCallbackId m_unlockGameStateCallbackId = RC::Unreal::Hook::ERROR_ID;
     };
 }

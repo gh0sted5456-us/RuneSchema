@@ -212,6 +212,8 @@ namespace DragonWilds {
     {
         if (m_initGameStateCallbackId != Hook::ERROR_ID)
             Hook::UnregisterCallback(m_initGameStateCallbackId);
+        if (m_unlockGameStateCallbackId != Hook::ERROR_ID)
+            Hook::UnregisterCallback(m_unlockGameStateCallbackId);
     }
 
     void DragonWildsBuildingModLoader::ReadDefinitions(
@@ -915,10 +917,7 @@ namespace DragonWilds {
         }
 
         RegisterHooks();
-        if (auto* progress = FindProgressComponent())
-        {
-            ApplyUnlocks(progress);
-        }
+        ApplyUnlocksToWorld();
 
         if (result.Loaded || result.Errors)
         {
@@ -2187,6 +2186,20 @@ namespace DragonWilds {
             return;
         }
 
+        Hook::FCallbackOptions unlockOptions{};
+        unlockOptions.OwnerModName = TEXT("RuneSchema");
+        unlockOptions.HookName = TEXT("BuildingLoaderUnlockInitGameState");
+        m_unlockGameStateCallbackId = Hook::RegisterInitGameStatePostCallback(
+            [this](Hook::TCallbackIterationData<void>&, AGameModeBase* gameMode) {
+                ApplyUnlocksToWorld(gameMode);
+            },
+            unlockOptions);
+        if (m_unlockGameStateCallbackId == Hook::ERROR_ID)
+        {
+            PS::Log<LogLevel::Warning>(
+                STR("Building post-initialization unlock callback could not be registered; native progress callbacks remain active.\n"));
+        }
+
         m_hooksRegistered = true;
     }
 
@@ -2276,10 +2289,10 @@ namespace DragonWilds {
             return;
         }
 
-        if (auto* progress = FindProgressComponent())
-        {
-            ApplyUnlocks(progress);
-        }
+        // Registry reconstruction belongs to the pre-initialization lane.
+        // Player progress components are selected and updated by the matching
+        // post callback, after the new world has finished replacing any stale
+        // frontend/previous-world components.
     }
 
     bool DragonWildsBuildingModLoader::RefreshBuildingCatalogueForWorld()
@@ -2325,6 +2338,7 @@ namespace DragonWilds {
         auto* unlockedProperty = CastField<FArrayProperty>(
             PropertyHelper::GetPropertyByName(
                 progressComponent->GetClassPrivate(), TEXT("BuildingsUnlocked")));
+        std::vector<UObject*> newlyUnlocked;
         if (unlockedProperty
             && CastField<FObjectProperty>(unlockedProperty->GetInner()))
         {
@@ -2356,6 +2370,7 @@ namespace DragonWilds {
                     helper.InitializeValue(value);
                     std::memcpy(value.GetData(), &building, sizeof(building));
                     helper.Add(value);
+                    newlyUnlocked.push_back(building);
                 }
             }
         }
@@ -2374,26 +2389,139 @@ namespace DragonWilds {
                 helper.Add(&building);
             }
         }
+
+        size_t visible = 0;
+        if (unlockedProperty)
+        {
+            auto* unlocked =
+                unlockedProperty->ContainerPtrToValuePtr<FScriptArray>(progressComponent);
+            const auto elementSize = unlockedProperty->GetInner()->GetElementSize();
+            for (auto* building : buildings)
+            {
+                for (int32 index = 0; index < unlocked->Num(); ++index)
+                {
+                    UObject* current = nullptr;
+                    std::memcpy(&current,
+                        static_cast<uint8*>(unlocked->GetData()) + index * elementSize,
+                        sizeof(current));
+                    if (current == building)
+                    {
+                        ++visible;
+                        break;
+                    }
+                }
+            }
+        }
+        size_t sessionOnly = 0;
+        if (sessionOnlyProperty)
+        {
+            UECustom::FScriptSetHelper helper(
+                sessionOnlyProperty,
+                sessionOnlyProperty->ContainerPtrToValuePtr<void>(progressComponent));
+            for (auto* building : buildings)
+                if (helper.Contains(&building)) ++sessionOnly;
+        }
+
+        if (visible != buildings.size() || sessionOnly != buildings.size())
+        {
+            PS::Log<LogLevel::Error>(STR(
+                "[BUILDING-UNLOCK][FAILED] component='{}' requested={} visible={} session_only={}.\n"),
+                progressComponent->GetPathName(), buildings.size(), visible, sessionOnly);
+            return;
+        }
+
+        if (!newlyUnlocked.empty())
+            NotifyBuildingUnlocks(progressComponent, newlyUnlocked);
+
+        if (!newlyUnlocked.empty())
+        {
+            PS::Log<LogLevel::Normal>(STR(
+                "[BUILDING-UNLOCK][VERIFIED] world='{}' component='{}' requested={} newly_visible={}.\n"),
+                progressComponent->GetWorld() ? TEXT("active") : TEXT("<none>"),
+                progressComponent->GetPathName(), buildings.size(), newlyUnlocked.size());
+        }
+        else
+        {
+            PS::Log<LogLevel::Verbose>(STR(
+                "[BUILDING-UNLOCK][UNCHANGED] component='{}' already contains all {} requested building(s).\n"),
+                progressComponent->GetPathName(), buildings.size());
+        }
     }
 
-    UObject* DragonWildsBuildingModLoader::FindProgressComponent() const
+    void DragonWildsBuildingModLoader::ApplyUnlocksToWorld(UObject* worldContext)
     {
+        if (!m_progressComponentClass || m_unlocks.empty()) return;
+
+        auto* targetWorld = worldContext ? worldContext->GetWorld() : nullptr;
         TArray<UObject*> candidates;
         UECustom::UObjectGlobals::GetObjectsOfClass(
             m_progressComponentClass, candidates, true);
 
+        size_t applied = 0;
         for (auto* candidate : candidates)
         {
-            if (candidate
-                && !candidate->HasAnyFlags(
-                    static_cast<EObjectFlags>(
-                        RF_ClassDefaultObject | RF_ArchetypeObject)))
-            {
-                return candidate;
-            }
+            if (!candidate || candidate->HasAnyFlags(static_cast<EObjectFlags>(
+                    RF_ClassDefaultObject | RF_ArchetypeObject
+                    | RF_BeginDestroyed | RF_FinishDestroyed)))
+                continue;
+            if (targetWorld && candidate->GetWorld() != targetWorld)
+                continue;
+            ApplyUnlocks(candidate);
+            ++applied;
         }
 
-        return nullptr;
+        if (!applied)
+        {
+            PS::Log<LogLevel::Verbose>(STR(
+                "[BUILDING-UNLOCK][DEFERRED] No live ProgressComponent was ready for world '{}'; native progress callbacks remain active.\n"),
+                worldContext ? worldContext->GetPathName() : TEXT("<any>"));
+        }
+    }
+
+    void DragonWildsBuildingModLoader::NotifyBuildingUnlocks(
+        UObject* progressComponent, const std::vector<UObject*>& buildings) const
+    {
+        if (!progressComponent || buildings.empty()) return;
+
+        auto* function = UECustom::UObjectGlobals::StaticFindObject<UFunction*>(
+            nullptr, nullptr,
+            TEXT("/Script/Dominion.ProgressComponent:BP_OnBuildingsUnlocked"));
+        auto* arrayProperty = function ? CastField<FArrayProperty>(
+            function->FindProperty(FName(TEXT("BuildingDataRefs"), FNAME_Find))) : nullptr;
+        auto* loadedProperty = function ? CastField<FBoolProperty>(
+            function->FindProperty(FName(TEXT("bFromLoadedState"), FNAME_Find))) : nullptr;
+        if (!function || !arrayProperty || !loadedProperty
+            || !CastField<FObjectProperty>(arrayProperty->GetInner()))
+        {
+            PS::Log<LogLevel::Warning>(STR(
+                "Building unlock state was applied, but its native UI notification is unavailable.\n"));
+            return;
+        }
+
+        std::vector<uint8_t> parameters(function->GetParmsSize());
+        arrayProperty->InitializeValue_InContainer(parameters.data());
+        try
+        {
+            auto* array = arrayProperty->ContainerPtrToValuePtr<FScriptArray>(
+                parameters.data());
+            UECustom::FScriptArrayHelper helper(array, arrayProperty);
+            for (auto* building : buildings)
+            {
+                UECustom::FManagedValue value;
+                helper.InitializeValue(value);
+                std::memcpy(value.GetData(), &building, sizeof(building));
+                helper.Add(value);
+            }
+            loadedProperty->SetPropertyValueInContainer(parameters.data(), true);
+            progressComponent->ProcessEvent(function, parameters.data());
+            arrayProperty->DestroyValue_InContainer(parameters.data());
+        }
+        catch (...)
+        {
+            try { arrayProperty->DestroyValue_InContainer(parameters.data()); }
+            catch (...) {}
+            throw;
+        }
     }
 
     UObject* DragonWildsBuildingModLoader::FindBuildingSubsystem(
