@@ -12,6 +12,7 @@
 #include "safetyhook.hpp"
 #include "Utility/UnrealReadinessGate.h"
 #include "Runtime/RegistryBridge.h"
+#include "Runtime/LogicPakBridge.h"
 
 namespace RC::Unreal {
     class AGameModeBase;
@@ -57,6 +58,7 @@ namespace DragonWilds {
         DragonWildsDataRegistrar m_dataRegistrar;
         CharacterEntryRecovery m_characterEntryRecovery;
         PS::Network::RegistryBridge m_registryBridge;
+        PS::LogicPakBridge m_logicPakBridge;
 
         void AutoReload(const std::filesystem::path& filePath);
 
@@ -77,6 +79,8 @@ namespace DragonWilds {
         void SetupAutoReload();
 
         void SetupAlternativePakPathReader();
+
+        void SetupLogicPakBridge();
 
         bool InitCore();
         void FailStartup(const std::string& reason);

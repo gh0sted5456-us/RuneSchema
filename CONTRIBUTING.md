@@ -29,7 +29,7 @@ submission. Do not submit game or engine content without the required rights.
 
 Release versions use a channel suffix. Main releases end in lowercase `m`
 (for example, `0.7.7.4m`), while experimental releases end in lowercase `e`
-(for example, `0.7.7.4e`). The builder and archive finalizer reject a main or
+(for example, `0.7.7.5e`). The builder and archive finalizer reject a main or
 experimental branch carrying the wrong suffix.
 
 Use the supported build launcher, or finalize a direct internal build with

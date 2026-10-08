@@ -157,6 +157,11 @@ if(PROJECT_IS_TOP_LEVEL)
     add_test(NAME ue4ss-bootstrap-contract COMMAND ue4ss-bootstrap-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/build.ps1"
         "${CMAKE_CURRENT_SOURCE_DIR}/../CMakeLists.txt")
+    add_executable(logic-pak-bridge-contract ../tests/logic-pak-bridge-contract.cpp)
+    target_link_libraries(logic-pak-bridge-contract PRIVATE RuneSchemaJsonCore)
+    add_test(NAME logic-pak-bridge-contract COMMAND logic-pak-bridge-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Runtime/LogicPakBridge.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../docs/PAK-CONTENT-GUIDE.md")
     add_executable(ue4ss-companion-bootstrap-contract ../tests/ue4ss-companion-bootstrap-contract.cpp)
     add_test(NAME ue4ss-companion-bootstrap-contract COMMAND ue4ss-companion-bootstrap-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../../ue4ss/scripts/main.lua"

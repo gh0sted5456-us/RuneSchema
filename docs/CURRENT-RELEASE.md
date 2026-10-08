@@ -1,7 +1,8 @@
-# RuneSchema 0.7.7.4m main release
+# RuneSchema 0.7.7.5e experimental release
 
-This build has been promoted from experimental to the main release line on
-October 6, 2026. It focuses on dependable
+This build is the experimental companion to the `0.7.7.4m` main release as of
+October 6, 2026. Both channels share the same code baseline; the suffix makes
+the installed channel explicit. It focuses on dependable
 mod loading, safer character saves, clearer status messages, and better support
 for mods that bring their own PAK content.
 

@@ -29,7 +29,7 @@ automatically:
 GoldenInteractionText : 1
 ```
 
-Restart Dragonwilds after installation. This mod requires RuneSchema 0.7.7.4m
+Restart Dragonwilds after installation. This mod requires RuneSchema 0.7.7.4e
 or a later build that supports `$RuntimeWidget.$TextStyle`.
 
 ## Customize the color

@@ -75,6 +75,11 @@ kind of work.
 
 [Open the complete folder guide](LOADER-WALKTHROUGHS.md).
 
+Cooked Blueprint logic can also remain inside the mod's `paks` folder. Name the
+container after its `/Game/Mods/<PackageName>/` root and include a default
+`ModActor.ModActor_C`; RuneSchema starts it once in the front end and once per
+gameplay world. See [Cooked PAK Content](PAK-CONTENT-GUIDE.md#start-a-cooked-blueprint-modactor).
+
 ## Add an optional UE4SS Lua companion
 
 Use this only when cooked Blueprints and RuneSchema's data loaders cannot

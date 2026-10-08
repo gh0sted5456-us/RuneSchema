@@ -6,7 +6,7 @@ param(
     [switch]$UpdateMappings
 )
 $ErrorActionPreference = 'Stop'
-$Version = '0.7.7.4m'
+$Version = '0.7.7.5e'
 $BuildRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 if (-not (Test-Path -LiteralPath (Join-Path $BuildRoot 'source\raw\CMakeLists.txt') -PathType Leaf)) {
     $BuildRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -762,7 +762,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
                 'equipment-storefront-lane','native-contract','journal-failure-isolation',
                 'journal-wingdk-lane','journal-save-ownership','loader-lifecycle-contract',
                 'recipe-reference-contract','main-menu-log-budget','runtime-widget-v08-contract','ue4ss-companion-bootstrap-contract','config-settings',
-                'persistence-mode-contract','preview-refresh-contract'
+                'persistence-mode-contract','preview-refresh-contract','logic-pak-bridge-contract'
             )
         }
 

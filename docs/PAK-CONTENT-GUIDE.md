@@ -157,6 +157,48 @@ GoldenArsenal : 1
 
 A `0` prevents RuneSchema from mounting or loading that mod folder.
 
+## Start a cooked Blueprint ModActor
+
+RuneSchema can start a client-side cooked Blueprint logic package from the same
+`paks` folder as the rest of a self-contained mod. Use BPModLoaderMod's default
+naming contract:
+
+```text
+RuneSchema/mods/Dye/
+  paks/
+    ColorsOfMoneyVisualPilotV4/
+      ColorsOfMoneyVisualPilotV4.pak
+      ColorsOfMoneyVisualPilotV4.utoc
+      ColorsOfMoneyVisualPilotV4.ucas
+```
+
+The package must contain this generated actor class:
+
+```text
+/Game/Mods/ColorsOfMoneyVisualPilotV4/ModActor.ModActor_C
+```
+
+RuneSchema loads that class and creates one `ModActor` in the front-end world
+and one in each gameplay world. Normal Blueprint `BeginPlay` runs. If the actor
+also defines the optional zero-argument `PreBeginPlay` or `PostBeginPlay`
+events used by BPModLoaderMod, RuneSchema calls them too. The log reports
+`[LOGIC-PAK][STARTED][FRONTEND]` or `[LOGIC-PAK][STARTED][WORLD]` with the owning
+RuneSchema mod and package name.
+
+This startup bridge is client-side. Dedicated servers still mount the cooked
+package so authoritative data remains available, but they do not create a
+visual `ModActor`. A co-op host is also a client, so its presentation actor is
+started normally.
+
+Do not install the same package twice. If RuneSchema finds a matching package
+under the older `Content/Paks/LogicMods` location, it leaves startup ownership
+with UE4SS BPModLoaderMod and suppresses its own copy. This keeps existing
+installs working while allowing new mods to ship as one RuneSchema folder.
+
+Packages without the default `ModActor.ModActor_C` remain ordinary cooked
+content packages. They are mounted exactly as before and do not produce a
+warning.
+
 ## Reference cooked content from a smaller mod
 
 A direct reference is useful for an ordinary-sized mod because it documents the

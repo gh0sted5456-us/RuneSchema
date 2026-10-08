@@ -23,7 +23,7 @@ cmake_install.cmake
 dist/
 plugins/
 clean-base/
-runtime/
+/runtime/
 release/
 example-mods/
 RuneSchema/mods/

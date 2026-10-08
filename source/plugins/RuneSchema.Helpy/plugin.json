@@ -1,8 +1,8 @@
 {
   "SchemaVersion": 1,
   "Id": "RuneSchema.Helpy",
-  "Version": "0.7.7.4m",
-  "BuiltForRuneSchema": "0.7.7.4m",
+  "Version": "0.7.7.5e",
+  "BuiltForRuneSchema": "0.7.7.5e",
   "EntryPoint": "RuneSchema.Helpy.dll",
   "ConsoleMessage": "Helpy is ready with its embedded instant-open catalog. Use the configured hotkey to open it.",
   "Capabilities": [

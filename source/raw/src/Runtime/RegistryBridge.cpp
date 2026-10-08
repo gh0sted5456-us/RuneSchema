@@ -49,7 +49,7 @@ constexpr size_t MaxActionPayloadBytes = 4 * 1024;
 constexpr uint32_t MaxRequestsPerSecond = 8;
 constexpr size_t MaxWorldInstances = 512;
 constexpr size_t MaxPresentationRoutes = 128;
-constexpr auto BuildIdentity = "0.7.7.4m";
+constexpr auto BuildIdentity = "0.7.7.5e";
 
 const PS::MappingBackbone::Mapping& LocalMapping() {
     return PS::MappingBackbone::Current(PS::HostServices::WorkingDirectory());

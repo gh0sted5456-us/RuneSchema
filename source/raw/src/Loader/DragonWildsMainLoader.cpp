@@ -128,6 +128,7 @@ namespace DragonWilds {
         // Stop the watcher before destroying its consumers.
         PS::StartupTrace::Mark("shutdown begin");
         m_fileWatcher.reset();
+        m_logicPakBridge.Stop();
         DatatableSerialize_Hook = {};
 
         GameInstanceInit_Hook = {};
@@ -322,7 +323,18 @@ namespace DragonWilds {
         PS::StartupTrace::Mark("PostEngineInit begin");
         InitializeMods(EEngineLifecyclePhase::PostEngineInit);
         LoadMods(EEngineLifecyclePhase::PostEngineInit);
+        SetupLogicPakBridge();
         PS::StartupTrace::Mark("PostEngineInit complete");
+    }
+
+    void DragonWildsMainLoader::SetupLogicPakBridge()
+    {
+        if (PS::Storefront::IsDedicatedServer()) return;
+        std::vector<std::pair<fs::path,std::string>> mods;
+        IterateModsFolder([&](const fs::path& path,const RC::StringType& owner) {
+            mods.emplace_back(path,RC::to_string(owner));
+        });
+        m_logicPakBridge.Start(mods);
     }
 
     void DragonWildsMainLoader::SetupGameInstanceInitLoadersOnce()
