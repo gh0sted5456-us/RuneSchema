@@ -39,5 +39,36 @@ int main()
     fs::create_directories(legacy/"old");
     {std::ofstream(legacy/"old"/"Legacy.pak")<<"";}
     assert(LooksLikeRuneSchemaMod(legacy));
+
+    const auto cooked=root/"CookedLogicMod";
+    fs::create_directories(cooked/"PaKs"/"ZetaLogic");
+    fs::create_directories(cooked/"PaKs"/"AlphaLogic");
+    {std::ofstream(cooked/"PaKs"/"ZetaLogic"/"ZetaLogic.pak")<<"";}
+    {std::ofstream(cooked/"PaKs"/"ZetaLogic"/"ZetaLogic.utoc")<<"";}
+    {std::ofstream(cooked/"PaKs"/"ZetaLogic"/"ZetaLogic.ucas")<<"";}
+    {std::ofstream(cooked/"PaKs"/"AlphaLogic"/"AlphaLogic.pak")<<"";}
+    const auto cookedReads=PakReadDirectories(cooked);
+    assert(cookedReads.size()==2);
+    assert(cookedReads[0].filename()=="AlphaLogic");
+    assert(cookedReads[1].filename()=="ZetaLogic");
+
+    const auto optIn=root/"OptInLogicMod";
+    fs::create_directories(optIn/"LogicMods"/"FirstLogic");
+    {std::ofstream(optIn/"LogicMods"/"FirstLogic"/"FirstLogic.pak")<<"";}
+    assert(LooksLikeRuneSchemaMod(optIn));
+    const auto logicReads=PakReadDirectories(optIn);
+    assert(logicReads.size()==1&&logicReads[0].filename()=="FirstLogic");
+
+    const auto flat=root/"FlatCookedMod";
+    fs::create_directories(flat/"paks");
+    {std::ofstream(flat/"paks"/"Flat.pak")<<"";}
+    const auto flatReads=PakReadDirectories(flat);
+    assert(flatReads.size()==1&&flatReads[0].filename()=="paks");
+
+    const auto rootCooked=root/"RootCookedMod";
+    fs::create_directories(rootCooked);
+    {std::ofstream(rootCooked/"Root.pak")<<"";}
+    const auto rootReads=PakReadDirectories(rootCooked);
+    assert(rootReads.size()==1&&rootReads[0]==rootCooked);
     fs::remove_all(root);
 }

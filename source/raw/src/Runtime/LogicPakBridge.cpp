@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 #include "Runtime/Storefront.h"
+#include "Runtime/BPModLoaderIntegration.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "Utility/Logging.h"
@@ -37,6 +38,11 @@ LogicPakBridge::~LogicPakBridge() { Stop(); }
 
 void LogicPakBridge::Start(const std::vector<std::pair<std::filesystem::path, std::string>>& mods) {
     if (m_started || Storefront::IsDedicatedServer()) return;
+    if (BPModLoaderIntegration::Active().load(std::memory_order_acquire)) {
+        PS::Log<LogLevel::Normal>(STR(
+            "[LOGIC-PAK][BP-LOADER] BPModLoaderMod owns enabled RuneSchema ModActors; native duplicate startup suppressed.\n"));
+        return;
+    }
 
     const auto legacyRoot = LegacyLogicModsRoot();
     for (const auto& [root, owner] : mods) {
@@ -133,10 +139,17 @@ void LogicPakBridge::Activate(UWorld* world) {
     if (m_activating || !IsSupportedWorld(world)) return;
     m_activating = true;
     struct Reset { bool& Value; ~Reset() { Value = false; } } reset{m_activating};
+    const auto* worldLabel = WorldLabel(world);
 
     if (m_world.Get() != world) {
         m_world.Assign(world);
-        for (auto& candidate : m_candidates) { candidate.Actor.Reset(); candidate.Owned = false; }
+        for (auto& candidate : m_candidates) {
+            candidate.Actor.Reset();
+            candidate.Owned = false;
+            // The front end may appear before a cooked class can resolve.
+            // Give each new world one fresh attempt without retrying on every BeginPlay.
+            if (!candidate.Class) candidate.ResolutionAttempted = false;
+        }
     }
 
     for (auto& candidate : m_candidates) {
@@ -164,7 +177,7 @@ void LogicPakBridge::Activate(UWorld* world) {
                 candidate.Actor.Assign(existing);
                 PS::Log<LogLevel::Normal>(STR(
                     "[LOGIC-PAK][EXISTING][{}][MOD:{}][PACKAGE:{}] ModActor already exists; duplicate startup suppressed.\n"),
-                    WorldLabel(world), PS::ToWideSafe(candidate.Package.Owner), PS::ToWideSafe(candidate.Package.Name));
+                    worldLabel, PS::ToWideSafe(candidate.Package.Owner), PS::ToWideSafe(candidate.Package.Name));
                 continue;
             }
             auto* actor = DragonWilds::ActorHelper::SpawnActor(world, candidate.Class, FVector{}, FRotator{},
@@ -173,14 +186,13 @@ void LogicPakBridge::Activate(UWorld* world) {
             candidate.Actor.Assign(actor);
             candidate.Owned = true;
             PS::Log<LogLevel::Normal>(STR(
-                "[LOGIC-PAK][STARTED][{}][MOD:{}][PACKAGE:{}] ModActor executed once for world '{}'.\n"),
-                WorldLabel(world), PS::ToWideSafe(candidate.Package.Owner), PS::ToWideSafe(candidate.Package.Name),
-                world->GetPathName());
+                "[LOGIC-PAK][STARTED][{}][MOD:{}][PACKAGE:{}] ModActor executed once for this world.\n"),
+                worldLabel, PS::ToWideSafe(candidate.Package.Owner), PS::ToWideSafe(candidate.Package.Name));
         } catch (const std::exception& error) {
             m_gate.Release(worldKey, candidate.Package.Name);
             PS::Log<LogLevel::Warning>(STR(
                 "[LOGIC-PAK][FAILED][{}][MOD:{}][PACKAGE:{}] ModActor startup failed: {}. Other packages continue.\n"),
-                WorldLabel(world), PS::ToWideSafe(candidate.Package.Owner), PS::ToWideSafe(candidate.Package.Name),
+                worldLabel, PS::ToWideSafe(candidate.Package.Owner), PS::ToWideSafe(candidate.Package.Name),
                 PS::ToWideSafe(error.what()));
         }
     }

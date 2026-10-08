@@ -7,9 +7,11 @@
 #include <string_view>
 #include <system_error>
 #include <stdexcept>
+#include <vector>
 
 namespace PS::ModFolderLayout {
 inline constexpr const char* PakDirectory = "paks";
+inline constexpr const char* LogicModDirectory = "logicmods";
 
 inline std::string AsciiLower(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
@@ -26,10 +28,10 @@ inline bool EqualsInsensitive(std::string_view left, std::string_view right) {
     return AsciiLower(std::string(left)) == AsciiLower(std::string(right));
 }
 
-inline constexpr std::array<std::string_view,24> ContentDirectories{{
+inline constexpr std::array<std::string_view,25> ContentDirectories{{
     "assets","blueprints","buildings","courses","dialogue","effects","enums",
     "equipment","events","journal","lore","nameplates","niagara","npc","players",
-    "quests","raw","recipes","registry","spawns","strings","ue4ss","vendors","paks"
+    "quests","raw","recipes","registry","spawns","strings","ue4ss","vendors","paks","logicmods"
 }};
 
 inline bool IsContentDirectoryName(std::string_view value) {
@@ -81,6 +83,70 @@ inline std::filesystem::path FindChildDirectory(
         found = entry.path();
     }
     return found;
+}
+
+inline bool IsPakContainerExtension(const std::filesystem::path& path) {
+    const auto extension = FoldAscii(path.extension().string());
+    return extension == ".pak" || extension == ".utoc"
+        || extension == ".ucas" || extension == ".sig";
+}
+
+inline bool ContainsImmediatePakContent(
+    const std::filesystem::path& folder, std::error_code& error) {
+    namespace fs = std::filesystem;
+    error.clear();
+    fs::directory_iterator current(folder, fs::directory_options::skip_permission_denied, error), end;
+    while (!error && current != end) {
+        std::error_code typeError;
+        if (current->is_regular_file(typeError) && !typeError
+            && IsPakContainerExtension(current->path())) return true;
+        current.increment(error);
+    }
+    return false;
+}
+
+// Unreal's startup PAK scan consumes concrete read directories; it does not
+// reliably recurse from the RuneSchema mod root into paks/<PackageName>/.
+// Return only directories that directly contain container files, preserving
+// flat legacy packages and deterministic package-folder order.
+inline std::vector<std::filesystem::path> PakReadDirectories(
+    const std::filesystem::path& modRoot) {
+    namespace fs = std::filesystem;
+    std::error_code error;
+    if (!fs::is_directory(modRoot, error) || error
+        || fs::is_symlink(fs::symlink_status(modRoot, error)) || error)
+        throw std::runtime_error("mod PAK root is not a safe directory");
+
+    std::vector<fs::path> result;
+    if (ContainsImmediatePakContent(modRoot, error)) result.push_back(modRoot);
+    if (error) throw std::runtime_error("mod PAK root scan failed: " + error.message());
+
+    for (const auto loader : {PakDirectory, LogicModDirectory}) {
+        const auto containerRoot = ResolveLoaderDirectory(modRoot, loader);
+        if (!containerRoot) continue;
+        error.clear();
+        if (fs::is_symlink(fs::symlink_status(*containerRoot, error)) || error)
+            throw std::runtime_error("mod container path is not a safe directory");
+        if (ContainsImmediatePakContent(*containerRoot, error)) result.push_back(*containerRoot);
+        if (error) throw std::runtime_error("mod container scan failed: " + error.message());
+
+        std::vector<fs::path> packages;
+        fs::directory_iterator current(*containerRoot, fs::directory_options::skip_permission_denied, error), end;
+        while (!error && current != end) {
+            std::error_code typeError;
+            if (current->is_directory(typeError) && !typeError
+                && !current->is_symlink(typeError) && !typeError)
+                packages.push_back(current->path());
+            current.increment(error);
+        }
+        if (error) throw std::runtime_error("mod package scan failed: " + error.message());
+        std::sort(packages.begin(), packages.end());
+        for (const auto& package : packages) {
+            if (ContainsImmediatePakContent(package, error)) result.push_back(package);
+            if (error) throw std::runtime_error("mod package scan failed: " + error.message());
+        }
+    }
+    return result;
 }
 
 inline bool ContainsLegacyPakContent(const std::filesystem::path& folder, std::error_code& error);

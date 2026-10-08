@@ -8,6 +8,16 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 function Assert-True([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
 }
+function Get-Sha256File([string]$Path) {
+    $stream = [IO.File]::OpenRead($Path)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        return (($hasher.ComputeHash($stream) | ForEach-Object { $_.ToString('x2') }) -join '')
+    } finally {
+        $hasher.Dispose()
+        $stream.Dispose()
+    }
+}
 function Assert-Archive([string]$Path, [string]$Prefix) {
     $archive = [IO.Compression.ZipFile]::OpenRead($Path)
     try {
@@ -59,7 +69,7 @@ try {
         New-Item -ItemType Directory -Path $payload -Force | Out-Null
         $binary = Join-Path $payload 'fixture.dll'
         [IO.File]::WriteAllBytes($binary, [byte[]](0,1,2,3,255))
-        $before[$binary] = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash
+        $before[$binary] = Get-Sha256File $binary
         Set-Content -LiteralPath (Join-Path $payload 'LICENSE') -Value 'Existing upstream notice: preserve this exact file.' -Encoding ascii
         if ($name -like '*-Universal') {
             New-Item -ItemType Directory -Path (Join-Path $payload 'plugins/RuneSchema.Helpy') -Force | Out-Null
@@ -78,7 +88,7 @@ try {
         Assert-True ($licenseText.Contains('Existing upstream notice: preserve this exact file.')) 'Existing inherited notice was lost on the second run.'
     }
     foreach ($binary in $before.Keys) {
-        Assert-True ((Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash -eq $before[$binary]) 'Binary bytes changed.'
+        Assert-True ((Get-Sha256File $binary) -eq $before[$binary]) 'Binary bytes changed.'
     }
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture 'dist/RuneSchema-0.0.0.0e-Universal/RuneSchema/plugins/RuneSchema.Helpy/LICENSE'))) 'Nested Helpy license duplicate remains.'
     $nested = Join-Path $fixture 'dist/RuneSchema-0.0.0.0e-Universal/RuneSchema/plugins/RuneSchema.Helpy'

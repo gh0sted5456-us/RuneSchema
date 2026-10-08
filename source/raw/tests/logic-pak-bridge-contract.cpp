@@ -4,6 +4,7 @@
 #include <string>
 
 #include "Runtime/LogicPakContract.h"
+#include "Runtime/BPModLoaderPatch.h"
 
 namespace fs = std::filesystem;
 
@@ -18,18 +19,32 @@ void Touch(const fs::path& path) {
 }
 
 int main(int argc, char** argv) {
+    if (argc == 2) {
+        const auto actual = PS::BPModLoaderIntegration::PatchSource(Read(argv[1]));
+        assert(actual.has_value());
+        assert(actual->find("logicmods-register.lua") != std::string::npos);
+        assert(actual->find("rsModsRoot .. \"/mods.txt\"") != std::string::npos);
+        assert(actual->find("io.open(\"Mods/mods.txt\"") == std::string::npos);
+        assert(PS::BPModLoaderIntegration::PatchSource(*actual) == actual);
+        return 0;
+    }
     assert(argc == 3);
     const auto fixture = fs::temp_directory_path() / "RuneSchema-LogicPakBridge-Contract";
     std::error_code error;
     fs::remove_all(fixture, error);
     const auto mod = fixture / "mods" / "Dye";
-    const auto package = mod / "paks" / "ColorsOfMoneyVisualPilotV4";
+    const auto package = mod / "logicmods" / "ColorsOfMoneyVisualPilotV4";
+    const auto ordinary = mod / "paks" / "OrdinaryCookedContent";
     const auto legacy = fixture / "Content" / "Paks" / "LogicMods";
     fs::create_directories(package);
     fs::create_directories(legacy);
-    Touch(package / "ColorsOfMoneyVisualPilotV4.pak");
-    Touch(package / "ColorsOfMoneyVisualPilotV4.utoc");
-    Touch(package / "ColorsOfMoneyVisualPilotV4.ucas");
+    Touch(package / "ColorsOfMoneyVisualPilotV4_0.7.7.5e_P.pak");
+    Touch(package / "ColorsOfMoneyVisualPilotV4_0.7.7.5e_P.utoc");
+    Touch(package / "ColorsOfMoneyVisualPilotV4_0.7.7.5e_P.ucas");
+    fs::create_directories(ordinary);
+    Touch(ordinary / "OrdinaryCookedContent.pak");
+    Touch(ordinary / "OrdinaryCookedContent.utoc");
+    Touch(ordinary / "OrdinaryCookedContent.ucas");
 
     auto discovered = PS::LogicPaks::Discover(mod, "Dye", legacy);
     assert(discovered.size() == 1);
@@ -37,6 +52,34 @@ int main(int argc, char** argv) {
     assert(discovered[0].ActorPath ==
         "/Game/Mods/ColorsOfMoneyVisualPilotV4/ModActor.ModActor_C");
     assert(!discovered[0].LegacyOwned);
+    assert(discovered[0].Name != "OrdinaryCookedContent");
+
+    const std::string upstreamLua =
+        "local function LoadModConfigs()\n"
+        "    LoadModOrder()\n"
+        "    SetupModOrder()\n"
+        "end\n"
+        "LoadModConfigs()\n";
+    auto patched = PS::BPModLoaderIntegration::PatchSource(upstreamLua);
+    assert(patched.has_value());
+    assert(patched->find("logicmods-register.lua") != std::string::npos);
+    assert(patched->find("rsModsRoot .. \"/mods.txt\"") != std::string::npos);
+    assert(PS::BPModLoaderIntegration::PatchSource(*patched) == patched);
+    assert(!PS::BPModLoaderIntegration::PatchSource("unrelated Lua").has_value());
+
+    const auto ue4ssMods = fixture / "ue4ss" / "Mods";
+    fs::create_directories(ue4ssMods);
+    const auto modsTxt = ue4ssMods / "mods.txt";
+    {
+        std::ofstream output(modsTxt);
+        output << "BPModLoaderMod : 1\nRuneSchema : 1\nRuneSchema : 0\n";
+    }
+    assert(!PS::BPModLoaderIntegration::EnabledInModsTxt(modsTxt, "RuneSchema"));
+    {
+        std::ofstream output(modsTxt);
+        output << "BPModLoaderMod : 1\nRuneSchema : 1\n";
+    }
+    assert(PS::BPModLoaderIntegration::EnabledInModsTxt(modsTxt, "RuneSchema"));
 
     Touch(legacy / "ColorsOfMoneyVisualPilotV4.pak");
     discovered = PS::LogicPaks::Discover(mod, "Dye", legacy);

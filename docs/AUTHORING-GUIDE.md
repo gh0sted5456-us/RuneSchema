@@ -71,14 +71,15 @@ kind of work.
 | `equipment` | Add supported special behavior to equipment. |
 | `registry` | Describe supported presentation or action content. It is not a general item list. |
 | `paks` | Store packaged Unreal content such as meshes, icons, sounds, items, and stations. |
+| `logicmods` | Opt in cooked packages that provide a `ModActor` to Blueprint startup. |
 | `ue4ss` | Carry an optional Lua-only UE4SS companion that starts with this RuneSchema mod. |
 
 [Open the complete folder guide](LOADER-WALKTHROUGHS.md).
 
-Cooked Blueprint logic can also remain inside the mod's `paks` folder. Name the
-container after its `/Game/Mods/<PackageName>/` root and include a default
-`ModActor.ModActor_C`; RuneSchema starts it once in the front end and once per
-gameplay world. See [Cooked PAK Content](PAK-CONTENT-GUIDE.md#start-a-cooked-blueprint-modactor).
+For cooked Blueprint logic, put the package under `logicmods/<PackageName>/`
+and include a default `ModActor.ModActor_C`. Packages under `paks` still mount,
+but they do not automatically start a ModActor. See
+[Cooked PAK Content](PAK-CONTENT-GUIDE.md#start-a-cooked-blueprint-modactor).
 
 ## Add an optional UE4SS Lua companion
 

@@ -946,12 +946,23 @@ namespace DragonWilds {
             if(!entry.is_directory()||entry.is_symlink())continue;
             std::error_code scanError;
             const auto paks=PS::ModFolderLayout::ResolveLoaderDirectory(entry.path(),PS::ModFolderLayout::PakDirectory);
+            const auto logicMods=PS::ModFolderLayout::ResolveLoaderDirectory(entry.path(),PS::ModFolderLayout::LogicModDirectory);
             const bool legacy=PS::ModFolderLayout::ContainsLegacyPakContent(entry.path(),scanError);
-            if((paks.has_value()||legacy)&&!scanError)discovered.push_back(entry.path().filename().native());
+            if((paks.has_value()||logicMods.has_value()||legacy)&&!scanError)discovered.push_back(entry.path().filename().native());
         }
         try {for(const auto& name:ModLoadOrder::Resolve(modsRoot,discovered)) {
-            pakRoots.push_back(modsRoot/name);
+            const auto modRoot=modsRoot/name;
+            auto readDirectories=PS::ModFolderLayout::PakReadDirectories(modRoot);
+            if(readDirectories.empty()) {
+                std::error_code legacyError;
+                if(PS::ModFolderLayout::ContainsLegacyPakContent(modRoot,legacyError)&&!legacyError)
+                    readDirectories.push_back(modRoot);
+            }
+            for(const auto& directory:readDirectories)pakRoots.push_back(directory);
             const auto owner=RC::to_string(name);
+            if(!readDirectories.empty())
+                PS::Log<LogLevel::Normal>(STR("[PAK-MOUNT][REGISTERED][MOD:{}] {} concrete container director{} registered for Unreal startup.\n"),
+                    name,readDirectories.size(),readDirectories.size()==1?STR("y"):STR("ies"));
             if(!PS::MountedModRegistryOwners::Remember(owner))
                 PS::Log<LogLevel::Verbose>(STR("Mod folder '{}' cannot use conventional cooked-registry fallback; use Asset Registry metadata or an underscore-only folder name.\n"),name);
         }}

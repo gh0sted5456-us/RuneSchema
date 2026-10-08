@@ -159,13 +159,13 @@ A `0` prevents RuneSchema from mounting or loading that mod folder.
 
 ## Start a cooked Blueprint ModActor
 
-RuneSchema can start a client-side cooked Blueprint logic package from the same
-`paks` folder as the rest of a self-contained mod. Use BPModLoaderMod's default
-naming contract:
+Place packages that need client-side Blueprint startup under `logicmods`, not
+`paks`. Ordinary `paks` packages still mount without starting a ModActor. Use
+BPModLoaderMod's default naming contract:
 
 ```text
 RuneSchema/mods/Dye/
-  paks/
+  logicmods/
     ColorsOfMoneyVisualPilotV4/
       ColorsOfMoneyVisualPilotV4.pak
       ColorsOfMoneyVisualPilotV4.utoc
@@ -178,12 +178,10 @@ The package must contain this generated actor class:
 /Game/Mods/ColorsOfMoneyVisualPilotV4/ModActor.ModActor_C
 ```
 
-RuneSchema loads that class and creates one `ModActor` in the front-end world
-and one in each gameplay world. Normal Blueprint `BeginPlay` runs. If the actor
-also defines the optional zero-argument `PreBeginPlay` or `PostBeginPlay`
-events used by BPModLoaderMod, RuneSchema calls them too. The log reports
-`[LOGIC-PAK][STARTED][FRONTEND]` or `[LOGIC-PAK][STARTED][WORLD]` with the owning
-RuneSchema mod and package name.
+RuneSchema mounts the package and submits it to BPModLoaderMod for client-side
+startup. BPModLoaderMod handles `BeginPlay` and its optional `PreBeginPlay` and
+`PostBeginPlay` events. RuneSchema logs a concise submission summary; its
+generated LogicMods list records the exact packages selected at launch.
 
 This startup bridge is client-side. Dedicated servers still mount the cooked
 package so authoritative data remains available, but they do not create a
@@ -195,9 +193,10 @@ under the older `Content/Paks/LogicMods` location, it leaves startup ownership
 with UE4SS BPModLoaderMod and suppresses its own copy. This keeps existing
 installs working while allowing new mods to ship as one RuneSchema folder.
 
-Packages without the default `ModActor.ModActor_C` remain ordinary cooked
-content packages. They are mounted exactly as before and do not produce a
-warning.
+Keep content-only packages under `paks`. Only put a package under `logicmods`
+when it contains the default `ModActor.ModActor_C` class. If you previously
+put a LogicMod under `paks`, move its entire package folder to `logicmods` so
+RuneSchema opts it in without installing a duplicate copy.
 
 ## Reference cooked content from a smaller mod
 

@@ -26,6 +26,17 @@ foreach ($relative in $required) {
 }
 $bundle = Join-Path ([IO.Path]::GetTempPath()) ('RuneSchema-Licenses-' + [guid]::NewGuid().ToString('N'))
 
+function Get-Sha256File([string]$Path) {
+    $stream = [IO.File]::OpenRead($Path)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        return (($hasher.ComputeHash($stream) | ForEach-Object { $_.ToString('x2') }) -join '')
+    } finally {
+        $hasher.Dispose()
+        $stream.Dispose()
+    }
+}
+
 function Remove-LegacyLicenseLayout([string]$Payload) {
     foreach ($name in @('LICENSE', 'AUTHORS.md', 'LICENSING.md', 'CONTRIBUTING.md', 'THIRD_PARTY_NOTICES.md')) {
         $legacy = Join-Path $Payload $name
@@ -48,8 +59,8 @@ function Install-LicenseBundle([string]$Payload) {
     }
     $legacyMain = Join-Path $Payload 'LICENSE'
     if (Test-Path -LiteralPath $legacyMain -PathType Leaf) {
-        $legacyHash = (Get-FileHash -LiteralPath $legacyMain -Algorithm SHA256).Hash.ToLowerInvariant()
-        $projectHash = (Get-FileHash -LiteralPath (Join-Path $RepositoryRoot 'LICENSE') -Algorithm SHA256).Hash.ToLowerInvariant()
+        $legacyHash = Get-Sha256File $legacyMain
+        $projectHash = Get-Sha256File (Join-Path $RepositoryRoot 'LICENSE')
         if ($legacyHash -ne $projectHash) {
             $inherited += [pscustomobject]@{ Name = 'Inherited payload license'; Content = (Get-Content -LiteralPath $legacyMain -Raw); Hash = $legacyHash }
         }
@@ -60,7 +71,7 @@ function Install-LicenseBundle([string]$Payload) {
             $inherited += [pscustomobject]@{
                 Name = 'Inherited payload notice: ' + $file.Name
                 Content = (Get-Content -LiteralPath $file.FullName -Raw)
-                Hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+                Hash = Get-Sha256File $file.FullName
             }
         }
     }
@@ -236,7 +247,7 @@ function Collect-DependencyNotices {
                 $file.Extension -in @('.txt', '.md', '.rst', '')
             if (-not ($namedNotice -or $inLicenseDirectory)) { continue }
             if ($file.Extension -in @('.exe', '.dll', '.png', '.jpg', '.svg', '.pdf')) { continue }
-            $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            $hash = Get-Sha256File $file.FullName
             $noticeName = Get-DependencyNoticeName $relative $hash
             Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $destination $noticeName) -Force
             $records += [pscustomobject]@{

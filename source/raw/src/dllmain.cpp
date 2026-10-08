@@ -33,6 +33,7 @@
 #include "Utility/Config.h"
 #include "Utility/BuildInfo.h"
 #include "Runtime/Storefront.h"
+#include "Runtime/BPModLoaderIntegration.h"
 #include "Runtime/MappingBackbone.h"
 #include "Utility/Logging.h"
 #include "Utility/StartupTrace.h"
@@ -243,6 +244,31 @@ public:
         PS::StartupTrace::Mark("config load begin");
         config->Load();
         const auto& storefront=PS::Storefront::CurrentDetection();
+        if (!storefront.DedicatedServer) {
+            try {
+                const auto ue4ssRoot = std::filesystem::path(PS::HostServices::WorkingDirectory());
+                auto content = storefront.Executable.parent_path();
+                if (!content.empty()) content = content.parent_path();
+                if (!content.empty()) content = content.parent_path();
+                const auto result = PS::BPModLoaderIntegration::Prepare(
+                    ue4ssRoot, content / "Content" / "Paks" / "LogicMods");
+                if (result.Active)
+                    PS::Log<LogLevel::Normal>(TEXT(
+                        "[LOGIC-PAK][BP-LOADER] {} RuneSchema package(s) submitted before Lua startup. {}.\n"),
+                        result.Submitted, PS::ToWideSafe(result.Detail.c_str()));
+                if (result.Patched)
+                    PS::Log<LogLevel::Normal>(TEXT(
+                        "[LOGIC-PAK][BP-LOADER][UPDATED] BPModLoaderMod integration refreshed atomically. This game launch will use it; restart after changing either mod during play.\n"));
+                if (!result.Active && result.Detail != "RuneSchema or BPModLoaderMod is disabled")
+                    PS::Log<LogLevel::Warning>(TEXT(
+                        "[LOGIC-PAK][BP-LOADER][PARTIAL] {}. Native ModActor fallback remains available.\n"),
+                        PS::ToWideSafe(result.Detail.c_str()));
+            } catch (const std::exception& error) {
+                PS::Log<LogLevel::Warning>(TEXT(
+                    "[LOGIC-PAK][BP-LOADER][PARTIAL] Integration skipped: {}. Native ModActor fallback remains available.\n"),
+                    PS::ToWideSafe(error.what()));
+            }
+        }
         if (!storefront.DedicatedServer) {
             const auto pluginRoot=std::filesystem::path(PS::HostServices::WorkingDirectory())/"Mods"/"RuneSchema"/"plugins";
             m_pluginHost.Load(pluginRoot);

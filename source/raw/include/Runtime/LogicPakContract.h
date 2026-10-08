@@ -50,7 +50,7 @@ inline std::vector<Package> Discover(const fs::path& modRoot, std::string owner,
     const fs::path& legacyLogicModsRoot) {
     std::vector<Package> result;
     const auto paks = PS::ModFolderLayout::ResolveLoaderDirectory(
-        modRoot, PS::ModFolderLayout::PakDirectory);
+        modRoot, PS::ModFolderLayout::LogicModDirectory);
     if (!paks) return result;
 
     std::error_code error;
@@ -78,8 +78,9 @@ inline std::vector<Package> Discover(const fs::path& modRoot, std::string owner,
         }
         if (error || pakFiles.size() != 1) { error.clear(); continue; }
 
-        const auto name = pakFiles.front().stem().string();
-        if (!ValidPackageName(name)) continue;
+        const auto containerName = pakFiles.front().stem().string();
+        const auto packageName = directory.filename().string();
+        if (!ValidPackageName(packageName)) continue;
         auto hasSibling = [&](std::string_view extension) {
             std::error_code siblingError;
             for (const auto& sibling : fs::directory_iterator(directory,
@@ -87,7 +88,7 @@ inline std::vector<Package> Discover(const fs::path& modRoot, std::string owner,
                 if (siblingError) break;
                 std::error_code typeError;
                 if (sibling.is_regular_file(typeError) && !typeError
-                    && PS::ModFolderLayout::EqualsInsensitive(sibling.path().stem().string(), name)
+                    && PS::ModFolderLayout::EqualsInsensitive(sibling.path().stem().string(), containerName)
                     && PS::ModFolderLayout::EqualsInsensitive(sibling.path().extension().string(), extension))
                     return true;
             }
@@ -95,9 +96,14 @@ inline std::vector<Package> Discover(const fs::path& modRoot, std::string owner,
         };
         if (!hasSibling(".utoc") || !hasSibling(".ucas")) continue;
 
-        result.push_back({owner, name, directory,
-            "/Game/Mods/" + name + "/ModActor.ModActor_C",
-            LegacyPackageExists(legacyLogicModsRoot, name)});
+        // logicmods/<PackageName>/ opts in to ModActor startup and identifies the cooked
+        // /Game/Mods/<PackageName>/ root.  Container filenames commonly carry
+        // staging/version suffixes (for example Bard_P or Conjurer_0.1.3e_P)
+        // and must not be treated as Unreal content roots.
+        result.push_back({owner, packageName, directory,
+            "/Game/Mods/" + packageName + "/ModActor.ModActor_C",
+            LegacyPackageExists(legacyLogicModsRoot, packageName)
+                || LegacyPackageExists(legacyLogicModsRoot, containerName)});
     }
     return result;
 }
