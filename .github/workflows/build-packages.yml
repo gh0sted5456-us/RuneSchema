@@ -19,6 +19,8 @@ jobs:
 
       - name: Build RuneSchema
         shell: cmd
+        env:
+          UEPSEUDO_READ_TOKEN: ${{ secrets.UEPSEUDO_READ_TOKEN }}
         run: call "Build RuneSchema.bat"
 
       - name: Upload Core artifact

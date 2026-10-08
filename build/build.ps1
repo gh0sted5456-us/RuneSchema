@@ -354,6 +354,15 @@ try {
         $env:GIT_CONFIG_VALUE_1 = 'ssh://git@github.com/'
         $env:GIT_CONFIG_KEY_2 = 'core.longpaths'
         $env:GIT_CONFIG_VALUE_2 = 'true'
+        if ($env:GITHUB_ACTIONS -eq 'true') {
+            if ([string]::IsNullOrWhiteSpace($env:UEPSEUDO_READ_TOKEN)) {
+                throw 'GitHub Actions cannot build RuneSchema without a read token for the private UE4SS UEPseudo dependency. Configure the UEPSEUDO_READ_TOKEN repository secret with access to Re-UE4SS/UEPseudo, then rerun the build.'
+            }
+            $credential = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("x-access-token:$($env:UEPSEUDO_READ_TOKEN)"))
+            $env:GIT_CONFIG_COUNT = '4'
+            $env:GIT_CONFIG_KEY_3 = 'http.https://github.com/.extraheader'
+            $env:GIT_CONFIG_VALUE_3 = "AUTHORIZATION: basic $credential"
+        }
         Invoke-Checked 'git.exe' @('ls-remote', '--exit-code', $UE4SSRepository, 'HEAD') 'GitHub connectivity check'
     }
     function Get-UE4SSPinnedCommit {
@@ -366,7 +375,7 @@ try {
         return $match.Groups[1].Value.ToLowerInvariant()
     }
     function Assert-UEPseudoAccess {
-        & git.exe ls-remote --exit-code $UEPseudoRepository HEAD *> $null
+        try { & git.exe ls-remote --exit-code $UEPseudoRepository HEAD *> $null } catch {}
         if ($LASTEXITCODE -eq 0) { return }
 
         $message = @'
