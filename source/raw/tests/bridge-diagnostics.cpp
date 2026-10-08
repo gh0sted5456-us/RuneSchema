@@ -11,7 +11,7 @@ static BridgeDiagnostics::Event E(std::string stage,std::string outcome,std::str
 }
 
 int main() {
-    BridgeDiagnostics d;d.BeginWorld("dedicated-server","0.7.7.5e",1,"registry-ok","match",true);
+    BridgeDiagnostics d;d.BeginWorld("dedicated-server","0.7.7.5m",1,"registry-ok","match",true);
     // Normal execution, both legal orderings, dedupe, stale/rate rejection,
     // attachment/permit timeout, callback mismatch/failure, reset/disconnect,
     // compatibility mismatch, and terminal receipt are deterministic records.

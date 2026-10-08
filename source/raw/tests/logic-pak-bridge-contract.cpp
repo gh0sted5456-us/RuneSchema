@@ -38,9 +38,9 @@ int main(int argc, char** argv) {
     const auto legacy = fixture / "Content" / "Paks" / "LogicMods";
     fs::create_directories(package);
     fs::create_directories(legacy);
-    Touch(package / "ColorsOfMoneyVisualPilotV4_0.7.7.5e_P.pak");
-    Touch(package / "ColorsOfMoneyVisualPilotV4_0.7.7.5e_P.utoc");
-    Touch(package / "ColorsOfMoneyVisualPilotV4_0.7.7.5e_P.ucas");
+    Touch(package / "ColorsOfMoneyVisualPilotV4_0.7.7.5m_P.pak");
+    Touch(package / "ColorsOfMoneyVisualPilotV4_0.7.7.5m_P.utoc");
+    Touch(package / "ColorsOfMoneyVisualPilotV4_0.7.7.5m_P.ucas");
     fs::create_directories(ordinary);
     Touch(ordinary / "OrdinaryCookedContent.pak");
     Touch(ordinary / "OrdinaryCookedContent.utoc");
