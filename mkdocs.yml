@@ -106,6 +106,7 @@ nav:
       - Combat Fallback Settings: COMBAT-FALLBACK-SETTINGS.md
       - Loader Folder Guide: LOADER-WALKTHROUGHS.md
       - UE4SS Lua Companions: UE4SS-LUA-COMPANIONS.md
+      - Blueprint and Lua Companion Folders: PSEUDO-LOADERS.md
       - Example Library: EXAMPLES.md
       - Golden Interaction Text Example: examples/GoldenInteractionText/README.md
       - Loader Details:

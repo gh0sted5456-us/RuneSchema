@@ -198,6 +198,8 @@ when it contains the default `ModActor.ModActor_C` class. If you previously
 put a LogicMod under `paks`, move its entire package folder to `logicmods` so
 RuneSchema opts it in without installing a duplicate copy.
 
+[Compare `paks`, `logicmods`, and Lua companions](PSEUDO-LOADERS.md).
+
 ## Reference cooked content from a smaller mod
 
 A direct reference is useful for an ordinary-sized mod because it documents the

@@ -1,6 +1,6 @@
 # Optional RuneSchema bridges
 
-RuneSchema 0.7.7.5e Universal includes optional helpers for mods that need more
+RuneSchema 0.7.7.5m Universal includes optional helpers for mods that need more
 than normal JSON loading or ordinary cooked PAK mounting. They are separate so
 you can use only what your mod list needs.
 

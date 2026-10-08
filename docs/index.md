@@ -9,7 +9,7 @@ hide:
 <img class="rs-hero__banner" src="assets/images/runeschema-banner.png" alt="RuneSchema">
 
 <div class="rs-hero__eyebrow">
-<span class="rs-version">RuneSchema 0.7.7.5e</span>
+<span class="rs-version">RuneSchema 0.7.7.5m</span>
 <span class="rs-platform rs-platform--steam">Steam / GOG</span>
 <span class="rs-platform rs-platform--gamepass">Game Pass / WinGDK</span>
 </div>
@@ -23,6 +23,7 @@ game, and remove missing saved references safely when a mod is uninstalled.
 [Read the Monday update](CURRENT-RELEASE.md){ .md-button .md-button--primary }
 [Create PAK content](PAK-CONTENT-GUIDE.md){ .md-button }
 [Start a mod](AUTHORING-GUIDE.md){ .md-button }
+[Blueprint and Lua companions](PSEUDO-LOADERS.md){ .md-button }
 [Get help](TROUBLESHOOTING.md){ .md-button }
 </div>
 </div>

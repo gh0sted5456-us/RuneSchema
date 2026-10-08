@@ -7,6 +7,9 @@ players do not need to add another named mod to UE4SS's `mods.txt`.
 This is an optional tool. Most content should continue to use cooked game
 assets and RuneSchema's normal folders.
 
+For a cooked Blueprint `ModActor` instead of Lua, use the separate
+[`logicmods` folder](PSEUDO-LOADERS.md#start-a-cooked-blueprint-logicmod).
+
 ## Folder layout
 
 Use the following exact layout:

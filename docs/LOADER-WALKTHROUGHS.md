@@ -30,12 +30,17 @@ makes a mod easier to test, update, and remove.
 | `strings` | Supported text replacements | Usually |
 | `vendors` | Shops and offers | Yes |
 | `paks` | Cooked Unreal files used by the other folders | Always |
+| `logicmods` | Cooked packages whose `ModActor` should start through BPModLoaderMod | Always |
 | `ue4ss` | Optional Lua companion at `ue4ss/scripts/main.lua` | Always |
 
 The `ue4ss` folder is not a normal JSON loader. RuneSchema's Lua bootstrap
 starts its `scripts/main.lua` only when that RuneSchema mod is enabled. See the
 [UE4SS Lua companion guide](UE4SS-LUA-COMPANIONS.md) for the complete layout,
 logging, safety, and multiplayer rules.
+
+`logicmods` is also optional. Unlike `paks`, it opts a cooked package into
+Blueprint actor startup. See [Blueprint and Lua companion folders](PSEUDO-LOADERS.md)
+for both folder layouts and their enable rules.
 
 ## How the folders work together
 

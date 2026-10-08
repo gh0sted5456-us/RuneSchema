@@ -81,6 +81,9 @@ and include a default `ModActor.ModActor_C`. Packages under `paks` still mount,
 but they do not automatically start a ModActor. See
 [Cooked PAK Content](PAK-CONTENT-GUIDE.md#start-a-cooked-blueprint-modactor).
 
+[Compare the two optional UE4SS-backed folders](PSEUDO-LOADERS.md) before
+adding Blueprint startup or a Lua companion.
+
 ## Add an optional UE4SS Lua companion
 
 Use this only when cooked Blueprints and RuneSchema's data loaders cannot

@@ -30,6 +30,7 @@ ue4ss/
     RuneSchema/
       dlls/
       mods/
+      scripts/
       settings/
 ```
 
@@ -58,6 +59,12 @@ RuneSchema : 1
 ```
 
 Use `0` only when you want RuneSchema itself to stay completely off.
+
+If a mod uses the optional `logicmods` folder, install and enable UE4SS
+BPModLoaderMod as well. RuneSchema prepares its enabled package list and
+updates a compatible BPModLoaderMod script at game launch. A mod's
+`ue4ss/scripts/main.lua` companion needs no separate UE4SS `mods.txt` line.
+See [Blueprint and Lua companion folders](PSEUDO-LOADERS.md) for the two layouts.
 
 ## Enable individual RuneSchema mods
 

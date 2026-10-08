@@ -1,10 +1,9 @@
-# RuneSchema 0.7.7.5e experimental release
+# RuneSchema 0.7.7.5m main release
 
-This build is the experimental companion to the `0.7.7.4m` main release as of
-October 6, 2026. Both channels share the same code baseline; the suffix makes
-the installed channel explicit. It focuses on dependable
-mod loading, safer character saves, clearer status messages, and better support
-for mods that bring their own PAK content.
+This October 7, 2026 main build includes the tested Blueprint and Lua
+companion paths. It also continues the work on dependable mod loading, safer
+character saves, clearer status messages, and support for mods that bring
+their own PAK content.
 
 Make a backup before testing a new game build, a new RuneSchema build, or a
 large change to your mod list.
@@ -72,6 +71,27 @@ RuneSchema reports mount, resolution, and live-registration results separately
 so an author can distinguish a missing PAK from a bad object path.
 
 [Learn how to create PAK content](PAK-CONTENT-GUIDE.md).
+
+## Blueprint and Lua companions stay inside a RuneSchema mod
+
+Mod authors can now keep optional Blueprint startup packages under
+`logicmods/<PackageName>/` and UE4SS Lua code under `ue4ss/scripts/main.lua`
+inside their RuneSchema mod. RuneSchema mounts the cooked package and asks an
+installed BPModLoaderMod to start its `ModActor`; it starts a Lua companion
+once at game launch when the same mod is enabled.
+
+An ordinary `paks` folder still mounts cooked content but no longer asks
+BPModLoaderMod to start every package. This cuts down unwanted startup checks
+and log noise. The log shows one LogicMod submission summary, while a generated
+list keeps the exact package names for troubleshooting. A mod marked `0` in
+`runeschema.txt` does not contribute PAKs, LogicMods, or Lua code on the next
+launch.
+
+If your existing mod needs a `ModActor`, move its complete package folder from
+`paks` to `logicmods`; do not leave duplicate copies. Restart after changing
+the mod list or updating BPModLoaderMod.
+
+[See both optional folder layouts](PSEUDO-LOADERS.md).
 
 ## Optional bridges are included in Universal
 
