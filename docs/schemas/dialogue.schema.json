@@ -1,0 +1,1465 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "anyOf": [
+    {
+      "additionalProperties": false,
+      "dependencies": {
+        "CompletedEntry": [
+          "Completion"
+        ]
+      },
+      "properties": {
+        "CompletedEntry": {
+          "type": "string"
+        },
+        "Completion": {
+          "additionalProperties": false,
+          "properties": {
+            "Count": {
+              "maximum": 999,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "Flag": {
+              "type": "string"
+            },
+            "Item": {
+              "maxLength": 1024,
+              "pattern": "^/",
+              "type": "string"
+            }
+          },
+          "required": [
+            "Flag",
+            "Item",
+            "Count"
+          ],
+          "type": "object"
+        },
+        "Entry": {
+          "type": "string"
+        },
+        "Id": {
+          "type": "string"
+        },
+        "Nodes": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "properties": {
+              "Choices": {
+                "items": {
+                  "additionalProperties": false,
+                  "allOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "Quest",
+                          "Complete"
+                        ]
+                      }
+                    },
+                    {
+                      "not": {
+                        "required": [
+                          "Event",
+                          "Complete"
+                        ]
+                      }
+                    },
+                    {
+                      "if": {
+                        "required": [
+                          "Event",
+                          "Quest"
+                        ]
+                      },
+                      "then": {
+                        "anyOf": [
+                          {
+                            "properties": {
+                              "Event": {
+                                "properties": {
+                                  "Action": {
+                                    "const": "Start"
+                                  }
+                                }
+                              },
+                              "Quest": {
+                                "properties": {
+                                  "Action": {
+                                    "const": "Accept"
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "properties": {
+                              "Event": {
+                                "properties": {
+                                  "Action": {
+                                    "const": "Cancel"
+                                  }
+                                }
+                              },
+                              "Quest": {
+                                "properties": {
+                                  "Action": {
+                                    "const": "Abandon"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "not": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "RequirementUnlock",
+                              "WhenQuest"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "RequirementUnlock",
+                              "WhenTimeOfDay"
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  ],
+                  "dependencies": {
+                    "Complete": [
+                      "Next"
+                    ]
+                  },
+                  "oneOf": [
+                    {
+                      "required": [
+                        "Next"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "End"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "VendorID"
+                      ]
+                    }
+                  ],
+                  "properties": {
+                    "Complete": {
+                      "const": true
+                    },
+                    "End": {
+                      "const": true
+                    },
+                    "Event": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "Action": {
+                          "enum": [
+                            "Start",
+                            "Cancel"
+                          ]
+                        },
+                        "Id": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "Id",
+                        "Action"
+                      ],
+                      "type": "object"
+                    },
+                    "Id": {
+                      "type": "string"
+                    },
+                    "Next": {
+                      "type": "string"
+                    },
+                    "NpcGoAway": {
+                      "description": "Retire this mod NPC for the current server session after the choice executes. Use its Id or ModId:Id.",
+                      "maxLength": 257,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "Quest": {
+                      "additionalProperties": false,
+                      "dependencies": {
+                        "EntryID": {
+                          "properties": {
+                            "Action": {
+                              "const": "Accept"
+                            }
+                          }
+                        }
+                      },
+                      "properties": {
+                        "Action": {
+                          "enum": [
+                            "Accept",
+                            "TurnIn",
+                            "Abandon"
+                          ]
+                        },
+                        "EntryID": {
+                          "type": "string"
+                        },
+                        "Id": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "Id",
+                        "Action"
+                      ],
+                      "type": "object"
+                    },
+                    "RequirementUnlock": {
+                      "additionalProperties": false,
+                      "description": "Player-specific unlock requirements evaluated before native conversation choices are populated. Unmet or unreadable requirements omit the branch completely; they never create a blank option.",
+                      "minProperties": 1,
+                      "properties": {
+                        "Quest": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "Id": {
+                              "maxLength": 257,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "ObjectivesComplete": {
+                              "type": "boolean"
+                            },
+                            "RepeatReady": {
+                              "type": "boolean"
+                            },
+                            "Stage": {
+                              "maxLength": 128,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "States": {
+                              "items": {
+                                "enum": [
+                                  "NotStarted",
+                                  "Active",
+                                  "Completed"
+                                ]
+                              },
+                              "maxItems": 3,
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            }
+                          },
+                          "required": [
+                            "Id",
+                            "States"
+                          ],
+                          "type": "object"
+                        },
+                        "TimeOfDay": {
+                          "description": "Hide this branch unless the game's native time state matches.",
+                          "enum": [
+                            "Day",
+                            "Night"
+                          ]
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "Text": {
+                      "maxLength": 512,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "VendorID": {
+                      "type": "string"
+                    },
+                    "VisualEffect": {
+                      "additionalProperties": false,
+                      "allOf": [
+                        {
+                          "if": {
+                            "properties": {
+                              "Action": {
+                                "const": "Activate"
+                              }
+                            }
+                          },
+                          "then": {
+                            "required": [
+                              "Effect"
+                            ]
+                          }
+                        },
+                        {
+                          "if": {
+                            "properties": {
+                              "Action": {
+                                "const": "Deactivate"
+                              }
+                            }
+                          },
+                          "then": {
+                            "not": {
+                              "required": [
+                                "Effect"
+                              ]
+                            }
+                          }
+                        }
+                      ],
+                      "description": "Server-authoritative Niagara side effect. Activate attaches the effect after the choice action succeeds; Deactivate removes the prior dialogue effect. The revision is presented locally by every client.",
+                      "properties": {
+                        "Action": {
+                          "enum": [
+                            "Activate",
+                            "Deactivate"
+                          ]
+                        },
+                        "Effect": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "LocationOffset": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "X": {
+                                  "type": "number"
+                                },
+                                "Y": {
+                                  "type": "number"
+                                },
+                                "Z": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "X",
+                                "Y",
+                                "Z"
+                              ],
+                              "type": "object"
+                            },
+                            "Parameters": {
+                              "maxProperties": 32,
+                              "type": "object"
+                            },
+                            "System": {
+                              "pattern": "^/.+\\..+$",
+                              "type": "string"
+                            },
+                            "Type": {
+                              "const": "Niagara"
+                            }
+                          },
+                          "required": [
+                            "Type",
+                            "System"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "Action"
+                      ],
+                      "type": "object"
+                    },
+                    "WhenQuest": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "Id": {
+                          "maxLength": 257,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "ObjectivesComplete": {
+                          "type": "boolean"
+                        },
+                        "RepeatReady": {
+                          "type": "boolean"
+                        },
+                        "Stage": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "States": {
+                          "items": {
+                            "enum": [
+                              "NotStarted",
+                              "Active",
+                              "Completed"
+                            ]
+                          },
+                          "maxItems": 3,
+                          "minItems": 1,
+                          "type": "array",
+                          "uniqueItems": true
+                        }
+                      },
+                      "required": [
+                        "Id",
+                        "States"
+                      ],
+                      "type": "object"
+                    },
+                    "WhenTimeOfDay": {
+                      "description": "Hide this branch unless the game's native time state matches.",
+                      "enum": [
+                        "Day",
+                        "Night"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "Id",
+                    "Text"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 4,
+                "minItems": 1,
+                "type": "array"
+              },
+              "Emote": {
+                "additionalProperties": false,
+                "description": "Human NPC animation played once when this node is entered. Asset cues must use Playback Once.",
+                "if": {
+                  "required": [
+                    "Time"
+                  ]
+                },
+                "oneOf": [
+                  {
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "Asset"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "Playback"
+                          ]
+                        }
+                      ]
+                    },
+                    "required": [
+                      "Preset"
+                    ]
+                  },
+                  {
+                    "not": {
+                      "required": [
+                        "Preset"
+                      ]
+                    },
+                    "required": [
+                      "Asset"
+                    ]
+                  }
+                ],
+                "properties": {
+                  "Asset": {
+                    "maxLength": 1024,
+                    "minLength": 2,
+                    "pattern": "^/",
+                    "type": "string"
+                  },
+                  "Playback": {
+                    "enum": [
+                      "Hold",
+                      "Loop",
+                      "Once"
+                    ]
+                  },
+                  "Preset": {
+                    "enum": [
+                      "Equipment",
+                      "Relaxed",
+                      "CharacterSelect",
+                      "Chair",
+                      "Armchair",
+                      "Unarmed",
+                      "Crouched",
+                      "OneHanded",
+                      "Dagger",
+                      "Staff",
+                      "Sword",
+                      "Pickaxe",
+                      "Greatsword",
+                      "Greataxe",
+                      "Shield",
+                      "Torch",
+                      "Bow",
+                      "Yes",
+                      "No",
+                      "Wave",
+                      "Point",
+                      "NoWay",
+                      "Celebrate"
+                    ]
+                  },
+                  "Time": {
+                    "maximum": 60,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "WeaponVisibility": {
+                    "enum": [
+                      "Auto",
+                      "Show",
+                      "Hide"
+                    ]
+                  }
+                },
+                "then": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "Preset": {
+                          "enum": [
+                            "Equipment",
+                            "Unarmed",
+                            "Crouched",
+                            "OneHanded",
+                            "Dagger",
+                            "Staff",
+                            "Sword",
+                            "Pickaxe",
+                            "Greatsword",
+                            "Greataxe",
+                            "Shield",
+                            "Torch",
+                            "Bow"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "Preset"
+                      ]
+                    },
+                    {
+                      "properties": {
+                        "Playback": {
+                          "const": "Hold"
+                        }
+                      },
+                      "required": [
+                        "Asset",
+                        "Playback"
+                      ]
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              "Pose": {
+                "additionalProperties": false,
+                "description": "Human only. Equipment preserves the held item's pose, or uses Relaxed when empty-handed. Time samples held poses in seconds; must be below the loaded clip duration. IdleAnimation and Pose are mutually exclusive. Full-body idles/emotes do not preserve every weapon grip.",
+                "if": {
+                  "required": [
+                    "Time"
+                  ]
+                },
+                "oneOf": [
+                  {
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "Asset"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "Playback"
+                          ]
+                        }
+                      ]
+                    },
+                    "required": [
+                      "Preset"
+                    ]
+                  },
+                  {
+                    "not": {
+                      "required": [
+                        "Preset"
+                      ]
+                    },
+                    "required": [
+                      "Asset"
+                    ]
+                  }
+                ],
+                "properties": {
+                  "Asset": {
+                    "maxLength": 1024,
+                    "minLength": 2,
+                    "pattern": "^/",
+                    "type": "string"
+                  },
+                  "Playback": {
+                    "enum": [
+                      "Hold",
+                      "Loop",
+                      "Once"
+                    ]
+                  },
+                  "Preset": {
+                    "enum": [
+                      "Equipment",
+                      "Relaxed",
+                      "CharacterSelect",
+                      "Chair",
+                      "Armchair",
+                      "Unarmed",
+                      "Crouched",
+                      "OneHanded",
+                      "Dagger",
+                      "Staff",
+                      "Sword",
+                      "Pickaxe",
+                      "Greatsword",
+                      "Greataxe",
+                      "Shield",
+                      "Torch",
+                      "Bow",
+                      "Yes",
+                      "No",
+                      "Wave",
+                      "Point",
+                      "NoWay",
+                      "Celebrate"
+                    ]
+                  },
+                  "Time": {
+                    "maximum": 60,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "WeaponVisibility": {
+                    "enum": [
+                      "Auto",
+                      "Show",
+                      "Hide"
+                    ]
+                  }
+                },
+                "then": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "Preset": {
+                          "enum": [
+                            "Equipment",
+                            "Unarmed",
+                            "Crouched",
+                            "OneHanded",
+                            "Dagger",
+                            "Staff",
+                            "Sword",
+                            "Pickaxe",
+                            "Greatsword",
+                            "Greataxe",
+                            "Shield",
+                            "Torch",
+                            "Bow"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "Preset"
+                      ]
+                    },
+                    {
+                      "properties": {
+                        "Playback": {
+                          "const": "Hold"
+                        }
+                      },
+                      "required": [
+                        "Asset",
+                        "Playback"
+                      ]
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              "Text": {
+                "maxLength": 4096,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "Text",
+              "Choices"
+            ],
+            "type": "object"
+          },
+          "maxProperties": 128,
+          "minProperties": 1,
+          "type": "object"
+        }
+      },
+      "required": [
+        "Id",
+        "Entry",
+        "Nodes"
+      ],
+      "type": "object"
+    },
+    {
+      "items": {
+        "additionalProperties": false,
+        "dependencies": {
+          "CompletedEntry": [
+            "Completion"
+          ]
+        },
+        "properties": {
+          "CompletedEntry": {
+            "type": "string"
+          },
+          "Completion": {
+            "additionalProperties": false,
+            "properties": {
+              "Count": {
+                "maximum": 999,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "Flag": {
+                "type": "string"
+              },
+              "Item": {
+                "maxLength": 1024,
+                "pattern": "^/",
+                "type": "string"
+              }
+            },
+            "required": [
+              "Flag",
+              "Item",
+              "Count"
+            ],
+            "type": "object"
+          },
+          "Entry": {
+            "type": "string"
+          },
+          "Id": {
+            "type": "string"
+          },
+          "Nodes": {
+            "additionalProperties": {
+              "additionalProperties": false,
+              "properties": {
+                "Choices": {
+                  "items": {
+                    "additionalProperties": false,
+                    "allOf": [
+                      {
+                        "not": {
+                          "required": [
+                            "Quest",
+                            "Complete"
+                          ]
+                        }
+                      },
+                      {
+                        "not": {
+                          "required": [
+                            "Event",
+                            "Complete"
+                          ]
+                        }
+                      },
+                      {
+                        "if": {
+                          "required": [
+                            "Event",
+                            "Quest"
+                          ]
+                        },
+                        "then": {
+                          "anyOf": [
+                            {
+                              "properties": {
+                                "Event": {
+                                  "properties": {
+                                    "Action": {
+                                      "const": "Start"
+                                    }
+                                  }
+                                },
+                                "Quest": {
+                                  "properties": {
+                                    "Action": {
+                                      "const": "Accept"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "properties": {
+                                "Event": {
+                                  "properties": {
+                                    "Action": {
+                                      "const": "Cancel"
+                                    }
+                                  }
+                                },
+                                "Quest": {
+                                  "properties": {
+                                    "Action": {
+                                      "const": "Abandon"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "not": {
+                          "anyOf": [
+                            {
+                              "required": [
+                                "RequirementUnlock",
+                                "WhenQuest"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "RequirementUnlock",
+                                "WhenTimeOfDay"
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ],
+                    "dependencies": {
+                      "Complete": [
+                        "Next"
+                      ]
+                    },
+                    "oneOf": [
+                      {
+                        "required": [
+                          "Next"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "End"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "VendorID"
+                        ]
+                      }
+                    ],
+                    "properties": {
+                      "Complete": {
+                        "const": true
+                      },
+                      "End": {
+                        "const": true
+                      },
+                      "Event": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "Action": {
+                            "enum": [
+                              "Start",
+                              "Cancel"
+                            ]
+                          },
+                          "Id": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "Id",
+                          "Action"
+                        ],
+                        "type": "object"
+                      },
+                      "Id": {
+                        "type": "string"
+                      },
+                      "Next": {
+                        "type": "string"
+                      },
+                      "NpcGoAway": {
+                        "description": "Retire this mod NPC for the current server session after the choice executes. Use its Id or ModId:Id.",
+                        "maxLength": 257,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "Quest": {
+                        "additionalProperties": false,
+                        "dependencies": {
+                          "EntryID": {
+                            "properties": {
+                              "Action": {
+                                "const": "Accept"
+                              }
+                            }
+                          }
+                        },
+                        "properties": {
+                          "Action": {
+                            "enum": [
+                              "Accept",
+                              "TurnIn",
+                              "Abandon"
+                            ]
+                          },
+                          "EntryID": {
+                            "type": "string"
+                          },
+                          "Id": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "Id",
+                          "Action"
+                        ],
+                        "type": "object"
+                      },
+                      "RequirementUnlock": {
+                        "additionalProperties": false,
+                        "description": "Player-specific unlock requirements evaluated before native conversation choices are populated. Unmet or unreadable requirements omit the branch completely; they never create a blank option.",
+                        "minProperties": 1,
+                        "properties": {
+                          "Quest": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "Id": {
+                                "maxLength": 257,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "ObjectivesComplete": {
+                                "type": "boolean"
+                              },
+                              "RepeatReady": {
+                                "type": "boolean"
+                              },
+                              "Stage": {
+                                "maxLength": 128,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "States": {
+                                "items": {
+                                  "enum": [
+                                    "NotStarted",
+                                    "Active",
+                                    "Completed"
+                                  ]
+                                },
+                                "maxItems": 3,
+                                "minItems": 1,
+                                "type": "array",
+                                "uniqueItems": true
+                              }
+                            },
+                            "required": [
+                              "Id",
+                              "States"
+                            ],
+                            "type": "object"
+                          },
+                          "TimeOfDay": {
+                            "description": "Hide this branch unless the game's native time state matches.",
+                            "enum": [
+                              "Day",
+                              "Night"
+                            ]
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "Text": {
+                        "maxLength": 512,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "VendorID": {
+                        "type": "string"
+                      },
+                      "VisualEffect": {
+                        "additionalProperties": false,
+                        "allOf": [
+                          {
+                            "if": {
+                              "properties": {
+                                "Action": {
+                                  "const": "Activate"
+                                }
+                              }
+                            },
+                            "then": {
+                              "required": [
+                                "Effect"
+                              ]
+                            }
+                          },
+                          {
+                            "if": {
+                              "properties": {
+                                "Action": {
+                                  "const": "Deactivate"
+                                }
+                              }
+                            },
+                            "then": {
+                              "not": {
+                                "required": [
+                                  "Effect"
+                                ]
+                              }
+                            }
+                          }
+                        ],
+                        "description": "Server-authoritative Niagara side effect. Activate attaches the effect after the choice action succeeds; Deactivate removes the prior dialogue effect. The revision is presented locally by every client.",
+                        "properties": {
+                          "Action": {
+                            "enum": [
+                              "Activate",
+                              "Deactivate"
+                            ]
+                          },
+                          "Effect": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "LocationOffset": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "X": {
+                                    "type": "number"
+                                  },
+                                  "Y": {
+                                    "type": "number"
+                                  },
+                                  "Z": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "X",
+                                  "Y",
+                                  "Z"
+                                ],
+                                "type": "object"
+                              },
+                              "Parameters": {
+                                "maxProperties": 32,
+                                "type": "object"
+                              },
+                              "System": {
+                                "pattern": "^/.+\\..+$",
+                                "type": "string"
+                              },
+                              "Type": {
+                                "const": "Niagara"
+                              }
+                            },
+                            "required": [
+                              "Type",
+                              "System"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "Action"
+                        ],
+                        "type": "object"
+                      },
+                      "WhenQuest": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "Id": {
+                            "maxLength": 257,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "ObjectivesComplete": {
+                            "type": "boolean"
+                          },
+                          "RepeatReady": {
+                            "type": "boolean"
+                          },
+                          "Stage": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "States": {
+                            "items": {
+                              "enum": [
+                                "NotStarted",
+                                "Active",
+                                "Completed"
+                              ]
+                            },
+                            "maxItems": 3,
+                            "minItems": 1,
+                            "type": "array",
+                            "uniqueItems": true
+                          }
+                        },
+                        "required": [
+                          "Id",
+                          "States"
+                        ],
+                        "type": "object"
+                      },
+                      "WhenTimeOfDay": {
+                        "description": "Hide this branch unless the game's native time state matches.",
+                        "enum": [
+                          "Day",
+                          "Night"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "Id",
+                      "Text"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 4,
+                  "minItems": 1,
+                  "type": "array"
+                },
+                "Emote": {
+                  "additionalProperties": false,
+                  "description": "Human NPC animation played once when this node is entered. Asset cues must use Playback Once.",
+                  "if": {
+                    "required": [
+                      "Time"
+                    ]
+                  },
+                  "oneOf": [
+                    {
+                      "not": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "Asset"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "Playback"
+                            ]
+                          }
+                        ]
+                      },
+                      "required": [
+                        "Preset"
+                      ]
+                    },
+                    {
+                      "not": {
+                        "required": [
+                          "Preset"
+                        ]
+                      },
+                      "required": [
+                        "Asset"
+                      ]
+                    }
+                  ],
+                  "properties": {
+                    "Asset": {
+                      "maxLength": 1024,
+                      "minLength": 2,
+                      "pattern": "^/",
+                      "type": "string"
+                    },
+                    "Playback": {
+                      "enum": [
+                        "Hold",
+                        "Loop",
+                        "Once"
+                      ]
+                    },
+                    "Preset": {
+                      "enum": [
+                        "Equipment",
+                        "Relaxed",
+                        "CharacterSelect",
+                        "Chair",
+                        "Armchair",
+                        "Unarmed",
+                        "Crouched",
+                        "OneHanded",
+                        "Dagger",
+                        "Staff",
+                        "Sword",
+                        "Pickaxe",
+                        "Greatsword",
+                        "Greataxe",
+                        "Shield",
+                        "Torch",
+                        "Bow",
+                        "Yes",
+                        "No",
+                        "Wave",
+                        "Point",
+                        "NoWay",
+                        "Celebrate"
+                      ]
+                    },
+                    "Time": {
+                      "maximum": 60,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "WeaponVisibility": {
+                      "enum": [
+                        "Auto",
+                        "Show",
+                        "Hide"
+                      ]
+                    }
+                  },
+                  "then": {
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "Preset": {
+                            "enum": [
+                              "Equipment",
+                              "Unarmed",
+                              "Crouched",
+                              "OneHanded",
+                              "Dagger",
+                              "Staff",
+                              "Sword",
+                              "Pickaxe",
+                              "Greatsword",
+                              "Greataxe",
+                              "Shield",
+                              "Torch",
+                              "Bow"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "Preset"
+                        ]
+                      },
+                      {
+                        "properties": {
+                          "Playback": {
+                            "const": "Hold"
+                          }
+                        },
+                        "required": [
+                          "Asset",
+                          "Playback"
+                        ]
+                      }
+                    ]
+                  },
+                  "type": "object"
+                },
+                "Pose": {
+                  "additionalProperties": false,
+                  "description": "Human only. Equipment preserves the held item's pose, or uses Relaxed when empty-handed. Time samples held poses in seconds; must be below the loaded clip duration. IdleAnimation and Pose are mutually exclusive. Full-body idles/emotes do not preserve every weapon grip.",
+                  "if": {
+                    "required": [
+                      "Time"
+                    ]
+                  },
+                  "oneOf": [
+                    {
+                      "not": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "Asset"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "Playback"
+                            ]
+                          }
+                        ]
+                      },
+                      "required": [
+                        "Preset"
+                      ]
+                    },
+                    {
+                      "not": {
+                        "required": [
+                          "Preset"
+                        ]
+                      },
+                      "required": [
+                        "Asset"
+                      ]
+                    }
+                  ],
+                  "properties": {
+                    "Asset": {
+                      "maxLength": 1024,
+                      "minLength": 2,
+                      "pattern": "^/",
+                      "type": "string"
+                    },
+                    "Playback": {
+                      "enum": [
+                        "Hold",
+                        "Loop",
+                        "Once"
+                      ]
+                    },
+                    "Preset": {
+                      "enum": [
+                        "Equipment",
+                        "Relaxed",
+                        "CharacterSelect",
+                        "Chair",
+                        "Armchair",
+                        "Unarmed",
+                        "Crouched",
+                        "OneHanded",
+                        "Dagger",
+                        "Staff",
+                        "Sword",
+                        "Pickaxe",
+                        "Greatsword",
+                        "Greataxe",
+                        "Shield",
+                        "Torch",
+                        "Bow",
+                        "Yes",
+                        "No",
+                        "Wave",
+                        "Point",
+                        "NoWay",
+                        "Celebrate"
+                      ]
+                    },
+                    "Time": {
+                      "maximum": 60,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "WeaponVisibility": {
+                      "enum": [
+                        "Auto",
+                        "Show",
+                        "Hide"
+                      ]
+                    }
+                  },
+                  "then": {
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "Preset": {
+                            "enum": [
+                              "Equipment",
+                              "Unarmed",
+                              "Crouched",
+                              "OneHanded",
+                              "Dagger",
+                              "Staff",
+                              "Sword",
+                              "Pickaxe",
+                              "Greatsword",
+                              "Greataxe",
+                              "Shield",
+                              "Torch",
+                              "Bow"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "Preset"
+                        ]
+                      },
+                      {
+                        "properties": {
+                          "Playback": {
+                            "const": "Hold"
+                          }
+                        },
+                        "required": [
+                          "Asset",
+                          "Playback"
+                        ]
+                      }
+                    ]
+                  },
+                  "type": "object"
+                },
+                "Text": {
+                  "maxLength": 4096,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "Text",
+                "Choices"
+              ],
+              "type": "object"
+            },
+            "maxProperties": 128,
+            "minProperties": 1,
+            "type": "object"
+          }
+        },
+        "required": [
+          "Id",
+          "Entry",
+          "Nodes"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  ],
+  "description": "Structural authoring hints, not an exhaustive runtime validator. Asset paths, identities, reflected properties and event compatibility must be validated in game.",
+  "title": "RuneSchema /dialogue",
+  "x-runeschema-coverage": "structural",
+  "x-runeschema-starter-capabilities": {
+    "append": false,
+    "clone": false,
+    "patch": false,
+    "search": "loaded records"
+  }
+}

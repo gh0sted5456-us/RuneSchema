@@ -1,0 +1,14 @@
+{
+  "SchemaVersion": 1,
+  "Id": "RuneSchema.RegistryBridge",
+  "Name": "RuneSchema Registry Bridge",
+  "Version": "0.7.7.4m",
+  "BuiltForRuneSchema": "0.7.7.4m",
+  "ConsoleMessage": "RuneSchema shared registry bridge content is available.",
+  "Capabilities": [
+    "bridge.registry-content"
+  ],
+  "CookedObjects": [
+    "/RuneSchema/Registry/PDA_RuneSchemaRegistryBridgeBase"
+  ]
+}

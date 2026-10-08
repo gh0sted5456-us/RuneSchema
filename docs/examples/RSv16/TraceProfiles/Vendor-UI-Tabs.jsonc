@@ -1,0 +1,37 @@
+{
+  // Open a merchant first and leave the crafting window active. Open RuneSchema's
+  // diagnostic UI, reload profiles, then load this profile. It resolves the live
+  // WBP_Crafting_MainPanel automatically. Start the object trace, return to the
+  // merchant, visit Craft, Repair and Ascend, then stop and export.
+  "Version": 1,
+  "Name": "Vendor-UI-Tabs",
+  "Description": "Traces the live crafting main-panel tab delegates and snapshots Repair/Ascend visibility and vanilla icon references.",
+  "Target": {
+    "Mode": "ClassAndName",
+    "ClassContains": "WBP_Crafting_MainPanel_C",
+    "NameContains": "WBP_Crafting_MainPanel_C"
+  },
+  "Trace": {
+    "Seconds": 60,
+    "MaxEvents": 1024,
+    "Categories": 31,
+    "IncludeAny": [
+      "WBP_Crafting_MainPanel"
+    ],
+    "SuppressTicks": true,
+    "TraceSelectedObject": true,
+    "CaptureParameters": true,
+    "EventCaptures": [
+      { "Root": "Target", "Path": ["RepairTabButton", "Visibility"] },
+      { "Root": "Target", "Path": ["RepairTabButton", "SelectedIcon"] },
+      { "Root": "Target", "Path": ["RepairTabButton", "UnselectedIcon"] },
+      { "Root": "Target", "Path": ["MasterworkTabButton", "Visibility"] },
+      { "Root": "Target", "Path": ["MasterworkTabButton", "SelectedIcon"] },
+      { "Root": "Target", "Path": ["MasterworkTabButton", "UnselectedIcon"] }
+    ]
+  },
+  "Export": {
+    "Name": "Vendor-UI-Tabs",
+    "Jsonc": false
+  }
+}

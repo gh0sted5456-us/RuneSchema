@@ -1,0 +1,47 @@
+// Restore the game's own cooked Edit Appearance controls on Gamepass/WinGDK.
+// No transient $RuntimeUI and no synthetic click binding are needed: the native
+// WBP_DomControllerPromptButton already carries IA_UI_EditAppearance.
+{
+  "WBP_MainMenu_CharSelect_C": {
+    "$RuntimeWidget": {
+      "$Storefront": "GamePass",
+
+      "Character.EditAppearanceButtonSBox": {
+        "$When": "Resolved",
+        "$Find": {
+          "Scope": "WidgetTree",
+          "Name": "EditAppearanceButtonSBox"
+        },
+        "Visibility": "Visible"
+      },
+
+      "Character.EditAppearanceButton": {
+        "$When": "Resolved",
+        "$Find": {
+          "Scope": "WidgetTree",
+          "Name": "EditAppearanceButton"
+        },
+        "Visibility": "Visible",
+        "bIsEnabled": true,
+        "RenderOpacity": 1.0
+      }
+    }
+  },
+
+  "WBP_MainMenu_CharacterSelect_C": {
+    "$RuntimeWidget": {
+      "$Storefront": "GamePass",
+
+      "InputLegend_EditAppearance": {
+        "$When": "Resolved",
+        "$Find": {
+          "Scope": "WidgetTree",
+          "Name": "InputLegend_EditAppearance"
+        },
+        "Visibility": "Visible",
+        "bIsEnabled": true,
+        "RenderOpacity": 1.0
+      }
+    }
+  }
+}

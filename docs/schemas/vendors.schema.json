@@ -1,0 +1,601 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "anyOf": [
+    {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "CategoryRules": {
+              "description": "Per-player category visibility. Offers in a matching Category appear only when native power level, time, and completed-quest gates pass. Unlisted categories remain visible.",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "Category": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "MaxPowerLevel": {
+                    "maximum": 100,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "MinPowerLevel": {
+                    "maximum": 100,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "QuestCompleted": {
+                    "type": "string"
+                  },
+                  "QuestID": {
+                    "type": "string"
+                  },
+                  "QuestState": {
+                    "const": "Complete"
+                  },
+                  "TimeOfDay": {
+                    "enum": [
+                      "Any",
+                      "Day",
+                      "Night"
+                    ]
+                  }
+                },
+                "required": [
+                  "Category"
+                ],
+                "type": "object"
+              },
+              "maxItems": 64,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "DataTable": {
+              "type": "string"
+            },
+            "Enabled": {
+              "type": "boolean"
+            },
+            "Id": {
+              "type": "string"
+            },
+            "Items": {
+              "items": {
+                "additionalProperties": true,
+                "properties": {
+                  "MaxPowerLevel": {
+                    "maximum": 100,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "MinPowerLevel": {
+                    "maximum": 100,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "Order": {
+                    "description": "Optional sort position within this offer Category. Lower numbers appear first; equal/missing positions retain source order.",
+                    "maximum": 1000000,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "QuestCompleted": {
+                    "type": "string"
+                  },
+                  "QuestID": {
+                    "type": "string"
+                  },
+                  "QuestState": {
+                    "const": "Complete"
+                  },
+                  "TimeOfDay": {
+                    "enum": [
+                      "Any",
+                      "Day",
+                      "Night"
+                    ]
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "Masterworkable": {
+              "default": false,
+              "description": "Expose the native Ascend/Masterwork tab and its vanilla normal/highlight icons.",
+              "type": "boolean"
+            },
+            "MerchantName": {
+              "type": "string"
+            },
+            "Repairable": {
+              "default": false,
+              "description": "Expose the native Repair tab in the merchant/crafting overlay. When false or omitted, Repair is excluded and E cannot navigate to it.",
+              "type": "boolean"
+            },
+            "RowName": {
+              "type": "string"
+            },
+            "VendorHeaderImage": {
+              "anyOf": [
+                {
+                  "const": ""
+                },
+                {
+                  "maxLength": 1024,
+                  "minLength": 2,
+                  "pattern": "^/",
+                  "type": "string"
+                }
+              ],
+              "default": "/Game/Art/UI/Craft/T_DeathShop_Banner.T_DeathShop_Banner",
+              "description": "Optional cooked banner path. Omit or leave blank to use the vanilla Death banner. RuneSchema custom banners mount below /Game/Mods/RuneSchema/UI/Icons/Banners/. Requires Items; restart after changes."
+            },
+            "VendorProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            }
+          },
+          "required": [
+            "Id",
+            "Items"
+          ],
+          "type": "object"
+        },
+        {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "CategoryRules": {
+                "description": "Per-player category visibility. Offers in a matching Category appear only when native power level, time, and completed-quest gates pass. Unlisted categories remain visible.",
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "Category": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "MaxPowerLevel": {
+                      "maximum": 100,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "MinPowerLevel": {
+                      "maximum": 100,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "QuestCompleted": {
+                      "type": "string"
+                    },
+                    "QuestID": {
+                      "type": "string"
+                    },
+                    "QuestState": {
+                      "const": "Complete"
+                    },
+                    "TimeOfDay": {
+                      "enum": [
+                        "Any",
+                        "Day",
+                        "Night"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "Category"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 64,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "DataTable": {
+                "type": "string"
+              },
+              "Enabled": {
+                "type": "boolean"
+              },
+              "Id": {
+                "type": "string"
+              },
+              "Items": {
+                "items": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "MaxPowerLevel": {
+                      "maximum": 100,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "MinPowerLevel": {
+                      "maximum": 100,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "Order": {
+                      "description": "Optional sort position within this offer Category. Lower numbers appear first; equal/missing positions retain source order.",
+                      "maximum": 1000000,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "QuestCompleted": {
+                      "type": "string"
+                    },
+                    "QuestID": {
+                      "type": "string"
+                    },
+                    "QuestState": {
+                      "const": "Complete"
+                    },
+                    "TimeOfDay": {
+                      "enum": [
+                        "Any",
+                        "Day",
+                        "Night"
+                      ]
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "Masterworkable": {
+                "default": false,
+                "description": "Expose the native Ascend/Masterwork tab and its vanilla normal/highlight icons.",
+                "type": "boolean"
+              },
+              "MerchantName": {
+                "type": "string"
+              },
+              "Repairable": {
+                "default": false,
+                "description": "Expose the native Repair tab in the merchant/crafting overlay. When false or omitted, Repair is excluded and E cannot navigate to it.",
+                "type": "boolean"
+              },
+              "RowName": {
+                "type": "string"
+              },
+              "VendorHeaderImage": {
+                "anyOf": [
+                  {
+                    "const": ""
+                  },
+                  {
+                    "maxLength": 1024,
+                    "minLength": 2,
+                    "pattern": "^/",
+                    "type": "string"
+                  }
+                ],
+                "default": "/Game/Art/UI/Craft/T_DeathShop_Banner.T_DeathShop_Banner",
+                "description": "Optional cooked banner path. Omit or leave blank to use the vanilla Death banner. RuneSchema custom banners mount below /Game/Mods/RuneSchema/UI/Icons/Banners/. Requires Items; restart after changes."
+              },
+              "VendorProperties": {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            },
+            "required": [
+              "Id",
+              "Items"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      ]
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "Vendors": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "CategoryRules": {
+                  "description": "Per-player category visibility. Offers in a matching Category appear only when native power level, time, and completed-quest gates pass. Unlisted categories remain visible.",
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "Category": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "MaxPowerLevel": {
+                        "maximum": 100,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "MinPowerLevel": {
+                        "maximum": 100,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "QuestCompleted": {
+                        "type": "string"
+                      },
+                      "QuestID": {
+                        "type": "string"
+                      },
+                      "QuestState": {
+                        "const": "Complete"
+                      },
+                      "TimeOfDay": {
+                        "enum": [
+                          "Any",
+                          "Day",
+                          "Night"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "Category"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 64,
+                  "type": "array",
+                  "uniqueItems": true
+                },
+                "DataTable": {
+                  "type": "string"
+                },
+                "Enabled": {
+                  "type": "boolean"
+                },
+                "Id": {
+                  "type": "string"
+                },
+                "Items": {
+                  "items": {
+                    "additionalProperties": true,
+                    "properties": {
+                      "MaxPowerLevel": {
+                        "maximum": 100,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "MinPowerLevel": {
+                        "maximum": 100,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "Order": {
+                        "description": "Optional sort position within this offer Category. Lower numbers appear first; equal/missing positions retain source order.",
+                        "maximum": 1000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "QuestCompleted": {
+                        "type": "string"
+                      },
+                      "QuestID": {
+                        "type": "string"
+                      },
+                      "QuestState": {
+                        "const": "Complete"
+                      },
+                      "TimeOfDay": {
+                        "enum": [
+                          "Any",
+                          "Day",
+                          "Night"
+                        ]
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "Masterworkable": {
+                  "default": false,
+                  "description": "Expose the native Ascend/Masterwork tab and its vanilla normal/highlight icons.",
+                  "type": "boolean"
+                },
+                "MerchantName": {
+                  "type": "string"
+                },
+                "Repairable": {
+                  "default": false,
+                  "description": "Expose the native Repair tab in the merchant/crafting overlay. When false or omitted, Repair is excluded and E cannot navigate to it.",
+                  "type": "boolean"
+                },
+                "RowName": {
+                  "type": "string"
+                },
+                "VendorHeaderImage": {
+                  "anyOf": [
+                    {
+                      "const": ""
+                    },
+                    {
+                      "maxLength": 1024,
+                      "minLength": 2,
+                      "pattern": "^/",
+                      "type": "string"
+                    }
+                  ],
+                  "default": "/Game/Art/UI/Craft/T_DeathShop_Banner.T_DeathShop_Banner",
+                  "description": "Optional cooked banner path. Omit or leave blank to use the vanilla Death banner. RuneSchema custom banners mount below /Game/Mods/RuneSchema/UI/Icons/Banners/. Requires Items; restart after changes."
+                },
+                "VendorProperties": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              },
+              "required": [
+                "Id",
+                "Items"
+              ],
+              "type": "object"
+            },
+            {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "CategoryRules": {
+                    "description": "Per-player category visibility. Offers in a matching Category appear only when native power level, time, and completed-quest gates pass. Unlisted categories remain visible.",
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "Category": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "MaxPowerLevel": {
+                          "maximum": 100,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "MinPowerLevel": {
+                          "maximum": 100,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "QuestCompleted": {
+                          "type": "string"
+                        },
+                        "QuestID": {
+                          "type": "string"
+                        },
+                        "QuestState": {
+                          "const": "Complete"
+                        },
+                        "TimeOfDay": {
+                          "enum": [
+                            "Any",
+                            "Day",
+                            "Night"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "Category"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 64,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "DataTable": {
+                    "type": "string"
+                  },
+                  "Enabled": {
+                    "type": "boolean"
+                  },
+                  "Id": {
+                    "type": "string"
+                  },
+                  "Items": {
+                    "items": {
+                      "additionalProperties": true,
+                      "properties": {
+                        "MaxPowerLevel": {
+                          "maximum": 100,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "MinPowerLevel": {
+                          "maximum": 100,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "Order": {
+                          "description": "Optional sort position within this offer Category. Lower numbers appear first; equal/missing positions retain source order.",
+                          "maximum": 1000000,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "QuestCompleted": {
+                          "type": "string"
+                        },
+                        "QuestID": {
+                          "type": "string"
+                        },
+                        "QuestState": {
+                          "const": "Complete"
+                        },
+                        "TimeOfDay": {
+                          "enum": [
+                            "Any",
+                            "Day",
+                            "Night"
+                          ]
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "Masterworkable": {
+                    "default": false,
+                    "description": "Expose the native Ascend/Masterwork tab and its vanilla normal/highlight icons.",
+                    "type": "boolean"
+                  },
+                  "MerchantName": {
+                    "type": "string"
+                  },
+                  "Repairable": {
+                    "default": false,
+                    "description": "Expose the native Repair tab in the merchant/crafting overlay. When false or omitted, Repair is excluded and E cannot navigate to it.",
+                    "type": "boolean"
+                  },
+                  "RowName": {
+                    "type": "string"
+                  },
+                  "VendorHeaderImage": {
+                    "anyOf": [
+                      {
+                        "const": ""
+                      },
+                      {
+                        "maxLength": 1024,
+                        "minLength": 2,
+                        "pattern": "^/",
+                        "type": "string"
+                      }
+                    ],
+                    "default": "/Game/Art/UI/Craft/T_DeathShop_Banner.T_DeathShop_Banner",
+                    "description": "Optional cooked banner path. Omit or leave blank to use the vanilla Death banner. RuneSchema custom banners mount below /Game/Mods/RuneSchema/UI/Icons/Banners/. Requires Items; restart after changes."
+                  },
+                  "VendorProperties": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "Id",
+                  "Items"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          ]
+        }
+      },
+      "required": [
+        "Vendors"
+      ],
+      "type": "object"
+    }
+  ],
+  "description": "Structural authoring hints, not an exhaustive runtime validator. Asset paths, identities, reflected properties and event compatibility must be validated in game.",
+  "title": "RuneSchema /vendors",
+  "x-runeschema-coverage": "structural",
+  "x-runeschema-starter-capabilities": {
+    "append": false,
+    "clone": false,
+    "patch": false,
+    "search": "authored files"
+  }
+}

@@ -1,0 +1,115 @@
+#include <fstream>
+#include <iterator>
+#include <stdexcept>
+#include <string>
+
+static std::string Read(const char* path) {
+    std::ifstream file(path);
+    if(!file) throw std::runtime_error(std::string("Cannot read ")+path);
+    return {std::istreambuf_iterator<char>(file),{}};
+}
+
+int main(int argc,char** argv) {
+    if(argc!=3) throw std::runtime_error("Expected building loader source and loader schema");
+    const auto loader=Read(argv[1]),schema=Read(argv[2]);
+    const auto require=[](bool value,const char* what) {
+        if(!value) throw std::runtime_error(std::string("Building clone contract regression: ")+what);
+    };
+    require(loader.find("FindSourcePlacements(source)")!=std::string::npos,
+        "omitted AddTo no longer inherits source catalogue membership");
+    require(loader.find("SameSoftObject(*soft, source)")!=std::string::npos,
+        "source catalogue matching is not object-path based");
+    require(loader.find("must resolve to a concrete BP_BaseBuilding_BaseActor child")!=std::string::npos,
+        "cooked actor ancestry guard missing");
+    require(loader.find("custom cooked actor could not select ManagedActor representation")!=std::string::npos,
+        "lightweight derived-mesh safety missing");
+    require(loader.find("BuildableActor replacement requires '$Clone'")!=std::string::npos,
+        "native source mutation is not rejected");
+    require(loader.find("PersistenceID\", \"InternalName\", \"BuildingPieceDataIndex\"")!=std::string::npos,
+        "managed identity fields are not protected");
+    require(loader.find("requirement.at(\"Amount\").get<int64_t>() <= 0")!=std::string::npos,
+        "non-positive costs are not rejected");
+    require(loader.find("RefreshBuildingReferencesForWorld()")!=std::string::npos,
+        "direct assets are not refreshed before world registration");
+    require(loader.find("GetValidBuilding(identity)")!=std::string::npos,
+        "registry protection can bypass serial-validated building handles");
+    const auto slotCheck=loader.find("slot->GetUObject()!=retained->second");
+    const auto rootCheck=loader.find("object->IsRootSet()",slotCheck);
+    require(slotCheck!=std::string::npos && rootCheck!=std::string::npos && slotCheck<rootCheck,
+        "transient clone handle recovery can dereference an unverified retained token");
+    require(loader.find("[BUILDING-ASSET][HANDLE-REFRESH]")!=std::string::npos,
+        "transient clone handle recovery is not observable");
+    require(loader.find("object=LoadObject(definition.AssetPath)")!=std::string::npos,
+        "direct assets are not re-resolved from their stable configured path");
+    require(loader.find("definition.Clone?TEXT(\"clone\"):TEXT(\"direct\")")!=std::string::npos,
+        "direct and clone lifetime diagnostics are no longer distinct");
+    require(loader.find("cooked identity changed")!=std::string::npos,
+        "world-boundary baked identity verification is missing");
+    require(loader.find("RefreshBuildingCatalogueForWorld()")!=std::string::npos,
+        "fresh world catalogue does not replay custom menu placements");
+    require(loader.find("[BUILDING-CATALOGUE][VERIFIED]")!=std::string::npos,
+        "world catalogue replay has no acceptance diagnostic");
+    require(loader.find("RegisterInitGameStatePreCallback")!=std::string::npos
+        && loader.find("RegisterInitGameStatePostCallback")!=std::string::npos,
+        "building registry and player unlock work no longer use separate lifecycle lanes");
+    require(loader.find("candidate->GetWorld() != targetWorld")!=std::string::npos,
+        "building unlock delivery is not restricted to the active gameplay world");
+    require(loader.find("RF_BeginDestroyed | RF_FinishDestroyed")!=std::string::npos,
+        "building unlock delivery can select a destroyed transition component");
+    require(loader.find("BP_OnBuildingsUnlocked")!=std::string::npos,
+        "building unlock delivery no longer notifies the native build-menu path");
+    require(loader.find("[BUILDING-UNLOCK][VERIFIED]")!=std::string::npos,
+        "building unlock delivery has no verification diagnostic");
+    require(loader.find("BuildingLoaderBoundedRecovery")!=std::string::npos
+        && loader.find("BuildingRecoveryTimeoutSeconds = 15.0f")!=std::string::npos,
+        "late building readiness is not covered by a bounded one-shot recovery window");
+    require(loader.find("ApplyUnlocksToWorld(worldContext, reportDeferred)")!=std::string::npos
+        && loader.find("if (!applied && reportDeferred)")!=std::string::npos,
+        "bounded building recovery can spam a deferred diagnostic on every retry");
+    require(loader.find("[SERVER][BUILDING-UNLOCK][AWAITING-PLAYER]")!=std::string::npos
+        && loader.find("std::strcmp(source, \"world-ready\") == 0")!=std::string::npos
+        && loader.find("ApplyUnlocksToWorld(nullptr, !PS::Storefront::IsDedicatedServer())")
+            !=std::string::npos,
+        "headless server startup treats the expected absence of a player as a recovery failure");
+    require(loader.find("if (m_pendingWorldContext.Get()) RetryWorldRecovery(deltaSeconds)")
+        !=std::string::npos,
+        "building recovery tick performs continuous work after recovery completes");
+    require(loader.find("/Script/Engine.PlayerController:ClientRestart")!=std::string::npos,
+        "building recovery has no event-driven fallback when InitGameState delivery is missed");
+    require(loader.find("[BUILDING-RECOVERY][TIMEOUT]")!=std::string::npos
+        && loader.find("Buildings remain isolated; other RuneSchema systems continue")
+            !=std::string::npos,
+        "bounded building recovery does not report an isolated timeout");
+    require(schema.find("appends the clone to every page/collection containing its $Clone source")!=std::string::npos,
+        "inherited menu behavior is undocumented in schema");
+    require(schema.find("Complete replacement build cost")!=std::string::npos,
+        "replacement cost behavior is undocumented in schema");
+    require(loader.find("[BUILDING-OVERRIDE][OK]")!=std::string::npos,
+        "station override verification is missing");
+    require(loader.find("StationBuildingPieceData")!=std::string::npos,
+        "station rows are not linked by their building relationship");
+    require(loader.find("PlacementProfileRowHandle")!=std::string::npos,
+        "placement profile override is missing");
+    require(loader.find("private transient copy")!=std::string::npos
+        && loader.find("_DerivedData")!=std::string::npos,
+        "clones can still mutate the vanilla source's shared derived placement data");
+    require(loader.find("RS_PLACE")!=std::string::npos
+        && loader.find("RS_STABLE")!=std::string::npos,
+        "per-building placement/stability profile rows are missing");
+    require(loader.find("[BUILDING-STABILITY][MISSING]")!=std::string::npos
+        && loader.find("FindRowUnchecked(rowName)")!=std::string::npos,
+        "cooked building stability handles are not validated against the live vanilla table");
+    require(loader.find("already owned by external content")!=std::string::npos,
+        "generated profile rows can overwrite external content");
+    require(schema.find("bCanOnlyBePlacedOnGround")!=std::string::npos
+        && schema.find("RegionBlockList")!=std::string::npos
+        && schema.find("PhysicalSurfaceExtentNeg")!=std::string::npos,
+        "mapped placement surface is incomplete");
+    require(schema.find("bShelterCheckedOnPlacement")!=std::string::npos
+        && schema.find("SweepRayDistance")!=std::string::npos,
+        "mapped shelter surface is incomplete");
+    require(loader.find("EBuildingRequirements::InteractAnywhere")!=std::string::npos,
+        "shelter override does not use the verified native enum");
+    require(schema.find("ProcessingRate multiplier")!=std::string::npos,
+        "processing-rate precedence is undocumented");
+}

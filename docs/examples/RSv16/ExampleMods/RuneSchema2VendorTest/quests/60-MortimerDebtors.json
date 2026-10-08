@@ -1,0 +1,13 @@
+{
+  "Id":"mortimer_debtors","PersistenceID":"_f81XxVymka9JVMGmzMLWw",
+  "Title":"Unfinished Business","Description":"Settle Mortimer's three named debtors in their marked areas, then defeat the giant account called Compound Interest. Return to Mortimer when every account is closed.",
+  "Completion":"ReturnToNPC","Category":"Story",
+  "Stages":[{"Id":"collections","Objectives":[
+    {"Id":"west","Type":"Kill","Text":"Defeat Overdue Oliver in the western area.","ProgressText":"Overdue Oliver remains in the western collection area.","CompleteText":"Overdue Oliver's account is settled.","AnnounceProgress":true,"Count":1,"AIClasses":["/FutureMajorVersion/Gameplay/AI/ZombieFaction/Zombie/BP_AI_Zombie_Character.BP_AI_Zombie_Character_C"],"IncludeDerived":true,"EventID":"mortimer_scattered_debtors","SpawnID":"rs_mortimer_west","Location":[38835,173509,-4163],"RadiusMeters":15},
+    {"Id":"east","Type":"Kill","Text":"Defeat Delinquent Doris in the eastern area.","ProgressText":"Delinquent Doris remains in the eastern collection area.","CompleteText":"Delinquent Doris's account is settled.","AnnounceProgress":true,"Count":1,"AIClasses":["/FutureMajorVersion/Gameplay/AI/ZombieFaction/Zombie/BP_AI_Zombie_Character.BP_AI_Zombie_Character_C"],"IncludeDerived":true,"EventID":"mortimer_scattered_debtors","SpawnID":"rs_mortimer_east","Location":[44835,173509,-4163],"RadiusMeters":15},
+    {"Id":"north","Type":"Kill","Text":"Defeat Past-Due Percy in the northern area.","ProgressText":"Past-Due Percy remains in the northern collection area.","CompleteText":"Past-Due Percy's account is settled.","AnnounceProgress":true,"Count":1,"AIClasses":["/FutureMajorVersion/Gameplay/AI/ZombieFaction/Zombie/BP_AI_Zombie_Character.BP_AI_Zombie_Character_C"],"IncludeDerived":true,"EventID":"mortimer_scattered_debtors","SpawnID":"rs_mortimer_north","Location":[41835,178509,-4163],"RadiusMeters":15}
+  ]},{"Id":"compound_interest","Objectives":[
+    {"Id":"giant","Type":"Kill","Text":"Defeat Compound Interest in the marked area.","ProgressText":"Compound Interest remains outstanding.","CompleteText":"Compound Interest has been liquidated. Return to Mortimer.","AnnounceProgress":true,"Count":1,"AIClasses":["/FutureMajorVersion/Gameplay/AI/ZombieFaction/Zombie/BP_AI_Zombie_Character.BP_AI_Zombie_Character_C"],"IncludeDerived":true,"EventID":"mortimer_giant_debtor","SpawnID":"rs_mortimer_giant","Location":[43135,174509,-4163],"RadiusMeters":25}
+  ]}],
+  "Reward":{"Item":"/Game/RuneSchema/Currency/Items/rs_currency_silver.rs_currency_silver","Count":5}
+}

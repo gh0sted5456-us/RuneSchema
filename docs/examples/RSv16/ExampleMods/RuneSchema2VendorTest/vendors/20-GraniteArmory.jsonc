@@ -1,0 +1,16 @@
+{
+  // Native Soul Fragment currency, 100 per sword. Separate from the cow's cabbage_trader shop.
+  "Id": "granite_armory",
+  "MerchantName": "Granite's Geological Armory",
+  "VendorHeaderImage": "/Game/Mods/RuneSchema/UI/Icons/Banners/VI_Rune_Crafter.VI_Rune_Crafter",
+  "Repairable": true,
+  "Items": [
+    {
+      "Category": "Unreasonable Greatswords",
+      "Item": "/Game/RuneSchema/RuneSchema2VendorTest/Items/rs_granites_last_word.rs_granites_last_word",
+      "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+      "Price": 100,
+      "Count": 1
+    }
+  ]
+}

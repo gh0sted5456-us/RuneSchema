@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://runeschema.dev/schemas/character-customization-v1.schema.json",
+  "title": "RuneSchema Character Customization v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "modId", "entries"],
+  "properties": {
+    "$schema": { "type": "string" }, "schema": { "const": "runeschema.character-customization/v1" },
+    "modId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+    "priority": { "type": "integer", "minimum": -100000, "maximum": 100000 },
+    "entries": { "type": "array", "maxItems": 1024, "items": { "$ref": "#/$defs/entry" } }
+  },
+  "$defs": {
+    "zone": { "type": ["object", "null"], "additionalProperties": false, "required": ["mesh", "animClass"], "properties": { "mesh": { "type": "string" }, "animClass": { "type": "string" } } },
+    "entry": {
+      "type": "object", "additionalProperties": false, "required": ["id", "type", "zones"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" }, "type": { "const": "hair" },
+        "enabled": { "type": "boolean" }, "visible": { "type": "boolean" },
+        "display": { "type": "object" }, "compatibility": { "type": "object" }, "color": { "type": "object" },
+        "zones": { "type": "object", "additionalProperties": false, "properties": { "zone1": { "$ref": "#/$defs/zone" }, "zone2": { "$ref": "#/$defs/zone" }, "zone3": { "$ref": "#/$defs/zone" }, "zone4": { "$ref": "#/$defs/zone" }, "zone5": { "$ref": "#/$defs/zone" } }, "minProperties": 1 }
+      }
+    }
+  }
+}

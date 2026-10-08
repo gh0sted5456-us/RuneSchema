@@ -1,0 +1,12 @@
+{
+  "Id": "cabbage_trader",
+  "MerchantName": "Cabbage Shop",
+  "Repairable": false,
+  "Items": [{
+    "Category": "Food",
+    "Item": "/Game/Gameplay/Items/Resources/Plant/ITEM_Resources_Cabbage.ITEM_Resources_Cabbage",
+    "Currency": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+    "Price": 1,
+    "Count": 5
+  }]
+}

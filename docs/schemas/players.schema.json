@@ -1,0 +1,1228 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Structural authoring hints, not an exhaustive runtime validator. Asset paths, identities, reflected properties and event compatibility must be validated in game.",
+  "items": {
+    "anyOf": [
+      {
+        "additionalProperties": false,
+        "properties": {
+          "$Id": {
+            "type": "string"
+          },
+          "Appearance": {
+            "additionalProperties": false,
+            "properties": {
+              "BeardStyle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "DataTable": {
+                        "type": "string"
+                      },
+                      "Fallback": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "DataTable": {
+                                "type": "string"
+                              },
+                              "RowName": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "RowName"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "RowName": {
+                        "type": "string"
+                      },
+                      "Source": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "RowName"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "BodyType": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "DataTable": {
+                        "type": "string"
+                      },
+                      "Fallback": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "DataTable": {
+                                "type": "string"
+                              },
+                              "RowName": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "RowName"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "RowName": {
+                        "type": "string"
+                      },
+                      "Source": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "RowName"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "EyeColor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "DataTable": {
+                        "type": "string"
+                      },
+                      "Fallback": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "DataTable": {
+                                "type": "string"
+                              },
+                              "RowName": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "RowName"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "RowName": {
+                        "type": "string"
+                      },
+                      "Source": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "RowName"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "EyebrowColor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "DataTable": {
+                        "type": "string"
+                      },
+                      "Fallback": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "DataTable": {
+                                "type": "string"
+                              },
+                              "RowName": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "RowName"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "RowName": {
+                        "type": "string"
+                      },
+                      "Source": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "RowName"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "FaceType": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "DataTable": {
+                        "type": "string"
+                      },
+                      "Fallback": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "DataTable": {
+                                "type": "string"
+                              },
+                              "RowName": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "RowName"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "RowName": {
+                        "type": "string"
+                      },
+                      "Source": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "RowName"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "FacialHairPreset": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "DataTable": {
+                        "type": "string"
+                      },
+                      "Fallback": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "DataTable": {
+                                "type": "string"
+                              },
+                              "RowName": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "RowName"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "RowName": {
+                        "type": "string"
+                      },
+                      "Source": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "RowName"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "HairColor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "DataTable": {
+                        "type": "string"
+                      },
+                      "Fallback": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "DataTable": {
+                                "type": "string"
+                              },
+                              "RowName": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "RowName"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "RowName": {
+                        "type": "string"
+                      },
+                      "Source": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "RowName"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "HairPreset": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "DataTable": {
+                        "type": "string"
+                      },
+                      "Fallback": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "DataTable": {
+                                "type": "string"
+                              },
+                              "RowName": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "RowName"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "RowName": {
+                        "type": "string"
+                      },
+                      "Source": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "RowName"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "HairStyle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "DataTable": {
+                        "type": "string"
+                      },
+                      "Fallback": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "DataTable": {
+                                "type": "string"
+                              },
+                              "RowName": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "RowName"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "RowName": {
+                        "type": "string"
+                      },
+                      "Source": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "RowName"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "Head": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "DataTable": {
+                        "type": "string"
+                      },
+                      "Fallback": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "DataTable": {
+                                "type": "string"
+                              },
+                              "RowName": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "RowName"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "RowName": {
+                        "type": "string"
+                      },
+                      "Source": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "RowName"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "SkinColor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "DataTable": {
+                        "type": "string"
+                      },
+                      "Fallback": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "DataTable": {
+                                "type": "string"
+                              },
+                              "RowName": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "RowName"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "RowName": {
+                        "type": "string"
+                      },
+                      "Source": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "RowName"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "SkinTone": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "DataTable": {
+                        "type": "string"
+                      },
+                      "Fallback": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "DataTable": {
+                                "type": "string"
+                              },
+                              "RowName": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "RowName"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "RowName": {
+                        "type": "string"
+                      },
+                      "Source": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "RowName"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "Archetype": {
+            "additionalProperties": false,
+            "properties": {
+              "Icon": {
+                "type": "string"
+              },
+              "Name": {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Scale": {
+                "maximum": 4,
+                "minimum": 0.1,
+                "type": "number"
+              }
+            },
+            "required": [
+              "Name",
+              "Icon"
+            ],
+            "type": "object"
+          },
+          "AttributeMultipliers": {
+            "additionalProperties": {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "number"
+            },
+            "type": "object"
+          },
+          "Attributes": {
+            "additionalProperties": {
+              "additionalProperties": false,
+              "oneOf": [
+                {
+                  "required": [
+                    "Set"
+                  ]
+                },
+                {
+                  "required": [
+                    "Add"
+                  ]
+                },
+                {
+                  "required": [
+                    "Multiply"
+                  ]
+                }
+              ],
+              "properties": {
+                "Add": {
+                  "type": "number"
+                },
+                "Multiply": {
+                  "maximum": 100,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                "Set": {
+                  "type": "number"
+                }
+              },
+              "type": "object"
+            },
+            "type": "object"
+          },
+          "BaseHealth": {
+            "maximum": 1000000,
+            "minimum": 1,
+            "type": "number"
+          },
+          "CarryWeightMultiplier": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "DamageMultiplier": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "DefenseMultiplier": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "HealthMultiplier": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "Id": {
+            "type": "string"
+          },
+          "MagicAttackMultiplier": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "MagicDefenseMultiplier": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "MagicalAttackMultiplier": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "MagicalDefenseMultiplier": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "MapIcon": {
+            "additionalProperties": false,
+            "properties": {
+              "Enabled": {
+                "default": false,
+                "type": "boolean"
+              },
+              "Icon": {
+                "maxLength": 1024,
+                "minLength": 2,
+                "pattern": "^/",
+                "type": "string"
+              },
+              "ShowName": {
+                "default": true,
+                "description": "Show the NPC name on its map icon. False keeps the icon without a label; does not change in-world names.",
+                "type": "boolean"
+              },
+              "Size": {
+                "maximum": 4096,
+                "minimum": 1,
+                "type": "number"
+              },
+              "SizeMode": {
+                "default": "Pixels",
+                "enum": [
+                  "Pixels",
+                  "WorldUnits"
+                ],
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "MaxCarryWeight": {
+            "maximum": 1000000,
+            "minimum": 1,
+            "type": "number"
+          },
+          "MaxHealth": {
+            "maximum": 1000000,
+            "minimum": 1,
+            "type": "number"
+          },
+          "MaxStamina": {
+            "maximum": 1000000,
+            "minimum": 1,
+            "type": "number"
+          },
+          "Nameplate": {
+            "additionalProperties": false,
+            "properties": {
+              "ActivityTimeoutSeconds": {
+                "maximum": 3600,
+                "minimum": 0,
+                "type": "number"
+              },
+              "AlwaysFaceCamera": {
+                "description": "Keep the native world-space nameplate facing the local camera.",
+                "type": "boolean"
+              },
+              "Client": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "enum": [
+                      "Yes",
+                      "No",
+                      "yes",
+                      "no"
+                    ]
+                  }
+                ]
+              },
+              "Definition": {
+                "description": "Reusable /nameplates Id. Local Id or Mod:Id; inline fields override the resolved definition.",
+                "maxLength": 192,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Distance": {
+                "maximum": 100000,
+                "minimum": 0,
+                "type": "number"
+              },
+              "Events": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "Action": {
+                      "enum": [
+                        "Pulse",
+                        "Activate",
+                        "Deactivate"
+                      ]
+                    },
+                    "Function": {
+                      "pattern": "^/[^:]+:[^:]+$",
+                      "type": "string"
+                    },
+                    "Parameters": {
+                      "items": {
+                        "additionalProperties": false,
+                        "oneOf": [
+                          {
+                            "required": [
+                              "Equals"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "NotEquals"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "NonEmpty"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "Exists"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "GreaterThan"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "GreaterOrEqual"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "LessThan"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "LessOrEqual"
+                            ]
+                          }
+                        ],
+                        "properties": {
+                          "Equals": {
+                            "anyOf": [
+                              {
+                                "type": [
+                                  "number",
+                                  "boolean"
+                                ]
+                              },
+                              {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "pattern": "^/",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "Exists": {
+                            "type": "boolean"
+                          },
+                          "GreaterOrEqual": {
+                            "type": "number"
+                          },
+                          "GreaterThan": {
+                            "type": "number"
+                          },
+                          "LessOrEqual": {
+                            "type": "number"
+                          },
+                          "LessThan": {
+                            "type": "number"
+                          },
+                          "NonEmpty": {
+                            "type": "boolean"
+                          },
+                          "NotEquals": {
+                            "anyOf": [
+                              {
+                                "type": [
+                                  "number",
+                                  "boolean"
+                                ]
+                              },
+                              {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "pattern": "^/",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "Path": {
+                            "items": {
+                              "pattern": "^[A-Za-z0-9_]{1,64}$",
+                              "type": "string"
+                            },
+                            "maxItems": 5,
+                            "minItems": 1,
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "Path"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 8,
+                      "type": "array"
+                    },
+                    "State": {
+                      "not": {
+                        "const": "Dead"
+                      },
+                      "pattern": "^[A-Za-z0-9_]{1,64}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "Function",
+                    "State"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 64,
+                "minItems": 1,
+                "type": "array"
+              },
+              "Icon": {
+                "type": "string"
+              },
+              "Mode": {
+                "enum": [
+                  "Name",
+                  "Icon",
+                  "Hidden"
+                ]
+              },
+              "Native": {
+                "additionalProperties": false,
+                "properties": {
+                  "Component": {
+                    "additionalProperties": true,
+                    "maxProperties": 64,
+                    "type": "object"
+                  },
+                  "Text": {
+                    "additionalProperties": true,
+                    "maxProperties": 64,
+                    "type": "object"
+                  },
+                  "Widget": {
+                    "additionalProperties": true,
+                    "maxProperties": 64,
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "OnlyShowNearby": {
+                "description": "Use the game's native distance visibility check with Distance as its range.",
+                "type": "boolean"
+              },
+              "PixelHeight": {
+                "maximum": 4096,
+                "minimum": 1,
+                "type": "number"
+              },
+              "PixelWidth": {
+                "maximum": 4096,
+                "minimum": 1,
+                "type": "number"
+              },
+              "Scale": {
+                "maximum": 4,
+                "minimum": 0.1,
+                "type": "number"
+              },
+              "Server": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "enum": [
+                      "Yes",
+                      "No",
+                      "yes",
+                      "no"
+                    ]
+                  }
+                ]
+              },
+              "ShowSelf": {
+                "type": "boolean"
+              },
+              "SkillXP": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "maxProperties": 64,
+                "minProperties": 1,
+                "type": "object"
+              },
+              "States": {
+                "additionalProperties": true,
+                "patternProperties": {
+                  "^[^$]": {
+                    "additionalProperties": false,
+                    "minProperties": 1,
+                    "properties": {
+                      "Icon": {
+                        "type": "string"
+                      },
+                      "InactivitySeconds": {
+                        "maximum": 3600,
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "Native": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "Component": {
+                            "additionalProperties": true,
+                            "maxProperties": 64,
+                            "type": "object"
+                          },
+                          "Text": {
+                            "additionalProperties": true,
+                            "maxProperties": 64,
+                            "type": "object"
+                          },
+                          "Widget": {
+                            "additionalProperties": true,
+                            "maxProperties": 64,
+                            "type": "object"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "Priority": {
+                        "maximum": 10000,
+                        "minimum": -10000,
+                        "type": "integer"
+                      },
+                      "Scale": {
+                        "maximum": 4,
+                        "minimum": 0.1,
+                        "type": "number"
+                      },
+                      "While": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "GameplayEffect": {
+                            "maxLength": 512,
+                            "pattern": "^/[^:]+[.][^:]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "GameplayEffect"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "Native": {
+            "additionalProperties": false,
+            "properties": {
+              "Components": {
+                "additionalProperties": {
+                  "additionalProperties": true,
+                  "maxProperties": 128,
+                  "type": "object"
+                },
+                "maxProperties": 128,
+                "type": "object"
+              },
+              "Pawn": {
+                "additionalProperties": true,
+                "maxProperties": 128,
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "PhysicalAttackMultiplier": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "PhysicalDefenseMultiplier": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "PlayerGuid": {
+            "type": "string"
+          },
+          "PlayerGuids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "PlayerName": {
+            "type": "string"
+          },
+          "PlayerNames": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "PoisonResistanceMultiplier": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "RangeAttackMultiplier": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "RangeDefenseMultiplier": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "RangedAttackMultiplier": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "RangedDefenseMultiplier": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "RunSpeedMultiplier": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "Scale": {
+            "maximum": 100,
+            "minimum": 0.01,
+            "type": "number"
+          },
+          "StaminaMultiplier": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "StaminaRecoveryMultiplier": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "VisualEffect": {
+            "additionalProperties": true,
+            "properties": {
+              "DurationSeconds": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "maximum": 300,
+                    "type": "number"
+                  },
+                  {
+                    "const": "INFINITE"
+                  }
+                ]
+              },
+              "Trigger": {
+                "enum": [
+                  "Load",
+                  "Respawn"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "WalkSpeedMultiplier": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      {
+        "properties": {
+          "$Patch": {
+            "type": "string"
+          },
+          "$Target": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "$Patch",
+          "$Target"
+        ],
+        "type": "object"
+      }
+    ]
+  },
+  "title": "RuneSchema /players",
+  "type": "array",
+  "x-runeschema-coverage": "structural",
+  "x-runeschema-starter-capabilities": {
+    "append": false,
+    "clone": false,
+    "patch": false,
+    "search": "loaded records"
+  }
+}

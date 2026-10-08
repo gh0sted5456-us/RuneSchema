@@ -1,0 +1,542 @@
+#pragma once
+#include "Loader/QuestSaveOwnership.h"
+#include "Loader/JournalSaveOwnership.h"
+#include "Core/SaveRegistrySnapshot.h"
+#include <cctype>
+#include <map>
+#include <unordered_map>
+
+namespace PS::SaveCleanup {
+using Json=nlohmann::json;
+struct Preview {
+    Json Save;
+    Json Removed=Json::array();
+    Json Restored=Json::array();
+    std::map<std::string,size_t> Owners;
+};
+struct BaselineMergeOptions {
+    bool Items=false;
+    bool Quests=false;
+    bool Progress=false;
+};
+enum class CharacterDocumentKind {
+    Gameplay,
+    ProfileOnly,
+    Unsupported,
+};
+inline CharacterDocumentKind ClassifyCharacterDocument(const Json& save) {
+    if(!save.is_object())return CharacterDocumentKind::Unsupported;
+    if(save.contains("GameProgress"))
+        return save.at("GameProgress").is_object()
+            ?CharacterDocumentKind::Gameplay:CharacterDocumentKind::Unsupported;
+    // Dragonwilds writes a small, valid profile document while a character is
+    // being created. It owns customization and metadata but has no inventory,
+    // progress, journal, quest, or recipe state for SafeSave to prune.
+    if(save.contains("Customization") && save.at("Customization").is_object()
+        && save.contains("meta_data") && save.at("meta_data").is_object())
+        return CharacterDocumentKind::ProfileOnly;
+    return CharacterDocumentKind::Unsupported;
+}
+inline std::string OwnerKey(std::string value) {
+    for(auto& character:value)character=static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+    return value;
+}
+inline std::set<std::string> AbsentOwners(const std::map<std::string,size_t>& owners,const std::set<std::string>& active) {
+    std::set<std::string> keys,absent;
+    for(const auto& owner:active)keys.insert(OwnerKey(owner));
+    for(const auto& [owner,count]:owners)if(!keys.contains(OwnerKey(owner)))absent.insert(owner);
+    return absent;
+}
+inline void RequireCharacter(const Json& save) {
+    if(ClassifyCharacterDocument(save)!=CharacterDocumentKind::Gameplay)
+        throw std::runtime_error("Only native character JSON saves are supported; world/SPUD saves require their own adapter");
+}
+inline Json JournalPayload(const Json& journal) {
+    if(!journal.is_object())throw std::runtime_error("Unsupported journal save layout");
+    auto result=journal;
+    result.erase(DragonWilds::JournalSave::Manifest);
+    return result;
+}
+inline void CheckPending(const Json& row) {
+    for(const auto& variable:row.at("QuestInts")) {
+        if(!variable.is_object() || !variable.contains("QuestVariableName") || !variable.at("QuestVariableName").is_string())continue;
+        const auto& name=variable.at("QuestVariableName").get_ref<const std::string&>();
+        const auto value=variable.value("QuestVariableValue",Json{});
+        if((name=="RuneSchema.Phase" && (value==2 || value==3)) || (name.starts_with("RuneSchema.Flag:") && value==1))
+            throw std::runtime_error("Selected mod has an unfinished item/reward exchange; resolve it before cleanup");
+    }
+}
+// Pure transformation: never reads/writes a file or queries a partially loaded registry.
+// Installed and absent owners are explicit selections; neither is inferred from an asset prefix.
+inline Preview Plan(const Json& source,const std::set<std::string>& requested,
+    bool eraseProgress=false,const RegistrySnapshot* registry=nullptr,
+    bool removePendingOwned=false,bool pruneRegistryProgress=false,
+    bool unresolvedOnly=false) {
+    RequireCharacter(source);
+    for(const auto& owner:requested)DragonWilds::Quests::ValidateOwner(owner);
+    const std::set<std::string> selected=eraseProgress?requested:std::set<std::string>{};
+    Preview result{source};
+    auto& game=result.Save.at("GameProgress");
+    if(registry) {
+        if(!registry->Ready())throw std::runtime_error("Item/recipe registries are incomplete; unknown-ID cleanup refused");
+        std::set<std::string> removedSlots;
+        for(const auto* section:{"Inventory","PersonalInventory","Loadout"}) {
+            if(!game.contains(section))continue;
+            auto& entries=game.at(section);
+            if(!entries.is_object())throw std::runtime_error("Unsupported inventory/loadout save layout");
+            for(auto it=entries.begin();it!=entries.end();) {
+                const auto& item=it.value();
+                if(!item.is_object() || (item.contains("ItemData") && !item.at("ItemData").is_string())) {
+                    if(unresolvedOnly) {++it;continue;}
+                    result.Removed.push_back({{"Kind",section},{"Id",it.key()},{"Slot",it.key()},{"Mod","Malformed native record"}});
+                    it=entries.erase(it);continue;
+                }
+                const auto id=item.value("ItemData",std::string{});
+                bool remove=!id.empty() && !registry->Items.contains(id);
+                if(std::string_view(section)=="Loadout" && item.contains("PlayerInventoryItemIndex")) {
+                    if(!item.at("PlayerInventoryItemIndex").is_number_integer()) {
+                        if(unresolvedOnly) {++it;continue;}
+                        result.Removed.push_back({{"Kind",section},{"Id",it.key()},{"Slot",it.key()},{"Mod","Malformed equipped inventory index"}});
+                        it=entries.erase(it);continue;
+                    }
+                    remove=remove || removedSlots.contains(std::to_string(item.at("PlayerInventoryItemIndex").get<int>()));
+                }
+                if(remove) {
+                    if(std::string_view(section)=="Inventory")removedSlots.insert(it.key());
+                    result.Removed.push_back({{"Kind",section},{"Id",id.empty()?it.key():id},{"Slot",it.key()},{"Mod","Registry-unknown (owner unavailable)"}});
+                    it=entries.erase(it);
+                }else ++it;
+            }
+        }
+        if((eraseProgress || pruneRegistryProgress) && game.contains("Progress")) {
+            auto& progress=game.at("Progress");
+            if(!progress.is_object())throw std::runtime_error("Unsupported item/recipe progress layout");
+            for(const auto* field:{"ItemsPickedUp","MilestoneMaterialsPickedUp","RecipesUnlocked","RecipesNew"}) {
+                if(!progress.contains(field))continue;
+                auto& entries=progress.at(field);
+                if(!entries.is_array())throw std::runtime_error("Unsupported item/recipe unlock list");
+                const auto& known=std::string_view(field).starts_with("Recipes")?registry->Recipes:registry->Items;
+                for(auto it=entries.begin();it!=entries.end();) {
+                    if(!it->is_string())throw std::runtime_error("Malformed item/recipe unlock identity");
+                    if(!known.contains(it->get<std::string>())) {
+                        result.Removed.push_back({{"Kind",field},{"Id",*it},{"Mod","Registry-unknown (owner unavailable)"}});it=entries.erase(it);
+                    }else ++it;
+                }
+            }
+        }
+    }
+    if(game.contains("QuestProgress")) {
+        auto& progress=game.at("QuestProgress");
+        if(!progress.is_object() || !progress.contains("Quests") || !progress.at("Quests").is_array() || progress.at("Quests").size()>4096)
+            throw std::runtime_error("Unsupported quest save layout");
+        std::set<std::string> ids,removed,locations;
+        auto retained=Json::array();
+            for(const auto& row:progress.at("Quests")) {
+            if(!row.is_object() || !row.contains("QuestId") || !row.at("QuestId").is_string()) {
+                retained.push_back(row);continue;
+            }
+            const auto id=row.at("QuestId").get<std::string>();
+            const bool duplicate=!ids.insert(id).second;
+            const bool registryOrphan=registry && registry->QuestsComplete && !registry->Quests.contains(id);
+            if(duplicate && !registryOrphan) {
+                retained.push_back(row);continue;
+            }
+            const auto owner=DragonWilds::Quests::OwnedBy(row);
+            if(!owner.empty())++result.Owners[owner];
+            if(!registryOrphan && (owner.empty() || !selected.contains(owner))){retained.push_back(row);continue;}
+            // An identity absent from the complete native registry cannot be
+            // resumed, so stale phase markers must not preserve it. The
+            // pending-exchange guard applies only to explicit owner removal.
+            if(!registryOrphan && !removePendingOwned)CheckPending(row);
+            removed.insert(id);
+            result.Removed.push_back({{"Kind","Quest/dialogue"},{"Id",id},{"Mod",owner.empty()?"Registry-unknown (owner unavailable)":owner}});
+            for(const auto& variable:row.at("QuestInts")) {
+                const auto name=variable.value("QuestVariableName",std::string{});
+                if(name.starts_with("RuneSchema.Location:") && variable.value("QuestVariableValue",Json{})==DragonWilds::Quests::OwnershipVersion)
+                    locations.insert(name.substr(20));
+            }
+        }
+        progress["Quests"]=std::move(retained);
+        if(progress.contains("QuestTracked")) {
+            if(!progress.at("QuestTracked").is_string())throw std::runtime_error("Unsupported tracked quest identity");
+            const auto tracked=progress.at("QuestTracked").get<std::string>();
+            const bool unresolvedTracked=registry && registry->QuestsComplete
+                && !tracked.empty() && !registry->Quests.contains(tracked);
+            if(removed.contains(tracked) || unresolvedTracked) {
+                if(unresolvedTracked && !removed.contains(tracked))
+                    result.Removed.push_back({{"Kind","Quest tracked"},{"Id",tracked},{"Mod","Registry-unknown (owner unavailable)"}});
+                progress["QuestTracked"]="";
+            }
+        }
+        if(!unresolvedOnly && progress.contains("QuestLocations") && !locations.empty()) {
+            if(!progress.at("QuestLocations").is_array())throw std::runtime_error("Unsupported quest location save layout");
+            auto kept=Json::array();
+            for(const auto& row:progress.at("QuestLocations")) {
+                if(!row.is_object() || !row.contains("QuestLocationId") || !row.at("QuestLocationId").is_string())throw std::runtime_error("Unsupported quest location record");
+                const auto id=row.at("QuestLocationId").get<std::string>();
+                if(locations.contains(id))result.Removed.push_back({{"Kind","Quest location"},{"Id",id}});
+                else kept.push_back(row);
+            }
+            progress["QuestLocations"]=std::move(kept);
+        }
+    }
+    if(game.contains("Journal")) {
+        auto payload=unresolvedOnly?game.at("Journal"):
+            JournalPayload(game.at("Journal"));
+        if(!payload.is_object())
+            throw std::runtime_error("Unsupported journal save layout");
+        if(registry && registry->JournalsComplete) {
+            for(const auto* field:{"UnlockedEntries","UnreadEntries"}) {
+                if(!payload.contains(field))continue;
+                auto& entries=payload.at(field);
+                if(!entries.is_array() || entries.size()>65535)
+                    throw std::runtime_error("Invalid journal saved entry list");
+                for(auto it=entries.begin();it!=entries.end();) {
+                    if(!it->is_string())throw std::runtime_error("Invalid journal saved entry identity");
+                    const auto id=it->get<std::string>();
+                    DragonWilds::JournalSave::ValidateId(id);
+                    if(!registry->Journals.contains(id)) {
+                        result.Removed.push_back({{"Kind",field},{"Id",id},{"Mod","Registry-unknown (owner unavailable)"}});
+                        it=entries.erase(it);
+                    } else ++it;
+                }
+            }
+        }
+        game["Journal"]=std::move(payload);
+    }
+    return result;
+}
+
+template<class Validator>
+inline Preview RepairInvalidAppearance(const Json& source,const Json& defaults,
+    Validator&& valid) {
+    RequireCharacter(source);
+    if(ClassifyCharacterDocument(defaults)!=CharacterDocumentKind::ProfileOnly)
+        throw std::runtime_error("Default character appearance document is invalid");
+    Preview result{source};
+    auto customization=[](Json& document)->Json* {
+        if(!document.contains("Customization") || !document.at("Customization").is_object())return nullptr;
+        auto& root=document.at("Customization");
+        if(!root.contains("CustomizationData") || !root.at("CustomizationData").is_object())return nullptr;
+        return &root.at("CustomizationData");
+    };
+    auto copy=defaults;
+    auto* fallback=customization(copy);
+    if(!fallback || fallback->empty() || fallback->size()>32)
+        throw std::runtime_error("Character appearance layout is unsupported");
+    if(!result.Save.contains("Customization")
+        || !result.Save.at("Customization").is_object())
+        result.Save["Customization"]=Json::object();
+    auto& customizationRoot=result.Save["Customization"];
+    if(!customizationRoot.contains("CustomizationData")
+        || !customizationRoot.at("CustomizationData").is_object())
+        customizationRoot["CustomizationData"]=Json::object();
+    auto* current=&customizationRoot["CustomizationData"];
+    const auto read=[](const Json& value,std::string& table,std::string& row) {
+        if(!value.is_object())return false;
+        const auto tableIt=value.find("dataTable"),rowIt=value.find("rowName");
+        if(tableIt==value.end() || rowIt==value.end()
+            || !tableIt->is_string() || !rowIt->is_string())return false;
+        table=tableIt->get<std::string>();row=rowIt->get<std::string>();
+        return !table.empty() && !row.empty();
+    };
+    for(const auto& [field,defaultValue]:fallback->items()) {
+        std::string defaultTable,defaultRow;
+        if(!read(defaultValue,defaultTable,defaultRow) || !valid(defaultTable,defaultRow))
+            throw std::runtime_error("Default character appearance reference is unavailable: "+field);
+        const auto found=current->find(field);
+        // A missing BodyType is not evidence that gender was customized.
+        // Leave it to Dominion.  An existing but invalid custom BodyType is
+        // repaired from the baked male/A profile like any other bad handle.
+        if(found==current->end() && field=="BodyType")continue;
+        std::string table,row;
+        if(found!=current->end() && read(*found,table,row) && valid(table,row))continue;
+        (*current)[field]=defaultValue;
+        result.Removed.push_back({{"Kind","Appearance"},{"Field",field},
+            {"Id",table+"#"+row},{"Replacement",defaultTable+"#"+defaultRow}});
+    }
+    return result;
+}
+
+inline Json AppearanceProfile(const Json& document) {
+    if(!document.is_object() || !document.contains("Customization")
+        || !document.at("Customization").is_object())
+        throw std::runtime_error("Default character document has no appearance profile");
+    return Json{{"meta_data",Json::object()},
+        {"Customization",document.at("Customization")}};
+}
+
+// Additive baseline recovery is intentionally narrower than a generic JSON
+// merge. Existing live values always win, and persistence-bearing entries are
+// accepted only when they resolve in the same complete registries used by
+// mandatory orphan pruning.
+inline Preview MergeBaseline(const Json& source,const Json& baseline,
+    const RegistrySnapshot& registry,const BaselineMergeOptions& options) {
+    RequireCharacter(source);
+    RequireCharacter(baseline);
+    if(!registry.Ready())
+        throw std::runtime_error("Live persistence registries are incomplete; baseline merge refused");
+    Preview result{source};
+    auto& live=result.Save.at("GameProgress");
+    const auto& base=baseline.at("GameProgress");
+    const auto record=[&](const char* kind,const std::string& id) {
+        result.Restored.push_back({{"Kind",kind},{"Id",id}});
+    };
+    const auto validItem=[&](const Json& row) {
+        if(!row.is_object() || !row.contains("ItemData")
+            || !row.at("ItemData").is_string())return false;
+        const auto id=row.at("ItemData").get<std::string>();
+        return !id.empty() && registry.Items.contains(id);
+    };
+    if(options.Items) {
+        for(const auto* section:{"Inventory","PersonalInventory"}) {
+            if(!base.contains(section))continue;
+            if(!base.at(section).is_object())
+                throw std::runtime_error(std::string("Default ")+section+" layout is unsupported");
+            if(!live.contains(section))live[section]=Json::object();
+            if(!live.at(section).is_object())
+                throw std::runtime_error(std::string("Live ")+section+" layout is unsupported");
+            for(const auto& [slot,row]:base.at(section).items()) {
+                if(live.at(section).contains(slot) || !validItem(row))continue;
+                live[section][slot]=row;
+                record(section,row.at("ItemData").get<std::string>());
+            }
+        }
+        if(base.contains("Loadout")) {
+            if(!base.at("Loadout").is_object())
+                throw std::runtime_error("Default Loadout layout is unsupported");
+            if(!live.contains("Loadout"))live["Loadout"]=Json::object();
+            if(!live.at("Loadout").is_object())
+                throw std::runtime_error("Live Loadout layout is unsupported");
+            for(const auto& [slot,row]:base.at("Loadout").items()) {
+                if(live.at("Loadout").contains(slot) || !row.is_object())continue;
+                bool safe=validItem(row);
+                std::string id=safe?row.at("ItemData").get<std::string>():std::string{};
+                if(!safe && row.contains("PlayerInventoryItemIndex")
+                    && row.at("PlayerInventoryItemIndex").is_number_integer()
+                    && live.contains("Inventory") && live.at("Inventory").is_object()) {
+                    const auto inventorySlot=std::to_string(
+                        row.at("PlayerInventoryItemIndex").get<int>());
+                    const auto found=live.at("Inventory").find(inventorySlot);
+                    safe=found!=live.at("Inventory").end() && validItem(*found);
+                    if(safe)id=found->at("ItemData").get<std::string>();
+                }
+                if(!safe)continue;
+                live["Loadout"][slot]=row;
+                record("Loadout",id);
+            }
+        }
+    }
+    if(options.Progress && base.contains("Progress")) {
+        if(!base.at("Progress").is_object())
+            throw std::runtime_error("Default Progress layout is unsupported");
+        if(!live.contains("Progress"))live["Progress"]=Json::object();
+        if(!live.at("Progress").is_object())
+            throw std::runtime_error("Live Progress layout is unsupported");
+        for(const auto* field:{"ItemsPickedUp","MilestoneMaterialsPickedUp",
+            "RecipesUnlocked","RecipesNew"}) {
+            if(!base.at("Progress").contains(field))continue;
+            const auto& additions=base.at("Progress").at(field);
+            if(!additions.is_array())
+                throw std::runtime_error(std::string("Default ")+field+" list is unsupported");
+            if(!live.at("Progress").contains(field))live["Progress"][field]=Json::array();
+            auto& target=live["Progress"][field];
+            if(!target.is_array())
+                throw std::runtime_error(std::string("Live ")+field+" list is unsupported");
+            const auto& known=std::string_view(field).starts_with("Recipes")
+                ?registry.Recipes:registry.Items;
+            std::set<std::string> present;
+            for(const auto& value:target)if(value.is_string())present.insert(value.get<std::string>());
+            for(const auto& value:additions) {
+                if(!value.is_string())continue;
+                const auto id=value.get<std::string>();
+                if(!known.contains(id) || !present.insert(id).second)continue;
+                target.push_back(id);record(field,id);
+            }
+        }
+    }
+    if(options.Quests && base.contains("QuestProgress")) {
+        if(!base.at("QuestProgress").is_object())
+            throw std::runtime_error("Default QuestProgress layout is unsupported");
+        if(!live.contains("QuestProgress"))live["QuestProgress"]=Json::object();
+        auto& target=live["QuestProgress"];
+        const auto& additions=base.at("QuestProgress");
+        if(!target.is_object())throw std::runtime_error("Live QuestProgress layout is unsupported");
+        if(!target.contains("Quests"))target["Quests"]=Json::array();
+        if(!target.at("Quests").is_array())throw std::runtime_error("Live quest list is unsupported");
+        std::set<std::string> present;
+        for(const auto& row:target.at("Quests"))
+            if(row.is_object() && row.contains("QuestId") && row.at("QuestId").is_string())
+                present.insert(row.at("QuestId").get<std::string>());
+        if(additions.contains("Quests")) {
+            if(!additions.at("Quests").is_array())throw std::runtime_error("Default quest list is unsupported");
+            for(const auto& row:additions.at("Quests")) {
+                if(!row.is_object() || !row.contains("QuestId") || !row.at("QuestId").is_string()
+                    || !row.contains("QuestInts") || !row.at("QuestInts").is_array())continue;
+                const auto id=row.at("QuestId").get<std::string>();
+                if(!registry.QuestsComplete || !registry.Quests.contains(id)
+                    || !present.insert(id).second)continue;
+                target["Quests"].push_back(row);record("Quest/dialogue",id);
+            }
+        }
+        const auto tracked=additions.value("QuestTracked",std::string{});
+        if((!target.contains("QuestTracked") || target.value("QuestTracked",std::string{}).empty())
+            && !tracked.empty() && registry.QuestsComplete && registry.Quests.contains(tracked)) {
+            target["QuestTracked"]=tracked;record("Quest tracked",tracked);
+        }
+        if(additions.contains("QuestLocations")) {
+            if(!additions.at("QuestLocations").is_array())
+                throw std::runtime_error("Default quest location list is unsupported");
+            if(!target.contains("QuestLocations"))target["QuestLocations"]=Json::array();
+            if(!target.at("QuestLocations").is_array())
+                throw std::runtime_error("Live quest location list is unsupported");
+            std::set<std::string> locations;
+            for(const auto& row:target.at("QuestLocations"))
+                if(row.is_object() && row.contains("QuestLocationId")
+                    && row.at("QuestLocationId").is_string())
+                    locations.insert(row.at("QuestLocationId").get<std::string>());
+            for(const auto& row:additions.at("QuestLocations")) {
+                if(!row.is_object() || !row.contains("QuestLocationId")
+                    || !row.at("QuestLocationId").is_string())continue;
+                const auto id=row.at("QuestLocationId").get<std::string>();
+                if(id.empty() || !locations.insert(id).second)continue;
+                target["QuestLocations"].push_back(row);record("Quest location",id);
+            }
+        }
+    }
+    return result;
+}
+
+// Automatic cleanup is deliberately narrower than the diagnostic registry
+// repair above. It accepts only historical RuneSchema identities whose owner
+// has been confirmed absent or explicitly disabled. Unknown third-party and
+// vanilla records are never inferred to be removable.
+inline Preview PlanOwned(const Json& source,
+    const std::unordered_map<std::string,std::string>& retiredItems,
+    const std::unordered_map<std::string,std::string>& retiredRecipes,
+    const std::unordered_map<std::string,std::string>& retiredQuests={},
+    const DragonWilds::JournalSave::Owners& retiredJournal={}) {
+    RequireCharacter(source);
+    Preview result{source};
+    auto& game=result.Save.at("GameProgress");
+    std::set<std::string> removedInventorySlots;
+    const auto record=[&](const char* kind,const std::string& id,
+        const std::string& slot,const std::string& owner) {
+        Json row={{"Kind",kind},{"Id",id},{"Mod",owner}};
+        if(!slot.empty())row["Slot"]=slot;
+        result.Removed.push_back(std::move(row));
+        ++result.Owners[owner];
+    };
+    if(game.contains("QuestProgress") && !retiredQuests.empty()) {
+        auto& progress=game.at("QuestProgress");
+        if(!progress.is_object() || !progress.contains("Quests") || !progress.at("Quests").is_array())
+            throw std::runtime_error("Unsupported quest save layout");
+        std::set<std::string> removed,locations;
+        auto retained=Json::array();
+        for(const auto& row:progress.at("Quests")) {
+            if(!row.is_object() || !row.contains("QuestId") || !row.at("QuestId").is_string()) {retained.push_back(row);continue;}
+            const auto id=row.at("QuestId").get<std::string>();
+            const auto found=retiredQuests.find(id);
+            if(found==retiredQuests.end() || DragonWilds::Quests::OwnedBy(row)!=found->second) {retained.push_back(row);continue;}
+            removed.insert(id);record("Quest/dialogue",id,{},found->second);
+            for(const auto& variable:row.at("QuestInts")) {
+                const auto name=variable.value("QuestVariableName",std::string{});
+                if(name.starts_with("RuneSchema.Location:") && variable.value("QuestVariableValue",Json{})==DragonWilds::Quests::OwnershipVersion)
+                    locations.insert(name.substr(20));
+            }
+        }
+        progress["Quests"]=std::move(retained);
+        if(progress.contains("QuestTracked") && progress.at("QuestTracked").is_string()
+            && removed.contains(progress.at("QuestTracked").get<std::string>()))progress["QuestTracked"]="";
+        if(progress.contains("QuestLocations") && !locations.empty()) {
+            if(!progress.at("QuestLocations").is_array())throw std::runtime_error("Unsupported quest location save layout");
+            auto kept=Json::array();
+            for(const auto& row:progress.at("QuestLocations")) {
+                if(!row.is_object() || !row.contains("QuestLocationId") || !row.at("QuestLocationId").is_string())throw std::runtime_error("Unsupported quest location record");
+                if(locations.contains(row.at("QuestLocationId").get<std::string>()))
+                    result.Removed.push_back({{"Kind","Quest location"},{"Id",row.at("QuestLocationId")}});
+                else kept.push_back(row);
+            }
+            progress["QuestLocations"]=std::move(kept);
+        }
+    }
+    if(game.contains("Journal") && !retiredJournal.empty()) {
+        auto payload=JournalPayload(game.at("Journal"));
+        const auto cleaned=DragonWilds::JournalSave::RemoveOwnedIds(payload,retiredJournal);
+        auto native=cleaned.Journal;
+        if(game.at("Journal").contains(DragonWilds::JournalSave::Manifest))
+            native[DragonWilds::JournalSave::Manifest]=DragonWilds::JournalSave::EncodeNative(DragonWilds::JournalSave::ReadOwnership(cleaned.Journal));
+        for(const auto& id:cleaned.Removed)record("Journal/lore",id,{},retiredJournal.at(id));
+        game["Journal"]=std::move(native);
+    }
+    for(const auto* section:{"Inventory","PersonalInventory"}) {
+        if(!game.contains(section))continue;
+        auto& entries=game.at(section);
+        if(!entries.is_object())continue;
+        for(auto it=entries.begin();it!=entries.end();) {
+            const auto& item=it.value();
+            if(!item.is_object() || !item.contains("ItemData")
+                || !item.at("ItemData").is_string()) {++it;continue;}
+            const auto id=item.at("ItemData").get<std::string>();
+            const auto owned=retiredItems.find(id);
+            if(owned==retiredItems.end()) {++it;continue;}
+            if(std::string_view(section)=="Inventory")removedInventorySlots.insert(it.key());
+            record(section,id,it.key(),owned->second);
+            it=entries.erase(it);
+        }
+    }
+    if(game.contains("Loadout") && game.at("Loadout").is_object()) {
+        auto& entries=game.at("Loadout");
+        for(auto it=entries.begin();it!=entries.end();) {
+            const auto& item=it.value();
+            std::string id,owner;
+            bool remove=false;
+            if(item.is_object() && item.contains("ItemData")
+                && item.at("ItemData").is_string()) {
+                id=item.at("ItemData").get<std::string>();
+                const auto owned=retiredItems.find(id);
+                if(owned!=retiredItems.end()) {remove=true;owner=owned->second;}
+            }
+            if(!remove && item.is_object()
+                && item.contains("PlayerInventoryItemIndex")
+                && item.at("PlayerInventoryItemIndex").is_number_integer()) {
+                const auto slot=std::to_string(
+                    item.at("PlayerInventoryItemIndex").get<int>());
+                if(removedInventorySlots.contains(slot)) {
+                    remove=true;id=slot;
+                    // The referenced inventory record was already removed and
+                    // carries the same confirmed ownership. Recover it from
+                    // the removal report without guessing from the loadout.
+                    for(auto row=result.Removed.rbegin();row!=result.Removed.rend();++row)
+                        if(row->value("Kind",std::string{})=="Inventory"
+                            && row->value("Slot",std::string{})==slot) {
+                            owner=row->value("Mod",std::string{});break;
+                        }
+                }
+            }
+            if(!remove) {++it;continue;}
+            record("Loadout",id,it.key(),owner);
+            it=entries.erase(it);
+        }
+    }
+    if(game.contains("Progress") && game.at("Progress").is_object()) {
+        auto& progress=game.at("Progress");
+        for(const auto* field:{"ItemsPickedUp","MilestoneMaterialsPickedUp",
+            "RecipesUnlocked","RecipesNew"}) {
+            if(!progress.contains(field) || !progress.at(field).is_array())continue;
+            auto& entries=progress.at(field);
+            const auto& owned=std::string_view(field).starts_with("Recipes")
+                ?retiredRecipes:retiredItems;
+            for(auto it=entries.begin();it!=entries.end();) {
+                if(!it->is_string()) {++it;continue;}
+                const auto id=it->get<std::string>();
+                const auto found=owned.find(id);
+                if(found==owned.end()) {++it;continue;}
+                record(field,id,{},found->second);
+                it=entries.erase(it);
+            }
+        }
+    }
+    return result;
+}
+}

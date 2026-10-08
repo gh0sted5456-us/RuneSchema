@@ -1,0 +1,7 @@
+# Dragonwilds Sync ID v1
+Schema: DragonwildsSync.ID.v1
+ModID: RuneSchemaRecipeUnlockConsumable
+Name: RuneSchema Dawnveil Recipe Unlocker Example
+Author: RuneSchema Project
+RuntimeRole: both
+HOTLOAD = NO

@@ -1,0 +1,1247 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "anyOf": [
+    {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "patternProperties": {
+            "^[^$]": {
+              "additionalProperties": false,
+              "oneOf": [
+                {
+                  "not": {
+                    "required": [
+                      "Asset"
+                    ]
+                  },
+                  "required": [
+                    "$Clone"
+                  ]
+                },
+                {
+                  "not": {
+                    "required": [
+                      "$Clone"
+                    ]
+                  },
+                  "required": [
+                    "Asset"
+                  ]
+                }
+              ],
+              "properties": {
+                "$Clone": {
+                  "description": "Clone a cooked BuildingPieceData asset. The clone receives a new RuneSchema identity and remains a separate build-menu entry.",
+                  "pattern": "^/",
+                  "type": "string"
+                },
+                "AddTo": {
+                  "description": "Optional explicit placement(s). When omitted, RuneSchema appends the clone to every page/collection containing its $Clone source.",
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "Collection": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "PageIndex": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "Collection"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "Collection": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "PageIndex": {
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "Collection"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 32,
+                      "minItems": 1,
+                      "type": "array"
+                    }
+                  ]
+                },
+                "Asset": {
+                  "description": "Register an existing BuildingPieceData asset; use $Clone when changing the actor or cost.",
+                  "pattern": "^/",
+                  "type": "string"
+                },
+                "Overrides": {
+                  "additionalProperties": false,
+                  "description": "Optional direct-building presentation, placement, shelter and station-row overrides. Omitted fields preserve cooked values; every requested runtime target is verified before registration.",
+                  "properties": {
+                    "DerivedData": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "PhysicalSurfaceExtentNeg": {
+                          "maximum": 100000,
+                          "minimum": -100000,
+                          "type": "number"
+                        },
+                        "PhysicalSurfaceExtentPos": {
+                          "maximum": 100000,
+                          "minimum": -100000,
+                          "type": "number"
+                        },
+                        "PlacementZOffset": {
+                          "maximum": 100000,
+                          "minimum": -100000,
+                          "type": "number"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "Health": {
+                      "additionalProperties": false,
+                      "description": "HealthComponent defaults. On $Clone, requires a private cooked BuildableActor.",
+                      "properties": {
+                        "MaxHealth": {
+                          "exclusiveMinimum": 0,
+                          "maximum": 100000000,
+                          "type": "number"
+                        },
+                        "bCanDie": {
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "Names": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "Catalogue": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "Interact": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "Menu": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "World": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "Placement": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "AcceptedPhysicalSurfaces": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 128,
+                          "type": "array"
+                        },
+                        "MagnetizingMultiplier": {
+                          "maximum": 100,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "OverlapExceptionFilter": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 128,
+                          "type": "array"
+                        },
+                        "OverlappingBoundsMultiplier": {
+                          "maximum": 100,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "OverrideProjectionNormal": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "X": {
+                              "type": "number"
+                            },
+                            "Y": {
+                              "type": "number"
+                            },
+                            "Z": {
+                              "type": "number"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "Profile": {
+                          "description": "Existing row in the building's cooked placement-profile table. PropProfile is the standard terrain-capable station profile.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "RegionBlockList": {
+                          "description": "Advanced native GameplayTagQuery object. Prefer copying a known-good FModel value.",
+                          "type": "object"
+                        },
+                        "RequiresFoundation": {
+                          "description": "False selects Profile, or PropProfile when Profile is omitted. True requires an explicit verified profile.",
+                          "type": "boolean"
+                        },
+                        "RequiresRoof": {
+                          "description": "Compatibility alias. True selects InteractInShelterOnly; false selects InteractAnywhere.",
+                          "type": "boolean"
+                        },
+                        "RequiresShelter": {
+                          "description": "Compatibility alias. True selects InteractInShelterOnly; false selects InteractAnywhere.",
+                          "type": "boolean"
+                        },
+                        "SnappingModeOverride": {
+                          "enum": [
+                            "Basic",
+                            "Advanced",
+                            "Free",
+                            "EBuildSnappingMode::Basic",
+                            "EBuildSnappingMode::Advanced",
+                            "EBuildSnappingMode::Free"
+                          ]
+                        },
+                        "SurfacePlacementNormal": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "X": {
+                              "type": "number"
+                            },
+                            "Y": {
+                              "type": "number"
+                            },
+                            "Z": {
+                              "type": "number"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "SurfaceRotationOffset": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "Pitch": {
+                              "type": "number"
+                            },
+                            "Roll": {
+                              "type": "number"
+                            },
+                            "Yaw": {
+                              "type": "number"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "bAllowOverlappingWithBuildingPieces": {
+                          "type": "boolean"
+                        },
+                        "bAllowUserHeightModification": {
+                          "type": "boolean"
+                        },
+                        "bAllowUserRotationModification": {
+                          "type": "boolean"
+                        },
+                        "bCanOnlyBePlacedOnCertainPhysicalSurfaces": {
+                          "type": "boolean"
+                        },
+                        "bCanOnlyBePlacedOnDefinedSurface": {
+                          "type": "boolean"
+                        },
+                        "bCanOnlyBePlacedOnGround": {
+                          "type": "boolean"
+                        },
+                        "bCanOnlyBeSnapped": {
+                          "type": "boolean"
+                        },
+                        "bCanSharePlugWithSamePieces": {
+                          "type": "boolean"
+                        },
+                        "bForceBuildingBlockerOverlapDuringPlacement": {
+                          "type": "boolean"
+                        },
+                        "bForcePlugRotation": {
+                          "type": "boolean"
+                        },
+                        "bOverrideProjectionNormal": {
+                          "type": "boolean"
+                        },
+                        "bOverrideRotationFromHitSurface": {
+                          "type": "boolean"
+                        },
+                        "bOverrideSnappingMode": {
+                          "type": "boolean"
+                        },
+                        "bShouldOffsetFromNonBuildingSurface": {
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "Processing": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "AcceptedFuels": {
+                          "additionalProperties": false,
+                          "description": "Mutate the processing row's AcceptedFuels array. Append preserves native fuels; authors should not repeat a fuel already present. Replace and Clear are explicit.",
+                          "oneOf": [
+                            {
+                              "not": {
+                                "required": [
+                                  "Items"
+                                ]
+                              },
+                              "properties": {
+                                "Mode": {
+                                  "const": "Clear"
+                                }
+                              }
+                            },
+                            {
+                              "properties": {
+                                "Mode": {
+                                  "enum": [
+                                    "Replace",
+                                    "Append"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "Items"
+                              ]
+                            }
+                          ],
+                          "properties": {
+                            "Items": {
+                              "items": {
+                                "pattern": "^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$",
+                                "type": "string"
+                              },
+                              "maxItems": 64,
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "Mode": {
+                              "enum": [
+                                "Replace",
+                                "Append",
+                                "Clear"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "Mode"
+                          ],
+                          "type": "object"
+                        },
+                        "AutoStartProcess": {
+                          "description": "Writes native bAutoStartProcess.",
+                          "type": "boolean"
+                        },
+                        "CanProcessBeStartedThroughUI": {
+                          "description": "Writes native bCanProcessBeStartedThroughUI.",
+                          "type": "boolean"
+                        },
+                        "IgnitesBurning": {
+                          "description": "Writes native bIgnitesBurning.",
+                          "type": "boolean"
+                        },
+                        "InfluenceRange": {
+                          "maximum": 100000,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "MaxFuelSlots": {
+                          "maximum": 64,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "MaxResourceSlots": {
+                          "maximum": 64,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "Rate": {
+                          "description": "ProcessingRate multiplier on the single station row that references this building. Recipe Min/MaxProcessingTime still takes precedence for per-recipe duration.",
+                          "exclusiveMinimum": 0,
+                          "maximum": 100,
+                          "type": "number"
+                        },
+                        "StartingFuelCount": {
+                          "maximum": 100000,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "StartingFuelItem": {
+                          "description": "Optional starting FuelItemData object path; null preserves an explicitly empty starter slot.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "StopsWhenRecipeChanges": {
+                          "description": "Writes native bStopsWhenRecipeChanges.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "Shelter": {
+                      "additionalProperties": false,
+                      "description": "Actor-component settings. On $Clone, these require Properties.BuildableActor to name a private cooked actor.",
+                      "properties": {
+                        "InteractionRequirements": {
+                          "enum": [
+                            "InteractInShelterOnly",
+                            "InteractExternallyOnly",
+                            "InteractAnywhere",
+                            "EBuildingRequirements::InteractInShelterOnly",
+                            "EBuildingRequirements::InteractExternallyOnly",
+                            "EBuildingRequirements::InteractAnywhere"
+                          ]
+                        },
+                        "RequiresNoRoofText": {
+                          "type": "string"
+                        },
+                        "RequiresNoShelterText": {
+                          "type": "string"
+                        },
+                        "RequiresRoofText": {
+                          "type": "string"
+                        },
+                        "RequiresShelterText": {
+                          "type": "string"
+                        },
+                        "RoofRays": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "X": {
+                                "type": "number"
+                              },
+                              "Y": {
+                                "type": "number"
+                              },
+                              "Z": {
+                                "type": "number"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "maxItems": 128,
+                          "type": "array"
+                        },
+                        "RoofTraceExclusionFilter": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 128,
+                          "type": "array"
+                        },
+                        "ShelterRays": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "X": {
+                                "type": "number"
+                              },
+                              "Y": {
+                                "type": "number"
+                              },
+                              "Z": {
+                                "type": "number"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "maxItems": 128,
+                          "type": "array"
+                        },
+                        "ShelterTraceExclusionFilter": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 128,
+                          "type": "array"
+                        },
+                        "SweepRayDistance": {
+                          "maximum": 100000,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "SweepRayThickness": {
+                          "maximum": 100000,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "ValidityPercentage": {
+                          "maximum": 100000,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "bIncludeNonBuildingPartActors": {
+                          "type": "boolean"
+                        },
+                        "bShelterCheckedOnPlacement": {
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "Snapping": {
+                      "additionalProperties": false,
+                      "description": "BuildingSnapComponent defaults. On $Clone, requires a private cooked BuildableActor.",
+                      "properties": {
+                        "SnappingRadius": {
+                          "maximum": 100000,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "SnappingRadiusInBasicSnappingMode": {
+                          "maximum": 100000,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "bUseSocketsForPlugGeneration": {
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "Stability": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "HorizontalLoss": {
+                          "maximum": 1000000,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "MaxStability": {
+                          "maximum": 1000000,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "MinStability": {
+                          "maximum": 1000000,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "Profile": {
+                          "description": "Existing DT_StabilityProfile row used as the source.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "VerticalLoss": {
+                          "maximum": 1000000,
+                          "minimum": 0,
+                          "type": "number"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "Properties": {
+                  "additionalProperties": true,
+                  "description": "Reflected BuildingPieceData overrides. PersistenceID, InternalName, BuildingPieceDataIndex and Requirements are managed and rejected here. A BuildableActor override must be a cooked BP_BaseBuilding_BaseActor child.",
+                  "type": "object"
+                },
+                "Requirements": {
+                  "description": "Complete replacement build cost. Every item must resolve before the clone is registered.",
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "Amount": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "ItemData": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ItemData",
+                      "Amount"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 64,
+                  "type": "array"
+                },
+                "Unlock": {
+                  "default": true,
+                  "description": "Session-unlock the separate cloned entry. False does not revoke an unlock already persisted by the game.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        {
+          "properties": {
+            "$Patch": {
+              "type": "string"
+            },
+            "$Target": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "$Patch",
+            "$Target"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "items": {
+        "anyOf": [
+          {
+            "additionalProperties": true,
+            "patternProperties": {
+              "^[^$]": {
+                "additionalProperties": false,
+                "oneOf": [
+                  {
+                    "not": {
+                      "required": [
+                        "Asset"
+                      ]
+                    },
+                    "required": [
+                      "$Clone"
+                    ]
+                  },
+                  {
+                    "not": {
+                      "required": [
+                        "$Clone"
+                      ]
+                    },
+                    "required": [
+                      "Asset"
+                    ]
+                  }
+                ],
+                "properties": {
+                  "$Clone": {
+                    "description": "Clone a cooked BuildingPieceData asset. The clone receives a new RuneSchema identity and remains a separate build-menu entry.",
+                    "pattern": "^/",
+                    "type": "string"
+                  },
+                  "AddTo": {
+                    "description": "Optional explicit placement(s). When omitted, RuneSchema appends the clone to every page/collection containing its $Clone source.",
+                    "oneOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "Collection": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "PageIndex": {
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "Collection"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "Collection": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "PageIndex": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "Collection"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 32,
+                        "minItems": 1,
+                        "type": "array"
+                      }
+                    ]
+                  },
+                  "Asset": {
+                    "description": "Register an existing BuildingPieceData asset; use $Clone when changing the actor or cost.",
+                    "pattern": "^/",
+                    "type": "string"
+                  },
+                  "Overrides": {
+                    "additionalProperties": false,
+                    "description": "Optional direct-building presentation, placement, shelter and station-row overrides. Omitted fields preserve cooked values; every requested runtime target is verified before registration.",
+                    "properties": {
+                      "DerivedData": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "PhysicalSurfaceExtentNeg": {
+                            "maximum": 100000,
+                            "minimum": -100000,
+                            "type": "number"
+                          },
+                          "PhysicalSurfaceExtentPos": {
+                            "maximum": 100000,
+                            "minimum": -100000,
+                            "type": "number"
+                          },
+                          "PlacementZOffset": {
+                            "maximum": 100000,
+                            "minimum": -100000,
+                            "type": "number"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "Health": {
+                        "additionalProperties": false,
+                        "description": "HealthComponent defaults. On $Clone, requires a private cooked BuildableActor.",
+                        "properties": {
+                          "MaxHealth": {
+                            "exclusiveMinimum": 0,
+                            "maximum": 100000000,
+                            "type": "number"
+                          },
+                          "bCanDie": {
+                            "type": "boolean"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "Names": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "Catalogue": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "Interact": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "Menu": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "World": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "Placement": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "AcceptedPhysicalSurfaces": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 128,
+                            "type": "array"
+                          },
+                          "MagnetizingMultiplier": {
+                            "maximum": 100,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "OverlapExceptionFilter": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 128,
+                            "type": "array"
+                          },
+                          "OverlappingBoundsMultiplier": {
+                            "maximum": 100,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "OverrideProjectionNormal": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "X": {
+                                "type": "number"
+                              },
+                              "Y": {
+                                "type": "number"
+                              },
+                              "Z": {
+                                "type": "number"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "Profile": {
+                            "description": "Existing row in the building's cooked placement-profile table. PropProfile is the standard terrain-capable station profile.",
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "RegionBlockList": {
+                            "description": "Advanced native GameplayTagQuery object. Prefer copying a known-good FModel value.",
+                            "type": "object"
+                          },
+                          "RequiresFoundation": {
+                            "description": "False selects Profile, or PropProfile when Profile is omitted. True requires an explicit verified profile.",
+                            "type": "boolean"
+                          },
+                          "RequiresRoof": {
+                            "description": "Compatibility alias. True selects InteractInShelterOnly; false selects InteractAnywhere.",
+                            "type": "boolean"
+                          },
+                          "RequiresShelter": {
+                            "description": "Compatibility alias. True selects InteractInShelterOnly; false selects InteractAnywhere.",
+                            "type": "boolean"
+                          },
+                          "SnappingModeOverride": {
+                            "enum": [
+                              "Basic",
+                              "Advanced",
+                              "Free",
+                              "EBuildSnappingMode::Basic",
+                              "EBuildSnappingMode::Advanced",
+                              "EBuildSnappingMode::Free"
+                            ]
+                          },
+                          "SurfacePlacementNormal": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "X": {
+                                "type": "number"
+                              },
+                              "Y": {
+                                "type": "number"
+                              },
+                              "Z": {
+                                "type": "number"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "SurfaceRotationOffset": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "Pitch": {
+                                "type": "number"
+                              },
+                              "Roll": {
+                                "type": "number"
+                              },
+                              "Yaw": {
+                                "type": "number"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "bAllowOverlappingWithBuildingPieces": {
+                            "type": "boolean"
+                          },
+                          "bAllowUserHeightModification": {
+                            "type": "boolean"
+                          },
+                          "bAllowUserRotationModification": {
+                            "type": "boolean"
+                          },
+                          "bCanOnlyBePlacedOnCertainPhysicalSurfaces": {
+                            "type": "boolean"
+                          },
+                          "bCanOnlyBePlacedOnDefinedSurface": {
+                            "type": "boolean"
+                          },
+                          "bCanOnlyBePlacedOnGround": {
+                            "type": "boolean"
+                          },
+                          "bCanOnlyBeSnapped": {
+                            "type": "boolean"
+                          },
+                          "bCanSharePlugWithSamePieces": {
+                            "type": "boolean"
+                          },
+                          "bForceBuildingBlockerOverlapDuringPlacement": {
+                            "type": "boolean"
+                          },
+                          "bForcePlugRotation": {
+                            "type": "boolean"
+                          },
+                          "bOverrideProjectionNormal": {
+                            "type": "boolean"
+                          },
+                          "bOverrideRotationFromHitSurface": {
+                            "type": "boolean"
+                          },
+                          "bOverrideSnappingMode": {
+                            "type": "boolean"
+                          },
+                          "bShouldOffsetFromNonBuildingSurface": {
+                            "type": "boolean"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "Processing": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "AcceptedFuels": {
+                            "additionalProperties": false,
+                            "description": "Mutate the processing row's AcceptedFuels array. Append preserves native fuels; authors should not repeat a fuel already present. Replace and Clear are explicit.",
+                            "oneOf": [
+                              {
+                                "not": {
+                                  "required": [
+                                    "Items"
+                                  ]
+                                },
+                                "properties": {
+                                  "Mode": {
+                                    "const": "Clear"
+                                  }
+                                }
+                              },
+                              {
+                                "properties": {
+                                  "Mode": {
+                                    "enum": [
+                                      "Replace",
+                                      "Append"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "Items"
+                                ]
+                              }
+                            ],
+                            "properties": {
+                              "Items": {
+                                "items": {
+                                  "pattern": "^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$",
+                                  "type": "string"
+                                },
+                                "maxItems": 64,
+                                "minItems": 1,
+                                "type": "array",
+                                "uniqueItems": true
+                              },
+                              "Mode": {
+                                "enum": [
+                                  "Replace",
+                                  "Append",
+                                  "Clear"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "Mode"
+                            ],
+                            "type": "object"
+                          },
+                          "AutoStartProcess": {
+                            "description": "Writes native bAutoStartProcess.",
+                            "type": "boolean"
+                          },
+                          "CanProcessBeStartedThroughUI": {
+                            "description": "Writes native bCanProcessBeStartedThroughUI.",
+                            "type": "boolean"
+                          },
+                          "IgnitesBurning": {
+                            "description": "Writes native bIgnitesBurning.",
+                            "type": "boolean"
+                          },
+                          "InfluenceRange": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "MaxFuelSlots": {
+                            "maximum": 64,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "MaxResourceSlots": {
+                            "maximum": 64,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "Rate": {
+                            "description": "ProcessingRate multiplier on the single station row that references this building. Recipe Min/MaxProcessingTime still takes precedence for per-recipe duration.",
+                            "exclusiveMinimum": 0,
+                            "maximum": 100,
+                            "type": "number"
+                          },
+                          "StartingFuelCount": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "StartingFuelItem": {
+                            "description": "Optional starting FuelItemData object path; null preserves an explicitly empty starter slot.",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "StopsWhenRecipeChanges": {
+                            "description": "Writes native bStopsWhenRecipeChanges.",
+                            "type": "boolean"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "Shelter": {
+                        "additionalProperties": false,
+                        "description": "Actor-component settings. On $Clone, these require Properties.BuildableActor to name a private cooked actor.",
+                        "properties": {
+                          "InteractionRequirements": {
+                            "enum": [
+                              "InteractInShelterOnly",
+                              "InteractExternallyOnly",
+                              "InteractAnywhere",
+                              "EBuildingRequirements::InteractInShelterOnly",
+                              "EBuildingRequirements::InteractExternallyOnly",
+                              "EBuildingRequirements::InteractAnywhere"
+                            ]
+                          },
+                          "RequiresNoRoofText": {
+                            "type": "string"
+                          },
+                          "RequiresNoShelterText": {
+                            "type": "string"
+                          },
+                          "RequiresRoofText": {
+                            "type": "string"
+                          },
+                          "RequiresShelterText": {
+                            "type": "string"
+                          },
+                          "RoofRays": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "X": {
+                                  "type": "number"
+                                },
+                                "Y": {
+                                  "type": "number"
+                                },
+                                "Z": {
+                                  "type": "number"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "maxItems": 128,
+                            "type": "array"
+                          },
+                          "RoofTraceExclusionFilter": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 128,
+                            "type": "array"
+                          },
+                          "ShelterRays": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "X": {
+                                  "type": "number"
+                                },
+                                "Y": {
+                                  "type": "number"
+                                },
+                                "Z": {
+                                  "type": "number"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "maxItems": 128,
+                            "type": "array"
+                          },
+                          "ShelterTraceExclusionFilter": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 128,
+                            "type": "array"
+                          },
+                          "SweepRayDistance": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "SweepRayThickness": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "ValidityPercentage": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "bIncludeNonBuildingPartActors": {
+                            "type": "boolean"
+                          },
+                          "bShelterCheckedOnPlacement": {
+                            "type": "boolean"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "Snapping": {
+                        "additionalProperties": false,
+                        "description": "BuildingSnapComponent defaults. On $Clone, requires a private cooked BuildableActor.",
+                        "properties": {
+                          "SnappingRadius": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "SnappingRadiusInBasicSnappingMode": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "bUseSocketsForPlugGeneration": {
+                            "type": "boolean"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "Stability": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "HorizontalLoss": {
+                            "maximum": 1000000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "MaxStability": {
+                            "maximum": 1000000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "MinStability": {
+                            "maximum": 1000000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "Profile": {
+                            "description": "Existing DT_StabilityProfile row used as the source.",
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "VerticalLoss": {
+                            "maximum": 1000000,
+                            "minimum": 0,
+                            "type": "number"
+                          }
+                        },
+                        "type": "object"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "Properties": {
+                    "additionalProperties": true,
+                    "description": "Reflected BuildingPieceData overrides. PersistenceID, InternalName, BuildingPieceDataIndex and Requirements are managed and rejected here. A BuildableActor override must be a cooked BP_BaseBuilding_BaseActor child.",
+                    "type": "object"
+                  },
+                  "Requirements": {
+                    "description": "Complete replacement build cost. Every item must resolve before the clone is registered.",
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "Amount": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "ItemData": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "ItemData",
+                        "Amount"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 64,
+                    "type": "array"
+                  },
+                  "Unlock": {
+                    "default": true,
+                    "description": "Session-unlock the separate cloned entry. False does not revoke an unlock already persisted by the game.",
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "$Patch": {
+                "type": "string"
+              },
+              "$Target": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "$Patch",
+              "$Target"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "type": "array"
+    }
+  ],
+  "description": "Structural authoring hints, not an exhaustive runtime validator. Asset paths, identities, reflected properties and event compatibility must be validated in game.",
+  "title": "RuneSchema /buildings",
+  "x-runeschema-coverage": "structural",
+  "x-runeschema-starter-capabilities": {
+    "append": false,
+    "clone": true,
+    "patch": false,
+    "search": "loaded records"
+  }
+}

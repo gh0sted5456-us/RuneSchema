@@ -1,0 +1,208 @@
+{
+  "Id": "grumble_retribution",
+  "Entry": "hello",
+  "Nodes": {
+    "hello": {
+      "Text": "You disturb goblins. Grumble requires retribution: twenty-five stone. No pebbles in a trench coat. Real stone.",
+      "Choices": [
+        {
+          "Id": "accept",
+          "Text": "I'll collect 25 stone.",
+          "RequirementUnlock": {"Quest": {
+            "Id": "grumble_stone_retribution",
+            "States": [
+              "NotStarted"
+            ]
+          }},
+          "Quest": {
+            "Id": "grumble_stone_retribution",
+            "Action": "Accept"
+          },
+          "Next": "accepted"
+        },
+        {
+          "Id": "turnin",
+          "Text": "I have your 25 stone.",
+          "RequirementUnlock": {"Quest": {
+            "Id": "grumble_stone_retribution",
+            "States": [
+              "Active"
+            ]
+          }},
+          "Quest": {
+            "Id": "grumble_stone_retribution",
+            "Action": "TurnIn"
+          },
+          "Next": "paid"
+        },
+        {
+          "Id": "repeat",
+          "Text": "Another delivery of 25 stone?",
+          "RequirementUnlock": {"Quest": {
+            "Id": "grumble_stone_retribution",
+            "States": [
+              "Completed"
+            ],
+            "RepeatReady": true
+          }},
+          "Quest": {
+            "Id": "grumble_stone_retribution",
+            "Action": "Accept"
+          },
+          "Next": "accepted"
+        },
+        {
+          "Id": "more",
+          "Text": "Other business, or goodbye.",
+          "Next": "more"
+        }
+      ]
+    },
+    "challenge": {
+      "Text": "Grumble has small problems and very large problems. Choose carefully.",
+      "Choices": [
+        {
+          "Id": "goblins",
+          "Text": "The goblin waves.",
+          "Next": "goblin_challenge"
+        },
+        {
+          "Id": "bosses",
+          "Text": "The named Zogre trial.",
+          "Next": "boss_challenge"
+        },
+        {
+          "Id": "why",
+          "Text": "Why do you need the stone?",
+          "Next": "why"
+        },
+        {
+          "Id": "back",
+          "Text": "Back.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "boss_challenge": {
+      "Text": "Grimtooth, Borgruk, then Mournmaw. One Zogre at a time. These are not goblins and do not count for Granite's patrol.",
+      "Choices": [
+        {
+          "Id": "start",
+          "Text": "Summon the Zogre trial.",
+          "Event": {
+            "Id": "grumble_zogre_trial",
+            "Action": "Start"
+          },
+          "Next": "event_result"
+        },
+        {
+          "Id": "cancel",
+          "Text": "Cancel my Zogre trial.",
+          "Event": {
+            "Id": "grumble_zogre_trial",
+            "Action": "Cancel"
+          },
+          "Next": "event_result"
+        },
+        {
+          "Id": "back",
+          "Text": "Not yet.",
+          "Next": "challenge"
+        }
+      ]
+    },
+    "goblin_challenge": {
+      "Text": "Two pebble pilferers. Two gravel grifters. Then the debt collector. Accept Granite's goblin patrol first if you want credit. This does not pay your twenty-five-stone debt; Grumble not that generous.",
+      "Choices": [
+        {
+          "Id": "start",
+          "Text": "Summon the three waves.",
+          "Event": {
+            "Id": "grumble_goblin_waves",
+            "Action": "Start"
+          },
+          "Next": "event_result"
+        },
+        {
+          "Id": "cancel",
+          "Text": "Cancel my encounter and remove its enemies.",
+          "Event": {
+            "Id": "grumble_goblin_waves",
+            "Action": "Cancel"
+          },
+          "Next": "event_result"
+        },
+        {
+          "Id": "back",
+          "Text": "Not yet.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "event_result": {
+      "Text": "The encounter has been updated.",
+      "Choices": [
+        {
+          "Id": "leave",
+          "Text": "Understood.",
+          "End": true
+        }
+      ]
+    },
+    "accepted": {
+      "Text": "Carry it here. Stone you already own counts. Grumble is collector, not geological detective.",
+      "Choices": [
+        {
+          "Id": "back",
+          "Text": "Understood.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "paid": {
+      "Text": "Debt settled. Here are Soul Fragments. NuLL sells metal supplies near Granite; perhaps help his forge. Grumble will accept another delivery when you return.",
+      "Choices": [
+        {
+          "Id": "back",
+          "Text": "Another round?",
+          "Next": "hello"
+        },
+        {
+          "Id": "bye",
+          "Text": "I'll visit NuLL.",
+          "End": true
+        }
+      ]
+    },
+    "why": {
+      "Text": "Building wall between Grumble and NuLL's jokes. Need much stone. Last joke was about sediment. Grumble still settling.",
+      "Choices": [
+        {
+          "Id": "back",
+          "Text": "That is understandable.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "more": {
+      "Text": "More questions? Grumble bills by the pebble.",
+      "Choices": [
+        {
+          "Id": "challenge",
+          "Text": "About your troublemakers...",
+          "Next": "challenge"
+        },
+        {
+          "Id": "back",
+          "Text": "Back to the delivery.",
+          "Next": "hello"
+        },
+        {
+          "Id": "bye",
+          "Text": "Goodbye.",
+          "End": true
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": {
+    "anyOf": [
+      {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        ]
+      },
+      {
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "type": "object"
+      }
+    ]
+  },
+  "description": "Structural authoring hints, not an exhaustive runtime validator. Asset paths, identities, reflected properties and event compatibility must be validated in game.",
+  "title": "RuneSchema /strings",
+  "type": "object",
+  "x-runeschema-coverage": "structural",
+  "x-runeschema-starter-capabilities": {
+    "append": false,
+    "clone": false,
+    "patch": false,
+    "search": "loaded records"
+  }
+}

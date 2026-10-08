@@ -1,0 +1,57 @@
+name: Build RuneSchema packages
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build RuneSchema
+        shell: cmd
+        run: call "Build RuneSchema.bat"
+
+      - name: Upload Core artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuneSchema-Core
+          path: dist/RuneSchema-*-Core.zip
+          if-no-files-found: error
+
+      - name: Upload Universal artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuneSchema-Universal
+          path: dist/RuneSchema-*-Universal.zip
+          if-no-files-found: error
+
+      - name: Upload Helpy artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuneSchema-Helpy
+          path: dist/RuneSchema.Helpy-*.zip
+          if-no-files-found: warn
+
+      - name: Publish tagged release assets
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --title "RuneSchema $tag" --generate-notes
+          }
+          Get-ChildItem dist -Filter '*.zip' | ForEach-Object {
+            gh release upload $tag $_.FullName --clobber
+          }

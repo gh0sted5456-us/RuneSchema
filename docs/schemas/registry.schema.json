@@ -1,0 +1,143 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "description": "Client presentation declarations shipped by a mod. RuneSchema namespaces every Id with the owning ModId and merges accepted entries into the replicated registry manifest.",
+  "properties": {
+    "Entries": {
+      "items": {
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "Presentation"
+            ]
+          },
+          {
+            "required": [
+              "Authority"
+            ]
+          }
+        ],
+        "properties": {
+          "Authority": {
+            "additionalProperties": false,
+            "properties": {
+              "Action": {
+                "enum": [
+                  "SpawnFollower",
+                  "ExecuteGraph"
+                ]
+              },
+              "Bindings": {
+                "additionalProperties": {
+                  "pattern": "^/(?:Game|DowdunReach|FutureMajorVersion)/",
+                  "type": "string"
+                },
+                "maxProperties": 32,
+                "type": "object"
+              },
+              "DataAsset": {
+                "pattern": "^/(?:Game|DowdunReach|FutureMajorVersion)/",
+                "type": "string"
+              },
+              "Function": {
+                "default": "Trigger",
+                "pattern": "^[A-Za-z0-9_.-]+$",
+                "type": "string"
+              },
+              "GraphClass": {
+                "pattern": "^/[A-Za-z0-9_.-]+/.+_C$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "Action",
+              "GraphClass"
+            ],
+            "type": "object"
+          },
+          "Id": {
+            "maxLength": 96,
+            "pattern": "^[A-Za-z0-9_.-]+$",
+            "type": "string"
+          },
+          "Kind": {
+            "enum": [
+              "SpellPresentation",
+              "PersistentEffect",
+              "WeatherPresentation",
+              "AudioPresentation",
+              "CosmeticWrapper"
+            ]
+          },
+          "Metadata": {
+            "maxProperties": 32,
+            "type": "object"
+          },
+          "Presentation": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "Class": {
+                  "pattern": "^/(?:Game|DowdunReach|FutureMajorVersion)/",
+                  "type": "string"
+                },
+                "Classification": {
+                  "enum": [
+                    "PureVFX",
+                    "CosmeticWrapper",
+                    "NativeReplicated",
+                    "Unsupported"
+                  ]
+                },
+                "Parameters": {
+                  "maxProperties": 32,
+                  "type": "object"
+                },
+                "Phase": {
+                  "maxLength": 96,
+                  "pattern": "^[A-Za-z0-9_.-]+$",
+                  "type": "string"
+                },
+                "Socket": {
+                  "maxLength": 128,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "Phase",
+                "Class",
+                "Classification"
+              ],
+              "type": "object"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "type": "array"
+          },
+          "Spell": {
+            "pattern": "^/(?:Game|DowdunReach|FutureMajorVersion)/",
+            "type": "string"
+          }
+        },
+        "required": [
+          "Id",
+          "Kind"
+        ],
+        "type": "object"
+      },
+      "maxItems": 256,
+      "type": "array"
+    },
+    "SchemaVersion": {
+      "const": 1
+    }
+  },
+  "required": [
+    "SchemaVersion",
+    "Entries"
+  ],
+  "title": "RuneSchema registry manifest",
+  "type": "object",
+  "x-runeschema-coverage": "structural"
+}

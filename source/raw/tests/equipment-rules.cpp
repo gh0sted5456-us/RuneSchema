@@ -1,0 +1,73 @@
+#include "Loader/EquipmentRules.h"
+#include <cassert>
+#include <iostream>
+using namespace DragonWilds;
+int main() {
+    EquipmentRules::Rules rules;
+    const char* path = "/Game/RuneSchema/Test/Items/cape.cape";
+    EquipmentRules::Merge(rules, {{"SurgeEvadeLegs", {{path, true}}}});
+    assert(rules.surge.size() == 1 && rules.shadowveil.empty());
+    EquipmentRules::Merge(rules, {{"GrantedEffects", {{path, {{"Mode","Replace"},{"Effects",{"Example:Effects/Swift","/Game/Effects/GE_Test.GE_Test_C"}}}}}}});
+    nlohmann::json itemRule={
+        {"AssociatedSkill","/Game/Skills/SKILL_Magic.SKILL_Magic"},
+        {"SkillUsed","/Game/Skills/SKILL_Artisan.SKILL_Artisan"},
+        {"SkillPerkRequiredToEquip","/Game/Perks/Perk_Magic.Perk_Magic"},
+        {"Properties",{{"PrimaryActionClass","/Game/Actions/GA_Primary.GA_Primary_C"},{"BuffDatas",nlohmann::json::array()}}},
+        {"GrantedEffects",nlohmann::json{{"Mode","Append"},{"Effects",nlohmann::json::array({"/Game/Effects/GE_Magic.GE_Magic_C"})}}}
+    };
+    EquipmentRules::Merge(rules, {{"Items", {{path, itemRule}}}});
+    assert(rules.items.size()==1);
+    assert(rules.items.at(path).associatedSkill=="/Game/Skills/SKILL_Magic.SKILL_Magic");
+    assert(rules.items.at(path).properties.at("PrimaryActionClass")=="/Game/Actions/GA_Primary.GA_Primary_C");
+    assert(rules.items.at(path).grantedEffects->mode==EquipmentEffectRules::Mode::Append);
+    assert(rules.effects.at(path).effects.size()==2);
+    EquipmentRules::Merge(rules, {{"ShadowveilAttackEvadeWearables", {{path, true}}}});
+    assert(rules.surge.size() == 1 && rules.shadowveil.size() == 1);
+    auto rejects = [&](const nlohmann::json& doc) {
+        bool rejected = false;
+        auto original = rules;
+        try { EquipmentRules::Merge(rules, doc); } catch (const std::exception&) { rejected = true; }
+        assert(rejected && rules.surge == original.surge && rules.shadowveil == original.shadowveil);
+    };
+    rejects({{"ShadowveilAttackEvadeWearables", {{path, false}}}, {"UnknownSpell", true}});
+    rejects({{"ShadowveilAttackEvadeWearables", {{"/Game/Bad.*", true}}}});
+    rejects({{"ShadowveilAttackEvadeWearables", {{path, "true"}}}});
+    rejects(nlohmann::json::array());
+    rejects(nlohmann::json::object());
+    nlohmann::json oversized = nlohmann::json::object();
+    for (int i=0;i<65;++i) oversized["/Game/Item" + std::to_string(i) + ".Item"] = true;
+    rejects({{"ShadowveilAttackEvadeWearables", oversized}});
+    const auto actionRule = [&](nlohmann::json actions) {
+        return nlohmann::json{{"ShadowveilWearables", {{path, {{"PreserveOn", actions}}}}}};
+    };
+    assert(rules.shadowveil.at(path) == ShadowveilRules::LegacyActions);
+    EquipmentRules::Merge(rules, actionRule({"MagicAttack", "UtilityCast"}));
+    assert(rules.shadowveil.at(path) == 24 && rules.surge.size() == 1);
+    rejects(actionRule({"MeleeAttack", "Unknown"}));
+    rejects(actionRule({"MagicAttack", "MagicAttack"}));
+    rejects(actionRule({1}));
+    rejects(actionRule("MagicAttack"));
+    rejects({{"ShadowveilWearables", {{path, true}}}});
+    auto misplacedGrant = actionRule({"Evade"});
+    misplacedGrant["ShadowveilWearables"][path]["GrantedEffects"] = {"bad"};
+    rejects(misplacedGrant);
+    nlohmann::json invalidEffect={{"GrantedEffects",nlohmann::json::object()}};
+    invalidEffect["GrantedEffects"][path]={{"Mode","Append"},{"Effects",nlohmann::json::array()}};rejects(invalidEffect);
+    invalidEffect["GrantedEffects"][path]={{"Mode","Unknown"},{"Effects",{"Example:Effects/Test"}}};rejects(invalidEffect);
+    invalidEffect["GrantedEffects"][path]={{"Mode","Clear"},{"Effects",{"Example:Effects/Test"}}};rejects(invalidEffect);
+    rejects({{"Items",{{path,{{"Properties",{{"PersistenceID","unsafe"}}}}}}}});
+    rejects({{"ShadowveilWearables", {{path, false}}}, {"ShadowveilAttackEvadeWearables", {{path, true}}}});
+    EquipmentRules::Merge(rules, actionRule({"MeleeAttack", "RangedAttack", "Evade", "MagicAttack", "UtilityCast"}));
+    assert(rules.shadowveil.at(path) == 31);
+    EquipmentRules::Merge(rules, actionRule({"Evade"}));
+    assert(rules.shadowveil.at(path) == 4); // Later list replaces, never accumulates stale actions.
+    EquipmentRules::Merge(rules, actionRule(nlohmann::json::array()));
+    assert(rules.shadowveil.empty());
+    EquipmentRules::Merge(rules, actionRule({"MagicAttack"}));
+    EquipmentRules::Merge(rules, {{"ShadowveilWearables", {{path, false}}}});
+    assert(rules.shadowveil.empty());
+    EquipmentRules::Merge(rules, {{"ShadowveilAttackEvadeWearables", {{path, true}}}});
+    EquipmentRules::Merge(rules, {{"ShadowveilAttackEvadeWearables", {{path, false}}}});
+    assert(rules.shadowveil.empty() && rules.surge.size() == 1);
+    std::cout << "PASS: legacy compatibility, gameplay-effect assignment, independent behaviors, five action masks, replacement/disable overrides, invalid/duplicate actions and atomic rollback.\n";
+}

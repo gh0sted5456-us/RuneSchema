@@ -1,0 +1,30 @@
+{
+  // Enter a world as the local player. Start the trace, open the vendor, exercise
+  // shop/repair/ascend tabs and E interactions, then stop and export.
+  // The menu opens on DominionPlayerController; the station component is captured
+  // from Client_ToggleCraftingMenu parameters.
+  "Version": 1,
+  "Name": "Vendor-Interaction",
+  "Description": "Traces live vendor and crafting-station menu calls so RuneSchema can map shop, repair, masterwork/ascend and interaction behavior.",
+  "Trace": {
+    "Seconds": 60,
+    "MaxEvents": 4096,
+    "Categories": 31,
+    "IncludeAny": [
+      "CraftingStation",
+      "ToggleCraftingMenu",
+      "VendorInteraction",
+      "RepairEquipment",
+      "RepairOption",
+      "Masterwork",
+      "Ascending"
+    ],
+    "SuppressTicks": true,
+    "TraceSelectedObject": false,
+    "CaptureParameters": true
+  },
+  "Export": {
+    "Name": "Vendor-Interaction",
+    "Jsonc": false
+  }
+}

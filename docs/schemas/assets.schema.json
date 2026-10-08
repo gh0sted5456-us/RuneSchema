@@ -1,0 +1,249 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "description": "Structural authoring hints, not an exhaustive runtime validator. Asset paths, identities, reflected properties and event compatibility must be validated in game.",
+  "patternProperties": {
+    "^(?!(?:RuneSchema|Modded)$)[^$]": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "not": {
+            "required": [
+              "$Clone",
+              "$DominionSpheres"
+            ]
+          }
+        }
+      ],
+      "description": "Reflected asset fields are accepted. Unlockable item assets may set RecipesToUnlock, or BuildingPieceToUnlock; $Clone inherits these fields before applying overrides. $DominionSpheres patches validated named sphere subobjects owned by the target asset.",
+      "properties": {
+        "$Clone": {
+          "type": "string"
+        },
+        "$DominionSpheres": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "properties": {
+              "Radius": {
+                "description": "Sphere radius in Unreal centimeters.",
+                "exclusiveMinimum": 0,
+                "maximum": 100000,
+                "type": "number"
+              }
+            },
+            "required": [
+              "Radius"
+            ],
+            "type": "object"
+          },
+          "maxProperties": 32,
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*$"
+          },
+          "type": "object"
+        },
+        "$VisualEffect": {
+          "additionalProperties": true,
+          "properties": {
+            "DurationSeconds": {
+              "const": "INFINITE"
+            },
+            "Trigger": {
+              "const": "Equip"
+            }
+          },
+          "type": "object"
+        },
+        "BuildingPieceToUnlock": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "AssetPathName": {
+                  "type": "string"
+                },
+                "ObjectName": {
+                  "type": "string"
+                },
+                "ObjectPath": {
+                  "type": "string"
+                },
+                "SubPathString": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "InternalName": {
+          "type": "string"
+        },
+        "Modded": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "pattern": "^(?:[Yy][Ee][Ss]|[Nn][Oo]|[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])$",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "additionalProperties": false,
+              "description": "Author declarations consumed by RuneSchema, not Unreal properties. SafeToClone is permission; actual source type, package evidence and dependencies are still checked.",
+              "properties": {
+                "Cooked": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "pattern": "^(?:[Yy][Ee][Ss]|[Nn][Oo]|[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])$",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "RuneSchema": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "pattern": "^(?:[Yy][Ee][Ss]|[Nn][Oo]|[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])$",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "SafeToClone": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "pattern": "^(?:[Yy][Ee][Ss]|[Nn][Oo]|[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])$",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "PersistenceID": {
+          "type": "string"
+        },
+        "RecipesToUnlock": {
+          "description": "Recipes learned when this native recipe-unlocker consumable is used. Accepts any authored local /recipes JSON name (no RECIPE_ prefix required), ModID:RecipeName, a globally unique authored name, or a full cooked RecipeData path. Ambiguous bare names are rejected.",
+          "items": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "RuneSchema": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "pattern": "^(?:[Yy][Ee][Ss]|[Nn][Oo]|[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])$",
+              "type": "string"
+            }
+          ]
+        },
+        "bSoftDeleted": {
+          "description": "Native item retirement flag, including wearable/cape data. Applies only when the target exposes this reflected Boolean. It is not proof of save exclusion and is not injected into ordinary asset patches.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "properties": {
+    "Modded": {
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "pattern": "^(?:[Yy][Ee][Ss]|[Nn][Oo]|[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])$",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "additionalProperties": false,
+          "description": "Author declarations consumed by RuneSchema, not Unreal properties. SafeToClone is permission; actual source type, package evidence and dependencies are still checked.",
+          "properties": {
+            "Cooked": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "pattern": "^(?:[Yy][Ee][Ss]|[Nn][Oo]|[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])$",
+                  "type": "string"
+                }
+              ]
+            },
+            "RuneSchema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "pattern": "^(?:[Yy][Ee][Ss]|[Nn][Oo]|[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])$",
+                  "type": "string"
+                }
+              ]
+            },
+            "SafeToClone": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "pattern": "^(?:[Yy][Ee][Ss]|[Nn][Oo]|[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])$",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    "RuneSchema": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "pattern": "^(?:[Yy][Ee][Ss]|[Nn][Oo]|[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])$",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "title": "RuneSchema /assets",
+  "type": "object",
+  "x-runeschema-coverage": "structural",
+  "x-runeschema-starter-capabilities": {
+    "append": true,
+    "clone": true,
+    "patch": true,
+    "search": "loaded records"
+  }
+}

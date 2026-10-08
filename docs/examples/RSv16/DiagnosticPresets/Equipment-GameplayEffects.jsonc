@@ -1,0 +1,27 @@
+{
+  // Select a live item data asset, equipment instance, or gameplay-effect instance.
+  "Name": "Equipment-GameplayEffects",
+  "Objects": [
+    "/Script/Dominion.WearableEquipmentData",
+    "/Script/Dominion.HeldEquipmentData",
+    "/Script/Dominion.WearableEquipment",
+    "/Script/Dominion.DominionGameplayEffectData",
+    "/Script/Dominion.DominionGameplayEffect",
+    "/Game/Gameplay/UtilityMagic/PerkSpells/ShadowVeil/GE_ShadowVeil.GE_ShadowVeil_C"
+  ],
+  "PropertyCaptures": [
+    { "Root": "Selected", "Path": ["GrantedEffects"], "Optional": true },
+    { "Root": "Selected", "Path": ["GameplayEffectsToApply"], "Optional": true },
+    { "Root": "Selected", "Path": ["Data"], "Optional": true },
+    { "Root": "Selected", "Path": ["Source"], "Optional": true },
+    { "Root": "Selected", "Path": ["PlayerCharacter"], "Optional": true },
+    { "Root": "Selected", "Path": ["PlayerEquipmentComponent"], "Optional": true }
+  ],
+  "CaptureLimits": {
+    "MaxDepth": 10,
+    "MaxEntries": 256,
+    "MaxNodes": 8192,
+    "MaxSparseSlots": 4096,
+    "FollowObjectReferences": false
+  }
+}

@@ -1,0 +1,700 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Structural authoring hints, not an exhaustive runtime validator. Asset paths, identities, reflected properties and event compatibility must be validated in game.",
+  "items": {
+    "oneOf": [
+      {
+        "additionalProperties": false,
+        "properties": {
+          "ActivityTimeoutSeconds": {
+            "maximum": 3600,
+            "minimum": 0,
+            "type": "number"
+          },
+          "AlwaysFaceCamera": {
+            "description": "Keep the native world-space nameplate facing the local camera.",
+            "type": "boolean"
+          },
+          "Client": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "enum": [
+                  "Yes",
+                  "No",
+                  "yes",
+                  "no"
+                ]
+              }
+            ]
+          },
+          "Definition": {
+            "description": "Reusable /nameplates Id. Local Id or Mod:Id; inline fields override the resolved definition.",
+            "maxLength": 192,
+            "minLength": 1,
+            "type": "string"
+          },
+          "Distance": {
+            "maximum": 100000,
+            "minimum": 0,
+            "type": "number"
+          },
+          "Events": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "Action": {
+                  "enum": [
+                    "Pulse",
+                    "Activate",
+                    "Deactivate"
+                  ]
+                },
+                "Function": {
+                  "pattern": "^/[^:]+:[^:]+$",
+                  "type": "string"
+                },
+                "Parameters": {
+                  "items": {
+                    "additionalProperties": false,
+                    "oneOf": [
+                      {
+                        "required": [
+                          "Equals"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "NotEquals"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "NonEmpty"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "Exists"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "GreaterThan"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "GreaterOrEqual"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "LessThan"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "LessOrEqual"
+                        ]
+                      }
+                    ],
+                    "properties": {
+                      "Equals": {
+                        "anyOf": [
+                          {
+                            "type": [
+                              "number",
+                              "boolean"
+                            ]
+                          },
+                          {
+                            "maxLength": 512,
+                            "minLength": 1,
+                            "pattern": "^/",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "Exists": {
+                        "type": "boolean"
+                      },
+                      "GreaterOrEqual": {
+                        "type": "number"
+                      },
+                      "GreaterThan": {
+                        "type": "number"
+                      },
+                      "LessOrEqual": {
+                        "type": "number"
+                      },
+                      "LessThan": {
+                        "type": "number"
+                      },
+                      "NonEmpty": {
+                        "type": "boolean"
+                      },
+                      "NotEquals": {
+                        "anyOf": [
+                          {
+                            "type": [
+                              "number",
+                              "boolean"
+                            ]
+                          },
+                          {
+                            "maxLength": 512,
+                            "minLength": 1,
+                            "pattern": "^/",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "Path": {
+                        "items": {
+                          "pattern": "^[A-Za-z0-9_]{1,64}$",
+                          "type": "string"
+                        },
+                        "maxItems": 5,
+                        "minItems": 1,
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "Path"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 8,
+                  "type": "array"
+                },
+                "State": {
+                  "not": {
+                    "const": "Dead"
+                  },
+                  "pattern": "^[A-Za-z0-9_]{1,64}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "Function",
+                "State"
+              ],
+              "type": "object"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "type": "array"
+          },
+          "Icon": {
+            "type": "string"
+          },
+          "Id": {
+            "maxLength": 96,
+            "minLength": 1,
+            "type": "string"
+          },
+          "Mode": {
+            "enum": [
+              "Name",
+              "Icon",
+              "Hidden"
+            ]
+          },
+          "Native": {
+            "additionalProperties": false,
+            "properties": {
+              "Component": {
+                "additionalProperties": true,
+                "maxProperties": 64,
+                "type": "object"
+              },
+              "Text": {
+                "additionalProperties": true,
+                "maxProperties": 64,
+                "type": "object"
+              },
+              "Widget": {
+                "additionalProperties": true,
+                "maxProperties": 64,
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "OnlyShowNearby": {
+            "description": "Use the game's native distance visibility check with Distance as its range.",
+            "type": "boolean"
+          },
+          "PixelHeight": {
+            "maximum": 4096,
+            "minimum": 1,
+            "type": "number"
+          },
+          "PixelWidth": {
+            "maximum": 4096,
+            "minimum": 1,
+            "type": "number"
+          },
+          "Scale": {
+            "maximum": 4,
+            "minimum": 0.1,
+            "type": "number"
+          },
+          "Server": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "enum": [
+                  "Yes",
+                  "No",
+                  "yes",
+                  "no"
+                ]
+              }
+            ]
+          },
+          "ShowSelf": {
+            "type": "boolean"
+          },
+          "SkillXP": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "maxProperties": 64,
+            "minProperties": 1,
+            "type": "object"
+          },
+          "States": {
+            "additionalProperties": true,
+            "patternProperties": {
+              "^[^$]": {
+                "additionalProperties": false,
+                "minProperties": 1,
+                "properties": {
+                  "Icon": {
+                    "type": "string"
+                  },
+                  "InactivitySeconds": {
+                    "maximum": 3600,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "Native": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "Component": {
+                        "additionalProperties": true,
+                        "maxProperties": 64,
+                        "type": "object"
+                      },
+                      "Text": {
+                        "additionalProperties": true,
+                        "maxProperties": 64,
+                        "type": "object"
+                      },
+                      "Widget": {
+                        "additionalProperties": true,
+                        "maxProperties": 64,
+                        "type": "object"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "Priority": {
+                    "maximum": 10000,
+                    "minimum": -10000,
+                    "type": "integer"
+                  },
+                  "Scale": {
+                    "maximum": 4,
+                    "minimum": 0.1,
+                    "type": "number"
+                  },
+                  "While": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "GameplayEffect": {
+                        "maxLength": 512,
+                        "pattern": "^/[^:]+[.][^:]+$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "GameplayEffect"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "Id"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "Id": {
+            "maxLength": 96,
+            "minLength": 1,
+            "type": "string"
+          },
+          "Nameplate": {
+            "additionalProperties": false,
+            "properties": {
+              "ActivityTimeoutSeconds": {
+                "maximum": 3600,
+                "minimum": 0,
+                "type": "number"
+              },
+              "AlwaysFaceCamera": {
+                "description": "Keep the native world-space nameplate facing the local camera.",
+                "type": "boolean"
+              },
+              "Client": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "enum": [
+                      "Yes",
+                      "No",
+                      "yes",
+                      "no"
+                    ]
+                  }
+                ]
+              },
+              "Definition": {
+                "description": "Reusable /nameplates Id. Local Id or Mod:Id; inline fields override the resolved definition.",
+                "maxLength": 192,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Distance": {
+                "maximum": 100000,
+                "minimum": 0,
+                "type": "number"
+              },
+              "Events": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "Action": {
+                      "enum": [
+                        "Pulse",
+                        "Activate",
+                        "Deactivate"
+                      ]
+                    },
+                    "Function": {
+                      "pattern": "^/[^:]+:[^:]+$",
+                      "type": "string"
+                    },
+                    "Parameters": {
+                      "items": {
+                        "additionalProperties": false,
+                        "oneOf": [
+                          {
+                            "required": [
+                              "Equals"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "NotEquals"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "NonEmpty"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "Exists"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "GreaterThan"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "GreaterOrEqual"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "LessThan"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "LessOrEqual"
+                            ]
+                          }
+                        ],
+                        "properties": {
+                          "Equals": {
+                            "anyOf": [
+                              {
+                                "type": [
+                                  "number",
+                                  "boolean"
+                                ]
+                              },
+                              {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "pattern": "^/",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "Exists": {
+                            "type": "boolean"
+                          },
+                          "GreaterOrEqual": {
+                            "type": "number"
+                          },
+                          "GreaterThan": {
+                            "type": "number"
+                          },
+                          "LessOrEqual": {
+                            "type": "number"
+                          },
+                          "LessThan": {
+                            "type": "number"
+                          },
+                          "NonEmpty": {
+                            "type": "boolean"
+                          },
+                          "NotEquals": {
+                            "anyOf": [
+                              {
+                                "type": [
+                                  "number",
+                                  "boolean"
+                                ]
+                              },
+                              {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "pattern": "^/",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "Path": {
+                            "items": {
+                              "pattern": "^[A-Za-z0-9_]{1,64}$",
+                              "type": "string"
+                            },
+                            "maxItems": 5,
+                            "minItems": 1,
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "Path"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 8,
+                      "type": "array"
+                    },
+                    "State": {
+                      "not": {
+                        "const": "Dead"
+                      },
+                      "pattern": "^[A-Za-z0-9_]{1,64}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "Function",
+                    "State"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 64,
+                "minItems": 1,
+                "type": "array"
+              },
+              "Icon": {
+                "type": "string"
+              },
+              "Mode": {
+                "enum": [
+                  "Name",
+                  "Icon",
+                  "Hidden"
+                ]
+              },
+              "Native": {
+                "additionalProperties": false,
+                "properties": {
+                  "Component": {
+                    "additionalProperties": true,
+                    "maxProperties": 64,
+                    "type": "object"
+                  },
+                  "Text": {
+                    "additionalProperties": true,
+                    "maxProperties": 64,
+                    "type": "object"
+                  },
+                  "Widget": {
+                    "additionalProperties": true,
+                    "maxProperties": 64,
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "OnlyShowNearby": {
+                "description": "Use the game's native distance visibility check with Distance as its range.",
+                "type": "boolean"
+              },
+              "PixelHeight": {
+                "maximum": 4096,
+                "minimum": 1,
+                "type": "number"
+              },
+              "PixelWidth": {
+                "maximum": 4096,
+                "minimum": 1,
+                "type": "number"
+              },
+              "Scale": {
+                "maximum": 4,
+                "minimum": 0.1,
+                "type": "number"
+              },
+              "Server": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "enum": [
+                      "Yes",
+                      "No",
+                      "yes",
+                      "no"
+                    ]
+                  }
+                ]
+              },
+              "ShowSelf": {
+                "type": "boolean"
+              },
+              "SkillXP": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "maxProperties": 64,
+                "minProperties": 1,
+                "type": "object"
+              },
+              "States": {
+                "additionalProperties": true,
+                "patternProperties": {
+                  "^[^$]": {
+                    "additionalProperties": false,
+                    "minProperties": 1,
+                    "properties": {
+                      "Icon": {
+                        "type": "string"
+                      },
+                      "InactivitySeconds": {
+                        "maximum": 3600,
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "Native": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "Component": {
+                            "additionalProperties": true,
+                            "maxProperties": 64,
+                            "type": "object"
+                          },
+                          "Text": {
+                            "additionalProperties": true,
+                            "maxProperties": 64,
+                            "type": "object"
+                          },
+                          "Widget": {
+                            "additionalProperties": true,
+                            "maxProperties": 64,
+                            "type": "object"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "Priority": {
+                        "maximum": 10000,
+                        "minimum": -10000,
+                        "type": "integer"
+                      },
+                      "Scale": {
+                        "maximum": 4,
+                        "minimum": 0.1,
+                        "type": "number"
+                      },
+                      "While": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "GameplayEffect": {
+                            "maxLength": 512,
+                            "pattern": "^/[^:]+[.][^:]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "GameplayEffect"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "Id",
+          "Nameplate"
+        ],
+        "type": "object"
+      }
+    ]
+  },
+  "title": "RuneSchema /nameplates",
+  "type": "array",
+  "x-runeschema-coverage": "structural",
+  "x-runeschema-starter-capabilities": {
+    "append": false,
+    "clone": false,
+    "patch": false,
+    "search": "authored files"
+  }
+}

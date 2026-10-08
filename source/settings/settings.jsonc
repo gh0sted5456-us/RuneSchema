@@ -1,0 +1,94 @@
+// RuneSchema settings. Edit with the game closed, then restart.
+// Advanced logging changes output detail only. Auto reload controls file watching only; neither setting gates initial RuneSchema startup.
+// Plugin-owned settings live below plugins/<PluginId>/settings/.
+{
+  "enableAutoReload": false,
+  "advancedLogging": false,
+  "advancedRuntime": false,
+  "diagnosticJobs": {
+    "enabled": false
+  },
+  "diagnostics": {
+    "persistenceLedger": false
+  },
+  "bridgeDiagnostics": {
+    // Bounded per-world lifecycle events. Warnings, errors, and the teardown
+    // health summary remain available when verbose mode is disabled.
+    "verbose": false
+  },
+  "colorCodeLoaderAnnotations": true,
+  "enableExperimentalDropScaling": false,
+  "plugins": {
+    "compatibilityNotices": "quiet"
+  },
+  "persistence": {
+    "characterCustomization": false,
+    "allowCorruptCharacterEntry": false,
+    "quests": true
+  },
+  "defaultRecovery": {
+    "enabled": false,
+    "useExternalDefault": false,
+    "appearance": true,
+    "quests": false,
+    "items": false,
+    "progress": false
+  },
+  "helpyAuthority": {
+    "allowClientItemGrants": false,
+    "allowClientTemporarySpawns": false,
+    "maximumItemCount": 100,
+    "maximumSpawnCount": 100,
+    "maximumNpcDurationSeconds": 300,
+    "permittedPlayerGuids": [],
+    "permittedPlayerNames": []
+  },
+  "loadOrder": {
+    "enabled": true,
+    "autoCreate": true,
+    "reconcileFolders": true,
+    "preserveComments": true,
+    "strictValues": true,
+    "deterministicFallback": true
+  },
+  "combatFallback": {
+    "enabled": false,
+    "additionalWeapons": true,
+    "manifestMelee": true,
+    "rangedEquipment": true,
+    "initialWorldMutation": false
+  },
+  "loaders": {
+    "assets": true,
+    "blueprints": true,
+    "buildings": true,
+    "courses": true,
+    "dialogue": true,
+    "effects": true,
+    "enums": true,
+    "equipment": true,
+    "events": true,
+    "journal": true,
+    "lore": true,
+    "nameplates": true,
+    "niagara": true,
+    "npc": true,
+    "players": true,
+    "quests": true,
+    "registry": true,
+    "raw": true,
+    "recipes": true,
+    "spawns": true,
+    "strings": true,
+    "vendors": true
+  },
+  "spawnBehavior": {
+    "enableNativeRoaming": true,
+    "defaultRoamRadius": 800.0,
+    "defaultRoamMaxZTolerance": 200.0
+  },
+  "npcDiagnostics": {
+    "statusExport": false,
+    "interactionTraceExport": false
+  }
+}

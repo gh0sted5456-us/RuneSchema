@@ -1,0 +1,14 @@
+// Character-creation text patch from Fixed Menu.
+{
+  "/Game/UI/MainMenu/WBP_MainMenu_CharCreate": {
+    "Button_BodyType": { "ButtonLabel": "Body Type" },
+    "Button_SkinTone": { "ButtonLabel": "Skin Tone" },
+    "Button_FaceType": { "ButtonLabel": "Face Appearance" },
+    "Button_EyeType": { "ButtonLabel": "Eye Type" },
+    "Button_EyeColor": { "ButtonLabel": "Eye Colour" },
+    "Button_HairPreset": { "ButtonLabel": "Hair Style" },
+    "Button_FacialHairPreset": { "ButtonLabel": "Facial Hair" },
+    "Button_HairColor": { "ButtonLabel": "Hair Colour" },
+    "Button_EyebrowColor": { "ButtonLabel": "Brow Colour" }
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "/Game/UI/HUD/WBP_HUD_InteractionPrompt": {
+    "$RuntimeWidget": {
+      "GoldenInteractionItemName": {
+        "$Find": {
+          "Scope": "WidgetTree",
+          "Name": "ItemNameTextBlock"
+        },
+        "$When": [
+          "Construct",
+          "OnInitialized"
+        ],
+        "$TextStyle": {
+          "Color": {
+            "R": 0.95,
+            "G": 0.72,
+            "B": 0.18,
+            "A": 1.0
+          }
+        }
+      },
+      "GoldenInteractionDescription": {
+        "$Find": {
+          "Scope": "WidgetTree",
+          "Name": "ItemAdditionalDescriptionTextBlock"
+        },
+        "$When": [
+          "Construct",
+          "OnInitialized"
+        ],
+        "$TextStyle": {
+          "Color": {
+            "R": 0.95,
+            "G": 0.72,
+            "B": 0.18,
+            "A": 1.0
+          }
+        }
+      },
+      "GoldenInteractionInventoryState": {
+        "$Find": {
+          "Scope": "WidgetTree",
+          "Name": "InventoryStateTextBlock"
+        },
+        "$When": [
+          "Construct",
+          "OnInitialized"
+        ],
+        "$TextStyle": {
+          "Color": {
+            "R": 0.95,
+            "G": 0.72,
+            "B": 0.18,
+            "A": 1.0
+          }
+        }
+      }
+    }
+  }
+}

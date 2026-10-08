@@ -1,0 +1,143 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "description": "Structural authoring hints, not an exhaustive runtime validator. Asset paths, identities, reflected properties and event compatibility must be validated in game.",
+  "patternProperties": {
+    "^[^$]": {
+      "additionalProperties": false,
+      "properties": {
+        "AutoActivate": {
+          "type": "boolean"
+        },
+        "Emitters": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "maxProperties": 16,
+          "type": "object"
+        },
+        "LocationOffset": {
+          "additionalProperties": false,
+          "properties": {
+            "X": {
+              "type": "number"
+            },
+            "Y": {
+              "type": "number"
+            },
+            "Z": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "X",
+            "Y",
+            "Z"
+          ],
+          "type": "object"
+        },
+        "Parameters": {
+          "additionalProperties": false,
+          "maxProperties": 32,
+          "patternProperties": {
+            "^User\\.": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "X": {
+                      "type": "number"
+                    },
+                    "Y": {
+                      "type": "number"
+                    },
+                    "Z": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "X",
+                    "Y",
+                    "Z"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "A": {
+                      "type": "number"
+                    },
+                    "B": {
+                      "type": "number"
+                    },
+                    "G": {
+                      "type": "number"
+                    },
+                    "R": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "R",
+                    "G",
+                    "B",
+                    "A"
+                  ],
+                  "type": "object"
+                }
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "RotationOffset": {
+          "additionalProperties": false,
+          "properties": {
+            "Pitch": {
+              "type": "number"
+            },
+            "Roll": {
+              "type": "number"
+            },
+            "Yaw": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "Pitch",
+            "Yaw",
+            "Roll"
+          ],
+          "type": "object"
+        },
+        "Socket": {
+          "type": "string"
+        },
+        "System": {
+          "pattern": "^/[^.]+\\.[^/]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "System"
+      ],
+      "type": "object"
+    }
+  },
+  "title": "RuneSchema /niagara",
+  "type": "object",
+  "x-runeschema-coverage": "structural",
+  "x-runeschema-starter-capabilities": {
+    "append": false,
+    "clone": false,
+    "patch": false,
+    "search": "authored files"
+  }
+}

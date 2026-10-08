@@ -1,0 +1,34 @@
+{
+  // Omitted AddTo inherits every catalogue location of the cloned source.
+  "quest_board": {
+    "$Clone": "/Game/Gameplay/BaseBuilding_New/BuildingPieces/Decorations/General/DA_BaseBuilding_Decoration_General_SawHorse.DA_BaseBuilding_Decoration_General_SawHorse",
+    "Properties": {
+      "BuildableActor": "/Coinage/Buildings/Actors/BP_Buildable_QuestBoard.BP_Buildable_QuestBoard_C",
+      "DisplayName": "Quest Board"
+    },
+    "Requirements": [
+      {
+        "ItemData": "/Game/RuneSchema/Currency/Items/rs_currency_copper.rs_currency_copper",
+        "Amount": 100
+      }
+    ],
+    "Unlock": true
+  },
+
+  // Explicit AddTo opts out of source-menu inheritance.
+  "crimson_ledger": {
+    "$Clone": "/Game/Gameplay/BaseBuilding_New/BuildingPieces/Decorations/Literature/BUILDPIECE_DA_BaseBuilding_Decoration_Literature_Book_Tome_Generic_Laying.BUILDPIECE_DA_BaseBuilding_Decoration_Literature_Book_Tome_Generic_Laying",
+    "Properties": {
+      "BuildableActor": "/Coinage/Buildings/Actors/BP_Buildable_CrimsonLedger.BP_Buildable_CrimsonLedger_C",
+      "DisplayName": "Crimson Ledger"
+    },
+    "Requirements": [
+      {
+        "ItemData": "/Game/RuneSchema/Currency/Items/rs_currency_copper.rs_currency_copper",
+        "Amount": 25
+      }
+    ],
+    "Unlock": true,
+    "AddTo": { "Collection": "Currency", "PageIndex": 0 }
+  }
+}

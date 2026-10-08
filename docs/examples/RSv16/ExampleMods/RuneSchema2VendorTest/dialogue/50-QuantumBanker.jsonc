@@ -1,0 +1,139 @@
+{
+  "Id": "quantum_banker_story",
+  "Entry": "hello",
+  "Nodes": {
+    "hello": {
+      "Text": "Welcome to Quantum Banking. Your money is both here and gone until you check your balance. I recommend not checking.",
+      "Choices": [
+        {
+          "Id":"ghost_account","Text":"Mortimer's giant account is settled. Anything to add?",
+          "RequirementUnlock": {"Quest": {"Id":"mortimer_debtors","States":["Completed"]}},"Next":"ghost_offer"
+        },
+        {
+          "Id": "trade",
+          "Text": "Let me exchange coins.",
+          "VendorID": "quantum_exchange"
+        },
+        {
+          "Id": "questions",
+          "Text": "About your banking business...",
+          "Next": "questions"
+        },
+        {
+          "Id": "leave",
+          "Text": "I'll keep my money, thanks.",
+          "End": true
+        }
+      ]
+    },
+    "ghost_offer": {
+      "Text":"You killed Compound Interest? Excellent. His debt survives him. I can repossess his ghost nearby. This is a rematch, not another payout. Our returns policy is mostly a haunting.",
+      "Choices":[
+        {"Id":"summon","Text":"Repossess the ghost.","RequirementUnlock": {"Quest": {"Id":"mortimer_debtors","States":["Completed"]}},"Event":{"Id":"quantum_ghost_rematch","Action":"Start"},"Next":"ghost_result"},
+        {"Id":"cancel","Text":"Close the ghost account.","RequirementUnlock": {"Quest": {"Id":"mortimer_debtors","States":["Completed"]}},"Event":{"Id":"quantum_ghost_rematch","Action":"Cancel"},"Next":"ghost_result"},
+        {"Id":"back","Text":"Back to banking.","Next":"hello"}
+      ]
+    },
+    "ghost_result":{"Text":"Your spectral account has been updated. Please retain your existential receipt.","Choices":[{"Id":"bye","Text":"Goodbye.","End":true}]},
+    "reincarnation": {
+      "Text": "No! I came from another world, where money was everything. We measured friendship in dividends and charged interest on eye contact. I died doing what I loved: checking whether a free sample was tax-deductible.",
+      "Choices": [
+        {
+          "Id": "rebirth",
+          "Text": "And you were reincarnated here?",
+          "Next": "rebirth"
+        },
+        {
+          "Id": "back",
+          "Text": "Let's talk banking.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "rebirth": {
+      "Text": "A mysterious voice offered me a second life with unlimited potential. I asked for a cutting-edge career in finance. Now I am a floating sword. Apparently my portfolio needed more steel and fewer securities. On the bright side, I can finally slash interest rates.",
+      "Choices": [
+        {
+          "Id": "lesson",
+          "Text": "Did you learn anything?",
+          "Next": "lesson"
+        },
+        {
+          "Id": "back",
+          "Text": "That explains the lack of pockets.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "lesson": {
+      "Text": "Absolutely. Money cannot buy happiness. It can, however, rent a convincingly similar expression. I have no face, so my overheads are excellent. My overhead icon is also excellent.",
+      "Choices": [
+        {
+          "Id": "back",
+          "Text": "I have heard enough financial wisdom.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "currency": {
+      "Text": "One hundred copper makes a silver; one hundred silver makes a gold. I exchange both directions, with no banking fee. Please do not push coins into me. Last time I sneezed change for a week.",
+      "Choices": [
+        {
+          "Id": "loot",
+          "Text": "Where do coins come from?",
+          "Next": "loot"
+        },
+        {
+          "Id": "back",
+          "Text": "A surprisingly clear explanation.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "loot": {
+      "Text": "Loot! Copper is common, silver less so, and gold is rare. Do not ask why a wolf has savings. Some creatures have better retirement plans than I do.",
+      "Choices": [
+        {
+          "Id": "back",
+          "Text": "I'll diversify into wolves.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "null": {
+      "Text": "NuLL asked me to invest in his forge. I said the returns looked solid. He said they would be molten. We have been laughing for three fiscal quarters. Granite has requested a restraining ore-der.",
+      "Choices": [
+        {
+          "Id": "back",
+          "Text": "Your jokes are a depreciating asset.",
+          "Next": "hello"
+        }
+      ]
+    },
+    "questions": {
+      "Text": "Financial advice is free. The consequences are not.",
+      "Choices": [
+        {
+          "Id": "past",
+          "Text": "Were you always a floating sword?",
+          "Next": "reincarnation"
+        },
+        {
+          "Id": "coins",
+          "Text": "Explain the coins.",
+          "Next": "currency"
+        },
+        {
+          "Id": "neighbor",
+          "Text": "How is business beside NuLL?",
+          "Next": "null"
+        },
+        {
+          "Id": "back",
+          "Text": "Back.",
+          "Next": "hello"
+        }
+      ]
+    }
+  }
+}

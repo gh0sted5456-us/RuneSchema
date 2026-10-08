@@ -1,0 +1,43 @@
+# CMake and IDE output
+build/
+build-*/
+out/
+outputs/
+work/
+.vs/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# Compiled artifacts
+*.dll
+*.exe
+*.exp
+*.ilk
+*.lib
+*.obj
+*.pdb
+
+# Local dependency cache, packaging and runtime data
+.cache/
+dist/
+plugins/
+clean-base/
+runtime/
+release/
+example-mods/
+RuneSchema/mods/
+RuneSchema/config/
+
+# Editor and operating-system files
+.vscode/
+*.user
+*.suo
+.DS_Store
+Thumbs.db
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
+
+# Local MkDocs preview output.
+/site/

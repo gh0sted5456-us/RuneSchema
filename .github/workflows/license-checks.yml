@@ -1,0 +1,66 @@
+name: License packaging checks
+
+on:
+  pull_request:
+    paths:
+      - 'LICENSE'
+      - 'AUTHORS.md'
+      - 'CONTRIBUTING.md'
+      - 'README.md'
+      - 'source/README.md'
+      - 'docs/LICENSING.md'
+      - 'docs/NEXUS-LICENSING.txt'
+      - 'LICENSING.md'
+      - 'THIRD_PARTY_NOTICES.md'
+      - 'licenses/**'
+      - 'build/package-licenses.ps1'
+      - 'build/test-package-licenses.ps1'
+      - 'build/build.bat'
+      - '.github/workflows/license-checks.yml'
+  push:
+    branches: [main, experimental]
+    paths:
+      - 'LICENSE'
+      - 'AUTHORS.md'
+      - 'CONTRIBUTING.md'
+      - 'README.md'
+      - 'source/README.md'
+      - 'docs/LICENSING.md'
+      - 'docs/NEXUS-LICENSING.txt'
+      - 'LICENSING.md'
+      - 'THIRD_PARTY_NOTICES.md'
+      - 'licenses/**'
+      - 'build/package-licenses.ps1'
+      - 'build/test-package-licenses.ps1'
+      - 'build/build.bat'
+      - '.github/workflows/license-checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  license-packaging:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Parse and test on Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          foreach ($path in @('build/package-licenses.ps1', 'build/test-package-licenses.ps1')) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD $path), [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) { throw ($errors | Out-String) }
+          }
+          & ./build/test-package-licenses.ps1
+      - name: Parse and test on PowerShell 7
+        shell: pwsh
+        run: |
+          foreach ($path in @('build/package-licenses.ps1', 'build/test-package-licenses.ps1')) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD $path), [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) { throw ($errors | Out-String) }
+          }
+          & ./build/test-package-licenses.ps1

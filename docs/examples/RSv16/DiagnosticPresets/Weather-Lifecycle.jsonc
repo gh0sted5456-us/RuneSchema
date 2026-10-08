@@ -1,0 +1,25 @@
+{
+  // Select BP_WeatherActor_C or a live SwitchableWeatherVolume when available.
+  // Capture once during natural weather, then again after domSetWeather changes it.
+  "Name": "Weather-Lifecycle",
+  "Objects": [
+    "/Game/Gameplay/World/Weather/BP_WeatherActor.BP_WeatherActor_C",
+    "/Script/Dominion.RegionSpecificGlobalWeatherActor",
+    "/Script/Dominion.SwitchableWeatherVolume",
+    "/Script/Dominion.EWeatherType"
+  ],
+  "PropertyCaptures": [
+    { "Root": "Selected", "Path": ["WeatherState"], "Optional": true },
+    { "Root": "Selected", "Path": ["WeatherType"], "Optional": true },
+    { "Root": "Selected", "Path": ["CurrentWeather"], "Optional": true },
+    { "Root": "Selected", "Path": ["Priority"], "Optional": true },
+    { "Root": "Selected", "Path": ["bEnabled"], "Optional": true }
+  ],
+  "CaptureLimits": {
+    "MaxDepth": 8,
+    "MaxEntries": 256,
+    "MaxNodes": 8192,
+    "MaxSparseSlots": 4096,
+    "FollowObjectReferences": false
+  }
+}

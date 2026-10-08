@@ -1,0 +1,7 @@
+# Dragonwilds Sync ID v1
+Schema: DragonwildsSync.ID.v1
+ModID: RuneSchemaBuildingOverrideExample
+Name: RuneSchema Coinage Station Override Example
+Author: RuneSchema Project
+RuntimeRole: both
+HOTLOAD = NO

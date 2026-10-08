@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "anyOf": [
+    {
+      "additionalProperties": true,
+      "patternProperties": {
+        "^[^$]": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    {
+      "items": {
+        "additionalProperties": true,
+        "patternProperties": {
+          "^[^$]": {
+            "additionalProperties": true,
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "type": "array"
+    }
+  ],
+  "description": "Structural authoring hints, not an exhaustive runtime validator. Asset paths, identities, reflected properties and event compatibility must be validated in game.",
+  "title": "RuneSchema /blueprints",
+  "x-runeschema-coverage": "structural",
+  "x-runeschema-starter-capabilities": {
+    "append": true,
+    "clone": false,
+    "patch": true,
+    "search": "loaded records",
+    "runtimeWidget": true
+  },
+  "x-runeschema-runtime-widget": {
+    "description": "Event-driven live widget property edits and optional multicast delegate binding.",
+    "owner": "Existing loaded widget Blueprint class name or /Game/ generated-class path.",
+    "widgetPath": "Dot-separated reflected object-property path from the live owner widget.",
+    "bind": {
+      "Event": "Reflected multicast delegate property on the target widget.",
+      "Target": "Optional dot-separated path from the owner; omit or use $Owner for the owner.",
+      "Function": "Reflected function on the selected target with a compatible delegate signature.",
+      "Compatibility": "Reflected parameter contract: count, direction, property type, referenced type/container element type, and return type. Raw ParmsSize/padding is ignored."
+    },
+    "hotReload": false,
+    "storefront": {
+      "$Storefront": "Optional string or array: GamePass/WinGDK, Steam/SteamGOG/GOG, Any.",
+      "$SkipMessage": "Optional informational message emitted when a known storefront does not match."
+    }
+  }
+}

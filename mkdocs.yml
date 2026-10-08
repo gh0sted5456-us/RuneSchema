@@ -1,0 +1,151 @@
+site_name: RuneSchema
+site_description: "Authoring and runtime reference for RuneSchema, a UE4SS content runtime for RuneScape: Dragonwilds."
+site_url: https://gh0sted5456-us.github.io/RuneSchema/
+repo_url: https://github.com/gh0sted5456-us/RuneSchema
+repo_name: gh0sted5456-us/RuneSchema
+
+theme:
+  name: material
+  language: en
+  logo: assets/images/runeschema-icon.png
+  favicon: assets/images/runeschema-icon.png
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: deep purple
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      accent: deep purple
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  features:
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+
+plugins:
+  - search:
+      separator: '[\\s\\-\\.\\_]+'
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/extra.js
+
+extra:
+  generator: false
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/gh0sted5456-us/RuneSchema
+      name: RuneSchema on GitHub
+
+copyright: >-
+  Copyright (c) 2026 RSDW Modding Community · MIT for covered original code and documentation · Upstream rights retained
+
+nav:
+  - Home: index.md
+  - Monday Update:
+      - What Is New: CURRENT-RELEASE.md
+      - Install or Update: INSTALLATION.md
+      - Optional Bridges: OPTIONAL-BRIDGES.md
+      - Platform and Multiplayer: COMPATIBILITY.md
+      - Save Safety: SAFE-SAVE-AND-LEDGER.md
+  - Create Mods:
+      - First RuneSchema Mod: AUTHORING-GUIDE.md
+      - Create PAK Content: PAK-CONTENT-GUIDE.md
+      - Create Weapons and Items: WEAPONS-AND-ITEMS.md
+      - Create Stations and Recipes: STATIONS-AND-RECIPES.md
+      - Shared Registry Bridge PAK: SHARED-REGISTRY-BRIDGE-PAK.md
+      - Registry Bridge Diagnostics: BRIDGE-DIAGNOSTICS.md
+      - Presentation Transport: PRESENTATION-TRANSPORT.md
+      - Summoning Authority Bridge: SUMMONING-AUTHORITY-BRIDGE.md
+      - Advanced PAK Registries: COOKED-PAK-REGISTRY-MANIFEST.md
+      - Combat Fallback Settings: COMBAT-FALLBACK-SETTINGS.md
+      - Loader Folder Guide: LOADER-WALKTHROUGHS.md
+      - UE4SS Lua Companions: UE4SS-LUA-COMPANIONS.md
+      - Example Library: EXAMPLES.md
+      - Golden Interaction Text Example: examples/GoldenInteractionText/README.md
+      - Loader Details:
+          - Assets: reference/loaders/assets.md
+          - Blueprints: reference/loaders/blueprints.md
+          - Buildings: reference/loaders/buildings.md
+          - Courses: reference/loaders/courses.md
+          - Dialogue: reference/loaders/dialogue.md
+          - Effects: reference/loaders/effects.md
+          - Enums: reference/loaders/enums.md
+          - Equipment: reference/loaders/equipment.md
+          - Events: reference/loaders/events.md
+          - Journal: reference/loaders/journal.md
+          - Lore: reference/loaders/lore.md
+          - Nameplates: reference/loaders/nameplates.md
+          - Niagara: reference/loaders/niagara.md
+          - NPCs: reference/loaders/npc.md
+          - Players: reference/loaders/players.md
+          - Quests: reference/loaders/quests.md
+          - Raw tables: reference/loaders/raw.md
+          - Recipes: reference/loaders/recipes.md
+          - Registry: reference/loaders/registry.md
+          - Spawns: reference/loaders/spawns.md
+          - Strings: reference/loaders/strings.md
+          - Vendors: reference/loaders/vendors.md
+  - Development:
+      - Contributor Guide: development/DEVELOPER-GUIDE.md
+      - Plugin API: development/API-REFERENCE.md
+      - Character Creation: development/CHARACTER-CREATION-AUTHORING.md
+      - Building Cloning: development/BUILDING-CLONING.md
+      - Registry Patching: development/REGISTRY-PATCHING.md
+      - Compatibility Backbone: development/COMPATIBILITY-BACKBONE.md
+      - Storefront Lanes: development/STOREFRONT-LANES.md
+      - Manual Save Recovery: development/MANUAL-SAVE-RECOVERY.md
+      - Unreal + RuneSchema:
+          - Overview: development/unreal-runeschema/index.md
+          - Stations, Quests, and Recipes: development/unreal-runeschema/stations-quests-recipes.md
+  - Help:
+      - Ask RuneSchema: ASK-RUNESCHEMA.md
+      - Troubleshooting: TROUBLESHOOTING.md
+      - Documentation Map: DOCUMENTATION-INDEX.md
+      - JSON Schemas: SCHEMAS.md
+      - Licensing and Ownership: LICENSING.md

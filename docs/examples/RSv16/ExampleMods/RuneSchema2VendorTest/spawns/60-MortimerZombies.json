@@ -1,0 +1,7 @@
+[
+  {"Id":"rs_mortimer_west","Type":"AISpawnPoint","EventOnly":true,"AIClass":"/FutureMajorVersion/Gameplay/AI/ZombieFaction/Zombie/BP_AI_Zombie_Character.BP_AI_Zombie_Character_C","DisplayName":"Overdue Oliver"},
+  {"Id":"rs_mortimer_east","Type":"AISpawnPoint","EventOnly":true,"AIClass":"/FutureMajorVersion/Gameplay/AI/ZombieFaction/Zombie/BP_AI_Zombie_Character.BP_AI_Zombie_Character_C","DisplayName":"Delinquent Doris"},
+  {"Id":"rs_mortimer_north","Type":"AISpawnPoint","EventOnly":true,"AIClass":"/FutureMajorVersion/Gameplay/AI/ZombieFaction/Zombie/BP_AI_Zombie_Character.BP_AI_Zombie_Character_C","DisplayName":"Past-Due Percy"},
+  {"Id":"rs_mortimer_giant","Type":"AISpawnPoint","EventOnly":true,"AIClass":"/FutureMajorVersion/Gameplay/AI/ZombieFaction/Zombie/BP_AI_Zombie_Character.BP_AI_Zombie_Character_C","DisplayName":"Compound Interest, the Unpaid","BossName":"Compound Interest, the Unpaid","Scale":2,"LootRow":"RS_Quantum_GiantGold"},
+  {"Id":"rs_quantum_ghost_giant","Type":"AISpawnPoint","EventOnly":true,"AIClass":"/FutureMajorVersion/Gameplay/AI/ZombieFaction/Zombie/BP_AI_Zombie_Character.BP_AI_Zombie_Character_C","DisplayName":"Compound Interest, the Repossessed","BossName":"Compound Interest, the Repossessed","Scale":2,"LootRow":"RS_Quantum_GhostEmpty","VisualEffect":{"Type":"Ghost Glow","MainColor":{"R":0.45,"G":0.15,"B":0.95,"A":1},"SecondaryColor":{"R":0.08,"G":0.55,"B":0.85,"A":1}}}
+]

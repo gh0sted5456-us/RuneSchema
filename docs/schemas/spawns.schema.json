@@ -1,0 +1,419 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Structural authoring hints, not an exhaustive runtime validator. Asset paths, identities, reflected properties and event compatibility must be validated in game.",
+  "items": {
+    "additionalProperties": true,
+    "allOf": [
+      {
+        "if": {
+          "required": [
+            "EventOnly"
+          ]
+        },
+        "then": {
+          "additionalProperties": false,
+          "properties": {
+            "AIClass": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "BossName": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "DisplayName": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "EventOnly": {
+              "const": true
+            },
+            "Id": {
+              "type": "string"
+            },
+            "LootRow": {
+              "maxLength": 256,
+              "minLength": 1,
+              "pattern": "^[^\\r\\n\\t]+$",
+              "type": "string"
+            },
+            "PowerLevel": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "Scale": {
+              "maximum": 100,
+              "minimum": 0.01,
+              "type": "number"
+            },
+            "Type": {
+              "const": "AISpawnPoint"
+            },
+            "VisualEffect": {
+              "additionalProperties": false,
+              "description": "All NPC visual types. Applies to meshes, including human equipment/weapons, not nameplate widgets. Enable Overlay or BodyMaterial.",
+              "properties": {
+                "BodyMaterial": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "MainColor": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "A": {
+                      "maximum": 1,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "B": {
+                      "maximum": 64,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "G": {
+                      "maximum": 64,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "R": {
+                      "maximum": 64,
+                      "minimum": 0,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "R",
+                    "G",
+                    "B",
+                    "A"
+                  ],
+                  "type": "object"
+                },
+                "Overlay": {
+                  "default": true,
+                  "type": "boolean"
+                },
+                "SecondaryColor": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "A": {
+                      "maximum": 1,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "B": {
+                      "maximum": 64,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "G": {
+                      "maximum": 64,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "R": {
+                      "maximum": 64,
+                      "minimum": 0,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "R",
+                    "G",
+                    "B",
+                    "A"
+                  ],
+                  "type": "object"
+                },
+                "Type": {
+                  "const": "Ghost Glow"
+                }
+              },
+              "required": [
+                "Type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "Id",
+            "Type",
+            "EventOnly",
+            "AIClass"
+          ],
+          "type": "object"
+        }
+      }
+    ],
+    "dependencies": {
+      "DuplicateRadius": {
+        "required": [
+          "QuestCompleted"
+        ]
+      },
+      "PersistAfterCondition": {
+        "required": [
+          "QuestCompleted"
+        ]
+      },
+      "SpawnRadiusMeters": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "MinSpawnDistance"
+              ]
+            },
+            {
+              "required": [
+                "MaxSpawnDistance"
+              ]
+            },
+            {
+              "required": [
+                "EventOnly"
+              ]
+            }
+          ]
+        },
+        "properties": {
+          "RequiresActivation": {
+            "const": false
+          },
+          "Type": {
+            "const": "AISpawnPoint"
+          }
+        },
+        "required": [
+          "Type"
+        ]
+      }
+    },
+    "properties": {
+      "AdditionalDrops": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "ChancePercent": {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "number"
+            },
+            "Item": {
+              "pattern": "^/[^\\r\\n\\t]+\\.[^\\r\\n\\t]+$",
+              "type": "string"
+            },
+            "Max": {
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "Min": {
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "Item",
+            "Min",
+            "Max",
+            "ChancePercent"
+          ],
+          "type": "object"
+        },
+        "maxItems": 16,
+        "type": "array"
+      },
+      "DuplicateRadius": {
+        "default": 100,
+        "description": "For quest-activated Actor and BuildingProp entries, treat the same actor class within this many centimetres as already satisfied. Zero disables the coordinate safeguard.",
+        "maximum": 10000,
+        "minimum": 0,
+        "type": "number"
+      },
+      "Grid": {
+        "additionalProperties": false,
+        "properties": {
+          "Columns": {
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "Rows": {
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "SpacingMeters": {
+            "maximum": 1000,
+            "minimum": 0.1,
+            "type": "number"
+          }
+        },
+        "required": [
+          "Rows",
+          "Columns",
+          "SpacingMeters"
+        ],
+        "type": "object"
+      },
+      "GroundOffset": {
+        "default": 0,
+        "description": "Centimetre offset above or below the resolved ground. Do not combine with the Location.Z $+offset shorthand.",
+        "maximum": 100000,
+        "minimum": -100000,
+        "type": "number"
+      },
+      "GroundToSurface": {
+        "default": true,
+        "description": "Trace the authored X/Y placement onto blocking ground before spawning. Disable only for intentionally airborne actors.",
+        "type": "boolean"
+      },
+      "Location": {
+        "description": "World coordinates as [X,Y,Z] or {X,Y,Z}. Z accepts $, $+offset, or $-offset and resolves to blocking ground.",
+        "oneOf": [
+          {
+            "additionalItems": false,
+            "items": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^\\$([+-][0-9]+(?:\\.[0-9]+)?)?$",
+                    "type": "string"
+                  }
+                ]
+              }
+            ],
+            "maxItems": 3,
+            "minItems": 3,
+            "type": "array"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "X": {
+                "type": "number"
+              },
+              "Y": {
+                "type": "number"
+              },
+              "Z": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^\\$([+-][0-9]+(?:\\.[0-9]+)?)?$",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "X",
+              "Y",
+              "Z"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "PersistAfterCondition": {
+        "default": true,
+        "description": "Latch a completed quest condition so an activated placement remains available. Set false for a placement that should exist only while the completion state is observable.",
+        "type": "boolean"
+      },
+      "PowerLevel": {
+        "description": "Native Dominion AI spawn power level. Supported on AISpawnPoint entries and validated for every authored ID.",
+        "maximum": 100,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "QuestCompleted": {
+        "description": "Activate this placement after a local Id or Mod:Id quest is completed by a connected participant. Combines with TimeOfDay when both are present.",
+        "maxLength": 512,
+        "minLength": 1,
+        "type": "string"
+      },
+      "Rotation": {
+        "additionalProperties": false,
+        "description": "Unreal rotator in degrees. Use the named Pitch, Yaw and Roll fields.",
+        "properties": {
+          "Pitch": {
+            "type": "number"
+          },
+          "Roll": {
+            "type": "number"
+          },
+          "Yaw": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "Pitch",
+          "Yaw",
+          "Roll"
+        ],
+        "type": "object"
+      },
+      "Scale": {
+        "anyOf": [
+          {
+            "maximum": 100,
+            "minimum": 0.01,
+            "type": "number"
+          },
+          {
+            "items": {
+              "maximum": 100,
+              "minimum": 0.01,
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": "array"
+          }
+        ],
+        "description": "Uniform number or XYZ actor scale. Every component accepts 0.01 through 100."
+      },
+      "SpawnRadiusMeters": {
+        "description": "Ordinary AISpawnPoint native proximity eligibility radius in metres. Minimum distance becomes zero; external activation is disabled. Cannot combine with MinSpawnDistance, MaxSpawnDistance or raw radius/activation Properties. Native streaming, navigation, population and respawn rules still apply; not a guaranteed one-shot ambush trigger.",
+        "maximum": 10000,
+        "minimum": 0.01,
+        "type": "number"
+      },
+      "TimeOfDay": {
+        "default": "Any",
+        "description": "Authority-controlled lifecycle gate for AI spawn points, resource actors, and functional BuildingProp entries. Timed actors are transient and cannot use native respawn persistence.",
+        "enum": [
+          "Any",
+          "Day",
+          "Night"
+        ]
+      }
+    },
+    "type": "object"
+  },
+  "title": "RuneSchema /spawns",
+  "type": "array",
+  "x-runeschema-coverage": "structural",
+  "x-runeschema-starter-capabilities": {
+    "append": false,
+    "clone": false,
+    "patch": false,
+    "search": "authored files"
+  }
+}

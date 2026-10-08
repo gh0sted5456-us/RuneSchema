@@ -1,0 +1,12 @@
+﻿{
+    "Schema":  1,
+    "Repository":  "RSDWArchive/RSDWArchive",
+    "Ref":  "main",
+    "Commit":  "68b81bc2f76186f55a9524c72218ca030f9bb97a",
+    "Version":  "1.0.0.5",
+    "File":  "RSDragonwilds-5.6.1-244954+++dominion+hotfix-f6d5f942.usmap",
+    "GitBlobSha":  "6d32cdebde79016172c9174b6cd0fcdc812d2706",
+    "Size":  3596866,
+    "Sha256":  "534ed194b5e314741009f71d29a03b5096ae158d49f151aebce6f1bae22029b8",
+    "DownloadUrl":  "https://raw.githubusercontent.com/RSDWArchive/RSDWArchive/68b81bc2f76186f55a9524c72218ca030f9bb97a/1.0.0.5/usmap/RSDragonwilds-5.6.1-244954+++dominion+hotfix-f6d5f942.usmap"
+}

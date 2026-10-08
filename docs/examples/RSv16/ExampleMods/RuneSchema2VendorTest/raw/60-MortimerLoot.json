@@ -1,0 +1,10 @@
+{
+  "DT_EnemyLootDropTable":{
+    "RS_Quantum_GiantGold":{"TablesByPowerLevel":[{"MinimumPowerLevel":0,"TableHandles":[{"DataTable":"/Game/Gameplay/Items/LootDropTables/DT_LootDropTable.DT_LootDropTable","RowName":"RS_Quantum_GiantGold"}]}]},
+    "RS_Quantum_GhostEmpty":{"TablesByPowerLevel":[{"MinimumPowerLevel":0,"TableHandles":[{"DataTable":"/Game/Gameplay/Items/LootDropTables/DT_LootDropTable.DT_LootDropTable","RowName":"RS_Quantum_GhostEmpty"}]}]}
+  },
+  "DT_LootDropTable":{
+    "RS_Quantum_GiantGold":{"Conditions":[],"DropChance":100,"Resources":[{"SpawnedItemData":"/Game/RuneSchema/Currency/Items/rs_currency_gold.rs_currency_gold","MinimumDropAmount":3,"MaximumDropAmount":3,"DropChance":100,"bOneInstancePerPlayerOnlyVisibleToThem":false,"bAutoAddToInventory":false,"bOnlyForPlayersThatInflictedDamage":false}],"Recipes":[]},
+    "RS_Quantum_GhostEmpty":{"Conditions":[],"DropChance":0,"Resources":[],"Recipes":[]}
+  }
+}

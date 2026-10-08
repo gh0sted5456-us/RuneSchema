@@ -1,0 +1,33 @@
+{
+  // Equip the target item and exercise melee, ranged, evade, magic and utility actions.
+  // For Shadowveil, cast it first and repeat every action before exporting.
+  "Version": 1,
+  "Name": "Equipment-UtilityMagic",
+  "Description": "Captures current equipment, gameplay-effect and UtilityMagic call paths for executable-profile hardening.",
+  "Trace": {
+    "Seconds": 60,
+    "MaxEvents": 4096,
+    "Categories": 31,
+    "IncludeAny": [
+      "GameplayEffect",
+      "ShadowVeil",
+      "UtilityMagic",
+      "WearableEquipment",
+      "HeldEquipment"
+    ],
+    "SuppressTicks": true,
+    "TraceSelectedObject": true,
+    "CaptureParameters": true,
+    "EventCaptures": [
+      { "Root": "Target", "Path": ["Data"] },
+      { "Root": "Target", "Path": ["Source"] },
+      { "Root": "Target", "Path": ["GrantedEffects"] },
+      { "Root": "Target", "Path": ["PlayerCharacter"] },
+      { "Root": "Target", "Path": ["PlayerEquipmentComponent"] }
+    ]
+  },
+  "Export": {
+    "Name": "Equipment-UtilityMagic",
+    "Jsonc": false
+  }
+}

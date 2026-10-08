@@ -1,0 +1,17 @@
+{
+  "SchemaVersion": 1,
+  "Id": "RuneSchema.Helpy",
+  "Version": "0.7.7.4m",
+  "BuiltForRuneSchema": "0.7.7.4m",
+  "EntryPoint": "RuneSchema.Helpy.dll",
+  "ConsoleMessage": "Helpy is ready with its embedded instant-open catalog. Use the configured hotkey to open it.",
+  "Capabilities": [
+    "helpy.navigation",
+    "helpy.item-lab",
+    "helpy.recipe-studio",
+    "helpy.journal-quests",
+    "authoring.live-preview",
+    "authoring.export"
+  ],
+  "MountPaks": false
+}

@@ -1,0 +1,23 @@
+{
+  "Id": "goblin_patrol",
+  "PersistenceID": "AAAAAAAAAAAAAAAAAAAAAA",
+  "Title": "Goblin Patrol",
+  "Description": "Thin the goblin patrol near the road.",
+  "Objective": {
+    "Id": "goblins",
+    "Type": "Kill",
+    "Text": "Kill 5 goblins",
+    "ProgressText": "Kill {remaining} more goblins",
+    "CompleteText": "The goblin patrol is defeated",
+    "AnnounceProgress": true,
+    "AIClasses": ["/Game/Gameplay/AI/Goblin/BP_AI_Goblin.BP_AI_Goblin_C"],
+    "Count": 5,
+    "Location": [0, 0, 0],
+    "RadiusMeters": 100
+  },
+  "Reward": {
+    "Item": "/Game/Gameplay/Items/Resources/Coins/ITEM_Coins.ITEM_Coins",
+    "Count": 25
+  }
+}
+

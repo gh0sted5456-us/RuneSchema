@@ -1,0 +1,52 @@
+{
+  "/Game/RuneSchema/RuneSchema2VendorTest/Items/rs_sacred_leaf.rs_sacred_leaf": {
+    "$Clone": "/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment",
+    "InternalName": "rs_sacred_leaf",
+    "PersistenceID": "7wkETHHMVYCK3mipH0JMRg",
+    "Name": "Sacred Leaf",
+    "FlavourText": "A leaf sacred to the brothers of the Great Tree. Accepted for provisions and outrageously expensive treasures.",
+    "Icon": {
+      "AssetPathName": "/Game/Art/UI/Icons/Icons_0_12_UmS/Icons/T_Icon_Tea_Leaves_01.T_Icon_Tea_Leaves_01",
+      "SubPathString": ""
+    },
+    "StaticMesh": {
+      "AssetPathName": "/Game/Art/Item/Resources/Plant_Satchel/SM_Plant_Satchel_01.SM_Plant_Satchel_01",
+      "SubPathString": ""
+    },
+    "Weight": 0,
+    "MaxStackSize": 9999,
+    "AudioSwitchTag": {
+      "TagName": "Audio.Plant"
+    }
+  },
+  "/Game/RuneSchema/RuneSchema2VendorTest/Items/rs_little_stone.rs_little_stone": {
+    "$Clone": "/Game/Gameplay/Items/Resources/Mineral/ITEM_Resources_Stone.ITEM_Resources_Stone",
+    "InternalName": "rs_little_stone",
+    "PersistenceID": "HUJn0zGBXWey891Daq5cww",
+    "Name": "Little Stone",
+    "FlavourText": "Moggruk's unimpressive trophy. Bring it to Grumble after defeating his tribe.",
+    "Weight": 0,
+    "MaxStackSize": 1,
+    "Category": {
+      "TagName": "Item.QuestItem.KeyItem"
+    },
+    "ItemFilterTags": [
+      "ItemFilter.Type.QuestItem"
+    ]
+  },
+  "/Game/RuneSchema/RuneSchema2VendorTest/Items/rs_grumbles_news.rs_grumbles_news": {
+    "$Clone": "/Game/Gameplay/Items/Resources/Mineral/ITEM_Resources_Stone.ITEM_Resources_Stone",
+    "InternalName": "rs_grumbles_news",
+    "PersistenceID": "dksy_OKuWqawO_gHuIxcRw",
+    "Name": "Grumble's News",
+    "FlavourText": "Grumble's message: the tribe is defeated. Return to Granite to finish the quest.",
+    "Weight": 0,
+    "MaxStackSize": 1,
+    "Category": {
+      "TagName": "Item.QuestItem.KeyItem"
+    },
+    "ItemFilterTags": [
+      "ItemFilter.Type.QuestItem"
+    ]
+  }
+}

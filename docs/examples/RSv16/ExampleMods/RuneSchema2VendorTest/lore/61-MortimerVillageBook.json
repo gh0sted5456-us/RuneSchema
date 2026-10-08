@@ -1,0 +1,26 @@
+{
+  "rs_mortimer_village_ledger": {
+    "Type": "Lore",
+    "DisplayName": "The Village Ledger",
+    "PageDescriptions": [
+      {
+        "Description": "Before the Ashes\n\nOur village was small enough that nobody knocked and large enough that everybody complained about it. Smoke curled from low roofs. A muddy lane joined the well, the smithy and the little burial ground where I kept the records. Children counted the bell's strokes; their parents counted cabbages, copper and the days until harvest.\n\nI recorded births beside deaths, because a village should remember more than its endings. There was always another name to write.\n\n- Mortimer, village keeper of records"
+      },
+      {
+        "Description": "The Last Bell\n\nThe goblins came before dawn. We rang the bell to warn those still sleeping. Then we rang it to gather the scattered. Only later did we understand that every stroke told the attackers where we were hiding.\n\nBy sunrise the smithy had fallen silent. The well was choked with ash. I found this ledger beneath a broken beam and began counting the missing. I never finished.\n\nThe last entry in my own hand was my neighbour's name. Someone should have written mine next."
+      },
+      {
+        "Description": "Unfinished Business\n\nThere were older words in this book: forbidden rites, squeezed into its margins by a hand less sensible than mine. Beneath the ashes, something answered them. I rose. I was taller than I remembered. Death, apparently, has terrible tailoring.\n\nI tried to bring the others back. Their bodies answered. Their laughter did not. Now they wander, and I call them debtors because their real names still hurt to say.\n\nIf you help me put them to rest, leave a coin for each grave. Not payment. A marker. Let the village be remembered for the people who lived here, not merely the things I made of them."
+      }
+    ],
+    "AddTo": {
+      "SubCategory": "/Game/UI/JournalData/JOURNAL_SC_Know_LoreScraps.JOURNAL_SC_Know_LoreScraps",
+      "Group": {
+        "Id": "rs_mortimer_village",
+        "DisplayName": "The Lost Village",
+        "CreateIfMissing": true
+      }
+    },
+    "Unlock": false
+  }
+}

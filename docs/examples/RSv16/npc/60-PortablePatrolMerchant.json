@@ -1,0 +1,9 @@
+{
+  "Id": "patrol_merchant",
+  "DisplayName": "Patrol Quartermaster",
+  "VisualSource": "/Game/Gameplay/Character/NPC/BP_NPC_Base.BP_NPC_Base_C",
+  "Location": [0, 0, 0],
+  "VendorID": "patrol_supplies",
+  "DialogueID": "patrol_captain"
+}
+

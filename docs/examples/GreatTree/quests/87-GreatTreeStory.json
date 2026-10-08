@@ -1,0 +1,78 @@
+{
+  "Id": "great_tree_story",
+  "PersistenceID": "pvqqg5cqXa6BQvpCFA6LoQ",
+  "Title": "A Little Stone, a Large Problem",
+  "Description": "Granite asks you to speak with Grumble. Defeat his tribe, bring the Little Stone to Grumble, then return to Granite with the news.",
+  "Category": "Story",
+  "Completion": "ReturnToNPC",
+  "Repeatable": false,
+  "Reward": {
+    "Item": "/Game/Gameplay/Items/Resources/Mineral/ITEM_Resources_Stone.ITEM_Resources_Stone",
+    "Count": 1
+  },
+  "Stages": [
+    {
+      "Id": "tribe",
+      "Objectives": [
+        {
+          "Id": "defeat_tribe",
+          "Type": "Kill",
+          "Text": "Speak to Grumble, begin his challenge, and defeat all five waves.",
+          "AIClasses": [
+            "/Game/Gameplay/AI/GoblinFaction/MeleeGoblin/BP_AI_MeleeGoblin_Character.BP_AI_MeleeGoblin_Character_C",
+            "/Game/Gameplay/AI/GoblinFaction/RangedGoblin/BP_AI_RangedGoblin_Character.BP_AI_RangedGoblin_Character_C",
+            "/Game/Gameplay/AI/GoblinFaction/ShieldGoblin/BP_AI_ShieldGoblin_Character.BP_AI_ShieldGoblin_Character_C"
+          ],
+          "IncludeDerived": true,
+          "EventID": "great_tree_tribe_trial",
+          "SpawnID": "great_tree_tribe_trial_5_shield",
+          "Count": 1,
+          "Location": [
+            42250,
+            174375,
+            -3266
+          ],
+          "RadiusMeters": 100,
+          "AnnounceProgress": true,
+          "CompleteText": "The brute is defeated. Loot the Little Stone and return to Grumble."
+        }
+      ]
+    },
+    {
+      "Id": "stone",
+      "Objectives": [
+        {
+          "Id": "give_stone",
+          "Type": "Collect",
+          "Item": "/Game/RuneSchema/RuneSchema2VendorTest/Items/rs_little_stone.rs_little_stone",
+          "Count": 1,
+          "Text": "Bring the Little Stone to Grumble.",
+          "Location": [
+            39638,
+            171857,
+            -3266
+          ],
+          "RadiusMeters": 20
+        }
+      ]
+    },
+    {
+      "Id": "report",
+      "Objectives": [
+        {
+          "Id": "hear_news",
+          "Type": "Collect",
+          "Item": "/Game/RuneSchema/RuneSchema2VendorTest/Items/rs_grumbles_news.rs_grumbles_news",
+          "Count": 1,
+          "Text": "Ask Grumble for his message, then return to Granite.",
+          "Location": [
+            17150,
+            193450,
+            -3266
+          ],
+          "RadiusMeters": 20
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{"Id":"grumble_zogre_trial","TimeoutSeconds":900,"Waves":[
+  [{"SpawnID":"trial_grimtooth","Location":[42250,174750,-4163]}],
+  [{"SpawnID":"trial_borgruk","Location":[42250,174750,-4163]}],
+  [{"SpawnID":"trial_mournmaw","Location":[42250,174750,-4163]}]
+]}

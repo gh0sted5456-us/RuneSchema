@@ -1,0 +1,19 @@
+{
+  "schema": "runeschema.character-customization/v1",
+  "modId": "ExampleHair",
+  "entries": [
+    {
+      "id": "example-hair",
+      "type": "hair",
+      "visible": true,
+      "display": { "name": "Example Hair", "description": "Cooked by ExampleHair" },
+      "compatibility": { "bodyType": "both", "faceTypes": "all", "eyeTypes": "all" },
+      "zones": {
+        "zone1": {
+          "mesh": "/Game/Mods/ExampleHair/SK_ExampleHair.SK_ExampleHair",
+          "animClass": "/Game/Mods/ExampleHair/ABP_ExampleHair.ABP_ExampleHair_C"
+        }
+      }
+    }
+  ]
+}

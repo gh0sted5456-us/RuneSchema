@@ -1,0 +1,32 @@
+{
+  // Enter a world and load this profile. It resolves the live WeatherSubsystem.
+  // Start the Object Trace, run `world.weather Sunny`, wait for it to settle,
+  // then run `world.weather Default`, stop, and export. Do not use
+  // `world.weather.regional`: that diagnostic command bypasses TrySetWeather and
+  // writes every regional weather object directly.
+  "Version": 1,
+  "Name": "Weather-Control-Invocation",
+  "Description": "Captures WeatherSubsystem TrySetWeather/GetWeatherAtLocation calls made by RSDW Tool's Kit while setting and restoring weather.",
+  "Target": {
+    "Mode": "ClassAndName",
+    "ClassContains": "WeatherSubsystem",
+    "NameContains": "WeatherSubsystem"
+  },
+  "Trace": {
+    "Seconds": 60,
+    "MaxEvents": 4096,
+    "Categories": 31,
+    "IncludeAny": [
+      "TrySetWeather",
+      "GetWeatherAtLocation",
+      "PauseWeather"
+    ],
+    "SuppressTicks": true,
+    "TraceSelectedObject": true,
+    "CaptureParameters": true
+  },
+  "Export": {
+    "Name": "Weather-Control-Invocation",
+    "Jsonc": false
+  }
+}

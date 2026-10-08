@@ -1,0 +1,5 @@
+[
+  {"Id":"trial_grimtooth","Type":"AISpawnPoint","EventOnly":true,"AIClass":"/FutureMajorVersion/Gameplay/AI/ZombieFaction/Zogre/BP_AI_Zogre_Character.BP_AI_Zogre_Character_C","DisplayName":"Grimtooth the Tollkeeper","BossName":"Grimtooth the Tollkeeper","Scale":1.2},
+  {"Id":"trial_borgruk","Type":"AISpawnPoint","EventOnly":true,"AIClass":"/FutureMajorVersion/Gameplay/AI/ZombieFaction/Zogre/BP_AI_Zogre_Character.BP_AI_Zogre_Character_C","DisplayName":"Borgruk Iron-Gut","BossName":"Borgruk Iron-Gut","Scale":0.85},
+  {"Id":"trial_mournmaw","Type":"AISpawnPoint","EventOnly":true,"AIClass":"/FutureMajorVersion/Gameplay/AI/ZombieFaction/Zogre/BP_AI_Zogre_Character.BP_AI_Zogre_Character_C","DisplayName":"Mournmaw the Hoarder","BossName":"Mournmaw the Hoarder","Scale":1.35}
+]
