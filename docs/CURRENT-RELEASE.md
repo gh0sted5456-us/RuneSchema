@@ -93,11 +93,12 @@ the mod list or updating BPModLoaderMod.
 
 [See both optional folder layouts](PSEUDO-LOADERS.md).
 
-## Optional bridges are included in Universal
+## Bridges are included in the release package
 
-The Universal package now includes the complete shared registry bridge PAK and
-the RSNetworking bridge. They are separate plugins, so players can turn either
-one off without disabling RuneSchema.
+The existing 0.7.7.5m release includes these bridges in its **Universal** ZIP.
+Starting with the next release, one RuneSchema ZIP will include the complete
+shared registry bridge PAK and the RSNetworking bridge. They are separate
+plugins, so players can turn either one off without disabling RuneSchema.
 
 The registry bridge gives PAK authors a shared base for declaring the items,
 recipes, spells, and attacks their own cooked mod supplies. RSNetworking gives
@@ -105,8 +106,8 @@ mods a shared path for supported multiplayer presentation and identity work.
 Neither bridge invents missing content, replaces the game's save format, or
 forces RuneSchema's optional weapon fallback on.
 
-The Core package remains plugin-free. Choose it when no installed mod requires
-one of the optional bridges.
+The 0.7.7.5m Core ZIP is the last plugin-free release package. Future releases
+will have one package. Keep a bridge enabled when an installed mod requires it.
 
 [See what each optional bridge does](OPTIONAL-BRIDGES.md).
 

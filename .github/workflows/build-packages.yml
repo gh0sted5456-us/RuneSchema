@@ -23,26 +23,12 @@ jobs:
           UEPSEUDO_READ_TOKEN: ${{ secrets.UEPSEUDO_READ_TOKEN }}
         run: call "Build RuneSchema.bat"
 
-      - name: Upload Core artifact
+      - name: Upload RuneSchema artifact
         uses: actions/upload-artifact@v4
         with:
-          name: RuneSchema-Core
-          path: dist/RuneSchema-*-Core.zip
+          name: RuneSchema
+          path: dist/RuneSchema-*.zip
           if-no-files-found: error
-
-      - name: Upload Universal artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: RuneSchema-Universal
-          path: dist/RuneSchema-*-Universal.zip
-          if-no-files-found: error
-
-      - name: Upload Helpy artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: RuneSchema-Helpy
-          path: dist/RuneSchema.Helpy-*.zip
-          if-no-files-found: warn
 
       - name: Publish tagged release assets
         if: startsWith(github.ref, 'refs/tags/')
@@ -65,6 +51,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             gh release create $tag --title "RuneSchema $tag" --generate-notes
           }
-          Get-ChildItem dist -Filter '*.zip' | ForEach-Object {
-            gh release upload $tag $_.FullName --clobber
+          $package = Join-Path dist "RuneSchema-$releaseVersion.zip"
+          if (-not (Test-Path -LiteralPath $package -PathType Leaf)) {
+            throw "RuneSchema release package not found: $package"
           }
+          gh release upload $tag $package --clobber

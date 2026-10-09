@@ -23,10 +23,9 @@ gameplay into RuneSchema's shared PAKs. The mod-owned Blueprint remains the
 source of truth and the bridge carries only stable identifiers and validated
 requests.
 
-The complete runtime triplet is included and enabled in the RuneSchema
-Universal package as the `RuneSchema.RegistryBridge` plugin. It is optional for
-players whose installed mods do not use it. The Core package does not include
-it.
+The complete runtime triplet is included and enabled in the RuneSchema release
+package as the `RuneSchema.RegistryBridge` plugin. Players whose installed mods
+do not use it can disable the plugin; the package always carries the files.
 
 ## What the shared bridge solves
 

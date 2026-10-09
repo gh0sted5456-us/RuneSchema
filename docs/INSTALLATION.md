@@ -15,10 +15,11 @@ You need:
 
 Close the game before replacing RuneSchema, UE4SS, or any PAK files.
 
-Choose **Universal** for the normal installation. It includes RuneSchema's
-optional registry, networking, and Helpy plugins. Choose **Core** only when you
-want the RuneSchema program without any optional plugins. The Core package can
-still load ordinary RuneSchema mods and their PAKs.
+For releases after 0.7.7.5m, download the single `RuneSchema-<version>.zip`
+package. It includes the registry and networking bridges needed by RuneSchema
+mods, plus the Helpy plugin. There is no separate plugin-free release package.
+The existing 0.7.7.5m release still has two legacy ZIPs; choose **Universal**
+for that release.
 
 ## RuneSchema folder location
 
@@ -37,7 +38,7 @@ ue4ss/
 The exact folders above `ue4ss` depend on the store installation. Do not move
 the contents of `RuneSchema/mods` into the game's ordinary PAK folder.
 
-The Universal package also has a `RuneSchema/plugins` folder. Its
+The package also has a `RuneSchema/plugins` folder. Its
 `plugins.txt` file controls the optional components shipped with RuneSchema:
 
 ```text
@@ -99,7 +100,7 @@ the patches that depend on them.
 7. Read `UE4SS.log` for the RuneSchema startup summary.
 8. Test world entry, menu return, and world re-entry.
 
-If you previously installed the Universal package, keep your preferred values
+If you previously installed RuneSchema, keep your preferred values
 from `RuneSchema/plugins/plugins.txt` when updating. See
 [Optional bridges](OPTIONAL-BRIDGES.md) before disabling a bridge required by a
 content mod.

@@ -614,7 +614,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         Copy-Item -LiteralPath $payload -Destination $pluginRoot -Recurse
         Write-Host "Created plugin-only package $zip; RuneSchema.dll was not built or replaced." -ForegroundColor Green
     }
-    function New-Package([string]$Name, [string]$CoreDll, [string]$HelpyDll, [object]$Mappings, [bool]$IncludePlugins = $true) {
+    function New-Package([string]$Name, [string]$CoreDll, [string]$HelpyDll, [object]$Mappings) {
         $packageRoot = Join-Path $DistRoot $Name
         $payload = Join-Path $packageRoot 'RuneSchema'
         if (Test-Path $packageRoot) { Remove-Item -LiteralPath $packageRoot -Recurse -Force }
@@ -656,31 +656,33 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
             throw "RuneSchema LogicMods Lua helper is missing: $logicModsHelper"
         }
         Copy-Item -LiteralPath $logicModsHelper -Destination (Join-Path $payload 'scripts\logicmods-register.lua') -Force
-        if ($IncludePlugins) {
-            # Plugin source is authoritative. Never let a cached runtime
-            # template resurrect retired plugin names, PAKs, or manifests.
-            $payloadPlugins = Join-Path $payload 'plugins'
-            if (Test-Path -LiteralPath $payloadPlugins) {
-                Remove-Item -LiteralPath $payloadPlugins -Recurse -Force
+        # Plugin source is authoritative. Never let a cached runtime
+        # template resurrect retired plugin names, PAKs, or manifests.
+        $payloadPlugins = Join-Path $payload 'plugins'
+        if (Test-Path -LiteralPath $payloadPlugins) {
+            Remove-Item -LiteralPath $payloadPlugins -Recurse -Force
+        }
+        New-Item -ItemType Directory -Path $payloadPlugins -Force | Out-Null
+        $sourcePlugins = Join-Path $SourceRoot 'plugins'
+        if (Test-Path -LiteralPath $sourcePlugins -PathType Container) {
+            Get-ChildItem -LiteralPath $sourcePlugins -Force | ForEach-Object {
+                Copy-Item -LiteralPath $_.FullName -Destination $payloadPlugins -Recurse -Force
             }
-            New-Item -ItemType Directory -Path $payloadPlugins -Force | Out-Null
-            $sourcePlugins = Join-Path $SourceRoot 'plugins'
-            if (Test-Path -LiteralPath $sourcePlugins -PathType Container) {
-                Get-ChildItem -LiteralPath $sourcePlugins -Force | ForEach-Object {
-                    Copy-Item -LiteralPath $_.FullName -Destination $payloadPlugins -Recurse -Force
-                }
-            }
-            New-Item -ItemType Directory -Path (Join-Path $payload 'plugins\RuneSchema.Helpy\dll') -Force | Out-Null
+        }
+        New-Item -ItemType Directory -Path (Join-Path $payload 'plugins\RuneSchema.Helpy\dll') -Force | Out-Null
 
-            # The Universal package promises a usable shared registry bridge.
-            # Reject partial containers: a .pak without its matching IoStore
-            # files can appear present while failing to mount in the game.
-            $bridgeContainer = Join-Path $payload 'plugins\RuneSchema.RegistryBridge\paks\RegistryBridge'
-            foreach ($bridgeFile in @('RegistryBridge_P.pak', 'RegistryBridge_P.utoc', 'RegistryBridge_P.ucas')) {
-                $bridgePath = Join-Path $bridgeContainer $bridgeFile
+        # The release package promises usable shared registry and networking
+        # bridges. Reject partial IoStore containers that cannot mount in game.
+        foreach ($bridge in @(
+            @{ Folder = 'RuneSchema.RegistryBridge\paks\RegistryBridge'; Name = 'RegistryBridge_P' },
+            @{ Folder = 'RSNetworking\paks\Networking'; Name = 'Networking_P' }
+        )) {
+            $bridgeContainer = Join-Path (Join-Path $payload 'plugins') $bridge.Folder
+            foreach ($extension in @('.pak', '.utoc', '.ucas')) {
+                $bridgePath = Join-Path $bridgeContainer ($bridge.Name + $extension)
                 if (-not (Test-Path -LiteralPath $bridgePath -PathType Leaf) -or
                     (Get-Item -LiteralPath $bridgePath).Length -le 0) {
-                    throw "Universal package is missing registry bridge runtime file: $bridgePath"
+                    throw "RuneSchema package is missing bridge runtime file: $bridgePath"
                 }
             }
         }
@@ -692,18 +694,12 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         # Keep the documented drop-in layout without shipping a load-order file
         # or sample mods that could replace an existing installation's content.
         New-Item -ItemType Directory -Path $mods -Force | Out-Null
-        if (-not $IncludePlugins) {
-            $optionalPlugins = Join-Path $payload 'plugins'
-            if (Test-Path $optionalPlugins) { Remove-Item -LiteralPath $optionalPlugins -Recurse -Force }
-        }
         Copy-Item -LiteralPath $CoreDll -Destination (Join-Path $payload 'dlls\main.dll') -Force
         $mappingDirectory = Join-Path $payload 'dlls\mappings'
         New-Item -ItemType Directory -Path $mappingDirectory -Force | Out-Null
         Copy-Item -LiteralPath $Mappings.Path -Destination (Join-Path $mappingDirectory 'Mappings.usmap') -Force
         $Mappings.Lock | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $payload 'settings\MAPPINGS-SOURCE.json') -Encoding utf8
-        if ($IncludePlugins) {
-            Copy-Item -LiteralPath $HelpyDll -Destination (Join-Path $payload 'plugins\RuneSchema.Helpy\dll\RuneSchema.Helpy.dll') -Force
-        }
+        Copy-Item -LiteralPath $HelpyDll -Destination (Join-Path $payload 'plugins\RuneSchema.Helpy\dll\RuneSchema.Helpy.dll') -Force
         $report = foreach ($dll in Get-ChildItem -LiteralPath $payload -Filter '*.dll' -File -Recurse) {
             $before = $dll.Length; $state = Compress-DllBestEffort $dll.FullName
             [pscustomobject]@{ File = $dll.FullName.Substring($payload.Length + 1); Before = $before; After = (Get-Item $dll.FullName).Length; State = $state }
@@ -799,16 +795,15 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
     }
     Copy-Item -LiteralPath $universal.Core `
         -Destination (Join-Path $DistRoot "RuneSchema-$Version.dll") -Force
-    New-Package "RuneSchema-$Version-Universal" $universal.Core $helpy $mappings $true
-    # Plugin-free runtime.
-    New-Package "RuneSchema-$Version-Core" $universal.Core $helpy $mappings $false
+    New-Package "RuneSchema-$Version" $universal.Core $helpy $mappings
     $pluginRoot = Join-Path $BuildRoot 'plugins'
     if (Test-Path $pluginRoot) { Remove-Item -LiteralPath $pluginRoot -Recurse -Force }
     New-Item -ItemType Directory -Path $pluginRoot -Force | Out-Null
-    $package = Get-ChildItem -LiteralPath $DistRoot -Directory -Filter "RuneSchema-$Version-Universal" | Select-Object -First 1
-    if (-not $package) { throw 'Universal package directory was not produced.' }
-    Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\dlls') -Destination (Join-Path $pluginRoot 'Universal\dlls') -Recurse
-    Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\plugins') -Destination (Join-Path $pluginRoot 'Universal\plugins') -Recurse
+    $package = Get-ChildItem -LiteralPath $DistRoot -Directory -Filter "RuneSchema-$Version" | Select-Object -First 1
+    if (-not $package) { throw 'RuneSchema package directory was not produced.' }
+    New-Item -ItemType Directory -Path (Join-Path $pluginRoot 'RuneSchema') -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\dlls') -Destination (Join-Path $pluginRoot 'RuneSchema\dlls') -Recurse
+    Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\plugins') -Destination (Join-Path $pluginRoot 'RuneSchema\plugins') -Recurse
     Write-Host "`n$Version build complete: $DistRoot" -ForegroundColor Green
     Write-Host 'UE4SS storefront packages are distributed separately from RuneSchema build output.' -ForegroundColor DarkGray
 } catch {

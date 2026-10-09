@@ -63,7 +63,7 @@ try {
     New-Item -ItemType Directory -Path $dependency -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $dependency 'LICENSE') -Value 'Synthetic dependency notice for packaging test.' -Encoding ascii
     $before = @{}
-    foreach ($name in @('RuneSchema-0.0.0.0e-Core', 'RuneSchema-0.0.0.0e-Universal', 'RuneSchema.Helpy-0.0.0.0e')) {
+    foreach ($name in @('RuneSchema-0.0.0.0e', 'RuneSchema.Helpy-0.0.0.0e')) {
         $prefix = if ($name -like 'RuneSchema.Helpy-*') { 'RuneSchema.Helpy' } else { 'RuneSchema' }
         $payload = Join-Path $fixture "dist/$name/$prefix"
         New-Item -ItemType Directory -Path $payload -Force | Out-Null
@@ -71,14 +71,14 @@ try {
         [IO.File]::WriteAllBytes($binary, [byte[]](0,1,2,3,255))
         $before[$binary] = Get-Sha256File $binary
         Set-Content -LiteralPath (Join-Path $payload 'LICENSE') -Value 'Existing upstream notice: preserve this exact file.' -Encoding ascii
-        if ($name -like '*-Universal') {
+        if ($name -eq 'RuneSchema-0.0.0.0e') {
             New-Item -ItemType Directory -Path (Join-Path $payload 'plugins/RuneSchema.Helpy') -Force | Out-Null
         }
         Compress-Archive -LiteralPath $payload -DestinationPath (Join-Path $fixture "dist/$name.zip")
     }
     & $helper -RepositoryRoot $fixture -FinalizeBuild
     & $helper -RepositoryRoot $fixture -FinalizeBuild
-    foreach ($name in @('RuneSchema-0.0.0.0e-Core', 'RuneSchema-0.0.0.0e-Universal', 'RuneSchema.Helpy-0.0.0.0e')) {
+    foreach ($name in @('RuneSchema-0.0.0.0e', 'RuneSchema.Helpy-0.0.0.0e')) {
         $prefix = if ($name -like 'RuneSchema.Helpy-*') { 'RuneSchema.Helpy' } else { 'RuneSchema' }
         Assert-Archive (Join-Path $fixture "dist/$name.zip") "$name/$prefix"
         $payload = Join-Path $fixture "dist/$name/$prefix"
@@ -90,8 +90,8 @@ try {
     foreach ($binary in $before.Keys) {
         Assert-True ((Get-Sha256File $binary) -eq $before[$binary]) 'Binary bytes changed.'
     }
-    Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture 'dist/RuneSchema-0.0.0.0e-Universal/RuneSchema/plugins/RuneSchema.Helpy/LICENSE'))) 'Nested Helpy license duplicate remains.'
-    $nested = Join-Path $fixture 'dist/RuneSchema-0.0.0.0e-Universal/RuneSchema/plugins/RuneSchema.Helpy'
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture 'dist/RuneSchema-0.0.0.0e/RuneSchema/plugins/RuneSchema.Helpy/LICENSE'))) 'Nested Helpy license duplicate remains.'
+    $nested = Join-Path $fixture 'dist/RuneSchema-0.0.0.0e/RuneSchema/plugins/RuneSchema.Helpy'
     foreach ($name in @('AUTHORS.md', 'CONTRIBUTING.md')) {
         Assert-True (-not (Test-Path -LiteralPath (Join-Path $nested $name))) "Nested Helpy $name duplicate remains."
     }

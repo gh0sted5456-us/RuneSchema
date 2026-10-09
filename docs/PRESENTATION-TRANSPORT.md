@@ -71,4 +71,4 @@ RuneSchema does not select individual PAKs by client/server role. Ship one downl
 - Audio, visuals, and the consumer component go only to the client package.
 - The dedicated-server package must have no hard imports of client presentation assets.
 
-The RuneSchema Universal package supplies the cooked presentation bridge. Custom consumers must be cooked with Unreal Engine 5.6.1. The RuneSchema build verifies the adapter source contract and confirms that the presentation bridge asset exists in the shipped networking PAK.
+The RuneSchema release package supplies the cooked presentation bridge. Custom consumers must be cooked with Unreal Engine 5.6.1. The RuneSchema build verifies the adapter source contract and confirms that the presentation bridge asset exists in the shipped networking PAK.

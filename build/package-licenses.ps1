@@ -77,7 +77,7 @@ function Install-LicenseBundle([string]$Payload) {
     }
     Remove-LegacyLicenseLayout $Payload
 
-    # Universal packages carry Helpy inside the RuneSchema payload. Keep one
+    # The release package carries Helpy inside the RuneSchema payload. Keep one
     # authoritative document instead of duplicating it inside that plugin.
     $nestedHelpy = Join-Path $Payload 'plugins/RuneSchema.Helpy'
     if (Test-Path -LiteralPath $nestedHelpy -PathType Container) {
@@ -293,8 +293,7 @@ try {
         }
         $dist = Join-Path $RepositoryRoot 'dist'
         $packages = @(
-            @{ Name = "RuneSchema-$version-Core"; Payload = 'RuneSchema' },
-            @{ Name = "RuneSchema-$version-Universal"; Payload = 'RuneSchema' },
+            @{ Name = "RuneSchema-$version"; Payload = 'RuneSchema' },
             @{ Name = "RuneSchema.Helpy-$version"; Payload = 'RuneSchema.Helpy' }
         )
         Collect-DependencyNotices
@@ -306,10 +305,10 @@ try {
             Write-LicensedArchive $payload $archive $true
             $count++
         }
-        if ($count -eq 0) { throw 'No current Core, Universal, or Helpy build archive was found to finalize.' }
+        if ($count -eq 0) { throw 'No current RuneSchema or Helpy build archive was found to finalize.' }
         # Accompany the loose developer DLL and convenience install trees too.
         Install-LicenseBundle $dist
-        foreach ($relative in @('plugins/Universal', 'plugins/RuneSchema.Helpy')) {
+        foreach ($relative in @('plugins/RuneSchema', 'plugins/RuneSchema.Helpy')) {
             $path = Join-Path $RepositoryRoot $relative
             if (Test-Path -LiteralPath $path -PathType Container) { Install-LicenseBundle $path }
         }

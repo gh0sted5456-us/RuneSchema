@@ -1,11 +1,13 @@
 # Optional RuneSchema bridges
 
-RuneSchema 0.7.7.5m Universal includes optional helpers for mods that need more
+RuneSchema's release package includes helpers for mods that need more
 than normal JSON loading or ordinary cooked PAK mounting. They are separate so
 you can use only what your mod list needs.
 
-The **Core** package includes none of these plugins. The **Universal** package
-includes all of them and enables them by default.
+Starting with the next release, the single package includes all bridges and
+enables them by default. There is no separate plugin-free download. For the
+existing 0.7.7.5m release, choose **Universal**. Disable a bridge only when no
+enabled mod depends on it.
 
 ## Quick choice
 
@@ -27,7 +29,7 @@ Open:
 RuneSchema/plugins/plugins.txt
 ```
 
-The Universal package starts with:
+The package starts with:
 
 ```text
 RuneSchema.RegistryBridge : 1
@@ -48,7 +50,7 @@ Dragonwilds' live gameplay lists. Mounting a PAK makes its files available, but
 it does not guarantee that every new item, recipe, spell, or attack becomes a
 usable game entry.
 
-The Universal package supplies these three matching runtime files:
+The package supplies these three matching runtime files:
 
 ```text
 RuneSchema/plugins/RuneSchema.RegistryBridge/paks/RegistryBridge/
@@ -106,7 +108,7 @@ switches and their order.
 ## Confirm what loaded
 
 After restarting, open `UE4SS.log` and search for the plugin names. A healthy
-Universal startup reports that each enabled plugin was found and loaded. A
+RuneSchema startup reports that each enabled plugin was found and loaded. A
 disabled plugin should not mount its PAKs or announce its cooked objects.
 
 If a content mod fails after a bridge is disabled, restore the bridge to `1`,
