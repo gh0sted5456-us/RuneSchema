@@ -161,7 +161,9 @@ if(PROJECT_IS_TOP_LEVEL)
     target_link_libraries(logic-pak-bridge-contract PRIVATE RuneSchemaJsonCore)
     add_test(NAME logic-pak-bridge-contract COMMAND logic-pak-bridge-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Runtime/LogicPakBridge.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../../docs/PAK-CONTENT-GUIDE.md")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../docs/PAK-CONTENT-GUIDE.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Runtime/BPModLoaderIntegration.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../ue4ss/scripts/logicmods-loader.lua")
     add_executable(ue4ss-companion-bootstrap-contract ../tests/ue4ss-companion-bootstrap-contract.cpp)
     add_test(NAME ue4ss-companion-bootstrap-contract COMMAND ue4ss-companion-bootstrap-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../../ue4ss/scripts/main.lua"

@@ -24,6 +24,7 @@
 #include "Unreal/Hooks.hpp"
 #include "Unreal/UFunctionStructs.hpp"
 #include "Unreal/UObject.hpp"
+#include "Unreal/World.hpp"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Classes/KismetSystemLibrary.h"
 #include "SDK/Classes/TSoftObjectPtr.h"
@@ -89,6 +90,13 @@ namespace DragonWilds {
             TEXT("/Script/Engine.PlayerController:ClientRestart");
         constexpr float BuildingRecoveryIntervalSeconds = 0.25f;
         constexpr float BuildingRecoveryTimeoutSeconds = 15.0f;
+        bool IsFrontEndWorld(UWorld* world)
+        {
+            if (!world) return true;
+            const auto name = world->GetName();
+            return name.find(TEXT("FrontEnd")) != RC::StringType::npos
+                || name.find(TEXT("MainMenu")) != RC::StringType::npos;
+        }
         bool SameSoftObject(const UECustom::FSoftObjectPtr& soft, UObject* object)
         {
             if (!object)
@@ -2401,6 +2409,16 @@ namespace DragonWilds {
     void DragonWildsBuildingModLoader::ScheduleWorldRecovery(UObject* worldContext)
     {
         if (!worldContext || !worldContext->GetWorld()) return;
+        if (IsFrontEndWorld(worldContext->GetWorld()))
+        {
+            // The menu has no live player progress. Cancel any prior world's
+            // retry instead of reporting an expected absence as a timeout.
+            m_pendingWorldContext.Reset();
+            m_recoveryElapsed = 0.0f;
+            m_recoveryInterval = 0.0f;
+            m_lastRecoveryFailure.clear();
+            return;
+        }
 
         auto* pending = m_pendingWorldContext.Get();
         if (pending && pending->GetWorld() == worldContext->GetWorld()) return;
@@ -2419,6 +2437,7 @@ namespace DragonWilds {
         UObject* worldContext, const char* source)
     {
         if (!worldContext || !worldContext->GetWorld()) return false;
+        if (IsFrontEndWorld(worldContext->GetWorld())) return true;
         ScheduleWorldRecovery(worldContext);
 
         try
@@ -2427,6 +2446,15 @@ namespace DragonWilds {
             {
                 m_lastRecoveryFailure = "native building registry was not ready";
                 return false;
+            }
+
+            if (m_unlocks.empty())
+            {
+                m_pendingWorldContext.Reset();
+                m_recoveryElapsed = 0.0f;
+                m_recoveryInterval = 0.0f;
+                m_lastRecoveryFailure.clear();
+                return true;
             }
 
             const bool reportDeferred = !source

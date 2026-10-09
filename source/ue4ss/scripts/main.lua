@@ -35,6 +35,14 @@ if not root then
     return
 end
 
+local logicOk, logicLoader = pcall(dofile, root .. "/scripts/logicmods-loader.lua")
+if logicOk and type(logicLoader) == "function" then
+    local started, failure = xpcall(function() logicLoader(root) end, debug.traceback)
+    if not started then log("[LOGIC-PAK][RUNE-LUA][PARTIAL] " .. tostring(failure)) end
+elseif not logicOk then
+    log("[LOGIC-PAK][RUNE-LUA][PARTIAL] Helper unavailable: " .. tostring(logicLoader))
+end
+
 local mods_root = root .. "/mods"
 local order_path = mods_root .. "/runeschema.txt"
 local order = io.open(order_path, "r")

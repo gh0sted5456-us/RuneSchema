@@ -53,6 +53,18 @@ inline bool AtomicWrite(const fs::path& target, std::string_view content) {
     return true;
 }
 
+inline std::optional<bool> HasMultipleHardlinks(const fs::path& path) {
+    const auto handle = CreateFileW(path.c_str(), FILE_READ_ATTRIBUTES,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (handle == INVALID_HANDLE_VALUE) return std::nullopt;
+    BY_HANDLE_FILE_INFORMATION info{};
+    const bool queried = GetFileInformationByHandle(handle, &info) != 0;
+    CloseHandle(handle);
+    if (!queried) return std::nullopt;
+    return info.nNumberOfLinks > 1;
+}
+
 struct Result {
     bool Active{};
     bool Patched{};
@@ -60,12 +72,74 @@ struct Result {
     std::string Detail;
 };
 
-inline Result Prepare(const fs::path& ue4ssRoot, const fs::path& legacyLogicModsRoot) {
+inline std::vector<std::string> CollectPackages(const fs::path& ue4ssRoot,
+    const fs::path& legacyLogicModsRoot) {
+    const auto modsRoot = ue4ssRoot / "Mods" / "RuneSchema" / "mods";
+    std::vector<RC::StringType> discovered;
+    std::error_code error;
+    if (fs::is_directory(modsRoot, error) && !error) {
+        for (const auto& entry : fs::directory_iterator(modsRoot))
+            if (ModFolderLayout::LooksLikeRuneSchemaMod(entry.path()))
+                discovered.push_back(entry.path().filename().native());
+    }
+    std::set<std::string> seen;
+    std::vector<std::string> packages;
+    for (const auto& name : DragonWilds::ModLoadOrder::Resolve(modsRoot, discovered)) {
+        const auto owner = RC::to_string(name);
+        for (const auto& package : LogicPaks::Discover(modsRoot / name, owner, legacyLogicModsRoot)) {
+            if (!package.LegacyOwned && seen.insert(package.Name).second)
+                packages.push_back(package.Name);
+        }
+    }
+    return packages;
+}
+
+inline std::string PackageManifest(const std::vector<std::string>& packages) {
+    std::ostringstream manifest;
+    manifest << "# RuneSchema enabled LogicMods; generated before UE4SS Lua startup.\n";
+    for (const auto& package : packages) manifest << package << '\n';
+    return manifest.str();
+}
+
+inline Result PrepareLua(const fs::path& ue4ssRoot,
+    const fs::path& legacyLogicModsRoot) {
+    Active().store(false, std::memory_order_release);
+    const auto modsRoot = ue4ssRoot / "Mods";
+    if (!EnabledInModsTxt(modsRoot / "mods.txt", "RuneSchema"))
+        return {false, false, 0, "RuneSchema is disabled"};
+    const auto settingsRoot = modsRoot / "RuneSchema" / "settings";
+    if (!AtomicWrite(settingsRoot / "logicmods.generated.txt", "# BPModLoaderMod handoff disabled.\n")
+        || !AtomicWrite(settingsRoot / "logicmods.lua.generated.txt", "# Lua ModActor loader inactive.\n"))
+        return {false, false, 0, "could not clear previous LogicMod handoff lists"};
+    std::error_code error;
+    if (!fs::is_regular_file(modsRoot / "RuneSchema" / "scripts" / "logicmods-loader.lua", error) || error)
+        return {false, false, 0, "RuneSchema Lua ModActor helper is missing"};
+    const auto packages = CollectPackages(ue4ssRoot, legacyLogicModsRoot);
+    if (!AtomicWrite(settingsRoot / "logicmods.lua.generated.txt", PackageManifest(packages)))
+        return {false, false, 0, "could not write RuneSchema Lua ModActor handoff list"};
+    Active().store(true, std::memory_order_release);
+    return {true, false, packages.size(), "RuneSchema Lua owns enabled ModActors"};
+}
+
+inline Result Prepare(const fs::path& ue4ssRoot,
+    const fs::path& legacyLogicModsRoot, bool patchScript) {
     Active().store(false, std::memory_order_release);
     const auto modsTxt = ue4ssRoot / "Mods" / "mods.txt";
-    if (!EnabledInModsTxt(modsTxt, "RuneSchema")
-        || !EnabledInModsTxt(modsTxt, "BPModLoaderMod"))
-        return {false, false, 0, "RuneSchema or BPModLoaderMod is disabled"};
+    if (!EnabledInModsTxt(modsTxt, "RuneSchema"))
+        return {false, false, 0, "RuneSchema is disabled"};
+    const auto list = ue4ssRoot / "Mods" / "RuneSchema" / "settings" / "logicmods.generated.txt";
+    constexpr std::string_view emptyManifest =
+        "# RuneSchema BPModLoader integration inactive; native ModActor fallback owns startup.\n";
+    // Clear any previous handoff before choosing an owner. An older patched
+    // BPModLoader script may still be installed after the setting is disabled.
+    if (!AtomicWrite(list, emptyManifest)
+        || !AtomicWrite(ue4ssRoot / "Mods" / "RuneSchema" / "settings" / "logicmods.lua.generated.txt",
+            "# RuneSchema Lua ModActor loader inactive.\n"))
+        return {false, false, 0, "could not clear the enabled LogicMods list; startup ownership is uncertain"};
+    if (!EnabledInModsTxt(modsTxt, "BPModLoaderMod"))
+        return {false, false, 0, "BPModLoaderMod is disabled; native ModActor fallback owns startup"};
+    if (!patchScript)
+        return {false, false, 0, "script patch disabled by settings; native ModActor fallback owns startup"};
     const auto bpScript = ue4ssRoot / "Mods" / "BPModLoaderMod" / "Scripts" / "main.lua";
     const auto helper = ue4ssRoot / "Mods" / "RuneSchema" / "scripts" / "logicmods-register.lua";
     std::error_code error;
@@ -73,32 +147,17 @@ inline Result Prepare(const fs::path& ue4ssRoot, const fs::path& legacyLogicMods
         || !fs::is_regular_file(helper, error) || error)
         return {false, false, 0, "BPModLoaderMod script or RuneSchema integration helper is missing"};
 
-    const auto modsRoot = ue4ssRoot / "Mods" / "RuneSchema" / "mods";
-    std::vector<RC::StringType> discovered;
-    if (fs::is_directory(modsRoot, error) && !error) {
-        for (const auto& entry : fs::directory_iterator(modsRoot))
-            if (ModFolderLayout::LooksLikeRuneSchemaMod(entry.path()))
-                discovered.push_back(entry.path().filename().native());
-    }
-    std::set<std::string> packages;
-    std::ostringstream manifest;
-    manifest << "# RuneSchema enabled LogicMods; generated before UE4SS Lua startup.\n";
-    for (const auto& name : DragonWilds::ModLoadOrder::Resolve(modsRoot, discovered)) {
-        const auto owner = RC::to_string(name);
-        for (const auto& package : LogicPaks::Discover(modsRoot / name, owner, legacyLogicModsRoot)) {
-            if (package.LegacyOwned || !packages.insert(package.Name).second) continue;
-            manifest << package.Name << '\n';
-        }
-    }
-    const auto list = ue4ssRoot / "Mods" / "RuneSchema" / "settings" / "logicmods.generated.txt";
-    if (!AtomicWrite(list, manifest.str()))
-        return {false, false, 0, "could not atomically write the enabled LogicMods list"};
-
+    const auto packages = CollectPackages(ue4ssRoot, legacyLogicModsRoot);
     const auto original = ReadFile(bpScript);
     const auto updated = PatchSource(original);
     if (!updated) return {false, false, 0, "BPModLoaderMod script has an unsupported structure; left untouched"};
     const bool changed = *updated != original;
     if (changed) {
+        const auto hardlinked = HasMultipleHardlinks(bpScript);
+        if (!hardlinked.has_value())
+            return {false, false, 0, "could not verify BPModLoaderMod script hardlink ownership; left untouched"};
+        if (*hardlinked)
+            return {false, false, 0, "BPModLoaderMod script is hardlinked (possibly Vortex-managed); left untouched"};
         const auto backup = ue4ssRoot / "Mods" / "RuneSchema" / "settings" / "backups"
             / ("BPModLoaderMod-main-" + std::to_string(std::hash<std::string>{}(original)) + ".lua");
         if (!fs::exists(backup, error) && !AtomicWrite(backup, original))
@@ -106,6 +165,8 @@ inline Result Prepare(const fs::path& ue4ssRoot, const fs::path& legacyLogicMods
         if (!AtomicWrite(bpScript, *updated))
             return {false, false, 0, "could not atomically update BPModLoaderMod"};
     }
+    if (!AtomicWrite(list, PackageManifest(packages)))
+        return {false, changed, 0, "could not atomically write the enabled LogicMods list"};
     Active().store(true, std::memory_order_release);
     return {true, changed, packages.size(), "BPModLoaderMod will read RuneSchema's enabled LogicMods list"};
 }

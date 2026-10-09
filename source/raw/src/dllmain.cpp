@@ -250,16 +250,28 @@ public:
                 auto content = storefront.Executable.parent_path();
                 if (!content.empty()) content = content.parent_path();
                 if (!content.empty()) content = content.parent_path();
-                const auto result = PS::BPModLoaderIntegration::Prepare(
-                    ue4ssRoot, content / "Content" / "Paks" / "LogicMods");
-                if (result.Active)
+                const auto& bpSettings = config->GetSettings().bpModLoader;
+                const auto result = bpSettings.luaActorLoader
+                    ? PS::BPModLoaderIntegration::PrepareLua(
+                        ue4ssRoot, content / "Content" / "Paks" / "LogicMods")
+                    : PS::BPModLoaderIntegration::Prepare(
+                        ue4ssRoot, content / "Content" / "Paks" / "LogicMods",
+                        bpSettings.patchScript);
+                if (result.Active && bpSettings.luaActorLoader)
+                    PS::Log<LogLevel::Normal>(TEXT(
+                        "[LOGIC-PAK][RUNE-LUA] {} RuneSchema package(s) queued for the Lua ModActor loader; BPModLoaderMod is untouched.\n"),
+                        result.Submitted);
+                else if (result.Active)
                     PS::Log<LogLevel::Normal>(TEXT(
                         "[LOGIC-PAK][BP-LOADER] {} RuneSchema package(s) submitted before Lua startup. {}.\n"),
                         result.Submitted, PS::ToWideSafe(result.Detail.c_str()));
                 if (result.Patched)
                     PS::Log<LogLevel::Normal>(TEXT(
                         "[LOGIC-PAK][BP-LOADER][UPDATED] BPModLoaderMod integration refreshed atomically. This game launch will use it; restart after changing either mod during play.\n"));
-                if (!result.Active && result.Detail != "RuneSchema or BPModLoaderMod is disabled")
+                if (!result.Active && result.Detail == "script patch disabled by settings; native ModActor fallback owns startup")
+                    PS::Log<LogLevel::Normal>(TEXT(
+                        "[LOGIC-PAK][BP-LOADER] Script patch disabled; BPModLoaderMod is untouched and native ModActor fallback owns RuneSchema packages.\n"));
+                else if (!result.Active && result.Detail != "RuneSchema is disabled")
                     PS::Log<LogLevel::Warning>(TEXT(
                         "[LOGIC-PAK][BP-LOADER][PARTIAL] {}. Native ModActor fallback remains available.\n"),
                         PS::ToWideSafe(result.Detail.c_str()));

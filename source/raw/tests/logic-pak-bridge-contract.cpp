@@ -28,7 +28,7 @@ int main(int argc, char** argv) {
         assert(PS::BPModLoaderIntegration::PatchSource(*actual) == actual);
         return 0;
     }
-    assert(argc == 3);
+    assert(argc == 5);
     const auto fixture = fs::temp_directory_path() / "RuneSchema-LogicPakBridge-Contract";
     std::error_code error;
     fs::remove_all(fixture, error);
@@ -100,6 +100,17 @@ int main(int argc, char** argv) {
     assert(runtime.find("PostBeginPlay") != std::string::npos);
     assert(runtime.find("[LOGIC-PAK][STARTED]") != std::string::npos);
     assert(runtime.find("duplicate startup suppressed") != std::string::npos);
+
+    const auto integration = Read(argv[3]);
+    assert(integration.find("if (!patchScript)") != std::string::npos);
+    assert(integration.find("AtomicWrite(list, emptyManifest)") != std::string::npos);
+    assert(integration.find("HasMultipleHardlinks(bpScript)") != std::string::npos);
+    assert(integration.find("PrepareLua(") != std::string::npos);
+    assert(integration.find("logicmods.lua.generated.txt") != std::string::npos);
+    const auto luaLoader = Read(argv[4]);
+    assert(luaLoader.find("RegisterLoadMapPostHook") != std::string::npos);
+    assert(luaLoader.find("RegisterBeginPlayPostHook") != std::string::npos);
+    assert(luaLoader.find("started[name] = true") != std::string::npos);
 
     const auto documentation = Read(argv[2]);
     assert(documentation.find("ModActor.ModActor_C") != std::string::npos);

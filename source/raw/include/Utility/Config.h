@@ -80,6 +80,15 @@ namespace PS {
         bool verbose = false;
     };
 
+    struct BPModLoaderSettings {
+        // Experimental RuneSchema-owned Lua ModActor lifecycle. Never patch
+        // BPModLoaderMod when this is selected.
+        bool luaActorLoader = false;
+        // Explicit compatibility opt-in. The default native route leaves
+        // mod-manager-owned BPModLoaderMod/Scripts/main.lua untouched.
+        bool patchScript = false;
+    };
+
     struct PluginSettings {
         // "normal" logs compatibility notices normally, "quiet" emits them
         // only with advanced logging, and "off" suppresses them.
@@ -145,6 +154,7 @@ namespace PS {
         DiagnosticJobSettings diagnosticJobs{};
         AdvancedDiagnosticSettings diagnostics{};
         BridgeDiagnosticSettings bridgeDiagnostics{};
+        BPModLoaderSettings bpModLoader{};
         PluginSettings plugins{};
         PersistenceSettings persistence{};
         DefaultRecoverySettings defaultRecovery{};

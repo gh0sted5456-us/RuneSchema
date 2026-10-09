@@ -34,6 +34,10 @@ int RunConfigSettings() {
     assert(settings.advancedLogging && settings.loaders.buildings);
     assert(!settings.colorCodeLoaderAnnotations);
     assert(!DecodeSettings("{}").advancedLogging);
+    assert(!DecodeSettings("{}").bpModLoader.patchScript);
+    assert(!DecodeSettings("{}").bpModLoader.luaActorLoader);
+    assert(DecodeSettings(R"({"bpModLoader":{"patchScript":true}})").bpModLoader.patchScript);
+    assert(DecodeSettings(R"({"bpModLoader":{"luaActorLoader":true}})").bpModLoader.luaActorLoader);
     assert(!DecodeSettings("{}").persistence.characterCustomization);
     assert(!DecodeSettings("{}").persistence.allowCorruptCharacterEntry);
     assert(DecodeSettings("{}").persistence.quests);

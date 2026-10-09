@@ -16,6 +16,13 @@
     // health summary remain available when verbose mode is disabled.
     "verbose": false
   },
+  "bpModLoader": {
+    // Local test: RuneSchema's own Lua ModActor loader, independent of BPModLoaderMod.
+    "luaActorLoader": false,
+    // Leave false for Vortex/hardlink-managed installs. True opts into
+    // RuneSchema patching an unshared BPModLoaderMod/Scripts/main.lua.
+    "patchScript": false
+  },
   "colorCodeLoaderAnnotations": true,
   "enableExperimentalDropScaling": false,
   "plugins": {

@@ -80,6 +80,9 @@ int main(int argc,char** argv) {
         && loader.find("Buildings remain isolated; other RuneSchema systems continue")
             !=std::string::npos,
         "bounded building recovery does not report an isolated timeout");
+    require(loader.find("IsFrontEndWorld(worldContext->GetWorld())")!=std::string::npos
+        && loader.find("m_pendingWorldContext.Reset();")!=std::string::npos,
+        "menu recovery may still time out without a player ProgressComponent");
     require(schema.find("appends the clone to every page/collection containing its $Clone source")!=std::string::npos,
         "inherited menu behavior is undocumented in schema");
     require(schema.find("Complete replacement build cost")!=std::string::npos,

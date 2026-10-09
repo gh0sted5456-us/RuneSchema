@@ -656,6 +656,11 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
             throw "RuneSchema LogicMods Lua helper is missing: $logicModsHelper"
         }
         Copy-Item -LiteralPath $logicModsHelper -Destination (Join-Path $payload 'scripts\logicmods-register.lua') -Force
+        $runeLuaLoader = Join-Path $SourceRoot 'ue4ss\scripts\logicmods-loader.lua'
+        if (-not (Test-Path -LiteralPath $runeLuaLoader -PathType Leaf)) {
+            throw "RuneSchema-owned Lua ModActor loader is missing: $runeLuaLoader"
+        }
+        Copy-Item -LiteralPath $runeLuaLoader -Destination (Join-Path $payload 'scripts\logicmods-loader.lua') -Force
         # Plugin source is authoritative. Never let a cached runtime
         # template resurrect retired plugin names, PAKs, or manifests.
         $payloadPlugins = Join-Path $payload 'plugins'

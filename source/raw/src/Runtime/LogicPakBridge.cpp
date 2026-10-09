@@ -40,7 +40,7 @@ void LogicPakBridge::Start(const std::vector<std::pair<std::filesystem::path, st
     if (m_started || Storefront::IsDedicatedServer()) return;
     if (BPModLoaderIntegration::Active().load(std::memory_order_acquire)) {
         PS::Log<LogLevel::Normal>(STR(
-            "[LOGIC-PAK][BP-LOADER] BPModLoaderMod owns enabled RuneSchema ModActors; native duplicate startup suppressed.\n"));
+            "[LOGIC-PAK][DELEGATED] Configured Lua loader owns enabled RuneSchema ModActors; native duplicate startup suppressed.\n"));
         return;
     }
 
