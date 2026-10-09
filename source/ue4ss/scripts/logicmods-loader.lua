@@ -17,6 +17,12 @@ return function(runeRoot)
     list:close()
     if #ordered == 0 then return end
 
+    local helpersOk, UEHelpers = pcall(require, "UEHelpers")
+    if not helpersOk or type(UEHelpers) ~= "table" then
+        print("[RuneSchema][LOGIC-PAK][RUNE-LUA][PARTIAL] UEHelpers module unavailable; no ModActors started.\n")
+        return
+    end
+
     local function valid(object)
         return object ~= nil and object:IsValid()
     end

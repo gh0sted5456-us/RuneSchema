@@ -108,6 +108,7 @@ int main(int argc, char** argv) {
     assert(integration.find("PrepareLua(") != std::string::npos);
     assert(integration.find("logicmods.lua.generated.txt") != std::string::npos);
     const auto luaLoader = Read(argv[4]);
+    assert(luaLoader.find("pcall(require, \"UEHelpers\")") != std::string::npos);
     assert(luaLoader.find("RegisterLoadMapPostHook") != std::string::npos);
     assert(luaLoader.find("RegisterBeginPlayPostHook") != std::string::npos);
     assert(luaLoader.find("started[name] = true") != std::string::npos);
