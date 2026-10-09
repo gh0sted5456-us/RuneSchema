@@ -6,7 +6,7 @@ param(
     [switch]$UpdateMappings
 )
 $ErrorActionPreference = 'Stop'
-$Version = '0.7.7.5m'
+$Version = '0.7.7.6m'
 $BuildRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 if (-not (Test-Path -LiteralPath (Join-Path $BuildRoot 'source\raw\CMakeLists.txt') -PathType Leaf)) {
     $BuildRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))

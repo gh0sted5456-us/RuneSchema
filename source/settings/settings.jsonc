@@ -17,8 +17,8 @@
     "verbose": false
   },
   "bpModLoader": {
-    // Local test: RuneSchema's own Lua ModActor loader, independent of BPModLoaderMod.
-    "luaActorLoader": false,
+    // RuneSchema's own Lua ModActor loader, independent of BPModLoaderMod.
+    "luaActorLoader": true,
     // Leave false for Vortex/hardlink-managed installs. True opts into
     // RuneSchema patching an unshared BPModLoaderMod/Scripts/main.lua.
     "patchScript": false

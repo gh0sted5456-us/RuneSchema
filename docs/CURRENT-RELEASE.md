@@ -1,6 +1,6 @@
-# RuneSchema 0.7.7.5m main release
+# RuneSchema 0.7.7.6m main release
 
-This October 7, 2026 main build includes the tested Blueprint and Lua
+This October 9, 2026 main build includes the tested Blueprint and Lua
 companion paths. It also continues the work on dependable mod loading, safer
 character saves, clearer status messages, and support for mods that bring
 their own PAK content.
@@ -74,29 +74,29 @@ so an author can distinguish a missing PAK from a bad object path.
 
 ## Blueprint and Lua companions stay inside a RuneSchema mod
 
-Mod authors can now keep optional Blueprint startup packages under
+Mod authors can keep optional Blueprint startup packages under
 `logicmods/<PackageName>/` and UE4SS Lua code under `ue4ss/scripts/main.lua`
-inside their RuneSchema mod. RuneSchema mounts the cooked package and asks an
-installed BPModLoaderMod to start its `ModActor`; it starts a Lua companion
+inside their RuneSchema mod. RuneSchema mounts the cooked package and uses its
+own Lua helper to start its `ModActor`; it starts a Lua companion
 once at game launch when the same mod is enabled.
 
 An ordinary `paks` folder still mounts cooked content but no longer asks
 BPModLoaderMod to start every package. This cuts down unwanted startup checks
 and log noise. The log shows one LogicMod submission summary, while a generated
-list keeps the exact package names for troubleshooting. A mod marked `0` in
+list keeps the exact package names for troubleshooting. This path leaves
+BPModLoaderMod untouched. A mod marked `0` in
 `runeschema.txt` does not contribute PAKs, LogicMods, or Lua code on the next
 launch.
 
 If your existing mod needs a `ModActor`, move its complete package folder from
 `paks` to `logicmods`; do not leave duplicate copies. Restart after changing
-the mod list or updating BPModLoaderMod.
+the mod list.
 
 [See both optional folder layouts](PSEUDO-LOADERS.md).
 
 ## Bridges are included in the release package
 
-The existing 0.7.7.5m release includes these bridges in its **Universal** ZIP.
-Starting with the next release, one RuneSchema ZIP will include the complete
+The 0.7.7.6m release includes these bridges in one RuneSchema ZIP: the complete
 shared registry bridge PAK and the RSNetworking bridge. They are separate
 plugins, so players can turn either one off without disabling RuneSchema.
 
@@ -106,8 +106,7 @@ mods a shared path for supported multiplayer presentation and identity work.
 Neither bridge invents missing content, replaces the game's save format, or
 forces RuneSchema's optional weapon fallback on.
 
-The 0.7.7.5m Core ZIP is the last plugin-free release package. Future releases
-will have one package. Keep a bridge enabled when an installed mod requires it.
+Keep a bridge enabled when an installed mod requires it.
 
 [See what each optional bridge does](OPTIONAL-BRIDGES.md).
 
@@ -126,7 +125,9 @@ recreate possessions or progress that no longer exist in the save.
 
 1. Close Dragonwilds completely.
 2. Back up at least one test character.
-3. Replace RuneSchema with the new package.
+3. Replace RuneSchema's program files with the new package; preserve your
+   existing `settings` and `mods` folders. In `settings.jsonc`, keep
+   `bpModLoader.luaActorLoader` enabled and `patchScript` disabled.
 4. Review `RuneSchema/mods/runeschema.txt` before starting the game.
 5. Start with the same mods that were used for the last successful save.
 6. Read the first RuneSchema summary in `UE4SS.log`.
