@@ -1,6 +1,6 @@
-# RuneSchema 0.7.7.6m main release
+# RuneSchema 0.7.7.6e experimental release
 
-This October 9, 2026 main build includes the tested Blueprint and Lua
+This October 9, 2026 experimental build includes the tested Blueprint and Lua
 companion paths. It also continues the work on dependable mod loading, safer
 character saves, clearer status messages, and support for mods that bring
 their own PAK content.
@@ -96,7 +96,7 @@ the mod list.
 
 ## Bridges are included in the release package
 
-The 0.7.7.6m release includes these bridges in one RuneSchema ZIP: the complete
+The 0.7.7.6e release includes these bridges in one RuneSchema ZIP: the complete
 shared registry bridge PAK and the RSNetworking bridge. They are separate
 plugins, so players can turn either one off without disabling RuneSchema.
 
