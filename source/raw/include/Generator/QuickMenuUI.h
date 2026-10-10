@@ -1488,7 +1488,7 @@ public:
             overlay("ABOUT HELPY");
             badge(QuickDecorations::RuneSchemaBadge,{244,94,78,78},"RS");
             badge(QuickDecorations::Ue4ssBadge,{458,94,78,78},"U4");
-            text("Helpy for RuneSchema 0.7.7.7m",390,194,27,ink,true);
+            text("Helpy for RuneSchema 0.7.7.7e",390,194,27,ink,true);
             text("In-game browser and authoring tool",390,234,20,gold,true);
             wrapped("Helpy browses the live item, NPC, AI and resource catalogues on demand. Grants and spawns use RuneSchema authority services, while Item Lab exports mod-owned item and recipe definitions.",62,286,68,5,18);
             wrapped("The interface and its navigation are supplied by the Helpy plugin. RuneSchema provides the loader API, permissions and runtime bridge; Helpy does not replace the underlying loaders.",62,408,68,5,18);
