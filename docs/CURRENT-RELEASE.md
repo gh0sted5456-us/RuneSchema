@@ -1,9 +1,17 @@
-# RuneSchema 0.7.7.6m main release
+# RuneSchema 0.7.7.7m main release
 
 This October 9, 2026 main build includes the tested Blueprint and Lua
 companion paths. It also continues the work on dependable mod loading, safer
 character saves, clearer status messages, and support for mods that bring
 their own PAK content.
+
+The Advanced Authoring & Tools page now uses one top-to-bottom workflow.
+Choose a stage, then a content type when authoring; the selected tool uses the
+full page width. Previous/Next controls move between stages, recent results
+stay at the bottom, and structural schema export is available under All Loaders.
+Within a loader, choose the starter format before searching and selecting a
+record, then review fields, build a preview, check dependencies, and export.
+No authored files are activated merely by opening or browsing this page.
 
 Make a backup before testing a new game build, a new RuneSchema build, or a
 large change to your mod list.
@@ -96,7 +104,7 @@ the mod list.
 
 ## Bridges are included in the release package
 
-The 0.7.7.6m release includes these bridges in one RuneSchema ZIP: the complete
+The 0.7.7.7m release includes these bridges in one RuneSchema ZIP: the complete
 shared registry bridge PAK and the RSNetworking bridge. They are separate
 plugins, so players can turn either one off without disabling RuneSchema.
 

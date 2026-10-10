@@ -72,6 +72,17 @@ struct Result {
     std::string Detail;
 };
 
+inline Result PrepareDedicatedServer(const fs::path& ue4ssRoot) {
+    Active().store(false, std::memory_order_release);
+    const auto settingsRoot = ue4ssRoot / "Mods" / "RuneSchema" / "settings";
+    if (!AtomicWrite(settingsRoot / "logicmods.generated.txt",
+            "# Dedicated server: client LogicMod handoff disabled.\n")
+        || !AtomicWrite(settingsRoot / "logicmods.lua.generated.txt",
+            "# Dedicated server: Lua ModActor loader disabled.\n"))
+        return {false, false, 0, "could not clear client LogicMod handoff lists on dedicated server"};
+    return {false, false, 0, "client LogicMod handoff lists cleared for dedicated server"};
+}
+
 inline std::vector<std::string> CollectPackages(const fs::path& ue4ssRoot,
     const fs::path& legacyLogicModsRoot) {
     const auto modsRoot = ue4ssRoot / "Mods" / "RuneSchema" / "mods";

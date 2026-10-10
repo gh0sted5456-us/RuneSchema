@@ -280,6 +280,14 @@ public:
                     "[LOGIC-PAK][BP-LOADER][PARTIAL] Integration skipped: {}. Native ModActor fallback remains available.\n"),
                     PS::ToWideSafe(error.what()));
             }
+        } else {
+            const auto result = PS::BPModLoaderIntegration::PrepareDedicatedServer(
+                std::filesystem::path(PS::HostServices::WorkingDirectory()));
+            if (result.Detail == "client LogicMod handoff lists cleared for dedicated server")
+                PS::Log<LogLevel::Normal>(TEXT("[LOGIC-PAK][SERVER] Client ModActor handoff cleared.\n"));
+            else
+                PS::Log<LogLevel::Warning>(TEXT("[LOGIC-PAK][SERVER][PARTIAL] {}.\n"),
+                    PS::ToWideSafe(result.Detail.c_str()));
         }
         if (!storefront.DedicatedServer) {
             const auto pluginRoot=std::filesystem::path(PS::HostServices::WorkingDirectory())/"Mods"/"RuneSchema"/"plugins";
@@ -794,59 +802,22 @@ public:
                 PS::InspectionTools::Section::Presets,
                 PS::InspectionTools::Section::Traces, PS::InspectionTools::Section::Inspector,
                 PS::InspectionTools::Section::Results};
-            constexpr ImVec4 toolColors[]{
-                {0.55f, 0.37f, 0.15f, 1.0f},
-                {0.22f, 0.43f, 0.64f, 1.0f},
-                {0.43f, 0.32f, 0.59f, 1.0f},
-                {0.16f, 0.46f, 0.40f, 1.0f},
-                {0.53f, 0.32f, 0.20f, 1.0f},
-                {0.36f, 0.46f, 0.23f, 1.0f}};
             static int selectedTool = 0;
-            ImGui::BeginChild("AdvancedToolsBody", ImVec2(0, -180), false);
-            ImGui::BeginChild("AdvancedToolsRail", ImVec2(145, 0), true);
-            for (int i = 0; i < 6; ++i) {
-                const auto color = toolColors[i];
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(color.x * .72f, color.y * .72f, color.z * .72f, 1));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, color);
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(color.x * .55f, color.y * .55f, color.z * .55f, 1));
-                const bool active = selectedTool == i;
-                if (active) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
-                if (ImGui::Button(names[i], ImVec2(-1, 0))) selectedTool = i;
-                if (active) ImGui::PopStyleColor();
-                ImGui::PopStyleColor(3);
-            }
-            ImGui::EndChild();
-            ImGui::SameLine();
-            const auto accent = toolColors[selectedTool];
-            const auto shade = [&](float scale) {
-                return ImVec4(accent.x * scale, accent.y * scale, accent.z * scale, 1.0f);
-            };
-            ImGui::PushStyleColor(ImGuiCol_Header, shade(.72f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, accent);
-            ImGui::PushStyleColor(ImGuiCol_HeaderActive, shade(.58f));
-            ImGui::PushStyleColor(ImGuiCol_Button, shade(.72f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, accent);
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, shade(.58f));
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, shade(.50f));
-            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, shade(.72f));
-            ImGui::BeginChild("AdvancedToolsContent", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+            ImGui::BeginChild("AdvancedToolsBody", ImVec2(0, 0), false,
+                ImGuiWindowFlags_AlwaysVerticalScrollbar);
+            ImGui::SetNextItemWidth(std::min(360.0f, ImGui::GetContentRegionAvail().x));
+            ImGui::Combo("Workflow stage", &selectedTool, names, 6);
+            ImGui::SeparatorText(names[selectedTool]);
             ImGui::PushID(names[selectedTool]);
-            ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.55f);
+            ImGui::PushItemWidth(std::max(160.0f, ImGui::GetContentRegionAvail().x * 0.7f));
             if(selectedTool==5)PS::SaveViewer::RenderCleanup();
             else if(selectedTool==0) {
                 static int authoringPage=0;
                 constexpr const char* authoringNames[]{"All Loaders","Players","Nameplates","Items","Recipes","Journal","Quests","NPCs","Spawns","Events","Session Cleanup"};
                 constexpr const char* authoringLoaders[]{nullptr,"players","nameplates","assets","recipes","journal","quests","npc","spawns","events",nullptr};
                 ImGui::TextWrapped("Create and export definitions for every RuneSchema loader. Focused pages expose the most common relationships; All Loaders provides the complete 22-loader selector.");
-                ImGui::BeginChild("ModAuthoringRail",ImVec2(135,0),true);
-                for(int i=0;i<11;++i) {
-                    const bool active=authoringPage==i;
-                    if(active)ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(1,1,1,1));
-                    if(ImGui::Button(authoringNames[i],ImVec2(-1,0)))authoringPage=i;
-                    if(active)ImGui::PopStyleColor();
-                }
-                ImGui::EndChild();ImGui::SameLine();
-                ImGui::BeginChild("ModAuthoringContent",ImVec2(0,0),false,ImGuiWindowFlags_AlwaysVerticalScrollbar);
+                ImGui::SetNextItemWidth(std::min(360.0f, ImGui::GetContentRegionAvail().x));
+                ImGui::Combo("Content type", &authoringPage, authoringNames, 11);
                 ImGui::PushID(authoringNames[authoringPage]);
                 if(authoringPage==0) {
                     ImGui::SeparatorText("All loader authoring");
@@ -888,15 +859,20 @@ public:
                     PS::SpawnToolsPanel::RenderSessionCleanup();
                 }
                 if(authoringPage!=10)PS::InspectionTools::Render(true,PS::InspectionTools::Section::AssetTemplates,authoringLoaders[authoringPage]);
-                ImGui::PopID();ImGui::EndChild();
+                if(authoringPage==0 && ImGui::CollapsingHeader("Export structural loader schemas"))
+                    render_schema_generator();
+                ImGui::PopID();
             }
             else PS::InspectionTools::Render(true, sections[selectedTool]);
+            ImGui::Separator();
+            if (selectedTool > 0 && ImGui::Button("Previous stage")) --selectedTool;
+            if (selectedTool > 0 && selectedTool < 5) ImGui::SameLine();
+            if (selectedTool < 5 && ImGui::Button("Next stage")) ++selectedTool;
+            if (ImGui::CollapsingHeader("Recent results"))
+                PS::InspectionTools::RenderHistory();
             ImGui::PopItemWidth();
             ImGui::PopID();
             ImGui::EndChild();
-            ImGui::PopStyleColor(8);
-            ImGui::EndChild();
-            PS::InspectionTools::RenderHistory();
             }
             EndRuneSchemaTab();
         }
