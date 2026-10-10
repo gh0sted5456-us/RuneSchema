@@ -4,9 +4,8 @@ RuneSchema's release package includes helpers for mods that need more
 than normal JSON loading or ordinary cooked PAK mounting. They are separate so
 you can use only what your mod list needs.
 
-Starting with the next release, the single package includes all bridges and
-enables them by default. There is no separate plugin-free download. For the
-existing 0.7.7.5m release, choose **Universal**. Disable a bridge only when no
+The current single package includes all bridges and enables them by default.
+There is no separate plugin-free download. Disable a bridge only when no
 enabled mod depends on it.
 
 ## Quick choice

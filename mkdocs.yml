@@ -87,7 +87,7 @@ copyright: >-
 
 nav:
   - Home: index.md
-  - Monday Update:
+  - Current Release:
       - What Is New: CURRENT-RELEASE.md
       - Install or Update: INSTALLATION.md
       - Optional Bridges: OPTIONAL-BRIDGES.md
@@ -95,6 +95,7 @@ nav:
       - Save Safety: SAFE-SAVE-AND-LEDGER.md
   - Create Mods:
       - First RuneSchema Mod: AUTHORING-GUIDE.md
+      - Advanced Authoring & Tools: ADVANCED-AUTHORING-TOOLS.md
       - Create PAK Content: PAK-CONTENT-GUIDE.md
       - Create Weapons and Items: WEAPONS-AND-ITEMS.md
       - Create Stations and Recipes: STATIONS-AND-RECIPES.md

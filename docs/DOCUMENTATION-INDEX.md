@@ -14,10 +14,11 @@ Use this page to find the shortest path to the information you need.
 ## New mod authors
 
 1. [Create your first RuneSchema mod](AUTHORING-GUIDE.md)
-2. [Learn what each folder does](LOADER-WALKTHROUGHS.md)
-3. [Study the example library](EXAMPLES.md)
-4. [Use the JSON schemas for field checking](SCHEMAS.md)
-5. [Add an optional UE4SS Lua companion](UE4SS-LUA-COMPANIONS.md)
+2. [Use Advanced Authoring & Tools](ADVANCED-AUTHORING-TOOLS.md)
+3. [Learn what each folder does](LOADER-WALKTHROUGHS.md)
+4. [Study the example library](EXAMPLES.md)
+5. [Use the JSON schemas for field checking](SCHEMAS.md)
+6. [Add an optional UE4SS Lua companion](UE4SS-LUA-COMPANIONS.md)
 
 ## PAK authors
 

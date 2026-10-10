@@ -1,9 +1,15 @@
 # RuneSchema 0.7.7.7m main release
 
-This October 9, 2026 main build includes the tested Blueprint and Lua
+This October 9, 2026 main build includes the Blueprint and Lua
 companion paths. It also continues the work on dependable mod loading, safer
 character saves, clearer status messages, and support for mods that bring
 their own PAK content.
+
+[Download the single 0.7.7.7m ZIP](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.7.7.7m/RuneSchema-0.7.7.7m.zip).
+The matching [0.7.7.7e experimental package](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.7.7.7e/RuneSchema-0.7.7.7e.zip)
+is available for testing. Both compiled and passed 57 automated checks. The
+new authoring layout and server handoff guard still need in-game validation;
+the separate crash narrowed to `Dye_WeaponsTrim` folders is not claimed fixed.
 
 The Advanced Authoring & Tools page now uses one top-to-bottom workflow.
 Choose a stage, then a content type when authoring; the selected tool uses the
@@ -12,6 +18,12 @@ stay at the bottom, and structural schema export is available under All Loaders.
 Within a loader, choose the starter format before searching and selecting a
 record, then review fields, build a preview, check dependencies, and export.
 No authored files are activated merely by opening or browsing this page.
+[Follow the authoring-tools walkthrough](ADVANCED-AUTHORING-TOOLS.md).
+
+On a dedicated server, RuneSchema now clears a stale client LogicMod handoff
+list at startup. The server still mounts its enabled cooked packages but does
+not start client visual ModActors. This guard prevents a copied client list
+from queuing a visual actor; it does not diagnose or repair a faulty cooked PAK.
 
 Make a backup before testing a new game build, a new RuneSchema build, or a
 large change to your mod list.

@@ -30,7 +30,7 @@ makes a mod easier to test, update, and remove.
 | `strings` | Supported text replacements | Usually |
 | `vendors` | Shops and offers | Yes |
 | `paks` | Cooked Unreal files used by the other folders | Always |
-| `logicmods` | Cooked packages whose `ModActor` should start through BPModLoaderMod | Always |
+| `logicmods` | Cooked packages whose `ModActor` should start through RuneSchema's Lua helper on clients | Always |
 | `ue4ss` | Optional Lua companion at `ue4ss/scripts/main.lua` | Always |
 
 The `ue4ss` folder is not a normal JSON loader. RuneSchema's Lua bootstrap
@@ -84,11 +84,10 @@ station, and unlock relationships into the PAK rather than creating thousands
 of empty loader files.
 
 Custom combat, magic, and equipment data can require different authoritative
-game registries. The planned generic solution is one cooked manifest per PAK,
-with atomic validation and multiplayer order checks. See the
-[cooked PAK registry manifest design](COOKED-PAK-REGISTRY-MANIFEST.md). It is a
-design target; the guide identifies which lanes are currently verified and
-which still require live reflection.
+game registries. A mod can cook its own registry declaration asset for the
+supported lanes. See the [current lanes and design limits](COOKED-PAK-REGISTRY-MANIFEST.md)
+before relying on one for a new feature; AI registration and some multiplayer
+behaviors still need separate validation.
 
 ## File order inside a folder
 

@@ -161,7 +161,7 @@ A `0` prevents RuneSchema from mounting or loading that mod folder.
 
 Place packages that need client-side Blueprint startup under `logicmods`, not
 `paks`. Ordinary `paks` packages still mount without starting a ModActor. Use
-BPModLoaderMod's default naming contract:
+the standard cooked ModActor path:
 
 ```text
 RuneSchema/mods/Dye/
@@ -178,10 +178,12 @@ The package must contain this generated actor class:
 /Game/Mods/ColorsOfMoneyVisualPilotV4/ModActor.ModActor_C
 ```
 
-RuneSchema mounts the package and submits it to BPModLoaderMod for client-side
-startup. BPModLoaderMod handles `BeginPlay` and its optional `PreBeginPlay` and
-`PostBeginPlay` events. RuneSchema logs a concise submission summary; its
-generated LogicMods list records the exact packages selected at launch.
+RuneSchema mounts the package and, when `bpModLoader.luaActorLoader` is enabled,
+its own Lua helper starts the client ModActor. This route does not edit
+BPModLoaderMod. RuneSchema logs a concise submission summary; the generated
+`settings/logicmods.lua.generated.txt` list records the exact packages
+selected at launch. See the [companion-folder guide](PSEUDO-LOADERS.md) for
+the settings and startup boundary.
 
 This startup bridge is client-side. Dedicated servers still mount the cooked
 package so authoritative data remains available, but they do not create a
@@ -190,8 +192,9 @@ started normally.
 
 Do not install the same package twice. If RuneSchema finds a matching package
 under the older `Content/Paks/LogicMods` location, it leaves startup ownership
-with UE4SS BPModLoaderMod and suppresses its own copy. This keeps existing
-installs working while allowing new mods to ship as one RuneSchema folder.
+with the existing UE4SS installation and suppresses its own copy. This keeps
+existing installs working while allowing new mods to ship as one RuneSchema
+folder.
 
 Keep content-only packages under `paks`. Only put a package under `logicmods`
 when it contains the default `ModActor.ModActor_C` class. If you previously
@@ -277,14 +280,13 @@ one universal Dragonwilds registry. Some use persistence maps while combat
 classes can use ordered component collections whose indices must match in
 multiplayer.
 
-The proposed cooked PAK manifest gives a large mod one compact declaration of
-the assets that must join those authoritative lanes. It uses complete
-validation, atomic registration, stable ordering, and a server/client
-fingerprint instead of scanning every loaded Unreal object.
+The cooked PAK registry declaration gives a mod one compact list of assets
+that need an explicit path into supported authoritative lanes. The game still
+owns the final live registries; RuneSchema validates the declaration and
+avoids duplicate registration when an entry is already present.
 
-This generic manifest is a design target, not a claim that every ranged or AI
-lane is already supported. Read the complete
-[cooked PAK registry manifest design](COOKED-PAK-REGISTRY-MANIFEST.md) before
+This is not a claim that every ranged or AI lane is supported. Read the
+[current lanes and design limits](COOKED-PAK-REGISTRY-MANIFEST.md) before
 planning custom combat or magic around it.
 
 ## Test before release

@@ -1,11 +1,12 @@
 # Cooked PAK authoritative registry manifest
 
-!!! warning "Experimental in 0.7.7.2"
-    The first native-first manifest slice is available on the experimental
-    branch. Items, recipes, quests, combat spells, utility spells,
-    held-equipment effects, and ordered player melee and ranged classes are
-    supported. AI collections remain unavailable until their authoritative
-    lifecycle is confirmed in live reflection.
+!!! note "Implemented lanes and design limits in 0.7.7.7"
+    The cooked declaration path is available for items, recipes, quests,
+    combat spells, utility spells, held-equipment effects, and the guarded
+    player combat lanes described below. Ranged classes do not have a global
+    registry; they follow the registered item's complete quick/full attack
+    pair. AI collection registration is not available. Later sections retain
+    design goals and open questions; do not treat those as shipped features.
 
 ## Purpose
 

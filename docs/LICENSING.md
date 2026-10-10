@@ -45,8 +45,8 @@ Newly generated packages combine `LICENSE`, `AUTHORS.md`, `LICENSING.md`,
 `CONTRIBUTING.md`, `THIRD_PARTY_NOTICES.md`, and applicable dependency notices
 into `settings/licenses/RuneSchema-Licenses.txt`. It is the only packaged
 license file and contains the complete texts, component names, and upstream
-links. The same credits travel with Core, Universal, Helpy, source, and example
-packages handled by the licensing helper.
+links. The same credits travel with the single RuneSchema package, Helpy,
+source, and example packages handled by the licensing helper.
 
 Maintainers must still review component-specific requirements. Older releases
 and Nexus uploads are not changed automatically. Each distributed copy must
