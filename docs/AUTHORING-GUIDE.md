@@ -193,6 +193,9 @@ For each release candidate:
 ## Prepare a mod for sharing
 
 Ship the whole mod folder, including its RuneSchema files and PAK containers.
+For a CurseForge or Nexus Mods listing, use the
+[mod-host and getting-started page](MOD-HOSTS-AND-GETTING-STARTED.md) to explain
+the framework dependency, expected file types, and install path.
 Include a short README with:
 
 - the RuneSchema version used for testing;

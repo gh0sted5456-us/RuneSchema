@@ -4,6 +4,9 @@ This guide covers a normal RuneSchema installation and the safest way to update
 an existing setup. The same RuneSchema content format is used on Steam, GOG,
 and Game Pass. Use the package intended for your game and UE4SS installation.
 
+New to the framework? Start with [what RuneSchema is, what its files do, and
+how to make an add-on](MOD-HOSTS-AND-GETTING-STARTED.md).
+
 ## Before installation
 
 You need:

@@ -90,6 +90,7 @@ nav:
   - Current Release:
       - What Is New: CURRENT-RELEASE.md
       - Install or Update: INSTALLATION.md
+      - For CurseForge and Nexus: MOD-HOSTS-AND-GETTING-STARTED.md
       - Optional Bridges: OPTIONAL-BRIDGES.md
       - Platform and Multiplayer: COMPATIBILITY.md
       - Save Safety: SAFE-SAVE-AND-LEDGER.md
