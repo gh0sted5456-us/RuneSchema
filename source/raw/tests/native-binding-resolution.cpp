@@ -95,6 +95,12 @@ int main(int argc, char** argv)
         "dedicated server exposes the core UE4SS tab while keeping client plugins suppressed");
     Check(entrypoint.find("BeginRuneSchemaTab(\"Authoring & Tools\", TabRole::Diagnostics)") != std::string::npos,
         "dedicated server retains the full RuneSchema authoring page");
+    Check(entrypoint.find("ImGui::Combo(\"Workflow stage\"") != std::string::npos
+        && entrypoint.find("ImGui::Combo(\"Content type\"") != std::string::npos
+        && entrypoint.find("render_schema_generator();") != std::string::npos
+        && entrypoint.find("AdvancedToolsRail") == std::string::npos
+        && entrypoint.find("ModAuthoringRail") == std::string::npos,
+        "advanced authoring follows one vertical workflow and exposes schema export");
     Check(entrypoint.find("DllMain") == std::string::npos
         && entrypoint.find("return new RuneSchema();") != std::string::npos,
         "RuneSchema performs startup only when UE4SS calls start_mod (mods.txt authority)");

@@ -4,7 +4,7 @@ Use this page to find the shortest path to the information you need.
 
 ## Players and server owners
 
-1. [What is new in 0.7.7.6e](CURRENT-RELEASE.md)
+1. [What is new in 0.7.7.7m](CURRENT-RELEASE.md)
 2. [Install or update RuneSchema](INSTALLATION.md)
 3. [Choose optional bridges](OPTIONAL-BRIDGES.md)
 4. [Platform and multiplayer support](COMPATIBILITY.md)

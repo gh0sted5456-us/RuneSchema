@@ -1316,7 +1316,7 @@ void Render(bool available, Section section, const char* loader) {
     }
     if(section==Section::AssetTemplates) {
         static char query[97]="",mod[65]="MyMod",name[65]="MyItem",identity[23]="";
-        static int mode=3,loaderIndex=0;
+        static int mode=0,loaderIndex=0;
         ImGui::BeginDisabled(busy);
         bool loaderChanged=false;
         if(loader && assetLoader!=loader) {
@@ -1331,7 +1331,20 @@ void Render(bool available, Section section, const char* loader) {
         if(loaderChanged) {
             assetSearchComplete=false;
             assetLoader=LoaderCapabilities[loaderIndex].Name;assetMatches=json::array();assetFields=json::object();assetHints=json::object();assetRecord=nullptr;
-            assetSource.clear();assetDraft=nullptr;assetPreview.clear();mode=3;
+            assetSource.clear();assetDraft=nullptr;assetPreview.clear();mode=0;
+        }
+        ImGui::EndDisabled();
+        ImGui::SeparatorText("Choose a starter format");
+        bool changed=false;
+        constexpr const char* formats[]{"Basic starter","$Patch","$Clone","Fields reference"};
+        ImGui::BeginDisabled(busy);
+        if(ImGui::BeginCombo("Format",formats[mode])) {
+            for(int i=0;i<4;++i) {
+                ImGui::BeginDisabled((i==1&&!LoaderTemplate::Patch(assetLoader))||(i==2&&!LoaderTemplate::Clone(assetLoader)));
+                if(ImGui::Selectable(formats[i],mode==i)) {mode=i;changed=true;
+                    if(!assetSource.empty() && !assetRecord.is_null())Queue(Action::AssetCapture,json{{"Loader",assetLoader},{"Entry",assetRecord},{"ReadValues",mode!=3}}.dump());}
+                ImGui::EndDisabled();
+            }ImGui::EndCombo();
         }
         ImGui::EndDisabled();
         ImGui::SeparatorText("Search configuration");
@@ -1369,19 +1382,7 @@ void Render(bool available, Section section, const char* loader) {
             catch(const std::exception& error){status=error.what();}
         }
         }
-        ImGui::SeparatorText("Starter configuration");
-        bool changed=false;
-        constexpr const char* formats[]{"Basic starter","$Patch","$Clone","Fields reference"};
-        ImGui::BeginDisabled(busy);
-        if(ImGui::BeginCombo("Format",formats[mode])) {
-            for(int i=0;i<4;++i) {
-                ImGui::BeginDisabled((i==1&&!LoaderTemplate::Patch(assetLoader))||(i==2&&!LoaderTemplate::Clone(assetLoader)));
-                if(ImGui::Selectable(formats[i],mode==i)) {mode=i;changed=true;
-                    if(!assetSource.empty() && !assetRecord.is_null())Queue(Action::AssetCapture,json{{"Loader",assetLoader},{"Entry",assetRecord},{"ReadValues",mode!=3}}.dump());}
-                ImGui::EndDisabled();
-            }ImGui::EndCombo();
-        }
-        ImGui::EndDisabled();
+        ImGui::SeparatorText("Configure the starter");
         if(mode!=3 && (mode==2 || assetLoader=="buildings" || assetLoader=="players")) {
             changed|=ImGui::InputText("Mod folder",mod,sizeof(mod));
             changed|=ImGui::InputText("New item name / rule key",name,sizeof(name));
