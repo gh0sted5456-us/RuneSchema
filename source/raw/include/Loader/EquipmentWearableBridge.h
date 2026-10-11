@@ -19,16 +19,33 @@
 
 namespace DragonWilds::EquipmentWearableBridge {
 using namespace RC::Unreal;
-// Initial diagnostic profile: the executable used by the preserved C traces.
 // Native code, not RuneSchema, allocates and populates the opaque cache values.
-inline constexpr uint32_t Timestamp=0xd702bba2, ImageSize=0xddf1000;
-inline constexpr uintptr_t BuilderRva=0x6384dd0, EvaluatorRva=0x657f900;
-inline constexpr std::array<uint8_t,24> BuilderBytes{
-    0x48,0x89,0x5c,0x24,0x08,0x44,0x88,0x44,0x24,0x18,0x55,0x56,
-    0x57,0x41,0x54,0x41,0x55,0x41,0x56,0x41,0x57,0x48,0x8b,0xec};
-inline constexpr std::array<uint8_t,24> EvaluatorBytes{
-    0x48,0x85,0xc9,0x0f,0x84,0x0b,0x04,0x00,0x00,0x4c,0x89,0x44,
-    0x24,0x18,0x53,0x56,0x57,0x41,0x56,0x48,0x81,0xec,0x98,0x00};
+// Each executable profile must match both its PE identity and both function
+// prologues. The WinGDK RVAs were recovered from the active 100.8.0.0 image
+// and checked against x64 unwind boundaries and matching Steam function bodies.
+struct NativeProfile {
+    uint32_t Timestamp, ImageSize;
+    PS::Storefront::NativeLane Lane;
+    uintptr_t BuilderRva, EvaluatorRva;
+    std::array<uint8_t,24> BuilderBytes, EvaluatorBytes;
+    const TCHAR* Name;
+};
+inline constexpr NativeProfile SteamProfile{
+    0xd702bba2,0xddf1000,PS::Storefront::NativeLane::SteamNative,
+    0x6384dd0,0x657f900,
+    {0x48,0x89,0x5c,0x24,0x08,0x44,0x88,0x44,0x24,0x18,0x55,0x56,
+     0x57,0x41,0x54,0x41,0x55,0x41,0x56,0x41,0x57,0x48,0x8b,0xec},
+    {0x48,0x85,0xc9,0x0f,0x84,0x0b,0x04,0x00,0x00,0x4c,0x89,0x44,
+     0x24,0x18,0x53,0x56,0x57,0x41,0x56,0x48,0x81,0xec,0x98,0x00},
+    TEXT("Steam")};
+inline constexpr NativeProfile GamePassProfile{
+    0xb0da0883,0x0db4e000,PS::Storefront::NativeLane::GamePassNative,
+    0x6caf850,0x6e7de30,
+    {0x44,0x88,0x44,0x24,0x18,0x48,0x89,0x54,0x24,0x10,0x48,0x89,
+     0x4c,0x24,0x08,0x55,0x53,0x56,0x57,0x41,0x54,0x41,0x55,0x41},
+    {0x48,0x85,0xc9,0x0f,0x84,0x53,0x05,0x00,0x00,0x4c,0x89,0x4c,
+     0x24,0x20,0x4c,0x89,0x44,0x24,0x18,0x56,0x41,0x56,0x48,0x81},
+    TEXT("Game Pass/WinGDK 100.8.0.0")};
 using Builder=void(*)(UObject*,void*,uint8_t);
 inline Builder BuildCache{};
 inline safetyhook::MidHook EvaluatorHook;
@@ -111,20 +128,26 @@ inline void Install() {
     const auto* dos=reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
     if(!dos || dos->e_magic!=IMAGE_DOS_SIGNATURE || dos->e_lfanew<=0 || dos->e_lfanew>4096) return;
     const auto* nt=reinterpret_cast<const IMAGE_NT_HEADERS64*>(base+dos->e_lfanew);
+    const auto lane=PS::Storefront::CurrentNativeLane();
+    const NativeProfile* profile=nullptr;
+    for(const auto* candidate:{&SteamProfile,&GamePassProfile}) {
+        if(candidate->Timestamp==nt->FileHeader.TimeDateStamp
+            && candidate->ImageSize==nt->OptionalHeader.SizeOfImage
+            && candidate->Lane==lane) { profile=candidate; break; }
+    }
     if(nt->Signature!=IMAGE_NT_SIGNATURE || nt->FileHeader.Machine!=IMAGE_FILE_MACHINE_AMD64
-        || nt->FileHeader.TimeDateStamp!=Timestamp || nt->OptionalHeader.SizeOfImage!=ImageSize
-        || PS::Storefront::CurrentNativeLane()!=PS::Storefront::NativeLane::SteamNative
-        || std::memcmp(reinterpret_cast<void*>(base+BuilderRva),BuilderBytes.data(),BuilderBytes.size())
-        || std::memcmp(reinterpret_cast<void*>(base+EvaluatorRva),EvaluatorBytes.data(),EvaluatorBytes.size())) {
+        || !profile
+        || std::memcmp(reinterpret_cast<void*>(base+profile->BuilderRva),profile->BuilderBytes.data(),profile->BuilderBytes.size())
+        || std::memcmp(reinterpret_cast<void*>(base+profile->EvaluatorRva),profile->EvaluatorBytes.data(),profile->EvaluatorBytes.size())) {
         PS::Log<RC::LogLevel::Warning>(TEXT("[WEARABLE-BRIDGE][INACTIVE] executable/profile mismatch; native cache refresh disabled.\n"));
         return;
     }
-    auto hook=safetyhook::MidHook::create(reinterpret_cast<void*>(base+EvaluatorRva),BeforeEvaluation,safetyhook::MidHook::StartDisabled);
+    auto hook=safetyhook::MidHook::create(reinterpret_cast<void*>(base+profile->EvaluatorRva),BeforeEvaluation,safetyhook::MidHook::StartDisabled);
     if(!hook) throw std::runtime_error("wearable evaluator hook creation failed");
-    BuildCache=reinterpret_cast<Builder>(base+BuilderRva);
+    BuildCache=reinterpret_cast<Builder>(base+profile->BuilderRva);
     EvaluatorHook=std::move(*hook);
     if(!EvaluatorHook.enable()) { EvaluatorHook.reset(); BuildCache=nullptr; throw std::runtime_error("wearable evaluator hook activation failed"); }
-    PS::Log<RC::LogLevel::Normal>(TEXT("[WEARABLE-BRIDGE][ACTIVE] verified native cache builder and wearable evaluator.\n"));
+    PS::Log<RC::LogLevel::Normal>(TEXT("[WEARABLE-BRIDGE][ACTIVE] profile='{}'; native cache builder and wearable evaluator signatures verified.\n"),profile->Name);
 }
 
 // Call after persistence/network identity registration, on the game thread.

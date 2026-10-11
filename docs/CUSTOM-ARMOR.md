@@ -61,10 +61,14 @@ assets merely to make them load.
 
 The native cache-refresh hook in 0.7.7.8 has been verified in game on the
 inspected Steam executable profile (PE timestamp `0xd702bba2`, image size
-`0xddf1000`). Its signature checks leave that part of the bridge inactive on
-an unmatched executable. Ordinary item registration remains available. Other
-game builds and storefronts need their own verification before this specific
-hair-hide behavior can be claimed there.
+`0xddf1000`). The same DLL also contains a profile matched to the active
+Game Pass/WinGDK 100.8.0.0 image (PE timestamp `0xb0da0883`, image size
+`0x0db4e000`). A Game Pass test loaded RuneSchema, entered a world, and showed
+the custom armor material and hidden hair. That session's log did not show
+wearable-bridge activation, so it does not prove the bridge caused the visual
+result. More direct hook validation is still needed on Game Pass. On any
+unmatched executable, native cache refresh stays inactive while ordinary item
+registration remains available.
 
 The confirmed in-game case is one TEST ARMOR helmet: its authored black
 material displayed and its hair was hidden, including after two former
