@@ -15,6 +15,19 @@ folders, lets smaller mods connect cooked objects through full paths, applies
 requested compatibility edits, reports failures clearly, and safely removes
 saved references after a mod is uninstalled.
 
+## Choose how the cooked asset becomes usable
+
+| Your content | What to ship | RuneSchema connection |
+| --- | --- | --- |
+| New art for an existing game item | Cooked art and an item/Blueprint that references it | An `assets` adjustment only if you need to change the existing item. |
+| One new cooked item | PAK with the item and every dependency | Name its exact path in `assets`, a supported recipe, or a cooked registry declaration. |
+| Large cooked item catalogue | PAK with stable identities and native relationships | One mod-owned cooked registry declaration for any items not otherwise enrolled. |
+| New recipe or station | PAK with recipe, station data, and their references | Use `recipes`/`buildings` to connect missing station or menu relationships. |
+| New attack or spell | PAK with the complete attack/spell and owning item data | Follow the distinct melee, ranged, and magic paths in [weapons and items](WEAPONS-AND-ITEMS.md). |
+
+The content mod owns the cooked files. The shared RuneSchema bridge supplies a
+registration route; it does not provide the mod's weapon, spell, mesh, or station.
+
 For a very large content library, bake the item, recipe, station, and unlock
 relationships into the PAK itself. RuneSchema should not need thousands of
 empty files that merely repeat cooked object paths.
@@ -167,7 +180,7 @@ A `0` prevents RuneSchema from mounting or loading that mod folder.
 
 Place packages that need client-side Blueprint startup under `logicmods`, not
 `paks`. Ordinary `paks` packages still mount without starting a ModActor. Use
-BPModLoaderMod's default naming contract:
+the standard cooked ModActor path:
 
 ```text
 RuneSchema/mods/Dye/
@@ -184,10 +197,12 @@ The package must contain this generated actor class:
 /Game/Mods/ColorsOfMoneyVisualPilotV4/ModActor.ModActor_C
 ```
 
-RuneSchema mounts the package and submits it to BPModLoaderMod for client-side
-startup. BPModLoaderMod handles `BeginPlay` and its optional `PreBeginPlay` and
-`PostBeginPlay` events. RuneSchema logs a concise submission summary; its
-generated LogicMods list records the exact packages selected at launch.
+RuneSchema mounts the package and, when `bpModLoader.luaActorLoader` is enabled,
+its own Lua helper starts the client ModActor. This route does not edit
+BPModLoaderMod. RuneSchema logs a concise submission summary; the generated
+`settings/logicmods.lua.generated.txt` list records the exact packages
+selected at launch. See the [companion-folder guide](PSEUDO-LOADERS.md) for
+the settings and startup boundary.
 
 This startup bridge is client-side. Dedicated servers still mount the cooked
 package so authoritative data remains available, but they do not create a
@@ -196,8 +211,9 @@ started normally.
 
 Do not install the same package twice. If RuneSchema finds a matching package
 under the older `Content/Paks/LogicMods` location, it leaves startup ownership
-with UE4SS BPModLoaderMod and suppresses its own copy. This keeps existing
-installs working while allowing new mods to ship as one RuneSchema folder.
+with the existing UE4SS installation and suppresses its own copy. This keeps
+existing installs working while allowing new mods to ship as one RuneSchema
+folder.
 
 Keep content-only packages under `paks`. Only put a package under `logicmods`
 when it contains the default `ModActor.ModActor_C` class. If you previously
@@ -220,8 +236,9 @@ An `assets` file may reference an existing cooked item without changing it:
 ```
 
 Use this when the PAK already contains the correct item values and the mod needs
-RuneSchema to load or patch that particular object. Add fields inside the braces
-only when a value must be adjusted at startup.
+RuneSchema to resolve that particular object. Empty braces mean no property
+edit; they do not create an item, supply a missing persistence ID, or repair
+broken cooked references. Add fields only when a supported value must change.
 
 You can also reference the item directly from a recipe. RuneSchema checks that
 the path resolves to a real item before accepting the recipe.
@@ -273,8 +290,8 @@ Use RuneSchema only for the integration that cannot sensibly be baked into the
 PAK. For example, a currency pack may use a small `/raw` file to add consumable
 packs to an existing enemy loot DataTable.
 
-If RuneSchema receives more than 1,000 recipe definitions, it prints one
-advisory warning with the count and continues loading without limits.
+RuneSchema's configurable advisory warning defaults to more than 50,000
+authored recipes. The warning does not limit or skip recipe loading.
 
 ## Advanced authoritative registries
 
@@ -283,15 +300,16 @@ one universal Dragonwilds registry. Some use persistence maps while combat
 classes can use ordered component collections whose indices must match in
 multiplayer.
 
-The proposed cooked PAK manifest gives a large mod one compact declaration of
-the assets that must join those authoritative lanes. It uses complete
-validation, atomic registration, stable ordering, and a server/client
-fingerprint instead of scanning every loaded Unreal object.
+The cooked PAK registry declaration gives a mod one compact list of assets
+that need an explicit path into supported authoritative lanes. The game still
+owns the final live registries; RuneSchema validates the declaration and
+avoids duplicate registration when an entry is already present. The
+[live registry guide](COOKED-PAK-REGISTRY-MANIFEST.md) is the canonical list
+of supported lanes; do not assume every game system has one.
 
-This generic manifest is a design target, not a claim that every ranged or AI
-lane is already supported. Read the complete
-[cooked PAK registry manifest design](COOKED-PAK-REGISTRY-MANIFEST.md) before
-planning custom combat or magic around it.
+Ranged attacks are item-owned rather than a global class list; AI attack
+collection registration is not provided. Check those boundaries before
+planning custom combat or magic around a manifest.
 
 ## Test before release
 

@@ -9,6 +9,10 @@ This guide explains the shared foundation. The focused guides cover
 [PAK content](PAK-CONTENT-GUIDE.md), [weapons and items](WEAPONS-AND-ITEMS.md),
 and [stations and recipes](STATIONS-AND-RECIPES.md).
 
+If you prefer a guided starting point, the in-game
+[Advanced Authoring & Tools workflow](ADVANCED-AUTHORING-TOOLS.md) can search
+records, export a JSONC starter, and check its dependencies before installation.
+
 ## Create the mod folder
 
 Give the mod one clear, permanent folder name beneath `RuneSchema/mods`:
@@ -53,6 +57,7 @@ MyDragonwildsMod/
   ue4ss/
   vendors/
   paks/
+  logicmods/
 ```
 
 You do not need empty folders. RuneSchema reads each folder for a different
@@ -188,6 +193,9 @@ For each release candidate:
 ## Prepare a mod for sharing
 
 Ship the whole mod folder, including its RuneSchema files and PAK containers.
+For a CurseForge or Nexus Mods listing, use the
+[mod-host and getting-started page](MOD-HOSTS-AND-GETTING-STARTED.md) to explain
+the framework dependency, expected file types, and install path.
 Include a short README with:
 
 - the RuneSchema version used for testing;

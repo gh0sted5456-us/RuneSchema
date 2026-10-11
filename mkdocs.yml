@@ -3,6 +3,9 @@ site_description: "Authoring and runtime reference for RuneSchema, a UE4SS conte
 site_url: https://gh0sted5456-us.github.io/RuneSchema/
 repo_url: https://github.com/gh0sted5456-us/RuneSchema
 repo_name: gh0sted5456-us/RuneSchema
+# Internal engineering notes live in source control, not in the public site or search.
+exclude_docs: |
+  /development/
 
 theme:
   name: material
@@ -87,30 +90,37 @@ copyright: >-
 
 nav:
   - Home: index.md
-  - Monday Update:
-      - What Is New: CURRENT-RELEASE.md
+  - Get RuneSchema:
+      - Release and Downloads: CURRENT-RELEASE.md
       - Install or Update: INSTALLATION.md
-      - Optional Bridges: OPTIONAL-BRIDGES.md
       - Platform and Multiplayer: COMPATIBILITY.md
       - Save Safety: SAFE-SAVE-AND-LEDGER.md
-  - Create Mods:
-      - First RuneSchema Mod: AUTHORING-GUIDE.md
-      - Create PAK Content: PAK-CONTENT-GUIDE.md
-      - Create Custom Armor: CUSTOM-ARMOR.md
-      - Create Weapons and Items: WEAPONS-AND-ITEMS.md
-      - Create Stations and Recipes: STATIONS-AND-RECIPES.md
-      - Shared Registry Bridge PAK: SHARED-REGISTRY-BRIDGE-PAK.md
-      - Registry Bridge Diagnostics: BRIDGE-DIAGNOSTICS.md
-      - Presentation Transport: PRESENTATION-TRANSPORT.md
-      - Summoning Authority Bridge: SUMMONING-AUTHORITY-BRIDGE.md
-      - Advanced PAK Registries: COOKED-PAK-REGISTRY-MANIFEST.md
-      - Combat Fallback Settings: COMBAT-FALLBACK-SETTINGS.md
-      - Loader Folder Guide: LOADER-WALKTHROUGHS.md
-      - UE4SS Lua Companions: UE4SS-LUA-COMPANIONS.md
-      - Blueprint and Lua Companion Folders: PSEUDO-LOADERS.md
+      - Optional Bridges: OPTIONAL-BRIDGES.md
+      - For CurseForge and Nexus: MOD-HOSTS-AND-GETTING-STARTED.md
+  - Make a Mod:
+      - First Mod: AUTHORING-GUIDE.md
+      - Choose a Loader: LOADER-WALKTHROUGHS.md
+      - Guided Authoring Tools: ADVANCED-AUTHORING-TOOLS.md
       - Example Library: EXAMPLES.md
-      - Golden Interaction Text Example: examples/GoldenInteractionText/README.md
-      - Loader Details:
+      - Golden Text Example: examples/GoldenInteractionText/README.md
+      - JSON Schemas: SCHEMAS.md
+  - Cooked Content:
+      - PAKs and Mounting: PAK-CONTENT-GUIDE.md
+      - Items and Attacks: WEAPONS-AND-ITEMS.md
+      - Stations and Recipes: STATIONS-AND-RECIPES.md
+      - Custom Armor: CUSTOM-ARMOR.md
+      - Live Registry Declarations: COOKED-PAK-REGISTRY-MANIFEST.md
+      - Cook a Bridge Declaration: SHARED-REGISTRY-BRIDGE-PAK.md
+      - Blueprint and Lua Companions: PSEUDO-LOADERS.md
+      - Lua Companion Reference: UE4SS-LUA-COMPANIONS.md
+      - Advanced Integration:
+          - Registry Diagnostics: BRIDGE-DIAGNOSTICS.md
+          - Combat Fallback Settings: COMBAT-FALLBACK-SETTINGS.md
+          - Presentation Transport: PRESENTATION-TRANSPORT.md
+          - Summoning Authority Bridge: SUMMONING-AUTHORITY-BRIDGE.md
+  - Loader Reference:
+      - Overview: LOADER-WALKTHROUGHS.md
+      - By Folder:
           - Assets: reference/loaders/assets.md
           - Blueprints: reference/loaders/blueprints.md
           - Buildings: reference/loaders/buildings.md
@@ -133,21 +143,8 @@ nav:
           - Spawns: reference/loaders/spawns.md
           - Strings: reference/loaders/strings.md
           - Vendors: reference/loaders/vendors.md
-  - Development:
-      - Contributor Guide: development/DEVELOPER-GUIDE.md
-      - Plugin API: development/API-REFERENCE.md
-      - Character Creation: development/CHARACTER-CREATION-AUTHORING.md
-      - Building Cloning: development/BUILDING-CLONING.md
-      - Registry Patching: development/REGISTRY-PATCHING.md
-      - Compatibility Backbone: development/COMPATIBILITY-BACKBONE.md
-      - Storefront Lanes: development/STOREFRONT-LANES.md
-      - Manual Save Recovery: development/MANUAL-SAVE-RECOVERY.md
-      - Unreal + RuneSchema:
-          - Overview: development/unreal-runeschema/index.md
-          - Stations, Quests, and Recipes: development/unreal-runeschema/stations-quests-recipes.md
   - Help:
       - Ask RuneSchema: ASK-RUNESCHEMA.md
       - Troubleshooting: TROUBLESHOOTING.md
       - Documentation Map: DOCUMENTATION-INDEX.md
-      - JSON Schemas: SCHEMAS.md
       - Licensing and Ownership: LICENSING.md

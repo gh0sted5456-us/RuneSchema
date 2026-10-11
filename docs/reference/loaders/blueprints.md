@@ -264,14 +264,12 @@ Example: style the journal description as one field:
 }
 ```
 
-The next .8 phases are intentionally separate: safe scoped discovery
-(`WidgetTree` / `HUDWidgetRefs` / CommonUI containers) before any global
-fallback, followed by a RuneSchema-owned `$RuntimeUI` tree for transient UMG.
+Scoped discovery checks only the documented widget owners and containers.
 Do not use unrestricted global widget sweeps as an authoring primitive.
 
 ## Scoped runtime discovery
 
-The 0.8 test bed adds `$Find` as a fallback when the ordinary dot-separated
+`$Find` is a fallback when the ordinary dot-separated
 widget path cannot resolve. RuneSchema always tries the direct path first.
 
 ```jsonc
@@ -309,7 +307,7 @@ There is intentionally no general `FindAllOf(UserWidget)` authoring path.
 
 ## RuneSchema-owned transient UI
 
-The 0.8 test bed also accepts a separate `$RuntimeUI` block on an existing
+The loader also accepts a separate `$RuntimeUI` block on an existing
 owner widget class. This does **not** create a Blueprint class. RuneSchema owns a
 transient `UUserWidget`, its `WidgetTree`, viewport lifetime, and cleanup.
 
@@ -328,7 +326,7 @@ transient `UUserWidget`, its `WidgetTree`, viewport lifetime, and cleanup.
             {
               "Type": "TextBlock",
               "Name": "NoticeText",
-              "Text": "RuneSchema 0.8 test bed"
+              "Text": "RuneSchema notice"
             }
           ]
         }
@@ -338,7 +336,7 @@ transient `UUserWidget`, its `WidgetTree`, viewport lifetime, and cleanup.
 }
 ```
 
-The first implementation deliberately whitelists only `CanvasPanel`,
+The loader whitelists only `CanvasPanel`,
 `Border`, `TextBlock`, `Image`, and `Button`. A tree is limited to
 64 nodes, depth 8, and 32 children per panel. `Border` and `Button` accept
 one child; `TextBlock` and `Image` are leaves. UI and node names must contain
@@ -348,7 +346,7 @@ Each child may provide a `Slot` object. RuneSchema applies those reflected
 properties to the panel slot returned by `AddChild`. Node properties are
 otherwise applied with the normal reflected Blueprint property writer.
 
-Runtime-created nodes may use the existing `$Bind` and test-bed `$Call`
+Runtime-created nodes may use `$Bind` and `$Call`
 directives. This lets a transient Button bind an existing reflected multicast
 event to an existing owner function without synthesizing Blueprint bytecode.
 
@@ -393,12 +391,12 @@ This path intentionally does not modify Steam/GOG.
 - Use `/blueprints` only for supported reflected defaults on an existing loaded class or component.
 - Use `$RuntimeWidget` only for existing live widget-tree objects.
 - `$Bind.Event` must be a reflected multicast delegate and `$Bind.Function` must resolve on the selected target.
-- Test bed: `$Call` only invokes reflected functions and every named `Args` entry must resolve to an input parameter.
-- Test bed: use `$When` and `$Once` for lifecycle-sensitive runtime actions; recursive ProcessEvent re-entry is suppressed per rule.
-- Test bed: `$Activate` is only valid when the target exposes CommonUI `ActivateWidget` / `DeactivateWidget`.
-- Test bed: `$Find` is fallback-only and limited to `WidgetTree`, `HUDWidgetRefs`, or CommonUI `WidgetList` discovery.
-- Test bed: ambiguous `$Find` results fail closed; no live widget is selected by guesswork.
-- Test bed: `$RuntimeUI` creates only RuneSchema-owned transient UMG from the explicit primitive whitelist; it does not create Blueprint classes.
+- `$Call` only invokes reflected functions and every named `Args` entry must resolve to an input parameter.
+- Use `$When` and `$Once` for lifecycle-sensitive runtime actions; recursive ProcessEvent re-entry is suppressed per rule.
+- `$Activate` is only valid when the target exposes CommonUI `ActivateWidget` / `DeactivateWidget`.
+- `$Find` is fallback-only and limited to `WidgetTree`, `HUDWidgetRefs`, or CommonUI `WidgetList` discovery.
+- Ambiguous `$Find` results fail closed; no live widget is selected by guesswork.
+- `$RuntimeUI` creates only RuneSchema-owned transient UMG from the explicit primitive whitelist; it does not create Blueprint classes.
 - Delegate and function reflected parameter contracts must be compatible; raw parameter-buffer size is not used as the compatibility test.
 - Use optional `$Storefront` metadata when a live UI rule is only meaningful on one storefront.
 - Confirm every field, widget path, event, and function against live reflection.

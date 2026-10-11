@@ -10,6 +10,7 @@
 #include "Runtime/HostServices.h"
 #include "Runtime/RegistryBridge.h"
 #include "Utility/Config.h"
+#include "Utility/BuildInfo.h"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
 #include "SDK/Helper/ActorHelper.h"
@@ -334,7 +335,7 @@ void DragonWildsRegistryLoader::WriteMerged() {
     m_bridge.SetRegistrySnapshot(merged.dump());
     if(PS::PSConfig::Get()->GetSettings().advancedRuntime)
         PS::ConfigFiles::Write(PS::HostServices::ExportsDirectory()/"RegistryManifestAudit.json",
-            json{{"Build","0.7.7.7e"},{"Accepted",m_modEntries.size()},{"Entries",m_audit}}.dump(2)+"\n");
+            json{{"Build",PS::BuildInfo::Version},{"Accepted",m_modEntries.size()},{"Entries",m_audit}}.dump(2)+"\n");
     PS::LoaderSummary("registry",m_modEntries.size(),0,m_modEntries.size(),0,0);
 }
 

@@ -1,6 +1,6 @@
 # Create custom cooked armor
 
-RuneSchema 0.7.7.8 can help a cooked armor item join Dragonwilds' native
+RuneSchema can help a cooked armor item join Dragonwilds' native
 wearable presentation path. The armor mod still owns its item, meshes,
 materials, textures, and appearance rules. RuneSchema does not paint an item
 or invent a material for it.
@@ -11,9 +11,12 @@ For each armor item, provide a stable cooked item asset and the game's required
 item identity. Keep its existing PersistenceID and InternalName when updating a
 released item, so existing characters do not lose it.
 
-Bind the item to its intended male and female wearable mesh-data assets. Each
-mesh-data asset must point to the correct cooked mesh and any required material
-override, opacity mask, and section-hide rules. Cook the materials **and their
+Bind the item to its intended male and female wearable mesh-data assets. Do
+this for every slot your mod adds: head, body, legs, and any other supported
+wearable slot. Each mesh-data asset must point to the correct cooked mesh and
+any required material override, opacity mask, and section-hide rules. Body
+and leg pieces also need the game's appropriate authored undergarment-hide
+rules; helmet hair rules do not substitute for those. Cook the materials **and their
 textures** into the PAK; a path to an uncooked material is not enough. Check
 that each asset resolves by its full object path after mounting.
 
@@ -28,8 +31,10 @@ RuneSchema registers eligible cooked wearable items in the native item-name
 enumeration map after their normal persistence and network identities resolve.
 When an equipped custom mesh-data asset is missing from the player's native
 material-hide cache, RuneSchema asks the game's own cache builder to populate
-it. Dragonwilds then evaluates its authored hide rules, including helmet hair
-rules. RuneSchema does not fabricate or copy the cache's internal values.
+it. This may happen again after an equipment change invalidates that cache.
+Dragonwilds then evaluates the item's authored hide rules for its slot,
+including helmet hair or body/leg undergarment rules. RuneSchema does not
+fabricate or copy the cache's internal values.
 
 You may declare cooked wearable mesh data in your PAK's `RSREG_` or
 `DA_RuneSchemaRegistry` asset. This resolves and class-checks the declared
@@ -57,26 +62,18 @@ material. Check `[PAK-PRESENTATION]` and `[WEARABLE-BRIDGE]` messages if the
 armor loads but its appearance is wrong. Do not add thousands of unrelated
 assets merely to make them load.
 
-## Compatibility and testing
+## Compatibility boundary
 
-The native cache-refresh hook in 0.7.7.8 has been verified in game on the
-inspected Steam executable profile (PE timestamp `0xd702bba2`, image size
-`0xddf1000`). The 0.7.7.8e experimental build also carries a strictly
-signature-matched profile for the active Game Pass/WinGDK 100.8.0.0 image
-(PE timestamp `0xb0da0883`, image size `0x0db4e000`). Its native function
-entry points were checked against the running image and x64 unwind table. A
-Game Pass test loaded RuneSchema, entered a world, and showed the custom armor
-material and hidden hair. Its log did not show wearable-bridge activation, so
-that visual result cannot yet be attributed to the bridge. A profile mismatch
-leaves cache refresh inactive; ordinary item registration remains available.
+Native cache refresh is available only for executable profiles whose identity
+and function signatures match the supported Steam/GOG or Game Pass build.
+On an unmatched game update, this appearance helper stays inactive while
+ordinary item registration continues. A registered item does not prove that
+its cooked mesh, material, or hide predicates are complete. If a slot shows
+an exposed undergarment or fails to restore it on unequip, check the authored
+mesh-data rules and full dependency paths before changing RuneSchema settings.
 
-The confirmed in-game case is one TEST ARMOR helmet: its authored black
-material displayed and its hair was hidden, including after two former
-presentation modules were removed. That does **not** yet establish helmet
-removal, every armor slot, character preview, multiplayer, dedicated server,
-or every dye variant. Test equip and unequip, male and female appearances,
-world re-entry, client/server play, and mod removal on a backed-up save before
-shipping your own armor.
+For multiplayer, each player who must see the armor needs its cooked assets;
+the server remains authoritative for gameplay equipment state.
 
 For the broader PAK workflow, see [Create PAK content](PAK-CONTENT-GUIDE.md)
 and the [cooked registry manifest](COOKED-PAK-REGISTRY-MANIFEST.md).

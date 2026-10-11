@@ -1,183 +1,62 @@
-# RuneSchema 0.7.7.8e experimental release
+# RuneSchema 0.7.7.9m
 
-This October 10, 2026 experimental build adds a guarded native wearable bridge for
-custom cooked armor. It also lets authors declare wearable mesh-data
-dependencies in a cooked registry manifest, and lets players turn the
-large-recipe warning on or off and set its threshold (50,000 by default).
-All recipe loading remains unchanged by that warning setting.
-One RuneSchema DLL contains both the Steam and Game Pass executable profiles;
-users do not need a separate storefront DLL.
+RuneSchema loads enabled mod folders, mounts their cooked content, and connects
+supported definitions to Dragonwilds' live systems. The current package uses
+one DLL for Steam/GOG and Game Pass. The `m` release is the main channel; `e`
+is the experimental channel.
 
-[Download the 0.7.7.8e experimental ZIP](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.7.7.8e/RuneSchema-0.7.7.8e.zip).
-The matching [0.7.7.8m main package](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.7.7.8m/RuneSchema-0.7.7.8m.zip)
-is the stable-branch counterpart.
+[Download 0.7.7.9m](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.7.7.9m/RuneSchema-0.7.7.9m.zip)
+· [Experimental 0.7.7.9e](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.7.7.9e/RuneSchema-0.7.7.9e.zip)
+· [Installation guide](INSTALLATION.md)
 
-The native wearable path has been verified with one equipped TEST ARMOR
-helmet on the inspected Steam executable: its authored black material
-displayed and its hair was hidden, including after the former presentation
-modules were removed. RuneSchema uses the game's own cache builder for the
-hide rules and leaves the feature inactive when the executable signature
-does not match. This experimental ZIP includes a scanned Game Pass/WinGDK
-100.8.0.0 profile; its hook addresses and signatures match the live image.
-Game Pass startup, world entry, custom material, and hidden hair were observed,
-but the log did not show wearable-bridge activation, so the visual result
-cannot yet be attributed to the bridge. Other armor slots, helmet removal,
-preview, multiplayer, and dedicated servers remain to be validated. Custom
-armor still needs its own cooked meshes, materials, and textures;
-RuneSchema does not dye it automatically. [Create custom cooked armor](CUSTOM-ARMOR.md).
+## What changed
 
-This release retains the Blueprint and Lua companion paths. It continues the work on dependable mod loading, safer
-character saves, clearer status messages, and support for mods that bring
-their own PAK content.
+- Custom cooked wearable items can join the game's item enumeration and native
+  appearance cache. When equipment changes clear a previously built cache
+  entry, RuneSchema can ask the game to rebuild it again. The game still applies
+  the item's authored material and hide rules; RuneSchema does not create them.
+- A cooked registry declaration can name wearable mesh-data dependencies in
+  `WearableMeshData`. This checks that those assets resolve; it is not a
+  substitute for the item's male/female mesh-data references.
+- The large-recipe warning is an advisory setting. It is enabled by default
+  above 50,000 authored recipes, and its threshold can be changed in
+  `settings.jsonc`. It never caps or skips recipe loading.
+- A mod marked `0` in `runeschema.txt` contributes no RuneSchema definitions,
+  PAKs, LogicMods, or Lua companion on the next launch. Enabled mods retain
+  their listed order.
 
-The 0.7.7.7 authoring layout and server handoff guard still need broad in-game
-validation; the separate crash narrowed to `Dye_WeaponsTrim` folders is not
-claimed fixed.
+The package includes RuneSchema, Helpy, the shared Registry Bridge, and
+RSNetworking. These are one download; optional plugins can be disabled when no
+installed mod requires them. [Choose optional bridges](OPTIONAL-BRIDGES.md).
 
-The Advanced Authoring & Tools page now uses one top-to-bottom workflow.
-Choose a stage, then a content type when authoring; the selected tool uses the
-full page width. Previous/Next controls move between stages, recent results
-stay at the bottom, and structural schema export is available under All Loaders.
-Within a loader, choose the starter format before searching and selecting a
-record, then review fields, build a preview, check dependencies, and export.
-No authored files are activated merely by opening or browsing this page.
+## Find the right authoring path
 
-Make a backup before testing a new game build, a new RuneSchema build, or a
-large change to your mod list.
+| Goal | Start here |
+| --- | --- |
+| Edit existing game data with JSON/JSONC | [First mod](AUTHORING-GUIDE.md) and [loader folder guide](LOADER-WALKTHROUGHS.md) |
+| Add a new cooked item, mesh, station, or other asset | [PAK content guide](PAK-CONTENT-GUIDE.md) |
+| Make a cooked item discoverable in a live registry | [Cooked registry declarations](COOKED-PAK-REGISTRY-MANIFEST.md) |
+| Add physical, ranged, or magic attacks | [Weapons and attacks](WEAPONS-AND-ITEMS.md) |
+| Add crafting or processing | [Stations and recipes](STATIONS-AND-RECIPES.md) |
+| Add custom armor and appearance | [Custom armor](CUSTOM-ARMOR.md) |
 
-## What players will notice
+## Save and multiplayer boundaries
 
-- A mod marked `0` in `RuneSchema/mods/runeschema.txt` stays disabled. Letter
-  case and duplicate lines cannot turn it back on.
-- Mods load in the order shown in `runeschema.txt`. RuneSchema no longer
-  rearranges newly found mods alphabetically.
-- RuneSchema prepares its content once when the game starts. Returning to the
-  menu and entering another world does not repeat the full setup.
-- Loaded PAK items, recipes, quests, journal entries, magic, and equipment
-  effects are checked against the game lists that actually use them.
-- In multiplayer, the server provides the registry baseline for the session.
-  Clients report clear per-mod differences without being blocked when they
-  have extra content or are missing optional content.
-- Client presentation-route notices identify the affected mod and are reported
-  once per loaded manifest instead of repeatedly warning during normal play.
-- The log now gives short totals for content found in PAK files and content
-  created through RuneSchema files.
-- Character menu additions can share the available grid more reliably instead
-  of pushing entries into broken rows or columns.
-- Mod authors can change supported menu text, fonts, and colors. The included
-  golden interaction-text example is a starting point.
-- Processing-station recipe placement is now read back from the live station
-  row. Missing replacement targets and rejected native array writes are
-  reported as errors instead of clean recipe loads.
+PAK mounting, object resolution, live registration, and gameplay connection
+are different steps. A mounted file is not proof that its item or attack is
+usable. Check each layer in the startup log and in the game. The server remains
+authoritative for multiplayer gameplay; participating clients need the cooked
+content they must use or display. [Platform and multiplayer guide](COMPATIBILITY.md).
 
-## Save cleanup is narrower and safer
-
-RuneSchema does not delete a saved entry just because it came from a mod. It
-first lets enabled mods and PAK files load. It then asks the live game lists
-whether each saved item, recipe, quest, or journal entry still exists.
-
-An entry is removed only when it cannot be found in the matching live game
-list. This is useful after uninstalling a mod because the missing item no longer
-blocks the character from loading.
-
-Cleanup runs at the first character-load point for that game launch. It does
-not repeatedly clean the same character every time the player moves between a
-world and the main menu. If nothing is missing, RuneSchema leaves the character
-data unchanged.
-
-[Read the full save-safety guide](SAFE-SAVE-AND-LEDGER.md).
-
-## Clearer PAK and RuneSchema roles
-
-A mounted PAK makes cooked files available. For ordinary mods, RuneSchema can
-reference those cooked items and recipes by their full object paths, place
-recipes in stations, and edit a cooked mod DataTable through `/raw`.
-
-Very large content libraries should keep their items, recipes, station
-relationships, and unlock relationships inside the cooked PAK. They should not
-need thousands of empty RuneSchema files merely to make every path load.
-RuneSchema can still perform the small integration work the mod asks for, such
-as adding consumable packs to enemy loot tables.
-
-When RuneSchema receives more than 1,000 authored recipe definitions, it prints
-one warning with the total. Loading continues normally without a cap or refusal.
-The warning simply tells the author that a native cooked-PAK layout may be
-easier to maintain.
-
-RuneSchema reports mount, resolution, and live-registration results separately
-so an author can distinguish a missing PAK from a bad object path.
-
-[Learn how to create PAK content](PAK-CONTENT-GUIDE.md).
-
-## Blueprint and Lua companions stay inside a RuneSchema mod
-
-Mod authors can keep optional Blueprint startup packages under
-`logicmods/<PackageName>/` and UE4SS Lua code under `ue4ss/scripts/main.lua`
-inside their RuneSchema mod. RuneSchema mounts the cooked package and uses its
-own Lua helper to start its `ModActor`; it starts a Lua companion
-once at game launch when the same mod is enabled.
-
-An ordinary `paks` folder still mounts cooked content but no longer asks
-BPModLoaderMod to start every package. This cuts down unwanted startup checks
-and log noise. The log shows one LogicMod submission summary, while a generated
-list keeps the exact package names for troubleshooting. This path leaves
-BPModLoaderMod untouched. A mod marked `0` in
-`runeschema.txt` does not contribute PAKs, LogicMods, or Lua code on the next
-launch.
-
-If your existing mod needs a `ModActor`, move its complete package folder from
-`paks` to `logicmods`; do not leave duplicate copies. Restart after changing
-the mod list.
-
-[See both optional folder layouts](PSEUDO-LOADERS.md).
-
-## Bridges are included in the release package
-
-The 0.7.7.7e release includes these bridges in one RuneSchema ZIP: the complete
-shared registry bridge PAK and the RSNetworking bridge. They are separate
-plugins, so players can turn either one off without disabling RuneSchema.
-
-The registry bridge gives PAK authors a shared base for declaring the items,
-recipes, spells, and attacks their own cooked mod supplies. RSNetworking gives
-mods a shared path for supported multiplayer presentation and identity work.
-Neither bridge invents missing content, replaces the game's save format, or
-forces RuneSchema's optional weapon fallback on.
-
-Keep a bridge enabled when an installed mod requires it.
-
-[See what each optional bridge does](OPTIONAL-BRIDGES.md).
+RuneSchema's cleanup uses applicable live registries after enabled content has
+loaded. It does not infer that a saved ID is orphaned merely because it came
+from a mod. Back up important characters before changing a gameplay mod list.
+[Save safety and removal](SAFE-SAVE-AND-LEDGER.md).
 
 ## What RuneSchema does not do
 
-RuneSchema cannot repair a PAK that was cooked with missing files or incorrect
-internal paths. It also cannot make two mods safely replace the same cooked file.
-When mods overlap, the author must choose unique paths or provide a deliberate
-compatibility patch.
-
-RuneSchema does not restore items that were previously removed from a save.
-Reinstalling a removed mod makes its content available again, but it does not
-recreate possessions or progress that no longer exist in the save.
-
-## Recommended update steps
-
-1. Close Dragonwilds completely.
-2. Back up at least one test character.
-3. Replace RuneSchema's program files with the new package; preserve your
-   existing `settings` and `mods` folders. In `settings.jsonc`, keep
-   `bpModLoader.luaActorLoader` enabled and `patchScript` disabled.
-4. Review `RuneSchema/mods/runeschema.txt` before starting the game.
-5. Start with the same mods that were used for the last successful save.
-6. Read the first RuneSchema summary in `UE4SS.log`.
-7. Enter a test world, return to the menu, and enter it again.
-8. Only then test removing or disabling a mod.
-
-## Information to include with a report
-
-Please include:
-
-- Steam, GOG, or Game Pass;
-- whether the problem happened on first entry or re-entry;
-- the full `UE4SS.log` from that launch;
-- the relevant lines from `runeschema.txt`;
-- the names of recently added, updated, disabled, or removed mods;
-- whether the same character loads after restoring the previous mod list.
+RuneSchema cannot fix a PAK with missing cooked assets, wrong paths, or broken
+Blueprints. It cannot invent an armor material, the missing half of an attack
+pair, or multiplayer behavior for a mod that has not authored it. A registry
+declaration names content and validates supported live lanes; it does not make
+every asset inside a PAK active automatically.
