@@ -87,26 +87,55 @@ an item that appears in the inventory but fails when equipped or attacked with.
 
 Dragonwilds uses different authorities for melee attacks, ranged attacks,
 combat magic, utility magic, and equipment effects. A weapon appearing in the
-item list does not prove that its combat classes joined the correct collection.
+item list does not prove that its attack or spell path is usable.
 
-RuneSchema has verified subsystem lanes for combat spells, utility spells, and
-held-equipment effects. Cooked manifests can declare a complete ordered
-`MeleeAttackClasses` collection. Ranged weapons do not share an equivalent
-global player registry: register the cooked `HeldEquipmentData` item and keep
-its `RangedAttackCollection` reference intact. RuneSchema resolves the
-collection defaults after item registration and admits only its complete
-quick/full attack-data pair to the live ranged component; it never inserts
-lower-level shot classes. Magic similarly keeps its normal weapon-owned attack
-collection while persistent spell data is declared through `CombatSpells` or
-`UtilitySpells`.
+### Physical melee attacks
 
-The melee class lane remains experimental and must resolve completely before
+1. Cook the item, held-equipment data, animation references, and every custom
+   attack class into the mod's PAK. Use a known weapon family as the template.
+2. Connect the item to the cooked equipment/attack collection in its own data.
+3. If the game's native path does not enroll the class collection, list the
+   complete, correctly ordered classes under `MeleeAttackClasses` in the
+   mod-owned cooked registry declaration. Enable the specific melee fallback
+   only when the mod calls for it.
+4. Check the live class order, every combo step, and multiplayer behavior. A
+   partial or wrong-class collection must be fixed in the PAK, not padded with
+   placeholder entries.
+
+### Bows, crossbows, and other ranged weapons
+
+1. Cook and register the weapon's item data; cook the `HeldEquipmentData` it
+   references.
+2. Keep its `RangedAttackCollection` reference intact. That collection needs
+   both `QuickAttackData` and `FullAttackData` pointing to valid cooked player
+   attack classes.
+3. If the normal item-owned path needs the optional RuneSchema fallback, use
+   the ranged-equipment switch. Do not put shot/projectile implementation
+   classes into `RangedAttackClasses`; that field is not a global ranged
+   registry.
+4. Verify equip, firing, ammo use, damage, and re-equip separately from item
+   registration.
+
+### Combat and utility magic
+
+1. Cook spell data and its effect, projectile, animation, and presentation
+   dependencies into the mod's PAK.
+2. Declare persistent spell assets in `CombatSpells` or `UtilitySpells` in the
+   cooked registry asset. Keep the equipped weapon's
+   `MagicAttackCollection` link to the intended spells.
+3. Verify that the live spell registry accepts the data and that the weapon's
+   cast path invokes it. Registering a spell does not create a new cast input,
+   animation, or network behavior.
+
+The [cooked registry guide](COOKED-PAK-REGISTRY-MANIFEST.md) gives the exact
+declaration fields, while [combat fallback settings](COMBAT-FALLBACK-SETTINGS.md)
+explains which optional switches affect attack collections.
+
+The melee class lane is guarded and must resolve completely before
 RuneSchema changes the process-scoped component default. A component that was
 already constructed in the first gameplay world may receive the same complete
-plan once; later worlds are read-only and inherit the default. Read the
-[cooked PAK registry manifest guide](COOKED-PAK-REGISTRY-MANIFEST.md) before
-building a new custom attack family around them. AI attack registration is
-still undergoing lifecycle validation.
+plan once; later worlds inherit the default. AI attack collection registration
+is not offered by the current cooked declaration.
 
 For a cooked content mod, the
 [shared registry bridge PAK walkthrough](SHARED-REGISTRY-BRIDGE-PAK.md) shows

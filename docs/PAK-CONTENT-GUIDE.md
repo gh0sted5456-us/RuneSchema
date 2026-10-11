@@ -15,6 +15,19 @@ folders, lets smaller mods connect cooked objects through full paths, applies
 requested compatibility edits, reports failures clearly, and safely removes
 saved references after a mod is uninstalled.
 
+## Choose how the cooked asset becomes usable
+
+| Your content | What to ship | RuneSchema connection |
+| --- | --- | --- |
+| New art for an existing game item | Cooked art and an item/Blueprint that references it | An `assets` adjustment only if you need to change the existing item. |
+| One new cooked item | PAK with the item and every dependency | Name its exact path in `assets`, a supported recipe, or a cooked registry declaration. |
+| Large cooked item catalogue | PAK with stable identities and native relationships | One mod-owned cooked registry declaration for any items not otherwise enrolled. |
+| New recipe or station | PAK with recipe, station data, and their references | Use `recipes`/`buildings` to connect missing station or menu relationships. |
+| New attack or spell | PAK with the complete attack/spell and owning item data | Follow the distinct melee, ranged, and magic paths in [weapons and items](WEAPONS-AND-ITEMS.md). |
+
+The content mod owns the cooked files. The shared RuneSchema bridge supplies a
+registration route; it does not provide the mod's weapon, spell, mesh, or station.
+
 For a very large content library, bake the item, recipe, station, and unlock
 relationships into the PAK itself. RuneSchema should not need thousands of
 empty files that merely repeat cooked object paths.
@@ -223,8 +236,9 @@ An `assets` file may reference an existing cooked item without changing it:
 ```
 
 Use this when the PAK already contains the correct item values and the mod needs
-RuneSchema to load or patch that particular object. Add fields inside the braces
-only when a value must be adjusted at startup.
+RuneSchema to resolve that particular object. Empty braces mean no property
+edit; they do not create an item, supply a missing persistence ID, or repair
+broken cooked references. Add fields only when a supported value must change.
 
 You can also reference the item directly from a recipe. RuneSchema checks that
 the path resolves to a real item before accepting the recipe.
@@ -276,8 +290,8 @@ Use RuneSchema only for the integration that cannot sensibly be baked into the
 PAK. For example, a currency pack may use a small `/raw` file to add consumable
 packs to an existing enemy loot DataTable.
 
-If RuneSchema receives more than 1,000 recipe definitions, it prints one
-advisory warning with the count and continues loading without limits.
+RuneSchema's configurable advisory warning defaults to more than 50,000
+authored recipes. The warning does not limit or skip recipe loading.
 
 ## Advanced authoritative registries
 
@@ -289,11 +303,13 @@ multiplayer.
 The cooked PAK registry declaration gives a mod one compact list of assets
 that need an explicit path into supported authoritative lanes. The game still
 owns the final live registries; RuneSchema validates the declaration and
-avoids duplicate registration when an entry is already present.
+avoids duplicate registration when an entry is already present. The
+[live registry guide](COOKED-PAK-REGISTRY-MANIFEST.md) is the canonical list
+of supported lanes; do not assume every game system has one.
 
-This is not a claim that every ranged or AI lane is supported. Read the
-[current lanes and design limits](COOKED-PAK-REGISTRY-MANIFEST.md) before
-planning custom combat or magic around it.
+Ranged attacks are item-owned rather than a global class list; AI attack
+collection registration is not provided. Check those boundaries before
+planning custom combat or magic around a manifest.
 
 ## Test before release
 

@@ -1,18 +1,25 @@
-# What is RuneSchema? A guide for mod hosts and new authors
+# RuneSchema: what it is, what the files do, and how to mod with it
 
 This page is written for players, CurseForge and Nexus Mods reviewers, and
 creators publishing RuneSchema add-ons for *RuneScape: Dragonwilds*. It
-describes the current 0.7.7.7 release. Individual add-ons use only the files
+describes the current release. Individual add-ons use only the files
 their feature needs; the framework download contains more files than a typical
 add-on.
 
-## Short description for a mod page
+## Ready-to-use description for CurseForge or Nexus Mods
 
 > RuneSchema is a UE4SS-based modding framework for RuneScape: Dragonwilds.
-> Add-ons can use JSON/JSONC to change supported game content and may also
-> include cooked Unreal PAKs or an optional UE4SS Lua companion. These parts
-> stay together under one RuneSchema mod folder, so the add-on can be enabled
-> or disabled as a unit. RuneSchema is required to run RuneSchema add-ons.
+> It lets creators add or adjust items, recipes, stations, quests, characters,
+> dialogue, text, and other supported content. A RuneSchema add-on can be a
+> small JSON/JSONC edit, a cooked Unreal PAK, or a combination with optional
+> Lua behavior. Its files stay in one mod folder so players can enable or
+> disable the add-on as a unit. RuneSchema and a supported UE4SS installation
+> are required to use RuneSchema add-ons.
+
+The [current download and release notes](CURRENT-RELEASE.md),
+[installation steps](INSTALLATION.md), and [first-mod guide](AUTHORING-GUIDE.md)
+are maintained here. A mod author can link this page from a CurseForge or Nexus
+listing instead of repackaging the framework in every add-on.
 
 RuneSchema is not a replacement for UE4SS or Unreal's cooking tools. It reads
 the enabled mod folders, loads supported definitions in the listed order,
@@ -21,7 +28,7 @@ systems that use it. It also checks supported saved identities against the
 live game lists after enabled content loads. A mounted PAK alone does not prove
 that every asset inside it is registered or usable.
 
-## Two different downloads
+## What players install
 
 The **RuneSchema framework** is the dependency installed at
 `ue4ss/Mods/RuneSchema/`. The [current release](CURRENT-RELEASE.md) ships one
@@ -33,6 +40,10 @@ A **RuneSchema add-on** normally installs as one folder beneath
 may combine data definitions with its own cooked PAK and Lua companion. An
 add-on does **not** need to repackage RuneSchema's DLL or shared bridges. Its
 author should name RuneSchema and any other required mod as dependencies.
+
+If you are installing an add-on, install the framework once, then put the
+add-on's complete folder under `RuneSchema/mods/`. Do not scatter its files
+across the game's PAK folder or the top-level UE4SS `Mods` folder.
 
 ```text
 ue4ss/Mods/
@@ -106,6 +117,12 @@ folders, not three more JSON loaders.
 
 ## Make your first RuneSchema mod
 
+Start with one visible change to existing content. The included
+[Golden Interaction Text example](examples/GoldenInteractionText/README.md)
+shows a small color edit with no new cooked assets. Once that works, add a
+recipe or item, and only then add a cooked PAK if your idea needs new game
+assets.
+
 1. Install the supported UE4SS setup for your game store, then install the
    [RuneSchema framework](INSTALLATION.md). Start the game once and confirm the
    RuneSchema version appears in `UE4SS.log`.
@@ -129,6 +146,14 @@ folders, not three more JSON loaders.
    dependencies, installation path, and safe update/removal steps. Do not
    include a second copy of UE4SS or RuneSchema unless the upload is the
    framework itself.
+
+If your mod adds new cooked content, create the assets in Unreal and cook the
+package first. Put its matching container files under `paks/<PackageName>/`,
+then use RuneSchema's supported folders to connect that content where needed.
+For example, a new weapon can have its mesh and item in the PAK, an `assets`
+definition for its item path, and a `recipes` definition to make it craftable.
+Mounting a PAK is only the first step: confirm the item and recipe appear in
+the live game, not just in the log as mounted files.
 
 The [first-mod guide](AUTHORING-GUIDE.md) continues from here. For new Unreal
 content, follow the [PAK guide](PAK-CONTENT-GUIDE.md); for cooked ModActors or

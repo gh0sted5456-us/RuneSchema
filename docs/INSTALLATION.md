@@ -18,7 +18,7 @@ You need:
 
 Close the game before replacing RuneSchema, UE4SS, or any PAK files.
 
-Download the [current 0.7.7.8m package](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.7.7.8m/RuneSchema-0.7.7.8m.zip).
+Download the [current 0.7.7.9m package](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.7.7.9m/RuneSchema-0.7.7.9m.zip).
 There is one `RuneSchema-<version>.zip` per release, with the registry and
 networking bridges and Helpy included. No separate Core or Universal choice is
 needed. The `e` suffix identifies an experimental build; `m` identifies main.
@@ -118,8 +118,8 @@ the same as a failed start.
 If RuneSchema cannot start at all, the log should state the reason. Fix that
 first before judging whether an individual mod worked.
 
-For this release, the startup version should read `0.7.7.8m` for the main ZIP
-or `0.7.7.8e` for the experimental ZIP. If it shows an earlier version, check
+For this release, the startup version should read `0.7.7.9m` for the main ZIP
+or `0.7.7.9e` for the experimental ZIP. If it shows an earlier version, check
 for an old DLL in the active UE4SS installation before troubleshooting the mod.
 
 ## Remove RuneSchema temporarily

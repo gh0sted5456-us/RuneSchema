@@ -67,7 +67,7 @@ Walkthrough:
 `PersistenceID`, `InternalName`, piece index, and requirements cannot be hidden
 inside `Properties`; RuneSchema owns those fields. For imported assemblies and
 static parent objects, see [Base Builder import](https://github.com/gh0sted5456-us/RuneSchema/blob/main/source/raw/BASE-BUILDER-IMPORT.md)
-and [Building cloning](../../development/BUILDING-CLONING.md).
+and [stations and recipes](../../STATIONS-AND-RECIPES.md).
 
 For compatible processing buildings, `Overrides.Processing` can append,
 replace, or clear accepted fuels and can set fuel slots, processing rate, and

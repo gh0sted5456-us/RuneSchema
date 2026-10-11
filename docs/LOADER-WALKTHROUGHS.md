@@ -3,6 +3,24 @@
 Each folder inside a RuneSchema mod has one job. Keeping those jobs separate
 makes a mod easier to test, update, and remove.
 
+## Choose the first loader for your goal
+
+| Goal | Start with | Add another folder only when needed |
+| --- | --- | --- |
+| Resolve or adjust an item that already exists in a PAK | `assets` with its full cooked object path | `recipes` to craft it; `journal` for a discovery page. |
+| Add a new mesh, icon, sound, animation, or Blueprint class | `paks` for the cooked files | `assets`, `blueprints`, or a cooked registry declaration to connect them. |
+| Change a row in an existing DataTable, including a mod-owned cooked table | `raw` | `paks` if the table itself is new cooked content. |
+| Add a building or station | `buildings` plus its cooked actor/data in `paks` | `recipes` for station output; `quests` for progression. |
+| Put a recipe into a crafting or processing station | `recipes` | `assets` only if the item also needs loading or adjustment. |
+| Add a quest-driven character | `quests`, `npc`, and `dialogue` | `events`, `spawns`, `journal`, or `lore` for the specific feature. |
+| Change supported interface text, font, or color | `blueprints` or `strings` | `paks` only for new cooked fonts or widget classes. |
+| Make a large cooked catalogue discoverable | A mod-owned cooked registry asset inside `paks` | Ordinary loaders only for focused patches or missing relationships. |
+
+A loader file cannot cook a missing Unreal asset. A PAK mount cannot, by
+itself, put every packaged object into the live gameplay list. For new content,
+follow [PAK mounting](PAK-CONTENT-GUIDE.md) and the
+[live registry guide](COOKED-PAK-REGISTRY-MANIFEST.md) together.
+
 ## Content folders
 
 | Folder | Typical content | Restart recommended |
@@ -86,8 +104,25 @@ of empty loader files.
 Custom combat, magic, and equipment data can require different authoritative
 game registries. A mod can cook its own registry declaration asset for the
 supported lanes. See the [current lanes and design limits](COOKED-PAK-REGISTRY-MANIFEST.md)
-before relying on one for a new feature; AI registration and some multiplayer
-behaviors still need separate validation.
+before relying on one for a new feature. A `registry/*.jsonc` file cannot
+declare `NativeRegistries` and AI attack registration is not a supported lane.
+
+## Open the detailed loader reference
+
+- Items and game data: [assets](reference/loaders/assets.md),
+  [raw tables](reference/loaders/raw.md), [recipes](reference/loaders/recipes.md),
+  [buildings](reference/loaders/buildings.md), and
+  [equipment](reference/loaders/equipment.md).
+- Story and world: [quests](reference/loaders/quests.md),
+  [dialogue](reference/loaders/dialogue.md), [events](reference/loaders/events.md),
+  [journal](reference/loaders/journal.md), [lore](reference/loaders/lore.md),
+  [NPCs](reference/loaders/npc.md), [spawns](reference/loaders/spawns.md), and
+  [vendors](reference/loaders/vendors.md).
+- Presentation and rules: [blueprints](reference/loaders/blueprints.md),
+  [strings](reference/loaders/strings.md), [nameplates](reference/loaders/nameplates.md),
+  [players](reference/loaders/players.md), [effects](reference/loaders/effects.md),
+  [niagara](reference/loaders/niagara.md), [courses](reference/loaders/courses.md),
+  [enums](reference/loaders/enums.md), and [registry](reference/loaders/registry.md).
 
 ## File order inside a folder
 

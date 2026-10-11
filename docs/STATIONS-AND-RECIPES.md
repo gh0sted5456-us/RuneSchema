@@ -180,9 +180,9 @@ station or save-aware recipe list. RuneSchema can:
 
 For a very large cooked recipe catalogue, bake recipe-to-item and
 recipe-to-station relationships into the PAK instead of producing thousands of
-RuneSchema recipe references. More than 1,000 authored recipes produces one
-advisory warning but does not stop loading. Large PAK authors should also read
-the [cooked PAK registry manifest design](COOKED-PAK-REGISTRY-MANIFEST.md).
+RuneSchema recipe references. The configurable advisory warning defaults to
+more than 50,000 authored recipes and does not stop loading. Large PAK authors
+should also read the [cooked registry guide](COOKED-PAK-REGISTRY-MANIFEST.md).
 
 ## Station and recipe test checklist
 

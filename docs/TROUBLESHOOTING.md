@@ -14,7 +14,7 @@ RuneSchema : 1
 
 Confirm the RuneSchema DLL is in the expected `RuneSchema/dlls` location and
 that the game was fully closed before the DLL was replaced.
-For the current main package, confirm the startup log identifies `0.7.7.8m`.
+For the current main package, confirm the startup log identifies `0.7.7.9m`.
 An older label means an older DLL is still being loaded.
 
 ## A LogicMod starts on a dedicated server

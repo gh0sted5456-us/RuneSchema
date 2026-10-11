@@ -1,6 +1,6 @@
 # Advanced Authoring & Tools
 
-RuneSchema 0.7.7.7 gives the in-game authoring page one full-width, top-to-bottom
+RuneSchema gives the in-game authoring page one full-width, top-to-bottom
 workflow. It can help you find a loaded record, prepare an editable JSONC
 starter, check its references, and export it. Opening the page, searching, and
 building a preview do not install a mod or change the game data.

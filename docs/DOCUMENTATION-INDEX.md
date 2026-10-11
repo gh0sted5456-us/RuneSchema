@@ -4,7 +4,7 @@ Use this page to find the shortest path to the information you need.
 
 ## Players and server owners
 
-1. [What is new in 0.7.7.8m](CURRENT-RELEASE.md)
+1. [Current release and downloads](CURRENT-RELEASE.md)
 2. [What RuneSchema is, its files, and how to start](MOD-HOSTS-AND-GETTING-STARTED.md)
 3. [Install or update RuneSchema](INSTALLATION.md)
 4. [Choose optional bridges](OPTIONAL-BRIDGES.md)
@@ -16,7 +16,7 @@ Use this page to find the shortest path to the information you need.
 
 1. [Create your first RuneSchema mod](AUTHORING-GUIDE.md)
 2. [Use Advanced Authoring & Tools](ADVANCED-AUTHORING-TOOLS.md)
-3. [Learn what each folder does](LOADER-WALKTHROUGHS.md)
+3. [Choose the correct loader folder](LOADER-WALKTHROUGHS.md)
 4. [Study the example library](EXAMPLES.md)
 5. [Use the JSON schemas for field checking](SCHEMAS.md)
 6. [Add an optional UE4SS Lua companion](UE4SS-LUA-COMPANIONS.md)
@@ -27,10 +27,10 @@ Use this page to find the shortest path to the information you need.
 2. [Create weapons and items](WEAPONS-AND-ITEMS.md)
 3. [Create stations and recipes](STATIONS-AND-RECIPES.md)
 4. [Create a shared registry bridge asset](SHARED-REGISTRY-BRIDGE-PAK.md)
-5. [Plan authoritative combat and magic registration](COOKED-PAK-REGISTRY-MANIFEST.md)
+5. [Declare supported live registries](COOKED-PAK-REGISTRY-MANIFEST.md)
 6. [Configure optional combat fallback helpers](COMBAT-FALLBACK-SETTINGS.md)
 7. [Bridge a self-contained summoning mod](SUMMONING-AUTHORITY-BRIDGE.md)
 8. [Troubleshoot mounting and registration](TROUBLESHOOTING.md)
 
-The public website describes the supported release in plain language. Historical
-experiments and internal implementation notes remain in Git history.
+The public website documents supported interfaces. It does not publish internal
+test logs or treat design proposals as available features.
