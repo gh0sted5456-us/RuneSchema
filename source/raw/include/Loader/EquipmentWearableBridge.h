@@ -55,7 +55,9 @@ inline bool InstallAttempted=false;
 inline thread_local bool Refreshing=false;
 inline std::vector<PS::WeakObjectHandle> Registered;
 struct Attempt { PS::WeakObjectHandle Component,Mesh; uint8_t Gender; };
-inline std::vector<Attempt> Attempts;
+// Retain only failed enrollments. A successful cache entry may later be
+// invalidated by the game when equipment changes, so it must be retryable.
+inline std::vector<Attempt> FailedAttempts;
 
 inline bool Live(UObject* object) {
     return object && !object->HasAnyFlags(static_cast<EObjectFlags>(
@@ -100,14 +102,14 @@ inline void BeforeEvaluation(safetyhook::Context& context) noexcept {
         // is the same mesh interface used by the normal native cache builder.
         auto** pair=reinterpret_cast<void**>(context.r8);
         if(!Live(static_cast<UObject*>(pair[0])) || !pair[1]) return;
-        std::erase_if(Attempts,[](const Attempt& a){return !Live(a.Component.Get()) || !Live(a.Mesh.Get());});
-        if(std::ranges::any_of(Attempts,[&](const Attempt& a){return a.Component.Get()==component && a.Mesh.Get()==mesh && a.Gender==gender;})) return;
-        if(Attempts.size()>=256) throw std::runtime_error("wearable refresh attempt budget exhausted");
-        Attempts.push_back({PS::WeakObject(component),PS::WeakObject(mesh),gender});
+        std::erase_if(FailedAttempts,[](const Attempt& a){return !Live(a.Component.Get()) || !Live(a.Mesh.Get());});
+        if(std::ranges::any_of(FailedAttempts,[&](const Attempt& a){return a.Component.Get()==component && a.Mesh.Get()==mesh && a.Gender==gender;})) return;
+        if(FailedAttempts.size()>=256) throw std::runtime_error("wearable refresh failure budget exhausted");
         Refreshing=true;
         BuildCache(component,pair[1],gender);
         Refreshing=false;
         const bool enrolled=ContainsMesh(component,mesh);
+        if(!enrolled) FailedAttempts.push_back({PS::WeakObject(component),PS::WeakObject(mesh),gender});
         PS::Log<RC::LogLevel::Normal>(TEXT("[WEARABLE-BRIDGE][{}] item='{}' component='{}' gender={}; native hide cache rebuilt.\n"),
             enrolled?TEXT("ENROLLED"):TEXT("NOT-ENROLLED"),item->GetPathName(),component->GetPathName(),gender);
     } catch(const std::exception& error) {
