@@ -64,9 +64,11 @@ inspected Steam executable profile (PE timestamp `0xd702bba2`, image size
 `0xddf1000`). The 0.7.7.8e experimental build also carries a strictly
 signature-matched profile for the active Game Pass/WinGDK 100.8.0.0 image
 (PE timestamp `0xb0da0883`, image size `0x0db4e000`). Its native function
-entry points were checked against the running image and x64 unwind table, but
-the Game Pass bridge has **not yet been tested in game**. A mismatch leaves
-cache refresh inactive; ordinary item registration remains available.
+entry points were checked against the running image and x64 unwind table. A
+Game Pass test loaded RuneSchema, entered a world, and showed the custom armor
+material and hidden hair. Its log did not show wearable-bridge activation, so
+that visual result cannot yet be attributed to the bridge. A profile mismatch
+leaves cache refresh inactive; ordinary item registration remains available.
 
 The confirmed in-game case is one TEST ARMOR helmet: its authored black
 material displayed and its hair was hidden, including after two former

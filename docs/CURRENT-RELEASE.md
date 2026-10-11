@@ -5,6 +5,8 @@ custom cooked armor. It also lets authors declare wearable mesh-data
 dependencies in a cooked registry manifest, and lets players turn the
 large-recipe warning on or off and set its threshold (50,000 by default).
 All recipe loading remains unchanged by that warning setting.
+One RuneSchema DLL contains both the Steam and Game Pass executable profiles;
+users do not need a separate storefront DLL.
 
 [Download the 0.7.7.8e experimental ZIP](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.7.7.8e/RuneSchema-0.7.7.8e.zip).
 The matching [0.7.7.8m main package](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.7.7.8m/RuneSchema-0.7.7.8m.zip)
@@ -16,9 +18,11 @@ displayed and its hair was hidden, including after the former presentation
 modules were removed. RuneSchema uses the game's own cache builder for the
 hide rules and leaves the feature inactive when the executable signature
 does not match. This experimental ZIP includes a scanned Game Pass/WinGDK
-100.8.0.0 profile; its hook addresses and signatures match the live image,
-but in-game Game Pass behavior is not verified yet. Other armor slots, helmet
-removal, preview, multiplayer, and dedicated servers remain to be validated. Custom
+100.8.0.0 profile; its hook addresses and signatures match the live image.
+Game Pass startup, world entry, custom material, and hidden hair were observed,
+but the log did not show wearable-bridge activation, so the visual result
+cannot yet be attributed to the bridge. Other armor slots, helmet removal,
+preview, multiplayer, and dedicated servers remain to be validated. Custom
 armor still needs its own cooked meshes, materials, and textures;
 RuneSchema does not dye it automatically. [Create custom cooked armor](CUSTOM-ARMOR.md).
 

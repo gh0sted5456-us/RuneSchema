@@ -21,7 +21,6 @@ game, and remove missing saved references safely when a mod is uninstalled.
 
 <div class="rs-actions" markdown>
 [See what is new in 0.7.7.8](CURRENT-RELEASE.md){ .md-button .md-button--primary }
-[For CurseForge and Nexus](MOD-HOSTS-AND-GETTING-STARTED.md){ .md-button }
 [Create PAK content](PAK-CONTENT-GUIDE.md){ .md-button }
 [Create custom armor](CUSTOM-ARMOR.md){ .md-button }
 [Start a mod](AUTHORING-GUIDE.md){ .md-button }
