@@ -9,7 +9,10 @@
     "enabled": false
   },
   "diagnostics": {
-    "persistenceLedger": false
+    "persistenceLedger": false,
+    // Advisory only; does not gate loading. Change the threshold as needed.
+    "largeRecipeWorkloadWarning": true,
+    "largeRecipeWarningThreshold": 50000
   },
   "bridgeDiagnostics": {
     // Bounded per-world lifecycle events. Warnings, errors, and the teardown

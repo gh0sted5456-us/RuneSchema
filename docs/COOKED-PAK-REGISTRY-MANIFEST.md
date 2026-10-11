@@ -1,6 +1,6 @@
 # Cooked PAK authoritative registry manifest
 
-!!! note "Implemented lanes and design limits in 0.7.7.7"
+!!! note "Implemented lanes and design limits in 0.7.7.8"
     The cooked declaration path is available for items, recipes, quests,
     combat spells, utility spells, held-equipment effects, and the guarded
     player combat lanes described below. Ranged classes do not have a global
@@ -65,6 +65,7 @@ use different authorities.
 | Content family | Authoritative owner | Current state |
 | --- | --- | --- |
 | Items | `ItemSubsystem.PersistenceIDToDataMap` | Known |
+| Custom wearable presentation | `ItemSubsystem.AssetNameToDataMap` and the native per-player material-hide cache | Verified for one equipped helmet on the inspected Steam build; see [custom armor](CUSTOM-ARMOR.md) |
 | Recipes | `RecipeSubsystem.PersistenceIDToDataMap` | Known |
 | Quests | `QuestDataSubsystem.PersistenceIDToDataMap` | Known |
 | Journal and lore | `JournalSubsystem` live identity map | Known, not in the first manifest slice |
@@ -106,6 +107,7 @@ declarations:
     ],
     "UtilitySpells": [],
     "EquipmentEffects": [],
+    "WearableMeshData": [],
     "MeleeAttackClasses": [
       "/AdditionalWeapons/Attacks/BP_Spear_Attack1.BP_Spear_Attack1_C",
       "/AdditionalWeapons/Attacks/BP_Spear_Attack2.BP_Spear_Attack2_C"
@@ -132,6 +134,7 @@ rejected. The current accepted fields are exactly:
 - `CombatSpells`
 - `UtilitySpells`
 - `EquipmentEffects`
+- `WearableMeshData`
 - `MeleeAttackClasses`
 - `RangedAttackClasses`
 
@@ -142,6 +145,13 @@ Ranged weapons must be registered as items and carry their own cooked
 collection's class default object after the item registry settles and admits
 only a complete `QuickAttackData`/`FullAttackData` class pair. It never appends
 the lower-level shot or action implementation classes.
+
+`WearableMeshData` resolves and checks explicitly declared cooked
+`UWearableEquipmentMeshData` assets. It is a dependency lane rather than a
+persistence registry. The equipped armor item must still bind its male/female
+mesh data and complete material/texture dependencies. RuneSchema's separate
+native wearable bridge handles missing hide-cache enrollment only on the
+verified executable profile; see [Create custom cooked armor](CUSTOM-ARMOR.md).
 
 Do not put magic spell classes in either attack-class lane. Magic uses the
 `CombatSpells` and `UtilitySpells` identity registries. A weapon's cooked

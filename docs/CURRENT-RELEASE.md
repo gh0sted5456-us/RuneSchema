@@ -1,15 +1,33 @@
-# RuneSchema 0.7.7.7m main release
+# RuneSchema 0.7.7.8m main release
 
-This October 9, 2026 main build includes the Blueprint and Lua
+This October 10, 2026 main build adds a guarded native wearable bridge for
+custom cooked armor. It also lets authors declare wearable mesh-data
+dependencies in a cooked registry manifest, and lets players turn the
+large-recipe warning on or off and set its threshold (50,000 by default).
+All recipe loading remains unchanged by that warning setting.
+
+[Download the single 0.7.7.8m ZIP](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.7.7.8m/RuneSchema-0.7.7.8m.zip).
+The matching [0.7.7.8e experimental package](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.7.7.8e/RuneSchema-0.7.7.8e.zip)
+is available for testing.
+
+The native wearable path has been verified with one equipped TEST ARMOR
+helmet on the inspected Steam executable: its authored black material
+displayed and its hair was hidden, including after the former presentation
+modules were removed. RuneSchema uses the game's own cache builder for the
+hide rules and leaves the feature inactive when the executable signature
+does not match. Other armor slots, helmet removal, preview, multiplayer,
+dedicated servers, and other storefronts remain to be validated. Custom
+armor still needs its own cooked meshes, materials, and textures;
+RuneSchema does not dye it automatically. [Create custom cooked armor](CUSTOM-ARMOR.md).
+
+This release also retains the Blueprint and Lua
 companion paths. It also continues the work on dependable mod loading, safer
 character saves, clearer status messages, and support for mods that bring
 their own PAK content.
 
-[Download the single 0.7.7.7m ZIP](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.7.7.7m/RuneSchema-0.7.7.7m.zip).
-The matching [0.7.7.7e experimental package](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.7.7.7e/RuneSchema-0.7.7.7e.zip)
-is available for testing. Both compiled and passed 57 automated checks. The
-new authoring layout and server handoff guard still need in-game validation;
-the separate crash narrowed to `Dye_WeaponsTrim` folders is not claimed fixed.
+The 0.7.7.7 authoring layout and server handoff guard still need broad in-game
+validation; the separate crash narrowed to `Dye_WeaponsTrim` folders is not
+claimed fixed.
 
 The Advanced Authoring & Tools page now uses one top-to-bottom workflow.
 Choose a stage, then a content type when authoring; the selected tool uses the

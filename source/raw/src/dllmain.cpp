@@ -466,6 +466,11 @@ public:
             ImGui::Checkbox("Export persistence ledger (restart required)", &settings.diagnostics.persistenceLedger);
             ImGui::TextWrapped("Writes a diagnostic inventory of RuneSchema mod PersistenceIDs, InternalNames, owners, and source paths. The ledger is never used for cleanup or loading decisions.");
             ImGui::EndDisabled();
+            ImGui::Checkbox("Warn about large recipe catalogs", &settings.diagnostics.largeRecipeWorkloadWarning);
+            ImGui::InputInt("Recipe warning threshold", &settings.diagnostics.largeRecipeWarningThreshold);
+            settings.diagnostics.largeRecipeWarningThreshold = std::clamp(
+                settings.diagnostics.largeRecipeWarningThreshold, 1, 10000000);
+            ImGui::TextWrapped("Default: warn only above 50,000 authored recipes. This advisory setting never limits, skips, or changes recipe loading and works independently of Advanced diagnostics.");
             ImGui::SeparatorText("Optional combat fallback");
             ImGui::Checkbox("Enable combat fallback helpers (restart required)", &settings.combatFallback.enabled);
             ImGui::TextWrapped("These switches affect only RuneSchema's optional weapon attack helpers. Item, recipe, quest, spell persistence, and save cleanup registries are not changed by them.");

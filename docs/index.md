@@ -9,7 +9,7 @@ hide:
 <img class="rs-hero__banner" src="assets/images/runeschema-banner.png" alt="RuneSchema">
 
 <div class="rs-hero__eyebrow">
-<span class="rs-version">RuneSchema 0.7.7.7m</span>
+<span class="rs-version">RuneSchema 0.7.7.8m</span>
 <span class="rs-platform rs-platform--steam">Steam / GOG</span>
 <span class="rs-platform rs-platform--gamepass">Game Pass / WinGDK</span>
 </div>
@@ -20,9 +20,10 @@ RuneSchema helps Dragonwilds mods load together, connect new PAK content to the
 game, and remove missing saved references safely when a mod is uninstalled.
 
 <div class="rs-actions" markdown>
-[See what is new in 0.7.7.7](CURRENT-RELEASE.md){ .md-button .md-button--primary }
+[See what is new in 0.7.7.8](CURRENT-RELEASE.md){ .md-button .md-button--primary }
 [For CurseForge and Nexus](MOD-HOSTS-AND-GETTING-STARTED.md){ .md-button }
 [Create PAK content](PAK-CONTENT-GUIDE.md){ .md-button }
+[Create custom armor](CUSTOM-ARMOR.md){ .md-button }
 [Start a mod](AUTHORING-GUIDE.md){ .md-button }
 [Blueprint and Lua companions](PSEUDO-LOADERS.md){ .md-button }
 [Get help](TROUBLESHOOTING.md){ .md-button }

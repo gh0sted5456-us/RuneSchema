@@ -48,7 +48,6 @@ namespace DragonWilds {
     static constexpr const TCHAR* ProgressComponentClassPath = TEXT("/Script/Dominion.ProgressComponent");
     static constexpr const TCHAR* PlayerControllerClassPath = TEXT("/Script/Dominion.DominionPlayerController");
     static constexpr const TCHAR* ServerCraftRecipePath = TEXT("/Script/Dominion.InventoryController:Server_CraftRecipe");
-    static constexpr std::size_t LargeRecipeWorkloadWarningThreshold = 1000;
 
     static constexpr const TCHAR* ClientUnlockHookPaths[] = {
         TEXT("/Script/Dominion.ProgressComponent:Client_HandleNewRecipesLoadedFromPersistence"),
@@ -900,13 +899,17 @@ namespace DragonWilds {
             return;
         }
 
-        if (!m_largeRecipeWorkloadWarned
-            && m_recipeDefs.size() > LargeRecipeWorkloadWarningThreshold)
+        const auto& recipeDiagnostics = PS::PSConfig::Get()->GetSettings().diagnostics;
+        const auto warningThreshold = std::clamp(
+            recipeDiagnostics.largeRecipeWarningThreshold, 1, 10000000);
+        if (recipeDiagnostics.largeRecipeWorkloadWarning
+            && !m_largeRecipeWorkloadWarned
+            && m_recipeDefs.size() > static_cast<std::size_t>(warningThreshold))
         {
             m_largeRecipeWorkloadWarned = true;
             PS::Log<LogLevel::Warning>(STR(
                 "[RECIPES][LARGE-WORKLOAD] {} RuneSchema recipe definitions were discovered (warning threshold: {}). Loading will continue normally without limits.\n"),
-                m_recipeDefs.size(), LargeRecipeWorkloadWarningThreshold);
+                m_recipeDefs.size(), warningThreshold);
         }
 
         // Build the PersistenceID -> ItemData route once per recipe batch.

@@ -933,13 +933,39 @@ void Tick() {
                 json state={{"player",Path(player)},{"captures",json::array()},{"errors",json::array()}};
                 CaptureBudget budget;
                 budget.maxDepth=8; budget.maxEntries=256; budget.remaining=8192;
+                // Keep the equipment contract fields ahead of the broad snapshots: the
+                // latter share this bounded budget and may otherwise hide the first
+                // vanilla-versus-mod divergence. Every path is read-only; missing
+                // fields are reported individually for the current game build.
                 for (const auto& path : std::vector<json>{
+                    {"PlayerEquipmentComponent","CurrentHeadWearable"},
+                    {"PlayerEquipmentComponent","CurrentHeadWearable","MaleMeshData"},
+                    {"PlayerEquipmentComponent","CurrentHeadWearable","FemaleMeshData"},
+                    {"PlayerEquipmentComponent","CurrentHeadWearable","MaleMeshData","MaterialSectionsToHide"},
+                    {"PlayerEquipmentComponent","CurrentHeadWearable","FemaleMeshData","MaterialSectionsToHide"},
+                    {"PlayerEquipmentComponent","CurrentHeadWearable","MaleMeshData","OpacityMask"},
+                    {"PlayerEquipmentComponent","CurrentHeadWearable","FemaleMeshData","OpacityMask"},
+                    {"EquipmentMaterialComponent","EquipmentMeshDataToMaterialsToHide"},
+                    {"PlayerEquipmentComponent","HairMesh","OverrideMaterials"},
+                    {"PlayerEquipmentComponent","HairMesh","bVisible"},
+                    {"PlayerEquipmentComponent","HairMesh","SkeletalMesh"},
+                    {"PlayerEquipmentComponent","HairMesh","SkeletalMeshAsset"},
+                    {"PlayerEquipmentComponent","OutfitHeadMesh","OverrideMaterials"},
+                    {"PlayerEquipmentComponent","OutfitHeadMesh","bVisible"},
+                    {"PlayerEquipmentComponent","OutfitHeadMesh","SkeletalMesh"},
+                    {"PlayerEquipmentComponent","OutfitHeadMesh","SkeletalMeshAsset"},
+                    {"PlayerEquipmentComponent","HeldEquipmentActorLeft","HeldEquipmentData"},
+                    {"PlayerEquipmentComponent","HeldEquipmentActorRight","HeldEquipmentData"},
+                    {"PlayerEquipmentComponent","HeldEquipmentActorLeft","MeshComponent","OverrideMaterials"},
+                    {"PlayerEquipmentComponent","HeldEquipmentActorRight","MeshComponent","OverrideMaterials"},
+                    {"PlayerEquipmentComponent","CurrentBodyWearable"},
+                    {"PlayerEquipmentComponent","CurrentLegsWearable"},
+                    {"PlayerEquipmentComponent","CurrentCapeWearable"},
                     {"PlayerEquipmentComponent","*"}, {"PlayerCustomizationComponent","*"},
                     {"CPDManager","*"}, {"BodyMesh","OverrideMaterials"},
                     {"HeadMesh","OverrideMaterials"}, {"OutfitBodyMesh","OverrideMaterials"},
                     {"OutfitCapeMesh","OverrideMaterials"}, {"OutfitHeadMesh","OverrideMaterials"},
-                    {"OutfitLegsMesh","OverrideMaterials"},
-                    {"PlayerEquipmentComponent","HeldEquipmentActorRight","MeshComponent","OverrideMaterials"}}) {
+                    {"OutfitLegsMesh","OverrideMaterials"}}) {
                     try { state["captures"].push_back(CaptureProperty(player,path,budget)); }
                     catch (const std::exception& error) { state["errors"].push_back({{"path",path},{"error",error.what()}}); }
                 }

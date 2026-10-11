@@ -4,7 +4,7 @@ Use this page to find the shortest path to the information you need.
 
 ## Players and server owners
 
-1. [What is new in 0.7.7.7m](CURRENT-RELEASE.md)
+1. [What is new in 0.7.7.8m](CURRENT-RELEASE.md)
 2. [What RuneSchema is, its files, and how to start](MOD-HOSTS-AND-GETTING-STARTED.md)
 3. [Install or update RuneSchema](INSTALLATION.md)
 4. [Choose optional bridges](OPTIONAL-BRIDGES.md)

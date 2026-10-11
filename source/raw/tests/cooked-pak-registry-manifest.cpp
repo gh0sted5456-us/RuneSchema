@@ -12,6 +12,8 @@ int main()
         {"NativeRegistries", {
             {"Items", nlohmann::json::array({
                 "/Example/Items/ITEM_Test.ITEM_Test"})},
+            {"WearableMeshData", nlohmann::json::array({
+                "/Example/MeshData/WEMD_Test.WEMD_Test"})},
             {"MeleeAttackClasses", nlohmann::json::array({
                 "/Example/Combat/BP_Attack1.BP_Attack1_C",
                 "/Example/Combat/BP_Attack2.BP_Attack2_C"})},
@@ -23,9 +25,18 @@ int main()
     assert(Publish(document, "ExampleMod", "pak:/Example.RSREG_Test", &published));
     assert(published.AssetLanes.size() == 1);
     assert(published.AssetLanes[0].Paths.size() == 1);
+    assert(published.WearableMeshData.size() == 1);
     assert(published.MeleeAttackClasses.size() == 2);
     assert(published.RangedAttackClasses.size() == 1);
     assert(published.Fingerprint != 0);
+    assert(Snapshot().size() == 1);
+
+    auto differentMesh = document;
+    differentMesh["NativeRegistries"]["WearableMeshData"][0] =
+        "/Example/MeshData/WEMD_Other.WEMD_Other";
+    Manifest changed;
+    assert(Publish(differentMesh, "ExampleMod", "pak:/Example.RSREG_Test", &changed));
+    assert(changed.Fingerprint != published.Fingerprint);
     assert(Snapshot().size() == 1);
 
     // Republishing the same cooked source replaces its declaration instead of

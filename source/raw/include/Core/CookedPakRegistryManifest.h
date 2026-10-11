@@ -21,6 +21,7 @@ namespace PS::CookedPakRegistryManifest {
         std::string Owner;
         std::string Source;
         std::vector<Lane> AssetLanes;
+        std::vector<std::string> WearableMeshData;
         std::vector<std::string> MeleeAttackClasses;
         std::vector<std::string> RangedAttackClasses;
         std::uint64_t Fingerprint = 0;
@@ -93,9 +94,10 @@ namespace PS::CookedPakRegistryManifest {
         const auto& native = document.at("NativeRegistries");
         if (!native.is_object())
             throw std::runtime_error("NativeRegistries must be an object");
-        static constexpr std::array<const char*, 8> Allowed{{
+        static constexpr std::array<const char*, 9> Allowed{{
             "Items", "Recipes", "Quests", "CombatSpells", "UtilitySpells",
-            "EquipmentEffects", "MeleeAttackClasses", "RangedAttackClasses"}};
+            "EquipmentEffects", "WearableMeshData", "MeleeAttackClasses",
+            "RangedAttackClasses"}};
         for (const auto& [key, unused] : native.items())
         {
             (void)unused;
@@ -114,6 +116,8 @@ namespace PS::CookedPakRegistryManifest {
             auto paths = Detail::ReadPaths(native, lane, total);
             if (!paths.empty()) result.AssetLanes.push_back({lane, std::move(paths)});
         }
+        result.WearableMeshData = Detail::ReadPaths(
+            native, "WearableMeshData", total);
         result.MeleeAttackClasses = Detail::ReadPaths(
             native, "MeleeAttackClasses", total);
         result.RangedAttackClasses = Detail::ReadPaths(
@@ -128,6 +132,8 @@ namespace PS::CookedPakRegistryManifest {
             Detail::Hash(hash, lane.Name);
             for (const auto& path : lane.Paths) Detail::Hash(hash, path);
         }
+        Detail::Hash(hash, "WearableMeshData");
+        for (const auto& path : result.WearableMeshData) Detail::Hash(hash, path);
         Detail::Hash(hash, "MeleeAttackClasses");
         for (const auto& path : result.MeleeAttackClasses) Detail::Hash(hash, path);
         Detail::Hash(hash, "RangedAttackClasses");
