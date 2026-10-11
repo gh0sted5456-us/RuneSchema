@@ -43,6 +43,7 @@
 #include "Runtime/Storefront.h"
 #include "Runtime/HostServices.h"
 #include "Misc/DragonWildsDataRegistrar.h"
+#include "Loader/EquipmentWearableBridge.h"
 #include "Unreal/UAssetRegistryHelpers.hpp"
 #include "Unreal/UAssetRegistry.hpp"
 #include "Unreal/FAssetData.hpp"
@@ -673,6 +674,45 @@ namespace DragonWilds {
                 m_manifestMeleeCollections);
             collectAttackLane("RangedAttackClasses", manifest.RangedAttackClasses,
                 m_manifestRangedCollections);
+
+            // Wearable mesh data is a dependency of an item, not a persistence
+            // registry entry. Resolve only explicitly declared cooked assets;
+            // the game's equipment component remains the hide-map authority.
+            if (!manifest.WearableMeshData.empty())
+            {
+                auto* meshDataClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+                    nullptr, nullptr, TEXT("/Script/Dominion.WearableEquipmentMeshData"));
+                std::size_t alreadyLoaded = 0;
+                std::size_t newlyLoaded = 0;
+                std::string failedPath;
+                if (!meshDataClass) failedPath = "<native WearableEquipmentMeshData class unavailable>";
+                for (const auto& path : manifest.WearableMeshData)
+                {
+                    if (!failedPath.empty()) break;
+                    const auto widePath = PS::ToWideSafe(path.c_str());
+                    auto* object = UECustom::UObjectGlobals::StaticFindObject<UObject*>(
+                        nullptr, nullptr, widePath.c_str(), false);
+                    const bool wasLoaded = object != nullptr;
+                    if (!object) object = ActorHelper::ResolveObject(widePath);
+                    if (!object || !object->IsA(meshDataClass))
+                    {
+                        failedPath = path;
+                        break;
+                    }
+                    if (wasLoaded) ++alreadyLoaded;
+                    else ++newlyLoaded;
+                }
+                if (!failedPath.empty())
+                    PS::Log<LogLevel::Warning>(STR(
+                        "[PAK-PRESENTATION][REJECTED] owner='{}' lane='WearableMeshData' unresolved_or_wrong_class='{}'; no equipment hide map was modified.\n"),
+                        PS::ToWideSafe(manifest.Owner.c_str()),
+                        PS::ToWideSafe(failedPath.c_str()));
+                else
+                    PS::Log<LogLevel::Normal>(STR(
+                        "[PAK-PRESENTATION][RESOLVED] owner='{}' wearable_mesh_data={} newly_loaded={} already_loaded={}; live equipment hide map remains game-owned.\n"),
+                        PS::ToWideSafe(manifest.Owner.c_str()),
+                        manifest.WearableMeshData.size(), newlyLoaded, alreadyLoaded);
+            }
 
             for (const auto& lane : manifest.AssetLanes)
             {
@@ -1858,6 +1898,7 @@ namespace DragonWilds {
                 {
                     throw std::runtime_error("network registry rejected the asset");
                 }
+                if (stats) EquipmentWearableBridge::TryRegister(subsystem, candidate);
                 if (inserted)
                 {
                     if (addedCount) ++*addedCount;

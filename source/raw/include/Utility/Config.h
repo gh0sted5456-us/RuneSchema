@@ -72,6 +72,9 @@ namespace PS {
     struct AdvancedDiagnosticSettings {
         // Observational export only. Save recovery never reads this ledger.
         bool persistenceLedger = false;
+        // Advisory only; recipe discovery and loading never consult this switch.
+        bool largeRecipeWorkloadWarning = true;
+        int largeRecipeWarningThreshold = 50000;
     };
 
     struct BridgeDiagnosticSettings {

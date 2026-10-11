@@ -1,9 +1,34 @@
-# RuneSchema 0.7.7.7e experimental release
+# RuneSchema 0.7.7.8e experimental release
 
-This October 9, 2026 experimental build includes the tested Blueprint and Lua
-companion paths. It also continues the work on dependable mod loading, safer
+This October 10, 2026 experimental build adds a guarded native wearable bridge for
+custom cooked armor. It also lets authors declare wearable mesh-data
+dependencies in a cooked registry manifest, and lets players turn the
+large-recipe warning on or off and set its threshold (50,000 by default).
+All recipe loading remains unchanged by that warning setting.
+
+[Download the 0.7.7.8e experimental ZIP](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.7.7.8e/RuneSchema-0.7.7.8e.zip).
+The matching [0.7.7.8m main package](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.7.7.8m/RuneSchema-0.7.7.8m.zip)
+is the stable-branch counterpart.
+
+The native wearable path has been verified with one equipped TEST ARMOR
+helmet on the inspected Steam executable: its authored black material
+displayed and its hair was hidden, including after the former presentation
+modules were removed. RuneSchema uses the game's own cache builder for the
+hide rules and leaves the feature inactive when the executable signature
+does not match. This experimental ZIP includes a scanned Game Pass/WinGDK
+100.8.0.0 profile; its hook addresses and signatures match the live image,
+but in-game Game Pass behavior is not verified yet. Other armor slots, helmet
+removal, preview, multiplayer, and dedicated servers remain to be validated. Custom
+armor still needs its own cooked meshes, materials, and textures;
+RuneSchema does not dye it automatically. [Create custom cooked armor](CUSTOM-ARMOR.md).
+
+This release retains the Blueprint and Lua companion paths. It continues the work on dependable mod loading, safer
 character saves, clearer status messages, and support for mods that bring
 their own PAK content.
+
+The 0.7.7.7 authoring layout and server handoff guard still need broad in-game
+validation; the separate crash narrowed to `Dye_WeaponsTrim` folders is not
+claimed fixed.
 
 The Advanced Authoring & Tools page now uses one top-to-bottom workflow.
 Choose a stage, then a content type when authoring; the selected tool uses the

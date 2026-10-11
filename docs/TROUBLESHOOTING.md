@@ -14,6 +14,17 @@ RuneSchema : 1
 
 Confirm the RuneSchema DLL is in the expected `RuneSchema/dlls` location and
 that the game was fully closed before the DLL was replaced.
+For the current main package, confirm the startup log identifies `0.7.7.8m`.
+An older label means an older DLL is still being loaded.
+
+## A LogicMod starts on a dedicated server
+
+The 0.7.7.7 build clears RuneSchema's client LogicMod handoff lists during
+dedicated-server startup. Confirm the log shows
+`[LOGIC-PAK][SERVER] Client ModActor handoff cleared.` If it instead reports
+`[PARTIAL]`, preserve that line and check folder write access. Also check for
+a separately installed copy under the game's `Content/Paks/LogicMods` or an
+independent BPModLoaderMod; RuneSchema cannot disable those copies.
 
 ## A RuneSchema mod still loads after being disabled
 
@@ -62,8 +73,11 @@ station, and unlock relationships that cause the game to load the content.
 Compare the log's mounted and live-registration totals, and look for duplicate
 persistence IDs or internal names.
 
-If RuneSchema reports more than 1,000 authored recipes, the warning is
-advisory. RuneSchema continues loading them; it does not disable the mod.
+By default, RuneSchema warns above 50,000 authored recipes. The warning is
+advisory: RuneSchema continues loading them and does not disable the mod.
+Advanced settings lets you turn the notice off or change its threshold.
+In `settings.jsonc`, use `diagnostics.largeRecipeWorkloadWarning` and
+`diagnostics.largeRecipeWarningThreshold` for the same controls.
 
 ## The recipe reports a missing item
 

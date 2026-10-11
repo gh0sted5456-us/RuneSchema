@@ -4,6 +4,12 @@ A PAK is the package that carries new Unreal content into Dragonwilds. Use one
 when your mod needs a new mesh, texture, icon, sound, animation, Blueprint,
 item, recipe, or station that does not already exist in the game.
 
+For armor with a custom appearance, follow the
+[custom cooked armor walkthrough](CUSTOM-ARMOR.md) as well. Its item,
+gender-specific wearable mesh data, materials, and textures must all be cooked
+and bound together; RuneSchema's native wearable bridge does not supply a
+missing dyed material.
+
 RuneSchema does not replace Unreal's packaging tools. It mounts enabled PAK
 folders, lets smaller mods connect cooked objects through full paths, applies
 requested compatibility edits, reports failures clearly, and safely removes
