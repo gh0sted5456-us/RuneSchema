@@ -26,6 +26,7 @@
 #include "SDK/Structs/Custom/FManagedStruct.h"
 #include "Utility/Logging.h"
 #include "Utility/Config.h"
+#include "Utility/BuildInfo.h"
 #include "Unreal/AActor.hpp"
 #include "Unreal/AGameModeBase.hpp"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
@@ -49,7 +50,10 @@ constexpr size_t MaxActionPayloadBytes = 4 * 1024;
 constexpr uint32_t MaxRequestsPerSecond = 8;
 constexpr size_t MaxWorldInstances = 512;
 constexpr size_t MaxPresentationRoutes = 128;
-constexpr auto BuildIdentity = "0.7.7.7m";
+// The main and experimental packages at one numeric release share the same
+// registry protocol; the channel suffix is diagnostic, not a parity mismatch.
+const std::string BuildIdentity{PS::BuildInfo::Version,
+    sizeof(PS::BuildInfo::Version)-2};
 
 const PS::MappingBackbone::Mapping& LocalMapping() {
     return PS::MappingBackbone::Current(PS::HostServices::WorkingDirectory());
