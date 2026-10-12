@@ -17,7 +17,7 @@ int main(int argc,char** argv) {
     };
     require(spawn.find("const bool questOwnedBuilding = spawn.bBuildingProp && !spawn.QuestCompleted.empty()")!=std::string::npos,
         "quest-owned building classification is missing");
-    require(spawn.find("spawn.Time!=TimeOfDay::Requirement::Any || questOwnedBuilding")!=std::string::npos
+    require(spawn.find("spawn.Time!=TimeOfDay::Requirement::Any || questOwnedBuilding || spawn.bTemporaryResource")!=std::string::npos
         && spawn.find("spawned->SetFlags(RF_Transient)")!=std::string::npos
         && spawn.find("TEXT(\"bSkipSpudStore\")")!=std::string::npos,
         "quest-owned buildings can still enter native persistence");

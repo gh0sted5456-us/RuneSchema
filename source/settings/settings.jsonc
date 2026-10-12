@@ -36,6 +36,11 @@
     "allowCorruptCharacterEntry": false,
     "quests": true
   },
+  "worldSaveCleanup": {
+    // Applies to Steam/GOG, Game Pass, and dedicated-server world cleanup.
+    // Keep true unless you accept losing the automatic pre-cleanup copy.
+    "backupBeforePrune": true
+  },
   "defaultRecovery": {
     "enabled": false,
     "useExternalDefault": false,

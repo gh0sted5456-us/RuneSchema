@@ -96,9 +96,9 @@ int main(int argc,char** argv){
             !=pruner.npos,
         "dedicated servers cannot validate every incoming character payload independently");
     need(pruner.find("m_checkedCharacters")==pruner.npos
-        && pruner.find("[PERSISTENCE-PRUNER][ORPHANS-REMOVED]")!=pruner.npos
+        && pruner.find("Save cleanup | missing character IDs removed=")!=pruner.npos
         && pruner.find("[PERSISTENCE-PRUNER][ORPHAN-REMOVED]")!=pruner.npos,
-        "cleanup is still per-character or no longer warns when orphaned IDs are removed");
+        "cleanup is still per-character or no longer reports removed orphan IDs");
     need(pruner.find("[PERSISTENCE-PRUNER][RESOLVED]")!=pruner.npos
         && pruner.find("Origin is irrelevant")!=pruner.npos,
         "loaded-pak item IDs are not visibly retained from the live registry");

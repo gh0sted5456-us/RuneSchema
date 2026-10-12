@@ -22,6 +22,7 @@
 #include "Loader/QuestDamageCredit.h"
 #include "Loader/NativeQuestReceipt.h"
 #include "Loader/NativeDialogueSave.h"
+#include "Loader/DialogueCompletionPresentation.h"
 #include "Loader/NativeQuestCleanup.h"
 #include "Loader/Spawn/GhostMaterials.h"
 #include "Unreal/Engine/UDataTable.hpp"
@@ -100,6 +101,23 @@ namespace DragonWilds {
             auto state=RC::to_string(native.StateName());
             if(const auto colon=state.rfind("::");colon!=state.npos)state=state.substr(colon+2);
             if(state=="Complete")return true;
+        }catch(...) {}
+        return false;
+    }
+    bool DragonWildsNpcLoader::IsQuestActive(UWorld* world,const std::string& quest) const
+    {
+        if(!world || quest.empty() || !m_quests.HasAsset(quest))return false;
+        auto* controllerType=ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionPlayerControllerBase"));
+        if(!controllerType)return false;
+        TArray<UObject*> controllers;
+        UECustom::UObjectGlobals::GetObjectsOfClass(controllerType,controllers,true);
+        if(controllers.Num()<0 || controllers.Num()>256)throw std::runtime_error("Quest condition player roster exceeds the safe bound");
+        for(auto* controller:controllers)try {
+            if(!controller || controller->GetWorld()!=world || !IsGameplayQuestController(controller))continue;
+            const QuestNative::Adapter native(controller,m_quests.Asset(quest));
+            auto state=RC::to_string(native.StateName());
+            if(const auto colon=state.rfind("::");colon!=state.npos)state=state.substr(colon+2);
+            if(state=="Given")return true;
         }catch(...) {}
         return false;
     }
@@ -2130,6 +2148,34 @@ namespace DragonWilds {
         HelpyNpcGuards::VerifyExcluded(actor);
         RecordPhase(definition, "Spawn.Finished", actor,
             {{"TransientActor", true}, {"SaveExcluded", true}});
+        // A ground trace measures the surface, not the spawned Character's
+        // footprint. Capture the native capsule clearance before changing
+        // placement rules; Blueprint meshes can have different pivots.
+        const auto& npcDiagnostics=PS::PSConfig::Get()->GetSettings();
+        if(definition.GroundToSurface && npcDiagnostics.advancedRuntime
+            && npcDiagnostics.npcDiagnostics.statusExport) {
+            try {
+                nlohmann::json footprint={{"SurfaceZ",definition.TargetLocation[2]-definition.GroundOffset},
+                    {"AuthoredOffset",definition.GroundOffset},
+                    {"ActorOriginZ",ActorHelper::GetActorLocation(actor).Z()}};
+                if(auto* capsuleClass=ActorHelper::ResolveClass(TEXT("/Script/Engine.CapsuleComponent"))) {
+                    auto capsules=actor->GetComponentsByClass(capsuleClass);
+                    if(capsules.Num()>0 && capsules[0]) {
+                        ActorHelper::FunctionCall halfHeight(capsules[0],
+                            TEXT("/Script/Engine.CapsuleComponent:GetScaledCapsuleHalfHeight"));
+                        halfHeight.Invoke();
+                        const double height=halfHeight.NumericResult();
+                        footprint["CapsuleHalfHeight"]=height;
+                        footprint["CapsuleFootZ"]=footprint["ActorOriginZ"].get<double>()-height;
+                        footprint["CapsuleClearance"]=footprint["CapsuleFootZ"].get<double>()-footprint["SurfaceZ"].get<double>();
+                    }
+                }
+                RecordPhase(definition,"Placement.FootprintObserved",actor,footprint);
+            } catch(const std::exception& error) {
+                RecordPhase(definition,"Placement.FootprintUnavailable",actor,
+                    {{"FootprintError",error.what()}});
+            }
+        }
 
             actor->SetActorScale3D(FVector(
                 definition.SpawnScale[0], definition.SpawnScale[1],
@@ -2883,7 +2929,12 @@ namespace DragonWilds {
                 const auto visible=VisibleVendorItems(*found,controller);
                 CreateInlineMerchantRow(*found,&visible);
                 ApplyVendorRow(station,*found);
-                RefreshClientShop(station);
+                // This cache routine is client-only. Standalone and listen
+                // hosts update the owned row here, then let native menu entry
+                // consume it; invoking the client routine on authority only
+                // produces an expected "requires a live native client station" warning.
+                if(PS::Network::Detect(station).Mode==PS::Network::Role::Client)
+                    RefreshClientShop(station);
                 PS::RoutineLog("vendors",STR("Merchant '{}:{}' stock refreshed for {}.\n"),
                     RC::to_generic_string(found->ModName),RC::to_generic_string(found->Id),
                     current==TimeOfDay::Requirement::Day?TEXT("day"):TEXT("night"));

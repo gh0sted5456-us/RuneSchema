@@ -39,4 +39,11 @@ int main(int argc,char** argv) {
     require(store.find("for(const auto& [vendorKey,_]:m_vendorRecipeOwners)")!=std::string::npos
         && store.find("helper.Remove(&vendorRecipe)")!=std::string::npos,
         "Previously opened vendor recipes can bleed into another store");
+    const auto vendorBegin=source.find("DragonWildsRecipeModLoader::EnsureVendorRecipe");
+    require(vendorBegin!=std::string::npos && vendorBegin<storeBegin,
+        "Vendor recipe creation implementation is missing");
+    const auto vendor=source.substr(vendorBegin,storeBegin-vendorBegin);
+    require(vendor.find("ApplyUnlocksToAllProgressComponents()") == std::string::npos
+        && vendor.find("m_unlock.insert(key)") == std::string::npos,
+        "Opening a vendor must not replay all recipe unlocks for every player");
 }

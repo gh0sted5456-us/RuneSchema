@@ -589,17 +589,31 @@ UObject* DragonWildsNpcLoader::BuildDialogueGraph(const VendorDefinition& defini
         for(const auto& [branch,next]:questNodes)m_dialogueCompletions.at(branch).Response=prompts.at(next);
         DialogueField(graph,TEXT("InternalNodeIds"),nodeIds);
         DialogueField(graph,TEXT("EntryTags"),Json::array({{{"EntryTag",entryTag},{"DestinationList",link("entry")},{"EntryIdentifier",""}}}));
+        std::size_t completionIndex=0;
         for(const auto& [branch,next]:completionNodes) {
+            const auto route=DialogueCompletionPresentation::MakeRoute(completionIndex++,next);
+            auto* response=node(promptClass,route.Response);
+            DialogueField(response,TEXT("SpeakerTag"),speakerTag);
+            DialogueField(response,TEXT("Message"),DialogueCompletionPresentation::Message(DialogueCompletionPresentation::Outcome::Pending));
+            DialogueField(response,TEXT("SpeakerDisplayName"),definition.DisplayName);
+            auto* continuation=node(blankClass,route.ContinueBranch);
+            auto* option=node(choiceClass,route.ContinueOption);
+            DialogueField(option,TEXT("DefaultChoiceDisplayText"),DialogueCompletionPresentation::Continue);
+            ActorHelper::SetObjectRef(option,TEXT("ParentNode"),continuation);
+            ActorHelper::SetObjectRef(continuation,TEXT("ParentNode"),response);
+            DialogueField(continuation,TEXT("SubNodes"),Json::array({path(option)}));
+            DialogueField(continuation,TEXT("OutputConnections"),link(route.AuthoredNext));
+            DialogueField(response,TEXT("OutputConnections"),link(route.ContinueBranch));
+            DialogueField(branch,TEXT("OutputConnections"),link(route.Response));
             const auto& completion=data.at("Completion");
-            auto binding=DialogueCompletionBinding{graph,prompts.at(next),
+            auto binding=DialogueCompletionBinding{graph,response,
                 Dialogue::Reference(definition.DialogueKey.substr(0,definition.DialogueKey.find(':')),completion.at("Flag")),
-                completion.at("Item").get<std::string>(),data.at("Nodes").at(next).at("Text").get<std::string>(),completion.at("Count").get<int32_t>()};
+                completion.at("Item").get<std::string>(),DialogueCompletionPresentation::Message(DialogueCompletionPresentation::Outcome::Granted),completion.at("Count").get<int32_t>()};
             if(const auto prior=m_dialogueCompletions.find(branch);prior!=m_dialogueCompletions.end()) {
                 binding.GateQuest=prior->second.GateQuest;binding.GateTime=prior->second.GateTime;
                 binding.GateStates=prior->second.GateStates;binding.GateConditions=prior->second.GateConditions;
             }
             m_dialogueCompletions.insert_or_assign(branch,std::move(binding));
-            DialogueField(prompts.at(next),TEXT("Message"),"I have not been able to confirm our exchange yet. The cabbage and shop unlock still need to be checked.");
         }
         auto* graphSlot=FUObjectArray::IndexToObject(graph->GetInternalIndex());
         if(!graphSlot || graphSlot->GetUObject()!=graph || !graphSlot->IsValid(false) || !graphSlot->IsRootSet())
@@ -651,6 +665,12 @@ void DragonWildsNpcLoader::OpenDialogue(AActor* actor,AActor* player,const Vendo
         completed=SavedDialogue(m_quests,ActorHelper::GetObjectRef(player,TEXT("Controller")),character,flag).HasFlag(flag);
     }
     auto* graph=BuildDialogueGraph(definition,completed,character,ActorHelper::GetObjectRef(player,TEXT("Controller")));
+    // Cached per-character graphs can outlive a failed conversation. Clear
+    // only their private completion responses before a new session starts;
+    // authored/shared prompts are immutable.
+    for(const auto& [branch,action]:m_dialogueCompletions)
+        if(action.Graph==graph && !action.Flag.empty() && action.Response)
+            DialogueField(action.Response,TEXT("Message"),DialogueCompletionPresentation::Message(DialogueCompletionPresentation::Outcome::Pending));
     for(auto& [key,lease]:m_dialogueGraphs)if(lease.Graph==graph) {
         lease.PlayerToken=player;lease.PlayerIndex=player->GetInternalIndex();
         auto* slot=FUObjectArray::IndexToObject(lease.PlayerIndex);
@@ -798,6 +818,12 @@ void DragonWildsNpcLoader::OnDialogueTask(UObject* source,UFunction* function,vo
                 const QuestNative::Adapter native(controller,m_quests.Asset(action.QuestKey));
                 auto state=RC::to_string(native.StateName());const auto colon=state.rfind("::");if(colon!=state.npos)state=state.substr(colon+2);
                 if(action.EventAction=="Start" && state=="Given")message+="\n"+m_events.Start(action.EventKey,player);
+                else if(action.EventAction=="Start") {
+                    message+="\nThe encounter did not start because this quest is not active.";
+                    PS::Log<LogLevel::Verbose>(STR("[EVENT-START][NOT-ACTIVE] event='{}' quest='{}' nativeState='{}'.\n"),
+                        RC::to_generic_string(action.EventKey),RC::to_generic_string(action.QuestKey),
+                        RC::to_generic_string(state));
+                }
                 else if(action.EventAction=="Cancel")message+="\n"+m_events.Cancel(action.EventKey,player);
             }
             applyVisual();
@@ -825,7 +851,7 @@ void DragonWildsNpcLoader::OnDialogueTask(UObject* source,UFunction* function,vo
         if(action.Flag.empty()){applyVisual();return;}
         auto saved=SavedDialogue(m_quests,controller,character,action.Flag);
         if(saved.HasFlag(action.Flag)) {
-            DialogueField(action.Response,TEXT("Message"),action.SuccessText);
+            DialogueField(action.Response,TEXT("Message"),DialogueCompletionPresentation::Message(DialogueCompletionPresentation::Outcome::AlreadyComplete));
             return;
         }
         auto* item=ActorHelper::ResolveObject(RC::to_generic_string(action.Item));
@@ -836,8 +862,11 @@ void DragonWildsNpcLoader::OnDialogueTask(UObject* source,UFunction* function,vo
             [&]{const auto okay=inventory.Ready(action.Count);if(!current())throw std::runtime_error("Conversation changed during reward preflight");return okay;},
             [&]{const auto okay=inventory.Give(action.Count,current);if(!current())throw std::runtime_error("Conversation changed during reward delivery");return okay;});
         if(!current())return;
-        const auto text=result==DialogueProgress::Result::NotReady?"Please make room in your inventory and speak to me again. Your reward has not been claimed.":
-            result==DialogueProgress::Result::Uncertain?"Our previous exchange could not be confirmed. The reward is paused to prevent giving it twice.":action.SuccessText;
+        const auto text=DialogueCompletionPresentation::Message(
+            result==DialogueProgress::Result::NotReady?DialogueCompletionPresentation::Outcome::NotReady:
+            result==DialogueProgress::Result::Uncertain?DialogueCompletionPresentation::Outcome::Uncertain:
+            result==DialogueProgress::Result::AlreadyComplete?DialogueCompletionPresentation::Outcome::AlreadyComplete:
+            DialogueCompletionPresentation::Outcome::Granted);
         DialogueField(action.Response,TEXT("Message"),text);
         if(result==DialogueProgress::Result::Granted)applyVisual();
         if(result==DialogueProgress::Result::Uncertain)
@@ -857,7 +886,7 @@ void DragonWildsNpcLoader::OnDialogueTask(UObject* source,UFunction* function,vo
             ErrorOnce("dialogue-shop:"+action.Store,RC::to_generic_string(std::string("Dialogue shop failed: ")+error.what()));
             return;
         }
-        if(action.Response)DialogueField(action.Response,TEXT("Message"),"I could not complete our exchange. Your reward and the shop unlock need to be checked before we try again.");
+        if(action.Response)DialogueField(action.Response,TEXT("Message"),DialogueCompletionPresentation::Message(DialogueCompletionPresentation::Outcome::Failed));
         ErrorOnce("dialogue-reward:"+action.Flag,RC::to_generic_string(std::string("Dialogue reward failed: ")+error.what()));
     }
 }

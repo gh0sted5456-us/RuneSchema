@@ -118,9 +118,11 @@ namespace {
     bool RefreshClientShop(UObject* station) {
         auto native=RequireNativeShopRefresh();
         auto* expected=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Dominion.CraftingStationComponent"));
+        auto* outer=station?station->GetOuterPrivate():nullptr;
+        auto* owner=outer && outer->IsA<AActor>()?static_cast<AActor*>(outer):nullptr;
         if(!station || station->GetClassPrivate()!=expected || !expected || expected->GetPropertiesSize()!=0x2e8
             || station->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed))
-            || PS::Network::Detect(station).Mode!=PS::Network::Role::Client)
+            || !owner || PS::Network::Detect(owner).Mode!=PS::Network::Role::Client)
             throw std::runtime_error("Native shop refresh: requires a live native client station");
         auto* handle=CastField<FStructProperty>(ShopField(expected,TEXT("CraftingDataRowHandle"),0xf0,16));
         ShopField(expected,TEXT("CraftingDataRowCached"),0x100,232);

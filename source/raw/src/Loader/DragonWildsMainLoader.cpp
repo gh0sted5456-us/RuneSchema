@@ -2,16 +2,28 @@
 #include <array>
 #include <atomic>
 #include <cctype>
+#include <algorithm>
 #include <fstream>
 #include <filesystem>
+#include <chrono>
+#include <cstdint>
+#include <cstring>
+#include <iterator>
+#include <memory>
 #include <mutex>
+#include <string>
+#include <utility>
 #include <vector>
 #include <Unreal/CoreUObject/UObject/Class.hpp>
+#include <Unreal/CoreUObject/UObject/UnrealType.hpp>
 #include "Unreal/UObjectGlobals.hpp"
 #include "Unreal/UObjectArray.hpp"
 #include "Unreal/UnrealInitializer.hpp"
+#include "Unreal/AGameModeBase.hpp"
+#include "Unreal/UFunctionStructs.hpp"
 #include <unordered_map>
 #include <unordered_set>
+#include <Windows.h>
 #include "Unreal/Engine/UDataTable.hpp"
 #include "Core/PersistenceDiagnosticLedger.h"
 #include "Core/MountedModRegistryOwners.h"
@@ -22,10 +34,15 @@
 #include "Utility/InlineHook.h"
 #include "Utility/ModFolderLayout.h"
 #include "SDK/Helper/Memory.h"
+#include "SDK/Helper/PropertyHelper.h"
+#include "SDK/Classes/Custom/UObjectGlobals.h"
+#include "SDK/Structs/Custom/FScriptMapHelper.h"
 #include "SDK/DragonWildsSignatures.h"
 #include "SDK/StaticClassStorage.h"
 #include "SDK/UnrealOffsets.h"
 #include "Runtime/HostServices.h"
+#include "Runtime/WorldBuildingSavePreflight.h"
+#include "Runtime/WorldBuildingRegistryValidation.h"
 #include "Runtime/PluginCatalog.h"
 #include "Runtime/Storefront.h"
 #include "Loader/DragonWildsRawTableLoader.h"
@@ -57,6 +74,717 @@ using namespace RC::Unreal;
 namespace fs = std::filesystem;
 
 namespace {
+    // Each world is handled independently. The complete live building registry
+    // is required before an unresolved type can be removed from any save.
+    std::unordered_set<std::string> ReadValidatedLiveBuildingIds(
+        const std::vector<PS::WorldBuildingRegistryValidation::Expected>& expected)
+    {
+        auto* subsystemClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr, nullptr, TEXT("/Script/Dominion.BuildingPieceSubsystem"));
+        if (!subsystemClass) throw std::runtime_error("building subsystem class is unavailable");
+        TArray<UObject*> candidates;
+        UECustom::UObjectGlobals::GetObjectsOfClass(subsystemClass, candidates, true);
+        UObject* subsystem = nullptr;
+        for (auto* candidate : candidates) {
+            if (!candidate || candidate->HasAnyFlags(static_cast<EObjectFlags>(
+                RF_ClassDefaultObject | RF_ArchetypeObject))) continue;
+            if (subsystem) throw std::runtime_error("ambiguous live building subsystems");
+            subsystem = candidate;
+        }
+        if (!subsystem) throw std::runtime_error("live building subsystem is unavailable");
+        auto* cls = subsystem->GetClassPrivate();
+        auto* mapProperty = cls ? CastField<FMapProperty>(
+            DragonWilds::PropertyHelper::GetPropertyByName(
+                cls, TEXT("PersistenceIDToDataMap"))) : nullptr;
+        auto* arrayProperty = cls ? CastField<FArrayProperty>(
+            DragonWilds::PropertyHelper::GetPropertyByName(
+                cls, TEXT("NetIdToData"))) : nullptr;
+        auto* reverseProperty = cls ? CastField<FMapProperty>(
+            DragonWilds::PropertyHelper::GetPropertyByName(
+                cls, TEXT("DataToNetIdMap"))) : nullptr;
+        auto* internalProperty = cls ? CastField<FMapProperty>(
+            DragonWilds::PropertyHelper::GetPropertyByName(
+                cls, TEXT("InternalNameToDataMap"))) : nullptr;
+        auto* mapKey = mapProperty ? CastField<FStrProperty>(mapProperty->GetKeyProp()) : nullptr;
+        auto* mapValue = mapProperty ? CastField<FObjectPropertyBase>(mapProperty->GetValueProp()) : nullptr;
+        auto* arrayInner = arrayProperty ? CastField<FObjectPropertyBase>(arrayProperty->GetInner()) : nullptr;
+        auto* reverseKey = reverseProperty ? CastField<FObjectPropertyBase>(reverseProperty->GetKeyProp()) : nullptr;
+        auto* reverseValue = reverseProperty ? reverseProperty->GetValueProp() : nullptr;
+        auto* internalKey = internalProperty ? CastField<FStrProperty>(internalProperty->GetKeyProp()) : nullptr;
+        auto* internalValue = internalProperty ? CastField<FObjectPropertyBase>(internalProperty->GetValueProp()) : nullptr;
+        // A single generic failure hid which dedicated-server registry view
+        // differed from the client. Keep the fail-closed contract, but report
+        // the first missing field or incompatible reflected layout precisely.
+        if (!mapProperty || !mapKey || !mapValue)
+            throw std::runtime_error("building PersistenceIDToDataMap field or key/value type is unavailable");
+        if (!arrayProperty || !arrayInner)
+            throw std::runtime_error("building NetIdToData field or element type is unavailable");
+        if (!reverseProperty)
+            throw std::runtime_error("building DataToNetIdMap map field is unavailable");
+        if (!reverseKey)
+            throw std::runtime_error("building DataToNetIdMap key is not an object property");
+        if (!reverseValue)
+            throw std::runtime_error("building DataToNetIdMap value is unavailable");
+        // The dedicated server reflects its two-byte NetId as a struct rather
+        // than a numeric property. Its raw value is accepted only if every
+        // reverse entry round-trips to the same object/index in NetIdToData.
+        auto* reverseStruct = CastField<FStructProperty>(reverseValue);
+        if (!CastField<FNumericProperty>(reverseValue)
+            && (!reverseStruct || !reverseStruct->GetStruct().Get()
+                || reverseStruct->GetStruct()->GetPropertiesSize() != sizeof(uint16)))
+            throw std::runtime_error("building DataToNetIdMap value has unsupported reflected type '"
+                + RC::to_string(reverseValue->GetClass().GetName()) + "'");
+        if (!internalProperty || !internalKey || !internalValue)
+            throw std::runtime_error("building InternalNameToDataMap field or key/value type is unavailable");
+        const auto requireWidth = [](const char* field, std::size_t actual,
+            std::size_t expectedWidth) {
+            if (actual != expectedWidth)
+                throw std::runtime_error(std::string("building ") + field
+                    + " reflected width is " + std::to_string(actual)
+                    + " bytes; expected " + std::to_string(expectedWidth));
+        };
+        requireWidth("PersistenceIDToDataMap value", mapValue->GetElementSize(), sizeof(UObject*));
+        requireWidth("NetIdToData element", arrayInner->GetElementSize(), sizeof(UObject*));
+        requireWidth("DataToNetIdMap key", reverseKey->GetElementSize(), sizeof(UObject*));
+        requireWidth("DataToNetIdMap value", reverseValue->GetElementSize(), sizeof(uint16));
+        requireWidth("InternalNameToDataMap value", internalValue->GetElementSize(), sizeof(UObject*));
+        auto* netIds = arrayProperty->ContainerPtrToValuePtr<FScriptArray>(subsystem);
+        if (!netIds || netIds->Num() <= 0)
+            throw std::runtime_error("live building NetId registry is empty");
+        std::unordered_set<std::string> live;
+        std::vector<PS::WorldBuildingRegistryValidation::Entry> persistenceEntries;
+        bool invalidEntry = false;
+        UECustom::FScriptMapHelper map(
+            mapProperty, mapProperty->ContainerPtrToValuePtr<void>(subsystem));
+        map.ForEachPair([&](void* key, void* value) {
+            UObject* object = nullptr;
+            std::memcpy(&object, value, sizeof(object));
+            auto* string = static_cast<FString*>(key);
+            if (!object || !string || string->GetCharArray().Num() <= 1) {
+                invalidEntry = true;
+                return;
+            }
+            std::string id;
+            const auto& characters = string->GetCharArray();
+            for (int32 i = 0; i + 1 < characters.Num(); ++i) {
+                const auto ch = characters[i];
+                if (ch < 32 || ch > 126) { invalidEntry = true; return; }
+                id.push_back(static_cast<char>(ch));
+            }
+            auto* idProperty = CastField<FStrProperty>(
+                DragonWilds::PropertyHelper::GetPropertyByName(object->GetClassPrivate(), TEXT("PersistenceID")));
+            if (!idProperty || RC::to_string(*idProperty->GetPropertyValue(
+                idProperty->ContainerPtrToValuePtr<void>(object))) != id) {
+                invalidEntry = true;
+                return;
+            }
+            persistenceEntries.push_back({id, reinterpret_cast<std::uintptr_t>(object)});
+            if (!live.insert(std::move(id)).second) invalidEntry = true;
+        });
+        if (invalidEntry || live.size() < static_cast<std::size_t>(netIds->Num()))
+            throw std::runtime_error("live building registry did not pass completeness checks");
+        std::vector<std::uintptr_t> networkEntries;
+        for (int32 index = 0; index < netIds->Num(); ++index) {
+            UObject* object = nullptr;
+            std::memcpy(&object, static_cast<uint8*>(netIds->GetData())
+                + index * arrayInner->GetElementSize(), sizeof(object));
+            networkEntries.push_back(reinterpret_cast<std::uintptr_t>(object));
+        }
+        std::vector<PS::WorldBuildingRegistryValidation::ReverseEntry> reverseEntries;
+        UECustom::FScriptMapHelper reverse(
+            reverseProperty, reverseProperty->ContainerPtrToValuePtr<void>(subsystem));
+        reverse.ForEachPair([&](void* key, void* value) {
+            UObject* object = nullptr;
+            uint16 index = 0;
+            std::memcpy(&object, key, sizeof(object));
+            std::memcpy(&index, value, sizeof(index));
+            reverseEntries.push_back({reinterpret_cast<std::uintptr_t>(object), index});
+        });
+        std::vector<PS::WorldBuildingRegistryValidation::InternalEntry> internalEntries;
+        UECustom::FScriptMapHelper internal(
+            internalProperty, internalProperty->ContainerPtrToValuePtr<void>(subsystem));
+        internal.ForEachPair([&](void* key, void* value) {
+            UObject* object = nullptr;
+            std::memcpy(&object, value, sizeof(object));
+            auto* string = static_cast<FString*>(key);
+            internalEntries.push_back({string && string->GetCharArray().Num() > 1
+                    ? RC::to_string(string->GetCharArray().GetData()) : std::string{},
+                reinterpret_cast<std::uintptr_t>(object)});
+        });
+        live = PS::WorldBuildingRegistryValidation::Validate(
+            persistenceEntries, networkEntries, expected, reverseEntries, internalEntries,
+            // Menu preflight precedes building world registration on both
+            // standalone clients and dedicated servers. Protect only enabled
+            // definitions whose cooked identity and live object were already
+            // certified by CleanupExpectations; conflicting registry entries
+            // still abort, and disabled mods provide no protected identity.
+            PS::WorldBuildingRegistryValidation::ExpectedMode::ProtectPendingDefinition);
+        PS::Log<LogLevel::Verbose>(STR(
+            "[PERSISTENCE-PRUNER][BUILDINGS][REGISTRY] persistence={} net={} reverse={} names={} enabled={} verified=true.\n"),
+            persistenceEntries.size(), networkEntries.size(), reverseEntries.size(),
+            internalEntries.size(), expected.size());
+        return live;
+    }
+
+    void RunLocalWorldBuildingPreflight(const fs::path& target,
+        const std::unordered_set<std::string>& live)
+    {
+        namespace Preflight = PS::WorldBuildingSavePreflight;
+        if (!fs::is_regular_file(target) || fs::is_symlink(fs::symlink_status(target))
+            || target.extension() != L".sav")
+            throw std::runtime_error("world save candidate is not a regular .sav file");
+        std::ifstream input(target, std::ios::binary);
+        if (!input) throw std::runtime_error("world save could not be read");
+        Preflight::Bytes original(std::istreambuf_iterator<char>{input},
+            std::istreambuf_iterator<char>{});
+        input.close();
+        auto repair = Preflight::RemoveUnresolved(original, live);
+        if (repair.removedIds.empty()) {
+            PS::Log<LogLevel::Verbose>(STR(
+                "[PERSISTENCE-PRUNER][BUILDINGS][CHECKED] '{}' has no unresolved building IDs; save unchanged.\n"),
+                target.filename().wstring());
+            return;
+        }
+
+        // Fail if another writer touched the world after it was read. This
+        // startup pass runs before a world is selected or loaded.
+        std::ifstream recheck(target, std::ios::binary);
+        const Preflight::Bytes current(std::istreambuf_iterator<char>{recheck},
+            std::istreambuf_iterator<char>{});
+        recheck.close();
+        if (current != original) throw std::runtime_error("save changed during preflight");
+        const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
+        const auto backupEnabled = PS::PSConfig::Get()->GetSettings()
+            .worldSaveCleanup.backupBeforePrune;
+        const fs::path backup = backupEnabled
+            ? fs::path(target.wstring() + L".runeschema-" + std::to_wstring(nonce) + L".bak")
+            : fs::path{};
+        const fs::path temporary = target.wstring() + L".runeschema-"
+            + std::to_wstring(nonce) + L".tmp";
+        if ((backupEnabled && fs::exists(backup)) || fs::exists(temporary))
+            throw std::runtime_error("preflight output path already exists");
+        {
+            std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
+            output.write(reinterpret_cast<const char*>(repair.bytes.data()),
+                static_cast<std::streamsize>(repair.bytes.size()));
+            output.flush();
+            if (!output) throw std::runtime_error("temporary repaired save write failed");
+        }
+        {
+            std::ifstream verification(temporary, std::ios::binary);
+            const Preflight::Bytes written(std::istreambuf_iterator<char>{verification},
+                std::istreambuf_iterator<char>{});
+            if (written != repair.bytes)
+                throw std::runtime_error("temporary repaired save did not verify");
+            (void)Preflight::Parse(written);
+        }
+        if (backupEnabled) {
+            if (!fs::copy_file(target, backup, fs::copy_options::none))
+                throw std::runtime_error("pre-cleanup backup could not be created; original retained");
+            std::ifstream verification(backup, std::ios::binary);
+            const Preflight::Bytes saved(std::istreambuf_iterator<char>{verification},
+                std::istreambuf_iterator<char>{});
+            if (!verification || saved != original)
+                throw std::runtime_error("pre-cleanup backup did not verify; original retained");
+        }
+        const auto repairedBytes = std::make_shared<const Preflight::Bytes>(std::move(repair.bytes));
+        const auto logSuccess = [target, backup, removedIds = repair.removedIds,
+            persistenceIds = repair.removedPersistenceIds, repairedBytes]() {
+            std::ifstream verification(target, std::ios::binary);
+            const Preflight::Bytes saved(std::istreambuf_iterator<char>{verification},
+                std::istreambuf_iterator<char>{});
+            if (!verification || saved != *repairedBytes)
+                throw std::runtime_error("committed repaired save did not verify; pre-cleanup backup retained");
+            (void)Preflight::Parse(saved);
+            const auto backupLabel = backup.empty() ? L"disabled" : backup.filename().wstring();
+            RC::Output::send<RC::LogLevel::Normal>(STR(
+                "[RuneSchema] [summary] Save cleanup | world='{}' | missing building IDs removed={} | backup='{}'.\n"),
+                target.filename().wstring(), removedIds.size(), backupLabel);
+            for (std::size_t i = 0; i < removedIds.size(); ++i)
+                PS::Log<LogLevel::Verbose>(STR(
+                    "[PERSISTENCE-PRUNER][BUILDINGS][REMOVED] world='{}' instance={} PersistenceID='{}' backup='{}'.\n"),
+                    target.filename().wstring(),
+                    removedIds[i], PS::ToWideSafe(persistenceIds[i]),
+                    backupLabel);
+        };
+        if (ReplaceFileW(target.c_str(), temporary.c_str(),
+            nullptr,
+            REPLACEFILE_WRITE_THROUGH, nullptr, nullptr)) {
+            logSuccess();
+            return;
+        }
+        const auto firstError = GetLastError();
+        if (firstError != ERROR_SHARING_VIOLATION)
+            throw std::runtime_error(std::format(
+                "atomic save replacement failed (Windows error {}); original retained",
+                firstError));
+
+        // Another save-provider handle can still be open at GameInstanceInit.
+        // Retry the already-validated bytes for at most 30 seconds, no more
+        // than once per half-second, and never after the target has changed.
+        struct Pending {
+            fs::path Target;
+            fs::path Temporary;
+            fs::path Backup;
+            Preflight::Bytes Original;
+            std::chrono::steady_clock::time_point Next;
+            std::chrono::steady_clock::time_point Deadline;
+        };
+        const auto now = std::chrono::steady_clock::now();
+        auto pending = std::make_shared<Pending>(Pending{
+            target, temporary, backup, std::move(original),
+            now + std::chrono::milliseconds(500), now + std::chrono::seconds(30) });
+        Hook::FCallbackOptions options{};
+        options.OwnerModName = TEXT("RuneSchema");
+        options.HookName = TEXT("WorldBuildingPreflightMenuRetry");
+        const auto callback = Hook::RegisterEngineTickPostCallback(
+            [pending, logSuccess](Hook::TCallbackIterationData<void>& iteration,
+                UEngine*, float, bool) {
+                const auto now = std::chrono::steady_clock::now();
+                if (now < pending->Next) return;
+                pending->Next = now + std::chrono::milliseconds(500);
+                if (now > pending->Deadline) {
+                    PS::Log<LogLevel::Warning>(STR(
+                        "[PERSISTENCE-PRUNER][BUILDINGS][SKIPPED] Save cleanup could not get a safe write window; the world save was not changed.\n"));
+                    iteration.RemoveSelf();
+                    return;
+                }
+                try {
+                    std::ifstream verificationStream(pending->Target, std::ios::binary);
+                    const Preflight::Bytes current(std::istreambuf_iterator<char>{verificationStream},
+                        std::istreambuf_iterator<char>{});
+                    verificationStream.close();
+                    if (current != pending->Original)
+                        throw std::runtime_error("world save changed before menu retry");
+                    if (ReplaceFileW(pending->Target.c_str(), pending->Temporary.c_str(),
+                        nullptr,
+                        REPLACEFILE_WRITE_THROUGH, nullptr, nullptr)) {
+                        logSuccess();
+                        iteration.RemoveSelf();
+                        return;
+                    }
+                    const auto winError = GetLastError();
+                    if (winError != ERROR_SHARING_VIOLATION)
+                        throw std::runtime_error(std::format(
+                            "atomic menu retry failed (Windows error {})", winError));
+                } catch (const std::exception& error) {
+                    PS::Log<LogLevel::Warning>(STR(
+                        "[PERSISTENCE-PRUNER][BUILDINGS][UNVERIFIED] World cleanup could not be certified: {}. Check the retained backup before loading this world.\n"),
+                        PS::ToWideSafe(error.what()));
+                    iteration.RemoveSelf();
+                }
+            }, options);
+        if (callback == Hook::ERROR_ID)
+            throw std::runtime_error("save is locked and bounded menu retry could not be installed");
+        PS::Log<LogLevel::Verbose>(STR(
+            "[PERSISTENCE-PRUNER][BUILDINGS][DEFERRED] Save locked at registry initialization; bounded menu retry armed.\n"));
+    }
+
+    void RunAllLocalWorldBuildingPreflights(DragonWilds::DragonWildsBuildingModLoader* buildingLoader)
+    {
+        if (!PS::Storefront::IsDedicatedServer()
+            && PS::Storefront::Current() != PS::Storefront::Kind::SteamGog) {
+            PS::Log<LogLevel::Verbose>(STR(
+                "[PERSISTENCE-PRUNER][BUILDINGS][PROVIDER-DEFERRED] Direct world files are not available through this save provider.\n"));
+            return;
+        }
+        fs::path saves;
+        if (PS::Storefront::IsDedicatedServer()) {
+            const auto& executable = PS::Storefront::CurrentDetection().Executable;
+            const auto binaries = executable.parent_path();
+            if (PS::Storefront::Lower(binaries.filename().wstring()) != L"win64"
+                || PS::Storefront::Lower(binaries.parent_path().filename().wstring())
+                    != L"binaries")
+                throw std::runtime_error("dedicated server executable layout is unrecognized");
+            saves = binaries.parent_path().parent_path()
+                / L"Saved" / L"SaveGames";
+        } else {
+            wchar_t appData[32768]{};
+            const auto length = GetEnvironmentVariableW(L"LOCALAPPDATA", appData, _countof(appData));
+            if (!length || length >= _countof(appData))
+                throw std::runtime_error("LOCALAPPDATA is unavailable");
+            saves = fs::path(std::wstring(appData, length))
+                / L"RSDragonwilds" / L"Saved" / L"SaveGames";
+        }
+        RC::Output::send<RC::LogLevel::Normal>(STR(
+            "[RuneSchema] [PERSISTENCE-PRUNER][BUILDINGS][SOURCE] mode={} directory='{}'.\n"),
+            PS::Storefront::IsDedicatedServer() ? TEXT("dedicated-server")
+                : TEXT("local-client"), saves.wstring());
+        if (!fs::exists(saves)) return;
+        if (!fs::is_directory(saves) || fs::is_symlink(fs::symlink_status(saves)))
+            throw std::runtime_error("world save directory is not a regular directory");
+        if (!buildingLoader)
+            throw std::runtime_error("building loader is unavailable; enabled building identities cannot be certified");
+        const auto expected = buildingLoader->CleanupExpectations();
+
+        std::vector<fs::path> worlds;
+        std::uintmax_t totalBytes = 0;
+        constexpr std::uintmax_t maximumTotalBytes = 2ull * 1024 * 1024 * 1024;
+        for (const auto& entry : fs::directory_iterator(saves)) {
+            if (entry.path().extension() != L".sav") continue;
+            if (entry.path().filename() == L"EnhancedInputUserSettings.sav") continue;
+            if (!entry.is_regular_file() || entry.is_symlink())
+                throw std::runtime_error("world save candidate is not a regular file");
+            const auto size = entry.file_size();
+            if (size > 512ull * 1024 * 1024 || size > maximumTotalBytes - totalBytes
+                || worlds.size() >= 256)
+                throw std::runtime_error("world save directory exceeds safe cleanup limits");
+            totalBytes += size;
+            worlds.push_back(entry.path());
+        }
+        std::ranges::sort(worlds);
+        if (worlds.empty()) return;
+        // Registry readiness is shared by every local save. Validate it once
+        // before visiting any file, so an unavailable menu registry is a
+        // single fail-closed diagnostic rather than one warning per world.
+        const auto live = ReadValidatedLiveBuildingIds(expected);
+        std::vector<std::wstring> skipped;
+        for (const auto& world : worlds) {
+            try { RunLocalWorldBuildingPreflight(world, live); }
+            catch (const std::exception& error) {
+                skipped.push_back(world.filename().wstring());
+                PS::Log<LogLevel::Warning>(STR(
+                    "[PERSISTENCE-PRUNER][BUILDINGS][UNVERIFIED] '{}' cleanup could not be certified: {}.\n"),
+                    world.filename().wstring(), PS::ToWideSafe(error.what()));
+            }
+        }
+        if (!skipped.empty())
+            PS::Log<LogLevel::Warning>(STR(
+                "[PERSISTENCE-PRUNER][BUILDINGS][PARTIAL] {} local world save(s) did not complete verified cleanup; inspect each reason.\n"),
+                skipped.size());
+        else
+            PS::Log<LogLevel::Verbose>(STR(
+                "[PERSISTENCE-PRUNER][BUILDINGS][CHECKED] {} local world save(s) checked.\n"),
+                worlds.size());
+    }
+
+    // Game Pass save-provider hooks. The slot hook supplies the world identity;
+    // the archive hook repairs a validated payload before deserialization.
+    SafetyHookInline NativeSpudLoadGameProbe{};
+    SafetyHookInline NativeSpudDeserializeProbe{};
+    DragonWilds::DragonWildsBuildingModLoader* NativeWorldBuildingLoader = nullptr;
+    thread_local std::wstring ActiveSpudLoadSlot;
+    bool NativeSpudLoadSlotReady = false;
+
+    bool ProbeMemoryReadable(const void* address, std::size_t bytes)
+    {
+        if (!address || !bytes) return false;
+        MEMORY_BASIC_INFORMATION page{};
+        if (!VirtualQuery(address, &page, sizeof(page)) || page.State != MEM_COMMIT
+            || (page.Protect & (PAGE_GUARD | PAGE_NOACCESS))) return false;
+        const auto protection = page.Protect & 0xFF;
+        if (protection != PAGE_READONLY && protection != PAGE_READWRITE
+            && protection != PAGE_WRITECOPY && protection != PAGE_EXECUTE_READ
+            && protection != PAGE_EXECUTE_READWRITE
+            && protection != PAGE_EXECUTE_WRITECOPY) return false;
+        const auto start = reinterpret_cast<std::uintptr_t>(address);
+        const auto regionStart = reinterpret_cast<std::uintptr_t>(page.BaseAddress);
+        return start >= regionStart && bytes <= page.RegionSize - (start - regionStart);
+    }
+
+    bool ProbeMemoryWritable(const void* address, std::size_t bytes)
+    {
+        if (!address || !bytes) return false;
+        MEMORY_BASIC_INFORMATION page{};
+        if (!VirtualQuery(address, &page, sizeof(page)) || page.State != MEM_COMMIT
+            || (page.Protect & (PAGE_GUARD | PAGE_NOACCESS))) return false;
+        const auto protection = page.Protect & 0xFF;
+        if (protection != PAGE_READWRITE && protection != PAGE_WRITECOPY
+            && protection != PAGE_EXECUTE_READWRITE
+            && protection != PAGE_EXECUTE_WRITECOPY) return false;
+        const auto start = reinterpret_cast<std::uintptr_t>(address);
+        const auto regionStart = reinterpret_cast<std::uintptr_t>(page.BaseAddress);
+        return start >= regionStart && bytes <= page.RegionSize - (start - regionStart);
+    }
+
+    std::wstring ReadProbeFString(const void* address)
+    {
+        struct Layout { const wchar_t* Data; std::int32_t Count; std::int32_t Capacity; };
+        if (!ProbeMemoryReadable(address, sizeof(Layout))) return L"<unavailable>";
+        Layout string{};
+        std::memcpy(&string, address, sizeof(string));
+        if (string.Count < 1 || string.Count > 512 || string.Capacity < string.Count
+            || !ProbeMemoryReadable(string.Data,
+                static_cast<std::size_t>(string.Count) * sizeof(wchar_t)))
+            return L"<unavailable>";
+        if (string.Data[string.Count - 1] != L'\0') return L"<unavailable>";
+        return std::wstring(string.Data, static_cast<std::size_t>(string.Count - 1));
+    }
+
+    fs::path BackupWorldBuildingPayload(const std::wstring& slot,
+        std::span<const std::uint8_t> original)
+    {
+        std::wstring safeSlot;
+        for (const auto ch : slot) {
+            if (safeSlot.size() == 48) break;
+            safeSlot.push_back((ch >= L'a' && ch <= L'z')
+                || (ch >= L'A' && ch <= L'Z')
+                || (ch >= L'0' && ch <= L'9')
+                || ch == L'-' || ch == L'_' ? ch : L'_');
+        }
+        if (safeSlot.empty()) throw std::runtime_error("world slot is unavailable");
+        const auto directory = PS::HostServices::StateDirectory()
+            / L"backups" / L"world-building";
+        std::error_code error;
+        fs::create_directories(directory, error);
+        if (error) throw std::runtime_error("world backup directory is unavailable");
+        static std::atomic<std::uint64_t> sequence{0};
+        const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
+        const auto name = safeSlot + L"-" + std::to_wstring(nonce) + L"-"
+            + std::to_wstring(sequence.fetch_add(1, std::memory_order_relaxed)) + L".sav";
+        const auto backup = directory / name;
+        if (fs::exists(backup)) throw std::runtime_error("world backup path already exists");
+        {
+            std::ofstream output(backup, std::ios::binary | std::ios::trunc);
+            if (!output) throw std::runtime_error("world backup could not be created");
+            output.write(reinterpret_cast<const char*>(original.data()),
+                static_cast<std::streamsize>(original.size()));
+            output.flush();
+            if (!output) throw std::runtime_error("world backup write failed");
+        }
+        std::ifstream verification(backup, std::ios::binary);
+        const std::vector<std::uint8_t> written(std::istreambuf_iterator<char>{verification},
+            std::istreambuf_iterator<char>{});
+        if (!verification.is_open() || verification.bad()
+            || written.size() != original.size()
+            || !std::equal(written.begin(), written.end(), original.begin()))
+            throw std::runtime_error("world backup verification failed");
+        return backup;
+    }
+
+    void NativeSpudLoadGameReadOnly(void* subsystem, const void* slotName,
+        std::uint8_t clientLoadingListen)
+    {
+        const auto slot = ReadProbeFString(slotName);
+        const auto previousSlot = std::exchange(ActiveSpudLoadSlot, slot);
+        NativeSpudLoadGameProbe.call<void>(subsystem, slotName, clientLoadingListen);
+        ActiveSpudLoadSlot = previousSlot;
+    }
+
+    void InstallNativeSpudLoadGameProbe()
+    {
+        constexpr std::uintptr_t routineRva = 0x6545470;
+        constexpr std::array<std::uint8_t, 21> expected{
+            0x44,0x88,0x44,0x24,0x18,0x48,0x89,0x54,0x24,0x10,
+            0x55,0x53,0x56,0x41,0x54,0x41,0x57,0x48,0x8D,0x6C,0x24};
+        auto* image = reinterpret_cast<const std::uint8_t*>(GetModuleHandleW(nullptr));
+        if (!image || !ProbeMemoryReadable(image, sizeof(IMAGE_DOS_HEADER))) return;
+        const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(image);
+        if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0
+            || dos->e_lfanew > 4096) return;
+        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(image + dos->e_lfanew);
+        if (!ProbeMemoryReadable(nt, sizeof(*nt)) || nt->Signature != IMAGE_NT_SIGNATURE
+            || nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC
+            || nt->OptionalHeader.SizeOfImage < routineRva + expected.size()) return;
+        auto* routine = const_cast<std::uint8_t*>(image + routineRva);
+        const auto verified = ProbeMemoryReadable(routine, expected.size())
+            && std::memcmp(routine, expected.data(), expected.size()) == 0;
+        const auto installed = verified && PS::InstallInlineHook(NativeSpudLoadGameProbe,
+            routine, reinterpret_cast<void*>(&NativeSpudLoadGameReadOnly));
+        NativeSpudLoadSlotReady = installed;
+    }
+
+    void NativeSpudDeserializeGuarded(void* state, const void* archive,
+        std::uint8_t loadingListen, void* context, void* callback)
+    {
+        if (!NativeSpudLoadSlotReady) {
+            NativeSpudDeserializeProbe.call<void>(state, archive, loadingListen,
+                context, callback);
+            return;
+        }
+        if (ProbeMemoryReadable(archive, 0x10)) {
+            if (ProbeMemoryReadable(archive, 0x98)) {
+                void* innerArchive{};
+                std::memcpy(&innerArchive,
+                    static_cast<const std::uint8_t*>(archive) + 0x90,
+                    sizeof(innerArchive));
+                if (ProbeMemoryReadable(innerArchive, sizeof(void*))) {
+                    if (ProbeMemoryReadable(innerArchive, 0xA8)) {
+                        const std::uint8_t* bytes{};
+                        const void* array{};
+                        std::int64_t position{};
+                        std::int64_t limit{};
+                        std::memcpy(&position,
+                            static_cast<const std::uint8_t*>(innerArchive) + 0x90,
+                            sizeof(position));
+                        std::memcpy(&array,
+                            static_cast<const std::uint8_t*>(innerArchive) + 0x98,
+                            sizeof(array));
+                        std::memcpy(&limit,
+                            static_cast<const std::uint8_t*>(innerArchive) + 0xA0,
+                            sizeof(limit));
+                        if (ProbeMemoryReadable(array, 0x10)) {
+                            std::int32_t count{};
+                            std::int32_t capacity{};
+                            std::memcpy(&bytes, array, sizeof(bytes));
+                            std::memcpy(&count,
+                                static_cast<const std::uint8_t*>(array) + 0x08,
+                                sizeof(count));
+                            std::memcpy(&capacity,
+                                static_cast<const std::uint8_t*>(array) + 0x0C,
+                                sizeof(capacity));
+                            const bool bounded = count >= 8 && count <= 32 * 1024 * 1024
+                                && capacity >= count
+                                && ProbeMemoryReadable(bytes, static_cast<std::size_t>(count));
+                            std::uint32_t marker{};
+                            if (bounded) std::memcpy(&marker, bytes, sizeof(marker));
+                            if (bounded && marker == 0x45564153u) {
+                                try {
+                                    const std::vector<std::uint8_t> original(bytes,
+                                        bytes + static_cast<std::size_t>(count));
+                                    const auto parsed = PS::WorldBuildingSavePreflight::Parse(
+                                        original);
+                                    try {
+                                        if (!NativeWorldBuildingLoader)
+                                            throw std::runtime_error("building loader is unavailable for Game Pass world cleanup");
+                                        const auto live = ReadValidatedLiveBuildingIds(
+                                            NativeWorldBuildingLoader->CleanupExpectations());
+                                        const auto repair = PS::WorldBuildingSavePreflight::RemoveUnresolved(
+                                            original, live);
+                                        const bool loadEligible = !ActiveSpudLoadSlot.empty()
+                                            && ActiveSpudLoadSlot != L"<unavailable>"
+                                            && loadingListen == 0 && position == 0
+                                            && limit == std::numeric_limits<std::int64_t>::max()
+                                            && !repair.removedIds.empty()
+                                            && repair.removedIds.size()
+                                                == repair.removedPersistenceIds.size()
+                                            && repair.bytes.size() >= 8
+                                            && repair.bytes.size() < original.size();
+                                        if (loadEligible) {
+                                            const auto verified = PS::WorldBuildingSavePreflight::Parse(
+                                                repair.bytes);
+                                            const std::unordered_set<std::uint32_t> removed(
+                                                repair.removedIds.begin(), repair.removedIds.end());
+                                            bool retainedMatch = verified.pieces.size() + removed.size()
+                                                == parsed.pieces.size();
+                                            std::size_t retainedIndex = 0;
+                                            for (const auto& piece : parsed.pieces) {
+                                                if (removed.contains(piece.id)) continue;
+                                                if (retainedIndex >= verified.pieces.size()) {
+                                                    retainedMatch = false;
+                                                    break;
+                                                }
+                                                const auto& retained = verified.pieces[retainedIndex++];
+                                                std::vector<std::uint32_t> expectedLinks;
+                                                for (const auto link : piece.links)
+                                                    if (!removed.contains(link)) expectedLinks.push_back(link);
+                                                if (piece.id != retained.id
+                                                    || piece.persistenceId != retained.persistenceId
+                                                    || expectedLinks != retained.links
+                                                    || piece.linksOffset - piece.offset
+                                                        != retained.linksOffset - retained.offset
+                                                    || std::memcmp(original.data() + piece.offset,
+                                                        repair.bytes.data() + retained.offset,
+                                                        piece.linksOffset - piece.offset) != 0) {
+                                                    retainedMatch = false;
+                                                    break;
+                                                }
+                                            }
+                                            retainedMatch = retainedMatch
+                                                && retainedIndex == verified.pieces.size();
+                                            const bool writable = retainedMatch
+                                                && ProbeMemoryWritable(array, 0x10)
+                                                && ProbeMemoryWritable(bytes,
+                                                    static_cast<std::size_t>(count));
+                                            const std::uint8_t* currentBytes{};
+                                            std::int32_t currentCount{};
+                                            std::int32_t currentCapacity{};
+                                            if (writable) {
+                                                std::memcpy(&currentBytes, array,
+                                                    sizeof(currentBytes));
+                                                std::memcpy(&currentCount,
+                                                    static_cast<const std::uint8_t*>(array) + 0x08,
+                                                    sizeof(currentCount));
+                                                std::memcpy(&currentCapacity,
+                                                    static_cast<const std::uint8_t*>(array) + 0x0C,
+                                                    sizeof(currentCapacity));
+                                            }
+                                            if (writable && currentBytes == bytes
+                                                && currentCount == count
+                                                && currentCapacity == capacity
+                                                && std::memcmp(bytes, original.data(),
+                                                    original.size()) == 0) {
+                                                fs::path backup;
+                                                if (PS::PSConfig::Get()->GetSettings()
+                                                        .worldSaveCleanup.backupBeforePrune)
+                                                    backup = BackupWorldBuildingPayload(
+                                                        ActiveSpudLoadSlot, original);
+                                                std::memcpy(const_cast<std::uint8_t*>(bytes),
+                                                    repair.bytes.data(), repair.bytes.size());
+                                                const auto repairedCount = static_cast<std::int32_t>(
+                                                    repair.bytes.size());
+                                                std::memcpy(static_cast<std::uint8_t*>(
+                                                    const_cast<void*>(array)) + 0x08,
+                                                    &repairedCount, sizeof(repairedCount));
+                                                RC::Output::send<RC::LogLevel::Normal>(STR(
+                                                    "[RuneSchema] [summary] Save cleanup | world='{}' | missing building IDs removed={} | retained={} | backup='{}'.\n"),
+                                                    ActiveSpudLoadSlot, removed.size(),
+                                                    verified.pieces.size(),
+                                                    backup.empty() ? L"disabled" : backup.filename().wstring());
+                                            } else {
+                                                RC::Output::send<RC::LogLevel::Warning>(STR(
+                                                    "[RuneSchema] [SAVE-CLEANUP][BUILDINGS][SKIPPED] Native buffer changed during validation; world unchanged.\n"));
+                                            }
+                                        } else if (!repair.removedIds.empty()) {
+                                            RC::Output::send<RC::LogLevel::Warning>(STR(
+                                                "[RuneSchema] [SAVE-CLEANUP][BUILDINGS][SKIPPED] World load contract was not safe for repair; world unchanged.\n"));
+                                        }
+                                    } catch (const std::exception& error) {
+                                        RC::Output::send<RC::LogLevel::Warning>(STR(
+                                            "[RuneSchema] [SAVE-CLEANUP][BUILDINGS][SKIPPED] World unchanged: {}.\n"),
+                                            PS::ToWideSafe(error.what()));
+                                    }
+                                } catch (const std::exception& error) {
+                                    RC::Output::send<RC::LogLevel::Warning>(STR(
+                                        "[RuneSchema] [SAVE-CLEANUP][BUILDINGS][SKIPPED] World data could not be validated: {}.\n"),
+                                        PS::ToWideSafe(error.what()));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        NativeSpudDeserializeProbe.call<void>(state, archive, loadingListen,
+            context, callback);
+    }
+
+    void InstallNativeSpudDeserializeProbe()
+    {
+        constexpr std::uintptr_t routineRva = 0x6529820;
+        constexpr std::array<std::uint8_t, 16> expected{
+            0x48,0x89,0x5C,0x24,0x18,0x55,0x56,0x57,
+            0x41,0x54,0x41,0x55,0x41,0x56,0x41,0x57};
+        auto* image = reinterpret_cast<const std::uint8_t*>(GetModuleHandleW(nullptr));
+        if (!image || !ProbeMemoryReadable(image, sizeof(IMAGE_DOS_HEADER))) return;
+        const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(image);
+        if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0
+            || dos->e_lfanew > 4096) return;
+        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(image + dos->e_lfanew);
+        if (!ProbeMemoryReadable(nt, sizeof(*nt)) || nt->Signature != IMAGE_NT_SIGNATURE
+            || nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC
+            || nt->OptionalHeader.SizeOfImage < routineRva + expected.size()) return;
+        auto* routine = const_cast<std::uint8_t*>(image + routineRva);
+        const auto verified = ProbeMemoryReadable(routine, expected.size())
+            && std::memcmp(routine, expected.data(), expected.size()) == 0;
+        const auto installed = verified && PS::InstallInlineHook(NativeSpudDeserializeProbe,
+            routine, reinterpret_cast<void*>(&NativeSpudDeserializeGuarded));
+        if (installed && NativeSpudLoadSlotReady)
+            RC::Output::send<RC::LogLevel::Normal>(STR(
+                "[RuneSchema] [SAVE-CLEANUP][BUILDINGS] Game Pass world cleanup is ready.\n"));
+        else
+            RC::Output::send<RC::LogLevel::Warning>(STR(
+                "[RuneSchema] [SAVE-CLEANUP][BUILDINGS][GAMEPASS-UNAVAILABLE] Required world hooks could not be installed; saves will not be changed.\n"));
+    }
+
+    void ProbeGamePassWorldSaveFunctions(DragonWilds::DragonWildsBuildingModLoader* buildingLoader)
+    {
+        if (PS::Storefront::Current() != PS::Storefront::Kind::GamePass) return;
+        NativeWorldBuildingLoader = buildingLoader;
+        InstallNativeSpudLoadGameProbe();
+        InstallNativeSpudDeserializeProbe();
+    }
+
     struct ModIdentity { std::string Id; std::string Name; std::string Author="Unknown Author"; std::string Website; bool Present=false; };
     std::string TrimIdentity(std::string value) {
         const auto first=value.find_first_not_of(" \t\r\n");
@@ -350,10 +1078,11 @@ namespace DragonWilds {
         InitializeMods(EEngineLifecyclePhase::GameInstanceInit);
         LoadMods(EEngineLifecyclePhase::GameInstanceInit);
 
+        bool buildingRegistrationReady = m_buildingLoader != nullptr;
         if (m_buildingLoader)
         {
             try {m_buildingLoader->ActivateWorldRegistration();}
-            catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:buildings] World registration disabled: {}.\n"),PS::ToWideSafe(error.what()));}
+            catch(const std::exception& error){buildingRegistrationReady=false;PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:buildings] World registration disabled: {}.\n"),PS::ToWideSafe(error.what()));}
         }
 
         if (m_stringLoader)
@@ -363,16 +1092,35 @@ namespace DragonWilds {
         }
 
         PS::StartupTrace::Mark("data registrar begin");
+        bool dataRegistrarReady = false;
         try {
             m_dataRegistrar.Initialize();
             if(!m_dataRegistrar.IsInitialized())
                 throw std::runtime_error("required live persistence registry bindings are unavailable");
+            dataRegistrarReady = true;
             if (PS::Storefront::IsDedicatedServer())
                 PS::Log<LogLevel::Normal>(STR(
                     "[SERVER][REGISTRIES-READY] Live persistence registries, cooked PAK discovery and configured combat registration completed.\n"));
         }
         catch(const std::exception& error){
-            PS::Log<LogLevel::Error>(STR("[DEGRADED][SERVICE:data-registrar] Registration/save cleanup unavailable: {}. RuneSchema will not prune this run.\n"),PS::ToWideSafe(error.what()));
+            PS::Log<LogLevel::Error>(STR("[DEGRADED][SERVICE:data-registrar] General registration and character-save cleanup unavailable: {}. Dedicated-server building cleanup will still check its live registries independently.\n"),PS::ToWideSafe(error.what()));
+        }
+        // Dedicated servers attempt the world pass independently of unrelated
+        // loader health. Each candidate still requires the live building
+        // registries to pass ReadValidatedLiveBuildingIds before any write.
+        if (PS::Storefront::IsDedicatedServer()
+            || (buildingRegistrationReady && dataRegistrarReady)) {
+            try { RunAllLocalWorldBuildingPreflights(m_buildingLoader); }
+            catch(const std::exception& error) {
+                PS::Log<LogLevel::Warning>(STR(
+                    "[PERSISTENCE-PRUNER][BUILDINGS][SKIPPED] World cleanup could not be certified: {}.\n"),
+                    PS::ToWideSafe(error.what()));
+            }
+        }
+        try { ProbeGamePassWorldSaveFunctions(m_buildingLoader); }
+        catch (const std::exception& error) {
+            PS::Log<LogLevel::Warning>(STR("[SAVE-CLEANUP][BUILDINGS] Game Pass world-save hooks could not start: {}.\n"),
+                PS::ToWideSafe(error.what()));
         }
         try {m_registryBridge.Start();}
         catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][SERVICE:registry-bridge] Networking bridge unavailable: {}.\n"),PS::ToWideSafe(error.what()));}
@@ -502,6 +1250,12 @@ namespace DragonWilds {
         };
         m_spawnLoader->IsQuestCompleted=[npcService](RC::Unreal::UWorld* world,const std::string& quest){
             return npcService->IsQuestCompleted(world,quest);
+        };
+        m_spawnLoader->IsQuestActive=[npcService](RC::Unreal::UWorld* world,const std::string& quest){
+            return npcService->IsQuestActive(world,quest);
+        };
+        m_spawnLoader->IsEventActive=[npcService](RC::Unreal::UWorld* world,const std::string& event){
+            return npcService->EventService().Running(event,world);
         };
         m_registryBridge.AuthorityChannel=[service=m_spawnLoader](RC::Unreal::UObject* player,const std::string& channel,
             const std::string&,const std::string& action,const std::string& payload){
@@ -819,6 +1573,9 @@ namespace DragonWilds {
                         + "/" + loaderKind);
                     if (!loader->Load(modPath, modName, engineLifecyclePhase)) {
                         modSuccessful=false;
+                        if (loaderKind == "buildings" && m_buildingLoader)
+                            m_buildingLoader->RejectCleanup("building section failed for enabled mod '"
+                                + RC::to_string(modName) + "'");
                     }
                     PS::StartupTrace::Mark("load loader end: " + RC::to_string(modName)
                         + "/" + loaderKind);

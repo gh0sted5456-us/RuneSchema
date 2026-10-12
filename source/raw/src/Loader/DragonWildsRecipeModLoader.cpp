@@ -559,9 +559,11 @@ namespace DragonWilds {
             }
         }
         m_propsApplied.insert(key);
-        m_unlock.insert(key);
+        // Vendor offers are available only to the player opening this store.
+        // PrepareStoreForPlayer updates that player's two native unlock sets;
+        // a per-offer global replay here scales with every recipe and progress
+        // component and briefly makes other vendors' stock visible.
         RegisterHooks();
-        ApplyUnlocksToAllProgressComponents();
         return recipe;
     }
 

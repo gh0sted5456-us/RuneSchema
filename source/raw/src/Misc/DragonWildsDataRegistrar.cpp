@@ -582,7 +582,7 @@ namespace DragonWilds {
                 ++changed;
                 removed += plan.Removed.size();
                 for (const auto& row : plan.Removed)
-                    PS::Log<LogLevel::Warning>(STR(
+                    PS::Log<LogLevel::Verbose>(STR(
                         "[PERSISTENCE-PRUNER][STARTUP][ORPHAN-REMOVED] {} '{}' from '{}'.\n"),
                         PS::ToWideSafe(row.value("Kind", std::string("Unknown")).c_str()),
                         PS::ToWideSafe(row.value("Id", std::string("<unknown>")).c_str()),
@@ -597,8 +597,8 @@ namespace DragonWilds {
             }
         }
         if (changed)
-            PS::Log<LogLevel::Warning>(STR(
-                "[PERSISTENCE-PRUNER][STARTUP][COMPLETE] Atomically removed {} unresolved persistence reference(s) from {} character save(s). Cleanup will not run again until game restart.\n"),
+            RC::Output::send<RC::LogLevel::Normal>(STR(
+                "[RuneSchema] [summary] Save cleanup | missing character IDs removed={} | saves updated={}. Valid IDs kept; originals backed up.\n"),
                 removed, changed);
         else
             PS::Log<LogLevel::Verbose>(STR(
