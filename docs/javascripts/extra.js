@@ -1,5 +1,14 @@
-// Keep external links visually distinct without changing internal navigation.
-document$.subscribe(() => {
+function rsOnPage(callback) {
+  if (typeof document$ !== "undefined") document$.subscribe(callback);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", callback, { once: true });
+  } else {
+    callback();
+  }
+}
+
+// Keep external links safe without changing internal navigation.
+rsOnPage(() => {
   document.querySelectorAll('.md-content a[href^="http"]').forEach((link) => {
     if (link.hostname !== window.location.hostname) {
       link.setAttribute('rel', 'noopener noreferrer');
@@ -149,4 +158,29 @@ function rsAskInit() {
   });
 }
 
-document$.subscribe(rsAskInit);
+rsOnPage(rsAskInit);
+
+function rsFinderInit() {
+  document.querySelectorAll("[data-rs-finder]").forEach((root) => {
+    if (root.dataset.rsReady === "1") return;
+    root.dataset.rsReady = "1";
+    const input = root.querySelector(".rs-finder__input");
+    const items = Array.from(root.querySelectorAll(".rs-finder__list li"));
+    const empty = root.querySelector(".rs-finder__empty");
+    if (!input || !empty) return;
+
+    const filter = () => {
+      const words = rsAskTokens(input.value);
+      let visible = 0;
+      items.forEach((item) => {
+        const label = rsAskNormalize(item.textContent);
+        item.hidden = !words.every((word) => label.includes(word));
+        if (!item.hidden) visible++;
+      });
+      empty.hidden = visible !== 0;
+    };
+    input.addEventListener("input", filter);
+  });
+}
+
+rsOnPage(rsFinderInit);

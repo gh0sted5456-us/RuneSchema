@@ -17,15 +17,15 @@ theme:
   palette:
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: black
-      accent: deep purple
+      primary: teal
+      accent: teal
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: black
-      accent: deep purple
+      primary: teal
+      accent: teal
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
@@ -34,7 +34,6 @@ theme:
     - navigation.instant.prefetch
     - navigation.tracking
     - navigation.tabs
-    - navigation.tabs.sticky
     - navigation.sections
     - navigation.indexes
     - navigation.top
@@ -91,67 +90,64 @@ copyright: >-
 nav:
   - Home: index.md
   - Users:
-      - Start here: users/index.md
-      - Download and release: CURRENT-RELEASE.md
-      - Install or update: INSTALLATION.md
-      - Manage mods and load order: users/manage-mods.md
-      - Safe removal and saves: SAFE-SAVE-AND-LEDGER.md
-      - Steam, GOG, Game Pass, and co-op: COMPATIBILITY.md
-      - Optional bridges: OPTIONAL-BRIDGES.md
+      - Overview: users/index.md
+      - Download: CURRENT-RELEASE.md
+      - Install: INSTALLATION.md
+      - Manage mods: users/manage-mods.md
+      - Save safety: SAFE-SAVE-AND-LEDGER.md
+      - Platforms and co-op: COMPATIBILITY.md
       - Troubleshooting: TROUBLESHOOTING.md
   - Modders:
-      - Start here: modders/index.md
-      - Your first mod: AUTHORING-GUIDE.md
-      - First cooked item walkthrough: modders/first-cooked-item.md
+      - Overview: modders/index.md
+      - First mod: AUTHORING-GUIDE.md
+      - First cooked item: modders/first-cooked-item.md
       - Choose a loader: LOADER-WALKTHROUGHS.md
-      - Guided authoring tools: ADVANCED-AUTHORING-TOOLS.md
-      - Example library: EXAMPLES.md
       - Cooked content:
-          - PAK creation and mounting: PAK-CONTENT-GUIDE.md
-          - Weapons, ranged, and magic: WEAPONS-AND-ITEMS.md
+          - PAKs and mounting: PAK-CONTENT-GUIDE.md
+          - Items and attacks: WEAPONS-AND-ITEMS.md
           - Stations and recipes: STATIONS-AND-RECIPES.md
-          - Custom armor: CUSTOM-ARMOR.md
+          - Armor: CUSTOM-ARMOR.md
           - Registry declarations: COOKED-PAK-REGISTRY-MANIFEST.md
-          - Cook a bridge declaration: SHARED-REGISTRY-BRIDGE-PAK.md
-      - Logic and multiplayer:
+      - More capabilities:
+          - Authoring tools: ADVANCED-AUTHORING-TOOLS.md
           - Blueprint and Lua companions: PSEUDO-LOADERS.md
-          - Lua companion reference: UE4SS-LUA-COMPANIONS.md
-          - Combat fallback settings: COMBAT-FALLBACK-SETTINGS.md
-          - Presentation transport: PRESENTATION-TRANSPORT.md
-          - Summoning authority bridge: SUMMONING-AUTHORITY-BRIDGE.md
+          - Examples: EXAMPLES.md
   - Servers:
-      - Start here: servers/index.md
-      - Dedicated server setup: servers/dedicated-setup.md
-      - Keep server and clients aligned: servers/mod-parity.md
-      - World saves and mod removal: servers/save-maintenance.md
-      - Registry bridge diagnostics: BRIDGE-DIAGNOSTICS.md
+      - Overview: servers/index.md
+      - Dedicated setup: servers/dedicated-setup.md
+      - Client and server parity: servers/mod-parity.md
+      - Save maintenance: servers/save-maintenance.md
+      - Bridge diagnostics: BRIDGE-DIAGNOSTICS.md
   - Reference:
-      - Documentation map: DOCUMENTATION-INDEX.md
-      - Loader and folder reference:
+      - Guide map: DOCUMENTATION-INDEX.md
+      - Find a loader: LOADER-WALKTHROUGHS.md
+      - Loaders · Content:
           - Assets: reference/loaders/assets.md
           - Blueprints: reference/loaders/blueprints.md
-          - Buildings: reference/loaders/buildings.md
-          - Courses: reference/loaders/courses.md
-          - Dialogue: reference/loaders/dialogue.md
-          - Effects: reference/loaders/effects.md
-          - Enums: reference/loaders/enums.md
           - Equipment: reference/loaders/equipment.md
-          - Events: reference/loaders/events.md
-          - Journal: reference/loaders/journal.md
-          - Lore: reference/loaders/lore.md
-          - Nameplates: reference/loaders/nameplates.md
-          - Niagara: reference/loaders/niagara.md
-          - NPCs: reference/loaders/npc.md
-          - Players: reference/loaders/players.md
-          - Quests: reference/loaders/quests.md
           - Raw tables: reference/loaders/raw.md
           - Recipes: reference/loaders/recipes.md
           - Registry: reference/loaders/registry.md
-          - Spawns: reference/loaders/spawns.md
           - Strings: reference/loaders/strings.md
+      - Loaders · World:
+          - Buildings: reference/loaders/buildings.md
+          - Courses: reference/loaders/courses.md
+          - Effects: reference/loaders/effects.md
+          - Events: reference/loaders/events.md
+          - NPCs: reference/loaders/npc.md
+          - Spawns: reference/loaders/spawns.md
           - Vendors: reference/loaders/vendors.md
+      - Loaders · Stories:
+          - Dialogue: reference/loaders/dialogue.md
+          - Journal: reference/loaders/journal.md
+          - Lore: reference/loaders/lore.md
+          - Quests: reference/loaders/quests.md
+      - Loaders · Presentation:
+          - Enums: reference/loaders/enums.md
+          - Nameplates: reference/loaders/nameplates.md
+          - Niagara: reference/loaders/niagara.md
+          - Players: reference/loaders/players.md
       - JSON schemas: SCHEMAS.md
-      - Golden text example: examples/GoldenInteractionText/README.md
       - Mod-host file guide: MOD-HOSTS-AND-GETTING-STARTED.md
       - Ask RuneSchema: ASK-RUNESCHEMA.md
-      - Licensing and Ownership: LICENSING.md
+      - Licensing: LICENSING.md

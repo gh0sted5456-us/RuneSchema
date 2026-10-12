@@ -3,85 +3,61 @@ hide:
   - toc
 ---
 
-<div class="rs-hero" markdown>
-<h1 class="rs-sr-only">RuneSchema</h1>
+<div class="rs-home">
 
-<img class="rs-hero__banner" src="assets/images/runeschema-banner.png" alt="RuneSchema">
+<section class="rs-hero" aria-labelledby="rs-home-title">
+  <div class="rs-hero__eyebrow">
+    <span>RuneSchema 0.7.7.9m</span>
+    <span>Steam · GOG · Game Pass</span>
+  </div>
+  <h1 id="rs-home-title">Make more of Dragonwilds.</h1>
+  <p>RuneSchema gives compatible mods a clear route into the game's content and runtime systems. Install a mod, author one, or run a server—start with the guide that fits you.</p>
+  <div class="rs-actions">
+    <a class="md-button md-button--primary" href="CURRENT-RELEASE/">Download RuneSchema</a>
+    <a class="md-button" href="INSTALLATION/">Installation guide</a>
+  </div>
+</section>
 
-<div class="rs-hero__eyebrow">
-<span class="rs-version">RuneSchema 0.7.7.9m</span>
-<span class="rs-platform rs-platform--steam">Steam / GOG</span>
-<span class="rs-platform rs-platform--gamepass">Game Pass / WinGDK</span>
+<h2 class="rs-section-heading">Choose your path</h2>
+<div class="rs-paths">
+  <article class="rs-path">
+    <h3>Use mods</h3>
+    <p>Install RuneSchema, choose add-ons, and keep your saves in mind when changing a mod list.</p>
+    <a href="users/">For players →</a>
+  </article>
+  <article class="rs-path">
+    <h3>Create mods</h3>
+    <p>Start with a loader file or bring your own cooked assets, then connect them to native systems.</p>
+    <a href="modders/">For modders →</a>
+  </article>
+  <article class="rs-path">
+    <h3>Run a server</h3>
+    <p>Set up the authoritative side, align client content, and manage world saves carefully.</p>
+    <a href="servers/">For server owners →</a>
+  </article>
 </div>
 
-**Mods that load together, with a clear path from content to the game.**
+<section class="rs-finder" data-rs-finder aria-labelledby="rs-finder-title">
+  <h2 id="rs-finder-title">Find a guide</h2>
+  <label class="rs-finder__label" for="rs-finder-input">What are you trying to do?</label>
+  <input class="rs-finder__input" id="rs-finder-input" type="search" placeholder="Try “station”, “save”, or “server”" autocomplete="off">
+  <ul class="rs-finder__list">
+    <li><a href="INSTALLATION/">Install or update RuneSchema</a></li>
+    <li><a href="users/manage-mods/">Enable, disable, or order mods</a></li>
+    <li><a href="SAFE-SAVE-AND-LEDGER/">Remove a mod safely</a></li>
+    <li><a href="modders/first-cooked-item/">Add a cooked item</a></li>
+    <li><a href="STATIONS-AND-RECIPES/">Connect stations and recipes</a></li>
+    <li><a href="WEAPONS-AND-ITEMS/">Register attacks and spells</a></li>
+    <li><a href="servers/dedicated-setup/">Set up a dedicated server</a></li>
+    <li><a href="LOADER-WALKTHROUGHS/">Browse the loader reference</a></li>
+  </ul>
+  <p class="rs-finder__empty" role="status" hidden>No matching guide here. Try the site search above.</p>
+</section>
 
-RuneSchema loads enabled JSON/JSONC mods and their cooked PAKs for *RuneScape:
-Dragonwilds*. It connects supported content to live game systems and checks
-saved identities against what actually loaded.
-
-<div class="rs-actions" markdown>
-[Download](CURRENT-RELEASE.md){ .md-button .md-button--primary }
-[Explore the guides](#choose-your-path){ .md-button }
-</div>
-</div>
-
-## Choose your path
-
-<div class="grid cards rs-card-grid" markdown>
-
--   :material-account:{ .lg .middle } **Users**
-
-    Install one package, enable or disable mods, keep saves safe, and solve
-    startup or world-entry problems.
-
-    [:octicons-arrow-right-24: User guide](users/index.md)
-
--   :material-hammer-wrench:{ .lg .middle } **Modders**
-
-    Start with a working loader file or cook new content, then connect items,
-    recipes, stations, attacks, dialogue, and more.
-
-    [:octicons-arrow-right-24: Modder guide](modders/index.md)
-
--   :material-server:{ .lg .middle } **Servers**
-
-    Install the same gameplay content, understand which side owns each action,
-    and protect world saves during mod-list changes.
-
-    [:octicons-arrow-right-24: Server guide](servers/index.md)
-
+<div class="rs-note">
+  <p><strong>A useful distinction:</strong> a PAK can mount without its assets being registered or usable. The <a href="modders/">modder guide</a> follows that chain; the <a href="SAFE-SAVE-AND-LEDGER/">save guide</a> explains what happens when content is removed.</p>
 </div>
 
-## Find your next step
+<p>Looking for a specific field? Open the <a href="DOCUMENTATION-INDEX/">documentation map</a> or <a href="ASK-RUNESCHEMA/">Ask RuneSchema</a>.</p>
 
-| If you want to… | Go to… |
-| --- | --- |
-| Install or update RuneSchema | [Installation](INSTALLATION.md) |
-| Turn a mod off without loading its PAK or companion | [Manage mods and load order](users/manage-mods.md) |
-| Understand cleanup before removing a mod | [Save safety](SAFE-SAVE-AND-LEDGER.md) |
-| Make a new cooked item show up | [First cooked item walkthrough](modders/first-cooked-item.md) |
-| Connect a station to recipes | [Stations and recipes](STATIONS-AND-RECIPES.md) |
-| Register a cooked attack or spell | [Weapons and items](WEAPONS-AND-ITEMS.md) and [registry declarations](COOKED-PAK-REGISTRY-MANIFEST.md) |
-| Set up a dedicated server | [Server setup](servers/dedicated-setup.md) |
-| Find one loader's exact fields | [Loader reference](LOADER-WALKTHROUGHS.md) and [schemas](SCHEMAS.md) |
-
-## What RuneSchema does—and does not do
-
-An enabled mod may contribute loader definitions, PAKs, a client LogicMod,
-and an optional Lua companion. The game still needs valid cooked assets and
-the right native relationships. **Mounted** does not mean **registered**, and
-**registered** does not mean an attack, station, or interface is fully usable.
-
-RuneSchema's save cleanup checks applicable live registries after enabled
-content loads. It does not remove a saved ID merely because it came from a
-mod. [Read the save boundaries](SAFE-SAVE-AND-LEDGER.md) before changing a
-gameplay mod list.
-
-For every page on the site, use the [documentation map](DOCUMENTATION-INDEX.md).
-
-## Need a hand?
-
-Search a specific question with [Ask RuneSchema](ASK-RUNESCHEMA.md), or use
-the [troubleshooting guide](TROUBLESHOOTING.md) to follow a problem from its
-first failed loading step.
+</div>
