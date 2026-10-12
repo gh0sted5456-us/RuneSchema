@@ -111,6 +111,12 @@ namespace PS {
         bool quests = true;
     };
 
+    struct WorldSaveCleanupSettings {
+        // Preserve the original world before removing unresolved building IDs.
+        // Disabling this is an explicit opt-out, not a validation bypass.
+        bool backupBeforePrune = true;
+    };
+
     struct DefaultRecoverySettings {
         // Recovery is an opt-in merge. It never replaces a healthy live save.
         bool enabled = false;
@@ -160,6 +166,7 @@ namespace PS {
         BPModLoaderSettings bpModLoader{};
         PluginSettings plugins{};
         PersistenceSettings persistence{};
+        WorldSaveCleanupSettings worldSaveCleanup{};
         DefaultRecoverySettings defaultRecovery{};
         HelpyAuthoritySettings helpyAuthority{};
     };

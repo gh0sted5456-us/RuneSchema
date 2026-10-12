@@ -259,7 +259,7 @@ void PersistencePruner::PruneCharacterJson(FString& characterJson)
                 ++orphanCount;
                 ++counts[kind];
                 const auto id = row.value("Id", std::string("<unknown>"));
-                Log<LogLevel::Warning>(STR(
+                Log<LogLevel::Verbose>(STR(
                     "[PERSISTENCE-PRUNER][ORPHAN-REMOVED] {} persistence ID '{}' did not resolve in its complete applicable live registry.\n"),
                     ToWideSafe(kind.c_str()), ToWideSafe(id.c_str()));
             }
@@ -269,15 +269,9 @@ void PersistencePruner::PruneCharacterJson(FString& characterJson)
             if (!summary.empty()) summary += ", ";
             summary += kind + "=" + std::to_string(count);
         }
-        if (orphanCount) Log<LogLevel::Warning>(STR(
-            "[PERSISTENCE-PRUNER][ORPHANS-REMOVED] Removed {} unresolved persistence reference(s) ({}). Resolved IDs were retained. Pruning will not run again until game restart.\n"),
-            orphanCount, ToWideSafe(summary.c_str()));
-        if (appearanceCount) Log<LogLevel::Warning>(STR(
-            "[DEFAULT-RECOVERY][APPEARANCE-REPAIRED] Replaced {} missing or invalid appearance handle(s) from the selected validated baseline.\n"),
-            appearanceCount);
-        if (!restored.empty()) Log<LogLevel::Warning>(STR(
-            "[DEFAULT-RECOVERY][MERGED] Added {} missing baseline record(s). Existing live values and progress were preserved.\n"),
-            restored.size());
+        RC::Output::send<RC::LogLevel::Normal>(STR(
+            "[RuneSchema] [summary] Save cleanup | missing character IDs removed={} ({}) | appearance repaired={} | baseline entries restored={} | valid data kept.\n"),
+            orphanCount, ToWideSafe(summary.c_str()), appearanceCount, restored.size());
     } catch (const std::exception& error) {
         Log<LogLevel::Error>(STR(
             "[PERSISTENCE-PRUNER][UNCHANGED] Character JSON was not modified: {}.\n"),

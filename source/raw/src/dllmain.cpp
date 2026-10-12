@@ -491,6 +491,10 @@ public:
             ImGui::TextWrapped("Normal RuneSchema recipe unlocks may persist once their live RecipeData has a valid PersistenceID. Generated vendor recipes remain transient. Safe Clean removes orphaned RuneSchema progress after content registration.");
             ImGui::Checkbox("Save RuneSchema quest progress", &settings.persistence.quests);
             ImGui::TextWrapped("On by default. Off leaves quest definitions available to other loaders but blocks RuneSchema quest actions because native quest progress is save-backed.");
+            ImGui::SeparatorText("World save cleanup");
+            ImGui::Checkbox("Back up worlds before building cleanup (restart required)",
+                &settings.worldSaveCleanup.backupBeforePrune);
+            ImGui::TextWrapped("On by default for Steam, Game Pass, and dedicated servers. Turning it off saves space but removes RuneSchema's automatic pre-cleanup copy. Live-registry checks remain mandatory either way.");
             ImGui::SeparatorText("Default baseline recovery");
             ImGui::Checkbox("Enable baseline recovery (restart required)", &settings.defaultRecovery.enabled);
             ImGui::TextWrapped("Off by default. When enabled, RuneSchema fills only missing or invalid selected fields after live-registry orphan pruning. Healthy live values and later progress always win.");

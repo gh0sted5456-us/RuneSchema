@@ -51,6 +51,7 @@ inline Builder BuildCache{};
 inline safetyhook::MidHook EvaluatorHook;
 inline std::atomic<DWORD> GameThread{};
 inline std::atomic<bool> Inactive{};
+inline std::atomic<bool> ServerPathReported{};
 inline bool InstallAttempted=false;
 inline thread_local bool Refreshing=false;
 inline std::vector<PS::WeakObjectHandle> Registered;
@@ -187,6 +188,13 @@ inline void Register(UObject* subsystem,UObject* item) {
         helper.Add(pair);
         auto* stored=helper.FindValue(const_cast<FString*>(&name));
         if(!stored || value->GetObjectPropertyValue(stored)!=item) throw std::runtime_error("wearable enumeration insertion did not round-trip");
+    }
+    if (PS::Storefront::IsDedicatedServer()) {
+        if (!ServerPathReported.exchange(true, std::memory_order_relaxed))
+            PS::Log<RC::LogLevel::Normal>(TEXT("[WEARABLE-BRIDGE][SERVER-DATA] Authoritative wearable enumeration is active; visual hide-map refresh remains client-only.\n"));
+        PS::Log<RC::LogLevel::Verbose>(TEXT("[WEARABLE-BRIDGE][SERVER-DATA][ITEM] item='{}' AssetName='{}' registry={}.\n"),
+            item->GetPathName(),*name,found?TEXT("existing"):TEXT("added"));
+        return;
     }
     std::erase_if(Registered,[](const auto& h){return !Live(h.Get());});
     if(!std::ranges::any_of(Registered,[&](const auto& h){return h.Get()==item;})) Registered.emplace_back(item);

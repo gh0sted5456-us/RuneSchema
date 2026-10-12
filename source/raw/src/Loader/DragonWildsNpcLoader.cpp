@@ -2883,7 +2883,12 @@ namespace DragonWilds {
                 const auto visible=VisibleVendorItems(*found,controller);
                 CreateInlineMerchantRow(*found,&visible);
                 ApplyVendorRow(station,*found);
-                RefreshClientShop(station);
+                // This cache routine is client-only. Standalone and listen
+                // hosts update the owned row here, then let native menu entry
+                // consume it; invoking the client routine on authority only
+                // produces an expected "requires a live native client station" warning.
+                if(PS::Network::Detect(station).Mode==PS::Network::Role::Client)
+                    RefreshClientShop(station);
                 PS::RoutineLog("vendors",STR("Merchant '{}:{}' stock refreshed for {}.\n"),
                     RC::to_generic_string(found->ModName),RC::to_generic_string(found->Id),
                     current==TimeOfDay::Requirement::Day?TEXT("day"):TEXT("night"));

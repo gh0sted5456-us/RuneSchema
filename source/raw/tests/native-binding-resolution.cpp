@@ -110,7 +110,8 @@ int main(int argc, char** argv)
     Check(loader.find("[RuneSchema][DID-NOT-START][CORE]") != std::string::npos
         && loader.find("All RuneSchema runtime hooks and services were stopped") != std::string::npos
         && loader.find("[DEGRADED][SERVICE:data-registrar]") != std::string::npos
-        && loader.find("RuneSchema will not prune this run") != std::string::npos,
+        && loader.find("Dedicated-server building cleanup will still check its live registries independently") != std::string::npos
+        && loader.find("if (PS::Storefront::IsDedicatedServer()") != std::string::npos,
         "fatal core shutdown or degraded persistence startup is not correctly classified");
     Check(loader.find("[SERVER][REGISTRIES-READY]") != std::string::npos,
         "dedicated server registry readiness is announced explicitly");
