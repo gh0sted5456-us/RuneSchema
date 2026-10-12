@@ -37,7 +37,38 @@ Use its full cooked object path as the JSON key. The asset retains its native cl
 }
 ```
 
-The ID above is a placeholder; inspect your cooked asset and keep its shipped ID stable. Cooked entries can use the native player-unlock path without RuneSchema's transient-save adapter. Native `UnlockCondition` has types `PlayerStart`, `ItemFirstPickup`, `RecipeUnlocked`, `Interaction`, `AIKill`, `RegionUnlocked`, `Manual`, and `NeverUnlock`. These are asset fields, not a guarantee that a mod event invokes them. `Manual` in particular still requires a successful authoritative runtime unlock.
+The ID above is a placeholder; inspect your cooked asset and keep its shipped ID stable. Cooked entries can use the native player-unlock path without RuneSchema's transient-save adapter.
+
+## Native discovery conditions
+
+`UnlockCondition` is a reflected native struct. RuneSchema accepts it for a journal entry and validates the required cooked path for the four trigger types confirmed in vanilla assets:
+
+| `UnlockType` | Required field | Meaning |
+| --- | --- | --- |
+| `ItemFirstPickup` | `UnlockingItemData` | First pickup of the exact item |
+| `RecipeUnlocked` | `UnlockingRecipe` | Discovery of the exact crafting recipe |
+| `Interaction` | `UnlockingInteractionActor` | Interaction with the exact actor class |
+| `AIKill` | `AIData` | Kill of the exact AI data type |
+
+Use full cooked object paths, including the object name. For example:
+
+```json
+{
+  "/MyMod/Journal/JOURNAL_Pigment.JOURNAL_Pigment": {
+    "Type": "World",
+    "Unlock": false,
+    "UnlockCondition": {
+      "UnlockType": "EJournalEntryUnlockType::ItemFirstPickup",
+      "UnlockingItemData": "/MyMod/Items/ITEM_Pigment.ITEM_Pigment"
+    },
+    "AddTo": {"Section": "World", "Category": "Material Sources"}
+  }
+}
+```
+
+Native assets also expose `PlayerStart`, `RegionUnlocked`, `Manual`, and `NeverUnlock`. `RegionUnlocked` has no confirmed donor in the current asset audit, so its target fields are not yet prescribed here. Conditions are data, not proof that an event will be indexed or fired for a late-registered mod entry. Test a fresh event, save/re-entry, and multiplayer authority before relying on a condition. `Manual` requires a successful native player unlock; it is not an automatic station-placement or NPC-talk trigger. When you provide `UnlockCondition`, RuneSchema no longer requests an immediate unlock by default; explicit `Unlock: true` still overrides that default.
+
+Recipe availability is separate from journal discovery. To make a crafting recipe earnable, set that `/recipes` definition's `Unlock` to `false` and provide a verified game progression rule that grants the recipe. A `RecipeUnlocked` journal condition can then reveal its page. A visible journal page alone does not grant the crafting recipe.
 
 ## Choose a section
 
