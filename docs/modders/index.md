@@ -1,49 +1,30 @@
-# RuneSchema for modders
+---
+hide:
+  - toc
+---
 
-RuneSchema is a way to connect authored content to Dragonwilds, not a cook
-button for Unreal assets. Use JSON/JSONC to adjust supported game data; use a
-PAK for new meshes, items, Blueprints, sounds, or other cooked content. Keep
-the gameplay asset and its dependencies in your own mod where possible.
+# For modders
 
-## Choose your starting path
+<p class="rs-hub-lead">Use loader files to connect supported game data, or bring your own cooked assets in a PAK. RuneSchema is a runtime bridge, not a button that cooks Unreal assets for you.</p>
 
-| You want to… | Start with… | Then check… |
-| --- | --- | --- |
-| Change existing game values | [First mod](../AUTHORING-GUIDE.md) | [Loader reference](../LOADER-WALKTHROUGHS.md) |
-| Ship one new cooked item | [First cooked item walkthrough](first-cooked-item.md) | [PAK guide](../PAK-CONTENT-GUIDE.md) |
-| Make a weapon attack or spell | [Weapons and items](../WEAPONS-AND-ITEMS.md) | [Cooked registry declarations](../COOKED-PAK-REGISTRY-MANIFEST.md) |
-| Build a station and place recipes | [Stations and recipes](../STATIONS-AND-RECIPES.md) | [Buildings loader](../reference/loaders/buildings.md) |
-| Add custom armor | [Armor walkthrough](../CUSTOM-ARMOR.md) | [Equipment loader](../reference/loaders/equipment.md) |
-| Build NPCs, quests, and dialogue | [Loader folder guide](../LOADER-WALKTHROUGHS.md) | [NPC](../reference/loaders/npc.md), [quest](../reference/loaders/quests.md), and [dialogue](../reference/loaders/dialogue.md) |
-| Add client-only logic | [Blueprint and Lua companions](../PSEUDO-LOADERS.md) | [Lua reference](../UE4SS-LUA-COMPANIONS.md) |
+<div class="rs-hub-links">
+  <a href="../AUTHORING-GUIDE/">Make your first mod<small>Start with a small loader file.</small></a>
+  <a href="first-cooked-item/">Add a cooked item<small>Mount, resolve, register, then test.</small></a>
+  <a href="../LOADER-WALKTHROUGHS/">Choose a loader<small>Find the folder and fields for a feature.</small></a>
+  <a href="../EXAMPLES/">Browse examples<small>Compare working layouts and definitions.</small></a>
+</div>
 
-## The content chain
+## Follow the content chain
 
-For a new cooked feature, verify each link separately:
+For a cooked feature, check each stage separately: the PAK contains its dependencies, RuneSchema mounts it, the object path resolves, any required native registry accepts it, and the feature works in-game. A successful mount does not establish the later stages.
 
-1. **Cooked:** the PAK contains the asset and every required dependency.
-2. **Mounted:** RuneSchema loaded the enabled PAK from the intended mod folder.
-3. **Resolved:** the exact object path names a compatible cooked asset.
-4. **Registered:** the item, recipe, station, attack, or spell appears in its
-   applicable live game list when that feature needs registration.
-5. **Used:** the feature works in-game, including save/reload and multiplayer
-   where your mod supports them.
+Start with the guide closest to what you are making:
 
-An empty `assets` reference can load one exact cooked item path. A large
-catalogue should keep normal relationships in cooked content and use a
-mod-owned [registry declaration](../COOKED-PAK-REGISTRY-MANIFEST.md) only for
-supported missing enrollment paths. Do not create thousands of empty JSON
-files to stand in for a complete PAK.
-
-## Authoring desk
-
+- [Items, ranged attacks, and magic](../WEAPONS-AND-ITEMS.md)
+- [Stations and recipes](../STATIONS-AND-RECIPES.md)
+- [Custom armor](../CUSTOM-ARMOR.md)
+- [Cooked registry declarations](../COOKED-PAK-REGISTRY-MANIFEST.md)
+- [Blueprint and Lua companions](../PSEUDO-LOADERS.md)
 - [Guided in-game authoring tools](../ADVANCED-AUTHORING-TOOLS.md)
-- [Folder and loader guide](../LOADER-WALKTHROUGHS.md)
-- [JSON field schemas](../SCHEMAS.md)
-- [Example library](../EXAMPLES.md)
-- [Mod-host file types and layout](../MOD-HOSTS-AND-GETTING-STARTED.md)
-- [Troubleshooting from the first failed stage](../TROUBLESHOOTING.md)
 
-Before publishing, test with a fresh character and an existing backed-up
-character. Test first world entry, return to menu, re-entry, a full restart,
-and any server/client combination your mod claims to support.
+Before publishing, test a new character and a backed-up existing character. Check first world entry, re-entry, a full restart, and the server/client combinations your mod claims to support.
