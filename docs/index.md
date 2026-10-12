@@ -14,87 +14,74 @@ hide:
 <span class="rs-platform rs-platform--gamepass">Game Pass / WinGDK</span>
 </div>
 
-**JSON/JSONC mod authoring and runtime support for RuneScape: Dragonwilds.**
+**Mods that load together, with a clear path from content to the game.**
 
-RuneSchema helps Dragonwilds mods load together, connect new PAK content to the
-game, and remove missing saved references safely when a mod is uninstalled.
+RuneSchema loads enabled JSON/JSONC mods and their cooked PAKs for *RuneScape:
+Dragonwilds*. It connects supported content to live game systems and checks
+saved identities against what actually loaded.
 
 <div class="rs-actions" markdown>
-[Get RuneSchema 0.7.7.9](CURRENT-RELEASE.md){ .md-button .md-button--primary }
-[For CurseForge and Nexus](MOD-HOSTS-AND-GETTING-STARTED.md){ .md-button }
-[Start a mod](AUTHORING-GUIDE.md){ .md-button }
-[Choose a loader](LOADER-WALKTHROUGHS.md){ .md-button }
-[Create PAK content](PAK-CONTENT-GUIDE.md){ .md-button }
-[Get help](TROUBLESHOOTING.md){ .md-button }
+[Download](CURRENT-RELEASE.md){ .md-button .md-button--primary }
+[Explore the guides](#choose-your-path){ .md-button }
 </div>
 </div>
 
-## Start here
+## Choose your path
 
 <div class="grid cards rs-card-grid" markdown>
 
--   :material-hammer-wrench:{ .lg .middle } **Create your first mod**
+-   :material-account:{ .lg .middle } **Users**
 
-    Learn the folder layout, load order, safe testing steps, and how to share a mod.
+    Install one package, enable or disable mods, keep saves safe, and solve
+    startup or world-entry problems.
 
-    [:octicons-arrow-right-24: Open guide](AUTHORING-GUIDE.md)
+    [:octicons-arrow-right-24: User guide](users/index.md)
 
--   :material-file-document-edit:{ .lg .middle } **Use the in-game authoring tools**
+-   :material-hammer-wrench:{ .lg .middle } **Modders**
 
-    Search loaded records, build a JSONC starter, check dependencies, and export.
+    Start with a working loader file or cook new content, then connect items,
+    recipes, stations, attacks, dialogue, and more.
 
-    [:octicons-arrow-right-24: Open the workflow](ADVANCED-AUTHORING-TOOLS.md)
+    [:octicons-arrow-right-24: Modder guide](modders/index.md)
 
--   :material-package-variant-closed:{ .lg .middle } **Create new PAK content**
+-   :material-server:{ .lg .middle } **Servers**
 
-    Package new weapons, items, icons, meshes, stations, and other Unreal content.
+    Install the same gameplay content, understand which side owns each action,
+    and protect world saves during mod-list changes.
 
-    [:octicons-arrow-right-24: Open the PAK guide](PAK-CONTENT-GUIDE.md)
-
--   :material-sword-cross:{ .lg .middle } **Weapons, stations, and recipes**
-
-    Connect new content to crafting menus and make sure the game recognizes it.
-
-    [:octicons-arrow-right-24: Build a connected mod](WEAPONS-AND-ITEMS.md)
-
--   :material-shield-check:{ .lg .middle } **Safe updates and removal**
-
-    Understand save cleanup, disabled mods, Steam, Game Pass, and multiplayer.
-
-    [:octicons-arrow-right-24: Read the safety guide](SAFE-SAVE-AND-LEDGER.md)
+    [:octicons-arrow-right-24: Server guide](servers/index.md)
 
 </div>
 
-## What the current release supports
+## Find your next step
 
-- Load RuneSchema JSON/JSONC definitions and mod-owned cooked PAKs in the
-  order set by `runeschema.txt`; `0` keeps a mod and its companions off.
-- Connect supported items, recipes, stations, quests, journal entries, NPCs,
-  and presentation content to the live game systems that use them.
-- Keep an optional cooked `ModActor` and Lua companion inside the same
-  RuneSchema mod, with dedicated servers skipping client visual actor startup.
-- Use the shared registry and networking bridges shipped in the single ZIP
-  when a mod declares a need for those paths.
-- Register custom cooked wearable items with the game's item enumeration and
-  use the native appearance cache for their authored hide rules.
-- Prepare JSONC starters with the in-game authoring workflow, and check saved
-  identities against live registries after enabled content loads.
+| If you want to… | Go to… |
+| --- | --- |
+| Install or update RuneSchema | [Installation](INSTALLATION.md) |
+| Turn a mod off without loading its PAK or companion | [Manage mods and load order](users/manage-mods.md) |
+| Understand cleanup before removing a mod | [Save safety](SAFE-SAVE-AND-LEDGER.md) |
+| Make a new cooked item show up | [First cooked item walkthrough](modders/first-cooked-item.md) |
+| Connect a station to recipes | [Stations and recipes](STATIONS-AND-RECIPES.md) |
+| Register a cooked attack or spell | [Weapons and items](WEAPONS-AND-ITEMS.md) and [registry declarations](COOKED-PAK-REGISTRY-MANIFEST.md) |
+| Set up a dedicated server | [Server setup](servers/dedicated-setup.md) |
+| Find one loader's exact fields | [Loader reference](LOADER-WALKTHROUGHS.md) and [schemas](SCHEMAS.md) |
 
-The release includes these paths; it does not guarantee that every independently
-cooked PAK or custom Blueprint is valid. See [current release limits](CURRENT-RELEASE.md#what-runeschema-does-not-do)
-and [platform guidance](COMPATIBILITY.md) before distributing a gameplay mod.
+## What RuneSchema does—and does not do
 
-## Safety and recovery
+An enabled mod may contribute loader definitions, PAKs, a client LogicMod,
+and an optional Lua companion. The game still needs valid cooked assets and
+the right native relationships. **Mounted** does not mean **registered**, and
+**registered** does not mean an attack, station, or interface is fully usable.
 
-- [Safe Clean and save boundaries](SAFE-SAVE-AND-LEDGER.md)
-- [Install or update RuneSchema](INSTALLATION.md)
-- [Current release and downloads](CURRENT-RELEASE.md)
-- [Troubleshooting](TROUBLESHOOTING.md)
+RuneSchema's save cleanup checks applicable live registries after enabled
+content loads. It does not remove a saved ID merely because it came from a
+mod. [Read the save boundaries](SAFE-SAVE-AND-LEDGER.md) before changing a
+gameplay mod list.
 
-!!! note
-    This website documents the current supported interfaces. Internal research,
-    test logs, and proposed features are not part of the public authoring guide.
+For every page on the site, use the [documentation map](DOCUMENTATION-INDEX.md).
 
-!!! warning
-    A game update can move or rename content. Back up a test character and check
-    the RuneSchema log before opening an important world after any game update.
+## Need a hand?
+
+Search a specific question with [Ask RuneSchema](ASK-RUNESCHEMA.md), or use
+the [troubleshooting guide](TROUBLESHOOTING.md) to follow a problem from its
+first failed loading step.
