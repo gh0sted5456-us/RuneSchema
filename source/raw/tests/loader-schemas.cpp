@@ -13,6 +13,17 @@ int RunLoaderSchemas(int argc,char** argv) {
     assert(!schemas.contains("behaviors"));
     assert(schemas["lore"]["patternProperties"]["^[^$]"]["properties"]["Type"]["const"]=="Lore");
     assert(schemas["journal"]["patternProperties"]["^[^$]"]["properties"].contains("StationTableRowHandle"));
+    for(const auto* name:{"journal","lore"}) {
+        const auto& properties=schemas[name]["patternProperties"]["^[^$]"]["properties"];
+        const auto& condition=properties.at("UnlockCondition");
+        assert(condition.at("required").at(0)=="UnlockType");
+        assert(condition.at("properties").contains("UnlockingItemData"));
+        assert(condition.at("properties").contains("UnlockingRecipe"));
+        assert(condition.at("properties").contains("UnlockingInteractionActor"));
+        assert(condition.at("properties").contains("AIData"));
+        assert(condition.at("allOf").size()==4);
+        assert(!properties.at("Unlock").contains("default"));
+    }
     assert(schemas["lore"]["patternProperties"]["^[^$]"]["properties"].contains("PageDescriptions"));
     assert(schemas.contains("events"));
     assert(schemas.contains("quests"));

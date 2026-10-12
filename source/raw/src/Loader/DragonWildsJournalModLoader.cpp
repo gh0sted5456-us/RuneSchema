@@ -48,6 +48,7 @@
 #include "Unreal/Core/HAL/UnrealMemory.hpp"
 #include "Unreal/Engine/UDataTable.hpp"
 #include "Loader/JournalNativeContract.h"
+#include "Loader/JournalUnlockCondition.h"
 #include "Loader/JournalWinGDKContract.h"
 #include "Loader/JournalPersistenceContract.h"
 #include "Loader/JournalJsonFieldContract.h"
@@ -122,16 +123,6 @@ namespace DragonWilds {
             }
 
             return RC::to_generic_string(value.at(key).get<std::string>());
-        }
-
-        bool ReadBool(const nlohmann::json& value, const char* key, bool fallback)
-        {
-            if (!value.contains(key) || !value.at(key).is_boolean())
-            {
-                return fallback;
-            }
-
-            return value.at(key).get<bool>();
         }
 
         RC::StringType NormalizeReferenceKey(RC::StringType value)
@@ -400,8 +391,7 @@ namespace DragonWilds {
                     TrackOwnedId(entry,persistence,def.Owner,def.Declared);
                 }
 
-                const bool acquire=def.Body.value("UnlockOnAcquire",false);
-                if (ReadBool(def.Body, "Unlock", !def.Declared && !acquire))
+                if (JournalUnlockCondition::Automatic(def.Body, def.Declared))
                 {
                     m_unlock.insert(def.Key);
                 }
@@ -625,6 +615,7 @@ namespace DragonWilds {
     void DragonWildsJournalModLoader::ApplyProperties(UObject* entry,
         const nlohmann::json& body, const RC::StringType& owner)
     {
+        JournalUnlockCondition::Validate(body);
         if (body.contains("Type")) {
             auto* expected = ResolveEntryClass(body);
             if (!expected || !entry->IsA(expected))
