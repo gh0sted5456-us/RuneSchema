@@ -90,37 +90,44 @@ copyright: >-
 
 nav:
   - Home: index.md
-  - Get RuneSchema:
-      - Release and Downloads: CURRENT-RELEASE.md
-      - Install or Update: INSTALLATION.md
-      - Platform and Multiplayer: COMPATIBILITY.md
-      - Save Safety: SAFE-SAVE-AND-LEDGER.md
-      - Optional Bridges: OPTIONAL-BRIDGES.md
-      - For CurseForge and Nexus: MOD-HOSTS-AND-GETTING-STARTED.md
-  - Make a Mod:
-      - First Mod: AUTHORING-GUIDE.md
-      - Choose a Loader: LOADER-WALKTHROUGHS.md
-      - Guided Authoring Tools: ADVANCED-AUTHORING-TOOLS.md
-      - Example Library: EXAMPLES.md
-      - Golden Text Example: examples/GoldenInteractionText/README.md
-      - JSON Schemas: SCHEMAS.md
-  - Cooked Content:
-      - PAKs and Mounting: PAK-CONTENT-GUIDE.md
-      - Items and Attacks: WEAPONS-AND-ITEMS.md
-      - Stations and Recipes: STATIONS-AND-RECIPES.md
-      - Custom Armor: CUSTOM-ARMOR.md
-      - Live Registry Declarations: COOKED-PAK-REGISTRY-MANIFEST.md
-      - Cook a Bridge Declaration: SHARED-REGISTRY-BRIDGE-PAK.md
-      - Blueprint and Lua Companions: PSEUDO-LOADERS.md
-      - Lua Companion Reference: UE4SS-LUA-COMPANIONS.md
-      - Advanced Integration:
-          - Registry Diagnostics: BRIDGE-DIAGNOSTICS.md
-          - Combat Fallback Settings: COMBAT-FALLBACK-SETTINGS.md
-          - Presentation Transport: PRESENTATION-TRANSPORT.md
-          - Summoning Authority Bridge: SUMMONING-AUTHORITY-BRIDGE.md
-  - Loader Reference:
-      - Overview: LOADER-WALKTHROUGHS.md
-      - By Folder:
+  - Users:
+      - Start here: users/index.md
+      - Download and release: CURRENT-RELEASE.md
+      - Install or update: INSTALLATION.md
+      - Manage mods and load order: users/manage-mods.md
+      - Safe removal and saves: SAFE-SAVE-AND-LEDGER.md
+      - Steam, GOG, Game Pass, and co-op: COMPATIBILITY.md
+      - Optional bridges: OPTIONAL-BRIDGES.md
+      - Troubleshooting: TROUBLESHOOTING.md
+  - Modders:
+      - Start here: modders/index.md
+      - Your first mod: AUTHORING-GUIDE.md
+      - First cooked item walkthrough: modders/first-cooked-item.md
+      - Choose a loader: LOADER-WALKTHROUGHS.md
+      - Guided authoring tools: ADVANCED-AUTHORING-TOOLS.md
+      - Example library: EXAMPLES.md
+      - Cooked content:
+          - PAK creation and mounting: PAK-CONTENT-GUIDE.md
+          - Weapons, ranged, and magic: WEAPONS-AND-ITEMS.md
+          - Stations and recipes: STATIONS-AND-RECIPES.md
+          - Custom armor: CUSTOM-ARMOR.md
+          - Registry declarations: COOKED-PAK-REGISTRY-MANIFEST.md
+          - Cook a bridge declaration: SHARED-REGISTRY-BRIDGE-PAK.md
+      - Logic and multiplayer:
+          - Blueprint and Lua companions: PSEUDO-LOADERS.md
+          - Lua companion reference: UE4SS-LUA-COMPANIONS.md
+          - Combat fallback settings: COMBAT-FALLBACK-SETTINGS.md
+          - Presentation transport: PRESENTATION-TRANSPORT.md
+          - Summoning authority bridge: SUMMONING-AUTHORITY-BRIDGE.md
+  - Servers:
+      - Start here: servers/index.md
+      - Dedicated server setup: servers/dedicated-setup.md
+      - Keep server and clients aligned: servers/mod-parity.md
+      - World saves and mod removal: servers/save-maintenance.md
+      - Registry bridge diagnostics: BRIDGE-DIAGNOSTICS.md
+  - Reference:
+      - Documentation map: DOCUMENTATION-INDEX.md
+      - Loader and folder reference:
           - Assets: reference/loaders/assets.md
           - Blueprints: reference/loaders/blueprints.md
           - Buildings: reference/loaders/buildings.md
@@ -143,8 +150,8 @@ nav:
           - Spawns: reference/loaders/spawns.md
           - Strings: reference/loaders/strings.md
           - Vendors: reference/loaders/vendors.md
-  - Help:
+      - JSON schemas: SCHEMAS.md
+      - Golden text example: examples/GoldenInteractionText/README.md
+      - Mod-host file guide: MOD-HOSTS-AND-GETTING-STARTED.md
       - Ask RuneSchema: ASK-RUNESCHEMA.md
-      - Troubleshooting: TROUBLESHOOTING.md
-      - Documentation Map: DOCUMENTATION-INDEX.md
       - Licensing and Ownership: LICENSING.md
