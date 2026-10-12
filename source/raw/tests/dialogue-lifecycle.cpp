@@ -1,10 +1,27 @@
 #include "Loader/DialogueGraphLifecycle.h"
 #include "Loader/DialogueGraphIdentity.h"
+#include "Loader/DialogueCompletionPresentation.h"
 #include <cassert>
+#include <string_view>
 #include <unordered_map>
 #include <memory>
 
 int main() {
+    using namespace DragonWilds::DialogueCompletionPresentation;
+    const auto kit=MakeRoute(0,"business"), unrelated=MakeRoute(1,"business");
+    assert(kit.Response!=unrelated.Response);
+    assert(kit.AuthoredNext=="text:business" && unrelated.AuthoredNext==kit.AuthoredNext);
+    assert(kit.ContinueBranch!=kit.AuthoredNext && kit.ContinueOption!=kit.ContinueBranch);
+    assert(std::string_view(Message(Outcome::Pending))==Message(Outcome::Failed));
+    assert(std::string_view(Message(Outcome::Granted))==Message(Outcome::AlreadyComplete));
+    assert(std::string_view(Message(Outcome::Granted))!=Message(Outcome::Pending));
+    assert(std::string_view(Message(Outcome::NotReady))!=Message(Outcome::Granted));
+    assert(std::string_view(Message(Outcome::Uncertain))!=Message(Outcome::Granted));
+    // Every new session starts conservative, independent of the last outcome.
+    const auto previous=Message(Outcome::Granted);
+    const auto repeated=Message(Outcome::Pending);
+    assert(std::string_view(previous)!=repeated);
+    assert(std::string_view(repeated).find("cabbage")==std::string_view::npos);
     using namespace DragonWilds::DialogueIdentity;
     const nlohmann::json data={{"Entry","hello"},{"Nodes",{{"hello",{{"Text","Hi"}}}}}};
     const auto key=GraphKey("mod","npc","mod:story","player-one",false,data);

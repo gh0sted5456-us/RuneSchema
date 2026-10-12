@@ -9,6 +9,7 @@
 #include <vector>
 #include "Loader/DragonWildsModLoaderBase.h"
 #include "SDK/WeakObjectHandle.h"
+#include "Runtime/WorldBuildingRegistryValidation.h"
 #include "nlohmann/json.hpp"
 
 namespace RC::Unreal {
@@ -23,6 +24,8 @@ namespace DragonWilds {
         DragonWildsBuildingModLoader();
         ~DragonWildsBuildingModLoader() override;
         void ActivateWorldRegistration();
+        std::vector<PS::WorldBuildingRegistryValidation::Expected> CleanupExpectations();
+        void RejectCleanup(const std::string& reason);
         std::function<void(const nlohmann::json&,const RC::StringType&)> ImportPlacements;
 
     protected:
@@ -129,6 +132,7 @@ namespace DragonWilds {
         RC::Unreal::UObject* m_catalogue = nullptr;
 
         std::vector<BuildingDefinition> m_definitions;
+        std::string m_cleanupDiscoveryFailure;
         std::unordered_map<RC::StringType, RC::Unreal::UObject*> m_buildings;
         std::unordered_map<RC::StringType, int32_t> m_buildingIndices;
         std::unordered_map<RC::StringType, PS::WeakObjectHandle> m_buildingHandles;

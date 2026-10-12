@@ -11,6 +11,7 @@
 #include "Engine/DataAsset.h"
 #include "Components/ActorComponent.h"
 #include "UObject/Package.h"
+#include "UObject/UnrealType.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogRuneSchemaBridgeAuthoring, Log, All);
 
@@ -73,12 +74,16 @@ bool EnsureVariable(UBlueprint* Blueprint, const TCHAR* Name, const FName Catego
             [&](const FBPVariableDescription& Value){ return Value.VarName == VariableName; });
     }
     if (!Existing) return false;
+    const auto PreviousFlags = Existing->PropertyFlags;
+    const FName PreviousNotify = Existing->RepNotifyFunc;
     Existing->PropertyFlags |= Flags;
     if (RepNotify && *RepNotify)
     {
         Existing->PropertyFlags |= CPF_RepNotify;
         Existing->RepNotifyFunc = FName(RepNotify);
     }
+    if (Existing->PropertyFlags != PreviousFlags || Existing->RepNotifyFunc != PreviousNotify)
+        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
     return true;
 }
 
@@ -174,6 +179,21 @@ bool AuthorBlueprint(const TCHAR* Path, const TArray<EventSpec>& Specs)
     return true;
 }
 
+bool VerifyIdentityContract()
+{
+    UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, IdentityPath);
+    UClass* Type = Blueprint ? Blueprint->GeneratedClass : nullptr;
+    FStrProperty* Payload = Type ? FindFProperty<FStrProperty>(Type, TEXT("IdentityPayload")) : nullptr;
+    const bool Valid = Payload && Payload->ArrayDim == 1
+        && Payload->GetSize() == sizeof(FString)
+        && Payload->HasAllPropertyFlags(CPF_Net | CPF_RepNotify)
+        && Type->FindFunctionByName(TEXT("OnRep_IdentityPayload"));
+    if (!Valid)
+        UE_LOG(LogRuneSchemaBridgeAuthoring, Error,
+            TEXT("Identity bridge contract invalid: BPC_RuneSchemaIdentity needs replicated IdentityPayload String with OnRep_IdentityPayload."));
+    return Valid;
+}
+
 bool AuthorBridges()
 {
     if (!MigrateCoreAssets()) return false;
@@ -207,6 +227,7 @@ bool AuthorBridges()
              {TEXT("Detail"), UEdGraphSchema_K2::PC_String}}, 1536}
     };
     const TArray<EventSpec> IdentityEvents{
+        {TEXT("OnRep_IdentityPayload"), FUNC_BlueprintEvent | FUNC_Public, {}, 64},
         {TEXT("OnRep_DurableStateRevision"), FUNC_BlueprintEvent | FUNC_Public, {}, 128},
         {TEXT("MulticastRuneSchemaPresentation"), Common | FUNC_NetMulticast,
             {{TEXT("Channel"), UEdGraphSchema_K2::PC_String}, {TEXT("EntityId"), UEdGraphSchema_K2::PC_String},
@@ -218,6 +239,7 @@ bool AuthorBridges()
         TEXT("/RuneSchema/Networking/BPC_RuneSchemaIdentity"),TEXT("BPC_RuneSchemaIdentity"));
     if (!Registry || !Identity
         || !EnsureVariable(Registry,TEXT("IdentityPayload"),UEdGraphSchema_K2::PC_String,CPF_Net,TEXT("OnRep_IdentityPayload"))
+        || !EnsureVariable(Identity,TEXT("IdentityPayload"),UEdGraphSchema_K2::PC_String,CPF_Net,TEXT("OnRep_IdentityPayload"))
         || !EnsureVariable(Identity,TEXT("DurableStateEnvelope"),UEdGraphSchema_K2::PC_String,CPF_Net)
         || !EnsureVariable(Identity,TEXT("DurableStateRevision"),UEdGraphSchema_K2::PC_Int,CPF_Net,TEXT("OnRep_DurableStateRevision")))
         return false;
@@ -239,7 +261,8 @@ bool AuthorBridges()
     FKismetEditorUtilities::CompileBlueprint(World, EBlueprintCompileOptions::SkipGarbageCollection);
     UEditorAssetSubsystem* Assets = GEditor ? GEditor->GetEditorSubsystem<UEditorAssetSubsystem>() : nullptr;
     if (World->Status == BS_Error || !Assets || !Assets->SaveLoadedAsset(World,false)) return false;
-    if (!AuthorBlueprint(RegistryPath, RegistryEvents) || !AuthorBlueprint(IdentityPath, IdentityEvents)) return false;
+    if (!AuthorBlueprint(RegistryPath, RegistryEvents) || !AuthorBlueprint(IdentityPath, IdentityEvents)
+        || !VerifyIdentityContract()) return false;
     const TArray<EventSpec> ConnectionEvents{
         {TEXT("ServerRuneSchemaPluginRequest"), Common | FUNC_NetServer,
             {{TEXT("PluginId"), UEdGraphSchema_K2::PC_String}, {TEXT("Connection"), UEdGraphSchema_K2::PC_String},

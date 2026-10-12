@@ -37,6 +37,7 @@
 #include "Loader/DragonWildsJournalModLoader.h"
 #include "Loader/DragonWildsRecipeModLoader.h"
 #include "Loader/JournalPlayerAccess.h"
+#include "Loader/JournalEntryIdentity.h"
 #include "Loader/JournalSaveOwnership.h"
 #include "Runtime/HostServices.h"
 #include "Runtime/Storefront.h"
@@ -340,18 +341,35 @@ namespace DragonWilds {
                         || (def.DeclaredInternalNameAsserted && actualName!=def.DeclaredInternalName))
                         throw std::runtime_error("Cooked journal/lore declaration does not match its PersistenceID/InternalName");
                 }
+                const auto expectedPersistence=JournalEntryIdentity::PersistenceId(RC::to_string(def.Key),def.Body);
+                if(!m_createdEntries.contains(entry) && def.Body.contains("PersistenceID")) {
+                    auto* field=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
+                        entry->GetClassPrivate(),TEXT("PersistenceID")));
+                    if(!field || RC::to_string(*field->GetPropertyValue(field->ContainerPtrToValuePtr<void>(entry)))!=expectedPersistence)
+                        throw std::runtime_error("Journal PersistenceID cannot replace a cooked entry's identity");
+                }
+                if(!m_createdEntries.contains(entry) && def.Body.contains("InternalName")) {
+                    if(!def.Body.at("InternalName").is_string())
+                        throw std::runtime_error("Cooked journal InternalName assertion must be a string");
+                    auto* field=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
+                        entry->GetClassPrivate(),TEXT("InternalName")));
+                    if(!field || RC::to_string(*field->GetPropertyValue(field->ContainerPtrToValuePtr<void>(entry)))
+                        !=def.Body.at("InternalName").get<std::string>())
+                        throw std::runtime_error("Journal InternalName cannot replace a cooked entry's identity");
+                }
                 ApplyProperties(entry, def.Body, def.Owner);
                 if (m_createdEntries.contains(entry)) {
                     // Runtime journal/lore identity is the authored entry key.
                     // Reassert it after reflected fields so a default/accidental
                     // identity value cannot invalidate the ownership snapshot.
-                    const auto identity = RC::to_string(def.Key);
                     for (const auto* fieldName : {TEXT("PersistenceID"), TEXT("InternalName")}) {
                         auto* field = CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
                             entry->GetClassPrivate(), fieldName));
                         if (!field) throw std::runtime_error(
                             "Owned journal/lore identity fields are unavailable");
-                        PropertyHelper::CopyJsonValueToContainer(entry, field, identity);
+                        PropertyHelper::CopyJsonValueToContainer(entry, field,
+                            fieldName==RC::StringType(TEXT("PersistenceID"))
+                                ? expectedPersistence : RC::to_string(def.Key));
                     }
                 }
                 RegisterEntry(entry,def.Owner);
@@ -539,10 +557,17 @@ namespace DragonWilds {
 
     UObject* DragonWildsJournalModLoader::ResolveOrCreate(const JournalDef& def)
     {
+        const auto persistence=JournalEntryIdentity::PersistenceId(RC::to_string(def.Key),def.Body);
         if (auto found = m_entries.find(def.Key); found != m_entries.end())
         {
             auto* entry = found->second.Get();
             if (!entry) throw std::runtime_error("Cached journal entry is no longer live; skipping until definitions are reloaded");
+            if(m_createdEntries.contains(entry)) {
+                auto* field=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
+                    entry->GetClassPrivate(),TEXT("PersistenceID")));
+                if(!field || RC::to_string(*field->GetPropertyValue(field->ContainerPtrToValuePtr<void>(entry)))!=persistence)
+                    throw std::runtime_error("Changing a journal PersistenceID requires a game restart");
+            }
             return entry;
         }
 
@@ -587,7 +612,8 @@ namespace DragonWilds {
         {
             if (auto* property = PropertyHelper::GetPropertyByName(entryClass, name))
             {
-                PropertyHelper::CopyJsonValueToContainer(entry, property, RC::to_string(def.Key));
+                PropertyHelper::CopyJsonValueToContainer(entry, property,
+                    name==RC::StringType(TEXT("PersistenceID")) ? persistence : RC::to_string(def.Key));
             }
         }
 
@@ -631,7 +657,8 @@ namespace DragonWilds {
         UObject* resolvedItem = nullptr;
         for (auto& [name, value] : body.items())
         {
-            if (name == "Type" || name == "AddTo" || name == "Unlock" || name == "UnlockOnAcquire")
+            if (name == "Type" || name == "AddTo" || name == "Unlock" || name == "UnlockOnAcquire"
+                || name == "PersistenceID" || name == "InternalName")
             {
                 continue;
             }
@@ -977,13 +1004,6 @@ namespace DragonWilds {
 
     void DragonWildsJournalModLoader::UnlockEntries(UObject* journalComponent)
     {
-        // Temporary mode is runtime-visible on lanes where the native writer
-        // adapter can exclude RuneSchema-owned IDs from the save payload.
-        if (!m_nativePersistenceReady)
-        {
-            PS::RoutineLog("journal", STR("Journal/lore temporary unlocks are unavailable because the native save adapter is not ready; registered entries remain active.\n"));
-            return;
-        }
         if (!journalComponent || !journalComponent->IsA(m_journalComponentClass))
         {
             PS::Log<LogLevel::Error>(STR("Journal persistence event supplied an invalid component.\n"));
@@ -1002,7 +1022,18 @@ namespace DragonWilds {
 
             UObject* entry = found->second.Get();
             if (!RegisteredJournalEntry(entry)) {++unavailable;continue;}
+            // The writer adapter only protects RuneSchema-created transient
+            // identities. Cooked assets are game-owned and must not depend on
+            // that adapter to use the native player-unlock path.
+            if(m_createdEntries.contains(entry) && !m_nativePersistenceReady) {
+                ++unavailable;
+                PS::RoutineLog("journal", STR("Temporary journal/lore unlock deferred until the native save adapter is ready.\n"));
+                continue;
+            }
             try {
+                auto* subsystem=FindJournalSubsystem();
+                if(!subsystem || !QuestRegistry::NativeRegistry::ResolvesPersistenceIdentity(subsystem,entry,true))
+                    throw std::runtime_error("Native journal registry does not resolve this entry at unlock time");
                 if(JournalPlayerAccess::EnsureUnlocked(journalComponent,entry))++added;
             }catch(const std::exception& error) {
                 ++unavailable;
@@ -1030,8 +1061,7 @@ namespace DragonWilds {
 
     void DragonWildsJournalModLoader::ObserveAcquisition(UObject* source,UFunction* function)
     {
-        if(m_observingAcquisition || !source || !function || m_acquisitionUnlocks.empty()
-            || !m_nativePersistenceReady)return;
+        if(m_observingAcquisition || !source || !function || m_acquisitionUnlocks.empty())return;
         const auto path=function->GetPathName();
         UObject* controller=nullptr;bool credit=true;
         if(path==TEXT("/Game/Gameplay/Character/Player/BP_PlayerController.BP_PlayerController_C:OnInventoryChanged_BrokenItemFTUE"))
@@ -1073,7 +1103,8 @@ namespace DragonWilds {
             if(!binding.Item || !added.contains(binding.Item->GetPathName()))continue;
             const auto entry=m_entries.find(binding.EntryKey);
             if(entry!=m_entries.end())if(auto* object=entry->second.Get();
-                RegisteredJournalEntry(object))
+                RegisteredJournalEntry(object)
+                && (!m_createdEntries.contains(object) || m_nativePersistenceReady))
                 (void)JournalPlayerAccess::EnsureUnlocked(journal,object);
         }
     }

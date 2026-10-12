@@ -160,9 +160,15 @@ namespace DragonWilds {
     {
         if (engineLifecyclePhase == EEngineLifecyclePhase::PostEngineInit)
         {
-            PS::JsonHelpers::ParseJsonFilesInPath(loaderPath, [&](const nlohmann::json& data) {
-                ReadDefinitions(data, modName);
-            });
+            try {
+                PS::JsonHelpers::ParseJsonFilesInPath(loaderPath, [&](const nlohmann::json& data) {
+                    ReadDefinitions(data, modName);
+                });
+            } catch (const std::exception& error) {
+                RejectCleanup("building discovery failed for '" + RC::to_string(modName)
+                    + "': " + error.what());
+                throw;
+            }
             return;
         }
 
@@ -219,6 +225,38 @@ namespace DragonWilds {
         }
 
         RegisterHooks();
+    }
+
+    void DragonWildsBuildingModLoader::RejectCleanup(const std::string& reason)
+    {
+        if (m_cleanupDiscoveryFailure.empty()) m_cleanupDiscoveryFailure = reason;
+    }
+
+    std::vector<PS::WorldBuildingRegistryValidation::Expected>
+    DragonWildsBuildingModLoader::CleanupExpectations()
+    {
+        if (!PS::PSConfig::Get()->IsLoaderEnabled("buildings") || !HasInitialized())
+            throw std::runtime_error("building loader is disabled or uninitialized; enabled building identities cannot be certified");
+        if (!m_cleanupDiscoveryFailure.empty()) throw std::runtime_error(m_cleanupDiscoveryFailure);
+        std::vector<PS::WorldBuildingRegistryValidation::Expected> result;
+        for (const auto& definition : m_definitions) {
+            const auto identity = Identity(definition.Owner, definition.Key);
+            auto* object = GetValidBuilding(identity);
+            const auto label = "owner='" + RC::to_string(definition.Owner)
+                + "' key='" + RC::to_string(definition.Key) + "'";
+            if (!m_applied.contains(identity) || !object)
+                throw std::runtime_error("enabled building definition was not applied: " + label);
+            auto* property = CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
+                object->GetClassPrivate(), TEXT("PersistenceID")));
+            if (!property) throw std::runtime_error("enabled building PersistenceID field is unavailable: " + label);
+            const auto id = RC::to_string(*property->GetPropertyValue(
+                property->ContainerPtrToValuePtr<void>(object)));
+            if (id.empty() || (definition.Declared && id != definition.DeclaredPersistenceID))
+                throw std::runtime_error("enabled building cooked identity did not validate: " + label);
+            result.push_back({ RC::to_string(definition.Owner), RC::to_string(definition.Key),
+                id, reinterpret_cast<std::uintptr_t>(object) });
+        }
+        return result;
     }
 
     DragonWildsBuildingModLoader::~DragonWildsBuildingModLoader()
@@ -403,6 +441,7 @@ namespace DragonWilds {
         }
         if (!data.is_object())
         {
+            RejectCleanup("invalid building document for enabled mod '" + RC::to_string(modName) + "'");
             PS::Log<LogLevel::Error>(
                 STR("{}: building file must contain a JSON object.\n"), modName);
             return;
@@ -421,6 +460,7 @@ namespace DragonWilds {
 
             if (!body.is_object())
             {
+                RejectCleanup("invalid enabled building definition '" + RC::to_string(modName) + ":" + key + "'");
                 PS::Log<LogLevel::Error>(
                     STR("{}: Building '{}' must be a JSON object.\n"),
                     modName, RC::to_generic_string(key));
@@ -431,6 +471,7 @@ namespace DragonWilds {
             const bool hasClone = body.contains("$Clone") && body.at("$Clone").is_string();
             if (hasAsset == hasClone)
             {
+                RejectCleanup("invalid enabled building asset declaration '" + RC::to_string(modName) + ":" + key + "'");
                 PS::Log<LogLevel::Error>(
                     STR("{}: Building '{}' requires exactly one string 'Asset' or '$Clone' path.\n"),
                     modName, RC::to_generic_string(key));
@@ -448,6 +489,7 @@ namespace DragonWilds {
             {
                 if (!body.at("Properties").is_object())
                 {
+                    RejectCleanup("invalid building Properties for enabled mod '" + RC::to_string(modName) + "'");
                     PS::Log<LogLevel::Error>(
                         STR("{}: Building '{}.Properties' must be a JSON object.\n"),
                         modName, definition.Key);
@@ -461,6 +503,7 @@ namespace DragonWilds {
                 {
                     if (definition.Properties.contains(protectedField))
                     {
+                        RejectCleanup("protected building identity property in enabled mod '" + RC::to_string(modName) + "'");
                         PS::Log<LogLevel::Error>(
                             STR("{}: Building '{}.Properties.{}' is RuneSchema-managed; use Requirements for cost and let RuneSchema assign identity/index fields.\n"),
                             modName, definition.Key,
@@ -471,6 +514,7 @@ namespace DragonWilds {
                 if (definition.Properties.contains("BuildableActor")
                     && !definition.Properties.at("BuildableActor").is_string())
                 {
+                    RejectCleanup("invalid BuildableActor for enabled mod '" + RC::to_string(modName) + "'");
                     PS::Log<LogLevel::Error>(
                         STR("{}: Building '{}.Properties.BuildableActor' must be a cooked Blueprint generated-class path ending in '_C'.\n"),
                         modName, definition.Key);
@@ -484,6 +528,7 @@ namespace DragonWilds {
                 const auto& requirements = body.at("Requirements");
                 if (!requirements.is_array())
                 {
+                    RejectCleanup("invalid building Requirements for enabled mod '" + RC::to_string(modName) + "'");
                     PS::Log<LogLevel::Error>(
                         STR("{}: Building '{}.Requirements' must be an array.\n"),
                         modName, definition.Key);
@@ -507,6 +552,7 @@ namespace DragonWilds {
 
                 if (!valid)
                 {
+                    RejectCleanup("invalid building Requirements entries for enabled mod '" + RC::to_string(modName) + "'");
                     PS::Log<LogLevel::Error>(
                         STR("{}: Building '{}.Requirements' entries require an ItemData string and positive Amount.\n"),
                         modName, definition.Key);
@@ -606,6 +652,7 @@ namespace DragonWilds {
                     else valid=false;
                 }
                 if(!valid) {
+                    RejectCleanup("invalid building Overrides for enabled mod '" + RC::to_string(modName) + "'");
                     PS::Log<LogLevel::Error>(STR("{}: Building '{}.Overrides' contains an unsupported field or value.\n"),modName,definition.Key);
                     continue;
                 }
@@ -616,6 +663,7 @@ namespace DragonWilds {
             {
                 if (!body.at("Unlock").is_boolean())
                 {
+                    RejectCleanup("invalid building Unlock for enabled mod '" + RC::to_string(modName) + "'");
                     PS::Log<LogLevel::Error>(
                         STR("{}: Building '{}.Unlock' must be true or false.\n"),
                         modName, definition.Key);
@@ -649,6 +697,7 @@ namespace DragonWilds {
                 }
                 if (!valid)
                 {
+                    RejectCleanup("invalid building AddTo for enabled mod '" + RC::to_string(modName) + "'");
                     PS::Log<LogLevel::Error>(
                         STR("{}: Building '{}.AddTo' requires an object (or array of objects) with a Collection string and optional integer PageIndex.\n"),
                         modName, definition.Key);
