@@ -228,6 +228,16 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsNpcLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/NpcQuestPresentation.inl"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/NpcQuestActions.inl")
+    add_executable(summon-kill-credit ../tests/summon-kill-credit.cpp)
+    target_include_directories(summon-kill-credit PRIVATE ../include)
+    target_compile_features(summon-kill-credit PRIVATE cxx_std_20)
+    add_test(NAME summon-kill-credit COMMAND summon-kill-credit)
+    add_executable(summon-kill-credit-contract ../tests/summon-kill-credit-contract.cpp)
+    add_test(NAME summon-kill-credit-contract COMMAND summon-kill-credit-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/SummonAttribution.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/QuestDamageCredit.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/NativeSummonKillCredit.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsNpcLoader.cpp")
     add_executable(time-of-day-contract ../tests/time-of-day-contract.cpp)
     add_test(NAME time-of-day-contract COMMAND time-of-day-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/TimeOfDayRuntime.h"

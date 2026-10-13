@@ -3,6 +3,7 @@
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
+#include "Loader/SummonAttribution.h"
 
 namespace DragonWilds::Quests {
 struct AttributedDeath {RC::Unreal::UObject* Victim=nullptr;RC::Unreal::UObject* Player=nullptr;};
@@ -34,24 +35,10 @@ inline AttributedDeath ReadFatalDamage(RC::Unreal::UObject* source,RC::Unreal::U
     auto* value=damage->ContainerPtrToValuePtr<void>(parameters);
     if(!fatal->GetPropertyValue(fatal->ContainerPtrToValuePtr<void>(value)))return {};
     auto* victim=target->GetObjectPropertyValue(target->ContainerPtrToValuePtr<void>(parameters));
-    auto* player=instigator->GetObjectPropertyValue(instigator->ContainerPtrToValuePtr<void>(value));
-    auto* aiClass=ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionAICharacter"));
-    auto* playerClass=ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionPlayerCharacter"));
-    if(!victim || !player || !aiClass || !playerClass || !victim->IsA(aiClass) || !player->IsA(playerClass)
-        || !victim->GetWorld() || victim->GetWorld()!=player->GetWorld() || source->GetOuterPrivate()!=victim
+    auto* player=Summons::CreditedPlayer(instigator->GetObjectPropertyValue(instigator->ContainerPtrToValuePtr<void>(value)));
+    if(!player || !victim || source->GetOuterPrivate()!=victim
         || ActorHelper::GetObjectRef(victim,TEXT("AiDamageComponent"))!=source)return {};
-    auto* health=ActorHelper::GetObjectRef(victim,TEXT("HealthComponent"));
-    if(!health || health->GetOuterPrivate()!=victim)return {};
-    auto* isDead=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,TEXT("/Script/Dominion.HealthComponent:IsDead"),false);
-    auto* result=isDead?CastField<FBoolProperty>(isDead->GetReturnProperty()):nullptr;
-    if(!isDead || isDead->GetParmsSize()!=1 || !result || !result->IsNativeBool() || result->GetArrayDim()!=1 || result->GetOffset_Internal()!=0 || result->GetElementSize()!=1)throw std::runtime_error("Kill-credit IsDead layout changed");
-    ActorHelper::FunctionCall dead(health,isDead->GetPathName());dead.Invoke();if(!dead.Result<bool>())return {};
-    ActorHelper::FunctionCall authority(player,TEXT("/Script/Engine.Actor:HasAuthority"));authority.Invoke();
-    if(!authority.Result<bool>())return {};
-    auto* controller=ActorHelper::GetObjectRef(player,TEXT("Controller"));
-    auto* controllerType=ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionPlayerController"));
-    if(!controller || !controllerType || !controller->IsA(controllerType) || controller->GetWorld()!=player->GetWorld()
-        || ActorHelper::GetObjectRef(controller,TEXT("Pawn"))!=player)return {};
+    if(!Summons::DeadVictim(victim,player))return {};
     return {victim,player};
 }
 }

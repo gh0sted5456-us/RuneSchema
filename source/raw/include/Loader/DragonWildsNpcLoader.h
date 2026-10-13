@@ -28,6 +28,8 @@
 #include "SDK/WeakObjectHandle.h"
 #include "Unreal/Hooks.hpp"
 
+namespace DragonWilds::Quests::Summons {class NativeKillCredit;}
+
 namespace RC::Unreal {
     class AActor;
     class UClass;
@@ -172,6 +174,7 @@ namespace DragonWilds {
         std::unordered_map<std::string,Dialogue::Definition> m_dialogues;
         Quests::Service m_quests;
         Quests::KillCredits m_killCredits;
+        std::unique_ptr<Quests::Summons::NativeKillCredit> m_summonNativeCredit;
         std::map<std::string,Quests::AcquisitionBaseline> m_acquisitionBaselines;
         // Client-only late-join recovery: one native current-objective
         // presentation per already-active quest and world.
@@ -369,6 +372,7 @@ namespace DragonWilds {
         RC::Unreal::Hook::GlobalCallbackId m_tickCallbackId = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::Hook::GlobalCallbackId m_worldTeardownCallbackId = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::Hook::GlobalCallbackId m_interactionCallbackId = RC::Unreal::Hook::ERROR_ID;
+        RC::Unreal::Hook::GlobalCallbackId m_summonCreditCallbackId = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::UFunction* m_cellShownFunction = nullptr;
         int32_t m_cellShownHookId = 0;
         uint64_t m_worldGeneration = 0;

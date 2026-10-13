@@ -762,7 +762,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         } else {
             @(
                 'vendor-offers','vendor-spawn-gate','loader-schemas','npc-catalog','npc-cleanup-contract','player-activity-events',
-                'quest-gameplay-owner','quest-native-contract','quest-definition','event-definition',
+                'quest-gameplay-owner','quest-native-contract','quest-definition','quest-kill-credit','summon-kill-credit','summon-kill-credit-contract','event-definition',
                 'character-entry-recovery-contract',
                 'appearance-defaults-contract',
                 'dialogue-definition','building-preview-safety','building-clone-contract',

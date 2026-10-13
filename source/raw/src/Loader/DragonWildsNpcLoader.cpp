@@ -20,6 +20,7 @@
 #include "Loader/DialogueGraphLifecycle.h"
 #include "Loader/DialogueGraphIdentity.h"
 #include "Loader/QuestDamageCredit.h"
+#include "Loader/NativeSummonKillCredit.h"
 #include "Loader/NativeQuestReceipt.h"
 #include "Loader/NativeDialogueSave.h"
 #include "Loader/DialogueCompletionPresentation.h"
@@ -321,6 +322,7 @@ namespace DragonWilds {
 
     DragonWildsNpcLoader::~DragonWildsNpcLoader()
     {
+        if(m_summonCreditCallbackId!=Hook::ERROR_ID)Hook::UnregisterCallback(m_summonCreditCallbackId);
         if(HelpyInstance==this)HelpyInstance=nullptr;
         // Shutdown stays on the existing loader lifecycle. Native lifespan is an
         // additional fallback; do not call engine APIs from another thread.
@@ -383,6 +385,7 @@ namespace DragonWilds {
 
     bool DragonWildsNpcLoader::OnInitialize()
     {
+        m_summonNativeCredit=std::make_unique<Quests::Summons::NativeKillCredit>();
         m_events.Report=[](const std::string& message){PS::Log<LogLevel::Normal>(STR("Events: {}.\n"),PS::ToWideSafe(message.c_str()));};
         m_events.ApplyActorCue=[this](AActor* actor,const nlohmann::json& cue){PlayDialogueCue(actor,cue);};
         m_events.SetArea=[this](UObject* controller,const Events::Definition& event,bool show){return m_quests.SetEventArea(controller,event,show);};
@@ -442,10 +445,12 @@ namespace DragonWilds {
         options.OwnerModName = TEXT("RuneSchema");
         options.HookName = TEXT("RuneSchemaMerchantInteraction");
         m_interactionCallbackId = Hook::RegisterProcessEventPostCallback(
-            [this](Hook::TCallbackIterationData<void>&, UObject* source,
+            [this](Hook::TCallbackIterationData<void>& dispatch, UObject* source,
                 UFunction* function, void* parameters) {
                 // The observed acknowledgement is the sole shop dispatcher.
                 try {
+                    if(m_summonNativeCredit && m_gameThreadId.load(std::memory_order_relaxed)==GetCurrentThreadId())
+                        m_summonNativeCredit->After(dispatch,source,function,parameters);
                     static const FName onRepIdentity(TEXT("OnRep_IdentityPayload"),FNAME_Add);
                     static const FName receiveBeginPlay(TEXT("ReceiveBeginPlay"),FNAME_Add);
                     static const FName receiveEndPlay(TEXT("ReceiveEndPlay"),FNAME_Add);
@@ -506,6 +511,17 @@ namespace DragonWilds {
                 STR("Unable to register the merchant interaction callback; vendors will not spawn.\n"));
             return false;
         }
+
+        options.HookName=TEXT("RuneSchemaSummonKillCredit");
+        m_summonCreditCallbackId=Hook::RegisterProcessEventPreCallback(
+            [this](Hook::TCallbackIterationData<void>& dispatch,UObject* source,UFunction* function,void* parameters) {
+                if(m_gameThreadId.load(std::memory_order_relaxed)!=GetCurrentThreadId() || !function
+                    || function->GetFName()!=FName(TEXT("OnAIKilled"),FNAME_Add))return;
+                try {m_summonNativeCredit->Before(dispatch,source,function,parameters,m_worldGeneration+1);}
+                catch(const std::exception& error){ErrorOnce("summon-kill-credit",PS::ToWideSafe(error.what()));}
+                catch(...) {}
+            },options);
+        if(m_summonCreditCallbackId==Hook::ERROR_ID)return false;
 
         m_actorObserverId=DragonWildsBlueprintModLoader::RegisterActorInitializedObserver(
             [this](AActor* actor){
