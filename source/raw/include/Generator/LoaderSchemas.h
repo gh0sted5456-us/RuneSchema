@@ -29,8 +29,22 @@ inline nlohmann::json LoaderSchemas() {
         fields["DisplayName"]=localizedText;
         fields["Image"]={{"type",{"string","object","null"}},{"description","Cooked image reference using the native Image field. The asset must load and match the live property class."}};
         fields["PageDescriptions"]={{"type","array"},{"items",{{"type","object"},{"properties",{{"Description",localizedText}}},{"additionalProperties",true}}}};
-        fields["Unlock"]={{"type","boolean"},{"default",true},{"description","Unlock the journal entry, not its crafting recipe. False does not revoke previous discovery."}};
+        fields["Unlock"]={{"type","boolean"},{"description","Request immediate journal discovery, not a crafting-recipe grant. If omitted, runtime-created entries default to true unless UnlockOnAcquire or UnlockCondition is present; declared cooked entries default to false. False does not revoke previous discovery."}};
         fields["UnlockOnAcquire"]={{"type","boolean"},{"default",false},{"description","Unlock this entry when the owning player first receives its ItemData. If Unlock is omitted, acquisition mode suppresses the normal automatic unlock. Unlock delivery uses the active native journal/lore path; Safe Clean removes orphaned RuneSchema identities when supplying content is removed."}};
+        fields["UnlockCondition"]={{"type","object"},{"required",{"UnlockType"}},
+            {"description","Native Dominion discovery condition. RuneSchema validates known trigger references and writes the reflected struct; in-game event indexing and persistence require runtime verification."},
+            {"properties",{{"UnlockType",{{"type","string"},{"minLength",1}}},
+                {"UnlockingItemData",{{"type","string"},{"pattern","^/"}}},
+                {"UnlockingRecipe",{{"type","string"},{"pattern","^/"}}},
+                {"UnlockingInteractionActor",{{"type","string"},{"pattern","^/"}}},
+                {"AIData",{{"type","string"},{"pattern","^/"}}},
+                {"RegionID",{{"type","integer"}}},
+                {"MapRegion",{{"type","string"},{"pattern","^/"}}}}},
+            {"allOf",{
+                json{{"if",{{"properties",{{"UnlockType",{{"pattern","(^|::)ItemFirstPickup$"}}}}}}},{"then",{{"required",{"UnlockingItemData"}}}}},
+                json{{"if",{{"properties",{{"UnlockType",{{"pattern","(^|::)RecipeUnlocked$"}}}}}}},{"then",{{"required",{"UnlockingRecipe"}}}}},
+                json{{"if",{{"properties",{{"UnlockType",{{"pattern","(^|::)Interaction$"}}}}}}},{"then",{{"required",{"UnlockingInteractionActor"}}}}},
+                json{{"if",{{"properties",{{"UnlockType",{{"pattern","(^|::)AIKill$"}}}}}}},{"then",{{"required",{"AIData"}}}}}}}};
         fields["RecipeData"]={{"type",{"string","object"}},{"description","Required for Recipe entries; full asset path or unique loaded recipe name."}};
         fields["ItemData"]={{"type",{"string","object"}},{"description","Recipe output item. Inferred only when ItemsCreated has one distinct item."}};
         fields["StationTableRowHandle"]={{"type","object"},{"required",{"DataTable","RowName"}},{"properties",{{"DataTable",text},{"RowName",text}}},{"additionalProperties",false}};
@@ -196,6 +210,8 @@ inline nlohmann::json LoaderSchemas() {
     result["spawns"]["items"]["properties"]["GroundOffset"]={{"type","number"},{"minimum",-100000},{"maximum",100000},{"default",0},{"description","Centimetre offset above or below the resolved ground. Do not combine with the Location.Z $+offset shorthand."}};
     result["spawns"]["items"]["properties"]["TimeOfDay"]={{"enum",{"Any","Day","Night"}},{"default","Any"},{"description","Authority-controlled lifecycle gate for AI spawn points, resource actors, and functional BuildingProp entries. Timed actors are transient and cannot use native respawn persistence."}};
     result["spawns"]["items"]["properties"]["QuestCompleted"]={{"type","string"},{"minLength",1},{"maxLength",512},{"description","Activate this placement after a local Id or Mod:Id quest is completed by a connected participant. Quest-linked BuildingProp actors are transient: RuneSchema recreates them while the quest definition is available, and they leave no saved collision shell when that quest or mod is removed. Combines with TimeOfDay when both are present."}};
+    result["spawns"]["items"]["properties"]["QuestActive"]={{"type","string"},{"minLength",1},{"maxLength",512},{"description","Temporary Actor resource exists only while a RuneSchema quest is Given to a connected participant. A local Id is qualified with the mod name. Requires a cooked subclass of the game's ore-node or fellable-tree base with SpudGuid and bSkipSpudStore. The actor is excluded from world saves and removed when the quest is no longer active."}};
+    result["spawns"]["items"]["properties"]["EventActive"]={{"type","string"},{"minLength",1},{"maxLength",512},{"description","Temporary Actor resource exists only while the named RuneSchema event runs in this world. A local Id is qualified with the mod name. It is excluded from world saves and removed when the event ends or is cancelled."}};
     result["spawns"]["items"]["properties"]["PersistAfterCondition"]={{"type","boolean"},{"default",true},{"description","Latch a completed quest condition so an activated placement remains available. Set false for a placement that should exist only while the completion state is observable."}};
     result["spawns"]["items"]["properties"]["DuplicateRadius"]={{"type","number"},{"minimum",0},{"maximum",10000},{"default",100},{"description","For quest-activated Actor and BuildingProp entries, treat the same actor class within this many centimetres as already satisfied. Zero disables the coordinate safeguard."}};
     result["spawns"]["items"]["dependencies"]["PersistAfterCondition"]={{"required",{"QuestCompleted"}}};

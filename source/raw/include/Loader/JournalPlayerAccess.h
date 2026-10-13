@@ -44,7 +44,12 @@ inline bool EnsureUnlocked(UObject* component,UObject* entry) {
     if(isUnlocked())return false;
     ActorHelper::FunctionCall call(component,unlock->GetPathName());
     call.Arg(TEXT("InJournalEntry"),entry).Arg(TEXT("bInMarkUnread"),true).Invoke();
-    if(!isUnlocked())throw std::runtime_error("Native journal unlock was not confirmed");
+    const bool nativeResult=call.Result<bool>();
+    // The native return value is not a reliable unlock receipt on every
+    // runtime lane. The queried player state is the postcondition that matters.
+    if(!isUnlocked())throw std::runtime_error(nativeResult
+        ? "Native journal unlock returned success but player state was not updated"
+        : "Native journal unlock rejected the entry and player state was not updated");
     return true;
 }
 }

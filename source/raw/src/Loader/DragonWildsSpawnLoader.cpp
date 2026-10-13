@@ -756,6 +756,23 @@ namespace DragonWilds {
             }
         } else if(value.contains("PersistAfterCondition") || value.contains("DuplicateRadius"))
             throw std::runtime_error("PersistAfterCondition and DuplicateRadius require QuestCompleted");
+        if(value.contains("QuestActive") || value.contains("EventActive")) {
+            if(value.contains("QuestActive") && value.contains("EventActive"))
+                throw std::runtime_error("Temporary resource requires either QuestActive or EventActive, not both");
+            if(!value.at("Type").is_string() || value.at("Type")!="Actor"
+                || value.contains("QuestCompleted") || value.contains("TimeOfDay")
+                || value.contains("UseNativeRespawn"))
+                throw std::runtime_error("QuestActive and EventActive require an Actor resource without another lifecycle or native respawn");
+            const auto field=value.contains("QuestActive")?"QuestActive":"EventActive";
+            if(!value.at(field).is_string())throw std::runtime_error(std::string(field)+" must be a quest or event ID");
+            const auto key=value.at(field).get<std::string>();
+            if(key.empty() || key.size()>512 || key.find_first_of("\r\n\t ")!=std::string::npos)
+                throw std::runtime_error(std::string(field)+" requires a bounded quest or event ID");
+            const auto qualified=key.find(':')==std::string::npos?RC::to_string(modName)+":"+key:key;
+            if(value.contains("QuestActive"))spawn.QuestActive=qualified;
+            else spawn.EventActive=qualified;
+            spawn.bTemporaryResource=true;
+        }
         auto locationInput = value;
         const auto& authoredLocation = value.at("Location");
         const auto parsedLocation=SpawnFields::ParseLocation(authoredLocation);
@@ -1168,12 +1185,24 @@ namespace DragonWilds {
         {
             throw std::runtime_error(std::format("Class '{}' was not found", classPath));
         }
+        if(spawn.bTemporaryResource) {
+            // Cooked silver nodes derive through BP_OreNode_Large_PARENT from
+            // this native ore Blueprint, not from a BP_OreNode_Base asset.
+            auto* oreBase=ResolveClass(TEXT("/Game/Gameplay/World/Mining/Ores/PARENT/BP_OreNode.BP_OreNode_C"));
+            auto* treeBase=ResolveClass(TEXT("/Game/Gameplay/World/Trees/BP_FellableTree_Base.BP_FellableTree_Base_C"));
+            if((!oreBase || !actorClass->IsChildOf(oreBase))
+                && (!treeBase || !actorClass->IsChildOf(treeBase)))
+                throw std::runtime_error("Temporary resource Class must inherit the game's ore or fellable-tree base");
+            auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(actorClass,TEXT("bSkipSpudStore")));
+            if(!skip || skip->GetArrayDim()!=1 || skip->GetElementSize()!=1)
+                throw std::runtime_error("Temporary resource requires the native bSkipSpudStore save-exclusion flag");
+        }
 
         auto* guidProperty = PropertyHelper::GetPropertyByName(actorClass, TEXT("SpudGuid"));
         if (!guidProperty || guidProperty->GetSize() != sizeof(FGuid))
         {
             throw std::runtime_error(std::format(
-                "Class '{}' has no SpudGuid property; only save-persistent world actors are supported", classPath));
+                "Class '{}' has no SpudGuid property; managed resource actors require a native identity", classPath));
         }
 
         const auto identity = std::format("{}|actor|{}", RC::to_string(spawn.ModName), entryId);
@@ -1203,6 +1232,8 @@ namespace DragonWilds {
             }
             for (const auto& [name, propertyValue] : properties.items())
             {
+                if(spawn.bTemporaryResource && (name=="SpudGuid" || name=="bSkipSpudStore"))
+                    throw std::runtime_error("Temporary resource identity and save-exclusion properties are managed by RuneSchema");
                 spawn.Properties[name] = propertyValue;
             }
         }
@@ -2794,6 +2825,7 @@ namespace DragonWilds {
                         spawn.bCellActivated = false;
                         spawn.bTimeAllowed = false;
                         spawn.bDeconstructed = false;
+                        spawn.bTemporaryResourceSpawned = false;
                         spawn.LiveActor = {};
                         spawn.Location = FVector(spawn.AuthoredLocation.X(),spawn.AuthoredLocation.Y(),spawn.AuthoredLocation.Z()+10.0);
                         spawn.bGroundingResolved = !spawn.bGroundToSurface;
@@ -2827,6 +2859,18 @@ namespace DragonWilds {
             PS::Log<LogLevel::Error>(STR("Failed processing spawns: {}\n"), PS::ToWideSafe(e.what()));
         }
         m_processingSpawns = false;
+    }
+
+    std::optional<bool> DragonWildsSpawnLoader::TemporaryResourceCondition(const SpawnInfo& spawn,UWorld* world) const
+    {
+        if(!spawn.bTemporaryResource || !world)return std::nullopt;
+        try {
+            if(!spawn.QuestActive.empty())
+                return IsQuestActive ? std::optional<bool>(IsQuestActive(world,spawn.QuestActive)) : std::nullopt;
+            if(!spawn.EventActive.empty())
+                return IsEventActive ? std::optional<bool>(IsEventActive(world,spawn.EventActive)) : std::nullopt;
+        } catch(...) {return std::nullopt;}
+        return std::nullopt;
     }
 
     void DragonWildsSpawnLoader::ProcessSpawns(UWorld* world, const std::vector<UECustom::FBox>* bounds)
@@ -2864,6 +2908,7 @@ namespace DragonWilds {
 
             try
             {
+                if(spawn.bTemporaryResource && TemporaryResourceCondition(spawn,world)!=true)continue;
                 if(spawn.Type!=ESpawnEntryType::RemoveActor && !spawn.QuestCompleted.empty()) {
                     if(spawn.bPersistAfterCondition && FindActorByStableId(world,spawn.StableId))spawn.bConditionLatched=true;
                     if(!spawn.bConditionLatched) {
@@ -2951,6 +2996,13 @@ namespace DragonWilds {
         {
             existing = FindActorByStableId(world, spawn.LegacyId);
             needsRecreate = existing != nullptr;
+        }
+        if(existing && spawn.bTemporaryResource) {
+            auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(
+                existing->GetClassPrivate(),TEXT("bSkipSpudStore")));
+            if(!existing->HasAnyFlags(RF_Transient) || !existing->IsA(actorClass)
+                || !skip || !skip->GetPropertyValue(skip->ContainerPtrToValuePtr<void>(existing)))
+                throw std::runtime_error("Temporary resource identity collides with an unverified world actor; left unchanged");
         }
 
         LoadNativeRespawnState();
@@ -3529,7 +3581,7 @@ namespace DragonWilds {
         const bool questOwnedBuilding = spawn.bBuildingProp && !spawn.QuestCompleted.empty();
         auto* actor = ActorHelper::SpawnActor(world, actorClass, spawn.Location, spawn.Rotation,
             [&](AActor* spawned) {
-                if(spawn.Time!=TimeOfDay::Requirement::Any || questOwnedBuilding) {
+                if(spawn.Time!=TimeOfDay::Requirement::Any || questOwnedBuilding || spawn.bTemporaryResource) {
                     spawned->SetFlags(RF_Transient);
                     if(auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(
                         spawned->GetClassPrivate(),TEXT("bSkipSpudStore"))))
@@ -3538,7 +3590,22 @@ namespace DragonWilds {
                 SetGuidProperty(spawned, TEXT("SpudGuid"), spawn.StableId);
                 ApplyBuildingData(spawned,spawn);
                 ApplyEntryProperties(spawned, spawn.Properties);
+                if(spawn.bTemporaryResource) {
+                    auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(
+                        spawned->GetClassPrivate(),TEXT("bSkipSpudStore")));
+                    if(!skip || !skip->GetPropertyValue(skip->ContainerPtrToValuePtr<void>(spawned)))
+                        throw std::runtime_error("Temporary resource save exclusion did not round-trip");
+                }
             }, ESpawnActorScaleMethod::OverrideRootScale);
+        if(spawn.bTemporaryResource) {
+            auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(
+                actor->GetClassPrivate(),TEXT("bSkipSpudStore")));
+            if(!actor->HasAnyFlags(RF_Transient) || !skip
+                || !skip->GetPropertyValue(skip->ContainerPtrToValuePtr<void>(actor))) {
+                ActorHelper::DestroyActor(actor);
+                throw std::runtime_error("Temporary resource lost save exclusion during creation");
+            }
+        }
         actor->SetActorScale3D(spawn.Scale);
         ApplyActorDisplayName(actor, spawn.DisplayName);
         ApplyAIProperties(actor, nlohmann::json::object(),
@@ -3569,6 +3636,7 @@ namespace DragonWilds {
         }
 
         spawn.bExistsInWorld = true;
+        if(spawn.bTemporaryResource)spawn.bTemporaryResourceSpawned=true;
         PS::Log<LogLevel::Verbose>(STR("Spawned actor '{}' ({}) at {} {} {}\n"), spawn.EntryId,
             actor->GetClassPrivate()->GetName(), spawn.Location.X(), spawn.Location.Y(), spawn.Location.Z());
     }
@@ -3577,7 +3645,7 @@ namespace DragonWilds {
     {
         if(!m_readyWorld || !GetGameMode(m_readyWorld))return;
         if(std::none_of(m_spawns.begin(),m_spawns.end(),[](const auto& spawn){
-            return spawn.Type!=ESpawnEntryType::RemoveActor && (spawn.Time!=TimeOfDay::Requirement::Any || !spawn.QuestCompleted.empty());
+            return spawn.Type!=ESpawnEntryType::RemoveActor && (spawn.Time!=TimeOfDay::Requirement::Any || !spawn.QuestCompleted.empty() || spawn.bTemporaryResource);
         }))return;
         m_buildingTimeElapsed+=deltaSeconds;
         if(m_buildingTimeElapsed<1.0)return;
@@ -3586,7 +3654,7 @@ namespace DragonWilds {
         const bool needsTime=std::any_of(m_spawns.begin(),m_spawns.end(),[](const auto& spawn){return spawn.Time!=TimeOfDay::Requirement::Any;});
         if(needsTime)try {current=TimeOfDay::Current(m_readyWorld);} catch(...) {return;}
         for(auto& spawn:m_spawns) {
-            if(spawn.Type==ESpawnEntryType::RemoveActor || (spawn.Time==TimeOfDay::Requirement::Any && spawn.QuestCompleted.empty()) || !spawn.bCellActivated)continue;
+            if(spawn.Type==ESpawnEntryType::RemoveActor || (spawn.Time==TimeOfDay::Requirement::Any && spawn.QuestCompleted.empty() && !spawn.bTemporaryResource) || !spawn.bCellActivated)continue;
             auto* actor=spawn.LiveActor.Get();
             if(!actor)actor=FindActorByStableId(m_readyWorld,spawn.StableId);
             if(actor && (actor->GetWorld()!=m_readyWorld
@@ -3595,14 +3663,51 @@ namespace DragonWilds {
             bool questAllowed=spawn.QuestCompleted.empty() || spawn.bConditionLatched;
             if(!questAllowed)try {questAllowed=IsQuestCompleted && IsQuestCompleted(m_readyWorld,spawn.QuestCompleted);} catch(...) {questAllowed=false;}
             if(questAllowed && !spawn.QuestCompleted.empty() && spawn.bPersistAfterCondition)spawn.bConditionLatched=true;
-            const bool allowed=(spawn.Time==TimeOfDay::Requirement::Any || spawn.Time==current) && questAllowed;
+            bool temporaryAllowed=true;
+            if(spawn.bTemporaryResource) {
+                const auto condition=TemporaryResourceCondition(spawn,m_readyWorld);
+                if(!condition)continue; // Unknown state must not retire a live resource.
+                temporaryAllowed=*condition;
+            }
+            const bool allowed=(spawn.Time==TimeOfDay::Requirement::Any || spawn.Time==current) && questAllowed && temporaryAllowed;
             if(allowed!=spawn.bTimeAllowed) {
                 spawn.bTimeAllowed=allowed;
-                if(allowed)spawn.bDeconstructed=false;
+                if(allowed) {
+                    spawn.bDeconstructed=false;
+                    spawn.bSpawnFailed=false;
+                }
                 PS::Log<LogLevel::Verbose>(STR("Conditional spawn '{}' entering {} state.\n"),
                     spawn.EntryId,allowed?STR("active"):STR("inactive"));
             }
             if(!allowed) {
+                if(spawn.bTemporaryResource) {
+                    if(actor) {
+                        auto* expected=ResolveClass(spawn.ClassPath);
+                        auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(
+                            actor->GetClassPrivate(),TEXT("bSkipSpudStore")));
+                        const bool classMatches=expected && actor->IsA(expected);
+                        const bool transientFlag=actor->HasAnyFlags(RF_Transient);
+                        const bool saveExcluded=skip && skip->GetPropertyValue(skip->ContainerPtrToValuePtr<void>(actor));
+                        if(!classMatches || !transientFlag || !saveExcluded) {
+                            if(!spawn.bSpawnFailed)
+                                PS::Log<LogLevel::Warning>(STR("Temporary resource '{}' from '{}' cleanup skipped: matching identity did not prove an owned transient actor (tracked={}, class={}, transient={}, save-excluded={}); the actor was left unchanged.\n"),
+                                    spawn.EntryId,spawn.ModName,spawn.LiveActor.Get()==actor,
+                                    classMatches,transientFlag,saveExcluded);
+                            spawn.bSpawnFailed=true;continue;
+                        }
+                        try {RetireTimedActor(static_cast<AActor*>(actor));}
+                        catch(const std::exception& error) {
+                            if(!spawn.bSpawnFailed)
+                                PS::Log<LogLevel::Warning>(STR("Temporary resource '{}' from '{}' cleanup will retry: {}\n"),
+                                    spawn.EntryId,spawn.ModName,PS::ToWideSafe(error.what()));
+                            spawn.bSpawnFailed=true;
+                            continue;
+                        }
+                    }
+                    spawn.LiveActor={};spawn.bExistsInWorld=false;
+                    spawn.bTemporaryResourceSpawned=false;spawn.bSpawnFailed=false;
+                    continue;
+                }
                 try {
                     if(spawn.Type==ESpawnEntryType::AISpawnPoint)DestroyLiveSpawnedAI(m_readyWorld,spawn);
                     if(actor && actor->IsA<AActor>())RetireTimedActor(static_cast<AActor*>(actor));
@@ -3623,18 +3728,31 @@ namespace DragonWilds {
                 spawn.bSatisfiedByExisting=false;spawn.bExistsInWorld=false;
             }
             if(actor) {spawn.LiveActor=PS::WeakObjectHandle(actor);spawn.bExistsInWorld=true;continue;}
+            if(spawn.bTemporaryResource && spawn.bTemporaryResourceSpawned)continue;
             if(spawn.bBuildingProp && spawn.bExistsInWorld && spawn.bAllowDeconstruction) {
                 spawn.bDeconstructed=true;
             }
             if(spawn.bDeconstructed)continue;
+            const bool priorFailure=spawn.bSpawnFailed;
+            const bool wasGrounded=spawn.bGroundingResolved;
             spawn.bExistsInWorld=false;spawn.bSpawnFailed=false;
+            const TCHAR* activationStage=TEXT("grounding");
             try {
+                // A cell can activate while a temporary quest resource is still
+                // inactive. Resolve its authored ground-relative location now,
+                // before the later quest/event activation creates the actor.
+                ResolveGroundedLocation(m_readyWorld,spawn);
+                activationStage=TEXT("creation");
                 if(spawn.Type==ESpawnEntryType::AISpawnPoint)ProcessAISpawnPointEntry(m_readyWorld,spawn);
                 else ProcessActorEntry(m_readyWorld,spawn);
             }
             catch(const std::exception& error) {
                 spawn.bSpawnFailed=true;
-                PS::Log<LogLevel::Error>(STR("Timed spawn '{}' failed: {}\n"),
+                if(spawn.bTemporaryResource) {
+                    if(!priorFailure || (!wasGrounded && spawn.bGroundingResolved))
+                        PS::Log<LogLevel::Warning>(STR("Temporary resource '{}' from '{}' could not activate during {}: {}. Activation will retry.\n"),
+                            spawn.EntryId,spawn.ModName,activationStage,PS::ToWideSafe(error.what()));
+                } else PS::Log<LogLevel::Error>(STR("Timed spawn '{}' failed: {}\n"),
                     spawn.EntryId,PS::ToWideSafe(error.what()));
             }
         }

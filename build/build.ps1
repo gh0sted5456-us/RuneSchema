@@ -767,6 +767,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
                 'appearance-defaults-contract',
                 'dialogue-definition','building-preview-safety','building-clone-contract',
                 'static-building-assembly-contract','quest-building-lifecycle-contract','owned-save-cleanup-contract',
+                'world-building-registry-validation','temporary-resource-lifecycle-contract',
                 'resource-additional-drops','resource-scale-idempotence','niagara-preset',
                 'time-of-day-contract','registry-patch-plan','cooked-pak-registry-manifest','registry-manifest-summary','network-identity-plan','registry-bridge-lifecycle-contract',
                 'presentation-transport-contract','summoning-authority-contract','cooked-registry-discovery-contract',

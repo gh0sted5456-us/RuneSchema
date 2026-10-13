@@ -36,14 +36,14 @@ int main(int argc, char** argv) {
     require(source.find("m_knownIds") == std::string::npos);
     require(source.find("InstallNativePersistence();") != std::string::npos);
     require(source.find("if (!m_ownedIds.empty())") != std::string::npos);
-    require(source.find("!m_nativePersistenceReady") != std::string::npos);
+    require(source.find("m_createdEntries.contains(entry) && !m_nativePersistenceReady") != std::string::npos);
     require(source.find("[FEATURE:journal-save-cleanup][UNAVAILABLE]") != std::string::npos);
     const auto persistence = source.find("InstallNativePersistence();", apply);
     const auto hooks = source.find("RegisterHooks();", persistence);
     require(persistence != std::string::npos && hooks != std::string::npos);
     require(source.substr(persistence, hooks-persistence).find("catch (const std::exception& error)") != std::string::npos);
     require(source.find("JournalPersistence::Install(this,") != std::string::npos);
-    require(source.find("if (!m_nativePersistenceReady)") != std::string::npos);
+    require(source.find("!m_createdEntries.contains(object) || m_nativePersistenceReady") != std::string::npos);
     require(source.find("JournalPlayerAccess::EnsureUnlocked(journalComponent,entry)") != std::string::npos);
     require(source.find("StripUnusableIdsFromCharacterSave") == std::string::npos);
     require(source.find("SaveCharacters") == std::string::npos);
@@ -53,6 +53,7 @@ int main(int argc, char** argv) {
     require(registered<placed && placed<owned);
     require(source.find("found->Owner!=modName")!=std::string::npos);
     require(source.find("for (const auto* fieldName : {TEXT(\"PersistenceID\"), TEXT(\"InternalName\")})")!=std::string::npos);
+    require(source.find("Journal InternalName cannot replace a cooked entry's identity")!=std::string::npos);
     require(source.find("std::memcpy(reverse.GetValuePtr") == std::string::npos);
     std::cout << "PASS: journal source guards for preflight, failure isolation, rooted cache and no character-load retry.\n";
 }

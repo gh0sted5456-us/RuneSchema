@@ -61,6 +61,7 @@ namespace DragonWilds {
         std::string HandleNetworkQuestControl(RC::Unreal::UObject* player,const std::string& quest,
             const std::string& action,const std::string& payload);
         bool IsQuestCompleted(RC::Unreal::UWorld* world,const std::string& quest) const;
+        bool IsQuestActive(RC::Unreal::UWorld* world,const std::string& quest) const;
         void HandleNetworkNotification(RC::Unreal::UObject* player,const std::string& channel,
             const std::string& entity,const std::string& payload);
         void HandleNetworkWorldState(const std::string& payload);

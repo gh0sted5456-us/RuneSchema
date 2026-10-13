@@ -29,6 +29,10 @@ if(PROJECT_IS_TOP_LEVEL)
     endif()
     string(REPLACE "/DNDEBUG" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
     enable_testing()
+    add_executable(world-building-registry-validation ../tests/world-building-registry-validation.cpp)
+    target_include_directories(world-building-registry-validation PRIVATE ../include)
+    target_compile_features(world-building-registry-validation PRIVATE cxx_std_20)
+    add_test(NAME world-building-registry-validation COMMAND world-building-registry-validation)
     foreach(test asset-aliases quest-definition quest-progress quest-native-contract quest-registry-plan spawn-radius quest-repeat-policy quest-save-ownership quest-receipt-journal quest-reward-tiers quest-stage-progress registry-patch-plan cooked-pak-registry-manifest registry-manifest-summary)
         add_executable(${test} ../tests/${test}.cpp)
         target_link_libraries(${test} PRIVATE RuneSchemaJsonCore)
@@ -133,6 +137,12 @@ if(PROJECT_IS_TOP_LEVEL)
     add_executable(journal-placement ../tests/journal-placement.cpp)
     target_link_libraries(journal-placement PRIVATE RuneSchemaJsonCore)
     add_test(NAME journal-placement COMMAND journal-placement)
+    add_executable(journal-entry-identity ../tests/journal-entry-identity.cpp)
+    target_link_libraries(journal-entry-identity PRIVATE RuneSchemaJsonCore)
+    add_test(NAME journal-entry-identity COMMAND journal-entry-identity)
+    add_executable(journal-unlock-condition ../tests/journal-unlock-condition.cpp)
+    target_link_libraries(journal-unlock-condition PRIVATE RuneSchemaJsonCore)
+    add_test(NAME journal-unlock-condition COMMAND journal-unlock-condition)
     add_executable(journal-failure-isolation ../tests/journal-failure-isolation.cpp)
     add_executable(journal-wingdk-lane ../tests/journal-wingdk-lane.cpp)
     add_test(NAME journal-wingdk-lane COMMAND journal-wingdk-lane
@@ -227,6 +237,13 @@ if(PROJECT_IS_TOP_LEVEL)
     add_executable(quest-building-lifecycle-contract ../tests/quest-building-lifecycle-contract.cpp)
     add_test(NAME quest-building-lifecycle-contract COMMAND quest-building-lifecycle-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsSpawnLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Generator/LoaderSchemas.h")
+    add_executable(temporary-resource-lifecycle-contract ../tests/temporary-resource-lifecycle-contract.cpp)
+    add_test(NAME temporary-resource-lifecycle-contract COMMAND temporary-resource-lifecycle-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsSpawnLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsNpcLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/EventRuntime.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Generator/LoaderSchemas.h")
     add_test(NAME npc-cleanup-contract COMMAND npc-cleanup-contract "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsNpcLoader.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/NpcCleanup.inl")
     add_test(NAME journal-failure-isolation COMMAND journal-failure-isolation "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsJournalModLoader.cpp")

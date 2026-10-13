@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 #include <memory>
+#include <optional>
 #include <functional>
 #include "SDK/WeakObjectHandle.h"
 #include "Unreal/Hooks.hpp"
@@ -77,9 +78,13 @@ namespace DragonWilds {
             int64_t BuildingDataIndex = 0;
             TimeOfDay::Requirement Time = TimeOfDay::Requirement::Any;
             std::string QuestCompleted;
+            std::string QuestActive;
+            std::string EventActive;
             bool bPersistAfterCondition = true;
             bool bConditionLatched = false;
             bool bSatisfiedByExisting = false;
+            bool bTemporaryResource = false;
+            bool bTemporaryResourceSpawned = false;
             double DuplicateRadius = 100.0;
             PS::WeakObjectHandle LiveActor;
             bool bUseNativeRespawn = false;
@@ -105,6 +110,8 @@ namespace DragonWilds {
         std::function<void(RC::Unreal::AActor*,const std::string&)> PresentEventState;
         std::function<bool(const std::string&,const std::string&)> ForwardHelpyAuthority;
         std::function<bool(RC::Unreal::UWorld*,const std::string&)> IsQuestCompleted;
+        std::function<bool(RC::Unreal::UWorld*,const std::string&)> IsQuestActive;
+        std::function<bool(RC::Unreal::UWorld*,const std::string&)> IsEventActive;
         std::string HandleNetworkHelpyAuthority(RC::Unreal::UObject* player,const std::string& action,const std::string& payload);
         void LoadBuildingPlacements(const nlohmann::json& data,const RC::StringType& modName){LoadSpawns(data,modName);}
         bool PresentEventIdentity(RC::Unreal::AActor* actor,const std::string& payload);
@@ -523,6 +530,7 @@ namespace DragonWilds {
         bool IsWorldStillLoaded(RC::Unreal::UWorld* world);
         void OnCellShown(RC::Unreal::UObject* cellObject);
         bool HasLiveSpawnedAI(RC::Unreal::UWorld* world, SpawnInfo& spawn);
+        std::optional<bool> TemporaryResourceCondition(const SpawnInfo& spawn,RC::Unreal::UWorld* world) const;
         void DestroyLiveSpawnedAI(RC::Unreal::UWorld* world,const SpawnInfo& spawn);
         void RetireTimedActor(RC::Unreal::AActor* actor);
         void TryProcessSpawns(RC::Unreal::UWorld* world, const std::vector<UECustom::FBox>* bounds, const wchar_t* trigger);

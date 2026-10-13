@@ -241,6 +241,10 @@ public:
         }
     }
     bool Active()const{return run.Active() || pendingStop || !owned.empty();}
+    bool Running(const std::string& key,UWorld* world)const{
+        auto* player=participant.Get();
+        return run.Active() && definition.Key==key && player && player->GetWorld()==world;
+    }
     bool NeedsTick()const{return Active() || !clientAreas.empty();}
     std::function<void(const std::string&)> Validate;
     std::function<Json(const std::string&)> SpawnManifest;
