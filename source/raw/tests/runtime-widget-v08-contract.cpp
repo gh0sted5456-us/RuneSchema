@@ -86,17 +86,12 @@ int main(int argc, char** argv) {
     Require(source, "A native widget can be collapsed before it emits any useful");
     Require(source, "propertyName == \"$RuntimeWidget\" || propertyName == \"$RuntimeUI\"");
 
-    Require(docs, "RuneSchema .8 test-bed runtime actions");
-    Require(docs, "`$Call`");
-    Require(docs, "`$When` and `$Once`");
-    Require(docs, "`$Activate`");
-    Require(docs, "`$TextStyle`");
-    Require(docs, "`$RuntimeUI`");
-    Require(docs, "## Scoped runtime discovery");
-    Require(docs, "There is intentionally no general `FindAllOf(UserWidget)` authoring path.");
-    Require(docs, "## RuneSchema-owned transient UI");
-    Require(docs, "64 nodes");
-    Require(docs, "does **not** create a Blueprint class");
+    Require(docs, "## Existing menu widgets");
+    Require(docs, "`$RuntimeWidget` can apply reflected properties to an existing live widget");
+    Require(docs, "It does not");
+    Require(docs, "create new widgets or functions.");
+    Require(docs, "Confirm each field, widget path, delegate, and function against live reflection.");
+    Require(docs, "new Blueprint class must be cooked and mounted separately.");
     Require(restoreAppearance, "\"$RuntimeWidget\"");
     Require(restoreAppearance, "\"$Storefront\": \"GamePass\"");
     Require(restoreAppearance, "\"WBP_MainMenu_CharSelect_C\"");
