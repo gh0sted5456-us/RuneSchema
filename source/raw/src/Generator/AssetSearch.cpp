@@ -341,6 +341,12 @@ json Search(const std::string& query,const std::string& loader) {
     return rows;
 }
 
+json NativeItemBadges(UObject* object,const std::string& tags) {
+    return {{"PowerLevel",Read(object,"PowerLevel")},
+        {"Masterwork",QuickDecorations::Token(tags,"masterwork")||ItemBool(object,{"bIsMasterworkItem","bIsMasterwork","IsMasterwork","bMasterwork","Masterwork"})},
+        {"MasterworkType",Read(object,"MasterworkType")},
+        {"CategoryIcon",ReferencePath(object,"CategoryClassIcon")}};
+}
 json DescribeItem(UObject* object) {
     if(!Usable(object))return nullptr;
     const auto path=to_string(object->GetPathName());
@@ -362,8 +368,7 @@ json DescribeItem(UObject* object) {
     const bool consumable=QuickDecorations::Token(tags,"consumable")||classText.find("consumable")!=std::string::npos;
     const bool quest=QuickDecorations::Token(tags,"quest")||ItemBool(object,{"bIsQuestItem","IsQuestItem","bQuestItem"});
     // Do not infer quality from PowerLevel or a user-editable display name.
-    const bool masterwork=QuickDecorations::Token(tags,"masterwork")||ItemBool(object,{"bIsMasterworkItem","bIsMasterwork","IsMasterwork","bMasterwork","Masterwork"});
-    return {{"Name",name},{"Path",path},{"InternalName",Text(object,"InternalName")},
+    auto row=json{{"Name",name},{"Path",path},{"InternalName",Text(object,"InternalName")},
         {"PersistenceID",Text(object,"PersistenceID")},{"Icon",ItemIconPath(object)},
         {"RuneSchema",runtimeClone||declared.runeSchema.value_or(AssetMetadata::IsManaged(object))},{"RuntimeClone",runtimeClone},
         {"RuneSchemaManaged",runtimeClone||declared.runeSchema.value_or(AssetMetadata::IsManaged(object))},
@@ -371,12 +376,11 @@ json DescribeItem(UObject* object) {
         {"CloneEligible",cloneEligible&&!AssetMetadata::IsIncomplete(object)},{"CloneReason",cloneReason},{"Modded",AssetMetadata::Encode(declared)},
         {"Available",!AssetMetadata::IsIncomplete(object)&&(!runtimeClone||provenance.value("Registered",false))},
         {"Reason",AssetMetadata::IsIncomplete(object)?"Helpy companion files incomplete; grants and cloning blocked until repaired":runtimeClone&&!provenance.value("Registered",false)?"Runtime clone is not registered with the item subsystem":""},
-        {"Masterwork",masterwork},{"Consumable",consumable},{"QuestItem",quest},
-        {"CategoryIcon",ReferencePath(object,"CategoryClassIcon")},{"Tags",tags},
+        {"Consumable",consumable},{"QuestItem",quest},{"Tags",tags},
         {"bSoftDeleted",ItemBool(object,{"bSoftDeleted","IsSoftDeleted","bIsSoftDeleted","IsSoftDelete","bIsSoftDelete"})},
         {"Class",to_string(object->GetClassPrivate()->GetPathName())},
-        {"Cooked",CookedAssets::VerifiedLoadedObject(object)},{"AppearanceGroup",ItemAppearanceMetadata::Group(object)},
-        {"PowerLevel",Read(object,"PowerLevel")}};
+        {"Cooked",CookedAssets::VerifiedLoadedObject(object)},{"AppearanceGroup",ItemAppearanceMetadata::Group(object)}};
+    row.update(NativeItemBadges(object,tags));return row;
 }
 
 namespace {
@@ -406,10 +410,11 @@ std::uint64_t HelpyStableId(const std::string& value) {
 }
 json DescribeItemBasic(UObject* object,const std::string& path,const std::string& name,const std::string& internal,const std::string& tags,const std::string& category) {
     auto persistence=CheapText(object,"PersistenceID");
-    return {{"StableId",HelpyStableId(path)},{"Name",name},{"Path",path},
+    auto row=json{{"StableId",HelpyStableId(path)},{"Name",name},{"Path",path},
         {"InternalName",internal},{"PersistenceID",std::move(persistence)},{"Icon",ItemIconPath(object)},
         {"Class",object&&object->GetClassPrivate()?to_string(object->GetClassPrivate()->GetPathName()):std::string{}},
         {"Tags",tags},{"Category",category},{"MaxStackSize",HelpyMaxStack(object)}};
+    row.update(NativeItemBadges(object,tags));return row;
 }
 }
 

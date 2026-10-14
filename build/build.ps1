@@ -768,7 +768,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
             @(
                 'vendor-offers','vendor-spawn-gate','loader-schemas','npc-catalog','npc-cleanup-contract','player-activity-events',
                 'quest-gameplay-owner','quest-native-contract','quest-definition','quest-kill-credit','summon-kill-credit','summon-kill-credit-contract','event-definition',
-                'item-cart','asset-preload-plan','helpy-lazy-thread','alpha-ui-contract',
+                'item-cart','asset-preload-plan','helpy-lazy-thread','alpha-ui-contract','icon-capture-schedule','helpy-popup-input','npc-journal-unlocks',
                 'character-entry-recovery-contract',
                 'appearance-defaults-contract',
                 'dialogue-definition','building-preview-safety','building-clone-contract',

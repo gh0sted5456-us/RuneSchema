@@ -8,6 +8,7 @@ struct JournalPersistence {
     inline static std::mutex Mutex;
     inline static std::map<const void*,Owners> Sources;
     inline static std::set<std::string> Errors;
+    inline static std::atomic<uint64_t> LoadRevision{1};
     static void Report(const char* phase,const char* message) noexcept {
         try {
             std::lock_guard lock(Mutex);
@@ -82,7 +83,9 @@ struct JournalPersistence {
                 return false;
             }
         }catch(...) {Report("load","Unknown adapter failure");}
-        return Reader.call<bool>(persistence,json,version);
+        const bool loaded=Reader.call<bool>(persistence,json,version);
+        if(loaded)LoadRevision.fetch_add(1,std::memory_order_release);
+        return loaded;
     }
     static bool Write(void* persistence,Shared* json) {
         bool called=false,written=false;

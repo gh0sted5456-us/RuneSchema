@@ -31,8 +31,8 @@ inline constexpr const char* FullScanBadge="/RuneSchema/UI/Icons/Badges/T_Badge_
 inline constexpr const char* StopBadge=FullScanBadge;
 inline constexpr const char* SettingsBadge="/RuneSchema/UI/Icons/Badges/T_Badge_Settings.T_Badge_Settings";
 inline constexpr const char* CoverageBadge="/RuneSchema/UI/Icons/Badges/T_Badge_Coverage.T_Badge_Coverage";
-// Retained as a schema/compatibility path for cooked packs; Helpy renders power
-// as gold "PL" plus a white numeral and no longer draws this texture.
+// Native power-level glyph. The standalone inventory uses this texture when
+// available; a text fallback does not invent item quality or a native icon path.
 inline constexpr const char* PowerLevelBadge="/Game/Art/UI/PowerLevel/T_PowerLevel_NeutralZone.T_PowerLevel_NeutralZone";
 inline constexpr const char* LowercaseBadgeRoot="/RuneSchema/UI/Icons/badges/";
 inline constexpr const char* LowercaseDragonwildsBadge="/RuneSchema/UI/Icons/badges/T_Badge_Dragonwilds.T_Badge_Dragonwilds";

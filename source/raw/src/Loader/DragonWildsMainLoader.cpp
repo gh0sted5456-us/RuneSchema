@@ -1222,9 +1222,13 @@ namespace DragonWilds {
 
         auto journalLoader=std::make_unique<DragonWildsJournalModLoader>();
         journalLoader->SetRecipeService(recipeService);
+        auto* journalService=journalLoader.get();
         RegisterLoader(std::move(journalLoader));
         auto loreLoader=std::make_unique<DragonWildsJournalModLoader>(true);
         loreLoader->SetRecipeService(recipeService);
+        auto* loreService=loreLoader.get();
+        npcService->DeliverAutomaticJournals=[journalService,loreService](RC::Unreal::UObject* controller){journalService->DeliverAutomaticUnlocks(controller);loreService->DeliverAutomaticUnlocks(controller);};
+        npcService->UnlockJournal=[journalService,loreService](RC::Unreal::UObject* controller,const std::string& entry){return journalService->UnlockForPlayer(controller,entry)||loreService->UnlockForPlayer(controller,entry);};
         npcService->OpenLore=[service=loreLoader.get()](RC::Unreal::UObject* controller,const std::string& entry){return service->OpenLoreForPlayer(controller,entry);};
         RegisterLoader(std::move(loreLoader));
 

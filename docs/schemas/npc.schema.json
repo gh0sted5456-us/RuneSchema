@@ -528,6 +528,18 @@
             "IdleAnimation": {
               "type": "string"
             },
+            "JournalEntries": {
+              "description": "Unlock these registered journal/lore entries when this NPC is interacted with. Use local entry IDs, Mod:Id, or full cooked asset paths. Works alongside dialogue and shops; native player unlock confirmation is required.",
+              "items": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 32,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
             "Location": {
               "description": "World coordinates as [X,Y,Z] or {X,Y,Z}. Z accepts $, $+offset, or $-offset and resolves to blocking ground.",
               "oneOf": [
@@ -651,7 +663,7 @@
             },
             "NoInteract": {
               "default": false,
-              "description": "Disable interaction and suppress VendorID, DialogueID, LoreID and LoreEntry bindings without changing collision.",
+              "description": "Disable interaction and suppress VendorID, DialogueID, LoreID, LoreEntry and JournalEntries bindings without changing collision.",
               "type": "boolean"
             },
             "OverheadIcon": {
@@ -1655,6 +1667,18 @@
               "IdleAnimation": {
                 "type": "string"
               },
+              "JournalEntries": {
+                "description": "Unlock these registered journal/lore entries when this NPC is interacted with. Use local entry IDs, Mod:Id, or full cooked asset paths. Works alongside dialogue and shops; native player unlock confirmation is required.",
+                "items": {
+                  "maxLength": 1024,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 32,
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              },
               "Location": {
                 "description": "World coordinates as [X,Y,Z] or {X,Y,Z}. Z accepts $, $+offset, or $-offset and resolves to blocking ground.",
                 "oneOf": [
@@ -1778,7 +1802,7 @@
               },
               "NoInteract": {
                 "default": false,
-                "description": "Disable interaction and suppress VendorID, DialogueID, LoreID and LoreEntry bindings without changing collision.",
+                "description": "Disable interaction and suppress VendorID, DialogueID, LoreID, LoreEntry and JournalEntries bindings without changing collision.",
                 "type": "boolean"
               },
               "OverheadIcon": {
@@ -2789,6 +2813,18 @@
                 "IdleAnimation": {
                   "type": "string"
                 },
+                "JournalEntries": {
+                  "description": "Unlock these registered journal/lore entries when this NPC is interacted with. Use local entry IDs, Mod:Id, or full cooked asset paths. Works alongside dialogue and shops; native player unlock confirmation is required.",
+                  "items": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 32,
+                  "minItems": 1,
+                  "type": "array",
+                  "uniqueItems": true
+                },
                 "Location": {
                   "description": "World coordinates as [X,Y,Z] or {X,Y,Z}. Z accepts $, $+offset, or $-offset and resolves to blocking ground.",
                   "oneOf": [
@@ -2912,7 +2948,7 @@
                 },
                 "NoInteract": {
                   "default": false,
-                  "description": "Disable interaction and suppress VendorID, DialogueID, LoreID and LoreEntry bindings without changing collision.",
+                  "description": "Disable interaction and suppress VendorID, DialogueID, LoreID, LoreEntry and JournalEntries bindings without changing collision.",
                   "type": "boolean"
                 },
                 "OverheadIcon": {
@@ -3916,6 +3952,18 @@
                   "IdleAnimation": {
                     "type": "string"
                   },
+                  "JournalEntries": {
+                    "description": "Unlock these registered journal/lore entries when this NPC is interacted with. Use local entry IDs, Mod:Id, or full cooked asset paths. Works alongside dialogue and shops; native player unlock confirmation is required.",
+                    "items": {
+                      "maxLength": 1024,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "maxItems": 32,
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
                   "Location": {
                     "description": "World coordinates as [X,Y,Z] or {X,Y,Z}. Z accepts $, $+offset, or $-offset and resolves to blocking ground.",
                     "oneOf": [
@@ -4039,7 +4087,7 @@
                   },
                   "NoInteract": {
                     "default": false,
-                    "description": "Disable interaction and suppress VendorID, DialogueID, LoreID and LoreEntry bindings without changing collision.",
+                    "description": "Disable interaction and suppress VendorID, DialogueID, LoreID, LoreEntry and JournalEntries bindings without changing collision.",
                     "type": "boolean"
                   },
                   "OverheadIcon": {

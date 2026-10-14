@@ -11,6 +11,10 @@ int main(int argc,char** argv){
     Require(picker.contains("AddToCart(row)") && !picker.contains("if(quickActions)PublishSharedCart(state)"));
     Require(panel.contains("AcceptDragDropPayload(\"RS_ITEM_ROW\")") && panel.contains("RenderCartDock();"));
     Require(panel.contains("SharedCart.Payload(mode)") && panel.contains("SetQuantity(entry.Path,quantity)"));
+    Require(panel.contains("BeginDelivery(request,mode)")&&panel.contains("TakeCompleted(request,receipt)")&&panel.contains("CompleteDelivery(request,receipt)"));
+    Require(panel.contains("run(\"Deliver\",0)")&&panel.contains("if(theme.advancedMode)"));
+    Require(window.contains("SpawnToolsPanel::PollCartDelivery();")&&window.contains("SmallButton(modeLabel)")&&window.contains("Current.advancedMode=!t.advancedMode"));
+    Require(picker.contains("PowerLevelBadge")&&picker.contains("ItemBadges::Masterwork(row)")&&picker.contains("DrawItemBadges(row,"));
     Require(!window.contains("helpy-cart-slot") && window.contains("LazyCatalog::PumpBackendSignal()"));
     Require(lazy.contains("std::atomic<uint64_t> BackendGeneration") && lazy.contains("memory_order_release") && lazy.contains("memory_order_acquire"));
     const auto signal=lazy.substr(lazy.find("inline void BackendSignal"),lazy.find("inline void PumpBackendSignal")-lazy.find("inline void BackendSignal"));

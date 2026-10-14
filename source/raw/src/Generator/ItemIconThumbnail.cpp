@@ -1,6 +1,8 @@
 #include "Generator/ItemIconThumbnail.h"
 #include "Generator/HelpyIconTrace.h"
 #include "Generator/HelpyRuntimePreferences.h"
+#include "Core/IconCaptureSchedule.h"
+#include "SDK/WeakObjectHandle.h"
 #include "Core/ConfigFiles.h"
 #include "Runtime/HostServices.h"
 #include "Utility/Logging.h"
@@ -29,6 +31,7 @@
 #include <tuple>
 #include <cctype>
 #include <chrono>
+#include <memory>
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -153,7 +156,7 @@ namespace {
         const auto size=std::filesystem::file_size(file,ec);if(ec||size!=16u+ThumbnailSize*ThumbnailSize*4u)return false;
         std::ifstream input(file,std::ios::binary);if(!input)return false;char magic[4]{};uint32_t w=0,h=0,bytes=0;
         input.read(magic,4);input.read(reinterpret_cast<char*>(&w),sizeof(w));input.read(reinterpret_cast<char*>(&h),sizeof(h));input.read(reinterpret_cast<char*>(&bytes),sizeof(bytes));
-        if(!input||std::string(magic,4)!="RSI1"||w!=ThumbnailSize||h!=ThumbnailSize||bytes!=ThumbnailSize*ThumbnailSize*4u)return false;
+        if(!input||std::string(magic,4)!="RSI2"||w!=ThumbnailSize||h!=ThumbnailSize||bytes!=ThumbnailSize*ThumbnailSize*4u)return false;
         std::vector<unsigned char> pixels(bytes);input.read(reinterpret_cast<char*>(pixels.data()),bytes);if(!input)return false;
         std::size_t alphaNonZero=0,rgbNonZero=0;
         for(std::size_t i=0;i+3<pixels.size();i+=4){if(pixels[i+3]!=0)++alphaNonZero;if(pixels[i]!=0||pixels[i+1]!=0||pixels[i+2]!=0)++rgbNonZero;}
@@ -204,6 +207,28 @@ namespace {
         if(!library || !target)return;
         try {ReflectedCall release(library,TEXT("/Script/Engine.KismetRenderingLibrary:ReleaseRenderTarget2D"));release.ObjectArg(TEXT("TextureRenderTarget"),target).Invoke();}catch(...){}
     }
+
+    struct CaptureLease {
+        PS::WeakObjectHandle Handle;bool Owned=false;
+        void Hold(UObject* object){
+            Handle.Assign(object);
+            if(!object||Handle.Get()!=object)throw std::runtime_error("Cannot retain item icon capture object");
+            Owned=!object->IsRootSet();if(Owned)object->SetRootSet();
+        }
+        UObject* Get()const{
+            auto* object=Handle.Get();
+            return object&&!object->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed))?object:nullptr;
+        }
+        void Release()noexcept{try{if(Owned)if(auto* object=Get();object&&object->IsRootSet())object->ClearRootSet();}catch(...){}Owned=false;Handle.Reset();}
+        ~CaptureLease(){Release();}
+    };
+    struct Capture {
+        std::string Icon,ResolvedClass,ResolvedChain;bool Cold=false;
+        PS::WeakObjectHandle World;CaptureLease Texture,Target;
+        IconCapture::Schedule Timing;
+    };
+    std::unique_ptr<Capture> ActiveCapture;
+    std::uint64_t CaptureNow(){return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());}
 
     std::vector<unsigned char> ReadColors(ReflectedCall& read) {
         auto* arrayProperty=CastField<FArrayProperty>(read.Property(TEXT("OutSamples")));
@@ -301,7 +326,7 @@ namespace {
         std::ofstream output(std::filesystem::path(temporary),std::ios::binary|std::ios::trunc);
         if(!output)throw std::runtime_error("Cannot create item icon thumbnail cache file");
         const uint32_t width=ThumbnailSize,height=ThumbnailSize,bytes=static_cast<uint32_t>(rgba.size());
-        output.write("RSI1",4);output.write(reinterpret_cast<const char*>(&width),sizeof(width));
+        output.write("RSI2",4);output.write(reinterpret_cast<const char*>(&width),sizeof(width));
         output.write(reinterpret_cast<const char*>(&height),sizeof(height));output.write(reinterpret_cast<const char*>(&bytes),sizeof(bytes));
         output.write(reinterpret_cast<const char*>(rgba.data()),static_cast<std::streamsize>(rgba.size()));output.close();
         if(!output)throw std::runtime_error("Item icon thumbnail write failed");
@@ -312,8 +337,56 @@ namespace {
 
 nlohmann::json Render(UWorld* world,const std::string& iconPath) {
     if(iconPath.empty()||iconPath.size()>1024||iconPath.front()!='/')throw std::runtime_error("Item icon request requires a canonical texture path");
-    const auto cachedFile=OutputFile(iconPath);if(CachedThumbnail(cachedFile)) {PS::HelpyIconTrace::Event("core-cache-hit",iconPath,"file='"+cachedFile.string()+"'");std::error_code touch;std::filesystem::last_write_time(cachedFile,std::filesystem::file_time_type::clock::now(),touch);MaintainCache(cachedFile.parent_path());return {{"Icon",iconPath},{"File",cachedFile.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",true}};}
+    const auto cachedFile=OutputFile(iconPath);if(CachedThumbnail(cachedFile)) {Reset();PS::HelpyIconTrace::Event("core-cache-hit",iconPath,"file='"+cachedFile.string()+"'");std::error_code touch;std::filesystem::last_write_time(cachedFile,std::filesystem::file_time_type::clock::now(),touch);MaintainCache(cachedFile.parent_path());return {{"Icon",iconPath},{"File",cachedFile.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",true}};}
     if(!world)throw std::runtime_error("Item icon rendering requires a loaded world");
+    if(ActiveCapture&&(ActiveCapture->Icon!=iconPath||ActiveCapture->World.Get()!=world))Reset();
+    if(ActiveCapture) {
+        auto& capture=*ActiveCapture;const auto now=CaptureNow();
+        if(capture.Timing.Expired(now)){Reset();throw std::runtime_error("Item icon texture warm-up timed out");}
+        auto* texture=capture.Texture.Get();
+        if(!texture){Reset();throw std::runtime_error("Item icon capture texture expired");}
+        auto* library=DefaultRenderingLibrary();
+        if(capture.Timing.CanRead(now)) {
+            auto* target=capture.Target.Get();if(!target){Reset();throw std::runtime_error("Item icon capture target expired");}
+            ReflectedCall read(library,TEXT("/Script/Engine.KismetRenderingLibrary:ReadRenderTarget"));
+            read.ObjectArg(TEXT("WorldContextObject"),world).ObjectArg(TEXT("TextureRenderTarget"),target).JsonArg(TEXT("bNormalize"),false).Invoke();
+            if(!read.BoolReturn())throw std::runtime_error("ReadRenderTarget failed for item icon");
+            auto pixels=ReadColors(read);std::size_t alpha=0,rgb=0;
+            for(std::size_t i=0;i+3<pixels.size();i+=4){alpha+=pixels[i+3]!=0;rgb+=pixels[i]!=0||pixels[i+1]!=0||pixels[i+2]!=0;}
+            if(alpha==0&&rgb==0) {
+                ReleaseRenderTarget(library,target);capture.Target.Release();
+                if(!capture.Timing.Blank(now)){Reset();throw std::runtime_error("ReadRenderTarget produced a blank item icon after bounded warm-up");}
+                return {{"Icon",iconPath},{"Status","Pending"}};
+            }
+            if(alpha==0)for(std::size_t i=0;i+3<pixels.size();i+=4)pixels[i+3]=std::max({pixels[i],pixels[i+1],pixels[i+2]});
+            WriteThumbnail(cachedFile,pixels);
+            std::error_code ec;const auto bytes=std::filesystem::file_size(cachedFile,ec);MaintainCache(cachedFile.parent_path(),ec?0:bytes);
+            const auto result=nlohmann::json{{"Icon",iconPath},{"File",cachedFile.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",false},{"ColdLoad",capture.Cold},{"ResolvedClass",capture.ResolvedClass},{"ResolvedChain",capture.ResolvedChain}};
+            Reset();return result;
+        }
+        if(!capture.Timing.CanDraw(now))return {{"Icon",iconPath},{"Status","Pending"}};
+        auto* renderTarget=CreateThumbnailRenderTarget(library,world);capture.Target.Hold(renderTarget);
+        ReflectedCall clear(library,TEXT("/Script/Engine.KismetRenderingLibrary:ClearRenderTarget2D"));
+        clear.ObjectArg(TEXT("WorldContextObject"),world).ObjectArg(TEXT("TextureRenderTarget"),renderTarget)
+            .JsonArg(TEXT("ClearColor"),{{"R",0.0},{"G",0.0},{"B",0.0},{"A",0.0}}).Invoke();
+        ReflectedCall begin(library,TEXT("/Script/Engine.KismetRenderingLibrary:BeginDrawCanvasToRenderTarget"));
+        begin.ObjectArg(TEXT("WorldContextObject"),world).ObjectArg(TEXT("TextureRenderTarget"),renderTarget).Invoke();
+        auto* canvas=begin.ObjectValue(TEXT("Canvas"));if(!canvas)throw std::runtime_error("BeginDrawCanvasToRenderTarget returned no Canvas");
+        try {
+            ReflectedCall draw(canvas,TEXT("/Script/Engine.Canvas:K2_DrawTexture"));
+            draw.ObjectArg(TEXT("RenderTexture"),texture)
+                .JsonArg(TEXT("ScreenPosition"),{{"X",0.0},{"Y",0.0}}).JsonArg(TEXT("ScreenSize"),{{"X",ThumbnailSize},{"Y",ThumbnailSize}})
+                .JsonArg(TEXT("CoordinatePosition"),{{"X",0.0},{"Y",0.0}}).JsonArg(TEXT("CoordinateSize"),{{"X",1.0},{"Y",1.0}})
+                .JsonArg(TEXT("RenderColor"),{{"R",1.0},{"G",1.0},{"B",1.0},{"A",1.0}})
+                .JsonArg(TEXT("BlendMode"),"BLEND_Translucent").JsonArg(TEXT("Rotation"),0.0).JsonArg(TEXT("PivotPoint"),{{"X",0.5},{"Y",0.5}}).Invoke();
+        }catch(...) {
+            try{ReflectedCall end(library,TEXT("/Script/Engine.KismetRenderingLibrary:EndDrawCanvasToRenderTarget"));end.ObjectArg(TEXT("WorldContextObject"),world).CopyArg(TEXT("Context"),begin,TEXT("Context")).Invoke();}catch(...){}
+            throw;
+        }
+        ReflectedCall end(library,TEXT("/Script/Engine.KismetRenderingLibrary:EndDrawCanvasToRenderTarget"));
+        end.ObjectArg(TEXT("WorldContextObject"),world).CopyArg(TEXT("Context"),begin,TEXT("Context")).Invoke();
+        capture.Timing.Submitted(now);return {{"Icon",iconPath},{"Status","Pending"}};
+    }
     const auto normalized=PS::AssetAliases::Resolve(ActorHelper::NormalizeObjectPath(RC::to_generic_string(iconPath)));
     PS::HelpyIconTrace::Event("resolve-start",iconPath,"normalized='"+RC::to_string(normalized)+"'");
     auto* root=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,normalized.c_str(),false);
@@ -326,78 +399,14 @@ nlohmann::json Render(UWorld* world,const std::string& iconPath) {
     if(texture->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed))){PS::HelpyIconTrace::Event("texture-state-fail",iconPath,"reason='destroying'");throw std::runtime_error("stage=texture-state: resolved texture is being destroyed: "+iconPath);}
     const auto resolvedClass=texture->GetClassPrivate()?RC::to_string(texture->GetClassPrivate()->GetPathName()):std::string("<unknown>");
     PS::HelpyIconTrace::Event("unwrap-ready",iconPath,"rootClass='"+rootClass+"' resolvedClass='"+resolvedClass+"' texture='"+RC::to_string(texture->GetPathName())+"' chain='"+resolved.Chain+"'");
-    auto* library=DefaultRenderingLibrary();UObject* renderTarget=nullptr;
-    try {
-        renderTarget=CreateThumbnailRenderTarget(library,world);PS::HelpyIconTrace::Event("render-target",iconPath,"created=true");
-
-        ReflectedCall clear(library,TEXT("/Script/Engine.KismetRenderingLibrary:ClearRenderTarget2D"));
-        clear.ObjectArg(TEXT("WorldContextObject"),world).ObjectArg(TEXT("TextureRenderTarget"),renderTarget)
-            .JsonArg(TEXT("ClearColor"),{{"R",0.0},{"G",0.0},{"B",0.0},{"A",0.0}}).Invoke();
-
-        ReflectedCall begin(library,TEXT("/Script/Engine.KismetRenderingLibrary:BeginDrawCanvasToRenderTarget"));
-        begin.ObjectArg(TEXT("WorldContextObject"),world).ObjectArg(TEXT("TextureRenderTarget"),renderTarget).Invoke();
-        auto* canvas=begin.ObjectValue(TEXT("Canvas"));if(!canvas)throw std::runtime_error("BeginDrawCanvasToRenderTarget returned no Canvas");
-        bool ended=false;
-        try {
-            ReflectedCall draw(canvas,TEXT("/Script/Engine.Canvas:K2_DrawTexture"));
-            draw.ObjectArg(TEXT("RenderTexture"),texture)
-                .JsonArg(TEXT("ScreenPosition"),{{"X",0.0},{"Y",0.0}})
-                .JsonArg(TEXT("ScreenSize"),{{"X",ThumbnailSize},{"Y",ThumbnailSize}})
-                .JsonArg(TEXT("CoordinatePosition"),{{"X",0.0},{"Y",0.0}})
-                .JsonArg(TEXT("CoordinateSize"),{{"X",1.0},{"Y",1.0}})
-                .JsonArg(TEXT("RenderColor"),{{"R",1.0},{"G",1.0},{"B",1.0},{"A",1.0}})
-                .JsonArg(TEXT("BlendMode"),"BLEND_Translucent").JsonArg(TEXT("Rotation"),0.0)
-                .JsonArg(TEXT("PivotPoint"),{{"X",0.5},{"Y",0.5}}).Invoke();
-            ReflectedCall end(library,TEXT("/Script/Engine.KismetRenderingLibrary:EndDrawCanvasToRenderTarget"));
-            end.ObjectArg(TEXT("WorldContextObject"),world).CopyArg(TEXT("Context"),begin,TEXT("Context")).Invoke();ended=true;
-        } catch(...) {
-            if(!ended)try {ReflectedCall end(library,TEXT("/Script/Engine.KismetRenderingLibrary:EndDrawCanvasToRenderTarget"));end.ObjectArg(TEXT("WorldContextObject"),world).CopyArg(TEXT("Context"),begin,TEXT("Context")).Invoke();}catch(...){}
-            throw;
-        }
-
-        auto readPixels=[&](UObject* target,const char* stage){
-            ReflectedCall read(library,TEXT("/Script/Engine.KismetRenderingLibrary:ReadRenderTarget"));
-            read.ObjectArg(TEXT("WorldContextObject"),world).ObjectArg(TEXT("TextureRenderTarget"),target).JsonArg(TEXT("bNormalize"),false).Invoke();
-            if(!read.BoolReturn()){PS::HelpyIconTrace::Event("readback-fail",iconPath,std::string("stage='")+stage+"' reason='ReadRenderTarget=false'");throw std::runtime_error("ReadRenderTarget failed for item icon");}
-            auto pixels=ReadColors(read);
-            std::size_t alphaNonZero=0,rgbNonZero=0;for(std::size_t i=0;i+3<pixels.size();i+=4){if(pixels[i+3]!=0)++alphaNonZero;if(pixels[i]!=0||pixels[i+1]!=0||pixels[i+2]!=0)++rgbNonZero;}
-            bool alphaRecovered=false;if(alphaNonZero==0&&rgbNonZero>0){for(std::size_t i=0;i+3<pixels.size();i+=4)pixels[i+3]=std::max({pixels[i],pixels[i+1],pixels[i+2]});alphaRecovered=true;alphaNonZero=rgbNonZero;}
-            PS::HelpyIconTrace::Event("readback-ready",iconPath,std::string("stage='")+stage+"' bytes="+std::to_string(pixels.size())+" alphaNonZero="+std::to_string(alphaNonZero)+" rgbNonZero="+std::to_string(rgbNonZero)+" alphaRecovered="+(alphaRecovered?std::string("true"):std::string("false")));
-            return std::tuple<std::vector<unsigned char>,std::size_t,std::size_t>(std::move(pixels),alphaNonZero,rgbNonZero);
-        };
-        auto [rgba,alphaNonZero,rgbNonZero]=readPixels(renderTarget,"primary");
-        if(alphaNonZero==0&&rgbNonZero==0){
-            PS::HelpyIconTrace::Event("capture-fallback",iconPath,"reason='blank-primary' mode='fresh-rt-opaque'");
-            ReleaseRenderTarget(library,renderTarget);renderTarget=CreateThumbnailRenderTarget(library,world);
-            ReflectedCall clear2(library,TEXT("/Script/Engine.KismetRenderingLibrary:ClearRenderTarget2D"));
-            clear2.ObjectArg(TEXT("WorldContextObject"),world).ObjectArg(TEXT("TextureRenderTarget"),renderTarget)
-                .JsonArg(TEXT("ClearColor"),{{"R",0.0},{"G",0.0},{"B",0.0},{"A",0.0}}).Invoke();
-            ReflectedCall begin2(library,TEXT("/Script/Engine.KismetRenderingLibrary:BeginDrawCanvasToRenderTarget"));
-            begin2.ObjectArg(TEXT("WorldContextObject"),world).ObjectArg(TEXT("TextureRenderTarget"),renderTarget).Invoke();
-            auto* canvas2=begin2.ObjectValue(TEXT("Canvas"));if(!canvas2)throw std::runtime_error("Fallback BeginDrawCanvasToRenderTarget returned no Canvas");
-            bool ended2=false;
-            try {
-                ReflectedCall draw2(canvas2,TEXT("/Script/Engine.Canvas:K2_DrawTexture"));
-                draw2.ObjectArg(TEXT("RenderTexture"),texture)
-                    .JsonArg(TEXT("ScreenPosition"),{{"X",0.0},{"Y",0.0}})
-                    .JsonArg(TEXT("ScreenSize"),{{"X",ThumbnailSize},{"Y",ThumbnailSize}})
-                    .JsonArg(TEXT("CoordinatePosition"),{{"X",0.0},{"Y",0.0}})
-                    .JsonArg(TEXT("CoordinateSize"),{{"X",1.0},{"Y",1.0}})
-                    .JsonArg(TEXT("RenderColor"),{{"R",1.0},{"G",1.0},{"B",1.0},{"A",1.0}})
-                    .JsonArg(TEXT("BlendMode"),"BLEND_Opaque").JsonArg(TEXT("Rotation"),0.0)
-                    .JsonArg(TEXT("PivotPoint"),{{"X",0.5},{"Y",0.5}}).Invoke();
-                ReflectedCall end2(library,TEXT("/Script/Engine.KismetRenderingLibrary:EndDrawCanvasToRenderTarget"));
-                end2.ObjectArg(TEXT("WorldContextObject"),world).CopyArg(TEXT("Context"),begin2,TEXT("Context")).Invoke();ended2=true;
-            } catch(...) {
-                if(!ended2)try {ReflectedCall end2(library,TEXT("/Script/Engine.KismetRenderingLibrary:EndDrawCanvasToRenderTarget"));end2.ObjectArg(TEXT("WorldContextObject"),world).CopyArg(TEXT("Context"),begin2,TEXT("Context")).Invoke();}catch(...){}
-                throw;
-            }
-            auto fallback=readPixels(renderTarget,"fallback-opaque");rgba=std::move(std::get<0>(fallback));alphaNonZero=std::get<1>(fallback);rgbNonZero=std::get<2>(fallback);
-            if(alphaNonZero!=0||rgbNonZero!=0)PS::HelpyIconTrace::Event("capture-fallback-ready",iconPath,"mode='fresh-rt-opaque'");
-        }
-        if(alphaNonZero==0&&rgbNonZero==0){PS::HelpyIconTrace::Event("readback-fail",iconPath,"reason='blank-payload-after-fallback'");throw std::runtime_error("ReadRenderTarget produced a blank item icon");}
-        WriteThumbnail(cachedFile,rgba);PS::HelpyIconTrace::Event("cache-write",iconPath,"file='"+cachedFile.string()+"'");std::error_code cacheSizeError;const auto cachedBytes=std::filesystem::file_size(cachedFile,cacheSizeError);MaintainCache(cachedFile.parent_path(),cacheSizeError?0:cachedBytes);ReleaseRenderTarget(library,renderTarget);renderTarget=nullptr;
-        return {{"Icon",iconPath},{"File",cachedFile.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",false},{"ColdLoad",coldLoad},{"ResolvedClass",resolvedClass},{"ResolvedChain",resolved.Chain}};
-    } catch(const std::exception& error) {PS::HelpyIconTrace::Event("render-exception",iconPath,"error='"+std::string(error.what())+"'");ReleaseRenderTarget(library,renderTarget);throw;} catch(...) {PS::HelpyIconTrace::Event("render-exception",iconPath,"error='<non-std exception>'");ReleaseRenderTarget(library,renderTarget);throw;}
+    auto capture=std::make_unique<Capture>();
+    capture->Icon=iconPath;capture->Cold=coldLoad;capture->ResolvedClass=resolvedClass;capture->ResolvedChain=resolved.Chain;
+    capture->World.Assign(world);if(capture->World.Get()!=world)throw std::runtime_error("Cannot retain item icon world identity");
+    capture->Texture.Hold(texture);capture->Timing.Begin(CaptureNow());ActiveCapture=std::move(capture);
+    return {{"Icon",iconPath},{"Status","Pending"}};
+}
+void Reset() noexcept {
+    try{if(ActiveCapture)if(auto* target=ActiveCapture->Target.Get())ReleaseRenderTarget(DefaultRenderingLibrary(),target);}catch(...){}
+    ActiveCapture.reset();
 }
 }

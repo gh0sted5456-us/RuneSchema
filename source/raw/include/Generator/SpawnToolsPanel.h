@@ -53,12 +53,25 @@ inline void CacheBuildings(const nlohmann::json& result,uint64_t revision,const 
 inline nlohmann::json UiSnapshot={{"Status","Load a world before using runtime tools."}};
 inline uint64_t UiRevision=0;inline int UiCategory=-99;
 inline std::string SelectedPlayer;
+inline uint64_t CartSequence=(uint64_t{1}<<62),CartGeneration=0;
+inline void PollCartDelivery() {
+    const auto generation=SpawnToolRequests::CurrentGeneration();
+    if(CartGeneration!=generation) {
+        if(ItemGridPicker::SharedCart.Delivery())ItemGridPicker::CartStatus="World changed during delivery. Cart retained; check your inventory before retrying.";
+        ItemGridPicker::SharedCart.CancelDelivery();CartGeneration=generation;
+    }
+    nlohmann::json receipt;const auto request=ItemGridPicker::SharedCart.Delivery();
+    if(request&&SpawnToolRequests::TakeCompleted(request,receipt)) {
+        ItemGridPicker::SharedCart.CompleteDelivery(request,receipt);
+        ItemGridPicker::CartStatus=receipt.value("Status",std::string("Delivery completed; inspect remaining items before retrying."));
+    }
+}
 inline void RenderCartDock() {
     const auto& theme=HelpyImGuiTheme::Current;
     ImGui::PushStyleColor(ImGuiCol_ChildBg,theme.panelAlt);
     if(ImGui::BeginChild("##item-cart-dock",ImVec2(0,theme.Y(244.0f)),true,ImGuiWindowFlags_AlwaysUseWindowPadding)){
         const auto pos=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();
-        if(ImGui::BeginDragDropTargetCustom(ImRect(pos,ImVec2(pos.x+size.x,pos.y+size.y)),ImGui::GetID("cart-transfer"))){
+        if(!ItemGridPicker::SharedCart.Delivery()&&ImGui::BeginDragDropTargetCustom(ImRect(pos,ImVec2(pos.x+size.x,pos.y+size.y)),ImGui::GetID("cart-transfer"))){
             if(const auto* payload=ImGui::AcceptDragDropPayload("RS_ITEM_ROW")){
                 if(payload->DataSize>0 && payload->DataSize<=8193 && static_cast<const char*>(payload->Data)[payload->DataSize-1]=='\0'){
                     try {ItemGridPicker::AddToCart(nlohmann::json::parse(static_cast<const char*>(payload->Data)));}catch(...){ItemGridPicker::CartStatus="This item payload could not be added.";}
@@ -71,6 +84,7 @@ inline void RenderCartDock() {
         ImGui::Separator();
         std::string removePath;
         const auto entries=ItemGridPicker::SharedCart.Entries();
+        ImGui::BeginDisabled(ItemGridPicker::SharedCart.Delivery()!=0);
         if(ImGui::BeginChild("##cart-items",ImVec2(0,theme.Y(134.0f)),false)){
             if(entries.empty())ImGui::TextWrapped("Drag items from the inventory above, or right-click an item and choose Add to cart. Nothing is given until you confirm below.");
             const float spacing=ImGui::GetStyle().ItemSpacing.x,width=theme.X(118.0f);
@@ -81,6 +95,7 @@ inline void RenderCartDock() {
                 const auto iconMin=ImGui::GetCursorScreenPos();ImGui::InvisibleButton("##cart-slot",ImVec2(width,theme.Y(50.0f)));
                 const ImVec2 imageMin(iconMin.x+(width-theme.Y(42.0f))*0.5f,iconMin.y),imageMax(imageMin.x+theme.Y(42.0f),imageMin.y+theme.Y(42.0f));
                 if(icon.empty() || !ItemIconCache::Draw(icon,imageMin,imageMax,true))ItemGridPicker::DrawPlaceholder(imageMin,imageMax,theme);
+                ItemGridPicker::DrawItemBadges(entry.Row,iconMin,ImVec2(iconMin.x+width,iconMin.y+theme.Y(50.0f)),theme);
                 if(ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)){
                     ImGui::SetDragDropPayload("RS_CART_PATH",entry.Path.c_str(),entry.Path.size()+1);ImGui::TextUnformatted(name.c_str());ImGui::TextDisabled("Drop back into the inventory to remove.");ImGui::EndDragDropSource();
                 }
@@ -91,15 +106,21 @@ inline void RenderCartDock() {
             }
         }ImGui::EndChild();
         if(!removePath.empty())ItemGridPicker::RemoveFromCart(removePath);
+        ImGui::EndDisabled();
         if(SelectedPlayer.empty())ImGui::TextDisabled("Select a player first.");
-        const bool blocked=SelectedPlayer.empty()||SpawnToolRequests::IsWaiting()||ItemGridPicker::SharedCart.Entries().empty();
+        const bool blocked=SelectedPlayer.empty()||SpawnToolRequests::IsWaiting()||ItemGridPicker::SharedCart.Delivery()||ItemGridPicker::SharedCart.Entries().empty();
         const auto run=[&](const char* label,int mode){
             if(!ImGui::Button(label))return;
             auto items=ItemGridPicker::SharedCart.Payload(mode);if(items.empty())return;
-            SpawnToolRequests::TrySubmit({{"Action","GiveItems"},{"_Source","HelpyStandaloneCart"},{"Player",SelectedPlayer},{"Items",std::move(items)}});
+            const auto request=++CartSequence;
+            if(!ItemGridPicker::SharedCart.BeginDelivery(request,mode))return;
+            if(!SpawnToolRequests::TrySubmit({{"_RequestId",request},{"Action","GiveItems"},{"_Source","HelpyStandaloneCart"},{"Player",SelectedPlayer},{"Items",std::move(items)}})) {
+                ItemGridPicker::SharedCart.CancelDelivery();ItemGridPicker::CartStatus="Delivery was not submitted; cart retained.";
+            } else ItemGridPicker::CartStatus="Delivering; confirmed items will leave the cart.";
         };
-        ImGui::BeginDisabled(blocked);run("Give quantities",0);SameLineIfRoom(100);run("One each",1);SameLineIfRoom(110);run("Half stacks",2);SameLineIfRoom(110);run("Full stacks",3);ImGui::EndDisabled();
-        SameLineIfRoom(70);if(ImGui::Button("Clear cart"))ItemGridPicker::ClearSharedCart();
+        ImGui::BeginDisabled(blocked);run("Deliver",0);
+        if(theme.advancedMode){SameLineIfRoom(100);run("One each",1);SameLineIfRoom(110);run("Half stacks",2);SameLineIfRoom(110);run("Full stacks",3);}ImGui::EndDisabled();
+        SameLineIfRoom(70);ImGui::BeginDisabled(ItemGridPicker::SharedCart.Delivery()!=0);if(ImGui::Button("Clear cart"))ItemGridPicker::ClearSharedCart();ImGui::EndDisabled();
         if(!ItemGridPicker::CartStatus.empty())ImGui::TextWrapped("%s",ItemGridPicker::CartStatus.c_str());
     }ImGui::EndChild();ImGui::PopStyleColor();
 }
@@ -147,16 +168,16 @@ inline void Render(View view) {
         if(!SpawnToolRequests::TrySubmit(std::move(request)))throw std::runtime_error("Runtime unavailable or another command is pending; nothing submitted.");
         clonePending=id;cloneError.clear();cloneStatus="Queued for the game thread.";
     };
-    ImGui::TextWrapped("Runtime actions stay serialized on the game thread; browsing and filtering remain UI-side.");
+    if(ui.advancedMode)ImGui::TextWrapped("Runtime actions stay serialized on the game thread; browsing and filtering remain UI-side.");
     if(ImGui::Button("Refresh current list")){buildingConfirmed=false;actors[0].Confirmed=false;actors[1].Confirmed=false;
         const int category=CatalogCategory(view);if(category>=0){auto& window=LazyCatalog::For(category);const char* mode=(category==0&&window.Query.empty())?"Random":"Search";LazyCatalog::Request(category,mode,window.Query,true,LazyCatalog::InitialRows);}}
     SameLineIfRoom(145.0f);if(ImGui::Button("Refresh players"))SpawnToolRequests::Submit({{"Action","QuickPlayers"}});
-    ImGui::Checkbox("I understand Full Scan may load additional candidate assets",&rebuildCatalogs);
+    if(ui.advancedMode){ImGui::Checkbox("I understand Full Scan may load additional candidate assets",&rebuildCatalogs);
     ImGui::BeginDisabled(!rebuildCatalogs);
     if(ImGui::Button("Full Scan / rebuild live Helpy catalog")) {
         buildingConfirmed=false;actors[0].Confirmed=false;actors[1].Confirmed=false;rebuildCatalogs=false;SpawnToolRequests::Submit({{"Action","IndexQuickCatalog"}});
     }
-    ImGui::EndDisabled();
+    ImGui::EndDisabled();}
     auto label=std::string("Select player");
     if(result.contains("Players"))for(const auto& row:result["Players"])if(row["Path"]==player)label=row["Name"];
     if(ImGui::BeginCombo("Player##spawn",label.c_str())) {
@@ -255,7 +276,7 @@ inline void Render(View view) {
             ImGui::Text("Selected: %s",dropPicker.SelectedTitle.c_str());
             ImGui::TextDisabled("%s",item);
         }
-        if(ImGui::CollapsingHeader("Advanced item path override")) {
+        if(ui.advancedMode&&ImGui::CollapsingHeader("Advanced item path override")) {
             ImGui::InputText("Item asset path##additional-drop",item,sizeof(item));
             ImGui::TextDisabled("Use this only for a valid loaded item path that is not available in the current catalog.");
         }
@@ -325,7 +346,7 @@ inline void Render(View view) {
     if(view==View::All||view==View::Resources)renderActorSection(1,"Resources",ImGuiTreeNodeFlags_DefaultOpen);
     if(view==View::All||view==View::Items||view==View::ItemLab) {
         if((view==View::All||view==View::Items) && HelpyImGuiTheme::SectionHeader("Items",HelpyImGuiTheme::Icon::Item,ImGuiTreeNodeFlags_DefaultOpen)) {
-            if(ImGui::CollapsingHeader("Give / spawn item",ImGuiTreeNodeFlags_DefaultOpen)) {
+            if(ui.advancedMode&&ImGui::CollapsingHeader("Give / spawn item",ImGuiTreeNodeFlags_DefaultOpen)) {
                 const auto inventoryPicker=ItemGridPicker::Render("inventory",result,itemFilter,sizeof(itemFilter),selectedItem,sizeof(selectedItem),itemPickerState,resultRevision,true,true);
                 if(inventoryPicker.RequestedAction==ItemGridPicker::ContextAction::GiveOne||inventoryPicker.RequestedAction==ItemGridPicker::ContextAction::GiveStack) {
                     if(player.empty())ImGui::OpenPopup("Select a player first##item-context-error");

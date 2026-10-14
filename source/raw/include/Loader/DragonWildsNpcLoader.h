@@ -55,6 +55,8 @@ namespace DragonWilds {
         std::function<void(const std::string&,const std::string&)> PublishWorldState;
         std::function<bool(RC::Unreal::AActor*,const std::string&)> PresentEventIdentity;
         std::function<bool(RC::Unreal::UObject*,const std::string&)> OpenLore;
+        std::function<void(RC::Unreal::UObject*)> DeliverAutomaticJournals;
+        std::function<bool(RC::Unreal::UObject*,const std::string&)> UnlockJournal;
         void ObserveEventDespawn(RC::Unreal::UObject* source,RC::Unreal::UFunction* function);
         void ObserveEventDeath(RC::Unreal::UObject* source,RC::Unreal::UFunction* function);
         void ObserveClientEvent(RC::Unreal::AActor* actor,const std::string& eventKey){m_events.ObserveClientReplica(actor,eventKey);}
@@ -108,6 +110,7 @@ namespace DragonWilds {
             std::string StoreOwner;
             std::string DialogueKey;
             std::string LoreEntry;
+            std::vector<std::string> JournalEntries;
             std::string QuestKey;
             std::string RequiredFlag;
             std::string LockedDialogueKey;

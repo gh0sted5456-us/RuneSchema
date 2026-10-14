@@ -40,6 +40,8 @@ namespace DragonWilds {
         ~DragonWildsJournalModLoader();
         void SetRecipeService(DragonWildsRecipeModLoader* service) { m_recipeService = service; }
         bool OpenLoreForPlayer(RC::Unreal::UObject* controller,const std::string& reference);
+        bool UnlockForPlayer(RC::Unreal::UObject* controller,const std::string& reference);
+        void DeliverAutomaticUnlocks(RC::Unreal::UObject* controller);
 
     protected:
         void OnLoad(const std::filesystem::path& loaderPath, const RC::StringType& modName,
@@ -81,6 +83,7 @@ namespace DragonWilds {
         std::unordered_map<std::string,std::unordered_map<RC::StringType,int32_t>> m_acquisitionBaselines;
         RC::Unreal::Hook::GlobalCallbackId m_acquisitionCallbackId = RC::Unreal::Hook::ERROR_ID;
         bool m_observingAcquisition = false;
+        std::unordered_map<std::string,uint64_t> m_automaticDelivery;
 
         struct ReferenceIndex {
             bool Built = false;
@@ -106,7 +109,7 @@ namespace DragonWilds {
         void RegisterHooks();
         void RegisterAcquisitionHook();
         void ObserveAcquisition(RC::Unreal::UObject* source,RC::Unreal::UFunction* function);
-        void UnlockEntries(RC::Unreal::UObject* journalComponent);
+        bool UnlockEntries(RC::Unreal::UObject* journalComponent);
         RC::Unreal::UObject* FindJournalComponent(RC::Unreal::UObject* controller=nullptr);
         RC::Unreal::UObject* FindJournalSubsystem();
 

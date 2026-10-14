@@ -235,6 +235,12 @@
         "minimum": 0,
         "type": "number"
       },
+      "EventActive": {
+        "description": "Temporary Actor resource exists only while the named RuneSchema event runs in this world. A local Id is qualified with the mod name. It is excluded from world saves and removed when the event ends or is cancelled.",
+        "maxLength": 512,
+        "minLength": 1,
+        "type": "string"
+      },
       "Grid": {
         "additionalProperties": false,
         "properties": {
@@ -342,8 +348,14 @@
         "minimum": 1,
         "type": "integer"
       },
+      "QuestActive": {
+        "description": "Temporary Actor resource exists only while a RuneSchema quest is Given to a connected participant. A local Id is qualified with the mod name. Requires a cooked subclass of the game's ore-node or fellable-tree base with SpudGuid and bSkipSpudStore. The actor is excluded from world saves and removed when the quest is no longer active.",
+        "maxLength": 512,
+        "minLength": 1,
+        "type": "string"
+      },
       "QuestCompleted": {
-        "description": "Activate this placement after a local Id or Mod:Id quest is completed by a connected participant. Combines with TimeOfDay when both are present.",
+        "description": "Activate this placement after a local Id or Mod:Id quest is completed by a connected participant. Quest-linked BuildingProp actors are transient: RuneSchema recreates them while the quest definition is available, and they leave no saved collision shell when that quest or mod is removed. Combines with TimeOfDay when both are present.",
         "maxLength": 512,
         "minLength": 1,
         "type": "string"

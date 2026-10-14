@@ -170,7 +170,7 @@ extern "C" __declspec(dllexport) int32_t RS_PLUGIN_CALL RuneSchemaPlugin_OnUnrea
         RC::Unreal::Hook::FCallbackOptions options{};options.OwnerModName=TEXT("RuneSchema.Helpy");options.HookName=TEXT("HelpyPluginHotkeys");
         state->Tick=RC::Unreal::Hook::RegisterEngineTickPostCallback([state](auto&,auto*,float,bool){
             const bool standalone=(GetAsyncKeyState(VK_F2)&0x8000)!=0;
-            if(standalone&&!state->StandaloneKeyDown&&state->Window&&state->Window->Ready())state->Window->Toggle();state->StandaloneKeyDown=standalone;
+            if(state->Window&&state->Window->Ready())state->Window->PollHotkey(standalone);state->StandaloneKeyDown=standalone;
             const bool reload=(GetAsyncKeyState(VK_F5)&0x8000)!=0;
             if(reload&&!state->ThemeKeyDown&&state->Window)state->Window->ReloadTheme();state->ThemeKeyDown=reload;
             const bool canvas=(GetAsyncKeyState(PS::HelpyHotkeys::Active.load())&0x8000)!=0;

@@ -1007,6 +1007,7 @@ namespace DragonWilds {
             for(const auto& key:m_dialogues.at(definition.DialogueKey).Events)m_events.Require(key);
         }
         definition.LoreEntry=data.value("LoreEntry",std::string{});
+        definition.JournalEntries=data.value("JournalEntries",std::vector<std::string>{});
         if(data.contains("QuestID")) {
             definition.QuestKey=data.at("QuestID").get<std::string>();
             (void)m_quests.Find("_",definition.QuestKey);
@@ -1694,7 +1695,7 @@ namespace DragonWilds {
         if(!matched)return false;
         auto& definition=*matched;
         if(!NpcNetwork::Supported(definition.Human,definition.Resource,
-            definition.Stage==VendorPolicy::VendorStage::Merchant,!definition.DialogueKey.empty(),!definition.RequiredFlag.empty(),!definition.LoreEntry.empty(),definition.Stage==VendorPolicy::VendorStage::Visual))return false;
+            definition.Stage==VendorPolicy::VendorStage::Merchant,!definition.DialogueKey.empty(),!definition.RequiredFlag.empty(),!definition.LoreEntry.empty()||!definition.JournalEntries.empty(),definition.Stage==VendorPolicy::VendorStage::Visual))return false;
         if(PS::Network::Detect(actor).Mode!=PS::Network::Role::Client)return false;
         ActorHelper::FunctionCall authority(actor,TEXT("/Script/Engine.Actor:HasAuthority"));authority.Invoke();
         if(authority.Result<bool>() || !ResolveDefinitionClasses(definition) || !actor->IsA(definition.BaseActorClass))return false;
@@ -1913,7 +1914,7 @@ namespace DragonWilds {
                 }
             }
             if(multiplayer && !NpcNetwork::Supported(definition.Human,definition.Resource,
-                definition.Stage==VendorPolicy::VendorStage::Merchant,!definition.DialogueKey.empty(),!definition.RequiredFlag.empty(),!definition.LoreEntry.empty(),definition.Stage==VendorPolicy::VendorStage::Visual)) {
+                definition.Stage==VendorPolicy::VendorStage::Merchant,!definition.DialogueKey.empty(),!definition.RequiredFlag.empty(),!definition.LoreEntry.empty()||!definition.JournalEntries.empty(),definition.Stage==VendorPolicy::VendorStage::Visual)) {
                 WarnOnce("network-unsupported:"+key,RC::to_generic_string("NPC '"+key+"' is not supported by the multiplayer NPC runtime; skipped."));
                 definition.SpawnGate.Begin();continue;
             }
@@ -3091,7 +3092,7 @@ namespace DragonWilds {
             ApplyComponentProperties(interaction, definition.InteractionProperties, definition);
             if (definition.Stage == VendorPolicy::VendorStage::Interaction) {
                 RegisterComponent(actor, interaction, definition);
-                if(!definition.DialogueKey.empty() || !definition.LoreEntry.empty())BindMerchantInteraction(actor,interaction,nullptr,definition);
+                if(!definition.DialogueKey.empty() || !definition.LoreEntry.empty() || !definition.JournalEntries.empty())BindMerchantInteraction(actor,interaction,nullptr,definition);
                 RecordPhase(definition, "Interaction.Ready", actor);
                 m_applied.insert(key);
                 return true;
@@ -3140,7 +3141,7 @@ namespace DragonWilds {
         AActor* actor, UObject* interaction, UObject* station,
         const VendorDefinition& definition)
     {
-        if (!actor || !interaction || (!station && definition.DialogueKey.empty() && definition.LoreEntry.empty()))
+        if (!actor || !interaction || (!station && definition.DialogueKey.empty() && definition.LoreEntry.empty() && definition.JournalEntries.empty()))
         {
             throw std::runtime_error("merchant interaction binding received a null object");
         }
@@ -3466,7 +3467,6 @@ namespace DragonWilds {
         if (definitionEntry == m_definitions.end() || !definitionEntry->Enabled) return;
         const auto definitionCopy = *definitionEntry;
         const auto* definition = &definitionCopy;
-        if(!isAuthority && definition->LoreEntry.empty())return;
         if(isAuthority && definition->Time!=TimeOfDay::Requirement::Any && !NpcTimeAllows(player,*definition))return;
         const auto generation = m_worldGeneration;
 
@@ -3506,6 +3506,17 @@ namespace DragonWilds {
             };
             if (findOwned(definition->InteractionClass) != source)
                 throw std::runtime_error("event source is not the vendor's unique interaction component");
+            auto* interactingController=ActorHelper::GetObjectRef(player,TEXT("Controller"));
+            bool journalRecipient=isAuthority;
+            if(interactingController&&!isAuthority){ActorHelper::FunctionCall local(interactingController,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();journalRecipient=local.Result<bool>();}
+            if(interactingController&&journalRecipient) {
+                // Unlock failure must not stop the NPC's dialogue or shop.
+                try{if(DeliverAutomaticJournals)DeliverAutomaticJournals(interactingController);}catch(const std::exception& error){ErrorOnce("journal-auto:"+binding->DefinitionKey,PS::ToWideSafe(error.what()));}
+                for(const auto& entry:definition->JournalEntries)try{
+                    if(!UnlockJournal||!UnlockJournal(interactingController,entry))throw std::runtime_error("Registered journal entry or owning player component is not ready");
+                }catch(const std::exception& error){ErrorOnce("journal-talk:"+binding->DefinitionKey+":"+entry,PS::ToWideSafe(error.what()));}
+            }
+            if(!isAuthority&&definition->LoreEntry.empty())return;
             if(!definition->LoreEntry.empty()) {
                 auto* controller=ActorHelper::GetObjectRef(player,TEXT("Controller"));
                 if(!controller)return;
@@ -3519,6 +3530,7 @@ namespace DragonWilds {
                 OpenDialogue(actor,player,*definition);
                 return;
             }
+            if(definition->Stage!=VendorPolicy::VendorStage::Merchant)return;
             OpenNpcShop(actor,player,*definition);
         }
         catch (const std::exception& error)

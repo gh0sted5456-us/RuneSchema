@@ -35,6 +35,7 @@ namespace detail {
         std::vector<ImTextureData*> RetiredTextures;
         std::unordered_set<std::string> Failed,Queued,Pending,DiskChecked,ReadyTraced;
         std::unordered_map<std::string,int> WantedFrame,Attempts;
+        std::unordered_map<std::string,std::chrono::steady_clock::time_point> RetryAt;
         std::deque<std::string> High,Normal;
         std::uint64_t Generation=0;
         int CacheMode=-1;
@@ -49,7 +50,7 @@ namespace detail {
         if(size<16||size>16+256*256*4)return false;
         input.seekg(0);char magic[4]{};uint32_t w=0,h=0,bytes=0;
         input.read(magic,4);input.read(reinterpret_cast<char*>(&w),sizeof(w));input.read(reinterpret_cast<char*>(&h),sizeof(h));input.read(reinterpret_cast<char*>(&bytes),sizeof(bytes));
-        if(!input||std::string(magic,4)!="RSI1"||w<1||h<1||w>256||h>256||bytes!=w*h*4||size!=static_cast<std::streamoff>(16+bytes))return false;
+        if(!input||std::string(magic,4)!="RSI2"||w<1||h<1||w>256||h>256||bytes!=w*h*4||size!=static_cast<std::streamoff>(16+bytes))return false;
         pixels.resize(bytes);input.read(reinterpret_cast<char*>(pixels.data()),bytes);if(!input)return false;
         std::size_t alphaNonZero=0,rgbNonZero=0;
         for(std::size_t i=0;i+3<pixels.size();i+=4){
@@ -127,9 +128,9 @@ namespace detail {
     }
     inline void ApplyResult(CacheState& state,nlohmann::json result) {
         const auto icon=result.value("Icon",std::string{});if(icon.empty())return;const auto status=result.value("Status",std::string{});
-        if(status.starts_with("World changed")){state.Pending.clear();state.High.clear();state.Normal.clear();state.Queued.clear();state.Failed.clear();return;}
+        if(status.starts_with("World changed")){state.Pending.clear();state.High.clear();state.Normal.clear();state.Queued.clear();state.Failed.clear();state.Attempts.clear();state.RetryAt.clear();return;}
         if(status=="Ready") {
-            state.Pending.erase(icon);state.Attempts.erase(icon);const auto file=result.value("File",std::string{});
+            state.Pending.erase(icon);state.Attempts.erase(icon);state.RetryAt.erase(icon);const auto file=result.value("File",std::string{});
             HelpyIconTrace::Event("plugin-result",icon,"status='Ready' file='"+file+"' cacheHit="+(result.value("CacheHit",false)?std::string("true"):std::string("false")));
             if(file.empty()||!Install(icon,std::filesystem::path(file)))state.Failed.insert(icon);
         }
@@ -138,7 +139,7 @@ namespace detail {
             const bool blank=error.find("blank item icon")!=std::string::npos||error.find("blank-payload")!=std::string::npos;
             const int maxAttempts=blank?3:3;
             HelpyIconTrace::Event("plugin-result-error",icon,"attempt="+std::to_string(attempt)+" error='"+error+"'");
-            if(attempt>=maxAttempts)state.Failed.insert(icon);
+            if(attempt>=maxAttempts){state.Failed.insert(icon);if(result.value("Retryable",blank))state.RetryAt[icon]=std::chrono::steady_clock::now()+std::chrono::seconds(15);}
             else {
                 const int delayMs=blank?(60*attempt*attempt):(90*attempt);
                 if(blank)HelpyIconTrace::Event("defer-warm",icon,"attempt="+std::to_string(attempt)+" delayMs="+std::to_string(delayMs));
@@ -154,7 +155,7 @@ inline void Update() {
     if(state.CacheMode!=cacheMode){state.CacheMode=cacheMode;state.DiskChecked.clear();HelpyIconTrace::Event("cache-mode","",std::string("persistent=")+(cacheMode?"true":"false"));}
     const auto generation=SpawnToolRequests::CurrentGeneration();
     if(state.Generation!=generation) {
-        state.Generation=generation;state.Pending.clear();state.High.clear();state.Normal.clear();state.Queued.clear();state.Failed.clear();state.WantedFrame.clear();state.Attempts.clear();state.NextSubmit={};
+        state.Generation=generation;state.Pending.clear();state.High.clear();state.Normal.clear();state.Queued.clear();state.Failed.clear();state.WantedFrame.clear();state.Attempts.clear();state.RetryAt.clear();state.NextSubmit={};
     }
     for(auto& [icon,texture]:state.Textures)if(texture&&texture->Status==ImTextureStatus_OK){
         if(state.ReadyTraced.insert(icon).second)HelpyIconTrace::Event("texture-ready",icon);
@@ -165,7 +166,11 @@ inline void Update() {
     } else if(!state.Pending.empty()) {
         auto result=ItemIconRequests::Read();const auto icon=result.value("Icon",std::string{});if(state.Pending.contains(icon))detail::ApplyResult(state,std::move(result));
     }
-    const auto now=std::chrono::steady_clock::now();if(now<state.NextSubmit)return;
+    const auto now=std::chrono::steady_clock::now();
+    for(auto it=state.RetryAt.begin();it!=state.RetryAt.end();){
+        if(now>=it->second){state.Failed.erase(it->first);state.Attempts.erase(it->first);state.DiskChecked.erase(it->first);it=state.RetryAt.erase(it);}else ++it;
+    }
+    if(now<state.NextSubmit)return;
     const std::size_t maxActive=RemoteSubmit?detail::MaxActiveRemote:1;
     while(state.Pending.size()<maxActive) {
         auto next=detail::PopNext(state);if(next.empty())return;
@@ -229,7 +234,7 @@ inline std::filesystem::path ActiveDiskFolder(){return HostServices::CacheDirect
 inline DiskStats CurrentDiskStats(){DiskStats stats;std::error_code ec;const auto folder=ActiveDiskFolder();if(!std::filesystem::is_directory(folder,ec)||ec)return stats;
     for(std::filesystem::directory_iterator it(folder,ec),end;!ec&&it!=end;it.increment(ec)){if(!it->is_regular_file(ec)||ec){ec.clear();continue;}if(it->path().extension()!=L".rsicon")continue;const auto size=it->file_size(ec);if(ec){ec.clear();continue;}stats.Bytes+=size;++stats.Files;}return stats;}
 inline bool CleanDiskCache(){std::error_code persistentError,liveError;std::filesystem::remove_all(HostServices::CacheDirectory()/"item-icons",persistentError);std::filesystem::remove_all(HostServices::CacheDirectory()/"item-icons-live",liveError);
-    auto& state=detail::State();state.DiskChecked.clear();state.Failed.clear();HelpyRuntimePreferences::IconCacheEpoch.fetch_add(1);return !persistentError&&!liveError;}
+    auto& state=detail::State();state.DiskChecked.clear();state.Failed.clear();state.Attempts.clear();state.RetryAt.clear();HelpyRuntimePreferences::IconCacheEpoch.fetch_add(1);return !persistentError&&!liveError;}
 inline size_t Count(){return detail::State().Textures.size();}
 inline size_t QueuedCount(){auto& state=detail::State();return state.Queued.size()+state.Pending.size();}
 }

@@ -7,6 +7,18 @@ building a preview do not install a mod or change the game data.
 
 ## Open the tools
 
+### Helpy 7.8 alpha
+
+Helpy's external F2 window has a compact **Simple / Advanced** switch in its header. Simple mode keeps everyday item browsing and delivery together; Advanced exposes Item Lab, building tools, cleanup, full scans and detailed appearance controls. The preference is stored in `ui.jsonc` under `views.advancedMode`.
+
+The item inventory is above the cart. Drag an item down, or right-click **Add to cart**, then choose a player and **Deliver**. Selecting an item does not grant it. Cart editing pauses during delivery; entries leave the cart only after matching inventory-delta confirmations. Failed or unconfirmed entries stay staged for inspection, without automatic retries. Advanced mode also offers one-each and stack presets.
+
+PowerLevel badges request the native game texture and display the item's actual native value, with a text fallback. Masterwork labels use native flags/tags; detailed tooltips retain the native `MasterworkType` identifier when supplied by the item. Item names and high PowerLevel do not imply masterwork quality.
+
+A versioned, data-only `RuneSchemaHelpyKit` contract is reserved for future JSON/JSONC loadout sharing. It contains a schema version, optional name and up to 64 unique cooked item paths with bounded quantities. File import/export is not exposed in this alpha; a kit does not contain scripts, automatic delivery, target-player selection or authority overrides.
+
+### RuneSchema authoring workflow
+
 Open RuneSchema Settings, then **Authoring & Tools**. If the tools are off,
 enable **Mod authoring tools** under **General > Runtime** and restart. When
 the game is ready, choose **Activate Tools for this session**. Activation is

@@ -432,6 +432,7 @@ namespace DragonWilds {
             Hook::UnregisterCallback(m_protectedBuildingDestroyGuard);
         }
         PlayerGhost::Clear();
+        PS::ItemIconThumbnail::Reset();
         for (const auto& ref : m_rootedVisualEffectMaterials)
             if (auto* material=ref.Get()) if (material->IsRootSet()) material->ClearRootSet();
     }
@@ -2540,6 +2541,8 @@ namespace DragonWilds {
                 PS::SpawnToolRequests::Clear();
                 PS::HelpyQueryService::Clear();
                 PS::ItemIconRequests::Clear();
+                m_activeItemIcon.clear();
+                PS::ItemIconThumbnail::Reset();
                 PS::ItemIconRequests::SetAvailable(false);
                 m_visualEffectAppliedActors.clear();
                 m_nameplateAppliedActors.clear();

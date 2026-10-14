@@ -20,7 +20,23 @@ Use a stable, mod-specific key. `Type` selects the native asset class: `Lore`, `
 }
 ```
 
-`Unlock: false` is appropriate when a gameplay event should discover the entry later. `Unlock: true` requests an immediate native player unlock, but the game can reject that request. Check the log and in-game journal; placement alone is not discovery. A generic building-placement or NPC-dialogue unlock trigger is not yet verified.
+`Unlock: false` is appropriate when a gameplay event should discover the entry later. `Unlock: true` requests a native player unlock once the owning player's journal component is ready. The alpha loader retries automatic delivery on player inventory activity and RuneSchema NPC interaction, without treating placement as an unlock receipt. A rejected native unlock remains an error; RuneSchema does not force-write the player's unlocked-entry array.
+
+## Discover an entry when talking to an NPC
+
+In the 7.8 alpha, an `/npc` definition can add `JournalEntries` alongside its normal shop or dialogue:
+
+```jsonc
+"JournalEntries": [
+  "field_notes",
+  "OtherMod:craftsman",
+  "/MyMod/Journal/JOURNAL_FieldNotes.JOURNAL_FieldNotes"
+]
+```
+
+References can identify a local `/journal` or `/lore` definition, a `Mod:Id`, or a full cooked journal object path. The list accepts 1..32 unique references. RuneSchema asks the native journal component belonging to the interacting player to unlock each registered entry. An already-unlocked entry stays unlocked and is not marked unread again. Unlock failure does not stop the NPC's ordinary dialogue or shop. `NoInteract: true` suppresses this binding.
+
+Use `Unlock: false` on an entry that should be discovered only through this interaction. Its native type and `AddTo` still determine the journal section; `JournalEntries` does not move entries or replace their identities. A cooked Blueprint may instead invoke the game's native `JournalComponent.UnlockJournalEntry` with that same registered entry and owning player component. The mod owns that gameplay trigger; RuneSchema handles mounting, registration and any JSONC override. Building placement does not implicitly unlock journals.
 
 ## Register a cooked entry
 

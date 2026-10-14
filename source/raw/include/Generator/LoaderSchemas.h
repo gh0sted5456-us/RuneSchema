@@ -286,6 +286,9 @@ inline nlohmann::json LoaderSchemas() {
     npc["properties"]["DialogueID"]={{"type","string"},{"minLength",1},{"pattern","^[^:]+(:[^:]+)?$"},{"description","Native Talk interaction; local dialogue Id or Mod:Id. With VendorID, dialogue choices may open that bound store after closing the conversation."}};
     npc["properties"]["LoreID"]={{"type","string"},{"minLength",1},{"pattern","^[^:]+(:[^:]+)?$"},{"description","Preferred /lore reference: local lore Id or Mod:Id. Creates the direct Examine interaction. Do not combine with LoreEntry, DialogueID or VendorID."}};
     npc["properties"]["LoreEntry"]={{"type","string"},{"minLength",1},{"maxLength",1024},{"description","Direct Examine interaction: /lore entry ID or cooked lore asset path. Do not combine with DialogueID or VendorID."}};
+    npc["properties"]["JournalEntries"]={{"type","array"},{"minItems",1},{"maxItems",32},{"uniqueItems",true},
+        {"items",{{"type","string"},{"minLength",1},{"maxLength",1024}}},
+        {"description","Unlock these registered journal/lore entries when this NPC is interacted with. Use local entry IDs, Mod:Id, or full cooked asset paths. Works alongside dialogue and shops; native player unlock confirmation is required."}};
     npc["properties"]["QuestID"]={{"type","string"},{"minLength",1},{"pattern","^[^:]+(:[^:]+)?$"},{"description","Associated /quests definition: local quest Id or Mod:Id. This records the NPC/quest relationship; dialogue choices still control acquisition and completion."}};
     npc["properties"]["Type"]={{"enum",{"AI","Human","Resource","Prop"}},{"default","AI"},{"description","Resource and Prop use an explicit StaticMesh on a neutral NPC, without harvesting, damage, drops or building behavior."}};
     json appearance={{"type","object"},{"additionalProperties",false},{"required",DragonWilds::HumanNpc::AppearanceKeys}};
@@ -348,7 +351,7 @@ inline nlohmann::json LoaderSchemas() {
             {"LocationOffset",offset},{"Parameters",{{"type","object"},{"maxProperties",32},{"propertyNames",{{"maxLength",128},{"pattern","^User\\.[^\\r\\n\\t]*$"}}},{"additionalProperties",parameter}}}}}};
     npc["properties"]["VisualEffect"]={{"anyOf",{ghostVisual,npcNiagara}}};
     npc["properties"]["HideMesh"]={{"type","boolean"},{"description","Prop only: hide visual mesh while retaining collision."}};
-    npc["properties"]["NoInteract"]={{"type","boolean"},{"default",false},{"description","Disable interaction and suppress VendorID, DialogueID, LoreID and LoreEntry bindings without changing collision."}};
+    npc["properties"]["NoInteract"]={{"type","boolean"},{"default",false},{"description","Disable interaction and suppress VendorID, DialogueID, LoreID, LoreEntry and JournalEntries bindings without changing collision."}};
     npc["properties"]["HideName"]={{"type","boolean"},{"default",false},{"description","Hide the in-world NPC name independently of interaction. Map.ShowName controls map labels."}};
     npc["properties"]["TimeOfDay"]={{"type","string"},{"enum",{"Any","Day","Night"}},{"default","Any"},{"description","Native lifecycle gate. Day/Night NPCs exist only during that phase; authority removes and restores them at the game's dawn/dusk transition while respecting world-cell loading."}};
     json marker={{"type","object"},{"additionalProperties",false},{"properties",{{"Enabled",{{"type","boolean"},{"default",false}}},{"Icon",{{"type","string"},{"pattern","^/"},{"minLength",2},{"maxLength",1024}}}}}};

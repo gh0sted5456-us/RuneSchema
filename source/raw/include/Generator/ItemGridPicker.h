@@ -5,6 +5,8 @@
 #include "Generator/LazyCatalog.h"
 #include "Core/ConfigFiles.h"
 #include "Core/ItemCart.h"
+#include "Core/ItemBadges.h"
+#include "Generator/QuickMenuDecorations.h"
 #include "Runtime/HostServices.h"
 #include <algorithm>
 #include <cctype>
@@ -31,7 +33,7 @@ struct State {
 };
 inline ItemCart::Model SharedCart;
 inline std::string CartStatus;
-inline bool AddToCart(const json& row){const bool added=SharedCart.Add(row);if(added)CartStatus.clear();else CartStatus="Cart accepts up to 64 distinct items with canonical asset paths.";return added;}
+inline bool AddToCart(const json& row){const bool added=SharedCart.Add(row);if(added)CartStatus.clear();else CartStatus=SharedCart.Delivery()?"Wait for delivery to complete before changing the cart.":"Cart accepts up to 64 distinct items with canonical asset paths.";return added;}
 inline void RemoveFromCart(const std::string& path){SharedCart.Remove(path);}
 inline void ClearSharedCart(){SharedCart.Clear();CartStatus.clear();}
 inline void DragItem(const json& row){
@@ -107,9 +109,12 @@ inline void SaveViewPreference(bool grid){HelpyImGuiTheme::Current.itemGridView=
 inline void ResetViewPreference(){HelpyImGuiTheme::Current.itemGridView=true;HelpyImGuiTheme::Current.itemResultHeight=HelpyImGuiTheme::Theme{}.itemResultHeight;HelpyImGuiTheme::Current.itemCategory="All";HelpyImGuiTheme::SaveCurrent();}
 inline void VerboseTooltip(const json& row,const std::string& name,const std::string& path,bool allowMulti,bool fits) {
     ImGui::BeginTooltip();ImGui::TextUnformatted(name.c_str());ImGui::Separator();ImGui::TextUnformatted(path.c_str());
+    if(const auto power=ItemBadges::Power(row))ImGui::Text("Power level: %.0f",*power);
+    if(ItemBadges::Masterwork(row))ImGui::TextUnformatted("Masterwork");
     if(HelpyImGuiTheme::Current.verboseTooltips){
         const auto field=[&](const char* label,const char* key){const auto v=row.value(key,std::string{});if(!v.empty())ImGui::Text("%s: %s",label,v.c_str());};
         field("Internal","InternalName");field("Persistence ID","PersistenceID");field("Category","Category");field("Tags","Tags");field("Icon","Icon");field("Class","Class");field("Type","Type");ImGui::Text("Max stack: %d",MaxStack(row));
+        const auto type=row.find("MasterworkType");if(type!=row.end()&&!type->is_null())ImGui::Text("Native masterwork type: %s",type->dump().c_str());
     }
     if(allowMulti)ImGui::TextDisabled("Shift+click toggles this item in the selection pool.");if(!fits)ImGui::TextUnformatted("Path exceeds the field capacity; it will not be truncated.");ImGui::EndTooltip();
 }
@@ -118,7 +123,7 @@ inline void ContextMenu(const json& catalog,const json& row,const std::string& p
     const size_t selectedCount=state.SelectedPaths.size();const bool multi=selectedCount>1;
     ImGui::TextUnformatted(name.c_str());ImGui::TextDisabled("Max stack: %d",MaxStack(row));
     if(multi)ImGui::TextDisabled("Actions apply to all %zu selected items.",selectedCount);ImGui::Separator();
-    if(ImGui::MenuItem("Add to cart")) {if(persistCart)AddToCart(row);}
+    if(ImGui::MenuItem("Add to cart",nullptr,false,!SharedCart.Delivery())) {if(persistCart)AddToCart(row);}
     ImGui::Separator();
     const std::string giveStackLabel=multi?("Give full stack ("+std::to_string(selectedCount)+" selected)"):"Give full stack";
     const std::string giveOneLabel=multi?("Give One Now ("+std::to_string(selectedCount)+" selected)"):"Give One Now";
@@ -138,6 +143,20 @@ inline std::string Ellipsize(const std::string& text,float maxWidth) {
 inline void DrawPlaceholder(const ImVec2& iconMin,const ImVec2& iconMax,const HelpyImGuiTheme::Theme& theme) {
     auto* draw=ImGui::GetWindowDrawList();const auto color=ImGui::GetColorU32(theme.icon);draw->AddRect(iconMin,iconMax,color,theme.X(3.0f),0,theme.X(1.2f));
     const auto center=ImVec2((iconMin.x+iconMax.x)*0.5f,(iconMin.y+iconMax.y)*0.5f);draw->AddCircleFilled(center,theme.X(2.2f),color);
+}
+inline void DrawItemBadges(const json& row,const ImVec2& min,const ImVec2& max,const HelpyImGuiTheme::Theme& theme) {
+    auto* draw=ImGui::GetWindowDrawList();float x=min.x;const float size=theme.Y(16.0f),glyphWidth=std::max(size,ImGui::CalcTextSize("PL").x),gap=theme.X(3.0f);
+    if(const auto power=ItemBadges::Power(row)) {
+        char label[32]{};std::snprintf(label,sizeof(label),"%.0f",*power);
+        const float width=glyphWidth+gap+ImGui::CalcTextSize(label).x;
+        if(x+width<=max.x) {
+            if(!ItemIconCache::Draw(QuickDecorations::PowerLevelBadge,ImVec2(x,min.y),ImVec2(x+size,min.y+size),true))
+                draw->AddText(ImVec2(x,min.y),ImGui::GetColorU32(theme.warning),"PL");
+            x+=glyphWidth+gap;draw->AddText(ImVec2(x,min.y),ImGui::GetColorU32(theme.text),label);x+=ImGui::CalcTextSize(label).x+theme.X(7.0f);
+        }
+    }
+    if(ItemBadges::Masterwork(row)&&x+ImGui::CalcTextSize("MW").x<=max.x)
+        draw->AddText(ImVec2(x,min.y),ImGui::GetColorU32(theme.warning),"MW");
 }
 inline void DrawLoadingSpinner(const HelpyImGuiTheme::Theme& theme,const char* label="Loading items...") {
     auto* draw=ImGui::GetWindowDrawList();const auto pos=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();const float radius=theme.Y(theme.loadingSpinnerRadius),thickness=theme.X(theme.loadingSpinnerThickness);
@@ -189,7 +208,10 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
                     ImGui::EndDisabled();const float pad=theme.X(4.0f);const ImVec2 iconMin(rowPos.x+pad,rowPos.y+(itemHeight-iconSize)*0.5f),iconMax(iconMin.x+iconSize,iconMin.y+iconSize);
                     if(!iconPath.empty())HelpyIconTrace::Event("render-row",iconPath,"name='"+name+"' row="+std::to_string(rowIndex));
                     if(iconPath.empty()||!ItemIconCache::Draw(iconPath,iconMin,iconMax,true))DrawPlaceholder(iconMin,iconMax,theme);
-                    ImGui::GetWindowDrawList()->AddText(ImVec2(iconMax.x+theme.X(9.0f),rowPos.y+(itemHeight-ImGui::GetTextLineHeight())*0.5f),ImGui::GetColorU32(fits?theme.text:theme.textDisabled),name.c_str());
+                    const float badgeWidth=(ItemBadges::Power(row)||ItemBadges::Masterwork(row))?theme.X(130.0f):0.0f;
+                    const float textX=iconMax.x+theme.X(9.0f);const auto label=Ellipsize(name,std::max(theme.X(30.0f),rowPos.x+rowWidth-badgeWidth-textX));
+                    ImGui::GetWindowDrawList()->AddText(ImVec2(textX,rowPos.y+(itemHeight-ImGui::GetTextLineHeight())*0.5f),ImGui::GetColorU32(fits?theme.text:theme.textDisabled),label.c_str());
+                    if(badgeWidth>0)DrawItemBadges(row,ImVec2(rowPos.x+rowWidth-badgeWidth,rowPos.y+(itemHeight-ImGui::GetTextLineHeight())*0.5f),ImVec2(rowPos.x+rowWidth,rowPos.y+itemHeight),theme);
                     if(quickActions)ContextMenu(catalog,row,path,name,selected,selectedCapacity,state,out,allowMulti,true);if(HelpyImGuiTheme::TooltipReady(std::string("item:")+path+":"+std::to_string(rowIndex),ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)))VerboseTooltip(row,name,path,allowMulti,fits);
                     ImGui::PopID();ImGui::PopID();
                 }
@@ -213,6 +235,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
                         const float iconX=(cardMin.x+cardMax.x-iconSize)*0.5f;const ImVec2 iconMin(iconX,cardMin.y+theme.Y(10.0f)),iconMax(iconX+iconSize,iconMin.y+iconSize);
                         if(!iconPath.empty())HelpyIconTrace::Event("render-row",iconPath,"name='"+name+"' row="+std::to_string(rowIndex));if(iconPath.empty()||!ItemIconCache::Draw(iconPath,iconMin,iconMax,true))DrawPlaceholder(iconMin,iconMax,theme);
                         const auto label=Ellipsize(name,cardWidth-theme.X(14.0f));const auto textSize=ImGui::CalcTextSize(label.c_str());draw->AddText(ImVec2(cardMin.x+(cardWidth-textSize.x)*0.5f,cardMax.y-theme.Y(29.0f)),ImGui::GetColorU32(fits?theme.text:theme.textDisabled),label.c_str());
+                        DrawItemBadges(row,ImVec2(cardMin.x+theme.X(6.0f),cardMin.y+theme.Y(4.0f)),ImVec2(cardMax.x-theme.X(6.0f),cardMax.y),theme);
                         if(clicked&&fits){if(ApplySelection(state,path,selected,selectedCapacity,ImGui::GetIO().KeyShift,allowMulti)){out.Changed=true;}}
                         if(quickActions && fits)DragItem(row);
                         if(quickActions)ContextMenu(catalog,row,path,name,selected,selectedCapacity,state,out,allowMulti,true);if(HelpyImGuiTheme::TooltipReady(std::string("item:")+path+":"+std::to_string(rowIndex),ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)))VerboseTooltip(row,name,path,allowMulti,fits);

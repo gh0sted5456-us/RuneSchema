@@ -49,8 +49,8 @@ int main(int argc, char** argv) {
     require(source.find("SaveCharacters") == std::string::npos);
     const auto registered=source.find("RegisterEntry(entry,def.Owner);",apply);
     const auto placed=source.find("Place(entry, def)",registered);
-    const auto owned=source.find("TrackOwnedId(entry,persistence,def.Owner,def.Declared);",placed);
-    require(registered<placed && placed<owned);
+    const auto owned=source.find("TrackOwnedId(entry,persistence,def.Owner,def.Declared,automatic);",placed);
+    require(registered!=std::string::npos && placed!=std::string::npos && owned!=std::string::npos && registered<placed && placed<owned);
     require(source.find("found->Owner!=modName")!=std::string::npos);
     require(source.find("for (const auto* fieldName : {TEXT(\"PersistenceID\"), TEXT(\"InternalName\")})")!=std::string::npos);
     require(source.find("Journal InternalName cannot replace a cooked entry's identity")!=std::string::npos);

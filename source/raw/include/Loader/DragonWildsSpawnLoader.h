@@ -373,6 +373,7 @@ namespace DragonWilds {
         std::vector<OwnedJsonDocument> m_nameplateDocuments;
         std::unordered_map<std::string,nlohmann::json> m_nameplateDefinitions;
         RC::Unreal::UWorld* m_readyWorld = nullptr;
+        std::string m_activeItemIcon;
         RC::Unreal::UWorld* m_pendingWorld = nullptr;
         std::vector<UECustom::FBox> m_pendingCellBounds;
         RC::Unreal::UFunction* m_onLevelShownFunction = nullptr;
