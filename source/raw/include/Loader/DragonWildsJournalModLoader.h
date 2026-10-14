@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <string>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -68,6 +69,7 @@ namespace DragonWilds {
         std::unordered_set<RC::StringType> m_unlock;
         std::unordered_set<RC::Unreal::UObject*> m_createdEntries;
         std::unordered_map<std::string,std::string> m_ownedIds;
+        std::set<std::string> m_saveTransientIds;
         RC::Unreal::UClass* m_baseEntryClass = nullptr;
         RC::Unreal::UClass* m_noBiomeSubCategoryClass = nullptr;
         RC::Unreal::UClass* m_journalComponentClass = nullptr;
@@ -108,7 +110,7 @@ namespace DragonWilds {
         RC::Unreal::UObject* FindJournalComponent(RC::Unreal::UObject* controller=nullptr);
         RC::Unreal::UObject* FindJournalSubsystem();
 
-        void TrackOwnedId(RC::Unreal::UObject* entry, const RC::Unreal::FString& persistenceId,const RC::StringType& owner,bool declared=false);
+        void TrackOwnedId(RC::Unreal::UObject* entry, const RC::Unreal::FString& persistenceId,const RC::StringType& owner,bool declared,bool automatic);
         void InstallNativePersistence();
         RC::Unreal::UObject* ResolveSoftReference(const TCHAR* classPath,
             const RC::StringType& reference, ReferenceIndex& index);

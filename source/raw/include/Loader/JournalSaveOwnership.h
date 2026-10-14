@@ -134,9 +134,22 @@ inline Cleanup RemoveOwnedIds(const Json& journal,const Owners& retired) {
     StoreOwnership(result.Journal,owners);
     return result;
 }
-// Exclude currently loaded RuneSchema entries from a native save without
-// removing them from the live journal.  This gives journal/lore the same
-// runtime-visible, save-transient mode already used by recipes.
+// Only generated entries that are automatically regranted are save-transient.
+// Cooked entries and earned/conditional generated entries retain native progress.
+inline bool IsSaveTransient(bool generated,bool automatic) {return generated && automatic;}
+inline Owners SelectTransient(const Owners& registered,const std::set<std::string>& ids) {
+    Owners result;
+    for(const auto& id:ids) {
+        ValidateId(id);
+        const auto found=registered.find(id);
+        if(found==registered.end())throw std::runtime_error("Transient journal identity was not registered");
+        Quests::ValidateOwner(found->second);
+        result.emplace(*found);
+    }
+    return result;
+}
+// Exclude explicitly selected transient entries without removing live unlocks.
+// Do not pass the complete ownership map: ownership alone is not transience.
 inline Json RemoveCurrent(const Json& journal,const Owners& current) {
     std::set<std::string> ids;
     for(const auto& [id,mod]:current) {

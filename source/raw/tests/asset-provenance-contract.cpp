@@ -14,12 +14,17 @@ int main(int argc,char** argv) {
     const auto loader=Read(argv[2]);
     const auto recipes=Read(argv[3]);
     assert(provenance.find("FWeakObjectPtr")==std::string::npos);
-    assert(provenance.find("PS::WeakObject")==std::string::npos);
+    assert(provenance.find("PS::WeakObjectHandle handle")!=std::string::npos);
+    assert(provenance.find("entry.handle.Get()!=object")!=std::string::npos);
+    assert(provenance.find("created.handle.Assign(object)")!=std::string::npos);
     assert(provenance.find("FUObjectArray::IndexToObject")!=std::string::npos);
-    assert(provenance.find("slot->GetUObject()==object")!=std::string::npos);
-    const auto call="PS::AssetProvenance::Record(";
-    const auto first=loader.find(call);
-    assert(first!=std::string::npos && loader.find(call,first+1)==std::string::npos);
+    assert(provenance.find("slot->GetUObject()!=object")!=std::string::npos);
+    // Ownership is established at construction, then updated with the actual
+    // registration result. A failed clone must not acquire successful provenance.
+    assert(loader.find("PS::AssetProvenance::Record(created,pendingAsset.Properties")!=std::string::npos);
+    assert(loader.find("RC::to_string(pendingAsset.ModName),true,false,0,pendingAsset.Properties)")!=std::string::npos);
+    assert(loader.find("if (isClone) PS::AssetProvenance::Record(object,it->Properties")!=std::string::npos);
+    assert(loader.find("RC::to_string(it->ModName),createdNow,registered,result.ErrorCount,it->Properties)")!=std::string::npos);
     assert(recipes.find("soft->WeakPtr.Get()") == std::string::npos);
     assert(recipes.find("soft->WeakPtr = PS::WeakObject(recipe)") == std::string::npos);
     assert(recipes.find("soft->ObjectID = recipeID") != std::string::npos);

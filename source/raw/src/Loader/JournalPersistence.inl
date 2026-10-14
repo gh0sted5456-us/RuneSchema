@@ -15,7 +15,7 @@ struct JournalPersistence {
                 PS::Log<LogLevel::Error>(STR("Journal persistence {}: {}. Save data was not swept.\n"),PS::ToWideSafe(phase),PS::ToWideSafe(message));
         }catch(...) {}
     }
-    static Owners CurrentOwners() {
+    static Owners CurrentTransientOwners() {
         std::lock_guard lock(Mutex);Owners result;
         for(const auto& [source,entries]:Sources)for(const auto& [id,mod]:entries) {
             JournalSave::ValidateId(id);Quests::ValidateOwner(mod);
@@ -59,7 +59,7 @@ struct JournalPersistence {
             ValidateInstance(persistence);
             if(!json || !json->Object || !json->Controller)throw std::runtime_error("Native journal JSON missing");
             auto payload=ReadPayload(json->Object);
-            const auto current=CurrentOwners();
+            const auto current=CurrentTransientOwners();
             auto cleanedPayload=payload;
             if(const auto registry=PS::SaveCleanup::ReadRegistry();registry && registry->JournalsComplete) {
                 for(const auto* field:{"UnlockedEntries","UnreadEntries"}) {
@@ -94,7 +94,7 @@ struct JournalPersistence {
             written=Writer.call<bool>(persistence,json);
             if(!written)return false;
             const auto payload=ReadPayload(held.Object());
-            const auto current=CurrentOwners();
+            const auto current=CurrentTransientOwners();
             const auto transient=JournalSave::RemoveCurrent(payload,current);
             if(transient!=payload)ReplacePayload(held.Object(),payload,transient);
             const auto previous=Api->ReadArray(held.Object(),TEXT("RuneSchemaOwnership"));
@@ -107,9 +107,10 @@ struct JournalPersistence {
         }catch(...) {Report("save","Unknown adapter failure");}
         return called?written:Writer.call<bool>(persistence,json);
     }
-    static void Install(const void* source,Owners owners,UClass* type) {
-        // Snapshot provenance, not callbacks into mutable loader containers.
-        {std::lock_guard lock(Mutex);Sources[source]=std::move(owners);}
+    static void Install(const void* source,Owners transientOwners,UClass* type) {
+        // Snapshot only selected automatic generated entries, never all owned
+        // entries or callbacks into mutable loader containers.
+        {std::lock_guard lock(Mutex);Sources[source]=std::move(transientOwners);}
         if(Reader && Writer)return;
         auto api=std::make_unique<JournalJsonBridge>(type);
         for(const auto& [name,offset]:{std::pair{TEXT("UnlockedJournalEntries"),0xc8},std::pair{TEXT("UnreadJournalEntries"),0xd8}}) {

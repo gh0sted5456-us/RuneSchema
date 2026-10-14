@@ -22,8 +22,7 @@
       "SpawnFollower",
       "FollowerComponent",
       "RaiseUndead",
-      "undead_secondary",
-      "OnRep_"
+      "undead_secondary"
     ],
     "SuppressTicks": true,
     "TraceSelectedObject": true,

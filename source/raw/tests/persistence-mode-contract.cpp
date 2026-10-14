@@ -37,7 +37,7 @@ int main(int argc, char** argv) {
         "Quest persistence must default on");
     Require(journal.find("if (!m_ownedIds.empty())") != std::string::npos,
         "Journal native adapter is not installed for transient unlock filtering");
-    Require(journal.find("if (!m_nativePersistenceReady)") != std::string::npos,
+    Require(journal.find("m_createdEntries.contains(entry) && !m_nativePersistenceReady") != std::string::npos,
         "Journal temporary unlock delivery is not guarded by the save adapter");
     Require(journal.find("RegisterHooks();") != std::string::npos,
         "Journal loader lifecycle was disabled with persistence");
@@ -45,8 +45,8 @@ int main(int argc, char** argv) {
         "Journal item-acquisition unlock validation is missing");
     Require(journal.find("/Script/Dominion.InventoryComponent:GetNumItemsByData") != std::string::npos,
         "Journal acquisition does not use the native inventory count contract");
-    Require(journal.find("|| !m_nativePersistenceReady)return;") != std::string::npos,
-        "Journal acquisition is not guarded when transient filtering is unavailable");
+    Require(journal.find("!m_createdEntries.contains(object) || m_nativePersistenceReady") != std::string::npos,
+        "Journal acquisition must guard generated entries without blocking cooked entries");
     Require(recipes.find("TEXT(\"RecipesUnlocked\"), TEXT(\"RecipesUnlockedThatShouldNotPersist\")") != std::string::npos,
         "Runtime recipes must enter the native visible unlock set");
     Require(recipes.find("TEXT(\"RecipesUnlockedThatShouldNotPersist\")") != std::string::npos

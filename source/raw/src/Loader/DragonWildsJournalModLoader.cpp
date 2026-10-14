@@ -37,10 +37,12 @@
 #include "Loader/DragonWildsJournalModLoader.h"
 #include "Loader/DragonWildsRecipeModLoader.h"
 #include "Loader/JournalPlayerAccess.h"
+#include "Loader/JournalPlayerSelection.h"
 #include "Loader/JournalEntryIdentity.h"
 #include "Loader/JournalSaveOwnership.h"
 #include "Runtime/HostServices.h"
 #include "Runtime/Storefront.h"
+#include "Runtime/NetworkContext.h"
 #include "Core/JsonPatchDirective.h"
 #include "Core/SaveRegistrySnapshot.h"
 #include "Core/JournalPlacement.h"
@@ -322,6 +324,7 @@ namespace DragonWilds {
                     result.ErrorCount++;
                     continue;
                 }
+                const bool automatic=JournalUnlockCondition::Automatic(def.Body,def.Declared);
 
                 if(def.Declared) {
                     auto* id=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(entry->GetClassPrivate(),TEXT("PersistenceID")));
@@ -388,10 +391,10 @@ namespace DragonWilds {
                     const auto& persistence=id->GetPropertyValue(id->ContainerPtrToValuePtr<void>(entry));
                     const auto actualId=RC::to_string(*persistence);
                     const auto actualName=RC::to_string(*name->GetPropertyValue(name->ContainerPtrToValuePtr<void>(entry)));
-                    TrackOwnedId(entry,persistence,def.Owner,def.Declared);
+                    TrackOwnedId(entry,persistence,def.Owner,def.Declared,automatic);
                 }
 
-                if (JournalUnlockCondition::Automatic(def.Body, def.Declared))
+                if (automatic)
                 {
                     m_unlock.insert(def.Key);
                 }
@@ -1013,8 +1016,8 @@ namespace DragonWilds {
 
             UObject* entry = found->second.Get();
             if (!RegisteredJournalEntry(entry)) {++unavailable;continue;}
-            // The writer adapter only protects RuneSchema-created transient
-            // identities. Cooked assets are game-owned and must not depend on
+            // The adapter protects generated identities and removes orphaned
+            // IDs before native load. Cooked assets must not depend on
             // that adapter to use the native player-unlock path.
             if(m_createdEntries.contains(entry) && !m_nativePersistenceReady) {
                 ++unavailable;
@@ -1102,32 +1105,35 @@ namespace DragonWilds {
 
     UObject* DragonWildsJournalModLoader::FindJournalComponent(UObject* controller)
     {
+        UObject* world=controller?controller->GetWorld():nullptr;
+        bool allowUniqueWorld=false;
+        try {
+            const auto context=PS::Network::Detect(controller);
+            if(!world)world=context.World;
+            allowUniqueWorld=context.Mode==PS::Network::Role::Standalone;
+        }catch(...) {
+            // Exact controller ownership can still be used if role detection
+            // is unavailable; never infer a player from world uniqueness.
+        }
+        if(!world)return nullptr;
+        auto* pawn=controller?ActorHelper::GetObjectRef(controller,TEXT("Pawn")):nullptr;
+        auto* state=controller?ActorHelper::GetObjectRef(controller,TEXT("PlayerState")):nullptr;
         TArray<UObject*> objects;
         UECustom::UObjectGlobals::GetObjectsOfClass(m_journalComponentClass, objects, true);
-        UObject* sameWorld=nullptr;
+        JournalPlayerSelection::Selection<UObject> selection;
         for (auto* object : objects)
         {
-            if (!object || object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject | RF_ArchetypeObject)))continue;
-            if(controller) {
-                if(object->GetWorld()!=controller->GetWorld())continue;
-                bool owned=false;
-                for(auto* outer=object->GetOuterPrivate();outer;outer=outer->GetOuterPrivate())
-                    if(outer==controller){owned=true;break;}
-                if(owned)return object;
-                // Some builds attach JournalComponent beneath a player state
-                // or pawn rather than directly beneath the controller.  A
-                // unique same-world component is safe for single-player; an
-                // ambiguous multiplayer world is deliberately rejected.
-                if(sameWorld)return nullptr;
-                sameWorld=object;
-                continue;
-            }
-            return object;
+            if (!object || object->GetWorld()!=world || object->HasAnyFlags(static_cast<EObjectFlags>(
+                RF_ClassDefaultObject|RF_ArchetypeObject|RF_NeedLoad|RF_NeedPostLoad|RF_NeedInitialization|RF_BeginDestroyed|RF_FinishDestroyed)))continue;
+            bool owned=false;
+            for(auto* outer=object->GetOuterPrivate();controller && outer;outer=outer->GetOuterPrivate())
+                if(outer==controller || (pawn && outer==pawn) || (state && outer==state)){owned=true;break;}
+            selection.Observe(object,owned);
         }
-        return sameWorld;
+        return selection.Result(allowUniqueWorld);
     }
 
-    void DragonWildsJournalModLoader::TrackOwnedId(UObject* entry, const FString& persistenceId,const RC::StringType& owner,bool declared)
+    void DragonWildsJournalModLoader::TrackOwnedId(UObject* entry, const FString& persistenceId,const RC::StringType& owner,bool declared,bool automatic)
     {
         if ((!m_createdEntries.contains(entry) && !declared) || persistenceId.GetCharArray().Num() <= 1)
         {
@@ -1135,12 +1141,16 @@ namespace DragonWilds {
         }
 
         const auto id=RC::to_string(RC::StringType(*persistenceId)),mod=RC::to_string(owner);
+        JournalSave::ValidateId(id);Quests::ValidateOwner(mod);
         const auto [found,added]=m_ownedIds.emplace(id,mod);
         if(!added && found->second!=mod)throw std::runtime_error("Journal persistence ownership transfer refused");
+        if(JournalSave::IsSaveTransient(m_createdEntries.contains(entry),automatic))m_saveTransientIds.insert(id);
+        else m_saveTransientIds.erase(id);
     }
 
     void DragonWildsJournalModLoader::InstallNativePersistence()
     {
-        JournalPersistence::Install(this, JournalSave::Owners(m_ownedIds.begin(),m_ownedIds.end()), m_journalComponentClass);
+        const JournalSave::Owners owned(m_ownedIds.begin(),m_ownedIds.end());
+        JournalPersistence::Install(this,JournalSave::SelectTransient(owned,m_saveTransientIds),m_journalComponentClass);
     }
 }
