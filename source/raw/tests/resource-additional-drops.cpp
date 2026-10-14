@@ -43,7 +43,7 @@ int main(int argc,char** argv) {
     Require(drops.find("materialize every entry before mutating the live")!=std::string::npos,
         "preflight-before-mutation contract was removed");
 
-    Require(panel.find("Override additional drops (AI / resources)")!=std::string::npos,
+    Require(panel.find("Append additional drops (AI / resources)")!=std::string::npos,
         "Settings still presents AdditionalDrops as AI-only");
 
     std::cout<<"PASS: resource AdditionalDrops is accepted, routed through native ItemsToDrop, and exposed in Settings.\n";

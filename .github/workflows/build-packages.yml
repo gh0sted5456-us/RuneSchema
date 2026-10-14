@@ -37,7 +37,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "${{ github.ref_name }}"
-          $tagMatch = [regex]::Match($tag, '^v?(\d+\.\d+\.\d+\.\d+[em])$')
+          $tagMatch = [regex]::Match($tag, '^v?(\d+\.\d+\.\d+\.\d+(?:[em]|-alpha(?:\.\d+)?))$')
           if (-not $tagMatch.Success) {
             throw "Unsupported RuneSchema release tag: $tag"
           }
@@ -49,7 +49,11 @@ jobs:
           }
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --title "RuneSchema $tag" --generate-notes
+            if ($releaseVersion -match '-alpha(?:\.\d+)?$') {
+              gh release create $tag --title "RuneSchema $tag" --generate-notes --prerelease --latest=false
+            } else {
+              gh release create $tag --title "RuneSchema $tag" --generate-notes
+            }
           }
           $package = Join-Path dist "RuneSchema-$releaseVersion.zip"
           if (-not (Test-Path -LiteralPath $package -PathType Leaf)) {

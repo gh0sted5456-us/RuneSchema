@@ -21,6 +21,10 @@ using namespace DragonWilds::SpawnRuntime;
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <deque>
+#include <map>
+#include <set>
+#include <unordered_map>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -42,6 +46,7 @@ using namespace DragonWilds::SpawnRuntime;
 #include "Unreal/Engine/UDataTable.hpp"
 #include "Unreal/Transform.hpp"
 #include "Unreal/UFunctionStructs.hpp"
+#include "Unreal/UObjectArray.hpp"
 #include "Unreal/UObject.hpp"
 #include "Unreal/World.hpp"
 #include "Unreal/UAssetRegistry.hpp"
@@ -67,6 +72,8 @@ using namespace DragonWilds::SpawnRuntime;
 #include "Generator/QuickMenuCatalogRules.h"
 #include "Generator/SpawnAuthoring.h"
 #include "Generator/AssetSearch.h"
+#include "Generator/HelpyIconTrace.h"
+#include "Generator/HelpyQueryService.h"
 #include "Generator/ItemIconThumbnail.h"
 #include "Loader/SpawnAuthoringFields.h"
 #include "Loader/SpawnPlacementDraft.h"
@@ -2531,8 +2538,9 @@ namespace DragonWilds {
                 m_toolActors.clear();
                 m_toolPlacements=nlohmann::json::array();
                 PS::SpawnToolRequests::Clear();
+                PS::HelpyQueryService::Clear();
                 PS::ItemIconRequests::Clear();
-                PS::ItemIconRequests::Available=false;
+                PS::ItemIconRequests::SetAvailable(false);
                 m_visualEffectAppliedActors.clear();
                 m_nameplateAppliedActors.clear();
                 m_activeNameplateStates.clear();
@@ -2558,8 +2566,8 @@ namespace DragonWilds {
         m_spawnTickCallbackId = Hook::RegisterEngineTickPostCallback(
             [this](Hook::TCallbackIterationData<void>&, UEngine*, float deltaSeconds, bool) {
                 PlayerGhost::Flush();
-                PumpItemIcons();
                 PumpSpawnTools();
+                PumpItemIcons();
                 ReconcileManagedActorScales(deltaSeconds);
                 ReconcileTimedBuildingProps(deltaSeconds);
                 RetryPendingAINames(deltaSeconds);

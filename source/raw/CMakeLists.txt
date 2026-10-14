@@ -2,6 +2,23 @@ cmake_minimum_required(VERSION 3.22)
 
 project(RuneSchema LANGUAGES CXX)
 
+# Reject leftover source files from the postponed RSDK Workspace/Inspector branch.
+file(GLOB_RECURSE RUNESCHEMA_DEFERRED_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.inl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h")
+foreach(RSDK_FILE IN LISTS RUNESCHEMA_DEFERRED_FILES)
+    if(RSDK_FILE MATCHES "(RSDKWorkspace|LiveProbe|ImportExplorer|WorkspaceGraph|GraphCanvasInteraction|PatchPlanModel)")
+        message(FATAL_ERROR "Deferred RSDK source contaminates HELPY build: ${RSDK_FILE}. Extract into a fresh directory.")
+    endif()
+    file(STRINGS "${RSDK_FILE}" RSDK_LEGACY_SYMBOLS
+        REGEX "SearchLoadedAuthoringTargets|ResolveComponentTargetFacts|RSDKWorkspace|LiveProbe|ImportExplorer|WorkspaceGraph|inspectorHideUnresolved"
+        LIMIT_COUNT 1)
+    if(RSDK_LEGACY_SYMBOLS)
+        message(FATAL_ERROR "Deferred RSDK reference contaminates HELPY build: ${RSDK_FILE}.")
+    endif()
+endforeach()
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(RUNESCHEMA_ENABLE_IPO "Enable interprocedural optimization for RuneSchema release targets" ON)
@@ -86,6 +103,7 @@ file(GLOB_RECURSE SRC_FILES
 )
 list(FILTER SRC_FILES EXCLUDE REGEX "/src/Core/")
 list(FILTER SRC_FILES EXCLUDE REGEX "/src/Generator/InGameQuickMenu\\.cpp$")
+list(FILTER SRC_FILES EXCLUDE REGEX "/src/Generator/HelpyStandaloneWindow\\.cpp$")
 
 add_library(${TARGET} SHARED
     ${SRC_FILES}
@@ -98,6 +116,8 @@ add_library(${TARGET} SHARED
 add_library(RuneSchemaHelpyPlugin SHARED
     plugins/helpy/HelpyPlugin.cpp
     src/Generator/InGameQuickMenu.cpp
+    src/Generator/HelpyStandaloneWindow.cpp
+    src/Generator/ToolRequestState.cpp
     src/Runtime/HostServices.cpp
     src/SDK/Classes/Custom/UObjectGlobals.cpp
     src/SDK/Classes/KismetSystemLibrary.cpp
@@ -120,7 +140,7 @@ target_compile_definitions(RuneSchemaHelpyPlugin PRIVATE WIN32_LEAN_AND_MEAN NOM
 target_include_directories(RuneSchemaHelpyPlugin PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_definitions(RuneSchemaHelpyPlugin PRIVATE _CRT_SECURE_NO_WARNINGS RUNESCHEMA_PLUGIN_CLIENT=1)
 target_link_libraries(RuneSchemaHelpyPlugin PRIVATE
-    RuneSchemaJsonCore UE4SS nlohmann_json::nlohmann_json safetyhook glaze::glaze efsw Zydis Zycore)
+    RuneSchemaJsonCore UE4SS nlohmann_json::nlohmann_json safetyhook glaze::glaze efsw Zydis Zycore d3d11 dxgi dwmapi shell32)
 
 target_include_directories(${TARGET} PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"

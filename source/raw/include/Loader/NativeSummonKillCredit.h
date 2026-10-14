@@ -1,5 +1,6 @@
 #pragma once
 #include "Loader/SummonAttribution.h"
+#include "Loader/ConfirmedKillNotifications.h"
 #include "Unreal/Hooks.hpp"
 #include <vector>
 
@@ -30,6 +31,10 @@ class NativeKillCredit {
     static bool IsLive(ObjectIdentity id) {
         auto* slot=RC::Unreal::FUObjectArray::IndexToObject(id.Index);
         return slot && slot->GetSerialNumber()==id.Serial && Live(slot->GetUObject());
+    }
+    static RC::Unreal::UObject* Resolve(ObjectIdentity id) {
+        if(!IsLive(id))return nullptr;
+        return RC::Unreal::FUObjectArray::IndexToObject(id.Index)->GetUObject();
     }
 public:
     void Before(RC::Unreal::Hook::TCallbackIterationData<void>& dispatch,RC::Unreal::UObject* source,
@@ -95,7 +100,14 @@ public:
             // later real dispatch rather than recording an award that never ran.
             if(frame.Reserved && dispatch.OriginalFunctionCallPrevented())
                 m_dispatches.Cancel(frame.Epoch,frame.World,frame.Victim,frame.Player);
-            m_frames.erase(m_frames.begin()+index-1);return;
+            // Erase before notifying: listener code can trigger nested ProcessEvent.
+            m_frames.erase(m_frames.begin()+index-1);
+            if(frame.Reserved && !dispatch.OriginalFunctionCallPrevented()) {
+                auto* player=Resolve(frame.Player);auto* victim=Resolve(frame.Victim);
+                if(player && victim && Identity(player->GetWorld())==frame.World)
+                    NotifyConfirmedKill(player,victim);
+            }
+            return;
         }
     }
 };

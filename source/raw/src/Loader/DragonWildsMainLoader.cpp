@@ -66,6 +66,7 @@
 #include "Loader/DragonWildsRegistryLoader.h"
 #include "Loader/DragonWildsMainLoader.h"
 #include "Loader/ModLoadOrder.h"
+#include "Loader/NativeAssetPrefetch.h"
 #include "Misc/FileWatchWrapper.h"
 
 using namespace RC;
@@ -1519,6 +1520,16 @@ namespace DragonWilds {
 
     void DragonWildsMainLoader::LoadMods(EEngineLifecyclePhase engineLifecyclePhase)
     {
+        if(engineLifecyclePhase==EEngineLifecyclePhase::GameInstanceInit){
+            PS::AssetPreload::Plan<RC::StringType> plan;
+            for(auto& loader:m_loaders){
+                const auto& kind=loader->GetModFolderType();
+                if(!PS::PSConfig::Get()->IsLoaderEnabled(kind))continue;
+                if(kind=="recipes")for(const auto& path:static_cast<DragonWildsRecipeModLoader*>(loader.get())->CookedReferencePaths())plan.Add(path);
+                if(kind=="assets")for(const auto& path:static_cast<DragonWildsAssetModLoader*>(loader.get())->CookedReferencePaths())plan.Add(path);
+            }
+            try {PrefetchCookedAssets(plan);}catch(const std::exception& error){PS::Log<LogLevel::Normal>(STR("[PERF][ASSETS] Native prefetch unavailable: {}. Required-asset loading continues normally.\n"),PS::ToWideSafe(error.what()));}
+        }
         if (engineLifecyclePhase == EEngineLifecyclePhase::GameInstanceInit
             && PS::PSConfig::Get()->IsLoaderEnabled("recipes")) {
             for (auto& loader : m_loaders) if (loader->GetModFolderType() == "recipes")

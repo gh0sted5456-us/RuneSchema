@@ -1,10 +1,10 @@
 {
   "SchemaVersion": 1,
   "Id": "RuneSchema.Helpy",
-  "Version": "0.7.7.5m",
-  "BuiltForRuneSchema": "0.7.7.5m",
+  "Version": "0.7.8.0-alpha",
+  "BuiltForRuneSchema": "0.7.8.0-alpha",
   "EntryPoint": "RuneSchema.Helpy.dll",
-  "ConsoleMessage": "Helpy is ready with its embedded instant-open catalog. Use the configured hotkey to open it.",
+  "ConsoleMessage": "Standalone HELPY is ready. F2 opens HELPY; F7 controls the optional legacy Canvas view.",
   "Capabilities": [
     "helpy.navigation",
     "helpy.item-lab",

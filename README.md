@@ -2,6 +2,16 @@
 
 Runtime schema and data-editing framework for **RuneScape: Dragonwilds**.
 
+This branch develops **RuneSchema 7.8 alpha** (`0.7.8.0-alpha`). Stable and
+experimental 0.7.7 releases remain on their existing branches.
+
+Helpy opens in its own window with F2; F7 retains the optional Canvas view.
+The item browser is above a staging cart: drag an item down, or right-click
+and choose **Add to cart**, then confirm a grant to the selected player.
+Drag a cart item back into the browser or use its context menu to remove it.
+Registry, networking, and Helpy remain included plugins in one package,
+with their own manifests and lifecycle.
+
 > **Documentation Website:** https://gh0sted5456-us.github.io/RuneSchema/
 
 [Open the RuneSchema documentation →](https://gh0sted5456-us.github.io/RuneSchema/)

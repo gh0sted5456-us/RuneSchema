@@ -8,6 +8,8 @@ namespace RC::Unreal { class UFunction; }
 #include "Loader/DragonWildsModLoaderBase.h"
 #include "nlohmann/json.hpp"
 #include "Loader/NpcCatalog.h"
+#include "Core/DefinitionNameIndex.h"
+#include "SDK/WeakObjectHandle.h"
 
 namespace RC::Unreal {
     class UClass;
@@ -45,6 +47,7 @@ namespace DragonWilds {
         ~DragonWildsRecipeModLoader();
         // Allocate identities before assets link recipe-unlocker references.
         void PrepareReferences();
+        std::vector<RC::StringType> CookedReferencePaths() const;
         // Resolve an authored local key, globally unique key, ModID:Key, or
         // cooked object path after PrepareReferences has allocated objects.
         RC::Unreal::UObject* ResolveReference(const RC::StringType& requestingMod,
@@ -73,6 +76,10 @@ namespace DragonWilds {
         struct PendingPatch { RC::StringType ModName; std::string Reference; nlohmann::json Changes; };
         std::vector<PendingPatch> m_pendingPatches;
         std::unordered_map<RC::StringType, RC::Unreal::UObject*> m_recipes;
+        PS::DefinitionNameIndex<RC::StringType> m_recipeNameCounts;
+        std::unordered_map<RC::Unreal::FName,PS::WeakObjectHandle> m_nativeRecipesByName;
+        bool m_nativeRecipeIndexReady=false;
+        void RefreshNativeRecipeIndex();
         // Packages backing authored RecipeData objects. Timed processing
         // queues retain recipe references beyond the immediate interaction,
         // so these recipes must never live in /Engine/Transient.

@@ -8,6 +8,78 @@ namespace {
             throw std::runtime_error(std::string(kind)+" catalog is invalid; rebuild it");
         return value["Entries"];
     }
+    std::string ToolWindowFold(std::string value) {
+        std::ranges::transform(value,value.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});return value;
+    }
+    bool ToolWindowMatches(const nlohmann::json& row,const std::string& query) {
+        if(query.empty())return true;const auto q=ToolWindowFold(query);
+        return ToolWindowFold(row.value("Key",std::string{})+" "+row.value("Name",std::string{})+" "+row.value("Class",std::string{})+" "+row.value("Type",std::string{})+" "+row.value("ModId",std::string{})+" "+row.value("ResourceFamily",std::string{})).find(q)!=std::string::npos;
+    }
+    std::uint64_t ToolStableId(const std::string& value) {
+        std::uint64_t hash=1469598103934665603ull;for(const unsigned char c:value){hash^=c;hash*=1099511628211ull;}return hash;
+    }
+    nlohmann::json ToolDefinitionWindow(const nlohmann::json& authored,int category,const std::string& query,std::size_t offset,std::size_t limit,
+        const std::string& fieldSet="BasicRow",std::size_t scanBudget=1536,std::uint64_t timeBudgetMicros=800) {
+        if(category!=1&&category!=2)throw std::runtime_error("Definition catalog category must be AI/NPC or Resources.");
+        if(limit<1||limit>128)throw std::runtime_error("Catalog window limit must be 1..128 rows.");
+        if(query.size()>256)throw std::runtime_error("Catalog search text exceeds 256 characters.");
+        if(fieldSet!="BasicRow"&&fieldSet!="Detail")throw std::runtime_error("Unsupported definition catalog field projection.");
+        scanBudget=std::clamp<std::size_t>(scanBudget,128,8192);timeBudgetMicros=std::clamp<std::uint64_t>(timeBudgetMicros,100,5000);
+        nlohmann::json rows=nlohmann::json::array();std::set<std::string> authoredIdentities;
+        for(const auto& row:authored)if(row.is_object())authoredIdentities.insert(row.value("Type",std::string{})+row.value("Class",std::string{}));
+        std::size_t raw=0,scanned=0;const auto begin=std::chrono::steady_clock::now();
+        const auto exhausted=[&]{return scanned>=scanBudget||(scanned>0&&std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-begin).count()>=static_cast<long long>(timeBudgetMicros));};
+        for(const auto& original:authored) {
+            const auto current=raw++;if(current<offset)continue;if(exhausted())return {{"Rows",std::move(rows)},{"NextOffset",current},{"HasMore",true},{"Scanned",scanned},{"BudgetExhausted",true}};++scanned;
+            if(!original.is_object())continue;auto row=original;const auto type=row.value("Type",std::string{});
+            const bool allowed=category==1?(type=="AI"||type=="NPC"):type=="Resource";if(!allowed||!ToolWindowMatches(row,query))continue;
+            const auto identity=row.value("Class",row.value("Key",std::string{}));row["StableId"]=ToolStableId(type+":"+identity);
+            rows.push_back(std::move(row));if(rows.size()>=limit)return {{"Rows",std::move(rows)},{"NextOffset",raw},{"HasMore",true},{"Scanned",scanned}};
+        }
+        auto* classType=ActorHelper::ResolveClass(TEXT("/Script/CoreUObject.Class"));
+        auto* actorType=ActorHelper::ResolveClass(TEXT("/Script/Engine.Actor"));
+        auto* aiType=ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionAICharacter"));
+        auto* npcType=ActorHelper::ResolveClass(TEXT("/Script/Dominion.InteractableNPC"));
+        if(!classType||!actorType||!aiType)throw std::runtime_error("The runtime actor classes are not ready");
+        const auto objectCount=FUObjectArray::GetNumElements();
+        if(objectCount<0||objectCount>4'000'000)throw std::runtime_error("Global object roster exceeds the safe catalog bound");
+        const std::size_t authoredCount=raw,total=static_cast<std::size_t>(objectCount);
+        std::size_t objectOffset=offset>authoredCount?std::min(offset-authoredCount,total):0;
+        for(std::size_t i=objectOffset;i<total;++i) {
+            if(exhausted())return {{"Rows",std::move(rows)},{"NextOffset",authoredCount+i},{"HasMore",true},{"Scanned",scanned},{"BudgetExhausted",true}};++scanned;
+            raw=authoredCount+i+1;auto* slot=FUObjectArray::IndexToObject(static_cast<int32>(i));auto* object=slot?slot->GetUObject():nullptr;
+            if(!object||!object->IsA(classType)||object->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed|RF_NeedLoad|RF_NeedPostLoad)))continue;
+            auto* type=static_cast<UClass*>(object);const bool npc=npcType&&type->IsChildOf(npcType),ai=!npc&&type->IsChildOf(aiType);
+            bool resource=false;if(category==2)resource=!npc&&!ai&&ToolResourceClass(type,actorType,aiType);
+            if((category==1&&!npc&&!ai)||(category==2&&!resource))continue;
+            const auto path=RC::to_string(type->GetPathName()),kind=std::string(npc?"NPC":ai?"AI":"Resource");
+            if(path.empty()||authoredIdentities.contains(kind+path))continue;
+            nlohmann::json light={{"Key",std::string(npc?"@loaded-npc:":ai?"@loaded-ai:":"@loaded-resource:")+path},{"Name",ToolReadableName(path)},{"Class",path},{"Type",kind},{"StableId",ToolStableId(kind+":"+path)}};
+            if(!ToolWindowMatches(light,query))continue;
+            if(fieldSet=="Detail") {
+                auto detailed=ToolDefinitionRow(type,light["Key"].get<std::string>(),ai,npc?"NPC":"");detailed["StableId"]=light["StableId"];
+                rows.push_back(std::move(detailed));
+            } else {
+                const bool concrete=!ActorHelper::IsAbstract(type);light["Available"]=concrete;light["Loaded"]=true;light["Reason"]=concrete?"":"Abstract base definition; not spawnable";
+                if(npc) {light["TemporaryAllowed"]=false;light["PermanentAllowed"]=false;light["TemporaryReason"]="Vanilla NPC definition: browse-only.";light["PermanentReason"]="Vanilla narrative NPC copying is not enabled.";}
+                else if(!ai) {
+                    std::string family;std::size_t depth=0;for(UStruct* base=type;base&&depth++<64;base=base->GetSuperStruct()) {const auto name=PS::QuickUI::Lower(RC::to_string(base->GetName()));if(name.find("fellabletree")!=name.npos||name.find("felledtree")!=name.npos||name.find("splittablelog")!=name.npos||name.find("sapling")!=name.npos){family="Tree";break;}if(PS::QuickCatalogRules::MiningName(name))family="Mineral";}light["ResourceFamily"]=family;
+                }
+                rows.push_back(std::move(light));
+            }
+            if(rows.size()>=limit)return {{"Rows",std::move(rows)},{"NextOffset",raw},{"HasMore",i+1<total},{"Scanned",scanned}};
+        }
+        return {{"Rows",std::move(rows)},{"NextOffset",authoredCount+total},{"HasMore",false},{"Scanned",scanned}};
+    }
+
+    std::size_t ToolCursorOffset(const std::string& cursor,const char prefix,std::size_t fallback=0) {
+        if(cursor.size()<3||cursor[0]!=prefix||cursor[1]!=':')return fallback;
+        try{return static_cast<std::size_t>(std::stoull(cursor.substr(2)));}catch(...){return fallback;}
+    }
+    bool ToolRandomCursor(const std::string& cursor,std::uint64_t& start,std::size_t& offset) {
+        if(cursor.size()<5||cursor[0]!='R'||cursor[1]!=':')return false;const auto split=cursor.find(':',2);if(split==std::string::npos)return false;
+        try{start=std::stoull(cursor.substr(2,split-2));offset=static_cast<std::size_t>(std::stoull(cursor.substr(split+1)));return true;}catch(...){return false;}
+    }
     void ExportCloneDraft(const nlohmann::json& draft) {
         if(!draft.is_object() || draft.size()!=1)throw std::runtime_error("Clone draft must contain exactly one asset entry");
         const auto& [path,fields]=*draft.items().begin();
@@ -214,9 +286,75 @@ std::pair<bool,std::string> DragonWildsSpawnLoader::VerifyToolBuildingCandidate(
 }
 
 void DragonWildsSpawnLoader::PumpSpawnTools() {
-    PS::SpawnToolRequests::Available=true;
-    if(auto query=PS::SpawnToolRequests::TakeSearchHint())g_quickCatalogIndex.Prioritize(*query);
-    g_quickCatalogIndex.Tick(); // Does not own or block the Spawn command slot.
+    const bool becameAvailable=!PS::SpawnToolRequests::Available.exchange(true);
+    if(becameAvailable&&PS::SpawnToolRequests::PushUpdate){static uint64_t readinessRevision=1;PS::SpawnToolRequests::PushUpdate("readiness",{{"Status","Spawn tools ready."}},++readinessRevision);}
+    if(g_quickCatalogIndex.active) {
+        if(auto query=PS::SpawnToolRequests::TakeSearchHint())g_quickCatalogIndex.Prioritize(*query);
+        g_quickCatalogIndex.Tick();
+    }
+    const auto runCatalogWindow=[&](const nlohmann::json& queryRequest)->nlohmann::json {
+        const int category=queryRequest.value("Category",-1);const auto mode=queryRequest.value("Mode",std::string("Search"));
+        const auto query=queryRequest.value("Query",std::string{}),cursor=queryRequest.value("Cursor",std::string{}),fieldSet=queryRequest.value("FieldSet",std::string("BasicRow"));
+        const int requestedLimit=queryRequest.value("Limit",24);const std::size_t limit=static_cast<std::size_t>(std::clamp(requestedLimit,1,128));
+        const bool reset=queryRequest.value("Reset",false);const auto generation=PS::SpawnToolRequests::Generation.load();
+        static std::deque<std::pair<std::string,nlohmann::json>> pageCache;
+        const auto cacheKey=std::to_string(generation)+"|"+std::to_string(category)+"|"+mode+"|"+fieldSet+"|"+query+"|"+cursor+"|"+std::to_string(limit)+"|"+std::to_string(queryRequest.value("Seed",uint64_t{}));
+        nlohmann::json page;bool cacheHit=false;
+        for(const auto& [key,value]:pageCache)if(key==cacheKey){page=value;cacheHit=true;break;}
+        if(!cacheHit) {
+            if(category==0) {
+                if(mode=="Random") {
+                    std::uint64_t start=queryRequest.value("Seed",uint64_t{});std::size_t offset=0;ToolRandomCursor(cursor,start,offset);
+                    page=PS::AssetSearch::ItemWindow({},offset,limit,start,true,fieldSet,2048,1000);
+                    const auto actualStart=page.value("Start",std::size_t{}),next=page.value("NextOffset",std::size_t{});
+                    page["NextCursor"]="R:"+std::to_string(actualStart)+":"+std::to_string(next);
+                } else if(mode=="Search") {
+                    const auto offset=ToolCursorOffset(cursor,'S');page=PS::AssetSearch::ItemWindow(query,offset,limit,0,false,fieldSet,4096,1800);
+                    page["NextCursor"]="S:"+std::to_string(page.value("NextOffset",std::size_t{}));
+                } else throw std::runtime_error("Unknown item catalog window mode");
+            } else if(category==1||category==2) {
+                if(mode!="Search")throw std::runtime_error("AI/resource catalog windows support Search mode only");
+                static std::size_t cachedEvents=static_cast<std::size_t>(-1),cachedSpawns=static_cast<std::size_t>(-1);
+                static nlohmann::json authoredBase=nlohmann::json::array();
+                if(cachedEvents!=m_eventTemplates.size()||cachedSpawns!=m_spawns.size()) {
+                    authoredBase=nlohmann::json::array();cachedEvents=m_eventTemplates.size();cachedSpawns=m_spawns.size();
+                    for(const auto& [key,definition]:m_eventTemplates)if(!key.starts_with("__RuneSchemaTools:"))authoredBase.push_back({{"Key",key},{"Name",definition.Name},{"Class",definition.Class},{"Type","AI"},{"RuneSchemaManaged",true},{"StableId",ToolStableId("AI:"+definition.Class)}});
+                    for(const auto& spawn:m_spawns)if(spawn.Type!=ESpawnEntryType::RemoveActor){const auto type=std::string(spawn.Type==ESpawnEntryType::Actor?"Resource":"AI"),path=RC::to_string(spawn.Type==ESpawnEntryType::Actor?spawn.ClassPath:spawn.AIClassPath);authoredBase.push_back({{"Key",RC::to_string(spawn.ModName)+":"+RC::to_string(spawn.EntryId)},{"Name",spawn.DisplayName},{"Class",path},{"Type",type},{"RuneSchemaManaged",true},{"StableId",ToolStableId(type+":"+path)}});}
+                    pageCache.clear();
+                }
+                auto authored=authoredBase;
+                if(auto* npcs=DragonWildsNpcLoader::HelpyInstance){const auto roster=npcs->HelpyDefinitions();for(auto row:roster){const auto type=row.value("Type",std::string("NPC")),path=row.value("Class",row.value("Key",std::string{}));row["StableId"]=ToolStableId(type+":"+path);authored.push_back(std::move(row));}}
+                const auto offset=ToolCursorOffset(cursor,'S');page=ToolDefinitionWindow(authored,category,query,offset,limit,fieldSet,4096,1800);
+                page["NextCursor"]="S:"+std::to_string(page.value("NextOffset",std::size_t{}));
+            } else throw std::runtime_error("Unknown catalog window category");
+            pageCache.push_back({cacheKey,page});while(pageCache.size()>32)pageCache.pop_front();
+        }
+        nlohmann::json rows=page.value("Rows",nlohmann::json::array()),dictionary=nlohmann::json::object();
+        if(category==0&&rows.is_array()) {
+            static uint64_t iconDictionaryGeneration=0;static std::map<uint64_t,std::string> announcedIcons;
+            if(iconDictionaryGeneration!=generation){iconDictionaryGeneration=generation;announcedIcons.clear();}
+            dictionary["Icons"]=nlohmann::json::array();
+            for(auto& row:rows)if(row.is_object()) {
+                const auto icon=row.value("Icon",std::string{});if(icon.empty())continue;const auto id=ToolStableId("Icon:"+icon);
+                const auto prior=announcedIcons.find(id);if(prior!=announcedIcons.end()&&prior->second!=icon)continue;
+                row["IconId"]=id;if(prior==announcedIcons.end()){announcedIcons[id]=icon;dictionary["Icons"].push_back({{"Id",id},{"Value",icon}});}row.erase("Icon");
+            }
+            if(dictionary["Icons"].empty())dictionary.erase("Icons");
+        }
+        nlohmann::json window={{"RequestId",queryRequest.value("RequestId",uint64_t{})},{"CancelGeneration",queryRequest.value("CancelGeneration",uint64_t{})},
+            {"RuntimeGeneration",generation},{"Category",category},{"Mode",mode},{"Query",query},{"Reset",reset},{"FieldSet",fieldSet},
+            {"Rows",std::move(rows)},{"NextCursor",page.value("NextCursor",std::string{})},{"HasMore",page.value("HasMore",false)},
+            {"Scanned",page.value("Scanned",std::size_t{})},{"BudgetExhausted",page.value("BudgetExhausted",false)},{"CacheHit",cacheHit}};
+        if(!dictionary.empty())window["Dictionary"]=std::move(dictionary);
+        return {{"CatalogWindow",std::move(window)},{"Status","Loaded a bounded Helpy query window on demand."}};
+    };
+    if(!PS::SpawnToolRequests::Waiting.load()&&PS::HelpyQueryService::HasPending()) {
+        if(m_readyWorld&&IsWorldStillLoaded(m_readyWorld))if(auto queryRequest=PS::HelpyQueryService::Take()) {
+            try {if(!PS::HelpyQueryService::IsStale(*queryRequest))PS::HelpyQueryService::Publish(runCatalogWindow(*queryRequest));}
+            catch(const std::exception& error) {auto failure=nlohmann::json{{"RequestId",queryRequest->value("RequestId",uint64_t{})},{"CancelGeneration",queryRequest->value("CancelGeneration",uint64_t{})},{"RuntimeGeneration",PS::SpawnToolRequests::Generation.load()},{"Category",queryRequest->value("Category",-1)},{"Mode",queryRequest->value("Mode",std::string("Search"))},{"Query",queryRequest->value("Query",std::string{})},{"Reset",queryRequest->value("Reset",false)},{"Rows",nlohmann::json::array()},{"HasMore",false},{"Error",error.what()}};PS::HelpyQueryService::Publish({{"CatalogWindow",std::move(failure)},{"Status",std::string("Helpy query failed: ")+error.what()}});}
+            catch(...) {PS::HelpyQueryService::Publish({{"Status","Helpy query failed with an unknown error."}});}
+        }
+    }
     auto request=PS::SpawnToolRequests::Take();if(!request)return;
     const bool f2Spawn=request->value("_Source",std::string{}).starts_with("Helpy")&&request->value("Action",std::string{})=="Spawn";
     const auto requestId=request->value("_RequestId",uint64_t{});
@@ -278,6 +416,7 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
             }
             PS::SpawnToolRequests::Publish(std::move(result));return;
         }
+        if(action=="CatalogWindow") {auto result=runCatalogWindow(*request);PS::SpawnToolRequests::Publish(std::move(result));return;}
         auto* controllerClass=ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionPlayerControllerBase"));
         if(!controllerClass)throw std::runtime_error("Load a world first");
         TArray<UObject*> controllers;UECustom::UObjectGlobals::GetObjectsOfClass(controllerClass,controllers,true);
@@ -312,7 +451,13 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
                 result["Status"]="Requested the authoritative connected-player roster.";
                 PS::SpawnToolRequests::Publish(std::move(result));return;
             }
-            auto result=PS::SpawnToolRequests::Read();result["Players"]=players;
+            static uint64_t playerGeneration=0;static std::map<std::string,nlohmann::json> previousPlayers;
+            const auto generation=PS::SpawnToolRequests::Generation.load();const bool reset=playerGeneration!=generation;if(reset){playerGeneration=generation;previousPlayers.clear();}
+            std::map<std::string,nlohmann::json> currentPlayers;for(const auto& row:players)if(row.is_object()){const auto path=row.value("Path",std::string{});if(!path.empty())currentPlayers[path]=row;}
+            nlohmann::json delta={{"Reset",reset},{"Added",nlohmann::json::array()},{"Updated",nlohmann::json::array()},{"Removed",nlohmann::json::array()}};
+            for(const auto& [path,row]:currentPlayers){const auto prior=previousPlayers.find(path);if(prior==previousPlayers.end())delta["Added"].push_back(row);else if(prior->second!=row)delta["Updated"].push_back(row);}
+            for(const auto& [path,row]:previousPlayers)if(!currentPlayers.contains(path))delta["Removed"].push_back(path);previousPlayers=std::move(currentPlayers);
+            auto result=PS::SpawnToolRequests::Read();result["Players"]=players;result["PlayersDelta"]=std::move(delta);
             result["Status"]=std::format("Refreshed {} currently available authoritative player(s).",players.size());
             PS::SpawnToolRequests::Publish(std::move(result));return;
         }

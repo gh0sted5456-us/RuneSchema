@@ -29,6 +29,24 @@ if(PROJECT_IS_TOP_LEVEL)
     endif()
     string(REPLACE "/DNDEBUG" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
     enable_testing()
+    foreach(test item-cart asset-preload-plan)
+        add_executable(${test} ../tests/${test}.cpp)
+        target_link_libraries(${test} PRIVATE RuneSchemaJsonCore)
+        add_test(NAME ${test} COMMAND ${test})
+    endforeach()
+    add_executable(helpy-lazy-thread ../tests/helpy-lazy-thread.cpp ../src/Generator/ToolRequestState.cpp)
+    target_link_libraries(helpy-lazy-thread PRIVATE RuneSchemaJsonCore)
+    add_test(NAME helpy-lazy-thread COMMAND helpy-lazy-thread)
+    add_executable(alpha-ui-contract ../tests/alpha-ui-contract.cpp)
+    target_compile_features(alpha-ui-contract PRIVATE cxx_std_23)
+    add_test(NAME alpha-ui-contract COMMAND alpha-ui-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Generator/ItemGridPicker.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Generator/SpawnToolsPanel.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Generator/HelpyStandaloneWindow.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Generator/LazyCatalog.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/NativeAssetPrefetch.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRecipeModLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp")
     add_executable(world-building-registry-validation ../tests/world-building-registry-validation.cpp)
     target_include_directories(world-building-registry-validation PRIVATE ../include)
     target_compile_features(world-building-registry-validation PRIVATE cxx_std_20)
@@ -351,7 +369,8 @@ if(PROJECT_IS_TOP_LEVEL)
     add_test(NAME ingame-quick-menu-shell COMMAND ingame-quick-menu-shell
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/dllmain.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Generator/InGameQuickMenu.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../src/SDK/Helper/ActorHelper.cpp")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/SDK/Helper/ActorHelper.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../plugins/helpy/HelpyPlugin.cpp")
     add_executable(helpy-instant-open ../tests/helpy-instant-open.cpp)
     add_test(NAME helpy-instant-open COMMAND helpy-instant-open
         "${CMAKE_CURRENT_SOURCE_DIR}/../plugins/helpy/HelpyPlugin.cpp"

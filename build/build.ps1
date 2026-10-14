@@ -6,14 +6,14 @@ param(
     [switch]$UpdateMappings
 )
 $ErrorActionPreference = 'Stop'
-$Version = '0.7.7.9e'
+$Version = '0.7.8.0-alpha'
 $BuildRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 if (-not (Test-Path -LiteralPath (Join-Path $BuildRoot 'source\raw\CMakeLists.txt') -PathType Leaf)) {
     $BuildRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 }
-$releaseVersionPattern = '^\d+\.\d+\.\d+\.\d+[em]$'
+$releaseVersionPattern = '^\d+\.\d+\.\d+\.\d+(?:[em]|-alpha(?:\.\d+)?)$'
 if ($Version -notmatch $releaseVersionPattern) {
-    throw "RuneSchema release versions must end in lowercase 'e' (experimental) or lowercase 'm' (main): $Version"
+    throw "RuneSchema versions must end in 'e', 'm', or '-alpha[.N]': $Version"
 }
 $releaseBranch = $env:GITHUB_REF_NAME
 if ([string]::IsNullOrWhiteSpace($releaseBranch) -and (Test-Path -LiteralPath (Join-Path $BuildRoot '.git'))) {
@@ -436,9 +436,9 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         $backup = "$Dll.uncompressed"
         Copy-Item -LiteralPath $Dll -Destination $backup -Force
         try {
-            & $Upx -9 --best --lzma $Dll
+            & $Upx -9 --best --lzma $Dll | Out-Host
             if ($LASTEXITCODE) { throw "UPX declined the DLL (exit $LASTEXITCODE)" }
-            & $Upx -t $Dll
+            & $Upx -t $Dll | Out-Host
             if ($LASTEXITCODE) { throw "UPX verification failed (exit $LASTEXITCODE)" }
             return 'UPX -9 --best --lzma; verified'
         } catch {
@@ -645,6 +645,11 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         if (Test-Path -LiteralPath $defaultsReadme -PathType Leaf) {
             Copy-Item -LiteralPath $defaultsReadme -Destination (Join-Path $payload 'settings\defaults\README.md') -Force
         }
+        # Retired authoring examples belong in the website, not in live jobs.
+        foreach ($retiredJob in @('character-editor.example.json', 'building-menu.example.json')) {
+            $retiredPath = Join-Path $payload "settings\jobs\$retiredJob"
+            if (Test-Path -LiteralPath $retiredPath -PathType Leaf) { Remove-Item -LiteralPath $retiredPath -Force }
+        }
         $luaBootstrap = Join-Path $SourceRoot 'ue4ss\scripts\main.lua'
         if (-not (Test-Path -LiteralPath $luaBootstrap -PathType Leaf)) {
             throw "RuneSchema UE4SS Lua bootstrap is missing: $luaBootstrap"
@@ -763,6 +768,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
             @(
                 'vendor-offers','vendor-spawn-gate','loader-schemas','npc-catalog','npc-cleanup-contract','player-activity-events',
                 'quest-gameplay-owner','quest-native-contract','quest-definition','quest-kill-credit','summon-kill-credit','summon-kill-credit-contract','event-definition',
+                'item-cart','asset-preload-plan','helpy-lazy-thread','alpha-ui-contract',
                 'character-entry-recovery-contract',
                 'appearance-defaults-contract',
                 'dialogue-definition','building-preview-safety','building-clone-contract',

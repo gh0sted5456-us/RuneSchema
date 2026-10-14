@@ -1,5 +1,6 @@
 #include "Loader/AssetAuthoringMetadata.h"
 #include "Generator/AssetSearch.h"
+#include "Generator/HelpyIconTrace.h"
 #include "Generator/ItemCatalogMetadata.h"
 #include "Generator/QuickMenuDecorations.h"
 #include "SDK/Helper/CookedAssetLookup.h"
@@ -10,6 +11,7 @@
 #include "Generator/LoaderSchemas.h"
 #include "Core/ConfigFiles.h"
 #include "Runtime/HostServices.h"
+#include "Utility/Logging.h"
 #include <filesystem>
 #include "SDK/Helper/StringTableHelper.h"
 #include "SDK/Helper/ActorHelper.h"
@@ -23,10 +25,17 @@
 #include "Unreal/CoreUObject/UObject/FStrProperty.hpp"
 #include "Unreal/Property/FTextProperty.hpp"
 #include "Unreal/FText.hpp"
+#include "Unreal/UObjectArray.hpp"
 #include "Helpers/String.hpp"
 #include <cmath>
+#include <cctype>
 #include <initializer_list>
 #include <set>
+#include <chrono>
+#include <sstream>
+#include <vector>
+#include <unordered_map>
+#include <unordered_set>
 
 using namespace RC;using namespace RC::Unreal;using namespace DragonWilds;
 using nlohmann::json;
@@ -83,7 +92,7 @@ json Value(FProperty* p,void* container,int size,bool references=true) {
             return {{"AssetPathName",package+"."+asset},{"SubPathString",""}};
     }
     if(references && p->GetElementSize()==sizeof(UObject*)) {
-        if(auto* hardReference=CastField<FObjectProperty>(p)) {
+        if(auto* hardReference=CastField<FObjectPropertyBase>(p)) {
             auto* linked=hardReference->GetObjectPropertyValue(address);
             if(linked && !linked->HasAnyFlags(static_cast<EObjectFlags>(RF_NeedLoad|RF_NeedPostLoad|RF_NeedInitialization|RF_BeginDestroyed|RF_FinishDestroyed)))
                 return to_string(linked->GetPathName());
@@ -95,6 +104,103 @@ json Read(UObject* object,const char* name) {
     return Value(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),to_wstring(name)),object,object->GetClassPrivate()->GetPropertiesSize());
 }
 std::string Text(UObject* object,const char* name) {auto value=Read(object,name);return value.is_string()?value.get<std::string>():std::string{};}
+std::string CheapText(UObject* object,const char* name) {
+    if(!object||!object->GetClassPrivate())return {};
+    auto* p=PropertyHelper::GetPropertyByName(object->GetClassPrivate(),to_wstring(name));
+    if(!p||p->GetArrayDim()!=1||p->GetOffset_Internal()<0)return {};
+    const auto size=object->GetClassPrivate()->GetPropertiesSize();
+    if(p->GetElementSize()<=0||p->GetOffset_Internal()>size||p->GetElementSize()>size-p->GetOffset_Internal())return {};
+    auto* address=p->ContainerPtrToValuePtr<void>(object);
+    if(CastField<FTextProperty>(p))return {};
+    if(CastField<FStrProperty>(p)) {
+        const auto& chars=static_cast<FString*>(address)->GetCharArray();
+        if(chars.Num()<0||chars.Num()>4097||(chars.Num()&&!chars.GetData()))return {};
+        return chars.Num()?to_string(StringType(chars.GetData(),chars.Num()-1)):std::string{};
+    }
+    if(auto* n=CastField<FNameProperty>(p))return to_string(n->GetPropertyValue(address).ToString());
+    return {};
+}
+std::string CachedItemName(UObject* object) {
+    static std::unordered_map<std::string,std::string> cache;
+    if(!object)return {};
+    const auto path=to_string(object->GetPathName());
+    if(auto it=cache.find(path);it!=cache.end())return it->second;
+    auto name=Text(object,"Name");
+    if(QuickDecorations::MissingDisplayName(name))name=Text(object,"DisplayName");
+    if(QuickDecorations::MissingDisplayName(name))name=QuickDecorations::ReadableAssetName(to_string(object->GetName()));
+    if(cache.size()>16384)cache.clear();
+    cache.emplace(path,name);
+    return name;
+}
+std::string IconReferenceValue(FProperty* p,void* container,int containerSize,int depth=0) {
+    if(!p||!container||depth>4||p->GetArrayDim()!=1)return {};
+    const auto offset=p->GetOffset_Internal(),size=p->GetElementSize();
+    if(offset<0||size<=0||offset>containerSize||size>containerSize-offset)return {};
+    auto* address=p->ContainerPtrToValuePtr<void>(container);
+    if((CastField<FSoftObjectProperty>(p)||CastField<FSoftClassProperty>(p))&&size==sizeof(UECustom::FSoftObjectPtr)) {
+        const auto& path=static_cast<UECustom::FSoftObjectPtr*>(address)->ObjectID;
+        const auto package=to_string(path.GetLongPackageFName().ToString()),asset=to_string(path.GetAssetFName().ToString());
+        if(package.starts_with('/')&&!asset.empty()&&asset!="None"&&path.SubPathString.GetCharArray().Num()<=1)return package+"."+asset;
+    }
+    if(auto* objectProperty=CastField<FObjectPropertyBase>(p)) {
+        if(auto* linked=objectProperty->GetObjectPropertyValue(address))return to_string(linked->GetPathName());
+    }
+    if(CastField<FStrProperty>(p)) {
+        const auto& chars=static_cast<FString*>(address)->GetCharArray();
+        if(chars.Num()>0&&chars.Num()<1025&&chars.GetData()) {
+            auto value=to_string(StringType(chars.GetData(),chars.Num()-1));if(value.starts_with('/'))return value;
+        }
+    }
+    if(auto* structure=CastField<FStructProperty>(p);structure&&structure->GetStruct()) {
+        static constexpr const char* preferred[]={"ResourceObject","Resource","Texture","Texture2D","Icon","Image","Brush","Asset","Object","Value"};
+        auto* type=structure->GetStruct().Get();const auto structSize=size;
+        for(const auto* childName:preferred)if(auto* child=PropertyHelper::GetPropertyByName(type,to_wstring(childName))) {
+            auto value=IconReferenceValue(child,address,structSize,depth+1);if(!value.empty())return value;
+        }
+        std::size_t scanned=0;for(auto* child:TFieldRange<FProperty>(type,EFieldIterationFlags::Default)) {
+            if(++scanned>48)break;const auto childName=to_string(child->GetName());std::string lower=childName;for(auto& c:lower)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            if(lower.find("icon")==std::string::npos&&lower.find("texture")==std::string::npos&&lower.find("image")==std::string::npos&&lower.find("brush")==std::string::npos&&lower.find("resource")==std::string::npos&&lower.find("asset")==std::string::npos)continue;
+            auto value=IconReferenceValue(child,address,structSize,depth+1);if(!value.empty())return value;
+        }
+    }
+    return {};
+}
+std::string PropertyType(FProperty* property) {
+    if(!property)return "<missing>";
+    try{return PropertyHelper::GetPropertyTypeAsUTF8String(property);}catch(...){return to_string(property->GetClass().GetName());}
+}
+void TraceItemIcon(UObject* object,const std::string& selectedField,const std::string& selectedType,const std::string& iconPath,const std::string& candidates) {
+    if(!object || !PS::HelpyIconTrace::Enabled())return;
+    static std::unordered_set<std::string> traced;static std::size_t emitted=0;
+    const auto itemPath=to_string(object->GetPathName());if(emitted>=100||!traced.insert(itemPath).second)return;++emitted;
+    const auto label=CachedItemName(object);const auto cls=object->GetClassPrivate()?to_string(object->GetClassPrivate()->GetPathName()):std::string("<unknown>");
+    PS::HelpyIconTrace::Event("row",itemPath,
+        "item='"+label+"' class='"+cls+"' selected='"+selectedField+"' type='"+selectedType+
+        "' rowIcon='"+iconPath+"' candidates=["+candidates+"]");
+}
+std::string ItemIconPath(UObject* object) {
+    if(!object||!object->GetClassPrivate())return {};
+    static constexpr const char* fields[]={"Icon","ItemIcon","InventoryIcon","DisplayIcon","IconTexture","Thumbnail","CategoryIcon","Image","Brush"};
+    const bool trace=PS::HelpyIconTrace::Enabled();
+    auto* type=object->GetClassPrivate();const auto size=type->GetPropertiesSize();std::string candidates;std::string selectedField,selectedType,result;
+    for(const auto* name:fields)if(auto* p=PropertyHelper::GetPropertyByName(type,to_wstring(name))) {
+        const auto propertyType=trace?PropertyType(p):std::string{};const auto path=IconReferenceValue(p,object,size);
+        if(!candidates.empty())candidates+="; ";candidates+=std::string(name)+":"+propertyType+(path.empty()?"=<none>":"="+path);
+        if(result.empty()&&!path.empty()){result=path;selectedField=name;selectedType=propertyType;}
+        if(!trace && !result.empty())return result;
+    }
+    if(result.empty()) {
+        std::size_t scanned=0;for(auto* p:TFieldRange<FProperty>(type,EFieldIterationFlags::Default)) {
+            if(++scanned>128)break;const auto fieldName=to_string(p->GetName());std::string lower=fieldName;for(auto& c:lower)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            if(lower.find("icon")==std::string::npos&&lower.find("thumbnail")==std::string::npos&&lower.find("image")==std::string::npos&&lower.find("brush")==std::string::npos)continue;
+            const auto propertyType=PropertyType(p);const auto path=IconReferenceValue(p,object,size);
+            if(!candidates.empty())candidates+="; ";candidates+=fieldName+":"+propertyType+(path.empty()?"=<none>":"="+path);
+            if(!path.empty()){result=path;selectedField=fieldName;selectedType=propertyType;break;}
+        }
+    }
+    TraceItemIcon(object,selectedField.empty()?"<none>":selectedField,selectedType.empty()?"<none>":selectedType,result.empty()?"<none>":result,candidates.empty()?"no icon-like reflected properties":candidates);
+    return result;
+}
 // Read reflected tag structures without guessing offsets or walking arbitrary object graphs.
 std::string TagValue(void* container,int size,FProperty* raw) {
     auto* property=CastField<FStructProperty>(raw);
@@ -258,7 +364,7 @@ json DescribeItem(UObject* object) {
     // Do not infer quality from PowerLevel or a user-editable display name.
     const bool masterwork=QuickDecorations::Token(tags,"masterwork")||ItemBool(object,{"bIsMasterworkItem","bIsMasterwork","IsMasterwork","bMasterwork","Masterwork"});
     return {{"Name",name},{"Path",path},{"InternalName",Text(object,"InternalName")},
-        {"PersistenceID",Text(object,"PersistenceID")},{"Icon",ReferencePath(object,"Icon")},
+        {"PersistenceID",Text(object,"PersistenceID")},{"Icon",ItemIconPath(object)},
         {"RuneSchema",runtimeClone||declared.runeSchema.value_or(AssetMetadata::IsManaged(object))},{"RuntimeClone",runtimeClone},
         {"RuneSchemaManaged",runtimeClone||declared.runeSchema.value_or(AssetMetadata::IsManaged(object))},
         {"DeclaredModded",declared.modded.value_or(false)},{"DeclaredCooked",declared.cooked.value_or(false)},
@@ -271,6 +377,74 @@ json DescribeItem(UObject* object) {
         {"Class",to_string(object->GetClassPrivate()->GetPathName())},
         {"Cooked",CookedAssets::VerifiedLoadedObject(object)},{"AppearanceGroup",ItemAppearanceMetadata::Group(object)},
         {"PowerLevel",Read(object,"PowerLevel")}};
+}
+
+namespace {
+std::string HelpyBroadItemCategory(UObject* object,const std::string& path,const std::string& name,const std::string& internal,const std::string& tags) {
+    std::string classes;std::size_t depth=0;for(UStruct* ancestor=object&&object->GetClassPrivate()?object->GetClassPrivate():nullptr;ancestor&&depth++<24;ancestor=ancestor->GetSuperStruct())classes+=" "+to_string(ancestor->GetName());
+    const auto hay=QuickDecorations::Fold(path+" "+name+" "+internal+" "+tags+" "+classes);
+    const auto any=[&](std::initializer_list<std::string_view> words){for(const auto word:words)if(hay.find(word)!=std::string::npos)return true;return false;};
+    if(any({"quest","questitem"}))return "Quest";
+    if(any({"ammo","ammunition","arrow","bolt","bullet","shot"}))return "Ammo";
+    if(any({"rune","runes"}))return "Runes";
+    if(any({"armor","armour","helmet"," helm","chestplate","cuirass","gauntlet","glove","boots","greaves","shield"}))return "Armor";
+    if(any({"weapon","sword","dagger","mace","spear","halberd","bow","crossbow","staff","wand","pistol","musket","axe_weapon","battleaxe"}))return "Weapons";
+    if(any({"consumable","food","potion","drink","elixir","brew","ration","cooked","meal"}))return "Consumables";
+    if(any({"tool","pickaxe","hatchet","fishingrod","fishing_rod","hammer","shovel","sickle"}))return "Tools";
+    if(any({"building","buildable","furniture","structure","construction","placeable"}))return "Building";
+    if(any({"resource","material","ore","ingot","bar_","_bar","plank","log","timber","hide","leather","fibre","fiber","cloth","stone","crystal","essence","shard","ash","coal"}))return "Resources";
+    return "Misc";
+}
+int HelpyMaxStack(UObject* object) {
+    const auto value=Read(object,"MaxStackSize");
+    try {if(value.is_number_integer())return std::clamp(value.get<int>(),1,10000);if(value.is_number_unsigned())return std::clamp(static_cast<int>(value.get<unsigned>()),1,10000);if(value.is_number_float())return std::clamp(static_cast<int>(value.get<double>()),1,10000);}catch(...){}
+    return 1;
+}
+std::uint64_t HelpyStableId(const std::string& value) {
+    std::uint64_t hash=1469598103934665603ull;
+    for(const unsigned char c:value){hash^=c;hash*=1099511628211ull;}return hash;
+}
+json DescribeItemBasic(UObject* object,const std::string& path,const std::string& name,const std::string& internal,const std::string& tags,const std::string& category) {
+    auto persistence=CheapText(object,"PersistenceID");
+    return {{"StableId",HelpyStableId(path)},{"Name",name},{"Path",path},
+        {"InternalName",internal},{"PersistenceID",std::move(persistence)},{"Icon",ItemIconPath(object)},
+        {"Class",object&&object->GetClassPrivate()?to_string(object->GetClassPrivate()->GetPathName()):std::string{}},
+        {"Tags",tags},{"Category",category},{"MaxStackSize",HelpyMaxStack(object)}};
+}
+}
+
+json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,std::uint64_t startSeed,bool randomOrder,
+    const std::string& fieldSet,std::size_t scanBudget,std::uint64_t timeBudgetMicros) {
+    if(limit<1||limit>128)throw std::runtime_error("Catalog window limit must be 1..128 rows.");
+    if(query.size()>256)throw std::runtime_error("Catalog search text exceeds 256 characters.");
+    if(fieldSet!="BasicRow"&&fieldSet!="Detail")throw std::runtime_error("Unsupported item catalog field projection.");
+    scanBudget=std::clamp<std::size_t>(scanBudget,128,8192);timeBudgetMicros=std::clamp<std::uint64_t>(timeBudgetMicros,100,5000);
+    json rows=json::array();std::vector<std::string> queryTokens;std::string categoryFilter,searchQuery=query;
+    constexpr std::string_view categoryPrefix="__helpycat:";
+    if(searchQuery.starts_with(categoryPrefix)){const auto split=searchQuery.find(' ');categoryFilter=AssetTemplate::Fold(searchQuery.substr(categoryPrefix.size(),split==std::string::npos?std::string::npos:split-categoryPrefix.size()));searchQuery=split==std::string::npos?std::string{}:searchQuery.substr(split+1);}
+    if(!searchQuery.empty()){std::istringstream words(searchQuery);std::string word;while(words>>word){word=AssetTemplate::Fold(std::move(word));if(!word.empty())queryTokens.push_back(std::move(word));}}
+    const auto matchesTokens=[&](const std::string& candidate){if(queryTokens.empty())return true;const auto folded=AssetTemplate::Fold(candidate);for(const auto& token:queryTokens)if(folded.find(token)==std::string::npos)return false;return true;};
+    auto* itemType=Class("assets");if(!itemType)throw std::runtime_error("ItemData class is not ready.");
+    const auto objectCount=FUObjectArray::GetNumElements();
+    if(objectCount<0||objectCount>4'000'000)throw std::runtime_error("Global object roster exceeds the safe catalog bound.");
+    const std::size_t total=static_cast<std::size_t>(objectCount);
+    if(!total)return {{"Rows",std::move(rows)},{"NextOffset",0},{"Start",0},{"HasMore",false},{"Scanned",0}};
+    const std::size_t start=randomOrder?static_cast<std::size_t>(startSeed%total):0;
+    std::size_t visited=std::min(offset,total),scanned=0;const auto begin=std::chrono::steady_clock::now();
+    while(visited<total&&rows.size()<limit&&scanned<scanBudget) {
+        if(scanned>0&&std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-begin).count()>=static_cast<long long>(timeBudgetMicros))break;
+        const std::size_t index=randomOrder?(start+visited)%total:visited;
+        auto* slot=FUObjectArray::IndexToObject(static_cast<int32>(index));++visited;++scanned;
+        auto* object=slot?slot->GetUObject():nullptr;
+        if(!Usable(object)||!object->IsA(itemType))continue;
+        const auto path=to_string(object->GetPathName());if(path.empty())continue;
+        const auto internal=CheapText(object,"InternalName");const auto name=CachedItemName(object);const auto tags=ItemTags(object);const auto broadCategory=HelpyBroadItemCategory(object,path,name,internal,tags);
+        if(!categoryFilter.empty()&&AssetTemplate::Fold(broadCategory)!=categoryFilter)continue;
+        if(!queryTokens.empty()&&!matchesTokens(path+" "+internal+" "+name+" "+tags+" "+broadCategory+" "+to_string(object->GetClassPrivate()->GetName())))continue;
+        auto entry=fieldSet=="Detail"?DescribeItem(object):DescribeItemBasic(object,path,name,internal,tags,broadCategory);if(entry.is_object())rows.push_back(std::move(entry));
+    }
+    return {{"Rows",std::move(rows)},{"NextOffset",visited},{"Start",start},{"HasMore",visited<total},
+        {"Scanned",scanned},{"BudgetExhausted",visited<total&&scanned>=scanBudget},{"FieldSet",fieldSet}};
 }
 
 json ItemRoster() {

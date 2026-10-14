@@ -18,9 +18,9 @@ int main(int argc,char** argv){
     const auto entry=Read(argv[5]);
     const auto storefront=Read(argv[6]);
     const auto catalog=Read(argv[7]);
-    Check(Has(plugin,"EmbeddedCatalog()")&&Has(plugin,"F2Catalog::BundledPaths()"),"Helpy DLL owns an embedded seed catalogue");
-    Check(Has(plugin,"state->ToolsCatalog=EmbeddedCatalog()"),"clear and initialization restore the embedded catalogue");
-    Check(Has(plugin,"for(auto it=core.begin();it!=core.end();++it)state->ToolsCatalog[it.key()]=it.value()"),"core updates overlay rather than discard the embedded catalogue");
+    Check(Has(plugin,"HelpyStandaloneWindow")&&Has(plugin,"QuerySubmit"),"standalone Helpy uses a bounded query service");
+    Check(Has(plugin,"state->ToolsCatalog=nlohmann::json::object()"),"initialization does not copy an eager full catalogue");
+    Check(Has(plugin,"for(auto it=payload.begin();it!=payload.end();++it)state->ToolsCatalog[it.key()]=it.value()"),"core catalogue updates are merged");
     const auto begin=menu.find("void InGameQuickMenu::Toggle()");
     const auto end=menu.find("void InGameQuickMenu::SelectPrevious()",begin);
     Check(begin!=std::string::npos&&end!=std::string::npos,"toggle implementation bounded");

@@ -1,5 +1,5 @@
-// RuneSchema.Helpy owns these settings. Edit with the game closed.
+// Standalone HELPY is F2. The optional legacy Canvas fallback is F7.
 {
   "enabled": true,
-  "toggleKey": "F2"
+  "canvasToggleKey": "F7"
 }

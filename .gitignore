@@ -21,7 +21,7 @@ cmake_install.cmake
 # Local dependency cache, packaging and runtime data
 .cache/
 dist/
-plugins/
+/plugins/
 clean-base/
 /runtime/
 release/

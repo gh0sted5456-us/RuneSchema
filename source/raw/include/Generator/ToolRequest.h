@@ -4,10 +4,12 @@
 #include <atomic>
 #include <cstdint>
 #include <map>
+#include <deque>
 #include <string>
 #include <functional>
 #include <nlohmann/json.hpp>
 namespace PS {
+struct NpcExportTag;struct SpawnToolTag;struct QuestStatusTag;struct ItemIconTag;
 template<class Tag> struct ToolRequest {
     inline static std::mutex Mutex;
     inline static std::optional<nlohmann::json> Pending;
@@ -28,7 +30,16 @@ template<class Tag> struct ToolRequest {
     static nlohmann::json Read(){std::lock_guard lock(Mutex);return Result;}
     static void Clear(){std::lock_guard lock(Mutex);Pending.reset();Waiting=false;Result={{"Status","World changed; refresh tools."}};}
 };
-struct NpcExportTag;struct SpawnToolTag;struct QuestStatusTag;struct ItemIconTag;
+template<> struct ToolRequest<ItemIconTag> {
+    static bool TrySubmit(nlohmann::json request);
+    static void Submit(nlohmann::json request);
+    static bool HasPending();
+    static void SetAvailable(bool available);
+    static std::optional<nlohmann::json> Take();
+    static void Publish(nlohmann::json result);
+    static nlohmann::json Read();
+    static void Clear();
+};
 using NpcExportRequests=ToolRequest<NpcExportTag>;
 // Spawn tools alone serialize mutation commands and retain one-shot acknowledgements.
 // Catalog indexing publishes independent progress and never owns the mutation slot.
@@ -44,8 +55,8 @@ template<> struct ToolRequest<SpawnToolTag> {
     inline static std::function<void(const char*,const nlohmann::json&,uint64_t)> PushUpdate;
     inline static std::mutex Mutex;
     inline static std::optional<nlohmann::json> Pending;
-    inline static std::atomic<bool> Waiting=false,Available=false,CancelRequested=false;
-    inline static std::atomic<uint64_t> Generation=1;
+    static std::atomic<bool> Waiting,Available,CancelRequested;
+    static std::atomic<uint64_t> Generation;
     inline static nlohmann::json Result={{"Status","Load a world before using runtime tools."}};
     inline static nlohmann::json QuickCatalogData=nlohmann::json::object();
     inline static uint64_t Revision=1,ActiveRequest=0;
@@ -106,6 +117,7 @@ template<> struct ToolRequest<SpawnToolTag> {
             while(Completed.size()>16)Completed.erase(Completed.begin());
         }
         Result=std::move(result);InFlight=false;Waiting=false;ActiveRequest=0;revision=++Revision;pushed=Result;
+        if(pushed.contains("PlayersDelta"))pushed.erase("Players");
         }
         if(PushUpdate)PushUpdate("result",pushed,revision);
     }

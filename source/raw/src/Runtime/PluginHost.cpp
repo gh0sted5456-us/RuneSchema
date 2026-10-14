@@ -5,6 +5,7 @@
 #include "Runtime/HostServices.h"
 #include "Core/UsmapIndex.h"
 #include "Generator/ToolRequest.h"
+#include "Generator/HelpyQueryService.h"
 #include "Utility/BuildInfo.h"
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
@@ -70,6 +71,13 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
                 result["Snapshot"]=std::move(snapshot);
             }
         } else if(action=="Submit") result={{"Accepted",SpawnToolRequests::TrySubmit(request.at("Request"))}};
+        else if(action=="QuerySubmit") result={{"Accepted",HelpyQueryService::Submit(request.at("Request"))}};
+        else if(action=="QueryCancel") {HelpyQueryService::Cancel(request.value("Category",-1),request.value("CancelGeneration",uint64_t{}));result={{"Accepted",true}};}
+        else if(action=="IconSubmit") {
+            const auto icon=request.value("Icon",std::string{});const bool accepted=!icon.empty()&&icon.size()<=4096
+                &&ItemIconRequests::TrySubmit(nlohmann::json{{"Icon",icon}});
+            result={{"Accepted",accepted}};
+        }
         else if(action=="Completed") {nlohmann::json receipt;const bool found=SpawnToolRequests::TakeCompleted(request.value("RequestId",uint64_t{}),receipt);result={{"Found",found}};if(found)result["Receipt"]=std::move(receipt);}
         else if(action=="Search") {SpawnToolRequests::PrioritizeSearch(request.value("Query",std::string{}));result={{"Accepted",true}};}
         else if(action=="Cancel") {SpawnToolRequests::CancelRequested=true;result={{"Accepted",true}};}
@@ -290,11 +298,12 @@ void PluginHost::OnUnrealInit(){for(auto& plugin:m_state->LoadedPlugins){
     };
     nlohmann::json bootstrap;uint64_t bootstrapRevision=0;{
         std::lock_guard lock(SpawnToolRequests::Mutex);
-        bootstrap={{"Result",SpawnToolRequests::Result},{"Catalog",SpawnToolRequests::QuickCatalogData}};
+        bootstrap={{"Result",SpawnToolRequests::Result}};
         bootstrapRevision=SpawnToolRequests::Revision;
     }SpawnToolRequests::PushUpdate("bootstrap",bootstrap,bootstrapRevision);
 }
 void PluginHost::Shutdown() noexcept {
+    HelpyQueryService::Clear();
     if(!m_state)return;
     SpawnToolRequests::PushUpdate={};
     for(auto iterator=m_state->LoadedPlugins.rbegin();iterator!=m_state->LoadedPlugins.rend();++iterator) {

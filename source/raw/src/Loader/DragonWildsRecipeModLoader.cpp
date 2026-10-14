@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cctype>
 #include <cstdint>
+#include <chrono>
 #include <string_view>
 #include <vector>
 #include "Unreal/CoreUObject/UObject/Class.hpp"
@@ -728,6 +729,7 @@ namespace DragonWilds {
 
     void DragonWildsRecipeModLoader::QueueData(const nlohmann::json& data, const RC::StringType& modName)
     {
+        m_nativeRecipeIndexReady=false;
         if (!data.is_object())
         {
             PS::Log<LogLevel::Error>(STR("Recipe file for {} must be a JSON object.\n"), modName);
@@ -850,13 +852,34 @@ namespace DragonWilds {
     void DragonWildsRecipeModLoader::PrepareReferences()
     {
         if (!m_recipeClass || !m_progressComponentClass) return;
+        const auto started=std::chrono::steady_clock::now();
         ApplyPendingPatches();
+        RefreshNativeRecipeIndex();
         for (const auto& def : m_recipeDefs) {
             try { bool created = false; ResolveOrCreate(def, created); }
             catch (const std::exception& error) {
                 PS::Log<LogLevel::Error>(STR("Recipe reference '{}' unavailable: {}\n"), def.Key, PS::ToWideSafe(error.what()));
             }
         }
+        const auto elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-started).count();
+        if(elapsed>=1000)PS::Log<LogLevel::Normal>(STR("[PERF][RECIPES] Reference preparation for {} recipes took {} ms.\n"),m_recipeDefs.size(),elapsed);
+    }
+
+    std::vector<RC::StringType> DragonWildsRecipeModLoader::CookedReferencePaths() const
+    {
+        std::vector<RC::StringType> paths;
+        for(const auto& def:m_recipeDefs)if(def.Key.starts_with(TEXT("/")))paths.push_back(def.Key);
+        return paths;
+    }
+
+    void DragonWildsRecipeModLoader::RefreshNativeRecipeIndex()
+    {
+        m_recipeNameCounts.Clear();m_nativeRecipesByName.clear();
+        for(const auto& def:m_recipeDefs)m_recipeNameCounts.Add(def.Key);
+        TArray<UObject*> recipes;UECustom::UObjectGlobals::GetObjectsOfClass(m_recipeClass,recipes,true);
+        for(auto* recipe:recipes)if(recipe && !recipe->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_BeginDestroyed|RF_FinishDestroyed)))
+            m_nativeRecipesByName.try_emplace(recipe->GetFName(),PS::WeakObjectHandle(recipe));
+        m_nativeRecipeIndexReady=true;
     }
 
     UObject* DragonWildsRecipeModLoader::ResolveReference(
@@ -1136,13 +1159,13 @@ namespace DragonWilds {
             return recipe;
         }
 
-        TArray<UObject*> recipes;
-        const auto duplicateKey=std::count_if(m_recipeDefs.begin(),m_recipeDefs.end(),
-            [&](const RecipeDef& candidate){return candidate.Key==def.Key;})>1;
-        if(!duplicateKey)UECustom::UObjectGlobals::GetObjectsOfClass(m_recipeClass, recipes, true);
+        if(!m_nativeRecipeIndexReady)RefreshNativeRecipeIndex();
+        const auto duplicateKey=m_recipeNameCounts.Ambiguous(def.Key);
         const FName recipeName(def.Key,FNAME_Add);
-        for (auto* candidate : recipes)
+        const auto native=m_nativeRecipesByName.find(recipeName);
+        if(!duplicateKey && native!=m_nativeRecipesByName.end())
         {
+            auto* candidate=native->second.Get();
             if (candidate && candidate->GetFName() == recipeName
                 && !candidate->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject)))
             {
