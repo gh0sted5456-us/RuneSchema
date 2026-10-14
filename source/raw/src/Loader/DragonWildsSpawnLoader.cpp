@@ -64,6 +64,8 @@ using namespace DragonWilds::SpawnRuntime;
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
 #include "Loader/DragonWildsSpawnLoader.h"
+#include "Loader/NativeUnlockEquipContracts.h"
+#include "Core/ItemCart.h"
 #include "Loader/EventIdentity.h"
 #include "Loader/PlayerGhost.h"
 #include "Generator/EventParameters.h"

@@ -9,6 +9,7 @@
 #include "Generator/ItemGridPicker.h"
 #include "Generator/LazyCatalog.h"
 #include "Generator/HelpyNodes.h"
+#include "Core/HelpyKitFiles.h"
 #include <algorithm>
 #include <cctype>
 #include <random>
@@ -54,13 +55,71 @@ inline nlohmann::json UiSnapshot={{"Status","Load a world before using runtime t
 inline uint64_t UiRevision=0;inline int UiCategory=-99;
 inline std::string SelectedPlayer;
 inline uint64_t CartSequence=(uint64_t{1}<<62),CartGeneration=0;
+inline uint64_t KitSequence=(uint64_t{1}<<61),KitPending=0;
+inline void RefreshKitMetadata() {
+    auto paths=nlohmann::json::array();for(const auto& entry:ItemGridPicker::SharedCart.Entries())paths.push_back(entry.Path);
+    if(paths.empty()||KitPending)return;const auto id=++KitSequence;
+    if(SpawnToolRequests::TrySubmit({{"Action","InspectKitItems"},{"_RequestId",id},{"Items",std::move(paths)},{"_Source","HelpyStandalone"}}))KitPending=id;
+}
+inline void RenderKitLibrary() {
+    static std::vector<std::string> files;static std::string selected,error;
+    static nlohmann::json preview;static char exportName[81]{};static bool asJsonc=true,replace=false;
+    const auto directory=HostServices::RuntimeDirectory()/"Helpy"/"kits";
+    const auto refresh=[&]{try{files=HelpyKitFiles::List(directory);error.clear();}catch(const std::exception& e){files.clear();error=e.what();}};
+    ImGui::BeginDisabled(ItemGridPicker::SharedCart.Delivery()!=0);
+    if(ImGui::SmallButton("Import kit")){selected.clear();preview=nullptr;refresh();ImGui::OpenPopup("Import Helpy kit");}
+    ImGui::SameLine();ImGui::BeginDisabled(ItemGridPicker::SharedCart.Entries().empty());
+    if(ImGui::SmallButton("Export kit")){error.clear();replace=false;ImGui::OpenPopup("Export Helpy kit");}
+    ImGui::EndDisabled();ImGui::EndDisabled();
+    if(ImGui::BeginPopupModal("Import Helpy kit",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextWrapped("Import replaces the staged cart only. It does not give items, equip anything or unlock content.");
+        ImGui::TextWrapped("Kit folder: %s",directory.string().c_str());
+        if(ImGui::Button("Refresh kits")){preview=nullptr;selected.clear();refresh();}
+        if(ImGui::BeginChild("##kit-files",ImVec2(HelpyImGuiTheme::Current.X(480),HelpyImGuiTheme::Current.Y(150)),true)) {
+            if(files.empty())ImGui::TextWrapped("No kits found. Export a kit, or copy a shared .json/.jsonc kit into this folder.");
+            for(const auto& file:files)if(ImGui::Selectable(file.c_str(),selected==file)) {
+                selected=file;preview=nullptr;try{preview=HelpyKitFiles::Read(directory,file);error.clear();}catch(const std::exception& e){error=e.what();}
+            }
+        }ImGui::EndChild();
+        if(preview.is_object())ImGui::Text("%s: %zu item types",preview.value("Name",selected).c_str(),preview.at("Items").size());
+        if(!error.empty())ImGui::TextWrapped("%s",error.c_str());
+        ImGui::BeginDisabled(!preview.is_object()||ItemGridPicker::SharedCart.Delivery()!=0);
+        if(ImGui::Button("Load into cart"))try {
+            // Re-read at confirmation: do not stage a stale preview after the file changed.
+            const auto document=HelpyKitFiles::Read(directory,selected);
+            ItemGridPicker::SharedCart.ImportKit(document,[](const std::string& path){
+                if(UiSnapshot.contains("Items")&&UiSnapshot["Items"].is_array())for(const auto& row:UiSnapshot["Items"])
+                    if(row.is_object()&&row.value("Path",std::string{})==path)return row;
+                return nlohmann::json::object();
+            });
+            ItemGridPicker::CartStatus="Kit loaded into cart. Review quantities, choose a player, then Deliver. Missing content is checked at delivery.";
+            RefreshKitMetadata();
+            error.clear();ImGui::CloseCurrentPopup();
+        }catch(const std::exception& e){error=e.what();}
+        ImGui::EndDisabled();ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
+    }
+    if(ImGui::BeginPopupModal("Export Helpy kit",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextWrapped("Save the current item paths and quantities as a shareable kit. Player, delivery and equip actions are not stored.");
+        ImGui::TextWrapped("Kit folder: %s",directory.string().c_str());
+        ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(350));if(ImGui::InputText("Kit name",exportName,sizeof(exportName)))replace=false;
+        ImGui::Checkbox("JSONC (includes comments)",&asJsonc);ImGui::Checkbox("Replace existing kit (preserve backup)",&replace);
+        if(!error.empty())ImGui::TextWrapped("%s",error.c_str());
+        ImGui::BeginDisabled(!HelpyKitFiles::FileName(exportName)||ItemGridPicker::SharedCart.Entries().empty()||ItemGridPicker::SharedCart.Delivery()!=0);
+        if(ImGui::Button("Save kit"))try {
+            const auto file=HelpyKitFiles::Write(directory,exportName,asJsonc,ItemGridPicker::SharedCart,replace);
+            ItemGridPicker::CartStatus="Kit exported: "+file.string();error.clear();ImGui::CloseCurrentPopup();
+        }catch(const std::exception& e){error=e.what();}
+        ImGui::EndDisabled();ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
+    }
+}
 inline void PollCartDelivery() {
     const auto generation=SpawnToolRequests::CurrentGeneration();
     if(CartGeneration!=generation) {
         if(ItemGridPicker::SharedCart.Delivery())ItemGridPicker::CartStatus="World changed during delivery. Cart retained; check your inventory before retrying.";
-        ItemGridPicker::SharedCart.CancelDelivery();CartGeneration=generation;
+        ItemGridPicker::SharedCart.CancelDelivery();KitPending=0;CartGeneration=generation;
     }
     nlohmann::json receipt;const auto request=ItemGridPicker::SharedCart.Delivery();
+    if(KitPending&&SpawnToolRequests::TakeCompleted(KitPending,receipt)){KitPending=0;if(receipt.contains("KitMetadata"))ItemGridPicker::SharedCart.RefreshMetadata(receipt["KitMetadata"]);}
     if(request&&SpawnToolRequests::TakeCompleted(request,receipt)) {
         ItemGridPicker::SharedCart.CompleteDelivery(request,receipt);
         ItemGridPicker::CartStatus=receipt.value("Status",std::string("Delivery completed; inspect remaining items before retrying."));
@@ -69,7 +128,7 @@ inline void PollCartDelivery() {
 inline void RenderCartDock() {
     const auto& theme=HelpyImGuiTheme::Current;
     ImGui::PushStyleColor(ImGuiCol_ChildBg,theme.panelAlt);
-    if(ImGui::BeginChild("##item-cart-dock",ImVec2(0,theme.Y(244.0f)),true,ImGuiWindowFlags_AlwaysUseWindowPadding)){
+    if(ImGui::BeginChild("##item-cart-dock",ImVec2(0,theme.Y(theme.advancedMode?284.0f:244.0f)),true,ImGuiWindowFlags_AlwaysUseWindowPadding)){
         const auto pos=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();
         if(!ItemGridPicker::SharedCart.Delivery()&&ImGui::BeginDragDropTargetCustom(ImRect(pos,ImVec2(pos.x+size.x,pos.y+size.y)),ImGui::GetID("cart-transfer"))){
             if(const auto* payload=ImGui::AcceptDragDropPayload("RS_ITEM_ROW")){
@@ -81,6 +140,7 @@ inline void RenderCartDock() {
         }
         ImGui::TextUnformatted("Cart / staging chest");ImGui::SameLine();
         ImGui::TextDisabled("%zu / %zu",ItemGridPicker::SharedCart.Entries().size(),ItemCart::Model::Limit);
+        SameLineIfRoom(180);RenderKitLibrary();
         ImGui::Separator();
         std::string removePath;
         const auto entries=ItemGridPicker::SharedCart.Entries();
@@ -121,6 +181,12 @@ inline void RenderCartDock() {
         ImGui::BeginDisabled(blocked);run("Deliver",0);
         if(theme.advancedMode){SameLineIfRoom(100);run("One each",1);SameLineIfRoom(110);run("Half stacks",2);SameLineIfRoom(110);run("Full stacks",3);}ImGui::EndDisabled();
         SameLineIfRoom(70);ImGui::BeginDisabled(ItemGridPicker::SharedCart.Delivery()!=0);if(ImGui::Button("Clear cart"))ItemGridPicker::ClearSharedCart();ImGui::EndDisabled();
+        if(theme.advancedMode) {
+            ImGui::BeginDisabled(true);bool equip=false;ImGui::Checkbox("Auto-equip delivered gear (not mapped yet)",&equip);ImGui::EndDisabled();
+            ImGui::SameLine();ImGui::BeginDisabled(SpawnToolRequests::IsWaiting());
+            if(ImGui::SmallButton("Inspect native equip / unlock contracts"))SpawnToolRequests::TrySubmit({{"Action","InspectUnlockEquipContracts"},{"_Source","HelpyStandalone"}});
+            ImGui::EndDisabled();
+        }
         if(!ItemGridPicker::CartStatus.empty())ImGui::TextWrapped("%s",ItemGridPicker::CartStatus.c_str());
     }ImGui::EndChild();ImGui::PopStyleColor();
 }

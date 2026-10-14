@@ -418,6 +418,14 @@ json DescribeItemBasic(UObject* object,const std::string& path,const std::string
 }
 }
 
+json ItemMetadata(const std::string& path) {
+    auto* item=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,RC::to_generic_string(path).c_str(),false);
+    auto* type=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Dominion.ItemData"),false);
+    if(!Usable(item)||!type||!item->IsA(type))return {{"Path",path},{"Name",QuickDecorations::ReadableAssetName(path)},{"Available",false},{"Reason","Item is not loaded in this session; checked again at delivery."}};
+    auto row=DescribeItem(item);row["MaxStackSize"]=HelpyMaxStack(item);
+    row["Category"]=HelpyBroadItemCategory(item,path,row.value("Name",std::string{}),row.value("InternalName",std::string{}),row.value("Tags",std::string{}));
+    return row;
+}
 json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,std::uint64_t startSeed,bool randomOrder,
     const std::string& fieldSet,std::size_t scanBudget,std::uint64_t timeBudgetMicros) {
     if(limit<1||limit>128)throw std::runtime_error("Catalog window limit must be 1..128 rows.");

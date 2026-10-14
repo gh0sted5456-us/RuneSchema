@@ -368,7 +368,7 @@ namespace DragonWilds {
                                 ? expectedPersistence : RC::to_string(def.Key));
                     }
                 }
-                RegisterEntry(entry,def.Owner);
+                RegisterEntry(entry,def.Owner);UObject* acquisitionItem=nullptr;
                 if(def.Body.contains("UnlockOnAcquire")) {
                     if(!def.Body.at("UnlockOnAcquire").is_boolean())
                         throw std::runtime_error("UnlockOnAcquire must be a boolean");
@@ -378,7 +378,7 @@ namespace DragonWilds {
                         auto* item=ResolveSoftReference(ItemDataClassPath,
                             RC::to_generic_string(def.Body.at("ItemData").get<std::string>()),m_itemReferenceIndex);
                         if(!item)throw std::runtime_error("UnlockOnAcquire ItemData could not be resolved");
-                        m_acquisitionUnlocks.push_back({item,def.Key});
+                        acquisitionItem=item;
                     }
                 }
                 if (def.Body.contains("AddTo")) {
@@ -405,6 +405,7 @@ namespace DragonWilds {
                     m_unlock.erase(def.Key);
                 }
 
+                if(acquisitionItem)m_acquisitionUnlocks.push_back({EntryHandle(acquisitionItem),def.Key});
                 result.EntriesReady++;
             }
             catch (const std::exception& e)
@@ -1122,8 +1123,8 @@ namespace DragonWilds {
         m_observingAcquisition=true;
         struct Guard {bool& Value;~Guard(){Value=false;}} guard{m_observingAcquisition};
         std::unordered_map<RC::StringType,UObject*> items;
-        for(const auto& binding:m_acquisitionUnlocks)if(binding.Item)
-            items.emplace(binding.Item->GetPathName(),binding.Item);
+        for(const auto& binding:m_acquisitionUnlocks)if(!m_rejectedEntries.contains(binding.EntryKey))if(auto* item=binding.Item.Get())
+            items.emplace(item->GetPathName(),item);
         std::unordered_set<RC::StringType> added;
         for(const auto& [itemPath,item]:items) {
             ActorHelper::FunctionCall count(inventory,TEXT("/Script/Dominion.InventoryComponent:GetNumItemsByData"));
@@ -1138,7 +1139,7 @@ namespace DragonWilds {
         if(!journal)return;
         DeliverAutomaticUnlocks(controller);
         for(const auto& binding:m_acquisitionUnlocks) {
-            if(!binding.Item || !added.contains(binding.Item->GetPathName()))continue;
+            auto* item=binding.Item.Get();if(m_rejectedEntries.contains(binding.EntryKey)||!item||!added.contains(item->GetPathName()))continue;
             const auto entry=m_entries.find(binding.EntryKey);
             if(entry!=m_entries.end())if(auto* object=entry->second.Get();
                 RegisteredJournalEntry(object)

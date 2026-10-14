@@ -57,7 +57,7 @@ int32_t RS_PLUGIN_CALL About(void*,const char*,char* response,uint32_t capacity,
 void StoreReceipt(State* state,const nlohmann::json& result) {
     const auto id=result.value("_RequestId",uint64_t{});if(!id)return;
     nlohmann::json receipt={{"Status",result.value("Status",std::string("Completed."))}};
-    for(const auto* key:{"GrantResults","SpawnResult","CloneResult","CloneSource","CloneAppearance","ItemDetails","RecipeExportResult","ItemOverrideExportResult"})
+    for(const auto* key:{"GrantResults","SpawnResult","CloneResult","CloneSource","CloneAppearance","ItemDetails","RecipeExportResult","ItemOverrideExportResult","KitMetadata","NativeContracts"})
         if(result.contains(key))receipt[key]=result[key];
     state->Completed[id]=std::move(receipt);while(state->Completed.size()>16)state->Completed.erase(state->Completed.begin());
 }

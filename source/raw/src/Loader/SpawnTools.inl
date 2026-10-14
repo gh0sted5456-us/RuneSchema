@@ -390,6 +390,20 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
         // inventory, or spawn into a world. Keep it ahead of controller roster
         // and authority validation so Item Details and Item Lab remain useful
         // while no authoritative recipient is selected or available.
+        if(action=="InspectKitItems") {
+            const auto& paths=request->at("Items");if(!paths.is_array()||paths.empty()||paths.size()>PS::ItemCart::Model::Limit)throw std::runtime_error("Kit metadata requires 1..64 item paths");
+            auto rows=nlohmann::json::array();
+            for(const auto& path:paths){if(!path.is_string()||!PS::ItemCart::KitPath(path.get<std::string>()))throw std::runtime_error("Kit metadata requires canonical item paths");rows.push_back(PS::AssetSearch::ItemMetadata(path.get<std::string>()));}
+            auto result=PS::SpawnToolRequests::Read();result["KitMetadata"]=std::move(rows);result["Status"]="Loaded item metadata for the staged kit; no items delivered.";PS::SpawnToolRequests::Publish(std::move(result));return;
+        }
+        if(action=="InspectUnlockEquipContracts") {
+            auto report=InspectNativeUnlockEquipContracts();
+            const auto directory=PS::HostServices::ExportsDirectory()/"native-contracts";
+            const auto stamp=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            const auto file=directory/("unlock-equip-"+std::to_string(stamp)+".json");PS::ConfigFiles::Write(file,report.dump(2));
+            auto result=PS::SpawnToolRequests::Read();result["NativeContracts"]=std::move(report);
+            result["Status"]="Read-only native equip/unlock signatures exported: "+file.string();PS::SpawnToolRequests::Publish(std::move(result));return;
+        }
         if(action=="InspectClone") {
             auto* loader=DragonWildsAssetModLoader::AuthoringInstance;
             if(!loader)throw std::runtime_error("The assets loader must be enabled before inspecting items");

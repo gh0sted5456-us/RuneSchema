@@ -13,6 +13,8 @@ int main(int argc,char** argv){
     Require(panel.contains("SharedCart.Payload(mode)") && panel.contains("SetQuantity(entry.Path,quantity)"));
     Require(panel.contains("BeginDelivery(request,mode)")&&panel.contains("TakeCompleted(request,receipt)")&&panel.contains("CompleteDelivery(request,receipt)"));
     Require(panel.contains("run(\"Deliver\",0)")&&panel.contains("if(theme.advancedMode)"));
+    Require(panel.contains("RenderKitLibrary();")&&panel.contains("ImportKit(document,")&&panel.contains("HelpyKitFiles::Write(directory,"));
+    Require(panel.contains("InspectKitItems")&&panel.contains("RefreshMetadata(receipt[\"KitMetadata\"])")&&panel.contains("InspectUnlockEquipContracts"));
     Require(window.contains("SpawnToolsPanel::PollCartDelivery();")&&window.contains("SmallButton(modeLabel)")&&window.contains("Current.advancedMode=!t.advancedMode"));
     Require(picker.contains("PowerLevelBadge")&&picker.contains("ItemBadges::Masterwork(row)")&&picker.contains("DrawItemBadges(row,"));
     Require(!window.contains("helpy-cart-slot") && window.contains("LazyCatalog::PumpBackendSignal()"));

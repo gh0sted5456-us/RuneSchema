@@ -4,10 +4,13 @@
 #include <string>
 #include <stdexcept>
 #include <vector>
+#include <functional>
 #include <nlohmann/json.hpp>
 
 namespace PS::ItemCart {
 using json=nlohmann::json;
+inline bool KitPath(const std::string& path);
+inline json KitItems(const json& document);
 struct Entry { std::string Path; json Row; int Quantity=1; };
 class Model {
     std::vector<Entry> m_entries;
@@ -38,6 +41,25 @@ public:
     void SetQuantity(const std::string& path,int quantity) {
         if(m_delivery)return;
         for(auto& entry:m_entries)if(entry.Path==path){entry.Quantity=std::clamp(quantity,1,10000);return;}
+    }
+    void RefreshMetadata(const json& rows) {
+        if(!rows.is_array()||rows.size()>Limit)return;
+        for(const auto& row:rows) {
+            if(!row.is_object())continue;const auto path=row.find("Path");if(path==row.end()||!path->is_string())continue;
+            for(auto& entry:m_entries)if(entry.Path==path->get_ref<const std::string&>()){entry.Row=row;break;}
+        }
+    }
+    void ImportKit(const json& document,const std::function<json(const std::string&)>& resolve={}) {
+        if(m_delivery)throw std::runtime_error("Wait for delivery before importing a kit");
+        const auto items=KitItems(document);std::vector<Entry> staged;staged.reserve(items.size());
+        for(const auto& item:items) {
+            const auto path=item.at("Item").get<std::string>();auto row=resolve?resolve(path):json::object();
+            if(!row.is_object())row=json::object();
+            row["Path"]=path;if(!row.contains("Name")||!row.at("Name").is_string())row["Name"]=path.substr(path.find_last_of('.')+1);
+            staged.push_back({path,std::move(row),item.at("Count").get<int>()});
+        }
+        // Commit only after every row validates/resolves. Import never delivers.
+        m_entries=std::move(staged);
     }
     json Payload(int mode=0) const {
         json items=json::array();
@@ -81,12 +103,12 @@ public:
     }
 };
 
-// Reserved portable kit contract. Parsing/staging does not grant items, load assets,
+// Portable kit contract. Parsing/staging does not grant items, load assets,
 // run code, select a player, or bypass the existing explicit delivery permission.
 inline bool KitPath(const std::string& path) {
     const auto slash=path.find_last_of('/'),dot=path.find_last_of('.');
     return path.size()>3&&path.size()<1024&&path.front()=='/'&&slash!=path.npos&&dot!=path.npos
-        &&dot>slash+1&&dot+1<path.size()
+        &&dot>slash+1&&dot+1<path.size()&&path.find("..") == path.npos&&path.find("//")==path.npos
         &&std::none_of(path.begin(),path.end(),[](unsigned char c){return c<=32||c==127||c=='\\'||c==':'||c=='"';});
 }
 inline json KitItems(const json& document) {

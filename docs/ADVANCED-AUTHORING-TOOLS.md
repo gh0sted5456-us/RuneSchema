@@ -15,7 +15,22 @@ The item inventory is above the cart. Drag an item down, or right-click **Add to
 
 PowerLevel badges request the native game texture and display the item's actual native value, with a text fallback. Masterwork labels use native flags/tags; detailed tooltips retain the native `MasterworkType` identifier when supplied by the item. Item names and high PowerLevel do not imply masterwork quality.
 
-A versioned, data-only `RuneSchemaHelpyKit` contract is reserved for future JSON/JSONC loadout sharing. It contains a schema version, optional name and up to 64 unique cooked item paths with bounded quantities. File import/export is not exposed in this alpha; a kit does not contain scripts, automatic delivery, target-player selection or authority overrides.
+Use **Export kit** to save the cart as JSON or commented JSONC. **Import kit** lists kits in the displayed `runtime/Helpy/kits` folder under RuneSchema's per-profile Saved state. Copy shared kits into that folder and choose **Refresh kits**. Selecting a file previews its name/count; **Load into cart** replaces the staged cart, not your inventory. Loaded-item metadata is refreshed on the game thread without mounting missing content. Unknown or unavailable items are checked again at delivery.
+
+Exports use a versioned, data-only `RuneSchemaHelpyKit` format: a schema version, optional name and up to 64 unique cooked item paths with quantities 1..10000. Imports are limited to 128 KiB and do not contain scripts, automatic delivery, target-player selection or authority overrides. Existing exports require explicit replacement confirmation and retain a backup. The in-window kit library does not open a Windows file dialog.
+
+```jsonc
+{
+  "SchemaVersion": 1,
+  "Type": "RuneSchemaHelpyKit",
+  "Name": "Starter sword",
+  "Items": [
+    {"Item": "/Game/Gameplay/Character/Player/Equipment/Held/Sword/ITEM_Sword_Bronze.ITEM_Sword_Bronze", "Count": 1}
+  ]
+}
+```
+
+Delivery uses the existing authoritative inventory grant and confirmation path. **Auto-equip** is disabled until an inventory-instance equip command and its native slot/result contract are mapped; importing a kit cannot enable it. Advanced mode's **Inspect native equip / unlock contracts** exports read-only function metadata without invoking those functions or editing saves.
 
 ### RuneSchema authoring workflow
 

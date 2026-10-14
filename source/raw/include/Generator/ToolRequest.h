@@ -78,7 +78,7 @@ template<> struct ToolRequest<SpawnToolTag> {
         Pending=std::move(request);Waiting=true;
         Result.erase("GrantResults");Result.erase("SpawnResult");
         Result.erase("CloneResult");Result.erase("CloneSource");Result.erase("CloneAppearance");Result.erase("ItemDetails");
-        Result.erase("RecipeExportResult");Result.erase("ItemOverrideExportResult");
+        Result.erase("RecipeExportResult");Result.erase("ItemOverrideExportResult");Result.erase("KitMetadata");Result.erase("NativeContracts");
         Result["Status"]="Queued for the game thread.";return true;
     }
     static void Submit(nlohmann::json request) {
@@ -106,6 +106,8 @@ template<> struct ToolRequest<SpawnToolTag> {
             // Do not retain copies of full asset catalogs for every command.
             nlohmann::json receipt={{"Status",result.value("Status",std::string("Completed."))}};
             if(result.contains("GrantResults"))receipt["GrantResults"]=result["GrantResults"];
+            if(result.contains("KitMetadata"))receipt["KitMetadata"]=result["KitMetadata"];
+            if(result.contains("NativeContracts"))receipt["NativeContracts"]=result["NativeContracts"];
             if(result.contains("SpawnResult"))receipt["SpawnResult"]=result["SpawnResult"];
             if(result.contains("CloneResult"))receipt["CloneResult"]=result["CloneResult"];
             if(result.contains("CloneSource"))receipt["CloneSource"]=result["CloneSource"];

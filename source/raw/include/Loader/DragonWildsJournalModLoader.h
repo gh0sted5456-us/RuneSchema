@@ -78,7 +78,7 @@ namespace DragonWilds {
         RC::Unreal::UClass* m_journalSubsystemClass = nullptr;
         bool m_hooksActive = false;
         bool m_nativePersistenceReady = false;
-        struct AcquisitionUnlock { RC::Unreal::UObject* Item=nullptr; RC::StringType EntryKey; };
+        struct AcquisitionUnlock { EntryHandle Item; RC::StringType EntryKey; };
         std::vector<AcquisitionUnlock> m_acquisitionUnlocks;
         std::unordered_map<std::string,std::unordered_map<RC::StringType,int32_t>> m_acquisitionBaselines;
         RC::Unreal::Hook::GlobalCallbackId m_acquisitionCallbackId = RC::Unreal::Hook::ERROR_ID;
