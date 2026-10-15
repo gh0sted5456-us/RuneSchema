@@ -48,7 +48,7 @@ int main(int argc,char** argv) {
         &&picker.find("ItemBayLayout::RowsHeight(theme.itemGridRows")!=std::string::npos
         &&picker.find("LayoutControls();")!=std::string::npos
         &&picker.find("ItemBayLayout::PaneHeight")!=std::string::npos
-        &&picker.find("LazyCatalog::More(0)")!=std::string::npos,
+        &&picker.find("LazyCatalog::FillTo(0,")!=std::string::npos,
         "adjustable item grid loses responsive sizing, layout controls, or catalog scrolling");
     Require(thumbnail.find("CaptureLease RendererTarget;")!=std::string::npos
         &&thumbnail.find("ReusableTarget(library,world)")!=std::string::npos

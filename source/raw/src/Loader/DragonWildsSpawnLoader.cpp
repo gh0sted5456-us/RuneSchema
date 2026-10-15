@@ -794,7 +794,8 @@ namespace DragonWilds {
         }
         PS::JsonHelpers::ParseVector(locationInput, "Location", spawn.Location);
         spawn.AuthoredLocation = spawn.Location;
-        spawn.GroundSearch=PS::Grounding::SearchRange::Around(spawn.AuthoredLocation.Z(),spawn.GroundTraceAbove,spawn.GroundTraceBelow);
+        spawn.GroundReferenceZ=PS::Grounding::Reference(value,parsedLocation.Ground?std::optional<double>{}:std::optional<double>{spawn.AuthoredLocation.Z()});
+        spawn.GroundSearch=PS::Grounding::SearchRange::Around(spawn.GroundReferenceZ.value_or(spawn.AuthoredLocation.Z()),spawn.GroundTraceAbove,spawn.GroundTraceBelow);
         // Keep the authored identity stable while giving every /spawns actor
         // a small landscape clearance at its final placement.
         spawn.Location=FVector(spawn.Location.X(),spawn.Location.Y(),spawn.Location.Z()+10.0);
@@ -2845,7 +2846,7 @@ namespace DragonWilds {
                         spawn.Location = FVector(spawn.AuthoredLocation.X(),spawn.AuthoredLocation.Y(),spawn.AuthoredLocation.Z()+10.0);
                         spawn.bGroundingResolved = !spawn.bGroundToSurface;
                         spawn.GroundRetry = {};
-                        spawn.GroundSearch=PS::Grounding::SearchRange::Around(spawn.AuthoredLocation.Z(),spawn.GroundTraceAbove,spawn.GroundTraceBelow);
+                        spawn.GroundSearch=PS::Grounding::SearchRange::Around(spawn.GroundReferenceZ.value_or(spawn.AuthoredLocation.Z()),spawn.GroundTraceAbove,spawn.GroundTraceBelow);
                     }
                     m_readyWorld = world;
                     m_groundingRetryElapsed=0;
@@ -2931,7 +2932,7 @@ namespace DragonWilds {
             }
             else spawn.bCellActivated = true;
 
-            if(!spawn.GroundRetry.Ready())continue;
+            if(!spawn.GroundRetry.PlacementReady())continue;
             try
             {
                 if(spawn.bTemporaryResource && TemporaryResourceCondition(spawn,world)!=true)continue;
@@ -2973,7 +2974,7 @@ namespace DragonWilds {
             }
             catch (const PS::Grounding::SurfacePending&)
             {
-                if(spawn.GroundRetry.Missed())PS::Log<LogLevel::Warning>(
+                if(spawn.GroundRetry.Missed())PS::Log<LogLevel::Verbose>(
                     STR("Placement '{}' from '{}' is waiting for a ground surface at ({}, {}); streaming retries are scheduled. Nothing was placed.\n"),
                     spawn.EntryId,spawn.ModName,spawn.AuthoredLocation.X(),spawn.AuthoredLocation.Y());
             }
@@ -3224,7 +3225,7 @@ namespace DragonWilds {
             ignoredActors.push_back(legacy);
 
         if (!UECustom::UKismetSystemLibrary::FindGroundSurface(
-                world, start, end, ignoredActors, impact, traceError))
+                world, start, end, ignoredActors, impact, traceError,spawn.GroundReferenceZ))
         {
             if(traceError.empty())throw PS::Grounding::SurfacePending();
             throw std::runtime_error("Location.Z $ ground trace failed: " + traceError);
@@ -3682,7 +3683,7 @@ namespace DragonWilds {
         if(!m_readyWorld||!GetGameMode(m_readyWorld))return;
         bool ready=false;
         for(auto& spawn:m_spawns)if(spawn.GroundRetry.Pending&&spawn.bCellActivated&&!spawn.bExistsInWorld&&!spawn.bSpawnFailed){
-            spawn.GroundRetry.Advance(1.0);ready|=spawn.GroundRetry.Ready();
+            spawn.GroundRetry.Advance(1.0);ready|=spawn.GroundRetry.PlacementReady();
         }
         if(ready)ProcessSpawns(m_readyWorld,nullptr,true);
     }
@@ -3779,7 +3780,7 @@ namespace DragonWilds {
                 spawn.bDeconstructed=true;
             }
             if(spawn.bDeconstructed)continue;
-            if(!spawn.GroundRetry.Ready())continue;
+            if(!spawn.GroundRetry.PlacementReady())continue;
             const bool priorFailure=spawn.bSpawnFailed;
             const bool wasGrounded=spawn.bGroundingResolved;
             spawn.bExistsInWorld=false;spawn.bSpawnFailed=false;
@@ -3794,7 +3795,7 @@ namespace DragonWilds {
                 else ProcessActorEntry(m_readyWorld,spawn);
             }
             catch(const PS::Grounding::SurfacePending&) {
-                if(spawn.GroundRetry.Missed())PS::Log<LogLevel::Warning>(
+                if(spawn.GroundRetry.Missed())PS::Log<LogLevel::Verbose>(
                     STR("Placement '{}' from '{}' is waiting for a ground surface; streaming retries are scheduled. Nothing was placed.\n"),spawn.EntryId,spawn.ModName);
             }
             catch(const std::exception& error) {

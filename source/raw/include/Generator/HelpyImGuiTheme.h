@@ -2,6 +2,7 @@
 #include "imgui.h"
 #include "Core/ConfigFiles.h"
 #include "Core/ItemBayLayout.h"
+#include "Core/ItemPaging.h"
 #include "Runtime/HostServices.h"
 #include "Generator/HelpyRuntimePreferences.h"
 #include <algorithm>
@@ -19,41 +20,28 @@ namespace PS::HelpyImGuiTheme {
 
 inline float RuntimeDpi=1.0f;
 inline void SetRuntimeDpi(float dpi){RuntimeDpi=std::clamp(dpi,0.75f,3.0f);}
+inline ImVec4 Hex(unsigned value){return {((value>>16)&255)/255.0f,((value>>8)&255)/255.0f,(value&255)/255.0f,1.0f};}
 
 struct Theme {
-    ImVec4 window{0.050f,0.052f,0.060f,1.0f};
-    ImVec4 panel{0.075f,0.078f,0.090f,1.0f};
-    ImVec4 panelAlt{0.100f,0.104f,0.120f,1.0f};
-    ImVec4 navigation{0.062f,0.064f,0.074f,1.0f};
-    ImVec4 navigationHover{0.125f,0.115f,0.155f,1.0f};
-    ImVec4 navigationActive{0.155f,0.115f,0.225f,1.0f};
-    ImVec4 accent{0.48f,0.28f,0.78f,1.0f};
-    ImVec4 accentHover{0.60f,0.39f,0.92f,1.0f};
-    ImVec4 accentActive{0.39f,0.20f,0.68f,1.0f};
-    ImVec4 text{0.94f,0.94f,0.96f,1.0f};
-    ImVec4 textDisabled{0.56f,0.57f,0.62f,1.0f};
-    ImVec4 control{0.125f,0.128f,0.150f,1.0f};
-    ImVec4 controlHover{0.175f,0.178f,0.205f,1.0f};
-    ImVec4 controlActive{0.22f,0.20f,0.29f,1.0f};
-    ImVec4 button{0.145f,0.140f,0.170f,1.0f};
-    ImVec4 buttonHover{0.48f,0.28f,0.78f,1.0f};
-    ImVec4 buttonActive{0.39f,0.20f,0.68f,1.0f};
-    ImVec4 selection{0.31f,0.20f,0.50f,1.0f};
-    ImVec4 border{0.24f,0.22f,0.31f,1.0f};
-    ImVec4 separator{0.20f,0.20f,0.24f,1.0f};
-    ImVec4 scrollbarTrack{0.055f,0.058f,0.067f,1.0f};
-    ImVec4 scrollbar{0.26f,0.24f,0.32f,1.0f};
-    ImVec4 scrollbarHover{0.42f,0.31f,0.58f,1.0f};
-    ImVec4 scrollbarActive{0.56f,0.37f,0.76f,1.0f};
-    ImVec4 icon{0.78f,0.74f,0.86f,1.0f};
+    // Shared visual language with Dragonwilds Sync: quiet slate, soft rune
+    // accent, restrained secondary controls, one contrasting primary action.
+    ImVec4 window=Hex(0x181e29),panel=Hex(0x1c2330),panelAlt=Hex(0x212938);
+    ImVec4 navigation=Hex(0x141923),navigationHover=Hex(0x19212d),navigationActive=Hex(0x292b3c);
+    ImVec4 accent=Hex(0xb8a1ef),accentHover=Hex(0xcbb9f6),accentActive=Hex(0xa18bd7),onAccent=Hex(0x1b142a);
+    ImVec4 text=Hex(0xf1f3fb),textDisabled=Hex(0x9aa7ba);
+    ImVec4 control=Hex(0x19212d),controlHover=Hex(0x293446),controlActive=Hex(0x303b4e);
+    ImVec4 button=Hex(0x293344),buttonHover=Hex(0x354259),buttonActive=Hex(0x414d64);
+    ImVec4 selection=Hex(0x3a3554),border=Hex(0x303b4e),separator=Hex(0x303b4e);
+    ImVec4 scrollbarTrack=Hex(0x141923),scrollbar=Hex(0x495873),scrollbarHover=Hex(0x657493),scrollbarActive=Hex(0x8d8ac0);
+    ImVec4 icon=Hex(0xb8a1ef);
     ImVec4 success{0.35f,0.75f,0.50f,1.0f};
     ImVec4 warning{0.95f,0.70f,0.28f,1.0f};
     ImVec4 error{0.94f,0.34f,0.38f,1.0f};
     ImVec4 info{0.36f,0.67f,0.95f,1.0f};
-    ImVec4 scrollFade{0.050f,0.052f,0.060f,0.86f};
+    ImVec4 scrollFade{24.0f/255,30.0f/255,41.0f/255,0.86f};
 
     float userScale{1.18f},fontScale{1.34f},density{1.14f};
-    float frameRounding{3.0f},childRounding{4.0f},scrollbarSize{11.0f};
+    float frameRounding{6.0f},childRounding{8.0f},scrollbarSize{11.0f};
     float framePaddingX{8.0f},framePaddingY{4.0f},itemSpacingX{8.0f},itemSpacingY{6.0f};
     float sectionSpacing{10.0f},scrollFadeHeight{18.0f},navigationWidth{184.0f},navigationMinWidth{126.0f},navigationMaxWidth{320.0f};
     float contentGutter{12.0f},contentPaddingX{10.0f},contentPaddingY{6.0f},splitterWidth{6.0f},minWindowWidth{760.0f},minWindowHeight{560.0f};
@@ -62,6 +50,7 @@ struct Theme {
     int overscanRows{4};
     int itemGridColumns{ItemBayLayout::DefaultColumns},itemGridRows{ItemBayLayout::DefaultRows};
     bool itemGridFitRows{true};
+    int itemPageSize{ItemPaging::DefaultSize};
     bool dpiAware{true},autoReload{true},textBold{false},verboseTooltips{false},itemGridView{true},aiGridView{false},advancedMode{false};
     float itemResultHeight{320.0f},aiResultHeight{320.0f};
     std::string itemCategory{"All"};
@@ -103,11 +92,11 @@ inline void SelectSettingsSource(bool appData){
     Loaded=false;HaveStamp=false;ForceReload=true;
 }
 
-inline nlohmann::json DefaultDocument() {
+inline nlohmann::json LegacyDefaultDocument() {
     return {
-        {"version",16},{"autoReload",true},
+        {"version",17},{"autoReload",true},
         {"display",{{"dpiAware",true},{"userScale",1.18},{"fontScale",1.34},{"density",1.14},{"fontFamily","Segoe UI"},{"textBold",false},{"verboseTooltips",false},{"tooltipDelay",0.35}}},
-        {"views",{{"advancedMode",false},{"itemGrid",true},{"itemGridColumns",ItemBayLayout::DefaultColumns},{"itemGridRows",ItemBayLayout::DefaultRows},{"itemGridFitRows",true},{"aiGrid",false},{"itemResultHeight",320.0},{"aiResultHeight",320.0},{"itemCategory","All"}}},
+        {"views",{{"advancedMode",false},{"itemGrid",true},{"itemPageSize",ItemPaging::DefaultSize},{"itemGridColumns",ItemBayLayout::DefaultColumns},{"itemGridRows",ItemBayLayout::DefaultRows},{"itemGridFitRows",true},{"aiGrid",false},{"itemResultHeight",320.0},{"aiResultHeight",320.0},{"itemCategory","All"}}},
         {"cache",{{"iconCacheMB",200}}},
         {"colors",{
             {"window",{0.050,0.052,0.060,1.0}},{"panel",{0.075,0.078,0.090,1.0}},{"panelAlt",{0.100,0.104,0.120,1.0}},
@@ -148,14 +137,14 @@ inline void ReadPair(const nlohmann::json& obj,const char* name,float& x,float& 
 inline nlohmann::json ColorJson(const ImVec4& v){return nlohmann::json::array({v.x,v.y,v.z,v.w});}
 inline nlohmann::json DocumentFrom(const Theme& t,int iconCacheMB) {
     return {
-        {"version",16},{"autoReload",t.autoReload},
+        {"version",18},{"autoReload",t.autoReload},
         {"display",{{"dpiAware",t.dpiAware},{"userScale",t.userScale},{"fontScale",t.fontScale},{"density",t.density},{"fontFamily",t.fontFamily},{"textBold",t.textBold},{"verboseTooltips",t.verboseTooltips},{"tooltipDelay",t.tooltipDelay}}},
-        {"views",{{"advancedMode",t.advancedMode},{"itemGrid",t.itemGridView},{"itemGridColumns",t.itemGridColumns},{"itemGridRows",t.itemGridRows},{"itemGridFitRows",t.itemGridFitRows},{"aiGrid",t.aiGridView},{"itemResultHeight",t.itemResultHeight},{"aiResultHeight",t.aiResultHeight},{"itemCategory",t.itemCategory}}},
+        {"views",{{"advancedMode",t.advancedMode},{"itemGrid",t.itemGridView},{"itemPageSize",t.itemPageSize},{"itemGridColumns",t.itemGridColumns},{"itemGridRows",t.itemGridRows},{"itemGridFitRows",t.itemGridFitRows},{"aiGrid",t.aiGridView},{"itemResultHeight",t.itemResultHeight},{"aiResultHeight",t.aiResultHeight},{"itemCategory",t.itemCategory}}},
         {"cache",{{"iconCacheMB",std::clamp(iconCacheMB,0,16384)}}},
         {"colors",{
             {"window",ColorJson(t.window)},{"panel",ColorJson(t.panel)},{"panelAlt",ColorJson(t.panelAlt)},
             {"navigation",ColorJson(t.navigation)},{"navigationHover",ColorJson(t.navigationHover)},{"navigationActive",ColorJson(t.navigationActive)},
-            {"accent",ColorJson(t.accent)},{"accentHover",ColorJson(t.accentHover)},{"accentActive",ColorJson(t.accentActive)},
+            {"accent",ColorJson(t.accent)},{"accentHover",ColorJson(t.accentHover)},{"accentActive",ColorJson(t.accentActive)},{"onAccent",ColorJson(t.onAccent)},
             {"text",ColorJson(t.text)},{"textDisabled",ColorJson(t.textDisabled)},
             {"control",ColorJson(t.control)},{"controlHover",ColorJson(t.controlHover)},{"controlActive",ColorJson(t.controlActive)},
             {"button",ColorJson(t.button)},{"buttonHover",ColorJson(t.buttonHover)},{"buttonActive",ColorJson(t.buttonActive)},
@@ -173,6 +162,16 @@ inline nlohmann::json DocumentFrom(const Theme& t,int iconCacheMB) {
             {"gridCardHeight",t.gridCardHeight},{"gridMinCardWidth",t.gridMinCardWidth},{"navigationItemHeight",t.navigationItemHeight},{"navigationIconSize",t.navigationIconSize},{"loadingSpinnerRadius",t.loadingSpinnerRadius},{"loadingSpinnerThickness",t.loadingSpinnerThickness},{"overscanRows",t.overscanRows}
         }}
     };
+}
+inline nlohmann::json DefaultDocument(){return DocumentFrom(Theme{},200);}
+inline void UseSyncColors(){
+    const auto source=DocumentFrom(Theme{},200).at("colors");
+#define SYNC_COLOR(name) Current.name=ReadColor(source,#name,Current.name)
+    SYNC_COLOR(window);SYNC_COLOR(panel);SYNC_COLOR(panelAlt);SYNC_COLOR(navigation);SYNC_COLOR(navigationHover);SYNC_COLOR(navigationActive);
+    SYNC_COLOR(accent);SYNC_COLOR(accentHover);SYNC_COLOR(accentActive);SYNC_COLOR(onAccent);SYNC_COLOR(text);SYNC_COLOR(textDisabled);
+    SYNC_COLOR(control);SYNC_COLOR(controlHover);SYNC_COLOR(controlActive);SYNC_COLOR(button);SYNC_COLOR(buttonHover);SYNC_COLOR(buttonActive);
+    SYNC_COLOR(selection);SYNC_COLOR(border);SYNC_COLOR(separator);SYNC_COLOR(scrollbarTrack);SYNC_COLOR(scrollbar);SYNC_COLOR(scrollbarHover);SYNC_COLOR(scrollbarActive);SYNC_COLOR(icon);SYNC_COLOR(scrollFade);
+#undef SYNC_COLOR
 }
 inline void RequestReload(){ForceReload=true;}
 inline void SaveCurrent() {
@@ -203,14 +202,24 @@ inline void Reload(bool createIfMissing=true) {
         next.fontScale=ReadFloat(display,"fontScale",1.34f,0.70f,1.75f);next.density=ReadFloat(display,"density",1.14f,0.65f,1.50f);try{next.fontFamily=display.value("fontFamily",std::string("Segoe UI"));}catch(...){next.fontFamily="Segoe UI";}next.textBold=display.value("textBold",false);next.verboseTooltips=display.value("verboseTooltips",false);next.tooltipDelay=ReadFloat(display,"tooltipDelay",next.tooltipDelay,0.0f,2.0f);
         const auto views=doc.value("views",nlohmann::json::object());next.advancedMode=views.value("advancedMode",false);next.itemGridView=views.value("itemGrid",true);next.aiGridView=views.value("aiGrid",false);next.itemResultHeight=ReadFloat(views,"itemResultHeight",320.0f,180.0f,900.0f);next.aiResultHeight=ReadFloat(views,"aiResultHeight",320.0f,180.0f,900.0f);try{const auto value=views.value("itemCategory",std::string("All"));if(value=="All"||value=="Weapons"||value=="Armor"||value=="Consumables"||value=="Ammo"||value=="Resources"||value=="Tools"||value=="Building"||value=="Quest"||value=="Misc")next.itemCategory=value;}catch(...){}
         next.itemGridColumns=ReadInt(views,"itemGridColumns",ItemBayLayout::DefaultColumns,1,ItemBayLayout::MaxColumns);
+        next.itemPageSize=ReadInt(views,"itemPageSize",ItemPaging::DefaultSize,1,ItemPaging::MaximumSize);
         next.itemGridRows=ReadInt(views,"itemGridRows",ItemBayLayout::DefaultRows,1,ItemBayLayout::MaxRows);
         next.itemGridFitRows=views.value("itemGridFitRows",true);
         if(version<4){if(std::abs(next.userScale-1.10f)<0.001f)next.userScale=1.18f;if(std::abs(next.fontScale-1.04f)<0.001f)next.fontScale=1.18f;if(std::abs(next.density-1.06f)<0.001f)next.density=1.14f;}
         if(version<5&&std::abs(next.fontScale-1.14f)<0.001f)next.fontScale=1.18f;
         if(version<6&&std::abs(next.fontScale-1.18f)<0.001f)next.fontScale=1.34f;
-        const auto c=doc.value("colors",nlohmann::json::object());
+        auto c=doc.value("colors",nlohmann::json::object());
+        if(version<18){
+            const auto legacy=LegacyDefaultDocument().at("colors");bool unchanged=c.size()==legacy.size();
+            for(const auto& [key,value]:legacy.items()){
+                if(!unchanged)break;const auto old=ReadColor(legacy,key.c_str(),{}),saved=ReadColor(c,key.c_str(),{});
+                unchanged=std::abs(old.x-saved.x)<0.0001f&&std::abs(old.y-saved.y)<0.0001f&&std::abs(old.z-saved.z)<0.0001f&&std::abs(old.w-saved.w)<0.0001f;
+            }
+            if(unchanged)c=DefaultDocument().at("colors");
+        }
+        if(version<18&&!c.contains("onAccent"))next.onAccent=ReadColor(c,"text",next.text);
 #define HCOL(name) next.name=ReadColor(c,#name,next.name)
-        HCOL(window);HCOL(panel);HCOL(panelAlt);HCOL(navigation);HCOL(navigationHover);HCOL(navigationActive);HCOL(accent);HCOL(accentHover);HCOL(accentActive);HCOL(text);HCOL(textDisabled);
+        HCOL(window);HCOL(panel);HCOL(panelAlt);HCOL(navigation);HCOL(navigationHover);HCOL(navigationActive);HCOL(accent);HCOL(accentHover);HCOL(accentActive);HCOL(onAccent);HCOL(text);HCOL(textDisabled);
         HCOL(control);HCOL(controlHover);HCOL(controlActive);HCOL(button);HCOL(buttonHover);HCOL(buttonActive);HCOL(selection);HCOL(border);HCOL(separator);HCOL(scrollbarTrack);HCOL(scrollbar);
         HCOL(scrollbarHover);HCOL(scrollbarActive);HCOL(icon);HCOL(success);HCOL(warning);HCOL(error);HCOL(info);HCOL(scrollFade);
 #undef HCOL

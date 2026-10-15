@@ -113,6 +113,7 @@ class Runtime {
             }
         }
     }
+    void Failure(const std::string& message){if(ReportFailure)ReportFailure(message);else Report(message);}
     void Present(const std::string& text) noexcept {
         if(text.empty() || !Notify)return;
         try {Notify(participantController.Get(),ExpandMessage(text,run.Wave(),definition.Waves.size()),definition.Audience);}
@@ -121,13 +122,13 @@ class Runtime {
     void HideOwnedArea() noexcept {
         if(!areaShown)return;
         try {if(SetArea)SetArea(participantController.Get(),definition,false);}
-        catch(const std::exception& e){try{Report("area cleanup warning: "+std::string(e.what()));}catch(...) {}}
+        catch(const std::exception& e){try{Failure("area cleanup failed: "+std::string(e.what()));}catch(...) {}}
         areaShown=false;
     }
     void RestoreEventWeather() noexcept {
         if(!weatherActive)return;
         try {if(RestoreWeather)RestoreWeather(participantController.Get(),weatherToken);}
-        catch(const std::exception& e){try{Report("weather restore warning: "+std::string(e.what()));}catch(...) {}}
+        catch(const std::exception& e){try{Failure("weather restore failed: "+std::string(e.what()));}catch(...) {}}
         weatherActive=false;weatherToken.clear();
     }
     static UFunction* ZeroArgument(const TCHAR* path) {
@@ -205,7 +206,7 @@ class Runtime {
                 const auto search=PS::Grounding::SearchRange::Around(anchor);
                 const RC::Unreal::FVector start(member.Position[0],member.Position[1],search.Top);
                 const RC::Unreal::FVector end(member.Position[0],member.Position[1],search.Bottom);
-                if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,start,end,{static_cast<AActor*>(player)},impact,error)){
+                if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,start,end,{static_cast<AActor*>(player)},impact,error,anchor)){
                     if(error.empty())throw PS::Grounding::SurfacePending();
                     throw std::runtime_error("Event ground query failed: "+error);
                 }
@@ -295,6 +296,7 @@ public:
     std::function<std::string(UObject*,const std::string&)> BeginWeather;
     std::function<void(UObject*,const std::string&)> RestoreWeather;
     std::function<void(const std::string&)> Report=[](const std::string&){};
+    std::function<void(const std::string&)> ReportFailure;
     void Load(const std::string& mod,const Json& data){catalog.Load(mod,data);}
     void Require(const std::string& key)const{catalog.Find(key);}
     void ObserveClientReplica(AActor* actor,const std::string& eventKey) {
@@ -344,7 +346,7 @@ public:
         try {
             if(definition.Weather){weatherToken=BeginWeather(controller,*definition.Weather);weatherActive=true;}
             TrySpawnWave(true);
-        }catch(...){run.Fail();HideOwnedArea();RestoreEventWeather();try{Cleanup();}catch(const std::exception& e){Report(e.what());}throw;}
+        }catch(...){run.Fail();HideOwnedArea();RestoreEventWeather();try{Cleanup();}catch(const std::exception& e){Failure(e.what());}throw;}
         return wavePending?"Encounter is waiting for ground collision to finish streaming. Talk to me again to cancel.":"Encounter started. Defeat all waves, or talk to me again to cancel.";
     }
     std::string Cancel(const std::string& key,UObject* requester) {
@@ -410,13 +412,13 @@ public:
                 for(auto it=clientAreas.begin();it!=clientAreas.end();) {
                     std::erase_if(it->second.Actors,[](const Handle& handle){return !handle.Get();});
                     if(it->second.Actors.empty()) {
-                        try{if(SetArea)SetArea(it->second.Controller.Get(),it->second.Event,false);}catch(const std::exception& e){Report("client area cleanup warning: "+std::string(e.what()));}
+                        try{if(SetArea)SetArea(it->second.Controller.Get(),it->second.Event,false);}catch(const std::exception& e){Failure("client area cleanup failed: "+std::string(e.what()));}
                         it=clientAreas.erase(it);
                     } else ++it;
                 }
             }
         }
-        if(pendingStop){pendingStop=false;Present(definition.Text.Failed);HideOwnedArea();RestoreEventWeather();Cleanup();Report(definition.Key+": despawn is not a kill; encounter stopped");return;}
+        if(pendingStop){pendingStop=false;Present(definition.Text.Failed);HideOwnedArea();RestoreEventWeather();Cleanup();Failure(definition.Key+": despawn is not a kill; encounter stopped");return;}
         if(!run.Active()) {
             if(owned.empty())return;
             if(!std::isfinite(delta) || delta<0)return;
@@ -456,7 +458,7 @@ public:
         else if(ActorHelper::GetObjectRef(controller,TEXT("Pawn"))!=player || ActorHelper::GetObjectRef(player,TEXT("Controller"))!=controller){run.Cancel();stopReason="participant possession changed";}
         if(run.Active())for(size_t i=0;i<owned.size();++i)if(!owned[i].Actor.Get() && !run.IsDead(i)){run.Missing(i);stopReason="enemy "+std::to_string(i+1)+" handle invalid before confirmed death";break;}
         try {
-            if(!run.Active()){Present(definition.Text.Failed);HideOwnedArea();RestoreEventWeather();Cleanup();Report(definition.Key+": stopped: "+stopReason+"; no completion credited");return;}
+            if(!run.Active()){Present(definition.Text.Failed);HideOwnedArea();RestoreEventWeather();Cleanup();Failure(definition.Key+": stopped: "+stopReason+"; no completion credited");return;}
             if(wavePending){
                 if(groundRetry.Attempts>=8)throw std::runtime_error("Wave ground collision remained unavailable after bounded retries; no completion credited");
                 if(groundRetry.Ready())TrySpawnWave(initialWavePending);
@@ -467,7 +469,7 @@ public:
                 run.Advance();
                 if(run.Active()){groundRetry={};TrySpawnWave(false);}else {Present(definition.Text.Completed);HideOwnedArea();RestoreEventWeather();Report(definition.Key+": complete");}
             }
-        }catch(const std::exception& error){run.Fail();Present(definition.Text.Failed);HideOwnedArea();RestoreEventWeather();try{Cleanup();}catch(const std::exception& cleanup){Report(cleanup.what());}Report(definition.Key+": failed: "+error.what());}
+        }catch(const std::exception& error){run.Fail();Present(definition.Text.Failed);HideOwnedArea();RestoreEventWeather();try{Cleanup();}catch(const std::exception& cleanup){Failure(cleanup.what());}Failure(definition.Key+": failed: "+error.what());}
     }
 };
 }

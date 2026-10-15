@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <optional>
+#include <nlohmann/json.hpp>
 namespace PS::Grounding {
 // Search limits, never a placement fallback. Cell bounds only widen the query;
 // the returned position must still come from a blocking physics hit.
@@ -24,5 +26,21 @@ struct SearchRange {
 // Binding errors are not a missing surface and must not be retried as one.
 template<class Query> bool QuerySurface(Query&& query){
     if(query(false))return true;return query(true);
+}
+// A small upward allowance admits a stair tread, not an overhead storey.
+inline constexpr double StepUp=45.0;
+inline SearchRange FloorRange(SearchRange bounds,double reference){
+    if(!bounds.Valid()||!std::isfinite(reference))throw std::runtime_error("Ground reference must be finite");
+    bounds.Top=std::min(bounds.Top,reference+StepUp);
+    if(!bounds.Valid())throw std::runtime_error("Ground reference lies below the search range");
+    return bounds;
+}
+inline std::optional<double> Reference(const nlohmann::json& entry,std::optional<double> fallback={}){
+    if(!entry.contains("GroundReferenceZ"))return fallback;
+    const auto& value=entry.at("GroundReferenceZ");
+    if(!value.is_number())throw std::runtime_error("GroundReferenceZ must be a finite height in centimetres");
+    const auto z=value.get<double>();
+    if(!std::isfinite(z)||std::abs(z)>100000000)throw std::runtime_error("GroundReferenceZ is outside the supported world bounds");
+    return z;
 }
 }

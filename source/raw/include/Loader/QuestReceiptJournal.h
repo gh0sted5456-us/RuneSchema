@@ -1,6 +1,7 @@
 #pragma once
 #include "Loader/QuestProgress.h"
 #include "Loader/QuestSaveOwnership.h"
+#include "Loader/QuestDefinitionIdentity.h"
 #include <chrono>
 #include <bit>
 #include <functional>
@@ -50,6 +51,10 @@ class ReceiptJournal {
         const auto hash=Fingerprint();
         Write("RuneSchema.DefLo",std::bit_cast<int32_t>(uint32_t(hash)));
         Write("RuneSchema.DefHi",std::bit_cast<int32_t>(uint32_t(hash>>32)));
+        const auto logic=DefinitionIdentity::Hash(DefinitionIdentity::Progress(document));
+        Write("RuneSchema.LogicLo",std::bit_cast<int32_t>(uint32_t(logic)));
+        Write("RuneSchema.LogicHi",std::bit_cast<int32_t>(uint32_t(logic>>32)));
+        Write("RuneSchema.LogicVersion",1);
     }
     void ResetFresh() const {
         Stamp();
@@ -73,6 +78,9 @@ public:
         const int version=Read("RuneSchema.Version");
         if(!version) {
             auto old=QuestProgress::Read(legacy,character);
+            if(old.at("Quests").contains(quest.Key)
+                &&DefinitionIdentity::Progress(old["Quests"][quest.Key].at("Definition"))==DefinitionIdentity::Progress(document))
+                old["Quests"][quest.Key]["Definition"]=document;
             if(old.at("Quests").contains(quest.Key)
                 && old.at("Quests").at(quest.Key).at("Definition")!=document) {
                 if(!resetChanged)throw std::runtime_error("Changed legacy quest requires an authoritative reset");
@@ -99,7 +107,10 @@ public:
             Time("RuneSchema.Clock",Now());Write("RuneSchema.Phase",phase);
             Write("RuneSchema.Version",OwnershipVersion);
         } else if(version!=OwnershipVersion)throw std::runtime_error("Unsupported native quest receipt version");
-        if(!MatchesFingerprint(document)) {
+        const auto match=DefinitionIdentity::Compare(document,reader);
+        if(match!=DefinitionIdentity::Match::Changed){
+            if(match==DefinitionIdentity::Match::Presentation||Read("RuneSchema.LogicVersion")==0)Stamp();
+        }else {
             auto prior=document;prior.erase("Repeatable");
             auto explicitFalse=prior;explicitFalse["Repeatable"]=false;
             auto nativeState=nativeStateName();const auto colon=nativeState.rfind("::");

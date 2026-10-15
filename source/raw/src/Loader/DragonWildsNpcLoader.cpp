@@ -388,6 +388,7 @@ namespace DragonWilds {
     {
         m_summonNativeCredit=std::make_unique<Quests::Summons::NativeKillCredit>();
         m_events.Report=[](const std::string& message){PS::Log<LogLevel::Normal>(STR("Events: {}.\n"),PS::ToWideSafe(message.c_str()));};
+        m_events.ReportFailure=[this](const std::string& message){ErrorOnce("event-failure:"+message,PS::ToWideSafe("Events: "+message));};
         m_events.ApplyActorCue=[this](AActor* actor,const nlohmann::json& cue){PlayDialogueCue(actor,cue);};
         m_events.SetArea=[this](UObject* controller,const Events::Definition& event,bool show){return m_quests.SetEventArea(controller,event,show);};
         m_events.Notify=[](UObject* controller,const std::string& message,Events::Scope scope) {
@@ -763,7 +764,7 @@ namespace DragonWilds {
                 m_scanElapsed = 0.0;
                 if(std::none_of(m_definitions.begin(),m_definitions.end(),[&](const auto& definition){
                     return !definition.HelpyTemporary&&definition.Enabled&&definition.SpawnGate.Pending()
-                        &&definition.GroundRetry.Ready()&&(!m_scanBudget.Exhausted()||definition.GroundRetry.Pending);
+                        &&definition.GroundRetry.PlacementReady()&&(!m_scanBudget.Exhausted()||definition.GroundRetry.Pending);
                 }))return;
                 try
                 {
@@ -1112,6 +1113,10 @@ namespace DragonWilds {
             definition.GroundToSurface=placement.Ground;
             definition.GroundOffset=placement.Offset;
             definition.GroundAnchorZ=placement.Position[2];
+            definition.GroundReferenceZ=PS::Grounding::Reference(data);
+            if(definition.GroundReferenceZ&&!placement.Ground)
+                throw std::runtime_error("NPC GroundReferenceZ requires Location.Z '$'");
+            if(definition.GroundReferenceZ)definition.GroundAnchorZ=*definition.GroundReferenceZ;
             definition.GroundSearch=PS::Grounding::SearchRange::Around(definition.GroundAnchorZ);
         }
         ReadVector3(data, "Rotation", definition.SpawnRotation, false);
@@ -1902,7 +1907,7 @@ namespace DragonWilds {
         if (world && std::none_of(m_definitions.begin(), m_definitions.end(),
             [&](const auto& definition) {
                 return !definition.HelpyTemporary && definition.Enabled && definition.SpawnGate.Pending()
-                    && definition.CellReadyWorld == world && definition.GroundRetry.Ready();
+                    && definition.CellReadyWorld == world && definition.GroundRetry.PlacementReady();
             })) {
             const bool groundWaiting=std::any_of(m_definitions.begin(),m_definitions.end(),[&](const auto& definition){
                 return definition.Enabled&&definition.SpawnGate.Pending()&&definition.CellReadyWorld==world&&definition.GroundRetry.Pending;
@@ -1916,7 +1921,7 @@ namespace DragonWilds {
         }
         const bool groundRetryReady=world&&std::any_of(m_definitions.begin(),m_definitions.end(),[&](const auto& definition){
             return !definition.HelpyTemporary&&definition.Enabled&&definition.SpawnGate.Pending()
-                &&definition.CellReadyWorld==world&&definition.GroundRetry.Pending&&definition.GroundRetry.Ready();
+                &&definition.CellReadyWorld==world&&definition.GroundRetry.Pending&&definition.GroundRetry.PlacementReady();
         });
         if (groundRetryReady || m_scanBudget.Begin(world != nullptr))
         {
@@ -1956,7 +1961,7 @@ namespace DragonWilds {
         for (auto& definition : m_definitions)
         {
             if (definition.HelpyTemporary || !definition.Enabled || !definition.SpawnGate.Pending()
-                || definition.CellReadyWorld != world || !definition.GroundRetry.Ready())
+                || definition.CellReadyWorld != world || !definition.GroundRetry.PlacementReady())
             {
                 continue;
             }
@@ -2029,10 +2034,11 @@ namespace DragonWilds {
             }
             catch (const PS::Grounding::SurfacePending&)
             {
-                if(definition.GroundRetry.Missed())WarnOnce("npc-ground-wait:"+key,
-                    RC::to_generic_string("NPC '"+key+"' is waiting for streamed ground collision; nothing was created. Placement will retry."));
+                if(definition.GroundRetry.Missed())PS::Log<LogLevel::Verbose>(
+                    STR("NPC '{}' is waiting for streamed ground collision; placement remains queued.\n"),PS::ToWideSafe(key));
                 RecordPhase(definition,"Placement.WaitingForGround",nullptr,
-                    {{"SearchTopZ",definition.GroundSearch.Top},{"SearchBottomZ",definition.GroundSearch.Bottom}});
+                    {{"SearchTopZ",definition.GroundSearch.Top},{"SearchBottomZ",definition.GroundSearch.Bottom},
+                     {"GroundAttempts",definition.GroundRetry.Attempts},{"RetrySeconds",definition.GroundRetry.Wait}});
             }
             catch (const std::exception& error)
             {
@@ -2057,7 +2063,7 @@ namespace DragonWilds {
         FVector impact{};std::string error;
         if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,
             FVector(definition.TargetLocation[0],definition.TargetLocation[1],definition.GroundSearch.Top),
-            FVector(definition.TargetLocation[0],definition.TargetLocation[1],definition.GroundSearch.Bottom),{},impact,error)){
+            FVector(definition.TargetLocation[0],definition.TargetLocation[1],definition.GroundSearch.Bottom),{},impact,error,definition.GroundReferenceZ)){
             if(error.empty())throw PS::Grounding::SurfacePending();
             throw std::runtime_error("NPC ground query failed: "+error);
         }

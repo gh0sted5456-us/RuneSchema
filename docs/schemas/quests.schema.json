@@ -446,6 +446,13 @@
           "type": "array",
           "uniqueItems": true
         },
+        "Region": {
+          "description": "Native EQuestRegion name, resolved by reflected enum rather than a numeric ID. Current names: Brynmoor, Ghornfell, Fellhollow, Dowdun_Reach, Umbral_Sands, Scorned_Wilderness. None/MAX are not regions. Omit for legacy behavior; no location is guessed.",
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^(EQuestRegion::)?[A-Za-z][A-Za-z0-9_]*$",
+          "type": "string"
+        },
         "Repeat": {
           "additionalProperties": false,
           "description": "Cooldown starts at completion. UTC daily/weekly reset may be used alone or combined; all specified gates must pass. Never starts a new run automatically.",
@@ -1487,6 +1494,13 @@
             "maxItems": 32,
             "type": "array",
             "uniqueItems": true
+          },
+          "Region": {
+            "description": "Native EQuestRegion name, resolved by reflected enum rather than a numeric ID. Current names: Brynmoor, Ghornfell, Fellhollow, Dowdun_Reach, Umbral_Sands, Scorned_Wilderness. None/MAX are not regions. Omit for legacy behavior; no location is guessed.",
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^(EQuestRegion::)?[A-Za-z][A-Za-z0-9_]*$",
+            "type": "string"
           },
           "Repeat": {
             "additionalProperties": false,

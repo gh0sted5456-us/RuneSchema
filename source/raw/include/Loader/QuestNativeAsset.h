@@ -8,7 +8,9 @@
 #include "SDK/Helper/ReflectedContract.h"
 #include "Unreal/UObjectArray.hpp"
 #include "Unreal/Property/FTextProperty.hpp"
+#include "Unreal/Property/FEnumProperty.hpp"
 #include "Unreal/CoreUObject/UObject/FStrProperty.hpp"
+#include <cstring>
 
 namespace DragonWilds::Quests {
 // Root lease for a newly created quest asset. Registry references may outlive
@@ -93,6 +95,22 @@ public:
             };
             setString(TEXT("PersistenceID"),definition.PersistenceId);setString(TEXT("InternalName"),definition.Key);
             setText(TEXT("QuestName"),definition.Title);setText(TEXT("QuestDescription"),definition.Description);
+            if(!definition.Region.empty()){
+                auto* region=field(TEXT("QuestRegion"));UEnum* enumeration=nullptr;
+                if(auto* value=CastField<FEnumProperty>(region))enumeration=value->GetEnum();
+                else if(auto* value=CastField<FByteProperty>(region))enumeration=value->GetEnum().Get();
+                if(!enumeration||enumeration->GetPathName()!=TEXT("/Script/Dominion.EQuestRegion")
+                    ||region->GetElementSize()!=1||!ReflectedContract::Fits(region,type->GetPropertiesSize()))
+                    throw std::runtime_error("Quest region reflected contract changed");
+                const auto& names=enumeration->GetEnumNames();
+                if(names.Num()<1||names.Num()>256)throw std::runtime_error("Quest region enum is invalid");
+                std::vector<std::pair<std::string,int64_t>> values;
+                for(const auto& entry:names)values.emplace_back(RC::to_string(entry.Key.ToString()),entry.Value);
+                const auto value=ResolveRegion(definition.Region,values);
+                auto* address=region->ContainerPtrToValuePtr<void>(object);
+                std::memcpy(address,&value,sizeof(value));
+                if(*static_cast<uint8_t*>(address)!=value)throw std::runtime_error("Quest region write was not retained");
+            }
             if(PropertyHelper::GetPropertyByName(type,TEXT("CompletedQuestDescription")))
                 setText(TEXT("CompletedQuestDescription"),definition.CompletedDescription.empty()?definition.Description:definition.CompletedDescription);
             for(const auto* key:{TEXT("bIsMainQuest"),TEXT("bHideInQuestList"),TEXT("bIsTaskQuest")}) {

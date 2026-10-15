@@ -10,6 +10,8 @@
 #include "Loader/HumanNpc.h"
 #include "Loader/NpcMarkers.h"
 #include "Loader/NpcVisualEffect.h"
+#include "Core/GroundSurface.h"
+#include "Loader/NpcPlacement.h"
 #include "Loader/TimeOfDay.h"
 #include "Loader/VendorCategoryGate.h"
 
@@ -54,8 +56,13 @@ public:
         // behavior. One NPC definition now serves standalone and multiplayer.
         normalized.erase("Multiplayer");
         Require(normalized, {"Id","DisplayName","VisualSource","Mesh","Materials","IdleAnimation","HideMesh","NoInteract","HideName",
-            "Location","Rotation","Scale","Enabled","EnableCollision","MeshCollision","Type","Appearance","Equipment","HideWeapon","Pose","DialoguePose","Ghost","VisualEffect","Map","OverheadIcon","VendorID","DialogueID","LoreID","LoreEntry","JournalEntries","QuestID","TimeOfDay"});
+            "Location","GroundReferenceZ","Rotation","Scale","Enabled","EnableCollision","MeshCollision","Type","Appearance","Equipment","HideWeapon","Pose","DialoguePose","Ghost","VisualEffect","Map","OverheadIcon","VendorID","DialogueID","LoreID","LoreEntry","JournalEntries","QuestID","TimeOfDay"});
         const auto& source=normalized;
+        if(source.contains("GroundReferenceZ")){
+            (void)PS::Grounding::Reference(source);
+            if(!source.contains("Location")||!NpcPlacement::Parse(source.at("Location")).Ground)
+                throw std::runtime_error("NPC GroundReferenceZ requires Location.Z '$'");
+        }
         const auto key=Key(mod,source.at("Id").get<std::string>());
         HumanNpc::Validate(source);
         for(const auto* field:{"NoInteract","HideName"})

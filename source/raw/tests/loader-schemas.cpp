@@ -59,6 +59,10 @@ int RunLoaderSchemas(int argc,char** argv) {
     assert(kill["properties"].contains("SpawnID"));
     assert(kill["dependencies"]["SpawnID"]==nlohmann::json::array({"EventID"}));
     const auto& questSchema=schemas["quests"]["anyOf"][0];
+    assert(questSchema["properties"]["Region"]["type"]=="string");
+    assert(!questSchema["properties"]["Region"].contains("enum"));
+    assert(schemas["spawns"]["items"]["properties"].contains("GroundReferenceZ"));
+    assert(humanEquipment.is_object());
     assert(questSchema["properties"]["ShowInCompletedQuestList"]["default"]==true);
     assert(questSchema["properties"]["HideInQuestList"]["default"]==false);
     assert(questSchema["properties"]["CompletedDescription"]["maxLength"]==2048);

@@ -4,6 +4,7 @@
 #include <Unreal/CoreUObject/UObject/UnrealType.hpp>
 #include <Unreal/Property/FEnumProperty.hpp>
 #include <Unreal/AActor.hpp>
+#include <Unreal/World.hpp>
 #include "Utility/Logging.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Helper/ReflectedContract.h"
@@ -147,7 +148,8 @@ namespace UECustom {
     bool UKismetSystemLibrary::LineTraceGround(
         UObject* WorldContext, const FVector& Start, const FVector& End,
         const std::vector<AActor*>& ActorsToIgnore,
-        FVector& ImpactPoint, std::string& Error, UObject** HitComponent,bool TraceComplex)
+        FVector& ImpactPoint, std::string& Error, UObject** HitComponent,bool TraceComplex,
+        FVector* ImpactNormal,bool* StartPenetrating)
     {
         if (HitComponent) *HitComponent = nullptr;
         try
@@ -233,6 +235,18 @@ namespace UECustom {
             auto* hitData = outHitProperty->ContainerPtrToValuePtr<void>(parameters.data());
             std::memcpy(&ImpactPoint,
                 impactProperty->ContainerPtrToValuePtr<void>(hitData), sizeof(ImpactPoint));
+            if(ImpactNormal){
+                auto* normal=CastField<FStructProperty>(DragonWilds::PropertyHelper::GetPropertyByName(outHitProperty->GetStruct().Get(),TEXT("ImpactNormal")));
+                if(!normal||normal->GetElementSize()!=sizeof(FVector)||!IsValidParameter(normal,outHitProperty->GetElementSize(),sizeof(FVector)))
+                    throw std::runtime_error("FHitResult.ImpactNormal layout changed");
+                std::memcpy(ImpactNormal,normal->ContainerPtrToValuePtr<void>(hitData),sizeof(FVector));
+            }
+            if(StartPenetrating){
+                auto* penetrating=CastField<FBoolProperty>(DragonWilds::PropertyHelper::GetPropertyByName(outHitProperty->GetStruct().Get(),TEXT("bStartPenetrating")));
+                if(!penetrating||!IsValidParameter(penetrating,outHitProperty->GetElementSize(),penetrating->GetElementSize()))
+                    throw std::runtime_error("FHitResult.bStartPenetrating layout changed");
+                *StartPenetrating=penetrating->GetPropertyValue(penetrating->ContainerPtrToValuePtr<void>(hitData));
+            }
             if (HitComponent) {
                 auto* component = CastField<FObjectPropertyBase>(
                     DragonWilds::PropertyHelper::GetPropertyByName(
@@ -254,7 +268,8 @@ namespace UECustom {
     }
 
     bool UKismetSystemLibrary::FindGroundSurface(UObject* world,const FVector& start,
-        const FVector& end,const std::vector<AActor*>& ignored,FVector& impact,std::string& error)
+        const FVector& end,const std::vector<AActor*>& ignored,FVector& impact,std::string& error,
+        std::optional<double> referenceZ)
     {
         error.clear();
         const PS::Grounding::SearchRange range{start.Z(),end.Z()};
@@ -262,18 +277,51 @@ namespace UECustom {
             ||start.X()!=end.X()||start.Y()!=end.Y()){
             error="Ground placement requires a finite downward vertical query";return false;
         }
-        bool contractFailure=false;
+        // Without an authored height, find landscape beneath overhead actors.
+        // Ignoring an actor is query-local; no actor or collision is changed.
+        if(!referenceZ){
+            auto* landscape=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Landscape.LandscapeHeightfieldCollisionComponent"));
+            if(!landscape){error="Terrain collision metadata unavailable; supply GroundReferenceZ to select a floor";return false;}
+            auto terrainIgnored=ignored;bool found=false;
+            for(int attempt=0;attempt<16;++attempt){
+                UObject* component=nullptr;FVector terrain{};bool contractFailure=false;
+                const bool hit=PS::Grounding::QuerySurface([&](bool complex){
+                    if(contractFailure)return false;
+                    if(LineTraceGround(world,start,end,terrainIgnored,terrain,error,&component,complex))return true;
+                    contractFailure=!error.empty();return false;
+                });
+                if(!hit)return false;
+                if(!component||component->GetWorld()!=world){error="Ground collision owner could not be verified";return false;}
+                if(component->IsA(landscape)){
+                    if(!range.Contains(terrain.Z())||!std::isfinite(terrain.X())||!std::isfinite(terrain.Y())
+                        ||std::abs(terrain.X()-start.X())>1||std::abs(terrain.Y()-start.Y())>1){error="Terrain hit lies outside the search column";return false;}
+                    referenceZ=terrain.Z();found=true;break;
+                }
+                auto* owner=component->GetOuterPrivate();
+                if(!owner||!owner->IsA(AActor::StaticClass())||owner->GetWorld()!=world){error="GroundReferenceZ is required for this stacked collision layout";return false;}
+                auto* actor=static_cast<AActor*>(owner);
+                if(std::find(terrainIgnored.begin(),terrainIgnored.end(),actor)!=terrainIgnored.end()){
+                    error="Ground collision query did not advance";return false;
+                }
+                terrainIgnored.push_back(actor);
+            }
+            if(!found){error="Terrain search exceeded its bounded collision budget; supply GroundReferenceZ";return false;}
+        }
+        PS::Grounding::SearchRange floor;
+        try{floor=PS::Grounding::FloorRange(range,*referenceZ);}catch(const std::exception& e){error=e.what();return false;}
+        bool contractFailure=false;FVector normal{};bool penetrating=false;
         const bool hit=PS::Grounding::QuerySurface([&](bool complex){
             if(contractFailure)return false;
-            if(LineTraceGround(world,start,end,ignored,impact,error,nullptr,complex))return true;
-            contractFailure=!error.empty();return false;
+            if(!LineTraceGround(world,FVector(start.X(),start.Y(),floor.Top),end,ignored,impact,error,nullptr,complex,&normal,&penetrating)){
+                contractFailure=!error.empty();return false;
+            }
+            if(!floor.Contains(impact.Z())||!std::isfinite(impact.X())||!std::isfinite(impact.Y())
+                ||std::abs(impact.X()-start.X())>1||std::abs(impact.Y()-start.Y())>1){
+                error="Ground hit lies outside the requested vertical segment";contractFailure=true;return false;
+            }
+            return !penetrating&&std::isfinite(normal.Z())&&normal.Z()>=0.5;
         });
-        if(!hit)return false;
-        if(!range.Contains(impact.Z())||!std::isfinite(impact.X())||!std::isfinite(impact.Y())
-            ||std::abs(impact.X()-start.X())>1||std::abs(impact.Y()-start.Y())>1){
-            error="Ground hit lies outside the requested vertical segment";return false;
-        }
-        return true;
+        return hit;
     }
 
 	UKismetSystemLibrary* UKismetSystemLibrary::GetDefaultObj()

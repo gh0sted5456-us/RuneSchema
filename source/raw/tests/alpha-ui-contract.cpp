@@ -12,7 +12,8 @@ int main(int argc,char** argv){
     Require(panel.contains("AcceptDragDropPayload(\"RS_ITEM_ROW\")") && panel.contains("RenderCartDock();"));
     Require(panel.contains("SharedCart.Payload(mode)") && panel.contains("SetQuantity(entry.Path,quantity)"));
     Require(panel.contains("BeginDelivery(request,mode)")&&panel.contains("TakeCompleted(request,receipt)")&&panel.contains("CompleteDelivery(request,receipt)"));
-    Require(panel.contains("run(\"Deliver\",0)")&&panel.contains("if(theme.advancedMode)"));
+    Require(panel.contains("run(\"Give items\",0)")&&panel.contains("if(theme.advancedMode)")&&panel.contains("ItemPaging::CartHeight"));
+    Require(panel.contains("##item-tools")&&panel.contains("if(!itemPage)maintenance();")&&panel.contains("##cart-loadouts"));
     Require(panel.contains("if(!ui.advancedMode||ImGui::CollapsingHeader(\"Give / spawn item\"")
         &&!panel.contains("if(ui.advancedMode&&ImGui::CollapsingHeader(\"Give / spawn item\""));
     Require(panel.contains("RenderKitLibrary();")&&panel.contains("ImportKit(document,")&&panel.contains("HelpyKitFiles::Write(directory,"));

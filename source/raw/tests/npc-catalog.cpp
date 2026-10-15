@@ -23,6 +23,11 @@ int main(int argc,char** argv){
         assert(resolved.at("Stage")=="Visual" && resolved.at("EnableCollision")==true);
         assert(!resolved.contains("VendorID") && !resolved.contains("DialogueID"));
         assert(resolved.at("HideName")==true);
+        auto grounded=prop;grounded["Location"][2]="$";grounded["GroundReferenceZ"]=-3550;
+        NpcCatalog groundedCatalog;groundedCatalog.AddNpc("test",grounded);
+        assert(groundedCatalog.Resolve().at(0).Data.at("GroundReferenceZ")==-3550);
+        auto invalidHint=prop;invalidHint["GroundReferenceZ"]=-3550;
+        assert(Rejects([&]{NpcCatalog c;c.AddNpc("test",invalidHint);}));
         for(const auto* field:{"NoInteract","HideName"}) {
             auto bad=prop;bad[field]="true";
             assert(Rejects([&]{NpcCatalog c;c.AddNpc("test",bad);}));

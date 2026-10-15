@@ -82,6 +82,24 @@ int main(){
     variables["RuneSchema.Phase"]=3;variables["RuneSchema.ExchangeStep"]=0;
     const auto unknownPending=variables;
     assert(!stageReloaded.RecoverConfirmedExchange("Given") && variables==unknownPending);
+    for(int phase:{0,1,2,3,4}) {
+        variables.clear();nativeState="Ungiven";auto baseline=load();
+        variables["RuneSchema.Phase"]=phase;variables["RuneSchema.Run"]=phase?1:0;
+        variables["saved_counter"]=6;nativeState=phase==4?"Complete":"Given";
+        variables.erase("RuneSchema.LogicVersion");variables.erase("RuneSchema.LogicLo");variables.erase("RuneSchema.LogicHi");
+        const auto saved=variables;const int paid=payments,given=rewards;
+        auto presentation=document;presentation["Region"]="Brynmoor";presentation["CompletedDescription"]="The seam was mined.";
+        const auto make=[&](const Json& value){const auto def=Parse("Test",value);const ReceiptJournal receipt(def,value,legacy,character,
+            [&](const auto& key){return variables[key];},[&](const auto& key,int value){variables[key]=value;},
+            []{return true;},[]{},[&]{return nativeState;},[&]{return now;});};
+        // Constructor-only checks: its borrowed definition is not used later.
+        make(presentation);assert(variables["RuneSchema.Phase"]==phase&&variables["saved_counter"]==6);
+        for(const auto& [key,value]:saved)if(key!="RuneSchema.DefLo"&&key!="RuneSchema.DefHi")assert(variables[key]==value);
+        presentation["Title"]="Clearer title";presentation["Region"]="Ghornfell";presentation["Objective"]["Text"]="Clearer objective text";
+        make(presentation);assert(variables["RuneSchema.Phase"]==phase&&variables["saved_counter"]==6);
+        assert(payments==paid&&rewards==given);
+        presentation["Reward"]["Count"]=17;assert(Rejects([&]{make(presentation);}));
+    }
     for(bool explicitFalse:{false,true}) {
         auto single=document;single.erase("Repeat");single.erase("Repeatable");
         if(explicitFalse)single["Repeatable"]=false;
@@ -94,7 +112,7 @@ int main(){
         auto old=construct(singleDef,single);const auto before=variables;
         auto migrated=construct(repeatDef,repeat);
         assert(migrated.Phase()==4 && migrated.Run()==old.Run());
-        for(const auto& [key,value]:before)if(key!="RuneSchema.DefLo" && key!="RuneSchema.DefHi")assert(variables[key]==value);
+        for(const auto& [key,value]:before)if(key!="RuneSchema.DefLo" && key!="RuneSchema.DefHi" && key!="RuneSchema.LogicLo" && key!="RuneSchema.LogicHi")assert(variables[key]==value);
         variables=before;variables["RuneSchema.Phase"]=3;
         assert(Rejects([&]{construct(repeatDef,repeat);}));
         variables=before;auto changedReward=repeat;changedReward["Reward"]["Count"]=20;
@@ -107,7 +125,7 @@ int main(){
         auto activeMigrated=construct(repeatDef,repeat);
         assert(activeMigrated.Phase()==1 && activeMigrated.Run()==active.Run());
         for(const auto& [key,value]:activeBefore)
-            if(key!="RuneSchema.DefLo" && key!="RuneSchema.DefHi")assert(variables[key]==value);
+            if(key!="RuneSchema.DefLo" && key!="RuneSchema.DefHi" && key!="RuneSchema.LogicLo" && key!="RuneSchema.LogicHi")assert(variables[key]==value);
         auto again=construct(repeatDef,repeat);
         assert(again.Phase()==1 && variables["test_kill_counter"]==3);
         for(int phase:{0,2,3}) {

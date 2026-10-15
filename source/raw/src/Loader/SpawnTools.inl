@@ -766,7 +766,7 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
             const double x=origin.X()+distance*100;
             const double y=origin.Y();
             FVector ground{};std::string error;
-            if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,FVector(x,y,origin.Z()+500),FVector(x,y,origin.Z()-1500),{pawn},ground,error))
+            if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,FVector(x,y,origin.Z()+500),FVector(x,y,origin.Z()-1500),{pawn},ground,error,origin.Z()))
                 throw std::runtime_error("No ground at the requested building position; nothing spawned. "+error);
             positions.emplace_back(ground.X(),ground.Y(),ground.Z()+height);
             try {
@@ -936,7 +936,7 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
             if(!gridPoints.empty()){x=gridPoints[i]["Location"]["X"].get<double>();y=gridPoints[i]["Location"]["Y"].get<double>();}
             else if(placementMode=="Grid") {const int columns=static_cast<int>(std::ceil(std::sqrt(static_cast<double>(count))));x=std::round(origin.X()/gridSize)*gridSize+(gridX+i%columns)*gridSize;y=std::round(origin.Y()/gridSize)*gridSize+(gridY+i/columns)*gridSize;}
             FVector ground{};std::string error;
-            if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,FVector(x,y,origin.Z()+500),FVector(x,y,origin.Z()-1500),{pawn},ground,error))
+            if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,FVector(x,y,origin.Z()+500),FVector(x,y,origin.Z()-1500),{pawn},ground,error,origin.Z()))
                 throw std::runtime_error("No ground at a requested spawn position; nothing spawned. "+error);
             positions.emplace_back(ground.X(),ground.Y(),ground.Z()+(resource?0:100)+height);
         }

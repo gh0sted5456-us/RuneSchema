@@ -542,6 +542,12 @@
               },
               "type": "object"
             },
+            "GroundReferenceZ": {
+              "description": "Approximate floor height in centimetres, not a placement fallback. Selects collision below this height plus a 45 cm stair allowance. For bare $ without a hint, use the landscape beneath overhead roofs and bridges.",
+              "maximum": 100000000,
+              "minimum": -100000000,
+              "type": "number"
+            },
             "HideMesh": {
               "description": "Prop only: hide visual mesh while retaining collision.",
               "type": "boolean"
@@ -1714,6 +1720,12 @@
                   }
                 },
                 "type": "object"
+              },
+              "GroundReferenceZ": {
+                "description": "Approximate floor height in centimetres, not a placement fallback. Selects collision below this height plus a 45 cm stair allowance. For bare $ without a hint, use the landscape beneath overhead roofs and bridges.",
+                "maximum": 100000000,
+                "minimum": -100000000,
+                "type": "number"
               },
               "HideMesh": {
                 "description": "Prop only: hide visual mesh while retaining collision.",
@@ -2895,6 +2907,12 @@
                   },
                   "type": "object"
                 },
+                "GroundReferenceZ": {
+                  "description": "Approximate floor height in centimetres, not a placement fallback. Selects collision below this height plus a 45 cm stair allowance. For bare $ without a hint, use the landscape beneath overhead roofs and bridges.",
+                  "maximum": 100000000,
+                  "minimum": -100000000,
+                  "type": "number"
+                },
                 "HideMesh": {
                   "description": "Prop only: hide visual mesh while retaining collision.",
                   "type": "boolean"
@@ -4067,6 +4085,12 @@
                       }
                     },
                     "type": "object"
+                  },
+                  "GroundReferenceZ": {
+                    "description": "Approximate floor height in centimetres, not a placement fallback. Selects collision below this height plus a 45 cm stair allowance. For bare $ without a hint, use the landscape beneath overhead roofs and bridges.",
+                    "maximum": 100000000,
+                    "minimum": -100000000,
+                    "type": "number"
                   },
                   "HideMesh": {
                     "description": "Prop only: hide visual mesh while retaining collision.",

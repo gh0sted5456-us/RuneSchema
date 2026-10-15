@@ -22,6 +22,15 @@ int main(int argc,char** argv){
     const auto pending=npc.find("catch (const PS::Grounding::SurfacePending&)",begin);
     const auto hard=npc.find("catch (const std::exception& error)",pending);
     Require(pending!=std::string::npos&&hard!=std::string::npos&&npc.substr(pending,hard-pending).find("SpawnGate.Begin")==std::string::npos,"Ground misses permanently close an NPC spawn gate");
+    Require(npc.substr(pending,hard-pending).find("WarnOnce")==std::string::npos&&npc.substr(pending,hard-pending).find("LogLevel::Verbose")!=std::string::npos,"Ordinary NPC collision readiness still warns in normal logs");
+    Require(npc.find("GroundRetry.Ready()") == std::string::npos&&spawn.find("GroundRetry.Ready()") == std::string::npos,"Persistent placements still stop at the encounter retry deadline");
+    Require(npc.find("GroundRetry.PlacementReady()")!=std::string::npos&&spawn.find("GroundRetry.PlacementReady()")!=std::string::npos,"Persistent placements cannot recover after late collision readiness");
+    Require(npc.find("m_events.ReportFailure=[this]")!=std::string::npos&&event.find("Failure(definition.Key+\": failed: \"")!=std::string::npos,"Event failures are hidden with ordinary event diagnostics");
+    const std::string groundCatch="PS::Grounding::SurfacePending&";
+    for(size_t at=spawn.find(groundCatch);at!=std::string::npos;at=spawn.find(groundCatch,at+groundCatch.size())){
+        const auto next=spawn.find("catch",at+groundCatch.size());const auto handler=spawn.substr(at,next-at);
+        Require(handler.find("LogLevel::Warning")==std::string::npos&&handler.find("LogLevel::Verbose")!=std::string::npos,"Ordinary spawn collision readiness still warns");
+    }
     Require(npc.find("groundRetryReady || m_scanBudget.Begin(world != nullptr)")!=std::string::npos,"NPC ground wait consumes its asset-readiness budget");
     Require(npc.find("definition.GroundSearch.ObserveCell(bounds->Min.Z(),bounds->Max.Z())")!=std::string::npos
         &&npc.find("definition.GroundRetry.CellShown()")!=std::string::npos,"Streamed NPC collision cannot re-arm a bounded miss");
@@ -35,7 +44,11 @@ int main(int argc,char** argv){
     Require(event.find("if(wavePending){")<event.find("if(run.WaveComplete())"),"Pending event waves cannot retry before completion logic");
     Require(event.find("groundRetry.Attempts>=8")!=std::string::npos&&event.find("wavePending=false;initialWavePending=false;groundRetry={};")!=std::string::npos,"Event ground retries are not bounded or travel-scoped");
     Require(sdk.find("PS::Grounding::QuerySurface")!=std::string::npos&&sdk.find("if(contractFailure)return false;")!=std::string::npos,"Complex fallback retries a failed native contract");
-    Require(sdk.find("range.Contains(impact.Z())")!=std::string::npos,"Shared ground helper accepts invalid hit coordinates");
+    Require(sdk.find("floor.Contains(impact.Z())")!=std::string::npos,"Shared ground helper accepts invalid hit coordinates");
+    Require(sdk.find("LandscapeHeightfieldCollisionComponent")!=std::string::npos&&sdk.find("attempt<16")!=std::string::npos,"Bare $ does not use a bounded terrain baseline");
+    Require(sdk.find("!penetrating")!=std::string::npos&&sdk.find("normal.Z()>=0.5")!=std::string::npos,"Ground query accepts walls or initial overlap as a floor");
+    Require(npc.find("impact,error,definition.GroundReferenceZ")!=std::string::npos&&spawn.find("impact, traceError,spawn.GroundReferenceZ")!=std::string::npos,"Configured loaders lost their floor reference");
+    Require(event.find("impact,error,anchor")!=std::string::npos&&tools.find("ground,error,origin.Z()")!=std::string::npos,"Live tools/events ignore participant height");
     Require(journal.find("JournalSave::RemoveCurrent")==std::string::npos
         &&journal.find("JournalSave::Record(payload,RegisteredOwners())")!=std::string::npos,"Journal save hook strips active learned progress");
 }

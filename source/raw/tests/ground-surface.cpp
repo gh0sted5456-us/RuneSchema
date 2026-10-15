@@ -16,6 +16,18 @@ int main(){
     assert(!range.Contains(std::numeric_limits<double>::infinity()));
     assert(Rejects([]{SearchRange::Around(std::numeric_limits<double>::quiet_NaN());}));
     assert(Rejects([]{SearchRange::Around(0,-1,10);}));
+    // A terrain-level placement must not select an overhead bridge/roof.
+    const std::vector<double> stacked{900,500,25,0,-400};
+    const auto floorAt=[&](double reference){const auto r=FloorRange({1500,-1000},reference);for(double z:stacked)if(r.Contains(z))return z;return -99999.0;};
+    assert(floorAt(0)==25); // a local stair tread beats terrain, not the roof
+    assert(floorAt(500)==500); // an intentional bridge/deck reference
+    assert(floorAt(-400)==-400); // a lower floor is not pulled upstairs
+    assert(Rejects([]{FloorRange({100,0},-100);}));
+    assert(!Reference(nlohmann::json::object()));
+    assert(Reference({{"GroundReferenceZ",-3550}})==-3550);
+    assert(Reference(nlohmann::json::object(),123)==123);
+    assert(Rejects([]{Reference({{"GroundReferenceZ","$"}});}));
+    assert(Rejects([]{Reference({{"GroundReferenceZ",1e20}});}));
     std::vector<bool> calls;
     assert(QuerySurface([&](bool complex){calls.push_back(complex);return true;}));assert(calls==std::vector<bool>{false});
     calls.clear();assert(QuerySurface([&](bool complex){calls.push_back(complex);return complex;}));assert(calls==std::vector<bool>({false,true}));

@@ -20,7 +20,7 @@ struct State {
     std::string Query,NextCursor,LastError,Coverage;
     bool HasMore=true,Pending=false,Started=false;
     uint64_t AppliedRevision=0,CancelGeneration=1,ActiveRequestId=0,RuntimeGeneration=0;
-    int FillTarget=0;
+    int FillTarget=0,StalledWindows=0;
     std::unordered_map<std::string,CachedWindow> Cache;
     std::unordered_set<std::string> RandomSeen;
 };
@@ -62,7 +62,7 @@ inline bool RestoreCache(int category,const std::string& query,uint64_t generati
     const auto found=state.Cache.find(key);if(found==state.Cache.end()||found->second.Generation!=generation)return false;
     state.Query=query;state.Rows=found->second.Rows;state.NextCursor=found->second.NextCursor;state.HasMore=found->second.HasMore;
     if(category==0&&query.empty())RebuildRandomSeen(state);else state.RandomSeen.clear();
-    state.Started=true;state.Pending=false;state.RuntimeGeneration=generation;state.FillTarget=static_cast<int>(state.Rows.size());return true;
+    state.Started=true;state.Pending=false;state.LastError.clear();state.StalledWindows=0;state.RuntimeGeneration=generation;state.FillTarget=static_cast<int>(state.Rows.size());return true;
 }
 inline bool SubmitRequest(json request) {
     if(RemoteSubmit)return RemoteSubmit(std::move(request));
@@ -79,7 +79,7 @@ inline bool Request(int category,const char* mode,const std::string& query,bool 
     if(std::string_view(mode)=="Random") {std::random_device rd;request["Seed"]=(static_cast<uint64_t>(rd())<<32)^rd();}
     if(!SubmitRequest(request))return false;
     state.Started=true;state.Pending=true;state.ActiveRequestId=requestId;state.RuntimeGeneration=generation;
-    if(reset){state.Rows=json::array();state.RandomSeen.clear();state.NextCursor.clear();state.HasMore=true;state.Query=query;state.FillTarget=limit;}
+    if(reset){state.Rows=json::array();state.RandomSeen.clear();state.NextCursor.clear();state.LastError.clear();state.StalledWindows=0;state.HasMore=true;state.Query=query;state.FillTarget=limit;}
     return true;
 }
 inline bool Search(int category,const std::string& query) {
@@ -89,12 +89,18 @@ inline bool Search(int category,const std::string& query) {
     ++state.CancelGeneration;if(RemoteCancel)RemoteCancel(category,state.CancelGeneration);
     state.Pending=false;return Request(category,"Search",query,true,InitialRows,{},1);
 }
-inline bool More(int category) {
+inline bool RequestMore(int category) {
     auto& state=For(category);const char* mode=(category==0&&state.Query.empty())?"Random":"Search";
-    if(!state.Started||!state.HasMore||state.Pending)return false;
-    state.FillTarget=std::max(state.FillTarget,static_cast<int>(state.Rows.size())+MoreRows);
+    if(!state.Started||!state.HasMore||state.Pending||!state.LastError.empty())return false;
     return Request(category,mode,state.Query,false,MoreRows,state.NextCursor,3);
 }
+// Fill a finite visible page without moving its target on each response.
+inline bool FillTo(int category,int count) {
+    auto& state=For(category);state.FillTarget=std::max(state.FillTarget,std::clamp(count,0,100000));
+    if(static_cast<int>(state.Rows.size())>=state.FillTarget)return true;
+    return RequestMore(category);
+}
+inline bool More(int category){return FillTo(category,static_cast<int>(For(category).Rows.size())+MoreRows);}
 inline void FirstOpen(uint64_t generation) {
     if(!generation||FirstOpenGeneration==generation)return;
     FirstOpenGeneration=generation;FirstOpenPendingGeneration=0;
@@ -117,15 +123,18 @@ inline void ApplyWindow(const json& window,uint64_t revision) {
     const auto requestId=window.value("RequestId",uint64_t{});if(state.ActiveRequestId&&requestId&&requestId!=state.ActiveRequestId)return;
     state.AppliedRevision=revision;state.RuntimeGeneration=generation;
     const bool reset=window.value("Reset",false);const bool randomItems=category==0&&window.value("Mode",std::string{})=="Random";
-    if(reset){state.Rows=json::array();state.RandomSeen.clear();}
+    if(reset){state.Rows=json::array();state.RandomSeen.clear();state.StalledWindows=0;}
+    const auto before=state.Rows.size();
     if(window.contains("Rows")&&window["Rows"].is_array())for(const auto& row:window["Rows"]) {
         if(randomItems){const auto identity=RandomIdentity(row);if(!identity.empty()&&!state.RandomSeen.insert(identity).second)continue;}
         state.Rows.push_back(row);
     }
     state.NextCursor=window.value("NextCursor",std::string{});state.HasMore=window.value("HasMore",false);state.Pending=false;state.ActiveRequestId=0;state.LastError=window.value("Error",std::string{});
     state.Coverage=window.value("Coverage",std::string{});
+    state.StalledWindows=!reset&&state.HasMore&&state.Rows.size()==before?state.StalledWindows+1:0;
+    if(state.StalledWindows>=3&&state.LastError.empty())state.LastError="No additional items returned. Refresh the current list to retry.";
     SaveCache(category);
-    if(state.Started&&state.HasMore&&static_cast<int>(state.Rows.size())<state.FillTarget)More(category);
+    if(state.Started&&state.HasMore&&state.LastError.empty()&&static_cast<int>(state.Rows.size())<state.FillTarget)RequestMore(category);
 }
 inline void Apply(const json& snapshot,uint64_t revision) {
     if(snapshot.contains("_QueryResults")&&snapshot["_QueryResults"].is_array())for(const auto& result:snapshot["_QueryResults"])

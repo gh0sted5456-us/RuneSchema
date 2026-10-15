@@ -274,6 +274,12 @@
         "minimum": -100000,
         "type": "number"
       },
+      "GroundReferenceZ": {
+        "description": "Approximate floor height in centimetres, not a placement fallback. Selects collision below this height plus a 45 cm stair allowance. For bare $ without a hint, use the landscape beneath overhead roofs and bridges.",
+        "maximum": 100000000,
+        "minimum": -100000000,
+        "type": "number"
+      },
       "GroundToSurface": {
         "default": true,
         "description": "Trace the authored X/Y placement onto blocking ground before spawning. Disable only for intentionally airborne actors.",

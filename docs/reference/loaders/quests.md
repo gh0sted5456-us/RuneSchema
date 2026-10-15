@@ -16,6 +16,7 @@ stable persistence ID.
   "Title": "Gather Logs",
   "Description": "Bring back five logs.",
   "CompletedDescription": "The village has the timber it needs.",
+  "Region": "Brynmoor",
   "ShowInCompletedQuestList": true,
   "Category": "Regular",
   "Completion": "ReturnToNPC",
@@ -55,6 +56,29 @@ Internal hidden stage records remain hidden from both lists.
 Completion still follows the authored `Completion` rule and native quest state.
 Rewards and repeat eligibility remain separate from list presentation. Hiding
 an entry does not remove its persisted progress.
+
+## Quest region
+
+`Region` is the game's native `EQuestRegion` name. Current internal names are
+`Brynmoor`, `Ghornfell`, `Fellhollow`, `Dowdun_Reach`, `Umbral_Sands` and
+`Scorned_Wilderness`. `EQuestRegion::Brynmoor` is also accepted. Names are resolved
+from the running game's reflected enum, not hard-coded numeric IDs or a fixed
+allowlist. A future region added to that same enum can be used in JSON without
+updating RuneSchema. An unavailable name is rejected with a targeted error;
+`None`, `MAX` and numeric IDs are not accepted.
+
+Omitting `Region` preserves legacy behavior, which can display the game's
+missing-region placeholder. RuneSchema does not infer a region from coordinates.
+An arbitrary custom label is not a new native map region: that needs separate
+UI/world support. Quest category, region and objective search radius are distinct.
+
+Presentation-only updates preserve native phase, counters, repeat run and reward
+receipts after the progress fingerprint has been recorded. Old full-document
+receipts can migrate proven additions of `Region` and/or `CompletedDescription`
+without replaying rewards or resetting progress. Other old presentation edits
+cannot be proven from the old hash alone; migrate to the new receipt before
+changing those fields. Changes to identity, objectives, rewards, costs or repeat
+rules remain gameplay changes and retain their migration/reset checks.
 
 ## Objective presentation
 

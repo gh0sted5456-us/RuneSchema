@@ -133,7 +133,8 @@ inline void PollCartDelivery() {
 inline void RenderCartDock() {
     const auto& theme=HelpyImGuiTheme::Current;
     ImGui::PushStyleColor(ImGuiCol_ChildBg,theme.panelAlt);
-    if(ImGui::BeginChild("##item-cart-dock",ImVec2(0,theme.Y(theme.advancedMode?284.0f:244.0f)),true,ImGuiWindowFlags_AlwaysUseWindowPadding)){
+    const bool empty=ItemGridPicker::SharedCart.Entries().empty();
+    if(ImGui::BeginChild("##item-cart-dock",ImVec2(0,theme.Y(ItemPaging::CartHeight(ItemGridPicker::SharedCart.Entries().size(),theme.advancedMode))),true,ImGuiWindowFlags_AlwaysUseWindowPadding)){
         const auto pos=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();
         if(!ItemGridPicker::SharedCart.Delivery()&&ImGui::BeginDragDropTargetCustom(ImRect(pos,ImVec2(pos.x+size.x,pos.y+size.y)),ImGui::GetID("cart-transfer"))){
             if(const auto* payload=ImGui::AcceptDragDropPayload("RS_ITEM_ROW")){
@@ -143,15 +144,15 @@ inline void RenderCartDock() {
             }
             ImGui::EndDragDropTarget();
         }
-        ImGui::TextUnformatted("Cart / staging chest");ImGui::SameLine();
+        ImGui::TextUnformatted("Your cart");ImGui::SameLine();
         ImGui::TextDisabled("%zu / %zu",ItemGridPicker::SharedCart.Entries().size(),ItemCart::Model::Limit);
-        SameLineIfRoom(180);RenderKitLibrary();
+        SameLineIfRoom(100);if(ImGui::SmallButton("Loadouts"))ImGui::OpenPopup("##cart-loadouts");
+        if(ImGui::BeginPopup("##cart-loadouts")){RenderKitLibrary();ImGui::EndPopup();}
         ImGui::Separator();
         std::string removePath;
         const auto entries=ItemGridPicker::SharedCart.Entries();
         ImGui::BeginDisabled(ItemGridPicker::SharedCart.Delivery()!=0);
-        if(ImGui::BeginChild("##cart-items",ImVec2(0,theme.Y(134.0f)),false)){
-            if(entries.empty())ImGui::TextWrapped("Drag items from the inventory above, or right-click an item and choose Add to cart. Nothing is given until you confirm below.");
+        if(!empty&&ImGui::BeginChild("##cart-items",ImVec2(0,theme.Y(108.0f)),false)){
             const float spacing=ImGui::GetStyle().ItemSpacing.x,width=theme.X(118.0f);
             const int columns=std::max(1,static_cast<int>((ImGui::GetContentRegionAvail().x+spacing)/(width+spacing)));
             for(std::size_t index=0;index<entries.size();++index){
@@ -169,7 +170,8 @@ inline void RenderCartDock() {
                 int quantity=entry.Quantity;ImGui::SetNextItemWidth(width);if(ImGui::InputInt("##quantity",&quantity,1,10))ItemGridPicker::SharedCart.SetQuantity(entry.Path,quantity);
                 ImGui::EndGroup();ImGui::PopID();if((index+1)%columns && index+1<entries.size())ImGui::SameLine();
             }
-        }ImGui::EndChild();
+        }if(!empty)ImGui::EndChild();
+        if(empty)ImGui::TextDisabled("Drag items here, or right-click an item to add it.");
         if(!removePath.empty())ItemGridPicker::RemoveFromCart(removePath);
         ImGui::EndDisabled();
         if(SelectedPlayer.empty())ImGui::TextDisabled("Select a player first.");
@@ -183,9 +185,11 @@ inline void RenderCartDock() {
                 ItemGridPicker::SharedCart.CancelDelivery();ItemGridPicker::CartStatus="Delivery was not submitted; cart retained.";
             } else ItemGridPicker::CartStatus="Delivering; confirmed items will leave the cart.";
         };
-        ImGui::BeginDisabled(blocked);run("Deliver",0);
+        ImGui::BeginDisabled(blocked);
+        ImGui::PushStyleColor(ImGuiCol_Button,theme.accent);ImGui::PushStyleColor(ImGuiCol_ButtonHovered,theme.accentHover);ImGui::PushStyleColor(ImGuiCol_ButtonActive,theme.accentActive);
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.onAccent);run("Give items",0);ImGui::PopStyleColor(4);
         if(theme.advancedMode){SameLineIfRoom(100);run("One each",1);SameLineIfRoom(110);run("Half stacks",2);SameLineIfRoom(110);run("Full stacks",3);}ImGui::EndDisabled();
-        SameLineIfRoom(70);ImGui::BeginDisabled(ItemGridPicker::SharedCart.Delivery()!=0);if(ImGui::Button("Clear cart"))ItemGridPicker::ClearSharedCart();ImGui::EndDisabled();
+        if(!empty){SameLineIfRoom(70);ImGui::BeginDisabled(ItemGridPicker::SharedCart.Delivery()!=0);if(ImGui::SmallButton("Clear"))ItemGridPicker::ClearSharedCart();ImGui::EndDisabled();}
         if(theme.advancedMode) {
             ImGui::BeginDisabled(true);bool equip=false;ImGui::Checkbox("Auto-equip delivered gear (not mapped yet)",&equip);ImGui::EndDisabled();
             ImGui::SameLine();ImGui::BeginDisabled(SpawnToolRequests::IsWaiting());
@@ -252,9 +256,10 @@ inline void Render(View view) {
         if(!SpawnToolRequests::TrySubmit(std::move(request)))throw std::runtime_error("Runtime unavailable or another command is pending; nothing submitted.");
         clonePending=id;cloneError.clear();cloneStatus="Queued for the game thread.";
     };
-    if(ui.advancedMode)ImGui::TextWrapped("Runtime actions stay serialized on the game thread; browsing and filtering remain UI-side.");
+    const bool itemPage=view==View::Items;
     const int coverageCategory=CatalogCategory(view);
-    if(coverageCategory>=0&&!LazyCatalog::For(coverageCategory).Coverage.empty())ImGui::TextWrapped("%s",LazyCatalog::For(coverageCategory).Coverage.c_str());
+    const auto maintenance=[&]{
+    if(coverageCategory>=0&&!LazyCatalog::For(coverageCategory).Coverage.empty()&&ui.advancedMode)ImGui::TextWrapped("%s",LazyCatalog::For(coverageCategory).Coverage.c_str());
     if(ImGui::Button("Refresh current list")){buildingConfirmed=false;actors[0].Confirmed=false;actors[1].Confirmed=false;
         const int category=CatalogCategory(view);if(category>=0){auto& window=LazyCatalog::For(category);const char* mode=(category==0&&window.Query.empty())?"Random":"Search";LazyCatalog::Request(category,mode,window.Query,true,LazyCatalog::InitialRows);}}
     SameLineIfRoom(145.0f);if(ImGui::Button("Refresh players"))SpawnToolRequests::Submit({{"Action","QuickPlayers"}});
@@ -264,9 +269,12 @@ inline void Render(View view) {
         buildingConfirmed=false;actors[0].Confirmed=false;actors[1].Confirmed=false;rebuildCatalogs=false;SpawnToolRequests::Submit({{"Action","IndexQuickCatalog"}});
     }
     ImGui::EndDisabled();}
+    };
+    if(!itemPage)maintenance();
     auto label=std::string("Select player");
     if(result.contains("Players"))for(const auto& row:result["Players"])if(row["Path"]==player)label=row["Name"];
-    if(ImGui::BeginCombo("Player##spawn",label.c_str())) {
+    if(itemPage){ImGui::AlignTextToFramePadding();ImGui::TextUnformatted("Give to");ImGui::SameLine();ImGui::SetNextItemWidth(std::max(ui.X(120.0f),ImGui::GetContentRegionAvail().x-ui.X(85.0f)));}
+    if(ImGui::BeginCombo(itemPage?"##item-recipient":"Player##spawn",label.c_str())) {
         if(result.contains("Players"))for(const auto& row:result["Players"]) {
             const auto path=row["Path"].get<std::string>();ImGui::PushID(path.c_str());
             if(ImGui::Selectable(row["Name"].get_ref<const std::string&>().c_str(),player==path)){player=path;buildingConfirmed=false;actors[0].Confirmed=false;actors[1].Confirmed=false;}
@@ -274,6 +282,7 @@ inline void Render(View view) {
         }
         ImGui::EndCombo();
     }
+    if(itemPage){SameLineIfRoom(70);if(ImGui::Button("More"))ImGui::OpenPopup("##item-tools");if(ImGui::BeginPopup("##item-tools")){maintenance();ImGui::EndPopup();}}
     const auto invalidateSharedPlacement=[&]{actors[0].Confirmed=false;actors[1].Confirmed=false;buildingConfirmed=false;};
     const auto renderActorSection=[&](int kind,const char* title,ImGuiTreeNodeFlags flags=0) {
         if(!HelpyImGuiTheme::SectionHeader(title,kind==0?HelpyImGuiTheme::Icon::Ai:HelpyImGuiTheme::Icon::Resource,flags))return;
@@ -440,7 +449,7 @@ inline void Render(View view) {
     if(view==View::All||view==View::Ai)renderActorSection(0,"AI",ImGuiTreeNodeFlags_DefaultOpen);
     if(view==View::All||view==View::Resources)renderActorSection(1,"Resources",ImGuiTreeNodeFlags_DefaultOpen);
     if(view==View::All||view==View::Items||view==View::ItemLab) {
-        if((view==View::All||view==View::Items) && HelpyImGuiTheme::SectionHeader("Items",HelpyImGuiTheme::Icon::Item,ImGuiTreeNodeFlags_DefaultOpen)) {
+        if((view==View::All||view==View::Items) && (!ui.advancedMode||HelpyImGuiTheme::SectionHeader("Items",HelpyImGuiTheme::Icon::Item,ImGuiTreeNodeFlags_DefaultOpen))) {
             // Giving items is a basic action; Advanced only adds an optional
             // collapsing group and the customization controls in the cart.
             if(!ui.advancedMode||ImGui::CollapsingHeader("Give / spawn item",ImGuiTreeNodeFlags_DefaultOpen)) {

@@ -3,6 +3,7 @@
 #include "Loader/ItemIdentity.h"
 #include "Loader/QuestRepeatPolicy.h"
 #include "Loader/TimeOfDay.h"
+#include "Loader/QuestRegion.h"
 #include <map>
 #include <array>
 #include <cmath>
@@ -43,6 +44,7 @@ struct Definition {
     bool AnnounceProgress=false;
     std::string CompletedDescription,SubobjectiveDescription,Hint,QuestDescriptionOverride;
     bool HideInQuestList=false,ShowInCompletedQuestList=true;
+    std::string Region;
 };
 inline ItemAmount ParseItem(const Json& data) {
     const auto item=Dialogue::Text(data.at("Item"),1024);
@@ -55,7 +57,7 @@ inline ItemAmount ParseItem(const Json& data) {
     return {item,count.get<int>(),time};
 }
 inline Definition ParseDefinition(const std::string& mod,const Json& data,bool stageObjective) {
-    Dialogue::Fields(data,{"Id","PersistenceID","Title","Description","CompletedDescription","HideInQuestList","ShowInCompletedQuestList","Objective","Stages","Category","Prerequisites","Reward","RepeatReward","Repeatable","Repeat","StartCost","EntryOptions","ResultTiers","Completion","TimeOfDay"});
+    Dialogue::Fields(data,{"Id","PersistenceID","Title","Description","CompletedDescription","Region","HideInQuestList","ShowInCompletedQuestList","Objective","Stages","Category","Prerequisites","Reward","RepeatReward","Repeatable","Repeat","StartCost","EntryOptions","ResultTiers","Completion","TimeOfDay"});
     if(data.contains("Stages")) {
         if(data.contains("Objective"))throw std::runtime_error("Quest cannot combine Objective and Stages");
         const auto& stages=data.at("Stages");
@@ -147,6 +149,7 @@ inline Definition ParseDefinition(const std::string& mod,const Json& data,bool s
     if(category!="Regular" && category!="Story" && category!="Task")throw std::runtime_error("Quest Category must be Regular, Story, or Task");
     result.Story=category=="Story";
     result.Task=category=="Task";
+    if(data.contains("Region"))result.Region=RegionName(Dialogue::Text(data.at("Region"),80));
     result.CompletedDescription=data.contains("CompletedDescription")?Dialogue::Text(data.at("CompletedDescription"),2048):result.Description;
     for(const auto* flag:{"HideInQuestList","ShowInCompletedQuestList"})
         if(data.contains(flag)&&!data.at(flag).is_boolean())throw std::runtime_error("Quest list visibility fields must be boolean");

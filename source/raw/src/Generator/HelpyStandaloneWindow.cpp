@@ -137,7 +137,7 @@ struct UserColorPreset { std::string Name; nlohmann::json Colors; };
 void CopyThemeColors(HelpyImGuiTheme::Theme& dst,const HelpyImGuiTheme::Theme& src) {
 #define COPY_COLOR(name) dst.name=src.name
     COPY_COLOR(window);COPY_COLOR(panel);COPY_COLOR(panelAlt);COPY_COLOR(navigation);COPY_COLOR(navigationHover);COPY_COLOR(navigationActive);
-    COPY_COLOR(accent);COPY_COLOR(accentHover);COPY_COLOR(accentActive);COPY_COLOR(text);COPY_COLOR(textDisabled);
+    COPY_COLOR(accent);COPY_COLOR(accentHover);COPY_COLOR(accentActive);COPY_COLOR(onAccent);COPY_COLOR(text);COPY_COLOR(textDisabled);
     COPY_COLOR(control);COPY_COLOR(controlHover);COPY_COLOR(controlActive);COPY_COLOR(button);COPY_COLOR(buttonHover);COPY_COLOR(buttonActive);
     COPY_COLOR(selection);COPY_COLOR(border);COPY_COLOR(separator);COPY_COLOR(scrollbarTrack);COPY_COLOR(scrollbar);COPY_COLOR(scrollbarHover);COPY_COLOR(scrollbarActive);
     COPY_COLOR(icon);COPY_COLOR(success);COPY_COLOR(warning);COPY_COLOR(error);COPY_COLOR(info);COPY_COLOR(scrollFade);
@@ -148,7 +148,7 @@ nlohmann::json ThemeColorsJson(const HelpyImGuiTheme::Theme& t) {
     return {
         {"window",ColorJson(t.window)},{"panel",ColorJson(t.panel)},{"panelAlt",ColorJson(t.panelAlt)},
         {"navigation",ColorJson(t.navigation)},{"navigationHover",ColorJson(t.navigationHover)},{"navigationActive",ColorJson(t.navigationActive)},
-        {"accent",ColorJson(t.accent)},{"accentHover",ColorJson(t.accentHover)},{"accentActive",ColorJson(t.accentActive)},
+        {"accent",ColorJson(t.accent)},{"accentHover",ColorJson(t.accentHover)},{"accentActive",ColorJson(t.accentActive)},{"onAccent",ColorJson(t.onAccent)},
         {"text",ColorJson(t.text)},{"textDisabled",ColorJson(t.textDisabled)},
         {"control",ColorJson(t.control)},{"controlHover",ColorJson(t.controlHover)},{"controlActive",ColorJson(t.controlActive)},
         {"button",ColorJson(t.button)},{"buttonHover",ColorJson(t.buttonHover)},{"buttonActive",ColorJson(t.buttonActive)},
@@ -158,9 +158,10 @@ nlohmann::json ThemeColorsJson(const HelpyImGuiTheme::Theme& t) {
     };
 }
 void ApplyThemeColorsJson(HelpyImGuiTheme::Theme& t,const nlohmann::json& c) {
+    if(!c.contains("onAccent"))t.onAccent=HelpyImGuiTheme::ReadColor(c,"text",t.text);
 #define READ_COLOR(name) t.name=HelpyImGuiTheme::ReadColor(c,#name,t.name)
     READ_COLOR(window);READ_COLOR(panel);READ_COLOR(panelAlt);READ_COLOR(navigation);READ_COLOR(navigationHover);READ_COLOR(navigationActive);
-    READ_COLOR(accent);READ_COLOR(accentHover);READ_COLOR(accentActive);READ_COLOR(text);READ_COLOR(textDisabled);
+    READ_COLOR(accent);READ_COLOR(accentHover);READ_COLOR(accentActive);READ_COLOR(onAccent);READ_COLOR(text);READ_COLOR(textDisabled);
     READ_COLOR(control);READ_COLOR(controlHover);READ_COLOR(controlActive);READ_COLOR(button);READ_COLOR(buttonHover);READ_COLOR(buttonActive);
     READ_COLOR(selection);READ_COLOR(border);READ_COLOR(separator);READ_COLOR(scrollbarTrack);READ_COLOR(scrollbar);READ_COLOR(scrollbarHover);READ_COLOR(scrollbarActive);
     READ_COLOR(icon);READ_COLOR(success);READ_COLOR(warning);READ_COLOR(error);READ_COLOR(info);READ_COLOR(scrollFade);
@@ -197,7 +198,7 @@ std::string TrimPresetName(std::string name) {
 }
 constexpr const char* BuiltinColorPresetNames[]={
     "OldSchool RuneScape","RuneSchema .7","Dark Mode","Light Mode",
-    "Cyberpunk","Light Sky","Dark Sky","Mid Sky"
+    "Cyberpunk","Light Sky","Dark Sky","Mid Sky","Dragonwilds Sync"
 };
 HelpyImGuiTheme::Theme BuiltinColorPreset(int index) {
     using T=HelpyImGuiTheme::Theme;T t{};
@@ -210,7 +211,7 @@ HelpyImGuiTheme::Theme BuiltinColorPreset(int index) {
         t.button=C(0x3E/255.0f,0x35/255.0f,0x30/255.0f);t.buttonHover=C(0x6B/255.0f,0x58/255.0f,0x40/255.0f);t.buttonActive=C(0x7B/255.0f,0x67/255.0f,0x4B/255.0f);t.selection=C(0xC4/255.0f,0xB4/255.0f,0x8C/255.0f,0.28f);t.border=C(0x47/255.0f,0x47/255.0f,0x45/255.0f);t.separator=C(0x1C/255.0f,0x16/255.0f,0x12/255.0f);
         t.scrollbarTrack=C(0x2A/255.0f,0x28/255.0f,0x24/255.0f);t.scrollbar=C(0x47/255.0f,0x47/255.0f,0x45/255.0f);t.scrollbarHover=C(0x6B/255.0f,0x58/255.0f,0x40/255.0f);t.scrollbarActive=C(0xC4/255.0f,0xB4/255.0f,0x8C/255.0f);t.icon=C(0xE0/255.0f,0xB1/255.0f,0x2F/255.0f);
         t.success=C(0x5E/255.0f,0xA8/255.0f,0x64/255.0f);t.warning=C(0xE0/255.0f,0xB1/255.0f,0x2F/255.0f);t.error=C(0xBF/255.0f,0x55/255.0f,0x4C/255.0f);t.info=C(0x7E/255.0f,0xA8/255.0f,0xC9/255.0f);t.scrollFade=C(0x2E/255.0f,0x2C/255.0f,0x29/255.0f,.88f);break;
-    case 1: break;
+    case 1: ApplyThemeColorsJson(t,HelpyImGuiTheme::LegacyDefaultDocument().at("colors"));break;
     case 2:
         t.window=C(.025f,.027f,.029f);t.panel=C(.040f,.043f,.046f);t.panelAlt=C(.058f,.061f,.064f);t.navigation=C(.031f,.033f,.035f);
         t.navigationHover=C(.090f,.098f,.094f);t.navigationActive=C(.115f,.128f,.120f);t.accent=C(.330f,.470f,.390f);t.accentHover=C(.405f,.560f,.470f);t.accentActive=C(.260f,.390f,.320f);
@@ -328,7 +329,7 @@ void RenderSettings(const HelpyImGuiTheme::Theme& t) {
     };
     if(selectedPreset<0||selectedPreset>=presetCount)selectedPreset=std::min(1,std::max(0,presetCount-1));
 
-    if(ImGui::CollapsingHeader("Color theme presets",ImGuiTreeNodeFlags_DefaultOpen)) {
+    if(theme.advancedMode&&ImGui::CollapsingHeader("Color theme presets",ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::TextDisabled("Presets change colors only. Your sizing, layout, cache, and browser preferences stay untouched.");
         ImGui::AlignTextToFramePadding();ImGui::TextUnformatted("Preset");ImGui::SameLine(t.X(220.0f));ImGui::SetNextItemWidth(std::max(t.X(220.0f),ImGui::GetContentRegionAvail().x-t.X(162.0f)));
         const auto preview=presetLabel(selectedPreset);
@@ -387,11 +388,13 @@ void RenderSettings(const HelpyImGuiTheme::Theme& t) {
         ImGui::TextDisabled("Saving an existing custom name updates that preset in place.");
     }
 
+    if(ImGui::Button("Use Dragonwilds Sync colors")){HelpyImGuiTheme::UseSyncColors();changed();}
     if(!theme.advancedMode) {
         ImGui::SeparatorText("Size");
         if(ImGui::SliderFloat("Window scale",&theme.userScale,0.75f,2.0f,"%.2fx"))changed();
         if(ImGui::SliderFloat("Text scale",&theme.fontScale,0.8f,2.0f,"%.2fx"))changed();
-        ImGui::TextDisabled("Advanced mode adds detailed layout, colors, cache and authoring controls.");return;
+        ImGui::TextDisabled("Advanced mode adds detailed layout, colors, cache and authoring controls.");
+        if(pendingSave&&!ImGui::IsAnyItemActive()){HelpyImGuiTheme::SaveCurrent();pendingSave=false;}return;
     }
     if(ImGui::CollapsingHeader("Overall style",ImGuiTreeNodeFlags_DefaultOpen)) {
         sectionActions("overall-style",[&](){
@@ -412,11 +415,14 @@ void RenderSettings(const HelpyImGuiTheme::Theme& t) {
     }
 
     if(ImGui::CollapsingHeader("Display & sizing",ImGuiTreeNodeFlags_DefaultOpen)) {
-        sectionActions("display-sizing",[&](){theme.dpiAware=defaults.dpiAware;theme.autoReload=defaults.autoReload;theme.verboseTooltips=defaults.verboseTooltips;theme.tooltipDelay=defaults.tooltipDelay;theme.userScale=defaults.userScale;theme.fontScale=defaults.fontScale;theme.density=defaults.density;theme.resultListHeight=defaults.resultListHeight;theme.itemResultHeight=defaults.itemResultHeight;theme.aiResultHeight=defaults.aiResultHeight;theme.itemGridView=defaults.itemGridView;theme.itemGridColumns=defaults.itemGridColumns;theme.itemGridRows=defaults.itemGridRows;theme.itemGridFitRows=defaults.itemGridFitRows;theme.aiGridView=defaults.aiGridView;theme.itemCategory=defaults.itemCategory;theme.listIconSize=defaults.listIconSize;theme.gridIconSize=defaults.gridIconSize;theme.gridCardHeight=defaults.gridCardHeight;theme.gridMinCardWidth=defaults.gridMinCardWidth;theme.navigationItemHeight=defaults.navigationItemHeight;theme.navigationIconSize=defaults.navigationIconSize;theme.loadingSpinnerRadius=defaults.loadingSpinnerRadius;theme.loadingSpinnerThickness=defaults.loadingSpinnerThickness;theme.overscanRows=defaults.overscanRows;});
+        sectionActions("display-sizing",[&](){
+            theme.itemPageSize=defaults.itemPageSize;
+            theme.dpiAware=defaults.dpiAware;theme.autoReload=defaults.autoReload;theme.verboseTooltips=defaults.verboseTooltips;theme.tooltipDelay=defaults.tooltipDelay;theme.userScale=defaults.userScale;theme.fontScale=defaults.fontScale;theme.density=defaults.density;theme.resultListHeight=defaults.resultListHeight;theme.itemResultHeight=defaults.itemResultHeight;theme.aiResultHeight=defaults.aiResultHeight;theme.itemGridView=defaults.itemGridView;theme.itemGridColumns=defaults.itemGridColumns;theme.itemGridRows=defaults.itemGridRows;theme.itemGridFitRows=defaults.itemGridFitRows;theme.aiGridView=defaults.aiGridView;theme.itemCategory=defaults.itemCategory;theme.listIconSize=defaults.listIconSize;theme.gridIconSize=defaults.gridIconSize;theme.gridCardHeight=defaults.gridCardHeight;theme.gridMinCardWidth=defaults.gridMinCardWidth;theme.navigationItemHeight=defaults.navigationItemHeight;theme.navigationIconSize=defaults.navigationIconSize;theme.loadingSpinnerRadius=defaults.loadingSpinnerRadius;theme.loadingSpinnerThickness=defaults.loadingSpinnerThickness;theme.overscanRows=defaults.overscanRows;});
         checkbox("DPI aware",theme.dpiAware,defaults.dpiAware);checkbox("Auto reload ui.jsonc",theme.autoReload,defaults.autoReload);checkbox("Verbose tooltips",theme.verboseTooltips,defaults.verboseTooltips);ImGui::TextDisabled("Adds internal paths, IDs, classes and other available metadata to hover tooltips without triggering extra runtime queries.");slider("Tooltip delay",theme.tooltipDelay,0.0f,2.0f,defaults.tooltipDelay,"%.2f s");
         slider("User scale",theme.userScale,0.60f,2.50f,defaults.userScale);slider("Font scale",theme.fontScale,0.70f,1.75f,defaults.fontScale);slider("Density",theme.density,0.65f,1.50f,defaults.density);
+        sliderInt("Items per page",theme.itemPageSize,1,ItemPaging::MaximumSize,defaults.itemPageSize);
         sliderInt("Item bay columns",theme.itemGridColumns,1,ItemBayLayout::MaxColumns,defaults.itemGridColumns);sliderInt("Item bay rows",theme.itemGridRows,1,ItemBayLayout::MaxRows,defaults.itemGridRows);checkbox("Size item grid by rows",theme.itemGridFitRows,defaults.itemGridFitRows);
-        ImGui::TextDisabled("Default: 5 columns by 4 rows; narrows to fit. Layout controls are also available above each item bay.");
+        ImGui::TextDisabled("Default: 20 items per page in a 5 by 4 grid. View controls are also above each item bay.");
         slider("List icon size",theme.listIconSize,16.0f,96.0f,defaults.listIconSize,"%.0f");slider("Grid icon size",theme.gridIconSize,28.0f,160.0f,defaults.gridIconSize,"%.0f");
         slider("Grid card height",theme.gridCardHeight,72.0f,260.0f,defaults.gridCardHeight,"%.0f");slider("Grid minimum card width",theme.gridMinCardWidth,92.0f,320.0f,defaults.gridMinCardWidth,"%.0f");slider("Item results pane height",theme.itemResultHeight,180.0f,900.0f,defaults.itemResultHeight,"%.0f");slider("AI results pane height",theme.aiResultHeight,180.0f,900.0f,defaults.aiResultHeight,"%.0f");slider("Navigation item height",theme.navigationItemHeight,24.0f,72.0f,defaults.navigationItemHeight,"%.0f");slider("Navigation icon size",theme.navigationIconSize,10.0f,40.0f,defaults.navigationIconSize,"%.0f");slider("Loading spinner radius",theme.loadingSpinnerRadius,6.0f,40.0f,defaults.loadingSpinnerRadius,"%.1f");slider("Loading spinner thickness",theme.loadingSpinnerThickness,1.0f,8.0f,defaults.loadingSpinnerThickness,"%.1f");sliderInt("Icon overscan rows",theme.overscanRows,0,16,defaults.overscanRows);
         sizingPreview();
@@ -447,6 +453,7 @@ void RenderSettings(const HelpyImGuiTheme::Theme& t) {
         else ImGui::TextDisabled("Selected font is unavailable on this Windows install; Segoe UI fallback is active.");
         if(ImGui::SmallButton("Rescan font files"))FontRescanRequested=true;
         color("Text",theme.text,defaults.text,&theme.textBold,defaults.textBold);color("Disabled text",theme.textDisabled,defaults.textDisabled);color("Success",theme.success,defaults.success);color("Warning",theme.warning,defaults.warning);color("Error",theme.error,defaults.error);color("Info",theme.info,defaults.info);
+        color("Primary action text",theme.onAccent,defaults.onAccent);
         typographyPreview();
     }
 
@@ -513,7 +520,7 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
 
     ImGui::SameLine(0,t.X(t.contentGutter));ImGui::BeginChild("##helpy-content",ImVec2(0,0),false,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::Dummy(ImVec2(1,t.Y(5.0f)));const float headerInset=t.X(t.contentPaddingX);ImGui::SetCursorPosX(ImGui::GetCursorPosX()+headerInset);ImGui::TextUnformatted(PageTitle(CurrentPage));
-    const char* modeLabel=t.advancedMode?"Advanced":"Simple";const float modeWidth=ImGui::CalcTextSize("Advanced").x+ImGui::GetStyle().FramePadding.x*2.0f;
+    const char* modeLabel=t.advancedMode?"Advanced mode":"Simple mode";const float modeWidth=ImGui::CalcTextSize("Advanced mode").x+ImGui::GetStyle().FramePadding.x*2.0f;
     ImGui::SameLine();ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(),ImGui::GetWindowContentRegionMax().x-modeWidth-headerInset));
     if(ImGui::SmallButton(modeLabel)){HelpyImGuiTheme::Current.advancedMode=!t.advancedMode;HelpyImGuiTheme::SaveCurrent();}
     if(ImGui::IsItemHovered())ImGui::SetTooltip(t.advancedMode?"Switch to Simple mode":"Switch to Advanced mode");

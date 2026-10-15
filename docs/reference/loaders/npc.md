@@ -4,6 +4,14 @@
 
 Creates persistent interactable AI, human, resource-style actors, and merchants.
 
+`Location.Z: "$"` prefers landscape beneath overhead roofs or bridges. To place
+an NPC on a particular stair landing, bridge deck or upper floor, add an
+approximate `GroundReferenceZ` alongside a `$` location. The shared floor query
+allows a 45 cm step upward, rejects wall/underside hits and initial overlaps,
+and requires real blocking collision before applying `$+offset`/`$-offset`.
+A numeric NPC Z remains an exact authored placement. See the
+[stacked-surface grounding rules](spawns.md) for terrain and streaming limits.
+
 [← Loader reference](../../LOADER-WALKTHROUGHS.md)
 
 ```jsonc

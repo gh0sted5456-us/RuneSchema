@@ -11,7 +11,11 @@ building a preview do not install a mod or change the game data.
 
 Helpy's external F2 window has a compact **Simple / Advanced** switch in its header. Simple mode keeps everyday item browsing and delivery together; Advanced exposes Transmutate, Recipes, building tools, cleanup, full scans and detailed appearance controls. The preference is stored in `ui.jsonc` under `views.advancedMode`.
 
-The shared item bay defaults to **5 columns × 4 rows**. Choose **Layout** above the bay to change the column/row counts, or drag its lower divider for a free-height pane. The grid fits the available window and uses fewer columns on narrow windows; scroll to browse the remaining items. This changes the viewport, not the catalog's item limit. These preferences are shared by the inventory and editor bays and saved in `ui.jsonc` (`views.itemGridColumns`, `itemGridRows`, `itemGridFitRows`). Existing colors, scaling and list-view preferences are retained.
+The shared item bay defaults to **20 items per page** in a **5 columns × 4 rows** grid. Change the page size below the items (presets or a custom count from 1 to 100), then use **Previous / Next**. Page size changes preserve the first item's approximate position without clearing the cart. The catalog fetches only enough bounded windows to fill the requested page; it does not start a Full Scan. A partial catalog is marked “more available” rather than reporting a guessed total.
+
+Search runs after a short typing pause or immediately on Enter. **All categories** filters item types. **View** contains Grid/List and optional column/row controls; the lower divider still supports free-height resizing. Narrow windows reduce columns and short windows scroll within the page. Preferences are shared across inventory and editor bays and saved in `ui.jsonc` (`views.itemPageSize`, `itemGridColumns`, `itemGridRows`, `itemGridFitRows`).
+
+Choose an item, then **Add to cart**, or drag it into the compact cart. **Give items** is the only primary delivery action. **Loadouts** holds kit import/export; **More** holds list/player refresh and advanced scan tools. An empty cart does not reserve the height of a populated staging chest. Existing colors, scaling, list-view preferences and delivery confirmation semantics are retained.
 
 **Transmutate** separates source selection, customization and the resulting item into connected cards, with the item bay below. Inspect the selected source before creating a clone. Native property and JSON overrides are in a separate expandable section. The source item is not changed.
 

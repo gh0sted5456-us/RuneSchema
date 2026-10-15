@@ -102,6 +102,7 @@ namespace DragonWilds {
             bool bGroundToSurface = false;
             bool bGroundingResolved = true;
             double GroundZOffset = 0.0;
+            std::optional<double> GroundReferenceZ;
             double GroundTraceAbove = 5000.0;
             double GroundTraceBelow = 10000.0;
             RC::Unreal::FGuid StableId{};

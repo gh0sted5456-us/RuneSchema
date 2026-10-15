@@ -99,6 +99,7 @@ int main(){
     assert(authored["Location"]["X"]==100 && authored["Rotation"]["Yaw"]==90);
     auto staged=PS::SpawnAuthoring::StageGroundDraft(authored,312.5,12.5);
     assert(staged["Location"]["Z"]=="$+12.5" && staged["$z"]==312.5);
+    assert(staged["GroundReferenceZ"]==312.5);
     auto resolved=PS::SpawnAuthoring::ResolveGroundDrafts(Json::array({staged}));
     assert(resolved[0]["Location"]["Z"]==312.5 && !resolved[0].contains("$z"));
     const auto resourceExport=PS::SpawnAuthoring::Placement({{"Type","Actor"},{"Class","/Game/Rock.Rock_C"},{"UseNativeRespawn",true}},"rock_1",{1,2,3},0);

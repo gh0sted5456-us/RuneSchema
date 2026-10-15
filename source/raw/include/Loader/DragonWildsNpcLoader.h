@@ -144,6 +144,7 @@ namespace DragonWilds {
             bool GroundToSurface=false;
             double GroundOffset=0;
             double GroundAnchorZ=0;
+            std::optional<double> GroundReferenceZ;
             PS::Grounding::SearchRange GroundSearch;
             PS::Grounding::Retry GroundRetry;
             RC::Unreal::UWorld* GroundResolvedWorld=nullptr; // compared only; cleared on travel
