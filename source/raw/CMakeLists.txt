@@ -113,34 +113,7 @@ add_library(${TARGET} SHARED
 
 # API-1 Helpy native plugin. All Helpy UI/input ownership lives in this optional
 # binary; multiplayer orchestration remains in the mandatory RuneSchema target.
-add_library(RuneSchemaHelpyPlugin SHARED
-    plugins/helpy/HelpyPlugin.cpp
-    src/Generator/InGameQuickMenu.cpp
-    src/Generator/HelpyStandaloneWindow.cpp
-    src/Generator/ToolRequestState.cpp
-    src/Runtime/HostServices.cpp
-    src/SDK/Classes/Custom/UObjectGlobals.cpp
-    src/SDK/Classes/KismetSystemLibrary.cpp
-    src/SDK/DragonWildsSignatures.cpp
-    src/SDK/StaticClassStorage.cpp
-    src/SDK/Helper/ActorHelper.cpp
-    src/SDK/Helper/ArrayFieldPatch.cpp
-    src/SDK/Helper/Memory.cpp
-    src/SDK/Helper/PropertyHelper.cpp
-    src/SDK/Structs/FSoftObjectPath.cpp
-    src/SDK/Structs/Custom/FManagedValue.cpp
-    src/SDK/Structs/Custom/FManagedStruct.cpp
-    src/SDK/Structs/Custom/FScriptArrayHelper.cpp
-    src/SDK/Structs/Custom/FScriptMapHelper.cpp
-    src/SDK/Structs/Custom/FScriptSetHelper.cpp
-    src/Utility/Config.cpp
-    src/Utility/JsonHelpers.cpp)
-set_target_properties(RuneSchemaHelpyPlugin PROPERTIES OUTPUT_NAME "RuneSchema.Helpy")
-target_compile_definitions(RuneSchemaHelpyPlugin PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-target_include_directories(RuneSchemaHelpyPlugin PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_definitions(RuneSchemaHelpyPlugin PRIVATE _CRT_SECURE_NO_WARNINGS RUNESCHEMA_PLUGIN_CLIENT=1)
-target_link_libraries(RuneSchemaHelpyPlugin PRIVATE
-    RuneSchemaJsonCore UE4SS nlohmann_json::nlohmann_json safetyhook glaze::glaze efsw Zydis Zycore d3d11 dxgi dwmapi shell32)
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../helpy" "${CMAKE_CURRENT_BINARY_DIR}/helpy")
 
 target_include_directories(${TARGET} PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"

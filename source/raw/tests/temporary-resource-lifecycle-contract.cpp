@@ -64,7 +64,9 @@ int main(int argc,char** argv) {
     require(ground.find("if(traceError.empty())throw PS::Grounding::SurfacePending();")!=std::string::npos
         && spawn.find("catch (const PS::Grounding::SurfacePending&)")!=std::string::npos
         && spawn.find("ReconcileGroundingRetries(deltaSeconds)")!=std::string::npos
-        && spawn.find("if(groundRetriesOnly&&(!spawn.GroundRetry.Pending||!spawn.bCellActivated))continue;")!=std::string::npos,
+        && spawn.find("if(groundRetriesOnly&&!spawn.bCellActivated)continue;")!=std::string::npos
+        && spawn.find("spawn.bExistsInWorld || spawn.bSpawnFailed || spawn.bDeconstructed")!=std::string::npos
+        && spawn.find("|| (spawn.bTemporaryResource && spawn.bTemporaryResourceSpawned)")!=std::string::npos,
         "ground misses are permanently failed, retried outside activated cells, or lose their bounded tick pump");
     const auto trace=ground.find("if (!UECustom::UKismetSystemLibrary::FindGroundSurface(");
     const auto failure=ground.find("throw std::runtime_error(",trace);

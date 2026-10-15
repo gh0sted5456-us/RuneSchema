@@ -1,3 +1,5 @@
+#include "Core/MapLanding.h"
+#include "Core/SpawnCatalogSearch.h"
 #include "Generator/HelpyReferencePolicy.h"
 #include "Generator/F2CatalogPlan.h"
 #include "Generator/F2BundledPaths.h"
@@ -77,6 +79,8 @@ using namespace DragonWilds::SpawnRuntime;
 #include "Generator/HelpyIconTrace.h"
 #include "Generator/HelpyQueryService.h"
 #include "Generator/ItemIconThumbnail.h"
+#include "Generator/HelpyMapRuntime.h"
+#include "Generator/HelpyMapTexture.h"
 #include "Loader/SpawnAuthoringFields.h"
 #include "Loader/SpawnPlacementDraft.h"
 #include "Loader/TimeOfDayRuntime.h"
@@ -434,7 +438,7 @@ namespace DragonWilds {
             Hook::UnregisterCallback(m_protectedBuildingDestroyGuard);
         }
         PlayerGhost::Clear();
-        PS::ItemIconThumbnail::Reset();
+        PS::ItemIconThumbnail::Reset();PS::HelpyMapTexture::Reset();
         for (const auto& ref : m_rootedVisualEffectMaterials)
             if (auto* material=ref.Get()) if (material->IsRootSet()) material->ClearRootSet();
     }
@@ -2540,13 +2544,14 @@ namespace DragonWilds {
                 m_readyWorld = nullptr;
                 m_pendingWorld = nullptr;
                 m_pendingCellBounds.clear();
+                m_cellCatchupCursor=0;m_cellCatchupDelay=0;
                 m_toolActors.clear();
                 m_toolPlacements=nlohmann::json::array();
                 PS::SpawnToolRequests::Clear();
                 PS::HelpyQueryService::Clear();
                 PS::ItemIconRequests::Clear();
                 m_activeItemIcon.clear();
-                PS::ItemIconThumbnail::Reset();
+                PS::ItemIconThumbnail::Reset();PS::HelpyMapTexture::Reset();
                 PS::ItemIconRequests::SetAvailable(false);
                 m_visualEffectAppliedActors.clear();
                 m_nameplateAppliedActors.clear();
@@ -2581,6 +2586,7 @@ namespace DragonWilds {
                 RetryPendingAINames(deltaSeconds);
                 PumpClientSpawnVisuals(deltaSeconds);
                 RefreshPlayerNameplates(deltaSeconds);
+                ReconcileShownCells(deltaSeconds);
                 if (!m_pendingWorld)
                 {
                     return;
@@ -2628,6 +2634,32 @@ namespace DragonWilds {
             m_pendingWorld = world;
         }
         m_pendingCellBounds.push_back(*bounds);
+    }
+
+    void DragonWildsSpawnLoader::ReconcileShownCells(float deltaSeconds)
+    {
+        if(!m_readyWorld||!IsWorldStillLoaded(m_readyWorld)||!std::isfinite(deltaSeconds)||deltaSeconds<=0)return;
+        const bool authoritative=GetGameMode(m_readyWorld)!=nullptr;
+        if(std::none_of(m_spawns.begin(),m_spawns.end(),[&](const auto& spawn){
+            return (authoritative||spawn.Type==ESpawnEntryType::StaticAssembly)
+                &&!spawn.bExistsInWorld&&!spawn.bSpawnFailed&&!spawn.bCellActivated;
+        }))return;
+        m_cellCatchupDelay=std::max(0.0,m_cellCatchupDelay-std::min(1.0,static_cast<double>(deltaSeconds)));
+        if(m_cellCatchupDelay>0)return;
+        auto* type=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Engine.WorldPartitionRuntimeLevelStreamingCell"));
+        if(!type)return;
+        const auto count=FUObjectArray::GetNumElements();if(count<0||count>4'000'000)return;
+        const auto begin=std::chrono::steady_clock::now();size_t scanned=0;
+        while(m_cellCatchupCursor<static_cast<size_t>(count)&&scanned++<2048
+            &&std::chrono::steady_clock::now()-begin<std::chrono::microseconds(500)) {
+            auto* slot=FUObjectArray::IndexToObject(static_cast<int32>(m_cellCatchupCursor++));
+            auto* object=slot?slot->GetUObject():nullptr;
+            if(!object||!object->IsA(type)||object->GetWorld()!=m_readyWorld
+                ||object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed)))continue;
+            auto* cell=static_cast<UECustom::UWorldPartitionRuntimeLevelStreamingCell*>(object);
+            if(cell->IsShown())OnCellShown(cell);
+        }
+        if(m_cellCatchupCursor>=static_cast<size_t>(count)){m_cellCatchupCursor=0;m_cellCatchupDelay=2;}
     }
 
     bool DragonWildsSpawnLoader::HasLiveSpawnedAI(UWorld* world, SpawnInfo& spawn)
@@ -2862,7 +2894,7 @@ namespace DragonWilds {
                 const bool hasPending = std::any_of(m_spawns.begin(), m_spawns.end(), [](const SpawnInfo& spawn) {
                     return !spawn.bExistsInWorld && !spawn.bSpawnFailed;
                 });
-                if (authoritative && hasPending && GetAIDirector(world))
+                if (authoritative && hasPending)
                 {
                     ProcessSpawns(world, bounds);
                 }
@@ -2902,8 +2934,9 @@ namespace DragonWilds {
         unsigned groundBudget=4;
         for (auto& spawn : m_spawns)
         {
-            if(groundRetriesOnly&&(!spawn.GroundRetry.Pending||!spawn.bCellActivated))continue;
-            if (spawn.bExistsInWorld || spawn.bSpawnFailed)
+            if(groundRetriesOnly&&!spawn.bCellActivated)continue;
+            if (spawn.bExistsInWorld || spawn.bSpawnFailed || spawn.bDeconstructed
+                || (spawn.bTemporaryResource && spawn.bTemporaryResourceSpawned))
             {
                 continue;
             }
@@ -2933,6 +2966,8 @@ namespace DragonWilds {
             else spawn.bCellActivated = true;
 
             if(!spawn.GroundRetry.PlacementReady())continue;
+            // Resource/prop placement does not depend on AI-director readiness.
+            if(spawn.Type==ESpawnEntryType::AISpawnPoint&&!GetAIDirector(world))continue;
             try
             {
                 if(spawn.bTemporaryResource && TemporaryResourceCondition(spawn,world)!=true)continue;
@@ -3682,7 +3717,10 @@ namespace DragonWilds {
         m_groundingRetryElapsed=0;
         if(!m_readyWorld||!GetGameMode(m_readyWorld))return;
         bool ready=false;
-        for(auto& spawn:m_spawns)if(spawn.GroundRetry.Pending&&spawn.bCellActivated&&!spawn.bExistsInWorld&&!spawn.bSpawnFailed){
+        for(auto& spawn:m_spawns)if(spawn.bCellActivated&&!spawn.bExistsInWorld&&!spawn.bSpawnFailed){
+            // A shown cell can precede AI-director/condition readiness as well
+            // as collision. Revisit eligible unplaced entries, not live actors
+            // or saved native-depletion records already marked satisfied.
             spawn.GroundRetry.Advance(1.0);ready|=spawn.GroundRetry.PlacementReady();
         }
         if(ready)ProcessSpawns(m_readyWorld,nullptr,true);

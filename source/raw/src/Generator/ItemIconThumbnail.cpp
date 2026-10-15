@@ -1,3 +1,4 @@
+#include "Core/HelpySourceCache.h"
 #include "Generator/ItemIconThumbnail.h"
 #include "Generator/HelpyIconTrace.h"
 #include "Generator/HelpyRuntimePreferences.h"
@@ -167,7 +168,7 @@ namespace {
     int ConfiguredCacheLimitMB() {
         static int cached=200;static bool haveStamp=false;static std::filesystem::file_time_type stamp{};static std::chrono::steady_clock::time_point next{};
         const auto now=std::chrono::steady_clock::now();if(now<next)return cached;next=now+std::chrono::milliseconds(500);
-        const auto file=HostServices::WorkingDirectory()/"Mods"/"RuneSchema"/"plugins"/"RuneSchema.Helpy"/"settings"/"ui.jsonc";std::error_code ec;
+        const auto file=HelpySourceCache::Directory(false).parent_path().parent_path().parent_path().parent_path()/"ui.jsonc";std::error_code ec;
         const auto currentStamp=std::filesystem::last_write_time(file,ec);if(ec)return cached;if(haveStamp&&currentStamp==stamp)return cached;
         try {const auto doc=nlohmann::json::parse(ConfigFiles::Read(file),nullptr,true,true);const auto c=doc.value("cache",nlohmann::json::object());cached=std::clamp(c.value("iconCacheMB",200),0,16384);stamp=currentStamp;haveStamp=true;}catch(...){}
         return cached;
@@ -179,13 +180,13 @@ namespace {
 
     std::filesystem::path OutputFile(const std::string& iconPath) {
         const bool liveOnly=ConfiguredCacheLimitMB()==0;
-        auto folder=HostServices::CacheDirectory()/(liveOnly?"item-icons-live":"item-icons");
+        auto folder=HelpySourceCache::Directory(liveOnly);
         static std::uint64_t lastCacheEpoch=HelpyRuntimePreferences::IconCacheEpoch.load();const auto cacheEpoch=HelpyRuntimePreferences::IconCacheEpoch.load();if(cacheEpoch!=lastCacheEpoch){CacheBytesKnown=false;CacheBytes=0;lastCacheEpoch=cacheEpoch;}
         static int lastMode=-1;const int mode=liveOnly?0:1;
         if(liveOnly&&lastMode!=0){std::error_code ec;std::filesystem::remove_all(folder,ec);CacheBytesKnown=false;CacheBytes=0;}
         if(lastMode!=mode){CacheBytesKnown=false;CacheBytes=0;lastMode=mode;}
         std::filesystem::create_directories(folder);
-        return folder/(std::format("{:016x}.rsicon",HashPath(iconPath)));
+        return folder/(HelpySourceCache::Key(iconPath)+".rsicon");
     }
     bool CachedThumbnail(const std::filesystem::path& file) {
         std::error_code ec;if(!std::filesystem::is_regular_file(file,ec)||ec)return false;
@@ -387,7 +388,8 @@ namespace {
 
 nlohmann::json Render(UWorld* world,const std::string& iconPath) {
     if(iconPath.empty()||iconPath.size()>1024||iconPath.front()!='/')throw std::runtime_error("Item icon request requires a canonical texture path");
-    const auto cachedFile=OutputFile(iconPath);if(CachedThumbnail(cachedFile)) {ActiveCapture.reset();PS::HelpyIconTrace::Event("core-cache-hit",iconPath,"file='"+cachedFile.string()+"'");std::error_code touch;std::filesystem::last_write_time(cachedFile,std::filesystem::file_time_type::clock::now(),touch);MaintainCache(cachedFile.parent_path());return {{"Icon",iconPath},{"File",cachedFile.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",true}};}
+    HelpySourceCache::Poll(HostServices::ModDirectory());if(!HelpySourceCache::Ready())return {{"Icon",iconPath},{"Status","Pending"}};
+    const auto cachedFile=OutputFile(iconPath);if(CachedThumbnail(cachedFile)) {ActiveCapture.reset();PS::HelpyIconTrace::Event("core-cache-hit",iconPath,"file='"+cachedFile.string()+"'");std::error_code touch;std::filesystem::last_write_time(cachedFile,std::filesystem::file_time_type::clock::now(),touch);MaintainCache(cachedFile.parent_path());return {{"Icon",iconPath},{"File",cachedFile.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",true},{"SourceKey",HelpySourceCache::Current.Key}};}
     if(!world)throw std::runtime_error("Item icon rendering requires a loaded world");
     if(RendererWorld.Get()!=world){Reset();RendererWorld.Assign(world);}
     if(ActiveCapture&&(ActiveCapture->Icon!=iconPath||ActiveCapture->World.Get()!=world))ActiveCapture.reset();
@@ -417,7 +419,7 @@ nlohmann::json Render(UWorld* world,const std::string& iconPath) {
             if(alpha==0)for(std::size_t i=0;i+3<pixels.size();i+=4)pixels[i+3]=std::max({pixels[i],pixels[i+1],pixels[i+2]});
             WriteThumbnail(cachedFile,pixels);
             std::error_code ec;const auto bytes=std::filesystem::file_size(cachedFile,ec);MaintainCache(cachedFile.parent_path(),ec?0:bytes);
-            const auto result=nlohmann::json{{"Icon",iconPath},{"File",cachedFile.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",false},{"ColdLoad",capture.Cold},{"ResolvedClass",capture.ResolvedClass},{"ResolvedChain",capture.ResolvedChain}};
+            const auto result=nlohmann::json{{"Icon",iconPath},{"File",cachedFile.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",false},{"SourceKey",HelpySourceCache::Current.Key},{"ColdLoad",capture.Cold},{"ResolvedClass",capture.ResolvedClass},{"ResolvedChain",capture.ResolvedChain}};
             ActiveCapture.reset();return result;
         };
         if(capture.Timing.CanRead(now))return readCapture();

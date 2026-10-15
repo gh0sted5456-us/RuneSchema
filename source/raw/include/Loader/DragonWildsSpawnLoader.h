@@ -497,7 +497,7 @@ namespace DragonWilds {
         void RegisterRemoveActor(SpawnInfo& spawn, const nlohmann::json& value);
         void ApplyBuildingData(RC::Unreal::AActor* actor,const SpawnInfo& spawn);
         std::pair<bool,std::string> VerifyToolBuildingInstance(RC::Unreal::AActor* actor,RC::Unreal::UObject* building,const SpawnInfo& spawn,RC::Unreal::UWorld* world,bool requireTransient) const;
-        std::pair<bool,std::string> VerifyToolBuildingCandidate(RC::Unreal::UObject* building,const SpawnInfo& spawn,RC::Unreal::UWorld* world) const;
+        std::pair<bool,std::string> VerifyToolBuildingCandidate(RC::Unreal::UObject* building,const SpawnInfo& spawn,RC::Unreal::UWorld* world,bool requireTemporary=true) const;
         void ReconcileTimedBuildingProps(float deltaSeconds);
         void ReconcileManagedActorScales(double deltaSeconds);
         RC::Unreal::UClass* ResolveClass(const RC::StringType& classPath);
@@ -535,6 +535,9 @@ namespace DragonWilds {
         bool IsProtectedBuildingActor(RC::Unreal::AActor* actor) const;
         bool IsWorldStillLoaded(RC::Unreal::UWorld* world);
         void OnCellShown(RC::Unreal::UObject* cellObject);
+        void ReconcileShownCells(float deltaSeconds);
+        size_t m_cellCatchupCursor=0;
+        double m_cellCatchupDelay=0;
         bool HasLiveSpawnedAI(RC::Unreal::UWorld* world, SpawnInfo& spawn);
         std::optional<bool> TemporaryResourceCondition(const SpawnInfo& spawn,RC::Unreal::UWorld* world) const;
         void DestroyLiveSpawnedAI(RC::Unreal::UWorld* world,const SpawnInfo& spawn);

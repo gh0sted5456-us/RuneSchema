@@ -14,6 +14,18 @@ int main(int argc,char** argv){
     const auto sdk=Read(root/"src/SDK/Classes/KismetSystemLibrary.cpp");
     const auto journal=Read(root/"src/Loader/JournalPersistence.inl");
     const auto inspection=Read(root/"src/Generator/InspectionTools.cpp");
+    const auto cell=Read(root/"src/SDK/Classes/Custom/UWorldPartitionRuntimeLevelStreamingCell.cpp");
+    Require(spawn.find("ReconcileShownCells(deltaSeconds);")!=std::string::npos
+        &&spawn.find("if(cell->IsShown())OnCellShown(cell);")!=std::string::npos
+        &&spawn.find("scanned++<2048")!=std::string::npos&&spawn.find("microseconds(500)")!=std::string::npos,
+        "Already-shown spawn cells have no bounded catch-up after loader readiness");
+    Require(cell.find("TEXT(\"LevelStreaming\")")!=std::string::npos
+        &&cell.find("TEXT(\"LoadedLevel\")")!=std::string::npos&&cell.find("TEXT(\"bIsVisible\")")!=std::string::npos
+        &&cell.find("TEXT(\"bShouldBeVisible\")")==std::string::npos,
+        "Cell catch-up guesses visibility from requested state instead of reflected live state");
+    Require(spawn.find("authoritative && hasPending && GetAIDirector(world)")==std::string::npos
+        &&spawn.find("spawn.Type==ESpawnEntryType::AISpawnPoint&&!GetAIDirector(world)")!=std::string::npos,
+        "Resource actors still depend on unrelated AI-director readiness");
     const auto begin=npc.find("void DragonWildsNpcLoader::TrySpawnConfiguredVendors(");
     const auto ground=npc.find("ResolveNpcGrounding(world,definition);",begin);
     const auto gate=npc.find("if (!definition.SpawnGate.Begin()) continue;",begin);

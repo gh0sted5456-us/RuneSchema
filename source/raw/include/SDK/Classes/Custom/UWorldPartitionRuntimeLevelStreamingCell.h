@@ -12,6 +12,7 @@ namespace UECustom {
     class UWorldPartitionRuntimeLevelStreamingCell : public RC::Unreal::UObject {
     public:
         bool GetIsHLOD();
+        bool IsShown();
 
         UWorldPartitionRuntimeCellData* GetRuntimeCellData();
 

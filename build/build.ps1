@@ -280,6 +280,15 @@ try {
                 }
 
             # Adding/removing/renaming a .cpp must force configure for source
+            # Helpy is a sibling, not a descendant of raw. Ninja regeneration
+            # is disabled, so fingerprint its explicit build graph too.
+            $helpyCmake = Join-Path (Split-Path $SourceDirectory -Parent) 'helpy\CMakeLists.txt'
+            if ((Split-Path $SourceDirectory -Leaf) -eq 'raw' -and (Test-Path -LiteralPath $helpyCmake -PathType Leaf)) {
+                [void]$builder.AppendLine('../helpy/CMakeLists.txt')
+                [void]$builder.AppendLine((Get-Content -LiteralPath $helpyCmake -Raw))
+            }
+
+            # Adding/removing/renaming a .cpp must force configure for source
             # trees that discover files by glob. Smaller subprojects such as
             # source\raw\core do not have their own src directory; their
             # CMakeLists explicitly names sources, so the CMake file hash is

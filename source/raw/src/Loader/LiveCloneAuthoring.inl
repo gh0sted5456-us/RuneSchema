@@ -441,9 +441,10 @@ namespace DragonWilds {
 
     nlohmann::json DragonWildsAssetModLoader::CreateToolClone(const nlohmann::json& request,UWorld* world) {
         std::scoped_lock lock{m_mutex};
-        if(!world || !request.value("AcknowledgeExperimental",false))
+        const bool prepare=request.value("Action",std::string{})=="PrepareClone";
+        if(!world || (!prepare&&!request.value("AcknowledgeExperimental",false)))
             throw std::runtime_error("Acknowledge experimental clone testing on a disposable/backed-up save first");
-        if(m_toolCloneCount>=64)throw std::runtime_error("64 live-authored clones reached. Restart before creating more experimental items.");
+        if(!prepare&&m_toolCloneCount>=64)throw std::runtime_error("64 live-authored clones reached. Restart before creating more experimental items.");
         const auto sourcePath=request.at("Source").get<std::string>();
         const bool permanent=request.value("Permanent",false);
         PS::CookedAssets::TryEnsure();
@@ -526,10 +527,12 @@ namespace DragonWilds {
             if(value.dump().size()>PS::Authoring::MaxCloneValueBytes)throw std::runtime_error("Clone field is too large: "+key);
             CloneValidateOverride(p,value);
         }
+        UObject* subsystem=nullptr;
+        FMapProperty* persistenceMap=nullptr;FMapProperty* internalMap=nullptr;
+        if(!prepare) {
         auto* subsystemClass=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Dominion.ItemSubsystem"),false);
         if(!subsystemClass)throw std::runtime_error("ItemSubsystem is unavailable");
         TArray<UObject*> candidates;UECustom::UObjectGlobals::GetObjectsOfClass(subsystemClass,candidates,true);
-        UObject* subsystem=nullptr;
         for(auto* candidate:candidates) {
             if(!candidate || candidate->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed)))continue;
             auto* candidateWorld=candidate->GetWorld();if(candidateWorld && candidateWorld!=world)continue;
@@ -537,15 +540,16 @@ namespace DragonWilds {
             subsystem=candidate;
         }
         if(!subsystem)throw std::runtime_error("No current ItemSubsystem is ready");
-        auto* persistenceMap=CastField<FMapProperty>(PropertyHelper::GetPropertyByName(subsystem->GetClassPrivate(),TEXT("PersistenceIDToDataMap")));
-        auto* internalMap=CastField<FMapProperty>(PropertyHelper::GetPropertyByName(subsystem->GetClassPrivate(),TEXT("InternalNameToDataMap")));
+        persistenceMap=CastField<FMapProperty>(PropertyHelper::GetPropertyByName(subsystem->GetClassPrivate(),TEXT("PersistenceIDToDataMap")));
+        internalMap=CastField<FMapProperty>(PropertyHelper::GetPropertyByName(subsystem->GetClassPrivate(),TEXT("InternalNameToDataMap")));
         if(!persistenceMap || !internalMap)throw std::runtime_error("ItemSubsystem registry contract is unavailable");
+        }
         const auto modTag=request.value("ModTag",std::string("RuneSchema"));
         if(modTag.size()>64)throw std::runtime_error("Mod tag exceeds 64 bytes");
         const auto outputMod=request.value("OutputMod",std::string{});
         if(!outputMod.empty()&&(!permanent||!PS::Authoring::SafeModFolder(outputMod)))throw std::runtime_error("Choose a safe mod folder for a permanent clone");
         const auto folder=outputMod.empty()?std::string("runeschema"):outputMod;
-        if(permanent)(void)PS::Authoring::Directory("assets",folder); // Validate containment before constructing or registering anything.
+        if(permanent&&!prepare)(void)PS::Authoring::Directory("assets",folder); // Validate containment before constructing or registering anything.
         auto id=request.value("PersistenceID",std::string{});
         if(id.empty())id=PS::ClonePresentation::NewId(modTag);
         if(!PS::ClonePresentation::ValidId(id,modTag)||!IsCanonicalPersistenceId(id))
@@ -590,6 +594,10 @@ namespace DragonWilds {
         PendingAsset pending{RC::to_generic_string(target),RC::to_generic_string(target),RC::to_generic_string(folder),fields,false,declaration,permanent};
         auto savedFields=fields;savedFields["Modded"]={{"RuneSchema",true},{"Cooked",false},{"SafeToClone",true}};
         const auto document=nlohmann::json{{target,savedFields}};
+        // Resolve the exact loader documents without constructing an item,
+        // registering identities, adding stat rows, writing files, or granting it.
+        if(prepare)return {{"State","Prepared"},{"Path",target},{"PersistenceID",id},{"InternalName",name},
+            {"Documents",{{"assets",document},{"raw",rawDocument},{"recipes",recipeDocument},{"journal",journalDocument}}}};
         std::unique_ptr<PS::Authoring::StagedFile> file;
         std::vector<std::unique_ptr<PS::Authoring::StagedFile>> companions;
         if(permanent) {
@@ -680,6 +688,7 @@ namespace DragonWilds {
         catch(...) {}
         return {{"ModTag",modTag},{"OutputMod",permanent?folder:std::string{}},{"AppearanceSource",appearance},{"Mesh",mesh},{"State","Created"},{"Path",target},{"PersistenceID",id},{"InternalName",name},
             {"Permanent",permanent},{"File",file?file->Path().string():std::string{}},{"Files",installedFiles},
+            {"Documents",{{"assets",document},{"raw",rawDocument},{"recipes",recipeDocument},{"journal",journalDocument}}},
             {"PendingFiles",pendingFiles},{"CompanionsReady",fileIssue.empty()},{"CompanionError",fileIssue},{"StatRows",statRows.size()},
             {"CompanionsNeedRestart",!recipeDocument.empty()||!journalDocument.empty()},
             {"SoftDeleteField",soft?RC::to_string(soft->GetName()):std::string{}}};

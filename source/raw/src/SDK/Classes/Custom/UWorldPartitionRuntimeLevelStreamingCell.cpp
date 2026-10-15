@@ -41,6 +41,28 @@ namespace UECustom {
         return static_cast<UWorldPartitionRuntimeCellData*>(data);
     }
 
+    bool UWorldPartitionRuntimeLevelStreamingCell::IsShown()
+    {
+        // Read current visibility, not the requested bShouldBeVisible state.
+        // This catches cells shown before a loader finished initializing without
+        // activating unloaded cells or depending on executable-specific offsets.
+        const auto objectField=[](UObject* owner,const TCHAR* name)->UObject* {
+            if(!owner)return nullptr;
+            auto* property=CastField<FObjectPropertyBase>(DragonWilds::PropertyHelper::GetPropertyByName(owner->GetClassPrivate(),name));
+            if(!DragonWilds::ReflectedContract::Fits(property,owner->GetClassPrivate()->GetPropertiesSize())||!property->GetPropertyClass())return nullptr;
+            auto* value=property->GetObjectPropertyValue(property->ContainerPtrToValuePtr<void>(owner));
+            if(!value||!value->IsA(property->GetPropertyClass().Get())
+                ||value->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed)))return nullptr;
+            return value;
+        };
+        auto* streaming=objectField(this,TEXT("LevelStreaming"));
+        auto* level=objectField(streaming,TEXT("LoadedLevel"));
+        if(!level||level->GetWorld()!=GetWorld())return false;
+        auto* visible=CastField<FBoolProperty>(DragonWilds::PropertyHelper::GetPropertyByName(level->GetClassPrivate(),TEXT("bIsVisible")));
+        return DragonWilds::ReflectedContract::Fits(visible,level->GetClassPrivate()->GetPropertiesSize())
+            &&visible->GetPropertyValue(visible->ContainerPtrToValuePtr<void>(level));
+    }
+
     FBox* UWorldPartitionRuntimeLevelStreamingCell::GetContentBounds()
     {
         auto* cellData = GetRuntimeCellData();

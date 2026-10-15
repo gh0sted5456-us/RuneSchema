@@ -1,5 +1,59 @@
 #include "QuickMenuCatalog.inl"
 namespace {
+    std::pair<PS::MapProjection::Point,PS::MapProjection::Projection> ToolMapTarget(UWorld* world,const nlohmann::json& request){
+        const auto& value=request.at("TargetLocation");
+        if(!value.is_object()||!value.contains("X")||!value.contains("Y")||!value["X"].is_number()||!value["Y"].is_number())throw std::runtime_error("Select a valid map position");
+        const PS::MapProjection::Point point{value["X"].get<double>(),value["Y"].get<double>()};const auto projection=PS::HelpyMapRuntime::Projection(world);
+        if(!projection.Contains(point))throw std::runtime_error("Selected position is outside the native world map");return {point,projection};
+    }
+    FVector ToolMapGround(UWorld* world,const nlohmann::json& request,AActor* pawn=nullptr){
+        const auto [point,projection]=ToolMapTarget(world,request);FVector ground{};std::string error;
+        std::vector<AActor*> ignore;if(pawn)ignore.push_back(pawn);
+        for(const auto candidate:PS::MapLanding::Candidates(point,request.value("NearMarker",false)))if(projection.Contains(candidate)&&UECustom::UKismetSystemLibrary::FindGroundSurface(world,FVector(candidate.X,candidate.Y,projection.MaxZ),FVector(candidate.X,candidate.Y,projection.MinZ),ignore,ground,error))return ground;
+        throw std::runtime_error("Ground is unavailable at this map point. Move closer to load the area. "+error);
+    }
+    bool ToolMapInWorld(UObject* object,UWorld* world){for(int i=0;object&&i<32;++i,object=object->GetOuterPrivate())if(object==world)return true;return false;}
+    bool ToolMapLodestone(std::string name){std::ranges::transform(name,name.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});std::erase_if(name,[](unsigned char c){return c=='_'||c==' '||c=='-';});return name.find("lodestone")!=name.npos||name.find("teleportstone")!=name.npos;}
+    std::string ToolMapActorKind(UClass* type){
+        if(!type)return {};
+        for(UStruct* base=type;base;base=base->GetSuperStruct()){
+            const auto path=RC::to_string(base->GetPathName());if(ToolMapLodestone(path))return "Lodestone";
+            if(path=="/Script/Dominion.AISpawnPoint")return "AI";
+        }
+        auto* actor=ActorHelper::ResolveClass(TEXT("/Script/Engine.Actor"));auto* ai=ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionAICharacter"));
+        return actor&&ai&&ToolResourceClass(type,actor,ai)?"Resource":"";
+    }
+    nlohmann::json ToolMapActor(UObject* object,UWorld* world,const std::string& kind,bool managed=false,const std::string& name={}){
+        if(!object||!object->IsA<AActor>()||!ToolMapInWorld(object,world)||object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed)))return nullptr;
+        const auto at=ActorHelper::GetActorLocation(static_cast<AActor*>(object));if(!std::isfinite(at.X())||!std::isfinite(at.Y())||!std::isfinite(at.Z()))return nullptr;
+        return {{"Path",RC::to_string(object->GetPathName())},{"Name",name.empty()?ToolReadableName(RC::to_string(object->GetClassPrivate()->GetPathName())):name},{"Kind",kind},{"Managed",managed},{"Loaded",true},{"Location",{at.X(),at.Y(),at.Z()}}};
+    }
+    nlohmann::json ToolMapNativeMarkers(UWorld* world,bool& scanning,const nlohmann::json& filters){
+        struct Marker{PS::WeakObjectHandle Actor;std::string Kind;nlohmann::json Row;};
+        static uint64_t generation=0;static size_t cursor=0;static std::vector<Marker> found;
+        static std::unordered_set<std::string> seen;static std::unordered_map<std::string,std::string> kinds;static auto next=std::chrono::steady_clock::time_point{};
+        const auto now=std::chrono::steady_clock::now(),begin=now;const auto current=PS::SpawnToolRequests::Generation.load();
+        if(generation!=current){generation=current;cursor=0;found.clear();seen.clear();kinds.clear();next={};}
+        const auto count=FUObjectArray::GetNumElements();if(count<0||count>4'000'000)throw std::runtime_error("Map actor discovery exceeds its bound");
+        if(now>=next){
+            size_t scanned=0;
+            while(cursor<static_cast<size_t>(count)&&scanned++<8192&&std::chrono::steady_clock::now()-begin<std::chrono::microseconds(1500)){
+                auto* slot=FUObjectArray::IndexToObject(static_cast<int32>(cursor++));auto* object=slot?slot->GetUObject():nullptr;
+                if(!object||!object->IsA<AActor>()||!ToolMapInWorld(object,world)||object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed)))continue;
+                auto* type=object->GetClassPrivate();const auto className=RC::to_string(type->GetPathName());auto it=kinds.find(className);
+                if(it==kinds.end())it=kinds.emplace(className,ToolMapActorKind(type)).first;
+                if(it->second.empty())continue;const auto key=RC::to_string(object->GetPathName());
+                if(found.size()<8192&&seen.insert(key).second)found.push_back({PS::WeakObject(object),it->second,ToolMapActor(object,world,it->second)});
+            }
+            if(cursor>=static_cast<size_t>(count)){cursor=0;next=now+std::chrono::seconds(4);kinds.clear();}
+        }
+        scanning=cursor!=0;auto rows=nlohmann::json::array();
+        for(auto it=found.begin();it!=found.end();){auto* actor=it->Actor.Get();
+            if(!actor||!ToolMapInWorld(actor,world)||actor->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed))||it->Row.is_null()){it=found.erase(it);continue;}if(filters.value(it->Kind=="Lodestone"?"Lodestones":it->Kind=="Resource"?"Resources":"AI",it->Kind=="Lodestone"))rows.push_back(it->Row);++it;}
+        // Rebuild identity membership so a streamed-out marker can return later.
+        seen.clear();for(const auto& marker:found)seen.insert(marker.Row.at("Path").get<std::string>());
+        return rows;
+    }
     nlohmann::json ToolCatalog(const std::filesystem::path& file,const char* kind) {
         if(!std::filesystem::is_regular_file(file))throw std::runtime_error(std::string(kind)+" catalog is missing; explicitly build the catalogs first");
         auto value=nlohmann::json::parse(PS::ConfigFiles::Read(file,16*1024*1024));
@@ -12,8 +66,7 @@ namespace {
         std::ranges::transform(value,value.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});return value;
     }
     bool ToolWindowMatches(const nlohmann::json& row,const std::string& query) {
-        if(query.empty())return true;const auto q=ToolWindowFold(query);
-        return ToolWindowFold(row.value("Key",std::string{})+" "+row.value("Name",std::string{})+" "+row.value("Class",std::string{})+" "+row.value("Type",std::string{})+" "+row.value("ModId",std::string{})+" "+row.value("ResourceFamily",std::string{})).find(q)!=std::string::npos;
+        return PS::SpawnCatalogSearch::Matches(row,query);
     }
     std::uint64_t ToolStableId(const std::string& value) {
         std::uint64_t hash=1469598103934665603ull;for(const unsigned char c:value){hash^=c;hash*=1099511628211ull;}return hash;
@@ -228,8 +281,8 @@ std::pair<bool,std::string> DragonWildsSpawnLoader::VerifyToolBuildingInstance(A
         return {false,"Tool-created building actor lost RF_Transient"};
 
     auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(actorClass,TEXT("bSkipSpudStore")));
-    if(!skip || skip->GetArrayDim()!=1)
-        return {false,"BuildableActor has no verified bSkipSpudStore save-exclusion flag"};
+    if(requireTransient&&(!skip || skip->GetArrayDim()!=1))
+        return {false,"Temporary placement is unavailable for this piece. Choose Permanent to save a placement."};
     if(requireTransient && !skip->GetPropertyValue(skip->ContainerPtrToValuePtr<void>(actor)))
         return {false,"Tool-created building actor is not excluded from the native save store"};
 
@@ -259,13 +312,13 @@ std::pair<bool,std::string> DragonWildsSpawnLoader::VerifyToolBuildingInstance(A
     return {true,requireTransient?"Temporary actor retained the verified native binding and save-exclusion flags":"Native actor exactly matches this BuildingPieceData binding"};
 }
 
-std::pair<bool,std::string> DragonWildsSpawnLoader::VerifyToolBuildingCandidate(UObject* building,const SpawnInfo& spawn,UWorld* world) const {
+std::pair<bool,std::string> DragonWildsSpawnLoader::VerifyToolBuildingCandidate(UObject* building,const SpawnInfo& spawn,UWorld* world,bool requireTemporary) const {
     if(!building || !world || !GetGameMode(world))return {false,"No authoritative world is available for native building preflight"};
     auto* actorClass=ActorHelper::ResolveClass(spawn.ClassPath);
     if(!actorClass || !ActorHelper::IsActorClass(actorClass) || ActorHelper::IsAbstract(actorClass))
         return {false,"BuildableActor is not a concrete actor class"};
-    if(!CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(actorClass,TEXT("bSkipSpudStore"))))
-        return {false,"BuildableActor has no verified bSkipSpudStore save-exclusion flag"};
+    if(requireTemporary&&!CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(actorClass,TEXT("bSkipSpudStore"))))
+        return {false,"Temporary placement is unavailable for this piece. Choose Permanent to save a placement."};
     if(spawn.BuildingObjectProperty.empty() && !spawn.bHasBuildingDataIndex)
         return {false,"BuildableActor exposes no verified BuildingPieceData binding"};
 
@@ -418,6 +471,14 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
             auto result=PS::SpawnToolRequests::Read();result["NativeContracts"]=std::move(report);
             result["Status"]="Read-only native equip/unlock signatures exported: "+file.string();PS::SpawnToolRequests::Publish(std::move(result));return;
         }
+        if(action=="PrepareClone") {
+            auto* loader=DragonWildsAssetModLoader::AuthoringInstance;
+            if(!loader)throw std::runtime_error("The assets loader must be enabled before preparing item exports");
+            auto draft=*request;draft["Permanent"]=true;draft["Give"]=false;
+            auto result=PS::SpawnToolRequests::Read();result["CloneResult"]=loader->CreateToolClone(draft,m_readyWorld);
+            result["Status"]="RuneSchema JSONC prepared. No item created, installed or given.";
+            PS::SpawnToolRequests::Publish(std::move(result));return;
+        }
         if(action=="InspectClone") {
             auto* loader=DragonWildsAssetModLoader::AuthoringInstance;
             if(!loader)throw std::runtime_error("The assets loader must be enabled before inspecting items");
@@ -475,8 +536,46 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
                 if(chars.Num()>1 && chars.Num()<256 && chars.GetData() && chars.GetData()[chars.Num()-1]==0)name=RC::to_string(RC::StringType(chars.GetData(),chars.Num()-1));
             }
             const auto path=RC::to_string(controller->GetPathName());
-            players.push_back({{"Name",name},{"Path",path}});
+            auto playerRow=nlohmann::json{{"Name",name},{"Path",path}};
+            try{if(auto* playerPawn=static_cast<AActor*>(ActorHelper::GetObjectRef(controller,TEXT("Pawn")))){
+                const auto position=ActorHelper::GetActorLocation(playerPawn);playerRow["Location"]={position.X(),position.Y(),position.Z()};
+            }}catch(...){}
+            players.push_back(std::move(playerRow));
             if(path==request->value("Player",std::string{})){if(selected)throw std::runtime_error("Player selection is ambiguous; refresh");selected=controller;}
+        }
+        if(action=="MapBuildings"){
+            auto result=PS::SpawnToolRequests::Read();result["MapBuildings"]=PS::HelpyMapRuntime::Buildings(request->value("Query",std::string{}),request->value("Offset",size_t{}));result["Status"]="Read the game's building menu.";PS::SpawnToolRequests::Publish(std::move(result));return;
+        }
+        if(action=="MapProbe"){
+            auto result=PS::SpawnToolRequests::Read();
+            try{const auto ground=ToolMapGround(m_readyWorld,*request);result["MapPoint"]={{"GroundAvailable",true},{"Location",{ground.X(),ground.Y(),ground.Z()}}};}
+            catch(const std::exception& error){result["MapPoint"]={{"GroundAvailable",false},{"Error",error.what()}};}
+            result["Status"]="Read coordinates at the selected map point.";PS::SpawnToolRequests::Publish(std::move(result));return;
+        }
+        if(action=="MapSnapshot"){
+            auto result=PS::SpawnToolRequests::Read();
+            try{
+                auto& map=result["MapSnapshot"];map=PS::HelpyMapRuntime::Snapshot(m_readyWorld,players);map["CanBuildAndTeleport"]=GetGameMode(m_readyWorld)!=nullptr;
+                bool scanning=false;auto markers=ToolMapNativeMarkers(m_readyWorld,scanning,*request);std::unordered_map<std::string,size_t> identities;
+                for(size_t i=0;i<markers.size();++i)identities[markers[i].at("Path").get<std::string>()]=i;
+                const auto append=[&](nlohmann::json row){if(row.is_null())return;const auto key=row.at("Path").get<std::string>();if(auto it=identities.find(key);it!=identities.end())markers[it->second]=std::move(row);else if(markers.size()<8192){identities[key]=markers.size();markers.push_back(std::move(row));}};
+                for(const auto& ref:m_toolActors)if(auto* actor=ref.Get()){
+                    auto kind=ToolMapActorKind(actor->GetClassPrivate());if(kind.empty())kind="Actor";if(!request->value("Placements",true)&&!(kind=="Lodestone"&&request->value("Lodestones",true)))continue;append(ToolMapActor(actor,m_readyWorld,kind,true));
+                }
+                for(const auto& spawn:m_spawns){
+                    if(spawn.Type==ESpawnEntryType::RemoveActor||spawn.bDeconstructed)continue;
+                    const std::string kind=ToolMapLodestone(RC::to_string(spawn.ClassPath)+spawn.BuildingDataPath)?"Lodestone":spawn.Type==ESpawnEntryType::AISpawnPoint?"AI":spawn.bBuildingProp?"Building":"Resource";
+                    if(!request->value("Placements",true)&&!(kind=="Lodestone"&&request->value("Lodestones",true)))continue;
+                    auto name=spawn.DisplayName;if(name.empty())name=ToolReadableName(RC::to_string(spawn.Type==ESpawnEntryType::AISpawnPoint?spawn.AIClassPath:spawn.ClassPath));
+                    auto row=ToolMapActor(spawn.LiveActor.Get(),m_readyWorld,kind,true,name);
+                    if(row.is_null()){const auto& at=spawn.Location;if(!std::isfinite(at.X())||!std::isfinite(at.Y())||!std::isfinite(at.Z()))continue;
+                        row={{"Path","@placement:"+RC::to_string(spawn.ModName)+":"+RC::to_string(spawn.EntryId)},{"Name",name+" (saved placement)"},{"Kind",kind},{"Managed",true},{"Loaded",false},{"Location",{at.X(),at.Y(),at.Z()}}};}
+                    append(std::move(row));
+                }
+                map["Markers"]=std::move(markers);map["MarkersScanning"]=scanning;map["MarkerCoverage"]="Loaded world actors and authored RuneSchema placements";
+            }
+            catch(const std::exception& error){result["MapSnapshot"]={{"BridgeVersion",1},{"Error",error.what()}};}
+            result["Status"]="Read native world-map bounds, artwork and player positions.";PS::SpawnToolRequests::Publish(std::move(result));return;
         }
         if(action=="QuickPlayers") {
             if(catalogWorld&&PS::Network::Detect(catalogWorld).Mode==PS::Network::Role::Client) {
@@ -661,6 +760,35 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
         if(!selected)throw std::runtime_error("Selected authoritative player is unavailable; refresh");
         auto* world=selected->GetWorld();
         if(!world||!GetGameMode(world))throw std::runtime_error("Only the authoritative server may run spawn tools");
+        if(action=="MapTeleport"){
+            auto* pawn=static_cast<AActor*>(ActorHelper::GetObjectRef(selected,TEXT("Pawn")));if(!pawn)throw std::runtime_error("Selected player has no active character");
+            const auto [point,projection]=ToolMapTarget(world,*request);
+            auto* capsule=ActorHelper::GetObjectRef(pawn,TEXT("CapsuleComponent"));
+            if(!capsule)throw std::runtime_error("Player collision bounds are unavailable");
+            ActorHelper::FunctionCall bounds(capsule,TEXT("/Script/Engine.CapsuleComponent:GetScaledCapsuleHalfHeight"));bounds.Invoke();const auto halfHeight=bounds.Result<float>();
+            ActorHelper::FunctionCall width(capsule,TEXT("/Script/Engine.CapsuleComponent:GetScaledCapsuleRadius"));width.Invoke();const auto radius=width.Result<float>();
+            const auto landing=PS::MapLanding::ResolveNear(projection,point,radius,halfHeight,request->value("NearMarker",false),[&](PS::MapProjection::Point sample,double top,double bottom){
+                FVector hit{};std::string error;
+                if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,FVector(sample.X,sample.Y,top),FVector(sample.X,sample.Y,bottom),{pawn},hit,error))
+                    throw std::runtime_error("Destination terrain is not loaded or walkable. Move closer before teleporting. "+error);
+                return PS::MapLanding::Position{hit.X(),hit.Y(),hit.Z()};
+            });
+            auto* movement=ActorHelper::GetObjectRef(pawn,TEXT("CharacterMovement"));if(!movement)throw std::runtime_error("Player movement component is unavailable; no teleport attempted");
+            ActorHelper::FunctionCall stop(movement,TEXT("/Script/Engine.MovementComponent:StopMovementImmediately"));stop.Invoke();
+            const auto original=ActorHelper::GetActorLocation(pawn);
+            ActorHelper::FunctionCall rotation(pawn,TEXT("/Script/Engine.Actor:K2_GetActorRotation"));rotation.Invoke();const auto facing=rotation.Result<FRotator>();
+            ActorHelper::FunctionCall teleport(pawn,TEXT("/Script/Engine.Actor:K2_TeleportTo"));
+            teleport.Arg(TEXT("DestLocation"),FVector(landing.X,landing.Y,landing.Z)).Arg(TEXT("DestRotation"),facing).Invoke();
+            if(!teleport.Result<bool>())throw std::runtime_error("The game rejected capsule clearance at this point; the player was not teleported");
+            const auto actual=ActorHelper::GetActorLocation(pawn);
+            if(!PS::MapLanding::Matches(landing,{actual.X(),actual.Y(),actual.Z()})){
+                ActorHelper::FunctionCall restore(pawn,TEXT("/Script/Engine.Actor:K2_TeleportTo"));restore.Arg(TEXT("DestLocation"),original).Arg(TEXT("DestRotation"),facing).Invoke();
+                if(!restore.Result<bool>())throw std::runtime_error("Landing verification and return to the original point failed; stop teleporting and recover the player in game");
+                throw std::runtime_error("The game adjusted the landing outside the verified footprint. Returned the player to the original point.");
+            }
+            const auto landed=ActorHelper::GetActorLocation(pawn);auto result=PS::SpawnToolRequests::Read();
+            result["MapPoint"]={{"GroundAvailable",true},{"Location",{landed.X(),landed.Y(),landed.Z()}}};result["Status"]=std::format("Teleported the selected player to X {:.0f}, Y {:.0f}, Z {:.0f}.",landed.X(),landed.Y(),landed.Z());PS::SpawnToolRequests::Publish(std::move(result));return;
+        }
         if(action=="DismissHelpyNpcs"||(action=="Spawn"&&request->value("NPC",false))) {
             auto* npcs=DragonWildsNpcLoader::HelpyInstance;
             if(!npcs)throw std::runtime_error("Enable the NPC loader before using Helpy NPC authoring.");
@@ -739,8 +867,9 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
             // C++ exception handling gets a chance to recover, so do not multiply
             // that risk with grids/batches.
             if(request->contains("Grid"))throw std::runtime_error("Building preview grids are disabled by the safety gate; spawn one verified piece at a time");
-            const int count=request->value("Count",1);const double distance=request->at("Distance").get<double>();
-            if(count!=1 || !std::isfinite(distance) || distance<3 || distance>50)
+            const bool mapPlacement=request->contains("TargetLocation"),permanent=request->value("Permanent",false);
+            const int count=request->value("Count",1);const double distance=request->value("Distance",5.0);
+            if(count!=1 || (!mapPlacement&&(!std::isfinite(distance) || distance<3 || distance>50)))
                 throw std::runtime_error("Building previews require Count=1 and distance 3..50 metres");
             const auto buildingPath=request->at("Building").get<std::string>();
             const double yaw=request->value("Yaw",0.0),height=request->value("Height",0.0),scale=request->value("Scale",1.0);
@@ -754,8 +883,8 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
             SpawnInfo prototype;prototype.ModName=TEXT("__RuneSchemaTools");prototype.EntryId=TEXT("candidate");
             RegisterBuildingProp(prototype,authored);
             auto* buildingObject=ActorHelper::ResolveObject(RC::to_generic_string(buildingPath));
-            const auto [buildingSafe,buildingReason]=VerifyToolBuildingCandidate(buildingObject,prototype,world);
-            if(!buildingSafe)throw std::runtime_error("Building preview blocked by safety preflight: "+buildingReason);
+            const auto [buildingSafe,buildingReason]=VerifyToolBuildingCandidate(buildingObject,prototype,world,!permanent);
+            if(!buildingSafe)throw std::runtime_error("Building placement unavailable: "+buildingReason);
             auto* buildingClass=ResolveClass(prototype.ClassPath);
             if(!buildingClass)throw std::runtime_error("Building actor class unloaded during validation");
             auto* pawn=static_cast<AActor*>(ActorHelper::GetObjectRef(selected,TEXT("Pawn")));
@@ -766,9 +895,23 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
             const double x=origin.X()+distance*100;
             const double y=origin.Y();
             FVector ground{};std::string error;
-            if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,FVector(x,y,origin.Z()+500),FVector(x,y,origin.Z()-1500),{pawn},ground,error,origin.Z()))
+            if(mapPlacement)ground=ToolMapGround(world,*request,pawn);
+            else if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,FVector(x,y,origin.Z()+500),FVector(x,y,origin.Z()-1500),{pawn},ground,error,origin.Z()))
                 throw std::runtime_error("No ground at the requested building position; nothing spawned. "+error);
             positions.emplace_back(ground.X(),ground.Y(),ground.Z()+height);
+            if(permanent){
+                const auto stem=PS::Authoring::NewName();const auto& position=positions.front();
+                auto placement=PS::SpawnAuthoring::Placement(authored,stem,{position.X(),position.Y(),position.Z()},yaw);
+                auto document=PS::SpawnAuthoring::ResolveGroundDrafts(nlohmann::json::array({PS::SpawnAuthoring::StageGroundDraft(std::move(placement),position.Z(),height)}));
+                const auto checkpoint=m_spawns.size(),reportedCheckpoint=m_reportedNewSpawns;if(checkpoint>=65536)throw std::runtime_error("Spawn definition limit reached");
+                std::unique_ptr<PS::Authoring::StagedFile> file;
+                try{RegisterSpawn(document.front(),TEXT("runeschema"));file=std::make_unique<PS::Authoring::StagedFile>("spawns",stem,document);{std::scoped_lock lock{m_toolSpawnFileMutex};m_toolSpawnFiles.insert(file->Path().lexically_normal());}file->Commit();}
+                catch(...){if(file){std::scoped_lock lock{m_toolSpawnFileMutex};m_toolSpawnFiles.erase(file->Path().lexically_normal());}m_spawns.resize(checkpoint);m_reportedNewSpawns=reportedCheckpoint;throw;}
+                auto result=PS::SpawnToolRequests::Read();
+                try{ProcessActorEntry(world,m_spawns[checkpoint]);result["Status"]=m_spawns[checkpoint].bExistsInWorld?"Building placement saved and activated.":"Building placement saved; activation is pending. Do not create a duplicate.";}
+                catch(const std::exception& error){result["Status"]=std::string("Building placement saved; activation failed. Do not create a duplicate. ")+error.what();}
+                result["SpawnResult"]={{"Permanent",true},{"File",file->Path().string()},{"Active",m_spawns[checkpoint].bExistsInWorld}};PS::SpawnToolRequests::Publish(std::move(result));return;
+            }
             try {
                 for(const auto& position:positions) {
                     auto* actor=ActorHelper::SpawnActor(world,buildingClass,position,FRotator(0,yaw,0),[&](AActor* value){
@@ -911,7 +1054,16 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
             if(!guid || guid->GetSize()!=sizeof(FGuid) || !skip || skip->GetArrayDim()!=1)throw std::runtime_error("This resource lacks verified temporary save exclusion; not spawned");
         }else if(!permanent)ValidateEventSpawn(definition.Key);
         auto* pawn=static_cast<AActor*>(ActorHelper::GetObjectRef(selected,TEXT("Pawn")));
-        const auto origin=ActorHelper::GetActorLocation(pawn);
+        auto origin=ActorHelper::GetActorLocation(pawn);
+        std::optional<PS::MapProjection::Projection> mapProjection;
+        if(request->contains("TargetLocation")){
+            const auto& point=request->at("TargetLocation");
+            if(!point.is_object()||!point.contains("X")||!point.contains("Y")||!point["X"].is_number()||!point["Y"].is_number())throw std::runtime_error("Map placement requires finite world X and Y");
+            const PS::MapProjection::Point xy{point["X"].get<double>(),point["Y"].get<double>()};
+            mapProjection=PS::HelpyMapRuntime::Projection(world);
+            if(!mapProjection->Contains(xy))throw std::runtime_error("Selected position is outside the native world map");
+            origin=FVector(xy.X,xy.Y,origin.Z());
+        }
         nlohmann::json gridPoints=nlohmann::json::array();
         if(request->contains("Grid")) {
             gridPoints=SpawnFields::Expand({{"Type",resource?"Actor":"AISpawnPoint"},{"Grid",request->at("Grid")},
@@ -936,7 +1088,8 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
             if(!gridPoints.empty()){x=gridPoints[i]["Location"]["X"].get<double>();y=gridPoints[i]["Location"]["Y"].get<double>();}
             else if(placementMode=="Grid") {const int columns=static_cast<int>(std::ceil(std::sqrt(static_cast<double>(count))));x=std::round(origin.X()/gridSize)*gridSize+(gridX+i%columns)*gridSize;y=std::round(origin.Y()/gridSize)*gridSize+(gridY+i/columns)*gridSize;}
             FVector ground{};std::string error;
-            if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,FVector(x,y,origin.Z()+500),FVector(x,y,origin.Z()-1500),{pawn},ground,error,origin.Z()))
+            if(mapProjection&&!mapProjection->Contains({x,y}))throw std::runtime_error("The selected spawn spread extends outside the world map");
+            if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,FVector(x,y,mapProjection?mapProjection->MaxZ:origin.Z()+500),FVector(x,y,mapProjection?mapProjection->MinZ:origin.Z()-1500),{pawn},ground,error,mapProjection?std::optional<double>{}:std::optional<double>{origin.Z()}))
                 throw std::runtime_error("No ground at a requested spawn position; nothing spawned. "+error);
             positions.emplace_back(ground.X(),ground.Y(),ground.Z()+(resource?0:100)+height);
         }
