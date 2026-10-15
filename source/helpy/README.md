@@ -30,8 +30,23 @@ The 2026-10-14 native-worker crash remains under investigation. These fixes do
 not establish its cause or demonstrate a gameplay crash fix. The combined
 candidate also catches up already-shown world cells for configured spawns;
 native save depletion, transient ownership and cleanup guards remain intact.
+NPCs use the same visible-cell recovery boundary. Late class readiness continues
+at a bounded cadence after the initial scan burst; actor construction remains
+one-shot. Quest-linked NPCs default to native quest-NPC map and overhead art,
+while explicit disabled/custom marker settings win. These location markers do
+not fabricate a native quest availability or completion state.
+Hover details are source-item-owned: leaving the item dismisses them immediately,
+and lengthy details can be wheel-scrolled while hovering the source item.
 Live icon display, silver-seam placement, teleport, save/reload and multiplayer
 behavior require separate in-game validation.
 
 Original UI handoff: Helpy 2.0.4 from the RuneSchema UX Adaptation project.
 The imported UI follows its component licenses under `licenses` and `vendor`.
+
+Main RuneSchema settings now prefer INI with a guarded two-launch JSONC
+migration; plugin-owned settings remain JSONC. Source identity includes both
+main settings formats. Plugin shutdown drains its filesystem cache worker
+after stopping the UI thread and before DLL unload. Dedicated hosts may start
+the separate desktop window in an interactive Windows session; non-interactive
+services skip the GUI without stopping the server. See
+`docs/SETTINGS-INI.md` and `docs/servers/helpy-desktop.md`.

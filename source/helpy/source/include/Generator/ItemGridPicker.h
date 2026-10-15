@@ -168,11 +168,11 @@ inline void PageControls(State& state,std::size_t count,bool more,bool pending) 
     ImGui::SameLine();ImGui::BeginDisabled(!page.Next||pending);
     if(HelpyImGuiTheme::SoftButton("Next")){++state.PageIndex;state.ResetScroll=true;}ImGui::EndDisabled();
 }
-// The hover target and the details window have separate lifetimes. Moving into
-// the details to scroll must not close it and immediately re-trigger the card.
+// Details are a tooltip, not a second hover target or a sticky selection.
+// Only a source item hovered during this frame may keep them open.
 struct DetailsPopupState {
     json Row;std::string Name,Path;ImVec2 AnchorMin{},AnchorMax{},Min{},Max{};
-    double LastInside=0;int QueuedFrame=-1;bool Fits=true,Open=false;
+    int QueuedFrame=-1;bool Fits=true,Open=false;
     uint64_t Generation=0;
 };
 inline DetailsPopupState DetailsPopup;
@@ -180,16 +180,16 @@ inline void VerboseTooltip(const json& row,const std::string& name,const std::st
     if(ImGui::IsMouseDown(0)||ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId))return;
     auto& popup=DetailsPopup;
     if(!popup.Open||popup.Path!=path){popup.Row=row;popup.Name=name;popup.Path=path;popup.AnchorMin=ImGui::GetItemRectMin();popup.AnchorMax=ImGui::GetItemRectMax();popup.Min=popup.Max={};}
-    popup.Fits=fits;popup.Open=true;popup.QueuedFrame=ImGui::GetFrameCount();popup.LastInside=ImGui::GetTime();popup.Generation=SpawnToolRequests::CurrentGeneration();
+    popup.AnchorMin=ImGui::GetItemRectMin();popup.AnchorMax=ImGui::GetItemRectMax();
+    popup.Fits=fits;popup.Open=true;popup.QueuedFrame=ImGui::GetFrameCount();popup.Generation=SpawnToolRequests::CurrentGeneration();
+    ImGui::SetKeyOwner(ImGuiKey_MouseWheelY,ImGui::GetItemID(),ImGuiInputFlags_LockThisFrame);
     ItemDetails::Request(path);
 }
 inline void RenderDetailsPopup() {
     auto& popup=DetailsPopup;if(!popup.Open)return;
-    const bool inside=ImGui::IsMouseHoveringRect(popup.Min,popup.Max,false);
-    const bool card=ImGui::IsMouseHoveringRect(popup.AnchorMin,popup.AnchorMax,false);
-    if(inside||card)popup.LastInside=ImGui::GetTime();
-    if(popup.Generation!=SpawnToolRequests::CurrentGeneration()||ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId)||ImGui::IsKeyPressed(ImGuiKey_Escape)||
-       (ImGui::IsMouseDown(0)&&!inside)||ImGui::IsMouseDown(1)||ImGui::GetTime()-popup.LastInside>0.22){popup.Open=false;return;}
+    if(popup.QueuedFrame!=ImGui::GetFrameCount()||popup.Generation!=SpawnToolRequests::CurrentGeneration()
+        ||ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId)||ImGui::IsKeyPressed(ImGuiKey_Escape)
+        ||ImGui::IsMouseDown(0)||ImGui::IsMouseDown(1)){popup.Open=false;return;}
     ItemDetails::Poll();const auto& row=popup.Row;const auto* entry=ItemDetails::Find(popup.Path);const auto& native=entry?entry->Native:row;
     const auto& theme=HelpyImGuiTheme::Current;HelpyImGuiTheme::Scope skin(theme);
     auto title=ItemPresentation::Text(native,"Name");if(title.empty())title=popup.Name;
@@ -216,7 +216,10 @@ inline void RenderDetailsPopup() {
     const float y=std::clamp(popup.AnchorMin.y,origin.y+pad,std::max(origin.y+pad,origin.y+area.y-pad-height));
     ImGui::SetNextWindowPos({x,y});ImGui::SetNextWindowSize({width,height});ImGui::SetNextWindowBgAlpha(0.98f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{pad,pad});
-    if(ImGui::Begin("##helpy-item-details",nullptr,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoFocusOnAppearing|ImGuiWindowFlags_NoNav)){
+    if(ImGui::Begin("##helpy-item-details",nullptr,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoFocusOnAppearing|ImGuiWindowFlags_NoNav|ImGuiWindowFlags_NoInputs)){
+        // Keep lengthy descriptions readable without turning the tooltip into
+        // a sticky window. Wheel scrolling belongs to the hovered source item.
+        if(ImGui::GetIO().MouseWheel!=0)ImGui::SetScrollY(std::clamp(ImGui::GetScrollY()-ImGui::GetIO().MouseWheel*ImGui::GetTextLineHeight()*3,0.0f,ImGui::GetScrollMaxY()));
         popup.Min=ImGui::GetWindowPos();const auto size=ImGui::GetWindowSize();popup.Max={popup.Min.x+size.x,popup.Min.y+size.y};
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX()+content);ImGui::TextWrapped("%s",title.c_str());
         if(!category.empty())ImGui::TextDisabled("%s",category.c_str());

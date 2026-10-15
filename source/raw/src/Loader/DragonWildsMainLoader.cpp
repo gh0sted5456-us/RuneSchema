@@ -28,6 +28,8 @@
 #include "Unreal/Engine/UDataTable.hpp"
 #include "Core/PersistenceDiagnosticLedger.h"
 #include "Core/MountedModRegistryOwners.h"
+#include "Core/CookedPakRegistryManifest.h"
+#include "Core/RegistryEnrollment.h"
 #include "Unreal/Hooks.hpp"
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
@@ -1598,7 +1600,16 @@ namespace DragonWilds {
             PS::AssetPreload::Plan<RC::StringType> plan;
             for(auto& loader:m_loaders){
                 const auto& kind=loader->GetModFolderType();
-                if(!PS::PSConfig::Get()->IsLoaderEnabled(kind))continue;
+                if(!PS::PSConfig::Get()->IsLoaderEnabled(kind)){
+                    const std::string lane=kind=="recipes"?"Recipes":kind=="journal"?"Journals":kind=="lore"?"Lore":"";
+                    if(!lane.empty())for(const auto& manifest:PS::CookedPakRegistryManifest::Snapshot()){
+                        const bool declared=manifest.LoaderDefinitions.contains(lane)||std::any_of(manifest.AssetLanes.begin(),manifest.AssetLanes.end(),[&](const auto& value){return value.Name==lane;});
+                        if(declared)PS::RegistryEnrollment::Reject(manifest.Source,"required loader is disabled: "+kind);
+                    }
+                    continue;
+                }
+                if(kind=="recipes")static_cast<DragonWildsRecipeModLoader*>(loader.get())->ImportCookedDefinitions();
+                if(kind=="journal"||kind=="lore")static_cast<DragonWildsJournalModLoader*>(loader.get())->ImportCookedDefinitions();
                 if(kind=="recipes")for(const auto& path:static_cast<DragonWildsRecipeModLoader*>(loader.get())->CookedReferencePaths())plan.Add(path);
                 if(kind=="assets")for(const auto& path:static_cast<DragonWildsAssetModLoader*>(loader.get())->CookedReferencePaths())plan.Add(path);
             }

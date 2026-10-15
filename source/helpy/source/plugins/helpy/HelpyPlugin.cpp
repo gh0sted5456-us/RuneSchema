@@ -15,6 +15,8 @@
 #include "Generator/ToolRequest.h"
 #include "Runtime/HelpySettings.h"
 #include "Runtime/HelpyPaths.h"
+#include "Core/HelpyEnvironment.h"
+#include "Core/HelpySourceCache.h"
 
 namespace {
 HMODULE Module{};
@@ -198,6 +200,14 @@ extern "C" __declspec(dllexport) int32_t RS_PLUGIN_CALL RuneSchemaPlugin_OnUnrea
         if(!PS::HelpySettings::IsEnabled()){state->Host->Log(RS_LOG_INFO,Descriptor.Id,"disabled by plugin settings");return RS_PLUGIN_OK;}
         state->Host->Log(RS_LOG_INFO,Descriptor.Id,"using RuneSchema host reflection services");
         ConfigureTransport(state);
+        nlohmann::json environment;
+        if(CallCore(state,{{"Action","Environment"}},environment))PS::HelpyEnvironment::Current=PS::HelpyEnvironment::Decode(environment);
+        if(PS::HelpyEnvironment::Server()){
+            USEROBJECTFLAGS flags{};DWORD bytes=0;
+            if(!GetUserObjectInformationW(GetProcessWindowStation(),UOI_FLAGS,&flags,sizeof(flags),&bytes)||!(flags.dwFlags&WSF_VISIBLE)){
+                state->Host->Log(RS_LOG_INFO,Descriptor.Id,"server has no interactive desktop; Helpy window skipped, server runtime continues");return RS_PLUGIN_OK;
+            }
+        }
         state->Window=std::make_unique<PS::HelpyStandaloneWindow>(Module);
         if(!state->Window->Start())state->Host->Log(RS_LOG_WARNING,Descriptor.Id,("standalone UI unavailable: "+state->Window->Error()).c_str());
         else state->Host->Log(RS_LOG_INFO,Descriptor.Id,"standalone Helpy ready: F2 toggle, F5 theme reload");
@@ -208,6 +218,7 @@ extern "C" __declspec(dllexport) int32_t RS_PLUGIN_CALL RuneSchemaPlugin_OnUnrea
 extern "C" __declspec(dllexport) void RS_PLUGIN_CALL RuneSchemaPlugin_Shutdown(void* instance) noexcept {
     auto* state=static_cast<State*>(instance);if(!state)return;
     if(state->Window)state->Window->Shutdown();
+    PS::HelpySourceCache::Shutdown();
     PS::ItemIconCache::ClearRemote();PS::LazyCatalog::ClearRemote();PS::SpawnToolRequests::ClearRemote();
     delete state;
     PS::PluginRuntimeServices::Reset();

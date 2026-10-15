@@ -1,4 +1,6 @@
 #include "Utility/NativeFunctionHook.h"
+#include "Core/CookedPakRegistryManifest.h"
+#include "Core/RegistryEnrollment.h"
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 
@@ -166,6 +168,25 @@ namespace DragonWilds {
             Hook::UnregisterCallback(m_acquisitionCallbackId);
     }
 
+    void DragonWildsJournalModLoader::ImportCookedDefinitions()
+    {
+        if(m_cookedImported)return;m_cookedImported=true;
+        const std::string lane=m_loreOnly?"Lore":"Journals";
+        try{
+            const auto definitions=PS::CookedPakRegistryManifest::Definitions(lane);
+            m_hasCookedDefinitions=!definitions.empty();
+            if(m_hasCookedDefinitions&&!m_baseEntryClass)throw std::runtime_error("Journal loader is unavailable for cooked declarations");
+            for(const auto& definition:definitions){
+                const auto path=RC::to_generic_string(definition.Path);
+                if(std::any_of(m_defs.begin(),m_defs.end(),[&](const auto& value){return value.Key==path;}))continue;
+                QueueData(nlohmann::json{{definition.Path,definition.Body}},RC::to_generic_string(definition.Owner));
+                if(std::none_of(m_defs.begin(),m_defs.end(),[&](const auto& value){return value.Key==path;}))
+                    throw std::runtime_error("Cooked journal/lore definition was not admitted: "+definition.Path);
+            }
+        }catch(const std::exception& error){PS::RegistryEnrollment::Reject("cooked "+lane,error.what());
+            PS::Log<LogLevel::Error>(STR("Cooked journal/lore declarations rejected; character cleanup is deferred: {}.\n"),PS::ToWideSafe(error.what()));}
+    }
+
     void DragonWildsJournalModLoader::OnLoad(const std::filesystem::path& loaderPath,
         const RC::StringType& modName, const EEngineLifecyclePhase& phase)
     {
@@ -180,8 +201,11 @@ namespace DragonWilds {
     {
         if (phase == EEngineLifecyclePhase::GameInstanceInit && !m_initialJournalApplied)
         {
-            ApplyPendingPatches();
-            ApplyAll();
+            try{
+                ApplyPendingPatches();
+                const auto result=ApplyAll();
+                if(m_hasCookedDefinitions&&result.ErrorCount)PS::RegistryEnrollment::Reject(m_loreOnly?"cooked lore":"cooked journals","journal finalization had unresolved entries");
+            }catch(const std::exception& error){if(m_hasCookedDefinitions)PS::RegistryEnrollment::Reject("cooked journals/lore",error.what());throw;}
         }
     }
 

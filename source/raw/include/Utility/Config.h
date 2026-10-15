@@ -202,5 +202,7 @@ namespace PS {
         PSConfigSettings m_settings;
         std::string m_status;
         bool m_preserveOriginal = false;
+        std::filesystem::path m_configFile;
+        nlohmann::json m_configDocument = nlohmann::json::object();
     };
 }

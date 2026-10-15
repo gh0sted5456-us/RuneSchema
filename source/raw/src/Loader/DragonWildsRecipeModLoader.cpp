@@ -1,4 +1,6 @@
 #include "Utility/NativeFunctionHook.h"
+#include "Core/CookedPakRegistryManifest.h"
+#include "Core/RegistryEnrollment.h"
 #include "SDK/WeakObjectHandle.h"
 #include <algorithm>
 #include <atomic>
@@ -34,6 +36,7 @@
 #include "Loader/VendorCategoryText.h"
 #include "Loader/VendorCategoryLabel.h"
 #include "Loader/RecipeUnlockPolicy.h"
+#include "Loader/NativeRecipeDiscovery.h"
 #include "Loader/ItemIdentity.h"
 #include "Loader/DialogueSaveIdentity.h"
 #include "Core/SaveRegistrySnapshot.h"
@@ -659,6 +662,37 @@ namespace DragonWilds {
         return report;
     }
 
+    void DragonWildsRecipeModLoader::ImportCookedDefinitions()
+    {
+        if(m_cookedImported)return;m_cookedImported=true;
+        try{
+            const auto definitions=PS::CookedPakRegistryManifest::Definitions("Recipes");
+            m_hasCookedDefinitions=!definitions.empty();
+            if(m_hasCookedDefinitions&&!m_recipeClass)throw std::runtime_error("Recipe loader is unavailable for cooked declarations");
+            std::unordered_set<RC::StringType> existingPaths;
+            existingPaths.reserve(m_recipeDefs.size()+definitions.size());
+            for(const auto& value:m_recipeDefs)existingPaths.insert(value.Key);
+            for(const auto& definition:definitions){
+                const auto path=RC::to_generic_string(definition.Path);
+                // Explicit loose definitions retain precedence, including an
+                // override supplied by a different enabled mod.
+                if(existingPaths.contains(path))continue;
+                // These are existing cooked object paths, never vendor offers,
+                // clones or patches. Reuse normal parsing/application without
+                // the per-definition linear lookup used by loose-file edits.
+                WantsUnlock(definition.Body);
+                const auto owner=RC::to_generic_string(definition.Owner);
+                m_recipeDefs.push_back({path,owner,definition.Body,ParsePlacements(definition.Body)});
+                const auto identity=RecipeIdentity(owner,path);
+                m_propsApplied.erase(identity);
+                m_invalidRecipes.erase(identity);
+                existingPaths.insert(path);
+            }
+            if(m_hasCookedDefinitions)m_nativeRecipeIndexReady=false;
+        }catch(const std::exception& error){PS::RegistryEnrollment::Reject("cooked recipes",error.what());
+            PS::Log<LogLevel::Error>(STR("Cooked recipe declarations rejected; character cleanup is deferred: {}.\n"),PS::ToWideSafe(error.what()));}
+    }
+
     void DragonWildsRecipeModLoader::OnLoad(const std::filesystem::path& loaderPath, const RC::StringType& modName, const EEngineLifecyclePhase& engineLifecyclePhase)
     {
         if (engineLifecyclePhase == EEngineLifecyclePhase::PostEngineInit)
@@ -679,8 +713,10 @@ namespace DragonWilds {
         const EEngineLifecyclePhase& engineLifecyclePhase)
     {
         if(engineLifecyclePhase!=EEngineLifecyclePhase::GameInstanceInit)return;
-        ApplyPendingPatches();
-        ApplyAll();
+        try{
+            ApplyPendingPatches();
+            ApplyAll();
+        }catch(const std::exception& error){if(m_hasCookedDefinitions)PS::RegistryEnrollment::Reject("cooked recipes",error.what());throw;}
     }
 
     void DragonWildsRecipeModLoader::OnAutoReload(const RC::StringType& modName, const std::filesystem::path& modFilePath)
@@ -688,6 +724,14 @@ namespace DragonWilds {
         struct ReloadGuard { bool& Flag; ~ReloadGuard() { Flag=false; } } guard{m_autoReloading};
         m_autoReloading=true;
         PS::JsonHelpers::ParseJsonFileInPath(modFilePath, [&](const nlohmann::json& data) {
+            // Progression components cache their table at creation. Changing
+            // queries after player entry would be only a partial override.
+            for(const auto& [key,body]:data.items()){
+                const auto existing=std::find_if(m_recipeDefs.begin(),m_recipeDefs.end(),[&](const auto& value){return value.ModName==modName&&value.Key==RC::to_generic_string(key);});
+                const bool patchDiscovery=body.is_object()&&body.contains("$Target")&&body.at("$Target").is_object()&&body.at("$Target").contains("Discovery");
+                if(patchDiscovery||(body.is_object()&&body.contains("Discovery"))||(existing!=m_recipeDefs.end()&&existing->Body.contains("Discovery")))
+                    throw std::runtime_error("Recipe Discovery changes require a full restart; no live override was applied");
+            }
             QueueData(data, modName);
         });
 
@@ -768,6 +812,7 @@ namespace DragonWilds {
             try
             {
                 if (body.contains("VendorID") || body.contains("RuneSchemaVendors") || body.contains("VanillaVendors")) {
+                    if(body.contains("Discovery"))throw std::runtime_error("Store offers cannot define recipe Discovery rules");
                     if(m_autoReloading)throw std::runtime_error("Store recipes require a restart; live reload was not applied");
                     auto offer=NpcCatalog::ParseStoreOffer(RC::to_string(modName),recipeKey,body);
                     for(const auto& existing:m_storeOffers)
@@ -792,6 +837,7 @@ namespace DragonWilds {
             }
             catch (const std::exception& error)
             {
+                if(body.contains("Discovery"))PS::RegistryEnrollment::Reject("recipe Discovery",error.what());
                 PS::Log<LogLevel::Error>(STR("Recipe patch '{}': {}. Skipping.\n"),
                     keyWide, PS::ToWideSafe(error.what()));
                 continue;
@@ -799,6 +845,7 @@ namespace DragonWilds {
 
             try { WantsUnlock(body); }
             catch (const std::exception& error) {
+                if(body.contains("Discovery"))PS::RegistryEnrollment::Reject("recipe Discovery",error.what());
                 PS::Log<LogLevel::Error>(STR("Recipe '{}': {}. Skipping.\n"), keyWide, PS::ToWideSafe(error.what()));
                 continue;
             }
@@ -846,6 +893,7 @@ namespace DragonWilds {
             const auto stats = JsonPatchDirective::Apply(patchedBody, directive, true);
             try { WantsUnlock(patchedBody); }
             catch (const std::exception& error) {
+                if(patchedBody.contains("Discovery"))PS::RegistryEnrollment::Reject("recipe Discovery",error.what());
                 PS::Log<LogLevel::Error>(STR("Recipe patch rejected: {}\n"), PS::ToWideSafe(error.what()));
                 ++errors; continue;
             }
@@ -869,8 +917,10 @@ namespace DragonWilds {
         ApplyPendingPatches();
         RefreshNativeRecipeIndex();
         for (const auto& def : m_recipeDefs) {
-            try { bool created = false; ResolveOrCreate(def, created); }
+            try { bool created = false;auto* resolved=ResolveOrCreate(def, created);
+                if(!resolved&&m_hasCookedDefinitions)PS::RegistryEnrollment::Reject("cooked recipes","reference preparation did not resolve an enabled recipe");}
             catch (const std::exception& error) {
+                if(m_hasCookedDefinitions)PS::RegistryEnrollment::Reject("cooked recipes",error.what());
                 PS::Log<LogLevel::Error>(STR("Recipe reference '{}' unavailable: {}\n"), def.Key, PS::ToWideSafe(error.what()));
             }
         }
@@ -928,6 +978,36 @@ namespace DragonWilds {
             }
         }
         return match?LiveRecipe(RecipeIdentity(match->ModName,match->Key)):nullptr;
+    }
+
+    void DragonWildsRecipeModLoader::ApplyDiscovery()
+    {
+        if(m_discoveryAttempted)return;
+        m_discoveryAttempted=true;
+        std::vector<NativeRecipeDiscovery::Request> requests;
+        try{
+            for(const auto& def:m_recipeDefs){
+                const auto rule=PS::RecipeDiscovery::Parse(def.Body);
+                if(!rule)continue;
+                const auto identity=RecipeIdentity(def.ModName,def.Key);
+                if(m_invalidRecipes.contains(identity))throw std::runtime_error("A recipe with Discovery failed property validation");
+                auto* recipe=LiveRecipe(identity);
+                if(!recipe)throw std::runtime_error("A recipe with Discovery could not be resolved");
+                requests.push_back({recipe,*rule});
+            }
+            if(requests.empty())return;
+            const auto result=NativeRecipeDiscovery::Apply(requests,m_progressComponentClass,m_discoveryOwnedRows);
+            PS::Log<LogLevel::Normal>(STR("[RECIPES][DISCOVERY][READY] {} native progression rules installed; {} old recipe links replaced. Learned progress was not changed.\n"),result.Added,result.Detached);
+        }catch(const std::exception& error){
+            PS::RegistryEnrollment::Reject("recipe Discovery",error.what());
+            // Do not grant/place a partially configured new recipe. Existing
+            // cooked progression remains unchanged if transaction preparation failed.
+            for(const auto& def:m_recipeDefs)if(def.Body.contains("Discovery")&&def.Body.at("Discovery").is_object()){
+                const auto identity=RecipeIdentity(def.ModName,def.Key);
+                m_invalidRecipes.insert(identity);m_unlock.erase(identity);
+            }
+            PS::Log<LogLevel::Error>(STR("[RECIPES][DISCOVERY][REJECTED] No new discovery policy was accepted: {}. Restart after correction; automatic character cleanup is deferred.\n"),PS::ToWideSafe(error.what()));
+        }
     }
 
     void DragonWildsRecipeModLoader::ApplyAll()
@@ -1030,6 +1110,7 @@ namespace DragonWilds {
             }
         }
 
+        ApplyDiscovery();
         RegisterHooks();
 
         int placed = 0;
@@ -1068,6 +1149,8 @@ namespace DragonWilds {
         if (result.Created || result.Edited || placed || result.ErrorCount)
             PS::LoaderSummary("recipes", result.Created + result.Edited,
                 result.Created, result.Edited, placed, result.ErrorCount);
+        if(m_hasCookedDefinitions&&result.ErrorCount)
+            PS::RegistryEnrollment::Reject("cooked recipes","recipe finalization had unresolved entries");
         if (omittedDetails)
             PS::Log<LogLevel::Verbose>(STR("Recipes: {} additional successful operation detail(s) omitted.\n"), omittedDetails);
     }
@@ -1253,7 +1336,7 @@ namespace DragonWilds {
         auto* recipeClass = recipe->GetClassPrivate();
         for (auto& [propertyName, propertyValue] : properties->items())
         {
-            if (propertyName == "AddTo" || propertyName == "Properties" || propertyName == "Unlock")
+            if (propertyName == "AddTo" || propertyName == "Properties" || propertyName == "Unlock" || propertyName == "Discovery")
             {
                 continue;
             }

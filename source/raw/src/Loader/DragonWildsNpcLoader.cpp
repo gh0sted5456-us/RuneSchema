@@ -720,6 +720,7 @@ namespace DragonWilds {
                 PumpClientReplicas(deltaSeconds);
                 PumpHelpyNpcs();
                 PumpNpcCleanup(deltaSeconds);
+                ReconcileShownVendorCells(deltaSeconds);
                 ReconcileNpcScales(deltaSeconds);
                 try {
                     if(auto* world=FindLoadedWorld();world && world!=m_legacyNpcSweepWorld) {
@@ -760,10 +761,11 @@ namespace DragonWilds {
                 if (m_scanElapsed < 0.5) return;
 
                 for(auto& definition:m_definitions)if(definition.GroundRetry.Pending)definition.GroundRetry.Advance(m_scanElapsed);
+                m_scanBudget.Advance(m_scanElapsed);
                 m_scanElapsed = 0.0;
                 if(std::none_of(m_definitions.begin(),m_definitions.end(),[&](const auto& definition){
                     return !definition.HelpyTemporary&&definition.Enabled&&definition.SpawnGate.Pending()
-                        &&definition.GroundRetry.PlacementReady()&&(!m_scanBudget.Exhausted()||definition.GroundRetry.Pending);
+                        &&definition.GroundRetry.PlacementReady();
                 }))return;
                 try
                 {
@@ -821,6 +823,7 @@ namespace DragonWilds {
                 m_errors.clear();
                 m_scanElapsed = 0.0;
                 m_scanBudget.ResetForMap();
+                m_cellCatchupCursor=0;m_cellCatchupDelay=0;
                 m_npcTimeDirty=false;
                 m_npcTimeElapsed=0;
                 m_npcScaleElapsed=0;
@@ -1018,8 +1021,7 @@ namespace DragonWilds {
             NpcVisualEffect::Validate(data.at("VisualEffect"));
             definition.VisualEffect=data.at("VisualEffect");
         }
-        NpcMarkers::Validate(data);
-        for(const auto* key:{"Map","OverheadIcon"})if(data.contains(key))definition.Markers[key]=data.at(key);
+        definition.Markers=NpcMarkers::FromDefinition(data);
         definition.Human=HumanNpc::IsHuman(data);
         if(data.contains("TimeOfDay")) {
             if(!data.at("TimeOfDay").is_string())throw std::runtime_error("TimeOfDay must be Any, Day, or Night");
@@ -1935,7 +1937,10 @@ namespace DragonWilds {
             if (!pending) m_vendorReport["Phase"] = "Merchant.AttemptsFinished";
             if (m_scanBudget.Exhausted()) {
                 m_vendorReport["ScanBudgetExhausted"] = true;
-                if (pending) m_vendorReport["Phase"] = "Merchant.ScanBudgetExhausted";
+                if (pending) {
+                    m_vendorReport["Phase"] = "Merchant.WaitingForAssetReadiness";
+                    m_vendorReport["DeferredReadinessSeconds"] = VendorScanBudget::DeferredSeconds;
+                }
             }
             WriteVendorStatus();
         }
@@ -2962,6 +2967,22 @@ namespace DragonWilds {
                 if(definition.CellReadyWorld != world){definition.CellReadyWorld = world;m_scanBudget.ResetForMap();}
             }
         }
+    }
+
+    void DragonWildsNpcLoader::ReconcileShownVendorCells(float deltaSeconds)
+    {
+        if(std::none_of(m_definitions.begin(),m_definitions.end(),[](const auto& definition){
+            return !definition.HelpyTemporary&&definition.Enabled&&definition.SpawnGate.Pending();
+        }))return;
+        auto* world=FindLoadedWorld();if(!world)return;
+        if(std::none_of(m_definitions.begin(),m_definitions.end(),[&](const auto& definition){
+            return !definition.HelpyTemporary&&definition.Enabled&&definition.SpawnGate.Pending()&&definition.CellReadyWorld!=world;
+        }))return;
+        // Share /spawns' actual-visible-cell boundary, including cells whose
+        // shown callback preceded definition or pawn readiness. This does not
+        // bypass the existing native-component, identity or collision gates.
+        UECustom::UWorldPartitionRuntimeLevelStreamingCell::VisitShown(world,m_cellCatchupCursor,m_cellCatchupDelay,
+            deltaSeconds,[this](UObject* cell){OnVendorCellShown(cell);});
     }
 
     bool DragonWildsNpcLoader::NpcTimeAllows(UObject* context,const VendorDefinition& definition) const

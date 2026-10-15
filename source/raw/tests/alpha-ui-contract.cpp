@@ -29,7 +29,8 @@ int main(int argc,char** argv){
     Require(!signal.contains("For(") && !signal.contains("RemoteSubmit"));
     Require(prefetch.contains("GetParmsSize()>256") && prefetch.contains("count!=4") && prefetch.contains("offsetof(LatentArgs,CallbackTarget)"));
     Require(prefetch.contains("GetWorld()") && prefetch.contains("FUNC_Static") && !prefetch.contains("std::thread"));
-    Require(prefetch.contains("MaxQueuedAssets=512") && main.contains("IsLoaderEnabled(kind))continue"));
+    Require(prefetch.contains("MaxQueuedAssets=512") && main.contains("if(!PS::PSConfig::Get()->IsLoaderEnabled(kind)){")
+        && main.contains("required loader is disabled: "));
     Require(recipe.contains("RefreshNativeRecipeIndex") && recipe.contains("m_recipeNameCounts.Ambiguous") && !recipe.contains("std::count_if(m_recipeDefs"));
     Require(main.find("PrefetchCookedAssets(plan)")<main.find("PrepareReferences();"));
 }

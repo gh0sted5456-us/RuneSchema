@@ -42,6 +42,7 @@ namespace DragonWilds {
         bool OpenLoreForPlayer(RC::Unreal::UObject* controller,const std::string& reference);
         bool UnlockForPlayer(RC::Unreal::UObject* controller,const std::string& reference);
         void DeliverAutomaticUnlocks(RC::Unreal::UObject* controller);
+        void ImportCookedDefinitions();
 
     protected:
         void OnLoad(const std::filesystem::path& loaderPath, const RC::StringType& modName,
@@ -53,6 +54,7 @@ namespace DragonWilds {
 
     private:
         bool m_loreOnly = false;
+        bool m_cookedImported=false,m_hasCookedDefinitions=false;
         DragonWildsRecipeModLoader* m_recipeService = nullptr;
         bool m_initialJournalApplied = false;
         std::vector<JournalDef> m_defs;

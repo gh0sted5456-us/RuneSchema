@@ -31,7 +31,7 @@ ue4ss/Mods/RuneSchema/
   mods/runeschema.txt
   plugins/plugins.txt
   scripts/main.lua
-  settings/settings.jsonc
+  settings/settings.ini           # legacy settings.jsonc is supported
 ```
 
 Keep the package's bridge PAK triplets intact. Copy your server's existing

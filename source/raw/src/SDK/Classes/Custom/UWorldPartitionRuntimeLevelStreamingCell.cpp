@@ -2,6 +2,10 @@
 #include "Helpers/Casting.hpp"
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Helper/ReflectedContract.h"
+#include "SDK/Classes/Custom/UObjectGlobals.h"
+#include "Unreal/UObjectArray.hpp"
+#include <algorithm>
+#include <chrono>
 #include <cmath>
 
 using namespace RC;
@@ -67,5 +71,26 @@ namespace UECustom {
     {
         auto* cellData = GetRuntimeCellData();
         return cellData ? cellData->GetContentBounds() : nullptr;
+    }
+
+    void UWorldPartitionRuntimeLevelStreamingCell::VisitShown(UWorld* world,size_t& cursor,double& delay,
+        float deltaSeconds,const std::function<void(UObject*)>& visit)
+    {
+        if(!world||!visit||!std::isfinite(deltaSeconds)||deltaSeconds<=0)return;
+        delay=std::max(0.0,delay-std::min(1.0,static_cast<double>(deltaSeconds)));
+        if(delay>0)return;
+        auto* type=UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Engine.WorldPartitionRuntimeLevelStreamingCell"));
+        if(!type)return;
+        const auto count=FUObjectArray::GetNumElements();if(count<0||count>4'000'000)return;
+        const auto begin=std::chrono::steady_clock::now();size_t scanned=0;
+        while(cursor<static_cast<size_t>(count)&&scanned++<2048
+            &&std::chrono::steady_clock::now()-begin<std::chrono::microseconds(500)) {
+            auto* slot=FUObjectArray::IndexToObject(static_cast<int32>(cursor++));auto* object=slot?slot->GetUObject():nullptr;
+            if(!object||!object->IsA(type)||object->GetWorld()!=world
+                ||object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed)))continue;
+            auto* cell=static_cast<UWorldPartitionRuntimeLevelStreamingCell*>(object);
+            if(!cell->GetIsHLOD()&&cell->IsShown())visit(cell);
+        }
+        if(cursor>=static_cast<size_t>(count)){cursor=0;delay=2;}
     }
 }

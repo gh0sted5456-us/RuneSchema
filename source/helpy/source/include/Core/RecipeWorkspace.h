@@ -53,6 +53,12 @@ inline bool References(const Json& value,const std::string& path,int depth=0) {
     if(value.is_array()||value.is_object())for(const auto& child:value)if(References(child,path,depth+1))return true;
     return false;
 }
+template<class Read> bool ContainsRecipeArray(int count,const std::string& recipePath,std::size_t& remaining,Read&& read){
+    if(count<0||count>65536||static_cast<std::size_t>(count)>remaining)throw std::runtime_error("Station recipe inspection exceeds its reference budget");
+    remaining-=static_cast<std::size_t>(count);
+    for(int i=0;i<count;++i)if(read(i)==recipePath)return true;
+    return false;
+}
 inline Json MatchingPlacements(const Json& station,const Json& values,const std::string& recipePath) {
     auto matches=Json::array();
     if(!station.value("Array",std::string{}).empty()){if(References(values,recipePath))matches.push_back(station);return matches;}
@@ -86,6 +92,8 @@ inline bool StationMatches(const Json& station,std::string query,const std::stri
     lower(query);lower(text);return query.empty()||text.find(query)!=std::string::npos;
 }
 inline Json LoadedStation(const Json& placements) {
-    if(!placements.is_array()||placements.empty()||!placements.front().is_object())return Json::object();return placements.front();
+    if(!placements.is_array()||placements.empty()||!placements.front().is_object())return Json::object();
+    for(const auto& placement:placements)if(placement.is_object()&&placement.value("PhysicalStation",true))return placement;
+    return placements.front();
 }
 }

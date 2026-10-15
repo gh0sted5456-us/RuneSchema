@@ -32,7 +32,7 @@ inline Snapshot Inspect(const std::filesystem::path& root){
         auto ext=entry.path().extension().string();std::transform(ext.begin(),ext.end(),ext.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
         const auto filename=entry.path().filename().string();
         const bool modList=filename=="enabled.txt"||filename=="mods.txt"||filename=="runeschema.txt";
-        if(ext!=".json"&&ext!=".jsonc"&&ext!=".pak"&&ext!=".utoc"&&ext!=".ucas"&&ext!=".dll"&&ext!=".exe"&&ext!=".lua"&&!modList)return;
+        if(ext!=".json"&&ext!=".jsonc"&&ext!=".ini"&&ext!=".pak"&&ext!=".utoc"&&ext!=".ucas"&&ext!=".dll"&&ext!=".exe"&&ext!=".lua"&&!modList)return;
         if(++count>100000)throw std::runtime_error("Source cache manifest exceeds its file bound");
         // Game Pass can expose the same install via XboxGames and WindowsApps.
         // Compare logical game-relative names, not the caller's absolute alias.
@@ -41,7 +41,7 @@ inline Snapshot Inspect(const std::filesystem::path& root){
         std::transform(name.begin(),name.end(),name.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
         auto record=std::to_string(entry.file_size())+":"+std::to_string(entry.last_write_time().time_since_epoch().count());
         // Small authored files include content, so same-size edits cannot reuse metadata.
-        if((ext==".json"||ext==".jsonc"||ext==".lua"||modList)&&entry.file_size()<=4*1024*1024){std::ifstream input(entry.path(),std::ios::binary);if(!input)throw std::runtime_error("Source file is not readable");uint64_t hash=1469598103934665603ull;char data[8192];while(input){input.read(data,sizeof(data));hash=Hash(std::string_view(data,static_cast<size_t>(input.gcount())),hash);}record+=":"+Hex(hash);}
+        if((ext==".json"||ext==".jsonc"||ext==".ini"||ext==".lua"||modList)&&entry.file_size()<=4*1024*1024){std::ifstream input(entry.path(),std::ios::binary);if(!input)throw std::runtime_error("Source file is not readable");uint64_t hash=1469598103934665603ull;char data[8192];while(input){input.read(data,sizeof(data));hash=Hash(std::string_view(data,static_cast<size_t>(input.gcount())),hash);}record+=":"+Hex(hash);}
         records[name]=record;
     };
     const auto tree=[&](const std::filesystem::path& folder){if(!std::filesystem::exists(folder))return;
@@ -51,7 +51,7 @@ inline Snapshot Inspect(const std::filesystem::path& root){
         }
     };
     tree(source.parent_path()); // Enabled UE4SS mods, including RuneSchema content and plugins.
-    if(std::filesystem::is_regular_file(source/"settings"/"settings.jsonc"))add(std::filesystem::directory_entry(source/"settings"/"settings.jsonc"));
+    for(const auto* name:{"settings.ini","settings.jsonc"})if(std::filesystem::is_regular_file(source/"settings"/name))add(std::filesystem::directory_entry(source/"settings"/name));
     if(std::filesystem::is_directory(binary))for(const auto& entry:std::filesystem::directory_iterator(binary))add(entry);
     tree(binary.parent_path().parent_path()/"Content"/"Paks");
     Snapshot result;uint64_t hash=Hash("helpy-cache-v3|"+binary.filename().generic_string());
@@ -73,6 +73,13 @@ inline bool Poll(const std::filesystem::path& root){
     if(!Worker.valid()&&now>=Next)Worker=std::async(std::launch::async,[root]{return Inspect(root);});return changed;
 }
 inline bool Ready(){return !Current.Key.empty()&&Error.empty();}
+// Call after the UI thread stops, before unloading the DLL. A std::async
+// future must not outlive plugin shutdown and wait from a static destructor
+// under Windows' loader lock.
+inline void Shutdown() noexcept {
+    if(Worker.valid())try{(void)Worker.get();}catch(...){}
+    Next={};
+}
 inline std::string Key(const std::string& icon){return Hex(Hash(Current.Key+"|"+icon));}
 inline std::filesystem::path Directory(bool liveOnly){
     wchar_t appdata[32768];const auto size=GetEnvironmentVariableW(L"LOCALAPPDATA",appdata,32768);if(!size||size>=32768)throw std::runtime_error("LOCALAPPDATA is unavailable");

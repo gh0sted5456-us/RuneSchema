@@ -85,6 +85,16 @@ nlohmann::json HelpyJournalChoices() {
 // Only native recipe placement structures accepted by the existing /recipes loader.
 std::vector<std::string> HelpyRecipeArrays(UScriptStruct* type) {
     std::vector<std::string> fields;
+    // Recipe arrays also occur on armor upgrades, rewards and other item data.
+    // A station row must expose the game's typed BuildingPieceData binding.
+    if(!type)return fields;
+    auto* station=DragonWilds::PropertyHelper::GetPropertyByName(type,TEXT("StationBuildingPieceData"));
+    UClass* buildingClass=nullptr;
+    if(auto* hard=CastField<FObjectProperty>(station))buildingClass=hard->GetPropertyClass().Get();
+    else if(auto* soft=CastField<FSoftObjectProperty>(station))buildingClass=soft->GetPropertyClass().Get();
+    bool buildingBinding=false;for(auto* base=static_cast<UStruct*>(buildingClass);base;base=base->GetSuperStruct())
+        if(base->GetPathName()==TEXT("/Script/Dominion.BuildingPieceData")){buildingBinding=true;break;}
+    if(!buildingBinding)return fields;
     for(auto* p:TFieldRange<FProperty>(type,EFieldIterationFlags::Default)) {
         auto* a=CastField<FArrayProperty>(p);if(!a||a->GetArrayDim()!=1)continue;
         if(RC::to_string(p->GetName())=="LabeledRecipes") {
@@ -96,14 +106,20 @@ std::vector<std::string> HelpyRecipeArrays(UScriptStruct* type) {
         }
     }return fields;
 }
-nlohmann::json HelpyStationPresentation(UScriptStruct* type,void* row) {
+nlohmann::json HelpyStationPresentation(UScriptStruct* type,void* row,std::size_t& loadsRemaining) {
     auto values=nlohmann::json::object(),building=nlohmann::json::object();
     for(const auto* name:{"DisplayNameOverride","DisplayName","Name","StationName","DisplayIcon","Icon","StationIcon"}){
         nlohmann::json value;if(CloneReadValue(DragonWilds::PropertyHelper::GetPropertyByName(type,RC::to_generic_string(name)),row,value))values[name]=std::move(value);
     }
     nlohmann::json reference;
     if(CloneReadValue(DragonWilds::PropertyHelper::GetPropertyByName(type,TEXT("StationBuildingPieceData")),row,reference)&&reference.is_string()) {
-        auto* piece=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,RC::to_generic_string(reference.get<std::string>()).c_str(),false);
+        const auto path=reference.get<std::string>();
+        auto* piece=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,RC::to_generic_string(path).c_str(),false);
+        // Resolve only the explicitly bound station asset, never an output item
+        // or arbitrary registry candidate. Bound synchronous loads per request.
+        if(!HelpyReady(piece)&&loadsRemaining&&path.starts_with('/')&&path.find('.')!=path.npos){
+            --loadsRemaining;try{piece=HelpyResolve(path);}catch(const std::exception&){}
+        }
         auto* pieceClass=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Dominion.BuildingPieceData"),false);
         if(HelpyReady(piece)&&pieceClass&&piece->IsA(pieceClass))for(const auto* name:{"DisplayName","DisplayIcon"}){
             nlohmann::json value;if(CloneReadValue(DragonWilds::PropertyHelper::GetPropertyByName(piece->GetClassPrivate(),RC::to_generic_string(name)),piece,value))building[name]=std::move(value);
@@ -118,28 +134,44 @@ nlohmann::json HelpyStationChoices() {
     if(tables.Num()<0||tables.Num()>8192)return out;
     std::unordered_map<std::string,std::size_t> tableNameCounts;
     for(auto* object:tables)if(HelpyReady(object))++tableNameCounts[RC::to_string(object->GetName())];
-    std::size_t rowsVisited=0;
+    std::size_t rowsVisited=0,loadsRemaining=64;
     for(auto* object:tables) {
         if(!HelpyReady(object))continue;const auto path=RC::to_string(object->GetPathName());
-        if(PS::QuickDecorations::Fold(path).find("vendor")!=std::string::npos)continue;
         auto* table=static_cast<UDataTable*>(object);auto* type=table->GetRowStruct().Get();if(!type)continue;
         const auto arrays=HelpyRecipeArrays(type);if(arrays.empty())continue;
         if(tableNameCounts[RC::to_string(object->GetName())]!=1)continue;
         for(const auto& [rowName,row]:table->GetRowMap()) {
             if(++rowsVisited>65536)return out;
-            if(!row)continue;const auto presentation=HelpyStationPresentation(type,row);
+            if(!row)continue;
+            if(auto* vendor=CastField<FBoolProperty>(DragonWilds::PropertyHelper::GetPropertyByName(type,TEXT("bIsVendor")));
+                vendor&&vendor->GetPropertyValue(vendor->ContainerPtrToValuePtr<void>(row)))continue;
+            const auto presentation=HelpyStationPresentation(type,row,loadsRemaining);
             const auto rowText=RC::to_string(rowName.ToString());
             const auto label=presentation.value("Name",std::string{}).empty()?rowText:presentation.at("Name").get<std::string>();
             for(const auto& array:arrays) {
                 if(out.size()>=4096)return out;
                 out.push_back({{"Id",path+":"+rowText+":"+array},{"Name",label+" / "+RC::to_string(table->GetName())+(array.empty()?"":" / "+array)},{"DisplayName",label},
-                    {"Path",path},{"Row",rowText},{"Array",array},{"Icon",presentation.at("Icon")},{"BuildingPiece",presentation.at("BuildingPiece")}});
+                    {"Path",path},{"Row",rowText},{"Array",array},{"Icon",presentation.at("Icon")},{"BuildingPiece",presentation.at("BuildingPiece")},
+                    {"PhysicalStation",!presentation.value("BuildingPiece",std::string{}).empty()}});
             }
         }
     }return out;
 }
+bool HelpyRecipeArrayContains(FArrayProperty* property,void* container,const std::string& recipePath,std::size_t& remaining) {
+    if(!property||!container)return false;auto* inner=property->GetInner();
+    if(!inner||inner->GetOffset_Internal()!=0||inner->GetArrayDim()!=1||inner->GetElementSize()<=0
+        ||(!CastField<FSoftObjectProperty>(inner)&&!CastField<FObjectProperty>(inner)))return false;
+    auto* values=property->ContainerPtrToValuePtr<FScriptArray>(container);
+    if(!values||values->Num()<0||values->Num()>65536||(values->Num()&&!values->GetData()))throw std::runtime_error("Station recipe array exceeds its inspection bound");
+    return PS::RecipeWorkspace::ContainsRecipeArray(values->Num(),recipePath,remaining,[&](int i){
+        nlohmann::json value;
+        if(CloneReadValue(inner,static_cast<uint8*>(values->GetData())+static_cast<std::size_t>(i)*inner->GetElementSize(),value)
+            &&value.is_string())return value.get<std::string>();
+        return std::string{};
+    });
+}
 nlohmann::json HelpyRecipePlacements(const std::string& recipePath,const nlohmann::json& choices) {
-    auto result=nlohmann::json::array();std::size_t visited=0;
+    auto result=nlohmann::json::array();std::size_t visited=0,remaining=262144;
     for(const auto& station:choices) {
         if(++visited>4096||result.size()>=32)break;
         auto* object=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,RC::to_generic_string(station.value("Path",std::string{})).c_str(),false);
@@ -148,8 +180,20 @@ nlohmann::json HelpyRecipePlacements(const std::string& recipePath,const nlohman
         auto* table=static_cast<UDataTable*>(object);auto* type=table->GetRowStruct().Get();if(!type)continue;
         const auto rowName=station.value("Row",std::string{}),array=station.value("Array",std::string{});
         auto* row=table->FindRowUnchecked(FName(RC::to_generic_string(rowName),FNAME_Find));if(!row)continue;
-        nlohmann::json values;if(!CloneReadValue(DragonWilds::PropertyHelper::GetPropertyByName(type,array.empty()?TEXT("LabeledRecipes"):RC::to_generic_string(array).c_str()),row,values))continue;
-        for(auto& placement:PS::RecipeWorkspace::MatchingPlacements(station,values,recipePath))if(result.size()<32)result.push_back(std::move(placement));
+        auto* field=CastField<FArrayProperty>(DragonWilds::PropertyHelper::GetPropertyByName(type,array.empty()?TEXT("LabeledRecipes"):RC::to_generic_string(array).c_str()));
+        if(!field)continue;
+        if(!array.empty()){if(HelpyRecipeArrayContains(field,row,recipePath,remaining))result.push_back(station);continue;}
+        auto* category=CastField<FStructProperty>(field->GetInner());if(!category||!category->GetStruct()||category->GetOffset_Internal()!=0)continue;
+        auto* collection=CastField<FArrayProperty>(DragonWilds::PropertyHelper::GetPropertyByName(category->GetStruct().Get(),TEXT("Collection")));
+        auto* label=DragonWilds::PropertyHelper::GetPropertyByName(category->GetStruct().Get(),TEXT("Label"));
+        auto* categories=field->ContainerPtrToValuePtr<FScriptArray>(row);
+        if(!categories||categories->Num()<0||categories->Num()>4096||(categories->Num()&&!categories->GetData()))throw std::runtime_error("Station category array exceeds its inspection bound");
+        for(int i=0;i<categories->Num()&&result.size()<32;++i){
+            auto* value=static_cast<uint8*>(categories->GetData())+static_cast<std::size_t>(i)*category->GetElementSize();
+            if(!HelpyRecipeArrayContains(collection,value,recipePath,remaining))continue;
+            auto placement=station;nlohmann::json text;if(CloneReadValue(label,value,text)&&text.is_string())placement["Category"]=std::move(text);
+            result.push_back(std::move(placement));
+        }
     }return result;
 }
 nlohmann::json HelpyItemRelations(const std::string& itemPath) {
@@ -224,7 +268,10 @@ nlohmann::json HelpyRecipeDocument(const nlohmann::json& option,const std::strin
     if(tables.Num()<0||tables.Num()>8192)throw std::runtime_error("Table roster exceeds the authoring limit");
     for(auto* other:tables)if(other!=object&&HelpyReady(other)&&other->GetFName()==object->GetFName())throw std::runtime_error("Ambiguous /recipes table name; no companion saved");
     const auto row=station.at("Row").get<std::string>(),array=station.value("Array",std::string{});
-    if(!type||!table->FindRowUnchecked(FName(RC::to_generic_string(row),FNAME_Add)))throw std::runtime_error("Recipe station row is missing");
+    auto* stationRow=type?table->FindRowUnchecked(FName(RC::to_generic_string(row),FNAME_Find)):nullptr;
+    if(!stationRow)throw std::runtime_error("Recipe station row is missing");
+    if(auto* vendor=CastField<FBoolProperty>(DragonWilds::PropertyHelper::GetPropertyByName(type,TEXT("bIsVendor")));
+        vendor&&vendor->GetPropertyValue(vendor->ContainerPtrToValuePtr<void>(stationRow)))throw std::runtime_error("Choose a crafting/processing station, not a vendor menu");
     const auto accepted=HelpyRecipeArrays(type);
     if(std::find(accepted.begin(),accepted.end(),array)==accepted.end())throw std::runtime_error("Recipe station placement type changed");
     const auto category=option.value("Category",std::string{});

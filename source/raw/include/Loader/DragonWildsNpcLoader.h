@@ -457,6 +457,9 @@ namespace DragonWilds {
         RC::Unreal::AActor* FindSpawnedVendor(RC::Unreal::UWorld* world,
             const VendorDefinition& definition) const;
         void OnVendorCellShown(RC::Unreal::UObject* cell);
+        void ReconcileShownVendorCells(float deltaSeconds);
+        size_t m_cellCatchupCursor=0;
+        double m_cellCatchupDelay=0;
         bool ApplyVendor(RC::Unreal::AActor* actor, VendorDefinition& definition);
         void BindMerchantInteraction(RC::Unreal::AActor* actor,
             RC::Unreal::UObject* interaction, RC::Unreal::UObject* station,

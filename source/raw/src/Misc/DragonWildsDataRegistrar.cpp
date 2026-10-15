@@ -35,6 +35,7 @@
 #include "Utility/Config.h"
 #include "Core/ConfigFiles.h"
 #include "Core/CookedPakRegistryManifest.h"
+#include "Core/RegistryEnrollment.h"
 #include "Core/NetworkIdentityPlan.h"
 #include "Core/NetworkIdentityState.h"
 #include "Core/RegistryProvenance.h"
@@ -716,6 +717,9 @@ namespace DragonWilds {
 
             for (const auto& lane : manifest.AssetLanes)
             {
+                // These lanes use the established journal/lore service for
+                // native registration, placement and unlock triggers.
+                if(lane.Name=="Journals"||lane.Name=="Lore")continue;
                 const auto binding = std::ranges::find_if(m_bindings,
                     [&](const RegistryBinding& value) {
                         const auto tag = RC::to_string(value.StatusTag);
@@ -729,6 +733,8 @@ namespace DragonWilds {
                     });
                 if (binding == m_bindings.end())
                 {
+                    if(lane.Name=="Items"||lane.Name=="Recipes"||lane.Name=="Quests")
+                        PS::RegistryEnrollment::Reject(manifest.Source,"required native registry binding is unavailable: "+lane.Name);
                     PS::Log<LogLevel::Error>(STR(
                         "[PAK-REGISTRY][REJECTED] owner='{}' lane='{}': authoritative live registry binding is unavailable; no registry was modified.\n"),
                         PS::ToWideSafe(manifest.Owner.c_str()),
@@ -756,6 +762,8 @@ namespace DragonWilds {
                 }
                 if (!valid)
                 {
+                    if(lane.Name=="Items"||lane.Name=="Recipes"||lane.Name=="Quests")
+                        PS::RegistryEnrollment::Reject(manifest.Source,"unresolved or wrong-class "+lane.Name+": "+failedPath);
                     m_rejectedManifestAssets.insert(
                         resolvedObjects.begin(), resolvedObjects.end());
                     PS::Log<LogLevel::Error>(STR(

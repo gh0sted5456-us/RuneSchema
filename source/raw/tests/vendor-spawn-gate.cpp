@@ -7,6 +7,7 @@
 #include "Loader/VendorOffers.h"
 #include <cassert>
 #include <string>
+#include <limits>
 
 int main() {
     namespace Ack = DragonWilds::VendorAcknowledgement;
@@ -47,6 +48,12 @@ int main() {
     assert(budget.Passes() == 0 && !budget.Exhausted());
     for (unsigned pass = 0; pass < budget.Limit; ++pass) assert(budget.Begin(true));
     assert(budget.Exhausted() && !budget.Begin(true));
+    for(int tick=0;tick<9;++tick){budget.Advance(0.5);assert(!budget.Begin(true));}
+    budget.Advance(0.5);assert(!budget.Begin(false));assert(budget.Begin(true));
+    assert(budget.Exhausted()&&!budget.Begin(true));
+    for(int tick=0;tick<9;++tick){budget.Advance(0.5);assert(!budget.Begin(true));}
+    budget.Advance(0.5);assert(budget.Begin(true));
+    budget.Advance(-1);budget.Advance(std::numeric_limits<double>::quiet_NaN());assert(!budget.Begin(true));
     budget.ResetForMap();
     assert(budget.Passes() == 0 && budget.Begin(true));
     using DragonWilds::VendorSpawnGate;

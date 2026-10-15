@@ -9,6 +9,7 @@
 #include "Utility/BuildInfo.h"
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
+#include "Runtime/Storefront.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/DragonWildsSignatures.h"
@@ -39,7 +40,8 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
     try {
         const auto request=nlohmann::json::parse(requestJson);const auto action=request.value("Action",std::string{});
         nlohmann::json result;
-        if(action=="Read") {
+        if(action=="Environment")result={{"Storefront",Storefront::Name(Storefront::Current())},{"DedicatedServer",Storefront::IsDedicatedServer()}};
+        else if(action=="Read") {
             const auto prior=request.value("Revision",uint64_t{});const auto category=request.value("Category",-1);std::lock_guard lock(SpawnToolRequests::Mutex);
             result={{"Available",SpawnToolRequests::Available.load()},{"Waiting",SpawnToolRequests::Waiting.load()},
                 {"Generation",SpawnToolRequests::Generation.load()},{"Revision",SpawnToolRequests::Revision},
@@ -208,6 +210,9 @@ void PluginHost::Load(const std::filesystem::path& root) {
     catch(...){m_state->Messages.push_back("plugin catalog rejected by an unknown error; RuneSchema core continues");return;}
     for(const auto& manifest:manifests) {
         if(!manifest.Enabled)continue;
+        // The desktop Helpy frontend has no Unreal imports or viewport hook.
+        // Other client plugins retain the existing dedicated-server exclusion.
+        if(Storefront::IsDedicatedServer()&&manifest.Id!="RuneSchema.Helpy")continue;
         if(manifest.ApiVersion!=RUNESCHEMA_PLUGIN_API_VERSION)
             CompatibilityNotice(manifest.Id+": manifest API "+std::to_string(manifest.ApiVersion)+", host API "+std::to_string(RUNESCHEMA_PLUGIN_API_VERSION)+"; trying native startup");
         if(!manifest.BuiltForRuneSchema.empty()&&manifest.BuiltForRuneSchema!=BuildInfo::Version)

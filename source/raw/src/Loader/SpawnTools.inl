@@ -338,6 +338,10 @@ std::pair<bool,std::string> DragonWildsSpawnLoader::VerifyToolBuildingCandidate(
 }
 
 void DragonWildsSpawnLoader::PumpSpawnTools() {
+    // Retain the request mailbox's mutation slot until native arrival/failure.
+    // Other loader work still runs on subsequent engine ticks; never flush or
+    // block the world to stream a distant map destination.
+    if(ToolMapTravelPump(m_readyWorld))return;
     const bool becameAvailable=!PS::SpawnToolRequests::Available.exchange(true);
     if(becameAvailable&&PS::SpawnToolRequests::PushUpdate){static uint64_t readinessRevision=1;PS::SpawnToolRequests::PushUpdate("readiness",{{"Status","Spawn tools ready."}},++readinessRevision);}
     if(g_quickCatalogIndex.active) {
@@ -763,31 +767,8 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
         if(action=="MapTeleport"){
             auto* pawn=static_cast<AActor*>(ActorHelper::GetObjectRef(selected,TEXT("Pawn")));if(!pawn)throw std::runtime_error("Selected player has no active character");
             const auto [point,projection]=ToolMapTarget(world,*request);
-            auto* capsule=ActorHelper::GetObjectRef(pawn,TEXT("CapsuleComponent"));
-            if(!capsule)throw std::runtime_error("Player collision bounds are unavailable");
-            ActorHelper::FunctionCall bounds(capsule,TEXT("/Script/Engine.CapsuleComponent:GetScaledCapsuleHalfHeight"));bounds.Invoke();const auto halfHeight=bounds.Result<float>();
-            ActorHelper::FunctionCall width(capsule,TEXT("/Script/Engine.CapsuleComponent:GetScaledCapsuleRadius"));width.Invoke();const auto radius=width.Result<float>();
-            const auto landing=PS::MapLanding::ResolveNear(projection,point,radius,halfHeight,request->value("NearMarker",false),[&](PS::MapProjection::Point sample,double top,double bottom){
-                FVector hit{};std::string error;
-                if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,FVector(sample.X,sample.Y,top),FVector(sample.X,sample.Y,bottom),{pawn},hit,error))
-                    throw std::runtime_error("Destination terrain is not loaded or walkable. Move closer before teleporting. "+error);
-                return PS::MapLanding::Position{hit.X(),hit.Y(),hit.Z()};
-            });
-            auto* movement=ActorHelper::GetObjectRef(pawn,TEXT("CharacterMovement"));if(!movement)throw std::runtime_error("Player movement component is unavailable; no teleport attempted");
-            ActorHelper::FunctionCall stop(movement,TEXT("/Script/Engine.MovementComponent:StopMovementImmediately"));stop.Invoke();
-            const auto original=ActorHelper::GetActorLocation(pawn);
-            ActorHelper::FunctionCall rotation(pawn,TEXT("/Script/Engine.Actor:K2_GetActorRotation"));rotation.Invoke();const auto facing=rotation.Result<FRotator>();
-            ActorHelper::FunctionCall teleport(pawn,TEXT("/Script/Engine.Actor:K2_TeleportTo"));
-            teleport.Arg(TEXT("DestLocation"),FVector(landing.X,landing.Y,landing.Z)).Arg(TEXT("DestRotation"),facing).Invoke();
-            if(!teleport.Result<bool>())throw std::runtime_error("The game rejected capsule clearance at this point; the player was not teleported");
-            const auto actual=ActorHelper::GetActorLocation(pawn);
-            if(!PS::MapLanding::Matches(landing,{actual.X(),actual.Y(),actual.Z()})){
-                ActorHelper::FunctionCall restore(pawn,TEXT("/Script/Engine.Actor:K2_TeleportTo"));restore.Arg(TEXT("DestLocation"),original).Arg(TEXT("DestRotation"),facing).Invoke();
-                if(!restore.Result<bool>())throw std::runtime_error("Landing verification and return to the original point failed; stop teleporting and recover the player in game");
-                throw std::runtime_error("The game adjusted the landing outside the verified footprint. Returned the player to the original point.");
-            }
-            const auto landed=ActorHelper::GetActorLocation(pawn);auto result=PS::SpawnToolRequests::Read();
-            result["MapPoint"]={{"GroundAvailable",true},{"Location",{landed.X(),landed.Y(),landed.Z()}}};result["Status"]=std::format("Teleported the selected player to X {:.0f}, Y {:.0f}, Z {:.0f}.",landed.X(),landed.Y(),landed.Z());PS::SpawnToolRequests::Publish(std::move(result));return;
+            PS::SpawnToolRequests::CancelRequested=false;
+            ToolMapTravelBegin(world,selected,pawn,projection,point,request->value("NearMarker",false));return;
         }
         if(action=="DismissHelpyNpcs"||(action=="Spawn"&&request->value("NPC",false))) {
             auto* npcs=DragonWildsNpcLoader::HelpyInstance;

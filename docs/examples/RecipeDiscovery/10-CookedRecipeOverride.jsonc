@@ -1,0 +1,13 @@
+{
+  // Example paths only. Use the actual cooked recipe and ItemData paths.
+  // Native pickup history is persistent; these items need not be held together.
+  "/Example/Recipes/RECIPE_BlackArmor.RECIPE_BlackArmor": {
+    "Unlock": false,
+    "Discovery": {
+      "AllItems": [
+        "/Example/Items/ITEM_BlackDye.ITEM_BlackDye",
+        "/Example/Items/ITEM_Armor.ITEM_Armor"
+      ]
+    }
+  }
+}

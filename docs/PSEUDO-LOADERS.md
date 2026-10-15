@@ -40,7 +40,7 @@ Do not install the same package again under the game's
 
 RuneSchema prepares a short enabled-package list when the game starts. With
 `bpModLoader.luaActorLoader: true` and `patchScript: false` in
-`RuneSchema/settings/settings.jsonc`, its own helper starts those ModActors
+`RuneSchema/settings/settings.ini` (legacy JSONC is supported), its own helper starts those ModActors
 without changing BPModLoaderMod. Restart the game after changing the mod list.
 The log gives a startup summary; the exact package names are in
 `RuneSchema/settings/logicmods.lua.generated.txt`. Existing installations

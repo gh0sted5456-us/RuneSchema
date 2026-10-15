@@ -87,12 +87,14 @@ int main(int argc, char** argv)
     Check(storefront.find("DedicatedServer") != std::string::npos,
         "dedicated server executable detection is explicit");
     Check(entrypoint.find("[SERVER][SAFE-MODE]") != std::string::npos
-        && entrypoint.find("if (!storefront.DedicatedServer)") != std::string::npos
+        && entrypoint.find("Desktop Helpy is allowed; other client plugins remain suppressed") != std::string::npos
+        && host.find("if(Storefront::IsDedicatedServer()&&manifest.Id!=\"RuneSchema.Helpy\")continue;") != std::string::npos
         && entrypoint.find("if (m_startupFailed.load(std::memory_order_acquire)) return;") != std::string::npos
         && entrypoint.find("if (!PS::Storefront::IsDedicatedServer())") != std::string::npos
         && entrypoint.find("m_pluginHost.OnUiInit();") != std::string::npos
-        && entrypoint.find("register_tab(STR(\"RuneSchema\")") != std::string::npos,
-        "dedicated server exposes the core UE4SS tab while keeping client plugins suppressed");
+        && entrypoint.find("register_tab(STR(\"RuneSchema\")") != std::string::npos
+        && entrypoint.find("m_pluginHost.OnUnrealInit();") != std::string::npos,
+        "dedicated server permits only standalone Helpy while keeping other client plugins suppressed");
     Check(entrypoint.find("BeginRuneSchemaTab(\"Authoring & Tools\", TabRole::Diagnostics)") != std::string::npos,
         "dedicated server retains the full RuneSchema authoring page");
     Check(entrypoint.find("ImGui::Combo(\"Workflow stage\"") != std::string::npos

@@ -281,7 +281,7 @@ public:
                 PS::Log<LogLevel::Warning>(TEXT("[LOGIC-PAK][SERVER][PARTIAL] {}.\n"),
                     PS::ToWideSafe(result.Detail.c_str()));
         }
-        if (!storefront.DedicatedServer) {
+        {
             const auto pluginRoot=std::filesystem::path(PS::HostServices::WorkingDirectory())/"Mods"/"RuneSchema"/"plugins";
             m_pluginHost.Load(pluginRoot);
             for(const auto& message:m_pluginHost.Diagnostics())
@@ -296,9 +296,10 @@ public:
             } catch(const std::exception& error) {
                 PS::Log<LogLevel::Warning>(TEXT("Helpy plugin service validation failed: {}\n"),PS::ToWideSafe(error.what()));
             }
-        } else {
+        }
+        if (storefront.DedicatedServer) {
             PS::Log<LogLevel::Normal>(TEXT(
-                "[SERVER][SAFE-MODE] Dedicated server executable detected. Native GUI/client plugins are suppressed; authoritative registry loaders remain enabled.\n"));
+                "[SERVER][SAFE-MODE] Dedicated server detected. Desktop Helpy is allowed; other client plugins remain suppressed. Authoritative registry loaders remain enabled.\n"));
         }
         PS::UE4SSCompatibility::Report();
         // Storefront selection controls native signature lookup.
@@ -510,9 +511,9 @@ public:
             settings.helpyAuthority.maximumItemCount=std::clamp(settings.helpyAuthority.maximumItemCount,1,10000);
             settings.helpyAuthority.maximumSpawnCount=std::clamp(settings.helpyAuthority.maximumSpawnCount,1,100);
             settings.helpyAuthority.maximumNpcDurationSeconds=std::clamp(settings.helpyAuthority.maximumNpcDurationSeconds,1,3600);
-            ImGui::TextWrapped("Remote users must also match permittedPlayerGuids or permittedPlayerNames in settings/settings.jsonc. An empty allowlist denies all remote Helpy mutations; GUIDs are preferred.");
+            ImGui::TextWrapped("Remote users must also match permittedPlayerGuids or permittedPlayerNames in settings/settings.ini [helpyAuthority] (legacy JSONC is also supported). An empty allowlist denies all remote Helpy mutations; GUIDs are preferred.");
             ImGui::TextWrapped("Plugin controls are owned by each plugin under plugins/<PluginId>/settings/. Helpy activation and its hotkey are managed by RuneSchema.Helpy.");
-            ImGui::TextWrapped("Settings: settings/settings.jsonc | Live jobs: runtime/live/jobs | Live state: runtime/live/saved");
+            ImGui::TextWrapped("Settings: settings/settings.ini (legacy settings.jsonc supported) | Live jobs: runtime/live/jobs | Live state: runtime/live/saved");
             ImGui::TextWrapped("Hotloading applies supported JSON changes while the game is running. Blueprint patches and ghost appearance changes still require a restart.");
             ImGui::SeparatorText("Load-order prefixes");
             ImGui::TextWrapped("AA_ loads first, then numeric prefixes such as 00_ and 01_ in ascending order, ordinary folders, and ZZ_ last. AA_ and ZZ_ folders are implied enabled and are omitted from generated runeschema.txt files unless you add an explicit override.");
@@ -900,8 +901,7 @@ public:
                 m_pluginHost.Shutdown();
             });
             MainLoader.Initialize();
-            if (!PS::Storefront::IsDedicatedServer())
-                m_pluginHost.OnUnrealInit();
+            m_pluginHost.OnUnrealInit();
             PS::StartupTrace::Mark("UE4SS on_unreal_init complete");
             m_unrealReady = true;
             if (!PS::Storefront::IsDedicatedServer()) {

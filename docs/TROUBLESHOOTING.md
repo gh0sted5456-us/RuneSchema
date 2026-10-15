@@ -76,7 +76,7 @@ persistence IDs or internal names.
 By default, RuneSchema warns above 50,000 authored recipes. The warning is
 advisory: RuneSchema continues loading them and does not disable the mod.
 Advanced settings lets you turn the notice off or change its threshold.
-In `settings.jsonc`, use `diagnostics.largeRecipeWorkloadWarning` and
+In `settings.ini` under `[diagnostics]` (or legacy JSONC), use `largeRecipeWorkloadWarning` and
 `diagnostics.largeRecipeWarningThreshold` for the same controls.
 
 ## The recipe reports a missing item

@@ -16,9 +16,13 @@ int main(int argc,char** argv){
     const auto inspection=Read(root/"src/Generator/InspectionTools.cpp");
     const auto cell=Read(root/"src/SDK/Classes/Custom/UWorldPartitionRuntimeLevelStreamingCell.cpp");
     Require(spawn.find("ReconcileShownCells(deltaSeconds);")!=std::string::npos
-        &&spawn.find("if(cell->IsShown())OnCellShown(cell);")!=std::string::npos
-        &&spawn.find("scanned++<2048")!=std::string::npos&&spawn.find("microseconds(500)")!=std::string::npos,
+        &&spawn.find("UWorldPartitionRuntimeLevelStreamingCell::VisitShown(m_readyWorld")!=std::string::npos
+        &&cell.find("scanned++<2048")!=std::string::npos&&cell.find("microseconds(500)")!=std::string::npos,
         "Already-shown spawn cells have no bounded catch-up after loader readiness");
+    Require(npc.find("ReconcileShownVendorCells(deltaSeconds);")!=std::string::npos
+        &&npc.find("UWorldPartitionRuntimeLevelStreamingCell::VisitShown(world")!=std::string::npos
+        &&cell.find("if(!cell->GetIsHLOD()&&cell->IsShown())visit(cell);")!=std::string::npos,
+        "NPC definitions cannot recover the same confirmed visible-cell boundary as resource placements");
     Require(cell.find("TEXT(\"LevelStreaming\")")!=std::string::npos
         &&cell.find("TEXT(\"LoadedLevel\")")!=std::string::npos&&cell.find("TEXT(\"bIsVisible\")")!=std::string::npos
         &&cell.find("TEXT(\"bShouldBeVisible\")")==std::string::npos,
@@ -44,6 +48,9 @@ int main(int argc,char** argv){
         Require(handler.find("LogLevel::Warning")==std::string::npos&&handler.find("LogLevel::Verbose")!=std::string::npos,"Ordinary spawn collision readiness still warns");
     }
     Require(npc.find("groundRetryReady || m_scanBudget.Begin(world != nullptr)")!=std::string::npos,"NPC ground wait consumes its asset-readiness budget");
+    Require(npc.find("m_scanBudget.Advance(m_scanElapsed);")!=std::string::npos
+        &&npc.find("&&(!m_scanBudget.Exhausted()||definition.GroundRetry.Pending)")==std::string::npos,
+        "Late native class readiness is permanently suppressed by an exhausted initial scan burst");
     Require(npc.find("definition.GroundSearch.ObserveCell(bounds->Min.Z(),bounds->Max.Z())")!=std::string::npos
         &&npc.find("definition.GroundRetry.CellShown()")!=std::string::npos,"Streamed NPC collision cannot re-arm a bounded miss");
     Require(spawn.find("spawn.GroundSearch.ObserveCell(box.Min.Z(),box.Max.Z())")!=std::string::npos,"Spawns ignore streamed-cell vertical bounds");

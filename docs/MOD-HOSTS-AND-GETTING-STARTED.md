@@ -51,7 +51,7 @@ ue4ss/Mods/
     dlls/main.dll                 # framework, not an add-on file
     scripts/main.lua              # framework startup helper
     plugins/                      # bundled optional bridges and Helpy
-    settings/settings.jsonc
+    settings/settings.ini         # legacy settings.jsonc auto-migrates
     mods/
       runeschema.txt              # enabled add-ons and their order
       MyMod/

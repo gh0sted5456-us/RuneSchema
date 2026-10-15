@@ -246,5 +246,16 @@ RuneSchema will leave that unsafe lane unchanged.
 
 For the full lane limits and validation rules, see the
 [advanced cooked PAK registry guide](COOKED-PAK-REGISTRY-MANIFEST.md).
+Large catalogues can use the [bounded shard-index contract](COOKED-REGISTRY-SHARDS.md):
+the conventional root directly lists child assets, without requiring a
+whole-project `AssetRegistry.bin` or metadata enumeration of those children.
+The 7.8 alpha reads `Journals` and `Lore` declarations and in-PAK
+`LoaderDefinitions` for recipe station links and journal/lore placement or
+unlock metadata from the same JSON string. No replacement shared Blueprint
+base or duplicate loose `/assets`, `/recipes`, `/journal` or `/lore` pointer
+is needed for content announced through that contract. Announcement alone
+does not unlock player progress; declaration-only entries default to
+`Unlock: false`. Failed enabled enrollment defers automatic character cleanup
+instead of treating those IDs as orphaned.
 Advanced users can independently disable only RuneSchema's optional weapon
 helpers through the [combat fallback settings](COMBAT-FALLBACK-SETTINGS.md).

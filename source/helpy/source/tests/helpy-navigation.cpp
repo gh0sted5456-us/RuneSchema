@@ -1,7 +1,14 @@
 #include "Core/HelpyNavigation.h"
+#include "Core/HelpyEnvironment.h"
 #include <stdexcept>
 #include <set>
 int main(){
+    using K=PS::HelpyEnvironment::Kind;
+    if(PS::HelpyEnvironment::Decode({{"Storefront","Steam/GOG"}})!=K::Steam
+        ||PS::HelpyEnvironment::Decode({{"Storefront","Game Pass/WinGDK"}})!=K::GamePass
+        ||PS::HelpyEnvironment::Decode({{"Storefront","Steam/GOG"},{"DedicatedServer",true}})!=K::Dedicated
+        ||PS::HelpyEnvironment::Decode(nlohmann::json::object())!=K::Unknown)
+        throw std::runtime_error("Environment detection must prefer dedicated server over its store lane");
     using namespace PS::HelpyNavigation;
     std::set<std::string_view> titles;
     for(auto page:Pages){

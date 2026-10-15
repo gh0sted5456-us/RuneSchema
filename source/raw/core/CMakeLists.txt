@@ -30,6 +30,21 @@ if(PROJECT_IS_TOP_LEVEL)
     endif()
     string(REPLACE "/DNDEBUG" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
     enable_testing()
+    add_executable(recipe-stations-contract ../tests/recipe-stations-contract.cpp)
+    target_compile_features(recipe-stations-contract PRIVATE cxx_std_23)
+    add_test(NAME recipe-stations-contract COMMAND recipe-stations-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/HelpyItemCompanions.inl"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../helpy/source/include/Generator/RecipeStudioPanel.h")
+    add_executable(map-travel ../tests/map-travel.cpp)
+    target_link_libraries(map-travel PRIVATE RuneSchemaJsonCore)
+    add_test(NAME map-travel COMMAND map-travel)
+    add_executable(map-travel-contract ../tests/map-travel-contract.cpp)
+    target_compile_features(map-travel-contract PRIVATE cxx_std_23)
+    add_test(NAME map-travel-contract COMMAND map-travel-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/MapTravel.inl"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/SpawnTools.inl"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsSpawnLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../helpy/source/include/Generator/MapPanel.h")
     add_executable(registry-reflection ../tests/registry-reflection.cpp)
     target_link_libraries(registry-reflection PRIVATE RuneSchemaJsonCore)
     add_test(NAME registry-reflection COMMAND registry-reflection)
@@ -86,7 +101,7 @@ if(PROJECT_IS_TOP_LEVEL)
     target_include_directories(world-cleanup-policy PRIVATE ../include)
     target_compile_features(world-cleanup-policy PRIVATE cxx_std_20)
     add_test(NAME world-cleanup-policy COMMAND world-cleanup-policy)
-    foreach(test asset-aliases quest-definition quest-progress quest-native-contract quest-registry-plan spawn-radius quest-repeat-policy quest-save-ownership quest-receipt-journal quest-reward-tiers quest-stage-progress registry-patch-plan cooked-pak-registry-manifest registry-manifest-summary)
+    foreach(test asset-aliases quest-definition quest-progress quest-native-contract quest-registry-plan spawn-radius quest-repeat-policy quest-save-ownership quest-receipt-journal quest-reward-tiers quest-stage-progress registry-patch-plan cooked-pak-registry-manifest registry-manifest-summary recipe-discovery cooked-registry-shards)
         add_executable(${test} ../tests/${test}.cpp)
         target_link_libraries(${test} PRIVATE RuneSchemaJsonCore)
         if(MSVC)
@@ -314,6 +329,24 @@ if(PROJECT_IS_TOP_LEVEL)
     target_link_libraries(bridge-diagnostics PRIVATE RuneSchemaJsonCore)
     add_test(NAME bridge-diagnostics COMMAND bridge-diagnostics)
     add_executable(cooked-registry-discovery-contract ../tests/cooked-registry-discovery-contract.cpp)
+    add_executable(cooked-loader-enrollment-contract ../tests/cooked-loader-enrollment-contract.cpp)
+    add_executable(recipe-discovery-contract ../tests/recipe-discovery-contract.cpp)
+    add_executable(cooked-registry-shards-contract ../tests/cooked-registry-shards-contract.cpp)
+    target_compile_features(cooked-registry-shards-contract PRIVATE cxx_std_23)
+    add_test(NAME cooked-registry-shards-contract COMMAND cooked-registry-shards-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRegistryLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Core/CookedPakRegistryManifest.h")
+    target_compile_features(recipe-discovery-contract PRIVATE cxx_std_23)
+    add_test(NAME recipe-discovery-contract COMMAND recipe-discovery-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRecipeModLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/NativeRecipeDiscovery.cpp")
+    target_compile_features(cooked-loader-enrollment-contract PRIVATE cxx_std_23)
+    add_test(NAME cooked-loader-enrollment-contract COMMAND cooked-loader-enrollment-contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRecipeModLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsJournalModLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRegistryLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Misc/DragonWildsDataRegistrar.cpp")
     add_test(NAME cooked-registry-discovery-contract COMMAND cooked-registry-discovery-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRegistryLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp"
@@ -480,5 +513,12 @@ if(PROJECT_IS_TOP_LEVEL)
             set_property(TARGET config-settings PROPERTY MSVC_RUNTIME_LIBRARY MultiThreadedDLL)
         endif()
         add_test(NAME config-settings COMMAND config-settings)
+        add_executable(config-migration ../tests/config-migration.cpp)
+        target_link_libraries(config-migration PRIVATE RuneSchemaJsonCore)
+        target_include_directories(config-migration PRIVATE "${RUNESCHEMA_GLAZE_INCLUDE_DIR}")
+        if(MSVC)
+            set_property(TARGET config-migration PROPERTY MSVC_RUNTIME_LIBRARY MultiThreadedDLL)
+        endif()
+        add_test(NAME config-migration COMMAND config-migration "${CMAKE_CURRENT_SOURCE_DIR}/../../..")
     endif()
 endif()

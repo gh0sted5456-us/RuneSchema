@@ -33,5 +33,11 @@ int main(int argc,char** argv)try{namespace fs=std::filesystem;using namespace P
     {std::ofstream f(list);f<<"Dye:1";}const auto enabled=Inspect(root);const auto listStamp=fs::last_write_time(list);
     {std::ofstream f(list);f<<"Dye:0";}fs::last_write_time(list,listStamp);assert(Inspect(root).Key!=enabled.Key);fs::remove(list);
     fs::create_directories(base/"other"/"Mods"/"RuneSchema");assert(Inspect(base/"other"/"Mods"/"RuneSchema").Key!=removed.Key);
+    fs::create_directories(root/"settings");const auto settings=root/"settings"/"settings.ini";
+    {std::ofstream f(settings);f<<"[RuneSchema]\nadvancedLogging=true \n";}
+    const auto firstIni=Inspect(root);const auto iniStamp=fs::last_write_time(settings);
+    {std::ofstream f(settings);f<<"[RuneSchema]\nadvancedLogging=false\n";}fs::last_write_time(settings,iniStamp);
+    assert(Inspect(root).Key!=firstIni.Key);fs::remove(settings);assert(Inspect(root).Key==removed.Key);
+    Worker=std::async(std::launch::async,[root]{return Inspect(root);});Shutdown();assert(!Worker.valid());
     fs::remove_all(NativePath(base));
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}

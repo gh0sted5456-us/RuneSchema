@@ -128,16 +128,21 @@ inline ImRect StationNode(float height) {
         const auto at=ImGui::GetCursorScreenPos();const ImVec2 end(at.x+t.Y(42),at.y+t.Y(42));
         if(icon.empty()||!ItemIconCache::Draw(icon,at,end,true))ItemIconCache::Draw(QuickDecorations::CraftingStationIcon,at,end,true);
         ImGui::Dummy(ImVec2(t.Y(42),t.Y(42)));
+        if(!s.Station.empty()){
+            ImGui::TextWrapped("%s",s.Station.value("DisplayName",s.Station.value("Name",std::string{})).c_str());
+            if(!s.Station.value("PhysicalStation",true))ImGui::TextDisabled("Native recipe menu; no station building is linked.");
+            else ImGui::TextDisabled("%s",s.Station.value("Array",std::string{}).empty()?"Crafting station":"Processing station");
+        }
         ImGui::SetNextItemWidth(-1);
         if(ImGui::BeginCombo("##station",s.Station.value("DisplayName",s.Station.value("Name",std::string("Choose a native station"))).c_str())) {
             ImGui::SetNextItemWidth(std::max(t.X(180),ImGui::GetContentRegionAvail().x));ImGui::InputTextWithHint("##station-search","Search name, table, row or mod path",s.StationSearch,sizeof(s.StationSearch));
             if(ImGui::BeginCombo("Source",s.StationRoot.empty()?"All sources":s.StationRoot.c_str())){
                 if(ImGui::Selectable("All sources",s.StationRoot.empty()))s.StationRoot.clear();
-                std::set<std::string> roots;for(const auto& station:s.Stations)roots.insert(RecipeWorkspace::StationSource(station));
+                std::set<std::string> roots;for(const auto& station:s.Stations)if(station.value("PhysicalStation",true))roots.insert(RecipeWorkspace::StationSource(station));
                 for(const auto& root:roots)if(ImGui::Selectable(root.c_str(),s.StationRoot==root))s.StationRoot=root;ImGui::EndCombo();
             }
             std::size_t matches=0;
-            for(const auto& station:s.Stations){if(!RecipeWorkspace::StationMatches(station,s.StationSearch,s.StationRoot))continue;++matches;
+            for(const auto& station:s.Stations){if(!station.value("PhysicalStation",true)||!RecipeWorkspace::StationMatches(station,s.StationSearch,s.StationRoot))continue;++matches;
                 const auto name=station.value("Name",std::string{}),id=station.value("Id",name);ImGui::PushID(id.c_str());
                 const auto point=ImGui::GetCursorScreenPos();const float extent=t.Y(20);
                 if(ImGui::IsRectVisible(ImVec2(extent,extent))){const auto stationIcon=ItemPresentation::StationIcon(station);const ImVec2 end(point.x+extent,point.y+extent);

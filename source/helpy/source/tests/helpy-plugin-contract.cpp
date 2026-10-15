@@ -7,19 +7,31 @@
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
+#include <memory>
+#include <iostream>
+#include <source_location>
 namespace {
 struct Service{RuneSchemaServiceFn Call;void* Context;};
 std::map<std::string,Service> Services;
 std::vector<std::string> Capabilities;
 std::vector<std::string> Logs;
-void Check(bool value){if(!value)throw std::runtime_error("Plugin boundary contract failed");}
+bool ServerDesktop=false;
+void Check(bool value,const std::source_location location=std::source_location::current()){
+    if(!value)throw std::runtime_error("Plugin boundary contract failed at line "+std::to_string(location.line()));
+}
 void RS_PLUGIN_CALL Log(uint32_t,const char*,const char* message){Logs.emplace_back(message);}
 int32_t RS_PLUGIN_CALL Capability(const char*,const char* value){Capabilities.push_back(value);return RS_PLUGIN_OK;}
 int32_t RS_PLUGIN_CALL Register(const char*,const char* name,RuneSchemaServiceFn call,void* context){Services.emplace(name,Service{call,context});return RS_PLUGIN_OK;}
-int32_t RS_PLUGIN_CALL Call(const char*,const char*,const char*,char*,uint32_t,uint32_t*){return RS_PLUGIN_NOT_FOUND;}
+int32_t RS_PLUGIN_CALL Call(const char*,const char* service,const char* request,char* response,uint32_t capacity,uint32_t* size){
+    if(!ServerDesktop||std::string(service)!="runeschema.tools"||nlohmann::json::parse(request).value("Action",std::string{})!="Environment")return RS_PLUGIN_NOT_FOUND;
+    const auto value=nlohmann::json{{"Storefront","Steam/GOG"},{"DedicatedServer",true}}.dump();
+    *size=static_cast<uint32_t>(value.size()+1);if(!response||capacity<*size)return RS_PLUGIN_BUFFER_TOO_SMALL;
+    std::memcpy(response,value.c_str(),*size);return RS_PLUGIN_OK;
 }
-int main(int argc,char** argv){
-    Check(argc==2||argc==3);auto dll=LoadLibraryA(argv[1]);Check(dll!=nullptr);
+}
+int Run(int argc,char** argv){
+    Check(argc==2||argc==3);ServerDesktop=argc==3&&std::string(argv[2])=="--server-desktop";
+    auto dll=LoadLibraryA(argv[1]);Check(dll!=nullptr);
     const auto query=reinterpret_cast<RuneSchemaPluginQueryFn>(GetProcAddress(dll,"RuneSchemaPlugin_Query"));
     const auto initialize=reinterpret_cast<RuneSchemaPluginInitializeFn>(GetProcAddress(dll,"RuneSchemaPlugin_Initialize"));
     const auto shutdown=reinterpret_cast<RuneSchemaPluginShutdownFn>(GetProcAddress(dll,"RuneSchemaPlugin_Shutdown"));
@@ -32,6 +44,8 @@ int main(int argc,char** argv){
     host.Log=Log;host.RegisterCapability=Capability;host.RegisterService=Register;host.CallService=Call;
     host.ApiVersion=999;Check(initialize(&host,&instance)==RS_PLUGIN_INCOMPATIBLE_API);host.ApiVersion=1;
     Check(initialize(&host,&instance)==RS_PLUGIN_OK&&instance);
+    const auto cleanup=[&](void*){shutdown(instance);FreeLibrary(dll);};
+    std::unique_ptr<void,decltype(cleanup)> guard(reinterpret_cast<void*>(1),cleanup);
     Check(Capabilities.size()==6&&Services.size()==2);
     // Mirror the real host's post-initialize manifest gate. Loading the DLL
     // alone does not prove the host will keep it or start its F2 window.
@@ -51,11 +65,24 @@ int main(int argc,char** argv){
     Check(push.Call(push.Context,"invalid json",nullptr,0,&size)==RS_PLUGIN_FAILED);
     Check(push.Call(push.Context,R"({"Kind":"bootstrap","Available":true,"Generation":2,"Payload":{"Result":{"Status":"Ready"},"Catalog":{}}})",nullptr,0,&size)==RS_PLUGIN_OK);
     Check(push.Call(push.Context,R"({"Kind":"clear","Available":false,"Generation":3,"Payload":{"Status":"World changed"}})",nullptr,0,&size)==RS_PLUGIN_OK);
-    if(argc==3&&std::string(argv[2])=="--start-hidden"){
+    if(argc==3&&(std::string(argv[2])=="--start-hidden"||ServerDesktop)){
         const auto start=reinterpret_cast<RuneSchemaPluginPhaseFn>(GetProcAddress(dll,"RuneSchemaPlugin_OnUnrealInit"));
         Check(start&&start(instance)==RS_PLUGIN_OK);
         bool ready=false;for(const auto& log:Logs)if(log.find("standalone Helpy ready")!=std::string::npos)ready=true;
         Check(ready);
+        if(ServerDesktop){
+            HWND own=nullptr;
+            for(HWND window=FindWindowExW(nullptr,nullptr,L"RuneSchema.Helpy.Window",nullptr);window;window=FindWindowExW(nullptr,window,L"RuneSchema.Helpy.Window",nullptr)){
+                DWORD pid=0;GetWindowThreadProcessId(window,&pid);if(pid==GetCurrentProcessId()){own=window;break;}
+            }
+            Check(own&&IsWindowVisible(own));
+            SendMessageW(own,WM_CLOSE,0,0);Check(IsWindowVisible(own)&&IsIconic(own));
+            ShowWindow(own,SW_SHOWNOACTIVATE);Check(IsWindowVisible(own));
+        }
     }
-    shutdown(instance);FreeLibrary(dll);
+    return 0;
+}
+int main(int argc,char** argv){
+    SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
+    try{return Run(argc,argv);}catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}
 }

@@ -5,7 +5,9 @@
   "patternProperties": {
     "^[^$]": {
       "additionalProperties": true,
+      "allOf": [{"if": {"required": ["Discovery"]}, "then": {"properties": {"Unlock": {"const": false}}}}],
       "properties": {
+        "Discovery": {"$ref": "recipe-discovery.schema.json"},
         "AddTo": {
           "description": "Place this recipe into station rows or merchant categories. Use exactly one of Table (legacy short name) or DataTable (exact cooked asset path).",
           "items": {

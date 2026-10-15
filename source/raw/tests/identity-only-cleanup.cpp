@@ -45,6 +45,26 @@ int main()
         throw std::runtime_error("Identity-only cleanup changed unrelated character data");
     if (Plan(cleaned.Save, {}, false, &registry, false, true, true).Save != cleaned.Save)
         throw std::runtime_error("Identity-only cleanup is not idempotent");
+    if (!Plan(cleaned.Save, {}, false, &registry, false, true, true).Removed.empty())
+        throw std::runtime_error("Cleanup scheduled writes without orphaned IDs");
+
+    // A failure discovered after a snapshot was published invalidates that
+    // snapshot too. Missing registrations must never look like removed mods.
+    PublishRegistry(registry);
+    const auto previouslyPublished=ReadRegistry();
+    if(!previouslyPublished || !previouslyPublished->Ready())
+        throw std::runtime_error("Fixture did not publish a complete registry");
+    PS::RegistryEnrollment::Reject("pak:/Example.RSREG_Test","enabled journal failed to register");
+    if(registry.Ready() || previouslyPublished->Ready())
+        throw std::runtime_error("Registration failure did not veto cleanup readiness");
+    bool blocked=false;
+    try{Plan(source,{},false,previouslyPublished.get(),false,true,true);}
+    catch(const std::exception&){blocked=true;}
+    if(!blocked)throw std::runtime_error("Incomplete enrollment authorized orphan pruning");
+    PublishRegistry(registry);
+    if(ReadRegistry())throw std::runtime_error("Unhealthy enrollment published a cleanup authority");
+    PS::RegistryEnrollment::Reset();
+    if(!registry.Ready())throw std::runtime_error("Fresh initialization did not reset the failure veto");
 
     auto earlyRegistry = registry;
     earlyRegistry.QuestsComplete = false;

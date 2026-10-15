@@ -65,7 +65,7 @@ inline void Poll(){
     if(Data.Pending&&now-Data.Requested>std::chrono::seconds(15)){Data.Pending=0;Data.Error="Map refresh timed out. Use Refresh to try again.";}
     if(Data.ProbePending&&now-Data.ProbeRequested>std::chrono::seconds(15)){Data.ProbePending=0;Data.Error="Coordinate lookup timed out. Select the point again.";}
     if(Data.BuildingsPending&&now-Data.BuildingsRequested>std::chrono::seconds(15)){Data.BuildingsPending=0;Data.Error="Building menu lookup timed out. Search again to retry.";}
-    if(Data.SpawnPending&&now-Data.ActionRequested>std::chrono::seconds(30)){Data.SpawnPending=0;Data.Status="The action has not confirmed completion. Check the game before retrying.";}
+    if(Data.SpawnPending&&now-Data.ActionRequested>std::chrono::seconds(100)){Data.SpawnPending=0;Data.Status="The action has not confirmed completion. Check the game before retrying.";}
     if(!SpawnToolRequests::IsAvailable()||SpawnToolRequests::IsWaiting()||Data.Pending||Data.SpawnPending||Data.ProbePending||Data.BuildingsPending)return;
     if(Data.ProbeWanted){const auto id=++Data.Sequence;if(SpawnToolRequests::TrySubmit({{"Action","MapProbe"},{"NearMarker",Data.NearMarker},{"_Source","HelpyMap"},{"_RequestId",id},{"TargetLocation",{{"X",Data.Point.X},{"Y",Data.Point.Y}}}})){Data.ProbePoint=Data.Point;Data.ProbePending=id;Data.ProbeRequested=now;Data.ProbeWanted=false;}return;}
     if(Data.BuildingsWanted&&now>=Data.BuildingSearchDue){const auto id=++Data.Sequence;if(SpawnToolRequests::TrySubmit({{"Action","MapBuildings"},{"_Source","HelpyMap"},{"_RequestId",id},{"Query",Data.BuildingSearch},{"Offset",Data.BuildingsOffset}})){Data.BuildingsPending=id;Data.BuildingsSentQuery=Data.BuildingSearch;Data.BuildingsSentOffset=Data.BuildingsOffset;Data.BuildingsRequested=now;Data.BuildingsWanted=false;}return;}
@@ -80,7 +80,7 @@ inline void PlacePopup(){
     ImGui::Text("X %.0f   Y %.0f",Data.Point.X,Data.Point.Y);
     const bool groundReady=Data.Ground.value("GroundAvailable",false)&&Data.Ground.contains("Location")&&Data.Ground["Location"].is_array()&&Data.Ground["Location"].size()==3;
     if(groundReady){ImGui::Text("Z %.0f (ground)",Data.Ground["Location"][2].get<double>());ImGui::SameLine();if(ImGui::SmallButton("Copy coordinates")){char value[128];std::snprintf(value,sizeof(value),"X=%.0f Y=%.0f Z=%.0f",Data.Point.X,Data.Point.Y,Data.Ground["Location"][2].get<double>());ImGui::SetClipboardText(value);}}
-    else ImGui::TextWrapped("%s",Data.ProbePending||Data.ProbeWanted?"Reading ground height...":ItemPresentation::Text(Data.Ground,"Error").c_str());
+    else if(Data.Operation!=2)ImGui::TextWrapped("%s",Data.ProbePending||Data.ProbeWanted?"Reading ground height...":ItemPresentation::Text(Data.Ground,"Error").c_str());
     ImGui::Separator();
     if(ImGui::RadioButton("Spawn",Data.Operation==0))Data.Operation=0;ImGui::SameLine();
     if(ImGui::RadioButton("Build",Data.Operation==1)){Data.Operation=1;if(Data.Buildings.empty()){Data.BuildingsOffset=0;Data.BuildingsWanted=true;}}ImGui::SameLine();
@@ -130,17 +130,18 @@ inline void PlacePopup(){
     if(Data.Count>1){ImGui::SetNextItemWidth(t.X(140));ImGui::InputFloat("Spread (cm)",&Data.Radius);Data.Radius=std::clamp(Data.Radius,0.0f,10000.0f);}
     }
     ImGui::TextUnformatted(Data.Operation==2?"Player to teleport":"Player context");SpawnToolsPanel::RenderCartRecipient(SpawnToolsPanel::UiSnapshot);
-    if(Data.Operation==2)ImGui::TextWrapped("%s",Data.NearMarker?"Moves the player to verified ground beside this stone (within 2 metres).":"Moves the selected player to a clear landing point on this ground.");
+    if(Data.Operation==2)ImGui::TextWrapped("%s",Data.NearMarker?"Loads this destination, checks ground beside the stone (within 2 metres), then uses native travel.":"Loads the destination before departure, verifies a safe landing, then uses the game's native travel and loading screen. Unsafe or unavailable ground cancels departure.");
     const bool choice=Data.Operation==2||(Data.Operation==1?!Data.Building.empty():!Data.Definition.empty());
     const bool authority=Data.Operation==0||Data.Snapshot.value("CanBuildAndTeleport",false);
     if(!authority)ImGui::TextWrapped("Use the host's Helpy for building placement and player teleportation.");
-    const bool ready=authority&&groundReady&&Data.Projection.Valid()&&choice&&!SpawnToolsPanel::SelectedPlayer.empty()&&!SpawnToolRequests::IsWaiting()&&!Data.SpawnPending&&!Data.ProbePending&&!Data.ProbeWanted&&!Data.BuildingsPending;
+    const bool destinationReady=Data.Operation==2||groundReady;
+    const bool ready=authority&&destinationReady&&Data.Projection.Valid()&&choice&&!SpawnToolsPanel::SelectedPlayer.empty()&&!SpawnToolRequests::IsWaiting()&&!Data.SpawnPending&&!Data.ProbePending&&!Data.ProbeWanted&&!Data.BuildingsPending;
     ImGui::BeginDisabled(!ready);
     const char* action=Data.Operation==2?"Teleport player here":Data.Operation==1?(Data.Permanent?"Place & save building":"Place building here"):(Data.Permanent?"Spawn & save placement":"Spawn here");
     if(HelpyImGuiTheme::SoftButton(action,ImVec2(-1,0))){try{
         const auto id=++Data.Sequence;auto request=Data.Operation==2?MapSpawnRequest::Target(Data.Projection,Data.Point,"MapTeleport",SpawnToolsPanel::SelectedPlayer,id):Data.Operation==1?MapSpawnRequest::Building(Data.Projection,Data.Point,Data.Building,SpawnToolsPanel::SelectedPlayer,Data.Permanent,Data.Yaw,id):MapSpawnRequest::Build(Data.Projection,Data.Point,Data.Definition,SpawnToolsPanel::SelectedPlayer,Data.Permanent,Data.Count,Data.Radius,id);
         request["NearMarker"]=Data.Operation==2&&Data.NearMarker;
-        if(SpawnToolRequests::TrySubmit(std::move(request))){Data.SpawnPending=id;Data.ActionRequested=Clock::now();Data.Status="Applying action at the selected map position...";ImGui::CloseCurrentPopup();Data.Popup=false;}else Data.Error="The runtime is busy. Try again.";
+        if(SpawnToolRequests::TrySubmit(std::move(request))){Data.SpawnPending=id;Data.ActionRequested=Clock::now();Data.Status=Data.Operation==2?"Preparing destination and native travel (up to 90 seconds). The player stays in place until ground is verified...":"Applying action at the selected map position...";ImGui::CloseCurrentPopup();Data.Popup=false;}else Data.Error="The runtime is busy. Try again.";
     }catch(const std::exception& error){Data.Error=error.what();}}
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::MapSpawn=HelpyPreviewHooks::LastRect();

@@ -667,9 +667,15 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         )) {
             New-Item -ItemType Directory -Path $requiredDirectory -Force | Out-Null
         }
-        $sourceSettingsFile = Join-Path $SourceRoot 'settings\settings.jsonc'
+        $sourceSettingsFile = Join-Path $SourceRoot 'settings\settings.ini'
+        # The pinned runtime template predates INI. Never ship its legacy
+        # settings beside the new file and accidentally trigger migration.
+        $legacyPackagedSettings = Join-Path $payload 'settings\settings.jsonc'
+        if (Test-Path -LiteralPath $legacyPackagedSettings -PathType Leaf) {
+            Remove-Item -LiteralPath $legacyPackagedSettings -Force
+        }
         if (Test-Path -LiteralPath $sourceSettingsFile -PathType Leaf) {
-            Copy-Item -LiteralPath $sourceSettingsFile -Destination (Join-Path $payload 'settings\settings.jsonc') -Force
+            Copy-Item -LiteralPath $sourceSettingsFile -Destination (Join-Path $payload 'settings\settings.ini') -Force
         }
         $defaultsReadme = Join-Path $SourceRoot 'settings\defaults\README.md'
         if (Test-Path -LiteralPath $defaultsReadme -PathType Leaf) {
@@ -814,7 +820,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
                 'vendor-category-refresh-contract','storefront-lanes','state-storage-contract',
                 'equipment-storefront-lane','native-contract','journal-failure-isolation',
                 'journal-wingdk-lane','journal-save-ownership','journal-player-selection','journal-unlock-condition','loader-lifecycle-contract',
-                'recipe-reference-contract','main-menu-log-budget','runtime-widget-contract','ue4ss-companion-bootstrap-contract','config-settings',
+                'recipe-reference-contract','main-menu-log-budget','runtime-widget-contract','ue4ss-companion-bootstrap-contract','config-settings','config-migration',
                 'persistence-mode-contract','preview-refresh-contract','logic-pak-bridge-contract'
             )
         }

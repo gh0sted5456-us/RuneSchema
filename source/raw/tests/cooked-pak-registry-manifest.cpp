@@ -1,3 +1,6 @@
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <cassert>
 #include <stdexcept>
 #include "Core/CookedPakRegistryManifest.h"
@@ -60,4 +63,65 @@ int main()
     catch (const std::runtime_error&) { rejected = true; }
     assert(rejected);
     assert(Snapshot().size() == 1);
+
+    Reset();
+    const std::string recipe="/Example/Recipes/RECIPE_Dye.RECIPE_Dye";
+    const std::string journal="/Example/Journal/JOURNAL_Trader.JOURNAL_Trader";
+    const std::string lore="/Example/Journal/JOURNAL_Note.JOURNAL_Note";
+    const nlohmann::json enrolled={{"NativeRegistries",{
+        {"Recipes",{recipe}},{"Journals",{journal}},{"Lore",{lore}}}}};
+    assert(Publish(enrolled,"Example","pak:/Example.RSREG_Base"));
+    for(const auto* lane:{"Recipes","Journals","Lore"}){
+        const auto values=Definitions(lane);
+        assert(values.size()==1 && values[0].Body==nlohmann::json({{"Unlock",false}}));
+    }
+    const nlohmann::json recipeBody={{"Unlock",false},{"AddTo",nlohmann::json::array({
+        {{"DataTable","/Game/Example/DT_Stations.DT_Stations"},{"Row","DyeStation"},{"Category","Dyes"}}})}};
+    const nlohmann::json journalBody={{"Unlock",true},{"AddTo",{{"Section","Knowledge"},{"Category","People"}}}};
+    const nlohmann::json loreBody={{"Unlock",false},{"UnlockOnAcquire",true},{"ItemData","/Example/Items/ITEM_Note.ITEM_Note"}};
+    const nlohmann::json metadata={{"LoaderDefinitions",{
+        {"Recipes",{{recipe,recipeBody}}},{"Journals",{{journal,journalBody}}},{"Lore",{{lore,loreBody}}}}}};
+    Manifest firstMetadata;
+    assert(Publish(metadata,"Example","pak:/Example.RSREG_Metadata",&firstMetadata));
+    assert(Definitions("Recipes")[0].Body==recipeBody);
+    assert(Definitions("Journals")[0].Body==journalBody);
+    assert(Definitions("Lore")[0].Body==loreBody);
+    // Identical repeated declarations are idempotent; an explicit body beats
+    // a bare native path, regardless of discovery order.
+    assert(Publish(metadata,"Example","pak:/Example.RSREG_Duplicate"));
+    assert(Publish(enrolled,"Example","pak:/Example.RSREG_LaterBare"));
+    assert(Definitions("Journals").size()==1);
+    assert(Definitions("Journals")[0].Body==journalBody);
+    auto conflict=metadata;
+    conflict["LoaderDefinitions"]["Journals"][journal]["Unlock"]=false;
+    Manifest conflictMetadata;
+    assert(Publish(conflict,"Example","pak:/Example.RSREG_Duplicate",&conflictMetadata));
+    assert(firstMetadata.Fingerprint!=conflictMetadata.Fingerprint);
+    rejected=false;
+    try{Definitions("Journals");}catch(const std::runtime_error&){rejected=true;}
+    assert(rejected);
+
+    const auto rejectDocument=[&](const nlohmann::json& value){
+        const auto before=Snapshot().size();bool failed=false;
+        try{Publish(value,"Bad","pak:/Bad.RSREG_Test");}catch(const std::runtime_error&){failed=true;}
+        assert(failed && Snapshot().size()==before);
+    };
+    for(const auto* directive:{"$Clone","$Patch","$Target","VendorID","RuneSchemaVendors","VanillaVendors"}){
+        auto value=metadata;value["LoaderDefinitions"]["Recipes"][recipe][directive]="not allowed";rejectDocument(value);
+    }
+    auto value=metadata;value["LoaderDefinitions"]["Lore"][lore]["Unlock"]="yes";rejectDocument(value);
+    rejectDocument({{"LoaderDefinitions",{{"Unknown",nlohmann::json::object()}}}});
+    rejectDocument({{"LoaderDefinitions",{{"Journals",{{"/Example/Journal/NoObjectName",nlohmann::json::object()}}}}}});
+    rejectDocument({{"LoaderDefinitions",{{"Journals",{{"/Example/Journal/Empty.",nlohmann::json::object()}}}}}});
+    rejectDocument({{"LoaderDefinitions",{{"Journals",{{journal,1}}}}}});
+    rejectDocument({{"NativeRegistries",nlohmann::json::object()}});
+    auto oversized=metadata;
+    for(int i=0;i<4097;++i)oversized["LoaderDefinitions"]["Lore"]["/Example/Note"+std::to_string(i)+".Note"] = nlohmann::json::object();
+    rejectDocument(oversized);
+    Reset();
+    assert(Publish(enrolled,"Example","pak:/Example.RSREG_Base"));
+    assert(Publish({{"NativeRegistries",{{"Lore",{journal}}}}},"Other","pak:/Other.RSREG_Test"));
+    rejected=false;
+    try{Definitions("Journals");}catch(const std::runtime_error&){rejected=true;}
+    assert(rejected);
 }

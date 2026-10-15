@@ -7,6 +7,7 @@
 #include "Generator/ToolRequest.h"
 #include "Core/HelpyPopupInput.h"
 #include "Core/HelpyNavigation.h"
+#include "Core/HelpyEnvironment.h"
 #include "Runtime/HelpyPaths.h"
 #include "Runtime/PluginRuntimeServices.h"
 #include <backends/imgui_impl_dx11.h>
@@ -31,6 +32,7 @@ namespace {
 constexpr UINT ToggleMessage=WM_APP+0x521,ReloadMessage=WM_APP+0x522,StopMessage=WM_APP+0x523;
 HelpyPopupInput::HotkeyLatch Hotkey;
 bool GameWindow(HWND hwnd) {
+    if(HelpyEnvironment::Server())return hwnd&&hwnd==GetConsoleWindow();
     DWORD pid=0;GetWindowThreadProcessId(hwnd,&pid);
     wchar_t name[128]{};GetClassNameW(hwnd,name,128);
     return hwnd&&pid==GetCurrentProcessId()&&std::wstring_view(name)==L"UnrealWindow";
@@ -699,8 +701,8 @@ void HelpyStandaloneWindow::Shutdown(){if(!m_thread.joinable())return;m_stop=tru
 std::string HelpyStandaloneWindow::Error() const{std::scoped_lock lock(m_errorMutex);return m_error;}
 void HelpyStandaloneWindow::SetError(std::string value){std::scoped_lock lock(m_errorMutex);m_error=std::move(value);}
 bool HelpyStandaloneWindow::OpenPopup() {
-    const auto game=GetForegroundWindow();if(!GameWindow(game))return false;
-    m_gameWindow=game;
+    const auto game=GetForegroundWindow();if(!HelpyEnvironment::Server()&&!GameWindow(game))return false;
+    m_gameWindow=HelpyEnvironment::Server()?nullptr:game;
     ShowWindow(m_hwnd,IsIconic(m_hwnd)?SW_RESTORE:SW_SHOW);m_visible=true;
     SetForegroundWindow(m_hwnd);SetFocus(m_hwnd);
     LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());QueuePlayerRefresh(true);return true;
@@ -708,7 +710,7 @@ bool HelpyStandaloneWindow::OpenPopup() {
 void HelpyStandaloneWindow::ClosePopup(){
     // Closing Helpy must not steal focus back from an unrelated application.
     const bool returnToGame=HelpyPopupInput::ReturnToGame(GetForegroundWindow()==m_hwnd,GameWindow(m_gameWindow));
-    m_visible=false;ShowWindow(m_hwnd,SW_HIDE);
+    m_visible=false;ShowWindow(m_hwnd,HelpyEnvironment::Server()?SW_MINIMIZE:SW_HIDE);
     if(returnToGame)SetForegroundWindow(m_gameWindow);
 }
 
@@ -742,7 +744,14 @@ void HelpyStandaloneWindow::ThreadMain() {
     LoadUiFontFamilies(io);
     BrandTexture=LoadBrand(m_device);
     ImGui::StyleColorsDark();ImGui_ImplWin32_Init(m_hwnd);ImGui_ImplDX11_Init(m_device,m_context);ShowWindow(m_hwnd,SW_HIDE);UpdateWindow(m_hwnd);
-    m_publishedWindow=m_hwnd;m_ready=true;m_started=true;
+    m_publishedWindow=m_hwnd;
+    // A dedicated host has no UnrealWindow/F2 entry point. Expose a normal
+    // taskbar window without taking focus from its launcher or console.
+    if(HelpyEnvironment::Server()){
+        ShowWindow(m_hwnd,SW_SHOWNOACTIVATE);m_visible=true;
+        LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());QueuePlayerRefresh(true);
+    }
+    m_ready=true;m_started=true;
     MSG msg{};bool done=false,themeKeyDown=false;
     while(!done&&!m_stop.load()) {
         // Hotkeys belong to Helpy's window thread. No engine tick callback,
@@ -886,14 +895,16 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 const auto tooltipBounds=Hooks::Tooltip;mouse(center(Hooks::ItemRects.at(path)),false,30);
                 check(Hooks::Tooltip.x==tooltipBounds.x&&Hooks::Tooltip.y==tooltipBounds.y&&Hooks::Tooltip.z==tooltipBounds.z&&Hooks::Tooltip.w==tooltipBounds.w,"Hover details changed geometry while stationary");
                 check(tooltipBounds.x>=0&&tooltipBounds.y>=0&&tooltipBounds.z<=width&&tooltipBounds.w<=height,"Hover details escaped viewport");
-                mouse(center(tooltipBounds),false,25);check(ItemGridPicker::DetailsPopup.Open,"Moving into the details popup closed it");
+                mouse(center(tooltipBounds),false,1);check(!ItemGridPicker::DetailsPopup.Open||ItemGridPicker::DetailsPopup.Path!=path,"Moving off the item kept its old details open");
+                mouse(center(Hooks::ItemRects.at(path)),false,5);check(ItemGridPicker::DetailsPopup.Open,"Returning to the item did not restore its details");
                 PreviewCapture=output/"item-hover.png";RenderFrame();PreviewCapture.clear();
                 const auto savedDetails=ItemDetails::Cache[path].Native;
                 std::string longDescription;for(int i=0;i<100;++i)longDescription+="A detailed native description with wrapping and additional information. ";
-                ItemDetails::Cache[path].Native["Description"]=longDescription;mouse(center(tooltipBounds),false,5);
+                ItemDetails::Cache[path].Native["Description"]=longDescription;mouse(center(Hooks::ItemRects.at(path)),false,5);
                 check(Hooks::TooltipScrollMax>0&&Hooks::Tooltip.w<=height,"Long details did not become a viewport-bounded scrolling popup");
                 ImGui::GetIO().AddMouseWheelEvent(0,-4);RenderFrame();RenderFrame();check(Hooks::TooltipScroll>0,"Long item details cannot be scrolled");
                 PreviewCapture=output/"item-hover-long.png";RenderFrame();PreviewCapture.clear();ItemDetails::Cache[path].Native=savedDetails;
+                mouse({-20,-20},false,1);check(!ItemGridPicker::DetailsPopup.Open,"Hover details did not close immediately after leaving the item");
                 HelpyImGuiTheme::Current.tooltipDelay=delay;
                 drag(center(Hooks::ItemRects.at(path)),center(Hooks::Cart));
                 check(ItemGridPicker::SharedCart.Entries().size()==1,"Dragging a browser item did not stage it in the cart");
@@ -1055,7 +1066,11 @@ bool HelpyStandaloneWindow::CreateDevice() {
     DXGI_SWAP_CHAIN_DESC sd{};sd.BufferCount=2;sd.BufferDesc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;sd.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;sd.OutputWindow=m_hwnd;
     sd.SampleDesc.Count=1;sd.Windowed=TRUE;sd.SwapEffect=DXGI_SWAP_EFFECT_DISCARD;UINT flags=0;D3D_FEATURE_LEVEL level{};
     constexpr D3D_FEATURE_LEVEL levels[]{D3D_FEATURE_LEVEL_11_0,D3D_FEATURE_LEVEL_10_0};
-    const auto hr=D3D11CreateDeviceAndSwapChain(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,flags,levels,2,D3D11_SDK_VERSION,&sd,&m_swapChain,&m_device,&level,&m_context);
+    auto hr=D3D11CreateDeviceAndSwapChain(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,flags,levels,2,D3D11_SDK_VERSION,&sd,&m_swapChain,&m_device,&level,&m_context);
+    if(FAILED(hr)&&HelpyEnvironment::Server()){
+        DestroyDevice();
+        hr=D3D11CreateDeviceAndSwapChain(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,flags,levels,2,D3D11_SDK_VERSION,&sd,&m_swapChain,&m_device,&level,&m_context);
+    }
     if(FAILED(hr))return false;CreateTarget();return m_target!=nullptr;
 }
 void HelpyStandaloneWindow::DestroyDevice(){DestroyTarget();if(m_swapChain){m_swapChain->Release();m_swapChain=nullptr;}if(m_context){m_context->Release();m_context=nullptr;}if(m_device){m_device->Release();m_device=nullptr;}}
@@ -1073,7 +1088,8 @@ LRESULT CALLBACK HelpyStandaloneWindow::WndProc(HWND hwnd,UINT msg,WPARAM wParam
         info->ptMinTrackSize.x=static_cast<LONG>(HelpyImGuiTheme::Current.minWindowWidth*scale);
         info->ptMinTrackSize.y=static_cast<LONG>(HelpyImGuiTheme::Current.minWindowHeight*scale);return 0;
     }
-    case WM_SIZE:if(self&&self->m_device&&wParam!=SIZE_MINIMIZED){self->DestroyTarget();self->m_swapChain->ResizeBuffers(0,LOWORD(lParam),HIWORD(lParam),DXGI_FORMAT_UNKNOWN,0);self->CreateTarget();}return 0;
+    case WM_SIZE:if(self&&HelpyEnvironment::Server())self->m_visible=wParam!=SIZE_MINIMIZED;
+        if(self&&self->m_device&&wParam!=SIZE_MINIMIZED){self->DestroyTarget();self->m_swapChain->ResizeBuffers(0,LOWORD(lParam),HIWORD(lParam),DXGI_FORMAT_UNKNOWN,0);self->CreateTarget();}return 0;
     case WM_DPICHANGED:if(const auto* rect=reinterpret_cast<RECT*>(lParam))SetWindowPos(hwnd,nullptr,rect->left,rect->top,rect->right-rect->left,rect->bottom-rect->top,SWP_NOZORDER|SWP_NOACTIVATE);return 0;
     case WM_CLOSE:if(self)self->ClosePopup();return 0;
     case WM_SYSCOMMAND:if((wParam&0xfff0)==SC_KEYMENU)return 0;break;

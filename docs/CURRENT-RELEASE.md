@@ -20,7 +20,7 @@ is the experimental channel.
   substitute for the item's male/female mesh-data references.
 - The large-recipe warning is an advisory setting. It is enabled by default
   above 50,000 authored recipes, and its threshold can be changed in
-  `settings.jsonc`. It never caps or skips recipe loading.
+  `settings.ini` (`[diagnostics]`; legacy JSONC remains supported). It never caps or skips recipe loading.
 - A mod marked `0` in `runeschema.txt` contributes no RuneSchema definitions,
   PAKs, LogicMods, or Lua companion on the next launch. Enabled mods retain
   their listed order.

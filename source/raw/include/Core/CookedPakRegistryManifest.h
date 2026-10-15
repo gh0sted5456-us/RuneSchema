@@ -9,6 +9,8 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <map>
+#include <optional>
 #include <nlohmann/json.hpp>
 
 namespace PS::CookedPakRegistryManifest {
@@ -21,6 +23,7 @@ namespace PS::CookedPakRegistryManifest {
         std::string Owner;
         std::string Source;
         std::vector<Lane> AssetLanes;
+        nlohmann::json LoaderDefinitions=nlohmann::json::object();
         std::vector<std::string> WearableMeshData;
         std::vector<std::string> MeleeAttackClasses;
         std::vector<std::string> RangedAttackClasses;
@@ -86,16 +89,17 @@ namespace PS::CookedPakRegistryManifest {
         }
     }
 
-    inline bool Publish(const nlohmann::json& document, const std::string& owner,
-        const std::string& source, Manifest* published = nullptr)
+    inline std::optional<Manifest> Parse(const nlohmann::json& document, const std::string& owner,
+        const std::string& source)
     {
-        if (!document.is_object() || !document.contains("NativeRegistries"))
-            return false;
-        const auto& native = document.at("NativeRegistries");
+        if (!document.is_object() || (!document.contains("NativeRegistries")&&!document.contains("LoaderDefinitions")))
+            return std::nullopt;
+        const auto native = document.value("NativeRegistries",nlohmann::json::object());
         if (!native.is_object())
             throw std::runtime_error("NativeRegistries must be an object");
-        static constexpr std::array<const char*, 9> Allowed{{
+        static constexpr std::array<const char*, 11> Allowed{{
             "Items", "Recipes", "Quests", "CombatSpells", "UtilitySpells",
+            "Journals", "Lore",
             "EquipmentEffects", "WearableMeshData", "MeleeAttackClasses",
             "RangedAttackClasses"}};
         for (const auto& [key, unused] : native.items())
@@ -111,7 +115,7 @@ namespace PS::CookedPakRegistryManifest {
         result.Source = source;
         std::size_t total = 0;
         for (const auto* lane : {"Items", "Recipes", "Quests", "CombatSpells",
-            "UtilitySpells", "EquipmentEffects"})
+            "UtilitySpells", "EquipmentEffects", "Journals", "Lore"})
         {
             auto paths = Detail::ReadPaths(native, lane, total);
             if (!paths.empty()) result.AssetLanes.push_back({lane, std::move(paths)});
@@ -122,8 +126,25 @@ namespace PS::CookedPakRegistryManifest {
             native, "MeleeAttackClasses", total);
         result.RangedAttackClasses = Detail::ReadPaths(
             native, "RangedAttackClasses", total);
+        if(document.contains("LoaderDefinitions")){
+            const auto& definitions=document.at("LoaderDefinitions");
+            if(!definitions.is_object())throw std::runtime_error("LoaderDefinitions must be an object");
+            for(const auto& [lane,entries]:definitions.items()){
+                if(lane!="Recipes"&&lane!="Journals"&&lane!="Lore")throw std::runtime_error("Unsupported cooked loader lane: "+lane);
+                if(!entries.is_object()||entries.size()>4096)throw std::runtime_error("Cooked loader lane must be an object with at most 4096 entries");
+                for(const auto& [path,body]:entries.items()){
+                    if(!Detail::ValidAssetPath(path)||path.rfind('.')==std::string::npos||path.rfind('.')<=path.rfind('/')||path.back()=='.'||!body.is_object())
+                        throw std::runtime_error("Cooked loader definitions require full object-path keys and object bodies");
+                    for(const auto* directive:{"$Patch","$Clone","$Target","VendorID","RuneSchemaVendors","VanillaVendors"})if(body.contains(directive))
+                        throw std::runtime_error("Cooked declarations reference existing assets; use loose definitions for patches, clones or vendor offers");
+                    if(body.contains("Unlock")&&!body.at("Unlock").is_boolean())throw std::runtime_error("Cooked Unlock must be boolean");
+                    if(++total>16384)throw std::runtime_error("Cooked registry exceeds the 16384-reference document limit");
+                }
+            }
+            result.LoaderDefinitions=definitions;
+        }
         if (!total)
-            throw std::runtime_error("NativeRegistries must declare at least one path");
+            throw std::runtime_error("Cooked registry must declare at least one asset or loader definition");
 
         std::uint64_t hash = 14695981039346656037ull;
         Detail::Hash(hash, owner);
@@ -138,16 +159,24 @@ namespace PS::CookedPakRegistryManifest {
         for (const auto& path : result.MeleeAttackClasses) Detail::Hash(hash, path);
         Detail::Hash(hash, "RangedAttackClasses");
         for (const auto& path : result.RangedAttackClasses) Detail::Hash(hash, path);
+        Detail::Hash(hash,result.LoaderDefinitions.dump());
         result.Fingerprint = hash;
+        return result;
+    }
 
+    inline void Upsert(std::vector<Manifest>& manifests,const Manifest& result) {
+        auto existing = std::ranges::find_if(manifests,
+            [&](const Manifest& value) {return value.Owner==result.Owner&&value.Source==result.Source;});
+        if(existing==manifests.end())manifests.push_back(result);else *existing=result;
+    }
+    inline bool Publish(const nlohmann::json& document, const std::string& owner,
+        const std::string& source, Manifest* published = nullptr)
+    {
+        const auto result=Parse(document,owner,source);
+        if(!result)return false;
         std::scoped_lock lock(Detail::Mutex);
-        auto existing = std::ranges::find_if(Detail::Manifests,
-            [&](const Manifest& value) {
-                return value.Owner == owner && value.Source == source;
-            });
-        if (existing == Detail::Manifests.end()) Detail::Manifests.push_back(result);
-        else *existing = result;
-        if (published) *published = result;
+        Upsert(Detail::Manifests,*result);
+        if (published) *published = *result;
         return true;
     }
 
@@ -155,6 +184,49 @@ namespace PS::CookedPakRegistryManifest {
     {
         std::scoped_lock lock(Detail::Mutex);
         return Detail::Manifests;
+    }
+
+    struct Definition {std::string Owner,Source,Path;nlohmann::json Body;bool Explicit=false;};
+    inline std::vector<Definition> MergeDefinitions(const std::vector<Manifest>& manifests,const std::string& lane) {
+        if(lane!="Recipes"&&lane!="Journals"&&lane!="Lore")throw std::runtime_error("Unsupported cooked definition lane");
+        std::map<std::string,Definition> merged;
+        const auto add=[&](Definition value){
+            if(!value.Body.contains("Unlock"))value.Body["Unlock"]=false;
+            auto [entry,inserted]=merged.emplace(value.Path,value);
+            if(inserted)return;
+            if(value.Explicit&&!entry->second.Explicit){entry->second=std::move(value);return;}
+            if(!value.Explicit)return;
+            if(entry->second.Body!=value.Body)throw std::runtime_error("Conflicting cooked "+lane+" declaration: "+value.Path);
+        };
+        for(const auto& manifest:manifests){
+            for(const auto& assets:manifest.AssetLanes)if(assets.Name==lane)for(const auto& path:assets.Paths)
+                add({manifest.Owner,manifest.Source,path,nlohmann::json::object(),false});
+            if(manifest.LoaderDefinitions.contains(lane))for(const auto& [path,body]:manifest.LoaderDefinitions.at(lane).items())
+                add({manifest.Owner,manifest.Source,path,body,true});
+        }
+        // One native journal asset must not receive competing policies from
+        // the journal and lore services during the same initialization.
+        if(lane=="Journals"||lane=="Lore"){
+            const std::string other=lane=="Journals"?"Lore":"Journals";
+            for(const auto& manifest:manifests){
+                for(const auto& assets:manifest.AssetLanes)if(assets.Name==other)for(const auto& path:assets.Paths)
+                    if(merged.contains(path))throw std::runtime_error("Cooked journal path declared in both Journals and Lore: "+path);
+                if(manifest.LoaderDefinitions.contains(other))for(const auto& [path,body]:manifest.LoaderDefinitions.at(other).items())
+                    if(merged.contains(path))throw std::runtime_error("Cooked journal path declared in both Journals and Lore: "+path);
+            }
+        }
+        std::vector<Definition> result;for(auto& [path,value]:merged)result.push_back(std::move(value));return result;
+    }
+    inline std::vector<Definition> Definitions(const std::string& lane) {return MergeDefinitions(Snapshot(),lane);}
+
+    // Declaration publication only: every native class/reference still has to
+    // pass the normal registrar/loader checks before it can authorize cleanup.
+    inline void PublishBatch(const std::vector<Manifest>& batch) {
+        std::scoped_lock lock(Detail::Mutex);
+        auto next=Detail::Manifests;
+        for(const auto& manifest:batch)Upsert(next,manifest);
+        for(const auto* lane:{"Recipes","Journals","Lore"})(void)MergeDefinitions(next,lane);
+        Detail::Manifests.swap(next);
     }
 
     inline void Reset()

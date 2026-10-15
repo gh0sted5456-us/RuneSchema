@@ -1,4 +1,6 @@
 #include "Core/MapLanding.h"
+#include "Core/MapTravel.h"
+#include "SDK/Helper/ReflectedContract.h"
 #include "Core/SpawnCatalogSearch.h"
 #include "Generator/HelpyReferencePolicy.h"
 #include "Generator/F2CatalogPlan.h"
@@ -370,6 +372,7 @@ namespace {
 
 namespace DragonWilds {
 #include "SpawnItemIcons.inl"
+#include "MapTravel.inl"
 #include "SpawnTools.inl"
 #include "SpawnAdditionalDrops.inl"
 
@@ -380,6 +383,7 @@ namespace DragonWilds {
 
     DragonWildsSpawnLoader::~DragonWildsSpawnLoader()
     {
+        ToolMapTravelReset(false); // no engine calls during DLL shutdown
         g_f2ReferenceJob.Shutdown(); // join copied-string worker before unloading this DLL
         ClearBonusRows();
         if (m_onLevelShownFunction && m_onLevelShownCallbackId != 0)
@@ -2541,6 +2545,7 @@ namespace DragonWilds {
             [this](Hook::TCallbackIterationData<void>&, AGameModeBase*) {
                 // Preserve authored item rules while resetting per-world state.
                 PlayerGhost::ClearWorld();
+                ToolMapTravelReset();
                 m_readyWorld = nullptr;
                 m_pendingWorld = nullptr;
                 m_pendingCellBounds.clear();
@@ -2644,22 +2649,8 @@ namespace DragonWilds {
             return (authoritative||spawn.Type==ESpawnEntryType::StaticAssembly)
                 &&!spawn.bExistsInWorld&&!spawn.bSpawnFailed&&!spawn.bCellActivated;
         }))return;
-        m_cellCatchupDelay=std::max(0.0,m_cellCatchupDelay-std::min(1.0,static_cast<double>(deltaSeconds)));
-        if(m_cellCatchupDelay>0)return;
-        auto* type=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Engine.WorldPartitionRuntimeLevelStreamingCell"));
-        if(!type)return;
-        const auto count=FUObjectArray::GetNumElements();if(count<0||count>4'000'000)return;
-        const auto begin=std::chrono::steady_clock::now();size_t scanned=0;
-        while(m_cellCatchupCursor<static_cast<size_t>(count)&&scanned++<2048
-            &&std::chrono::steady_clock::now()-begin<std::chrono::microseconds(500)) {
-            auto* slot=FUObjectArray::IndexToObject(static_cast<int32>(m_cellCatchupCursor++));
-            auto* object=slot?slot->GetUObject():nullptr;
-            if(!object||!object->IsA(type)||object->GetWorld()!=m_readyWorld
-                ||object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed)))continue;
-            auto* cell=static_cast<UECustom::UWorldPartitionRuntimeLevelStreamingCell*>(object);
-            if(cell->IsShown())OnCellShown(cell);
-        }
-        if(m_cellCatchupCursor>=static_cast<size_t>(count)){m_cellCatchupCursor=0;m_cellCatchupDelay=2;}
+        UECustom::UWorldPartitionRuntimeLevelStreamingCell::VisitShown(m_readyWorld,m_cellCatchupCursor,m_cellCatchupDelay,
+            deltaSeconds,[this](UObject* cell){OnCellShown(cell);});
     }
 
     bool DragonWildsSpawnLoader::HasLiveSpawnedAI(UWorld* world, SpawnInfo& spawn)

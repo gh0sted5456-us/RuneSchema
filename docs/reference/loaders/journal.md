@@ -40,6 +40,14 @@ Use `Unlock: false` on an entry that should be discovered only through this inte
 
 ## Register a cooked entry
 
+A PAK can announce entries without duplicate loose pointer files through
+`NativeRegistries.Journals` / `NativeRegistries.Lore`, or carry the ordinary
+loader body in `LoaderDefinitions.Journals` / `LoaderDefinitions.Lore`.
+See [cooked PAK declarations](../../COOKED-PAK-REGISTRY-MANIFEST.md).
+Declaration-only entries default to `Unlock: false`; native conditions and
+explicit gameplay triggers remain responsible for player discovery. Loose
+definitions for the same cooked path still override the in-PAK metadata.
+
 Use its full cooked object path as the JSON key. The asset retains its native class, identity, pages, icon, and `UnlockCondition`. Optional `PersistenceID` and `InternalName` fields assert the cooked identity; RuneSchema will not replace it. Do not create a second runtime entry for the same page.
 
 ```json

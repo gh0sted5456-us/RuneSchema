@@ -3,6 +3,12 @@
 using namespace PS::RecipeWorkspace;
 template<class F> bool Rejects(F action){try{action();}catch(const std::exception&){return true;}return false;}
 int main(){
+    std::size_t stationBudget=262144;int reads=0;
+    assert(ContainsRecipeArray(21982,"/Dye/Recipe_21981.Recipe_21981",stationBudget,[&](int i){++reads;return "/Dye/Recipe_"+std::to_string(i)+".Recipe_"+std::to_string(i);}));
+    assert(reads==21982&&stationBudget==262144-21982);
+    assert(!ContainsRecipeArray(1,"/Dye/A.A",stationBudget,[](int){return "/Dye/A.A_extra";}));
+    stationBudget=1;assert(Rejects([&]{ContainsRecipeArray(2,"/Dye/A.A",stationBudget,[](int){return "/Dye/A.A";});}));
+    stationBudget=262144;assert(Rejects([&]{ContainsRecipeArray(65537,"/Dye/A.A",stationBudget,[](int){return "/Dye/A.A";});}));
     Json input=Json::array(),output=Json::array();
     AddItem(input,{{"Path","/Game/Items/Wood.Wood"}});AddItem(input,{{"Path","/Game/Items/Wood.Wood"}});
     AddItem(output,{{"Path","/Game/Items/Plank.Plank"}});AddItem(output,{{"Path","/Game/Items/Bark.Bark"}});

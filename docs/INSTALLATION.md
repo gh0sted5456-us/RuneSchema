@@ -66,8 +66,9 @@ Use `0` only when you want RuneSchema itself to stay completely off.
 If a mod uses the optional `logicmods` folder, RuneSchema's own Lua helper can
 start its cooked ModActor. The release settings enable this route without
 editing BPModLoaderMod. Keep your existing `settings` and `mods` folders when
-updating, and confirm `bpModLoader.luaActorLoader: true` and
-`bpModLoader.patchScript: false` in `settings.jsonc`. A mod's
+updating, and confirm `luaActorLoader = true` and
+`patchScript = false` in the `[bpModLoader]` section of `settings.ini`. Existing
+JSONC settings migrate automatically; see [settings and migration](SETTINGS-INI.md). A mod's
 `ue4ss/scripts/main.lua` companion needs no separate UE4SS `mods.txt` line.
 See [Blueprint and Lua companion folders](PSEUDO-LOADERS.md) for the two layouts.
 
