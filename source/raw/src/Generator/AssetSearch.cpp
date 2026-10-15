@@ -20,6 +20,7 @@
 #include "Unreal/Engine/UDataTable.hpp"
 #include "Unreal/Property/FEnumProperty.hpp"
 #include "SDK/Helper/PropertyHelper.h"
+#include "SDK/Helper/ReflectedContract.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Structs/FSoftObjectPtr.h"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
@@ -575,7 +576,7 @@ json Reference(const json& entry,const std::string& loader) {
         } else if(CastField<FNameProperty>(field) && size==sizeof(FName)) {
             values[name]=to_string(static_cast<FName*>(address)->ToString());
         } else {
-            if(CastField<FTextProperty>(field) && size!=sizeof(FText))continue;
+            if(CastField<FTextProperty>(field) && !ReflectedContract::Text(field))continue;
             if(CastField<FStrProperty>(field) && size!=sizeof(FString))continue;
             if(auto* boolean=CastField<FBoolProperty>(field);boolean
                 && (!boolean->IsNativeBool() || size!=sizeof(bool) || boolean->GetByteOffset()!=0))continue;

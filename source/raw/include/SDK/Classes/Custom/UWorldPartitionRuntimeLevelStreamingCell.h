@@ -6,17 +6,12 @@
 namespace UECustom {
     class UWorldPartitionRuntimeCellData : public RC::Unreal::UObject {
     public:
-        static constexpr int32_t ContentBoundsOffset = 0x60;
-
-        FBox& GetContentBounds();
+        FBox* GetContentBounds();
     };
 
     class UWorldPartitionRuntimeLevelStreamingCell : public RC::Unreal::UObject {
     public:
-        static constexpr int32_t IsHLODOffset = 0x59;
-        static constexpr int32_t RuntimeCellDataOffset = 0xA8;
-
-        bool& GetIsHLOD();
+        bool GetIsHLOD();
 
         UWorldPartitionRuntimeCellData* GetRuntimeCellData();
 

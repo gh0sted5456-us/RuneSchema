@@ -2,6 +2,8 @@
 #include "Core/ReflectedLayout.h"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
 #include "Unreal/UFunctionStructs.hpp"
+#include "Unreal/FText.hpp"
+#include "Unreal/Property/FTextProperty.hpp"
 #include <string>
 #include <vector>
 
@@ -22,6 +24,14 @@ inline void Frame(UFunction* function) {
 inline bool Fits(FProperty* property,int ownerSize) {
     return property&&property->GetArrayDim()==1&&property->GetOffset_Internal()>=0&&property->GetSize()>0
         &&ownerSize>=property->GetOffset_Internal()&&property->GetSize()<=ownerSize-property->GetOffset_Internal();
+}
+// FText is an SDK storage wrapper, not the live engine field size. In UE 5.6
+// the native value is 16 bytes while the wrapper reserves 48 bytes. Value
+// initialization/copy/destruction must remain with the reflected property.
+inline bool Text(FProperty* property) {
+    const auto liveSize=FText::StaticSize();
+    return CastField<FTextProperty>(property)&&property->GetArrayDim()==1
+        &&liveSize>0&&liveSize<=sizeof(FText)&&property->GetElementSize()==liveSize;
 }
 inline bool Input(FProperty* property,UFunction* function) {
     return function&&Fits(property,function->GetParmsSize())&&property->HasAnyPropertyFlags(CPF_Parm)

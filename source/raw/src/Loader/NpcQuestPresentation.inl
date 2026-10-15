@@ -14,7 +14,7 @@ void DragonWildsNpcLoader::OnQuestTextQuery(UnrealScriptFunctionCallableContext&
         if(count!=(current?3:4)
             || !ReflectedContract::Input(input,function) || input->GetElementSize()!=sizeof(UObject*)
             || !input->HasAnyPropertyFlags(CPF_Parm) || input->HasAnyPropertyFlags(CPF_OutParm|CPF_ReturnParm)
-            || !ReflectedContract::Fits(output,function->GetParmsSize()) || output->GetElementSize()!=sizeof(FText)
+            || !ReflectedContract::Fits(output,function->GetParmsSize()) || !ReflectedContract::Text(output)
             || !output->HasAnyPropertyFlags(CPF_OutParm) || output->HasAnyPropertyFlags(CPF_ReturnParm)
             || !ReflectedContract::Output(result,function) || !result->IsNativeBool() || result->GetElementSize()!=1
             || (!current && (!ReflectedContract::Input(name,function) || name->GetElementSize()!=sizeof(FName))))

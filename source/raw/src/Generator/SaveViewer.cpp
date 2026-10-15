@@ -11,6 +11,7 @@
 #include <set>
 #include "SDK/Helper/ActorHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
+#include "SDK/Helper/ReflectedContract.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
@@ -120,7 +121,7 @@ namespace {
         for(const auto* name:{TEXT("Name"),TEXT("DisplayName")}) {
             auto* field=CastField<FTextProperty>(TextField(object,name));
             if(!field)continue;
-            if(field->GetElementSize()!=sizeof(FText))throw std::runtime_error("Unsupported save-viewer name layout.");
+            if(!ReflectedContract::Text(field))throw std::runtime_error("Unsupported save-viewer name layout.");
             const auto& text=*field->ContainerPtrToValuePtr<FText>(object);
             const auto display=text.ToString();
             if(display.size()>4096)throw std::runtime_error("Save-viewer name exceeds limits.");

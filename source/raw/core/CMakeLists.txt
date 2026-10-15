@@ -356,6 +356,9 @@ if(PROJECT_IS_TOP_LEVEL)
     add_executable(ground-surface-contract ../tests/ground-surface-contract.cpp)
     target_compile_features(ground-surface-contract PRIVATE cxx_std_23)
     add_test(NAME ground-surface-contract COMMAND ground-surface-contract "${CMAKE_CURRENT_SOURCE_DIR}/..")
+    add_executable(native-placement-contract ../tests/native-placement-contract.cpp)
+    target_compile_features(native-placement-contract PRIVATE cxx_std_23)
+    add_test(NAME native-placement-contract COMMAND native-placement-contract "${CMAKE_CURRENT_SOURCE_DIR}/..")
     add_executable(item-icon-grid ../tests/item-icon-grid.cpp)
     add_test(NAME item-icon-grid COMMAND item-icon-grid
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Generator/SpawnToolsPanel.h"

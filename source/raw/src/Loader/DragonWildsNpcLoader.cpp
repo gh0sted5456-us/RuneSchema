@@ -398,13 +398,12 @@ namespace DragonWilds {
                 TEXT("/Script/Dominion.DominionPlayerController:Client_DisplayTextNotification"),false);
             auto* tag=function?CastField<FStructProperty>(function->FindProperty(FName(TEXT("NotificationTag"),FNAME_Find))):nullptr;
             auto* text=function?CastField<FTextProperty>(function->FindProperty(FName(TEXT("Text"),FNAME_Find))):nullptr;
-            size_t count=0;if(function)for(auto* field:TFieldRange<FProperty>(function,EFieldIterationFlags::Default))if(field->HasAnyPropertyFlags(CPF_Parm))++count;
-            ReflectedContract::Frame(function);
+            const auto count=ReflectedContract::Count(function);
             if(function->GetReturnProperty() || count!=2
                 || !ReflectedContract::Input(tag,function) || tag->GetArrayDim()!=1
                 || !tag->GetStruct().Get() || tag->GetStruct().Get()->GetPathName()!=TEXT("/Script/GameplayTags.GameplayTag")
                 || tag->GetElementSize()!=tag->GetStruct()->GetStructureSize()
-                || !ReflectedContract::Input(text,function) || text->GetElementSize()!=sizeof(FText))
+                || !ReflectedContract::Input(text,function) || !ReflectedContract::Text(text))
                 throw std::runtime_error("Native event notification layout changed");
             const auto deliver=[&](UObject* recipient) {
                 if(!recipient || recipient->GetWorld()!=controller->GetWorld())return;
@@ -3743,14 +3742,28 @@ namespace DragonWilds {
         AActor* actor,
         UClass* componentClass)
     {
+        auto* base=ActorHelper::ResolveClass(TEXT("/Script/Engine.ActorComponent"));
+        if(!actor||!actor->GetWorld()||!IsNpcObjectUsable(actor)
+            ||actor->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject))
+            ||!componentClass||!base||!componentClass->IsChildOf(base)||ActorHelper::IsAbstract(componentClass))
+            throw std::runtime_error("NPC component creation requires a live actor and a concrete ActorComponent class");
+        const auto ownedLive=[&](UObject* component){
+            return component&&component->IsA(componentClass)&&component->GetOuterPrivate()==actor
+                &&component->GetWorld()==actor->GetWorld()
+                &&!component->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed));
+        };
         auto components = actor->GetComponentsByClass(componentClass);
+        UObject* existing=nullptr;
         for (auto* component : components)
         {
-            if (component && component->IsA(componentClass))
+            if (ownedLive(component))
             {
-                return component;
+                if(existing&&existing!=component)
+                    throw std::runtime_error("NPC component ownership is ambiguous for "+RC::to_string(componentClass->GetPathName()));
+                existing=component;
             }
         }
+        if(existing)return existing;
 
         // This is the preferred path. AddComponentByClass is a reflected
         // Blueprint-callable engine helper and performs the normal component
@@ -3772,15 +3785,21 @@ namespace DragonWilds {
             auto* component = add.Result<UObject*>();
             if (component)
             {
+                if(!ownedLive(component))throw std::runtime_error("Engine returned a component outside the requested actor/class/world");
+                bool listed=false;
+                for(auto* owned:actor->GetComponentsByClass(componentClass))if(owned==component)listed=true;
+                if(!listed)throw std::runtime_error("Engine-created component is absent from its actor's owned component list");
                 m_createdComponents.insert(component);
                 return component;
             }
         }
         catch (const std::exception& error)
         {
-            throw std::runtime_error(std::string("Engine component creation failed: ") + error.what());
+            throw std::runtime_error(std::format("Engine component creation failed for '{}' on '{}': {}",
+                RC::to_string(componentClass->GetPathName()),RC::to_string(actor->GetPathName()),error.what()));
         }
-        throw std::runtime_error("AddComponentByClass returned null; no manual ownership fallback is allowed");
+        throw std::runtime_error(std::format("AddComponentByClass returned null for '{}' on '{}'; no component was adopted or manually constructed",
+            RC::to_string(componentClass->GetPathName()),RC::to_string(actor->GetPathName())));
     }
 
     nlohmann::json DragonWildsNpcLoader::VisibleVendorItems(
