@@ -38,8 +38,9 @@ bool DragonWildsJournalModLoader::OpenLoreForPlayer(UObject* controller,const st
     auto* initialized=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,TEXT("/Script/Dominion.LorePopupUIAPI:IsInitialized"),false);
     auto* result=initialized?CastField<FBoolProperty>(initialized->GetReturnProperty()):nullptr;
     size_t count=0;if(initialized)for(auto* field:TFieldRange<FProperty>(initialized,EFieldIterationFlags::Default))if(field->HasAnyPropertyFlags(CPF_Parm))++count;
-    if(!initialized || count!=1 || initialized->GetParmsSize()!=1 || !result || !result->IsNativeBool()
-        || result->GetArrayDim()!=1 || result->GetElementSize()!=1 || result->GetOffset_Internal()!=0)
+    ReflectedContract::Frame(initialized);
+    if(count!=1 || !ReflectedContract::Output(result,initialized) || !result->IsNativeBool()
+        || result->GetArrayDim()!=1 || result->GetElementSize()!=1)
         throw std::runtime_error("Lore UI initialization signature changed");
     ActorHelper::FunctionCall ready(selected,initialized->GetPathName());ready.Invoke();
     auto* inputManagerProperty=CastField<FObjectPropertyBase>(PropertyHelper::GetPropertyByName(apiClass,TEXT("InputManagerAPI")));
@@ -55,8 +56,8 @@ bool DragonWildsJournalModLoader::OpenLoreForPlayer(UObject* controller,const st
     auto* open=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,TEXT("/Script/Dominion.LorePopupUIAPI:OpenLorePopup"),false);
     auto* input=open?CastField<FSoftObjectProperty>(open->FindProperty(FName(TEXT("Entry"),FNAME_Find))):nullptr;
     count=0;if(open)for(auto* field:TFieldRange<FProperty>(open,EFieldIterationFlags::Default))if(field->HasAnyPropertyFlags(CPF_Parm))++count;
-    if(!open || count!=1 || open->GetReturnProperty() || open->GetParmsSize()!=40 || !input
-        || input->GetOffset_Internal()!=0 || input->GetElementSize()!=40 || input->GetArrayDim()!=1
+    ReflectedContract::Frame(open);
+    if(count!=1 || open->GetReturnProperty() || !ReflectedContract::Input(input,open)
         || !input->GetPropertyClass().Get() || !entry->IsA(input->GetPropertyClass().Get()))
         throw std::runtime_error("Lore popup entry signature changed");
     ActorHelper::FunctionCall(selected,open->GetPathName()).SoftObjectArg(TEXT("Entry"),entry).Invoke();

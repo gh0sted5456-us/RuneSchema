@@ -23,80 +23,13 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND,UINT,WPARAM,LP
 namespace PS {
 namespace {
 constexpr UINT ToggleMessage=WM_APP+0x521,ReloadMessage=WM_APP+0x522,StopMessage=WM_APP+0x523;
-constexpr UINT RoutedKeyMessage=WM_APP+0x524,ReleaseGameKeysMessage=WM_APP+0x525;
-// No desktop-wide keyboard hook or stored input history. This route is bound
-// only to the foreground game's window thread and only while Helpy is visible.
-struct PopupRoute {
-    std::atomic<HWND> Game=nullptr,Popup=nullptr;
-    std::atomic<bool> Visible=false;
-    std::atomic<unsigned> InFlight=0;
-    HelpyPopupInput::HotkeyLatch Hotkey;
-};
-PopupRoute InputRoute;
-unsigned UiModifierSnapshot=0;
-constexpr std::pair<int,unsigned> ModifierKeys[]={{VK_CONTROL,1},{VK_SHIFT,2},{VK_MENU,4},{VK_LWIN,8},{VK_RWIN,4096},
-    {VK_LSHIFT,16},{VK_RSHIFT,32},{VK_LCONTROL,64},{VK_RCONTROL,128},{VK_LMENU,256},{VK_RMENU,512}};
-void ApplyUiModifierSnapshot(unsigned mods) {
-    // SetKeyboardState changes only this UI thread's input-state table, never
-    // the game's. The non-activating window cannot rely on its own OS key queue.
-    BYTE state[256]{};if(!GetKeyboardState(state))return;
-    for(const auto& [key,bit]:ModifierKeys)state[key]=static_cast<BYTE>((state[key]&0x7f)|((mods&bit)?0x80:0));
-    SetKeyboardState(state);
-}
+HelpyPopupInput::HotkeyLatch Hotkey;
 bool GameWindow(HWND hwnd) {
     DWORD pid=0;GetWindowThreadProcessId(hwnd,&pid);
     wchar_t name[128]{};GetClassNameW(hwnd,name,128);
     return hwnd&&pid==GetCurrentProcessId()&&std::wstring_view(name)==L"UnrealWindow";
 }
-LRESULT CALLBACK PopupInputHook(int code,WPARAM removing,LPARAM data) {
-    InputRoute.InFlight.fetch_add(1);
-    struct Leave{~Leave(){InputRoute.InFlight.fetch_sub(1);}} leave;
-    auto* msg=code==HC_ACTION&&data?reinterpret_cast<MSG*>(data):nullptr;
-    const auto game=InputRoute.Game.load(),popup=InputRoute.Popup.load();
-    if(msg&&game&&popup&&removing==PM_REMOVE&&msg->hwnd==game&&msg->message==ReleaseGameKeysMessage) {
-        // Release keys pressed before opening so game movement cannot remain
-        // latched when their key-up is routed to Helpy instead of the viewport.
-        if(GetForegroundWindow()==game) {
-            auto proc=reinterpret_cast<WNDPROC>(GetWindowLongPtrW(game,GWLP_WNDPROC));
-            if(proc)for(UINT key=8;key<256;++key)if(GetKeyState(key)&0x8000)
-                CallWindowProcW(proc,game,WM_KEYUP,key,(LPARAM{1}<<31)|(LPARAM{1}<<30)|(MapVirtualKeyW(key,MAPVK_VK_TO_VSC)<<16)|1);
-            if(proc) {
-                POINT point{};GetCursorPos(&point);ScreenToClient(game,&point);const auto position=MAKELPARAM(point.x,point.y);
-                for(const auto& [key,message]:{std::pair{VK_LBUTTON,WM_LBUTTONUP},std::pair{VK_RBUTTON,WM_RBUTTONUP},std::pair{VK_MBUTTON,WM_MBUTTONUP}})
-                    if(GetKeyState(key)&0x8000)CallWindowProcW(proc,game,message,0,position);
-                if(GetKeyState(VK_XBUTTON1)&0x8000)CallWindowProcW(proc,game,WM_XBUTTONUP,MAKEWPARAM(0,XBUTTON1),position);
-                if(GetKeyState(VK_XBUTTON2)&0x8000)CallWindowProcW(proc,game,WM_XBUTTONUP,MAKEWPARAM(0,XBUTTON2),position);
-            }
-        }
-        msg->message=WM_NULL;msg->wParam=0;msg->lParam=0;
-    }
-    if(msg&&HelpyPopupInput::Route(InputRoute.Visible.load(),GetForegroundWindow()==game,
-        msg->hwnd==game||(game&&IsChild(game,msg->hwnd)),removing==PM_REMOVE)) {
-        const auto message=msg->message;
-        const bool key=message==WM_KEYDOWN||message==WM_KEYUP||message==WM_SYSKEYDOWN||message==WM_SYSKEYUP;
-        const bool text=message==WM_CHAR||message==WM_SYSCHAR||message==WM_UNICHAR;
-        const bool mouse=message>=WM_MOUSEFIRST&&message<=WM_MOUSELAST;
-        const bool systemSwitch=key&&(msg->wParam==VK_LWIN||msg->wParam==VK_RWIN||(msg->wParam==VK_TAB&&(GetKeyState(VK_MENU)&0x8000)));
-        if(!systemSwitch&&(key||text||mouse||message==WM_INPUT)) {
-            if(key&&msg->wParam==VK_F2) {
-                if((message==WM_KEYDOWN||message==WM_SYSKEYDOWN)&&InputRoute.Hotkey.Press())PostMessageW(popup,ToggleMessage,0,0);
-                else if(message==WM_KEYUP||message==WM_SYSKEYUP)InputRoute.Hotkey.Release();
-            }else if(key) {
-                unsigned mods=0;for(const auto& [key,bit]:ModifierKeys)if(GetKeyState(key)&0x8000)mods|=bit;
-                const auto packed=(static_cast<WPARAM>(message)<<32)|(static_cast<WPARAM>(mods)<<16)|(msg->wParam&0xffff);
-                if(PostMessageW(popup,RoutedKeyMessage,packed,msg->lParam)&&message==WM_KEYDOWN)TranslateMessage(msg);
-            }else if(text)PostMessageW(popup,message,msg->wParam,msg->lParam);
-            else if(mouse) {
-                POINT point{static_cast<short>(LOWORD(msg->lParam)),static_cast<short>(HIWORD(msg->lParam))};
-                if(message!=WM_MOUSEWHEEL&&message!=WM_MOUSEHWHEEL){ClientToScreen(msg->hwnd,&point);ScreenToClient(popup,&point);}
-                PostMessageW(popup,message,msg->wParam,MAKELPARAM(point.x,point.y));
-            }else if(message==WM_INPUT)DefWindowProcW(msg->hwnd,message,msg->wParam,msg->lParam);
-            msg->message=WM_NULL;msg->wParam=0;msg->lParam=0;
-        }
-    }
-    return CallNextHookEx(nullptr,code,removing,data);
-}
-enum class Page : unsigned char { Items,Ai,Resources,ItemLab,Buildings,Cleanup,Settings };
+enum class Page : unsigned char { Items,Ai,Resources,ItemLab,Buildings,Cleanup,Settings,Recipes };
 Page CurrentPage=Page::Items;
 float SidebarWidthLogical=-1.0f;
 ImFont* UiRegularFont=nullptr;
@@ -179,11 +112,11 @@ void RenderToasts(const HelpyImGuiTheme::Theme& t){
 }
 const char* PageTitle(Page page) {
     switch(page){case Page::Items:return "Items";case Page::Ai:return "AI";case Page::Resources:return "Resources";
-    case Page::ItemLab:return "Item Lab";case Page::Buildings:return "Buildings";case Page::Cleanup:return "Cleanup";default:return "Settings";}
+    case Page::ItemLab:return "Transmutate";case Page::Recipes:return "Recipes";case Page::Buildings:return "Buildings";case Page::Cleanup:return "Cleanup";default:return "Settings";}
 }
 HelpyImGuiTheme::Icon PageIcon(Page page) {
     using I=HelpyImGuiTheme::Icon;switch(page){case Page::Items:return I::Item;case Page::Ai:return I::Ai;case Page::Resources:return I::Resource;
-    case Page::ItemLab:return I::Lab;case Page::Buildings:return I::Building;case Page::Cleanup:return I::Cleanup;default:return I::Appearance;}
+    case Page::ItemLab:case Page::Recipes:return I::Lab;case Page::Buildings:return I::Building;case Page::Cleanup:return I::Cleanup;default:return I::Appearance;}
 }
 bool NavItem(Page page,const HelpyImGuiTheme::Theme& t) {
     const bool active=CurrentPage==page;ImGui::PushID(static_cast<int>(page));
@@ -192,8 +125,10 @@ bool NavItem(Page page,const HelpyImGuiTheme::Theme& t) {
     const float h=t.Y(t.navigationItemHeight);const float w=ImGui::GetContentRegionAvail().x;
     const bool clicked=ImGui::Selectable("##nav",active,ImGuiSelectableFlags_None,ImVec2(w,h));
     const auto a=ImGui::GetItemRectMin(),b=ImGui::GetItemRectMax();const float icon=t.Y(t.navigationIconSize);
-    HelpyImGuiTheme::DrawIcon(PageIcon(page),ImVec2(a.x+t.X(18.0f),(a.y+b.y)*0.5f),icon,active?t.accentHover:t.icon);
-    ImGui::GetWindowDrawList()->AddText(ImVec2(a.x+t.X(36.0f),a.y+(h-ImGui::GetTextLineHeight())*.5f),ImGui::GetColorU32(active?t.text:t.textDisabled),PageTitle(page));
+    const bool compact=w<ImGui::CalcTextSize(PageTitle(page)).x+t.X(46);
+    HelpyImGuiTheme::DrawIcon(PageIcon(page),ImVec2(compact?(a.x+b.x)*0.5f:a.x+t.X(18.0f),(a.y+b.y)*0.5f),icon,active?t.accentHover:t.icon);
+    if(!compact)ImGui::GetWindowDrawList()->AddText(ImVec2(a.x+t.X(36.0f),a.y+(h-ImGui::GetTextLineHeight())*.5f),ImGui::GetColorU32(active?t.text:t.textDisabled),PageTitle(page));
+    else if(ImGui::IsItemHovered())ImGui::SetTooltip("%s",PageTitle(page));
     ImGui::PopStyleColor(3);ImGui::PopID();if(clicked)CurrentPage=page;return clicked;
 }
 
@@ -477,9 +412,11 @@ void RenderSettings(const HelpyImGuiTheme::Theme& t) {
     }
 
     if(ImGui::CollapsingHeader("Display & sizing",ImGuiTreeNodeFlags_DefaultOpen)) {
-        sectionActions("display-sizing",[&](){theme.dpiAware=defaults.dpiAware;theme.autoReload=defaults.autoReload;theme.verboseTooltips=defaults.verboseTooltips;theme.tooltipDelay=defaults.tooltipDelay;theme.userScale=defaults.userScale;theme.fontScale=defaults.fontScale;theme.density=defaults.density;theme.resultListHeight=defaults.resultListHeight;theme.itemResultHeight=defaults.itemResultHeight;theme.aiResultHeight=defaults.aiResultHeight;theme.itemGridView=defaults.itemGridView;theme.aiGridView=defaults.aiGridView;theme.itemCategory=defaults.itemCategory;theme.listIconSize=defaults.listIconSize;theme.gridIconSize=defaults.gridIconSize;theme.gridCardHeight=defaults.gridCardHeight;theme.gridMinCardWidth=defaults.gridMinCardWidth;theme.navigationItemHeight=defaults.navigationItemHeight;theme.navigationIconSize=defaults.navigationIconSize;theme.loadingSpinnerRadius=defaults.loadingSpinnerRadius;theme.loadingSpinnerThickness=defaults.loadingSpinnerThickness;theme.overscanRows=defaults.overscanRows;});
+        sectionActions("display-sizing",[&](){theme.dpiAware=defaults.dpiAware;theme.autoReload=defaults.autoReload;theme.verboseTooltips=defaults.verboseTooltips;theme.tooltipDelay=defaults.tooltipDelay;theme.userScale=defaults.userScale;theme.fontScale=defaults.fontScale;theme.density=defaults.density;theme.resultListHeight=defaults.resultListHeight;theme.itemResultHeight=defaults.itemResultHeight;theme.aiResultHeight=defaults.aiResultHeight;theme.itemGridView=defaults.itemGridView;theme.itemGridColumns=defaults.itemGridColumns;theme.itemGridRows=defaults.itemGridRows;theme.itemGridFitRows=defaults.itemGridFitRows;theme.aiGridView=defaults.aiGridView;theme.itemCategory=defaults.itemCategory;theme.listIconSize=defaults.listIconSize;theme.gridIconSize=defaults.gridIconSize;theme.gridCardHeight=defaults.gridCardHeight;theme.gridMinCardWidth=defaults.gridMinCardWidth;theme.navigationItemHeight=defaults.navigationItemHeight;theme.navigationIconSize=defaults.navigationIconSize;theme.loadingSpinnerRadius=defaults.loadingSpinnerRadius;theme.loadingSpinnerThickness=defaults.loadingSpinnerThickness;theme.overscanRows=defaults.overscanRows;});
         checkbox("DPI aware",theme.dpiAware,defaults.dpiAware);checkbox("Auto reload ui.jsonc",theme.autoReload,defaults.autoReload);checkbox("Verbose tooltips",theme.verboseTooltips,defaults.verboseTooltips);ImGui::TextDisabled("Adds internal paths, IDs, classes and other available metadata to hover tooltips without triggering extra runtime queries.");slider("Tooltip delay",theme.tooltipDelay,0.0f,2.0f,defaults.tooltipDelay,"%.2f s");
         slider("User scale",theme.userScale,0.60f,2.50f,defaults.userScale);slider("Font scale",theme.fontScale,0.70f,1.75f,defaults.fontScale);slider("Density",theme.density,0.65f,1.50f,defaults.density);
+        sliderInt("Item bay columns",theme.itemGridColumns,1,ItemBayLayout::MaxColumns,defaults.itemGridColumns);sliderInt("Item bay rows",theme.itemGridRows,1,ItemBayLayout::MaxRows,defaults.itemGridRows);checkbox("Size item grid by rows",theme.itemGridFitRows,defaults.itemGridFitRows);
+        ImGui::TextDisabled("Default: 5 columns by 4 rows; narrows to fit. Layout controls are also available above each item bay.");
         slider("List icon size",theme.listIconSize,16.0f,96.0f,defaults.listIconSize,"%.0f");slider("Grid icon size",theme.gridIconSize,28.0f,160.0f,defaults.gridIconSize,"%.0f");
         slider("Grid card height",theme.gridCardHeight,72.0f,260.0f,defaults.gridCardHeight,"%.0f");slider("Grid minimum card width",theme.gridMinCardWidth,92.0f,320.0f,defaults.gridMinCardWidth,"%.0f");slider("Item results pane height",theme.itemResultHeight,180.0f,900.0f,defaults.itemResultHeight,"%.0f");slider("AI results pane height",theme.aiResultHeight,180.0f,900.0f,defaults.aiResultHeight,"%.0f");slider("Navigation item height",theme.navigationItemHeight,24.0f,72.0f,defaults.navigationItemHeight,"%.0f");slider("Navigation icon size",theme.navigationIconSize,10.0f,40.0f,defaults.navigationIconSize,"%.0f");slider("Loading spinner radius",theme.loadingSpinnerRadius,6.0f,40.0f,defaults.loadingSpinnerRadius,"%.1f");slider("Loading spinner thickness",theme.loadingSpinnerThickness,1.0f,8.0f,defaults.loadingSpinnerThickness,"%.1f");sliderInt("Icon overscan rows",theme.overscanRows,0,16,defaults.overscanRows);
         sizingPreview();
@@ -541,7 +478,7 @@ void RenderSettings(const HelpyImGuiTheme::Theme& t) {
 }
 void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
     SpawnToolsPanel::PollCartDelivery();
-    if(!t.advancedMode&&(CurrentPage==Page::ItemLab||CurrentPage==Page::Buildings||CurrentPage==Page::Cleanup))CurrentPage=Page::Items;
+    if(!t.advancedMode&&(CurrentPage==Page::ItemLab||CurrentPage==Page::Recipes||CurrentPage==Page::Buildings||CurrentPage==Page::Cleanup))CurrentPage=Page::Items;
     if(SidebarWidthLogical<0.0f)SidebarWidthLogical=t.navigationWidth;
     const float totalLogical=ImGui::GetContentRegionAvail().x/std::max(0.01f,t.Scale());
     const float minimumContent=360.0f;
@@ -549,12 +486,12 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
     SidebarWidthLogical=std::clamp(SidebarWidthLogical,t.navigationMinWidth,std::min(t.navigationMaxWidth,dynamicMax));
 
     ImGui::PushStyleColor(ImGuiCol_ChildBg,t.navigation);
-    ImGui::BeginChild("##helpy-nav",ImVec2(t.X(SidebarWidthLogical),0),false,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::BeginChild("##helpy-nav",ImVec2(t.X(SidebarWidthLogical),0),false);
     ImGui::Dummy(ImVec2(1,t.Y(8.0f)));ImGui::SetCursorPosX(t.X(15.0f));ImGui::TextUnformatted("RuneSchema");
     ImGui::SetCursorPosX(t.X(15.0f));ImGui::PushStyleColor(ImGuiCol_Text,t.accentHover);ImGui::TextUnformatted("HELPY 2.0");ImGui::PopStyleColor();
     ImGui::SetCursorPosX(t.X(15.0f));ImGui::TextDisabled("by NuLL");
     ImGui::Dummy(ImVec2(1,t.Y(8.0f)));ImGui::Separator();ImGui::Dummy(ImVec2(1,t.Y(5.0f)));
-    NavItem(Page::Items,t);NavItem(Page::Ai,t);NavItem(Page::Resources,t);if(t.advancedMode){NavItem(Page::ItemLab,t);NavItem(Page::Buildings,t);}
+    NavItem(Page::Items,t);NavItem(Page::Ai,t);NavItem(Page::Resources,t);if(t.advancedMode){NavItem(Page::ItemLab,t);NavItem(Page::Recipes,t);NavItem(Page::Buildings,t);}
     ImGui::Dummy(ImVec2(1,t.Y(8.0f)));ImGui::Separator();ImGui::Dummy(ImVec2(1,t.Y(5.0f)));
     if(t.advancedMode)NavItem(Page::Cleanup,t);NavItem(Page::Settings,t);
     const float footer=t.Y(34.0f);
@@ -589,6 +526,7 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
         case Page::Ai:SpawnToolsPanel::Render(SpawnToolsPanel::View::Ai);break;
         case Page::Resources:SpawnToolsPanel::Render(SpawnToolsPanel::View::Resources);break;
         case Page::ItemLab:SpawnToolsPanel::Render(SpawnToolsPanel::View::ItemLab);break;
+        case Page::Recipes:SpawnToolsPanel::Render(SpawnToolsPanel::View::Recipes);break;
         case Page::Buildings:SpawnToolsPanel::Render(SpawnToolsPanel::View::Buildings);break;
         case Page::Cleanup:SpawnToolsPanel::RenderSessionCleanup();break;
         case Page::Settings:RenderSettings(t);break;
@@ -603,43 +541,33 @@ bool HelpyStandaloneWindow::Start() {
     for(int i=0;i<500&&!m_started.load();++i)Sleep(2);return m_ready.load();
 }
 void HelpyStandaloneWindow::Toggle(){if(m_threadId)PostThreadMessageW(m_threadId,ToggleMessage,0,0);}
-void HelpyStandaloneWindow::PollHotkey(bool down){if(InputRoute.Hotkey.Poll(down)&&GameWindow(GetForegroundWindow()))Toggle();}
+void HelpyStandaloneWindow::PollHotkey(bool down){
+    const auto foreground=GetForegroundWindow();
+    if(Hotkey.Poll(down)&&HelpyPopupInput::CanToggle(GameWindow(foreground),foreground==m_publishedWindow.load()))Toggle();
+}
 void HelpyStandaloneWindow::ReloadTheme(){if(m_threadId)PostThreadMessageW(m_threadId,ReloadMessage,0,0);}
 void HelpyStandaloneWindow::Shutdown(){if(!m_thread.joinable())return;m_stop=true;if(m_threadId)PostThreadMessageW(m_threadId,StopMessage,0,0);m_thread.join();m_threadId=0;m_ready=false;}
 std::string HelpyStandaloneWindow::Error() const{std::scoped_lock lock(m_errorMutex);return m_error;}
 void HelpyStandaloneWindow::SetError(std::string value){std::scoped_lock lock(m_errorMutex);m_error=std::move(value);}
 bool HelpyStandaloneWindow::OpenPopup() {
     const auto game=GetForegroundWindow();if(!GameWindow(game))return false;
-    DWORD pid=0;const DWORD thread=GetWindowThreadProcessId(game,&pid);
-    if(!thread||pid!=GetCurrentProcessId())return false;
-    m_gameWindow=game;InputRoute.Game=game;InputRoute.Popup=m_hwnd;
-    m_inputHook=SetWindowsHookExW(WH_GETMESSAGE,PopupInputHook,nullptr,thread);
-    if(!m_inputHook){InputRoute.Game=nullptr;InputRoute.Popup=nullptr;SetError("Could not attach the game-local Helpy input route");return false;}
-    SetWindowLongPtrW(m_hwnd,GWLP_HWNDPARENT,reinterpret_cast<LONG_PTR>(game));
-    m_clipSaved=GetClipCursor(&m_savedClip)!=0;ClipCursor(nullptr);GetClipCursor(&m_releasedClip);
-    RECT gameRect{},popupRect{};GetWindowRect(game,&gameRect);GetWindowRect(m_hwnd,&popupRect);
-    SetWindowPos(m_hwnd,HWND_TOPMOST,gameRect.left+std::max(0L,(gameRect.right-gameRect.left-(popupRect.right-popupRect.left))/2),
-        gameRect.top+std::max(0L,(gameRect.bottom-gameRect.top-(popupRect.bottom-popupRect.top))/2),0,0,SWP_NOSIZE|SWP_NOACTIVATE|SWP_SHOWWINDOW);
-    ShowWindow(m_hwnd,SW_SHOWNOACTIVATE);m_visible=true;InputRoute.Visible=true;
-    PostMessageW(game,ReleaseGameKeysMessage,0,0);ImGui::GetIO().AddFocusEvent(true);
+    m_gameWindow=game;
+    ShowWindow(m_hwnd,IsIconic(m_hwnd)?SW_RESTORE:SW_SHOW);m_visible=true;
+    SetForegroundWindow(m_hwnd);SetFocus(m_hwnd);
     LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());QueuePlayerRefresh(true);return true;
 }
-void HelpyStandaloneWindow::ReleaseInputRoute() {
-    InputRoute.Visible=false;
-    if(m_inputHook){UnhookWindowsHookEx(m_inputHook);m_inputHook=nullptr;}
-    InputRoute.Game=nullptr;InputRoute.Popup=nullptr;
-    while(InputRoute.InFlight.load())Sleep(1);
-    RECT clip{};
-    if(m_clipSaved&&GetForegroundWindow()==m_gameWindow&&GetClipCursor(&clip)&&EqualRect(&clip,&m_releasedClip))ClipCursor(&m_savedClip);
-    m_clipSaved=false;
+void HelpyStandaloneWindow::ClosePopup(){
+    // Closing Helpy must not steal focus back from an unrelated application.
+    const bool returnToGame=HelpyPopupInput::ReturnToGame(GetForegroundWindow()==m_hwnd,GameWindow(m_gameWindow));
+    m_visible=false;ShowWindow(m_hwnd,SW_HIDE);
+    if(returnToGame)SetForegroundWindow(m_gameWindow);
 }
-void HelpyStandaloneWindow::ClosePopup(){m_visible=false;ReleaseInputRoute();UiModifierSnapshot=0;ApplyUiModifierSnapshot(0);ShowWindow(m_hwnd,SW_HIDE);if(ImGui::GetCurrentContext())ImGui::GetIO().AddFocusEvent(false);}
 
 void HelpyStandaloneWindow::ThreadMain() {
     m_threadId=GetCurrentThreadId();
     WNDCLASSEXW wc{sizeof(wc),CS_CLASSDC,WndProc,0,0,m_module,nullptr,LoadCursorW(nullptr,IDC_ARROW),nullptr,nullptr,L"RuneSchema.Helpy.Window",nullptr};
     RegisterClassExW(&wc);
-    m_hwnd=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_TOPMOST|WS_EX_NOACTIVATE,wc.lpszClassName,L"RuneSchema HELPY by NuLL",WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,1120,780,nullptr,nullptr,m_module,this);
+    m_hwnd=CreateWindowExW(WS_EX_APPWINDOW,wc.lpszClassName,L"RuneSchema HELPY by NuLL",WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,1120,780,nullptr,nullptr,m_module,this);
     if(!m_hwnd){SetError("CreateWindowExW failed");m_started=true;UnregisterClassW(wc.lpszClassName,m_module);return;}
     HICON appIconBig=nullptr,appIconSmall=nullptr;const auto iconPath=HostServices::WorkingDirectory()/"Mods"/"RuneSchema"/"plugins"/"RuneSchema.Helpy"/"assets"/"RuneSchema.ico";
     if(std::filesystem::is_regular_file(iconPath)){appIconBig=static_cast<HICON>(LoadImageW(nullptr,iconPath.c_str(),IMAGE_ICON,32,32,LR_LOADFROMFILE));appIconSmall=static_cast<HICON>(LoadImageW(nullptr,iconPath.c_str(),IMAGE_ICON,16,16,LR_LOADFROMFILE));if(appIconBig)SendMessageW(m_hwnd,WM_SETICON,ICON_BIG,reinterpret_cast<LPARAM>(appIconBig));if(appIconSmall)SendMessageW(m_hwnd,WM_SETICON,ICON_SMALL,reinterpret_cast<LPARAM>(appIconSmall));}
@@ -648,7 +576,7 @@ void HelpyStandaloneWindow::ThreadMain() {
     IMGUI_CHECKVERSION();ImGui::CreateContext();auto& io=ImGui::GetIO();io.ConfigFlags|=ImGuiConfigFlags_NavEnableKeyboard;io.IniFilename=nullptr;
     LoadUiFontFamilies(io);
     ImGui::StyleColorsDark();ImGui_ImplWin32_Init(m_hwnd);ImGui_ImplDX11_Init(m_device,m_context);ShowWindow(m_hwnd,SW_HIDE);UpdateWindow(m_hwnd);
-    m_ready=true;m_started=true;
+    m_publishedWindow=m_hwnd;m_ready=true;m_started=true;
     MSG msg{};bool done=false;
     while(!done&&!m_stop.load()) {
         while(PeekMessageW(&msg,nullptr,0,0,PM_REMOVE)) {
@@ -659,14 +587,16 @@ void HelpyStandaloneWindow::ThreadMain() {
             }
             if(msg.hwnd==nullptr&&msg.message==ReloadMessage){HelpyImGuiTheme::RequestReload();continue;}
             if(msg.hwnd==nullptr&&msg.message==StopMessage){done=true;break;}
+            if(msg.hwnd==m_hwnd&&msg.wParam==VK_F2&&(msg.message==WM_KEYDOWN||msg.message==WM_KEYUP)) {
+                if(msg.message==WM_KEYDOWN){if(Hotkey.Press())ClosePopup();}else Hotkey.Release();
+                continue;
+            }
             TranslateMessage(&msg);DispatchMessageW(&msg);
         }
         if(done)break;
-        if(m_visible.load()&&GetForegroundWindow()!=m_gameWindow)ClosePopup();
-        if(m_visible.load()){ClipCursor(nullptr);GetClipCursor(&m_releasedClip);}
         if(m_visible.load()&&std::chrono::steady_clock::now()>=NextPlayerRefresh)QueuePlayerRefresh(true);if(m_visible.load()&&!IsIconic(m_hwnd))RenderFrame();else Sleep(16);
     }
-    ClosePopup();ImGui_ImplDX11_Shutdown();ImGui_ImplWin32_Shutdown();ImGui::DestroyContext();DestroyDevice();
+    m_publishedWindow=nullptr;ClosePopup();ImGui_ImplDX11_Shutdown();ImGui_ImplWin32_Shutdown();ImGui::DestroyContext();DestroyDevice();
     if(m_hwnd)DestroyWindow(m_hwnd);m_hwnd=nullptr;if(appIconBig)DestroyIcon(appIconBig);if(appIconSmall)DestroyIcon(appIconSmall);UnregisterClassW(wc.lpszClassName,m_module);m_ready=false;
 }
 
@@ -679,7 +609,8 @@ void HelpyStandaloneWindow::RenderFrame() {
     if(FontRescanRequested.exchange(false)) {
         auto& io=ImGui::GetIO();ImGui_ImplDX11_InvalidateDeviceObjects();io.Fonts->Clear();LoadUiFontFamilies(io);SelectUiFontFamily(HelpyImGuiTheme::Current.fontFamily);io.FontDefault=UiRegularFont;
     }
-    ApplyUiModifierSnapshot(UiModifierSnapshot);ImGui_ImplDX11_NewFrame();ImGui_ImplWin32_NewFrame();auto& frameIo=ImGui::GetIO();const auto& preTheme=HelpyImGuiTheme::Current;SelectUiFontFamily(preTheme.fontFamily);frameIo.FontDefault=UiRegularFont;frameIo.FontGlobalScale=std::clamp(preTheme.Scale()*preTheme.fontScale,0.50f,4.00f);ImGui::NewFrame();HelpyImGuiTheme::Poll();const auto& t=HelpyImGuiTheme::Current;SelectUiFontFamily(t.fontFamily);frameIo.FontGlobalScale=std::clamp(t.Scale()*t.fontScale,0.50f,4.00f);
+    HelpyImGuiTheme::Poll();
+    ImGui_ImplDX11_NewFrame();ImGui_ImplWin32_NewFrame();auto& frameIo=ImGui::GetIO();const auto& t=HelpyImGuiTheme::Current;SelectUiFontFamily(t.fontFamily);frameIo.FontDefault=UiRegularFont;frameIo.FontGlobalScale=std::clamp(t.Scale()*t.fontScale,0.50f,4.00f);ImGui::NewFrame();
     LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());
     ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
     ImGui::PushStyleColor(ImGuiCol_WindowBg,t.window);ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,0.0f);ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,0.0f);
@@ -706,15 +637,7 @@ void HelpyStandaloneWindow::DestroyTarget(){if(m_target){m_target->Release();m_t
 LRESULT CALLBACK HelpyStandaloneWindow::WndProc(HWND hwnd,UINT msg,WPARAM wParam,LPARAM lParam) {
     auto* self=reinterpret_cast<HelpyStandaloneWindow*>(GetWindowLongPtrW(hwnd,GWLP_USERDATA));
     if(msg==WM_NCCREATE){const auto* cs=reinterpret_cast<CREATESTRUCTW*>(lParam);self=static_cast<HelpyStandaloneWindow*>(cs->lpCreateParams);SetWindowLongPtrW(hwnd,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(self));}
-    if(msg==WM_MOUSEACTIVATE)return MA_NOACTIVATE;
     if(msg==ToggleMessage){if(self&&self->m_visible.load())self->ClosePopup();return 0;}
-    if(msg==RoutedKeyMessage&&ImGui::GetCurrentContext()) {
-        if(!self||!self->m_visible.load()||GetForegroundWindow()!=self->m_gameWindow)return 0;
-        const UINT original=static_cast<UINT>(wParam>>32);const auto key=wParam&0xffff;const unsigned mods=static_cast<unsigned>((wParam>>16)&0xffff);
-        UiModifierSnapshot=mods;ApplyUiModifierSnapshot(mods);
-        ImGui_ImplWin32_WndProcHandler(hwnd,original,key,lParam);auto& io=ImGui::GetIO();
-        io.AddKeyEvent(ImGuiMod_Ctrl,(mods&1)!=0);io.AddKeyEvent(ImGuiMod_Shift,(mods&2)!=0);io.AddKeyEvent(ImGuiMod_Alt,(mods&4)!=0);io.AddKeyEvent(ImGuiMod_Super,(mods&(8|4096))!=0);return 0;
-    }
     if(ImGui::GetCurrentContext()&&ImGui_ImplWin32_WndProcHandler(hwnd,msg,wParam,lParam))return true;
     switch(msg) {
     case WM_GETMINMAXINFO: {

@@ -3,7 +3,8 @@ param(
     [switch]$Clean,
     [switch]$PluginOnly,
     [switch]$Tests,
-    [switch]$UpdateMappings
+    [switch]$UpdateMappings,
+    [string]$MappingsPath
 )
 $ErrorActionPreference = 'Stop'
 $Version = '0.7.8.0-alpha'
@@ -110,13 +111,19 @@ try {
         # do not wrap it again or the directory entries become a nested array.
         $root = Invoke-RestMethod -Uri "$api/contents?ref=$commitSha" -Headers $headers
         $versions = @($root | Where-Object {
-            $_.type -eq 'dir' -and $_.name -match '^\d+\.\d+\.\d+\.\d+$'
+            $_.type -eq 'dir' -and $_.name -match '^\d+\.\d+\.\d+(?:\.\d+)?$'
         } | ForEach-Object {
             [pscustomobject]@{ Name = [string]$_.name; Version = [version]($_.name) }
         } | Sort-Object Version -Descending)
         if (-not $versions) { throw 'RSDWArchive does not contain a versioned mapping directory.' }
 
         $version = $versions[0].Name
+        if (Test-Path -LiteralPath $MappingsLock -PathType Leaf) {
+            $priorLock = Get-Content -LiteralPath $MappingsLock -Raw | ConvertFrom-Json
+            if ($priorLock.Version -and [version]$version -lt [version]$priorLock.Version) {
+                throw "Archive mapping $version is older than pinned $($priorLock.Version); mapping lock was not changed."
+            }
+        }
         $entries = Invoke-RestMethod -Uri "$api/contents/$version/usmap`?ref=$commitSha" -Headers $headers
         $maps = @($entries | Where-Object { $_.type -eq 'file' -and $_.name -match '\.usmap$' })
         if ($maps.Count -ne 1) {
@@ -166,14 +173,27 @@ try {
             }
             Get-Content -LiteralPath $MappingsLock -Raw | ConvertFrom-Json
         }
-        if ($lock.Repository -ne $MappingsRepository -or $lock.Sha256 -notmatch '^[0-9a-fA-F]{64}$' -or
+        $nativeCapture = $lock.Source -eq 'NativeCapture'
+        if (($nativeCapture -and ($lock.Schema -ne 1 -or $lock.Platform -ne 'Steam' -or $lock.GameChangelist -le 0)) -or
+            (-not $nativeCapture -and $lock.Repository -ne $MappingsRepository) -or $lock.Sha256 -notmatch '^[0-9a-fA-F]{64}$' -or
             [int64]$lock.Size -le 0 -or [int64]$lock.Size -gt $MaximumMappingsBytes) {
             throw "Mappings lock is invalid: $MappingsLock"
         }
 
         New-Item -ItemType Directory -Path $MappingsCache -Force | Out-Null
         $cacheFile = Join-Path $MappingsCache "$($lock.Sha256.ToLowerInvariant()).usmap"
+        if ($MappingsPath) {
+            $provided = (Get-Item -LiteralPath $MappingsPath -ErrorAction Stop).FullName
+            if ((Get-Item -LiteralPath $provided).Length -ne [int64]$lock.Size -or
+                -not (Assert-Sha256 $provided $lock.Sha256)) {
+                throw 'Provided USMAP does not match the pinned mapping size and SHA-256.'
+            }
+            if ($provided -ne $cacheFile) { Copy-Item -LiteralPath $provided -Destination $cacheFile -Force }
+        }
         if (-not (Assert-Sha256 $cacheFile $lock.Sha256)) {
+            if ($nativeCapture) {
+                throw "The pinned $($lock.Version) native mapping is not cached. Supply its verified capture with -MappingsPath; do not substitute an older mapping."
+            }
             $temporary = "$cacheFile.download"
             Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
             Write-Host "Downloading locked RSDWArchive USMAP $($lock.Version)..." -ForegroundColor Cyan
@@ -185,6 +205,7 @@ try {
             }
             Move-Item -LiteralPath $temporary -Destination $cacheFile -Force
         }
+        if ((Get-Item -LiteralPath $cacheFile).Length -ne [int64]$lock.Size) { throw 'Pinned USMAP cache size changed.' }
         [pscustomobject]@{ Path = $cacheFile; Lock = $lock }
     }
     function Ensure-BuildDependencies {

@@ -12,15 +12,20 @@ stable persistence ID.
 ```json
 {
   "Id": "gather_logs",
-  "PersistenceID": "stable-quest-id",
+  "PersistenceID": "AAAAAAAAAAAAAAAAAAAAAA",
   "Title": "Gather Logs",
   "Description": "Bring back five logs.",
+  "CompletedDescription": "The village has the timber it needs.",
+  "ShowInCompletedQuestList": true,
+  "Category": "Regular",
   "Completion": "ReturnToNPC",
   "Stages": [{
     "Id": "gather",
     "Objectives": [{
       "Id": "logs",
-      "Type": "Fetch",
+      "Type": "Collect",
+      "Text": "Bring back five logs.",
+      "Hint": "Look near the forest edge.",
       "Item": "/Game/Gameplay/Items/ITEM_Log.ITEM_Log",
       "Count": 5
     }]
@@ -28,6 +33,40 @@ stable persistence ID.
   "Reward": {"Item":"/Game/Gameplay/Items/ITEM_Reward.ITEM_Reward","Count":1}
 }
 ```
+
+Replace the example item paths with your cooked `ItemData` paths and generate a
+unique, canonical 22-character `PersistenceID` for each quest. Keep that identity
+stable when updating the same quest.
+
+## Quest lists and completion
+
+A file may contain one definition or an array of definitions. Multiple quests
+remain separate per-character native progress records; accepting another quest
+does not complete the first. `Category` accepts `Regular`, `Story`, or `Task`.
+The game maintains its own tracked-quest selection by quest type; tracking is
+not the same as which quests a player owns or has completed.
+
+`CompletedDescription` controls the native description after completion and
+defaults to `Description`. `ShowInCompletedQuestList` defaults to `true` and
+controls completed-list visibility only: it never completes the quest or grants
+its reward. `HideInQuestList` defaults to `false` and controls the normal list.
+Internal hidden stage records remain hidden from both lists.
+
+Completion still follows the authored `Completion` rule and native quest state.
+Rewards and repeat eligibility remain separate from list presentation. Hiding
+an entry does not remove its persisted progress.
+
+## Objective presentation
+
+Objectives support `SubobjectiveDescription`, `Hint`, and
+`QuestDescriptionOverride` in addition to `Text`. These map to the game's
+structured objective data. A description override applies when that objective
+is selected by native progression; it does not overwrite other quests.
+
+For staged quests, visible objective descriptions, subobjective text and hints
+are combined for the active stage. Hidden objective presentation is excluded
+from that stage summary. `CompleteText` remains progress text, not a replacement
+for the quest-level `CompletedDescription`.
 
 Walkthrough:
 

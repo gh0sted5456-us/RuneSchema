@@ -1,6 +1,7 @@
 #pragma once
 #include "imgui.h"
 #include "Core/ConfigFiles.h"
+#include "Core/ItemBayLayout.h"
 #include "Runtime/HostServices.h"
 #include "Generator/HelpyRuntimePreferences.h"
 #include <algorithm>
@@ -59,6 +60,8 @@ struct Theme {
     float resultListHeight{320.0f},listIconSize{28.0f},gridIconSize{60.0f},gridCardHeight{116.0f},gridMinCardWidth{132.0f};
     float navigationItemHeight{36.0f},navigationIconSize{17.0f},loadingSpinnerRadius{13.0f},loadingSpinnerThickness{2.4f},tooltipDelay{0.35f};
     int overscanRows{4};
+    int itemGridColumns{ItemBayLayout::DefaultColumns},itemGridRows{ItemBayLayout::DefaultRows};
+    bool itemGridFitRows{true};
     bool dpiAware{true},autoReload{true},textBold{false},verboseTooltips{false},itemGridView{true},aiGridView{false},advancedMode{false};
     float itemResultHeight{320.0f},aiResultHeight{320.0f};
     std::string itemCategory{"All"};
@@ -102,9 +105,9 @@ inline void SelectSettingsSource(bool appData){
 
 inline nlohmann::json DefaultDocument() {
     return {
-        {"version",15},{"autoReload",true},
+        {"version",16},{"autoReload",true},
         {"display",{{"dpiAware",true},{"userScale",1.18},{"fontScale",1.34},{"density",1.14},{"fontFamily","Segoe UI"},{"textBold",false},{"verboseTooltips",false},{"tooltipDelay",0.35}}},
-        {"views",{{"advancedMode",false},{"itemGrid",true},{"aiGrid",false},{"itemResultHeight",320.0},{"aiResultHeight",320.0},{"itemCategory","All"}}},
+        {"views",{{"advancedMode",false},{"itemGrid",true},{"itemGridColumns",ItemBayLayout::DefaultColumns},{"itemGridRows",ItemBayLayout::DefaultRows},{"itemGridFitRows",true},{"aiGrid",false},{"itemResultHeight",320.0},{"aiResultHeight",320.0},{"itemCategory","All"}}},
         {"cache",{{"iconCacheMB",200}}},
         {"colors",{
             {"window",{0.050,0.052,0.060,1.0}},{"panel",{0.075,0.078,0.090,1.0}},{"panelAlt",{0.100,0.104,0.120,1.0}},
@@ -145,9 +148,9 @@ inline void ReadPair(const nlohmann::json& obj,const char* name,float& x,float& 
 inline nlohmann::json ColorJson(const ImVec4& v){return nlohmann::json::array({v.x,v.y,v.z,v.w});}
 inline nlohmann::json DocumentFrom(const Theme& t,int iconCacheMB) {
     return {
-        {"version",15},{"autoReload",t.autoReload},
+        {"version",16},{"autoReload",t.autoReload},
         {"display",{{"dpiAware",t.dpiAware},{"userScale",t.userScale},{"fontScale",t.fontScale},{"density",t.density},{"fontFamily",t.fontFamily},{"textBold",t.textBold},{"verboseTooltips",t.verboseTooltips},{"tooltipDelay",t.tooltipDelay}}},
-        {"views",{{"advancedMode",t.advancedMode},{"itemGrid",t.itemGridView},{"aiGrid",t.aiGridView},{"itemResultHeight",t.itemResultHeight},{"aiResultHeight",t.aiResultHeight},{"itemCategory",t.itemCategory}}},
+        {"views",{{"advancedMode",t.advancedMode},{"itemGrid",t.itemGridView},{"itemGridColumns",t.itemGridColumns},{"itemGridRows",t.itemGridRows},{"itemGridFitRows",t.itemGridFitRows},{"aiGrid",t.aiGridView},{"itemResultHeight",t.itemResultHeight},{"aiResultHeight",t.aiResultHeight},{"itemCategory",t.itemCategory}}},
         {"cache",{{"iconCacheMB",std::clamp(iconCacheMB,0,16384)}}},
         {"colors",{
             {"window",ColorJson(t.window)},{"panel",ColorJson(t.panel)},{"panelAlt",ColorJson(t.panelAlt)},
@@ -199,6 +202,9 @@ inline void Reload(bool createIfMissing=true) {
         next.dpiAware=display.value("dpiAware",true);next.userScale=ReadFloat(display,"userScale",1.18f,0.60f,2.50f);
         next.fontScale=ReadFloat(display,"fontScale",1.34f,0.70f,1.75f);next.density=ReadFloat(display,"density",1.14f,0.65f,1.50f);try{next.fontFamily=display.value("fontFamily",std::string("Segoe UI"));}catch(...){next.fontFamily="Segoe UI";}next.textBold=display.value("textBold",false);next.verboseTooltips=display.value("verboseTooltips",false);next.tooltipDelay=ReadFloat(display,"tooltipDelay",next.tooltipDelay,0.0f,2.0f);
         const auto views=doc.value("views",nlohmann::json::object());next.advancedMode=views.value("advancedMode",false);next.itemGridView=views.value("itemGrid",true);next.aiGridView=views.value("aiGrid",false);next.itemResultHeight=ReadFloat(views,"itemResultHeight",320.0f,180.0f,900.0f);next.aiResultHeight=ReadFloat(views,"aiResultHeight",320.0f,180.0f,900.0f);try{const auto value=views.value("itemCategory",std::string("All"));if(value=="All"||value=="Weapons"||value=="Armor"||value=="Consumables"||value=="Ammo"||value=="Resources"||value=="Tools"||value=="Building"||value=="Quest"||value=="Misc")next.itemCategory=value;}catch(...){}
+        next.itemGridColumns=ReadInt(views,"itemGridColumns",ItemBayLayout::DefaultColumns,1,ItemBayLayout::MaxColumns);
+        next.itemGridRows=ReadInt(views,"itemGridRows",ItemBayLayout::DefaultRows,1,ItemBayLayout::MaxRows);
+        next.itemGridFitRows=views.value("itemGridFitRows",true);
         if(version<4){if(std::abs(next.userScale-1.10f)<0.001f)next.userScale=1.18f;if(std::abs(next.fontScale-1.04f)<0.001f)next.fontScale=1.18f;if(std::abs(next.density-1.06f)<0.001f)next.density=1.14f;}
         if(version<5&&std::abs(next.fontScale-1.14f)<0.001f)next.fontScale=1.18f;
         if(version<6&&std::abs(next.fontScale-1.18f)<0.001f)next.fontScale=1.34f;

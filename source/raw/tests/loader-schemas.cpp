@@ -9,6 +9,10 @@
 int RunLoaderSchemas(int argc,char** argv) {
     const auto schemas=PS::JsonSchemaGenerator::LoaderSchemas();
     assert(schemas.size()==22);
+    const auto& humanEquipment=schemas.at("npc").at("anyOf").at(0).at("anyOf").at(0).at("properties").at("Equipment");
+    assert(humanEquipment.at("properties").contains("Necklace"));
+    assert(humanEquipment.at("properties").contains("Trinket2"));
+    assert(humanEquipment.at("not").at("required")==nlohmann::json::array({"Necklace","Trinket2"}));
     assert(!schemas.contains("animations"));
     assert(!schemas.contains("behaviors"));
     assert(schemas["lore"]["patternProperties"]["^[^$]"]["properties"]["Type"]["const"]=="Lore");
@@ -55,6 +59,12 @@ int RunLoaderSchemas(int argc,char** argv) {
     assert(kill["properties"].contains("SpawnID"));
     assert(kill["dependencies"]["SpawnID"]==nlohmann::json::array({"EventID"}));
     const auto& questSchema=schemas["quests"]["anyOf"][0];
+    assert(questSchema["properties"]["ShowInCompletedQuestList"]["default"]==true);
+    assert(questSchema["properties"]["HideInQuestList"]["default"]==false);
+    assert(questSchema["properties"]["CompletedDescription"]["maxLength"]==2048);
+    for(const auto* field:{"SubobjectiveDescription","Hint","QuestDescriptionOverride"}) {
+        assert(objective["properties"].contains(field));assert(kill["properties"].contains(field));
+    }
     assert(questSchema["properties"]["Stages"]["items"]["properties"]["Objectives"]["items"]==questSchema["properties"]["Objective"]);
     assert(questSchema["oneOf"].size()==2);
     assert(questSchema["properties"]["Category"]["enum"]==nlohmann::json::array({"Regular","Story","Task"}));

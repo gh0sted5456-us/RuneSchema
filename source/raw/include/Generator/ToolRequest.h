@@ -79,6 +79,8 @@ template<> struct ToolRequest<SpawnToolTag> {
         Result.erase("GrantResults");Result.erase("SpawnResult");
         Result.erase("CloneResult");Result.erase("CloneSource");Result.erase("CloneAppearance");Result.erase("ItemDetails");
         Result.erase("RecipeExportResult");Result.erase("ItemOverrideExportResult");Result.erase("KitMetadata");Result.erase("NativeContracts");
+        Result.erase("RecipeWorkspaceCatalog");Result.erase("RecipeWorkspaceSource");
+        Result.erase("SpawnDefinition");
         Result["Status"]="Queued for the game thread.";return true;
     }
     static void Submit(nlohmann::json request) {
@@ -114,6 +116,9 @@ template<> struct ToolRequest<SpawnToolTag> {
             if(result.contains("CloneAppearance"))receipt["CloneAppearance"]=result["CloneAppearance"];
             if(result.contains("ItemDetails"))receipt["ItemDetails"]=result["ItemDetails"];
             if(result.contains("RecipeExportResult"))receipt["RecipeExportResult"]=result["RecipeExportResult"];
+            if(result.contains("RecipeWorkspaceCatalog"))receipt["RecipeWorkspaceCatalog"]=result["RecipeWorkspaceCatalog"];
+            if(result.contains("RecipeWorkspaceSource"))receipt["RecipeWorkspaceSource"]=result["RecipeWorkspaceSource"];
+            if(result.contains("SpawnDefinition"))receipt["SpawnDefinition"]=result["SpawnDefinition"];
             if(result.contains("ItemOverrideExportResult"))receipt["ItemOverrideExportResult"]=result["ItemOverrideExportResult"];
             Completed[ActiveRequest]=std::move(receipt);
             while(Completed.size()>16)Completed.erase(Completed.begin());

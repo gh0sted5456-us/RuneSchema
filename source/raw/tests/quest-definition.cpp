@@ -1,6 +1,7 @@
 #include "Loader/QuestDefinition.h"
 #include "Loader/QuestInspectorModel.h"
 #include "Loader/QuestProgressText.h"
+#include "Loader/QuestObjectiveSchema.h"
 #include <cassert>
 #include <fstream>
 using namespace DragonWilds::Quests;
@@ -12,6 +13,30 @@ int main(int argc,char** argv){
     auto data=Example();auto quest=Parse("Test",data);
     assert(quest.Key=="Test:supper" && quest.Required.Count==3 && quest.Reward.Count==1);
     assert(!quest.Marker);
+    assert(quest.CompletedDescription==quest.Description&&quest.ShowInCompletedQuestList&&!quest.HideInQuestList);
+    auto rich=data;rich["CompletedDescription"]="The village has enough food.";
+    rich["HideInQuestList"]=true;rich["ShowInCompletedQuestList"]=false;
+    rich["Objective"]["SubobjectiveDescription"]="Three fresh cabbages";
+    rich["Objective"]["Hint"]="Look near the farms.";
+    rich["Objective"]["QuestDescriptionOverride"]="Gather supplies for supper.";
+    const auto richQuest=Parse("Test",rich);
+    assert(richQuest.CompletedDescription=="The village has enough food."&&richQuest.HideInQuestList&&!richQuest.ShowInCompletedQuestList);
+    const auto presentation=ObjectivePresentation(richQuest);
+    assert(presentation.at("Hint")=="Look near the farms."&&presentation.at("bOverrideQuestDescription")==true);
+    const auto payload=ObjectivePayload(Json::array({{{"Key","food"},{"Value",presentation}}}),true);
+    assert(payload.at(0).at("Value")==presentation);
+    assert(Rejects([&]{ObjectivePayload(payload,false);}));
+    const auto basic=ObjectivePayload(Json::array({{{"Key","food"},{"Value",ObjectivePresentation(quest)}}}),false);
+    assert(basic.at(0).at("Value")==quest.ObjectiveText);
+    auto badPresentation=presentation;badPresentation["UnsupportedField"]=true;
+    assert(Rejects([&]{ObjectivePayload(Json::array({{{"Key","food"},{"Value",badPresentation}}}),true);}));
+    for(const auto* field:{"HideInQuestList","ShowInCompletedQuestList"})for(const auto value:{Json(1),Json("true"),Json()}) {
+        auto invalid=rich;invalid[field]=value;assert(Rejects([&]{Parse("Test",invalid);}));
+    }
+    for(const auto* field:{"SubobjectiveDescription","Hint","QuestDescriptionOverride"}) {
+        auto invalid=rich;invalid["Objective"][field]=true;assert(Rejects([&]{Parse("Test",invalid);}));
+    }
+    assert(InspectorModel(richQuest).at("CompletedDescription")==richQuest.CompletedDescription);
     auto task=data;task["Category"]="Task";assert(Parse("Test",task).Task && !Parse("Test",task).Story);
     data["Objective"]["ProgressText"]="Bring {remaining} more cabbages";
     data["Objective"]["CompleteText"]="All cabbages collected";
@@ -70,6 +95,9 @@ int main(int argc,char** argv){
     bad=data;bad["Scope"]="World";assert(Rejects([&]{Parse("Test",bad);}));
     bad=data;bad["Objective"]["Type"]="Wave";assert(Rejects([&]{Parse("Test",bad);}));
     Catalog catalog;catalog.Add("Test",data);
+    auto second=data;second["Id"]="second";second["PersistenceID"]="BAAAAAAAAAAAAAAAAAAAAA";second["Category"]="Task";
+    catalog.Add("Test",second);
+    assert(catalog.Find("Test","second").Task&&catalog.Find("Test","supper").Key==quest.Key);
     assert(catalog.Find("Other","Test:supper").Key==quest.Key);
     assert(Rejects([&]{catalog.Find("Other","supper");}));
     assert(Rejects([&]{catalog.Add("Test",data);}));

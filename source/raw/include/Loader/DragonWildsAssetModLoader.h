@@ -44,6 +44,7 @@ namespace DragonWilds {
         inline static DragonWildsAssetModLoader* AuthoringInstance=nullptr;
         nlohmann::json InspectToolClone(const std::string& sourcePath,bool requireCloneEligibility=true);
         nlohmann::json ExportToolRecipe(const nlohmann::json& request);
+        nlohmann::json RecipeWorkspaceSnapshot(const nlohmann::json& request);
         nlohmann::json ExportToolOverrides(const nlohmann::json& request);
         nlohmann::json CreateToolClone(const nlohmann::json& request, RC::Unreal::UWorld* world);
         DragonWildsAssetModLoader();

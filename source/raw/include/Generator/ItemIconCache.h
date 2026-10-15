@@ -50,7 +50,7 @@ namespace detail {
         if(size<16||size>16+256*256*4)return false;
         input.seekg(0);char magic[4]{};uint32_t w=0,h=0,bytes=0;
         input.read(magic,4);input.read(reinterpret_cast<char*>(&w),sizeof(w));input.read(reinterpret_cast<char*>(&h),sizeof(h));input.read(reinterpret_cast<char*>(&bytes),sizeof(bytes));
-        if(!input||std::string(magic,4)!="RSI2"||w<1||h<1||w>256||h>256||bytes!=w*h*4||size!=static_cast<std::streamoff>(16+bytes))return false;
+        if(!input||std::string(magic,4)!="RSI3"||w<1||h<1||w>256||h>256||bytes!=w*h*4||size!=static_cast<std::streamoff>(16+bytes))return false;
         pixels.resize(bytes);input.read(reinterpret_cast<char*>(pixels.data()),bytes);if(!input)return false;
         std::size_t alphaNonZero=0,rgbNonZero=0;
         for(std::size_t i=0;i+3<pixels.size();i+=4){

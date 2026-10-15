@@ -24,7 +24,7 @@ int main(int argc,char** argv) {
         "manual asset-path escape hatch disappeared");
     Require(panel.find("AdditionalDropList")!=std::string::npos && panel.find("ChancePercent")!=std::string::npos,
         "Additional Loot summary table is missing");
-    Require(picker.find("ImGuiListClipper")!=std::string::npos && picker.find("const int columns=std::max(1")!=std::string::npos,
+    Require(picker.find("ImGuiListClipper")!=std::string::npos && picker.find("const int columns=ItemBayLayout::Columns(avail,minCardWidth,spacing,theme.itemGridColumns)")!=std::string::npos,
         "bounded responsive grid contract regressed");
     Require(picker.find("ItemIconCache::Draw(iconPath")!=std::string::npos,
         "shared picker no longer renders real icons");

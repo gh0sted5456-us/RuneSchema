@@ -391,6 +391,12 @@
             },
             "Equipment": {
               "additionalProperties": false,
+              "not": {
+                "required": [
+                  "Necklace",
+                  "Trinket2"
+                ]
+              },
               "properties": {
                 "Body": {
                   "description": "WearableEquipmentData whose native Slot is Body.",
@@ -462,6 +468,20 @@
                     }
                   ]
                 },
+                "Necklace": {
+                  "description": "WearableEquipmentData whose native Slot is Necklace (1.0.1).",
+                  "oneOf": [
+                    {
+                      "maxLength": 1024,
+                      "pattern": "^/[^\\r\\n\\t]+$",
+                      "type": "string"
+                    },
+                    {
+                      "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                      "type": "string"
+                    }
+                  ]
+                },
                 "OffHand": {
                   "description": "HeldEquipmentData with native Slot HeldOnlyLeft. Cannot accompany a two-handed MainHand.",
                   "oneOf": [
@@ -478,6 +498,20 @@
                 },
                 "Trinket": {
                   "description": "WearableEquipmentData whose native Slot is Trinket.",
+                  "oneOf": [
+                    {
+                      "maxLength": 1024,
+                      "pattern": "^/[^\\r\\n\\t]+$",
+                      "type": "string"
+                    },
+                    {
+                      "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "Trinket2": {
+                  "description": "Alias for Necklace. Must reference a native Necklace item; cannot accompany Necklace.",
                   "oneOf": [
                     {
                       "maxLength": 1024,
@@ -1530,6 +1564,12 @@
               },
               "Equipment": {
                 "additionalProperties": false,
+                "not": {
+                  "required": [
+                    "Necklace",
+                    "Trinket2"
+                  ]
+                },
                 "properties": {
                   "Body": {
                     "description": "WearableEquipmentData whose native Slot is Body.",
@@ -1601,6 +1641,20 @@
                       }
                     ]
                   },
+                  "Necklace": {
+                    "description": "WearableEquipmentData whose native Slot is Necklace (1.0.1).",
+                    "oneOf": [
+                      {
+                        "maxLength": 1024,
+                        "pattern": "^/[^\\r\\n\\t]+$",
+                        "type": "string"
+                      },
+                      {
+                        "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                        "type": "string"
+                      }
+                    ]
+                  },
                   "OffHand": {
                     "description": "HeldEquipmentData with native Slot HeldOnlyLeft. Cannot accompany a two-handed MainHand.",
                     "oneOf": [
@@ -1617,6 +1671,20 @@
                   },
                   "Trinket": {
                     "description": "WearableEquipmentData whose native Slot is Trinket.",
+                    "oneOf": [
+                      {
+                        "maxLength": 1024,
+                        "pattern": "^/[^\\r\\n\\t]+$",
+                        "type": "string"
+                      },
+                      {
+                        "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "Trinket2": {
+                    "description": "Alias for Necklace. Must reference a native Necklace item; cannot accompany Necklace.",
                     "oneOf": [
                       {
                         "maxLength": 1024,
@@ -2676,6 +2744,12 @@
                 },
                 "Equipment": {
                   "additionalProperties": false,
+                  "not": {
+                    "required": [
+                      "Necklace",
+                      "Trinket2"
+                    ]
+                  },
                   "properties": {
                     "Body": {
                       "description": "WearableEquipmentData whose native Slot is Body.",
@@ -2747,6 +2821,20 @@
                         }
                       ]
                     },
+                    "Necklace": {
+                      "description": "WearableEquipmentData whose native Slot is Necklace (1.0.1).",
+                      "oneOf": [
+                        {
+                          "maxLength": 1024,
+                          "pattern": "^/[^\\r\\n\\t]+$",
+                          "type": "string"
+                        },
+                        {
+                          "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                          "type": "string"
+                        }
+                      ]
+                    },
                     "OffHand": {
                       "description": "HeldEquipmentData with native Slot HeldOnlyLeft. Cannot accompany a two-handed MainHand.",
                       "oneOf": [
@@ -2763,6 +2851,20 @@
                     },
                     "Trinket": {
                       "description": "WearableEquipmentData whose native Slot is Trinket.",
+                      "oneOf": [
+                        {
+                          "maxLength": 1024,
+                          "pattern": "^/[^\\r\\n\\t]+$",
+                          "type": "string"
+                        },
+                        {
+                          "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "Trinket2": {
+                      "description": "Alias for Necklace. Must reference a native Necklace item; cannot accompany Necklace.",
                       "oneOf": [
                         {
                           "maxLength": 1024,
@@ -3815,6 +3917,12 @@
                   },
                   "Equipment": {
                     "additionalProperties": false,
+                    "not": {
+                      "required": [
+                        "Necklace",
+                        "Trinket2"
+                      ]
+                    },
                     "properties": {
                       "Body": {
                         "description": "WearableEquipmentData whose native Slot is Body.",
@@ -3886,6 +3994,20 @@
                           }
                         ]
                       },
+                      "Necklace": {
+                        "description": "WearableEquipmentData whose native Slot is Necklace (1.0.1).",
+                        "oneOf": [
+                          {
+                            "maxLength": 1024,
+                            "pattern": "^/[^\\r\\n\\t]+$",
+                            "type": "string"
+                          },
+                          {
+                            "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                            "type": "string"
+                          }
+                        ]
+                      },
                       "OffHand": {
                         "description": "HeldEquipmentData with native Slot HeldOnlyLeft. Cannot accompany a two-handed MainHand.",
                         "oneOf": [
@@ -3902,6 +4024,20 @@
                       },
                       "Trinket": {
                         "description": "WearableEquipmentData whose native Slot is Trinket.",
+                        "oneOf": [
+                          {
+                            "maxLength": 1024,
+                            "pattern": "^/[^\\r\\n\\t]+$",
+                            "type": "string"
+                          },
+                          {
+                            "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "Trinket2": {
+                        "description": "Alias for Necklace. Must reference a native Necklace item; cannot accompany Necklace.",
                         "oneOf": [
                           {
                             "maxLength": 1024,

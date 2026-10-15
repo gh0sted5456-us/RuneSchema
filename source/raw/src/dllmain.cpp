@@ -57,6 +57,7 @@ struct LoadOrderEditorState {
     bool dirty = false;
     std::string status;
     std::vector<LoadOrderRow> rows;
+    DragonWilds::ModOrderState::Snapshot snapshot;
 };
 
 constexpr auto KnownLoaders=[] {
@@ -95,9 +96,12 @@ std::filesystem::path RuneSchemaModsRoot() {
 }
 
 void RefreshLoadOrderEditor(LoadOrderEditorState& state, const std::filesystem::path& modsRoot,
-    bool strictValues) {
+    bool /*strictValues*/) {
     state.rows.clear();
     state.dirty = false;
+    state.loaded = false;
+    try {
+    state.snapshot=DragonWilds::ModOrderState::Read(DragonWilds::ModLoadOrder::GetOrderPath(modsRoot));
     std::vector<std::string> discovered;
     std::error_code ec;
     for (std::filesystem::directory_iterator it(modsRoot, ec), end; !ec && it != end; it.increment(ec)) {
@@ -106,26 +110,12 @@ void RefreshLoadOrderEditor(LoadOrderEditorState& state, const std::filesystem::
         if (name != "RuneSchema") discovered.push_back(name);
     }
     std::sort(discovered.begin(), discovered.end());
-    std::unordered_map<std::string, bool> enabled;
-    std::vector<std::string> ordered;
-    for (const auto& entry : DragonWilds::ModLoadOrder::Load(
-        DragonWilds::ModLoadOrder::GetOrderPath(modsRoot), strictValues)) {
-        const auto name = RC::to_string(entry.Name);
-        if (!enabled.contains(name)) {
-            enabled.emplace(name, entry.Enabled);
-            ordered.push_back(name);
-        }
-    }
-    for (const auto& name : discovered)
-        if (!enabled.contains(name) && DragonWilds::ModOrderPolicy::ShouldAutoPersist(name)) {
-            enabled.emplace(name, true);
-            ordered.push_back(name);
-        }
-    std::erase_if(ordered, [&](const auto& name) {
-        return !std::binary_search(discovered.begin(), discovered.end(), name);
-    });
-    for (const auto& name : ordered) {
-        LoadOrderRow row{name, enabled.at(name)};
+    if(ec)throw std::runtime_error("Cannot scan mod folders");
+    const auto plan=DragonWilds::ModOrderState::Reconcile(
+        DragonWilds::ModOrderState::Parse(state.snapshot.Contents),discovered);
+    for (const auto& entry : plan.Entries) {
+        const auto& name=entry.Name;
+        LoadOrderRow row{name, entry.Enabled};
         const auto mod = modsRoot / name;
         for (size_t loader = 0; loader < std::size(KnownLoaders); ++loader) {
             const auto folder = mod / KnownLoaders[loader];
@@ -148,9 +138,11 @@ void RefreshLoadOrderEditor(LoadOrderEditorState& state, const std::filesystem::
         }
         state.rows.push_back(std::move(row));
     }
-    DragonWilds::ModOrderPolicy::Apply(state.rows, [](const auto& row) -> const auto& { return row.name; });
     state.loaded = true;
     state.status = ec ? "Load-order scan completed with filesystem warnings." : "Load order loaded from disk.";
+    } catch(const std::exception& error) {
+        state.rows.clear();state.status=std::string("Cannot read load order: ")+error.what()+". No changes saved.";
+    }
 }
 
 bool BeginRuneSchemaTab(const char* label, TabRole role, const ImVec4* custom = nullptr,
@@ -484,10 +476,8 @@ public:
             ImGui::SeparatorText("Progress persistence");
             ImGui::Checkbox("Save RuneSchema character customization", &settings.persistence.characterCustomization);
             ImGui::TextWrapped("Off by default. Character option and data-table loaders remain active, but automatic /players appearance assignments do not rewrite CustomizationSaveData.");
-            ImGui::BeginDisabled();
-            ImGui::Checkbox("Allow rejected/corrupt character entry (quarantined)", &settings.persistence.allowCorruptCharacterEntry);
-            ImGui::EndDisabled();
-            ImGui::TextWrapped("Temporarily unavailable: crash-dump analysis identified an unsafe native ProcessPlayerStateLoad ABI. RuneSchema will refuse this setting even if manually enabled, leaving native character acceptance unchanged.");
+            ImGui::Checkbox("Bypass rejected character validation (restart required)", &settings.persistence.allowCorruptCharacterEntry);
+            ImGui::TextWrapped("Off by default. Emergency recovery only: native validation runs, then its rejection may be bypassed at the verified character-load call site. This does not repair damaged save data or guarantee a successful load. Back up your character before enabling; later game saves can persist incomplete state. Disable the standalone CorruptCharacterBypass first. Restart also applies turning this off.");
             ImGui::TextWrapped("Normal RuneSchema recipe unlocks may persist once their live RecipeData has a valid PersistenceID. Generated vendor recipes remain transient. Safe Clean removes orphaned RuneSchema progress after content registration.");
             ImGui::Checkbox("Save RuneSchema quest progress", &settings.persistence.quests);
             ImGui::TextWrapped("On by default. Off leaves quest definitions available to other loaders but blocks RuneSchema quest actions because native quest progress is save-backed.");
@@ -725,9 +715,9 @@ public:
         ImGui::Checkbox("Use runeschema.txt", &settings.loadOrder.enabled);
         ImGui::Checkbox("Create the file automatically", &settings.loadOrder.autoCreate);
         if(ImGui::CollapsingHeader("Advanced file handling")) {
-        ImGui::Checkbox("Add new folders and remove missing folders", &settings.loadOrder.reconcileFolders);
+        ImGui::Checkbox("Add new folders (retain saved choices for missing folders)", &settings.loadOrder.reconcileFolders);
         ImGui::Checkbox("Preserve comments when reconciling", &settings.loadOrder.preserveComments);
-        ImGui::Checkbox("Only accept 0 or 1", &settings.loadOrder.strictValues);
+        ImGui::TextDisabled("Only 1 enables a mod; 0 and invalid values disable it.");
         ImGui::Checkbox("Sort folders when no order file is used", &settings.loadOrder.deterministicFallback);
         }
          ImGui::TextWrapped("Folder order is top-to-bottom. Set a mod to 0 to disable it. Directive documents are queued and applied after ordinary definitions.");
@@ -738,21 +728,28 @@ public:
         if (ImGui::Button("Reload from disk") || !editor.loaded)
             RefreshLoadOrderEditor(editor, modsRoot, settings.loadOrder.strictValues);
         ImGui::SameLine();
+        ImGui::BeginDisabled(!editor.loaded);
         if (ImGui::Button("Save load order")) {
-            DragonWilds::ModOrderPolicy::Apply(editor.rows,
-                [](const auto& row) -> const auto& { return row.name; });
             std::vector<DragonWilds::ModOrderEntry> entries;
             entries.reserve(editor.rows.size());
             for (const auto& row : editor.rows)
                 entries.push_back({PS::ToWideSafe(row.name.c_str()), row.enabled});
             const auto path = DragonWilds::ModLoadOrder::GetOrderPath(modsRoot);
-            const bool saved = settings.loadOrder.preserveComments && std::filesystem::exists(path)
-                ? DragonWilds::ModLoadOrder::SavePreservingComments(path, entries)
-                : DragonWilds::ModLoadOrder::Save(path, entries);
+            const bool saved = settings.loadOrder.preserveComments && editor.snapshot.Exists
+                ? DragonWilds::ModLoadOrder::SavePreservingComments(path, entries, &editor.snapshot)
+                : DragonWilds::ModLoadOrder::Save(path, entries, &editor.snapshot);
             editor.status = saved ? "Saved runeschema.txt. The new order takes effect on the next game load."
-                                  : "Could not save runeschema.txt; see the RuneSchema log.";
+                                  : "Save not applied: the file changed or could not be written. Reload from disk before retrying.";
             editor.dirty = !saved;
+            // Our baseline must be the bytes we saved, not a potentially newer
+            // file read after another writer has changed a setting.
+            if(saved) {
+                std::vector<DragonWilds::ModOrderState::Entry> serialized;
+                for(const auto& row:editor.rows)serialized.push_back({row.name,row.enabled});
+                editor.snapshot={true,DragonWilds::ModOrderState::Serialize(serialized,editor.snapshot,settings.loadOrder.preserveComments)};
+            }
         }
+        ImGui::EndDisabled();
         if (!editor.status.empty()) ImGui::TextWrapped("%s", editor.status.c_str());
         ImGui::SeparatorText("Mods");
         for (size_t index = 0; index < editor.rows.size(); ++index) {
@@ -761,6 +758,7 @@ public:
             if (ImGui::Checkbox("##enabled", &row.enabled)) editor.dirty = true;
             ImGui::SameLine();
             ImGui::TextUnformatted(row.name.c_str());
+            if(!std::filesystem::is_directory(modsRoot/row.name)) {ImGui::SameLine();ImGui::TextDisabled("(not installed; choice retained)");}
             for (const auto loader : row.loaders) {
                 ImGui::SameLine();
                 const auto color = settings.colorCodeLoaderAnnotations

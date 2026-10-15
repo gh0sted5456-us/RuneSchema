@@ -1,6 +1,7 @@
 #pragma once
 #include "Generator/AuthoringPolicy.h"
 #include "Generator/ClonePresentation.h"
+#include "Core/AuthoringDestination.h"
 #include <nlohmann/json.hpp>
 namespace PS::Authoring {
 inline nlohmann::json ParseCloneJson(const std::string& text) {
@@ -14,7 +15,7 @@ inline nlohmann::json CloneRequest(const std::string& source,const std::string& 
     const std::string& icon,nlohmann::json overrides,bool permanent,bool give,int count,
     bool acknowledged,const std::string& player,const std::string& modTag="RuneSchema",
     const std::string& persistenceId="",const std::string& appearance="",
-    const std::string& meshField="",const std::string& mesh="") {
+    const std::string& meshField="",const std::string& mesh="",const std::string& outputMod="") {
     ValidateObjectPath(source);
     if(player.empty())throw std::runtime_error("Select an authoritative player first.");
     if(!acknowledged)throw std::runtime_error("Acknowledge disposable-save testing first.");
@@ -32,9 +33,10 @@ inline nlohmann::json CloneRequest(const std::string& source,const std::string& 
     if(!appearance.empty())ValidateObjectPath(appearance);
     if(!mesh.empty()){ValidateObjectPath(mesh);if(!ClonePresentation::VisualField(meshField))throw std::runtime_error("Choose a supported visual slot.");}
     if(!appearance.empty()&&!mesh.empty())throw std::runtime_error("Choose copy appearance or a cooked mesh, not both.");
+    if(!outputMod.empty()&&(!permanent||!SafeModFolder(outputMod)))throw std::runtime_error("Choose a safe mod folder for a permanent asset.");
     return {{"ModTag",modTag},{"PersistenceID",persistenceId},{"AppearanceSource",appearance},{"MeshField",meshField},{"Mesh",mesh},
         {"Action","CreateClone"},{"Source",source},{"Name",name},{"Icon",icon},
-        {"Overrides",std::move(overrides)},{"Permanent",permanent},{"Give",give},
+        {"Overrides",std::move(overrides)},{"Permanent",permanent},{"OutputMod",outputMod},{"Give",give},
         {"Count",count},{"AcknowledgeExperimental",acknowledged},{"Player",player}};
 }
 } // namespace PS::Authoring

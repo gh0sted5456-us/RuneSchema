@@ -57,6 +57,8 @@
 #include "Loader/JournalJsonFieldContract.h"
 #include "Generator/NativeCallResolver.h"
 #include "Loader/QuestNativeRegistry.h"
+#include "SDK/WeakObjectHandle.h"
+#include "Core/RegistryObjectIdentity.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -65,20 +67,23 @@ namespace DragonWilds {
     #include "JournalJsonBridge.inl"
     #include "JournalPersistence.inl"
     #include "JournalLorePresentation.inl"
-    DragonWildsJournalModLoader::EntryHandle::EntryHandle(UObject* object):Object(object) {
+    DragonWildsJournalModLoader::EntryHandle::EntryHandle(UObject* object,bool requireRoot):Object(object),RequireRoot(requireRoot) {
         auto* slot=object?FUObjectArray::IndexToObject(object->GetInternalIndex()):nullptr;
-        if(!slot || slot->GetUObject()!=object || !slot->IsValid(false) || !slot->IsRootSet())
-            throw std::runtime_error("Journal cache requires a live rooted entry");
-        Index=object->GetInternalIndex();Serial=slot->GetSerialNumber();Path=object->GetPathName();
+        if(!slot || slot->GetUObject()!=object || !slot->IsValid(false) || (RequireRoot&&!slot->IsRootSet()))
+            throw std::runtime_error("Journal cache object is invalid or its owned root lease is unavailable");
+        // A borrowed cooked acquisition item is retained by its native registry,
+        // not necessarily individually rooted. Give it a stable generation token.
+        const auto weak=PS::WeakObject(object);
+        if(weak.Get()!=object)throw std::runtime_error("Journal cache object generation unavailable");
+        Index=weak.ObjectIndex;Serial=weak.ObjectSerialNumber;Path=object->GetPathName();
     }
     UObject* DragonWildsJournalModLoader::EntryHandle::Get() const {
         auto* slot=Index<0?nullptr:FUObjectArray::IndexToObject(Index);
-        if(!slot || slot->GetUObject()!=Object || !slot->IsValid(false) || !slot->IsRootSet())return nullptr;
+        if(!slot || slot->GetUObject()!=Object || !slot->IsValid(false) || (RequireRoot&&!slot->IsRootSet()))return nullptr;
         const auto current=slot->GetSerialNumber();
-        if(current<0 || Serial<0 || (Serial!=0 && Serial!=current) || Object->GetPathName()!=Path
-            || Object->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed)))return nullptr;
-        // A continuously rooted runtime asset can acquire its first serial later.
-        Serial=current;
+        if(!PS::RegistryObjectIdentity::Matches(true,Object->GetPathName()==Path,true,
+            Object->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed)),
+            RequireRoot,slot->IsRootSet(),Serial,current))return nullptr;
         return Object;
     }
     #include "JournalGroupPlacement.inl"
@@ -405,7 +410,7 @@ namespace DragonWilds {
                     m_unlock.erase(def.Key);
                 }
 
-                if(acquisitionItem)m_acquisitionUnlocks.push_back({EntryHandle(acquisitionItem),def.Key});
+                if(acquisitionItem)m_acquisitionUnlocks.push_back({EntryHandle(acquisitionItem,false),def.Key});
                 result.EntriesReady++;
             }
             catch (const std::exception& e)
@@ -807,7 +812,8 @@ namespace DragonWilds {
             throw std::runtime_error("AddTo object is required");
         }
         const auto& addTo = def.Body.at("AddTo");
-        const auto placement=PS::JournalPlacement::Parse(addTo,RC::to_string(def.Key));
+        const auto placement=PS::JournalPlacement::WithNativeGroupKey(
+            PS::JournalPlacement::Parse(addTo,RC::to_string(def.Key)),RC::to_string(entry->GetFName().ToString()));
         auto path = RC::to_generic_string(placement.SubCategory);
         auto keyString = RC::to_generic_string(placement.Key);
         if (path.empty())
@@ -965,7 +971,8 @@ namespace DragonWilds {
             return;
         }
         size_t parameterCount=0;
-        bool valid=function->GetParmsSize()==32 && !function->GetReturnProperty();
+        bool valid=!function->GetReturnProperty();
+        try {ReflectedContract::Frame(function);}catch(...){valid=false;}
         for(auto* field:TFieldRange<FProperty>(function,EFieldIterationFlags::Default)) {
             if(!field->HasAnyPropertyFlags(CPF_Parm))continue;
             ++parameterCount;
@@ -975,8 +982,8 @@ namespace DragonWilds {
             auto* inner=array?CastField<FStructProperty>(array->GetInner()):nullptr;
             auto* type=inner?inner->GetStruct().Get():nullptr;
             auto* netId=type?CastField<FUInt16Property>(PropertyHelper::GetPropertyByName(type,TEXT("NetId"))):nullptr;
-            valid=valid && offset>=0 && field->GetOffset_Internal()==offset
-                && field->GetElementSize()==16 && field->GetArrayDim()==1
+            valid=valid && offset>=0 && ReflectedContract::Input(field,function)
+                && field->GetElementSize()==sizeof(FScriptArray) && field->GetArrayDim()==1
                 && type && type->GetPathName()==TEXT("/Script/Dominion.DominionDataAssetNetId")
                 && inner->GetElementSize()==2 && inner->GetArrayDim()==1 && type->GetStructureSize()==2
                 && netId && netId->GetOffset_Internal()==0 && netId->GetElementSize()==2 && netId->GetArrayDim()==1;
@@ -1024,7 +1031,7 @@ namespace DragonWilds {
             // that adapter to use the native player-unlock path.
             if(m_createdEntries.contains(entry) && !m_nativePersistenceReady) {
                 ++unavailable;
-                PS::RoutineLog("journal", STR("Temporary journal/lore unlock deferred until the native save adapter is ready.\n"));
+                PS::RoutineLog("journal", STR("Journal/lore unlock deferred until native persistence protection is ready.\n"));
                 continue;
             }
             try {
@@ -1180,6 +1187,7 @@ namespace DragonWilds {
 
     void DragonWildsJournalModLoader::TrackOwnedId(UObject* entry, const FString& persistenceId,const RC::StringType& owner,bool declared,bool automatic)
     {
+        (void)automatic; // Automatic delivery does not make learned progress transient.
         if ((!m_createdEntries.contains(entry) && !declared) || persistenceId.GetCharArray().Num() <= 1)
         {
             return;
@@ -1189,13 +1197,11 @@ namespace DragonWilds {
         JournalSave::ValidateId(id);Quests::ValidateOwner(mod);
         const auto [found,added]=m_ownedIds.emplace(id,mod);
         if(!added && found->second!=mod)throw std::runtime_error("Journal persistence ownership transfer refused");
-        if(JournalSave::IsSaveTransient(m_createdEntries.contains(entry),automatic))m_saveTransientIds.insert(id);
-        else m_saveTransientIds.erase(id);
     }
 
     void DragonWildsJournalModLoader::InstallNativePersistence()
     {
         const JournalSave::Owners owned(m_ownedIds.begin(),m_ownedIds.end());
-        JournalPersistence::Install(this,JournalSave::SelectTransient(owned,m_saveTransientIds),m_journalComponentClass);
+        JournalPersistence::Install(this,owned,m_journalComponentClass);
     }
 }

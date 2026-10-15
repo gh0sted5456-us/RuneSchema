@@ -319,13 +319,82 @@ namespace DragonWilds {
             {"TemporarySource",m_temporaryToolClones.contains(sourcePath)}};
     }
 
+    nlohmann::json DragonWildsAssetModLoader::RecipeWorkspaceSnapshot(const nlohmann::json& request) {
+        std::scoped_lock lock{m_mutex};
+        const auto sourcePath=request.value("SourceRecipe",std::string{});
+        if(!m_recipeDataClass)throw std::runtime_error("Native recipe class is unavailable");
+        nlohmann::json result={{"Stations",HelpyStationChoices()}};
+        if(sourcePath.empty()) {
+            const auto query=PS::QuickDecorations::Fold(request.value("Query",std::string{}));
+            if(query.size()>256)throw std::runtime_error("Recipe search exceeds 256 bytes");
+            if(request.contains("Offset")&&(!request["Offset"].is_number_integer()||request["Offset"]<0||request["Offset"]>32768))
+                throw std::runtime_error("Recipe catalog offset is invalid");
+            const auto offset=request.value("Offset",0);int matched=0;std::map<std::string,std::string> nativePaths;
+            auto rows=nlohmann::json::array();TArray<UObject*> recipes;
+            UECustom::UObjectGlobals::GetObjectsOfClass(m_recipeDataClass,recipes,true);
+            if(recipes.Num()<0||recipes.Num()>32768)throw std::runtime_error("Loaded recipe catalog exceeds its bound");
+            for(auto* recipe:recipes)if(HelpyReady(recipe)) {
+                const auto path=RC::to_string(recipe->GetPathName());
+                nativePaths.emplace(path,PS::QuickDecorations::ReadableAssetName(path));
+            }
+            if(PS::CookedAssets::TryEnsure())for(const auto& record:PS::CookedAssets::MetadataSnapshot()) {
+                if(PS::QuickDecorations::Fold(record.type).ends_with("recipedata"))nativePaths.emplace(record.path,PS::QuickDecorations::ReadableAssetName(record.path));
+            }
+            for(const auto& [path,name]:nativePaths) {
+                if(!query.empty()&&PS::QuickDecorations::Fold(path+" "+name).find(query)==std::string::npos)continue;
+                if(matched++<offset||rows.size()>=128)continue;rows.push_back({{"Path",path},{"Name",name}});
+            }
+            result["Offset"]=offset;result["Total"]=matched;result["HasMore"]=offset+rows.size()<static_cast<std::size_t>(matched);
+            result["Recipes"]=std::move(rows);return result;
+        }
+        PS::Authoring::ValidateObjectPath(sourcePath);auto* recipe=HelpyResolve(sourcePath);
+        if(!recipe->IsA(m_recipeDataClass)||!HelpyReady(recipe))throw std::runtime_error("Selected asset is not a ready RecipeData");
+        result["SourceRecipe"]=sourcePath;
+        result["Placements"]=HelpyRecipePlacements(sourcePath,result["Stations"]);
+        for(const auto* field:{"ItemsConsumed","ItemsCreated","MinProcessingTime","MaxProcessingTime"}) {
+            nlohmann::json value;
+            if(CloneReadValue(PropertyHelper::GetPropertyByName(recipe->GetClassPrivate(),RC::to_generic_string(field)),recipe,value))result[field]=std::move(value);
+        }
+        result["Items"]=nlohmann::json::array();std::set<std::string> describedItems;
+        for(const auto* side:{"ItemsConsumed","ItemsCreated"})if(result.contains(side)&&result[side].is_array())for(const auto& row:result[side]) {
+            const auto item=row.value("ItemData",std::string{});
+            if(!item.empty()&&describedItems.size()<64&&describedItems.insert(item).second)result["Items"].push_back(PS::AssetSearch::ItemMetadata(item));
+        }
+        return result;
+    }
     nlohmann::json DragonWildsAssetModLoader::ExportToolRecipe(const nlohmann::json& request) {
         std::scoped_lock lock{m_mutex};
         const auto sourcePath=request.at("Source").get<std::string>();PS::Authoring::ValidateObjectPath(sourcePath);
         auto* source=HelpyResolve(sourcePath);
         if(!m_itemDataClass||!source->IsA(m_itemDataClass)||!IsReadyForPatch(source))throw std::runtime_error("Recipe output must be a loaded ItemData asset");
         const auto key=PS::ClonePresentation::NewId("RuneSchemaRecipe");
-        const auto document=HelpyRecipeDocument(request.at("Recipe"),sourcePath,key);
+        const auto& options=request.at("Recipe");
+        const auto sourceRecipe=options.value("SourceRecipe",std::string{});
+        nlohmann::json document;
+        if(sourceRecipe.empty())document=HelpyRecipeDocument(options,sourcePath,key);
+        else {
+            PS::Authoring::ValidateObjectPath(sourceRecipe);auto* recipe=HelpyResolve(sourceRecipe);
+            if(!m_recipeDataClass||!recipe->IsA(m_recipeDataClass)||!HelpyReady(recipe)||sourceRecipe.starts_with("/Engine/Transient"))
+                throw std::runtime_error("Recipe override target must be a stable, ready RecipeData asset");
+            auto properties=PS::RecipeWorkspace::Properties(options,sourcePath);
+            for(const auto* side:{"ItemsConsumed","ItemsCreated"})for(const auto& entry:properties.at(side)) {
+                auto* item=HelpyResolve(entry.at("ItemData").get<std::string>());
+                if(!m_itemDataClass||!item->IsA(m_itemDataClass)||!HelpyReady(item))throw std::runtime_error("Recipe override contains unavailable ItemData");
+                const auto origin=PS::AssetProvenance::Lookup(item);
+                if(origin.is_object()&&(!origin.value("Registered",false)||!PS::AssetMetadata::HasInstalledDefinition(item)))
+                    throw std::runtime_error("A saved recipe cannot refer to a session-only item");
+            }
+            for(const auto& [field,value]:properties.items()) {
+                auto* property=PropertyHelper::GetPropertyByName(recipe->GetClassPrivate(),RC::to_generic_string(field));
+                if(!property||!CloneEditable(property))throw std::runtime_error("Native recipe field is unavailable: "+field);
+                CloneValidateOverride(property,value);
+            }
+            document={{sourceRecipe,{{"Properties",std::move(properties)},{"Unlock",options.value("Unlock",false)}}}};
+            if(options.value("AddStation",false)) {
+                const auto placed=HelpyRecipeDocument(options,sourcePath,key);
+                document[sourceRecipe]["AddTo"]=placed.at(key).at("AddTo");
+            }
+        }
         PS::Authoring::StagedFile file("recipes",PS::Authoring::NewName(),document);file.Commit();
         return {{"State","Completed"},{"File",file.Path().string()},{"Key",key},{"RequiresRestart",true}};
     }
@@ -473,6 +542,10 @@ namespace DragonWilds {
         if(!persistenceMap || !internalMap)throw std::runtime_error("ItemSubsystem registry contract is unavailable");
         const auto modTag=request.value("ModTag",std::string("RuneSchema"));
         if(modTag.size()>64)throw std::runtime_error("Mod tag exceeds 64 bytes");
+        const auto outputMod=request.value("OutputMod",std::string{});
+        if(!outputMod.empty()&&(!permanent||!PS::Authoring::SafeModFolder(outputMod)))throw std::runtime_error("Choose a safe mod folder for a permanent clone");
+        const auto folder=outputMod.empty()?std::string("runeschema"):outputMod;
+        if(permanent)(void)PS::Authoring::Directory("assets",folder); // Validate containment before constructing or registering anything.
         auto id=request.value("PersistenceID",std::string{});
         if(id.empty())id=PS::ClonePresentation::NewId(modTag);
         if(!PS::ClonePresentation::ValidId(id,modTag)||!IsCanonicalPersistenceId(id))
@@ -514,16 +587,16 @@ namespace DragonWilds {
         fields["$InheritEquipmentStats"]=true;
         if(soft)fields[RC::to_string(soft->GetName())]=!permanent;
         PS::AssetMetadata::Declaration declaration;declaration.modded=true;declaration.runeSchema=true;declaration.cooked=false;declaration.safeToClone=true;
-        PendingAsset pending{RC::to_generic_string(target),RC::to_generic_string(target),TEXT("runeschema"),fields,false,declaration,permanent};
+        PendingAsset pending{RC::to_generic_string(target),RC::to_generic_string(target),RC::to_generic_string(folder),fields,false,declaration,permanent};
         auto savedFields=fields;savedFields["Modded"]={{"RuneSchema",true},{"Cooked",false},{"SafeToClone",true}};
         const auto document=nlohmann::json{{target,savedFields}};
         std::unique_ptr<PS::Authoring::StagedFile> file;
         std::vector<std::unique_ptr<PS::Authoring::StagedFile>> companions;
         if(permanent) {
-            file=std::make_unique<PS::Authoring::StagedFile>("assets",name,document);
-            if(!rawDocument.empty())companions.push_back(std::make_unique<PS::Authoring::StagedFile>("raw",name,rawDocument));
-            if(!recipeDocument.empty())companions.push_back(std::make_unique<PS::Authoring::StagedFile>("recipes",name,recipeDocument));
-            if(!journalDocument.empty())companions.push_back(std::make_unique<PS::Authoring::StagedFile>("journal",name,journalDocument));
+            file=std::make_unique<PS::Authoring::StagedFile>("assets",name,document,folder);
+            if(!rawDocument.empty())companions.push_back(std::make_unique<PS::Authoring::StagedFile>("raw",name,rawDocument,folder));
+            if(!recipeDocument.empty())companions.push_back(std::make_unique<PS::Authoring::StagedFile>("recipes",name,recipeDocument,folder));
+            if(!journalDocument.empty())companions.push_back(std::make_unique<PS::Authoring::StagedFile>("journal",name,journalDocument,folder));
         }
         auto installedFiles=nlohmann::json::array();std::string fileIssue;
         const auto rootCheckpoint=m_createdAssets.size();
@@ -605,7 +678,7 @@ namespace DragonWilds {
         // Nonessential diagnostics must not turn a committed creation into a retryable failure.
         try {PS::AssetProvenance::Record(created,sourcePath,"runeschema",true,registered,0,fields);}
         catch(...) {}
-        return {{"ModTag",modTag},{"AppearanceSource",appearance},{"Mesh",mesh},{"State","Created"},{"Path",target},{"PersistenceID",id},{"InternalName",name},
+        return {{"ModTag",modTag},{"OutputMod",permanent?folder:std::string{}},{"AppearanceSource",appearance},{"Mesh",mesh},{"State","Created"},{"Path",target},{"PersistenceID",id},{"InternalName",name},
             {"Permanent",permanent},{"File",file?file->Path().string():std::string{}},{"Files",installedFiles},
             {"PendingFiles",pendingFiles},{"CompanionsReady",fileIssue.empty()},{"CompanionError",fileIssue},{"StatRows",statRows.size()},
             {"CompanionsNeedRestart",!recipeDocument.empty()||!journalDocument.empty()},

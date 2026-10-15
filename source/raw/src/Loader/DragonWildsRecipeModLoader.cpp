@@ -285,11 +285,10 @@ namespace DragonWilds {
             return;
         }
 
-        // `Unlock: true` means available every session, not permanently learned.
-        // Publish each automatic recipe into the visible set and the native
-        // save-exclusion set as one validated operation. This prevents a normal
-        // world visit from pumping transient mod IDs into the character JSON;
-        // genuinely learned recipes added by game progression remain persistent.
+        // Authored Unlock:true is learn-once character progress. Only temporary
+        // store offers belong in RecipesUnlockedThatShouldNotPersist. Remove
+        // legacy exclusions for these exact registered recipes so existing
+        // characters migrate without clearing or re-announcing their progress.
         struct TargetSet { FSetProperty* Property; FObjectPropertyBase* Element; };
         std::array<TargetSet,2> targets{};
         const std::array<const TCHAR*,2> names{
@@ -304,10 +303,21 @@ namespace DragonWilds {
             targets[index]={property,element};
         }
 
+        const auto snapshot=[&](const TargetSet& target){
+            auto* set=static_cast<FScriptSet*>(target.Property->ContainerPtrToValuePtr<void>(progressComponent));
+            if(!set||set->Num()<0||set->GetMaxIndex()<0||set->GetMaxIndex()>1000000||set->Num()>set->GetMaxIndex())throw std::runtime_error("Recipe progress set bounds changed");
+            const auto layout=FScriptSet::GetScriptLayout(target.Element->GetSize(),target.Element->GetMinAlignment());
+            std::unordered_set<UObject*> members;members.reserve(static_cast<size_t>(set->Num()));
+            for(int32_t i=0;i<set->GetMaxIndex();++i)if(set->IsValidIndex(i)){
+                UObject* recipe=nullptr;std::memcpy(&recipe,set->GetData(i,layout),sizeof(recipe));members.insert(recipe);
+            }return members;
+        };
+        const auto visible=snapshot(targets[0]),excluded=snapshot(targets[1]);
         std::vector<UObject*> valid;
         valid.reserve(recipes.size());
         for(auto* recipe:recipes) {
             if(!recipe || !recipe->GetClassPrivate())continue;
+            if(visible.contains(recipe)&&!excluded.contains(recipe))continue;
             auto* idProperty = CastField<FStrProperty>(
                 PropertyHelper::GetPropertyByName(
                     recipe->GetClassPrivate(), TEXT("PersistenceID")));
@@ -321,10 +331,13 @@ namespace DragonWilds {
                 throw std::runtime_error("Automatic recipe availability object type changed");
             valid.push_back(recipe);
         }
-        for(const auto& target:targets) {
-            UECustom::FScriptSetHelper set(target.Property,
-                target.Property->ContainerPtrToValuePtr<void>(progressComponent));
-            for(auto* recipe:valid)set.Add(&recipe);
+        UECustom::FScriptSetHelper learned(targets[0].Property,targets[0].Property->ContainerPtrToValuePtr<void>(progressComponent));
+        UECustom::FScriptSetHelper transient(targets[1].Property,targets[1].Property->ContainerPtrToValuePtr<void>(progressComponent));
+        for(auto* recipe:valid){
+            const auto plan=PS::RecipeUnlockPolicy::LearnOnce(visible.contains(recipe),excluded.contains(recipe));
+            if(plan.AddVisible)learned.Add(&recipe);
+            if(plan.RemoveExclusion)transient.Remove(&recipe);
+            if(!learned.Contains(&recipe)||transient.Contains(&recipe))throw std::runtime_error("Learned recipe persistence was not retained");
         }
     }
 
@@ -1648,9 +1661,8 @@ namespace DragonWilds {
 
         AddRecipeUnlocks(progressComponent, recipes);
 
-        // Automatic definitions are visible for this session but are paired
-        // with Dominion's non-persistent exclusion set by AddRecipeUnlocks.
-        // Explicit game progression remains free to learn persistent recipes.
+        // Native character progress restores learned IDs on later sessions;
+        // AddRecipeUnlocks skips them and never resets discovery/read state.
     }
 
     void DragonWildsRecipeModLoader::ApplyUnlocksToAllProgressComponents()

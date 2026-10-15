@@ -9,6 +9,7 @@
 #include "Generator/ItemGridPicker.h"
 #include "Generator/LazyCatalog.h"
 #include "Generator/HelpyNodes.h"
+#include "Generator/RecipeStudioPanel.h"
 #include "Core/HelpyKitFiles.h"
 #include <algorithm>
 #include <cctype>
@@ -17,19 +18,20 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 namespace PS::SpawnToolsPanel {
-enum class View : unsigned char { All, Items, Ai, Resources, ItemLab, Buildings, Cleanup };
+enum class View : unsigned char { All, Items, Ai, Resources, ItemLab, Buildings, Cleanup, Recipes };
 inline int CatalogCategory(View view) {
     if(view==View::All)return -1;
-    if(view==View::Items||view==View::ItemLab)return 0;
+    if(view==View::Items||view==View::ItemLab||view==View::Recipes)return 0;
     if(view==View::Ai)return 1;
     if(view==View::Resources)return 2;
     return -1;
 }
 inline bool SearchOnEnter(const char* label,const char* hint,char* buffer,size_t capacity,std::string& committed) {
     const auto& theme=HelpyImGuiTheme::Current;const float button=ImGui::GetFrameHeight(),spacing=ImGui::GetStyle().ItemSpacing.x;
+    ImGui::PushID(label);ImGui::TextUnformatted(label);
     ImGui::SetNextItemWidth(std::max(theme.X(140.0f),ImGui::GetContentRegionAvail().x-button-spacing));
-    const bool enter=ImGui::InputTextWithHint(label,hint,buffer,capacity,ImGuiInputTextFlags_EnterReturnsTrue);
-    ImGui::SameLine();const bool click=HelpyImGuiTheme::SearchIconButton(label);
+    const bool enter=ImGui::InputTextWithHint("##query",hint,buffer,capacity,ImGuiInputTextFlags_EnterReturnsTrue);
+    ImGui::SameLine();const bool click=HelpyImGuiTheme::SearchIconButton("search");ImGui::PopID();
     if(enter||click){committed=buffer;return true;}return false;
 }
 inline void SameLineIfRoom(float logicalWidth=150.0f) {if(ImGui::GetContentRegionAvail().x>HelpyImGuiTheme::Current.X(logicalWidth))ImGui::SameLine();}
@@ -54,6 +56,9 @@ inline void CacheBuildings(const nlohmann::json& result,uint64_t revision,const 
 inline nlohmann::json UiSnapshot={{"Status","Load a world before using runtime tools."}};
 inline uint64_t UiRevision=0;inline int UiCategory=-99;
 inline std::string SelectedPlayer;
+inline uint64_t DefinitionSequence=0x5000000000000000ull,DefinitionPending=0,DefinitionGeneration=0;
+inline std::map<std::string,nlohmann::json> InspectedDefinitions;
+inline std::string DefinitionStatus;
 inline uint64_t CartSequence=(uint64_t{1}<<62),CartGeneration=0;
 inline uint64_t KitSequence=(uint64_t{1}<<61),KitPending=0;
 inline void RefreshKitMetadata() {
@@ -195,6 +200,16 @@ inline void RefreshSnapshot(int category,bool force=false) {
     const auto prior=UiRevision;SpawnToolRequests::ReadQuickIfChanged(UiRevision,category,UiSnapshot);
     if(force||UiRevision!=prior){LazyCatalog::Apply(UiSnapshot,UiRevision);LazyCatalog::ReleaseFailedWindow(UiRevision,UiSnapshot);LazyCatalog::Overlay(UiSnapshot,category);}
     else LazyCatalog::Overlay(UiSnapshot,category);
+    const auto generation=SpawnToolRequests::CurrentGeneration();
+    if(generation!=DefinitionGeneration){DefinitionGeneration=generation;DefinitionPending=0;InspectedDefinitions.clear();DefinitionStatus.clear();}
+    nlohmann::json receipt;
+    if(DefinitionPending&&SpawnToolRequests::TakeCompleted(DefinitionPending,receipt)) {
+        DefinitionPending=0;DefinitionStatus=receipt.value("Status",std::string{});
+        if(receipt.contains("SpawnDefinition")){auto row=receipt["SpawnDefinition"];InspectedDefinitions[row.at("Key").get<std::string>()]=std::move(row);}
+    }
+    if(UiSnapshot.contains("Definitions"))for(auto& row:UiSnapshot["Definitions"]) {
+        const auto found=InspectedDefinitions.find(row.value("Key",std::string{}));if(found!=InspectedDefinitions.end())row=found->second;
+    }
 }
 inline void Render(View view) {
     auto& player=SelectedPlayer;
@@ -204,9 +219,11 @@ inline void Render(View view) {
     static bool grid=false,overrideGhost=false,ghost=false,overrideDrops=false;
     static int dropMin=1,dropMax=1,npcDuration=HelpyNodes::DefaultDuration;static float chance=100;
     static char item[1024]{},selectedItem[1024]{},cloneName[257]{},cloneIcon[2049]{},cloneFilter[257]{},cloneEditor[65536]="{}";
+    static char cloneMod[65]="MyClones";
     static bool cloneGive=true,cloneAck=false;
     static std::string cloneError,cloneStatus,cloneSoft,cloneFieldSource,cloneFieldQuery;static std::vector<size_t> cloneFieldMatches;
     static nlohmann::json cloneSnapshot=nlohmann::json::object();
+    static nlohmann::json cloneAppearance=nlohmann::json::object();
     static uint64_t cloneSequence=(uint64_t{1}<<63),clonePending=0,seenGeneration=0;
     static int itemCount=1,itemAction=0,buildingTime=0;static bool rebuildCatalogs=false,cloneReady=false,allowDeconstruction=false;
     static ItemGridPicker::State itemPickerState{};
@@ -215,10 +232,11 @@ inline void Render(View view) {
     static nlohmann::json drops=nlohmann::json::array();
     RefreshSnapshot(CatalogCategory(view));const auto& result=UiSnapshot;const auto resultRevision=UiRevision;
     const auto& ui=HelpyImGuiTheme::Current;
+    if(view==View::Recipes){RecipeStudioPanel::Render(result,resultRevision);return;}
     const auto generation=SpawnToolRequests::CurrentGeneration();
     if(generation!=seenGeneration) {
         seenGeneration=generation;clonePending=0;cloneReady=false;cloneAck=false;
-        cloneSnapshot=nlohmann::json::object();cloneError.clear();cloneStatus.clear();cloneSoft.clear();
+        cloneSnapshot=nlohmann::json::object();cloneAppearance=nlohmann::json::object();cloneError.clear();cloneStatus.clear();cloneSoft.clear();
     }
     nlohmann::json receipt;
     if(clonePending && SpawnToolRequests::TakeCompleted(clonePending,receipt)) {
@@ -235,6 +253,8 @@ inline void Render(View view) {
         clonePending=id;cloneError.clear();cloneStatus="Queued for the game thread.";
     };
     if(ui.advancedMode)ImGui::TextWrapped("Runtime actions stay serialized on the game thread; browsing and filtering remain UI-side.");
+    const int coverageCategory=CatalogCategory(view);
+    if(coverageCategory>=0&&!LazyCatalog::For(coverageCategory).Coverage.empty())ImGui::TextWrapped("%s",LazyCatalog::For(coverageCategory).Coverage.c_str());
     if(ImGui::Button("Refresh current list")){buildingConfirmed=false;actors[0].Confirmed=false;actors[1].Confirmed=false;
         const int category=CatalogCategory(view);if(category>=0){auto& window=LazyCatalog::For(category);const char* mode=(category==0&&window.Query.empty())?"Random":"Search";LazyCatalog::Request(category,mode,window.Query,true,LazyCatalog::InitialRows);}}
     SameLineIfRoom(145.0f);if(ImGui::Button("Refresh players"))SpawnToolRequests::Submit({{"Action","QuickPlayers"}});
@@ -316,10 +336,19 @@ inline void Render(View view) {
     }
     std::string selectedClass;bool selectedAvailable=custom,selectedModeAllowed=custom;std::string selectedReason;
     if(!custom&&result.contains("Definitions"))for(const auto& row:result["Definitions"])if(row.value("Key",std::string{})==definition) {
+        if(row.value("NeedsInspection",false)) {
+            ImGui::TextWrapped("Mounted content: load and inspect this class to verify its native type. This does not spawn it.");
+            ImGui::BeginDisabled(DefinitionPending!=0||SpawnToolRequests::IsWaiting());
+            if(ImGui::Button("Inspect selected definition")) {
+                const auto id=++DefinitionSequence;
+                if(SpawnToolRequests::TrySubmit({{"Action","InspectSpawnDefinition"},{"_Source","HelpyStandalone"},{"_RequestId",id},{"Class",row.at("Class")},{"Key",definition},{"ExpectedType",row.at("Type")}}))DefinitionPending=id;
+            }ImGui::EndDisabled();
+        }
         selectedClass=row.value("Class",std::string{});selectedAvailable=row.value("Available",true);
         selectedModeAllowed=npc?(permanent?row.value("PermanentAllowed",false):row.value("TemporaryAllowed",false)):selectedAvailable;
         selectedReason=npc?(permanent?row.value("PermanentReason",std::string{}):row.value("TemporaryReason",std::string{})):row.value("Reason",std::string{});break;
     }
+    if(!DefinitionStatus.empty())ImGui::TextWrapped("%s",DefinitionStatus.c_str());
     if(!selectedModeAllowed&&!definition.empty()&&!selectedReason.empty())ImGui::TextWrapped("Unavailable: %s",selectedReason.c_str());
     if(ImGui::SliderFloat("Instance scale",&scale,0.1f,10.0f,"%.2fx"))invalidateSharedPlacement();
     if(ImGui::Checkbox("Grid placement",&grid))invalidateSharedPlacement();
@@ -412,7 +441,9 @@ inline void Render(View view) {
     if(view==View::All||view==View::Resources)renderActorSection(1,"Resources",ImGuiTreeNodeFlags_DefaultOpen);
     if(view==View::All||view==View::Items||view==View::ItemLab) {
         if((view==View::All||view==View::Items) && HelpyImGuiTheme::SectionHeader("Items",HelpyImGuiTheme::Icon::Item,ImGuiTreeNodeFlags_DefaultOpen)) {
-            if(ui.advancedMode&&ImGui::CollapsingHeader("Give / spawn item",ImGuiTreeNodeFlags_DefaultOpen)) {
+            // Giving items is a basic action; Advanced only adds an optional
+            // collapsing group and the customization controls in the cart.
+            if(!ui.advancedMode||ImGui::CollapsingHeader("Give / spawn item",ImGuiTreeNodeFlags_DefaultOpen)) {
                 const auto inventoryPicker=ItemGridPicker::Render("inventory",result,itemFilter,sizeof(itemFilter),selectedItem,sizeof(selectedItem),itemPickerState,resultRevision,true,true);
                 if(inventoryPicker.RequestedAction==ItemGridPicker::ContextAction::GiveOne||inventoryPicker.RequestedAction==ItemGridPicker::ContextAction::GiveStack) {
                     if(player.empty())ImGui::OpenPopup("Select a player first##item-context-error");
@@ -424,30 +455,70 @@ inline void Render(View view) {
                 RenderCartDock();
             }
         }
-        if((view==View::All||view==View::ItemLab) && HelpyImGuiTheme::SectionHeader("Item Lab",HelpyImGuiTheme::Icon::Lab,ImGuiTreeNodeFlags_DefaultOpen)) {
-            if(ImGui::CollapsingHeader("Clone creator (Experimental)",ImGuiTreeNodeFlags_DefaultOpen)) {
-                ImGui::TextWrapped("Single-player experiment. Create a distinct item from a loaded source. This does not edit the source; native save/reload safety is NOT established.");
-                const auto picker=ItemGridPicker::Render("clone-source",result,itemFilter,sizeof(itemFilter),selectedItem,sizeof(selectedItem),cloneItemPickerState,resultRevision,false);
-                if(picker.Changed || (cloneReady && cloneSnapshot.value("Source",std::string{})!=selectedItem)) {
+        if((view==View::All||view==View::ItemLab) && HelpyImGuiTheme::SectionHeader("Transmutate",HelpyImGuiTheme::Icon::Lab,ImGuiTreeNodeFlags_DefaultOpen)) {
+            {
+                const auto resetSource=[&]{cloneReady=false;cloneAck=false;cloneSnapshot=nlohmann::json::object();cloneAppearance=nlohmann::json::object();cloneSoft.clear();cloneError.clear();cloneStatus.clear();cloneIcon[0]=0;std::snprintf(cloneEditor,sizeof(cloneEditor),"{}");};
+                ImGui::TextWrapped("Source → appearance → new item. Drag from the bay into a source, appearance or icon slot. The original stays unchanged.");
+                if(cloneReady && cloneSnapshot.value("Source",std::string{})!=selectedItem) {
                     cloneReady=false;cloneAck=false;cloneSnapshot=nlohmann::json::object();cloneSoft.clear();
                     cloneError.clear();cloneStatus.clear();
-                    std::snprintf(cloneName,sizeof(cloneName),"%s",(picker.SelectedTitle+" Clone").c_str());
                     cloneIcon[0]=0;std::snprintf(cloneEditor,sizeof(cloneEditor),"{}");
                 }
+                const auto nodeHeight=ui.Y(300);std::array<ImRect,3> cloneNodes;
+                const int flowColumns=ImGui::GetContentRegionAvail().x>=std::max(ui.X(690),ImGui::CalcTextSize("Display name override").x*4.2f)?3:1;
+                ImGui::PushStyleVar(ImGuiStyleVar_CellPadding,ImVec2(ui.X(10),ui.Y(9)));
+                if(ImGui::BeginTable("transmutate-flow",flowColumns,ImGuiTableFlags_SizingStretchSame)) {
+                ImGui::TableNextColumn();ImGui::PushStyleColor(ImGuiCol_ChildBg,ui.panelAlt);ImGui::BeginChild("transmutate-source",ImVec2(0,nodeHeight),true);
+                {const auto p=ImGui::GetWindowPos(),s=ImGui::GetWindowSize();cloneNodes[0]=ImRect(p,ImVec2(p.x+s.x,p.y+s.y));}
+                ImGui::SeparatorText("1 · Source");
+                const auto* sourceRow=ItemGridPicker::Find(result,selectedItem);const auto sourceIcon=sourceRow?sourceRow->value("Icon",std::string{}):std::string{};
+                if(!sourceIcon.empty()){const auto at=ImGui::GetCursorScreenPos();ItemIconCache::Draw(sourceIcon,at,ImVec2(at.x+ui.Y(60),at.y+ui.Y(60)),true);ImGui::Dummy(ImVec2(ui.Y(60),ui.Y(60)));}
+                const auto sourceName=ItemGridPicker::Title(result,selectedItem);ImGui::TextWrapped("%s",selectedItem[0]?sourceName.c_str():"Select an item in the bay below");
+                if(selectedItem[0]&&ImGui::IsItemHovered())ImGui::SetTooltip("%s",selectedItem);
                 ImGui::BeginDisabled(player.empty() || selectedItem[0]!='/' || clonePending || SpawnToolRequests::IsWaiting());
-                if(ImGui::Button("Inspect loaded item / reload fields"))try {
+                if(ImGui::Button("Inspect source"))try {
                     Authoring::ValidateObjectPath(selectedItem);cloneReady=false;
                     submitClone({{"Action","InspectClone"},{"Player",player},{"Source",selectedItem}});
                 }catch(const std::exception& e){cloneError=e.what();}
                 ImGui::EndDisabled();
-                ImGui::InputText("Display name override (blank inherits)",cloneName,sizeof(cloneName));
-                ImGui::InputText("Icon asset path override (blank inherits)",cloneIcon,sizeof(cloneIcon));
-                bool permanent=Authoring::PermanentAsset.load();
-                if(ImGui::Checkbox("Permanent asset",&permanent)){Authoring::PermanentAsset=permanent;cloneAck=false;}
-                ImGui::TextWrapped("%s",permanent?"Install to RuneSchema/mods/runeschema/assets/. The definition reloads with the same identity; no automatic inventory re-grant.":
-                    cloneSoft.empty()?"Temporary clone blocked until a reflected soft-delete Boolean is found.":("Temporary: "+cloneSoft+" = true. No installed asset JSON. Save safety remains experimental.").c_str());
-                ImGui::Checkbox("Give the created clone to selected player",&cloneGive);
-                ImGui::InputInt("Clone quantity",&itemCount);itemCount=std::clamp(itemCount,1,10000);
+                ImGui::TextWrapped("%s",cloneReady?"Source inspected. Inherited properties are preserved.":clonePending?"Reading native source…":"Inspect the source before creating a clone.");
+                if(!clonePending&&ImGui::BeginDragDropTargetCustom(cloneNodes[0],ImGui::GetID("clone-source-drop"))){
+                    if(auto row=ItemGridPicker::AcceptItemDrop(cloneError)){resetSource();std::snprintf(selectedItem,sizeof(selectedItem),"%s",row->at("Path").get<std::string>().c_str());std::snprintf(cloneName,sizeof(cloneName),"%s",(row->value("Name",std::string("Item"))+" Clone").c_str());
+                        if(!player.empty())try{submitClone({{"Action","InspectClone"},{"Player",player},{"Source",selectedItem}});}catch(const std::exception& e){cloneError=e.what();}}
+                    ImGui::EndDragDropTarget();
+                }
+                ImGui::EndChild();ImGui::PopStyleColor();ImGui::TableNextColumn();ImGui::PushStyleColor(ImGuiCol_ChildBg,ui.panelAlt);ImGui::BeginChild("transmutate-customize",ImVec2(0,nodeHeight),true);
+                {const auto p=ImGui::GetWindowPos(),s=ImGui::GetWindowSize();cloneNodes[1]=ImRect(p,ImVec2(p.x+s.x,p.y+s.y));}
+                ImGui::SeparatorText("2 · Customize");
+                ImGui::BeginDisabled(clonePending!=0||selectedItem[0]==0);
+                ImGui::TextUnformatted("Skin / appearance");
+                ImGui::Button(cloneAppearance.empty()?"Drop skin item here":cloneAppearance.value("Name",std::string("Appearance selected")).c_str(),ImVec2(-1,ui.Y(40)));
+                if(ImGui::BeginDragDropTarget()){if(auto row=ItemGridPicker::AcceptItemDrop(cloneError)){cloneAppearance=*row;cloneAck=false;}ImGui::EndDragDropTarget();}
+                if(!cloneAppearance.empty()&&ImGui::SmallButton("Keep source appearance")){cloneAppearance=nlohmann::json::object();cloneAck=false;}
+                ImGui::EndDisabled();
+                ImGui::TextUnformatted("Display name");ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##clone-name","Blank inherits source",cloneName,sizeof(cloneName));
+                ImGui::TextUnformatted("Inventory icon");ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##clone-icon","Blank inherits source icon",cloneIcon,sizeof(cloneIcon));
+                if(!clonePending&&ImGui::BeginDragDropTarget()){
+                    if(auto row=ItemGridPicker::AcceptItemDrop(cloneError)){const auto path=row->value("Icon",std::string{});if(path.empty())cloneError="This item has no resolved inventory icon.";else{std::snprintf(cloneIcon,sizeof(cloneIcon),"%s",path.c_str());cloneAck=false;}}ImGui::EndDragDropTarget();
+                }
+                ImGui::TextWrapped("Copy a compatible cooked item's skin. Native properties and stats stay with the source.");
+                ImGui::EndChild();ImGui::PopStyleColor();ImGui::TableNextColumn();ImGui::PushStyleColor(ImGuiCol_ChildBg,ui.panelAlt);ImGui::BeginChild("transmutate-result",ImVec2(0,nodeHeight),true);
+                {const auto p=ImGui::GetWindowPos(),s=ImGui::GetWindowSize();cloneNodes[2]=ImRect(p,ImVec2(p.x+s.x,p.y+s.y));}
+                ImGui::SeparatorText("3 · Result");
+                const auto outputIcon=cloneIcon[0]?std::string(cloneIcon):cloneAppearance.value("Icon",sourceIcon);
+                if(!outputIcon.empty()){const auto at=ImGui::GetCursorScreenPos();ItemIconCache::Draw(outputIcon,at,ImVec2(at.x+ui.Y(60),at.y+ui.Y(60)),true);ImGui::Dummy(ImVec2(ui.Y(60),ui.Y(60)));}
+                ImGui::TextWrapped("%s",cloneName[0]?cloneName:sourceName.c_str());
+                ImGui::Checkbox("Give to selected player",&cloneGive);ImGui::TextUnformatted("Quantity");ImGui::SetNextItemWidth(-1);ImGui::InputInt("##clone-quantity",&itemCount);itemCount=std::clamp(itemCount,1,10000);
+                bool saveToMod=Authoring::PermanentAsset.load();
+                if(ImGui::Checkbox("Save to mod folder",&saveToMod)){Authoring::PermanentAsset=saveToMod;cloneAck=false;}
+                if(saveToMod){ImGui::TextUnformatted("Mod folder name");ImGui::SetNextItemWidth(-1);if(ImGui::InputTextWithHint("##clone-mod","MyClones",cloneMod,sizeof(cloneMod)))cloneAck=false;
+                    if(!Authoring::SafeModFolder(cloneMod))ImGui::TextWrapped("Use letters, digits, underscores or hyphens; no paths.");
+                    else ImGui::TextWrapped("%s/assets/ · $Clone JSON. Folder is created if needed. Existing enable/disable settings stay unchanged.",cloneMod);
+                }else ImGui::TextWrapped("%s",cloneSoft.empty()?"Temporary cloning requires a reflected soft-delete Boolean.":"Temporary session item; no installed definition.");
+                ImGui::EndChild();ImGui::PopStyleColor();ImGui::EndTable();
+                }ImGui::PopStyleVar();RecipeStudioPanel::Connector(cloneNodes[0],cloneNodes[1]);RecipeStudioPanel::Connector(cloneNodes[1],cloneNodes[2]);
+                const bool permanent=Authoring::PermanentAsset.load();
+                if(ImGui::CollapsingHeader("Native properties & JSON overrides")) {
                 SearchOnEnter("Find item setting","name or property type",cloneFilter,sizeof(cloneFilter),cloneQuery);
                 if(cloneReady && cloneSnapshot.contains("Fields") && cloneSnapshot["Fields"].is_array()) {
                     const auto source=cloneSnapshot.value("Source",std::string{});
@@ -471,16 +542,21 @@ inline void Render(View view) {
                 }
                 ImGui::TextWrapped("Override JSON: only these fields change. Click a setting above to add its current value; delete a key to inherit it. Explicit JSON overrides take precedence over the name/icon boxes. Identity and soft-delete fields are backend-managed.");
                 ImGui::InputTextMultiline("Item overrides JSON",cloneEditor,sizeof(cloneEditor),ImVec2(-1,ui.Y(220.0f)));
+                }
                 ImGui::Checkbox("I accept experimental testing on a disposable or backed-up save",&cloneAck);
-                ImGui::BeginDisabled(!cloneReady || !cloneAck || player.empty() || clonePending || SpawnToolRequests::IsWaiting() || (!permanent&&cloneSoft.empty()));
+                ImGui::BeginDisabled(!cloneReady || !cloneAck || player.empty() || clonePending || SpawnToolRequests::IsWaiting() || (!permanent&&cloneSoft.empty()) || (permanent&&!Authoring::SafeModFolder(cloneMod)));
                 if(ImGui::Button("Create clone now"))try {
                     auto overrides=Authoring::ParseCloneJson(cloneEditor);
-                    submitClone(Authoring::CloneRequest(selectedItem,cloneName,cloneIcon,std::move(overrides),permanent,cloneGive,itemCount,cloneAck,player));
+                    auto request=Authoring::CloneRequest(selectedItem,cloneName,cloneIcon,std::move(overrides),permanent,cloneGive,itemCount,cloneAck,player,permanent?std::string(cloneMod):"RuneSchema","",cloneAppearance.value("Path",std::string{}),"","",permanent?std::string(cloneMod):std::string{});
+                    if(!cloneIcon[0])request["IconMode"]="Auto";submitClone(std::move(request));
                     cloneAck=false;
                 }catch(const std::exception& e){cloneError=e.what();}
                 ImGui::EndDisabled();
                 if(!cloneError.empty())ImGui::TextWrapped("Not submitted: %s",cloneError.c_str());
                 if(!cloneStatus.empty())ImGui::TextWrapped("%s",cloneStatus.c_str());
+                ImGui::SeparatorText("Item bay");
+                const auto picker=ItemGridPicker::Render("clone-source",result,itemFilter,sizeof(itemFilter),selectedItem,sizeof(selectedItem),cloneItemPickerState,resultRevision,false);
+                if(picker.Changed){resetSource();std::snprintf(cloneName,sizeof(cloneName),"%s",(picker.SelectedTitle+" Clone").c_str());}
             }
         }
         ImGui::TextWrapped("%s",result.value("Status",std::string{}).c_str());

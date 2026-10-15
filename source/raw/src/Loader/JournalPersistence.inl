@@ -16,7 +16,7 @@ struct JournalPersistence {
                 PS::Log<LogLevel::Error>(STR("Journal persistence {}: {}. Save data was not swept.\n"),PS::ToWideSafe(phase),PS::ToWideSafe(message));
         }catch(...) {}
     }
-    static Owners CurrentTransientOwners() {
+    static Owners RegisteredOwners() {
         std::lock_guard lock(Mutex);Owners result;
         for(const auto& [source,entries]:Sources)for(const auto& [id,mod]:entries) {
             JournalSave::ValidateId(id);Quests::ValidateOwner(mod);
@@ -60,7 +60,6 @@ struct JournalPersistence {
             ValidateInstance(persistence);
             if(!json || !json->Object || !json->Controller)throw std::runtime_error("Native journal JSON missing");
             auto payload=ReadPayload(json->Object);
-            const auto current=CurrentTransientOwners();
             auto cleanedPayload=payload;
             if(const auto registry=PS::SaveCleanup::ReadRegistry();registry && registry->JournalsComplete) {
                 for(const auto* field:{"UnlockedEntries","UnreadEntries"}) {
@@ -71,7 +70,6 @@ struct JournalPersistence {
                     cleanedPayload[field]=std::move(entries);
                 }
             }
-            cleanedPayload=JournalSave::RemoveCurrent(cleanedPayload,current);
             if(cleanedPayload!=payload)ReplacePayload(json->Object,payload,cleanedPayload);
             const auto metadata=Api->ReadArray(json->Object,TEXT("RuneSchemaOwnership"));
             if(metadata && !metadata->empty())
@@ -97,12 +95,8 @@ struct JournalPersistence {
             written=Writer.call<bool>(persistence,json);
             if(!written)return false;
             const auto payload=ReadPayload(held.Object());
-            const auto current=CurrentTransientOwners();
-            const auto transient=JournalSave::RemoveCurrent(payload,current);
-            if(transient!=payload)ReplacePayload(held.Object(),payload,transient);
-            const auto previous=Api->ReadArray(held.Object(),TEXT("RuneSchemaOwnership"));
-            if(previous && !previous->empty())
-                Api->WriteArray(held.Object(),TEXT("RuneSchemaOwnership"),{});
+            const auto recorded=JournalSave::Record(payload,RegisteredOwners());
+            if(recorded!=payload)ReplacePayload(held.Object(),payload,recorded);
             return true;
         }catch(const std::exception& error) {
             Report("save",error.what());
@@ -110,10 +104,10 @@ struct JournalPersistence {
         }catch(...) {Report("save","Unknown adapter failure");}
         return called?written:Writer.call<bool>(persistence,json);
     }
-    static void Install(const void* source,Owners transientOwners,UClass* type) {
-        // Snapshot only selected automatic generated entries, never all owned
-        // entries or callbacks into mutable loader containers.
-        {std::lock_guard lock(Mutex);Sources[source]=std::move(transientOwners);}
+    static void Install(const void* source,Owners registeredOwners,UClass* type) {
+        // Retain learned/unread arrays. Ownership is cleanup provenance, not
+        // permission to erase active entries on every save or world entry.
+        {std::lock_guard lock(Mutex);Sources[source]=std::move(registeredOwners);}
         if(Reader && Writer)return;
         auto api=std::make_unique<JournalJsonBridge>(type);
         for(const auto& [name,offset]:{std::pair{TEXT("UnlockedJournalEntries"),0xc8},std::pair{TEXT("UnreadJournalEntries"),0xd8}}) {

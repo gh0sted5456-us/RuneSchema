@@ -22,16 +22,16 @@ int main(int argc, char** argv)
     const auto signatures = Read(argv[2]);
     const auto loader = Read(argv[3]);
 
-    const auto validationCall = recovery.find("ValidationHook.call<bool>");
-    const auto validationAccept = recovery.find("return true;", validationCall);
-    const auto playerCall = recovery.find("PlayerStateHook.call<bool>");
-    const auto playerAccept = recovery.find("return true;", playerCall);
-    Need(validationCall != recovery.npos && validationAccept != recovery.npos
-            && validationCall < validationAccept,
-        "character validation is not allowed only after native validation runs");
-    Need(playerCall != recovery.npos && playerAccept != recovery.npos
-            && playerCall < playerAccept,
-        "player-state loading is not allowed only after the native loader runs");
+    Need(recovery.find("MidHook::create")!=recovery.npos&&recovery.find("StartDisabled")!=recovery.npos,
+        "entry bypass must publish a disabled register-context hook before enabling it");
+    Need(recovery.find("call<bool>")==recovery.npos&&recovery.find("ProcessPlayerStateLoad")==recovery.npos,
+        "entry bypass must never invoke native loading through a guessed ABI");
+    Need(recovery.find("context.rax=PS::CharacterEntryBypassPlan::AcceptRejected(context.rax)")!=recovery.npos
+        &&recovery.find("if(context.rax&0xffu)return;")!=recovery.npos,
+        "only rejected Boolean acceptance may be changed");
+    Need(recovery.find("ZydisDecoderDecodeFull")!=recovery.npos&&recovery.find("LoadCharacterInfoFromJson")!=recovery.npos
+        &&recovery.find("RtlLookupFunctionEntry")!=recovery.npos&&recovery.find("if(result)return nullptr")!=recovery.npos,
+        "decoded boundaries, native caller identity and uniqueness are mandatory");
     Need(recovery.find("json") == recovery.npos
             && recovery.find("ConfigFiles") == recovery.npos
             && recovery.find("SaveCleanup") == recovery.npos,
@@ -40,16 +40,15 @@ int main(int argc, char** argv)
             && recovery.find("video") == recovery.npos,
         "unrelated intro-skip behavior leaked into entry recovery");
     Need(recovery.find("CreateToolhelp32Snapshot") != recovery.npos
-            && recovery.find("corruptcharacterbypass") != recovery.npos,
+            && recovery.find("corruptcharacterbypass") != recovery.npos&&recovery.find("enabled.txt")!=recovery.npos,
         "standalone bypass conflict detection is missing");
     Need(signatures.find("CharacterSave::Validate") != signatures.npos
-            && signatures.find("UPersistenceSubsystem::ProcessPlayerStateLoad")
-                != signatures.npos,
-        "entry recovery signatures are not embedded for native lanes");
+            && signatures.find("UPersistenceSubsystem::ProcessPlayerStateLoad")==signatures.npos,
+        "the unused unsafe loader ABI binding must not return");
     const auto gate = loader.find(
         "GetSettings().persistence.allowCorruptCharacterEntry");
     Need(gate != loader.npos
-            && loader.find("[SAVE-ENTRY][QUARANTINED]", gate) != loader.npos
-            && loader.find("m_characterEntryRecovery.Initialize();") == loader.npos,
-        "unsafe native entry hooks must remain quarantined");
+            && loader.find("m_characterEntryRecovery.Initialize();",gate)!=loader.npos
+            && loader.find("[SAVE-ENTRY][QUARANTINED]")==loader.npos,
+        "the verified bypass must remain behind its explicit persistence setting");
 }

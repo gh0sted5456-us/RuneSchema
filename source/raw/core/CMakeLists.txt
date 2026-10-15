@@ -10,6 +10,7 @@ if(NOT TARGET nlohmann_json::nlohmann_json)
 endif()
 add_library(RuneSchemaJsonCore STATIC
     ../src/Core/ConfigFiles.cpp
+    ../src/Core/ModOrderState.cpp
     ../src/Core/JsonDocument.cpp
     ../src/Core/JsonArrayPatch.cpp
     ../src/Core/JsonLoadOrderMerge.cpp
@@ -29,7 +30,19 @@ if(PROJECT_IS_TOP_LEVEL)
     endif()
     string(REPLACE "/DNDEBUG" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
     enable_testing()
-    foreach(test item-cart asset-preload-plan icon-capture-schedule helpy-kit-files consume-queue ordered-callbacks authoring-policy unreal-readiness ghost-tools-options surge-evade-rules)
+    add_executable(registry-reflection ../tests/registry-reflection.cpp)
+    target_link_libraries(registry-reflection PRIVATE RuneSchemaJsonCore)
+    add_test(NAME registry-reflection COMMAND registry-reflection)
+    add_executable(native-function-discovery ../tests/native-function-discovery.cpp)
+    target_link_libraries(native-function-discovery PRIVATE RuneSchemaJsonCore)
+    if(WIN32)
+        target_compile_definitions(native-function-discovery PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    endif()
+    add_test(NAME native-function-discovery COMMAND native-function-discovery)
+    add_executable(mod-order-state ../tests/mod-order-state.cpp)
+    target_link_libraries(mod-order-state PRIVATE RuneSchemaJsonCore)
+    add_test(NAME mod-order-state COMMAND mod-order-state "${CMAKE_CURRENT_BINARY_DIR}/mod-order-state-fixtures")
+    foreach(test item-bay-layout ground-surface authored-file item-transfer grounding-retry item-cart recipe-workspace mounted-catalog character-entry-bypass-plan asset-preload-plan icon-capture-schedule helpy-kit-files consume-queue ordered-callbacks authoring-policy unreal-readiness ghost-tools-options surge-evade-rules)
         add_executable(${test} ../tests/${test}.cpp)
         target_link_libraries(${test} PRIVATE RuneSchemaJsonCore)
         add_test(NAME ${test} COMMAND ${test})
@@ -69,6 +82,10 @@ if(PROJECT_IS_TOP_LEVEL)
     target_include_directories(world-building-registry-validation PRIVATE ../include)
     target_compile_features(world-building-registry-validation PRIVATE cxx_std_20)
     add_test(NAME world-building-registry-validation COMMAND world-building-registry-validation)
+    add_executable(world-cleanup-policy ../tests/world-cleanup-policy.cpp)
+    target_include_directories(world-cleanup-policy PRIVATE ../include)
+    target_compile_features(world-cleanup-policy PRIVATE cxx_std_20)
+    add_test(NAME world-cleanup-policy COMMAND world-cleanup-policy)
     foreach(test asset-aliases quest-definition quest-progress quest-native-contract quest-registry-plan spawn-radius quest-repeat-policy quest-save-ownership quest-receipt-journal quest-reward-tiers quest-stage-progress registry-patch-plan cooked-pak-registry-manifest registry-manifest-summary)
         add_executable(${test} ../tests/${test}.cpp)
         target_link_libraries(${test} PRIVATE RuneSchemaJsonCore)
@@ -332,6 +349,13 @@ if(PROJECT_IS_TOP_LEVEL)
     add_test(NAME item-grid-pagination COMMAND item-grid-pagination
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Generator/SpawnToolsPanel.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Generator/ItemGridPicker.h")
+    add_executable(icon-draw-context ../tests/icon-draw-context.cpp)
+    target_compile_features(icon-draw-context PRIVATE cxx_std_23)
+    target_include_directories(icon-draw-context PRIVATE ../include)
+    add_test(NAME icon-draw-context COMMAND icon-draw-context)
+    add_executable(ground-surface-contract ../tests/ground-surface-contract.cpp)
+    target_compile_features(ground-surface-contract PRIVATE cxx_std_23)
+    add_test(NAME ground-surface-contract COMMAND ground-surface-contract "${CMAKE_CURRENT_SOURCE_DIR}/..")
     add_executable(item-icon-grid ../tests/item-icon-grid.cpp)
     add_test(NAME item-icon-grid COMMAND item-icon-grid
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Generator/SpawnToolsPanel.h"

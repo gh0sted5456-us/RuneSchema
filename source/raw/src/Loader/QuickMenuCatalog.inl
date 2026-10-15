@@ -68,6 +68,36 @@ nlohmann::json ToolDefinitionRow(UClass* type,const std::string& key,bool ai,con
     }
     return row;
 }
+nlohmann::json ToolMountedDefinitionHints() {
+    static uint64_t generation=0;static auto rows=nlohmann::json::array();
+    const auto current=PS::SpawnToolRequests::Generation.load();
+    if(current==generation)return rows;
+    generation=current;rows=nlohmann::json::array();
+    // Metadata only. Never ResolveClass/load every registry candidate here.
+    if(!PS::CookedAssets::TryEnsure())return rows;
+    auto* actorType=ActorHelper::ResolveClass(TEXT("/Script/Engine.Actor"));
+    auto* aiType=ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionAICharacter"));
+    auto* npcType=ActorHelper::ResolveClass(TEXT("/Script/Dominion.InteractableNPC"));
+    for(const auto& record:PS::CookedAssets::MetadataSnapshot()) {
+        const auto candidate=PS::F2Catalog::MountedCandidate(record.path,record.name,record.type);
+        if(!candidate||candidate->kind==PS::F2Catalog::Kind::Item)continue;
+        const bool npc=candidate->kind==PS::F2Catalog::Kind::Npc,ai=candidate->kind==PS::F2Catalog::Kind::Enemy;
+        const auto key=std::string(npc?"@loaded-npc:":ai?"@loaded-ai:":"@loaded-resource:")+candidate->path;
+        auto* loaded=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,RC::to_generic_string(candidate->path).c_str(),false);
+        if(loaded&&actorType&&aiType&&!loaded->HasAnyFlags(static_cast<EObjectFlags>(RF_NeedLoad|RF_NeedPostLoad|RF_BeginDestroyed|RF_FinishDestroyed))) {
+            const bool actualNpc=npcType&&loaded->IsChildOf(npcType),actualAi=!actualNpc&&loaded->IsChildOf(aiType);
+            if((npc&&actualNpc)||(ai&&actualAi)||(!npc&&!ai&&!actualNpc&&!actualAi&&ToolResourceClass(loaded,actorType,aiType))) {
+                rows.push_back(ToolDefinitionRow(loaded,key,actualAi,actualNpc?"NPC":""));continue;
+            }
+        }
+        rows.push_back({{"Key",key},
+            {"Name",ToolReadableName(candidate->path)},{"Class",candidate->path},{"Type",npc?"NPC":ai?"AI":"Resource"},
+            {"Available",false},{"Loaded",false},{"Mounted",true},{"NeedsInspection",true},
+            {"TemporaryAllowed",false},{"PermanentAllowed",false},
+            {"Reason","Mounted native candidate; inspect to verify its actual class before spawning"}});
+    }
+    return rows;
+}
 nlohmann::json ToolLiveDefinitions(const nlohmann::json& authored) {
     auto* classType=ActorHelper::ResolveClass(TEXT("/Script/CoreUObject.Class"));
     auto* actorType=ActorHelper::ResolveClass(TEXT("/Script/Engine.Actor"));

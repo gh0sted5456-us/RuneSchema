@@ -44,8 +44,21 @@ bool AddJournalMapEntry(FMapProperty* property,void* data,FName key,UObject* ent
     soft->ObjectID=UECustom::FSoftObjectPath(entry->GetPathName());
     map.Add(pair);map.Rehash();return true;
 }
+bool RemoveJournalMapAliases(FMapProperty* property,void* data,FName key,UObject* entry) {
+    ValidateJournalEntryMap(property);
+    UECustom::FScriptMapHelper map(property,data);std::vector<FName> aliases;
+    map.ForEachPair([&](void* k,void* v) {
+        const auto candidate=*static_cast<FName*>(k);
+        if(candidate!=key&&SameJournalPath(static_cast<UECustom::FSoftObjectPtr*>(v)->ObjectID,entry))aliases.push_back(candidate);
+    });
+    for(auto alias:aliases)if(!map.Remove(&alias))throw std::runtime_error("Journal stale alias could not be removed");
+    if(!aliases.empty())map.Rehash();return !aliases.empty();
+}
 bool PlaceJournalGroup(UObject* category,UObject* entry,const PS::JournalPlacement::Placement& placement) {
     if(!placement.TargetGroup)throw std::runtime_error("This journal category requires AddTo.Group.Id");
+    const FName nativeKey=entry->GetFName();
+    if(nativeKey!=FName(RC::to_generic_string(placement.Key),FNAME_Add))
+        throw std::runtime_error("Grouped journal lookup key does not match the entry's native name");
     const auto& requested=*placement.TargetGroup;
     auto* type=category->GetClassPrivate();
     auto* groups=CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(type,TEXT("Groups")));
@@ -105,14 +118,18 @@ bool PlaceJournalGroup(UObject* category,UObject* entry,const PS::JournalPlaceme
         auto* soft=static_cast<UECustom::FSoftObjectPtr*>(value.GetData());
         soft->ObjectID=UECustom::FSoftObjectPath(entry->GetPathName());refs.Add(value);changed=true;
     }
-    FName key(RC::to_generic_string(placement.Key),FNAME_Add);
+    const FName key=nativeKey;
+    changed=RemoveJournalMapAliases(entryMap,entryMap->ContainerPtrToValuePtr<void>(stagedData.data),key,entry)||changed;
     changed=AddJournalMapEntry(entryMap,entryMap->ContainerPtrToValuePtr<void>(stagedData.data),key,entry)||changed;
     UECustom::FScriptMapHelper groupMap(byGroup,stagedMap.data);
     void* groupContainer=nullptr;
     groupMap.ForEachPair([&](void* k,void* v) {if(*static_cast<FName*>(k)==groupId) {
         if(groupContainer)throw std::runtime_error("Duplicate journal group map key");groupContainer=v;
     }});
-    if(groupContainer)changed=AddJournalMapEntry(entryMap,entryMap->ContainerPtrToValuePtr<void>(groupContainer),key,entry)||changed;
+    if(groupContainer) {
+        changed=RemoveJournalMapAliases(entryMap,entryMap->ContainerPtrToValuePtr<void>(groupContainer),key,entry)||changed;
+        changed=AddJournalMapEntry(entryMap,entryMap->ContainerPtrToValuePtr<void>(groupContainer),key,entry)||changed;
+    }
     else {
         if(!creating)throw std::runtime_error("Existing journal group lookup is not initialized; placement deferred");
         UECustom::FManagedValue pair;groupMap.InitializePair(pair);

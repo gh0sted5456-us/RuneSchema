@@ -53,7 +53,13 @@ Use its full cooked object path as the JSON key. The asset retains its native cl
 }
 ```
 
-The ID above is a placeholder; inspect your cooked asset and keep its shipped ID stable. Cooked entries can use the native player-unlock path without RuneSchema's transient-save adapter.
+The ID above is a placeholder; inspect your cooked asset and keep its shipped ID stable. Cooked entries can use the native player-unlock path without RuneSchema's generated-entry persistence adapter.
+
+Unlocked entries, including automatically granted generated entries, retain
+their native character progress between sessions. Already unlocked entries
+are not re-marked unread. Safe Clean removes unresolved orphan entries when
+their content is disabled or removed, rather than clearing active entries
+on every save.
 
 ## Native discovery conditions
 
@@ -98,7 +104,7 @@ Recipe availability is separate from journal discovery. To make a crafting recip
 | Recipes | Tools, Weapons, Armor, Ammo & Runes, Trinkets, Masterworks, Food & Potions, Basic Materials, Processed Materials, Special Materials, Quest Items, Capes |
 | Knowledge | Tutorials, Lore Scraps, People, Places |
 
-For a loaded native subcategory outside this list, use `"AddTo": {"SubCategory": "/Game/.../ExactCategory.ExactCategory"}`. `AddTo.Key` optionally chooses the key within the category. `AddTo.Group` may select a group or create one where the native category supports it:
+For a loaded native subcategory outside this list, use `"AddTo": {"SubCategory": "/Game/.../ExactCategory.ExactCategory"}`. `AddTo.Key` optionally chooses the key within an ungrouped category. Grouped categories use the entry asset's native object name consistently in their list, detail lookup, and hierarchy index; an authored `Key` alias does not replace that native key or change the entry's persistence identity. `AddTo.Group` may select a group or create one where the native category supports it:
 
 ```json
 "AddTo": {

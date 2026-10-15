@@ -96,6 +96,22 @@ std::vector<std::string> HelpyRecipeArrays(UScriptStruct* type) {
         }
     }return fields;
 }
+nlohmann::json HelpyStationPresentation(UScriptStruct* type,void* row) {
+    auto values=nlohmann::json::object(),building=nlohmann::json::object();
+    for(const auto* name:{"DisplayNameOverride","DisplayName","Name","StationName","DisplayIcon","Icon","StationIcon"}){
+        nlohmann::json value;if(CloneReadValue(DragonWilds::PropertyHelper::GetPropertyByName(type,RC::to_generic_string(name)),row,value))values[name]=std::move(value);
+    }
+    nlohmann::json reference;
+    if(CloneReadValue(DragonWilds::PropertyHelper::GetPropertyByName(type,TEXT("StationBuildingPieceData")),row,reference)&&reference.is_string()) {
+        auto* piece=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,RC::to_generic_string(reference.get<std::string>()).c_str(),false);
+        auto* pieceClass=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Dominion.BuildingPieceData"),false);
+        if(HelpyReady(piece)&&pieceClass&&piece->IsA(pieceClass))for(const auto* name:{"DisplayName","DisplayIcon"}){
+            nlohmann::json value;if(CloneReadValue(DragonWilds::PropertyHelper::GetPropertyByName(piece->GetClassPrivate(),RC::to_generic_string(name)),piece,value))building[name]=std::move(value);
+        }
+    }
+    auto result=PS::RecipeWorkspace::StationPresentation(values,building);
+    result["BuildingPiece"]=reference.is_string()?reference.get<std::string>():std::string{};return result;
+}
 nlohmann::json HelpyStationChoices() {
     auto out=nlohmann::json::array();auto* tableClass=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Engine.DataTable"),false);
     if(!tableClass)return out;TArray<UObject*> tables;UECustom::UObjectGlobals::GetObjectsOfClass(tableClass,tables,true);
@@ -111,22 +127,30 @@ nlohmann::json HelpyStationChoices() {
         if(tableNameCounts[RC::to_string(object->GetName())]!=1)continue;
         for(const auto& [rowName,row]:table->GetRowMap()) {
             if(++rowsVisited>65536)return out;
-            if(!row)continue;nlohmann::json display;
-            for(const auto* key:{TEXT("DisplayName"),TEXT("Name"),TEXT("StationName")}) {
-                if(CloneReadValue(DragonWilds::PropertyHelper::GetPropertyByName(type,key),row,display)&&display.is_string())break;
-            }
-            nlohmann::json stationIcon;
-            for(const auto* key:{TEXT("DisplayIcon"),TEXT("Icon"),TEXT("StationIcon")})
-                if(CloneReadValue(DragonWilds::PropertyHelper::GetPropertyByName(type,key),row,stationIcon)&&stationIcon.is_string())break;
+            if(!row)continue;const auto presentation=HelpyStationPresentation(type,row);
             const auto rowText=RC::to_string(rowName.ToString());
-            const auto label=display.is_string()?display.get<std::string>():rowText;
+            const auto label=presentation.value("Name",std::string{}).empty()?rowText:presentation.at("Name").get<std::string>();
             for(const auto& array:arrays) {
                 if(out.size()>=4096)return out;
-                out.push_back({{"Id",path+":"+rowText+":"+array},{"Name",label+" / "+RC::to_string(table->GetName())+(array.empty()?"":" / "+array)},
-                    {"Path",path},{"Row",rowText},{"Array",array},{"Icon",stationIcon.is_string()?stationIcon.get<std::string>():std::string{}}});
+                out.push_back({{"Id",path+":"+rowText+":"+array},{"Name",label+" / "+RC::to_string(table->GetName())+(array.empty()?"":" / "+array)},{"DisplayName",label},
+                    {"Path",path},{"Row",rowText},{"Array",array},{"Icon",presentation.at("Icon")},{"BuildingPiece",presentation.at("BuildingPiece")}});
             }
         }
     }return out;
+}
+nlohmann::json HelpyRecipePlacements(const std::string& recipePath,const nlohmann::json& choices) {
+    auto result=nlohmann::json::array();std::size_t visited=0;
+    for(const auto& station:choices) {
+        if(++visited>4096||result.size()>=32)break;
+        auto* object=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,RC::to_generic_string(station.value("Path",std::string{})).c_str(),false);
+        auto* tableClass=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Engine.DataTable"),false);
+        if(!HelpyReady(object)||!tableClass||!object->IsA(tableClass))continue;
+        auto* table=static_cast<UDataTable*>(object);auto* type=table->GetRowStruct().Get();if(!type)continue;
+        const auto rowName=station.value("Row",std::string{}),array=station.value("Array",std::string{});
+        auto* row=table->FindRowUnchecked(FName(RC::to_generic_string(rowName),FNAME_Find));if(!row)continue;
+        nlohmann::json values;if(!CloneReadValue(DragonWilds::PropertyHelper::GetPropertyByName(type,array.empty()?TEXT("LabeledRecipes"):RC::to_generic_string(array).c_str()),row,values))continue;
+        for(auto& placement:PS::RecipeWorkspace::MatchingPlacements(station,values,recipePath))if(result.size()<32)result.push_back(std::move(placement));
+    }return result;
 }
 nlohmann::json HelpyItemRelations(const std::string& itemPath) {
     nlohmann::json recipes=nlohmann::json::array(),journals=nlohmann::json::array();
@@ -205,7 +229,8 @@ nlohmann::json HelpyRecipeDocument(const nlohmann::json& option,const std::strin
     if(std::find(accepted.begin(),accepted.end(),array)==accepted.end())throw std::runtime_error("Recipe station placement type changed");
     const auto category=option.value("Category",std::string{});
     if(array.empty()&&(category.empty()||category.size()>128))throw std::runtime_error("Recipe category must contain 1..128 bytes");
-    const auto& ingredients=option.at("Ingredients");if(!ingredients.is_array()||ingredients.empty()||ingredients.size()>16)throw std::runtime_error("Recipe needs 1..16 ingredient rows");
+    auto properties=PS::RecipeWorkspace::Properties(option,target);
+    const auto& ingredients=properties.at("ItemsConsumed");
     std::set<std::string> seen;auto* itemClass=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Dominion.ItemData"),false);
     for(const auto& ingredient:ingredients) {
         const auto itemPath=ingredient.at("ItemData").get<std::string>();const auto n=ingredient.at("Count").get<int>();
@@ -214,11 +239,17 @@ nlohmann::json HelpyRecipeDocument(const nlohmann::json& option,const std::strin
         const auto origin=PS::AssetProvenance::Lookup(item);
         if(origin.is_object()&&(!origin.value("Registered",false)||!PS::AssetMetadata::HasInstalledDefinition(item)))throw std::runtime_error("A saved recipe cannot use a session-only or unregistered ingredient");
     }
-    const auto n=option.value("Count",1);if(n<1||n>10000)throw std::runtime_error("Invalid recipe output count");
+    for(const auto& output:properties.at("ItemsCreated")) {
+        auto* item=HelpyResolve(output.at("ItemData").get<std::string>());
+        if(!itemClass||!item->IsA(itemClass))throw std::runtime_error("Recipe output is not ItemData");
+        const auto origin=PS::AssetProvenance::Lookup(item);
+        if(origin.is_object()&&(!origin.value("Registered",false)||!PS::AssetMetadata::HasInstalledDefinition(item)))
+            throw std::runtime_error("A saved recipe cannot use a session-only or unregistered output");
+    }
+    properties["PersistenceID"]=key;properties["InternalName"]="Recipe_"+key;
     nlohmann::json placement={{"Table",RC::to_string(table->GetName())},{"Row",row}};
     if(array.empty())placement["Category"]=category;else placement["Array"]=array;
-    return {{key,{{"Properties",{{"ItemsConsumed",ingredients},{"ItemsCreated",nlohmann::json::array({{{"ItemData",target},{"Count",n}}})},
-        {"PersistenceID",key},{"InternalName","Recipe_"+key}}},{"Unlock",option.value("Unlock",false)},
+    return {{key,{{"Properties",std::move(properties)},{"Unlock",option.value("Unlock",false)},
         {"AddTo",nlohmann::json::array({placement})}}}};
 }
 nlohmann::json HelpyJournalDocument(const nlohmann::json& option,const std::string& target,const std::string& key,const std::string& icon) {

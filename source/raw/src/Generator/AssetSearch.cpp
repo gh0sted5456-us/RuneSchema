@@ -1,5 +1,7 @@
 #include "Loader/AssetAuthoringMetadata.h"
 #include "Generator/AssetSearch.h"
+#include "Generator/F2CatalogPlan.h"
+#include "Generator/ToolRequest.h"
 #include "Generator/HelpyIconTrace.h"
 #include "Generator/ItemCatalogMetadata.h"
 #include "Generator/QuickMenuDecorations.h"
@@ -440,13 +442,33 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
     auto* itemType=Class("assets");if(!itemType)throw std::runtime_error("ItemData class is not ready.");
     const auto objectCount=FUObjectArray::GetNumElements();
     if(objectCount<0||objectCount>4'000'000)throw std::runtime_error("Global object roster exceeds the safe catalog bound.");
-    const std::size_t total=static_cast<std::size_t>(objectCount);
+    static uint64_t mountedGeneration=0;static std::vector<CookedAssets::Record> mountedItems;
+    const auto generation=SpawnToolRequests::Generation.load();
+    if(mountedGeneration!=generation) {
+        mountedGeneration=generation;mountedItems.clear();
+        if(CookedAssets::TryEnsure())for(const auto& record:CookedAssets::MetadataSnapshot()) {
+            const auto hint=F2Catalog::MountedCandidate(record.path,record.name,record.type);
+            if(hint&&hint->kind==F2Catalog::Kind::Item)mountedItems.push_back(record);
+        }
+    }
+    const std::size_t liveTotal=static_cast<std::size_t>(objectCount),total=liveTotal+mountedItems.size();
     if(!total)return {{"Rows",std::move(rows)},{"NextOffset",0},{"Start",0},{"HasMore",false},{"Scanned",0}};
     const std::size_t start=randomOrder?static_cast<std::size_t>(startSeed%total):0;
     std::size_t visited=std::min(offset,total),scanned=0;const auto begin=std::chrono::steady_clock::now();
     while(visited<total&&rows.size()<limit&&scanned<scanBudget) {
         if(scanned>0&&std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-begin).count()>=static_cast<long long>(timeBudgetMicros))break;
         const std::size_t index=randomOrder?(start+visited)%total:visited;
+        if(index>=liveTotal) {
+            ++visited;++scanned;const auto& record=mountedItems[index-liveTotal];
+            auto* loaded=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,RC::to_generic_string(record.path).c_str(),false);
+            if(Usable(loaded))continue; // already covered by the native UObject slice
+            const auto name=QuickDecorations::ReadableAssetName(record.path),category=HelpyBroadItemCategory(nullptr,record.path,name,{},record.type);
+            if(!categoryFilter.empty()&&AssetTemplate::Fold(category)!=categoryFilter)continue;
+            if(!matchesTokens(record.path+" "+name+" "+record.type+" "+category))continue;
+            rows.push_back({{"StableId",HelpyStableId(record.path)},{"Path",record.path},{"Name",name},{"Class",record.type},{"Category",category},
+                {"Cooked",true},{"Mounted",true},{"Loaded",false},{"Available",true},{"Reason","Mounted ItemData candidate; native fields and inventory compatibility are checked when loaded"}});
+            continue;
+        }
         auto* slot=FUObjectArray::IndexToObject(static_cast<int32>(index));++visited;++scanned;
         auto* object=slot?slot->GetUObject():nullptr;
         if(!Usable(object)||!object->IsA(itemType))continue;

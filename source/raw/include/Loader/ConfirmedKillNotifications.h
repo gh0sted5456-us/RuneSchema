@@ -26,15 +26,15 @@ inline void NotifyConfirmedKill(RC::Unreal::UObject* player,RC::Unreal::UObject*
         if(!PlayerController(player) || !Live(victim) || victim->GetWorld()!=player->GetWorld())break;
         if(!Live(component) || component->GetOuterPrivate()!=player || component->GetWorld()!=player->GetWorld())continue;
         auto* function=component->GetFunctionByNameInChain(TEXT("RuneSchema_OnConfirmedKill"));
-        if(!function || function->HasAnyFunctionFlags(FUNC_Net) || function->GetParmsSize()!=16 || function->GetReturnProperty())continue;
+        if(!function || function->HasAnyFunctionFlags(FUNC_Net) || function->GetReturnProperty())continue;
+        try {ReflectedContract::Frame(function);}catch(...){continue;}
         size_t count=0;bool valid=true;
         for(auto* property:TFieldRange<FProperty>(function,EFieldIterationFlags::Default))if(property->HasAnyPropertyFlags(CPF_Parm)) {
             ++count;auto* object=CastField<FObjectPropertyBase>(property);
             const bool killed=property->GetFName()==FName(TEXT("Victim"),FNAME_Add);
             const bool credited=property->GetFName()==FName(TEXT("CreditedPlayer"),FNAME_Add);
             valid&=(killed || credited) && object && !property->HasAnyPropertyFlags(CPF_OutParm|CPF_ReturnParm|CPF_ReferenceParm)
-                && property->GetArrayDim()==1 && property->GetElementSize()==8
-                && property->GetOffset_Internal()==(killed?0:8)
+                && ReflectedContract::Input(property,function) && property->GetElementSize()==sizeof(UObject*)
                 && object->GetPropertyClass().Get()==actorType;
         }
         if(!valid || count!=2)continue;

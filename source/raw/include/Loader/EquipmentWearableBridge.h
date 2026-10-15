@@ -15,14 +15,15 @@
 #include "SDK/Structs/Custom/FScriptMapHelper.h"
 #include "Unreal/CoreUObject/UObject/FStrProperty.hpp"
 #include "Runtime/Storefront.h"
+#include "Runtime/NativeExecutableDiscovery.h"
+#include "Runtime/NativeHookPatterns.h"
 #include "Utility/Logging.h"
 
 namespace DragonWilds::EquipmentWearableBridge {
 using namespace RC::Unreal;
 // Native code, not RuneSchema, allocates and populates the opaque cache values.
-// Each executable profile must match both its PE identity and both function
-// prologues. The WinGDK RVAs were recovered from the active 100.8.0.0 image
-// and checked against x64 unwind boundaries and matching Steam function bodies.
+// Known legacy profiles are a fast path only. Updated executables use unique,
+// unwind-bounded code discovery plus the reflected cache-layout checks below.
 struct NativeProfile {
     uint32_t Timestamp, ImageSize;
     PS::Storefront::NativeLane Lane;
@@ -138,19 +139,31 @@ inline void Install() {
             && candidate->ImageSize==nt->OptionalHeader.SizeOfImage
             && candidate->Lane==lane) { profile=candidate; break; }
     }
-    if(nt->Signature!=IMAGE_NT_SIGNATURE || nt->FileHeader.Machine!=IMAGE_FILE_MACHINE_AMD64
-        || !profile
-        || std::memcmp(reinterpret_cast<void*>(base+profile->BuilderRva),profile->BuilderBytes.data(),profile->BuilderBytes.size())
-        || std::memcmp(reinterpret_cast<void*>(base+profile->EvaluatorRva),profile->EvaluatorBytes.data(),profile->EvaluatorBytes.size())) {
-        PS::Log<RC::LogLevel::Warning>(TEXT("[WEARABLE-BRIDGE][INACTIVE] executable/profile mismatch; native cache refresh disabled.\n"));
+    if(nt->Signature!=IMAGE_NT_SIGNATURE || nt->FileHeader.Machine!=IMAGE_FILE_MACHINE_AMD64)return;
+    void* builder=nullptr;void* evaluator=nullptr;
+    if(profile
+        &&profile->BuilderRva+profile->BuilderBytes.size()<=nt->OptionalHeader.SizeOfImage
+        &&profile->EvaluatorRva+profile->EvaluatorBytes.size()<=nt->OptionalHeader.SizeOfImage
+        &&!std::memcmp(reinterpret_cast<void*>(base+profile->BuilderRva),profile->BuilderBytes.data(),profile->BuilderBytes.size())
+        &&!std::memcmp(reinterpret_cast<void*>(base+profile->EvaluatorRva),profile->EvaluatorBytes.data(),profile->EvaluatorBytes.size())) {
+        builder=reinterpret_cast<void*>(base+profile->BuilderRva);evaluator=reinterpret_cast<void*>(base+profile->EvaluatorRva);
+    } else if(lane==PS::Storefront::NativeLane::GamePassNative) {
+        builder=PS::NativeExecutableDiscovery::Resolve(PS::NativeHookPatterns::GamePassWearableBuilder);
+        evaluator=PS::NativeExecutableDiscovery::Resolve(PS::NativeHookPatterns::GamePassWearableEvaluator);
+    } else if(lane==PS::Storefront::NativeLane::SteamNative) {
+        builder=PS::NativeExecutableDiscovery::Resolve(PS::NativeHookPatterns::SteamWearableBuilder);
+        evaluator=PS::NativeExecutableDiscovery::Resolve(PS::NativeHookPatterns::SteamWearableEvaluator);
+    }
+    if(!builder||!evaluator) {
+        PS::Log<RC::LogLevel::Warning>(TEXT("[WEARABLE-BRIDGE][INACTIVE] compatible native cache functions could not be uniquely identified; item registration remains available.\n"));
         return;
     }
-    auto hook=safetyhook::MidHook::create(reinterpret_cast<void*>(base+profile->EvaluatorRva),BeforeEvaluation,safetyhook::MidHook::StartDisabled);
+    auto hook=safetyhook::MidHook::create(evaluator,BeforeEvaluation,safetyhook::MidHook::StartDisabled);
     if(!hook) throw std::runtime_error("wearable evaluator hook creation failed");
-    BuildCache=reinterpret_cast<Builder>(base+profile->BuilderRva);
+    BuildCache=reinterpret_cast<Builder>(builder);
     EvaluatorHook=std::move(*hook);
     if(!EvaluatorHook.enable()) { EvaluatorHook.reset(); BuildCache=nullptr; throw std::runtime_error("wearable evaluator hook activation failed"); }
-    PS::Log<RC::LogLevel::Normal>(TEXT("[WEARABLE-BRIDGE][ACTIVE] profile='{}'; native cache builder and wearable evaluator signatures verified.\n"),profile->Name);
+    PS::Log<RC::LogLevel::Normal>(TEXT("[WEARABLE-BRIDGE][ACTIVE] native cache builder and wearable evaluator verified.\n"));
 }
 
 // Call after persistence/network identity registration, on the game thread.

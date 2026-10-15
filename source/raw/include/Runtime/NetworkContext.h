@@ -3,6 +3,7 @@
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
+#include "SDK/Helper/ReflectedContract.h"
 #include "Unreal/World.hpp"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
@@ -39,9 +40,10 @@ inline Context Detect(RC::Unreal::UObject* preferred=nullptr) {
         auto* function=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,path);
         auto* input=function?CastField<FObjectPropertyBase>(function->FindProperty(FName(TEXT("WorldContextObject"),FNAME_Find))):nullptr;
         auto* output=function?CastField<FBoolProperty>(function->GetReturnProperty()):nullptr;
-        if(!function || function->GetParmsSize()!=9 || !input || input->GetOffset_Internal()!=0
-            || input->GetSize()!=8 || !output || !output->IsNativeBool()
-            || output->GetOffset_Internal()!=8 || output->GetSize()!=1)
+        ReflectedContract::Frame(function);
+        if(ReflectedContract::Count(function)!=2 || !ReflectedContract::Input(input,function)
+            || input->GetSize()!=sizeof(UObject*) || !ReflectedContract::Output(output,function) || !output->IsNativeBool()
+            || output->GetSize()!=sizeof(bool))
             throw std::runtime_error("Network-mode query does not match captured layout");
         ActorHelper::FunctionCall call(library,path);
         call.Arg(TEXT("WorldContextObject"),result.World).Invoke();

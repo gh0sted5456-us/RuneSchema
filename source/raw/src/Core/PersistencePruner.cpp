@@ -15,6 +15,7 @@
 #include "SDK/Classes/KismetSystemLibrary.h"
 #include "SDK/Classes/TSoftObjectPtr.h"
 #include "SDK/Structs/FSoftObjectPath.h"
+#include "SDK/Helper/ReflectedContract.h"
 #include "Utility/Logging.h"
 #include "Utility/Config.h"
 #include "Runtime/HostServices.h"
@@ -109,21 +110,23 @@ void PersistencePruner::PruneBeforeCharacterLoad(
         || !context || !function || !parameters) return;
 
     try {
+        DragonWilds::ReflectedContract::Frame(function);
         FStrProperty* jsonProperty = nullptr;
         void* jsonAddress = nullptr;
         for (auto* field : TFieldRange<FProperty>(
-            function, EFieldIterationFlags::Default)) {
-            if (!field->HasAnyPropertyFlags(CPF_Parm)
-                || field->HasAnyPropertyFlags(CPF_ReturnParm | CPF_OutParm)
-                || field->GetArrayDim() != 1 || field->GetOffset_Internal() < 0
-                || field->GetOffset_Internal() + field->GetElementSize()
-                    > function->GetParmsSize()) continue;
+            function, EFieldIterationFlags::IncludeDeprecated)) {
+            // A FString passed by const/reference is still an input. Only
+            // genuine output-only fields are excluded, not reference inputs.
+            if (!DragonWilds::ReflectedContract::Input(field,function)) continue;
             auto* stringField = CastField<FStrProperty>(field);
-            if (!stringField) continue;
+            if (!stringField || stringField->GetElementSize()!=sizeof(FString)) continue;
             auto* address = stringField->ContainerPtrToValuePtr<void>(parameters);
             const auto value = stringField->GetPropertyValue(address);
-            if (value.GetCharArray().Num() <= 1) continue;
-            const auto utf8 = RC::to_string(RC::StringType(*value));
+            const auto& chars=value.GetCharArray();
+            if(chars.Num()<=1)continue;
+            if(chars.Num()>32*1024*1024||!chars.GetData()||chars.GetData()[chars.Num()-1]!=0)
+                throw std::runtime_error("character JSON string bounds invalid");
+            const auto utf8 = RC::to_string(RC::StringType(chars.GetData(),chars.Num()-1));
             if (utf8.find("\"GameProgress\"") == std::string::npos) continue;
             auto parsed = nlohmann::json::parse(utf8, nullptr, true, true);
             if (SaveCleanup::ClassifyCharacterDocument(parsed)

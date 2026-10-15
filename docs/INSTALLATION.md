@@ -93,6 +93,15 @@ same name appears more than once, even with different letter case.
 The line order is also the RuneSchema mod order. Keep required base mods above
 the patches that depend on them.
 
+Choices are retained for temporarily missing folders, so restoring an update
+does not reactivate a disabled mod. Only `1` enables a folder; invalid values
+remain disabled. Save this file as UTF-8. If it changes while the load-order
+editor is open, reload from disk before saving; stale edits are not applied.
+
+Helpy opens as a separate desktop window with F2. It has its own taskbar entry
+and normal keyboard/mouse focus. Press F2 again or close the window to return
+to the game. Switching to another application does not force it closed.
+
 ## Update an existing installation
 
 1. Close Dragonwilds.

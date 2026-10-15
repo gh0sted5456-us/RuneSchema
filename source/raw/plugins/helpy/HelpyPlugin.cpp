@@ -7,12 +7,10 @@
 #include <deque>
 #include "Runtime/RuneSchemaPluginApi.h"
 #include "Runtime/PluginRuntimeServices.h"
-#include "Generator/InGameQuickMenu.h"
 #include "Generator/HelpyStandaloneWindow.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Generator/ItemIconCache.h"
 #include "Generator/HelpyIconTrace.h"
-#include "Generator/HelpyHotkeys.h"
 #include "Generator/LazyCatalog.h"
 #include "Generator/ToolRequest.h"
 #include "Runtime/HelpySettings.h"
@@ -24,8 +22,8 @@ namespace {
 HMODULE Module{};
 constexpr RuneSchemaPluginDescriptor Descriptor{sizeof(RuneSchemaPluginDescriptor),RUNESCHEMA_PLUGIN_API_VERSION,
     "RuneSchema.Helpy","RuneSchema Helpy","0.7.8.0-alpha"};
-struct State {const RuneSchemaHostApi* Host{};std::unique_ptr<PS::InGameQuickMenu> Menu;std::unique_ptr<PS::HelpyStandaloneWindow> Window;
-    RC::Unreal::Hook::GlobalCallbackId Tick=RC::Unreal::Hook::ERROR_ID;bool StandaloneKeyDown=false,CanvasKeyDown=false,ThemeKeyDown=false,RendererReady=false,CanvasChecked=false,CanvasClassesReady=false;
+struct State {const RuneSchemaHostApi* Host{};std::unique_ptr<PS::HelpyStandaloneWindow> Window;
+    RC::Unreal::Hook::GlobalCallbackId Tick=RC::Unreal::Hook::ERROR_ID;bool ThemeKeyDown=false;
     std::atomic<bool> ToolsAvailable=false,ToolsWaiting=false;std::atomic<uint64_t> ToolsGeneration=1;
     std::mutex ToolsMutex;uint64_t ToolsRevision=0; nlohmann::json ToolsResult=nlohmann::json::object(),ToolsCatalog=nlohmann::json::object(),Players=nlohmann::json::array();std::deque<nlohmann::json> IconResults;
     std::map<uint64_t,nlohmann::json> Completed;std::map<uint64_t,std::string> IconDictionary;std::deque<nlohmann::json> QueryResults;};
@@ -57,7 +55,7 @@ int32_t RS_PLUGIN_CALL About(void*,const char*,char* response,uint32_t capacity,
 void StoreReceipt(State* state,const nlohmann::json& result) {
     const auto id=result.value("_RequestId",uint64_t{});if(!id)return;
     nlohmann::json receipt={{"Status",result.value("Status",std::string("Completed."))}};
-    for(const auto* key:{"GrantResults","SpawnResult","CloneResult","CloneSource","CloneAppearance","ItemDetails","RecipeExportResult","ItemOverrideExportResult","KitMetadata","NativeContracts"})
+    for(const auto* key:{"GrantResults","SpawnResult","SpawnDefinition","CloneResult","CloneSource","CloneAppearance","ItemDetails","RecipeExportResult","RecipeWorkspaceCatalog","RecipeWorkspaceSource","ItemOverrideExportResult","KitMetadata","NativeContracts"})
         if(result.contains(key))receipt[key]=result[key];
     state->Completed[id]=std::move(receipt);while(state->Completed.size()>16)state->Completed.erase(state->Completed.begin());
 }
@@ -106,7 +104,6 @@ int32_t RS_PLUGIN_CALL ToolsPush(void* context,const char* requestJson,char*,uin
                 state->ToolsResult=payload;StoreReceipt(state,payload);
             }
             else if(kind=="clear"){state->ToolsResult=payload;state->ToolsCatalog=nlohmann::json::object();state->Players=nlohmann::json::array();state->IconResults.clear();state->IconDictionary.clear();state->Completed.clear();state->QueryResults.clear();}
-            if(state->Menu&&kind!="icon")state->Menu->NotifyToolsChanged();
         }
         PS::LazyCatalog::BackendSignal(generation);*size=0;return RS_PLUGIN_OK;
     }catch(...){return RS_PLUGIN_FAILED;}
@@ -166,24 +163,14 @@ extern "C" __declspec(dllexport) int32_t RS_PLUGIN_CALL RuneSchemaPlugin_OnUnrea
         state->Window=std::make_unique<PS::HelpyStandaloneWindow>(Module);
         if(!state->Window->Start())state->Host->Log(RS_LOG_WARNING,Descriptor.Id,("standalone UI unavailable: "+state->Window->Error()).c_str());
         else state->Host->Log(RS_LOG_INFO,Descriptor.Id,"standalone Helpy ready: F2 toggle, F5 theme reload");
-        state->Menu=std::make_unique<PS::InGameQuickMenu>();
         RC::Unreal::Hook::FCallbackOptions options{};options.OwnerModName=TEXT("RuneSchema.Helpy");options.HookName=TEXT("HelpyPluginHotkeys");
         state->Tick=RC::Unreal::Hook::RegisterEngineTickPostCallback([state](auto&,auto*,float,bool){
             const bool standalone=(GetAsyncKeyState(VK_F2)&0x8000)!=0;
-            if(state->Window&&state->Window->Ready())state->Window->PollHotkey(standalone);state->StandaloneKeyDown=standalone;
+            if(state->Window&&state->Window->Ready())state->Window->PollHotkey(standalone);
             const bool reload=(GetAsyncKeyState(VK_F5)&0x8000)!=0;
             if(reload&&!state->ThemeKeyDown&&state->Window)state->Window->ReloadTheme();state->ThemeKeyDown=reload;
-            const bool canvas=(GetAsyncKeyState(PS::HelpyHotkeys::Active.load())&0x8000)!=0;
-            if(canvas&&!state->CanvasKeyDown&&state->Menu){
-                if(!state->CanvasChecked){DragonWilds::StaticClassStorage::Initialize();state->CanvasChecked=true;
-                    state->CanvasClassesReady=DragonWilds::StaticClassStorage::NumericPropertyStaticClass&&DragonWilds::StaticClassStorage::BoolPropertyStaticClass
-                        &&DragonWilds::StaticClassStorage::StrPropertyStaticClass&&DragonWilds::StaticClassStorage::StructPropertyStaticClass&&DragonWilds::StaticClassStorage::ObjectPropertyStaticClass;}
-                if(state->CanvasClassesReady&&!state->RendererReady)state->RendererReady=state->Menu->Initialize(false);
-                if(state->RendererReady)state->Menu->Toggle();
-            }
-            state->CanvasKeyDown=canvas;
         },options);
-        state->Host->Log(RS_LOG_INFO,Descriptor.Id,"hotkeys active: F2 standalone Helpy, F7 legacy Canvas, F5 skin reload");return RS_PLUGIN_OK;
+        state->Host->Log(RS_LOG_INFO,Descriptor.Id,"hotkeys active: F2 desktop Helpy (close to return to game), F5 skin reload");return RS_PLUGIN_OK;
     } catch(const std::exception& error) {state->Host->Log(RS_LOG_ERROR,Descriptor.Id,error.what());return RS_PLUGIN_FAILED;}
       catch(...) {state->Host->Log(RS_LOG_ERROR,Descriptor.Id,"unknown Unreal initialization failure");return RS_PLUGIN_FAILED;}
 }
@@ -192,7 +179,7 @@ extern "C" __declspec(dllexport) void RS_PLUGIN_CALL RuneSchemaPlugin_Shutdown(v
     if(state->Tick!=RC::Unreal::Hook::ERROR_ID)RC::Unreal::Hook::UnregisterCallback(state->Tick);
     if(state->Window)state->Window->Shutdown();
     PS::ItemIconCache::ClearRemote();PS::LazyCatalog::ClearRemote();PS::SpawnToolRequests::ClearRemote();
-    if(state->Menu)state->Menu->Shutdown();delete state;
+    delete state;
     PS::PluginRuntimeServices::Reset();
 }
 BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID) {if(reason==DLL_PROCESS_ATTACH)Module=module;return TRUE;}

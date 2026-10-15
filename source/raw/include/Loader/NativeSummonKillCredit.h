@@ -1,6 +1,8 @@
 #pragma once
 #include "Loader/SummonAttribution.h"
 #include "Loader/ConfirmedKillNotifications.h"
+#include "SDK/Helper/ReflectedContract.h"
+#include "Loader/QuestObjectReference.h"
 #include "Unreal/Hooks.hpp"
 #include <vector>
 
@@ -24,6 +26,14 @@ class NativeKillCredit {
     NativeDispatches m_dispatches;
     std::vector<Frame> m_frames;
     unsigned m_checks=0;
+    static void WriteObject(RC::Unreal::FObjectPropertyBase* property,void* container,RC::Unreal::UObject* value,bool validateObject=true) {
+        if(!property||!container||!value||(validateObject&&(!property->GetPropertyClass().Get()||!value->IsA(property->GetPropertyClass().Get()))))
+            throw std::runtime_error("Kill-credit object reference class mismatch");
+        QuestRegistry::ValidateObjectReferenceLayout(RC::to_string(property->GetClass().GetName()),property->GetElementSize(),property->GetArrayDim(),sizeof(value));
+        QuestRegistry::CopyResolvedReference(value,property->ContainerPtrToValuePtr<void>(container),
+            [&](void* target,const void* source){property->CopyCompleteValue(target,source);},
+            [&](void* target){return property->GetObjectPropertyValue(target);});
+    }
     static ObjectIdentity Identity(RC::Unreal::UObject* object) {
         if(!Live(object))return {};
         const auto weak=PS::WeakObject(object);return {weak.ObjectIndex,weak.ObjectSerialNumber};
@@ -51,16 +61,15 @@ public:
         auto* instigator=CastField<FObjectPropertyBase>(function->FindProperty(FName(TEXT("Instigator"),FNAME_Find)));
         auto* event=CastField<FStructProperty>(function->FindProperty(FName(TEXT("DamageEvent"),FNAME_Find)));
         auto* type=event?event->GetStruct().Get():nullptr;
-        if(function->GetParmsSize()!=256 || function->GetReturnProperty() || !victimField || !instigator || !event
-            || victimField->GetArrayDim()!=1 || victimField->GetElementSize()!=8 || victimField->GetOffset_Internal()!=0
-            || instigator->GetArrayDim()!=1 || instigator->GetElementSize()!=8 || instigator->GetOffset_Internal()!=8
-            || event->GetArrayDim()!=1 || event->GetElementSize()!=240 || event->GetOffset_Internal()!=16
-            || !type || type->GetPathName()!=TEXT("/Script/Dominion.DominionDamageEvent"))
+        ReflectedContract::Frame(function);
+        if(function->GetReturnProperty() || !ReflectedContract::Input(victimField,function) || !ReflectedContract::Input(instigator,function) || !ReflectedContract::Input(event,function)
+            || victimField->GetElementSize()!=sizeof(UObject*) || instigator->GetElementSize()!=sizeof(UObject*)
+            || !type || event->GetElementSize()!=type->GetStructureSize() || type->GetPathName()!=TEXT("/Script/Dominion.DominionDamageEvent"))
             throw std::runtime_error("Native summon kill-credit function layout changed");
         auto* damageInstigator=CastField<FObjectPropertyBase>(PropertyHelper::GetPropertyByName(type,TEXT("Instigator")));
         auto* fatal=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(type,TEXT("bIsFatalHit")));
-        if(!damageInstigator || damageInstigator->GetArrayDim()!=1 || damageInstigator->GetElementSize()!=8 || damageInstigator->GetOffset_Internal()!=64
-            || !fatal || !fatal->IsNativeBool() || fatal->GetArrayDim()!=1 || fatal->GetElementSize()!=1 || fatal->GetOffset_Internal()!=224)
+        if(!ReflectedContract::Fits(damageInstigator,type->GetStructureSize()) || damageInstigator->GetElementSize()!=sizeof(UObject*)
+            || !ReflectedContract::Fits(fatal,type->GetStructureSize()) || !fatal->IsNativeBool() || fatal->GetElementSize()!=1)
             throw std::runtime_error("Native summon damage-event fields changed");
         auto* damage=event->ContainerPtrToValuePtr<void>(parameters);
         if(!fatal->GetPropertyValue(fatal->ContainerPtrToValuePtr<void>(damage)))return;
@@ -84,8 +93,8 @@ public:
         frame.Reserved=decision==NativeDispatches::Decision::First;
         if(!summon)return;
         frame.Instigator=instigator;frame.DamageInstigator=damageInstigator;frame.Damage=damage;frame.Original=attacker;frame.Changed=true;
-        instigator->SetObjectPropertyValue(instigator->ContainerPtrToValuePtr<void>(parameters),player);
-        damageInstigator->SetObjectPropertyValue(damageInstigator->ContainerPtrToValuePtr<void>(damage),player);
+        WriteObject(instigator,parameters,player);
+        WriteObject(damageInstigator,damage,player);
     }
     void After(RC::Unreal::Hook::TCallbackIterationData<void>& dispatch,RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters) {
         if(m_frames.empty() || !function || function->GetPathName()!=TEXT("/Script/Dominion.ProgressComponent:OnAIKilled"))return;
@@ -93,8 +102,10 @@ public:
             const auto frame=m_frames[index-1];
             if(frame.Source!=source || frame.Function!=function || frame.Parameters!=parameters)continue;
             if(frame.Changed) {
-                frame.Instigator->SetObjectPropertyValue(frame.Instigator->ContainerPtrToValuePtr<void>(parameters),frame.Original);
-                frame.DamageInstigator->SetObjectPropertyValue(frame.DamageInstigator->ContainerPtrToValuePtr<void>(frame.Damage),frame.Original);
+                // Restore the original borrowed reference without dereferencing
+                // an actor that may have been destroyed by the native callback.
+                WriteObject(frame.Instigator,parameters,frame.Original,false);
+                WriteObject(frame.DamageInstigator,frame.Damage,frame.Original,false);
             }
             // Another mod may veto the original after our pre-hook. Permit a
             // later real dispatch rather than recording an award that never ran.

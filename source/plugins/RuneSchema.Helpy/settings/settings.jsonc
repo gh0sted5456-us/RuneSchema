@@ -1,5 +1,4 @@
-// Standalone HELPY is F2. The optional legacy Canvas fallback is F7.
+// Desktop HELPY is F2. Close it or press F2 again to return to the game.
 {
-  "enabled": true,
-  "canvasToggleKey": "F7"
+  "enabled": true
 }

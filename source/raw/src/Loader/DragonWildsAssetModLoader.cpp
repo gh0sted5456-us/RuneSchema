@@ -1,4 +1,6 @@
 #include "Loader/HelpyDependencyOrder.h"
+#include "Core/RecipeWorkspace.h"
+#include "Generator/AssetSearch.h"
 #include "Generator/HelpyStatKey.h"
 #include "Generator/HelpyPropertyValue.h"
 #include "Generator/QuickMenuDecorations.h"

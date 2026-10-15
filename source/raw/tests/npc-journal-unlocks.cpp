@@ -24,9 +24,9 @@ int Run(int argc,char** argv){
     Require(journal.find("m_acquisitionUnlocks.empty()&&m_unlock.empty()")!=std::string::npos);
     Require(journal.find("DeliverAutomaticUnlocks(controller)")!=std::string::npos);
     Require(main.find("npcService->UnlockJournal=")!=std::string::npos);
-    Require(journal.find("EntryHandle(acquisitionItem)")!=std::string::npos);
+    Require(journal.find("EntryHandle(acquisitionItem,false)")!=std::string::npos);
     Require(journal.find("m_rejectedEntries.contains(binding.EntryKey)")!=std::string::npos);
-    const auto placed=journal.find("Place(entry, def)"),binding=journal.find("m_acquisitionUnlocks.push_back({EntryHandle(acquisitionItem)");
+    const auto placed=journal.find("Place(entry, def)"),binding=journal.find("m_acquisitionUnlocks.push_back({EntryHandle(acquisitionItem,false)");
     Require(placed!=std::string::npos&&binding!=std::string::npos&&placed<binding);
     return 0;
 }

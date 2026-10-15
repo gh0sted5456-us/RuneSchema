@@ -134,43 +134,4 @@ inline Cleanup RemoveOwnedIds(const Json& journal,const Owners& retired) {
     StoreOwnership(result.Journal,owners);
     return result;
 }
-// Only generated entries that are automatically regranted are save-transient.
-// Cooked entries and earned/conditional generated entries retain native progress.
-inline bool IsSaveTransient(bool generated,bool automatic) {return generated && automatic;}
-inline Owners SelectTransient(const Owners& registered,const std::set<std::string>& ids) {
-    Owners result;
-    for(const auto& id:ids) {
-        ValidateId(id);
-        const auto found=registered.find(id);
-        if(found==registered.end())throw std::runtime_error("Transient journal identity was not registered");
-        Quests::ValidateOwner(found->second);
-        result.emplace(*found);
-    }
-    return result;
-}
-// Exclude explicitly selected transient entries without removing live unlocks.
-// Do not pass the complete ownership map: ownership alone is not transience.
-inline Json RemoveCurrent(const Json& journal,const Owners& current) {
-    std::set<std::string> ids;
-    for(const auto& [id,mod]:current) {
-        ValidateId(id);Quests::ValidateOwner(mod);ids.insert(id);
-    }
-    auto result=journal;
-    for(const auto* field:{"UnlockedEntries","UnreadEntries"}) {
-        if(!result.contains(field))continue;
-        const auto& source=result.at(field);
-        if(!source.is_array() || source.size()>65535)throw std::runtime_error("Invalid journal saved entry list");
-        auto retained=Json::array();
-        for(const auto& entry:source) {
-            if(!entry.is_string())throw std::runtime_error("Invalid journal saved entry identity");
-            const auto id=entry.get<std::string>();ValidateId(id);
-            if(!ids.contains(id))retained.push_back(entry);
-        }
-        result[field]=std::move(retained);
-    }
-    auto owners=ReadOwnership(result);
-    for(const auto& id:ids)owners.erase(id);
-    StoreOwnership(result,owners);
-    return result;
-}
 }

@@ -25,7 +25,15 @@ namespace UECustom {
             const std::vector<RC::Unreal::AActor*>& ActorsToIgnore,
             RC::Unreal::FVector& ImpactPoint,
             std::string& Error,
-            RC::Unreal::UObject** HitComponent = nullptr);
+            RC::Unreal::UObject** HitComponent = nullptr,
+            bool TraceComplex = false);
+        // Vertical placement query shared by NPC, spawn, event and authoring
+        // loaders. Inspection rays retain the visibility-only helper above.
+        static bool FindGroundSurface(
+            RC::Unreal::UObject* WorldContext,
+            const RC::Unreal::FVector& Start,const RC::Unreal::FVector& End,
+            const std::vector<RC::Unreal::AActor*>& ActorsToIgnore,
+            RC::Unreal::FVector& ImpactPoint,std::string& Error);
 	private:
 		static UKismetSystemLibrary* GetDefaultObj();
 	};

@@ -22,6 +22,8 @@
 #include "Loader/EventDefinition.h"
 #include "Loader/SpawnRadius.h"
 #include "Loader/TimeOfDay.h"
+#include "Core/GroundingRetry.h"
+#include "Core/GroundSurface.h"
 
 namespace RC::Unreal {
     class AActor;
@@ -58,6 +60,8 @@ namespace DragonWilds {
             nlohmann::json AdditionalDrops=nlohmann::json::array();
             RC::Unreal::FVector Location{};
             RC::Unreal::FVector AuthoredLocation{};
+            PS::Grounding::Retry GroundRetry;
+            PS::Grounding::SearchRange GroundSearch;
             RC::Unreal::FRotator Rotation{};
             RC::Unreal::FVector Scale{1.0, 1.0, 1.0};
             double DropMultiplier = 1.0;
@@ -535,7 +539,9 @@ namespace DragonWilds {
         void DestroyLiveSpawnedAI(RC::Unreal::UWorld* world,const SpawnInfo& spawn);
         void RetireTimedActor(RC::Unreal::AActor* actor);
         void TryProcessSpawns(RC::Unreal::UWorld* world, const std::vector<UECustom::FBox>* bounds, const wchar_t* trigger);
-        void ProcessSpawns(RC::Unreal::UWorld* world, const std::vector<UECustom::FBox>* bounds);
+        void ProcessSpawns(RC::Unreal::UWorld* world, const std::vector<UECustom::FBox>* bounds,bool groundRetriesOnly=false);
+        void ReconcileGroundingRetries(float deltaSeconds);
+        double m_groundingRetryElapsed=0;
         void ProcessAISpawnPointEntry(RC::Unreal::UWorld* world, SpawnInfo& spawn);
         void ProcessActorEntry(RC::Unreal::UWorld* world, SpawnInfo& spawn);
         void ProcessStaticAssemblyEntry(RC::Unreal::UWorld* world, SpawnInfo& spawn);

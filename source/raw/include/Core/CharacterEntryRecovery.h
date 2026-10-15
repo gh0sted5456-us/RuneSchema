@@ -11,10 +11,7 @@ public:
     ~CharacterEntryRecovery() { Shutdown(); }
 
 private:
-    static bool ValidateCharacter(void*, void*, void*, void*, void*);
-    static bool ProcessPlayerStateLoad(void*, void*, void*, void*);
-
-    static inline SafetyHookInline ValidationHook;
-    static inline SafetyHookInline PlayerStateHook;
+    static void AcceptCharacter(SafetyHookContext&);
+    static inline SafetyHookMid AcceptanceHook;
 };
 }

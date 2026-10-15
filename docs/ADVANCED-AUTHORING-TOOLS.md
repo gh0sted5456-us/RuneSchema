@@ -9,7 +9,17 @@ building a preview do not install a mod or change the game data.
 
 ### Helpy 7.8 alpha
 
-Helpy's external F2 window has a compact **Simple / Advanced** switch in its header. Simple mode keeps everyday item browsing and delivery together; Advanced exposes Item Lab, building tools, cleanup, full scans and detailed appearance controls. The preference is stored in `ui.jsonc` under `views.advancedMode`.
+Helpy's external F2 window has a compact **Simple / Advanced** switch in its header. Simple mode keeps everyday item browsing and delivery together; Advanced exposes Transmutate, Recipes, building tools, cleanup, full scans and detailed appearance controls. The preference is stored in `ui.jsonc` under `views.advancedMode`.
+
+The shared item bay defaults to **5 columns × 4 rows**. Choose **Layout** above the bay to change the column/row counts, or drag its lower divider for a free-height pane. The grid fits the available window and uses fewer columns on narrow windows; scroll to browse the remaining items. This changes the viewport, not the catalog's item limit. These preferences are shared by the inventory and editor bays and saved in `ui.jsonc` (`views.itemGridColumns`, `itemGridRows`, `itemGridFitRows`). Existing colors, scaling and list-view preferences are retained.
+
+**Transmutate** separates source selection, customization and the resulting item into connected cards, with the item bay below. Inspect the selected source before creating a clone. Native property and JSON overrides are in a separate expandable section. The source item is not changed.
+
+**Recipes** connects inputs, station/timing and outputs. Drag items from the bottom bay into either side, or select an item and use the add buttons. Quantities are editable; a recipe can have multiple outputs. Choose a native station row and, where applicable, a labeled category. Optional processing duration has minimum and maximum bounds in seconds. These cards stack vertically when the available width is limited.
+
+Use **Browse** to search native recipe metadata, or paste an exact cooked `RecipeData` object path and choose **Load**. Saving an override changes only the authored ingredients, outputs and optional timing; it preserves the cooked recipe's identity. Adding a station is optional and does not remove its original station placements. New recipes require a compatible station. **Save** writes a RuneSchema `/recipes` definition and reports its file path; restart to apply it. It does not silently grant inventory items. Station artwork comes from native row metadata or a cooked preview-icon path, not an automatic web download.
+
+Normal catalog queries combine loaded objects with mounted asset-registry metadata. Unloaded AI/resource candidates remain visible but need **Inspect selected definition** before spawning. Inspection loads only the selected class and checks its native ancestry; native NPC-copy restrictions and resource save-exclusion checks still apply. The coverage message identifies when registry metadata is unavailable. Unknown mod directories are not guessed to be resource or AI classes: authored `/spawns` entries and the explicit Full Scan remain additional discovery paths.
 
 The item inventory is above the cart. Drag an item down, or right-click **Add to cart**, then choose a player and **Deliver**. Selecting an item does not grant it. Cart editing pauses during delivery; entries leave the cart only after matching inventory-delta confirmations. Failed or unconfirmed entries stay staged for inspection, without automatic retries. Advanced mode also offers one-each and stack presets.
 
@@ -71,7 +81,7 @@ structural loader schemas** provides the full set.
 
 Items, recipes, journal entries, quests, NPCs, spawns, and events have focused
 content choices. Player and nameplate pages include their own guided controls;
-the Items page also points to Helpy's Item Lab for in-world item authoring.
+the Items page also points to Helpy's Transmutate workspace for in-world item authoring.
 
 ## Know what each stage is for
 

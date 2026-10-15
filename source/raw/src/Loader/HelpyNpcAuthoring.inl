@@ -217,6 +217,7 @@ nlohmann::json DragonWildsNpcLoader::SpawnHelpyNpc(const nlohmann::json& request
     // or inside streamed terrain and prevent normal navigation.
     d.TargetLocation[0]=targetX;d.TargetLocation[1]=targetY;d.TargetLocation[2]=origin.Z();
     d.GroundToSurface=true;d.GroundOffset=100;d.HasTargetLocation=true;d.SpawnRotation[0]=0;d.SpawnRotation[1]=0;d.SpawnRotation[2]=0;
+    d.GroundAnchorZ=origin.Z();d.GroundSearch=PS::Grounding::SearchRange::Around(d.GroundAnchorZ);d.GroundResolvedWorld=nullptr;d.GroundRetry={};
     d.PersistentId=VendorIdentity::ForOwner(VendorOffers::Owner(d.ModName,d.Id));
     if(!ResolveDefinitionClasses(d))throw std::runtime_error("NPC native class/component contracts are not ready.");
     if(!permanent)HelpyNpcGuards::TemporaryClass(d.BaseActorClass);

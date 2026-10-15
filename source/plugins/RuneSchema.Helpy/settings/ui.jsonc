@@ -1,7 +1,7 @@
 // RuneSchema Helpy live UI settings. Changes here and in Settings share the same values.
 // cache.iconCacheMB = 0 disables persistent cache and uses session-only live caching.
 {
-  "version": 15,
+  "version": 16,
   "autoReload": true,
   "display": {
     "dpiAware": true,
@@ -234,6 +234,9 @@
   },
   "views": {
     "itemGrid": true,
+    "itemGridColumns": 5,
+    "itemGridRows": 4,
+    "itemGridFitRows": true,
     "aiGrid": false,
     "itemResultHeight": 320.0,
     "aiResultHeight": 320.0,

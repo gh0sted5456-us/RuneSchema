@@ -15,6 +15,15 @@ int main() {
     Require(existing.TargetGroup && !existing.TargetGroup->CreateIfMissing);
     auto custom=Parse({{"SubCategory","Processed Materials"},{"Group",{{"Id","my_mod_materials"},{"DisplayName","Enchanted Materials"},{"CreateIfMissing",true}}}},"entry");
     Require(custom.TargetGroup->CreateIfMissing && custom.TargetGroup->DisplayName=="Enchanted Materials");
+    auto people=Parse({{"Section","Knowledge"},{"Category","People"},{"Key","Dye_Core_iGhrazi"},
+        {"Group",{{"Id","ColorsOfMoney_Dye_People"},{"DisplayName","Craftsmen"},{"CreateIfMissing",true}}}},"asset-path");
+    const auto native=PS::JournalPlacement::WithNativeGroupKey(people,"JOURNAL_Dye_People_iGhrazi_Core");
+    Require(native.Key=="JOURNAL_Dye_People_iGhrazi_Core"&&people.Key=="Dye_Core_iGhrazi");
+    Require(native.TargetGroup->Id==people.TargetGroup->Id&&native.SubCategory==people.SubCategory);
+    Require(PS::JournalPlacement::WithNativeGroupKey(native,"JOURNAL_Dye_People_iGhrazi_Core").Key==native.Key);
+    Require(PS::JournalPlacement::WithNativeGroupKey(plain,"unrelated-native-name").Key==plain.Key);
+    Require(PS::JournalPlacement::WithNativeGroupKey(custom,"RuntimeEntry").Key=="RuntimeEntry");
+    bool invalid=false;try{(void)PS::JournalPlacement::WithNativeGroupKey(people,"");}catch(const std::exception&){invalid=true;}Require(invalid);
     Reject({{"SubCategory"," "}});
     Reject({{"Section","Knowledge"}});
     Reject({{"Section","Knowledge"},{"Category","Unknown"}});

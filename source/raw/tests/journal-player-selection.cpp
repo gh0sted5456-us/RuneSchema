@@ -46,6 +46,6 @@ int main(int argc,char** argv) {
     Require(source.find("context.Mode==PS::Network::Role::Standalone")!=std::string::npos);
     Require(source.find("(pawn && outer==pawn)")!=std::string::npos);
     Require(source.find("(state && outer==state)")!=std::string::npos);
-    Require(source.find("JournalSave::SelectTransient(owned,m_saveTransientIds)")!=std::string::npos);
-    Require(source.find("JournalSave::IsSaveTransient(m_createdEntries.contains(entry),automatic)")!=std::string::npos);
+    Require(source.find("JournalPersistence::Install(this,owned,m_journalComponentClass)")!=std::string::npos);
+    Require(source.find("m_saveTransientIds")==std::string::npos);
 }

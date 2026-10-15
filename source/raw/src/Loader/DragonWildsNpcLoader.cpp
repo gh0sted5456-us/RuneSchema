@@ -299,11 +299,12 @@ namespace DragonWilds {
                     ++count;
                     if(field->GetFName()==FName(TEXT("Object"),FNAME_Add))input=CastField<FObjectPropertyBase>(field);
                 }
-            if(!library || !function || count!=2 || function->GetParmsSize()!=9
-                || !returned || !returned->IsNativeBool() || returned->GetOffset_Internal()!=8
+            ReflectedContract::Frame(function);
+            if(!library || count!=2
+                || !ReflectedContract::Output(returned,function) || !returned->IsNativeBool()
                 || returned->GetSize()!=1 || returned->GetArrayDim()!=1
                 || !returned->HasAnyPropertyFlags(CPF_ReturnParm)
-                || !input || input->GetOffset_Internal()!=0 || input->GetSize()!=sizeof(UObject*)
+                || !ReflectedContract::Input(input,function) || input->GetSize()!=sizeof(UObject*)
                 || input->GetArrayDim()!=1 || input->HasAnyPropertyFlags(CPF_OutParm|CPF_ReturnParm))
                 throw std::runtime_error("NPC retirement validity function layout unavailable");
             ActorHelper::FunctionCall call(library,TEXT("/Script/Engine.KismetSystemLibrary:IsValid"));
@@ -397,23 +398,18 @@ namespace DragonWilds {
             auto* tag=function?CastField<FStructProperty>(function->FindProperty(FName(TEXT("NotificationTag"),FNAME_Find))):nullptr;
             auto* text=function?CastField<FTextProperty>(function->FindProperty(FName(TEXT("Text"),FNAME_Find))):nullptr;
             size_t count=0;if(function)for(auto* field:TFieldRange<FProperty>(function,EFieldIterationFlags::Default))if(field->HasAnyPropertyFlags(CPF_Parm))++count;
-            if(!function || function->GetParmsSize()!=24 || function->GetReturnProperty() || count!=2
-                || !tag || tag->GetOffset_Internal()!=0 || tag->GetElementSize()!=sizeof(FName) || tag->GetArrayDim()!=1
+            ReflectedContract::Frame(function);
+            if(function->GetReturnProperty() || count!=2
+                || !ReflectedContract::Input(tag,function) || tag->GetArrayDim()!=1
                 || !tag->GetStruct().Get() || tag->GetStruct().Get()->GetPathName()!=TEXT("/Script/GameplayTags.GameplayTag")
-                || !text || text->GetOffset_Internal()!=8 || text->GetElementSize()!=16 || text->GetArrayDim()!=1)
+                || tag->GetElementSize()!=tag->GetStruct()->GetStructureSize()
+                || !ReflectedContract::Input(text,function) || text->GetElementSize()!=sizeof(FText))
                 throw std::runtime_error("Native event notification layout changed");
             const auto deliver=[&](UObject* recipient) {
                 if(!recipient || recipient->GetWorld()!=controller->GetWorld())return;
-                std::array<uint8_t,24> params{};
-                text->InitializeValue_InContainer(params.data());
-                try {
-                    PropertyHelper::CopyJsonValueToContainer(params.data(),text,message);
-                    recipient->ProcessEvent(function,params.data());
-                    text->DestroyValue_InContainer(params.data());
-                } catch(...) {
-                    try{text->DestroyValue_InContainer(params.data());}catch(...) {}
-                    throw;
-                }
+                ActorHelper::FunctionCall(recipient,function)
+                    .JsonArg(TEXT("NotificationTag"),nlohmann::json::object())
+                    .JsonArg(TEXT("Text"),message).Invoke();
             };
             if(scope==Events::Scope::Participant){deliver(controller);return;}
             auto* type=ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionPlayerController"));
@@ -628,11 +624,49 @@ namespace DragonWilds {
             }
             if(!m_dialogueRequirementReady)WarnOnce("dialogue-requirements",TEXT("Native dialogue requirement contract unavailable; gated dialogues will not open."));
         }
-        for(const auto& [name,size]:{std::pair{TEXT("Client_OnQuestUpdated"),114},
-            std::pair{TEXT("Client_OnQuestsUpdated"),17},std::pair{TEXT("Client_NotifyTrackedQuestLoaded"),8}}) {
+        for(const auto* name:{TEXT("Client_OnQuestUpdated"),TEXT("Client_OnQuestsUpdated"),TEXT("Client_NotifyTrackedQuestLoaded")}) {
+            try {
             const auto path=RC::StringType(TEXT("/Script/Dominion.QuestProgressComponent:"))+name;
             auto* function=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,path.c_str(),false);
-            if(!function || function->GetParmsSize()!=size)throw std::runtime_error("Native quest delivery contract changed");
+            if(!function || !function->HasAnyFunctionFlags(FUNC_Native)
+                || !function->HasAnyFunctionFlags(FUNC_NetClient) || !function->HasAnyFunctionFlags(FUNC_Net)
+                || function->GetReturnProperty())throw std::runtime_error("Native quest delivery callback unavailable: "+RC::to_string(name));
+            std::vector<std::string> names;
+            std::vector<QuestNative::Field> fields;
+            names.reserve(4);fields.reserve(4);
+            for(auto* property:TFieldRange<FProperty>(function,EFieldIterationFlags::Default)) {
+                if(!property->HasAnyPropertyFlags(CPF_Parm))continue;
+                if(names.size()>=4 || property->GetArrayDim()!=1)throw std::runtime_error("Native quest delivery parameter count changed");
+                QuestNative::Kind kind;
+                if(auto* object=CastField<FObjectPropertyBase>(property)) {
+                    if(!object->GetPropertyClass().Get() || object->GetPropertyClass()->GetPathName()!=TEXT("/Script/Dominion.QuestData"))
+                        throw std::runtime_error("Native quest delivery object type changed");
+                    kind=QuestNative::Kind::Quest;
+                } else if(auto* boolean=CastField<FBoolProperty>(property)) {
+                    if(!boolean->IsNativeBool() || boolean->GetByteOffset()!=0)throw std::runtime_error("Native quest delivery bool changed");
+                    kind=QuestNative::Kind::Boolean;
+                } else if(auto* structure=CastField<FStructProperty>(property)) {
+                    if(!structure->GetStruct().Get() || structure->GetStruct()->GetPathName()!=TEXT("/Script/Dominion.QuestProgress"))
+                        throw std::runtime_error("Native quest delivery progress type changed");
+                    kind=QuestNative::Kind::Progress;
+                } else if(auto* array=CastField<FArrayProperty>(property)) {
+                    auto* inner=CastField<FStructProperty>(array->GetInner());
+                    if(!inner || inner->GetArrayDim()!=1 || !inner->GetStruct().Get()
+                        || inner->GetStruct()->GetPathName()!=TEXT("/Script/Dominion.QuestProgress"))
+                        throw std::runtime_error("Native quest delivery array type changed");
+                    kind=QuestNative::Kind::ProgressArray;
+                } else {
+                    UEnum* enumeration=nullptr;
+                    if(auto* value=CastField<FEnumProperty>(property))enumeration=value->GetEnum();
+                    else if(auto* value=CastField<FByteProperty>(property))enumeration=value->GetEnum().Get();
+                    if(!enumeration || enumeration->GetPathName()!=TEXT("/Script/Dominion.EQuestType"))
+                        throw std::runtime_error("Native quest delivery enum changed");
+                    kind=QuestNative::Kind::QuestType;
+                }
+                names.push_back(RC::to_string(property->GetName()));
+                fields.push_back({names.back(),property->GetOffset_Internal(),property->GetElementSize(),kind,false});
+            }
+            QuestNative::ValidateDelivery(RC::to_string(name),function->GetParmsSize(),fields);
             const auto id=PS::RegisterNativePostHook(function,[this](UnrealScriptFunctionCallableContext& context,void*) {
                 auto* source=context.Context;
                 if(!source || m_gameThreadId.load(std::memory_order_relaxed)!=GetCurrentThreadId())return;
@@ -647,6 +681,10 @@ namespace DragonWilds {
             });
             if(!id)throw std::runtime_error("Native quest delivery hook unavailable");
             m_questDeliveryHooks.emplace_back(function,id);
+            }catch(const std::exception& error) {
+                WarnOnce("quest-client-delivery:"+RC::to_string(name),
+                    PS::ToWideSafe((std::string("Quest client-refresh observer unavailable; native registry and authority progression remain active: ")+error.what()).c_str()));
+            }
         }
         for(const auto* name:{TEXT("GetCurrentObjectiveText"),TEXT("GetObjectiveText")}) {
             const auto path=RC::StringType(TEXT("/Script/Dominion.QuestProgressComponent:"))+name;
@@ -712,7 +750,7 @@ namespace DragonWilds {
                 if(m_events.NeedsTick())try {m_events.Tick(deltaSeconds);}
                     catch(const std::exception& error){try{m_events.Reset();}catch(...){}ErrorOnce("event-tick",PS::ToWideSafe(error.what()));}
                 PumpQuestLocations(deltaSeconds);
-                if (m_definitions.empty() || m_scanBudget.Exhausted()) return;
+                if (m_definitions.empty()) return;
                 if (std::none_of(m_definitions.begin(), m_definitions.end(),
                     [](const auto& definition) { return !definition.HelpyTemporary && definition.Enabled && definition.SpawnGate.Pending(); }))
                 {
@@ -721,7 +759,12 @@ namespace DragonWilds {
                 m_scanElapsed += deltaSeconds;
                 if (m_scanElapsed < 0.5) return;
 
+                for(auto& definition:m_definitions)if(definition.GroundRetry.Pending)definition.GroundRetry.Advance(m_scanElapsed);
                 m_scanElapsed = 0.0;
+                if(std::none_of(m_definitions.begin(),m_definitions.end(),[&](const auto& definition){
+                    return !definition.HelpyTemporary&&definition.Enabled&&definition.SpawnGate.Pending()
+                        &&definition.GroundRetry.Ready()&&(!m_scanBudget.Exhausted()||definition.GroundRetry.Pending);
+                }))return;
                 try
                 {
                     ScanLoadedActors();
@@ -800,6 +843,9 @@ namespace DragonWilds {
                     definition.InteractionClass = nullptr;
                     definition.VendorClass = nullptr;
                     definition.CellReadyWorld = nullptr;
+                    definition.GroundResolvedWorld=nullptr;
+                    definition.GroundSearch=PS::Grounding::SearchRange::Around(definition.GroundAnchorZ);
+                    definition.GroundRetry={};
                     definition.SpawnGate.ResetForMap();
                 }
             }, options);
@@ -1065,6 +1111,8 @@ namespace DragonWilds {
             definition.HasTargetLocation=true;
             definition.GroundToSurface=placement.Ground;
             definition.GroundOffset=placement.Offset;
+            definition.GroundAnchorZ=placement.Position[2];
+            definition.GroundSearch=PS::Grounding::SearchRange::Around(definition.GroundAnchorZ);
         }
         ReadVector3(data, "Rotation", definition.SpawnRotation, false);
         ReadVector3(data, "Scale", definition.SpawnScale, true);
@@ -1854,15 +1902,23 @@ namespace DragonWilds {
         if (world && std::none_of(m_definitions.begin(), m_definitions.end(),
             [&](const auto& definition) {
                 return !definition.HelpyTemporary && definition.Enabled && definition.SpawnGate.Pending()
-                    && definition.CellReadyWorld == world;
+                    && definition.CellReadyWorld == world && definition.GroundRetry.Ready();
             })) {
-            if (m_vendorReport.value("Phase", std::string{}) != "Merchant.WaitingForCell") {
-                m_vendorReport["Phase"] = "Merchant.WaitingForCell";
+            const bool groundWaiting=std::any_of(m_definitions.begin(),m_definitions.end(),[&](const auto& definition){
+                return definition.Enabled&&definition.SpawnGate.Pending()&&definition.CellReadyWorld==world&&definition.GroundRetry.Pending;
+            });
+            const auto phase=groundWaiting?"Placement.WaitingForGround":"Merchant.WaitingForCell";
+            if (m_vendorReport.value("Phase", std::string{}) != phase) {
+                m_vendorReport["Phase"] = phase;
                 WriteVendorStatus();
             }
             return;
         }
-        if (m_scanBudget.Begin(world != nullptr))
+        const bool groundRetryReady=world&&std::any_of(m_definitions.begin(),m_definitions.end(),[&](const auto& definition){
+            return !definition.HelpyTemporary&&definition.Enabled&&definition.SpawnGate.Pending()
+                &&definition.CellReadyWorld==world&&definition.GroundRetry.Pending&&definition.GroundRetry.Ready();
+        });
+        if (groundRetryReady || m_scanBudget.Begin(world != nullptr))
         {
             // Menu/loading time must not exhaust the bounded asset-ready scans.
             m_vendorReport["ScanPasses"] = m_scanBudget.Passes();
@@ -1900,7 +1956,7 @@ namespace DragonWilds {
         for (auto& definition : m_definitions)
         {
             if (definition.HelpyTemporary || !definition.Enabled || !definition.SpawnGate.Pending()
-                || definition.CellReadyWorld != world)
+                || definition.CellReadyWorld != world || !definition.GroundRetry.Ready())
             {
                 continue;
             }
@@ -1952,6 +2008,9 @@ namespace DragonWilds {
                 // Readiness may retry within the timer budget, but actor
                 // construction and row mutation get one attempt per map.
                 if (!ResolveDefinitionClasses(definition)) continue;
+                // Ground readiness is reversible. Do not consume the one-shot
+                // construction gate or mutate shop rows until a surface exists.
+                ResolveNpcGrounding(world,definition);
                 if (!definition.SpawnGate.Begin()) continue;
                 if (definition.Stage == VendorPolicy::VendorStage::Merchant && definition.InlineMerchant) {
                     RecordPhase(definition, "MerchantRow.Before");
@@ -1968,6 +2027,13 @@ namespace DragonWilds {
                         "Vendor '{}' stopped after a failed proxy/attachment attempt; no retry until next map or restart.", definition.Id)));
                 }
             }
+            catch (const PS::Grounding::SurfacePending&)
+            {
+                if(definition.GroundRetry.Missed())WarnOnce("npc-ground-wait:"+key,
+                    RC::to_generic_string("NPC '"+key+"' is waiting for streamed ground collision; nothing was created. Placement will retry."));
+                RecordPhase(definition,"Placement.WaitingForGround",nullptr,
+                    {{"SearchTopZ",definition.GroundSearch.Top},{"SearchBottomZ",definition.GroundSearch.Bottom}});
+            }
             catch (const std::exception& error)
             {
                 ErrorOnce("spawn:" + key,
@@ -1983,6 +2049,21 @@ namespace DragonWilds {
                     "Vendor '{}' stopped for this map after an unknown failure.", definition.Id)));
             }
         }
+    }
+
+    void DragonWildsNpcLoader::ResolveNpcGrounding(UWorld* world,VendorDefinition& definition)
+    {
+        if(!definition.GroundToSurface||definition.GroundResolvedWorld==world)return;
+        FVector impact{};std::string error;
+        if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,
+            FVector(definition.TargetLocation[0],definition.TargetLocation[1],definition.GroundSearch.Top),
+            FVector(definition.TargetLocation[0],definition.TargetLocation[1],definition.GroundSearch.Bottom),{},impact,error)){
+            if(error.empty())throw PS::Grounding::SurfacePending();
+            throw std::runtime_error("NPC ground query failed: "+error);
+        }
+        definition.TargetLocation[2]=impact.Z()+definition.GroundOffset;
+        definition.GroundResolvedWorld=world;definition.GroundRetry.Resolved();
+        RecordPhase(definition,"Placement.Grounded",nullptr,{{"GroundZ",impact.Z()},{"PlacedZ",definition.TargetLocation[2]}});
     }
 
     AActor* DragonWildsNpcLoader::SpawnVisualVendor(
@@ -2070,17 +2151,7 @@ namespace DragonWilds {
             m_applied.erase(ActorKey(actor,definition));
         };
         try {
-        if(definition.GroundToSurface) {
-            FVector impact{};std::string error;
-            std::vector<AActor*> ignored;
-            if(actor)ignored.push_back(actor);
-            if(!UECustom::UKismetSystemLibrary::LineTraceGround(world,
-                FVector(definition.TargetLocation[0],definition.TargetLocation[1],5000.0),
-                FVector(definition.TargetLocation[0],definition.TargetLocation[1],-10000.0),ignored,impact,error))
-                throw std::runtime_error(error.empty()?"NPC Location.Z $ found no blocking surface":"NPC ground trace failed: "+error);
-            definition.TargetLocation[2]=impact.Z()+definition.GroundOffset;
-            RecordPhase(definition,"Placement.Grounded",nullptr,{{"GroundZ",impact.Z()},{"PlacedZ",definition.TargetLocation[2]}});
-        }
+        ResolveNpcGrounding(world,definition);
         if(actor) {
                 const auto readTransform=[&](const TCHAR* path,bool rotation) {
                     auto* getter=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,path);
@@ -2880,10 +2951,10 @@ namespace DragonWilds {
             if (definition.HelpyTemporary || !definition.Enabled || !definition.SpawnGate.Pending()) continue;
             const auto x = definition.TargetLocation[0], y = definition.TargetLocation[1];
             if (x > bounds->Min.X() && x < bounds->Max.X()
-                && y > bounds->Min.Y() && y < bounds->Max.Y()
-                && definition.CellReadyWorld != world) {
-                definition.CellReadyWorld = world;
-                m_scanBudget.ResetForMap();
+                && y > bounds->Min.Y() && y < bounds->Max.Y()) {
+                definition.GroundSearch.ObserveCell(bounds->Min.Z(),bounds->Max.Z());
+                definition.GroundRetry.CellShown();
+                if(definition.CellReadyWorld != world){definition.CellReadyWorld = world;m_scanBudget.ResetForMap();}
             }
         }
     }

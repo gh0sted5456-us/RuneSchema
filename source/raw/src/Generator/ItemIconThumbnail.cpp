@@ -2,6 +2,8 @@
 #include "Generator/HelpyIconTrace.h"
 #include "Generator/HelpyRuntimePreferences.h"
 #include "Core/IconCaptureSchedule.h"
+#include "Core/IconDrawContext.h"
+#include "Utility/EngineCleanupLifetime.h"
 #include "SDK/WeakObjectHandle.h"
 #include "Core/ConfigFiles.h"
 #include "Runtime/HostServices.h"
@@ -10,6 +12,7 @@
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
+#include "SDK/Helper/ReflectedContract.h"
 #include "SDK/Structs/FSoftObjectPtr.h"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
 #include "Unreal/CoreUObject/UObject/FStrProperty.hpp"
@@ -32,6 +35,7 @@
 #include <cctype>
 #include <chrono>
 #include <memory>
+#include <cmath>
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -51,11 +55,11 @@ namespace {
             if(!m_self)throw std::runtime_error("Item icon renderer has no function owner");
             m_function=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,path,false);
             if(!m_function)throw std::runtime_error(std::format("Item icon renderer function '{}' is unavailable",RC::to_string(StringType(path))));
-            if(m_function->GetParmsSize()<0 || m_function->GetParmsSize()>65535)throw std::runtime_error("Item icon renderer function parameter layout is invalid");
+            ReflectedContract::Frame(m_function);
             m_params.resize(static_cast<size_t>(m_function->GetParmsSize()));
             for(auto* property:TFieldRange<FProperty>(m_function,EFieldIterationFlags::Default)) {
-                if(!property->HasAnyPropertyFlags(CPF_Parm) || property->GetOffset_Internal()<0
-                    || static_cast<size_t>(property->GetOffset_Internal())+static_cast<size_t>(property->GetElementSize())>m_params.size())continue;
+                if(!property->HasAnyPropertyFlags(CPF_Parm))continue;
+                if(!ReflectedContract::Fits(property,static_cast<int>(m_params.size())))throw std::runtime_error("Item icon renderer parameter extent changed");
                 property->InitializeValue_InContainer(m_params.data());m_initialized.push_back(property);
             }
         }
@@ -64,7 +68,7 @@ namespace {
 
         FProperty* Property(const TCHAR* name) const {
             auto* property=m_function->FindProperty(FName(name,FNAME_Find));
-            if(!property || !property->HasAnyPropertyFlags(CPF_Parm) || property->GetOffset_Internal()<0)
+            if(!property || !property->HasAnyPropertyFlags(CPF_Parm) || !ReflectedContract::Fits(property,static_cast<int>(m_params.size())))
                 throw std::runtime_error(std::format("Item icon renderer parameter '{}' changed",RC::to_string(StringType(name))));
             return property;
         }
@@ -80,19 +84,26 @@ namespace {
             return *this;
         }
         ReflectedCall& JsonArg(const TCHAR* name,const nlohmann::json& value) {
-            auto* property=Property(name);PropertyHelper::CopyJsonValueToContainer(m_params.data(),property,value);return *this;
+            auto* property=Property(name);WriteJson(m_params.data(),static_cast<int>(m_params.size()),property,value);return *this;
         }
         ReflectedCall& JsonArgIfPresent(const TCHAR* name,const nlohmann::json& value) {
             if(Has(name))JsonArg(name,value);return *this;
         }
-        ReflectedCall& CopyArg(const TCHAR* name,const ReflectedCall& source,const TCHAR* sourceName) {
-            auto* destination=Property(name);auto* origin=source.Property(sourceName);
-            if(destination->GetClass()!=origin->GetClass() || destination->GetElementSize()!=origin->GetElementSize())
-                throw std::runtime_error("Item icon render context layout changed");
-            if(auto* ds=CastField<FStructProperty>(destination)) {
-                auto* os=CastField<FStructProperty>(origin);if(!os || ds->GetStruct()!=os->GetStruct())throw std::runtime_error("Item icon render context struct changed");
-            }
-            destination->CopyCompleteValue(destination->ContainerPtrToValuePtr<void>(m_params.data()),source.Value(sourceName));return *this;
+        ReflectedCall& TakeDrawContext(ReflectedCall& source) {
+            auto* destination=CastField<FStructProperty>(Property(TEXT("Context")));
+            auto* origin=CastField<FStructProperty>(source.Property(TEXT("Context")));
+            if(!destination||!origin||destination->GetStruct()!=origin->GetStruct()||!destination->GetStruct()
+                ||destination->GetStruct()->GetPathName()!=TEXT("/Script/Engine.DrawToRenderTargetContext")
+                ||destination->GetElementSize()!=origin->GetElementSize())throw std::runtime_error("Item icon render context struct changed");
+            auto* target=CastField<FObjectPropertyBase>(PropertyHelper::GetPropertyByName(origin->GetStruct().Get(),TEXT("RenderTarget")));
+            const auto size=origin->GetElementSize();
+            if(!target||!ReflectedContract::Fits(target,size)||target->GetElementSize()!=sizeof(UObject*)
+                ||!target->GetObjectPropertyValue(target->ContainerPtrToValuePtr<void>(source.Value(TEXT("Context")))))
+                throw std::runtime_error("Item icon draw context has no render target");
+            PS::IconCapture::TransferDrawContext({static_cast<uint8_t*>(Value(TEXT("Context"))),static_cast<size_t>(size)},
+                {static_cast<uint8_t*>(source.Value(TEXT("Context"))),static_cast<size_t>(size)},
+                destination->HasAnyPropertyFlags(CPF_NoDestructor)&&origin->HasAnyPropertyFlags(CPF_NoDestructor));
+            return *this;
         }
         void Invoke(){m_self->ProcessEvent(m_function,m_params.data());}
         UObject* ObjectValue(const TCHAR* name) {
@@ -118,6 +129,31 @@ namespace {
             return property->GetPropertyValue(property->ContainerPtrToValuePtr<void>(m_params.data()));
         }
     private:
+        static void WriteJson(void* container,int size,FProperty* property,const nlohmann::json& value,int depth=0) {
+            if(depth>4||!ReflectedContract::Fits(property,size))throw std::runtime_error("Item icon draw parameter bounds changed");
+            if(auto* structure=CastField<FStructProperty>(property);structure&&value.is_object()) {
+                auto* type=structure->GetStruct().Get();if(!type)throw std::runtime_error("Item icon draw parameter struct is unavailable");
+                auto* address=property->ContainerPtrToValuePtr<void>(container);
+                // Resolve each requested key with FName semantics. Enumerating
+                // display-case field names and JSON.contains silently skipped
+                // native vector/color components when their casing differed.
+                for(const auto& [key,field]:value.items()) {
+                    auto* child=PropertyHelper::GetPropertyByName(type,RC::to_generic_string(key));
+                    if(!child)throw std::runtime_error("Item icon draw field is unavailable: "+key);
+                    WriteJson(address,structure->GetElementSize(),child,field,depth+1);
+                }
+                return;
+            }
+            PropertyHelper::CopyJsonValueToContainer(container,property,value);
+            if(auto* numeric=CastField<FNumericProperty>(property);numeric&&value.is_number()) {
+                auto* address=property->ContainerPtrToValuePtr<void>(container);
+                const double actual=numeric->IsFloatingPoint()?numeric->GetFloatingPointPropertyValue(address)
+                    :static_cast<double>(numeric->GetSignedIntPropertyValue(address));
+                const auto expected=value.get<double>();
+                if(!std::isfinite(actual)||std::abs(actual-expected)>0.0001)
+                    throw std::runtime_error("Item icon draw parameter write was not confirmed");
+            }
+        }
         UObject* m_self{};UFunction* m_function{};std::vector<uint8_t> m_params;std::vector<FProperty*> m_initialized;
     };
 
@@ -156,7 +192,7 @@ namespace {
         const auto size=std::filesystem::file_size(file,ec);if(ec||size!=16u+ThumbnailSize*ThumbnailSize*4u)return false;
         std::ifstream input(file,std::ios::binary);if(!input)return false;char magic[4]{};uint32_t w=0,h=0,bytes=0;
         input.read(magic,4);input.read(reinterpret_cast<char*>(&w),sizeof(w));input.read(reinterpret_cast<char*>(&h),sizeof(h));input.read(reinterpret_cast<char*>(&bytes),sizeof(bytes));
-        if(!input||std::string(magic,4)!="RSI2"||w!=ThumbnailSize||h!=ThumbnailSize||bytes!=ThumbnailSize*ThumbnailSize*4u)return false;
+        if(!input||std::string(magic,4)!="RSI3"||w!=ThumbnailSize||h!=ThumbnailSize||bytes!=ThumbnailSize*ThumbnailSize*4u)return false;
         std::vector<unsigned char> pixels(bytes);input.read(reinterpret_cast<char*>(pixels.data()),bytes);if(!input)return false;
         std::size_t alphaNonZero=0,rgbNonZero=0;
         for(std::size_t i=0;i+3<pixels.size();i+=4){if(pixels[i+3]!=0)++alphaNonZero;if(pixels[i]!=0||pixels[i+1]!=0||pixels[i+2]!=0)++rgbNonZero;}
@@ -208,6 +244,10 @@ namespace {
         try {ReflectedCall release(library,TEXT("/Script/Engine.KismetRenderingLibrary:ReleaseRenderTarget2D"));release.ObjectArg(TEXT("TextureRenderTarget"),target).Invoke();}catch(...){}
     }
 
+    // Declared before the owners; the barrier below stops Unreal access before
+    // their CRT destructors. Weak-object serial checks also require a live
+    // FUObjectArray and are not safe after the engine has shut down.
+    PS::EngineCleanupLifetime CaptureCleanup;
     struct CaptureLease {
         PS::WeakObjectHandle Handle;bool Owned=false;
         void Hold(UObject* object){
@@ -219,7 +259,7 @@ namespace {
             auto* object=Handle.Get();
             return object&&!object->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed))?object:nullptr;
         }
-        void Release()noexcept{try{if(Owned)if(auto* object=Get();object&&object->IsRootSet())object->ClearRootSet();}catch(...){}Owned=false;Handle.Reset();}
+        void Release()noexcept{try{CaptureCleanup.Run([&]{if(Owned)if(auto* object=Get();object&&object->IsRootSet())object->ClearRootSet();});}catch(...){}Owned=false;Handle.Reset();}
         ~CaptureLease(){Release();}
     };
     struct Capture {
@@ -228,6 +268,16 @@ namespace {
         IconCapture::Schedule Timing;
     };
     std::unique_ptr<Capture> ActiveCapture;
+    PS::WeakObjectHandle RendererWorld;
+    CaptureLease RendererTarget;
+    PS::StopStaticEngineCleanup StopCaptureCleanup{CaptureCleanup};
+    UObject* ReusableTarget(UObject* library,UWorld* world) {
+        if(RendererWorld.Get()!=world)throw std::runtime_error("Item icon renderer world changed during capture");
+        if(auto* target=RendererTarget.Get())return target;
+        auto* target=CreateThumbnailRenderTarget(library,world);
+        RendererWorld.Assign(world);RendererTarget.Hold(target);
+        return target;
+    }
     std::uint64_t CaptureNow(){return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());}
 
     std::vector<unsigned char> ReadColors(ReflectedCall& read) {
@@ -326,7 +376,7 @@ namespace {
         std::ofstream output(std::filesystem::path(temporary),std::ios::binary|std::ios::trunc);
         if(!output)throw std::runtime_error("Cannot create item icon thumbnail cache file");
         const uint32_t width=ThumbnailSize,height=ThumbnailSize,bytes=static_cast<uint32_t>(rgba.size());
-        output.write("RSI2",4);output.write(reinterpret_cast<const char*>(&width),sizeof(width));
+        output.write("RSI3",4);output.write(reinterpret_cast<const char*>(&width),sizeof(width));
         output.write(reinterpret_cast<const char*>(&height),sizeof(height));output.write(reinterpret_cast<const char*>(&bytes),sizeof(bytes));
         output.write(reinterpret_cast<const char*>(rgba.data()),static_cast<std::streamsize>(rgba.size()));output.close();
         if(!output)throw std::runtime_error("Item icon thumbnail write failed");
@@ -337,35 +387,42 @@ namespace {
 
 nlohmann::json Render(UWorld* world,const std::string& iconPath) {
     if(iconPath.empty()||iconPath.size()>1024||iconPath.front()!='/')throw std::runtime_error("Item icon request requires a canonical texture path");
-    const auto cachedFile=OutputFile(iconPath);if(CachedThumbnail(cachedFile)) {Reset();PS::HelpyIconTrace::Event("core-cache-hit",iconPath,"file='"+cachedFile.string()+"'");std::error_code touch;std::filesystem::last_write_time(cachedFile,std::filesystem::file_time_type::clock::now(),touch);MaintainCache(cachedFile.parent_path());return {{"Icon",iconPath},{"File",cachedFile.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",true}};}
+    const auto cachedFile=OutputFile(iconPath);if(CachedThumbnail(cachedFile)) {ActiveCapture.reset();PS::HelpyIconTrace::Event("core-cache-hit",iconPath,"file='"+cachedFile.string()+"'");std::error_code touch;std::filesystem::last_write_time(cachedFile,std::filesystem::file_time_type::clock::now(),touch);MaintainCache(cachedFile.parent_path());return {{"Icon",iconPath},{"File",cachedFile.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",true}};}
     if(!world)throw std::runtime_error("Item icon rendering requires a loaded world");
-    if(ActiveCapture&&(ActiveCapture->Icon!=iconPath||ActiveCapture->World.Get()!=world))Reset();
+    if(RendererWorld.Get()!=world){Reset();RendererWorld.Assign(world);}
+    if(ActiveCapture&&(ActiveCapture->Icon!=iconPath||ActiveCapture->World.Get()!=world))ActiveCapture.reset();
     if(ActiveCapture) {
         auto& capture=*ActiveCapture;const auto now=CaptureNow();
         if(capture.Timing.Expired(now)){Reset();throw std::runtime_error("Item icon texture warm-up timed out");}
         auto* texture=capture.Texture.Get();
         if(!texture){Reset();throw std::runtime_error("Item icon capture texture expired");}
         auto* library=DefaultRenderingLibrary();
-        if(capture.Timing.CanRead(now)) {
+        const auto readCapture=[&]() -> nlohmann::json {
             auto* target=capture.Target.Get();if(!target){Reset();throw std::runtime_error("Item icon capture target expired");}
             ReflectedCall read(library,TEXT("/Script/Engine.KismetRenderingLibrary:ReadRenderTarget"));
             read.ObjectArg(TEXT("WorldContextObject"),world).ObjectArg(TEXT("TextureRenderTarget"),target).JsonArg(TEXT("bNormalize"),false).Invoke();
             if(!read.BoolReturn())throw std::runtime_error("ReadRenderTarget failed for item icon");
             auto pixels=ReadColors(read);std::size_t alpha=0,rgb=0;
             for(std::size_t i=0;i+3<pixels.size();i+=4){alpha+=pixels[i+3]!=0;rgb+=pixels[i]!=0||pixels[i+1]!=0||pixels[i+2]!=0;}
-            if(alpha==0&&rgb==0) {
-                ReleaseRenderTarget(library,target);capture.Target.Release();
+            // An opaque draw can turn an unready texture into a solid black
+            // rectangle (nonzero alpha). Do not persist that as a valid icon.
+            if((alpha==0&&rgb==0)||(capture.Timing.Opaque()&&rgb==0)) {
+                // Keep the world-owned target alive. Recreating/releasing it
+                // per icon reproduced "first icon only" on the native GPU path.
+                // Clear before each draw; a retry must not recycle its RHI resource.
                 if(!capture.Timing.Blank(now)){Reset();throw std::runtime_error("ReadRenderTarget produced a blank item icon after bounded warm-up");}
+                PS::HelpyIconTrace::Event("capture-fallback",iconPath,"mode='retained-rt-opaque' reason='blank-readback'");
                 return {{"Icon",iconPath},{"Status","Pending"}};
             }
             if(alpha==0)for(std::size_t i=0;i+3<pixels.size();i+=4)pixels[i+3]=std::max({pixels[i],pixels[i+1],pixels[i+2]});
             WriteThumbnail(cachedFile,pixels);
             std::error_code ec;const auto bytes=std::filesystem::file_size(cachedFile,ec);MaintainCache(cachedFile.parent_path(),ec?0:bytes);
             const auto result=nlohmann::json{{"Icon",iconPath},{"File",cachedFile.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",false},{"ColdLoad",capture.Cold},{"ResolvedClass",capture.ResolvedClass},{"ResolvedChain",capture.ResolvedChain}};
-            Reset();return result;
-        }
+            ActiveCapture.reset();return result;
+        };
+        if(capture.Timing.CanRead(now))return readCapture();
         if(!capture.Timing.CanDraw(now))return {{"Icon",iconPath},{"Status","Pending"}};
-        auto* renderTarget=CreateThumbnailRenderTarget(library,world);capture.Target.Hold(renderTarget);
+        auto* renderTarget=ReusableTarget(library,world);if(capture.Target.Get()!=renderTarget){capture.Target.Release();capture.Target.Hold(renderTarget);}
         ReflectedCall clear(library,TEXT("/Script/Engine.KismetRenderingLibrary:ClearRenderTarget2D"));
         clear.ObjectArg(TEXT("WorldContextObject"),world).ObjectArg(TEXT("TextureRenderTarget"),renderTarget)
             .JsonArg(TEXT("ClearColor"),{{"R",0.0},{"G",0.0},{"B",0.0},{"A",0.0}}).Invoke();
@@ -378,14 +435,20 @@ nlohmann::json Render(UWorld* world,const std::string& iconPath) {
                 .JsonArg(TEXT("ScreenPosition"),{{"X",0.0},{"Y",0.0}}).JsonArg(TEXT("ScreenSize"),{{"X",ThumbnailSize},{"Y",ThumbnailSize}})
                 .JsonArg(TEXT("CoordinatePosition"),{{"X",0.0},{"Y",0.0}}).JsonArg(TEXT("CoordinateSize"),{{"X",1.0},{"Y",1.0}})
                 .JsonArg(TEXT("RenderColor"),{{"R",1.0},{"G",1.0},{"B",1.0},{"A",1.0}})
-                .JsonArg(TEXT("BlendMode"),"BLEND_Translucent").JsonArg(TEXT("Rotation"),0.0).JsonArg(TEXT("PivotPoint"),{{"X",0.5},{"Y",0.5}}).Invoke();
+                .JsonArg(TEXT("BlendMode"),capture.Timing.Opaque()?"BLEND_Opaque":"BLEND_Translucent").JsonArg(TEXT("Rotation"),0.0).JsonArg(TEXT("PivotPoint"),{{"X",0.5},{"Y",0.5}}).Invoke();
         }catch(...) {
-            try{ReflectedCall end(library,TEXT("/Script/Engine.KismetRenderingLibrary:EndDrawCanvasToRenderTarget"));end.ObjectArg(TEXT("WorldContextObject"),world).CopyArg(TEXT("Context"),begin,TEXT("Context")).Invoke();}catch(...){}
+            try{ReflectedCall end(library,TEXT("/Script/Engine.KismetRenderingLibrary:EndDrawCanvasToRenderTarget"));end.ObjectArg(TEXT("WorldContextObject"),world).TakeDrawContext(begin).Invoke();}catch(...){}
             throw;
         }
         ReflectedCall end(library,TEXT("/Script/Engine.KismetRenderingLibrary:EndDrawCanvasToRenderTarget"));
-        end.ObjectArg(TEXT("WorldContextObject"),world).CopyArg(TEXT("Context"),begin,TEXT("Context")).Invoke();
-        capture.Timing.Submitted(now);return {{"Icon",iconPath},{"Status","Pending"}};
+        end.ObjectArg(TEXT("WorldContextObject"),world).TakeDrawContext(begin).Invoke();
+        capture.Timing.Submitted(now);
+        // Helpy 2.0 completed EndDraw and ReadRenderTarget in the same call.
+        // ReadRenderTarget synchronizes the submitted canvas work. Game Pass
+        // has returned blank captures on the deferred-across-ticks path.
+        // Retain bounded warm-up/retries, but never leave a submitted canvas
+        // dependent on a later foreground game frame before its first read.
+        return readCapture();
     }
     const auto normalized=PS::AssetAliases::Resolve(ActorHelper::NormalizeObjectPath(RC::to_generic_string(iconPath)));
     PS::HelpyIconTrace::Event("resolve-start",iconPath,"normalized='"+RC::to_string(normalized)+"'");
@@ -406,7 +469,8 @@ nlohmann::json Render(UWorld* world,const std::string& iconPath) {
     return {{"Icon",iconPath},{"Status","Pending"}};
 }
 void Reset() noexcept {
-    try{if(ActiveCapture)if(auto* target=ActiveCapture->Target.Get())ReleaseRenderTarget(DefaultRenderingLibrary(),target);}catch(...){}
     ActiveCapture.reset();
+    try{CaptureCleanup.Run([&]{if(auto* target=RendererTarget.Get())ReleaseRenderTarget(DefaultRenderingLibrary(),target);});}catch(...){}
+    RendererTarget.Release();RendererWorld.Reset();
 }
 }

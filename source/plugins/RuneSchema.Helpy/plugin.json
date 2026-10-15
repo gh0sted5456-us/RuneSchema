@@ -4,7 +4,7 @@
   "Version": "0.7.8.0-alpha",
   "BuiltForRuneSchema": "0.7.8.0-alpha",
   "EntryPoint": "RuneSchema.Helpy.dll",
-  "ConsoleMessage": "Standalone HELPY is ready. F2 opens HELPY; F7 controls the optional legacy Canvas view.",
+  "ConsoleMessage": "Desktop HELPY is ready. F2 opens/closes its separate window; F5 reloads its skin.",
   "Capabilities": [
     "helpy.navigation",
     "helpy.item-lab",

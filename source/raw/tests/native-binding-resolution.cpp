@@ -53,8 +53,8 @@ int main(int argc, char** argv)
         "core readiness is visible with standard logging");
     Check(loader.find("Unable to initialize RuneSchema core, signature for UDataTable::Serialize") == std::string::npos,
         "obsolete fatal diagnostic removed");
-    Check(loadOrder.find("create_directories(path.parent_path()") != std::string::npos,
-        "missing mods directory is created before load-order write");
+    Check(loadOrder.find("ModOrderState::WriteExpected(path,baseline,contents)") != std::string::npos,
+        "load-order writes use the snapshot-checked atomic configuration writer");
     Check(host.find("runeschema.bindings") != std::string::npos, "binding discovery service registered");
     Check(host.find("binding.resolve") != std::string::npos, "binding capability registered");
     Check(host.find("ResolveBinding") != std::string::npos, "host binding resolver exported");

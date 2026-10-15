@@ -3,6 +3,7 @@
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
+#include "SDK/Helper/ReflectedContract.h"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
 #include "Unreal/Property/FEnumProperty.hpp"
 #include "SDK/Structs/Custom/FScriptArrayHelper.h"
@@ -134,8 +135,8 @@ public:
         auto* integers=type?CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(type,TEXT("QuestInts"))):nullptr;
         auto* integerType=integers?CastField<FStructProperty>(integers->GetInner()):nullptr;
         if(!array||array->GetArrayDim()!=1||!inner||!type||type->GetPathName()!=TEXT("/Script/Dominion.QuestProgress")
-            ||!data||data->GetOffset_Internal()!=0||data->GetElementSize()!=sizeof(UObject*)
-            ||!integers||integers->GetOffset_Internal()!=24||integers->GetElementSize()!=sizeof(FScriptArray)
+            ||!ReflectedContract::Fits(data,inner->GetElementSize())||data->GetElementSize()!=sizeof(UObject*)
+            ||!ReflectedContract::Fits(integers,inner->GetElementSize())||integers->GetElementSize()!=sizeof(FScriptArray)
             ||!integerType||!integerType->GetStruct()||integerType->GetStruct()->GetPathName()!=TEXT("/Script/Dominion.QuestInt"))
             throw std::runtime_error("Changed quest reset layout changed");
         auto* raw=array->ContainerPtrToValuePtr<FScriptArray>(component);
@@ -187,7 +188,8 @@ public:
         // component; on a listen host it never reaches the host's client HUD,
         // and on a dedicated server it never reaches the owning connection.
         auto* fn=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,TEXT("/Script/Dominion.QuestProgressComponent:Client_OnQuestsUpdated"),false);
-        if(!array || !inner || !fn || fn->GetParmsSize()!=17)throw std::runtime_error("Quest control notification unavailable");
+        ReflectedContract::Frame(fn);
+        if(!array || !inner)throw std::runtime_error("Quest control notification unavailable");
         size_t count=0;FArrayProperty* updated=nullptr;FBoolProperty* loaded=nullptr;
         for(auto* p:TFieldRange<FProperty>(fn,EFieldIterationFlags::Default))if(p->HasAnyPropertyFlags(CPF_Parm)) {
             ++count;if(p->GetFName()==FName(TEXT("UpdatedQuests"),FNAME_Add))updated=CastField<FArrayProperty>(p);
@@ -195,8 +197,8 @@ public:
         }
         auto* item=updated?CastField<FStructProperty>(updated->GetInner()):nullptr;
         if(count!=2 || !fn->HasAnyFunctionFlags(FUNC_Net) || !fn->HasAnyFunctionFlags(FUNC_NetClient)
-            || !updated || updated->GetOffset_Internal()!=0 || updated->GetElementSize()!=16 || !item || item->GetStruct()!=inner->GetStruct()
-            || !loaded || loaded->GetOffset_Internal()!=16 || loaded->GetElementSize()!=1 || !loaded->IsNativeBool())throw std::runtime_error("Quest control notification layout changed");
+            || !ReflectedContract::Input(updated,fn) || updated->GetElementSize()!=sizeof(FScriptArray) || !item || item->GetStruct()!=inner->GetStruct()
+            || !ReflectedContract::Input(loaded,fn) || loaded->GetElementSize()!=1 || !loaded->IsNativeBool())throw std::runtime_error("Quest control notification layout changed");
         auto* values=array->ContainerPtrToValuePtr<FScriptArray>(component);
         if(values->Num()<1 || values->Num()>4096)throw std::runtime_error("Quest control registry count invalid");
         if(invoke)ActorHelper::FunctionCall(component,fn)

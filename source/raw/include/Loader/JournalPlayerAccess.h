@@ -2,6 +2,7 @@
 #include "SDK/Helper/ActorHelper.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
+#include "SDK/Helper/ReflectedContract.h"
 
 namespace DragonWilds::JournalPlayerAccess {
 using namespace RC::Unreal;
@@ -11,19 +12,18 @@ inline UFunction* Function(const TCHAR* path,bool unlock,UObject* entry) {
     auto* result=fn?CastField<FBoolProperty>(fn->GetReturnProperty()):nullptr;
     size_t count=0;
     if(fn)for(auto* p:TFieldRange<FProperty>(fn,EFieldIterationFlags::Default))if(p->HasAnyPropertyFlags(CPF_Parm))++count;
-    if(!fn || fn->GetParmsSize()!=(unlock?10:9) || count!=(unlock?3:2)
+    ReflectedContract::Frame(fn);
+    if(count!=(unlock?3:2)
         || !input || input->GetArrayDim()!=1 || input->GetElementSize()!=sizeof(UObject*)
-        || input->GetOffset_Internal()!=0 || !input->HasAnyPropertyFlags(CPF_Parm)
-        || input->HasAnyPropertyFlags(CPF_OutParm|CPF_ReturnParm)
+        || !ReflectedContract::Input(input,fn)
         || !entry || !input->GetPropertyClass().Get() || !entry->IsA(input->GetPropertyClass().Get())
         || !result || !result->IsNativeBool() || result->GetByteOffset()!=0
-        || result->GetArrayDim()!=1 || result->GetElementSize()!=1 || result->GetOffset_Internal()!=(unlock?9:8))
+        || result->GetArrayDim()!=1 || result->GetElementSize()!=1 || !ReflectedContract::Output(result,fn))
         throw std::runtime_error("Journal player-access signature changed");
     if(unlock) {
         auto* unread=CastField<FBoolProperty>(fn->FindProperty(FName(TEXT("bInMarkUnread"),FNAME_Find)));
         if(!unread || !unread->IsNativeBool() || unread->GetByteOffset()!=0
-            || unread->GetArrayDim()!=1 || unread->GetElementSize()!=1 || unread->GetOffset_Internal()!=8
-            || !unread->HasAnyPropertyFlags(CPF_Parm) || unread->HasAnyPropertyFlags(CPF_OutParm|CPF_ReturnParm))
+            || unread->GetArrayDim()!=1 || unread->GetElementSize()!=1 || !ReflectedContract::Input(unread,fn))
             throw std::runtime_error("Journal unread-input signature changed");
     }
     return fn;

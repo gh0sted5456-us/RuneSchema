@@ -171,7 +171,7 @@ void DragonWildsNpcLoader::ApplyHumanVisuals(AActor* actor, VendorDefinition& de
             auto* expected=heldSlot?heldClass:wearableClass;
             if(!item || !expected || !item->IsA(expected))throw std::runtime_error("Human equipment has the wrong item type: "+slot);
             const auto nativeSlot=HumanEnum(item,TEXT("Slot"));
-            if(!heldSlot && nativeSlot!=slot)throw std::runtime_error("Human equipment slot mismatch: "+slot+" versus "+nativeSlot);
+            if(!heldSlot && !HumanNpc::MatchesWearableSlot(slot,nativeSlot))throw std::runtime_error("Human equipment slot mismatch: "+slot+" versus "+nativeSlot);
             if(slot=="MainHand" && !HumanNpc::IsMainHandSlot(nativeSlot))
                 throw std::runtime_error("Human MainHand requires HeldOnlyRight or HeldTwoHanded equipment");
             if(slot=="OffHand" && !HumanNpc::IsOffHandSlot(nativeSlot))

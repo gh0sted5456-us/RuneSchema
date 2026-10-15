@@ -28,7 +28,9 @@ int main(int argc, char** argv) {
     require(source.find("UObject* entry = found->second.Get();") != std::string::npos);
     require(source.find("m_entries.emplace(def.Key, FWeakObjectPtr(entry))") == std::string::npos);
     require(source.find("m_entries.emplace(def.Key, EntryHandle(entry))") != std::string::npos);
-    require(source.find("Serial!=0 && Serial!=current") != std::string::npos);
+    require(source.find("PS::RegistryObjectIdentity::Matches") != std::string::npos);
+    require(source.find("EntryHandle(acquisitionItem,false)") != std::string::npos);
+    require(source.find("const auto weak=PS::WeakObject(object)") != std::string::npos);
     require(source.find("slot->IsRootSet()") != std::string::npos);
     require(source.find("requested entries unavailable") != std::string::npos);
     require(source.find("JournalPlayerAccess::EnsureUnlocked(journalComponent,entry)") != std::string::npos);

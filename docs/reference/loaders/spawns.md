@@ -27,6 +27,14 @@ both. `AdditionalDrops` supports an item, minimum, maximum, and chance. A
 quest-completed condition can latch with `PersistAfterCondition`. `EventOnly`
 templates are definitions for `/events` and do not place permanent actors.
 
+Grounded placements wait for streamed blocking collision. NPCs, spawns,
+event members and authoring previews share the same simple-collision query
+with a complex-collision fallback. Streamed cell height bounds can widen the
+search for installed NPCs and spawns. A missing surface never permits a guessed
+placement height; installed entries retry within a bounded window and can
+retry again when their cell streams in. Event waves resolve every member's
+ground position before constructing any actors.
+
 ## Temporary ore and tree nodes
 
 Use an ordinary `Actor` resource entry with **one** lifecycle condition:

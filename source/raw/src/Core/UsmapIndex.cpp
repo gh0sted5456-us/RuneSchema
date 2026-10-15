@@ -23,6 +23,7 @@ constexpr size_t MaximumFileBytes = 128ull * 1024 * 1024;
 constexpr size_t MaximumPayloadBytes = 192ull * 1024 * 1024;
 constexpr size_t MaximumCacheBytes = 2ull * 1024 * 1024;
 constexpr size_t MaximumCachedTypes = 128;
+constexpr int CacheSchemaVersion = 2;
 constexpr auto ParseBudget = std::chrono::milliseconds(2500);
 
 class Reader {
@@ -185,7 +186,7 @@ void Index::LoadCache()
     try {
         if (!fs::is_regular_file(path) || fs::file_size(path) > MaximumCacheBytes) return;
         const auto value = json::parse(ConfigFiles::Read(path, MaximumCacheBytes));
-        if (value.value("SchemaVersion", 0) != 1 || value.value("Fingerprint", std::string{}) != m_fingerprint
+        if (value.value("SchemaVersion", 0) != CacheSchemaVersion || value.value("Fingerprint", std::string{}) != m_fingerprint
             || !value.contains("Types") || !value["Types"].is_object()
             || value["Types"].size() > MaximumCachedTypes) return;
         m_cachedTypes = value["Types"];
@@ -197,7 +198,7 @@ void Index::LoadCache()
 void Index::SaveCache()
 {
     if (m_fingerprint.empty() || m_cacheDirectory.empty() || m_cachedTypes.size() > MaximumCachedTypes) return;
-    const json value{{"SchemaVersion", 1}, {"Fingerprint", m_fingerprint}, {"Types", m_cachedTypes}};
+    const json value{{"SchemaVersion", CacheSchemaVersion}, {"Fingerprint", m_fingerprint}, {"Types", m_cachedTypes}};
     const auto text = value.dump();
     if (text.size() > MaximumCacheBytes) return;
     ConfigFiles::Write(m_cacheDirectory / ("usmap-" + m_fingerprint + ".json"), text);
@@ -304,8 +305,15 @@ void Index::Parse()
 
         m_lookup.clear();
         for (size_t index = 0; index < m_types.size(); ++index) {
-            m_lookup[Normalize(m_types[index].Name)].push_back(index);
-            if (!m_types[index].Path.empty()) m_lookup[Normalize(m_types[index].Path)].push_back(index);
+            auto& type=m_types[index];
+            // UE4SS's PPTH extension supplies native modules or Blueprint
+            // package paths, not complete object paths. Preserve qualified paths.
+            if(type.Path.starts_with('/') && type.Path.find('.')==std::string::npos
+                && !type.Name.empty() && type.Name.find_first_of("/.")==std::string::npos)
+                type.Path+='.'+type.Name;
+            const auto nameKey=Normalize(type.Name),pathKey=Normalize(type.Path);
+            m_lookup[nameKey].push_back(index);
+            if(!pathKey.empty() && pathKey!=nameKey)m_lookup[pathKey].push_back(index);
         }
         m_parsed = true;
         m_parseMilliseconds = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(

@@ -16,7 +16,7 @@ int main(int argc,char** argv) {
     const auto panel=Read(argv[1]);const auto picker=Read(argv[2]);
     Require(panel.find("ItemGridPicker::Render(\"inventory\"")!=std::string::npos,"Items tab no longer uses shared grid");
     Require(picker.find("ImGuiListClipper")!=std::string::npos,"visible-window clipping missing");
-    Require(picker.find("const int columns=std::max(1")!=std::string::npos,"responsive grid columns missing");
+    Require(picker.find("const int columns=ItemBayLayout::Columns(avail,minCardWidth,spacing,theme.itemGridColumns)")!=std::string::npos,"responsive preferred grid columns missing");
     Require(picker.find("LazyCatalog::More(0)")!=std::string::npos,"bounded incremental navigation missing");
     Require(picker.find("LazyCatalog::Search(0,BackendQuery(state))")!=std::string::npos,"search does not request a new window");
     Require(picker.find("InternalName")!=std::string::npos && picker.find("PersistenceID")!=std::string::npos,

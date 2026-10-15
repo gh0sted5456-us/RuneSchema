@@ -17,7 +17,7 @@ using json=nlohmann::json;
 struct CachedWindow {json Rows=json::array();std::string NextCursor;bool HasMore=true;uint64_t Generation=0;};
 struct State {
     json Rows=json::array();
-    std::string Query,NextCursor,LastError;
+    std::string Query,NextCursor,LastError,Coverage;
     bool HasMore=true,Pending=false,Started=false;
     uint64_t AppliedRevision=0,CancelGeneration=1,ActiveRequestId=0,RuntimeGeneration=0;
     int FillTarget=0;
@@ -123,6 +123,7 @@ inline void ApplyWindow(const json& window,uint64_t revision) {
         state.Rows.push_back(row);
     }
     state.NextCursor=window.value("NextCursor",std::string{});state.HasMore=window.value("HasMore",false);state.Pending=false;state.ActiveRequestId=0;state.LastError=window.value("Error",std::string{});
+    state.Coverage=window.value("Coverage",std::string{});
     SaveCache(category);
     if(state.Started&&state.HasMore&&static_cast<int>(state.Rows.size())<state.FillTarget)More(category);
 }

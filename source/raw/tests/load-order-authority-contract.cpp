@@ -70,7 +70,10 @@ int main(int argc, char** argv) {
     const auto pluginHost = Read(argv[4]);
 
     Require(modOrder, "Explicit runeschema.txt order is authoritative");
-    Require(modOrder, "resolved.insert(resolved.end(), entries.begin(), entries.end())");
+    Require(modOrder, "ModOrderState::Reconcile(ToEntries(entries),names)");
+    Require(modOrder, "ModOrderState::WriteExpected(path,baseline,contents)");
+    Require(modOrder, "&snapshot");
+    Require(modOrder, "refusing stale enablement decisions");
     Require(modOrder, "Unlisted ordinary/numeric mods are appended in discovery order");
     Require(modOrder, "A disabled row wins");
     Require(modOrder, "Zero wins across duplicate rows");

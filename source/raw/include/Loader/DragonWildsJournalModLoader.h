@@ -63,7 +63,8 @@ namespace DragonWilds {
             int32_t Index=-1;
             mutable int32_t Serial=0;
             RC::StringType Path;
-            explicit EntryHandle(RC::Unreal::UObject* object);
+            bool RequireRoot=true;
+            explicit EntryHandle(RC::Unreal::UObject* object,bool requireRoot=true);
             RC::Unreal::UObject* Get() const;
         };
         std::unordered_map<RC::StringType, EntryHandle> m_entries;
@@ -71,7 +72,6 @@ namespace DragonWilds {
         std::unordered_set<RC::StringType> m_unlock;
         std::unordered_set<RC::Unreal::UObject*> m_createdEntries;
         std::unordered_map<std::string,std::string> m_ownedIds;
-        std::set<std::string> m_saveTransientIds;
         RC::Unreal::UClass* m_baseEntryClass = nullptr;
         RC::Unreal::UClass* m_noBiomeSubCategoryClass = nullptr;
         RC::Unreal::UClass* m_journalComponentClass = nullptr;

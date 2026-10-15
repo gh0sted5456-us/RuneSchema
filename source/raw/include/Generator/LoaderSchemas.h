@@ -310,6 +310,8 @@ inline nlohmann::json LoaderSchemas() {
         {"Legs","WearableEquipmentData whose native Slot is Legs."},
         {"Cape","WearableEquipmentData whose native Slot is Cape."},
         {"Trinket","WearableEquipmentData whose native Slot is Trinket."},
+        {"Necklace","WearableEquipmentData whose native Slot is Necklace (1.0.1)."},
+        {"Trinket2","Alias for Necklace. Must reference a native Necklace item; cannot accompany Necklace."},
         {"MainHand","HeldEquipmentData with native Slot HeldOnlyRight or HeldTwoHanded."},
         {"OffHand","HeldEquipmentData with native Slot HeldOnlyLeft. Cannot accompany a two-handed MainHand."}};
     const json equipmentReference={{"oneOf",{
@@ -319,6 +321,7 @@ inline nlohmann::json LoaderSchemas() {
         equipment["properties"][key]=equipmentReference;
         equipment["properties"][key]["description"]=equipmentDescriptions.at(key);
     }
+    equipment["not"]={{"required",{"Necklace","Trinket2"}}};
     npc["properties"]["Equipment"]=equipment;
     npc["properties"]["HideWeapon"]={{"type","boolean"},{"default",false},{"description","Human only. Keeps MainHand and OffHand equipment data for pose selection but hides the rendered held weapon visuals."}};
     json poseNames=json::array(),heldPoseNames=json::array();
@@ -496,6 +499,8 @@ inline nlohmann::json LoaderSchemas() {
     auto collectObjective=result["quests"]["anyOf"][0]["properties"]["Objective"];
     collectObjective["properties"]["Type"]={{"const","Collect"}};
     for(auto* objective:{&collectObjective,&killObjective}) {
+        for(const auto* key:{"SubobjectiveDescription","Hint","QuestDescriptionOverride"})
+            (*objective)["properties"][key]={{"type","string"},{"minLength",1},{"maxLength",std::string_view(key)=="QuestDescriptionOverride"?2048:1024}};
         (*objective)["properties"]["Hidden"]={{"type","boolean"},{"default",false}};
         (*objective)["properties"]["Optional"]={{"type","boolean"},{"default",false}};
         (*objective)["properties"]["ProgressText"]={{"type","string"},{"minLength",1},{"maxLength",1024},{"description","Live objective template. Supports {current}, {required}, {remaining}, and repeat-safe {run}; for example: Run {run}: kill {remaining} more goblins."}};
@@ -525,6 +530,9 @@ inline nlohmann::json LoaderSchemas() {
                 {"properties",{{"Id",{{"type","string"},{"pattern","^[A-Za-z0-9_-]{1,64}$"}}},
                     {"Objectives",{{"type","array"},{"minItems",1},{"maxItems",16},{"items",objectives}}}}}}}};
         (*questSchema)["properties"]["Category"]={{"enum",{"Regular","Story","Task"}},{"default","Regular"},{"description","Task uses the game's green task-quest presentation."}};
+        (*questSchema)["properties"]["CompletedDescription"]={{"type","string"},{"minLength",1},{"maxLength",2048},{"description","Native completed quest description; omitted values inherit Description."}};
+        (*questSchema)["properties"]["HideInQuestList"]={{"type","boolean"},{"default",false}};
+        (*questSchema)["properties"]["ShowInCompletedQuestList"]={{"type","boolean"},{"default",true},{"description","Expose the quest in the native completed list after native completion. Does not complete it or grant rewards."}};
         (*questSchema)["properties"]["TimeOfDay"]={{"enum",{"Any","Day","Night"}},{"default","Any"},{"description","Acceptance gate evaluated from the game's native time state. Active quest progress remains intact across later day/night transitions."}};
         (*questSchema)["properties"]["Prerequisites"]={{"type","array"},{"maxItems",32},{"uniqueItems",true},{"items",text}};
         (*questSchema)["properties"]["Repeatable"]={{"type","boolean"},{"default",false}};

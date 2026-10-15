@@ -794,6 +794,7 @@ namespace DragonWilds {
         }
         PS::JsonHelpers::ParseVector(locationInput, "Location", spawn.Location);
         spawn.AuthoredLocation = spawn.Location;
+        spawn.GroundSearch=PS::Grounding::SearchRange::Around(spawn.AuthoredLocation.Z(),spawn.GroundTraceAbove,spawn.GroundTraceBelow);
         // Keep the authored identity stable while giving every /spawns actor
         // a small landscape clearance at its final placement.
         spawn.Location=FVector(spawn.Location.X(),spawn.Location.Y(),spawn.Location.Z()+10.0);
@@ -2574,6 +2575,7 @@ namespace DragonWilds {
                 PumpSpawnTools();
                 PumpItemIcons();
                 ReconcileManagedActorScales(deltaSeconds);
+                ReconcileGroundingRetries(deltaSeconds);
                 ReconcileTimedBuildingProps(deltaSeconds);
                 RetryPendingAINames(deltaSeconds);
                 PumpClientSpawnVisuals(deltaSeconds);
@@ -2842,8 +2844,11 @@ namespace DragonWilds {
                         spawn.LiveActor = {};
                         spawn.Location = FVector(spawn.AuthoredLocation.X(),spawn.AuthoredLocation.Y(),spawn.AuthoredLocation.Z()+10.0);
                         spawn.bGroundingResolved = !spawn.bGroundToSurface;
+                        spawn.GroundRetry = {};
+                        spawn.GroundSearch=PS::Grounding::SearchRange::Around(spawn.AuthoredLocation.Z(),spawn.GroundTraceAbove,spawn.GroundTraceBelow);
                     }
                     m_readyWorld = world;
+                    m_groundingRetryElapsed=0;
                     if(authoritative)ApplyPlayerRules();
                     else PS::Log<LogLevel::Verbose>(STR("Client player presentation world ready ({}).\n"),trigger);
 
@@ -2886,15 +2891,17 @@ namespace DragonWilds {
         return std::nullopt;
     }
 
-    void DragonWildsSpawnLoader::ProcessSpawns(UWorld* world, const std::vector<UECustom::FBox>* bounds)
+    void DragonWildsSpawnLoader::ProcessSpawns(UWorld* world, const std::vector<UECustom::FBox>* bounds,bool groundRetriesOnly)
     {
         if (!world)
         {
             return;
         }
 
+        unsigned groundBudget=4;
         for (auto& spawn : m_spawns)
         {
+            if(groundRetriesOnly&&(!spawn.GroundRetry.Pending||!spawn.bCellActivated))continue;
             if (spawn.bExistsInWorld || spawn.bSpawnFailed)
             {
                 continue;
@@ -2912,13 +2919,19 @@ namespace DragonWilds {
                     continue;
                 }
                 spawn.bCellActivated = true;
+                for(const auto& box:*bounds)if(box.bIsValid
+                    &&spawn.Location.X()>box.Min.X()&&spawn.Location.X()<box.Max.X()
+                    &&spawn.Location.Y()>box.Min.Y()&&spawn.Location.Y()<box.Max.Y())
+                    spawn.GroundSearch.ObserveCell(box.Min.Z(),box.Max.Z());
+                spawn.GroundRetry.CellShown();
             }
-            else if (spawn.Type != ESpawnEntryType::AISpawnPoint)
+            else if (spawn.Type != ESpawnEntryType::AISpawnPoint && !groundRetriesOnly)
             {
                 continue;
             }
             else spawn.bCellActivated = true;
 
+            if(!spawn.GroundRetry.Ready())continue;
             try
             {
                 if(spawn.bTemporaryResource && TemporaryResourceCondition(spawn,world)!=true)continue;
@@ -2940,6 +2953,7 @@ namespace DragonWilds {
                     spawn.bTimeAllowed=allowed;
                     if(!allowed)continue;
                 }
+                if(groundRetriesOnly){if(!groundBudget)return;--groundBudget;}
                 ResolveGroundedLocation(world, spawn);
                 switch (spawn.Type)
                 {
@@ -2956,6 +2970,12 @@ namespace DragonWilds {
                     ProcessRemoveActorEntry(world, spawn);
                     break;
                 }
+            }
+            catch (const PS::Grounding::SurfacePending&)
+            {
+                if(spawn.GroundRetry.Missed())PS::Log<LogLevel::Warning>(
+                    STR("Placement '{}' from '{}' is waiting for a ground surface at ({}, {}); streaming retries are scheduled. Nothing was placed.\n"),
+                    spawn.EntryId,spawn.ModName,spawn.AuthoredLocation.X(),spawn.AuthoredLocation.Y());
             }
             catch (const std::exception& e)
             {
@@ -3189,10 +3209,10 @@ namespace DragonWilds {
 
         const FVector start(
             spawn.AuthoredLocation.X(), spawn.AuthoredLocation.Y(),
-            spawn.AuthoredLocation.Z() + spawn.GroundTraceAbove);
+            spawn.GroundSearch.Top);
         const FVector end(
             spawn.AuthoredLocation.X(), spawn.AuthoredLocation.Y(),
-            spawn.AuthoredLocation.Z() - spawn.GroundTraceBelow);
+            spawn.GroundSearch.Bottom);
         FVector impact{};
         std::string traceError;
         std::vector<AActor*> ignoredActors;
@@ -3203,19 +3223,18 @@ namespace DragonWilds {
                 == ignoredActors.end())
             ignoredActors.push_back(legacy);
 
-        if (!UECustom::UKismetSystemLibrary::LineTraceGround(
+        if (!UECustom::UKismetSystemLibrary::FindGroundSurface(
                 world, start, end, ignoredActors, impact, traceError))
         {
-            throw std::runtime_error(
-                traceError.empty()
-                    ? "Location.Z $ found no blocking ground surface"
-                    : "Location.Z $ ground trace failed: " + traceError);
+            if(traceError.empty())throw PS::Grounding::SurfacePending();
+            throw std::runtime_error("Location.Z $ ground trace failed: " + traceError);
         }
 
         spawn.Location = FVector(
             spawn.AuthoredLocation.X(), spawn.AuthoredLocation.Y(),
             impact.Z() + spawn.GroundZOffset + 10.0);
         spawn.bGroundingResolved = true;
+        spawn.GroundRetry.Resolved();
         PS::Log<LogLevel::Verbose>(
             STR("Resolved Location.Z '$' for {} from trace origin Z {} to ground Z {} (offset {}).\n"),
             spawn.ModName, spawn.AuthoredLocation.Z(), spawn.Location.Z(),
@@ -3654,6 +3673,20 @@ namespace DragonWilds {
             actor->GetClassPrivate()->GetName(), spawn.Location.X(), spawn.Location.Y(), spawn.Location.Z());
     }
 
+    void DragonWildsSpawnLoader::ReconcileGroundingRetries(float deltaSeconds)
+    {
+        if(!std::isfinite(deltaSeconds)||deltaSeconds<=0)return;
+        m_groundingRetryElapsed+=std::min(1.0,static_cast<double>(deltaSeconds));
+        if(m_groundingRetryElapsed<1.0)return;
+        m_groundingRetryElapsed=0;
+        if(!m_readyWorld||!GetGameMode(m_readyWorld))return;
+        bool ready=false;
+        for(auto& spawn:m_spawns)if(spawn.GroundRetry.Pending&&spawn.bCellActivated&&!spawn.bExistsInWorld&&!spawn.bSpawnFailed){
+            spawn.GroundRetry.Advance(1.0);ready|=spawn.GroundRetry.Ready();
+        }
+        if(ready)ProcessSpawns(m_readyWorld,nullptr,true);
+    }
+
     void DragonWildsSpawnLoader::ReconcileTimedBuildingProps(float deltaSeconds)
     {
         if(!m_readyWorld || !GetGameMode(m_readyWorld))return;
@@ -3746,6 +3779,7 @@ namespace DragonWilds {
                 spawn.bDeconstructed=true;
             }
             if(spawn.bDeconstructed)continue;
+            if(!spawn.GroundRetry.Ready())continue;
             const bool priorFailure=spawn.bSpawnFailed;
             const bool wasGrounded=spawn.bGroundingResolved;
             spawn.bExistsInWorld=false;spawn.bSpawnFailed=false;
@@ -3758,6 +3792,10 @@ namespace DragonWilds {
                 activationStage=TEXT("creation");
                 if(spawn.Type==ESpawnEntryType::AISpawnPoint)ProcessAISpawnPointEntry(m_readyWorld,spawn);
                 else ProcessActorEntry(m_readyWorld,spawn);
+            }
+            catch(const PS::Grounding::SurfacePending&) {
+                if(spawn.GroundRetry.Missed())PS::Log<LogLevel::Warning>(
+                    STR("Placement '{}' from '{}' is waiting for a ground surface; streaming retries are scheduled. Nothing was placed.\n"),spawn.EntryId,spawn.ModName);
             }
             catch(const std::exception& error) {
                 spawn.bSpawnFailed=true;

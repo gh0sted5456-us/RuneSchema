@@ -6,6 +6,8 @@
 #include <Unreal/AActor.hpp>
 #include "Utility/Logging.h"
 #include "SDK/Helper/PropertyHelper.h"
+#include "SDK/Helper/ReflectedContract.h"
+#include "Core/GroundSurface.h"
 
 #include <cstring>
 #include <new>
@@ -31,6 +33,7 @@ namespace UECustom {
             const CharType* name, int64 value)
         {
             auto* property = function->FindProperty(FName(name, FNAME_Find));
+            if(!DragonWilds::ReflectedContract::Fits(property,static_cast<int>(parameters.size())))throw std::runtime_error("line-trace numeric parameter extent changed");
             auto* address = property
                 ? property->ContainerPtrToValuePtr<void>(parameters.data()) : nullptr;
             if (auto* enumProperty = CastField<FEnumProperty>(property))
@@ -57,7 +60,7 @@ namespace UECustom {
         {
             auto* property = CastField<FBoolProperty>(
                 function->FindProperty(FName(name, FNAME_Find)));
-            if (!property)
+            if (!DragonWilds::ReflectedContract::Fits(property,static_cast<int>(parameters.size())))
                 throw std::runtime_error("line-trace boolean parameter was unavailable");
             property->SetPropertyValue(
                 property->ContainerPtrToValuePtr<void>(parameters.data()), value);
@@ -74,9 +77,12 @@ namespace UECustom {
             return nullptr;
         }
 
-        auto* assetProperty = Function->FindProperty(FName(TEXT("Asset"), FNAME_Find));
-        auto* returnProperty = Function->GetReturnProperty();
-        if (!assetProperty || !returnProperty)
+        DragonWilds::ReflectedContract::Frame(Function);
+        auto* assetProperty = CastField<FSoftObjectProperty>(Function->FindProperty(FName(TEXT("Asset"), FNAME_Find)));
+        auto* returnProperty = CastField<FObjectPropertyBase>(Function->GetReturnProperty());
+        if (!DragonWilds::ReflectedContract::Input(assetProperty,Function) || assetProperty->GetSize()!=sizeof(Asset)
+            || !DragonWilds::ReflectedContract::Output(returnProperty,Function) || returnProperty->GetSize()!=sizeof(UObject*)
+            || DragonWilds::ReflectedContract::Count(Function)!=2)
         {
             PS::Log<LogLevel::Error>(STR("LoadAsset_Blocking parameter metadata was invalid.\n"));
             return nullptr;
@@ -93,9 +99,14 @@ namespace UECustom {
             return nullptr;
         }
 
-        new (params.data() + assetOffset) UECustom::TSoftObjectPtr<UObject>(Asset);
-        GetDefaultObj()->ProcessEvent(Function, params.data());
-        return *reinterpret_cast<UObject**>(params.data() + returnOffset);
+        assetProperty->InitializeValue_InContainer(params.data());
+        try {
+            assetProperty->CopyCompleteValue(assetProperty->ContainerPtrToValuePtr<void>(params.data()),&Asset);
+            GetDefaultObj()->ProcessEvent(Function, params.data());
+            auto* result=returnProperty->GetObjectPropertyValue(returnProperty->ContainerPtrToValuePtr<void>(params.data()));
+            assetProperty->DestroyValue_InContainer(params.data());
+            return result;
+        }catch(...) {assetProperty->DestroyValue_InContainer(params.data());throw;}
     }
 
     RC::Unreal::UClass* UKismetSystemLibrary::LoadClassAsset_Blocking(UECustom::TSoftClassPtr<UObject> AssetClass)
@@ -136,7 +147,7 @@ namespace UECustom {
     bool UKismetSystemLibrary::LineTraceGround(
         UObject* WorldContext, const FVector& Start, const FVector& End,
         const std::vector<AActor*>& ActorsToIgnore,
-        FVector& ImpactPoint, std::string& Error, UObject** HitComponent)
+        FVector& ImpactPoint, std::string& Error, UObject** HitComponent,bool TraceComplex)
     {
         if (HitComponent) *HitComponent = nullptr;
         try
@@ -145,6 +156,7 @@ namespace UECustom {
             static auto* function = UECustom::UObjectGlobals::StaticFindObject<UFunction*>(
                 nullptr, nullptr, TEXT("/Script/Engine.KismetSystemLibrary:LineTraceSingle"));
             if (!function) throw std::runtime_error("LineTraceSingle was unavailable");
+            DragonWilds::ReflectedContract::Frame(function);
 
             std::vector<uint8> parameters(function->GetParmsSize(), 0);
             auto* worldProperty = function->FindProperty(
@@ -158,7 +170,9 @@ namespace UECustom {
             auto* ignoredProperty = CastField<FArrayProperty>(function->FindProperty(
                 FName(TEXT("ActorsToIgnore"), FNAME_Find)));
             auto* returnProperty = CastField<FBoolProperty>(function->GetReturnProperty());
-            if (!IsValidParameter(worldProperty, parameters.size(), sizeof(UObject*))
+            if (!CastField<FObjectProperty>(worldProperty)||worldProperty->GetArrayDim()!=1||worldProperty->GetElementSize()!=sizeof(UObject*)
+                ||!startProperty||startProperty->GetElementSize()!=sizeof(FVector)||!endProperty||endProperty->GetElementSize()!=sizeof(FVector)
+                ||!IsValidParameter(worldProperty, parameters.size(), sizeof(UObject*))
                 || !IsValidParameter(startProperty, parameters.size(), sizeof(FVector))
                 || !IsValidParameter(endProperty, parameters.size(), sizeof(FVector))
                 || !outHitProperty || !outHitProperty->GetStruct()
@@ -180,7 +194,7 @@ namespace UECustom {
                 &End, sizeof(End));
             SetNumericParameter(function, parameters, TEXT("TraceChannel"), 0);
             SetNumericParameter(function, parameters, TEXT("DrawDebugType"), 0);
-            SetBooleanParameter(function, parameters, TEXT("bTraceComplex"), false);
+            SetBooleanParameter(function, parameters, TEXT("bTraceComplex"), TraceComplex);
             SetBooleanParameter(function, parameters, TEXT("bIgnoreSelf"), false);
 
             auto* ignored = new (
@@ -237,6 +251,29 @@ namespace UECustom {
             Error = exception.what();
             return false;
         }
+    }
+
+    bool UKismetSystemLibrary::FindGroundSurface(UObject* world,const FVector& start,
+        const FVector& end,const std::vector<AActor*>& ignored,FVector& impact,std::string& error)
+    {
+        error.clear();
+        const PS::Grounding::SearchRange range{start.Z(),end.Z()};
+        if(!range.Valid()||!std::isfinite(start.X())||!std::isfinite(start.Y())
+            ||start.X()!=end.X()||start.Y()!=end.Y()){
+            error="Ground placement requires a finite downward vertical query";return false;
+        }
+        bool contractFailure=false;
+        const bool hit=PS::Grounding::QuerySurface([&](bool complex){
+            if(contractFailure)return false;
+            if(LineTraceGround(world,start,end,ignored,impact,error,nullptr,complex))return true;
+            contractFailure=!error.empty();return false;
+        });
+        if(!hit)return false;
+        if(!range.Contains(impact.Z())||!std::isfinite(impact.X())||!std::isfinite(impact.Y())
+            ||std::abs(impact.X()-start.X())>1||std::abs(impact.Y()-start.Y())>1){
+            error="Ground hit lies outside the requested vertical segment";return false;
+        }
+        return true;
     }
 
 	UKismetSystemLibrary* UKismetSystemLibrary::GetDefaultObj()

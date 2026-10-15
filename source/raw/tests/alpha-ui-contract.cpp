@@ -13,9 +13,14 @@ int main(int argc,char** argv){
     Require(panel.contains("SharedCart.Payload(mode)") && panel.contains("SetQuantity(entry.Path,quantity)"));
     Require(panel.contains("BeginDelivery(request,mode)")&&panel.contains("TakeCompleted(request,receipt)")&&panel.contains("CompleteDelivery(request,receipt)"));
     Require(panel.contains("run(\"Deliver\",0)")&&panel.contains("if(theme.advancedMode)"));
+    Require(panel.contains("if(!ui.advancedMode||ImGui::CollapsingHeader(\"Give / spawn item\"")
+        &&!panel.contains("if(ui.advancedMode&&ImGui::CollapsingHeader(\"Give / spawn item\""));
     Require(panel.contains("RenderKitLibrary();")&&panel.contains("ImportKit(document,")&&panel.contains("HelpyKitFiles::Write(directory,"));
     Require(panel.contains("InspectKitItems")&&panel.contains("RefreshMetadata(receipt[\"KitMetadata\"])")&&panel.contains("InspectUnlockEquipContracts"));
     Require(window.contains("SpawnToolsPanel::PollCartDelivery();")&&window.contains("SmallButton(modeLabel)")&&window.contains("Current.advancedMode=!t.advancedMode"));
+    Require(window.contains("return \"Transmutate\"")&&window.contains("Page::Recipes")&&panel.contains("RecipeStudioPanel::Render(result,resultRevision)"));
+    Require(panel.contains("transmutate-flow")&&panel.contains("InspectSpawnDefinition")&&panel.contains("InspectedDefinitions"));
+    Require(window.find("HelpyImGuiTheme::Poll();",window.find("void HelpyStandaloneWindow::RenderFrame"))<window.find("ImGui::NewFrame();",window.find("void HelpyStandaloneWindow::RenderFrame")));
     Require(picker.contains("PowerLevelBadge")&&picker.contains("ItemBadges::Masterwork(row)")&&picker.contains("DrawItemBadges(row,"));
     Require(!window.contains("helpy-cart-slot") && window.contains("LazyCatalog::PumpBackendSignal()"));
     Require(lazy.contains("std::atomic<uint64_t> BackendGeneration") && lazy.contains("memory_order_release") && lazy.contains("memory_order_acquire"));

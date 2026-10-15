@@ -2,6 +2,7 @@
 #include "Loader/ItemIdentity.h"
 #include <array>
 #include <string>
+#include <string_view>
 #include <stdexcept>
 #include <nlohmann/json.hpp>
 #include "Loader/HumanPose.h"
@@ -10,7 +11,13 @@ namespace DragonWilds::HumanNpc {
 inline constexpr std::array<const char*,8> AppearanceKeys={"BodyType","Head","HairPreset","FacialHairPreset","HairColor","SkinTone","EyeColor","EyebrowColor"};
 inline constexpr std::array<const char*,8> HandleKeys={"BodyTypeDataHandle","FaceDataHandle","HairPresetDataHandle","FacialHairPresetDataHandle","HairColorPrimitiveDataHandle","SkinTonePrimitiveDataHandle","EyeColorPrimitiveDataHandle","EyebrowColorPrimitiveDataHandle"};
 inline constexpr std::array<const char*,8> Tables={"BodyType","FaceType","HairPresets","FacialHairPresets","HairColor","SkinTone","EyeColor","EyebrowColor"};
-inline constexpr std::array<const char*,7> EquipmentKeys={"Head","Body","Legs","Cape","Trinket","MainHand","OffHand"};
+inline constexpr std::array<const char*,9> EquipmentKeys={"Head","Body","Legs","Cape","Trinket","Necklace","Trinket2","MainHand","OffHand"};
+inline std::string_view CanonicalEquipmentSlot(std::string_view slot) {
+    return slot=="Trinket2"?std::string_view("Necklace"):slot;
+}
+inline bool MatchesWearableSlot(std::string_view slot,std::string_view nativeSlot) {
+    return CanonicalEquipmentSlot(slot)==nativeSlot;
+}
 inline bool IsMainHandSlot(const std::string& slot) {
     return slot=="HeldOnlyRight" || slot=="HeldTwoHanded";
 }
@@ -89,6 +96,8 @@ inline void Validate(const nlohmann::json& data) {
     if(!data.contains("Equipment"))return;
     const auto& equipment=data.at("Equipment");
     if(!equipment.is_object())throw std::runtime_error("Human Equipment must be a slot-to-item-path object");
+    if(equipment.contains("Necklace") && equipment.contains("Trinket2"))
+        throw std::runtime_error("Use Necklace or its Trinket2 alias, not both");
     for(const auto& [key,value]:equipment.items()) {
         bool known=false;for(const auto* slot:EquipmentKeys)if(key==slot)known=true;
         if(!known)throw std::runtime_error("Unsupported human equipment slot: "+key);

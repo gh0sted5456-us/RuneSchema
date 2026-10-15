@@ -22,6 +22,7 @@
 #include "SDK/Classes/KismetSystemLibrary.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Helper/ActorHelper.h"
+#include "SDK/Helper/ReflectedContract.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Structs/Custom/FManagedStruct.h"
 #include "Utility/Logging.h"
@@ -496,8 +497,10 @@ void RegistryBridge::ObserveInventoryRemoval(UObject* source,UFunction* function
     auto* itemField=CastField<FObjectPropertyBase>(function->FindProperty(FName(TEXT("ItemData"),FNAME_Find)));
     auto* countField=CastField<FIntProperty>(function->FindProperty(FName(TEXT("Count"),FNAME_Find)));
     auto* resultField=CastField<FBoolProperty>(function->GetReturnProperty());
-    if(function->GetParmsSize()!=13||!itemField||!countField||!resultField
-        ||itemField->GetOffset_Internal()!=0||countField->GetOffset_Internal()!=8||resultField->GetOffset_Internal()!=12
+    DragonWilds::ReflectedContract::Frame(function);
+    if(!DragonWilds::ReflectedContract::Input(itemField,function)||itemField->GetElementSize()!=sizeof(UObject*)
+        ||!DragonWilds::ReflectedContract::Input(countField,function)||countField->GetElementSize()!=sizeof(int32_t)
+        ||!DragonWilds::ReflectedContract::Output(resultField,function)||resultField->GetElementSize()!=sizeof(bool)
         ||!resultField->IsNativeBool())throw std::runtime_error("Consumed-item inventory-removal contract changed");
     if(!resultField->GetPropertyValue(resultField->ContainerPtrToValuePtr<void>(parameters)))return;
     const auto count=countField->GetPropertyValue(countField->ContainerPtrToValuePtr<void>(parameters));
@@ -544,9 +547,10 @@ void RegistryBridge::InvokeConsumedItemAuthority(UObject* caster,const Authority
     auto* controllerField=callback?CastField<FObjectPropertyBase>(callback->FindProperty(FName(TEXT("PlayerController"),FNAME_Find))):nullptr;
     auto* tagsField=callback?CastField<FStructProperty>(callback->FindProperty(FName(TEXT("ItemGameplayTags"),FNAME_Find))):nullptr;
     auto* tagsType=tagsField?tagsField->GetStruct().Get():nullptr;
-    if(!callback||callback->GetParmsSize()!=40||!controllerField||controllerField->GetOffset_Internal()!=0
-        ||controllerField->GetElementSize()!=8||!controller->IsA(controllerField->GetPropertyClass().Get())
-        ||!tagsField||tagsField->GetOffset_Internal()!=8||tagsField->GetElementSize()!=32||!tagsType
+    DragonWilds::ReflectedContract::Frame(callback);
+    if(DragonWilds::ReflectedContract::Count(callback)!=2 || !DragonWilds::ReflectedContract::Input(controllerField,callback)
+        ||controllerField->GetElementSize()!=sizeof(UObject*)||!controllerField->GetPropertyClass().Get()||!controller->IsA(controllerField->GetPropertyClass().Get())
+        ||!DragonWilds::ReflectedContract::Input(tagsField,callback)||!tagsType||tagsField->GetElementSize()!=tagsType->GetStructureSize()
         ||tagsType->GetPathName()!=TEXT("/Script/GameplayTags.GameplayTagContainer"))
         throw std::runtime_error("Consumed-item success function layout changed");
     DragonWilds::FManagedStruct tags(tagsType);struct EmptyTags{uint8_t Bytes[32];} empty{};
@@ -1283,7 +1287,8 @@ void RegistryBridge::InvokeAuthorityActionForCaster(UObject* caster,const Author
     auto* casterField=graph?CastField<FObjectPropertyBase>(DragonWilds::PropertyHelper::GetPropertyByName(graphType,TEXT("Caster"))):nullptr;
     const auto entryFunction=PS::ToWideSafe(action.EntryFunction.c_str());
     auto* trigger=graph?graph->GetFunctionByNameInChain(entryFunction.c_str()):nullptr;
-    if(!graph || !trigger || trigger->GetParmsSize()!=0)
+    if(!graph || !trigger || trigger->GetReturnProperty()
+        || DragonWilds::ReflectedContract::Count(trigger)!=0)
         throw std::runtime_error("Authority Blueprint entry function is unavailable or requires parameters");
     if(casterField)WriteObject(graph,casterField,caster,"Caster");
     else if(action.Action=="SpawnFollower")throw std::runtime_error("Follower authority Blueprint has no Caster field");
@@ -1295,7 +1300,8 @@ void RegistryBridge::InvokeAuthorityActionForCaster(UObject* caster,const Author
         WriteObject(graph,field,value,property);
     }
     m_activeAuthorityGraph=graph;m_nativeAuthorityActionObserved=true;
-    try {graph->ProcessEvent(trigger,nullptr);}catch(...){m_activeAuthorityGraph=nullptr;m_nativeAuthorityActionObserved=false;throw;}
+    try {DragonWilds::ActorHelper::FunctionCall(graph,trigger).Invoke();}
+    catch(...){m_activeAuthorityGraph=nullptr;m_nativeAuthorityActionObserved=false;throw;}
     m_activeAuthorityGraph=nullptr;m_nativeAuthorityActionObserved=false;
     PublishActionActivation(caster,action);
 }

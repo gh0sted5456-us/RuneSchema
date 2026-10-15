@@ -10,13 +10,14 @@ void DragonWildsNpcLoader::OnQuestTextQuery(UnrealScriptFunctionCallableContext&
         auto* result=CastField<FBoolProperty>(function->GetReturnProperty());
         auto* name=current?nullptr:CastField<FNameProperty>(function->FindProperty(FName(TEXT("ObjectiveName"),FNAME_Find)));
         size_t count=0;for(auto* field:TFieldRange<FProperty>(function,EFieldIterationFlags::Default))if(field->HasAnyPropertyFlags(CPF_Parm))++count;
-        if(count!=(current?3:4) || function->GetParmsSize()!=(current?25:33)
-            || !input || input->GetOffset_Internal()!=0 || input->GetElementSize()!=8 || input->GetArrayDim()!=1
+        ReflectedContract::Frame(function);
+        if(count!=(current?3:4)
+            || !ReflectedContract::Input(input,function) || input->GetElementSize()!=sizeof(UObject*)
             || !input->HasAnyPropertyFlags(CPF_Parm) || input->HasAnyPropertyFlags(CPF_OutParm|CPF_ReturnParm)
-            || !output || output->GetOffset_Internal()!=(current?8:16) || output->GetElementSize()!=16 || output->GetArrayDim()!=1
+            || !ReflectedContract::Fits(output,function->GetParmsSize()) || output->GetElementSize()!=sizeof(FText)
             || !output->HasAnyPropertyFlags(CPF_OutParm) || output->HasAnyPropertyFlags(CPF_ReturnParm)
-            || !result || !result->IsNativeBool() || result->GetOffset_Internal()!=(current?24:32) || result->GetElementSize()!=1
-            || result->GetArrayDim()!=1 || (!current && (!name || name->GetOffset_Internal()!=8 || name->GetElementSize()!=8 || name->GetArrayDim()!=1)))
+            || !ReflectedContract::Output(result,function) || !result->IsNativeBool() || result->GetElementSize()!=1
+            || (!current && (!ReflectedContract::Input(name,function) || name->GetElementSize()!=sizeof(FName))))
             throw std::runtime_error("Quest objective text function layout changed");
         if(!result->GetPropertyValue(context.RESULT_DECL))return;
         auto* controller=context.Context->GetOuterPrivate();

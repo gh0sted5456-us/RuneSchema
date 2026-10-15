@@ -9,8 +9,8 @@ static void Require(bool value){++check;if(!value){std::cerr<<"Helpy Canvas fall
 int main(int argc,char** argv){
     Require(argc==5);
     const auto menu=Read(argv[2]),actor=Read(argv[3]),plugin=Read(argv[4]);
-    Require(plugin.find("VK_F2")!=std::string::npos && plugin.find("PS::HelpyHotkeys::Active.load()")!=std::string::npos);
-    Require(plugin.find("state->Menu->Initialize(false)")!=std::string::npos && plugin.find("state->Menu->Shutdown()")!=std::string::npos);
+    Require(plugin.find("VK_F2")!=std::string::npos && plugin.find("state->Window->PollHotkey(standalone)")!=std::string::npos);
+    Require(plugin.find("state->Menu")==std::string::npos && plugin.find("state->Window->Shutdown()")!=std::string::npos);
     Require(menu.find("ResolvePostRender()")!=std::string::npos && menu.find("UGameViewportClient::VTableLayoutMap")!=std::string::npos
         && menu.find("PostRenderThunk")!=std::string::npos);
     Require(menu.find("/Script/Engine.HUD:ReceiveDrawHUD")==std::string::npos);

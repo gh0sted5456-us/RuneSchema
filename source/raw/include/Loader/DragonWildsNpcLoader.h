@@ -17,6 +17,8 @@
 
 #include "Loader/DragonWildsModLoaderBase.h"
 #include "Loader/VendorSpawnGate.h"
+#include "Core/GroundSurface.h"
+#include "Core/GroundingRetry.h"
 #include "Loader/VendorPolicy.h"
 #include "Loader/VendorIdentity.h"
 #include "Loader/VendorTraceBudget.h"
@@ -141,6 +143,10 @@ namespace DragonWilds {
             double TargetLocation[3]{};
             bool GroundToSurface=false;
             double GroundOffset=0;
+            double GroundAnchorZ=0;
+            PS::Grounding::SearchRange GroundSearch;
+            PS::Grounding::Retry GroundRetry;
+            RC::Unreal::UWorld* GroundResolvedWorld=nullptr; // compared only; cleared on travel
             double SpawnRotation[3]{};
             double SpawnScale[3]{ 1.0, 1.0, 1.0 };
             bool HasTargetLocation = false;
@@ -429,6 +435,7 @@ namespace DragonWilds {
         double m_clientReplicaElapsed=0;
         bool m_preparingClientReplica=false;
         void TrySpawnConfiguredVendors(RC::Unreal::UWorld* world);
+        void ResolveNpcGrounding(RC::Unreal::UWorld* world,VendorDefinition& definition);
         RC::Unreal::AActor* SpawnVisualVendor(RC::Unreal::UWorld* world,
             VendorDefinition& definition);
         bool ApplyVendorVisuals(RC::Unreal::AActor* actor,

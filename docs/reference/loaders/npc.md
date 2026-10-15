@@ -28,6 +28,10 @@ server owns creation and clients prepare the replicated presentation.
 - Bind `VendorID`, `DialogueID`, `QuestID`, or lore only when needed.
 - The 7.8 alpha's `JournalEntries` list requests native player discovery on interaction without replacing the NPC's shop or dialogue. Use local journal/lore IDs, `Mod:Id`, or full cooked journal paths; see the [journal loader](journal.md). `NoInteract` suppresses these bindings.
 - `HideWeapon` suppresses inherited weapon presentation on supported human NPCs.
+- Human `Equipment` accepts `Necklace` for items whose native slot strategy is
+  `Necklace`, alongside the existing `Trinket` slot. `Trinket2` is an alias for
+  `Necklace`; do not specify both. Slot validation uses the live item's native
+  strategy, so a necklace cannot be assigned to `Trinket`.
 - Use `/buildings` for buildable architecture and `/spawns` for general world
   placement rather than using NPCs as generic props.
 

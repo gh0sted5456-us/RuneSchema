@@ -1,4 +1,5 @@
 #pragma once
+#include "SDK/Helper/ReflectedContract.h"
 #include "Loader/SummonKillCreditPolicy.h"
 #include "Runtime/NetworkContext.h"
 #include "SDK/WeakObjectHandle.h"
@@ -29,8 +30,9 @@ inline bool NativeBool(RC::Unreal::UObject* actor,const TCHAR* path) {
     using namespace RC::Unreal;
     auto* function=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,path,false);
     auto* result=function?CastField<FBoolProperty>(function->GetReturnProperty()):nullptr;
-    if(!function || function->GetParmsSize()!=1 || !result || !result->IsNativeBool()
-        || result->GetArrayDim()!=1 || result->GetElementSize()!=1 || result->GetOffset_Internal()!=0)
+    ReflectedContract::Frame(function);
+    if(!ReflectedContract::Output(result,function) || !result->IsNativeBool()
+        || result->GetArrayDim()!=1 || result->GetElementSize()!=1 || ReflectedContract::Count(function)!=1)
         throw std::runtime_error("Summon native allegiance function changed");
     ActorHelper::FunctionCall query(actor,function);query.Invoke();return query.Result<bool>();
 }
@@ -43,10 +45,10 @@ inline bool CertifiedAllegiance(RC::Unreal::UObject* attacker,RC::Unreal::UObjec
     auto* ai=function?CastField<FObjectPropertyBase>(function->FindProperty(FName(TEXT("AI"),FNAME_Find))):nullptr;
     auto* target=function?CastField<FObjectPropertyBase>(function->FindProperty(FName(TEXT("Target"),FNAME_Find))):nullptr;
     auto* result=function?CastField<FByteProperty>(function->GetReturnProperty()):nullptr;
-    if(!function || !library || function->GetParmsSize()!=17 || !ai || !target || !result
-        || ai->GetArrayDim()!=1 || ai->GetElementSize()!=8 || ai->GetOffset_Internal()!=0
-        || target->GetArrayDim()!=1 || target->GetElementSize()!=8 || target->GetOffset_Internal()!=8
-        || result->GetArrayDim()!=1 || result->GetElementSize()!=1 || result->GetOffset_Internal()!=16)
+    ReflectedContract::Frame(function);
+    if(!library || ReflectedContract::Count(function)!=3 || !ReflectedContract::Input(ai,function) || !ReflectedContract::Input(target,function)
+        || ai->GetElementSize()!=sizeof(UObject*) || target->GetElementSize()!=sizeof(UObject*)
+        || !ReflectedContract::Output(result,function) || result->GetElementSize()!=1)
         throw std::runtime_error("Summon native attitude function changed");
     ActorHelper::FunctionCall attitude(library,function);attitude.Arg(TEXT("AI"),attacker).Arg(TEXT("Target"),caster).Invoke();
     const NativeAllegiance state{attitude.Result<uint8_t>()==0,
@@ -90,7 +92,8 @@ inline bool DeadVictim(RC::Unreal::UObject* victim,RC::Unreal::UObject* player) 
     if(!Live(health) || health->GetOuterPrivate()!=victim)return false;
     auto* function=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,TEXT("/Script/Dominion.HealthComponent:IsDead"),false);
     auto* result=function?CastField<FBoolProperty>(function->GetReturnProperty()):nullptr;
-    if(!function || function->GetParmsSize()!=1 || !result || !result->IsNativeBool() || result->GetArrayDim()!=1 || result->GetOffset_Internal()!=0 || result->GetElementSize()!=1)
+    ReflectedContract::Frame(function);
+    if(ReflectedContract::Count(function)!=1 || !ReflectedContract::Output(result,function) || !result->IsNativeBool() || result->GetArrayDim()!=1 || result->GetElementSize()!=1)
         throw std::runtime_error("Kill-credit IsDead layout changed");
     ActorHelper::FunctionCall dead(health,function);dead.Invoke();return dead.Result<bool>();
 }

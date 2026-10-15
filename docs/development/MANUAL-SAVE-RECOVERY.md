@@ -6,14 +6,29 @@ last-resort recovery path, not the normal uninstall workflow.
 
 ## Rejected/corrupt character entry
 
-`persistence.allowCorruptCharacterEntry` is reserved for an emergency
-compatibility switch and is disabled by default. It is currently quarantined:
-crash-dump analysis identified an unsafe native `ProcessPlayerStateLoad` ABI.
-RuneSchema refuses the setting even if it is manually enabled and leaves native
-character acceptance unchanged.
+`persistence.allowCorruptCharacterEntry` is an emergency compatibility switch,
+disabled by default. In RuneSchema settings, open **General > Runtime >
+Progress persistence** and use **Bypass rejected character validation (restart
+required)**. Restart is required both to enable
+and to disable the bypass.
 
-The standalone `CorruptCharacterBypass` DLL must not be combined with a future
-RuneSchema implementation. Duplicate-provider detection remains in place.
+When enabled, RuneSchema verifies the native validator and its character-load
+caller, lets validation execute normally, then changes only a rejected Boolean
+acceptance result. It does not replace or call `ProcessPlayerStateLoad` through
+a guessed native signature. Other uses of the validator remain unchanged. If
+the character call site cannot be uniquely verified, no bypass is installed;
+other RuneSchema loaders and cleanup are independent.
+
+This is **not a save repair** and does not guarantee successful loading. Broken
+JSON, missing required data, native deserialization failures and unrelated
+crashes are not made safe by accepting validation. Subsequent automatic or
+manual game saves can persist incomplete state. Back up the complete character
+storage first, retain the original, and turn the bypass off after recovery.
+
+Disable the standalone `CorruptCharacterBypass` before enabling this option.
+RuneSchema refuses duplicate hooks when that mod is already loaded or enabled
+in the normal UE4SS Mods directory. An `enabled.txt` marker still enables the
+standalone mod even when its `mods.txt` entry is `0`.
 
 ## Safety rules
 

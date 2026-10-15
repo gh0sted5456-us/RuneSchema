@@ -105,15 +105,15 @@ namespace {
         if(PS::AssetMetadata::IsIncomplete(item))throw std::runtime_error("Item publication is incomplete; inventory grant blocked. Repair pending Helpy files with the game closed.");
         if(!inventory || !inventoryType || !inventory->IsA(inventoryType) || inventory->GetOuterPrivate()!=controller)
             throw std::runtime_error("Selected player's authoritative inventory is unavailable");
-        const auto validate=[](const TCHAR* path,int32_t size,std::initializer_list<std::tuple<const TCHAR*,int32_t,int32_t>> fields) {
+        const auto validate=[](const TCHAR* path,int32_t /*legacySize*/,std::initializer_list<std::tuple<const TCHAR*,int32_t,int32_t>> fields) {
             auto* function=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,path,false);
-            if(!function || function->GetParmsSize()!=size)throw std::runtime_error("Native inventory command layout changed");
+            ReflectedContract::Frame(function);
             size_t count=0;for(auto* field:TFieldRange<FProperty>(function,EFieldIterationFlags::Default))if(field->HasAnyPropertyFlags(CPF_Parm))++count;
             if(count!=fields.size())throw std::runtime_error("Native inventory command parameter count changed");
             for(const auto& [name,offset,width]:fields) {
                 auto* field=function->FindProperty(FName(name,FNAME_Find));
-                if(!field || !field->HasAnyPropertyFlags(CPF_Parm) || field->GetArrayDim()!=1
-                    || field->GetOffset_Internal()!=offset || field->GetElementSize()!=width)
+                if(!ReflectedContract::Fits(field,function->GetParmsSize()) || !field->HasAnyPropertyFlags(CPF_Parm)
+                    || (RC::StringType(name)!=TEXT("GameplayTags") && field->GetElementSize()!=width))
                     throw std::runtime_error("Native inventory command parameter layout changed");
             }
         };
@@ -128,9 +128,8 @@ namespace {
         if(!ready.Result<bool>())throw std::runtime_error("The selected inventory cannot accept that quantity");
         auto* tagType=UECustom::UObjectGlobals::StaticFindObject<UScriptStruct*>(nullptr,nullptr,TEXT("/Script/GameplayTags.GameplayTagContainer"));
         if(!tagType)throw std::runtime_error("Inventory tag container unavailable");
-        FManagedStruct tags(tagType);struct EmptyTags{uint8_t Bytes[32];} empty{};std::memcpy(&empty,tags.GetData(),sizeof(empty));
         ActorHelper::FunctionCall give(inventory,givePath);give.Arg(TEXT("ItemData"),item).Arg(TEXT("Count"),count)
-            .Arg(TEXT("DurabilityPercentage"),1.0f).Arg(TEXT("GameplayTags"),empty).Invoke();
+            .Arg(TEXT("DurabilityPercentage"),1.0f).JsonArg(TEXT("GameplayTags"),nlohmann::json::object()).Invoke();
         ActorHelper::FunctionCall afterCall(inventory,countPath);afterCall.Arg(TEXT("ItemData"),item).Invoke();const auto after=afterCall.Result<int32_t>();
         if(!give.Result<bool>() || int64_t(after)-before!=count)throw std::runtime_error("Native inventory grant could not be confirmed");
     }
@@ -322,7 +321,9 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
                     for(const auto& spawn:m_spawns)if(spawn.Type!=ESpawnEntryType::RemoveActor){const auto type=std::string(spawn.Type==ESpawnEntryType::Actor?"Resource":"AI"),path=RC::to_string(spawn.Type==ESpawnEntryType::Actor?spawn.ClassPath:spawn.AIClassPath);authoredBase.push_back({{"Key",RC::to_string(spawn.ModName)+":"+RC::to_string(spawn.EntryId)},{"Name",spawn.DisplayName},{"Class",path},{"Type",type},{"RuneSchemaManaged",true},{"StableId",ToolStableId(type+":"+path)}});}
                     pageCache.clear();
                 }
-                auto authored=authoredBase;
+                auto authored=authoredBase;std::set<std::string> known;
+                for(const auto& row:authored)known.insert(row.value("Class",std::string{}));
+                for(auto row:ToolMountedDefinitionHints())if(known.insert(row.value("Class",std::string{})).second)authored.push_back(std::move(row));
                 if(auto* npcs=DragonWildsNpcLoader::HelpyInstance){const auto roster=npcs->HelpyDefinitions();for(auto row:roster){const auto type=row.value("Type",std::string("NPC")),path=row.value("Class",row.value("Key",std::string{}));row["StableId"]=ToolStableId(type+":"+path);authored.push_back(std::move(row));}}
                 const auto offset=ToolCursorOffset(cursor,'S');page=ToolDefinitionWindow(authored,category,query,offset,limit,fieldSet,4096,1800);
                 page["NextCursor"]="S:"+std::to_string(page.value("NextOffset",std::size_t{}));
@@ -345,6 +346,7 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
             {"RuntimeGeneration",generation},{"Category",category},{"Mode",mode},{"Query",query},{"Reset",reset},{"FieldSet",fieldSet},
             {"Rows",std::move(rows)},{"NextCursor",page.value("NextCursor",std::string{})},{"HasMore",page.value("HasMore",false)},
             {"Scanned",page.value("Scanned",std::size_t{})},{"BudgetExhausted",page.value("BudgetExhausted",false)},{"CacheHit",cacheHit}};
+        window["Coverage"]=PS::CookedAssets::Available()?"Loaded native objects + mounted-content metadata. Unloaded candidates are validated on use.":"Loaded native objects only: mounted registry metadata is not available in this session.";
         if(!dictionary.empty())window["Dictionary"]=std::move(dictionary);
         return {{"CatalogWindow",std::move(window)},{"Status","Loaded a bounded Helpy query window on demand."}};
     };
@@ -361,6 +363,18 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
     const char* spawnStage="recipient selection";
     try {
         const auto action=request->at("Action").get<std::string>();
+        if(action=="InspectSpawnDefinition") {
+            const auto path=request->at("Class").get<std::string>(),expected=request->at("ExpectedType").get<std::string>();
+            if(!PS::F2Catalog::ValidObjectPath(path)||(expected!="AI"&&expected!="NPC"&&expected!="Resource"))throw std::runtime_error("Invalid native definition inspection");
+            auto* type=ActorHelper::ResolveClass(RC::to_generic_string(path));
+            auto* actors=ActorHelper::ResolveClass(TEXT("/Script/Engine.Actor"));auto* ais=ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionAICharacter"));
+            auto* npcs=ActorHelper::ResolveClass(TEXT("/Script/Dominion.InteractableNPC"));
+            if(!type||!actors||!ais)throw std::runtime_error("Native class could not be loaded");
+            const bool npc=npcs&&type->IsChildOf(npcs),ai=!npc&&type->IsChildOf(ais);
+            if((expected=="NPC"&&!npc)||(expected=="AI"&&!ai)||(expected=="Resource"&&(npc||ai||!ToolResourceClass(type,actors,ais))))throw std::runtime_error("Mounted candidate does not have the expected native ancestry");
+            auto row=ToolDefinitionRow(type,request->at("Key").get<std::string>(),ai,npc?"NPC":"");row["NeedsInspection"]=false;
+            auto result=PS::SpawnToolRequests::Read();result["SpawnDefinition"]=std::move(row);result["Status"]="Native definition inspected; no actor spawned.";PS::SpawnToolRequests::Publish(std::move(result));return;
+        }
         if(f2Spawn)PS::Log<LogLevel::Verbose>(STR("RuneSchema Helpy spawn #{} received by SpawnTools.\n"),requestId);
         if(action=="ExportClone") {
             ExportCloneDraft(request->at("Draft"));
@@ -415,6 +429,14 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
             PS::SpawnToolRequests::CatalogProgress({{"CookedVisuals",result["CookedVisuals"]}});
             result["Status"]=details?"Item details loaded. Player selection is only required for inventory actions.":
                 "Clone source inspected. Edit item fields and linked table stats; source data remains unchanged.";
+            PS::SpawnToolRequests::Publish(std::move(result));return;
+        }
+        if(action=="RecipeWorkspaceCatalog"||action=="InspectRecipe") {
+            auto* loader=DragonWildsAssetModLoader::AuthoringInstance;
+            if(!loader)throw std::runtime_error("The assets loader must be enabled before recipe authoring");
+            auto result=PS::SpawnToolRequests::Read();
+            result[action=="InspectRecipe"?"RecipeWorkspaceSource":"RecipeWorkspaceCatalog"]=loader->RecipeWorkspaceSnapshot(*request);
+            result["Status"]="Recipe authoring data read from native assets; no recipe changed.";
             PS::SpawnToolRequests::Publish(std::move(result));return;
         }
         if(action=="ExportRecipe"||action=="ExportItemOverrides") {
@@ -744,7 +766,7 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
             const double x=origin.X()+distance*100;
             const double y=origin.Y();
             FVector ground{};std::string error;
-            if(!UECustom::UKismetSystemLibrary::LineTraceGround(world,FVector(x,y,origin.Z()+500),FVector(x,y,origin.Z()-1500),{pawn},ground,error))
+            if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,FVector(x,y,origin.Z()+500),FVector(x,y,origin.Z()-1500),{pawn},ground,error))
                 throw std::runtime_error("No ground at the requested building position; nothing spawned. "+error);
             positions.emplace_back(ground.X(),ground.Y(),ground.Z()+height);
             try {
@@ -914,7 +936,7 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
             if(!gridPoints.empty()){x=gridPoints[i]["Location"]["X"].get<double>();y=gridPoints[i]["Location"]["Y"].get<double>();}
             else if(placementMode=="Grid") {const int columns=static_cast<int>(std::ceil(std::sqrt(static_cast<double>(count))));x=std::round(origin.X()/gridSize)*gridSize+(gridX+i%columns)*gridSize;y=std::round(origin.Y()/gridSize)*gridSize+(gridY+i/columns)*gridSize;}
             FVector ground{};std::string error;
-            if(!UECustom::UKismetSystemLibrary::LineTraceGround(world,FVector(x,y,origin.Z()+500),FVector(x,y,origin.Z()-1500),{pawn},ground,error))
+            if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,FVector(x,y,origin.Z()+500),FVector(x,y,origin.Z()-1500),{pawn},ground,error))
                 throw std::runtime_error("No ground at a requested spawn position; nothing spawned. "+error);
             positions.emplace_back(ground.X(),ground.Y(),ground.Z()+(resource?0:100)+height);
         }
