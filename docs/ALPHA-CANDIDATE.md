@@ -3,6 +3,11 @@
 This source snapshot is for `runeschema-7.8-alpha`. It does not change the main or
 experimental release channels or create a release tag.
 
+For the deduplicated October 13–16 feature list and current outstanding work,
+see the [consolidated alpha changelog](ALPHA-CHANGELOG.md). The sections below
+retain historical verification/install receipts; an older "not installed"
+heading does not override the latest installed candidate at the top.
+
 ## Grounding, first-building placement and icon census — installed Steam/Game Pass
 
 This follow-up keeps the installed quest-scroll identity correction and adds:
