@@ -34,7 +34,6 @@ theme:
     - navigation.instant.prefetch
     - navigation.tracking
     - navigation.tabs
-    - navigation.sections
     - navigation.indexes
     - navigation.top
     - toc.follow
@@ -89,7 +88,7 @@ copyright: >-
 
 nav:
   - Home: index.md
-  - Users:
+  - Players:
       - Overview: users/index.md
       - Download: CURRENT-RELEASE.md
       - Install: INSTALLATION.md
@@ -97,7 +96,7 @@ nav:
       - Save safety: SAFE-SAVE-AND-LEDGER.md
       - Platforms and co-op: COMPATIBILITY.md
       - Troubleshooting: TROUBLESHOOTING.md
-  - Modders:
+  - Creators:
       - Overview: modders/index.md
       - First mod: AUTHORING-GUIDE.md
       - First cooked item: modders/first-cooked-item.md
@@ -151,3 +150,6 @@ nav:
       - Mod-host file guide: MOD-HOSTS-AND-GETTING-STARTED.md
       - Ask RuneSchema: ASK-RUNESCHEMA.md
       - Licensing: LICENSING.md
+  - Updates:
+      - Alpha changelog: ALPHA-CHANGELOG.md
+      - Stable release: CURRENT-RELEASE.md

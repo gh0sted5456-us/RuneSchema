@@ -167,19 +167,45 @@ function rsFinderInit() {
     const input = root.querySelector(".rs-finder__input");
     const items = Array.from(root.querySelectorAll(".rs-finder__list li"));
     const empty = root.querySelector(".rs-finder__empty");
+    const count = root.querySelector(".rs-finder__count");
+    const clear = root.querySelector(".rs-finder__clear");
     if (!input || !empty) return;
 
     const filter = () => {
-      const words = rsAskTokens(input.value);
+      const words = rsAskNormalize(input.value).split(" ").filter(Boolean);
       let visible = 0;
       items.forEach((item) => {
-        const label = rsAskNormalize(item.textContent);
+        const label = rsAskNormalize(item.textContent + " " + (item.dataset.rsKeywords || ""));
         item.hidden = !words.every((word) => label.includes(word));
         if (!item.hidden) visible++;
       });
       empty.hidden = visible !== 0;
+      if (clear) clear.hidden = input.value.length === 0;
+      if (count) count.textContent = words.length
+        ? visible + (visible === 1 ? " matching guide" : " matching guides")
+        : items.length + " quick guides · use site search for all documentation";
     };
     input.addEventListener("input", filter);
+    if (clear) clear.addEventListener("click", () => {
+      input.value = "";
+      filter();
+      input.focus();
+    });
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        input.value = "";
+        filter();
+        event.preventDefault();
+      }
+      if (event.key === "Enter") {
+        const match = items.find((item) => !item.hidden);
+        if (match) {
+          event.preventDefault();
+          match.querySelector("a").click();
+        }
+      }
+    });
+    filter();
   });
 }
 
