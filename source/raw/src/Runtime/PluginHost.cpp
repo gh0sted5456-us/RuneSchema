@@ -10,6 +10,11 @@
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
 #include "Runtime/Storefront.h"
+#include "Runtime/ExecutableVersion.h"
+#include "Core/HelpySourceCache.h"
+#include "Core/IconCacheBuild.h"
+#include "Core/HelpyAuthoringProtocol.h"
+#include "Generator/HelpyRuntimePreferences.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/DragonWildsSignatures.h"
@@ -40,8 +45,21 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
     try {
         const auto request=nlohmann::json::parse(requestJson);const auto action=request.value("Action",std::string{});
         nlohmann::json result;
-        if(action=="Environment")result={{"Storefront",Storefront::Name(Storefront::Current())},{"DedicatedServer",Storefront::IsDedicatedServer()}};
+        if(action=="Environment")result={{"Storefront",Storefront::Name(Storefront::Current())},{"DedicatedServer",Storefront::IsDedicatedServer()},
+            {"RuneSchemaVersion",BuildInfo::Version},{"GameVersion",ExecutableVersion::Current()}};
+        else if(action=="IconCacheSources")result=HelpySourceCache::ForClient();
+        else if(action=="IconCacheBuildRead")result=IconCacheBuild::Read();
+        else if(action=="IconCacheBuildStart"){HelpySourceCache::Requested=true;result={{"Accepted",!Storefront::IsDedicatedServer()&&IconCacheBuild::Start(request.value("Source",std::string{}))}};}
+        else if(action=="IconCacheBuildCancel"){IconCacheBuild::Cancel();result={{"Accepted",true}};}
+        else if(action=="IconCacheResetAccounting"){HelpyRuntimePreferences::IconCacheEpoch.fetch_add(1);result={{"Accepted",true}};}
+        else if(action=="AuthoringActivate")result=HelpyAuthoring::Bridge.Activate();
+        else if(action=="AuthoringSubmit") {
+            try {result=HelpyAuthoring::Bridge.Submit(request.at("Request"));}
+            catch(const std::exception& error){result={{"Accepted",false},{"Status",error.what()}};}
+        }
+        else if(action=="AuthoringSnapshot")result=HelpyAuthoring::Bridge.Snapshot(request.value("Revision",uint64_t{}));
         else if(action=="Read") {
+            SpawnToolRequests::RequestPlayerRoles();
             const auto prior=request.value("Revision",uint64_t{});const auto category=request.value("Category",-1);std::lock_guard lock(SpawnToolRequests::Mutex);
             result={{"Available",SpawnToolRequests::Available.load()},{"Waiting",SpawnToolRequests::Waiting.load()},
                 {"Generation",SpawnToolRequests::Generation.load()},{"Revision",SpawnToolRequests::Revision},
@@ -67,13 +85,14 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
                     snapshot=SpawnToolRequests::Result;
                     for(auto it=SpawnToolRequests::QuickCatalogData.begin();it!=SpawnToolRequests::QuickCatalogData.end();++it)snapshot[it.key()]=it.value();
                 }
-                for(const auto* key:{"Players","CatalogReady","_CatalogIndexing","CatalogStatus","RegistryRecords","UnresolvedAssets",
+                for(const auto* key:{"Players","PlayerRoles","CatalogReady","_CatalogIndexing","CatalogStatus","RegistryRecords","UnresolvedAssets",
                         "MetadataUnavailable","UnclassifiedRecords","CatalogAI","CatalogResources","CatalogCoverage",
                         "IndexStage","IndexDone","IndexTotal","IndexHasTotal","IndexFinished","IndexDetail"})copy(key);
                 result["Snapshot"]=std::move(snapshot);
             }
         } else if(action=="Submit") result={{"Accepted",SpawnToolRequests::TrySubmit(request.at("Request"))}};
         else if(action=="QuerySubmit") result={{"Accepted",HelpyQueryService::Submit(request.at("Request"))}};
+        else if(action=="MapGroundSubmit") result={{"Accepted",SpawnToolRequests::SubmitMapGround(request.at("Request"))}};
         else if(action=="QueryCancel") {HelpyQueryService::Cancel(request.value("Category",-1),request.value("CancelGeneration",uint64_t{}));result={{"Accepted",true}};}
         else if(action=="IconSubmit") {
             const auto icon=request.value("Icon",std::string{});const bool accepted=!icon.empty()&&icon.size()<=4096
@@ -308,6 +327,7 @@ void PluginHost::OnUnrealInit(){for(auto& plugin:m_state->LoadedPlugins){
     }SpawnToolRequests::PushUpdate("bootstrap",bootstrap,bootstrapRevision);
 }
 void PluginHost::Shutdown() noexcept {
+    HelpySourceCache::Requested=false;HelpySourceCache::Shutdown();
     HelpyQueryService::Clear();
     if(!m_state)return;
     SpawnToolRequests::PushUpdate={};

@@ -42,6 +42,15 @@ int main(){
     Check(RetainOtherRecipes({"A","B","A","C"},{"B"})==std::vector<std::string>({"A","A","C"}));
     Check(RetainOtherRecipes({"A"},{"missing"})==std::vector<std::string>({"A"}));
     Check(RetainOtherRecipes({"A"},{"A"}).empty());
+    // Native opaque reference tokens: nulls, duplicate unrelated entries and
+    // original slot ordering survive a targeted override, even in mixed rows.
+    using Token=std::uintptr_t;
+    const std::vector<Token> native{0,11,22,0,11,33,22};
+    Check(RetainOtherRecipeIndices(native,std::set<Token>{22})==std::vector<std::size_t>({0,1,3,4,5}));
+    Check(RetainOtherRecipeIndices(native,std::set<Token>{99})==std::vector<std::size_t>({0,1,2,3,4,5,6}));
+    Check(RetainOtherRecipeIndices(std::vector<Token>{0,0},std::set<Token>{11})==std::vector<std::size_t>({0,1}));
+    Check(RetainOtherRecipeIndices(std::vector<Token>{22,22},std::set<Token>{22}).empty());
+    Reject([&]{RetainOtherRecipeIndices(native,std::set<Token>{0});});
     // The same body can ship in a cooked manifest without loose pointer files.
     PS::CookedPakRegistryManifest::Reset();
     const std::string recipe="/Example/Recipes/RECIPE_Dye.RECIPE_Dye";

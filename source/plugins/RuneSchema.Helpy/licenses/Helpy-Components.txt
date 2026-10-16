@@ -21,7 +21,12 @@ nlohmann/json 3.11.3:
   Full original MIT notice: vendor/json/LICENSE.MIT.
 
 RuneSchema logo and Windows icon are existing project artwork, retained with
-the project branding. No Jagex artwork, game binaries, Unreal SDK, or game
+the project branding. Steam and Xbox runtime marks were supplied by the user;
+these marks remain the property of Valve and Microsoft respectively, are not
+relicensed under MIT, and are used only to identify the detected runtime.
+Gold tint and transparency are applied by the renderer, not to the originals.
+Helpy's own code shares RuneSchema's MIT License; third-party notices remain.
+No Jagex artwork, game binaries, Unreal SDK, or game
 catalog dump is included. Sample preview records are synthetic developer data.
 
 Microsoft Windows APIs and the compiler's static runtime are platform/build

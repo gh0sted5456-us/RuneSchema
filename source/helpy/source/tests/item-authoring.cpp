@@ -14,6 +14,14 @@ int main(){
     const auto creation=Request(d,Mode::Creation,"",true);assert(creation["Action"]=="PrepareClone"&&creation["Give"]==false&&creation["Permanent"]==true&&!creation.contains("Player"));
     assert(creation["Overrides"]["PowerLevel"]==10&&creation["StatOverrides"]["WeaponStats"]["DamageMultiplier"]==3.5&&creation["AppearanceSource"]=="");
     const auto transmog=Request(d,Mode::Transmog,"",true);assert(transmog["Source"]=="/Game/Items/Sword.Sword"&&transmog["AppearanceSource"]=="/Game/Items/Axe.Axe"&&transmog["Overrides"].empty()&&transmog["StatOverrides"].empty());
+    d.Source["Icon"]="/Game/UI/Sword.Sword";d.Appearance["Icon"]="/Mod/UI/Axe.Axe";
+    assert(Preview(d,Mode::Transmog)["Icon"]=="/Mod/UI/Axe.Axe");
+    d.Result={{"State","Prepared"},{"Icon","/Mod/UI/NativeSkin.NativeSkin"}};
+    assert(Preview(d,Mode::Transmog)["Icon"]=="/Mod/UI/NativeSkin.NativeSkin");
+    d.Result={{"State","Created"},{"Icon","/Mod/UI/NativeSkin.NativeSkin"},{"Path","/Game/RuneSchema/Items/Clone.Clone"}};d.Created=true;
+    assert(Preview(d,Mode::Transmog)["Path"]=="/Game/RuneSchema/Items/Clone.Clone");
+    d.Changed();assert(d.Result.empty()&&Preview(d,Mode::Transmog)["Icon"]=="/Mod/UI/Axe.Axe");
+    d.Appearance["Icon"]="";assert(Preview(d,Mode::Transmog)["Icon"]=="/Game/UI/Sword.Sword");
     rejects([&]{Request(d,Mode::Creation,"player",false);});d.Acknowledged=true;assert(Request(d,Mode::Creation,"player",false)["Action"]=="CreateClone");
     Json direct,stats;rejects([&]{SplitValues({{"PersistenceID","bad"}},d.Inspection,direct,stats);});rejects([&]{SplitValues({{"Unknown",1}},d.Inspection,direct,stats);});rejects([]{ParseValues("[]");});rejects([]{ParseValues("{bad}");});
     const auto id=d.Id;d.Created=true;d.Changed();assert(d.Id.empty()&&!d.Created&&!d.Acknowledged);

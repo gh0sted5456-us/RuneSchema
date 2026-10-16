@@ -110,9 +110,13 @@ namespace {
 }
 
 void DragonWildsNpcLoader::ApplyHumanVisuals(AActor* actor, VendorDefinition& definition) {
+    const PS::WeakObjectHandle ownerIdentity(actor);
+    auto* ownerWorld=actor?actor->GetWorld():nullptr;
+    actor=RequireNpcActor(ownerIdentity,ownerWorld,"Human preview preflight");
     auto* previewClass=ActorHelper::ResolveClass(TEXT("/Game/Gameplay/Frontend/BP_PlayerCharacterPreview.BP_PlayerCharacterPreview_C"));
     auto* nativeClass=ActorHelper::ResolveClass(TEXT("/Script/Dominion.PlayerCharacterPreview"));
     auto* childClass=ActorHelper::ResolveClass(TEXT("/Script/Engine.ChildActorComponent"));
+    actor=RequireNpcActor(ownerIdentity,ownerWorld,"Human preview class loading");
     auto* anchor=FindMeshComponent(actor);
     if(!previewClass || !nativeClass || !previewClass->IsChildOf(nativeClass) || !childClass || !anchor)
         throw std::runtime_error("Human preview class or neutral mesh anchor unavailable");
@@ -156,6 +160,7 @@ void DragonWildsNpcLoader::ApplyHumanVisuals(AActor* actor, VendorDefinition& de
             customization[HumanNpc::HandleKeys[i]]={{"DataTable",path},{"RowName",row}};
         }
         RecordPhase(definition,"Human.Appearance.Before",actor);
+        actor=RequireNpcActor(ownerIdentity,ownerWorld,"Human appearance asset loading");
         HumanCall(preview,TEXT("/Script/Dominion.PlayerCharacterPreview:ApplyFullCustomization"),
             {{"CustomizationData",customization},{"bInIsNewCharacter",false}});
 
@@ -165,7 +170,8 @@ void DragonWildsNpcLoader::ApplyHumanVisuals(AActor* actor, VendorDefinition& de
         bool mainHandTwoHanded=false;
         auto* wearableClass=ActorHelper::ResolveClass(TEXT("/Script/Dominion.WearableEquipmentData"));
         auto* heldClass=ActorHelper::ResolveClass(TEXT("/Script/Dominion.HeldEquipmentData"));
-        for(const auto& [slot,path]:definition.Equipment.items()) {
+        const auto equipment=EffectiveNpcEquipment(actor,definition);
+        for(const auto& [slot,path]:equipment.items()) {
             auto* item=HumanEquipment(path.get<std::string>());
             const bool heldSlot=slot=="MainHand" || slot=="OffHand";
             auto* expected=heldSlot?heldClass:wearableClass;
@@ -183,8 +189,10 @@ void DragonWildsNpcLoader::ApplyHumanVisuals(AActor* actor, VendorDefinition& de
         if(mainHandTwoHanded && offhand)
             throw std::runtime_error("Human equipment cannot combine a two-handed MainHand item with OffHand equipment");
         RecordPhase(definition,"Human.Outfit.Before",actor);
+        actor=RequireNpcActor(ownerIdentity,ownerWorld,"Human equipment asset loading");
         HumanCall(preview,TEXT("/Script/Dominion.PlayerCharacterPreview:HandleCharacterLoadoutChanged"),
             {{"CustomizationLoadout",loadout},{"bInIsNewCharacter",false}});
+        m_appliedNpcEquipment[RC::to_string(actor->GetPathName())]=equipment.dump();
 
         // Use the preview's native animation mesh directly. The body, head,
         // hair and outfit components are already authored to follow this mesh;

@@ -19,6 +19,13 @@ int main(int argc,char** argv) {
     Require(assets.find("{\"Icon\",ItemIconPath(object)}")!=std::string::npos
         && assets.find("IconReferenceValue")!=std::string::npos,
         "ItemRoster no longer captures reflected native icon references");
+    const auto resolve=assets.find("std::string ItemIconPath(UObject* object)");
+    const auto finish=assets.find("// Read reflected tag structures",resolve);
+    const auto iconResolver=assets.substr(resolve,finish-resolve);
+    Require(iconResolver.find("if(!trace && !result.empty())return result;")==std::string::npos
+        &&iconResolver.find("if(!trace && !result.empty())break;")!=std::string::npos
+        &&iconResolver.find("PS::HelpyCacheSources::Reference")<iconResolver.rfind("return result;"),
+        "normal tracing-off icons skip the native cross-source dependency used by schema clones");
     Require(panel.find("ItemGridPicker::Render(\"inventory\"")!=std::string::npos
         && picker.find("ItemIconCache::Update()")!=std::string::npos && picker.find("ItemIconCache::Draw(iconPath")!=std::string::npos,
         "Settings grid is not wired through the shared picker to the icon cache");
@@ -88,7 +95,7 @@ int main(int argc,char** argv) {
         "FColor channels are no longer read reflectively");
     Require(spawns.find("ItemIconRequests::Take()")==std::string::npos
         && icons.find("ItemIconRequests::Take()")!=std::string::npos
-        && icons.find("ItemIconThumbnail::Render(m_readyWorld,icon)")!=std::string::npos,
+        && icons.find("ItemIconThumbnail::Render(iconWorld,icon)")!=std::string::npos,
         "icon requests are not isolated in the /spawns item-icon subloader");
     Require(requests.find("using ItemIconRequests=ToolRequest<ItemIconTag>")!=std::string::npos,
         "item icon requests are no longer isolated from spawn-tool status");

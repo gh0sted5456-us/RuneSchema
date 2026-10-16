@@ -1,0 +1,11 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.1.0",
+  "FriendlyName": "RuneSchema Quest Items",
+  "Description": "Neutral inert quest-scroll ItemData Blueprint. RuneSchema provides authoritative activation; no quests or rewards are embedded.",
+  "Category": "RuneSchema",
+  "CanContainContent": true,
+  "EnabledByDefault": true,
+  "Installed": false
+}

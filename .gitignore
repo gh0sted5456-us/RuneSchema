@@ -41,3 +41,4 @@ Thumbs.db
 
 # Local MkDocs preview output.
 /site/
+/site-preview/

@@ -5,6 +5,7 @@
 #include "Unreal/Property/FEnumProperty.hpp"
 #include "Unreal/UEnum.hpp"
 #include "Core/SaveCleanup.h"
+#include "Core/AuthoringCleanupPreview.h"
 #include "Runtime/HostServices.h"
 #include "Runtime/Storefront.h"
 #include <imgui.h>
@@ -230,6 +231,7 @@ namespace {
 }
 #include "SaveCleanupPanel.inl"
 #include "NpcExportPanel.inl"
+#include "SaveAuthoring.inl"
 json Capture(UObject* controller,bool world) {
     if(!controller || !controller->GetWorld())throw std::runtime_error("Enter a world first.");
     auto report=world?World(controller):Character(controller);

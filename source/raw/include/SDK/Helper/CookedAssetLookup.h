@@ -75,7 +75,7 @@ inline void Refresh() {
     using namespace RC::Unreal;
     auto interface=UAssetRegistryHelpers::GetAssetRegistry();auto* registry=static_cast<UAssetRegistry*>(interface.ObjectPointer);
     TArray<FAssetData> assets;
-    if(!registry||!registry->GetAllAssets(assets,true)){Invalidate();throw std::runtime_error("Cannot verify cooked assets against the mounted registry");}
+    if(!registry||!registry->GetAllAssets(assets,true)||assets.Num()<=0){Invalidate();throw std::runtime_error("Cannot verify cooked assets against a ready, non-empty mounted registry");}
     Build(assets);
 }
 inline void Ensure() {if(!Available())Refresh();}

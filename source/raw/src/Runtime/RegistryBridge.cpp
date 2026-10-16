@@ -18,6 +18,7 @@
 #include "Runtime/RegistryManifestSummary.h"
 #include "Runtime/Storefront.h"
 #include "Core/NetworkIdentityState.h"
+#include "Core/PlayerStatus.h"
 #include "Generator/ToolRequest.h"
 #include "SDK/Classes/KismetSystemLibrary.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
@@ -279,6 +280,7 @@ void RegistryBridge::ResetWorld() {
     }catch(...) {}
     m_authorityComponent=nullptr;m_worldAuthorityComponent=nullptr;m_presentationAuthorityComponent=nullptr;
     m_pendingMode.Reset();
+    m_helpyRosterComponent.Reset();m_helpyRosterRevision=0;m_helpyRosterGeneration=0;
     m_retryElapsed=m_retryInterval=0.0f;
     m_seenRegistryRevision=m_seenActivationRevision=m_seenPersistentRevision=0;
     m_activeAuthorityGraph=nullptr;m_nativeAuthorityActionObserved=false;
@@ -928,11 +930,21 @@ void RegistryBridge::ObserveClientTransport(UObject* source,UFunction* function,
         }
         if(channel=="world.state"&&PersistentState)PersistentState(owner.Result<UObject*>(),channel,entity,payload);
         if(channel=="helpy.players")try {
+            const auto revision=ParameterInt64(function,parameters,TEXT("Revision"));
+            if(revision!=m_helpyRosterRevision||!revision||m_helpyRosterComponent.Get()!=source
+                ||m_helpyRosterGeneration!=PS::SpawnToolRequests::Generation.load())return;
+            m_helpyRosterRevision=0;m_helpyRosterComponent.Reset();
             const auto roster=nlohmann::json::parse(payload);
-            if(roster.value("Kind",std::string{})=="HelpyPlayers1"&&roster.contains("Players")&&roster["Players"].is_array()) {
+            if(roster.value("Kind",std::string{})=="HelpyPlayers1"&&roster.contains("Players")&&roster["Players"].is_array()&&roster["Players"].size()<=256) {
                 nlohmann::json rows=nlohmann::json::array();
-                for(const auto& player:roster["Players"])if(player.is_object())rows.push_back({{"Name",player.value("Name",std::string("Player"))},{"Path",player.value("Guid",std::string{})},{"Guid",player.value("Guid",std::string{})}});
-                PS::SpawnToolRequests::CatalogProgress({{"Players",std::move(rows)}});
+                for(const auto& player:roster["Players"])if(player.is_object()) {
+                    auto row=nlohmann::json{{"Name",player.value("Name",std::string("Player"))},{"Path",player.value("Guid",std::string{})},{"Guid",player.value("Guid",std::string{})}};
+                    if(player.contains("PlayerId")&&player["PlayerId"].is_number_integer())row["PlayerId"]=player["PlayerId"];
+                    if(player.contains("RoleStatus")&&PS::PlayerStatus::Valid(player["RoleStatus"]))row["RoleStatus"]=player["RoleStatus"];
+                    rows.push_back(std::move(row));
+                }
+                auto roles=PS::PlayerStatus::Snapshot(rows,PS::SpawnToolRequests::Generation.load());
+                PS::SpawnToolRequests::CatalogProgress({{"Players",std::move(rows)},{"PlayerRoles",std::move(roles)}});
             }
         }catch(...){}
         if(ClientNotification)ClientNotification(owner.Result<UObject*>(),channel,entity,payload);
@@ -1106,6 +1118,7 @@ bool RegistryBridge::RequestAuthority(const std::string& action,const std::strin
         auto* rpc=components[0]->GetFunctionByNameInChain(TEXT("ServerRequestRuneSchemaAction"));
         if(!rpc||!rpc->HasAnyFunctionFlags(FUNC_Net|FUNC_NetServer))continue;
         const auto revision=++m_outboundRevision;
+        if(action=="Players") {m_helpyRosterComponent.Assign(components[0]);m_helpyRosterRevision=revision;m_helpyRosterGeneration=PS::SpawnToolRequests::Generation.load();}
         DragonWilds::ActorHelper::FunctionCall request(components[0],rpc);
         request.Arg(TEXT("Channel"),std::string("helpy.authority"))
             .Arg(TEXT("EntityId"),std::string("request-")+std::to_string(revision))

@@ -29,9 +29,15 @@ template<class Query> bool QuerySurface(Query&& query){
 }
 // A small upward allowance admits a stair tread, not an overhead storey.
 inline constexpr double StepUp=45.0;
+// An intended floor may be below a character's capsule centre or an authored
+// approximation, but not dozens of metres down in a cave/under-world shell.
+// Bare '$' first obtains the terrain height, so this is a local floor window,
+// not a restriction on the initial terrain-discovery ray.
+inline constexpr double StepDown=300.0;
 inline SearchRange FloorRange(SearchRange bounds,double reference){
     if(!bounds.Valid()||!std::isfinite(reference))throw std::runtime_error("Ground reference must be finite");
     bounds.Top=std::min(bounds.Top,reference+StepUp);
+    bounds.Bottom=std::max(bounds.Bottom,reference-StepDown);
     if(!bounds.Valid())throw std::runtime_error("Ground reference lies below the search range");
     return bounds;
 }

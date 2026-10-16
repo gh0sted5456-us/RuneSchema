@@ -52,6 +52,15 @@ int main(int argc,char** argv){
     assert(stages.Stages[1].second[0].ObjectiveId=="patrol:goblins");
     assert(stages.Stages[1].second[0].Marker->Name=="RuneSchema_Quest_AAAAAAAAAAAAAAAAAAAAAA_patrol_goblins");
     assert(!stages.Kill && !stages.Marker);
+    auto either=staged;either["Stages"]=Json::array({either["Stages"][1]});
+    either["Stages"][0]["Completion"]="Any";
+    either["Stages"][0]["Objectives"].push_back(data["Objective"]);
+    const auto eitherQuest=Parse("Test",either);
+    assert(eitherQuest.AnyStage(0));
+    assert(ProgressText(eitherQuest,"patrol",[](const auto&){return 0;})->find("\nOR ")!=std::string::npos);
+    auto invalidEither=either;invalidEither["Stages"][0]["Completion"]="Either";assert(Rejects([&]{Parse("Test",invalidEither);}));
+    invalidEither=either;invalidEither["Stages"][0]["Objectives"][1]["Optional"]=true;assert(Rejects([&]{Parse("Test",invalidEither);}));
+    invalidEither=either;invalidEither["Stages"][0]["Objectives"].erase(1);assert(Rejects([&]{Parse("Test",invalidEither);}));
     const auto timeline=InspectorModel(stages);
     assert(timeline.at("Stages")==Json::array({"supplies","patrol"}));
     assert(timeline.at("Timeline")[0].at("Objectives")[0].at("Kind")=="TurnIn");

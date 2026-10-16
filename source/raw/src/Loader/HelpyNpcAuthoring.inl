@@ -41,7 +41,7 @@ nlohmann::json DragonWildsNpcLoader::HelpyNpcDocument(const VendorDefinition& so
         throw std::runtime_error("Permanent copies of legacy custom proxy classes need an explicit /npc conversion.");
     auto doc=nlohmann::json::object();
     for(const auto* field:{"DisplayName","VisualSource","Mesh","Materials","IdleAnimation","HideMesh","NoInteract","HideName",
-        "Location","Rotation","Scale","Enabled","EnableCollision","MeshCollision","Type","Appearance","Equipment","Pose","DialoguePose","Ghost","VisualEffect","Map","OverheadIcon","VendorID","DialogueID","LoreID","LoreEntry","JournalEntries","QuestID","TimeOfDay"})
+        "Location","Rotation","Scale","Enabled","EnableCollision","MeshCollision","Type","Appearance","Equipment","EquipmentWhen","Pose","DialoguePose","Ghost","VisualEffect","Map","OverheadIcon","VendorID","DialogueID","LoreID","LoreEntry","JournalEntries","QuestID","TimeOfDay"})
         if(source.HelpySource.contains(field))doc[field]=source.HelpySource[field];
     if(doc.contains("LoreID"))doc.erase("LoreEntry"); // Resolve() adds the runtime alias; authored copies keep the preferred reference.
     doc["Id"]=id;doc["Enabled"]=true;doc["TimeOfDay"]="Any";

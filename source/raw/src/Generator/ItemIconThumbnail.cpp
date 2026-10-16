@@ -180,10 +180,11 @@ namespace {
 
     std::filesystem::path OutputFile(const std::string& iconPath) {
         const bool liveOnly=ConfiguredCacheLimitMB()==0;
-        auto folder=HelpySourceCache::Directory(liveOnly);
+        auto folder=HelpySourceCache::IconDirectory(iconPath,liveOnly);
+        if(folder.empty())throw std::runtime_error("Icon source is not present in the registered source manifest");
         static std::uint64_t lastCacheEpoch=HelpyRuntimePreferences::IconCacheEpoch.load();const auto cacheEpoch=HelpyRuntimePreferences::IconCacheEpoch.load();if(cacheEpoch!=lastCacheEpoch){CacheBytesKnown=false;CacheBytes=0;lastCacheEpoch=cacheEpoch;}
         static int lastMode=-1;const int mode=liveOnly?0:1;
-        if(liveOnly&&lastMode!=0){std::error_code ec;std::filesystem::remove_all(folder,ec);CacheBytesKnown=false;CacheBytes=0;}
+        if(liveOnly&&lastMode!=0){std::error_code ec;std::filesystem::remove_all(HelpySourceCache::Directory(true),ec);CacheBytesKnown=false;CacheBytes=0;}
         if(lastMode!=mode){CacheBytesKnown=false;CacheBytes=0;lastMode=mode;}
         std::filesystem::create_directories(folder);
         return folder/(HelpySourceCache::Key(iconPath)+".rsicon");
@@ -204,7 +205,9 @@ namespace {
         std::vector<Entry> files;std::error_code ec;
         if(!CacheBytesKnown) {
             CacheBytes=0;
-            for(std::filesystem::directory_iterator it(folder,ec),end;!ec&&it!=end;it.increment(ec)) {
+            for(std::filesystem::recursive_directory_iterator it(folder,ec),end;!ec&&it!=end;it.increment(ec)) {
+                const auto attributes=GetFileAttributesW(it->path().c_str());
+                if(attributes==INVALID_FILE_ATTRIBUTES||(attributes&FILE_ATTRIBUTE_REPARSE_POINT)){it.disable_recursion_pending();continue;}
                 if(!it->is_regular_file(ec)||ec||it->path().extension()!=L".rsicon"){ec.clear();continue;}
                 const auto size=it->file_size(ec);if(ec){ec.clear();continue;}CacheBytes+=size;
             }
@@ -215,7 +218,9 @@ namespace {
         const std::uintmax_t trimTarget=configuredMB<=0?(LiveSessionCacheLimitBytes*3ull/4ull):(limitBytes*95ull/100ull);
         if(CacheBytes<=limitBytes)return;
         std::uintmax_t total=0;ec.clear();
-        for(std::filesystem::directory_iterator it(folder,ec),end;!ec&&it!=end;it.increment(ec)) {
+        for(std::filesystem::recursive_directory_iterator it(folder,ec),end;!ec&&it!=end;it.increment(ec)) {
+            const auto attributes=GetFileAttributesW(it->path().c_str());
+            if(attributes==INVALID_FILE_ATTRIBUTES||(attributes&FILE_ATTRIBUTE_REPARSE_POINT)){it.disable_recursion_pending();continue;}
             if(!it->is_regular_file(ec)||ec||it->path().extension()!=L".rsicon"){ec.clear();continue;}
             const auto size=it->file_size(ec);if(ec){ec.clear();continue;}const auto used=it->last_write_time(ec);if(ec){ec.clear();continue;}
             files.push_back({it->path(),used,size});total+=size;
@@ -389,7 +394,7 @@ namespace {
 nlohmann::json Render(UWorld* world,const std::string& iconPath) {
     if(iconPath.empty()||iconPath.size()>1024||iconPath.front()!='/')throw std::runtime_error("Item icon request requires a canonical texture path");
     HelpySourceCache::Poll(HostServices::ModDirectory());if(!HelpySourceCache::Ready())return {{"Icon",iconPath},{"Status","Pending"}};
-    const auto cachedFile=OutputFile(iconPath);if(CachedThumbnail(cachedFile)) {ActiveCapture.reset();PS::HelpyIconTrace::Event("core-cache-hit",iconPath,"file='"+cachedFile.string()+"'");std::error_code touch;std::filesystem::last_write_time(cachedFile,std::filesystem::file_time_type::clock::now(),touch);MaintainCache(cachedFile.parent_path());return {{"Icon",iconPath},{"File",cachedFile.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",true},{"SourceKey",HelpySourceCache::Current.Key}};}
+    const auto cachedFile=OutputFile(iconPath);if(CachedThumbnail(cachedFile)) {ActiveCapture.reset();PS::HelpyIconTrace::Event("core-cache-hit",iconPath,"file='"+cachedFile.string()+"'");std::error_code touch;std::filesystem::last_write_time(cachedFile,std::filesystem::file_time_type::clock::now(),touch);MaintainCache(HelpySourceCache::Directory(ConfiguredCacheLimitMB()==0));return {{"Icon",iconPath},{"File",cachedFile.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",true},{"SourceKey",HelpySourceCache::Fingerprint(iconPath)}};}
     if(!world)throw std::runtime_error("Item icon rendering requires a loaded world");
     if(RendererWorld.Get()!=world){Reset();RendererWorld.Assign(world);}
     if(ActiveCapture&&(ActiveCapture->Icon!=iconPath||ActiveCapture->World.Get()!=world))ActiveCapture.reset();
@@ -418,8 +423,8 @@ nlohmann::json Render(UWorld* world,const std::string& iconPath) {
             }
             if(alpha==0)for(std::size_t i=0;i+3<pixels.size();i+=4)pixels[i+3]=std::max({pixels[i],pixels[i+1],pixels[i+2]});
             WriteThumbnail(cachedFile,pixels);
-            std::error_code ec;const auto bytes=std::filesystem::file_size(cachedFile,ec);MaintainCache(cachedFile.parent_path(),ec?0:bytes);
-            const auto result=nlohmann::json{{"Icon",iconPath},{"File",cachedFile.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",false},{"SourceKey",HelpySourceCache::Current.Key},{"ColdLoad",capture.Cold},{"ResolvedClass",capture.ResolvedClass},{"ResolvedChain",capture.ResolvedChain}};
+            std::error_code ec;const auto bytes=std::filesystem::file_size(cachedFile,ec);MaintainCache(HelpySourceCache::Directory(ConfiguredCacheLimitMB()==0),ec?0:bytes);
+            const auto result=nlohmann::json{{"Icon",iconPath},{"File",cachedFile.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",false},{"SourceKey",HelpySourceCache::Fingerprint(iconPath)},{"ColdLoad",capture.Cold},{"ResolvedClass",capture.ResolvedClass},{"ResolvedChain",capture.ResolvedChain}};
             ActiveCapture.reset();return result;
         };
         if(capture.Timing.CanRead(now))return readCapture();

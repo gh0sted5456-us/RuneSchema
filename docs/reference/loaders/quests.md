@@ -9,6 +9,11 @@ Per-character quest definitions, objectives, rewards, and persistence.
 Quests are per-character definitions with stages, objectives, rewards, and a
 stable persistence ID.
 
+Quests can also be accepted through a craftable consumable item using an
+item-side [`$QuestScroll` declaration](../../QUEST-SCROLLS.md) in `/assets`.
+The recipe produces a normal stable-ID item; use activates an existing quest
+through the authoritative acceptance receipt, without requiring station dialogue.
+
 ```json
 {
   "Id": "gather_logs",
@@ -40,6 +45,11 @@ unique, canonical 22-character `PersistenceID` for each quest. Keep that identit
 stable when updating the same quest.
 
 ## Quest lists and completion
+
+7.8 alpha stages also support `Completion: "Any"` for alternative objectives
+with one completion/reward receipt. See [alternative objectives and NPC
+equipment consequences](../../QUEST-ALTERNATIVES-AND-NPC-EQUIPMENT.md) for the
+kill-or-hand-in contract, limits, repeat behavior and live-validation status.
 
 A file may contain one definition or an array of definitions. Multiple quests
 remain separate per-character native progress records; accepting another quest

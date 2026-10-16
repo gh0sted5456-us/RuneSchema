@@ -124,4 +124,18 @@ int main()
     rejected=false;
     try{Definitions("Journals");}catch(const std::runtime_error&){rejected=true;}
     assert(rejected);
+    // Loose /registry files share lane validation but must not synthesize a
+    // cooked definition for an asset constructed by a schema loader.
+    Reset();const std::string runtime="/Game/RuneSchema/Example/Recipes/R_One.R_One";
+    const nlohmann::json schemaRef={{"Path",runtime},{"Source","Schema"}};
+    assert(Publish({{"NativeRegistries",{{"Items",{"/Game/RuneSchema/Example/Items/A.A"}},{"Recipes",{schemaRef}}}}},"Example","schema.jsonc"));
+    assert(Definitions("Recipes").empty());
+    assert(Snapshot()[0].AssetLanes.size()==2);
+    assert(Publish({{"NativeRegistries",{{"Recipes",{recipe}}}}},"Example","cooked-reference.jsonc"));
+    assert(Definitions("Recipes").size()==1&&Definitions("Recipes")[0].Path==recipe);
+    bool runtimeBodyRejected=false;
+    try{Publish({{"NativeRegistries",{{"Recipes",{schemaRef}}}},{"LoaderDefinitions",{{"Recipes",{{runtime,nlohmann::json::object()}}}}}},"Example","runtime-body.jsonc");}catch(const std::exception&){runtimeBodyRejected=true;}
+    assert(runtimeBodyRejected);
+    assert(Publish({{"NativeRegistries",{{"Recipes",{runtime}}}}},"Example","cooked-runeschema-namespace.jsonc"));
+    assert(Definitions("Recipes").size()==2); // Namespace alone is not provenance.
 }

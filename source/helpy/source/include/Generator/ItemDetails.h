@@ -1,5 +1,6 @@
 #pragma once
 #include "Generator/ToolRequest.h"
+#include "Generator/LazyCatalog.h"
 #include "Core/ItemPresentation.h"
 #include <chrono>
 #include <map>
@@ -20,6 +21,7 @@ inline void Poll(Clock::time_point now=Clock::now()) {
         if(receipt.contains("ItemDetails")&&receipt["ItemDetails"].is_object()&&ItemPresentation::Text(receipt["ItemDetails"],"Source")==PendingPath){
             const auto& native=receipt["ItemDetails"];
             for(const auto* key:{"Source","Name","Icon","PowerLevel"})if(native.contains(key)&&!native[key].is_structured())entry.Native[key]=native[key];
+            if(native.contains("Icon"))LazyCatalog::RecordNativeIcon(PendingPath,native["Icon"]);
             entry.Native["Description"]=ItemPresentation::Description(native);
             entry.Native["Fields"]=Json::array();
             if(native.contains("Fields")&&native["Fields"].is_array())for(const auto& field:native["Fields"]){

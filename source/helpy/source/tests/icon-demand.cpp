@@ -1,6 +1,7 @@
 #include "Generator/ItemIconCache.h"
 #include <cassert>
 #include <deque>
+#include <fstream>
 
 int main() {
     using namespace PS;
@@ -37,5 +38,32 @@ int main() {
     icons::Update();assert(state.Failed.contains(active)&&state.RetryAt.empty());
     state.NextSubmit={};icons::Queue(active,true);icons::Update();assert(submissions==3);
     icons::RetryFailed();state.DiskChecked.insert(active);icons::Queue(active,true);icons::Update();assert(submissions==4);
-    end();icons::ClearRemote();ImGui::DestroyContext();
+    end();
+    // A source-scoped disk hit must install pixels without asking the engine
+    // to render again. A cached file cannot stand in for source registration.
+    icons::InvalidateSource();HelpySourceCache::Current={};HelpySourceCache::Current.Authoritative=true;
+    HelpySourceCache::Current.Key="0123456789abcdef";HelpySourceCache::Current.SourceKeys={{"game","abcdef0123456789"}};
+    const std::string cachedIcon="/Game/Art/Test/T_Cached.T_Cached";
+    const auto file=icons::detail::DiskFile(cachedIcon);std::filesystem::create_directories(file.parent_path());
+    const uint32_t iconWidth=64,iconHeight=64,iconBytes=iconWidth*iconHeight*4;
+    std::vector<unsigned char> iconPixels(iconBytes,255);
+    {std::ofstream output(file,std::ios::binary);output.write("RSI3",4);output.write(reinterpret_cast<const char*>(&iconWidth),4);
+        output.write(reinterpret_cast<const char*>(&iconHeight),4);output.write(reinterpret_cast<const char*>(&iconBytes),4);
+        output.write(reinterpret_cast<const char*>(iconPixels.data()),iconPixels.size());}
+    const auto requestsBeforeDiskHit=submissions;
+    begin();icons::Queue(cachedIcon,true);icons::Update();
+    assert(submissions==requestsBeforeDiskHit&&state.Textures.contains(cachedIcon));
+    assert(icons::detail::DiskFile("/NotRegistered/Art/T_Stale.T_Stale").empty());
+    assert(!icons::detail::Install("/Game/Art/Test/T_Wrong.T_Wrong",file));
+    state.NextSubmit={};icons::Queue("/NotRegistered/Art/T_Stale.T_Stale",true);icons::Update();
+    assert(submissions==requestsBeforeDiskHit&&state.Pending.empty()&&state.Failed.empty());
+    end();
+    unsigned accountingResets=0;icons::RemoteResetAccounting=[&]{++accountingResets;};
+    assert(!icons::RemoveDiskFolder(HostServices::CacheDirectory()));
+    assert(!icons::RemoveDiskFolder(HostServices::CacheDirectory()/"unrelated"));
+    assert(std::filesystem::exists(file));
+    assert(icons::CleanDiskCache()&&accountingResets==1&&!std::filesystem::exists(file));
+    icons::RemoteResetAccounting={};
+    for(auto* texture:state.RetiredTextures)if(texture)texture->SetStatus(ImTextureStatus_Destroyed);
+    icons::detail::ReapRetired(state);icons::ClearRemote();ImGui::DestroyContext();
 }

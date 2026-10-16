@@ -18,4 +18,10 @@ int main(int argc,char** argv){
     Check(tools.find("ToolMapTravelPump(m_readyWorld)")<tools.find("SpawnToolRequests::Take()"),"Async travel must retain the mutation slot");
     Check(tools.find("Only the authoritative server may run spawn tools")<tools.find("ToolMapTravelBegin(world"),"Map travel must retain host authority");
     Check(ui.contains("destinationReady=Data.Operation==2||groundReady"),"Only teleport may prepare unloaded ground; spawn/build retain ground gates");
+    Check(ui.contains("Data.ProbeWanted=Data.Operation!=2")&&ui.contains("previewReady=Data.Operation==2||"),"Repeated teleport selection still waits for a placement-only preview");
+    Check(ui.contains("ProgressBar(-")&&ui.contains("duration_cast<std::chrono::seconds>")&&ui.contains("Cancel travel"),"Travel must show an indeterminate phase indicator, elapsed time and pre-departure cancel");
+    Check(travel.contains("ToolMapTravelProgress(\"Preparing\"")&&travel.contains("ToolMapTravelProgress(\"Checking ground\"")&&travel.contains("ToolMapTravelProgress(\"Travelling\""),"Native travel stages must report progress without completing the request");
+    Check(travel.contains("milliseconds(500)"),"Travel progress must be throttled");
+    Check(tools.contains("SpawnToolRequests::TakeMapGround()")&&tools.contains("if(!PS::SpawnToolRequests::IsWaiting()&&groundNow>=nextMapGround)"),"Height queries must stay below queued travel/mutation priority");
+    Check(ui.contains("SpawnToolRequests::SubmitMapGround")&&ui.contains("milliseconds(350)")&&ui.contains("ground unavailable"),"Hover Z must be debounced, independently requested and honest about unloaded ground");
 }

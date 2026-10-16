@@ -1,4 +1,6 @@
 #include "Runtime/RuneSchemaPluginApi.h"
+#include "Core/HelpyBranding.h"
+#include "Core/RsmkResources.h"
 #include <windows.h>
 #include <map>
 #include <string>
@@ -37,6 +39,11 @@ int Run(int argc,char** argv){
     const auto shutdown=reinterpret_cast<RuneSchemaPluginShutdownFn>(GetProcAddress(dll,"RuneSchemaPlugin_Shutdown"));
     Check(query&&initialize&&shutdown);const auto* descriptor=query();
     Check(descriptor->ApiVersion==1&&std::string(descriptor->Id)=="RuneSchema.Helpy");
+    Check(std::string(descriptor->Name)=="RSMK (RuneSchema Modding Kit)");
+    Check(FindResourceW(dll,MAKEINTRESOURCEW(IDI_RSMK),RT_GROUP_ICON)!=nullptr);
+    const auto small=static_cast<HICON>(LoadImageW(dll,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,16,16,LR_SHARED));
+    const auto large=static_cast<HICON>(LoadImageW(dll,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,32,32,LR_SHARED));
+    Check(small&&large);
     RuneSchemaHostApi host{};host.StructSize=sizeof(host);host.ApiVersion=1;
     void* instance=nullptr;
     Check(initialize(nullptr,&instance)==RS_PLUGIN_INCOMPATIBLE_API);
@@ -68,7 +75,7 @@ int Run(int argc,char** argv){
     if(argc==3&&(std::string(argv[2])=="--start-hidden"||ServerDesktop)){
         const auto start=reinterpret_cast<RuneSchemaPluginPhaseFn>(GetProcAddress(dll,"RuneSchemaPlugin_OnUnrealInit"));
         Check(start&&start(instance)==RS_PLUGIN_OK);
-        bool ready=false;for(const auto& log:Logs)if(log.find("standalone Helpy ready")!=std::string::npos)ready=true;
+        bool ready=false;for(const auto& log:Logs)if(log.find("standalone RSMK ready")!=std::string::npos)ready=true;
         Check(ready);
         if(ServerDesktop){
             HWND own=nullptr;
@@ -76,6 +83,8 @@ int Run(int argc,char** argv){
                 DWORD pid=0;GetWindowThreadProcessId(window,&pid);if(pid==GetCurrentProcessId()){own=window;break;}
             }
             Check(own&&IsWindowVisible(own));
+            wchar_t title[128]{};GetWindowTextW(own,title,128);Check(std::wstring(title)==PS::HelpyBranding::WindowTitle);
+            Check(SendMessageW(own,WM_GETICON,ICON_SMALL,0)!=0&&SendMessageW(own,WM_GETICON,ICON_BIG,0)!=0);
             SendMessageW(own,WM_CLOSE,0,0);Check(IsWindowVisible(own)&&IsIconic(own));
             ShowWindow(own,SW_SHOWNOACTIVATE);Check(IsWindowVisible(own));
         }

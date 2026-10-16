@@ -233,7 +233,7 @@ void DragonWildsNpcLoader::PublishDialogueCue(AActor* actor,const nlohmann::json
     if(components.Num()!=1)return;
     auto payload=nlohmann::json::parse(ReadIdentity(components[0]));
     const auto identity=NpcIdentity::Decode(payload.dump());
-    payload["version"]=2;payload["cueRevision"]=++m_serverDialogueCueRevisions[actor];payload["cue"]=cue;
+    payload["version"]=payload.value("version",1)==3?3:2;payload["cueRevision"]=++m_serverDialogueCueRevisions[actor];payload["cue"]=cue;
     const auto encoded=payload.dump();if(encoded.size()>NpcIdentity::MaxPayload)throw std::runtime_error("NPC visual cue payload is too large");
     PropertyHelper::CopyJsonValueToContainer(components[0],IdentityField(type),encoded);
     if(ReadIdentity(components[0])!=encoded)throw std::runtime_error("NPC visual cue replication write failed");
@@ -378,9 +378,9 @@ bool DragonWildsNpcLoader::DialogueGateAllows(const DialogueCompletionBinding& a
                     const auto& objectives=quest.Stages[index].second;
                     const auto plan=Quests::SelectHandIns(objectives,
                         [&](size_t objective){return progress.Count(index,objective);},
-                        [](const Quests::Definition&){return true;},inventory);
-                    complete=true;
-                    for(size_t objective=0;objective<objectives.size();++objective) {
+                        [](const Quests::Definition&){return true;},inventory,quest.AnyStage(index));
+                    complete=quest.AnyStage(index)?!plan.Objectives.empty():true;
+                    for(size_t objective=0;!quest.AnyStage(index) && objective<objectives.size();++objective) {
                         const auto& value=objectives[objective];
                         if(value.Optional || progress.Count(index,objective)==value.Required.Count)continue;
                         if(value.Kill || value.Acquire

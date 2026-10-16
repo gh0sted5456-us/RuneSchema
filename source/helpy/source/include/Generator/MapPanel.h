@@ -1,7 +1,9 @@
 #pragma once
 #include "Core/MapProjection.h"
+#include "Core/MapViewport.h"
 #include "Core/MapSpawnRequest.h"
 #include "Core/SpawnCatalogSearch.h"
+#include "Core/BuildingMenu.h"
 #include "Generator/SpawnToolsPanel.h"
 #include <fstream>
 #include <chrono>
@@ -11,10 +13,17 @@ using Clock=std::chrono::steady_clock;
 struct State {
     Json Snapshot=Json::object(),Definition=Json::object(),Building=Json::object(),Ground=Json::object(),Buildings=Json::array();
     MapProjection::Projection Projection;
+    MapProjection::Viewport View;
     MapProjection::Point Center{0.5,0.5},Point{},ProbePoint{};
     float Zoom=1,Radius=300,Yaw=0;int Kind=2,Count=1,Operation=0,SpawnType=0;
     bool Permanent=false,Popup=false,ShowPlayers=true,HasPoint=false,Dragged=false,ProbeWanted=false,BuildingsWanted=false,BuildingsMore=false;
-    bool NearMarker=false;
+    bool NearMarker=false,TravelAction=false,CancelSent=false;
+    bool BuildingBrowserOpen=false,BuildingAction=false;
+    int BuildingCategory=-1;
+    Json BuildingCategories=Json::array(),PlacementResult=Json::object();
+    bool FitRequested=false,HoverActive=false,GroundReadSelected=false;
+    Json HoverGround=Json::object();MapProjection::Point GroundReadPoint{},HoverPoint{};
+    uint64_t GroundReadPending=0;Clock::time_point HoverStableAt{},NextGroundRead{},GroundReadAt{},HoverFreshUntil{};
     bool LiveSearch=false;std::string TypedSearch;
     bool ShowLodestones=true,ShowPlaced=true,ShowResources=false,ShowAI=false;
     size_t BuildingsOffset=0,BuildingsNext=0,BuildingsSentOffset=0;
@@ -27,6 +36,13 @@ struct State {
     ImTextureData* Texture=nullptr;std::vector<ImTextureData*> Retired;
 };
 inline State Data;
+inline void ReadGround(MapProjection::Point point,bool selected){
+    const auto now=Clock::now();if(now<Data.NextGroundRead||SpawnToolRequests::IsWaiting()||!SpawnToolRequests::IsAvailable())return;
+    const auto id=++Data.Sequence;Data.NextGroundRead=now+std::chrono::milliseconds(500);
+    if(SpawnToolRequests::SubmitMapGround({{"RequestId",id},{"Generation",Data.Generation},{"TargetLocation",{{"X",point.X},{"Y",point.Y}}}})){
+        Data.GroundReadPending=id;Data.GroundReadPoint=point;Data.GroundReadSelected=selected;Data.GroundReadAt=now;
+    }
+}
 inline void Reap(){for(auto it=Data.Retired.begin();it!=Data.Retired.end();){auto* texture=*it;if(texture->Status!=ImTextureStatus_Destroyed){++it;continue;}ImGui::UnregisterUserTexture(texture);IM_DELETE(texture);it=Data.Retired.erase(it);}}
 inline void LoadImage(const Json& image){
     const auto file=ItemPresentation::Text(image,"File");if(file.empty()||file==Data.ImageFile||ItemPresentation::Text(image,"Status")!="Ready")return;
@@ -41,17 +57,29 @@ inline void LoadImage(const Json& image){
 inline void Poll(){
     Reap();if(Data.Texture&&Data.Texture->Status==ImTextureStatus_OK&&Data.Texture->Pixels)Data.Texture->DestroyPixels();
     const auto generation=SpawnToolRequests::CurrentGeneration();const auto now=Clock::now();
-    if(generation!=Data.Generation){Data.Generation=generation;Data.Pending=Data.SpawnPending=Data.ProbePending=Data.BuildingsPending=0;Data.Snapshot=Json::object();Data.Projection={};Data.Definition=Data.Building=Data.Ground=Json::object();Data.Buildings=Json::array();Data.ProbeWanted=Data.BuildingsWanted=Data.HasPoint=false;Data.Next={};Data.Popup=false;Data.Error.clear();Data.Status.clear();Data.Center={0.5,0.5};Data.Zoom=1;}
+    if(generation!=Data.Generation){Data.GroundReadPending=0;Data.HoverActive=false;Data.HoverGround=Json::object();Data.NextGroundRead={};Data.View={};Data.FitRequested=false;Data.BuildingAction=Data.BuildingBrowserOpen=false;Data.PlacementResult=Json::object();Data.BuildingCategories=Json::array();Data.BuildingCategory=-1;}
+    if(generation!=Data.Generation){Data.Generation=generation;Data.Pending=Data.SpawnPending=Data.ProbePending=Data.BuildingsPending=0;Data.Snapshot=Json::object();Data.Projection={};Data.Definition=Data.Building=Data.Ground=Json::object();Data.Buildings=Json::array();Data.ProbeWanted=Data.BuildingsWanted=Data.HasPoint=false;Data.Next={};Data.Popup=false;Data.Error.clear();Data.Status.clear();Data.Center={0.5,0.5};Data.Zoom=1;Data.TravelAction=Data.CancelSent=false;}
     Json receipt;
-    if(Data.SpawnPending&&SpawnToolRequests::TakeCompleted(Data.SpawnPending,receipt)){Data.SpawnPending=0;Data.Status=ItemPresentation::Text(receipt,"Status");}
+    const auto& live=SpawnToolsPanel::UiSnapshot;
+    if(Data.GroundReadPending&&live.contains("MapGround")&&live["MapGround"].is_object()){
+        const auto& ground=live["MapGround"];
+        if(ground.value("Generation",uint64_t{})==Data.Generation&&ground.value("RequestId",uint64_t{})==Data.GroundReadPending){
+            if(Data.GroundReadSelected&&Data.Point.X==Data.GroundReadPoint.X&&Data.Point.Y==Data.GroundReadPoint.Y)Data.Ground=ground;
+            else if(!Data.GroundReadSelected&&Data.HoverActive&&Data.HoverPoint.X==Data.GroundReadPoint.X&&Data.HoverPoint.Y==Data.GroundReadPoint.Y){Data.HoverGround=ground;Data.HoverFreshUntil=now+std::chrono::seconds(2);}
+            Data.GroundReadPending=0;
+        }
+    }
+    if(Data.GroundReadPending&&now-Data.GroundReadAt>std::chrono::seconds(4)){Data.GroundReadPending=0;Data.NextGroundRead=now+std::chrono::seconds(1);}
+    if(Data.SpawnPending&&SpawnToolRequests::TakeCompleted(Data.SpawnPending,receipt)){Data.SpawnPending=0;Data.TravelAction=false;Data.Status=ItemPresentation::Text(receipt,"Status");if(Data.BuildingAction)Data.PlacementResult=receipt.value("SpawnResult",Json{{"Active",false},{"Error",Data.Status}});Data.Next={};}
     if(Data.ProbePending&&SpawnToolRequests::TakeCompleted(Data.ProbePending,receipt)){Data.ProbePending=0;if(Data.Point.X==Data.ProbePoint.X&&Data.Point.Y==Data.ProbePoint.Y)Data.Ground=receipt.value("MapPoint",Json{{"GroundAvailable",false},{"Error",ItemPresentation::Text(receipt,"Status")}});}
     if(Data.BuildingsPending&&SpawnToolRequests::TakeCompleted(Data.BuildingsPending,receipt)){
         Data.BuildingsPending=0;
-        if(Data.BuildingsSentQuery!=Data.BuildingSearch){}
-        else if(receipt.contains("MapBuildings")&&receipt["MapBuildings"].is_object()){
+        if(receipt.contains("MapBuildings")&&receipt["MapBuildings"].is_object()){
             const auto& page=receipt["MapBuildings"];if(!Data.BuildingsSentOffset)Data.Buildings=Json::array();
             if(page.contains("Rows")&&page["Rows"].is_array())for(const auto& row:page["Rows"])if(row.is_object()&&Data.Buildings.size()<4096)Data.Buildings.push_back(row);
             Data.BuildingsNext=page.value("NextOffset",size_t{});Data.BuildingsMore=page.value("HasMore",false);
+            if(page.contains("Categories")&&page["Categories"].is_array())Data.BuildingCategories=page["Categories"];
+            if(Data.BuildingsMore&&Data.BuildingBrowserOpen){Data.BuildingsOffset=Data.BuildingsNext;Data.BuildingsWanted=true;}
         }else Data.Error=ItemPresentation::Text(receipt,"Status");
     }
     if(Data.Pending&&SpawnToolRequests::TakeCompleted(Data.Pending,receipt)){
@@ -65,14 +93,71 @@ inline void Poll(){
     if(Data.Pending&&now-Data.Requested>std::chrono::seconds(15)){Data.Pending=0;Data.Error="Map refresh timed out. Use Refresh to try again.";}
     if(Data.ProbePending&&now-Data.ProbeRequested>std::chrono::seconds(15)){Data.ProbePending=0;Data.Error="Coordinate lookup timed out. Select the point again.";}
     if(Data.BuildingsPending&&now-Data.BuildingsRequested>std::chrono::seconds(15)){Data.BuildingsPending=0;Data.Error="Building menu lookup timed out. Search again to retry.";}
-    if(Data.SpawnPending&&now-Data.ActionRequested>std::chrono::seconds(100)){Data.SpawnPending=0;Data.Status="The action has not confirmed completion. Check the game before retrying.";}
+    if(Data.SpawnPending&&now-Data.ActionRequested>std::chrono::seconds(100)){Data.SpawnPending=0;Data.Status="The action has not confirmed completion. Check the game before retrying.";if(Data.BuildingAction)Data.PlacementResult={{"Active",false},{"Error",Data.Status}};}
     if(!SpawnToolRequests::IsAvailable()||SpawnToolRequests::IsWaiting()||Data.Pending||Data.SpawnPending||Data.ProbePending||Data.BuildingsPending)return;
-    if(Data.ProbeWanted){const auto id=++Data.Sequence;if(SpawnToolRequests::TrySubmit({{"Action","MapProbe"},{"NearMarker",Data.NearMarker},{"_Source","HelpyMap"},{"_RequestId",id},{"TargetLocation",{{"X",Data.Point.X},{"Y",Data.Point.Y}}}})){Data.ProbePoint=Data.Point;Data.ProbePending=id;Data.ProbeRequested=now;Data.ProbeWanted=false;}return;}
-    if(Data.BuildingsWanted&&now>=Data.BuildingSearchDue){const auto id=++Data.Sequence;if(SpawnToolRequests::TrySubmit({{"Action","MapBuildings"},{"_Source","HelpyMap"},{"_RequestId",id},{"Query",Data.BuildingSearch},{"Offset",Data.BuildingsOffset}})){Data.BuildingsPending=id;Data.BuildingsSentQuery=Data.BuildingSearch;Data.BuildingsSentOffset=Data.BuildingsOffset;Data.BuildingsRequested=now;Data.BuildingsWanted=false;}return;}
+    if(Data.Operation!=2&&Data.ProbeWanted){const auto id=++Data.Sequence;if(SpawnToolRequests::TrySubmit({{"Action","MapProbe"},{"NearMarker",Data.NearMarker},{"_Source","HelpyMap"},{"_RequestId",id},{"TargetLocation",{{"X",Data.Point.X},{"Y",Data.Point.Y}}}})){Data.ProbePoint=Data.Point;Data.ProbePending=id;Data.ProbeRequested=now;Data.ProbeWanted=false;}return;}
+    if(Data.Operation==1&&Data.BuildingsWanted&&now>=Data.BuildingSearchDue){const auto id=++Data.Sequence;if(SpawnToolRequests::TrySubmit({{"Action","MapBuildings"},{"_Source","HelpyMap"},{"_RequestId",id},{"Query",""},{"Offset",Data.BuildingsOffset}})){Data.BuildingsPending=id;Data.BuildingsSentQuery="";Data.BuildingsSentOffset=Data.BuildingsOffset;Data.BuildingsRequested=now;Data.BuildingsWanted=false;}return;}
     if(!Data.Popup&&now>=Data.Next){
         const auto id=++Data.Sequence;Data.Next=now+std::chrono::milliseconds(750);
         if(SpawnToolRequests::TrySubmit({{"Action","MapSnapshot"},{"Lodestones",Data.ShowLodestones},{"Placements",Data.ShowPlaced},{"Resources",Data.ShowResources},{"AI",Data.ShowAI},{"_Source","HelpyMap"},{"_RequestId",id}})){Data.Pending=id;Data.Requested=now;}
     }
+}
+inline void BuildingBrowser(){
+    const auto& t=HelpyImGuiTheme::Current;const auto screen=ImGui::GetIO().DisplaySize;
+    ImGui::SetNextWindowSize(ImVec2(std::min(t.X(960),screen.x-t.X(32)),std::min(t.Y(650),screen.y-t.Y(32))),ImGuiCond_Appearing);
+    bool open=true;
+    if(!ImGui::BeginPopupModal("Building menu",&open,ImGuiWindowFlags_NoSavedSettings)){Data.BuildingBrowserOpen=false;return;}
+    Data.BuildingBrowserOpen=true;
+    ImGui::TextDisabled("Native building catalogue · icons and categories from the game");
+    ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##building-menu-search","Search pieces, categories or groups...",Data.BuildingSearch,sizeof(Data.BuildingSearch));
+    if(Data.BuildingsPending||Data.BuildingsWanted)ImGui::TextDisabled("Loading menu... %zu pieces received",Data.Buildings.size());
+    else ImGui::TextDisabled("%zu pieces · select a piece, then use selection",Data.Buildings.size());
+    const float body=std::max(t.Y(80),ImGui::GetContentRegionAvail().y-ImGui::GetFrameHeightWithSpacing()*2-t.Y(12));
+    if(ImGui::BeginChild("##building-categories",ImVec2(t.X(150),body),true)){
+        if(ImGui::Selectable("All categories",Data.BuildingCategory<0))Data.BuildingCategory=-1;
+        for(const auto& category:Data.BuildingCategories){
+            const auto id=category.value("Id",-1);const auto name=ItemPresentation::Text(category,"Name"),icon=ItemPresentation::Text(category,"Icon");ImGui::PushID(id);
+            const auto a=ImGui::GetCursorScreenPos();const float iconSize=t.Y(18),labelWidth=std::max(1.0f,ImGui::GetContentRegionAvail().x-t.X(28));
+            const float height=std::max(t.Y(28),ImGui::CalcTextSize(name.c_str(),nullptr,false,labelWidth).y+t.Y(6));
+            if(ImGui::Selectable("##category",Data.BuildingCategory==id,ImGuiSelectableFlags_None,ImVec2(0,height)))Data.BuildingCategory=id;
+            if(!icon.empty())ItemIconCache::Draw(icon,ImVec2(a.x,a.y+(height-iconSize)*.5f),ImVec2(a.x+iconSize,a.y+(height+iconSize)*.5f),true);
+            ImGui::GetWindowDrawList()->AddText(ImGui::GetFont(),ImGui::GetFontSize(),ImVec2(a.x+t.X(25),a.y+t.Y(3)),ImGui::GetColorU32(t.text),name.c_str(),nullptr,labelWidth);
+            ImGui::PopID();
+        }
+    }ImGui::EndChild();ImGui::SameLine();
+    if(ImGui::BeginChild("##building-grid",ImVec2(0,body),true)){
+        const float width=ImGui::GetContentRegionAvail().x;const int columns=std::max(1,static_cast<int>((width+t.X(8))/(t.X(132)+t.X(8))));
+        const float cardWidth=std::max(1.0f,(width-t.X(8)*(columns-1))/columns);size_t shown=0;
+        for(const auto& row:Data.Buildings){if(!BuildingMenu::Matches(row,Data.BuildingSearch,Data.BuildingCategory))continue;
+            if(shown%columns)ImGui::SameLine(0,t.X(8));
+            const auto path=ItemPresentation::Text(row,"Path"),name=ItemPresentation::Text(row,"Name");ImGui::PushID(path.c_str());
+            const auto start=ImGui::GetCursorScreenPos();const bool selected=path==ItemPresentation::Text(Data.Building,"Path");
+            ImGui::PushStyleColor(ImGuiCol_Header,selected?t.selection:t.panelAlt);
+            if(ImGui::Selectable("##piece",selected,ImGuiSelectableFlags_None,ImVec2(cardWidth,t.Y(116))))Data.Building=row;
+#if defined(HELPY_PREVIEW)
+            HelpyPreviewHooks::BuildingCards[path]=HelpyPreviewHooks::LastRect();
+#endif
+            const bool hovered=ImGui::IsItemHovered();ImGui::PopStyleColor();
+            const float icon=std::min(t.Y(56),cardWidth-t.X(16));const ImVec2 a(start.x+(cardWidth-icon)*.5f,start.y+t.Y(7)),b(a.x+icon,a.y+icon);
+            if(!ItemIconCache::Draw(ItemPresentation::Text(row,"Icon"),a,b,true))HelpyImGuiTheme::DrawIcon(HelpyImGuiTheme::Icon::Building,ImVec2((a.x+b.x)*.5f,(a.y+b.y)*.5f),icon*.6f,t.textDisabled);
+            ImGui::GetWindowDrawList()->AddRect(start,ImVec2(start.x+cardWidth,start.y+t.Y(116)),ImGui::GetColorU32(selected?t.accent:t.border),t.X(5));
+            ImGui::GetWindowDrawList()->AddText(ImGui::GetFont(),ImGui::GetFontSize(),ImVec2(start.x+t.X(7),start.y+t.Y(70)),ImGui::GetColorU32(t.text),name.c_str(),nullptr,cardWidth-t.X(14));
+            if(hovered)ImGui::SetTooltip("%s\n%s / %s",name.c_str(),ItemPresentation::Text(row,"Category").c_str(),ItemPresentation::Text(row,"Group").c_str());
+            ImGui::PopID();++shown;
+        }
+        if(!shown)ImGui::TextWrapped("%s",Data.BuildingsPending||Data.BuildingsWanted?"Looking through the game's menu...":"No pieces match this search/category.");
+    }ImGui::EndChild();
+    ImGui::TextWrapped("Selected: %s",Data.Building.empty()?"None":ItemPresentation::Text(Data.Building,"Name").c_str());
+    ImGui::BeginDisabled(Data.Building.empty());if(HelpyImGuiTheme::SoftButton("Use selected piece")){Data.BuildingBrowserOpen=false;ImGui::CloseCurrentPopup();}
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::BuildingUse=HelpyPreviewHooks::LastRect();
+#endif
+    ImGui::EndDisabled();ImGui::SameLine();
+    if(HelpyImGuiTheme::SoftButton("Close menu")){Data.BuildingBrowserOpen=false;ImGui::CloseCurrentPopup();}
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::BuildingClose=HelpyPreviewHooks::LastRect();
+#endif
+    ImGui::EndPopup();
 }
 inline void PlacePopup(){
     if(!ImGui::BeginPopup("##map-place")){Data.Popup=false;return;}Data.Popup=true;const auto& t=HelpyImGuiTheme::Current;
@@ -82,9 +167,13 @@ inline void PlacePopup(){
     if(groundReady){ImGui::Text("Z %.0f (ground)",Data.Ground["Location"][2].get<double>());ImGui::SameLine();if(ImGui::SmallButton("Copy coordinates")){char value[128];std::snprintf(value,sizeof(value),"X=%.0f Y=%.0f Z=%.0f",Data.Point.X,Data.Point.Y,Data.Ground["Location"][2].get<double>());ImGui::SetClipboardText(value);}}
     else if(Data.Operation!=2)ImGui::TextWrapped("%s",Data.ProbePending||Data.ProbeWanted?"Reading ground height...":ItemPresentation::Text(Data.Ground,"Error").c_str());
     ImGui::Separator();
-    if(ImGui::RadioButton("Spawn",Data.Operation==0))Data.Operation=0;ImGui::SameLine();
-    if(ImGui::RadioButton("Build",Data.Operation==1)){Data.Operation=1;if(Data.Buildings.empty()){Data.BuildingsOffset=0;Data.BuildingsWanted=true;}}ImGui::SameLine();
-    if(ImGui::RadioButton("Teleport",Data.Operation==2))Data.Operation=2;
+    if(ImGui::RadioButton("Spawn",Data.Operation==0)){Data.Operation=0;if(!groundReady)Data.ProbeWanted=true;}ImGui::SameLine();
+    if(ImGui::RadioButton("Build",Data.Operation==1)){Data.Operation=1;if(!groundReady)Data.ProbeWanted=true;if(Data.Buildings.empty()){Data.BuildingsOffset=0;Data.BuildingsWanted=true;}}ImGui::SameLine();
+    if(ImGui::RadioButton("Teleport",Data.Operation==2)){Data.Operation=2;Data.ProbeWanted=false;}
+    if(Data.Operation==2){
+        if(Data.Ground.empty()&&!Data.GroundReadPending)ReadGround(Data.Point,true);
+        if(!groundReady)ImGui::TextDisabled("%s",Data.GroundReadPending?"Reading native ground Z (optional)...":"Ground Z unavailable here; travel prepares the destination separately.");
+    }
     if(Data.Operation==0){
     const char* types[]{"Resources", "Ore / mineral nodes", "Trees / wood", "Enemies / AI"};
     ImGui::SetNextItemWidth(t.X(340));if(ImGui::Combo("##spawn-type",&Data.SpawnType,types,4)){
@@ -111,12 +200,12 @@ inline void PlacePopup(){
     if(!Data.Definition.empty())ImGui::TextWrapped("Selected: %s",ItemPresentation::Text(Data.Definition,"Name").c_str());
     if(!window.LastError.empty())ImGui::TextWrapped("%s",window.LastError.c_str());
     }else if(Data.Operation==1){
-        ImGui::SetNextItemWidth(t.X(300));if(ImGui::InputTextWithHint("##map-building-search","Find building pieces / teleport stones...",Data.BuildingSearch,sizeof(Data.BuildingSearch))){Data.BuildingsOffset=0;Data.BuildingsWanted=true;Data.BuildingSearchDue=Clock::now()+std::chrono::milliseconds(220);Data.Building=Json::object();Data.Buildings=Json::array();}
-        const auto label=ItemPresentation::Text(Data.Building,"Name");ImGui::SetNextItemWidth(t.X(300));
-        if(ImGui::BeginCombo("##map-building",label.empty()?"Choose a building piece":label.c_str())){
-            for(const auto& row:Data.Buildings){const auto path=ItemPresentation::Text(row,"Path");ImGui::PushID(path.c_str());if(ImGui::Selectable(ItemPresentation::Text(row,"Name").c_str(),path==ItemPresentation::Text(Data.Building,"Path")))Data.Building=row;ImGui::PopID();}
-            if(Data.BuildingsMore&&!Data.BuildingsPending&&ImGui::Selectable("Load more...")){Data.BuildingsOffset=Data.BuildingsNext;Data.BuildingsWanted=true;}ImGui::EndCombo();
-        }
+        if(HelpyImGuiTheme::SoftButton("Browse building menu",ImVec2(-1,0))){Data.BuildingBrowserOpen=true;if(Data.BuildingsMore){Data.BuildingsOffset=Data.BuildingsNext;Data.BuildingsWanted=true;}ImGui::OpenPopup("Building menu");}
+#if defined(HELPY_PREVIEW)
+        HelpyPreviewHooks::BuildingBrowse=HelpyPreviewHooks::LastRect();
+#endif
+        BuildingBrowser();
+        ImGui::TextWrapped("Selected: %s",Data.Building.empty()?"Choose a building piece":ItemPresentation::Text(Data.Building,"Name").c_str());
         if(Data.BuildingsPending||Data.BuildingsWanted)ImGui::TextDisabled("Reading the game's building menu...");
         ImGui::SetNextItemWidth(t.X(140));ImGui::SliderFloat("Rotation",&Data.Yaw,0,360,"%.0f degrees");
         ImGui::TextWrapped("Pieces must pass the game's building checks. Placement uses one piece at a time.");
@@ -133,15 +222,19 @@ inline void PlacePopup(){
     if(Data.Operation==2)ImGui::TextWrapped("%s",Data.NearMarker?"Loads this destination, checks ground beside the stone (within 2 metres), then uses native travel.":"Loads the destination before departure, verifies a safe landing, then uses the game's native travel and loading screen. Unsafe or unavailable ground cancels departure.");
     const bool choice=Data.Operation==2||(Data.Operation==1?!Data.Building.empty():!Data.Definition.empty());
     const bool authority=Data.Operation==0||Data.Snapshot.value("CanBuildAndTeleport",false);
-    if(!authority)ImGui::TextWrapped("Use the host's Helpy for building placement and player teleportation.");
+    if(!authority)ImGui::TextWrapped("Use the host's RSMK for building placement and player teleportation.");
     const bool destinationReady=Data.Operation==2||groundReady;
-    const bool ready=authority&&destinationReady&&Data.Projection.Valid()&&choice&&!SpawnToolsPanel::SelectedPlayer.empty()&&!SpawnToolRequests::IsWaiting()&&!Data.SpawnPending&&!Data.ProbePending&&!Data.ProbeWanted&&!Data.BuildingsPending;
+    const bool previewReady=Data.Operation==2||(!Data.ProbePending&&!Data.ProbeWanted&&!Data.BuildingsPending);
+    const bool ready=authority&&destinationReady&&Data.Projection.Valid()&&choice&&!SpawnToolsPanel::SelectedPlayer.empty()&&!SpawnToolRequests::IsWaiting()&&!Data.SpawnPending&&previewReady;
+    if(Data.Operation==1&&!ready){const auto reason=BuildingMenu::BlockedReason(authority,groundReady,Data.Projection.Valid(),choice,!SpawnToolsPanel::SelectedPlayer.empty(),SpawnToolRequests::IsWaiting(),!previewReady||Data.SpawnPending);ImGui::PushStyleColor(ImGuiCol_Text,t.warning);ImGui::TextWrapped("%s",reason.c_str());ImGui::PopStyleColor();}
+    if(Data.Operation==1&&!groundReady&&!Data.ProbePending&&!Data.ProbeWanted&&HelpyImGuiTheme::SoftButton("Retry ground")){Data.Ground=Json::object();Data.ProbeWanted=true;}
+    if(SpawnToolRequests::IsWaiting())ImGui::TextDisabled("Finishing the current runtime request...");
     ImGui::BeginDisabled(!ready);
     const char* action=Data.Operation==2?"Teleport player here":Data.Operation==1?(Data.Permanent?"Place & save building":"Place building here"):(Data.Permanent?"Spawn & save placement":"Spawn here");
     if(HelpyImGuiTheme::SoftButton(action,ImVec2(-1,0))){try{
         const auto id=++Data.Sequence;auto request=Data.Operation==2?MapSpawnRequest::Target(Data.Projection,Data.Point,"MapTeleport",SpawnToolsPanel::SelectedPlayer,id):Data.Operation==1?MapSpawnRequest::Building(Data.Projection,Data.Point,Data.Building,SpawnToolsPanel::SelectedPlayer,Data.Permanent,Data.Yaw,id):MapSpawnRequest::Build(Data.Projection,Data.Point,Data.Definition,SpawnToolsPanel::SelectedPlayer,Data.Permanent,Data.Count,Data.Radius,id);
         request["NearMarker"]=Data.Operation==2&&Data.NearMarker;
-        if(SpawnToolRequests::TrySubmit(std::move(request))){Data.SpawnPending=id;Data.ActionRequested=Clock::now();Data.Status=Data.Operation==2?"Preparing destination and native travel (up to 90 seconds). The player stays in place until ground is verified...":"Applying action at the selected map position...";ImGui::CloseCurrentPopup();Data.Popup=false;}else Data.Error="The runtime is busy. Try again.";
+        if(SpawnToolRequests::TrySubmit(std::move(request))){Data.SpawnPending=id;Data.ActionRequested=Clock::now();Data.TravelAction=Data.Operation==2;Data.BuildingAction=Data.Operation==1;Data.PlacementResult=Json::object();Data.CancelSent=false;Data.ProbeWanted=false;Data.Status=Data.TravelAction?"Preparing destination. You stay in place until a safe landing is verified.":"Applying action at the selected map position...";ImGui::CloseCurrentPopup();Data.Popup=false;}else Data.Error="The runtime is busy. Try again.";
     }catch(const std::exception& error){Data.Error=error.what();}}
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::MapSpawn=HelpyPreviewHooks::LastRect();
@@ -150,8 +243,12 @@ inline void PlacePopup(){
 }
 inline void Render(){
     Poll();SpawnToolsPanel::RefreshSnapshot(-1);const auto& t=HelpyImGuiTheme::Current;
-    if(HelpyImGuiTheme::SoftButton("Fit map")){Data.Zoom=1;Data.Center={0.5,0.5};}ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Refresh")){Data.Next={};Data.Error.clear();}
-    ImGui::SameLine();ImGui::Checkbox("Players",&Data.ShowPlayers);SpawnToolsPanel::SameLineIfRoom(360);ImGui::TextDisabled("Scroll to zoom · drag to pan · click for actions");
+    const auto inlineIfRoom=[](float needed){const auto right=ImGui::GetCursorScreenPos().x+ImGui::GetContentRegionAvail().x;
+        if(right-ImGui::GetItemRectMax().x>needed+ImGui::GetStyle().ItemSpacing.x)ImGui::SameLine();};
+    if(HelpyImGuiTheme::SoftButton("Fit world")){Data.FitRequested=true;Data.Center={0.5,0.5};}ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Refresh")){Data.Next={};Data.Error.clear();}
+    inlineIfRoom(t.X(160));ImGui::SetNextItemWidth(t.X(120));ImGui::SliderFloat("Zoom",&Data.Zoom,static_cast<float>(Data.View.FitZoom()),32,"%.1fx",ImGuiSliderFlags_Logarithmic);
+    inlineIfRoom(t.X(80));ImGui::Checkbox("Players",&Data.ShowPlayers);
+    const char* hint="Scroll to zoom · drag to pan · click for actions";inlineIfRoom(ImGui::CalcTextSize(hint).x);ImGui::TextDisabled("%s",hint);
     if(ImGui::TreeNode("Map layers")){
         ImGui::Checkbox("Lodestones / teleport stones",&Data.ShowLodestones);ImGui::SameLine();ImGui::Checkbox("RuneSchema placements",&Data.ShowPlaced);
         ImGui::Checkbox("Vanilla resources",&Data.ShowResources);ImGui::SameLine();ImGui::Checkbox("AI spawn points",&Data.ShowAI);
@@ -159,31 +256,66 @@ inline void Render(){
     }
     if(Data.Snapshot.value("MarkersScanning",false))ImGui::TextDisabled("Discovering loaded map markers...");
     if(Data.HasPoint)ImGui::TextDisabled("Selected: X %.0f   Y %.0f",Data.Point.X,Data.Point.Y);
-    if(!Data.Error.empty())ImGui::TextWrapped("%s",Data.Error.c_str());if(!Data.Status.empty())ImGui::TextWrapped("%s",Data.Status.c_str());
-    const auto available=ImGui::GetContentRegionAvail();const float side=std::max(t.Y(160),std::min(available.x,available.y-t.Y(24)));
-    const auto start=ImGui::GetCursorScreenPos();const ImVec2 min(start.x+(available.x-side)*0.5f,start.y),max(min.x+side,min.y+side);
-    ImGui::SetCursorScreenPos(min);ImGui::InvisibleButton("##world-map",ImVec2(side,side),ImGuiButtonFlags_MouseButtonLeft|ImGuiButtonFlags_MouseButtonRight);
+    if(!Data.Error.empty())ImGui::TextWrapped("%s",Data.Error.c_str());
+    if(Data.SpawnPending&&Data.TravelAction){
+        const auto& snapshot=SpawnToolsPanel::UiSnapshot;
+        const bool ours=snapshot.value("_RequestId",uint64_t{})==Data.SpawnPending;
+        const auto progress=ours?snapshot.value("MapTravel",Json::object()):Json::object();
+        const auto phase=progress.value("Phase",std::string("Queued"));
+        const auto seconds=std::chrono::duration_cast<std::chrono::seconds>(Clock::now()-Data.ActionRequested).count();
+        const auto label=phase+" · "+std::to_string(seconds)+"s";
+        // Indeterminate: native streaming does not expose a truthful percentage.
+        ImGui::ProgressBar(-static_cast<float>(ImGui::GetTime()),ImVec2(-1,t.Y(8)),"");
+        ImGui::TextUnformatted(label.c_str());
+        if(!progress.value("Committed",false)){
+            ImGui::SameLine();ImGui::BeginDisabled(Data.CancelSent);
+            if(ImGui::SmallButton(Data.CancelSent?"Cancelling...":"Cancel travel")){SpawnToolRequests::Cancel();Data.CancelSent=true;}
+            ImGui::EndDisabled();
+        }
+        if(ours)Data.Status=ItemPresentation::Text(snapshot,"Status");
+    }
+    if(Data.BuildingAction&&(Data.SpawnPending||!Data.PlacementResult.empty())){
+        const bool active=Data.PlacementResult.value("Active",false),saved=Data.PlacementResult.value("Permanent",false)&&Data.PlacementResult.contains("File");
+        ImGui::PushStyleColor(ImGuiCol_Text,Data.SpawnPending?t.info:active?t.success:saved?t.warning:t.error);
+        ImGui::TextWrapped("%s",Data.SpawnPending?"Placing building... waiting for the runtime result.":active?"Building placement confirmed.":saved?"Placement saved, but not active yet. Do not place a duplicate.":"Building was not confirmed placed.");ImGui::PopStyleColor();
+        if(Data.PlacementResult.contains("Location"))ImGui::TextWrapped("Position: %s",Data.PlacementResult["Location"].dump().c_str());
+        if(saved)ImGui::TextWrapped("Saved placement: %s",ItemPresentation::Text(Data.PlacementResult,"File").c_str());
+    }
+    if(!Data.Status.empty())ImGui::TextWrapped("%s",Data.Status.c_str());
+    const auto available=ImGui::GetContentRegionAvail();const float width=std::max(t.X(160),available.x),height=std::max(t.Y(160),available.y-t.Y(24));
+    const auto min=ImGui::GetCursorScreenPos();const ImVec2 max(min.x+width,min.y+height);
+    Data.View={width,height,Data.Projection.Valid()?Data.Projection.HalfWidth/Data.Projection.HalfHeight:1,Data.Zoom,Data.Center};
+    if(Data.FitRequested){Data.View.Zoom=Data.View.FitZoom();Data.FitRequested=false;}Data.View.Clamp();
+    ImGui::InvisibleButton("##world-map",ImVec2(width,height),ImGuiButtonFlags_MouseButtonLeft|ImGuiButtonFlags_MouseButtonRight);
     const bool hovered=ImGui::IsItemHovered();auto& io=ImGui::GetIO();
     if(hovered&&ImGui::IsMouseClicked(ImGuiMouseButton_Left))Data.Dragged=false;
-    if(hovered&&io.MouseWheel!=0){Data.Zoom=std::clamp(Data.Zoom*std::pow(1.2f,io.MouseWheel),1.0f,8.0f);}
-    if(ImGui::IsItemActive()&&ImGui::IsMouseDragging(ImGuiMouseButton_Left)){Data.Dragged=true;Data.Center.X-=io.MouseDelta.x/(side*Data.Zoom);Data.Center.Y-=io.MouseDelta.y/(side*Data.Zoom);}
-    const double half=0.5/Data.Zoom;Data.Center.X=std::clamp(Data.Center.X,half,1-half);Data.Center.Y=std::clamp(Data.Center.Y,half,1-half);
-    const ImVec2 uvMin(static_cast<float>(Data.Center.X-half),static_cast<float>(Data.Center.Y-half)),uvMax(static_cast<float>(Data.Center.X+half),static_cast<float>(Data.Center.Y+half));
+    if(hovered&&io.MouseWheel!=0)Data.View.ZoomAt(Data.View.Zoom*std::pow(1.2,io.MouseWheel),{io.MousePos.x-min.x,io.MousePos.y-min.y});
+    if(ImGui::IsItemActive()&&ImGui::IsMouseDragging(ImGuiMouseButton_Left)){Data.Dragged=true;Data.View.Pan({io.MouseDelta.x,io.MouseDelta.y});}
+    Data.Zoom=static_cast<float>(Data.View.Zoom);Data.Center=Data.View.Center;
+    const auto span=Data.View.Span();const ImVec2 uvMin(static_cast<float>(Data.Center.X-span.X/2),static_cast<float>(Data.Center.Y-span.Y/2)),uvMax(static_cast<float>(Data.Center.X+span.X/2),static_cast<float>(Data.Center.Y+span.Y/2));
     auto* draw=ImGui::GetWindowDrawList();draw->AddRectFilled(min,max,ImGui::GetColorU32(t.panelAlt));
     const bool imageReady=Data.Texture&&Data.Texture->Status==ImTextureStatus_OK&&Data.Projection.Valid();
     draw->PushClipRect(min,max,true);
-    if(imageReady)draw->AddImage(Data.Texture->GetTexRef(),min,max,uvMin,uvMax);
+    if(imageReady){
+        const MapProjection::Point a{std::max(0.0f,uvMin.x),std::max(0.0f,uvMin.y)},b{std::min(1.0f,uvMax.x),std::min(1.0f,uvMax.y)};
+        const auto start=Data.View.ToPixel(a),end=Data.View.ToPixel(b);
+        draw->AddImage(Data.Texture->GetTexRef(),{min.x+static_cast<float>(start.X),min.y+static_cast<float>(start.Y)},
+            {min.x+static_cast<float>(end.X),min.y+static_cast<float>(end.Y)}, {static_cast<float>(a.X),static_cast<float>(a.Y)},{static_cast<float>(b.X),static_cast<float>(b.Y)});
+    }
     else draw->AddText(ImVec2(min.x+t.X(14),min.y+t.Y(14)),ImGui::GetColorU32(t.textDisabled),SpawnToolRequests::IsAvailable()?"Loading the native world map...":"Load a world to view the map.");
     if(Data.ShowPlayers&&Data.Projection.Valid()&&Data.Snapshot.contains("Players")&&Data.Snapshot["Players"].is_array())for(const auto& player:Data.Snapshot["Players"]){
         if(!player.is_object()||!player.contains("Location")||!player["Location"].is_array()||player["Location"].size()!=3)continue;
         const auto& location=player["Location"];if(!location[0].is_number()||!location[1].is_number())continue;
         const MapProjection::Point xy{location[0].get<double>(),location[1].get<double>()};if(!Data.Projection.Contains(xy))continue;const auto uv=Data.Projection.ToUV(xy);
         if(uv.X<uvMin.x||uv.X>uvMax.x||uv.Y<uvMin.y||uv.Y>uvMax.y)continue;
-        const ImVec2 point(min.x+static_cast<float>((uv.X-uvMin.x)*Data.Zoom)*side,min.y+static_cast<float>((uv.Y-uvMin.y)*Data.Zoom)*side);
-        draw->AddCircleFilled(point,t.X(6),ImGui::GetColorU32(t.accentHover));draw->AddCircle(point,t.X(7),IM_COL32(255,255,255,255));const auto name=ItemPresentation::Text(player,"Name");draw->AddText(ImVec2(point.x+t.X(10),point.y-t.Y(7)),ImGui::GetColorU32(t.text),name.c_str());
+        const auto pixel=Data.View.ToPixel(uv);const ImVec2 point(min.x+static_cast<float>(pixel.X),min.y+static_cast<float>(pixel.Y));
+        draw->AddCircleFilled(point,t.X(6),ImGui::GetColorU32(t.accentHover));draw->AddCircle(point,t.X(7),IM_COL32(255,255,255,255));const auto name=ItemPresentation::Text(player,"Name");
+        const auto* role=PlayerBadges::Find(player);const bool decorated=PlayerBadges::Draw(draw,{point.x+t.X(16),point.y},t.Y(15),role);
+        draw->AddText(ImVec2(point.x+t.X(decorated?28:10),point.y-t.Y(7)),ImGui::GetColorU32(t.text),name.c_str());
+        const auto mouse=ImGui::GetIO().MousePos;if(role&&std::abs(mouse.x-point.x)<t.X(24)&&std::abs(mouse.y-point.y)<t.Y(12))ImGui::SetTooltip("%s\n%s",name.c_str(),PlayerBadges::Tooltip(*role).c_str());
     }
     const Json* hoveredMarker=nullptr;float nearest=t.X(11)*t.X(11);
-    const auto screen=[&](MapProjection::Point xy){const auto uv=Data.Projection.ToUV(xy);return ImVec2(min.x+static_cast<float>((uv.X-uvMin.x)*Data.Zoom)*side,min.y+static_cast<float>((uv.Y-uvMin.y)*Data.Zoom)*side);};
+    const auto screen=[&](MapProjection::Point xy){const auto pixel=Data.View.ToPixel(Data.Projection.ToUV(xy));return ImVec2(min.x+static_cast<float>(pixel.X),min.y+static_cast<float>(pixel.Y));};
     if(Data.Projection.Valid()&&Data.Snapshot.contains("Markers"))for(const auto& marker:Data.Snapshot["Markers"]){
         const auto kind=ItemPresentation::Text(marker,"Kind");const bool placed=marker.value("Managed",false);
         if(!(kind=="Lodestone"?Data.ShowLodestones:placed?Data.ShowPlaced:kind=="Resource"?Data.ShowResources:Data.ShowAI))continue;
@@ -208,15 +340,22 @@ inline void Render(){
         HelpyPreviewHooks::MapSelected={at.x-r,at.y-r,at.x+r,at.y+r};
 #endif
     }
-    if(hovered&&imageReady){
-        const MapProjection::Point uv{uvMin.x+(io.MousePos.x-min.x)/(side*Data.Zoom),uvMin.y+(io.MousePos.y-min.y)/(side*Data.Zoom)};const auto point=Data.Projection.ToWorld(uv);
-        char label[96];std::snprintf(label,sizeof(label),"X %.0f   Y %.0f",point.X,point.Y);draw->AddText(ImVec2(min.x+t.X(10),max.y-t.Y(24)),ImGui::GetColorU32(t.accentHover),label);
+    const auto hoverUV=Data.View.ToUV({io.MousePos.x-min.x,io.MousePos.y-min.y});
+    if(hovered&&imageReady&&MapProjection::Viewport::InMap(hoverUV)){
+        const auto point=Data.Projection.ToWorld(hoverUV);const auto now=Clock::now();
+        if(!Data.HoverActive||Data.HoverPoint.X!=point.X||Data.HoverPoint.Y!=point.Y){Data.HoverActive=true;Data.HoverPoint=point;Data.HoverStableAt=now+std::chrono::milliseconds(350);Data.HoverGround=Json::object();if(!Data.GroundReadSelected)Data.GroundReadPending=0;}
+        if(!Data.Popup&&!Data.Dragged&&now>=Data.HoverStableAt&&!Data.GroundReadPending&&(Data.HoverGround.empty()||now>=Data.HoverFreshUntil))ReadGround(point,false);
+        const auto& ground=Data.HoverGround;
+        const bool haveZ=now<Data.HoverFreshUntil&&ground.value("GroundAvailable",false)&&ground.contains("Location")&&ground["Location"].is_array()&&ground["Location"].size()==3&&ground["Location"][2].is_number();
+        char label[160];if(haveZ)std::snprintf(label,sizeof(label),"X %.0f   Y %.0f   Z %.0f (ground)",point.X,point.Y,ground["Location"][2].get<double>());
+        else std::snprintf(label,sizeof(label),"X %.0f   Y %.0f   Z: %s",point.X,point.Y,Data.GroundReadPending?"tracing...":ground.empty()?"pause to trace":"ground unavailable");
+        draw->AddRectFilled({min.x+4,max.y-t.Y(32)},{max.x-4,max.y-4},IM_COL32(0,0,0,220));draw->AddText(ImVec2(min.x+t.X(10),max.y-t.Y(24)),ImGui::GetColorU32(t.accentHover),label);
         if(ImGui::IsMouseReleased(ImGuiMouseButton_Right)||(ImGui::IsMouseReleased(ImGuiMouseButton_Left)&&!Data.Dragged)){
             Data.Point=point;Data.NearMarker=false;Data.SelectionName.clear();
             if(hoveredMarker){const auto& loc=hoveredMarker->at("Location");Data.Point={loc[0].get<double>(),loc[1].get<double>()};Data.SelectionName=ItemPresentation::Text(*hoveredMarker,"Name");if(ItemPresentation::Text(*hoveredMarker,"Kind")=="Lodestone"){Data.Operation=2;Data.NearMarker=true;}}
-            Data.HasPoint=true;Data.Ground=Json::object();Data.ProbeWanted=true;Data.Popup=true;ImGui::OpenPopup("##map-place");
+            Data.HasPoint=true;Data.Ground=Json::object();Data.GroundReadPending=0;Data.ProbeWanted=Data.Operation!=2;Data.Popup=true;ImGui::OpenPopup("##map-place");
         }
-    }
+    }else{Data.HoverActive=false;Data.HoverGround=Json::object();if(!Data.GroundReadSelected)Data.GroundReadPending=0;}
     if(hoveredMarker){const auto label=ItemPresentation::Text(*hoveredMarker,"Name")+(ItemPresentation::Text(*hoveredMarker,"Kind")=="Lodestone"?" · click to teleport":"");draw->AddRectFilled({min.x+4,min.y+4},{max.x-4,min.y+t.Y(30)},IM_COL32(0,0,0,225));draw->AddText({min.x+t.X(10),min.y+t.Y(8)},ImGui::GetColorU32(t.text),label.c_str());}
     draw->PopClipRect();draw->AddRect(min,max,ImGui::GetColorU32(t.border));PlacePopup();
 #if defined(HELPY_PREVIEW)

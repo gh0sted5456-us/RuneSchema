@@ -3,10 +3,14 @@ param(
     [switch]$Clean,
     [switch]$PluginOnly,
     [switch]$Tests,
+    [switch]$ManagedUE4SSHost,
     [switch]$UpdateMappings,
     [string]$MappingsPath
 )
 $ErrorActionPreference = 'Stop'
+if ($ManagedUE4SSHost) {
+    throw 'Custom UE4SS hosts are retired. RuneSchema must run on an unmodified UE4SS.dll; build a framework-only package instead.'
+}
 $Version = '0.7.8.0-alpha'
 $BuildRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 if (-not (Test-Path -LiteralPath (Join-Path $BuildRoot 'source\raw\CMakeLists.txt') -PathType Leaf)) {
@@ -555,6 +559,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
             '-Wno-author',
             '-Wno-deprecated'
         )
+        $configureArgs += '-DRUNESCHEMA_BUILD_MANAGED_UE4SS_HOST=OFF'
         Ensure-CMakeConfigured $RawSource $build $configureArgs 'universal RuneSchema'
         $targets = if ($OnlyPlugin) { @('RuneSchemaHelpyPlugin') } else { @('RuneSchema', 'RuneSchemaHelpyPlugin') }
         Write-Host $(if ($OnlyPlugin) { '=== Compile Helpy plugin only (RuneSchema.dll is untouched) ===' } else { '=== Compile universal RuneSchema ===' }) -ForegroundColor Cyan
@@ -617,7 +622,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
                 if ($LASTEXITCODE) { throw 'UE4SS ABI audit failed for universal RuneSchema.' }
             } else { Write-Warning "Built UE4SS host DLL not found for an ABI audit: $hostDll" }
         }
-        [pscustomobject]@{ Build = $build; Core = $core; Helpy = (Join-Path $build 'RuneSchema.Helpy.dll') }
+        [pscustomobject]@{ Build = $build; Core = $core; Helpy = (Join-Path $build 'RuneSchema.Helpy.dll'); Host = (Join-Path $build "$Configuration\bin\UE4SS.dll") }
     }
     function New-HelpyPluginPackage([string]$HelpyDll) {
         $name = "RuneSchema.Helpy-$Version"
@@ -692,6 +697,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         }
         New-Item -ItemType Directory -Path (Join-Path $payload 'scripts') -Force | Out-Null
         Copy-Item -LiteralPath $luaBootstrap -Destination (Join-Path $payload 'scripts\main.lua') -Force
+        Copy-Item -LiteralPath (Join-Path $SourceRoot 'ue4ss\scripts\packages-loader.lua') -Destination (Join-Path $payload 'scripts\packages-loader.lua') -Force
         $logicModsHelper = Join-Path $SourceRoot 'ue4ss\scripts\logicmods-register.lua'
         if (-not (Test-Path -LiteralPath $logicModsHelper -PathType Leaf)) {
             throw "RuneSchema LogicMods Lua helper is missing: $logicModsHelper"
@@ -721,7 +727,8 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         # bridges. Reject partial IoStore containers that cannot mount in game.
         foreach ($bridge in @(
             @{ Folder = 'RuneSchema.RegistryBridge\paks\RegistryBridge'; Name = 'RegistryBridge_P' },
-            @{ Folder = 'RSNetworking\paks\Networking'; Name = 'Networking_P' }
+            @{ Folder = 'RSNetworking\paks\Networking'; Name = 'Networking_P' },
+            @{ Folder = 'RuneSchema.QuestItems\paks\RuneSchemaQuestItems'; Name = 'RuneSchemaQuestItems_P' }
         )) {
             $bridgeContainer = Join-Path (Join-Path $payload 'plugins') $bridge.Folder
             foreach ($extension in @('.pak', '.utoc', '.ucas')) {
@@ -732,6 +739,17 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
                 }
             }
         }
+
+        $questContentLockPath = Join-Path $SourceRoot 'content\RuneSchemaQuestItems\CONTENT-RECEIPT.json'
+        $questContentLock = Get-Content -LiteralPath $questContentLockPath -Raw | ConvertFrom-Json
+        foreach ($container in $questContentLock.Containers) {
+            if ($container.Name -notmatch '^RuneSchemaQuestItems_P\.(pak|utoc|ucas)$') { throw 'Unexpected shared quest-items container name' }
+            $contentFile = Join-Path $payloadPlugins ('RuneSchema.QuestItems\paks\RuneSchemaQuestItems\' + $container.Name)
+            if ((Get-Item -LiteralPath $contentFile).Length -ne $container.Bytes -or (Get-Sha256Hex $contentFile) -ne $container.SHA256) {
+                throw "Shared quest-items content differs from its verified receipt: $contentFile"
+            }
+        }
+        Copy-Item -LiteralPath $questContentLockPath -Destination (Join-Path $payloadPlugins 'RuneSchema.QuestItems\CONTENT-RECEIPT.json')
 
         # UE4SS enable marker.
         Set-Content -LiteralPath (Join-Path $payload 'enabled.txt') -Value '' -Encoding ascii

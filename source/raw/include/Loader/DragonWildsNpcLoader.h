@@ -7,6 +7,9 @@
 #include "Loader/EventRuntime.h"
 #include "Loader/QuestKillCredit.h"
 #include "Loader/QuestAcquisition.h"
+#include "Loader/QuestScroll.h"
+#include "Loader/NpcEquipmentConditions.h"
+#include "Loader/QuestProgress.h"
 #include <cstdint>
 #include <memory>
 #include <nlohmann/json.hpp>
@@ -102,6 +105,7 @@ namespace DragonWilds {
             bool Resource=false;
             nlohmann::json Appearance=nlohmann::json::object();
             nlohmann::json Equipment=nlohmann::json::object();
+            std::vector<NpcEquipment::Rule> EquipmentWhen;
             bool HideWeapon=false;
             HumanPose::Selection Pose;
             bool HasDialoguePose=false;
@@ -147,6 +151,7 @@ namespace DragonWilds {
             std::optional<double> GroundReferenceZ;
             PS::Grounding::SearchRange GroundSearch;
             PS::Grounding::Retry GroundRetry;
+            unsigned LifecycleFailures=0; // bounded, cleanup-acknowledged construction retries
             RC::Unreal::UWorld* GroundResolvedWorld=nullptr; // compared only; cleared on travel
             double SpawnRotation[3]{};
             double SpawnScale[3]{ 1.0, 1.0, 1.0 };
@@ -259,7 +264,9 @@ namespace DragonWilds {
             nlohmann::json GateConditions=nlohmann::json::object();
         };
         bool DialogueGateAllows(const DialogueCompletionBinding& action,RC::Unreal::UObject* controller);
-        std::string RunQuestAction(const DialogueCompletionBinding& action,RC::Unreal::UObject* controller,const std::function<bool()>& current);
+        std::string RunQuestAction(const DialogueCompletionBinding& action,RC::Unreal::UObject* controller,const std::function<bool()>& current,
+            RC::Unreal::UObject* scrollItem=nullptr,QuestProgress::Result* observed=nullptr);
+        bool OnQuestScrollUse(RC::Unreal::Hook::TCallbackIterationData<void>& dispatch,RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
         std::unordered_map<RC::Unreal::UObject*,DialogueCompletionBinding> m_dialogueCompletions;
         struct DialogueSession {
             RC::Unreal::UObject* Instance=nullptr;
@@ -442,6 +449,16 @@ namespace DragonWilds {
         bool ApplyVendorVisuals(RC::Unreal::AActor* actor,
             VendorDefinition& definition);
         void ApplyHumanVisuals(RC::Unreal::AActor* actor, VendorDefinition& definition);
+        std::vector<std::string> ActiveEquipmentRules(RC::Unreal::UObject* context,const VendorDefinition& definition);
+        nlohmann::json EffectiveNpcEquipment(RC::Unreal::AActor* actor,const VendorDefinition& definition);
+        void RecordQuestEquipment(RC::Unreal::UObject* controller,const std::string& quest);
+        void ReconcileNpcEquipment(float deltaSeconds);
+        void RefreshNpcEquipment(RC::Unreal::AActor* actor,const VendorDefinition& definition);
+        void LoadNpcEquipmentWorld(RC::Unreal::UObject* context);
+        std::string m_equipmentWorldGuid;
+        nlohmann::json m_equipmentWorld;
+        std::unordered_map<std::string,std::string> m_appliedNpcEquipment;
+        double m_npcEquipmentElapsed=0;
         void ApplyNpcVisualEffect(RC::Unreal::UObject* visual,const VendorDefinition& definition);
         RC::Unreal::UObject* FindMeshComponent(RC::Unreal::UObject* actor) const;
         RC::Unreal::AActor* FindVisualSourceActor(

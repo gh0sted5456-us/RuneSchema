@@ -1,6 +1,8 @@
 #include "Core/MapLanding.h"
+#include "Core/SpawnFootprint.h"
 #include "Core/MapTravel.h"
 #include "SDK/Helper/ReflectedContract.h"
+#include "SDK/Helper/PlayerStatus.h"
 #include "Core/SpawnCatalogSearch.h"
 #include "Generator/HelpyReferencePolicy.h"
 #include "Generator/F2CatalogPlan.h"
@@ -15,6 +17,10 @@
 #include "Loader/HelpyNpcGuards.h"
 #include "Loader/AssetMetadataRegistry.h"
 #include "Loader/AssetAuthoringMetadata.h"
+#include "Core/HelpySourceCache.h"
+#include "Core/IconCacheBuild.h"
+#include "Generator/AssetSearch.h"
+#include "Generator/HelpyRuntimePreferences.h"
 #include "Utility/NativeFunctionHook.h"
 #include "Runtime/NetworkContext.h"
 #include "Loader/PlayerActivityEvents.h"
@@ -371,6 +377,7 @@ namespace {
 }
 
 namespace DragonWilds {
+#include "IconCacheBuild.inl"
 #include "SpawnItemIcons.inl"
 #include "MapTravel.inl"
 #include "SpawnTools.inl"
@@ -442,6 +449,8 @@ namespace DragonWilds {
             Hook::UnregisterCallback(m_protectedBuildingDestroyGuard);
         }
         PlayerGhost::Clear();
+        PS::IconCacheBuild::PumpAvailable=false;
+        BulkIconJob.Stop("Icon cache builder shut down.");
         PS::ItemIconThumbnail::Reset();PS::HelpyMapTexture::Reset();
         for (const auto& ref : m_rootedVisualEffectMaterials)
             if (auto* material=ref.Get()) if (material->IsRootSet()) material->ClearRootSet();
@@ -2547,6 +2556,7 @@ namespace DragonWilds {
                 PlayerGhost::ClearWorld();
                 ToolMapTravelReset();
                 m_readyWorld = nullptr;
+                MenuIconWorldCache.Reset();NextMenuIconWorldScan={};
                 m_pendingWorld = nullptr;
                 m_pendingCellBounds.clear();
                 m_cellCatchupCursor=0;m_cellCatchupDelay=0;
@@ -2614,7 +2624,7 @@ namespace DragonWilds {
             PS::Log<LogLevel::Error>(STR("Unable to register the spawn tick; spawns will not be created.\n"));
             return false;
         }
-
+        PS::IconCacheBuild::PumpAvailable=true;
         return true;
     }
 
@@ -2627,7 +2637,7 @@ namespace DragonWilds {
         }
 
         auto* world = cell->GetWorld();
-        auto* bounds = cell->GetContentBounds();
+        const auto bounds = cell->GetContentBounds();
         if (!world || !bounds)
         {
             return;
@@ -2936,8 +2946,8 @@ namespace DragonWilds {
             {
                 const bool inside = std::any_of(bounds->begin(), bounds->end(),
                     [&](const UECustom::FBox& box) {
-                        return spawn.Location.X() > box.Min.X() && spawn.Location.X() < box.Max.X()
-                            && spawn.Location.Y() > box.Min.Y() && spawn.Location.Y() < box.Max.Y();
+                        return spawn.Location.X() >= box.Min.X() && spawn.Location.X() <= box.Max.X()
+                            && spawn.Location.Y() >= box.Min.Y() && spawn.Location.Y() <= box.Max.Y();
                     });
                 if (!inside)
                 {
@@ -2945,8 +2955,8 @@ namespace DragonWilds {
                 }
                 spawn.bCellActivated = true;
                 for(const auto& box:*bounds)if(box.bIsValid
-                    &&spawn.Location.X()>box.Min.X()&&spawn.Location.X()<box.Max.X()
-                    &&spawn.Location.Y()>box.Min.Y()&&spawn.Location.Y()<box.Max.Y())
+                    &&spawn.Location.X()>=box.Min.X()&&spawn.Location.X()<=box.Max.X()
+                    &&spawn.Location.Y()>=box.Min.Y()&&spawn.Location.Y()<=box.Max.Y())
                     spawn.GroundSearch.ObserveCell(box.Min.Z(),box.Max.Z());
                 spawn.GroundRetry.CellShown();
             }
@@ -3136,8 +3146,8 @@ namespace DragonWilds {
             if (!bounds) continue;
             const bool inside = std::any_of(bounds->begin(), bounds->end(),
                 [&](const UECustom::FBox& box) {
-                    return spawn.Location.X() > box.Min.X() && spawn.Location.X() < box.Max.X()
-                        && spawn.Location.Y() > box.Min.Y() && spawn.Location.Y() < box.Max.Y();
+                    return spawn.Location.X() >= box.Min.X() && spawn.Location.X() <= box.Max.X()
+                        && spawn.Location.Y() >= box.Min.Y() && spawn.Location.Y() <= box.Max.Y();
                 });
             if (!inside) continue;
             spawn.bCellActivated = true;
@@ -3361,7 +3371,38 @@ namespace DragonWilds {
         return true;
     }
 
-    AActor* DragonWildsSpawnLoader::SpawnEventAI(const std::string& key,UWorld* world,const FVector& position,bool tool,double yaw,const std::string& eventKey,int toolPowerLevel)
+    namespace {
+    PS::SpawnFootprint::Capsule EventCapsule(UObject* actor){
+        auto* capsule=ActorHelper::GetObjectRef(actor,TEXT("CapsuleComponent"));
+        auto* type=ActorHelper::ResolveClass(TEXT("/Script/Engine.CapsuleComponent"));
+        if(!capsule||!type||!capsule->IsA(type)||capsule->GetOuterPrivate()!=actor
+            ||ActorHelper::GetObjectRef(actor,TEXT("RootComponent"))!=capsule)
+            throw std::runtime_error("Event grounding requires an owned root capsule");
+        ActorHelper::FunctionCall height(capsule,TEXT("/Script/Engine.CapsuleComponent:GetScaledCapsuleHalfHeight"));height.Invoke();
+        ActorHelper::FunctionCall radius(capsule,TEXT("/Script/Engine.CapsuleComponent:GetScaledCapsuleRadius"));radius.Invoke();
+        return PS::SpawnFootprint::Scaled({radius.NumericResult(),height.NumericResult()},1);
+    }
+    }
+    FVector DragonWildsSpawnLoader::PrepareEventGrounded(const std::string& key,UWorld* world,const FVector& foot,AActor* participant){
+        if(!world||!GetGameMode(world))throw std::runtime_error("Event grounding requires world authority");
+        ValidateEventSpawn(key);const auto& definition=m_eventTemplates.at(key);
+        auto* type=ResolveClass(RC::to_generic_string(definition.Class));
+        auto* defaults=type?type->GetClassDefaultObject().Get():nullptr;
+        if(!defaults)throw std::runtime_error("Event AI defaults are unavailable");
+        const auto capsule=PS::SpawnFootprint::Scaled(EventCapsule(defaults),definition.Scale);
+        const auto range=PS::Grounding::SearchRange::Around(foot.Z());
+        const double z=PS::SpawnFootprint::OriginZ(capsule,foot.Z(),[&](double x,double y){
+            FVector hit{};std::string error;
+            if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,FVector(foot.X()+x,foot.Y()+y,range.Top),FVector(foot.X()+x,foot.Y()+y,range.Bottom),{participant},hit,error,foot.Z())){
+                if(error.empty())throw PS::Grounding::SurfacePending();
+                throw std::runtime_error("Event footprint ground query failed: "+error);
+            }
+            return hit.Z();
+        });
+        return FVector(foot.X(),foot.Y(),z);
+    }
+
+    AActor* DragonWildsSpawnLoader::SpawnEventAI(const std::string& key,UWorld* world,const FVector& position,bool tool,double yaw,const std::string& eventKey,int toolPowerLevel,std::optional<double> groundOffset)
     {
         if(!world || !GetGameMode(world))throw std::runtime_error("Event AI can only be spawned by world authority");
         ValidateEventSpawn(key);
@@ -3382,7 +3423,9 @@ namespace DragonWilds {
         naming->Scale=FVector(definition.Scale,definition.Scale,definition.Scale);
         naming->VisualEffect=definition.VisualEffect;
         if(!naming->VisualEffect.empty())naming->VisualEffect["Type"]="Ghost";
+        PS::WeakObjectHandle constructionIdentity;
         auto* actor=ActorHelper::SpawnActor(world,type,position,FRotator(0,yaw,0),[&](AActor* value){
+            constructionIdentity.Assign(value);
             value->SetFlags(RF_Transient);
             // This callback runs before FinishSpawning/BeginPlay; never invent
             // damage/health multipliers as a substitute for native power.
@@ -3393,8 +3436,17 @@ namespace DragonWilds {
             m_customNamedAIActors.erase(value);
             m_aiNameRetryAttempts.erase(value);
             m_liveAIBindings.push_back({PS::WeakObject(value),{},naming});
-        });
+        },ESpawnActorScaleMethod::OverrideRootScale,ESpawnActorCollisionHandlingMethod::AlwaysSpawn,FVector(definition.Scale,definition.Scale,definition.Scale));
         try {
+            const auto requireLive=[&] {
+                auto* live=constructionIdentity.Get();
+                if(live!=actor||!live||live->GetWorld()!=world)throw std::runtime_error("Event actor lifetime changed during native construction; rolled back");
+                auto* validityLibrary=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,TEXT("/Script/Engine.Default__KismetSystemLibrary"),false);
+                ActorHelper::FunctionCall valid(validityLibrary,TEXT("/Script/Engine.KismetSystemLibrary:IsValid"));
+                valid.Arg(TEXT("Object"),actor).Invoke();
+                if(!valid.Result<bool>())throw std::runtime_error("Native event actor validity failed after construction; rolled back");
+            };
+            requireLive();
             auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(type,TEXT("bSkipSpudStore")));
             if(!skip || !skip->GetPropertyValue(skip->ContainerPtrToValuePtr<void>(actor)))throw std::runtime_error("Event AI lost save exclusion during creation");
             if(power) {
@@ -3403,8 +3455,55 @@ namespace DragonWilds {
                 if(actual!=toolPowerLevel)throw std::runtime_error("Native AI initialization replaced the requested PowerLevel; temporary spawn rolled back");
             }
             actor->SetActorScale3D(FVector(definition.Scale,definition.Scale,definition.Scale));
+            if(!eventKey.empty()){
+                const auto expected=PS::SpawnFootprint::Scaled(EventCapsule(type->GetClassDefaultObject().Get()),definition.Scale),actual=EventCapsule(actor);
+                if(std::abs(expected.HalfHeight-actual.HalfHeight)>0.1||std::abs(expected.Radius-actual.Radius)>0.1)
+                    throw std::runtime_error("Event construction changed the preflighted scaled capsule; actor rolled back");
+                const auto placed=ActorHelper::GetActorLocation(actor);
+                if(!std::isfinite(placed.X())||!std::isfinite(placed.Y())||!std::isfinite(placed.Z()))
+                    throw std::runtime_error("Native event construction returned a non-finite actor location; wave rolled back");
+                PS::Log<LogLevel::Verbose>(STR("[EVENT-PLACEMENT] '{}' requested=({},{},{}) actual=({},{},{}) capsule[r={},h={}] scale={}.\n"),
+                    PS::ToWideSafe(key),position.X(),position.Y(),position.Z(),placed.X(),placed.Y(),placed.Z(),actual.Radius,actual.HalfHeight,definition.Scale);
+                if(groundOffset) {
+                    // Native construction may floor-adjust the Character. Re-
+                    // trace the original requested footprint using its scaled
+                    // capsule, then use native collision-checked teleport, never
+                    // an unchecked SetActorLocation or a widened epsilon.
+                    if(!std::isfinite(*groundOffset)||*groundOffset<0)throw std::runtime_error("Event grounded capsule requires non-negative foot clearance");
+                    FVector impact{};std::string error;
+                    const double reference=position.Z()-expected.HalfHeight-*groundOffset;
+                    const auto search=PS::Grounding::SearchRange::Around(reference);
+                    if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,FVector(position.X(),position.Y(),search.Top),FVector(position.X(),position.Y(),search.Bottom),{actor},impact,error,reference))
+                        throw std::runtime_error("Event ground changed during construction; wave rolled back: "+error);
+                    FVector target;
+                    try{target=PrepareEventGrounded(key,world,FVector(position.X(),position.Y(),impact.Z()+*groundOffset),actor);}
+                    catch(const std::exception& failure){throw std::runtime_error(std::string("Event footprint revalidation failed during construction; wave rolled back: ")+failure.what());}
+                    const auto differs=[&](const FVector& value){return !std::isfinite(value.X())||!std::isfinite(value.Y())||!std::isfinite(value.Z())||std::abs(value.X()-target.X())>1||std::abs(value.Y()-target.Y())>1||std::abs(value.Z()-target.Z())>1;};
+                    if(differs(placed)) {
+                        ActorHelper::FunctionCall relocate(actor,TEXT("/Script/Engine.Actor:K2_TeleportTo"));
+                        relocate.Arg(TEXT("DestLocation"),target).Arg(TEXT("DestRotation"),FRotator(0,yaw,0)).Invoke();
+                        if(!relocate.Result<bool>())throw std::runtime_error("Native collision checks rejected event footprint reconciliation; wave rolled back");
+                    }
+                    requireLive();
+                    const auto retained=EventCapsule(actor);
+                    if(differs(ActorHelper::GetActorLocation(actor))||std::abs(retained.HalfHeight-expected.HalfHeight)>0.1||std::abs(retained.Radius-expected.Radius)>0.1)
+                        throw std::runtime_error("Event actor did not retain its verified grounded capsule; wave rolled back");
+                } else if(std::abs(placed.X()-position.X())>1||std::abs(placed.Y()-position.Y())>1||std::abs(placed.Z()-position.Z())>1)
+                    throw std::runtime_error("Event construction moved an ungrounded authored position; actor rolled back");
+            }
             if(!definition.LootRow.empty() && !ApplyAILootRow(actor,definition.LootRow))
                 throw std::runtime_error("Event enemy loot override could not be applied: "+definition.LootRow);
+            if(!definition.AdditionalDrops.empty()){
+                UObject* loot=nullptr;
+                try{loot=ActorHelper::GetObjectRef(actor,TEXT("LootDrop"));}catch(...){}
+                if(!loot)try{loot=ActorHelper::GetObjectRef(actor,TEXT("LootDrop_GEN_VARIABLE"));}catch(...){}
+                auto* lootType=ActorHelper::ResolveClass(TEXT("/Script/Dominion.LootDropComponent"));
+                if(!loot||!lootType||!loot->IsA(lootType)||loot->GetOuterPrivate()!=actor)
+                    throw std::runtime_error("Event AdditionalDrops requires owned native AI LootDrop; destruction-resource fallback is forbidden");
+                ApplyAdditionalDrops(actor,definition.AdditionalDrops);
+                const auto applied=m_bonusApplied.find(actor);
+                if(applied==m_bonusApplied.end()||applied->second.Get()!=actor)throw std::runtime_error("Event additional loot could not be verified; actor rolled back");
+            }
             ApplyAIDisplayName(actor,definition.Name,definition.BossName);
             ApplyVisualEffect(actor,naming->VisualEffect,TEXT("Event AI"));
             const auto mode=PS::Network::Detect(actor).Mode;
@@ -3416,7 +3515,7 @@ namespace DragonWilds {
                 PublishEventIdentity(actor,identity.dump());
             }
             return actor;
-        }catch(...){ActorHelper::DestroyActor(actor);throw;}
+        }catch(...){if(constructionIdentity.Get()==actor){ReleaseEventAdditionalDrops(actor);ActorHelper::DestroyActor(actor);}throw;}
     }
 
     void DragonWildsSpawnLoader::HandleNetworkWorldState(const std::string& payload)
@@ -3655,7 +3754,9 @@ namespace DragonWilds {
                     if(!skip || !skip->GetPropertyValue(skip->ContainerPtrToValuePtr<void>(spawned)))
                         throw std::runtime_error("Temporary resource save exclusion did not round-trip");
                 }
-            }, ESpawnActorScaleMethod::OverrideRootScale);
+            }, ESpawnActorScaleMethod::OverrideRootScale,
+            spawn.bBuildingProp?ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding:ESpawnActorCollisionHandlingMethod::AlwaysSpawn,
+            spawn.bBuildingProp?spawn.Scale:FVector(1.0,1.0,1.0));
         if(spawn.bTemporaryResource) {
             auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(
                 actor->GetClassPrivate(),TEXT("bSkipSpudStore")));

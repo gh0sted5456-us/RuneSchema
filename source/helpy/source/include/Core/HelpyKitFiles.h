@@ -66,7 +66,7 @@ inline fs::path Write(const fs::path& directory,const std::string& name,bool jso
         if(!replace)throw std::runtime_error("A kit with this name already exists; confirm replacement or choose a new name");
         (void)ConfigFiles::Backup(target);
     }
-    const auto text=(jsonc?"// Helpy kit: importing only stages items. Deliver explicitly in Helpy.\n":"")+document.dump(2)+"\n";
+    const auto text=(jsonc?"// RSMK kit: importing only stages items. Deliver explicitly in RSMK.\n":"")+document.dump(2)+"\n";
     if(replace)ConfigFiles::Write(target,text);
     else {
         // Publish a complete new kit atomically without clobbering a file that

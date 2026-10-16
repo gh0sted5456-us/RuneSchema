@@ -28,6 +28,17 @@ int main(int argc,char** argv) {
         "new resource actors do not receive additional drops");
     Require(loader.find("AdditionalDrops currently requires AISpawnPoint")==std::string::npos,
         "legacy AI-only AdditionalDrops gate returned");
+    Require(loader.find("ApplyAdditionalDrops(actor,definition.AdditionalDrops)")!=std::string::npos
+        &&loader.find("Event AdditionalDrops requires owned native AI LootDrop; destruction-resource fallback is forbidden")!=std::string::npos,
+        "Event trophies can fall back to destruction-resource loot or silently skip their binding");
+    Require(loader.find("ReleaseEventAdditionalDrops(actor);ActorHelper::DestroyActor(actor)")!=std::string::npos,
+        "Failed event initialization can retire an actor with bonus loot still armed");
+    Require(drops.find("Additional loot instance binding did not verify")!=std::string::npos
+        &&drops.find("Event original loot restoration did not verify")!=std::string::npos,
+        "Event loot install/retirement lacks reflected readback");
+    Require(drops.find("rowType->CopyScriptStruct(combined.GetData(),source)")!=std::string::npos
+        &&drops.find("PropertyHelper::BuildAppendValue(handles,extra)")!=std::string::npos,
+        "Additional loot replaces rather than appends native rewards");
 
     Require(drops.find("ItemDropOnDestructionComponent")!=std::string::npos,
         "resource drop routing no longer prefers destruction/depletion drops");

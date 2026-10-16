@@ -151,7 +151,9 @@ public:
                     for(const auto& entry:entries){
                         texts.push_back({{"Key",entry.ObjectiveId},{"Value",ObjectivePresentation(entry)}});
                         if(entry.Hidden)continue;
-                        append(text,entry.ObjectiveText);append(subobjective,entry.SubobjectiveDescription);
+                        if(!text.empty() && definition.AnyStages.contains(id))text+="\nOR ";
+                        else if(!text.empty())text+='\n';
+                        text+=entry.ObjectiveText;append(subobjective,entry.SubobjectiveDescription);
                         append(hint,entry.Hint);append(descriptionOverride,entry.QuestDescriptionOverride);
                     }
                     Json presentation={{"Description",text}};

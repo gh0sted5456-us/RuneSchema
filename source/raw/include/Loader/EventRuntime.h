@@ -179,6 +179,7 @@ class Runtime {
         for(auto& item:owned) {
             bool failed=false;
             auto* actor=item.Actor.Get();
+            if(actor&&DisarmDrops)try{DisarmDrops(actor);}catch(const std::exception& e){error=e.what();remaining.push_back(item);continue;}
             if(auto* controller=item.Controller.Get())try {
                 auto* pawn=ActorHelper::GetObjectRef(controller,TEXT("Pawn"));
                 if(!pawn || pawn==actor)failed=!DestroyOwnedActor(item.Controller);
@@ -214,12 +215,13 @@ class Runtime {
                 // blocking surface, with GroundOffset as an author delta.
                 location=RC::Unreal::FVector(member.Position[0],member.Position[1],impact.Z()+member.GroundOffset+10.0);
             }
+            if(member.Ground){if(!PrepareGrounded)throw std::runtime_error("Event footprint provider unavailable");location=PrepareGrounded(member.Spawn,world,location,static_cast<AActor*>(player));}
             positions.push_back(location);
         }
         owned.reserve(definition.Waves.at(run.Wave()).size());
         size_t positionIndex=0;
         for(const auto& member:definition.Waves.at(run.Wave())) {
-            auto* actor=Spawn(member.Spawn,definition.Key,world,positions.at(positionIndex++));
+            auto* actor=Spawn(member.Spawn,definition.Key,world,positions.at(positionIndex++),member.Ground?std::optional<double>{member.GroundOffset+10.0}:std::nullopt);
             if(!actor)throw std::runtime_error("Event spawn returned no actor");
             try {owned.push_back({Handle(actor),{}, {},member.Spawn,{}});}catch(...){ActorHelper::DestroyActor(actor);throw;}
             auto& tracking=owned.back();
@@ -289,7 +291,9 @@ public:
         if(!SpawnManifest)throw std::runtime_error("Event spawn manifest provider unavailable");
         return BuildNetworkManifest(catalog.Find(key),SpawnManifest);
     }
-    std::function<AActor*(const std::string&,const std::string&,UWorld*,const RC::Unreal::FVector&)> Spawn;
+    std::function<AActor*(const std::string&,const std::string&,UWorld*,const RC::Unreal::FVector&,std::optional<double>)> Spawn;
+    std::function<RC::Unreal::FVector(const std::string&,UWorld*,const RC::Unreal::FVector&,AActor*)> PrepareGrounded;
+    std::function<void(UObject*)> DisarmDrops;
     std::function<void(UObject*,const std::string&,Scope)> Notify;
     std::function<void(AActor*,const Json&)> ApplyActorCue;
     std::function<bool(UObject*,const Definition&,bool)> SetArea;
@@ -375,6 +379,7 @@ public:
         for(size_t i=0;i<owned.size();++i)if(!run.IsDead(i) &&
             ((path==TEXT("/Script/Dominion.AiDeathComponent:Despawn") && source==owned[i].Death.Get())
              || (path==TEXT("/Script/Engine.Actor:K2_DestroyActor") && source==owned[i].Actor.Get()))) {
+            if(DisarmDrops)DisarmDrops(owned[i].Actor.Get());
             run.Missing(i);pendingStop=true;return;
         }
     }

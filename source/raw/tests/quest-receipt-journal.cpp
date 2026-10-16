@@ -38,6 +38,22 @@ int main(){
     auto changed=document;changed["Reward"]["Count"]=2;const auto different=Parse("Test",changed);
     assert(Rejects([&]{ReceiptJournal invalid(different,changed,legacy,character,[&](const auto& key){return variables[key];},[&](const auto& key,int value){variables[key]=value;},[]{return true;},[]{},[&]{return nativeState;});}));
     int changedResets=0;
+    const auto pendingBefore=variables;
+    for(const auto phase:{2,3}){
+        variables=pendingBefore;variables["RuneSchema.Phase"]=phase;const auto before=variables;
+        assert(Rejects([&]{ReceiptJournal reject(different,changed,legacy,character,[&](const auto& key){return variables[key];},
+            [&](const auto& key,int value){variables[key]=value;},[]{return true;},[]{},[&]{return nativeState;},ReceiptJournal::EpochNow,
+            [&]{++changedResets;variables.clear();nativeState="Ungiven";});}));
+        assert(changedResets==0&&variables==before);
+    }
+    variables=pendingBefore;variables["RuneSchema.Phase"]=4;nativeState="Complete";
+    const auto completedBefore=variables;
+    ReceiptJournal preserved(different,changed,legacy,character,[&](const auto& key){return variables[key];},
+        [&](const auto& key,int value){variables[key]=value;},[]{return true;},[]{},[&]{return nativeState;},ReceiptJournal::EpochNow,
+        [&]{++changedResets;variables.clear();nativeState="Ungiven";});
+    assert(changedResets==0&&preserved.Phase()==4&&preserved.Run()==completedBefore.at("RuneSchema.Run"));
+    assert(variables["RuneSchema.CompletedLo"]==completedBefore.at("RuneSchema.CompletedLo")&&rewards==2&&payments==3);
+    variables=pendingBefore;variables["RuneSchema.Phase"]=1;nativeState="Given";
     ReceiptJournal resetChanged(different,changed,legacy,character,[&](const auto& key){return variables[key];},
         [&](const auto& key,int value){variables[key]=value;},[]{return true;},[]{},[&]{return nativeState;},ReceiptJournal::EpochNow,
         [&]{++changedResets;variables.clear();nativeState="Ungiven";});

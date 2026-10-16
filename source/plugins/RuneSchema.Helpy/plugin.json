@@ -4,7 +4,7 @@
   "Version": "2.0.4",
   "BuiltForRuneSchema": "0.7.8.0-alpha",
   "EntryPoint": "RuneSchema.Helpy.dll",
-  "ConsoleMessage": "Desktop HELPY is ready. F2 opens/closes its separate window; F5 reloads its skin.",
+  "ConsoleMessage": "Desktop RSMK is ready. F2 opens/closes its separate window; F5 reloads its skin.",
   "Capabilities": [
     "helpy.navigation",
     "helpy.item-lab",
@@ -14,5 +14,5 @@
     "authoring.export"
   ],
   "MountPaks": false,
-  "Name": "Helpy 2.0"
+  "Name": "RSMK (RuneSchema Modding Kit)"
 }

@@ -1,125 +1,85 @@
-# Optional UE4SS Lua companions
+# Included Lua UE4SS add-ons
 
-RuneSchema mods can include a small UE4SS Lua companion when JSON and cooked
-PAK content are not enough. The companion stays inside the RuneSchema mod, so
-players do not need to add another named mod to UE4SS's `mods.txt`.
-
-This is an optional tool. Most content should continue to use cooked game
-assets and RuneSchema's normal folders.
-
-For a cooked Blueprint `ModActor` instead of Lua, use the separate
-[`logicmods` folder](PSEUDO-LOADERS.md#start-a-cooked-blueprint-logicmod).
-
-## Folder layout
-
-Use the following exact layout:
+The alpha candidate supports complete Lua-based UE4SS add-ons inside an enabled
+RuneSchema mod. Like `paks`, `ue4ss` is a container for separate packages:
 
 ```text
-RuneSchema/
-└─ mods/
-   └─ MyMod/
-      ├─ assets/
-      ├─ paks/
-      └─ ue4ss/
-         └─ scripts/
-            ├─ main.lua
-            └─ support.lua
+RuneSchema/mods/MyMod/
+  ue4ss/
+    MaxCape/
+      Scripts/main.lua
+      Scripts/helpers.lua
+      config.txt
+      modmenu.json
+    AnotherLuaAddon/
+      Scripts/main.lua
+      settings.ini
 ```
 
-The folder is named `ue4ss`, not `lua`. The entry file must be named
-`ue4ss/scripts/main.lua`. Additional Lua files may be placed beside it and
-loaded with `require`.
+Keep each complete package intact. Names must be unique across included
+packages and ordinary UE4SS mods. Never install a second copy under
+`UE4SS/Mods`; a collision is rejected rather than silently replacing it.
 
-RuneSchema currently loads Lua files only from this folder. DLL companions are
-not loaded.
+## Player setup
 
-## Enable the companion
+Keep your original **unmodified UE4SS.dll**. RuneSchema updates are framework-only;
+the previously produced managed-host bundles are retired and must not be used.
+Lua-only packages use RuneSchema's bootstrap. Native DLL add-ons are outside
+this feature's scope and must be installed through stock UE4SS separately.
+RuneSchema skips an entire native/hybrid package with a clear diagnostic;
+it never silently runs only its Lua half or manually calls native entry points.
 
-The mod must be enabled in `RuneSchema/mods/runeschema.txt`:
+Enable the parent as usual in `RuneSchema/mods/runeschema.txt`:
 
 ```text
 MyMod: 1
 ```
 
-`MyMod: 0` disables the entire RuneSchema mod, including its Lua companion.
-Disabling RuneSchema itself in UE4SS also disables every nested companion.
+`MyMod: 0` disables all its packages on the next launch. Restart after adding,
+removing, enabling or disabling packages; this is
+not hot reloading. Changing worlds does not start a package twice.
 
-Restart the game after adding, removing, enabling, or disabling a companion.
-Changing worlds does not start it a second time.
+## Lifecycle boundary
 
-## Minimal example
+RuneSchema does not replace or patch the UE4SS runtime. Stock UE4SS performs its
+native mod discovery before RuneSchema can announce nested packages. Native
+loading is therefore not part of this feature. The Lua bootstrap
+does not create independent UE4SS ModRef instances or independent host-owned VMs.
 
-Create `RuneSchema/mods/MyMod/ue4ss/scripts/main.lua`:
+Package configs, scripts, metadata and dependencies remain at their original
+paths. Discovery does not rewrite or prune them. Native mods still need a
+compatible UE4SS SDK and game version; bundling cannot make an incompatible or
+unsafe DLL safe. Host errors are reported per package, not described as success.
 
-```lua
-local context = RuneSchemaUE4SS.Current
+Third-party tools that scan only immediate `UE4SS/Mods` folders may need to add
+nested-package discovery. Preserving `modmenu.json` does not automatically
+extend ModMenu's own filesystem scan.
 
-print(string.format(
-    "[MyMod] Lua companion started from %s\n",
-    context and context.Root or "an unknown folder"
-))
+## Legacy Lua companions
 
-local support = require("support")
-support.start()
-```
+The old `MyMod/ue4ss/scripts/main.lua` layout remains supported. Do not mix
+direct entry points with packaged child mods in the same container. Legacy Lua
+keeps the compatibility bootstrap and `RuneSchemaUE4SS.Current` context.
 
-Then create `support.lua` in the same `scripts` folder:
+Packaged Lua uses the RuneSchema bootstrap: helpers and globals are
+isolated per package, and `RuneSchemaUE4SS.Current` supplies `Owner`, `Name`,
+`Root` and `Scripts`. It is not a separate host-owned mod and does not have its
+own `ModRef`. Code requiring independent VM/ModRef behavior is not a drop-in
+RuneSchema add-on: adapt it to the provided context or install it directly in
+stock UE4SS. Config files remain at the original package path. This context is
+namespace isolation for compatibility, not a security sandbox.
 
-```lua
-local M = {}
+## Diagnostics and trust
 
-function M.start()
-    print("[MyMod] Support module ready.\n")
-end
+Lua `[OK]` confirms that the package entry script ran; it does not prove all
+gameplay callbacks work. `[REJECTED]`, `[NATIVE-UNSUPPORTED]` and Lua `[ERROR]`
+explain failures. Retired host-owned manifest rows are rejected rather than
+being treated as successfully started.
+The session-scoped generated manifest is diagnostic state, not user config.
+Stale manifests cannot start disabled packages on another launch.
 
-return M
-```
-
-While `main.lua` is starting, `RuneSchemaUE4SS.Current` provides:
-
-| Value | Meaning |
-| --- | --- |
-| `Name` | RuneSchema mod folder name |
-| `Root` | That mod's `ue4ss` folder |
-| `Scripts` | That mod's `ue4ss/scripts` folder |
-
-Normal UE4SS Lua functions remain available.
-
-## What appears in the log
-
-A successful companion reports:
-
-```text
-[RuneSchema][UE4SS] [MOD:MyMod][OK] Lua companion started.
-```
-
-RuneSchema also prints one summary:
-
-```text
-[RuneSchema][UE4SS] Companion summary: 1 started, 0 failed.
-```
-
-`0 started, 0 failed` means the bootstrap ran correctly but none of the enabled
-mods contained `ue4ss/scripts/main.lua` at the expected location.
-
-If one companion fails, RuneSchema reports that mod's name and error while
-continuing to the next enabled companion.
-
-## Multiplayer guidance
-
-Loading a Lua companion does not automatically send its actions over the
-network. Multiplayer features should use the game's existing replicated
-systems or a documented RuneSchema bridge. Install the same required content
-on the server and clients unless the mod author clearly marks one side as
-optional.
-
-For example, a server can tell clients that a replicated game action occurred,
-but a local-only Lua callback does not become synchronized merely because it is
-inside RuneSchema.
-
-## Safety
-
-Lua companions run with normal UE4SS Lua access. Only install companions from
-authors you trust. Keep the script focused on the feature that cannot be
-expressed through cooked content or RuneSchema JSON.
+Only install trusted Lua packages: they execute code. Packages are not
+automatically networked. Install the same required content on server and clients,
+keep authority server-side, and use documented game/RuneSchema networking.
+For cooked Blueprint actors instead, see [LogicMods](PSEUDO-LOADERS.md).
 

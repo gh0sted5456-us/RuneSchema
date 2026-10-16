@@ -1347,7 +1347,9 @@ namespace DragonWilds {
             if(!service->HasInitialized())throw std::runtime_error("Spawn loader is disabled or not ready");
             service->ValidateEventSpawn(key);
         };
-        npcService->EventService().Spawn=[service=m_spawnLoader](const std::string& key,const std::string& event,RC::Unreal::UWorld* world,const RC::Unreal::FVector& position){return service->SpawnEventAI(key,world,position,false,0,event);};
+        npcService->EventService().Spawn=[service=m_spawnLoader](const std::string& key,const std::string& event,RC::Unreal::UWorld* world,const RC::Unreal::FVector& position,std::optional<double> groundOffset){return service->SpawnEventAI(key,world,position,false,0,event,-1,groundOffset);};
+        npcService->EventService().PrepareGrounded=[service=m_spawnLoader](const std::string& key,RC::Unreal::UWorld* world,const RC::Unreal::FVector& position,RC::Unreal::AActor* participant){return service->PrepareEventGrounded(key,world,position,participant);};
+        npcService->EventService().DisarmDrops=[service=m_spawnLoader](RC::Unreal::UObject* actor){service->ReleaseEventAdditionalDrops(actor);};
         RegisterLoader(std::move(spawnLoader));
 
         RegisterLoader(std::make_unique<DragonWildsCourseLoader>());

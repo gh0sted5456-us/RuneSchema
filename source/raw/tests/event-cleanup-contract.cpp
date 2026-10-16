@@ -22,6 +22,11 @@ int main(int argc,char** argv) {
     const auto cleanup=source.substr(end,source.find("void SpawnWave()",end)-end);
     assert(cleanup.find("DestroyOwnedActor(item.Controller)")!=cleanup.npos);
     assert(cleanup.find("DestroyOwnedActor(item.Actor)")!=cleanup.npos);
+    assert(cleanup.find("DisarmDrops(actor)")<cleanup.find("DestroyOwnedActor(item.Controller)"));
+    const auto footprint=source.find("location=PrepareGrounded(member.Spawn,world,location,static_cast<AActor*>(player))");
+    assert(footprint!=source.npos&&footprint<source.find("auto* actor=Spawn(member.Spawn"));
+    const auto despawn=source.find("void OnDespawn(");
+    assert(source.find("DisarmDrops(owned[i].Actor.Get())",despawn)<source.find("run.Missing(i)",despawn));
     assert(cleanup.find("if(failed)remaining.push_back(item)")!=cleanup.npos);
     assert(source.find("return run.Active() || pendingStop || !owned.empty()")!=source.npos);
     assert(source.find("if(!Cleanup())return;")<source.find("run.Advance();"));

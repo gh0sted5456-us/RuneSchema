@@ -326,6 +326,14 @@ inline nlohmann::json LoaderSchemas() {
     }
     equipment["not"]={{"required",{"Necklace","Trinket2"}}};
     npc["properties"]["Equipment"]=equipment;
+    auto consequenceEquipment=equipment;
+    consequenceEquipment["minProperties"]=1;
+    consequenceEquipment["properties"].erase("MainHand");consequenceEquipment["properties"].erase("OffHand");
+    npc["properties"]["EquipmentWhen"]={{"type","array"},{"minItems",1},{"maxItems",16},
+        {"items",{{"type","object"},{"additionalProperties",false},{"required",{"Id","QuestCompleted","Policy","Equipment"}},
+            {"properties",{{"Id",{{"type","string"},{"pattern","^[A-Za-z0-9_-]{1,64}$"}}},
+                {"QuestCompleted",text},{"Policy",{{"const","WorldEverCompleted"}}},{"Equipment",consequenceEquipment}}}}},
+        {"description","Human-only durable shared-world equipment consequence. Any authoritative player completion latches this rule for the world-save GUID, including after disconnect/restart. Rule IDs and wearable slots must not overlap; rewards remain per-character quest receipts. Back up RuneSchema saved/progress/worlds with world saves."}};
     npc["properties"]["HideWeapon"]={{"type","boolean"},{"default",false},{"description","Human only. Keeps MainHand and OffHand equipment data for pose selection but hides the rendered held weapon visuals."}};
     json poseNames=json::array(),heldPoseNames=json::array();
     for(const auto& preset:DragonWilds::HumanPose::Presets) {
@@ -373,7 +381,7 @@ inline nlohmann::json LoaderSchemas() {
     npc["allOf"]=json::array({json{
         {"if",{{"required",{"Type"}},{"properties",{{"Type",{{"const","Human"}}}}}}},
         {"then",{{"required",{"Appearance"}},{"not",{{"anyOf",{json{{"required",{"Mesh"}}},json{{"required",{"VisualSource"}}},json{{"required",{"Materials"}}}}}}}}},
-        {"else",{{"not",{{"anyOf",{json{{"required",{"Appearance"}}},json{{"required",{"Equipment"}}},json{{"required",{"Pose"}}},json{{"required",{"DialoguePose"}}},json{{"required",{"Ghost"}}}}}}}}}
+        {"else",{{"not",{{"anyOf",{json{{"required",{"Appearance"}}},json{{"required",{"Equipment"}}},json{{"required",{"EquipmentWhen"}}},json{{"required",{"Pose"}}},json{{"required",{"DialoguePose"}}},json{{"required",{"Ghost"}}}}}}}}}
     }});
     npc["allOf"].push_back({{"not",{{"required",{"Pose","IdleAnimation"}}}}});
     npc["allOf"].push_back({{"not",{{"anyOf",{
@@ -531,7 +539,11 @@ inline nlohmann::json LoaderSchemas() {
         (*questSchema)["properties"]["Stages"]={{"type","array"},{"minItems",1},{"maxItems",32},
             {"items",{{"type","object"},{"additionalProperties",false},{"required",{"Id","Objectives"}},
                 {"properties",{{"Id",{{"type","string"},{"pattern","^[A-Za-z0-9_-]{1,64}$"}}},
+                    {"Completion",{{"enum",{"All","Any"}},{"default","All"},{"description","Any completes on the first successful alternative, consumes only that hand-in route, and uses one quest reward receipt. Any requires at least two visible mandatory objectives."}}},
                     {"Objectives",{{"type","array"},{"minItems",1},{"maxItems",16},{"items",objectives}}}}}}}};
+        auto& stageSchema=(*questSchema)["properties"]["Stages"]["items"];
+        stageSchema["if"]={{"required",{"Completion"}},{"properties",{{"Completion",{{"const","Any"}}}}}};
+        stageSchema["then"]["properties"]["Objectives"]={{"minItems",2},{"items",{{"properties",{{"Optional",{{"const",false}}},{"Hidden",{{"const",false}}}}}}}};
         (*questSchema)["properties"]["Category"]={{"enum",{"Regular","Story","Task"}},{"default","Regular"},{"description","Task uses the game's green task-quest presentation."}};
         (*questSchema)["properties"]["CompletedDescription"]={{"type","string"},{"minLength",1},{"maxLength",2048},{"description","Native completed quest description; omitted values inherit Description."}};
         (*questSchema)["properties"]["Region"]={{"type","string"},{"minLength",1},{"maxLength",80},{"pattern","^(EQuestRegion::)?[A-Za-z][A-Za-z0-9_]*$"},{"description","Native EQuestRegion name, resolved by reflected enum rather than a numeric ID. Current names: Brynmoor, Ghornfell, Fellhollow, Dowdun_Reach, Umbral_Sands, Scorned_Wilderness. None/MAX are not regions. Omit for legacy behavior; no location is guessed."}};
@@ -718,6 +730,12 @@ inline nlohmann::json LoaderSchemas() {
     asset["properties"]["$VisualEffect"]={{"type","object"},{"additionalProperties",true},
         {"properties",{{"Trigger",{{"const","Equip"}}},
             {"DurationSeconds",{{"const","INFINITE"}}}}}};
+    asset["properties"]["$WearableBridge"]={{"type","boolean"},{"description","Request native wearable enumeration/cache enrollment after successful field writes. Supports cooked, PAK and RuneSchema-cloned WearableEquipmentData. Does not allocate item/network identities or fabricate mesh data; false is a no-op, not a global bridge disable."}};
+    asset["properties"]["$QuestScroll"]={{"type","object"},{"additionalProperties",false},{"required",{"QuestID","PersistenceID"}},
+        {"properties",{{"QuestID",{{"type","string"},{"minLength",1},{"maxLength",257},{"pattern","^[^:/\\r\\n\\t ]+(?::[^:/\\r\\n\\t ]+)?$"}}},
+            {"PersistenceID",{{"type","string"},{"pattern","^[A-Za-z0-9_-]{21}[AQgw]$"}}},
+            {"EntryID",{{"type","string"},{"minLength",1},{"maxLength",128},{"pattern","^[^:\\r\\n\\t ]+$"}}}}},
+        {"description","Replace a cooked Blueprint ConsumableItemData UseItem override with authoritative acceptance of an existing local quest Id or Mod:Id. Requires an inert impure script UseItem override returning false (BlueprintPure=false); native-only C++ consumables are not supported. PersistenceID is the expected item identity (not the quest ID). One scroll plus any normal quest start cost is charged only after native acceptance; active/cooldown/prerequisite/missing-quest rejection leaves the scroll. EntryID selects an existing quest entry option. Original cooked use callbacks are not also executed. Restart required."}};
     asset["properties"]["$DominionSpheres"]={{"type","object"},{"minProperties",1},{"maxProperties",32},
         {"propertyNames",{{"pattern","^[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*$"}}},
         {"additionalProperties",{{"type","object"},{"additionalProperties",false},{"required",{"Radius"}},
@@ -797,7 +815,17 @@ inline nlohmann::json LoaderSchemas() {
     result["registry"]={{"type","object"},{"additionalProperties",false},{"required",{"SchemaVersion","Entries"}},
         {"properties",{{"SchemaVersion",{{"const",1}}},
             {"Entries",{{"type","array"},{"maxItems",256},{"items",registryEntry}}}}},
-        {"description","Client presentation declarations shipped by a mod. RuneSchema namespaces every Id with the owning ModId and merges accepted entries into the replicated registry manifest."}};
+        {"description","Enabled loose schema mods and cooked declarations share native-registry enrollment and client/server declarations. Every asset still requires a correct live type and verified native identity; a declaration does not construct an asset or authorize cleanup."}};
+    json nativeRegistries={{"type","object"},{"additionalProperties",false},{"properties",json::object()}};
+    const json nativePath={{"type","string"},{"minLength",1},{"maxLength",1024},{"pattern","^/[^\\r\\n\\t]+\\.[^/]+$"}};
+    const json schemaPath={{"type","object"},{"additionalProperties",false},{"required",{"Path","Source"}},{"properties",{{"Path",nativePath},{"Source",{{"const","Schema"}}}}}};
+    for(const auto* lane:{"Items","Recipes","Quests","CombatSpells","UtilitySpells","EquipmentEffects","Journals","Lore","WearableMeshData","MeleeAttackClasses","RangedAttackClasses"})
+        nativeRegistries["properties"][lane]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},{"items",{{"anyOf",{nativePath,schemaPath}}}}};
+    for(const auto* lane:{"MeleeAttackClasses","RangedAttackClasses"})nativeRegistries["properties"][lane]["items"]=nativePath;
+    result["registry"]["properties"]["NativeRegistries"]=nativeRegistries;
+    result["registry"]["properties"]["LoaderDefinitions"]={{"type","object"},{"additionalProperties",false},{"properties",json::object()}};
+    for(const auto* lane:{"Recipes","Journals","Lore"})result["registry"]["properties"]["LoaderDefinitions"]["properties"][lane]=
+        {{"type","object"},{"maxProperties",4096},{"additionalProperties",{{"type","object"}}}};
     for(auto& [name,schema]:result.items()) {
         if(name=="registry") {
             schema["$schema"]="http://json-schema.org/draft-07/schema#";

@@ -17,7 +17,7 @@ inline void Submit(Draft& draft,Json request){
 }
 inline void Poll(){
     const auto generation=SpawnToolRequests::CurrentGeneration();
-    if(Generation!=generation){Generation=generation;for(auto& draft:Drafts){draft.Pending=0;draft.Ready=false;draft.Prepared=Json::object();draft.ExportWanted=false;draft.InspectWanted=!draft.Source.empty();}}
+    if(Generation!=generation){Generation=generation;for(auto& draft:Drafts){draft.Pending=0;draft.Ready=false;draft.Prepared=draft.Result=Json::object();draft.Created=false;draft.ExportWanted=false;draft.InspectWanted=!draft.Source.empty();}}
     for(auto& draft:Drafts){
         Json receipt;
         if(draft.Pending&&SpawnToolRequests::TakeCompleted(draft.Pending,receipt)){
@@ -26,8 +26,12 @@ inline void Poll(){
             draft.Status=receipt.value("Status",std::string{});
             if(receipt.contains("CloneSource")&&receipt["CloneSource"].value("Source",std::string{})==draft.Source.value("Path",std::string{})){
                 draft.Inspection=receipt["CloneSource"];draft.Ready=true;
+                const auto icon=draft.Inspection.value("Icon",std::string{});if(!icon.empty())draft.Source["Icon"]=icon;
             }else if(receipt.contains("CloneResult")){
                 const auto& result=receipt["CloneResult"];
+                if(result.value("State",std::string{})=="Prepared"||result.value("State",std::string{})=="Created")draft.Result=result;
+                if(result.value("State",std::string{})=="Created"&&result.value("CompanionsReady",true)&&result.contains("Icon"))
+                    LazyCatalog::RecordNativeIcon(result.value("Path",std::string{}),result["Icon"]);
                 if(result.value("State",std::string{})=="Prepared"){
                     draft.Prepared=result;
                     if(draft.ExportWanted)try{draft.ExportPath=Export(HostServices::ExportsDirectory()/"items",result).string();draft.Status="Exported JSONC: "+draft.ExportPath;}catch(const std::exception& error){draft.Error=error.what();}
@@ -83,8 +87,7 @@ inline void RenderDraft(Draft& draft,Mode mode,const Json& catalog,const std::st
             ImGui::EndChild();
         }
         ImGui::TableNextColumn();ImGui::BeginChild("result",ImVec2(0,theme.Y(220)),true);
-        ImGui::SeparatorText("New item");auto preview=draft.Source;
-        if(!preview.empty()){if(draft.Name[0])preview["Name"]=draft.Name;if(draft.Icon[0])preview["Icon"]=draft.Icon;else if(transmog&&!draft.Appearance.empty())preview["Icon"]=draft.Appearance.value("Icon",preview.value("Icon",std::string{}));}
+        ImGui::SeparatorText("New item");auto preview=Preview(draft,mode);
         Card("result-card",preview,"Choose a source to begin");
         ImGui::TextUnformatted("Display name");ImGui::SetNextItemWidth(-1);if(ImGui::InputText("##name",draft.Name,sizeof(draft.Name)))draft.Changed();
         if(ImGui::CollapsingHeader("Custom inventory icon")){ImGui::SetNextItemWidth(-1);if(ImGui::InputText("##icon",draft.Icon,sizeof(draft.Icon)))draft.Changed();

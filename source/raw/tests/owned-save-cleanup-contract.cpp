@@ -132,19 +132,19 @@ int main(int argc,char** argv){
         && registrar.find("false,")!=registrar.npos,
         "combat persistence registries are missing or can become cleanup authority");
     need(registrar.find("[REGISTRY][{}][ADDED]")!=registrar.npos
-        && registrar.find("[REGISTRY][{}][IDENTITY]")!=registrar.npos
+        && registrar.find("[REGISTRY][{}][SOURCE-SUMMARY]")!=registrar.npos
         && registrar.find("TEXT(\"ITEM\")")!=registrar.npos
         && registrar.find("TEXT(\"RECIPE\")")!=registrar.npos
         && registrar.find("TEXT(\"QUEST\")")!=registrar.npos
         && registrar.find("TEXT(\"COMBAT-SPELL\")")!=registrar.npos
         && registrar.find("TEXT(\"UTILITY-SPELL\")")!=registrar.npos
         && registrar.find("TEXT(\"EQUIPMENT-EFFECT\")")!=registrar.npos
-        && registrar.find("PersistenceID='{}'")!=registrar.npos
-        && registrar.find("networkId={}")!=registrar.npos
+        && registrar.find("source='{}' added={} existing={}")!=registrar.npos
+        && registrar.find("ordered_fingerprint={}")!=registrar.npos
         && registrar.find("[COMBAT-REGISTRY][{}][{}]")!=registrar.npos
         && registrar.find("TEXT(\"MELEE-ATTACK\")")!=registrar.npos
         && registrar.find("TEXT(\"RANGED-EQUIPMENT\")")!=registrar.npos,
-        "new combat registry identities are not announced with actionable status");
+        "combat registry counts, content sources and identity fingerprint are not reported without per-asset spam");
     need(provenance.find("AnnounceRuneSchemaItem")!=provenance.npos
         && provenance.find("RuneSchemaItems")!=provenance.npos
         && assetLoader.find("RegistryProvenance::AnnounceRuneSchemaItem")!=assetLoader.npos

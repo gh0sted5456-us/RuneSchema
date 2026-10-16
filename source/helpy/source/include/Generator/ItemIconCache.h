@@ -2,6 +2,7 @@
 
 #include "Generator/ToolRequest.h"
 #include "Core/HelpySourceCache.h"
+#include "Core/HelpyIconPack.h"
 #include "Generator/HelpyIconTrace.h"
 #include "Generator/HelpyRuntimePreferences.h"
 #include "Runtime/HostServices.h"
@@ -24,6 +25,7 @@
 namespace PS::ItemIconCache {
 inline std::function<bool(const std::string&)> RemoteSubmit;
 inline std::function<bool(nlohmann::json&)> RemoteRead;
+inline std::function<void()> RemoteResetAccounting;
 inline void ConfigureRemote(std::function<bool(const std::string&)> submit,std::function<bool(nlohmann::json&)> read){RemoteSubmit=std::move(submit);RemoteRead=std::move(read);}
 inline void ClearRemote(){RemoteSubmit={};RemoteRead={};}
 namespace detail {
@@ -45,7 +47,8 @@ namespace detail {
     inline CacheState& State(){static auto* state=new CacheState();return *state;}
     inline bool BackendSupportsTextures(){return ImGui::GetCurrentContext()!=nullptr;}
     inline std::uint64_t HashPath(const std::string& value){std::uint64_t hash=1469598103934665603ull;for(unsigned char byte:value){hash^=byte;hash*=1099511628211ull;}return hash;}
-    inline std::filesystem::path DiskFile(const std::string& iconPath){const bool liveOnly=HelpyRuntimePreferences::IconCacheLimitMB.load()==0;return HelpySourceCache::Directory(liveOnly)/(HelpySourceCache::Key(iconPath)+".rsicon");}
+    inline std::filesystem::path DiskFile(const std::string& iconPath){const bool liveOnly=HelpyRuntimePreferences::IconCacheLimitMB.load()==0;
+        const auto folder=HelpySourceCache::IconDirectory(iconPath,liveOnly);return folder.empty()?std::filesystem::path{}:folder/(HelpySourceCache::Key(iconPath)+".rsicon");}
     inline bool ReadThumbnail(const std::filesystem::path& file,int& width,int& height,std::vector<unsigned char>& pixels) {
         std::ifstream input(file,std::ios::binary|std::ios::ate);if(!input)return false;const auto size=input.tellg();
         if(size<16||size>16+256*256*4)return false;
@@ -92,10 +95,12 @@ namespace detail {
     }
     inline bool Install(const std::string& iconPath,const std::filesystem::path& file) {
         if(!HelpySourceCache::Ready())return false;auto& state=State();if(state.Textures.contains(iconPath))return true;
+        const auto expected=DiskFile(iconPath);if(expected.empty()||file.lexically_normal()!=expected.lexically_normal())return false;
         ReapRetired(state);
         if(state.Textures.size()>=MaxResidentTextures&&!EvictOne(state,iconPath)){HelpyIconTrace::Event("ui-install-fail",iconPath,"reason='resident-busy'");return false;}
         int width=0,height=0;std::vector<unsigned char> pixels;
         if(!ReadThumbnail(file,width,height,pixels)){HelpyIconTrace::Event("ui-install-fail",iconPath,"reason='cache-read' file='"+file.string()+"'");return false;}
+        HelpyIconPack::Index(file,iconPath);
         if(!BackendSupportsTextures()){HelpyIconTrace::Event("ui-install-fail",iconPath,"reason='no-imgui-context'");return false;}
         auto* texture=IM_NEW(ImTextureData)();texture->Create(ImTextureFormat_RGBA32,width,height);std::memcpy(texture->GetPixels(),pixels.data(),pixels.size());
         texture->UseColors=true;texture->RefCount=1;texture->SetStatus(ImTextureStatus_WantCreate);ImGui::RegisterUserTexture(texture);state.Textures.emplace(iconPath,texture);
@@ -105,6 +110,7 @@ namespace detail {
     inline bool TryInstallDisk(const std::string& iconPath) {
         if(!HelpySourceCache::Ready())return false;auto& state=State();if(state.Textures.contains(iconPath))return true;if(state.DiskChecked.contains(iconPath))return false;state.DiskChecked.insert(iconPath);
         const auto file=DiskFile(iconPath);
+        if(file.empty())return false;
         std::error_code existsError;const bool exists=std::filesystem::exists(file,existsError)&&!existsError;
         if(!exists){HelpyIconTrace::Event("disk-miss",iconPath,"file='"+file.string()+"'");return false;}
         if(!Install(iconPath,file)){HelpyIconTrace::Event("disk-invalid",iconPath,"file='"+file.string()+"'");return false;}
@@ -131,7 +137,7 @@ namespace detail {
         const auto icon=result.value("Icon",std::string{});if(icon.empty())return;const auto status=result.value("Status",std::string{});
         if(status.starts_with("World changed")){state.Pending.clear();state.High.clear();state.Normal.clear();state.Queued.clear();state.Failed.clear();state.Attempts.clear();state.RetryAt.clear();return;}
         if(status=="Ready") {
-            if(result.contains("SourceKey")&&result.value("SourceKey",std::string{})!=HelpySourceCache::Current.Key){state.Pending.erase(icon);if(state.Queued.insert(icon).second)state.High.push_back(icon);state.NextSubmit=std::chrono::steady_clock::now()+std::chrono::milliseconds(500);return;}
+            if(result.contains("SourceKey")&&result.value("SourceKey",std::string{})!=HelpySourceCache::Fingerprint(icon)){state.Pending.erase(icon);if(state.Queued.insert(icon).second)state.High.push_back(icon);state.NextSubmit=std::chrono::steady_clock::now()+std::chrono::milliseconds(500);return;}
             state.Pending.erase(icon);state.Attempts.erase(icon);state.RetryAt.erase(icon);const auto file=result.value("File",std::string{});
             HelpyIconTrace::Event("plugin-result",icon,"status='Ready' file='"+file+"' cacheHit="+(result.value("CacheHit",false)?std::string("true"):std::string("false")));
             if(file.empty()||!Install(icon,std::filesystem::path(file)))state.Failed.insert(icon);
@@ -180,6 +186,12 @@ inline void Update() {
     while(state.Pending.size()<maxActive) {
         auto next=detail::PopNext(state);if(next.empty())return;
         if(state.Textures.contains(next)||state.Failed.contains(next)||state.Pending.contains(next))continue;
+        // Newly observed cross-source icons wait for the core's copied source
+        // manifest; do not burn their capture retries while it is being built.
+        if(HelpySourceCache::Fingerprint(next).empty()){
+            state.Queued.insert(next);state.High.push_front(std::move(next));
+            state.NextSubmit=now+std::chrono::milliseconds(250);return;
+        }
         const bool accepted=RemoteSubmit?RemoteSubmit(next):ItemIconRequests::TrySubmit({{"Icon",next}});
         if(!accepted){HelpyIconTrace::Event("submit-rejected",next);state.Queued.insert(next);state.High.push_front(std::move(next));state.NextSubmit=now+std::chrono::milliseconds(16);return;}
         HelpyIconTrace::Event("submit",next,"accepted=true");state.Pending.insert(std::move(next));state.NextSubmit=now+std::chrono::milliseconds(100);
@@ -239,9 +251,26 @@ inline bool Draw(const std::string& iconPath,const ImVec2& minimum,const ImVec2&
 struct DiskStats {std::uintmax_t Bytes=0;std::size_t Files=0;};
 inline std::filesystem::path ActiveDiskFolder(){return HostServices::CacheDirectory()/(HelpyRuntimePreferences::IconCacheLimitMB.load()==0?"item-icons-live":"item-icons");}
 inline DiskStats CurrentDiskStats(){DiskStats stats;std::error_code ec;const auto folder=ActiveDiskFolder();if(!std::filesystem::is_directory(folder,ec)||ec)return stats;
-    for(std::filesystem::directory_iterator it(folder,ec),end;!ec&&it!=end;it.increment(ec)){if(!it->is_regular_file(ec)||ec){ec.clear();continue;}if(it->path().extension()!=L".rsicon")continue;const auto size=it->file_size(ec);if(ec){ec.clear();continue;}stats.Bytes+=size;++stats.Files;}return stats;}
-inline bool CleanDiskCache(){std::error_code persistentError,liveError;std::filesystem::remove_all(HostServices::CacheDirectory()/"item-icons",persistentError);std::filesystem::remove_all(HostServices::CacheDirectory()/"item-icons-live",liveError);
-    auto& state=detail::State();state.DiskChecked.clear();state.Failed.clear();state.Attempts.clear();state.RetryAt.clear();HelpyRuntimePreferences::IconCacheEpoch.fetch_add(1);return !persistentError&&!liveError;}
+    for(std::filesystem::recursive_directory_iterator it(folder,ec),end;!ec&&it!=end;it.increment(ec)){
+        const auto attributes=GetFileAttributesW(it->path().c_str());
+        if(attributes==INVALID_FILE_ATTRIBUTES||(attributes&FILE_ATTRIBUTE_REPARSE_POINT)){it.disable_recursion_pending();continue;}
+        if(!it->is_regular_file(ec)||ec){ec.clear();continue;}if(it->path().extension()!=L".rsicon")continue;const auto size=it->file_size(ec);if(ec){ec.clear();continue;}stats.Bytes+=size;++stats.Files;}return stats;}
+inline bool RemoveDiskFolder(const std::filesystem::path& folder){
+    const auto base=std::filesystem::absolute(HostServices::CacheDirectory()).lexically_normal();
+    const auto target=std::filesystem::absolute(folder).lexically_normal();
+    if(target.parent_path()!=base||(target.filename()!=L"item-icons"&&target.filename()!=L"item-icons-live"))return false;
+    std::error_code ec;if(!std::filesystem::exists(target,ec))return !ec;
+    // Never follow a redirected cache or a nested junction during cleanup.
+    for(auto check=target;check!=base.parent_path();check=check.parent_path()){
+        const auto attrs=GetFileAttributesW(check.c_str());if(attrs==INVALID_FILE_ATTRIBUTES||(attrs&FILE_ATTRIBUTE_REPARSE_POINT))return false;
+    }
+    std::size_t entries=0;for(std::filesystem::recursive_directory_iterator it(target,ec),end;!ec&&it!=end;it.increment(ec)){
+        const auto attrs=GetFileAttributesW(it->path().c_str());if(attrs==INVALID_FILE_ATTRIBUTES||(attrs&FILE_ATTRIBUTE_REPARSE_POINT)||++entries>1000000)return false;
+    }
+    if(ec)return false;std::filesystem::remove_all(target,ec);return !ec;
+}
+inline bool CleanDiskCache(){const bool persistent=RemoveDiskFolder(HostServices::CacheDirectory()/"item-icons");const bool live=RemoveDiskFolder(HostServices::CacheDirectory()/"item-icons-live");
+    InvalidateSource();HelpyRuntimePreferences::IconCacheEpoch.fetch_add(1);if(RemoteResetAccounting)RemoteResetAccounting();return persistent&&live;}
 inline size_t Count(){return detail::State().Textures.size();}
 inline size_t QueuedCount(){auto& state=detail::State();return state.Queued.size()+state.Pending.size();}
 }

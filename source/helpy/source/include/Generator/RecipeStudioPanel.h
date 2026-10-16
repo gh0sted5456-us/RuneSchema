@@ -185,11 +185,18 @@ inline void Render(const Json& catalog,uint64_t revision) {
     if(browseExisting){ImGui::BeginDisabled(s.Pending!=0);
     const float browseWidth=ImGui::CalcTextSize("Browse").x+ImGui::GetStyle().FramePadding.x*2+ImGui::GetStyle().ItemSpacing.x;
     ImGui::SetNextItemWidth(std::max(t.X(60),ImGui::GetContentRegionAvail().x-browseWidth));
-    const bool search=ImGui::InputTextWithHint("##recipe-search","Search native recipe catalog",s.Search,sizeof(s.Search),ImGuiInputTextFlags_EnterReturnsTrue);ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Browse")||search)Search();
-    if(ImGui::BeginCombo("Native recipes",s.LoadedRecipe.empty()?"Choose a cooked recipe":s.LoadedRecipe.c_str())) {
-        for(const auto& row:s.Catalog.value("Recipes",Json::array())){const auto path=row.value("Path",std::string{});ImGui::PushID(path.c_str());if(ImGui::Selectable(row.value("Name",path).c_str()))Submit({{"Action","InspectRecipe"},{"SourceRecipe",path}});ImGui::PopID();}ImGui::EndCombo();
+    const bool search=ImGui::InputTextWithHint("##recipe-search","Search cooked and RuneSchema recipes, names or mods",s.Search,sizeof(s.Search),ImGuiInputTextFlags_EnterReturnsTrue);ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Browse")||search)Search();
+    if(ImGui::BeginCombo("Recipes",s.LoadedRecipe.empty()?"Choose a cooked or RuneSchema recipe":s.LoadedRecipe.c_str())) {
+        for(const auto& row:s.Catalog.value("Recipes",Json::array())){const auto path=row.value("Path",std::string{}),reference=row.value("Reference",path),owner=row.value("Owner",std::string{});
+            ImGui::PushID((path+reference).c_str());ImGui::BeginDisabled(path.empty()||!row.value("Available",true));
+            const auto label=row.value("Name",path)+(owner.empty()?"":"  ["+owner+"]");if(ImGui::Selectable(label.c_str()))Submit({{"Action","InspectRecipe"},{"SourceRecipe",path}});
+            ImGui::EndDisabled();if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("%s\n%s",path.empty()?reference.c_str():path.c_str(),row.value("Available",true)?row.value("Source",std::string{}).c_str():"Definition is present but its native recipe is not ready; inspect loader errors.");ImGui::PopID();}ImGui::EndCombo();
     }
-    if(s.Catalog.value("HasMore",false)&&ImGui::SmallButton("Next recipe page"))Search(s.Catalog.value("Offset",0)+128);
+    if(s.Catalog.contains("Total"))ImGui::TextDisabled("%zu matching recipes",s.Catalog.value("Total",std::size_t{}));
+    if(s.Catalog.contains("MountedCatalogReady")&&!s.Catalog.value("MountedCatalogReady",false))ImGui::TextWrapped("Mounted content metadata is unavailable; showing loaded recipes and declared definitions only. Browse again when ready.");
+    else if(s.Catalog.contains("SubclassCatalogReady")&&!s.Catalog.value("SubclassCatalogReady",false))ImGui::TextWrapped("Subclass metadata is unavailable; unloaded Blueprint-derived recipes may be missing. Loaded recipes and known native/declared recipes remain available.");
+    const auto recipeOffset=s.Catalog.value("Offset",0);if(recipeOffset>0&&ImGui::SmallButton("Previous recipe page"))Search(std::max(0,recipeOffset-128));
+    if(s.Catalog.value("HasMore",false)){if(recipeOffset>0)ImGui::SameLine();if(ImGui::SmallButton("Next recipe page"))Search(recipeOffset+128);}
     const float loadWidth=ImGui::CalcTextSize("Load").x+ImGui::GetStyle().FramePadding.x*2+ImGui::GetStyle().ItemSpacing.x;
     ImGui::SetNextItemWidth(std::max(t.X(60),ImGui::GetContentRegionAvail().x-loadWidth));ImGui::InputTextWithHint("##recipe-source","Or paste a cooked RecipeData object path",s.Source,sizeof(s.Source));ImGui::SameLine();
     if(HelpyImGuiTheme::SoftButton("Load")&&s.Source[0])Submit({{"Action","InspectRecipe"},{"SourceRecipe",s.Source}});

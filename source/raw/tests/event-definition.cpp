@@ -1,5 +1,6 @@
 #include "Loader/EventDefinition.h"
 #include "Loader/EventIdentity.h"
+#include "Core/SpawnFootprint.h"
 #include "Generator/SpawnAuthoring.h"
 #include "Loader/SpawnPlacementDraft.h"
 #include "Loader/SpawnAuthoringFields.h"
@@ -77,6 +78,20 @@ int main(){
     assert(ParseSpawn("Test",spawn).BossName=="Named boss");
     spawn["LootRow"]="RS_TestGold";
     assert(ParseSpawn("Test",spawn).LootRow=="RS_TestGold");
+    auto trophy=spawn;trophy["AdditionalDrops"]=Json::array({{{"Item","/Test/ITEM_Sigil.ITEM_Sigil"},{"Min",1},{"Max",1},{"ChancePercent",100}}});
+    const auto trophySpawn=ParseSpawn("Test",trophy);assert(trophySpawn.AdditionalDrops.size()==1);
+    ValidateIdentity(DecodeIdentity(EncodeIdentity(trophySpawn)),trophySpawn);
+    auto altered=trophySpawn;altered.AdditionalDrops[0]["Max"]=2;
+    assert(Rejects([&]{ValidateIdentity(DecodeIdentity(EncodeIdentity(trophySpawn)),altered);}));
+    auto invalidTrophy=trophy;invalidTrophy["AdditionalDrops"][0]["ChancePercent"]=101;assert(Rejects([&]{ParseSpawn("Test",invalidTrophy);}));
+    invalidTrophy=trophy;invalidTrophy["AdditionalDrops"][0]["Max"]=0;assert(Rejects([&]{ParseSpawn("Test",invalidTrophy);}));
+    const auto capsule=PS::SpawnFootprint::Scaled({40,90},2);assert(capsule.Radius==80&&capsule.HalfHeight==180);
+    int footprintSamples=0;const auto origin=PS::SpawnFootprint::OriginZ(capsule,1010,[&](double,double){++footprintSamples;return 1000.0;});
+    assert(footprintSamples==5&&origin==1190&&origin-capsule.HalfHeight==1010);
+    assert(PS::SpawnFootprint::OriginZ(capsule,1010,[](double x,double){return x>0?1020.0:1000.0;})==1210);
+    assert(Rejects([&]{PS::SpawnFootprint::Scaled({40,90},0);}));
+    assert(Rejects([&]{PS::SpawnFootprint::OriginZ(capsule,1010,[](double x,double){return x>0?1300.0:1000.0;});}));
+    assert(Rejects([&]{PS::SpawnFootprint::OriginZ(capsule,1010,[](double x,double){if(x<0)throw std::runtime_error("No ground");return 1000.0;});}));
     for(const auto& invalid:{Json(""),Json(12),Json("bad\nrow"),Json(std::string(257,'x'))}) {
         auto badLoot=spawn;badLoot["LootRow"]=invalid;assert(Rejects([&]{ParseSpawn("Test",badLoot);}));
     }

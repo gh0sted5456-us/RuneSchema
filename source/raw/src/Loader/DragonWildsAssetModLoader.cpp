@@ -56,6 +56,13 @@
 #include "Core/JsonPatchDirective.h"
 #include "Core/RegistryProvenance.h"
 #include "Loader/PlayerGhost.h"
+#include "Loader/EquipmentWearableBridge.h"
+#include "Loader/WearableBridgeDirective.h"
+#include "Loader/QuestScroll.h"
+#include "Loader/QuestScrollUseContract.h"
+#include "SDK/Helper/ActorHelper.h"
+#include "Core/CookedPakRegistryManifest.h"
+#include "SDK/Helper/RecipeAssetCatalog.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -1086,6 +1093,9 @@ namespace DragonWilds {
             }
             try
             {
+                (void)PS::WearableBridgeDirective::Requested(normalizedProperties);
+                if(normalizedProperties.contains("$QuestScroll"))
+                    (void)QuestScrolls::Parse(RC::to_string(modName),normalizedProperties.at("$QuestScroll"));
                 if (normalizedProperties.contains("$DominionSpheres"))
                 {
                     if (normalizedProperties.contains("$Clone"))
@@ -1544,12 +1554,17 @@ namespace DragonWilds {
 
         const auto errorsBefore = outResult.ErrorCount;
         const auto writesBefore = outResult.PropertiesWritten;
+        bool wearableRefresh=false;
+        try {
+            wearableRefresh=PS::WearableBridgeDirective::Requested(pendingAsset.Properties);
+            if(wearableRefresh&&!EquipmentWearableBridge::IsWearable(object))throw std::runtime_error("$WearableBridge requires WearableEquipmentData, not a generic item or mesh asset");
+        }catch(const std::exception& error){++outResult.ErrorCount;PS::Log<LogLevel::Error>(STR("Asset wearable directive: {}\n"),PS::ToWideSafe(error.what()));return;}
         if (HasModuleImportDirectives(pendingAsset.Properties)
             && !ApplyModuleImports(object, pendingAsset, outResult))
             return;
         for (auto& [propertyName, propertyValue] : pendingAsset.Properties.items())
         {
-            if (propertyName == "$Append" || propertyName == "$Clone" || propertyName == "$InheritEquipmentStats" || IsModuleImportDirective(propertyName) || PS::AssetMetadata::IsKey(propertyName))
+            if (propertyName == "$Append" || propertyName == "$Clone" || propertyName == "$InheritEquipmentStats" || propertyName == "$WearableBridge" || propertyName == "$QuestScroll" || IsModuleImportDirective(propertyName) || PS::AssetMetadata::IsKey(propertyName))
             {
                 continue;
             }
@@ -1618,8 +1633,20 @@ namespace DragonWilds {
         // Metadata is recorded only against an object actually handled by this loader.
         // A native field-write failure cannot grant new clone permissions.
         if(outResult.ErrorCount==errorsBefore) {
+            if(wearableRefresh&&!pendingAsset.Properties.contains("$Clone"))
+                (void)EquipmentWearableBridge::RefreshRegistered(object);
             try {PS::AssetMetadata::Record(object,pendingAsset.Metadata,RC::to_string(pendingAsset.ModName),pendingAsset.InstalledDefinition);}
             catch(const std::exception& e){++outResult.ErrorCount;PS::Log<LogLevel::Error>(STR("Asset metadata: {}\n"),PS::ToWideSafe(e.what()));}
+            if(outResult.ErrorCount==errorsBefore && pendingAsset.Properties.contains("$QuestScroll"))try {
+                const auto scroll=QuestScrolls::Parse(RC::to_string(pendingAsset.ModName),pendingAsset.Properties.at("$QuestScroll"));
+                auto* consumable=ActorHelper::ResolveClass(TEXT("/Script/Dominion.ConsumableItemData"));
+                auto* identity=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(objectClass,TEXT("PersistenceID")));
+                if(!consumable||!object->IsA(consumable)||!identity||identity->GetArrayDim()!=1
+                    ||RC::to_string(RC::StringType(*identity->GetPropertyValue(identity->ContainerPtrToValuePtr<void>(object))))!=scroll.PersistenceId)
+                    throw std::runtime_error("$QuestScroll requires ConsumableItemData with the exact declared stable item PersistenceID");
+                (void)QuestScrolls::RequireUseEvent(object);
+                QuestScrolls::Bind(RC::to_string(object->GetPathName()),scroll);
+            }catch(const std::exception& e){++outResult.ErrorCount;PS::Log<LogLevel::Error>(STR("Quest scroll: {}\n"),PS::ToWideSafe(e.what()));}
         }
         if (outResult.ErrorCount > errorsBefore) {
             PS::Log<LogLevel::Error>(STR("[{}] Asset edit incomplete: {} successful field writes, {} errors. Changes are not rolled back; inspect field errors and restart after correcting the mod.\n"),
@@ -3440,6 +3467,7 @@ namespace DragonWilds {
             }
 
             if (!networkDeferred && firstNetId < 0) firstNetId = netId;
+            if(!networkDeferred)EquipmentWearableBridge::TryRegister(candidate,item);
             ++registeredCount;
         }
 

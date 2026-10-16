@@ -91,22 +91,6 @@ namespace DragonWilds {
     #include "JournalGroupPlacement.inl"
     #include "JournalHierarchy.inl"
     namespace {
-        bool RegisteredJournalEntry(UObject* entry)
-        {
-            if (!entry) return false;
-            const auto registry = PS::SaveCleanup::ReadRegistry();
-            if (!registry || !registry->JournalsComplete) return false;
-            auto* idProperty = CastField<FStrProperty>(
-                PropertyHelper::GetPropertyByName(
-                    entry->GetClassPrivate(), TEXT("PersistenceID")));
-            if (!idProperty) return false;
-            const auto id = idProperty->GetPropertyValue(
-                idProperty->ContainerPtrToValuePtr<void>(entry));
-            return id.GetCharArray().Num() > 1
-                && registry->Journals.contains(
-                    RC::to_string(RC::StringType(*id)));
-        }
-
         constexpr const TCHAR* EntryClassPaths[] = {
             TEXT("/Script/Dominion.JournalEntryKnowLoreData"),
             TEXT("/Script/Dominion.JournalEntryKnowPeopleData"),
@@ -338,6 +322,7 @@ namespace DragonWilds {
         ResetFinalizeCaches();
         m_acquisitionUnlocks.clear();
         m_automaticDelivery.clear();
+        m_reportedUnlockFailures.clear();
         LoadResult result{};
 
         for (auto& def : m_defs)
@@ -966,6 +951,16 @@ namespace DragonWilds {
         return m_finalizeJournalSubsystem;
     }
 
+    bool DragonWildsJournalModLoader::RegisteredJournalEntry(UObject* entry)
+    {
+        if(!entry||!entry->IsA(m_baseEntryClass)||entry->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_NeedInitialization|RF_NeedLoad|RF_NeedPostLoad|RF_BeginDestroyed|RF_FinishDestroyed)))return false;
+        auto* subsystem=FindJournalSubsystem();
+        // Unlock authorization is this exact live identity/object mapping, not
+        // a whole-character deletion certificate. Unrelated loader failures
+        // must still veto pruning, but must not disable healthy journal entries.
+        return subsystem&&QuestRegistry::NativeRegistry::ResolvesPersistenceIdentity(subsystem,entry,true);
+    }
+
     void DragonWildsJournalModLoader::RegisterEntry(UObject* entry,const RC::StringType& owner)
     {
         (void)owner;
@@ -1038,38 +1033,35 @@ namespace DragonWilds {
             return false;
         }
 
-        size_t added=0,unavailable=0;
+        size_t added=0,unavailable=0,newFailures=0;
         for (auto& key : m_unlock)
         {
+            try {
             auto found = m_entries.find(key);
             if (found == m_entries.end())
             {
-                ++unavailable;
-                continue;
+                throw std::runtime_error("Journal entry is missing from the loader cache");
             }
 
             UObject* entry = found->second.Get();
-            if (!RegisteredJournalEntry(entry)) {++unavailable;continue;}
+            if (!RegisteredJournalEntry(entry))throw std::runtime_error("Journal entry is not live or its native persistence identity does not resolve to this object");
             // The adapter protects generated identities and removes orphaned
             // IDs before native load. Cooked assets must not depend on
             // that adapter to use the native player-unlock path.
             if(m_createdEntries.contains(entry) && !m_nativePersistenceReady) {
-                ++unavailable;
-                PS::RoutineLog("journal", STR("Journal/lore unlock deferred until native persistence protection is ready.\n"));
-                continue;
+                throw std::runtime_error("Journal/lore unlock deferred until native persistence protection is ready");
             }
-            try {
-                auto* subsystem=FindJournalSubsystem();
-                if(!subsystem || !QuestRegistry::NativeRegistry::ResolvesPersistenceIdentity(subsystem,entry,true))
-                    throw std::runtime_error("Native journal registry does not resolve this entry at unlock time");
                 if(JournalPlayerAccess::EnsureUnlocked(journalComponent,entry))++added;
             }catch(const std::exception& error) {
                 ++unavailable;
-                PS::Log<LogLevel::Error>(STR("Journal unlock '{}': {}\n"),key,PS::ToWideSafe(error.what()));
+                const auto failure=RC::to_string(journalComponent->GetPathName())+":"+RC::to_string(key)+":"+error.what();
+                if(m_reportedUnlockFailures.size()<2048&&m_reportedUnlockFailures.insert(failure).second){
+                    ++newFailures;PS::Log<LogLevel::Error>(STR("Journal unlock '{}': {}\n"),key,PS::ToWideSafe(error.what()));
+                }
             }
         }
         if(added)PS::Log<LogLevel::Verbose>(STR("Journal unlock: {} entries added to '{}'. UI visibility still depends on category placement.\n"),added,journalComponent->GetPathName());
-        if(unavailable)PS::Log<LogLevel::Warning>(STR("Journal unlock: {} requested entries unavailable; asset placement does not confirm player unlock.\n"),unavailable);
+        if(unavailable&&newFailures)PS::Log<LogLevel::Warning>(STR("Journal unlock: {} requested entries unavailable; asset placement does not confirm player unlock. Identical failures are suppressed until definitions reload.\n"),unavailable);
         return unavailable==0;
     }
 

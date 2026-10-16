@@ -27,6 +27,16 @@ struct State {
     std::unordered_set<std::string> RandomSeen;
 };
 inline std::array<State,3> Windows{};
+// UI-thread-only native icon confirmations. They never introduce items or
+// survive a world/source change. Keep query caches from restoring old artwork.
+inline std::unordered_map<std::string,std::string> NativeIcons;
+inline void RecordNativeIcon(const std::string& path,const json& icon){
+    if(path.empty()||path.size()>1024||path.front()!='/'||!icon.is_string()||icon.get_ref<const std::string&>().size()>2048)return;
+    if(NativeIcons.size()>=512&&!NativeIcons.contains(path))NativeIcons.erase(NativeIcons.begin());
+    NativeIcons[path]=icon.get<std::string>();
+    const auto update=[&](json& rows){if(rows.is_array())for(auto& row:rows)if(row.is_object()&&row.value("Path",std::string{})==path)row["Icon"]=icon;};
+    update(Windows[0].Rows);for(auto& [query,cache]:Windows[0].Cache)update(cache.Rows);
+}
 inline bool SourcesRemoved=false;
 inline uint64_t FirstOpenGeneration=0,FirstOpenPendingGeneration=0,NextRequestId=(uint64_t{1}<<62);
 // The game-thread push callback may only publish this scalar. Catalogue state
@@ -151,7 +161,8 @@ inline void ApplyWindow(const json& window,uint64_t revision) {
     if(window.contains("Rows")&&window["Rows"].is_array())for(const auto& row:window["Rows"]) {
         if(!row.is_object())continue;
         if(randomItems){const auto identity=RandomIdentity(row);if(!identity.empty()&&!state.RandomSeen.insert(identity).second)continue;}
-        state.Rows.push_back(row);
+        auto current=row;if(category==0){const auto icon=NativeIcons.find(row.value("Path",std::string{}));if(icon!=NativeIcons.end())current["Icon"]=icon->second;}
+        state.Rows.push_back(std::move(current));
     }
     state.NextCursor=window.value("NextCursor",std::string{});state.HasMore=window.value("HasMore",false);state.Pending=false;state.ActiveRequestId=0;state.LastError=window.value("Error",std::string{});
     state.Coverage=window.value("Coverage",std::string{});
@@ -180,7 +191,7 @@ inline void Overlay(json& snapshot,int category){if(category>=0&&category<=2){au
     if(state.Query.empty()&&state.Rows.empty()&&snapshot.contains(key)&&snapshot[key].is_array()&&!snapshot[key].empty())return;
     if(state.Started||!state.Rows.empty())snapshot[key]=state.Rows;
 }}
-inline void InvalidateSources(bool removed){SourcesRemoved=removed;for(size_t i=0;i<Windows.size();++i){auto& state=Windows[i];const auto cancel=state.CancelGeneration+1;if(RemoteCancel)RemoteCancel(static_cast<int>(i),cancel);state=State{};state.CancelGeneration=cancel;}FirstOpenGeneration=0;}
+inline void InvalidateSources(bool removed){SourcesRemoved=removed;NativeIcons.clear();for(size_t i=0;i<Windows.size();++i){auto& state=Windows[i];const auto cancel=state.CancelGeneration+1;if(RemoteCancel)RemoteCancel(static_cast<int>(i),cancel);state=State{};state.CancelGeneration=cancel;}FirstOpenGeneration=0;}
 inline void ClearPending(){for(auto& state:Windows){state.Pending=false;state.ActiveRequestId=0;}}
-inline void ResetForGeneration(uint64_t generation){for(auto& state:Windows){if(state.RuntimeGeneration!=generation){const auto cancel=state.CancelGeneration;state=State{};state.CancelGeneration=cancel;state.RuntimeGeneration=generation;}}}
+inline void ResetForGeneration(uint64_t generation){for(auto& state:Windows){if(state.RuntimeGeneration!=generation){NativeIcons.clear();const auto cancel=state.CancelGeneration;state=State{};state.CancelGeneration=cancel;state.RuntimeGeneration=generation;}}}
 }

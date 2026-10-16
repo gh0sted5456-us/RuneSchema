@@ -10,8 +10,10 @@
 #include "Generator/HelpyStandaloneWindow.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Generator/ItemIconCache.h"
+#include "Generator/HelpyIconPacks.h"
 #include "Generator/HelpyIconTrace.h"
 #include "Generator/LazyCatalog.h"
+#include "Generator/AuthoringClient.h"
 #include "Generator/ToolRequest.h"
 #include "Runtime/HelpySettings.h"
 #include "Runtime/HelpyPaths.h"
@@ -21,18 +23,19 @@
 namespace {
 HMODULE Module{};
 constexpr RuneSchemaPluginDescriptor Descriptor{sizeof(RuneSchemaPluginDescriptor),RUNESCHEMA_PLUGIN_API_VERSION,
-    "RuneSchema.Helpy","RuneSchema Helpy","2.0.4"};
+    "RuneSchema.Helpy","RSMK (RuneSchema Modding Kit)","2.0.4"};
 struct State {const RuneSchemaHostApi* Host{};std::unique_ptr<PS::HelpyStandaloneWindow> Window;
     std::atomic<bool> ToolsAvailable=false,ToolsWaiting=false;std::atomic<uint64_t> ToolsGeneration=1;
     std::mutex ToolsMutex;uint64_t ToolsRevision=0; nlohmann::json ToolsResult=nlohmann::json::object(),ToolsCatalog=nlohmann::json::object(),Players=nlohmann::json::array();std::deque<nlohmann::json> IconResults;
     std::map<uint64_t,nlohmann::json> Completed;std::map<uint64_t,std::string> IconDictionary;std::deque<nlohmann::json> QueryResults;uint64_t HostRevision=0;std::chrono::steady_clock::time_point NextHostRead{};
+    nlohmann::json MapGroundReply=nlohmann::json::object();
     bool LoggedQuery=false,LoggedRows=false,LoggedIcon=false;};
 bool CallCore(State* state,const nlohmann::json& request,nlohmann::json& response) {
     try {
     if(!state||!state->Host)return false;
     const auto input=request.dump();
     const auto action=request.value("Action",std::string{});
-    const bool readOnly=action=="Read";
+    const bool readOnly=action=="Read"||action=="AuthoringSnapshot";
     uint32_t size=0;
     std::string output;
     if(readOnly){
@@ -55,6 +58,8 @@ int32_t RS_PLUGIN_CALL About(void*,const char*,char* response,uint32_t capacity,
     if(!response||capacity<sizeof(value))return RS_PLUGIN_BUFFER_TOO_SMALL;std::memcpy(response,value,sizeof(value));return RS_PLUGIN_OK;
 }
 void StoreReceipt(State* state,const nlohmann::json& result) {
+    // Progress retains the mutation slot; only final acknowledgements complete it.
+    if(result.value("_InProgress",false))return;
     const auto id=result.value("_RequestId",uint64_t{});if(!id)return;
     nlohmann::json receipt={{"Status",result.value("Status",std::string("Completed."))}};
     for(const auto* key:{"GrantResults","SpawnResult","SpawnDefinition","CloneResult","CloneSource","CloneAppearance","ItemDetails","MapSnapshot","MapBuildings","MapPoint","RecipeExportResult","RecipeWorkspaceCatalog","RecipeWorkspaceSource","ItemOverrideExportResult","KitMetadata","NativeContracts"})
@@ -71,7 +76,11 @@ int32_t RS_PLUGIN_CALL ToolsPush(void* context,const char* requestJson,char*,uin
             state->ToolsAvailable=message.value("Available",false);state->ToolsWaiting=message.value("Waiting",false);
             state->ToolsGeneration=generation;if(kind!="icon")++state->ToolsRevision;
             if(kind=="bootstrap")state->ToolsResult=payload.value("Result",nlohmann::json::object());
-            else if(kind=="catalog")for(auto it=payload.begin();it!=payload.end();++it)state->ToolsCatalog[it.key()]=it.value();
+            else if(kind=="mapground")state->MapGroundReply=std::move(payload);
+            else if(kind=="catalog") {
+                if(payload.contains("Players")&&payload["Players"].is_array())state->Players=payload["Players"];
+                for(auto it=payload.begin();it!=payload.end();++it)state->ToolsCatalog[it.key()]=it.value();
+            }
             else if(kind=="query") {
                 if(payload.contains("CatalogWindow")&&payload["CatalogWindow"].is_object()) {
                     auto& window=payload["CatalogWindow"];
@@ -92,14 +101,14 @@ int32_t RS_PLUGIN_CALL ToolsPush(void* context,const char* requestJson,char*,uin
                     window.erase("Dictionary");
                     const auto rows=window.contains("Rows")&&window["Rows"].is_array()?window["Rows"].size():0;
                     if(!state->LoggedQuery||(rows&&!state->LoggedRows)){
-                        diagnostic="Helpy 2.0.4 catalog received: category="+std::to_string(window.value("Category",-1))+" rows="+std::to_string(rows)+" more="+(window.value("HasMore",false)?"yes":"no");
+                        diagnostic="RSMK 2.0.4 catalog received: category="+std::to_string(window.value("Category",-1))+" rows="+std::to_string(rows)+" more="+(window.value("HasMore",false)?"yes":"no");
                         state->LoggedQuery=true;if(rows)state->LoggedRows=true;
                     }
                 }
                 state->QueryResults.push_back(std::move(payload));while(state->QueryResults.size()>32)state->QueryResults.pop_front();
             }
             else if(kind=="icon"){
-                if(!state->LoggedIcon){diagnostic="Helpy 2.0.4 native icon reply received.";state->LoggedIcon=true;}
+                if(!state->LoggedIcon){diagnostic="RSMK 2.0.4 native icon reply received.";state->LoggedIcon=true;}
                 state->IconResults.push_back(std::move(payload));while(state->IconResults.size()>16)state->IconResults.pop_front();}
             else if(kind=="result"){
                 if(payload.contains("Players")&&payload["Players"].is_array())state->Players=payload["Players"];
@@ -113,7 +122,7 @@ int32_t RS_PLUGIN_CALL ToolsPush(void* context,const char* requestJson,char*,uin
                 }
                 state->ToolsResult=payload;StoreReceipt(state,payload);
             }
-            else if(kind=="clear"){state->ToolsResult=payload;state->ToolsCatalog=nlohmann::json::object();state->Players=nlohmann::json::array();state->IconResults.clear();state->IconDictionary.clear();state->Completed.clear();state->QueryResults.clear();state->LoggedQuery=false;state->LoggedRows=false;state->LoggedIcon=false;}
+            else if(kind=="clear"){state->MapGroundReply=nlohmann::json::object();state->ToolsResult=payload;state->ToolsCatalog=nlohmann::json::object();state->Players=nlohmann::json::array();state->IconResults.clear();state->IconDictionary.clear();state->Completed.clear();state->QueryResults.clear();state->LoggedQuery=false;state->LoggedRows=false;state->LoggedIcon=false;}
         }
         if(!diagnostic.empty()&&state->Host&&state->Host->Log)state->Host->Log(RS_LOG_INFO,Descriptor.Id,diagnostic.c_str());
         PS::LazyCatalog::BackendSignal(generation);*size=0;return RS_PLUGIN_OK;
@@ -128,6 +137,7 @@ void SyncHost(State* state,bool force=false) {
     const auto generation=reply.value("Generation",state->ToolsGeneration.load());
     if(generation<state->ToolsGeneration.load())return;
     if(generation!=state->ToolsGeneration.load()) {
+        state->MapGroundReply=nlohmann::json::object();
         state->QueryResults.clear();state->IconDictionary.clear();state->ToolsCatalog=nlohmann::json::object();state->Players=nlohmann::json::array();state->Completed.clear();
     }
     state->ToolsGeneration=generation;state->ToolsAvailable=reply.value("Available",false);state->ToolsWaiting=reply.value("Waiting",false);
@@ -140,6 +150,11 @@ void SyncHost(State* state,bool force=false) {
     ++state->ToolsRevision;PS::LazyCatalog::BackendSignal(generation);
 }
 void ConfigureTransport(State* state) {
+        PS::HelpyIconPacks::RemoteBuild=[state](const nlohmann::json& request,nlohmann::json& result){return CallCore(state,request,result);};
+        PS::HelpySourceCache::RemoteSnapshot=[state](nlohmann::json& result){return CallCore(state,{{"Action","IconCacheSources"}},result);};
+        PS::ItemIconCache::RemoteResetAccounting=[state]{nlohmann::json ignored;CallCore(state,{{"Action","IconCacheResetAccounting"}},ignored);};
+        PS::AuthoringClient::Remote=[state](const nlohmann::json& request,nlohmann::json& reply){return CallCore(state,request,reply);};
+        PS::SpawnToolRequests::RemoteMapGroundSubmit=[state](nlohmann::json request){nlohmann::json result;return CallCore(state,{{"Action","MapGroundSubmit"},{"Request",std::move(request)}},result)&&result.value("Accepted",false);};
         PS::SpawnToolRequests::RemoteSearch=[state](std::string query){nlohmann::json ignored;CallCore(state,{{"Action","Search"},{"Query",std::move(query)}},ignored);};
         PS::SpawnToolRequests::RemoteSubmit=[state](nlohmann::json request){
             nlohmann::json result;const bool accepted=CallCore(state,{{"Action","Submit"},{"Request",std::move(request)}},result)&&result.value("Accepted",false);
@@ -149,9 +164,10 @@ void ConfigureTransport(State* state) {
         PS::SpawnToolRequests::RemoteReadQuick=[state](uint64_t& revision,int category,nlohmann::json& snapshot){
             SyncHost(state);std::lock_guard lock(state->ToolsMutex);if(revision==state->ToolsRevision)return false;
             snapshot=state->ToolsResult;snapshot["_Category"]=category;
+            if(!state->MapGroundReply.empty())snapshot["MapGround"]=state->MapGroundReply;
             if(!state->QueryResults.empty()) {snapshot["_QueryResults"]=nlohmann::json::array();for(auto& row:state->QueryResults)snapshot["_QueryResults"].push_back(std::move(row));state->QueryResults.clear();}
             const auto copy=[&](const char* key){if(state->ToolsCatalog.contains(key))snapshot[key]=state->ToolsCatalog[key];};
-            if(!state->Players.empty())snapshot["Players"]=state->Players;
+            snapshot["Players"]=state->Players;copy("PlayerRoles");
             if(category==0){copy("Items");copy("CookedVisuals");copy("CatalogIssues");}
             else if(category==1||category==2){if(state->ToolsCatalog.contains("Definitions")&&state->ToolsCatalog["Definitions"].is_array()){
                 snapshot["Definitions"]=nlohmann::json::array();for(const auto& row:state->ToolsCatalog["Definitions"]){const auto type=row.value("Type",std::string{});if((category==1&&(type=="AI"||type=="NPC"))||(category==2&&type=="Resource"))snapshot["Definitions"].push_back(row);}}}
@@ -186,14 +202,14 @@ extern "C" __declspec(dllexport) int32_t RS_PLUGIN_CALL RuneSchemaPlugin_Initial
     for(const auto* capability:capabilities)if(host->RegisterCapability(Descriptor.Id,capability)!=RS_PLUGIN_OK){delete state;return RS_PLUGIN_DUPLICATE;}
     if(host->RegisterService(Descriptor.Id,"helpy.about",About,state)!=RS_PLUGIN_OK){delete state;return RS_PLUGIN_DUPLICATE;}
     if(host->RegisterService(Descriptor.Id,"helpy.tools.push",ToolsPush,state)!=RS_PLUGIN_OK){delete state;return RS_PLUGIN_DUPLICATE;}
-    host->Log(RS_LOG_INFO,Descriptor.Id,"Helpy 2.0.4 native GUI plugin initialized");*instance=state;return RS_PLUGIN_OK;
+    host->Log(RS_LOG_INFO,Descriptor.Id,"RSMK 2.0.4 native GUI plugin initialized");*instance=state;return RS_PLUGIN_OK;
 }
 extern "C" __declspec(dllexport) int32_t RS_PLUGIN_CALL RuneSchemaPlugin_OnUiInit(void*) noexcept {return RS_PLUGIN_OK;}
 extern "C" __declspec(dllexport) int32_t RS_PLUGIN_CALL RuneSchemaPlugin_OnUnrealInit(void* instance) noexcept {
     auto* state=static_cast<State*>(instance);if(!state)return RS_PLUGIN_INVALID_ARGUMENT;
     try {
         wchar_t modulePath[32768]{};const auto length=GetModuleFileNameW(Module,modulePath,_countof(modulePath));
-        if(!length||length>=_countof(modulePath))throw std::runtime_error("cannot resolve Helpy plugin directory");
+        if(!length||length>=_countof(modulePath))throw std::runtime_error("cannot resolve RSMK plugin directory");
         PS::HelpyPaths::Configure(std::filesystem::path(modulePath).parent_path().parent_path());
         PS::HelpySettings::Configure(PS::HelpyPaths::PluginRoot());
         PS::HelpySettings::EnsureLoaded();
@@ -201,24 +217,27 @@ extern "C" __declspec(dllexport) int32_t RS_PLUGIN_CALL RuneSchemaPlugin_OnUnrea
         state->Host->Log(RS_LOG_INFO,Descriptor.Id,"using RuneSchema host reflection services");
         ConfigureTransport(state);
         nlohmann::json environment;
-        if(CallCore(state,{{"Action","Environment"}},environment))PS::HelpyEnvironment::Current=PS::HelpyEnvironment::Decode(environment);
+        if(CallCore(state,{{"Action","Environment"}},environment))PS::HelpyEnvironment::Configure(environment);
         if(PS::HelpyEnvironment::Server()){
             USEROBJECTFLAGS flags{};DWORD bytes=0;
             if(!GetUserObjectInformationW(GetProcessWindowStation(),UOI_FLAGS,&flags,sizeof(flags),&bytes)||!(flags.dwFlags&WSF_VISIBLE)){
-                state->Host->Log(RS_LOG_INFO,Descriptor.Id,"server has no interactive desktop; Helpy window skipped, server runtime continues");return RS_PLUGIN_OK;
+                state->Host->Log(RS_LOG_INFO,Descriptor.Id,"server has no interactive desktop; RSMK window skipped, server runtime continues");return RS_PLUGIN_OK;
             }
         }
         state->Window=std::make_unique<PS::HelpyStandaloneWindow>(Module);
         if(!state->Window->Start())state->Host->Log(RS_LOG_WARNING,Descriptor.Id,("standalone UI unavailable: "+state->Window->Error()).c_str());
-        else state->Host->Log(RS_LOG_INFO,Descriptor.Id,"standalone Helpy ready: F2 toggle, F5 theme reload");
-        state->Host->Log(RS_LOG_INFO,Descriptor.Id,"hotkeys active: F2 desktop Helpy (close to return to game), F5 skin reload");return RS_PLUGIN_OK;
+        else state->Host->Log(RS_LOG_INFO,Descriptor.Id,"standalone RSMK ready: F2 toggle, F5 theme reload");
+        state->Host->Log(RS_LOG_INFO,Descriptor.Id,"hotkeys active: F2 desktop RSMK (close to return to game), F5 skin reload");return RS_PLUGIN_OK;
     } catch(const std::exception& error) {state->Host->Log(RS_LOG_ERROR,Descriptor.Id,error.what());return RS_PLUGIN_FAILED;}
       catch(...) {state->Host->Log(RS_LOG_ERROR,Descriptor.Id,"unknown Unreal initialization failure");return RS_PLUGIN_FAILED;}
 }
 extern "C" __declspec(dllexport) void RS_PLUGIN_CALL RuneSchemaPlugin_Shutdown(void* instance) noexcept {
     auto* state=static_cast<State*>(instance);if(!state)return;
     if(state->Window)state->Window->Shutdown();
+    PS::AuthoringClient::Clear();
     PS::HelpySourceCache::Shutdown();
+    PS::HelpySourceCache::RemoteSnapshot={};PS::ItemIconCache::RemoteResetAccounting={};
+    PS::HelpyIconPacks::RemoteBuild={};PS::HelpyIconPacks::BuildState=nlohmann::json::object();
     PS::ItemIconCache::ClearRemote();PS::LazyCatalog::ClearRemote();PS::SpawnToolRequests::ClearRemote();
     delete state;
     PS::PluginRuntimeServices::Reset();

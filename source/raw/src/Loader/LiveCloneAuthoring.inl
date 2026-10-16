@@ -306,7 +306,7 @@ namespace DragonWilds {
         }
         auto* soft=CloneSoftDelete(source->GetClassPrivate());
         nlohmann::json icon,name,power;
-        CloneReadValue(PropertyHelper::GetPropertyByName(source->GetClassPrivate(),TEXT("Icon")),source,icon);
+        icon=PS::AssetSearch::ItemMetadata(RC::to_string(source->GetPathName())).value("Icon",std::string{});
         CloneReadValue(PropertyHelper::GetPropertyByName(source->GetClassPrivate(),TEXT("Name")),source,name);
         CloneReadValue(PropertyHelper::GetPropertyByName(source->GetClassPrivate(),TEXT("PowerLevel")),source,power);
         return {{"Name",name.is_string()&&!PS::QuickDecorations::MissingDisplayName(name.get<std::string>())?name.get<std::string>():PS::QuickDecorations::ReadableAssetName(sourcePath)},
@@ -325,27 +325,36 @@ namespace DragonWilds {
         if(!m_recipeDataClass)throw std::runtime_error("Native recipe class is unavailable");
         nlohmann::json result={{"Stations",HelpyStationChoices()}};
         if(sourcePath.empty()) {
-            const auto query=PS::QuickDecorations::Fold(request.value("Query",std::string{}));
+            const auto query=request.value("Query",std::string{});
             if(query.size()>256)throw std::runtime_error("Recipe search exceeds 256 bytes");
-            if(request.contains("Offset")&&(!request["Offset"].is_number_integer()||request["Offset"]<0||request["Offset"]>32768))
+            if(request.contains("Offset")&&(!request["Offset"].is_number_integer()||request["Offset"]<0||request["Offset"]>PS::RecipeCatalog::MaxEntries))
                 throw std::runtime_error("Recipe catalog offset is invalid");
-            const auto offset=request.value("Offset",0);int matched=0;std::map<std::string,std::string> nativePaths;
-            auto rows=nlohmann::json::array();TArray<UObject*> recipes;
+            const auto offset=request.value("Offset",std::size_t{});PS::RecipeCatalog::Index index;
+            TArray<UObject*> recipes;std::set<std::string> recipeClasses;
             UECustom::UObjectGlobals::GetObjectsOfClass(m_recipeDataClass,recipes,true);
-            if(recipes.Num()<0||recipes.Num()>32768)throw std::runtime_error("Loaded recipe catalog exceeds its bound");
+            if(recipes.Num()<0||static_cast<std::size_t>(recipes.Num())>PS::RecipeCatalog::MaxEntries)throw std::runtime_error("Loaded recipe catalog exceeds its metadata safety bound");
             for(auto* recipe:recipes)if(HelpyReady(recipe)) {
                 const auto path=RC::to_string(recipe->GetPathName());
-                nativePaths.emplace(path,PS::QuickDecorations::ReadableAssetName(path));
+                PS::RecipeCatalog::Add(index,{path,PS::QuickDecorations::ReadableAssetName(path),{},{},"Loaded recipe",true});
+                recipeClasses.insert(PS::QuickDecorations::Fold(RC::to_string(recipe->GetClassPrivate()->GetName())));
             }
-            if(PS::CookedAssets::TryEnsure())for(const auto& record:PS::CookedAssets::MetadataSnapshot()) {
-                if(PS::QuickDecorations::Fold(record.type).ends_with("recipedata"))nativePaths.emplace(record.path,PS::QuickDecorations::ReadableAssetName(record.path));
+            const bool mountedReady=PS::CookedAssets::TryEnsure();
+            if(mountedReady)for(const auto& record:PS::CookedAssets::MetadataSnapshot()) {
+                const auto type=PS::QuickDecorations::Fold(PS::ClonePresentation::ClassLeaf(record.type));
+                if(type.ends_with("recipedata")||recipeClasses.contains(type))
+                    PS::RecipeCatalog::Add(index,{record.path,PS::QuickDecorations::ReadableAssetName(record.path),{},{},"Cooked candidate",true});
             }
-            for(const auto& [path,name]:nativePaths) {
-                if(!query.empty()&&PS::QuickDecorations::Fold(path+" "+name).find(query)==std::string::npos)continue;
-                if(matched++<offset||rows.size()>=128)continue;rows.push_back({{"Path",path},{"Name",name}});
-            }
-            result["Offset"]=offset;result["Total"]=matched;result["HasMore"]=offset+rows.size()<static_cast<std::size_t>(matched);
-            result["Recipes"]=std::move(rows);return result;
+            bool subclassesReady=false;std::string metadataWarning;
+            try{
+                for(const auto& path:PS::RecipeAssetCatalog::MountedPaths())PS::RecipeCatalog::Add(index,{path,PS::QuickDecorations::ReadableAssetName(path),{},{},"Cooked candidate",true});
+                subclassesReady=true;
+            }catch(const std::exception& error){metadataWarning=error.what();}
+            for(const auto& manifest:PS::CookedPakRegistryManifest::Snapshot())for(const auto& lane:manifest.AssetLanes)if(lane.Name=="Recipes")
+                for(const auto& path:lane.Paths)PS::RecipeCatalog::Add(index,{path,PS::QuickDecorations::ReadableAssetName(path),manifest.Owner,{},"Declared cooked recipe",true});
+            if(m_recipeService)for(auto entry:m_recipeService->HelpyCatalogEntries())PS::RecipeCatalog::Add(index,std::move(entry));
+            result.update(PS::RecipeCatalog::Page(index,query,offset));
+            result["MountedCatalogReady"]=mountedReady||subclassesReady;result["SubclassCatalogReady"]=subclassesReady;
+            result["MetadataWarning"]=metadataWarning;result["CatalogSize"]=index.size();return result;
         }
         PS::Authoring::ValidateObjectPath(sourcePath);auto* recipe=HelpyResolve(sourcePath);
         if(!recipe->IsA(m_recipeDataClass)||!HelpyReady(recipe))throw std::runtime_error("Selected asset is not a ready RecipeData");
@@ -506,20 +515,21 @@ namespace DragonWilds {
             CloneRequireCookedReferences(mesh);fields[field]=mesh;
         }
         const auto display=request.value("Name",std::string{});
-        auto icon=request.value("Icon",std::string{});const auto iconMode=request.value("IconMode",std::string("Override"));
+        auto icon=request.value("Icon",std::string{});const auto iconMode=request.value("IconMode",icon.empty()?std::string("Auto"):std::string("Override"));
         if(iconMode!="Auto"&&iconMode!="Source"&&iconMode!="Appearance"&&iconMode!="Override")throw std::runtime_error("Unknown clone icon mode");
         if(iconMode!="Override") {
-            UObject* iconSource=source;nlohmann::json value;
+            UObject* iconSource=source;
             if((iconMode=="Auto"||iconMode=="Appearance")&&!appearance.empty())iconSource=HelpyResolve(appearance);
             else if(iconMode=="Appearance")throw std::runtime_error("Appearance icon requires a donor");
-            CloneReadValue(PropertyHelper::GetPropertyByName(iconSource->GetClassPrivate(),TEXT("Icon")),iconSource,value);
-            if(iconMode=="Auto"&&(!value.is_string()||value.get<std::string>().empty()))CloneReadValue(PropertyHelper::GetPropertyByName(type,TEXT("Icon")),source,value);
-            icon=value.is_string()?value.get<std::string>():std::string{};
+            icon=PS::AssetSearch::ItemMetadata(RC::to_string(iconSource->GetPathName())).value("Icon",std::string{});
+            if(iconMode=="Auto"&&icon.empty())icon=PS::AssetSearch::ItemMetadata(RC::to_string(source->GetPathName())).value("Icon",std::string{});
         }
         if(display.size()>256 || display.find('\0')!=display.npos)throw std::runtime_error("Clone display name is too long or invalid");
         if(!display.empty() && !fields.contains("Name"))fields["Name"]=display;
         if(!icon.empty())CloneRequireCookedReferences(icon);
         if(!icon.empty() && !fields.contains("Icon")){PS::Authoring::ValidateObjectPath(icon);fields["Icon"]=icon;}
+        // Explicit advanced field overrides win over donor/source convenience.
+        if(fields.contains("Icon"))icon=fields["Icon"].is_string()?fields["Icon"].get<std::string>():std::string{};
         for(const auto& [key,value]:fields.items()) {
             if(!PS::Authoring::SafeFieldName(key))throw std::runtime_error("Clone identity/directive/soft-delete field cannot be overridden: "+key);
             auto* p=PropertyHelper::GetPropertyByName(type,RC::to_generic_string(key));
@@ -596,7 +606,7 @@ namespace DragonWilds {
         const auto document=nlohmann::json{{target,savedFields}};
         // Resolve the exact loader documents without constructing an item,
         // registering identities, adding stat rows, writing files, or granting it.
-        if(prepare)return {{"State","Prepared"},{"Path",target},{"PersistenceID",id},{"InternalName",name},
+        if(prepare)return {{"State","Prepared"},{"Path",target},{"PersistenceID",id},{"InternalName",name},{"Icon",icon},
             {"Documents",{{"assets",document},{"raw",rawDocument},{"recipes",recipeDocument},{"journal",journalDocument}}}};
         std::unique_ptr<PS::Authoring::StagedFile> file;
         std::vector<std::unique_ptr<PS::Authoring::StagedFile>> companions;
@@ -686,7 +696,9 @@ namespace DragonWilds {
         // Nonessential diagnostics must not turn a committed creation into a retryable failure.
         try {PS::AssetProvenance::Record(created,sourcePath,"runeschema",true,registered,0,fields);}
         catch(...) {}
-        return {{"ModTag",modTag},{"OutputMod",permanent?folder:std::string{}},{"AppearanceSource",appearance},{"Mesh",mesh},{"State","Created"},{"Path",target},{"PersistenceID",id},{"InternalName",name},
+        auto actualIcon=icon;
+        try{actualIcon=PS::AssetSearch::ItemMetadata(RC::to_string(created->GetPathName())).value("Icon",std::string{});}catch(...){}
+        return {{"ModTag",modTag},{"OutputMod",permanent?folder:std::string{}},{"AppearanceSource",appearance},{"Mesh",mesh},{"Icon",actualIcon},{"State","Created"},{"Path",target},{"PersistenceID",id},{"InternalName",name},
             {"Permanent",permanent},{"File",file?file->Path().string():std::string{}},{"Files",installedFiles},
             {"Documents",{{"assets",document},{"raw",rawDocument},{"recipes",recipeDocument},{"journal",journalDocument}}},
             {"PendingFiles",pendingFiles},{"CompanionsReady",fileIssue.empty()},{"CompanionError",fileIssue},{"StatRows",statRows.size()},

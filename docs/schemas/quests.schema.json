@@ -677,7 +677,25 @@
         "Stages": {
           "items": {
             "additionalProperties": false,
+            "if": {
+              "properties": {
+                "Completion": {
+                  "const": "Any"
+                }
+              },
+              "required": [
+                "Completion"
+              ]
+            },
             "properties": {
+              "Completion": {
+                "default": "All",
+                "description": "Any completes on the first successful alternative, consumes only that hand-in route, and uses one quest reward receipt. Any requires at least two visible mandatory objectives.",
+                "enum": [
+                  "All",
+                  "Any"
+                ]
+              },
               "Id": {
                 "pattern": "^[A-Za-z0-9_-]{1,64}$",
                 "type": "string"
@@ -1000,6 +1018,23 @@
               "Id",
               "Objectives"
             ],
+            "then": {
+              "properties": {
+                "Objectives": {
+                  "items": {
+                    "properties": {
+                      "Hidden": {
+                        "const": false
+                      },
+                      "Optional": {
+                        "const": false
+                      }
+                    }
+                  },
+                  "minItems": 2
+                }
+              }
+            },
             "type": "object"
           },
           "maxItems": 32,
@@ -1726,7 +1761,25 @@
           "Stages": {
             "items": {
               "additionalProperties": false,
+              "if": {
+                "properties": {
+                  "Completion": {
+                    "const": "Any"
+                  }
+                },
+                "required": [
+                  "Completion"
+                ]
+              },
               "properties": {
+                "Completion": {
+                  "default": "All",
+                  "description": "Any completes on the first successful alternative, consumes only that hand-in route, and uses one quest reward receipt. Any requires at least two visible mandatory objectives.",
+                  "enum": [
+                    "All",
+                    "Any"
+                  ]
+                },
                 "Id": {
                   "pattern": "^[A-Za-z0-9_-]{1,64}$",
                   "type": "string"
@@ -2049,6 +2102,23 @@
                 "Id",
                 "Objectives"
               ],
+              "then": {
+                "properties": {
+                  "Objectives": {
+                    "items": {
+                      "properties": {
+                        "Hidden": {
+                          "const": false
+                        },
+                        "Optional": {
+                          "const": false
+                        }
+                      }
+                    },
+                    "minItems": 2
+                  }
+                }
+              },
               "type": "object"
             },
             "maxItems": 32,

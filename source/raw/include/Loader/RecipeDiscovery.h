@@ -79,4 +79,13 @@ inline std::vector<std::string> RetainOtherRecipes(const std::vector<std::string
     for(const auto& path:outputs)if(!replaced.contains(path))result.push_back(path);
     return result;
 }
+// Native progression arrays can contain null/unresolved references belonging
+// to unrelated content. Select by verified object identity and copy retained
+// native slots, rather than serializing/re-resolving those unrelated assets.
+template<class Reference> std::vector<std::size_t> RetainOtherRecipeIndices(const std::vector<Reference>& outputs,const std::set<Reference>& replaced) {
+    Require(!replaced.contains(Reference{}),"an unresolved recipe cannot be a discovery override target");
+    std::vector<std::size_t> result;result.reserve(outputs.size());
+    for(std::size_t i=0;i<outputs.size();++i)if(!replaced.contains(outputs[i]))result.push_back(i);
+    return result;
+}
 }

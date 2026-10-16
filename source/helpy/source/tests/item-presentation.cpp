@@ -3,6 +3,13 @@
 #include <cassert>
 int main(){
     using namespace PS::ItemPresentation;
+    Json cloned={{"Path","/Game/RuneSchema/MyClones/HeavySteelHelm.HeavySteelHelm"},{"Icon","/Game/UI/Source.Source"}};
+    Json nativeIcon={{"Source",cloned["Path"]},{"Icon","/CustomMod/UI/ClonedHelm.ClonedHelm"}};
+    assert(Icon(cloned,&nativeIcon)=="/CustomMod/UI/ClonedHelm.ClonedHelm");
+    nativeIcon["Source"]="/Game/Other.Other";assert(Icon(cloned,&nativeIcon)=="/Game/UI/Source.Source");
+    nativeIcon["Source"]=cloned["Path"];nativeIcon["Icon"]="";assert(Icon(cloned,&nativeIcon).empty());
+    cloned["_HelpyIconPreview"]=true;cloned["Icon"]="/Game/UI/Donor.Donor";assert(Icon(cloned,&nativeIcon)=="/Game/UI/Donor.Donor");
+    assert(Icon(nullptr).empty());
     Json details={{"Fields",Json::array({
         {{"NativeName","Description"},{"Value","A native item description."},{"HasValue",true}},
         {{"NativeName","BaseDamage"},{"Value",42.5},{"HasValue",true}},

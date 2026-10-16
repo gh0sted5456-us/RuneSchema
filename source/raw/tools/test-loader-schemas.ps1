@@ -20,6 +20,16 @@ Check-Schema vendors '42' $false
 Check-Schema equipment '{"SurgeEvadeLegs":{}}' $true
 Check-Schema equipment '{"Unknown":{}}' $false
 Check-Schema equipment '{"SurgeEvadeLegs":{"Boots":"yes"}}' $false
+Check-Schema assets '{"/Game/Test.Test":{"$WearableBridge":true}}' $true
+Check-Schema assets '{"/Game/Test.Test":{"$WearableBridge":"true"}}' $false
+Check-Schema assets '{"/Game/Scroll.Scroll":{"$QuestScroll":{"QuestID":"Dye:rat_work","PersistenceID":"VT39acMY4k62LnArwSMkEQ"}}}' $true
+Check-Schema assets '{"/Game/Scroll.Scroll":{"$QuestScroll":{"QuestID":"Dye:rat_work","PersistenceID":"bad"}}}' $false
+Check-Schema assets '{"/Game/Scroll.Scroll":{"$QuestScroll":{"QuestID":"Dye:rat_work","PersistenceID":"VT39acMY4k62LnArwSMkEQ","Action":"reward"}}}' $false
+Check-Schema registry '{"SchemaVersion":1,"Entries":[],"NativeRegistries":{"Items":[{"Path":"/Game/Items/Example.Example","Source":"Schema"}]}}' $true
+Check-Schema registry '{"SchemaVersion":1,"Entries":[],"NativeRegistries":{"Recipes":["/Mod/Recipes/Example.Example"]}}' $true
+Check-Schema registry '{"SchemaVersion":1,"Entries":[],"NativeRegistries":{"Items":[{"Path":"/Game/Items/Example.Example","Source":"Unknown"}]}}' $false
+Check-Schema registry '{"SchemaVersion":1,"Entries":[],"NativeRegistries":{"Unknown":["/Game/Test.Test"]}}' $false
+Check-Schema registry '{"SchemaVersion":1,"Entries":[],"NativeRegistries":{"Recipes":[42]}}' $false
 Check-Schema raw '[{"$Patch":"DT_Test:Row","$Target":{"Amount":2}}]' $true
 Check-Schema players '[{"Archetype":{"Name":"Mage","Icon":"/Game/Test.Test"}}]' $true
 Check-Schema players '[{"Archetype":{"Name":"Mage"}}]' $false
@@ -45,4 +55,18 @@ Check-Schema npc '[{"Id":"journal_vendor","Type":"Prop","Mesh":"/Game/Test.Test"
 Check-Schema npc '[{"Id":"journal_vendor","Type":"Prop","Mesh":"/Game/Test.Test","Location":[0,0,0],"JournalEntries":[]}]' $false
 Check-Schema npc '[{"Id":"journal_vendor","Type":"Prop","Mesh":"/Game/Test.Test","Location":[0,0,0],"JournalEntries":["history","history"]}]' $false
 Check-Schema npc '[{"Id":"journal_vendor","Type":"Prop","Mesh":"/Game/Test.Test","Location":[0,0,0],"JournalEntries":[42]}]' $false
+$alternative=@{Id='work';PersistenceID='VT39acMY4k62LnArwSMkEQ';Title='Work';Description='Either route';Reward=@{Item='/Test/Reward.Reward';Count=1};Stages=@(@{Id='work';Completion='Any';Objectives=@(@{Id='a';Text='A';Item='/Test/A.A';Count=50},@{Id='b';Text='B';Type='Kill';AIClasses=@('/Test/Rat.Rat_C');Count=50})})}
+Check-Schema quests (ConvertTo-Json $alternative -Depth 30) $true
+$alternative.Stages[0].Objectives[0].Optional=$true
+Check-Schema quests (ConvertTo-Json $alternative -Depth 30) $false
+$alternative.Stages[0].Objectives[0].Remove('Optional')
+$alternative.Stages[0].Objectives=@($alternative.Stages[0].Objectives[0])
+Check-Schema quests (ConvertTo-Json $alternative -Depth 30) $false
+$human=@{Id='keeper';DisplayName='Keeper';Type='Human';Location=@(0,0,0);Appearance=@{BodyType='A';Head='A';HairPreset='A';FacialHairPreset='A';HairColor='A';SkinTone='A';EyeColor='A';EyebrowColor='A'};EquipmentWhen=@(@{Id='helmet';QuestCompleted='Test:final';Policy='WorldEverCompleted';Equipment=@{Head='/Test/Helmet.Helmet'}})}
+Check-Schema npc (ConvertTo-Json $human -Depth 30) $true
+$human.EquipmentWhen[0].Policy='PerPlayer'
+Check-Schema npc (ConvertTo-Json $human -Depth 30) $false
+$human.EquipmentWhen[0].Policy='WorldEverCompleted'
+$human.EquipmentWhen[0].Equipment=@{MainHand='/Test/Sword.Sword'}
+Check-Schema npc (ConvertTo-Json $human -Depth 30) $false
 Write-Output "Loader schemas: $checks positive/negative checks passed."

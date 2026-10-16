@@ -1,8 +1,4 @@
-void PumpNpcExport() {
-    NpcExportRequests::Available=true;
-    auto request=NpcExportRequests::Take();if(!request)return;
-    try {
-        auto preview=std::move(*request);
+json ResolveNpcPreview(json preview) {
         Resolve(preview["Rows"],TEXT("/Script/Dominion.ItemData"));
         for(auto& row:preview["Rows"])if(row["AssetPath"].is_string()) {
             auto* item=ActorHelper::ResolveObject(to_generic_string(row["AssetPath"].get<std::string>()));
@@ -20,6 +16,13 @@ void PumpNpcExport() {
         }
         NpcSaveExport::ApplyResolved(preview);
         preview["Status"]="Preview ready. Unresolved equipment is omitted with warnings. Export is disabled until you enable and place the NPC.";
+    return preview;
+}
+void PumpNpcExport() {
+    NpcExportRequests::Available=true;
+    auto request=NpcExportRequests::Take();if(!request)return;
+    try {
+        auto preview=ResolveNpcPreview(std::move(*request));
         NpcExportRequests::Publish(preview);
     }catch(const std::exception& e){NpcExportRequests::Publish({{"Status",e.what()}});}
 }

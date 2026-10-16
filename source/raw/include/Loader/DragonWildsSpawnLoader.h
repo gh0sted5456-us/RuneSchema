@@ -123,7 +123,9 @@ namespace DragonWilds {
         void HandleNetworkWorldState(const std::string& payload);
         nlohmann::json EventSpawnManifest(const std::string& key) const;
         void ValidateEventSpawn(const std::string& key);
-        RC::Unreal::AActor* SpawnEventAI(const std::string& key,RC::Unreal::UWorld* world,const RC::Unreal::FVector& position,bool tool=false,double yaw=0,const std::string& eventKey={},int toolPowerLevel=-1);
+        RC::Unreal::AActor* SpawnEventAI(const std::string& key,RC::Unreal::UWorld* world,const RC::Unreal::FVector& position,bool tool=false,double yaw=0,const std::string& eventKey={},int toolPowerLevel=-1,std::optional<double> groundOffset={});
+        RC::Unreal::FVector PrepareEventGrounded(const std::string& key,RC::Unreal::UWorld* world,const RC::Unreal::FVector& foot,RC::Unreal::AActor* participant);
+        void ReleaseEventAdditionalDrops(RC::Unreal::UObject* actor);
         void PumpItemIcons();
         void PumpSpawnTools();
         std::vector<PS::WeakObjectHandle> m_toolActors;

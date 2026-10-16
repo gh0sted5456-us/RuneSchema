@@ -33,6 +33,16 @@ int main(int argc, char** argv) {
     require(source.find("const auto weak=PS::WeakObject(object)") != std::string::npos);
     require(source.find("slot->IsRootSet()") != std::string::npos);
     require(source.find("requested entries unavailable") != std::string::npos);
+    const auto registration=source.find("bool DragonWildsJournalModLoader::RegisteredJournalEntry");
+    const auto registrationEnd=source.find("void DragonWildsJournalModLoader::RegisterEntry",registration);
+    require(registration!=std::string::npos&&registrationEnd!=std::string::npos);
+    const auto eligibility=source.substr(registration,registrationEnd-registration);
+    require(eligibility.find("ResolvesPersistenceIdentity(subsystem,entry,true)")!=std::string::npos);
+    require(eligibility.find("SaveCleanup")==std::string::npos);
+    require(eligibility.find("RegistryEnrollment")==std::string::npos);
+    require(source.find("m_reportedUnlockFailures.insert(failure).second")!=std::string::npos);
+    require(source.find("if(unavailable&&newFailures)")!=std::string::npos);
+    require(source.find("return unavailable==0;")!=std::string::npos); // Failed delivery is retried, not marked learned.
     require(source.find("JournalPlayerAccess::EnsureUnlocked(journalComponent,entry)") != std::string::npos);
     require(source.find("ensureInArray") == std::string::npos);
     require(source.find("m_knownIds") == std::string::npos);

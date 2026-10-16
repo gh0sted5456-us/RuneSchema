@@ -312,7 +312,7 @@ namespace UECustom {
         bool contractFailure=false;FVector normal{};bool penetrating=false;
         const bool hit=PS::Grounding::QuerySurface([&](bool complex){
             if(contractFailure)return false;
-            if(!LineTraceGround(world,FVector(start.X(),start.Y(),floor.Top),end,ignored,impact,error,nullptr,complex,&normal,&penetrating)){
+            if(!LineTraceGround(world,FVector(start.X(),start.Y(),floor.Top),FVector(end.X(),end.Y(),floor.Bottom),ignored,impact,error,nullptr,complex,&normal,&penetrating)){
                 contractFailure=!error.empty();return false;
             }
             if(!floor.Contains(impact.Z())||!std::isfinite(impact.X())||!std::isfinite(impact.Y())

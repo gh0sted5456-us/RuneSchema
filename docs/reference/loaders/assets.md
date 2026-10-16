@@ -1,19 +1,24 @@
 # Assets loader
 
+Craftable consumables may declare [`$QuestScroll`](../../QUEST-SCROLLS.md) to
+accept an existing RuneSchema quest through the pre-consumption native item-use
+route. The expected item PersistenceID is verified; this is not a quest/reward
+script field or an identity override.
+
 **Folder:** `RuneSchema/mods/<ModName>/assets/`
 
 Items, icons, stats, unlock links, DataAssets, and reflected object patches.
 
 [← Loader reference](../../LOADER-WALKTHROUGHS.md)
 
-Use `/assets` to patch a loaded item or clone a compatible item into a new
-cooked path.
+Use `/assets` to patch a loaded item or clone a compatible item into a stable
+RuneSchema runtime asset. A JSON clone is not a newly cooked Unreal package.
 
 ```json
 {
   "/Game/MyMod/Items/ITEM_Test.ITEM_Test": {
     "$Clone": "/Game/Gameplay/Items/ITEM_Source.ITEM_Source",
-    "PersistenceID": "stable-unique-id",
+    "PersistenceID": "RS7Test12345678901234A",
     "InternalName": "mymod_test",
     "Name": "Test Item",
     "PowerLevel": 20
@@ -35,6 +40,39 @@ can attach a supported equip effect. `RecipesToUnlock` and
 `BuildingPieceToUnlock` are inherited by a clone unless explicitly replaced.
 
 Reference: `examples/RSv16/ExampleMods/RuneSchema2VendorTest/assets`.
+
+## Wearables without a PAK
+
+Schema-created `WearableEquipmentData` items enter the same native wearable
+enumeration/cache bridge after successful identity and network registration.
+No additional PAK registry declaration is needed for ordinary `/assets` clones.
+Existing cooked, vanilla or schema-created wearables can request enrollment
+after their field patch:
+
+```jsonc
+{
+  "/Game/RuneSchema/MyClones/Items/MyCape.MyCape": {
+    "$WearableBridge": true
+    // MaleMeshData/FemaleMeshData may reference compatible existing mesh data.
+  }
+}
+```
+
+`$WearableBridge` is a Boolean directive, not a native item property. `false`
+means no additional request; it does not disable automatic wearable support.
+The target must be wearable equipment. Late patches require the existing
+persistence and two-way network identities to resolve to that exact item;
+the bridge does not allocate an identity to make an invalid patch appear valid.
+Startup requests can wait for normal settled registration. Presentation failures
+do not revoke otherwise valid item registration.
+
+The native equipment system still owns mesh-cache construction. JSON cannot
+invent a missing skeletal mesh, skeleton, texture or material; use compatible
+existing assets or ship new assets in a PAK. This directive does not promise
+immediate repainting of an already equipped actor after arbitrary edits to
+shared mesh/material data. Re-equip the item when testing a changed appearance.
+Helpy's transmog card follows the donor's resolved inventory icon unless an
+explicit icon override is supplied; this is not a generated 3D thumbnail.
 
 ## Direct `DA_` fields
 

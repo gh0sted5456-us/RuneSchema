@@ -27,4 +27,14 @@ int main(int argc,char** argv){
     Require(header.find("Offset =")==std::string::npos&&cell.find("ptr_cast")==std::string::npos,"World-cell readiness still dereferences fixed native offsets");
     for(const auto* field:{"ContentBounds","bIsHLOD","RuntimeCellData"})Require(cell.find(field)!=std::string::npos,"World-cell reflection field missing");
     Require(cell.find("GetPropertyValue(")!=std::string::npos&&cell.find("std::isfinite")!=std::string::npos,"World-cell boolean or finite bounds validation missing");
+    Require(header.find("std::optional<FBox> GetContentBounds()")!=std::string::npos,
+        "Cell bounds must be decoded into owned storage, not alias engine padding");
+    Require(cell.find("sizeof(FBox)")==std::string::npos&&cell.find("ContainerPtrToValuePtr<FBox>")==std::string::npos,
+        "Engine Box extent still depends on the differently aligned SDK wrapper");
+    for(const auto* field:{"TEXT(\"Min\")","TEXT(\"Max\")","TEXT(\"IsValid\")"})
+        Require(cell.find(field)!=std::string::npos,"Native Box fields must use reflected offsets");
+    Require(cell.find("Fits(vector,extent)")!=std::string::npos&&cell.find("Fits(valid,extent)")!=std::string::npos,
+        "Decoded bounds bypass reflected extent checks");
+    Require(npc.find("x >= bounds->Min.X() && x <= bounds->Max.X()")!=std::string::npos,
+        "NPC placements exactly on a visible-cell edge never activate");
 }

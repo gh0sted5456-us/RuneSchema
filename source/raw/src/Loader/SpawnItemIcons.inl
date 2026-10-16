@@ -1,6 +1,11 @@
 void DragonWildsSpawnLoader::PumpItemIcons() {
+    if(PS::HelpySourceCache::Requested.load())PS::HelpySourceCache::Poll(PS::HostServices::ModDirectory());
+    if(!BulkIconJob.Active&&!PS::IconCacheBuild::HasWork()&&m_activeItemIcon.empty()&&!PS::ItemIconRequests::HasPending())return;
+    auto* iconWorld=MenuIconWorld(m_readyWorld&&IsWorldStillLoaded(m_readyWorld)?m_readyWorld:nullptr);
+    BulkIconJob.Tick(iconWorld,m_activeItemIcon.empty()&&!PS::ItemIconRequests::HasPending());
+    if(BulkIconJob.Capturing)return;
     if(m_activeItemIcon.empty()&&!PS::ItemIconRequests::HasPending())return;
-    const bool worldReady=m_readyWorld&&IsWorldStillLoaded(m_readyWorld);PS::ItemIconRequests::SetAvailable(worldReady);
+    const bool worldReady=iconWorld!=nullptr;PS::ItemIconRequests::SetAvailable(worldReady);
     if(!worldReady){m_activeItemIcon.clear();PS::ItemIconThumbnail::Reset();return;}
     static uint64_t iconRevision=1;
     for(int job=0;job<4;++job) {
@@ -13,7 +18,7 @@ void DragonWildsSpawnLoader::PumpItemIcons() {
         nlohmann::json result;bool cacheHit=false;
         try {
             if(icon.empty())throw std::runtime_error("Item icon request did not contain an icon path");
-            result=PS::ItemIconThumbnail::Render(m_readyWorld,icon);cacheHit=result.value("CacheHit",false);
+            result=PS::ItemIconThumbnail::Render(iconWorld,icon);cacheHit=result.value("CacheHit",false);
             if(result.value("Status",std::string{})=="Pending")return;
             PS::HelpyIconTrace::Event("core-render-ready",icon,"cacheHit="+(cacheHit?std::string("true"):std::string("false"))+" file='"+result.value("File",std::string{})+"'");
         } catch(const std::exception& error) {

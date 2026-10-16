@@ -9,6 +9,9 @@
 int RunLoaderSchemas(int argc,char** argv) {
     const auto schemas=PS::JsonSchemaGenerator::LoaderSchemas();
     assert(schemas.size()==22);
+    assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"].size()==11);
+    assert(schemas["registry"]["properties"]["LoaderDefinitions"]["properties"].size()==3);
+    assert(schemas["assets"]["patternProperties"]["^(?!(?:RuneSchema|Modded)$)[^$]"]["properties"]["$WearableBridge"]["type"]=="boolean");
     const auto& humanEquipment=schemas.at("npc").at("anyOf").at(0).at("anyOf").at(0).at("properties").at("Equipment");
     assert(humanEquipment.at("properties").contains("Necklace"));
     assert(humanEquipment.at("properties").contains("Trinket2"));

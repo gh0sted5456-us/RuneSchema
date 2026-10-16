@@ -196,13 +196,13 @@ inline void RequestReload(){ForceReload=true;}
 inline void SaveCurrent() {
     const auto file=FilePath();
     try {
-        ConfigFiles::Write(file,"// Helpy ImGui skin. Settings UI and this file share the same live values.\n// Set cache.iconCacheMB to 0 for session-only live icon caching.\n"+DocumentFrom(Current,HelpyRuntimePreferences::IconCacheLimitMB.load()).dump(2)+"\n");
+        ConfigFiles::Write(file,"// RSMK ImGui skin. Settings UI and this file share the same live values.\n// Set cache.iconCacheMB to 0 for session-only live icon caching.\n"+DocumentFrom(Current,HelpyRuntimePreferences::IconCacheLimitMB.load()).dump(2)+"\n");
         std::error_code ec;const auto stamp=std::filesystem::last_write_time(file,ec);if(!ec){Stamp=stamp;HaveStamp=true;}Loaded=true;Status="Saved "+file.string();
     } catch(const std::exception& e) {Status=std::string("Theme save failed: ")+e.what();}
 }
 inline void ResetDefaults() {Current=Theme{};HelpyRuntimePreferences::IconCacheLimitMB.store(200);SaveCurrent();}
 inline void WriteDefault(const std::filesystem::path& file) {
-    ConfigFiles::Write(file,"// Helpy ImGui skin. Edit while Dragonwilds is running.\n// Searches execute on Enter; style saves auto-reload. F5 forces refresh.\n"+DefaultDocument().dump(2)+"\n");
+    ConfigFiles::Write(file,"// RSMK ImGui skin. Edit while Dragonwilds is running.\n// Searches execute on Enter; style saves auto-reload. F5 forces refresh.\n"+DefaultDocument().dump(2)+"\n");
 }
 inline void Reload(bool createIfMissing=true) {
     const auto file=FilePath();
@@ -273,6 +273,8 @@ struct Scope {
         const auto pv=[&](ImGuiStyleVar var,float v){ImGui::PushStyleVar(var,v);++vars;};
         const auto pv2=[&](ImGuiStyleVar var,float x,float y){ImGui::PushStyleVar(var,ImVec2(x,y));++vars;};
         pc(ImGuiCol_Text,t.text);pc(ImGuiCol_TextDisabled,t.textDisabled);pc(ImGuiCol_WindowBg,t.window);pc(ImGuiCol_ChildBg,t.panel);pc(ImGuiCol_PopupBg,t.panelAlt);
+        pc(ImGuiCol_TitleBg,t.navigation);pc(ImGuiCol_TitleBgActive,t.navigationActive);pc(ImGuiCol_TitleBgCollapsed,t.navigation);
+        pc(ImGuiCol_ModalWindowDimBg,ImVec4(0,0,0,0.68f));
         pc(ImGuiCol_Border,t.border);pc(ImGuiCol_FrameBg,t.control);pc(ImGuiCol_FrameBgHovered,t.controlHover);pc(ImGuiCol_FrameBgActive,t.controlActive);
         pc(ImGuiCol_Button,t.button);pc(ImGuiCol_ButtonHovered,t.buttonHover);pc(ImGuiCol_ButtonActive,t.buttonActive);
         pc(ImGuiCol_Header,t.control);pc(ImGuiCol_HeaderHovered,t.controlHover);pc(ImGuiCol_HeaderActive,t.controlActive);

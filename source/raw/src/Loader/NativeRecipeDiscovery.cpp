@@ -9,6 +9,7 @@
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Helper/ReflectedContract.h"
 #include "SDK/Structs/Custom/FManagedStruct.h"
+#include "SDK/Structs/Custom/FScriptArrayHelper.h"
 #include "SDK/Structs/FSoftObjectPtr.h"
 #include <cstring>
 #include <map>
@@ -45,15 +46,26 @@ FProperty* Field(UScriptStruct* row,const TCHAR* name) {
     if(!ReflectedContract::Fits(field,row->GetStructureSize()))throw std::runtime_error("Native progression row field/layout changed");
     return field;
 }
-std::vector<std::string> Outputs(FArrayProperty* field,void* row) {
+std::vector<UObject*> Outputs(FArrayProperty* field,void* row) {
     const auto* array=static_cast<FScriptArray*>(field->ContainerPtrToValuePtr<void>(row));
     if(array->Num()<0||array->Num()>100000||(array->Num()&&!array->GetData()))throw std::runtime_error("Native progression recipe array is invalid");
-    std::vector<std::string> result;result.reserve(array->Num());
-    for(int32 i=0;i<array->Num();++i){UObject* object=nullptr;
-        std::memcpy(&object,static_cast<const uint8*>(array->GetData())+i*sizeof(UObject*),sizeof(object));
-        if(!object)throw std::runtime_error("Native progression row contains an unresolved recipe; no rows changed");
-        result.push_back(RC::to_string(object->GetPathName()));}
+    auto* element=CastField<FObjectPropertyBase>(field->GetInner());
+    if(!element||element->GetArrayDim()!=1||element->GetOffset_Internal()!=0||element->GetElementSize()!=sizeof(UObject*))
+        throw std::runtime_error("Native progression recipe reference layout changed");
+    std::vector<UObject*> result;result.reserve(array->Num());
+    for(int32 i=0;i<array->Num();++i)
+        result.push_back(element->GetObjectPropertyValue(static_cast<const uint8*>(array->GetData())+i*element->GetElementSize()));
     return result;
+}
+void RetainNativeSlots(FArrayProperty* field,void* destination,void* source,const std::vector<std::size_t>& indices) {
+    auto* before=field->ContainerPtrToValuePtr<FScriptArray>(source);
+    UECustom::FScriptArrayHelper after(field->ContainerPtrToValuePtr<void>(destination),field);after.Empty();
+    for(const auto index:indices){
+        if(index>=static_cast<std::size_t>(before->Num()))throw std::runtime_error("Native recipe slot changed during preparation");
+        // Add performs reflected CopySingleValue, retaining nulls and native
+        // reference representations without loading or dereferencing them.
+        after.Add(static_cast<uint8*>(before->GetData())+index*field->GetInner()->GetElementSize());
+    }
 }
 struct Prepared {FName Name;std::unique_ptr<FManagedStruct> Before,After;bool Existing=false;};
 bool Identical(UScriptStruct* row,void* left,void* right){
@@ -83,19 +95,23 @@ Result Apply(const std::vector<Request>& requests,UClass* progressClass,std::set
         const auto [found,inserted]=unique.emplace(path,&request);
         if(!inserted&&found->second->Rule.Query!=request.Rule.Query)throw std::runtime_error("Conflicting recipe Discovery policies for "+path);
     }
-    std::set<std::string> replaced;for(const auto& [path,request]:unique)replaced.insert(path);
+    std::set<UObject*> replaced;for(const auto& [path,request]:unique)replaced.insert(request->Recipe);
     std::vector<Prepared> prepared;Result result;
     // Prepare replacements first. No live row is changed until every query,
     // prerequisite and target has passed reflected conversion/type checks.
-    for(const auto& [name,source]:table->GetRowMap()){
-        const auto before=Outputs(recipes,source),after=PS::RecipeDiscovery::RetainOtherRecipes(before,replaced);
-        if(before==after)continue;
+    std::size_t inspected=0;
+    for(const auto& [name,source]:table->GetRowMap())try{
+        const auto before=Outputs(recipes,source);
+        if((inspected+=before.size())>1000000)throw std::runtime_error("Native progression inspection exceeds one million recipe references");
+        const auto retained=PS::RecipeDiscovery::RetainOtherRecipeIndices(before,replaced);
+        if(before.size()==retained.size())continue;
+        std::vector<UObject*> after;for(const auto index:retained)after.push_back(before[index]);
         Prepared change{name,std::make_unique<FManagedStruct>(row),std::make_unique<FManagedStruct>(row),true};
         row->CopyScriptStruct(change.Before->GetData(),source);row->CopyScriptStruct(change.After->GetData(),source);
-        PropertyHelper::CopyJsonValueToContainer(change.After->GetData(),recipes,after);
+        RetainNativeSlots(recipes,change.After->GetData(),source,retained);
         if(Outputs(recipes,change.After->GetData())!=after)throw std::runtime_error("Discovery recipe detachment did not verify");
         prepared.push_back(std::move(change));result.Detached+=before.size()-after.size();
-    }
+    }catch(const std::exception& error){throw std::runtime_error("Progression table '"+RC::to_string(table->GetPathName())+"', row '"+RC::to_string(name.ToString())+"', UnlockedRecipes: "+error.what());}
     std::set<std::string> newOwned;
     for(const auto& [path,request]:unique){
         const auto name=RegistryPatch::StableRowName("RS_RECIPE_DISCOVERY",path);
@@ -108,7 +124,7 @@ Result Apply(const std::vector<Request>& requests,UClass* progressClass,std::set
         PropertyHelper::CopyJsonValueToContainer(addition.After->GetData(),milestone,false);
         PropertyHelper::CopyJsonValueToContainer(addition.After->GetData(),description,request->Rule.Description);
         PropertyHelper::CopyJsonValueToContainer(addition.After->GetData(),recipes,Json::array({path}));
-        if(Outputs(recipes,addition.After->GetData())!=std::vector<std::string>{path})throw std::runtime_error("Discovery output recipe did not verify");
+        if(Outputs(recipes,addition.After->GetData())!=std::vector<UObject*>{request->Recipe})throw std::runtime_error("Discovery output recipe did not verify: "+path);
         prepared.push_back(std::move(addition));newOwned.insert(key);++result.Added;
     }
     std::size_t committed=0;

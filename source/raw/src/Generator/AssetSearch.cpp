@@ -1,8 +1,10 @@
 #include "Loader/AssetAuthoringMetadata.h"
 #include "Generator/AssetSearch.h"
 #include "Generator/F2CatalogPlan.h"
+#include "Core/ItemCatalogLayout.h"
 #include "Generator/ToolRequest.h"
 #include "Generator/HelpyIconTrace.h"
+#include "Core/HelpyCacheSources.h"
 #include "Generator/ItemCatalogMetadata.h"
 #include "Generator/QuickMenuDecorations.h"
 #include "SDK/Helper/CookedAssetLookup.h"
@@ -190,7 +192,9 @@ std::string ItemIconPath(UObject* object) {
         const auto propertyType=trace?PropertyType(p):std::string{};const auto path=IconReferenceValue(p,object,size);
         if(!candidates.empty())candidates+="; ";candidates+=std::string(name)+":"+propertyType+(path.empty()?"=<none>":"="+path);
         if(result.empty()&&!path.empty()){result=path;selectedField=name;selectedType=propertyType;}
-        if(!trace && !result.empty())return result;
+        // Every resolved icon must publish the native item -> icon dependency,
+        // including the normal tracing-off path (clones often cross mounts).
+        if(!trace && !result.empty())break;
     }
     if(result.empty()) {
         std::size_t scanned=0;for(auto* p:TFieldRange<FProperty>(type,EFieldIterationFlags::Default)) {
@@ -202,6 +206,7 @@ std::string ItemIconPath(UObject* object) {
         }
     }
     TraceItemIcon(object,selectedField.empty()?"<none>":selectedField,selectedType.empty()?"<none>":selectedType,result.empty()?"<none>":result,candidates.empty()?"no icon-like reflected properties":candidates);
+    if(!result.empty())PS::HelpyCacheSources::Reference(to_string(object->GetPathName()),result);
     return result;
 }
 // Read reflected tag structures without guessing offsets or walking arbitrary object graphs.
@@ -312,7 +317,7 @@ json Search(const std::string& query,const std::string& loader) {
         return rows;
     }
     TArray<UObject*> objects;UECustom::UObjectGlobals::GetObjectsOfClass(Class(loader),objects,true);
-    if(objects.Num()>32768)throw std::runtime_error("Loaded item limit exceeded.");
+    if(objects.Num()<0)throw std::runtime_error("Loaded object roster has an invalid size.");
     size_t visitedRows=0;
     for(auto* object:objects) {
         if(!Usable(object))continue;
@@ -394,7 +399,7 @@ std::string HelpyBroadItemCategory(UObject* object,const std::string& path,const
     if(any({"quest","questitem"}))return "Quest";
     if(any({"ammo","ammunition","arrow","bolt","bullet","shot"}))return "Ammo";
     if(any({"rune","runes"}))return "Runes";
-    if(any({"armor","armour","helmet"," helm","chestplate","cuirass","gauntlet","glove","boots","greaves","shield"}))return "Armor";
+    if(any({"armor","armour","helmet"," helm","chestplate","cuirass","gauntlet","glove","boots","greaves","shield","wearableequipmentdata"})||QuickDecorations::Token(hay,"cape"))return "Armor";
     if(any({"weapon","sword","dagger","mace","spear","halberd","bow","crossbow","staff","wand","pistol","musket","axe_weapon","battleaxe"}))return "Weapons";
     if(any({"consumable","food","potion","drink","elixir","brew","ration","cooked","meal"}))return "Consumables";
     if(any({"tool","pickaxe","hatchet","fishingrod","fishing_rod","hammer","shovel","sickle"}))return "Tools";
@@ -421,6 +426,17 @@ json DescribeItemBasic(UObject* object,const std::string& path,const std::string
 }
 }
 
+std::vector<std::string> IconReferences(UObject* object) {
+    std::set<std::string> paths;if(!Usable(object)||!object->GetClassPrivate())return {};
+    auto* type=object->GetClassPrivate();size_t visited=0;
+    for(auto* field:TFieldRange<FProperty>(type,EFieldIterationFlags::Default)) {
+        if(++visited>256)break;const auto name=F2Catalog::Lower(to_string(field->GetName()));
+        if(name.find("icon")==name.npos&&name.find("thumbnail")==name.npos&&name.find("brush")==name.npos&&name!="image")continue;
+        const auto path=IconReferenceValue(field,object,type->GetPropertiesSize());
+        if(!path.empty()){paths.insert(path);HelpyCacheSources::Reference(to_string(object->GetPathName()),path);}
+    }
+    return {paths.begin(),paths.end()};
+}
 json ItemMetadata(const std::string& path) {
     auto* item=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,RC::to_generic_string(path).c_str(),false);
     auto* type=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Dominion.ItemData"),false);
@@ -443,24 +459,32 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
     auto* itemType=Class("assets");if(!itemType)throw std::runtime_error("ItemData class is not ready.");
     const auto objectCount=FUObjectArray::GetNumElements();
     if(objectCount<0||objectCount>4'000'000)throw std::runtime_error("Global object roster exceeds the safe catalog bound.");
-    static uint64_t mountedGeneration=0;static std::vector<CookedAssets::Record> mountedItems;
+    static uint64_t mountedGeneration=0;static bool mountedReady=false;static std::vector<CookedAssets::Record> mountedItems;
     const auto generation=SpawnToolRequests::Generation.load();
-    if(mountedGeneration!=generation) {
-        mountedGeneration=generation;mountedItems.clear();
-        if(CookedAssets::TryEnsure())for(const auto& record:CookedAssets::MetadataSnapshot()) {
-            const auto hint=F2Catalog::MountedCandidate(record.path,record.name,record.type);
-            if(hint&&hint->kind==F2Catalog::Kind::Item)mountedItems.push_back(record);
+    if(!mountedReady||mountedGeneration!=generation) {
+        if(mountedGeneration!=generation){mountedReady=false;mountedItems.clear();}
+        if(CookedAssets::TryEnsure()) {
+            std::vector<CookedAssets::Record> discovered;
+            for(const auto& record:CookedAssets::MetadataSnapshot()) {
+                const auto hint=F2Catalog::MountedCandidate(record.path,record.name,record.type);
+                if(hint&&hint->kind==F2Catalog::Kind::Item)discovered.push_back(record);
+            }
+            mountedItems=std::move(discovered);mountedGeneration=generation;mountedReady=true;
         }
     }
-    const std::size_t liveTotal=static_cast<std::size_t>(objectCount),total=liveTotal+mountedItems.size();
+    const auto priorityPaths=AssetProvenance::LivePaths();
+    const std::unordered_set<std::string> prioritySet(priorityPaths.begin(),priorityPaths.end());
+    const ItemCatalogLayout layout{{priorityPaths.size(),static_cast<std::size_t>(objectCount),mountedItems.size()}};
+    const auto total=layout.Total();
     if(!total)return {{"Rows",std::move(rows)},{"NextOffset",0},{"Start",0},{"HasMore",false},{"Scanned",0}};
     const std::size_t start=randomOrder?static_cast<std::size_t>(startSeed%total):0;
     std::size_t visited=std::min(offset,total),scanned=0;const auto begin=std::chrono::steady_clock::now();
     while(visited<total&&rows.size()<limit&&scanned<scanBudget) {
         if(scanned>0&&std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-begin).count()>=static_cast<long long>(timeBudgetMicros))break;
         const std::size_t index=randomOrder?(start+visited)%total:visited;
-        if(index>=liveTotal) {
-            ++visited;++scanned;const auto& record=mountedItems[index-liveTotal];
+        const auto [segment,localIndex]=layout.At(index);
+        if(segment==2) {
+            ++visited;++scanned;const auto& record=mountedItems[localIndex];
             auto* loaded=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,RC::to_generic_string(record.path).c_str(),false);
             if(Usable(loaded))continue; // already covered by the native UObject slice
             const auto name=QuickDecorations::ReadableAssetName(record.path),category=HelpyBroadItemCategory(nullptr,record.path,name,{},record.type);
@@ -470,14 +494,18 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
                 {"Cooked",true},{"Mounted",true},{"Loaded",false},{"Available",true},{"Reason","Mounted ItemData candidate; native fields and inventory compatibility are checked when loaded"}});
             continue;
         }
-        auto* slot=FUObjectArray::IndexToObject(static_cast<int32>(index));++visited;++scanned;
-        auto* object=slot?slot->GetUObject():nullptr;
+        UObject* object=nullptr;
+        if(segment==0)object=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,RC::to_generic_string(priorityPaths[localIndex]).c_str(),false);
+        else{auto* slot=FUObjectArray::IndexToObject(static_cast<int32>(localIndex));object=slot?slot->GetUObject():nullptr;}
+        ++visited;++scanned;
         if(!Usable(object)||!object->IsA(itemType))continue;
         const auto path=to_string(object->GetPathName());if(path.empty())continue;
+        if(segment==1&&prioritySet.contains(path))continue;
         const auto internal=CheapText(object,"InternalName");const auto name=CachedItemName(object);const auto tags=ItemTags(object);const auto broadCategory=HelpyBroadItemCategory(object,path,name,internal,tags);
         if(!categoryFilter.empty()&&AssetTemplate::Fold(broadCategory)!=categoryFilter)continue;
         if(!queryTokens.empty()&&!matchesTokens(path+" "+internal+" "+name+" "+tags+" "+broadCategory+" "+to_string(object->GetClassPrivate()->GetName())))continue;
-        auto entry=fieldSet=="Detail"?DescribeItem(object):DescribeItemBasic(object,path,name,internal,tags,broadCategory);if(entry.is_object())rows.push_back(std::move(entry));
+        auto entry=fieldSet=="Detail"||segment==0?DescribeItem(object):DescribeItemBasic(object,path,name,internal,tags,broadCategory);
+        if(entry.is_object()){entry["StableId"]=HelpyStableId(path);entry["Category"]=broadCategory;rows.push_back(std::move(entry));}
     }
     return {{"Rows",std::move(rows)},{"NextOffset",visited},{"Start",start},{"HasMore",visited<total},
         {"Scanned",scanned},{"BudgetExhausted",visited<total&&scanned>=scanBudget},{"FieldSet",fieldSet}};
@@ -485,8 +513,9 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
 
 json ItemRoster() {
     json rows=json::array();
-    TArray<UObject*> objects;UECustom::UObjectGlobals::GetObjectsOfClass(Class("assets"),objects,true);
-    if(objects.Num()<0||objects.Num()>32768)throw std::runtime_error("Loaded item roster exceeds its safe bound.");
+    auto* itemType=Class("assets");if(!itemType)throw std::runtime_error("ItemData class is not ready.");
+    TArray<UObject*> objects;UECustom::UObjectGlobals::GetObjectsOfClass(itemType,objects,true);
+    if(objects.Num()<0)throw std::runtime_error("Loaded item roster has an invalid size.");
     std::set<std::string> paths;
     for(auto* object:objects) {
         if(!Usable(object))continue;

@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
-  "description": "Client presentation declarations shipped by a mod. RuneSchema namespaces every Id with the owning ModId and merges accepted entries into the replicated registry manifest.",
+  "description": "Enabled loose schema mods and cooked declarations share native-registry enrollment and client/server declarations. Every asset still requires a correct live type and verified native identity; a declaration does not construct an asset or authorize cleanup.",
   "properties": {
     "Entries": {
       "items": {
@@ -128,6 +128,367 @@
       },
       "maxItems": 256,
       "type": "array"
+    },
+    "LoaderDefinitions": {
+      "additionalProperties": false,
+      "properties": {
+        "Journals": {
+          "additionalProperties": {
+            "type": "object"
+          },
+          "maxProperties": 4096,
+          "type": "object"
+        },
+        "Lore": {
+          "additionalProperties": {
+            "type": "object"
+          },
+          "maxProperties": 4096,
+          "type": "object"
+        },
+        "Recipes": {
+          "additionalProperties": {
+            "type": "object"
+          },
+          "maxProperties": 4096,
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "NativeRegistries": {
+      "additionalProperties": false,
+      "properties": {
+        "CombatSpells": {
+          "items": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "Path": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                    "type": "string"
+                  },
+                  "Source": {
+                    "const": "Schema"
+                  }
+                },
+                "required": [
+                  "Path",
+                  "Source"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "EquipmentEffects": {
+          "items": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "Path": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                    "type": "string"
+                  },
+                  "Source": {
+                    "const": "Schema"
+                  }
+                },
+                "required": [
+                  "Path",
+                  "Source"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "Items": {
+          "items": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "Path": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                    "type": "string"
+                  },
+                  "Source": {
+                    "const": "Schema"
+                  }
+                },
+                "required": [
+                  "Path",
+                  "Source"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "Journals": {
+          "items": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "Path": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                    "type": "string"
+                  },
+                  "Source": {
+                    "const": "Schema"
+                  }
+                },
+                "required": [
+                  "Path",
+                  "Source"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "Lore": {
+          "items": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "Path": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                    "type": "string"
+                  },
+                  "Source": {
+                    "const": "Schema"
+                  }
+                },
+                "required": [
+                  "Path",
+                  "Source"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "MeleeAttackClasses": {
+          "items": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "Quests": {
+          "items": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "Path": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                    "type": "string"
+                  },
+                  "Source": {
+                    "const": "Schema"
+                  }
+                },
+                "required": [
+                  "Path",
+                  "Source"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "RangedAttackClasses": {
+          "items": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "Recipes": {
+          "items": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "Path": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                    "type": "string"
+                  },
+                  "Source": {
+                    "const": "Schema"
+                  }
+                },
+                "required": [
+                  "Path",
+                  "Source"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "UtilitySpells": {
+          "items": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "Path": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                    "type": "string"
+                  },
+                  "Source": {
+                    "const": "Schema"
+                  }
+                },
+                "required": [
+                  "Path",
+                  "Source"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "WearableMeshData": {
+          "items": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "Path": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                    "type": "string"
+                  },
+                  "Source": {
+                    "const": "Schema"
+                  }
+                },
+                "required": [
+                  "Path",
+                  "Source"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "type": "object"
     },
     "SchemaVersion": {
       "const": 1

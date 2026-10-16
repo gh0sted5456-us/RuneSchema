@@ -32,7 +32,10 @@ namespace DragonWilds::ActorHelper {
                                    const RC::Unreal::FRotator& Rotation,
                                    const std::function<void(RC::Unreal::AActor*)>& Configure = {},
                                    RC::Unreal::ESpawnActorScaleMethod ScaleMethod =
-                                       RC::Unreal::ESpawnActorScaleMethod::MultiplyWithRoot);
+                                       RC::Unreal::ESpawnActorScaleMethod::MultiplyWithRoot,
+                                   RC::Unreal::ESpawnActorCollisionHandlingMethod CollisionMethod =
+                                       RC::Unreal::ESpawnActorCollisionHandlingMethod::AlwaysSpawn,
+                                   const RC::Unreal::FVector& Scale = RC::Unreal::FVector(1.0,1.0,1.0));
 
     void DestroyActor(RC::Unreal::AActor* Actor);
     void DestroyComponent(RC::Unreal::UObject* Component);

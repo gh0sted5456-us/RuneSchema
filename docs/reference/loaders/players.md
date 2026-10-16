@@ -26,6 +26,19 @@ components can be recreated.
 
 ## Simple rules
 
+Carry capacity uses `CarryWeightMultiplier` (relative to the pawn's captured
+baseline) **or** `MaxCarryWeight` (an absolute capacity), not both in one rule.
+These change maximum capacity, not the weight of individual inventory items.
+If several matching rules set capacity, the last successfully applied rule wins;
+multipliers do not stack. For example, a later player profile with `1.4` overrides
+an earlier inventory mod with `3.0`. Remove the competing field or change load
+order deliberately; a restart does not change that precedence.
+
+Carry diagnostics include the captured baseline, requested capacity and value
+read back after the native attribute notification. Conflicting matching rules
+produce a deduplicated `[PLAYERS][CARRY-OVERRIDE]` warning. A rejected or overwritten
+native value is not reported as successfully applied.
+
 - Player rules may select by player name, GUID, or wildcard.
 - Use GUID selectors when player names are not unique.
 - Appearance rows and cooked presentation assets must be installed on every client; test respawn because player objects can be recreated.

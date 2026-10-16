@@ -70,7 +70,7 @@ inline std::vector<std::string> EnemyRoots() {
 inline std::optional<Candidate> MountedCandidate(const std::string& path,const std::string& name,const std::string& type) {
     if(!ValidObjectPath(path))return {};
     const auto t=Lower(type),p=Lower(path),n=Lower(name);
-    if(t.ends_with("itemdata")||(n.starts_with("item_")&&n.find("meshdata")==n.npos))return Candidate{path,name,Kind::Item};
+    if(t.ends_with("itemdata")||t.ends_with("equipmentdata")||(n.starts_with("item_")&&n.find("meshdata")==n.npos))return Candidate{path,name,Kind::Item};
     if(!(t.find("blueprint")!=t.npos||t=="class"||n.starts_with("bp_")))return {};
     const auto cls=path.ends_with("_C")?path:path+"_C";
     if(UnderAny(path,ResourceRoots())||p.find("/mining/")!=p.npos||p.find("/trees/")!=p.npos)return Candidate{cls,name,Kind::Resource};

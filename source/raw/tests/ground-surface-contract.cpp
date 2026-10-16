@@ -64,6 +64,7 @@ int main(int argc,char** argv){
     Require(event.find("groundRetry.Attempts>=8")!=std::string::npos&&event.find("wavePending=false;initialWavePending=false;groundRetry={};")!=std::string::npos,"Event ground retries are not bounded or travel-scoped");
     Require(sdk.find("PS::Grounding::QuerySurface")!=std::string::npos&&sdk.find("if(contractFailure)return false;")!=std::string::npos,"Complex fallback retries a failed native contract");
     Require(sdk.find("floor.Contains(impact.Z())")!=std::string::npos,"Shared ground helper accepts invalid hit coordinates");
+    Require(sdk.find("FVector(end.X(),end.Y(),floor.Bottom)")!=std::string::npos,"Intended floor bound is not used by the actual collision ray");
     Require(sdk.find("LandscapeHeightfieldCollisionComponent")!=std::string::npos&&sdk.find("attempt<16")!=std::string::npos,"Bare $ does not use a bounded terrain baseline");
     Require(sdk.find("!penetrating")!=std::string::npos&&sdk.find("normal.Z()>=0.5")!=std::string::npos,"Ground query accepts walls or initial overlap as a floor");
     Require(npc.find("impact,error,definition.GroundReferenceZ")!=std::string::npos&&spawn.find("impact, traceError,spawn.GroundReferenceZ")!=std::string::npos,"Configured loaders lost their floor reference");

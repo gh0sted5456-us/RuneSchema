@@ -11,6 +11,9 @@
 #include "Generator/HelpyNodes.h"
 #include "Generator/RecipeStudioPanel.h"
 #include "Core/HelpyKitFiles.h"
+#include "Core/CartDeliveryBatch.h"
+#include "Generator/PlayerBadges.h"
+#include "Generator/CatalogProgressView.h"
 #include "Generator/ItemAuthoringPanel.h"
 #include <algorithm>
 #include <cctype>
@@ -65,6 +68,22 @@ inline uint64_t DefinitionSequence=0x5000000000000000ull,DefinitionPending=0,Def
 inline std::map<std::string,nlohmann::json> InspectedDefinitions;
 inline std::string DefinitionStatus;
 inline uint64_t CartSequence=(uint64_t{1}<<62),CartGeneration=0;
+inline CartDeliveryBatch::Plan CartBatch;
+inline std::vector<CartDeliveryBatch::Recipient> CartRecipients;
+inline bool CartRecipientsChosen=false,CartNeedsReview=false,CartReviewAcknowledged=false;
+inline std::chrono::steady_clock::time_point CartRequestedAt{};
+inline std::vector<CartDeliveryBatch::Recipient> EffectiveCartRecipients(){
+    if(CartRecipientsChosen)return CartRecipients;
+    if(SelectedPlayer.empty())return {};
+    std::string name=SelectedPlayer;if(UiSnapshot.contains("Players")&&UiSnapshot["Players"].is_array())for(const auto& player:UiSnapshot["Players"])if(ItemPresentation::Text(player,"Path")==SelectedPlayer)name=ItemPresentation::Text(player,"Name");
+    return {{SelectedPlayer,name}};
+}
+inline bool SubmitNextCartRecipient(uint64_t id){
+    auto request=CartBatch.Request(id);
+    if(!SpawnToolRequests::TrySubmit(std::move(request))){CartBatch.Stop();return false;}
+    CartRequestedAt=std::chrono::steady_clock::now();
+    ItemGridPicker::CartStatus="Giving the cart to player "+std::to_string(CartBatch.Completed()+1)+" of "+std::to_string(CartBatch.Total())+"...";return true;
+}
 inline uint64_t KitSequence=(uint64_t{1}<<61),KitPending=0;
 inline void RefreshKitMetadata() {
     auto paths=nlohmann::json::array();for(const auto& entry:ItemGridPicker::SharedCart.Entries())paths.push_back(entry.Path);
@@ -77,11 +96,11 @@ inline void RenderKitLibrary() {
     const auto directory=HostServices::RuntimeDirectory()/"Helpy"/"kits";
     const auto refresh=[&]{try{files=HelpyKitFiles::List(directory);error.clear();}catch(const std::exception& e){files.clear();error=e.what();}};
     ImGui::BeginDisabled(ItemGridPicker::SharedCart.Delivery()!=0);
-    if(ImGui::SmallButton("Import kit")){selected.clear();preview=nullptr;refresh();ImGui::OpenPopup("Import Helpy kit");}
+    if(ImGui::SmallButton("Import kit")){selected.clear();preview=nullptr;refresh();ImGui::OpenPopup("Import RSMK kit");}
     ImGui::SameLine();ImGui::BeginDisabled(ItemGridPicker::SharedCart.Entries().empty());
-    if(ImGui::SmallButton("Export kit")){error.clear();replace=false;ImGui::OpenPopup("Export Helpy kit");}
+    if(ImGui::SmallButton("Export kit")){error.clear();replace=false;ImGui::OpenPopup("Export RSMK kit");}
     ImGui::EndDisabled();ImGui::EndDisabled();
-    if(ImGui::BeginPopupModal("Import Helpy kit",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+    if(ImGui::BeginPopupModal("Import RSMK kit",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextWrapped("Import replaces the staged cart only. It does not give items, equip anything or unlock content.");
         ImGui::TextWrapped("Kit folder: %s",directory.string().c_str());
         if(HelpyImGuiTheme::SoftButton("Refresh kits")){preview=nullptr;selected.clear();refresh();}
@@ -102,13 +121,13 @@ inline void RenderKitLibrary() {
                     if(row.is_object()&&row.value("Path",std::string{})==path)return row;
                 return nlohmann::json::object();
             });
-            ItemGridPicker::CartStatus="Kit loaded into cart. Review quantities, choose a player, then Deliver. Missing content is checked at delivery.";
+            ItemGridPicker::CartStatus="Kit loaded into cart. Review quantities, choose recipients, then Give items. Missing content is checked at delivery.";
             RefreshKitMetadata();
             error.clear();ImGui::CloseCurrentPopup();
         }catch(const std::exception& e){error=e.what();}
         ImGui::EndDisabled();ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
     }
-    if(ImGui::BeginPopupModal("Export Helpy kit",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+    if(ImGui::BeginPopupModal("Export RSMK kit",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextWrapped("Save the current item paths and quantities as a shareable kit. Player, delivery and equip actions are not stored.");
         ImGui::TextWrapped("Kit folder: %s",directory.string().c_str());
         ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(350));if(ImGui::InputText("Kit name",exportName,sizeof(exportName)))replace=false;
@@ -125,39 +144,52 @@ inline void RenderKitLibrary() {
 inline void PollCartDelivery() {
     const auto generation=SpawnToolRequests::CurrentGeneration();
     if(CartGeneration!=generation) {
-        if(ItemGridPicker::SharedCart.Delivery())ItemGridPicker::CartStatus="World changed during delivery. Cart retained; check your inventory before retrying.";
+        if(ItemGridPicker::SharedCart.Delivery()){ItemGridPicker::CartStatus="World changed during delivery. Cart retained; check recipient inventories before retrying.";CartBatch.Stop();CartNeedsReview=true;CartReviewAcknowledged=false;}
         ItemGridPicker::SharedCart.CancelDelivery();KitPending=0;CartGeneration=generation;
+        CartRecipients.clear();CartRecipientsChosen=false;
     }
     nlohmann::json receipt;const auto request=ItemGridPicker::SharedCart.Delivery();
     if(KitPending&&SpawnToolRequests::TakeCompleted(KitPending,receipt)){KitPending=0;if(receipt.contains("KitMetadata"))ItemGridPicker::SharedCart.RefreshMetadata(receipt["KitMetadata"]);}
-    if(request&&SpawnToolRequests::TakeCompleted(request,receipt)) {
-        ItemGridPicker::SharedCart.CompleteDelivery(request,receipt);
-        ItemGridPicker::CartStatus=receipt.value("Status",std::string("Delivery completed; inspect remaining items before retrying."));
+    if(request){
+        if(CartBatch.Pending()&&SpawnToolRequests::TakeCompleted(CartBatch.PendingId(),receipt))CartBatch.Accept(CartBatch.PendingId(),receipt);
+        if(CartBatch.Pending()&&std::chrono::steady_clock::now()-CartRequestedAt>std::chrono::seconds(30))CartBatch.Stop();
+        if(CartBatch.Finished()){
+            ItemGridPicker::SharedCart.CompleteDelivery(request,CartBatch.Aggregate());
+            CartNeedsReview=CartBatch.Stopped();CartReviewAcknowledged=false;
+            ItemGridPicker::CartStatus=CartNeedsReview?"Delivery stopped or unconfirmed. Remaining cart retained. Check recipient inventories before allowing another delivery.":
+                "Cart delivered to "+std::to_string(CartBatch.Total())+" player(s); every inventory delta confirmed.";
+        }else if(!CartBatch.Pending()&&!SpawnToolRequests::IsWaiting()&&SpawnToolRequests::IsAvailable()){
+            if(!SubmitNextCartRecipient(++CartSequence)){ItemGridPicker::SharedCart.CancelDelivery();CartNeedsReview=true;CartReviewAcknowledged=false;ItemGridPicker::CartStatus="Next recipient was not submitted. Check completed recipients before retrying.";}
+        }
     }
 }
 inline bool RenderCartRecipient(const nlohmann::json& result) {
-    bool changed=false;auto label=std::string("Select player");
+    bool changed=false;const auto selected=EffectiveCartRecipients();auto label=selected.empty()?std::string("Select players"):selected.size()==1?selected[0].Name:std::to_string(selected.size())+" players selected";
     const auto* players=result.is_object()&&result.contains("Players")&&result["Players"].is_array()?&result["Players"]:nullptr;
-    if(players)for(const auto& row:*players)if(ItemPresentation::Text(row,"Path")==SelectedPlayer)label=ItemPresentation::Text(row,"Name");
+    ImGui::BeginDisabled(ItemGridPicker::SharedCart.Delivery()!=0);
     ImGui::SetNextItemWidth(-1);
     if(ImGui::BeginCombo("##item-recipient",label.c_str())){
         if(players)for(const auto& row:*players){const auto path=ItemPresentation::Text(row,"Path");if(path.empty())continue;
-            if(ImGui::Selectable(ItemPresentation::Text(row,"Name").c_str(),SelectedPlayer==path)){SelectedPlayer=path;changed=true;}}
+            bool checked=std::any_of(selected.begin(),selected.end(),[&](const auto& item){return item.Path==path;});
+            ImGui::PushID(path.c_str());if(ImGui::Checkbox(ItemPresentation::Text(row,"Name").c_str(),&checked)){
+                if(!CartRecipientsChosen){CartRecipients=selected;CartRecipientsChosen=true;}
+                if(checked){if(CartRecipients.size()<CartDeliveryBatch::Plan::MaxPlayers){CartRecipients.push_back({path,ItemPresentation::Text(row,"Name")});SelectedPlayer=path;changed=true;}}
+                else {std::erase_if(CartRecipients,[&](const auto& item){return item.Path==path;});changed=true;}
+            }PlayerBadges::Inline(row);ImGui::PopID();}
         if(ImGui::Selectable("Refresh players"))SpawnToolRequests::Submit({{"Action","QuickPlayers"}});ImGui::EndCombo();
-    }return changed;
+    }ImGui::EndDisabled();if(selected.size()>1){std::string names;for(const auto& player:selected){if(!names.empty())names+=", ";names+=player.Name;}ImGui::TextWrapped("%s",names.c_str());ImGui::TextDisabled("Same quantities for each player.");}return changed;
 }
 inline void RenderCartDock(ImVec2 size,const std::function<void()>& recipient) {
     const auto& theme=HelpyImGuiTheme::Current;
     auto& cart=ItemGridPicker::SharedCart;
     const bool empty=cart.Entries().empty(),delivering=cart.Delivery()!=0;
     const auto deliver=[&](int mode){
-        if(SelectedPlayer.empty()||SpawnToolRequests::IsWaiting()||delivering||empty)return;
+        const auto recipients=EffectiveCartRecipients();if(recipients.empty()||SpawnToolRequests::IsWaiting()||delivering||empty||CartNeedsReview)return;
         auto items=cart.Payload(mode);if(items.empty())return;
         const auto request=++CartSequence;
-        if(!cart.BeginDelivery(request,mode))return;
-        if(!SpawnToolRequests::TrySubmit({{"_RequestId",request},{"Action","GiveItems"},{"_Source","HelpyStandaloneCart"},{"Player",SelectedPlayer},{"Items",std::move(items)}})) {
-            cart.CancelDelivery();ItemGridPicker::CartStatus="Delivery was not submitted; cart retained.";
-        } else ItemGridPicker::CartStatus="Delivering items...";
+        try{CartBatch.Begin(items,recipients);if(!cart.BeginDelivery(request,mode))return;
+            if(!SubmitNextCartRecipient(request)){cart.CancelDelivery();ItemGridPicker::CartStatus="Delivery was not submitted; cart retained.";}
+        }catch(const std::exception& error){cart.CancelDelivery();ItemGridPicker::CartStatus=error.what();}
     };
     ImGui::PushStyleColor(ImGuiCol_ChildBg,theme.panelAlt);
     if(ImGui::BeginChild("##item-cart-dock",size,true,ImGuiWindowFlags_AlwaysUseWindowPadding)){
@@ -183,7 +215,7 @@ inline void RenderCartDock(ImVec2 size,const std::function<void()>& recipient) {
             if(ImGui::BeginMenu("Saved loadouts")){RenderKitLibrary();ImGui::EndMenu();}
             if(ImGui::MenuItem("Clear cart",nullptr,false,!empty&&!delivering))ItemGridPicker::ClearSharedCart();
             ImGui::Separator();
-            const bool ready=!SelectedPlayer.empty()&&!SpawnToolRequests::IsWaiting()&&!delivering&&!empty;
+            const bool ready=!EffectiveCartRecipients().empty()&&!SpawnToolRequests::IsWaiting()&&!delivering&&!empty&&!CartNeedsReview;
             if(ImGui::MenuItem("Give one of each",nullptr,false,ready))deliver(1);
             if(ImGui::MenuItem("Give half stacks",nullptr,false,ready))deliver(2);
             if(ImGui::MenuItem("Give full stacks",nullptr,false,ready))deliver(3);
@@ -191,7 +223,7 @@ inline void RenderCartDock(ImVec2 size,const std::function<void()>& recipient) {
         }
         ImGui::Separator();
         std::string removePath;
-        const float footer=theme.Y(ItemGridPicker::CartStatus.empty()?98.0f:140.0f);
+        const float footer=theme.Y((ItemGridPicker::CartStatus.empty()?98.0f:140.0f)+(EffectiveCartRecipients().size()>1?52.0f:0.0f)+(CartNeedsReview?90.0f:0.0f));
         const float listHeight=std::max(theme.Y(58.0f),ImGui::GetContentRegionAvail().y-footer);
         if(ImGui::BeginChild("##cart-items",ImVec2(0,listHeight),false)){
             if(empty){ImGui::Spacing();ImGui::TextWrapped("Drag items here");ImGui::TextDisabled("or right-click an item.");}
@@ -220,7 +252,7 @@ inline void RenderCartDock(ImVec2 size,const std::function<void()>& recipient) {
         }ImGui::EndChild();
         if(!removePath.empty())ItemGridPicker::RemoveFromCart(removePath);
         ImGui::Separator();ImGui::TextDisabled("Give to");recipient();
-        ImGui::BeginDisabled(SelectedPlayer.empty()||SpawnToolRequests::IsWaiting()||delivering||empty);
+        ImGui::BeginDisabled(EffectiveCartRecipients().empty()||SpawnToolRequests::IsWaiting()||delivering||empty||CartNeedsReview);
         ImGui::PushStyleColor(ImGuiCol_Button,theme.accent);ImGui::PushStyleColor(ImGuiCol_ButtonHovered,theme.accentHover);ImGui::PushStyleColor(ImGuiCol_ButtonActive,theme.accentActive);ImGui::PushStyleColor(ImGuiCol_Text,theme.onAccent);
         if(HelpyImGuiTheme::SoftButton(delivering?"Giving items...":"Give items",ImVec2(-1,0)))deliver(0);
 #if defined(HELPY_PREVIEW)
@@ -228,6 +260,8 @@ inline void RenderCartDock(ImVec2 size,const std::function<void()>& recipient) {
 #endif
         ImGui::PopStyleColor(4);ImGui::EndDisabled();
         if(!ItemGridPicker::CartStatus.empty())ImGui::TextWrapped("%s",ItemGridPicker::CartStatus.c_str());
+        if(!CartBatch.Receipts().empty()&&ImGui::TreeNode("Delivery results")){for(const auto& result:CartBatch.Receipts())ImGui::TextWrapped("%s: %s",result.value("Name",std::string{}).c_str(),result["Receipt"].value("Status",std::string("Native confirmation received")).c_str());ImGui::TreePop();}
+        if(CartNeedsReview){ImGui::Checkbox("I checked affected inventories",&CartReviewAcknowledged);ImGui::BeginDisabled(!CartReviewAcknowledged);if(ImGui::SmallButton("Allow a new delivery")){CartNeedsReview=false;CartReviewAcknowledged=false;ItemGridPicker::CartStatus="Cart unlocked after inventory review. Quantities are per selected player.";}ImGui::EndDisabled();}
     }ImGui::EndChild();ImGui::PopStyleColor();
 }
 inline void RefreshSnapshot(int category,bool force=false) {
@@ -237,6 +271,7 @@ inline void RefreshSnapshot(int category,bool force=false) {
     else LazyCatalog::Overlay(UiSnapshot,category);
     const auto generation=SpawnToolRequests::CurrentGeneration();
     if(generation!=DefinitionGeneration){DefinitionGeneration=generation;DefinitionPending=0;InspectedDefinitions.clear();DefinitionStatus.clear();}
+    PlayerBadges::Update(UiSnapshot);
     nlohmann::json receipt;
     if(DefinitionPending&&SpawnToolRequests::TakeCompleted(DefinitionPending,receipt)) {
         DefinitionPending=0;DefinitionStatus=receipt.value("Status",std::string{});
@@ -272,13 +307,14 @@ inline void Render(View view) {
     const bool itemPage=view==View::Items;
     const int coverageCategory=CatalogCategory(view);
     const auto maintenance=[&]{
+    CatalogProgressView::Render(result);
     if(coverageCategory>=0&&!LazyCatalog::For(coverageCategory).Coverage.empty()&&ui.advancedMode)ImGui::TextWrapped("%s",LazyCatalog::For(coverageCategory).Coverage.c_str());
     if(HelpyImGuiTheme::SoftButton("Refresh current list")){buildingConfirmed=false;actors[0].Confirmed=false;actors[1].Confirmed=false;
         const int category=CatalogCategory(view);if(category>=0){auto& window=LazyCatalog::For(category);const char* mode=(category==0&&window.Query.empty())?"Random":"Search";LazyCatalog::Retry(category);}}
     SameLineIfRoom(145.0f);if(HelpyImGuiTheme::SoftButton("Refresh players"))SpawnToolRequests::Submit({{"Action","QuickPlayers"}});
     if(ui.advancedMode){ImGui::Checkbox("I understand Full Scan may load additional candidate assets",&rebuildCatalogs);
     ImGui::BeginDisabled(!rebuildCatalogs);
-    if(HelpyImGuiTheme::SoftButton("Full Scan / rebuild live Helpy catalog")) {
+    if(HelpyImGuiTheme::SoftButton("Full Scan / rebuild live RSMK catalog")) {
         buildingConfirmed=false;actors[0].Confirmed=false;actors[1].Confirmed=false;rebuildCatalogs=false;SpawnToolRequests::Submit({{"Action","IndexQuickCatalog"}});
     }
     ImGui::EndDisabled();}
@@ -293,7 +329,7 @@ inline void Render(View view) {
             if(result.contains("Players"))for(const auto& row:result["Players"]) {
                 const auto path=row["Path"].get<std::string>();ImGui::PushID(path.c_str());
                 if(ImGui::Selectable(row["Name"].get_ref<const std::string&>().c_str(),player==path)){player=path;buildingConfirmed=false;actors[0].Confirmed=false;actors[1].Confirmed=false;}
-                ImGui::PopID();
+                PlayerBadges::Inline(row);ImGui::PopID();
             }
             if(ImGui::Selectable("Refresh players"))SpawnToolRequests::Submit({{"Action","QuickPlayers"}});
             ImGui::EndCombo();
@@ -557,7 +593,7 @@ inline void RenderSessionCleanup() {
         ImGui::EndCombo();
     }
     ImGui::BeginDisabled(player.empty());
-    if(HelpyImGuiTheme::SoftButton("Dismiss Helpy temporary NPCs"))SpawnToolRequests::Submit({{"Action","DismissHelpyNpcs"},{"_Source","HelpyStandalone"},{"Player",player}});
+    if(HelpyImGuiTheme::SoftButton("Dismiss RSMK temporary NPCs"))SpawnToolRequests::Submit({{"Action","DismissHelpyNpcs"},{"_Source","HelpyStandalone"},{"Player",player}});
     ImGui::SameLine();
     if(HelpyImGuiTheme::SoftButton("Clean up live tool-created actors"))SpawnToolRequests::Submit({{"Action","Cleanup"},{"Player",player}});
     ImGui::EndDisabled();

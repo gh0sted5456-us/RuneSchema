@@ -114,7 +114,7 @@ inline bool KitPath(const std::string& path) {
 inline json KitItems(const json& document) {
     if(!document.is_object()||!document.contains("SchemaVersion")||!document.at("SchemaVersion").is_number_integer()||document.at("SchemaVersion")!=1
         ||!document.contains("Type")||document.at("Type")!="RuneSchemaHelpyKit")
-        throw std::invalid_argument("Unsupported Helpy kit schema");
+        throw std::invalid_argument("Unsupported RSMK kit schema");
     for(const auto& [key,value]:document.items())if(key!="SchemaVersion"&&key!="Type"&&key!="Name"&&key!="Items")
         throw std::invalid_argument("Kit metadata cannot contain actions or delivery instructions");
     if(document.contains("Name")&&(!document.at("Name").is_string()||document.at("Name").get_ref<const std::string&>().size()>128))

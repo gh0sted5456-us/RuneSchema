@@ -135,18 +135,20 @@ namespace DragonWilds::ActorHelper {
                        const FVector& Location,
                        const FRotator& Rotation,
                        const std::function<void(AActor*)>& Configure,
-                       ESpawnActorScaleMethod ScaleMethod)
+                       ESpawnActorScaleMethod ScaleMethod,
+                       ESpawnActorCollisionHandlingMethod CollisionMethod,
+                       const FVector& Scale)
     {
         if (!World || !ActorClass)
         {
             throw std::runtime_error("Spawn was given a null world or class");
         }
 
-        auto transform = FTransform(Rotation, Location, FVector(1.0, 1.0, 1.0));
+        auto transform = FTransform(Rotation, Location, Scale);
 
         UObject* worldContext = World;
         AActor* owner = nullptr;
-        auto collision = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+        auto collision = CollisionMethod;
         auto begin = FunctionCall(GetDefaultObject(TEXT("/Script/Engine.Default__GameplayStatics")),
                                   STR("/Script/Engine.GameplayStatics:BeginDeferredActorSpawnFromClass"));
         begin.Arg(STR("WorldContextObject"), worldContext)

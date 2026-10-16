@@ -22,6 +22,13 @@ int main(){
     assert(floorAt(0)==25); // a local stair tread beats terrain, not the roof
     assert(floorAt(500)==500); // an intentional bridge/deck reference
     assert(floorAt(-400)==-400); // a lower floor is not pulled upstairs
+    const auto maxx=FloorRange(SearchRange::Around(-185),-185);
+    assert(maxx.Top==-140&&maxx.Bottom==-485);
+    assert(!maxx.Contains(-6949.73624259686)); // streamed intended ground missing, not an underground fallback
+    assert(maxx.Contains(-185)&&maxx.Contains(-140)&&maxx.Contains(-485));
+    // Cell discovery can widen terrain discovery, never the intended floor.
+    auto late=SearchRange::Around(-185);late.ObserveCell(-22000,5000);
+    assert(!FloorRange(late,-185).Contains(-6949.73624259686));
     assert(Rejects([]{FloorRange({100,0},-100);}));
     assert(!Reference(nlohmann::json::object()));
     assert(Reference({{"GroundReferenceZ",-3550}})==-3550);

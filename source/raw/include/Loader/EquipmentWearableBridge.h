@@ -7,12 +7,15 @@
 #include <cstring>
 #include <stdexcept>
 #include <vector>
+#include <unordered_map>
+#include "Core/RegistrationDiagnostics.h"
 #include "Loader/QuestObjectReference.h"
 #include "SDK/WeakObjectHandle.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Structs/Custom/FManagedValue.h"
 #include "SDK/Structs/Custom/FScriptMapHelper.h"
+#include "Unreal/CoreUObject/UObject/UnrealType.hpp"
 #include "Unreal/CoreUObject/UObject/FStrProperty.hpp"
 #include "Runtime/Storefront.h"
 #include "Runtime/NativeExecutableDiscovery.h"
@@ -55,7 +58,15 @@ inline std::atomic<bool> Inactive{};
 inline std::atomic<bool> ServerPathReported{};
 inline bool InstallAttempted=false;
 inline thread_local bool Refreshing=false;
-inline std::vector<PS::WeakObjectHandle> Registered;
+inline std::unordered_map<UObject*,PS::WeakObjectHandle> Registered;
+inline PS::RegistrationDiagnostics::Sources PendingDiagnostics;
+inline void ReportDiagnostics() {
+    const auto counts=PendingDiagnostics.Take();
+    if(!PS::PSConfig::Get()->IsDebugLoggingEnabled())return;
+    for(const auto& [source,count]:counts)
+        PS::Log<RC::LogLevel::Verbose>(TEXT("[WEARABLE-BRIDGE][SUMMARY] source='{}' added={} existing={}; individual asset messages suppressed.\n"),
+            PS::ToWideSafe(source),count.Added,count.Existing);
+}
 struct Attempt { PS::WeakObjectHandle Component,Mesh; uint8_t Gender; };
 // Retain only failed enrollments. A successful cache entry may later be
 // invalidated by the game when equipment changes, so it must be retryable.
@@ -64,6 +75,10 @@ inline std::vector<Attempt> FailedAttempts;
 inline bool Live(UObject* object) {
     return object && !object->HasAnyFlags(static_cast<EObjectFlags>(
         RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed));
+}
+inline bool IsWearable(UObject* item){
+    auto* type=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Dominion.WearableEquipmentData"));
+    return Live(item)&&type&&item->IsA(type);
 }
 
 inline UObject* ObjectField(UObject* object,const TCHAR* name) {
@@ -94,7 +109,8 @@ inline void BeforeEvaluation(safetyhook::Context& context) noexcept {
         || GetCurrentThreadId()!=GameThread.load(std::memory_order_acquire)) return;
     try {
         auto* item=reinterpret_cast<UObject*>(context.rcx);
-        if(!std::ranges::any_of(Registered,[&](const auto& h){return h.Get()==item;})) return;
+        const auto registered=Registered.find(item);
+        if(registered==Registered.end()||registered->second.Get()!=item) return;
         auto* component=reinterpret_cast<UObject*>(context.r9);
         const auto gender=static_cast<uint8_t>(context.rdx);
         if(gender>1 || !Live(item) || !Live(component) || !context.r8) return;
@@ -112,8 +128,7 @@ inline void BeforeEvaluation(safetyhook::Context& context) noexcept {
         Refreshing=false;
         const bool enrolled=ContainsMesh(component,mesh);
         if(!enrolled) FailedAttempts.push_back({PS::WeakObject(component),PS::WeakObject(mesh),gender});
-        PS::Log<RC::LogLevel::Normal>(TEXT("[WEARABLE-BRIDGE][{}] item='{}' component='{}' gender={}; native hide cache rebuilt.\n"),
-            enrolled?TEXT("ENROLLED"):TEXT("NOT-ENROLLED"),item->GetPathName(),component->GetPathName(),gender);
+        if(!enrolled)PS::Log<RC::LogLevel::Warning>(TEXT("[WEARABLE-BRIDGE][NOT-ENROLLED] item='{}'; native hide-cache rebuild did not confirm enrollment.\n"),item->GetPathName());
     } catch(const std::exception& error) {
         Refreshing=false;
         Inactive.store(true,std::memory_order_release);
@@ -168,8 +183,7 @@ inline void Install() {
 
 // Call after persistence/network identity registration, on the game thread.
 inline void Register(UObject* subsystem,UObject* item) {
-    auto* wearableClass=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Dominion.WearableEquipmentData"));
-    if(!wearableClass || !item->IsA(wearableClass)) return;
+    if(!Live(subsystem)||!IsWearable(item))return;
     auto* property=CastField<FMapProperty>(PropertyHelper::GetPropertyByName(subsystem->GetClassPrivate(),TEXT("AssetNameToDataMap")));
     if(!property || !CastField<FStrProperty>(property->GetKeyProp())) throw std::runtime_error("wearable enumeration registry unavailable");
     auto* value=CastField<FObjectPropertyBase>(property->GetValueProp());
@@ -202,18 +216,18 @@ inline void Register(UObject* subsystem,UObject* item) {
         auto* stored=helper.FindValue(const_cast<FString*>(&name));
         if(!stored || value->GetObjectPropertyValue(stored)!=item) throw std::runtime_error("wearable enumeration insertion did not round-trip");
     }
+    const auto prior=Registered.find(item);
+    if(prior==Registered.end()||prior->second.Get()!=item){
+        Registered.insert_or_assign(item,PS::WeakObject(item));
+        if(PS::PSConfig::Get()->IsDebugLoggingEnabled())
+            PendingDiagnostics.Add(RC::to_string(item->GetPathName()),!found);
+    }
     if (PS::Storefront::IsDedicatedServer()) {
         if (!ServerPathReported.exchange(true, std::memory_order_relaxed))
             PS::Log<RC::LogLevel::Normal>(TEXT("[WEARABLE-BRIDGE][SERVER-DATA] Authoritative wearable enumeration is active; visual hide-map refresh remains client-only.\n"));
-        PS::Log<RC::LogLevel::Verbose>(TEXT("[WEARABLE-BRIDGE][SERVER-DATA][ITEM] item='{}' AssetName='{}' registry={}.\n"),
-            item->GetPathName(),*name,found?TEXT("existing"):TEXT("added"));
         return;
     }
-    std::erase_if(Registered,[](const auto& h){return !Live(h.Get());});
-    if(!std::ranges::any_of(Registered,[&](const auto& h){return h.Get()==item;})) Registered.emplace_back(item);
     GameThread.store(GetCurrentThreadId(),std::memory_order_release);
-    PS::Log<RC::LogLevel::Normal>(TEXT("[WEARABLE-BRIDGE][DISCOVERABLE] item='{}' AssetName='{}' registry={}.\n"),
-        item->GetPathName(),*name,found?TEXT("existing"):TEXT("added"));
     Install();
 }
 
@@ -232,5 +246,51 @@ inline void TryRegister(UObject* subsystem,UObject* item) noexcept {
         Inactive.store(true,std::memory_order_release);
         PS::Log<RC::LogLevel::Warning>(TEXT("[WEARABLE-BRIDGE][INACTIVE] unknown wearable enrollment failure; normal item registration continues.\n"));
     }
+}
+// Schema patches may arrive after the settled registrar. Re-enroll only an
+// item whose existing persistence AND two-way network identity round-trip.
+// Never allocate a network ID, synthesize an item, or mutate an opaque cache.
+inline bool RefreshRegistered(UObject* item) noexcept {
+    try {
+        if(Inactive.load(std::memory_order_acquire)||!IsWearable(item))return false;
+        auto* idField=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(item->GetClassPrivate(),TEXT("PersistenceID")));
+        if(!idField)return false;const auto id=idField->GetPropertyValue(idField->ContainerPtrToValuePtr<void>(item));
+        if(id.GetCharArray().Num()<=1)return false;
+        auto* type=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Dominion.ItemSubsystem"));
+        if(!type)return false;TArray<UObject*> instances;UECustom::UObjectGlobals::GetObjectsOfClass(type,instances,true);
+        if(instances.Num()<0||instances.Num()>256)return false;
+        bool enrolled=false;
+        for(auto* subsystem:instances){
+            if(!Live(subsystem))continue;
+            auto* identity=CastField<FMapProperty>(PropertyHelper::GetPropertyByName(type,TEXT("PersistenceIDToDataMap")));
+            auto* reverse=CastField<FMapProperty>(PropertyHelper::GetPropertyByName(type,TEXT("DataToNetIdMap")));
+            auto* forward=CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(type,TEXT("NetIdToData")));
+            if(!identity||!reverse||!forward)continue;
+            auto* identityValue=CastField<FObjectPropertyBase>(identity->GetValueProp());
+            auto* reverseKey=CastField<FObjectPropertyBase>(reverse->GetKeyProp());
+            auto* reverseValue=CastField<FNumericProperty>(reverse->GetValueProp());
+            auto* forwardValue=CastField<FObjectPropertyBase>(forward->GetInner());
+            if(!CastField<FStrProperty>(identity->GetKeyProp())||!identityValue||identityValue->GetElementSize()!=sizeof(UObject*)
+                ||!reverseKey||reverseKey->GetElementSize()!=sizeof(UObject*)||!reverseValue||!reverseValue->IsInteger()
+                ||reverseValue->GetElementSize()!=sizeof(uint16_t)||!forwardValue||forwardValue->GetElementSize()!=sizeof(UObject*))continue;
+            for(auto* field:{identityValue,reverseKey,forwardValue})QuestRegistry::ValidateObjectReferenceLayout(
+                RC::to_string(field->GetClass().GetName()),field->GetElementSize(),field->GetArrayDim(),sizeof(UObject*));
+            auto* identityData=identity->ContainerPtrToValuePtr<FScriptMap>(subsystem);
+            auto* reverseData=reverse->ContainerPtrToValuePtr<FScriptMap>(subsystem);
+            auto* array=forward->ContainerPtrToValuePtr<FScriptArray>(subsystem);
+            if(!identityData||!reverseData||!array||identityData->Num()<0||identityData->Num()>65536||identityData->GetMaxIndex()>131072
+                ||reverseData->Num()<0||reverseData->Num()>65536||reverseData->GetMaxIndex()>131072||array->Num()<0||array->Num()>65536)continue;
+            UECustom::FScriptMapHelper ids(identity,identityData),network(reverse,reverseData);
+            const auto* stored=ids.FindValue(const_cast<FString*>(&id));
+            if(!stored||identityValue->GetObjectPropertyValue(stored)!=item)continue;
+            const auto* net=network.FindValue(&item);if(!net)continue;
+            uint16_t index=0;std::memcpy(&index,net,sizeof(index));if(index>=array->Num())continue;
+            FScriptArrayHelper values(forward,array);
+            if(forwardValue->GetObjectPropertyValue(values.GetRawPtr(index))!=item)continue;
+            TryRegister(subsystem,item);const auto found=Registered.find(item);
+            enrolled=enrolled||(found!=Registered.end()&&found->second.Get()==item);
+        }
+        return enrolled;
+    }catch(...){return false;} // Optional presentation must not reject a valid item.
 }
 }

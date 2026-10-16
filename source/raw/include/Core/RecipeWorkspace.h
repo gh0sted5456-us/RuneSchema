@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/ContentSource.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cmath>
@@ -71,8 +72,7 @@ inline Json MatchingPlacements(const Json& station,const Json& values,const std:
 }
 inline std::string StationSource(const Json& station) {
     auto path=station.value("BuildingPiece",std::string{});if(path.empty())path=station.value("Path",std::string{});
-    const auto end=path.find('/',path.starts_with("/Game/Mods/")?11:1);
-    return path.starts_with('/')?path.substr(0,end):std::string("Unknown");
+    const auto root=ContentSource::Root(path);return root.empty()?std::string("Unknown"):root;
 }
 inline Json StationPresentation(const Json& row,const Json& building) {
     Json result={{"Name",""},{"Icon",""}};

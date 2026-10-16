@@ -30,6 +30,16 @@ if(PROJECT_IS_TOP_LEVEL)
     endif()
     string(REPLACE "/DNDEBUG" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
     enable_testing()
+    add_executable(ue4ss-packages ../tests/ue4ss-packages.cpp)
+    target_link_libraries(ue4ss-packages PRIVATE RuneSchemaJsonCore)
+    target_compile_definitions(ue4ss-packages PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    add_test(NAME ue4ss-packages COMMAND ue4ss-packages "${CMAKE_CURRENT_BINARY_DIR}/ue4ss-package-fixtures")
+    add_executable(building-menu-contract ../tests/building-menu-contract.cpp)
+    target_compile_features(building-menu-contract PRIVATE cxx_std_23)
+    add_test(NAME building-menu-contract COMMAND building-menu-contract "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+    add_executable(placement-cache-regression ../tests/placement-cache-regression.cpp)
+    target_compile_features(placement-cache-regression PRIVATE cxx_std_23)
+    add_test(NAME placement-cache-regression COMMAND placement-cache-regression "${CMAKE_CURRENT_SOURCE_DIR}/..")
     add_executable(recipe-stations-contract ../tests/recipe-stations-contract.cpp)
     target_compile_features(recipe-stations-contract PRIVATE cxx_std_23)
     add_test(NAME recipe-stations-contract COMMAND recipe-stations-contract
@@ -57,7 +67,7 @@ if(PROJECT_IS_TOP_LEVEL)
     add_executable(mod-order-state ../tests/mod-order-state.cpp)
     target_link_libraries(mod-order-state PRIVATE RuneSchemaJsonCore)
     add_test(NAME mod-order-state COMMAND mod-order-state "${CMAKE_CURRENT_BINARY_DIR}/mod-order-state-fixtures")
-    foreach(test item-paging quest-region quest-definition-identity item-bay-layout ground-surface authored-file item-transfer grounding-retry item-cart recipe-workspace mounted-catalog character-entry-bypass-plan asset-preload-plan icon-capture-schedule helpy-kit-files consume-queue ordered-callbacks authoring-policy unreal-readiness ghost-tools-options surge-evade-rules)
+    foreach(test recipe-batch-work player-carry-weight item-paging quest-region quest-definition-identity item-bay-layout ground-surface authored-file item-transfer grounding-retry item-cart recipe-workspace mounted-catalog character-entry-bypass-plan asset-preload-plan icon-capture-schedule helpy-kit-files consume-queue ordered-callbacks authoring-policy unreal-readiness ghost-tools-options surge-evade-rules)
         add_executable(${test} ../tests/${test}.cpp)
         target_link_libraries(${test} PRIVATE RuneSchemaJsonCore)
         add_test(NAME ${test} COMMAND ${test})
@@ -101,7 +111,7 @@ if(PROJECT_IS_TOP_LEVEL)
     target_include_directories(world-cleanup-policy PRIVATE ../include)
     target_compile_features(world-cleanup-policy PRIVATE cxx_std_20)
     add_test(NAME world-cleanup-policy COMMAND world-cleanup-policy)
-    foreach(test asset-aliases quest-definition quest-progress quest-native-contract quest-registry-plan spawn-radius quest-repeat-policy quest-save-ownership quest-receipt-journal quest-reward-tiers quest-stage-progress registry-patch-plan cooked-pak-registry-manifest registry-manifest-summary recipe-discovery cooked-registry-shards)
+    foreach(test asset-aliases quest-definition quest-progress quest-native-contract quest-registry-plan spawn-radius quest-repeat-policy quest-save-ownership quest-receipt-journal quest-scroll quest-scroll-identity quest-reward-tiers quest-stage-progress quest-alternative-exchange npc-equipment-conditions registry-patch-plan cooked-pak-registry-manifest registry-manifest-summary recipe-discovery cooked-registry-shards)
         add_executable(${test} ../tests/${test}.cpp)
         target_link_libraries(${test} PRIVATE RuneSchemaJsonCore)
         if(MSVC)
@@ -109,6 +119,15 @@ if(PROJECT_IS_TOP_LEVEL)
         endif()
         add_test(NAME ${test} COMMAND ${test})
     endforeach()
+    add_executable(quest-scroll-routing ../tests/quest-scroll-routing.cpp)
+    add_executable(bundled-quest-scroll ../tests/bundled-quest-scroll.cpp)
+    target_link_libraries(bundled-quest-scroll PRIVATE RuneSchemaJsonCore)
+    add_test(NAME bundled-quest-scroll COMMAND bundled-quest-scroll "${CMAKE_CURRENT_SOURCE_DIR}/../../plugins")
+    add_test(NAME quest-scroll-routing COMMAND quest-scroll-routing
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/NpcQuestScroll.inl"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/NpcQuestActions.inl"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/QuestScrollUseContract.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsAssetModLoader.cpp")
     add_executable(quest-inventory-routing ../tests/quest-inventory-routing.cpp)
     target_link_libraries(quest-inventory-routing PRIVATE RuneSchemaJsonCore)
     if(MSVC)
@@ -202,6 +221,7 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Runtime/BPModLoaderIntegration.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../ue4ss/scripts/logicmods-loader.lua")
     add_executable(ue4ss-companion-bootstrap-contract ../tests/ue4ss-companion-bootstrap-contract.cpp)
+    target_compile_features(ue4ss-companion-bootstrap-contract PRIVATE cxx_std_23)
     add_test(NAME ue4ss-companion-bootstrap-contract COMMAND ue4ss-companion-bootstrap-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../../ue4ss/scripts/main.lua"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/build.ps1"
@@ -238,6 +258,16 @@ if(PROJECT_IS_TOP_LEVEL)
         ${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsJournalModLoader.cpp)
     add_executable(npc-cleanup-contract ../tests/npc-cleanup-contract.cpp)
     add_executable(asset-provenance-contract ../tests/asset-provenance-contract.cpp)
+    add_executable(wearable-schema ../tests/wearable-schema.cpp)
+    add_executable(recipe-catalog ../tests/recipe-catalog.cpp)
+    target_link_libraries(recipe-catalog PRIVATE RuneSchemaJsonCore)
+    add_test(NAME recipe-catalog COMMAND recipe-catalog)
+    target_compile_features(wearable-schema PRIVATE cxx_std_23)
+    target_link_libraries(wearable-schema PRIVATE RuneSchemaJsonCore)
+    add_test(NAME wearable-schema COMMAND wearable-schema
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsAssetModLoader.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/EquipmentWearableBridge.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/LiveCloneAuthoring.inl")
     add_test(NAME asset-provenance-contract COMMAND asset-provenance-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/AssetProvenance.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsAssetModLoader.cpp"
@@ -368,6 +398,18 @@ if(PROJECT_IS_TOP_LEVEL)
     target_compile_features(network-identity-plan PRIVATE cxx_std_23)
     target_include_directories(network-identity-plan PRIVATE ../include)
     add_test(NAME network-identity-plan COMMAND network-identity-plan)
+    add_executable(recipe-item-routing ../tests/recipe-item-routing.cpp)
+    target_link_libraries(recipe-item-routing PRIVATE RuneSchemaJsonCore)
+    add_test(NAME recipe-item-routing COMMAND recipe-item-routing)
+    add_executable(item-catalog-layout ../tests/item-catalog-layout.cpp)
+    target_link_libraries(item-catalog-layout PRIVATE RuneSchemaJsonCore)
+    add_test(NAME item-catalog-layout COMMAND item-catalog-layout)
+    add_executable(registration-diagnostics ../tests/registration-diagnostics.cpp)
+    target_link_libraries(registration-diagnostics PRIVATE RuneSchemaJsonCore)
+    add_test(NAME registration-diagnostics COMMAND registration-diagnostics
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/EquipmentWearableBridge.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Misc/DragonWildsDataRegistrar.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Generator/AssetSearch.cpp")
     add_executable(character-entry-recovery-contract ../tests/character-entry-recovery-contract.cpp)
     add_test(NAME character-entry-recovery-contract COMMAND character-entry-recovery-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Core/CharacterEntryRecovery.cpp"
@@ -428,10 +470,12 @@ if(PROJECT_IS_TOP_LEVEL)
     endif()
     add_test(NAME plugin-catalog-compatibility COMMAND plugin-catalog-compatibility)
     add_executable(recipe-placement-contract ../tests/recipe-placement-contract.cpp)
+    target_compile_features(recipe-placement-contract PRIVATE cxx_std_23)
     add_test(NAME recipe-placement-contract COMMAND recipe-placement-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRecipeModLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../../docs/LOADER-WALKTHROUGHS.md"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../src/SDK/Helper/PropertyHelper.cpp")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/SDK/Helper/PropertyHelper.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include/Core/RecipeItemRouting.h")
     add_executable(raw-datatable-contract ../tests/raw-datatable-contract.cpp)
     add_test(NAME raw-datatable-contract COMMAND raw-datatable-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRawTableLoader.cpp")
@@ -450,6 +494,7 @@ if(PROJECT_IS_TOP_LEVEL)
     endif()
     add_test(NAME usmap-index COMMAND usmap-index)
     add_executable(native-binding-resolution ../tests/native-binding-resolution.cpp)
+    target_compile_features(native-binding-resolution PRIVATE cxx_std_17)
     add_test(NAME native-binding-resolution COMMAND native-binding-resolution
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/SDK/DragonWildsSignatures.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp"

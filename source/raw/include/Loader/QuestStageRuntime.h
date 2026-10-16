@@ -16,7 +16,7 @@ inline bool StageReceiptActive(const QuestNative::Adapter& api,const Json& docum
 inline Stages::Graph StageGraph(const Definition& quest) {
     Stages::Graph graph;
     for(const auto& [id,objectives]:quest.Stages) {
-        Stages::Stage stage{id,{}};
+        Stages::Stage stage{id,{},quest.AnyStages.contains(id)};
         for(const auto& definition:objectives) {
             const auto local=definition.ObjectiveId.substr(id.size()+1);
             Stages::Objective objective{local,definition.Kill?Stages::Kind::Kill:definition.Acquire?Stages::Kind::Acquire:Stages::Kind::TurnIn,

@@ -34,8 +34,13 @@ int main(int argc,char** argv) {
         && registry.contains("property->GetElementSize()!=sizeof(FString)")
         && registry.contains("PS::RegistryEnrollment::Reject(\"pak:\"+path,error.what())"),
         "Cooked strings and rejected declarations require guarded reflection and cleanup veto");
-    Require(registrar.contains("if(lane.Name==\"Journals\"||lane.Name==\"Lore\")continue;")
+    Require(registrar.contains("if(lane.Name==\"Journals\"||lane.Name==\"Lore\"){")
+        && registrar.contains("QuestRegistry::NativeRegistry::ResolvesPersistenceIdentity(subsystem,entry,true)")
+        && registrar.contains("schema journal/lore identity is not registered:")
         && registrar.contains("required native registry binding is unavailable:")
         && registrar.contains("unresolved or wrong-class "),
         "Journal ownership must remain in its loader; failed persistent native lanes must veto cleanup");
+    Require(!registry.contains("accepted only from a cooked RSREG_")
+        && registry.contains("PS::RegistryEnrollment::Reject(owner+\":\"+source,error.what())"),
+        "Loose native declarations must use the same parser and fail-closed cleanup enrollment");
 }

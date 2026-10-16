@@ -86,6 +86,11 @@ int main(){
     assert(selected.Objectives==std::vector<size_t>{1}); // Required precedes authored bonus.
     assert(SelectHandIns(handIns,zero,[](const auto&){return false;},one).Objectives.empty());
     assert(Rejects([&]{SelectHandIns(handIns,[](size_t){return -1;},[](const auto&){return true;},one);}));
+    handIns={kill,areaA,areaB};
+    selected=SelectHandIns(handIns,zero,[](const auto&){return true;},[](const auto&){return 999;},true);
+    assert(selected.Objectives==std::vector<size_t>{1} && selected.Amounts.at(areaA.Required.Item)==1);
+    selected=SelectHandIns(handIns,[](size_t i){return i==0?1:0;},[](const auto&){return true;},[](const auto&){return 999;},true);
+    assert(selected.Objectives.empty() && selected.Amounts.empty()); // Kill wins, no meat spent.
     auto automaticStages=staged;automaticStages["Completion"]="Automatic";
     assert(Parse("Test",automaticStages).AutomaticReward);
     assert(!stagedQuest.Hidden && !stagedQuest.Optional);

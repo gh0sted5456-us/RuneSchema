@@ -9,7 +9,7 @@ namespace PS::ItemAuthoring {
 using Json=nlohmann::json;
 enum class Mode { Transmog, Creation };
 struct Draft {
-    Json Source=Json::object(),Appearance=Json::object(),Inspection=Json::object(),Prepared=Json::object();
+    Json Source=Json::object(),Appearance=Json::object(),Inspection=Json::object(),Prepared=Json::object(),Result=Json::object();
     std::array<char,Authoring::MaxCloneDocumentBytes+1> Editor{};
     char Name[257]{},Icon[2049]{},Mod[65]="MyClones",Filter[257]{};
     std::string Id,Error,Status,ExportPath;
@@ -18,7 +18,7 @@ struct Draft {
     uint64_t Pending=0,Revision=0,SentRevision=0;
     std::chrono::steady_clock::time_point Requested{};
     Draft(){Editor[0]='{';Editor[1]='}';}
-    void Changed(){if(Created)Id.clear();++Revision;Prepared=Json::object();ExportWanted=false;Acknowledged=false;Created=false;Error.clear();Status.clear();}
+    void Changed(){if(Created)Id.clear();++Revision;Prepared=Result=Json::object();ExportWanted=false;Acknowledged=false;Created=false;Error.clear();Status.clear();}
     void SetSource(const Json& row){
         Authoring::ValidateObjectPath(row.at("Path").get<std::string>());
         Source=row;Appearance=Inspection=Json::object();Ready=false;InspectWanted=true;Id.clear();
@@ -26,6 +26,20 @@ struct Draft {
         std::snprintf(Name,sizeof(Name),"%s",(row.value("Name",std::string("Item"))+" Clone").c_str());Changed();
     }
 };
+inline Json Preview(const Draft& draft,Mode mode){
+    auto row=draft.Source;if(row.empty())return row;
+    row["_HelpyIconPreview"]=!draft.Created;
+    if(draft.Name[0])row["Name"]=draft.Name;
+    if(draft.Icon[0])row["Icon"]=draft.Icon;
+    else if(mode==Mode::Transmog&&draft.Appearance.contains("Icon")&&draft.Appearance["Icon"].is_string()&&!draft.Appearance["Icon"].get_ref<const std::string&>().empty())row["Icon"]=draft.Appearance["Icon"];
+    // Once prepared/created, show the native receipt rather than stale source
+    // metadata. This also preserves an explicit icon override in the editor.
+    if(draft.Result.contains("Icon")&&draft.Result["Icon"].is_string())row["Icon"]=draft.Result["Icon"];
+    if(draft.Created&&draft.Result.value("CompanionsReady",true)){
+        row["Path"]=draft.Result.value("Path",row.value("Path",std::string{}));row["RuntimeClone"]=true;
+    }
+    return row;
+}
 inline Json ParseValues(std::string_view text){
     if(text.size()>Authoring::MaxCloneDocumentBytes)throw std::runtime_error("Item values exceed 256 KiB.");
     auto values=Json::parse(text,[](int depth,Json::parse_event_t,Json&){if(depth>16)throw std::runtime_error("Item values exceed 16 nesting levels.");return true;},true,true);

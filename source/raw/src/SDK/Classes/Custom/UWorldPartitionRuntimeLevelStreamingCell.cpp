@@ -7,22 +7,39 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 
 using namespace RC;
 using namespace RC::Unreal;
 
 namespace UECustom {
-    FBox* UWorldPartitionRuntimeCellData::GetContentBounds()
+    std::optional<FBox> UWorldPartitionRuntimeCellData::GetContentBounds()
     {
         auto* property=CastField<FStructProperty>(DragonWilds::PropertyHelper::GetPropertyByName(GetClassPrivate(),TEXT("ContentBounds")));
         if(!DragonWilds::ReflectedContract::Fits(property,GetClassPrivate()->GetPropertiesSize())
-            ||!property->GetStruct()||property->GetStruct()->GetPathName()!=TEXT("/Script/CoreUObject.Box")
-            ||property->GetElementSize()!=sizeof(FBox))return nullptr;
-        auto* bounds=property->ContainerPtrToValuePtr<FBox>(this);
-        if(!bounds->bIsValid)return nullptr;
-        for(const auto value:{bounds->Min.X(),bounds->Min.Y(),bounds->Min.Z(),bounds->Max.X(),bounds->Max.Y(),bounds->Max.Z()})
-            if(!std::isfinite(value))return nullptr;
-        if(bounds->Min.X()>bounds->Max.X()||bounds->Min.Y()>bounds->Max.Y()||bounds->Min.Z()>bounds->Max.Z())return nullptr;
+            ||!property->GetStruct()||property->GetStruct()->GetPathName()!=TEXT("/Script/CoreUObject.Box"))return {};
+        // FVector's SDK wrapper has byte alignment. A C++ FBox therefore need
+        // not have the engine's padding/stride; never alias a native Box with it.
+        auto* structure=property->GetStruct().Get();
+        const auto extent=structure->GetPropertiesSize();
+        if(extent<=0||extent>property->GetElementSize())return {};
+        auto* minimum=CastField<FStructProperty>(DragonWilds::PropertyHelper::GetPropertyByName(structure,TEXT("Min")));
+        auto* maximum=CastField<FStructProperty>(DragonWilds::PropertyHelper::GetPropertyByName(structure,TEXT("Max")));
+        auto* valid=CastField<FBoolProperty>(DragonWilds::PropertyHelper::GetPropertyByName(structure,TEXT("IsValid")));
+        for(auto* vector:{minimum,maximum})
+            if(!DragonWilds::ReflectedContract::Fits(vector,extent)||!vector->GetStruct()
+                ||vector->GetStruct()->GetPathName()!=TEXT("/Script/CoreUObject.Vector")
+                ||vector->GetElementSize()!=sizeof(FVector))return {};
+        if(!DragonWilds::ReflectedContract::Fits(valid,extent))return {};
+        auto* native=property->ContainerPtrToValuePtr<void>(this);
+        if(!valid->GetPropertyValue(valid->ContainerPtrToValuePtr<void>(native)))return {};
+        FBox bounds{};
+        std::memcpy(&bounds.Min,minimum->ContainerPtrToValuePtr<void>(native),sizeof(FVector));
+        std::memcpy(&bounds.Max,maximum->ContainerPtrToValuePtr<void>(native),sizeof(FVector));
+        bounds.bIsValid=true;
+        for(const auto value:{bounds.Min.X(),bounds.Min.Y(),bounds.Min.Z(),bounds.Max.X(),bounds.Max.Y(),bounds.Max.Z()})
+            if(!std::isfinite(value))return {};
+        if(bounds.Min.X()>bounds.Max.X()||bounds.Min.Y()>bounds.Max.Y()||bounds.Min.Z()>bounds.Max.Z())return {};
         return bounds;
     }
 
@@ -67,10 +84,10 @@ namespace UECustom {
             &&visible->GetPropertyValue(visible->ContainerPtrToValuePtr<void>(level));
     }
 
-    FBox* UWorldPartitionRuntimeLevelStreamingCell::GetContentBounds()
+    std::optional<FBox> UWorldPartitionRuntimeLevelStreamingCell::GetContentBounds()
     {
         auto* cellData = GetRuntimeCellData();
-        return cellData ? cellData->GetContentBounds() : nullptr;
+        return cellData ? cellData->GetContentBounds() : std::nullopt;
     }
 
     void UWorldPartitionRuntimeLevelStreamingCell::VisitShown(UWorld* world,size_t& cursor,double& delay,

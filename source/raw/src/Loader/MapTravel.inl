@@ -5,11 +5,19 @@ namespace {
         PS::MapProjection::Projection Projection;PS::MapProjection::Point Point;
         PS::MapLanding::Position Landing;PS::MapTravel::Gate Gate;
         double Radius=0,HalfHeight=0;bool NearMarker=false;
-        uint64_t Generation=0;std::chrono::steady_clock::time_point Next{};
+        uint64_t Generation=0;std::chrono::steady_clock::time_point Next{},NextProgress{};
+        std::string Phase;
         std::string LastGroundError;
     };
     std::optional<ToolMapTravelJob> g_mapTravel;
     std::int64_t ToolMapTravelTime(){return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();}
+    void ToolMapTravelProgress(const char* phase,const char* status){
+        if(!g_mapTravel)return;auto& job=*g_mapTravel;const auto now=std::chrono::steady_clock::now();
+        if(job.Phase==phase&&now<job.NextProgress)return;
+        job.Phase=phase;job.NextProgress=now+std::chrono::milliseconds(500);
+        PS::SpawnToolRequests::Progress(status,{{"MapTravel",{{"Phase",phase},{"ElapsedSeconds",std::max<std::int64_t>(0,ToolMapTravelTime()-job.Gate.Began)/1000},
+            {"Committed",job.Gate.Committed}}}});
+    }
     bool ToolMapTravelAlive(UObject* object){return object&&!object->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed));}
     bool ToolMapTravelTeleporting(UObject* pawn){ActorHelper::FunctionCall call(pawn,TEXT("/Script/Dominion.DominionPlayerCharacter:IsTeleporting"));call.Invoke();return call.Result<bool>();}
     void ToolMapTravelReset(bool destroy=true){
@@ -95,6 +103,7 @@ namespace {
             ActorHelper::FunctionCall enable(source,TEXT("/Script/Engine.WorldPartitionStreamingSourceComponent:EnableStreamingSource"));enable.Invoke();
             ActorHelper::FunctionCall enabled(source,TEXT("/Script/Engine.WorldPartitionStreamingSourceComponent:IsStreamingSourceEnabled"));enabled.Invoke();
             if(!enabled.Result<bool>())throw std::runtime_error("The destination streaming source did not enable");
+            ToolMapTravelProgress("Preparing","Loading destination terrain...");
         }catch(...){ToolMapTravelReset();throw;}
     }
     bool ToolMapTravelPump(UWorld* activeWorld){
@@ -114,12 +123,14 @@ namespace {
             if(step==PS::MapTravel::Gate::Step::Expired){ToolMapTravelFinish(job.Gate.Committed?"Native map travel did not confirm arrival within 60 seconds. Check the player in game before retrying; no second teleport was issued.":"Destination did not become collision-ready within 30 seconds; the player was not moved. "+job.LastGroundError);return true;}
             if(step==PS::MapTravel::Gate::Step::Invalidated){ToolMapTravelFinish("Map travel was invalidated before completion.");return true;}
             if(job.Gate.Committed){
+                ToolMapTravelProgress("Travelling","Native travel in progress; waiting for confirmed arrival...");
                 const auto at=ActorHelper::GetActorLocation(pawn);
                 if(!ToolMapTravelTeleporting(pawn)&&PS::MapTravel::Arrived(job.Landing,{at.X(),at.Y(),at.Z()},job.HalfHeight))
                     ToolMapTravelFinish(std::format("Teleported the selected player via native travel to X {:.0f}, Y {:.0f}, Z {:.0f}.",at.X(),at.Y(),at.Z()),true);
                 return true;
             }
-            if(step!=PS::MapTravel::Gate::Step::Probe)return true;
+            if(step!=PS::MapTravel::Gate::Step::Probe){ToolMapTravelProgress("Preparing","Loading destination terrain...");return true;}
+            ToolMapTravelProgress("Checking ground","Checking safe landing and player clearance...");
             try{
                 job.Landing=PS::MapLanding::ResolveNear(job.Projection,job.Point,job.Radius,job.HalfHeight,job.NearMarker,[&](PS::MapProjection::Point sample,double top,double bottom){
                     FVector hit{};std::string error;if(!UECustom::UKismetSystemLibrary::FindGroundSurface(activeWorld,FVector(sample.X,sample.Y,top),FVector(sample.X,sample.Y,bottom),{pawn},hit,error))throw std::runtime_error(error.empty()?"No blocking ground surface":error);
@@ -138,6 +149,7 @@ namespace {
             // native delegate. Completion is verified from pawn state/location,
             // never inferred from this acceptance Boolean alone.
             teleport.Invoke();if(!teleport.Result<bool>()){ToolMapTravelFinish("The game's native travel service rejected this destination; no fallback position jump was attempted.");return true;}
+            ToolMapTravelProgress("Travelling","Native travel in progress; waiting for confirmed arrival...");
         }catch(const std::exception& error){ToolMapTravelFinish(std::string("Map travel stopped: ")+error.what());}
         catch(...){ToolMapTravelFinish("Map travel stopped after an unexpected native error; check the player before retrying.");}
         return true;

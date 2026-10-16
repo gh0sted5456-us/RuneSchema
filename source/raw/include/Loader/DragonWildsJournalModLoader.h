@@ -86,6 +86,7 @@ namespace DragonWilds {
         RC::Unreal::Hook::GlobalCallbackId m_acquisitionCallbackId = RC::Unreal::Hook::ERROR_ID;
         bool m_observingAcquisition = false;
         std::unordered_map<std::string,uint64_t> m_automaticDelivery;
+        std::unordered_set<std::string> m_reportedUnlockFailures;
 
         struct ReferenceIndex {
             bool Built = false;
@@ -114,6 +115,7 @@ namespace DragonWilds {
         bool UnlockEntries(RC::Unreal::UObject* journalComponent);
         RC::Unreal::UObject* FindJournalComponent(RC::Unreal::UObject* controller=nullptr);
         RC::Unreal::UObject* FindJournalSubsystem();
+        bool RegisteredJournalEntry(RC::Unreal::UObject* entry);
 
         void TrackOwnedId(RC::Unreal::UObject* entry, const RC::Unreal::FString& persistenceId,const RC::StringType& owner,bool declared,bool automatic);
         void InstallNativePersistence();

@@ -1,5 +1,7 @@
 #include "Loader/TimeOfDayRuntime.h"
-std::string DragonWildsNpcLoader::RunQuestAction(const DialogueCompletionBinding& action,UObject* controller,const std::function<bool()>& current) {
+std::string DragonWildsNpcLoader::RunQuestAction(const DialogueCompletionBinding& action,UObject* controller,const std::function<bool()>& current,UObject* scrollItem,QuestProgress::Result* observed) {
+    if(observed)*observed=QuestProgress::Result::NotReady;
+    if(scrollItem&&action.QuestAction!="Accept")throw std::runtime_error("Quest scrolls can only accept quests");
     if(action.QuestAction!="Accept" && action.QuestAction!="TurnIn" && action.QuestAction!="Abandon")throw std::runtime_error("Unsupported quest action");
     if(!PS::PSConfig::Get()->GetSettings().persistence.quests)
         return "RuneSchema quest saving is disabled. Quest actions are unavailable for this session.";
@@ -43,6 +45,13 @@ std::string DragonWildsNpcLoader::RunQuestAction(const DialogueCompletionBinding
         if(!item || !itemClass || !item->IsA(itemClass))throw std::runtime_error("Quest item could not be resolved before interaction");
     }
     const auto state=[&]{auto name=RC::to_string(native.StateName());const auto colon=name.rfind("::");return colon==name.npos?name:name.substr(colon+2);};
+    const auto completeNative=[&]{
+        if(!current())return false;
+        native.SetComplete(false);
+        if(!current() || state()!="Complete")return false;
+        RecordQuestEquipment(controller,quest.Key);
+        return current();
+    };
     const auto progress=PS::HostServices::ProgressDirectory()/"quests"/(character+".json");
     const Quests::NativeReceipt receipt(native,quest,document,progress,character);
     if(current() && receipt.RecoverConfirmedExchange(state()))
@@ -95,8 +104,14 @@ std::string DragonWildsNpcLoader::RunQuestAction(const DialogueCompletionBinding
             auto* itemType=ActorHelper::ResolveClass(TEXT("/Script/Dominion.ItemData"));
             if(!costItem || !itemType || !costItem->IsA(itemType))throw std::runtime_error("Quest start-cost item is unavailable");
         }
+        // One acceptance receipt owns both the scroll and any ordinary start
+        // cost. Preflight all counts; never remove anything for active,
+        // cooldown, missing prerequisite, missing quest, or rejected accepts.
+        std::map<UObject*,int> charges;
+        if(cost)charges[costItem]=cost->Count;
+        if(scrollItem)++charges[scrollItem];
         if(current())receipt.RecoverUnchargedRepeat(state()=="Complete");
-        result=receipt.Accept([&]{return current() && (!cost || DialogueInventory(controller,costItem).Count()>=cost->Count);},[&](bool repeating){
+        result=receipt.Accept([&]{if(!current())return false;for(const auto& [item,count]:charges)if(DialogueInventory(controller,item).Count()<count)return false;return true;},[&](bool repeating){
             if(!current() || (repeating?state()!="Complete":(state()=="Complete" || state()=="Given")))return false;
             const auto prepare=[&] {
                 if(!current())throw std::runtime_error("World changed before quest preparation");
@@ -117,7 +132,8 @@ std::string DragonWildsNpcLoader::RunQuestAction(const DialogueCompletionBinding
             // suppress it. Repeat acceptance already refreshes inside
             // RestartCompleted; objective/stage updates use the queued path.
             return current() && native.IsInitialized() && state()=="Given";
-        },[&]{return current() && (!cost || DialogueInventory(controller,costItem).Take(cost->Count,current));},entryIndex);
+        },[&]{if(!current())return false;for(const auto& [item,count]:charges)if(!DialogueInventory(controller,item).Take(count,current))return false;return true;},entryIndex);
+        if(observed)*observed=result; // Commit result before best-effort presentation.
     } else if(!quest.Stages.empty()) {
         if(receipt.Phase()==2 || receipt.Phase()==3)result=QuestProgress::Result::Uncertain;
         else if(receipt.Phase()==4)result=QuestProgress::Result::AlreadyComplete;
@@ -128,7 +144,16 @@ std::string DragonWildsNpcLoader::RunQuestAction(const DialogueCompletionBinding
             result=QuestProgress::Result::NotReady;
             if(active<quest.Stages.size()) {
                 std::map<std::string,int> amounts;std::vector<const Quests::Definition*> handIns;
-                for(bool optional:{false,true})for(size_t i=0;i<quest.Stages[active].second.size();++i) {
+                if(quest.AnyStage(active)) {
+                    const auto& objectives=quest.Stages[active].second;
+                    const auto plan=Quests::SelectHandIns(objectives,[&](size_t i){return staged.Count(active,i);},
+                        [](const Quests::Definition&){return true;},[&](const Quests::Definition& objective){
+                            return DialogueInventory(controller,ActorHelper::ResolveObject(RC::to_generic_string(objective.Required.Item))).Count();
+                        },true);
+                    amounts=plan.Amounts;
+                    for(const auto index:plan.Objectives)handIns.push_back(&objectives[index]);
+                }
+                else for(bool optional:{false,true})for(size_t i=0;i<quest.Stages[active].second.size();++i) {
                     const auto& objective=quest.Stages[active].second[i];
                     if(objective.Optional!=optional)continue;
                     if(objective.Kill || objective.Acquire || staged.Count(active,i)==objective.Required.Count)continue;
@@ -156,7 +181,7 @@ std::string DragonWildsNpcLoader::RunQuestAction(const DialogueCompletionBinding
                 const DialogueInventory rewardInventory(controller,ActorHelper::ResolveObject(RC::to_generic_string(spec.Item)));
                 result=receipt.TurnIn([&]{return current() && state()=="Given" && TimeOfDay::Allows(controller,spec.Time) && rewardInventory.Ready(spec.Count);},current,
                     [&]{return rewardInventory.Give(spec.Count,current);},
-                    [&]{if(!current())return false;native.SetComplete(false);return current() && state()=="Complete";},tierIndex);
+                    completeNative,tierIndex);
             }
         }
     } else if(quest.Kill || quest.Acquire) {
@@ -172,7 +197,7 @@ std::string DragonWildsNpcLoader::RunQuestAction(const DialogueCompletionBinding
             [&]{return current() && state()=="Given" && native.GetInt(counter)==quest.Required.Count && TimeOfDay::Allows(controller,rewardSpec.Time) && rewardInventory.Ready(rewardSpec.Count);},
             [&]{return current();},
             [&]{return rewardInventory.Give(rewardSpec.Count,current);},
-            [&]{if(!current())return false;native.SetComplete(false);return current() && state()=="Complete";},tierIndex);
+            completeNative,tierIndex);
     } else {
         auto* required=ActorHelper::ResolveObject(RC::to_generic_string(quest.Required.Item));
         const DialogueInventory inventory(controller,required);
@@ -190,7 +215,7 @@ std::string DragonWildsNpcLoader::RunQuestAction(const DialogueCompletionBinding
             [&]{return current() && state()=="Given" && inventory.Count()>=quest.Required.Count && TimeOfDay::Allows(controller,rewardSpec.Time) && rewardInventory.Ready(rewardSpec.Count);},
             [&]{return inventory.Take(quest.Required.Count,current);},
             [&]{return rewardInventory.Give(rewardSpec.Count,current);},
-            [&]{if(!current())return false;native.SetComplete(false);return current() && state()=="Complete";},tierIndex);
+            completeNative,tierIndex);
         if(result==QuestProgress::Result::NotReady || result==QuestProgress::Result::AlreadyActive)
             inventoryStatus=Quests::InventoryHandInStatus(carried,quest.Required.Count);
     }
@@ -213,7 +238,7 @@ std::string DragonWildsNpcLoader::RunQuestAction(const DialogueCompletionBinding
         else for(size_t i=0;i<quest.Stages[active].second.size();++i) {
             const auto& objective=quest.Stages[active].second[i];
             if(objective.Hidden)continue;
-            if(!message.empty())message+="\n";
+            if(!message.empty())message+=quest.AnyStage(active)?"\nOR ":"\n";
             int visible=staged.Count(active,i);
             if(!objective.Kill && !objective.Acquire && visible<objective.Required.Count)
                 visible=std::min(objective.Required.Count,DialogueInventory(controller,

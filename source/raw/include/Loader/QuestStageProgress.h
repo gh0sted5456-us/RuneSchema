@@ -25,7 +25,7 @@ struct Objective {
     std::optional<Area> Region;
     bool Hidden=false,Optional=false;
 };
-struct Stage {std::string Id;std::vector<Objective> Objectives;};
+struct Stage {std::string Id;std::vector<Objective> Objectives;bool Any=false;};
 struct Graph {std::vector<Stage> Stages;};
 inline bool ValidId(const std::string& id) {
     return !id.empty() && id.size()<=64 && std::all_of(id.begin(),id.end(),[](unsigned char c){
@@ -41,6 +41,9 @@ inline void Validate(const Graph& graph) {
         if(stage.Objectives.empty() || stage.Objectives.size()>16 || (total+=stage.Objectives.size())>128)
             throw std::runtime_error("Quest objective limit exceeded");
         std::set<std::string> ids;
+        if(stage.Any && (stage.Objectives.size()<2 || std::any_of(stage.Objectives.begin(),stage.Objectives.end(),
+            [](const auto& objective){return objective.Optional || objective.Hidden;})))
+            throw std::runtime_error("Any stage requires at least two visible, mandatory alternatives");
         if(std::none_of(stage.Objectives.begin(),stage.Objectives.end(),[](const auto& objective){return !objective.Optional;}))
             throw std::runtime_error("Stage requires a mandatory objective");
         for(const auto& objective:stage.Objectives) {
@@ -114,9 +117,15 @@ public:
         CurrentRun();
         // Derive stage from counters, avoiding a second mutable cursor that
         // could disagree with them after a save or interrupted transition.
-        for(size_t s=0;s<graph.Stages.size();++s)
-            for(size_t o=0;o<graph.Stages[s].Objectives.size();++o)
-                if(!graph.Stages[s].Objectives[o].Optional && Count(s,o)<graph.Stages[s].Objectives[o].Count)return s;
+        for(size_t s=0;s<graph.Stages.size();++s) {
+            bool all=true,any=false;
+            for(size_t o=0;o<graph.Stages[s].Objectives.size();++o) {
+                const auto& objective=graph.Stages[s].Objectives[o];
+                if(objective.Optional)continue;
+                const bool done=Count(s,o)==objective.Count;all&=done;any|=done;
+            }
+            if(!(graph.Stages[s].Any?any:all))return s;
+        }
         return graph.Stages.size();
     }
     bool Complete() const {return ActiveStage()==graph.Stages.size();}
@@ -142,6 +151,9 @@ public:
             const auto value=Count(s,o);
             if(value==objective.Count)continue;
             Set(Key(graph.Stages[s],objective),value+std::min(credit.Amount,objective.Count-value));++changed;
+            // One authority-ordered winner; a completing event cannot also
+            // credit another alternative or a successor stage.
+            if(graph.Stages[s].Any && Count(s,o)==objective.Count)break;
         }
         return changed;
     }

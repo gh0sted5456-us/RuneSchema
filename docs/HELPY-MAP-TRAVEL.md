@@ -29,6 +29,35 @@ An unconfirmed arrival is reported as such, not retried automatically. Only the
 owned temporary streaming helper is retired. Spawn and Build keep their existing
 loaded-ground requirements.
 
+The map displays a compact animated activity bar, current phase (Preparing,
+Checking ground, Travelling) and elapsed seconds. It deliberately does not show a
+percentage: native streaming exposes readiness, not a reliable completion fraction.
+Cancel travel is available before departure; native travel must finish after it
+has committed. Progress messages do not complete the action or release its slot.
+
+Teleport selection skips the placement-only ground preview and building-catalog
+lookup, including repeated clicks on lodestones. The travel job still performs
+its own activated-cell and capsule-footprint checks before moving the player.
+An already-running runtime request must finish before another mutation can start.
+
+## Wide map and ground height
+
+The map fills the available rectangular workspace while preserving native map
+proportions. Scroll or use the zoom slider up to 32×; wheel zoom stays anchored
+under the pointer. Drag to pan; Fit world shows the full map, letterboxing when
+necessary. Clicking outside the artwork cannot select an out-of-bounds target.
+Magnification uses the native artwork, not newly generated terrain imagery.
+
+Pause the pointer to read X/Y and native ground Z. The selected teleport popup
+also requests Z independently, without making it a prerequisite for travel.
+Requests are debounced and coalesced into one read-only latest-point mailbox;
+the game thread performs the same collision-ground query used for map placement.
+These queries cannot reserve/release the mutation slot and yield to active travel
+or queued actions. They do not load distant cells. No loaded ground hit means
+ground unavailable, not Z=0 or an inferred height. Replies are correlated by
+request and world generation; moving the pointer invalidates the displayed Z,
+and stationary height samples expire after two seconds before refreshing.
+
 ## Compatibility and validation
 
 The implementation uses live reflected parameter layouts and semantic enum names,

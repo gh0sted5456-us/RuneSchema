@@ -50,6 +50,10 @@ FetchContent_Declare(
     GIT_TAG ${RUNESCHEMA_UE4SS_TAG}
 )
 FetchContent_MakeAvailable(UE4SS)
+option(RUNESCHEMA_BUILD_MANAGED_UE4SS_HOST "Retired: custom UE4SS hosts are not supported" OFF)
+if(RUNESCHEMA_BUILD_MANAGED_UE4SS_HOST)
+    message(FATAL_ERROR "RuneSchema must run on an unmodified UE4SS.dll. Configure RUNESCHEMA_BUILD_MANAGED_UE4SS_HOST=OFF.")
+endif()
 
 if(MSVC AND TARGET UE4SS)
     target_link_options(UE4SS PRIVATE "/PDBALTPATH:UE4SS.pdb")
@@ -134,6 +138,7 @@ target_link_libraries(${TARGET} PRIVATE
     efsw
     Zydis
     Zycore
+    version
 )
 
 # Apply size optimization to UE4SS's custom Shipping configurations.

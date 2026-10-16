@@ -13,6 +13,19 @@ inline std::string Text(const Json& row,const char* key) {
     if(!row.is_object())return {};const auto it=row.find(key);
     return it!=row.end()&&it->is_string()?it->get<std::string>():std::string{};
 }
+inline std::string Icon(const Json& row,const Json* native=nullptr){
+    // A draft is not the source item: do not overwrite its selected skin/icon
+    // with a hover receipt for the unchanged source sharing its preview Path.
+    const auto preview=row.is_object()?row.find("_HelpyIconPreview"):row.end();
+    if(row.is_object()&&preview!=row.end()&&preview->is_boolean()&&preview->get<bool>())return Text(row,"Icon");
+    const auto path=Text(row,"Path");
+    if(native&&!path.empty()&&Text(*native,"Source")==path){
+        const auto found=native->find("Icon");
+        // An explicitly empty native icon must not resurrect an inherited icon.
+        if(found!=native->end()&&found->is_string())return found->get<std::string>();
+    }
+    return Text(row,"Icon");
+}
 inline std::string Label(const std::string& name) {
     std::string result;
     for(size_t i=0;i<name.size();++i){const unsigned char c=name[i];

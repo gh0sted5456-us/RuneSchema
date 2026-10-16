@@ -63,5 +63,18 @@ int main(){
     assert(accepted==1&&For(0).Pending&&For(0).CancelGeneration>=fence);
     ResetForGeneration(13);PS::SpawnToolRequests::Generation=13;FirstOpen(13);
     assert(accepted==2&&For(0).CancelGeneration>=fence);
+    // A native clone/hover icon confirmation updates all cached searches and
+    // survives stale in-flight basic rows without creating new catalogue items.
+    For(0)=State{};auto& cloneWindow=For(0);cloneWindow.CancelGeneration=fence;cloneWindow.RuntimeGeneration=13;cloneWindow.Started=true;
+    const json stale={{"Path","/Game/RuneSchema/MyClones/Helm.Helm"},{"Icon","/Game/UI/Source.Source"}};
+    cloneWindow.Rows=json::array({stale});cloneWindow.Cache["helm"]={cloneWindow.Rows,"",false,13};
+    RecordNativeIcon(stale.at("Path"),"/Mod/UI/Clone.Clone");assert(cloneWindow.Rows[0]["Icon"]=="/Mod/UI/Clone.Clone");
+    assert(cloneWindow.Cache.at("helm").Rows[0]["Icon"]=="/Mod/UI/Clone.Clone");
+    assert(Request(0,"Search","helm",true,1));
+    ApplyWindow({{"Category",0},{"CancelGeneration",cloneWindow.CancelGeneration},{"RuntimeGeneration",13},{"RequestId",cloneWindow.ActiveRequestId},
+        {"Reset",true},{"Rows",json::array({stale})},{"HasMore",false}},102);
+    assert(cloneWindow.Rows.size()==1&&cloneWindow.Rows[0]["Icon"]=="/Mod/UI/Clone.Clone");
+    RecordNativeIcon(stale.at("Path"),"");assert(cloneWindow.Rows[0]["Icon"]=="");
+    InvalidateSources(false);assert(NativeIcons.empty());
     ClearRemote();
 }

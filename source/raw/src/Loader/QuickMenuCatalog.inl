@@ -341,7 +341,7 @@ struct ToolCatalogIndex {
                 const auto package=ToolNativeString(asset.PackageName().ToString()),name=ToolNativeString(asset.AssetName().ToString());
                 std::string type;try{type=ToolAssetClass(asset);}catch(...){}
                 if(PS::QuickCatalogRules::MissingClassMetadata(type))++unknown;
-                if(name.starts_with("ITEM_")&&name.find("MeshData")==name.npos) {Add({package+"."+name,name,Kind::Item});continue;}
+                if(const auto hint=PS::F2Catalog::MountedCandidate(package+"."+name,name,type);hint&&hint->kind==Kind::Item) {Add(*hint);continue;}
                 if(!PS::QuickCatalogRules::BlueprintCandidate(name,type))continue;
                 const auto path=PS::QuickCatalogRules::GeneratedClassPath(package,name);
                 const bool resource=PS::F2Catalog::UnderAny(package,sources.resources),enemy=PS::F2Catalog::UnderAny(package,sources.enemies);

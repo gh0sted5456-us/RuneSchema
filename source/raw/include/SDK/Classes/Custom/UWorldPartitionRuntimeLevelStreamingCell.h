@@ -4,13 +4,14 @@
 #include "SDK/Structs/FBox.h"
 #include <functional>
 #include <cstddef>
+#include <optional>
 
 namespace RC::Unreal {class UWorld;}
 
 namespace UECustom {
     class UWorldPartitionRuntimeCellData : public RC::Unreal::UObject {
     public:
-        FBox* GetContentBounds();
+        std::optional<FBox> GetContentBounds();
     };
 
     class UWorldPartitionRuntimeLevelStreamingCell : public RC::Unreal::UObject {
@@ -23,6 +24,6 @@ namespace UECustom {
         UWorldPartitionRuntimeCellData* GetRuntimeCellData();
 
 
-        FBox* GetContentBounds();
+        std::optional<FBox> GetContentBounds();
     };
 }

@@ -12,6 +12,10 @@ int main(){
     assert(npc&&npc->kind==Kind::Npc);
     const auto item=MountedCandidate("/Mod/Items/Equipment.Equipment","Equipment","ArmorItemData");
     assert(item&&item->kind==Kind::Item);
+    const auto wearable=MountedCandidate("/RuneSchema/MaxCape/Items/maxcape.maxcape","maxcape","WearableEquipmentData");
+    assert(wearable&&wearable->kind==Kind::Item);
+    const auto held=MountedCandidate("/Custom/Items/Blade.Blade","Blade","/Script/Dominion.HeldEquipmentData");
+    assert(held&&held->kind==Kind::Item);
     assert(!MountedCandidate("/Game/Art/UI/T_Tree.T_Tree","T_Tree","Texture2D"));
     assert(!MountedCandidate("not a path","ITEM_Test","ItemData"));
     // Unknown directories are not invented resource classes. Explicit authored

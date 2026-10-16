@@ -11,6 +11,7 @@
 #include <vector>
 #include <map>
 #include <optional>
+#include <set>
 #include <nlohmann/json.hpp>
 
 namespace PS::CookedPakRegistryManifest {
@@ -23,6 +24,7 @@ namespace PS::CookedPakRegistryManifest {
         std::string Owner;
         std::string Source;
         std::vector<Lane> AssetLanes;
+        std::set<std::string> SchemaPaths;
         nlohmann::json LoaderDefinitions=nlohmann::json::object();
         std::vector<std::string> WearableMeshData;
         std::vector<std::string> MeleeAttackClasses;
@@ -62,7 +64,7 @@ namespace PS::CookedPakRegistryManifest {
         }
 
         inline std::vector<std::string> ReadPaths(const nlohmann::json& root,
-            const char* field, std::size_t& total)
+            const char* field, std::size_t& total,std::set<std::string>* schemaPaths=nullptr)
         {
             if (!root.contains(field)) return {};
             const auto& value = root.at(field);
@@ -73,10 +75,15 @@ namespace PS::CookedPakRegistryManifest {
             result.reserve(value.size());
             for (const auto& row : value)
             {
-                if (!row.is_string() || !ValidAssetPath(row.get<std::string>()))
+                std::string path;
+                if(row.is_string())path=row.get<std::string>();
+                else if(row.is_object()&&row.size()==2&&row.contains("Path")&&row["Path"].is_string()
+                    &&row.contains("Source")&&row["Source"]=="Schema"&&schemaPaths){
+                    path=row["Path"].get<std::string>();schemaPaths->insert(path);
+                }else throw std::runtime_error(std::string("NativeRegistries.")+field+" requires an object path or {Path, Source: Schema} reference");
+                if (!ValidAssetPath(path))
                     throw std::runtime_error(std::string("NativeRegistries.") + field
                         + " contains an invalid cooked asset path");
-                auto path = row.get<std::string>();
                 if (std::ranges::find(result, path) != result.end())
                     throw std::runtime_error(std::string("NativeRegistries.") + field
                         + " contains a duplicate cooked asset path");
@@ -117,11 +124,11 @@ namespace PS::CookedPakRegistryManifest {
         for (const auto* lane : {"Items", "Recipes", "Quests", "CombatSpells",
             "UtilitySpells", "EquipmentEffects", "Journals", "Lore"})
         {
-            auto paths = Detail::ReadPaths(native, lane, total);
+            auto paths = Detail::ReadPaths(native, lane, total,&result.SchemaPaths);
             if (!paths.empty()) result.AssetLanes.push_back({lane, std::move(paths)});
         }
         result.WearableMeshData = Detail::ReadPaths(
-            native, "WearableMeshData", total);
+            native, "WearableMeshData", total,&result.SchemaPaths);
         result.MeleeAttackClasses = Detail::ReadPaths(
             native, "MeleeAttackClasses", total);
         result.RangedAttackClasses = Detail::ReadPaths(
@@ -133,6 +140,8 @@ namespace PS::CookedPakRegistryManifest {
                 if(lane!="Recipes"&&lane!="Journals"&&lane!="Lore")throw std::runtime_error("Unsupported cooked loader lane: "+lane);
                 if(!entries.is_object()||entries.size()>4096)throw std::runtime_error("Cooked loader lane must be an object with at most 4096 entries");
                 for(const auto& [path,body]:entries.items()){
+                    if(result.SchemaPaths.contains(path))
+                        throw std::runtime_error("LoaderDefinitions edits existing cooked assets; use the owning loose loader for schema-created assets, and NativeRegistries to announce their runtime paths");
                     if(!Detail::ValidAssetPath(path)||path.rfind('.')==std::string::npos||path.rfind('.')<=path.rfind('/')||path.back()=='.'||!body.is_object())
                         throw std::runtime_error("Cooked loader definitions require full object-path keys and object bodies");
                     for(const auto* directive:{"$Patch","$Clone","$Target","VendorID","RuneSchemaVendors","VanillaVendors"})if(body.contains(directive))
@@ -160,6 +169,7 @@ namespace PS::CookedPakRegistryManifest {
         Detail::Hash(hash, "RangedAttackClasses");
         for (const auto& path : result.RangedAttackClasses) Detail::Hash(hash, path);
         Detail::Hash(hash,result.LoaderDefinitions.dump());
+        if(!result.SchemaPaths.empty()){Detail::Hash(hash,"SchemaReferences");for(const auto& path:result.SchemaPaths)Detail::Hash(hash,path);}
         result.Fingerprint = hash;
         return result;
     }
@@ -199,8 +209,13 @@ namespace PS::CookedPakRegistryManifest {
             if(entry->second.Body!=value.Body)throw std::runtime_error("Conflicting cooked "+lane+" declaration: "+value.Path);
         };
         for(const auto& manifest:manifests){
-            for(const auto& assets:manifest.AssetLanes)if(assets.Name==lane)for(const auto& path:assets.Paths)
+            for(const auto& assets:manifest.AssetLanes)if(assets.Name==lane)for(const auto& path:assets.Paths){
+                // A loose /recipes or /journal loader owns construction and
+                // policy for its runtime asset. Do not synthesize a second,
+                // cooked-style definition before that asset exists.
+                if(manifest.SchemaPaths.contains(path))continue;
                 add({manifest.Owner,manifest.Source,path,nlohmann::json::object(),false});
+            }
             if(manifest.LoaderDefinitions.contains(lane))for(const auto& [path,body]:manifest.LoaderDefinitions.at(lane).items())
                 add({manifest.Owner,manifest.Source,path,body,true});
         }

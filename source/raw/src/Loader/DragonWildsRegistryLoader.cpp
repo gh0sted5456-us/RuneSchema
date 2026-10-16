@@ -1,4 +1,5 @@
 #include "Loader/DragonWildsRegistryLoader.h"
+#include "Core/HelpyCacheSources.h"
 
 #include <algorithm>
 #include <cctype>
@@ -116,6 +117,7 @@ bool DragonWildsRegistryLoader::CanInitialize(const EEngineLifecyclePhase& phase
 bool DragonWildsRegistryLoader::OnInitialize() {
     m_modEntries=json::array();m_audit=json::array();m_keys.clear();
     PS::CookedPakRegistryManifest::Reset();
+    PS::HelpyCacheSources::Reset();
     PS::RegistryEnrollment::Reset();
     return true;
 }
@@ -244,14 +246,18 @@ void DragonWildsRegistryLoader::LoadDocument(const json& input,const std::string
     if(document.value("SchemaVersion",0)!=1 || !document.contains("Entries") || !document["Entries"].is_array()
         || document["Entries"].size()>MaxEntriesPerDocument)
         throw std::runtime_error("registry document requires SchemaVersion 1 and at most 256 Entries");
-    if((document.contains("NativeRegistries")||document.contains("LoaderDefinitions")) && !source.starts_with("pak:"))
-        throw std::runtime_error("NativeRegistries and LoaderDefinitions are accepted only from a cooked RSREG_ or DA_RuneSchemaRegistry asset inside a PAK");
+    // Enabled loose schema mods use the same bounded declarations as a cooked
+    // RSREG asset. Publication is not proof of native identity registration.
     PS::CookedPakRegistryManifest::Manifest nativeManifest;
     if(PS::CookedPakRegistryManifest::Publish(document,owner,source,&nativeManifest)) {
+        try {std::set<std::string> cacheSources;
+            for(const auto& lane:nativeManifest.AssetLanes)for(const auto& path:lane.Paths)
+                if(cacheSources.insert(PS::HelpyCacheSources::Source(path)).second)PS::HelpyCacheSources::Declare(owner,path);
+        }catch(...) {/* Cache bookkeeping must not reject an accepted declaration. */}
         std::size_t assetCount=0,definitionCount=0;
         for(const auto& lane:nativeManifest.AssetLanes)assetCount+=lane.Paths.size();
         for(const auto& [lane,definitions]:nativeManifest.LoaderDefinitions.items())definitionCount+=definitions.size();
-        PS::Log<RC::LogLevel::Normal>(STR("[PAK-REGISTRY][DECLARED] owner='{}' asset_paths={} loader_definitions={} melee_classes={} ranged_classes={} fingerprint={:016x} source='{}'.\n"),
+        PS::Log<RC::LogLevel::Verbose>(STR("[NATIVE-REGISTRY][DECLARED] owner='{}' asset_paths={} loader_definitions={} melee_classes={} ranged_classes={} fingerprint={:016x} source='{}'.\n"),
             PS::ToWideSafe(owner.c_str()),assetCount,definitionCount,nativeManifest.MeleeAttackClasses.size(),nativeManifest.RangedAttackClasses.size(),nativeManifest.Fingerprint,PS::ToWideSafe(source.c_str()));
     }
     std::size_t ordinal=0;for(const auto& entry:document["Entries"]) {++ordinal;
@@ -274,6 +280,8 @@ void DragonWildsRegistryLoader::OnLoad(const std::filesystem::path& path,const R
             const auto source=relative.generic_string();
             try {LoadDocument(document,owner,source);}
             catch(const std::exception& error) {
+                if(document.is_object()&&(document.contains("NativeRegistries")||document.contains("LoaderDefinitions")))
+                    PS::RegistryEnrollment::Reject(owner+":"+source,error.what());
                 m_audit.push_back({{"Owner",owner},{"Source",source},{"Status","Rejected"},{"Reason",error.what()}});
                 PS::Log<RC::LogLevel::Error>(STR("Registry file '{}' in mod '{}' rejected: {}.\n"),
                     PS::ToWideSafe(source.c_str()),mod,PS::ToWideSafe(error.what()));

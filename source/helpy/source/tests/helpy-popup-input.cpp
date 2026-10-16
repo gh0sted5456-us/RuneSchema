@@ -26,6 +26,7 @@ int main(int argc,char** argv){
     Require(source.find("WH_KEYBOARD_LL")==std::string::npos);
     Require(source.find("ClipCursor(")==std::string::npos&&source.find("SetKeyboardState(")==std::string::npos);
     Require(source.find("if(Hotkey.Press())ClosePopup()")!=std::string::npos);
-    Require(source.find("CanToggle(GameWindow(foreground),foreground==m_publishedWindow.load())")!=std::string::npos);
+    Require(source.find("CanToggle(GameWindow(foreground),foreground==m_publishedWindow.load()")!=std::string::npos);
+    Require(source.find("foreground==m_publishedBayWindow.load()")!=std::string::npos);
     Require(source.find("if(m_visible.load()&&GetForegroundWindow()!=m_gameWindow)ClosePopup()")==std::string::npos);
 }

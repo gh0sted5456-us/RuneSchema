@@ -45,6 +45,8 @@ struct Definition {
     std::string CompletedDescription,SubobjectiveDescription,Hint,QuestDescriptionOverride;
     bool HideInQuestList=false,ShowInCompletedQuestList=true;
     std::string Region;
+    std::set<std::string> AnyStages;
+    bool AnyStage(size_t index) const {return AnyStages.contains(Stages.at(index).first);}
 };
 inline ItemAmount ParseItem(const Json& data) {
     const auto item=Dialogue::Text(data.at("Item"),1024);
@@ -67,7 +69,9 @@ inline Definition ParseDefinition(const std::string& mod,const Json& data,bool s
         auto result=ParseDefinition(mod,base,true);
         std::set<std::string> ids;size_t total=0;
         for(const auto& stage:stages) {
-            Dialogue::Fields(stage,{"Id","Objectives"});const auto id=Dialogue::Id(stage.at("Id"));
+            Dialogue::Fields(stage,{"Id","Objectives","Completion"});const auto id=Dialogue::Id(stage.at("Id"));
+            const auto completion=stage.value("Completion",std::string("All"));
+            if(completion!="All" && completion!="Any")throw std::runtime_error("Stage Completion must be All or Any");
             if(id=="__ready" || id.size()>64 || id.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")!=id.npos || !ids.insert(id).second)
                 throw std::runtime_error("Stage IDs must be unique letters, digits, underscores or hyphens");
             const auto& objectives=stage.at("Objectives");
@@ -85,6 +89,11 @@ inline Definition ParseDefinition(const std::string& mod,const Json& data,bool s
             }
             if(std::none_of(parsed.begin(),parsed.end(),[](const auto& objective){return !objective.Optional;}))
                 throw std::runtime_error("Each stage requires a mandatory objective");
+            if(completion=="Any") {
+                if(parsed.size()<2 || std::any_of(parsed.begin(),parsed.end(),[](const auto& objective){return objective.Optional || objective.Hidden;}))
+                    throw std::runtime_error("Any stage requires at least two visible, mandatory alternatives");
+                result.AnyStages.insert(id);
+            }
             result.Stages.emplace_back(id,std::move(parsed));
         }
         for(const auto& tier:result.ResultTiers)for(const auto& required:tier.Objectives) {

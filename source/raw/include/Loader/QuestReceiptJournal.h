@@ -83,12 +83,17 @@ public:
                 old["Quests"][quest.Key]["Definition"]=document;
             if(old.at("Quests").contains(quest.Key)
                 && old.at("Quests").at(quest.Key).at("Definition")!=document) {
+                if(old["Quests"][quest.Key].at("State")=="pending")throw std::runtime_error("Changed legacy quest has an unresolved exchange; migration refused");
+                auto state=nativeStateName();const auto separator=state.rfind("::");if(separator!=state.npos)state=state.substr(separator+2);
+                if(resetChanged&&old["Quests"][quest.Key].at("State")=="complete"&&state=="Complete")old["Quests"][quest.Key]["Definition"]=document;
+                else {
                 if(!resetChanged)throw std::runtime_error("Changed legacy quest requires an authoritative reset");
                 resetChanged();
                 ResetFresh();
                 old["Quests"].erase(quest.Key);
                 QuestProgress::Write(legacy,old);
                 return;
+                }
             }
             const auto state=QuestProgress::Status(old,quest,document);
             auto nativeState=nativeStateName();
@@ -115,9 +120,13 @@ public:
             auto explicitFalse=prior;explicitFalse["Repeatable"]=false;
             auto nativeState=nativeStateName();const auto colon=nativeState.rfind("::");
             if(colon!=nativeState.npos)nativeState=nativeState.substr(colon+2);
+            if(Phase()==2||Phase()==3)throw std::runtime_error("Changed quest has an unresolved exchange; migration refused");
             const bool stableRun=(Phase()==1 && nativeState=="Given")
                 || (Phase()==4 && nativeState=="Complete");
-            if(quest.Repeat.Enabled && !document.contains("Repeat") && stableRun && Run()>=1
+            // Preserve completed history and cooldowns; a definition update is
+            // not permission to pay this character again or erase an exchange.
+            if(resetChanged&&Phase()==4&&nativeState=="Complete")Stamp();
+            else if(quest.Repeat.Enabled && !document.contains("Repeat") && stableRun && Run()>=1
                 && (MatchesFingerprint(prior) || MatchesFingerprint(explicitFalse)))Stamp();
             else if(resetChanged){resetChanged();ResetFresh();}
             else throw std::runtime_error("Saved quest definition changed; explicit migration required");
