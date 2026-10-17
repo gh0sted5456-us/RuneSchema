@@ -150,5 +150,6 @@ nav:
       - Ask RuneSchema: ASK-RUNESCHEMA.md
       - Licensing: LICENSING.md
   - Updates:
+      - Release 0.8.0.0: RELEASE-0.8.0.0.md
       - Alpha changelog: ALPHA-CHANGELOG.md
-      - Stable release: CURRENT-RELEASE.md
+      - Current release: CURRENT-RELEASE.md

@@ -107,6 +107,30 @@ int main() {
     bad=graph;bad.Stages[0].Id="bad:id";assert(throws([&]{Validate(bad);}));
     bad=graph;bad.Stages[0].Objectives[0].Region->RadiusMeters=std::numeric_limits<double>::infinity();assert(throws([&]{Validate(bad);}));
     // Failed read-back never reports success.
+    Graph alternatives{{{"work",{{"rats",Kind::Kill,{"rat"},50,west},
+        {"meat",Kind::TurnIn,{"meat"},50,{}}},true}}};
+    std::map<std::string,int> alternativeInts;
+    auto altRead=[&](const auto& key){return alternativeInts[key];};
+    auto altWrite=[&](const auto& key,int value){alternativeInts[key]=value;};
+    Progress either(alternatives,1,altRead,altWrite);either.BeginRun();
+    assert(either.Apply({Kind::Kill,"rat",49,std::array<double,3>{0,0,0}})==1);
+    assert(!either.Complete());
+    Progress eitherReloaded(alternatives,1,altRead,altWrite);eitherReloaded.BeginRun();
+    assert(eitherReloaded.Count(0,0)==49);
+    eitherReloaded.Apply({Kind::Kill,"rat",1,std::array<double,3>{0,0,0}});
+    assert(eitherReloaded.Complete() && eitherReloaded.Count(0,1)==0);
+    assert(eitherReloaded.ActiveMarkers().empty());
+    assert(eitherReloaded.Apply({Kind::TurnIn,"meat",50,{}})==0);
+    Progress eitherRepeat(alternatives,2,altRead,altWrite);eitherRepeat.BeginRun();
+    eitherRepeat.Apply({Kind::TurnIn,"meat",50,{}});
+    assert(eitherRepeat.Complete() && eitherRepeat.Count(0,0)==0);
+    auto overlapping=alternatives;overlapping.Stages[0].Objectives[1]=overlapping.Stages[0].Objectives[0];
+    overlapping.Stages[0].Objectives[1].Id="rat2";
+    alternativeInts.clear();Progress tie(overlapping,1,altRead,altWrite);tie.BeginRun();
+    assert(tie.Apply({Kind::Kill,"rat",50,std::array<double,3>{0,0,0}})==1);
+    assert(tie.Count(0,0)==50 && tie.Count(0,1)==0);
+    bad=alternatives;bad.Stages[0].Objectives[1].Optional=true;assert(throws([&]{Validate(bad);}));
+    bad=alternatives;bad.Stages[0].Objectives.resize(1);assert(throws([&]{Validate(bad);}));
     nativeInts.clear();Progress broken(graph,1,read,[](const std::string&,int){});
     assert(throws([&]{broken.BeginRun();}));
 }

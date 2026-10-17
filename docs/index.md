@@ -15,15 +15,15 @@ hide:
   <p>A shared runtime for Dragonwilds mods. Install content, create something new, or bring your community together.</p>
   <div class="rs-actions">
     <a class="md-button md-button--primary" href="INSTALLATION/">Get started <span aria-hidden="true">→</span></a>
-    <a class="rs-text-link" href="CURRENT-RELEASE/">Stable release · 0.7.7.9m</a>
+    <a class="rs-text-link" href="CURRENT-RELEASE/">Current release · 0.8.0.0</a>
     <a class="rs-text-link" href="MOD-HOSTS-AND-GETTING-STARTED/">What is RuneSchema? <span aria-hidden="true">↗</span></a>
   </div>
 </section>
 
-<aside class="rs-release" aria-label="Alpha development">
-  <span class="rs-release__tag">In development</span>
-  <p><strong>0.8.0.0 alpha</strong> — the revamped Helpy workspace, content integration, and runtime hardening.</p>
-  <a href="ALPHA-CHANGELOG/">See what changed <span aria-hidden="true">→</span></a>
+<aside class="rs-release" aria-label="Current release">
+  <span class="rs-release__tag">Released on main</span>
+  <p><strong>0.8.0.0</strong> — the revamped Helpy workspace, content integration, and runtime hardening.</p>
+  <a href="RELEASE-0.8.0.0/">Release notes and verification <span aria-hidden="true">→</span></a>
 </aside>
 
 <h2 class="rs-section-heading">Choose your path</h2>

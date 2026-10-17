@@ -9,7 +9,7 @@ the work to UE4SS. Keep them inside the mod they belong to so one
 | --- | --- |
 | `paks` | Makes cooked items, sounds, meshes, and other content available. It does not start a Blueprint actor. |
 | `logicmods` | Mounts a cooked package and asks RuneSchema's Lua helper to start its `ModActor` on clients. |
-| `ue4ss` | Starts an optional Lua companion from `ue4ss/scripts/main.lua`. |
+| `ue4ss` | Complete `ue4ss/<PackageName>/` Lua-only add-ons using stock UE4SS; native/hybrid packages are skipped. |
 
 Most mods need only `paks` and RuneSchema's normal content folders. Add the
 other two only when the mod actually uses them.
@@ -40,7 +40,7 @@ Do not install the same package again under the game's
 
 RuneSchema prepares a short enabled-package list when the game starts. With
 `bpModLoader.luaActorLoader: true` and `patchScript: false` in
-`RuneSchema/settings/settings.jsonc`, its own helper starts those ModActors
+`RuneSchema/settings/settings.ini` (legacy JSONC is supported), its own helper starts those ModActors
 without changing BPModLoaderMod. Restart the game after changing the mod list.
 The log gives a startup summary; the exact package names are in
 `RuneSchema/settings/logicmods.lua.generated.txt`. Existing installations
@@ -51,23 +51,26 @@ Dedicated servers still receive the cooked package but do not start a visual
 ModActor. Blueprint startup alone does not make custom behavior networked;
 the mod must use game-supported multiplayer behavior.
 
-## Add an optional UE4SS Lua companion
+## Include UE4SS packages
 
 Place Lua files inside the same RuneSchema mod:
 
 ```text
 ue4ss/Mods/RuneSchema/mods/MyMod/
   ue4ss/
-    scripts/
-      main.lua
-      support.lua
+    MyLuaPackage/
+      Scripts/main.lua
+      Scripts/support.lua
+      config.txt
+    AnotherLuaPackage/
+      Scripts/main.lua
 ```
 
-The entry file must be named `main.lua`. RuneSchema starts it once per game
-launch, not every time a player changes worlds. It can use normal UE4SS Lua
-functions. This folder currently carries Lua, not DLL mods. See the
-[Lua companion guide](UE4SS-LUA-COMPANIONS.md) for a working example and
-multiplayer guidance.
+Packages start once per launch, not on world changes. Preserve their entire
+contents. Only Lua-based add-ons are supported; UE4SS.dll is not replaced or
+patched. Native/hybrid packages are skipped. The old direct
+`ue4ss/scripts/main.lua` layout remains compatible. See the
+[package guide](UE4SS-LUA-COMPANIONS.md) for requirements and safety.
 
 ## Turn the whole mod off
 

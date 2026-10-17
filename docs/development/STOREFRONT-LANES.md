@@ -1,4 +1,4 @@
-# Steam/GOG and Game Pass native lanes
+# Steam/Epic and Game Pass native lanes
 
 RuneSchema ships one `main.dll`. The storefront determines which native bindings
 may run; JSON loaders and the plugin API are shared. These notes describe the
@@ -6,9 +6,9 @@ current Unreal 5.6.1 / Dragonwilds 100.4.0.0 work. RVAs are relative to the
 game executable image, **not** stable addresses or offsets to copy to another
 game build.
 
-| | Steam / GOG (`Win64`) | Game Pass (`WinGDK`) |
+| | Steam / Epic (`Win64`) | Game Pass (`WinGDK`) |
 |---|---|---|
-| Selection | Executable path contains `Win64`, Steam, or GOG and has no Windows package identity. | `WinGDK`/package executable path or Windows package identity; UE4SS signature folder is a last-resort clue. |
+| Selection | Executable path contains `Win64`, Steam, or Epic and has no Windows package identity. | `WinGDK`/package executable path or Windows package identity; UE4SS signature folder is a last-resort clue. |
 | Native lane | `steam-native` | `gamepass-native` |
 | Core bindings | Steam AOB and call-site maps. | Separate WinGDK AOB and call-site maps; never try the Steam `GetObjectsOfClass` ABI. |
 | `UDataTable::Serialize` | Steam AOB `48 89 5C 24 18 57 48 81 EC E0 01...`; UE4SS virtual fallback. | WinGDK AOB `48 89 5C 24 10 57 48 81 EC D0 01...`; same validated virtual fallback. |

@@ -20,9 +20,33 @@ Use a stable, mod-specific key. `Type` selects the native asset class: `Lore`, `
 }
 ```
 
-`Unlock: false` is appropriate when a gameplay event should discover the entry later. `Unlock: true` requests an immediate native player unlock, but the game can reject that request. Check the log and in-game journal; placement alone is not discovery. A generic building-placement or NPC-dialogue unlock trigger is not yet verified.
+`Unlock: false` is appropriate when a gameplay event should discover the entry later. `Unlock: true` requests a native player unlock once the owning player's journal component is ready. The alpha loader retries automatic delivery on player inventory activity and RuneSchema NPC interaction, without treating placement as an unlock receipt. A rejected native unlock remains an error; RuneSchema does not force-write the player's unlocked-entry array.
+
+## Discover an entry when talking to an NPC
+
+In the 7.8 alpha, an `/npc` definition can add `JournalEntries` alongside its normal shop or dialogue:
+
+```jsonc
+"JournalEntries": [
+  "field_notes",
+  "OtherMod:craftsman",
+  "/MyMod/Journal/JOURNAL_FieldNotes.JOURNAL_FieldNotes"
+]
+```
+
+References can identify a local `/journal` or `/lore` definition, a `Mod:Id`, or a full cooked journal object path. The list accepts 1..32 unique references. RuneSchema asks the native journal component belonging to the interacting player to unlock each registered entry. An already-unlocked entry stays unlocked and is not marked unread again. Unlock failure does not stop the NPC's ordinary dialogue or shop. `NoInteract: true` suppresses this binding.
+
+Use `Unlock: false` on an entry that should be discovered only through this interaction. Its native type and `AddTo` still determine the journal section; `JournalEntries` does not move entries or replace their identities. A cooked Blueprint may instead invoke the game's native `JournalComponent.UnlockJournalEntry` with that same registered entry and owning player component. The mod owns that gameplay trigger; RuneSchema handles mounting, registration and any JSONC override. Building placement does not implicitly unlock journals.
 
 ## Register a cooked entry
+
+A PAK can announce entries without duplicate loose pointer files through
+`NativeRegistries.Journals` / `NativeRegistries.Lore`, or carry the ordinary
+loader body in `LoaderDefinitions.Journals` / `LoaderDefinitions.Lore`.
+See [cooked PAK declarations](../../COOKED-PAK-REGISTRY-MANIFEST.md).
+Declaration-only entries default to `Unlock: false`; native conditions and
+explicit gameplay triggers remain responsible for player discovery. Loose
+definitions for the same cooked path still override the in-PAK metadata.
 
 Use its full cooked object path as the JSON key. The asset retains its native class, identity, pages, icon, and `UnlockCondition`. Optional `PersistenceID` and `InternalName` fields assert the cooked identity; RuneSchema will not replace it. Do not create a second runtime entry for the same page.
 
@@ -37,7 +61,13 @@ Use its full cooked object path as the JSON key. The asset retains its native cl
 }
 ```
 
-The ID above is a placeholder; inspect your cooked asset and keep its shipped ID stable. Cooked entries can use the native player-unlock path without RuneSchema's transient-save adapter.
+The ID above is a placeholder; inspect your cooked asset and keep its shipped ID stable. Cooked entries can use the native player-unlock path without RuneSchema's generated-entry persistence adapter.
+
+Unlocked entries, including automatically granted generated entries, retain
+their native character progress between sessions. Already unlocked entries
+are not re-marked unread. Safe Clean removes unresolved orphan entries when
+their content is disabled or removed, rather than clearing active entries
+on every save.
 
 ## Native discovery conditions
 
@@ -66,7 +96,9 @@ Use full cooked object paths, including the object name. For example:
 }
 ```
 
-Native assets also expose `PlayerStart`, `RegionUnlocked`, `Manual`, and `NeverUnlock`. `RegionUnlocked` has no confirmed donor in the current asset audit, so its target fields are not yet prescribed here. Conditions are data, not proof that an event will be indexed or fired for a late-registered mod entry. Test a fresh event, save/re-entry, and multiplayer authority before relying on a condition. `Manual` requires a successful native player unlock; it is not an automatic station-placement or NPC-talk trigger. When you provide `UnlockCondition`, RuneSchema no longer requests an immediate unlock by default; explicit `Unlock: true` still overrides that default.
+`UnlockType` accepts the eight native values `PlayerStart`, `ItemFirstPickup`, `RecipeUnlocked`, `Interaction`, `AIKill`, `RegionUnlocked`, `Manual`, and `NeverUnlock`, either bare or prefixed with `EJournalEntryUnlockType::`. Unknown values and other enum prefixes are rejected. The four targeted conditions above require bounded cooked references; those references are also checked against the live reflected fields when applied. `RegionUnlocked` remains native-only here: no synthetic target field or substitute progression rule is invented.
+
+Conditions are data, not proof that an event will be indexed or fired for a late-registered mod entry. Registration and discovery are separate contracts. Item-acquisition delivery only includes entries that completed registration/placement and uses live object identity rather than stale raw pointers. Native unlock requests still require the owning player's queried state to confirm success. `Manual` requires an explicit trigger such as `JournalEntries` on a RuneSchema NPC or the mod's own cooked gameplay event. When you provide `UnlockCondition`, RuneSchema no longer requests an immediate unlock by default; explicit `Unlock: true` overrides that default. `NeverUnlock` has no automatic discovery behavior.
 
 Recipe availability is separate from journal discovery. To make a crafting recipe earnable, set that `/recipes` definition's `Unlock` to `false` and provide a verified game progression rule that grants the recipe. A `RecipeUnlocked` journal condition can then reveal its page. A visible journal page alone does not grant the crafting recipe.
 
@@ -80,7 +112,7 @@ Recipe availability is separate from journal discovery. To make a crafting recip
 | Recipes | Tools, Weapons, Armor, Ammo & Runes, Trinkets, Masterworks, Food & Potions, Basic Materials, Processed Materials, Special Materials, Quest Items, Capes |
 | Knowledge | Tutorials, Lore Scraps, People, Places |
 
-For a loaded native subcategory outside this list, use `"AddTo": {"SubCategory": "/Game/.../ExactCategory.ExactCategory"}`. `AddTo.Key` optionally chooses the key within the category. `AddTo.Group` may select a group or create one where the native category supports it:
+For a loaded native subcategory outside this list, use `"AddTo": {"SubCategory": "/Game/.../ExactCategory.ExactCategory"}`. `AddTo.Key` optionally chooses the key within an ungrouped category. Grouped categories use the entry asset's native object name consistently in their list, detail lookup, and hierarchy index; an authored `Key` alias does not replace that native key or change the entry's persistence identity. `AddTo.Group` may select a group or create one where the native category supports it:
 
 ```json
 "AddTo": {

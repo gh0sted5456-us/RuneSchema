@@ -12,6 +12,8 @@ public:
             [&api](const std::string& key){return api.GetInt(Name(key));},
             [&api](const std::string& key,int value){api.SetInt(Name(key),value);},
             [&api]{api.ValidateCounters();return api.IsInitialized();},[&api]{api.Initialize();},[&api]{return RC::to_string(api.StateName());},
-            ReceiptJournal::EpochNow,[&api]{api.ResetForDefinitionChange();}) {}
+            ReceiptJournal::EpochNow,[&api]{api.ResetForDefinitionChange();},[&api,&definition]{
+                api.NormalizeOwnership(definition.Key.substr(0,definition.Key.find(':')),definition.PersistenceId,definition.Key);
+            }) {}
 };
 }

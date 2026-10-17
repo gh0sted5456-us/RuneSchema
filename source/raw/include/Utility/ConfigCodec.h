@@ -26,6 +26,8 @@ namespace PS {
         const auto json=StripJsonComments(text);
         const auto error = glz::read<glz::opts{.error_on_unknown_keys = false, .error_on_missing_keys = false}>(candidate, json);
         if (error) throw std::runtime_error(glz::format_error(error, json));
+        if(candidate.plugins.compatibilityNotices!="normal"&&candidate.plugins.compatibilityNotices!="quiet"&&candidate.plugins.compatibilityNotices!="off")
+            throw std::runtime_error("Invalid plugins.compatibilityNotices; use normal, quiet, or off");
         return candidate;
     }
     inline std::string EncodeSettings(const PSConfigSettings& settings) {

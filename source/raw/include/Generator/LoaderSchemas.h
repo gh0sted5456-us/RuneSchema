@@ -207,6 +207,16 @@ inline nlohmann::json LoaderSchemas() {
     }},{"description","Uniform number or XYZ actor scale. Every component accepts 0.01 through 100."}};
     result["spawns"]["items"]["properties"]["SpawnRadiusMeters"]={{"type","number"},{"minimum",0.01},{"maximum",10000},{"description","Ordinary AISpawnPoint native proximity eligibility radius in metres. Minimum distance becomes zero; external activation is disabled. Cannot combine with MinSpawnDistance, MaxSpawnDistance or raw radius/activation Properties. Native streaming, navigation, population and respawn rules still apply; not a guaranteed one-shot ambush trigger."}};
     result["spawns"]["items"]["properties"]["GroundToSurface"]={{"type","boolean"},{"default",true},{"description","Trace the authored X/Y placement onto blocking ground before spawning. Disable only for intentionally airborne actors."}};
+    const json groundReference={{"type","number"},{"minimum",-100000000},{"maximum",100000000},{"description","Approximate floor height in centimetres, not a placement fallback. Selects collision below this height plus a 45 cm stair allowance. For bare $ without a hint, use the landscape beneath overhead roofs and bridges."}};
+    result["spawns"]["items"]["properties"]["GroundReferenceZ"]=groundReference;
+    const json migrationRadius={{"type","number"},{"minimum",0},{"maximum",1000},{"default",300},
+        {"description","Bounded nearby collision-clear placement radius in centimetres; 0 disables relocation. Native capsule or GroundClearance required. Authored location and identity remain unchanged."}};
+    const json groundClearance={{"type","object"},{"additionalProperties",false},{"required",{"Radius","HalfHeight"}},
+        {"description","Unscaled capsule clearance envelope above the surface for props/resources without an owned native capsule. HalfHeight must be at least Radius; verify native/runtime geometry."},
+        {"properties",{{"Radius",{{"type","number"},{"minimum",0.1},{"maximum",10000}}},
+            {"HalfHeight",{{"type","number"},{"minimum",0.1},{"maximum",100000}}}}}};
+    result["spawns"]["items"]["properties"]["GroundMigrationRadius"]=migrationRadius;
+    result["spawns"]["items"]["properties"]["GroundClearance"]=groundClearance;
     result["spawns"]["items"]["properties"]["GroundOffset"]={{"type","number"},{"minimum",-100000},{"maximum",100000},{"default",0},{"description","Centimetre offset above or below the resolved ground. Do not combine with the Location.Z $+offset shorthand."}};
     result["spawns"]["items"]["properties"]["TimeOfDay"]={{"enum",{"Any","Day","Night"}},{"default","Any"},{"description","Authority-controlled lifecycle gate for AI spawn points, resource actors, and functional BuildingProp entries. Timed actors are transient and cannot use native respawn persistence."}};
     result["spawns"]["items"]["properties"]["QuestCompleted"]={{"type","string"},{"minLength",1},{"maxLength",512},{"description","Activate this placement after a local Id or Mod:Id quest is completed by a connected participant. Quest-linked BuildingProp actors are transient: RuneSchema recreates them while the quest definition is available, and they leave no saved collision shell when that quest or mod is removed. Combines with TimeOfDay when both are present."}};
@@ -281,11 +291,17 @@ inline nlohmann::json LoaderSchemas() {
     for(const auto* field:{"Id","DisplayName","VisualSource","Mesh","Materials","IdleAnimation","Location","Rotation","Scale","EnableCollision"})
         npc["properties"][field]=vendor["properties"][field];
     npc["properties"]["Enabled"]={{"type","boolean"}};
+    npc["properties"]["GroundReferenceZ"]=groundReference;
+    npc["properties"]["GroundMigrationRadius"]=migrationRadius;
+    npc["properties"]["GroundClearance"]=groundClearance;
     npc["properties"]["VendorID"]={{"type","string"},{"minLength",1},{"pattern","^[^:]+(:[^:]+)?$"},{"description","Direct Trade interaction: local store Id or Mod:Id. Omit for a visual-only NPC."}};
     npc["properties"]["MeshCollision"]={{"enum",{"Native","Pawn","None"}},{"description","AI Pawn uses the selected mesh's reinitialized PhysicsAsset and removes capsule pawn blocking; missing physics fails setup. AI Native preserves mesh defaults and capsule blocking; None disables mesh collision but retains capsule blocking. Humans use a body capsule, not equipment collision. Resources use authored static-mesh query collision for Native/Pawn and no capsule pawn blocking. EnableCollision=false disables all actor collision."}};
     npc["properties"]["DialogueID"]={{"type","string"},{"minLength",1},{"pattern","^[^:]+(:[^:]+)?$"},{"description","Native Talk interaction; local dialogue Id or Mod:Id. With VendorID, dialogue choices may open that bound store after closing the conversation."}};
     npc["properties"]["LoreID"]={{"type","string"},{"minLength",1},{"pattern","^[^:]+(:[^:]+)?$"},{"description","Preferred /lore reference: local lore Id or Mod:Id. Creates the direct Examine interaction. Do not combine with LoreEntry, DialogueID or VendorID."}};
     npc["properties"]["LoreEntry"]={{"type","string"},{"minLength",1},{"maxLength",1024},{"description","Direct Examine interaction: /lore entry ID or cooked lore asset path. Do not combine with DialogueID or VendorID."}};
+    npc["properties"]["JournalEntries"]={{"type","array"},{"minItems",1},{"maxItems",32},{"uniqueItems",true},
+        {"items",{{"type","string"},{"minLength",1},{"maxLength",1024}}},
+        {"description","Unlock these registered journal/lore entries when this NPC is interacted with. Use local entry IDs, Mod:Id, or full cooked asset paths. Works alongside dialogue and shops; native player unlock confirmation is required."}};
     npc["properties"]["QuestID"]={{"type","string"},{"minLength",1},{"pattern","^[^:]+(:[^:]+)?$"},{"description","Associated /quests definition: local quest Id or Mod:Id. This records the NPC/quest relationship; dialogue choices still control acquisition and completion."}};
     npc["properties"]["Type"]={{"enum",{"AI","Human","Resource","Prop"}},{"default","AI"},{"description","Resource and Prop use an explicit StaticMesh on a neutral NPC, without harvesting, damage, drops or building behavior."}};
     json appearance={{"type","object"},{"additionalProperties",false},{"required",DragonWilds::HumanNpc::AppearanceKeys}};
@@ -307,6 +323,8 @@ inline nlohmann::json LoaderSchemas() {
         {"Legs","WearableEquipmentData whose native Slot is Legs."},
         {"Cape","WearableEquipmentData whose native Slot is Cape."},
         {"Trinket","WearableEquipmentData whose native Slot is Trinket."},
+        {"Necklace","WearableEquipmentData whose native Slot is Necklace (1.0.1)."},
+        {"Trinket2","Alias for Necklace. Must reference a native Necklace item; cannot accompany Necklace."},
         {"MainHand","HeldEquipmentData with native Slot HeldOnlyRight or HeldTwoHanded."},
         {"OffHand","HeldEquipmentData with native Slot HeldOnlyLeft. Cannot accompany a two-handed MainHand."}};
     const json equipmentReference={{"oneOf",{
@@ -316,7 +334,16 @@ inline nlohmann::json LoaderSchemas() {
         equipment["properties"][key]=equipmentReference;
         equipment["properties"][key]["description"]=equipmentDescriptions.at(key);
     }
+    equipment["not"]={{"required",{"Necklace","Trinket2"}}};
     npc["properties"]["Equipment"]=equipment;
+    auto consequenceEquipment=equipment;
+    consequenceEquipment["minProperties"]=1;
+    consequenceEquipment["properties"].erase("MainHand");consequenceEquipment["properties"].erase("OffHand");
+    npc["properties"]["EquipmentWhen"]={{"type","array"},{"minItems",1},{"maxItems",16},
+        {"items",{{"type","object"},{"additionalProperties",false},{"required",{"Id","QuestCompleted","Policy","Equipment"}},
+            {"properties",{{"Id",{{"type","string"},{"pattern","^[A-Za-z0-9_-]{1,64}$"}}},
+                {"QuestCompleted",text},{"Policy",{{"const","WorldEverCompleted"}}},{"Equipment",consequenceEquipment}}}}},
+        {"description","Human-only durable shared-world equipment consequence. Any authoritative player completion latches this rule for the world-save GUID, including after disconnect/restart. Rule IDs and wearable slots must not overlap; rewards remain per-character quest receipts. Back up RuneSchema saved/progress/worlds with world saves."}};
     npc["properties"]["HideWeapon"]={{"type","boolean"},{"default",false},{"description","Human only. Keeps MainHand and OffHand equipment data for pose selection but hides the rendered held weapon visuals."}};
     json poseNames=json::array(),heldPoseNames=json::array();
     for(const auto& preset:DragonWilds::HumanPose::Presets) {
@@ -348,7 +375,7 @@ inline nlohmann::json LoaderSchemas() {
             {"LocationOffset",offset},{"Parameters",{{"type","object"},{"maxProperties",32},{"propertyNames",{{"maxLength",128},{"pattern","^User\\.[^\\r\\n\\t]*$"}}},{"additionalProperties",parameter}}}}}};
     npc["properties"]["VisualEffect"]={{"anyOf",{ghostVisual,npcNiagara}}};
     npc["properties"]["HideMesh"]={{"type","boolean"},{"description","Prop only: hide visual mesh while retaining collision."}};
-    npc["properties"]["NoInteract"]={{"type","boolean"},{"default",false},{"description","Disable interaction and suppress VendorID, DialogueID, LoreID and LoreEntry bindings without changing collision."}};
+    npc["properties"]["NoInteract"]={{"type","boolean"},{"default",false},{"description","Disable interaction and suppress VendorID, DialogueID, LoreID, LoreEntry and JournalEntries bindings without changing collision."}};
     npc["properties"]["HideName"]={{"type","boolean"},{"default",false},{"description","Hide the in-world NPC name independently of interaction. Map.ShowName controls map labels."}};
     npc["properties"]["TimeOfDay"]={{"type","string"},{"enum",{"Any","Day","Night"}},{"default","Any"},{"description","Native lifecycle gate. Day/Night NPCs exist only during that phase; authority removes and restores them at the game's dawn/dusk transition while respecting world-cell loading."}};
     json marker={{"type","object"},{"additionalProperties",false},{"properties",{{"Enabled",{{"type","boolean"},{"default",false}}},{"Icon",{{"type","string"},{"pattern","^/"},{"minLength",2},{"maxLength",1024}}}}}};
@@ -364,7 +391,7 @@ inline nlohmann::json LoaderSchemas() {
     npc["allOf"]=json::array({json{
         {"if",{{"required",{"Type"}},{"properties",{{"Type",{{"const","Human"}}}}}}},
         {"then",{{"required",{"Appearance"}},{"not",{{"anyOf",{json{{"required",{"Mesh"}}},json{{"required",{"VisualSource"}}},json{{"required",{"Materials"}}}}}}}}},
-        {"else",{{"not",{{"anyOf",{json{{"required",{"Appearance"}}},json{{"required",{"Equipment"}}},json{{"required",{"Pose"}}},json{{"required",{"DialoguePose"}}},json{{"required",{"Ghost"}}}}}}}}}
+        {"else",{{"not",{{"anyOf",{json{{"required",{"Appearance"}}},json{{"required",{"Equipment"}}},json{{"required",{"EquipmentWhen"}}},json{{"required",{"Pose"}}},json{{"required",{"DialoguePose"}}},json{{"required",{"Ghost"}}}}}}}}}
     }});
     npc["allOf"].push_back({{"not",{{"required",{"Pose","IdleAnimation"}}}}});
     npc["allOf"].push_back({{"not",{{"anyOf",{
@@ -469,6 +496,7 @@ inline nlohmann::json LoaderSchemas() {
         {"properties",{{"Id",text},{"Type",{{"const","AISpawnPoint"}}},{"EventOnly",{{"const",true}}},
             {"AIClass",{{"type","string"},{"pattern","^/"}}},{"DisplayName",{{"type","string"},{"minLength",1},{"maxLength",128}}},{"BossName",{{"type","string"},{"minLength",1},{"maxLength",128}}},{"Scale",{{"type","number"},{"minimum",0.01},{"maximum",100}}}}}};
     result["spawns"]["items"]["allOf"]=json::array({{{"if",{{"required",{"EventOnly"}}}},{"then",eventSpawn}}});
+    result["spawns"]["items"]["allOf"][0]["then"]["properties"]["GroundMigrationRadius"]=migrationRadius;
     result["spawns"]["items"]["allOf"][0]["then"]["properties"]["VisualEffect"]=ghostVisual;
     result["spawns"]["items"]["allOf"][0]["then"]["properties"]["PowerLevel"]={{"type","integer"},{"minimum",1},{"maximum",100}};
     result["spawns"]["items"]["allOf"][0]["then"]["properties"]["LootRow"]={{"type","string"},{"minLength",1},{"maxLength",256},{"pattern","^[^\\r\\n\\t]+$"}};
@@ -493,6 +521,8 @@ inline nlohmann::json LoaderSchemas() {
     auto collectObjective=result["quests"]["anyOf"][0]["properties"]["Objective"];
     collectObjective["properties"]["Type"]={{"const","Collect"}};
     for(auto* objective:{&collectObjective,&killObjective}) {
+        for(const auto* key:{"SubobjectiveDescription","Hint","QuestDescriptionOverride"})
+            (*objective)["properties"][key]={{"type","string"},{"minLength",1},{"maxLength",std::string_view(key)=="QuestDescriptionOverride"?2048:1024}};
         (*objective)["properties"]["Hidden"]={{"type","boolean"},{"default",false}};
         (*objective)["properties"]["Optional"]={{"type","boolean"},{"default",false}};
         (*objective)["properties"]["ProgressText"]={{"type","string"},{"minLength",1},{"maxLength",1024},{"description","Live objective template. Supports {current}, {required}, {remaining}, and repeat-safe {run}; for example: Run {run}: kill {remaining} more goblins."}};
@@ -520,8 +550,16 @@ inline nlohmann::json LoaderSchemas() {
         (*questSchema)["properties"]["Stages"]={{"type","array"},{"minItems",1},{"maxItems",32},
             {"items",{{"type","object"},{"additionalProperties",false},{"required",{"Id","Objectives"}},
                 {"properties",{{"Id",{{"type","string"},{"pattern","^[A-Za-z0-9_-]{1,64}$"}}},
+                    {"Completion",{{"enum",{"All","Any"}},{"default","All"},{"description","Any completes on the first successful alternative, consumes only that hand-in route, and uses one quest reward receipt. Any requires at least two visible mandatory objectives."}}},
                     {"Objectives",{{"type","array"},{"minItems",1},{"maxItems",16},{"items",objectives}}}}}}}};
+        auto& stageSchema=(*questSchema)["properties"]["Stages"]["items"];
+        stageSchema["if"]={{"required",{"Completion"}},{"properties",{{"Completion",{{"const","Any"}}}}}};
+        stageSchema["then"]["properties"]["Objectives"]={{"minItems",2},{"items",{{"properties",{{"Optional",{{"const",false}}},{"Hidden",{{"const",false}}}}}}}};
         (*questSchema)["properties"]["Category"]={{"enum",{"Regular","Story","Task"}},{"default","Regular"},{"description","Task uses the game's green task-quest presentation."}};
+        (*questSchema)["properties"]["CompletedDescription"]={{"type","string"},{"minLength",1},{"maxLength",2048},{"description","Native completed quest description; omitted values inherit Description."}};
+        (*questSchema)["properties"]["Region"]={{"type","string"},{"minLength",1},{"maxLength",80},{"pattern","^(EQuestRegion::)?[A-Za-z][A-Za-z0-9_]*$"},{"description","Native EQuestRegion name, resolved by reflected enum rather than a numeric ID. Current names: Brynmoor, Ghornfell, Fellhollow, Dowdun_Reach, Umbral_Sands, Scorned_Wilderness. None/MAX are not regions. Omit for legacy behavior; no location is guessed."}};
+        (*questSchema)["properties"]["HideInQuestList"]={{"type","boolean"},{"default",false}};
+        (*questSchema)["properties"]["ShowInCompletedQuestList"]={{"type","boolean"},{"default",true},{"description","Expose the quest in the native completed list after native completion. Does not complete it or grant rewards."}};
         (*questSchema)["properties"]["TimeOfDay"]={{"enum",{"Any","Day","Night"}},{"default","Any"},{"description","Acceptance gate evaluated from the game's native time state. Active quest progress remains intact across later day/night transitions."}};
         (*questSchema)["properties"]["Prerequisites"]={{"type","array"},{"maxItems",32},{"uniqueItems",true},{"items",text}};
         (*questSchema)["properties"]["Repeatable"]={{"type","boolean"},{"default",false}};
@@ -703,6 +741,12 @@ inline nlohmann::json LoaderSchemas() {
     asset["properties"]["$VisualEffect"]={{"type","object"},{"additionalProperties",true},
         {"properties",{{"Trigger",{{"const","Equip"}}},
             {"DurationSeconds",{{"const","INFINITE"}}}}}};
+    asset["properties"]["$WearableBridge"]={{"type","boolean"},{"description","Request native wearable enumeration/cache enrollment after successful field writes. Supports cooked, PAK and RuneSchema-cloned WearableEquipmentData. Does not allocate item/network identities or fabricate mesh data; false is a no-op, not a global bridge disable."}};
+    asset["properties"]["$QuestScroll"]={{"type","object"},{"additionalProperties",false},{"required",{"QuestID","PersistenceID"}},
+        {"properties",{{"QuestID",{{"type","string"},{"minLength",1},{"maxLength",257},{"pattern","^[^:/\\r\\n\\t ]+(?::[^:/\\r\\n\\t ]+)?$"}}},
+            {"PersistenceID",{{"type","string"},{"pattern","^[A-Za-z0-9_-]{21}[AQgw]$"}}},
+            {"EntryID",{{"type","string"},{"minLength",1},{"maxLength",128},{"pattern","^[^:\\r\\n\\t ]+$"}}}}},
+        {"description","Replace a cooked Blueprint ConsumableItemData UseItem override with authoritative acceptance of an existing local quest Id or Mod:Id. Requires an inert impure script UseItem override returning false (BlueprintPure=false); native-only C++ consumables are not supported. PersistenceID is the expected item identity (not the quest ID). One scroll plus any normal quest start cost is charged only after native acceptance; active/cooldown/prerequisite/missing-quest rejection leaves the scroll. EntryID selects an existing quest entry option. Original cooked use callbacks are not also executed. Restart required."}};
     asset["properties"]["$DominionSpheres"]={{"type","object"},{"minProperties",1},{"maxProperties",32},
         {"propertyNames",{{"pattern","^[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*$"}}},
         {"additionalProperties",{{"type","object"},{"additionalProperties",false},{"required",{"Radius"}},
@@ -782,7 +826,17 @@ inline nlohmann::json LoaderSchemas() {
     result["registry"]={{"type","object"},{"additionalProperties",false},{"required",{"SchemaVersion","Entries"}},
         {"properties",{{"SchemaVersion",{{"const",1}}},
             {"Entries",{{"type","array"},{"maxItems",256},{"items",registryEntry}}}}},
-        {"description","Client presentation declarations shipped by a mod. RuneSchema namespaces every Id with the owning ModId and merges accepted entries into the replicated registry manifest."}};
+        {"description","Enabled loose schema mods and cooked declarations share native-registry enrollment and client/server declarations. Every asset still requires a correct live type and verified native identity; a declaration does not construct an asset or authorize cleanup."}};
+    json nativeRegistries={{"type","object"},{"additionalProperties",false},{"properties",json::object()}};
+    const json nativePath={{"type","string"},{"minLength",1},{"maxLength",1024},{"pattern","^/[^\\r\\n\\t]+\\.[^/]+$"}};
+    const json schemaPath={{"type","object"},{"additionalProperties",false},{"required",{"Path","Source"}},{"properties",{{"Path",nativePath},{"Source",{{"const","Schema"}}}}}};
+    for(const auto* lane:{"Items","Recipes","Quests","CombatSpells","UtilitySpells","EquipmentEffects","Journals","Lore","WearableMeshData","MeleeAttackClasses","RangedAttackClasses"})
+        nativeRegistries["properties"][lane]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},{"items",{{"anyOf",{nativePath,schemaPath}}}}};
+    for(const auto* lane:{"MeleeAttackClasses","RangedAttackClasses"})nativeRegistries["properties"][lane]["items"]=nativePath;
+    result["registry"]["properties"]["NativeRegistries"]=nativeRegistries;
+    result["registry"]["properties"]["LoaderDefinitions"]={{"type","object"},{"additionalProperties",false},{"properties",json::object()}};
+    for(const auto* lane:{"Recipes","Journals","Lore"})result["registry"]["properties"]["LoaderDefinitions"]["properties"][lane]=
+        {{"type","object"},{"maxProperties",4096},{"additionalProperties",{{"type","object"}}}};
     for(auto& [name,schema]:result.items()) {
         if(name=="registry") {
             schema["$schema"]="http://json-schema.org/draft-07/schema#";

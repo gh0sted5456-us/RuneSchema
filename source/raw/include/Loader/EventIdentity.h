@@ -6,6 +6,7 @@ inline Json Identity(const SpawnTemplate& spawn) {
     Json result={{"version",2},{"kind","event-ai"},{"spawn",spawn.Key},{"class",spawn.Class},
         {"name",spawn.Name},{"boss",spawn.BossName},{"scale",spawn.Scale},{"visual",spawn.VisualEffect},{"loot",spawn.LootRow}};
     if(spawn.PowerLevel!=-1)result["power"]=spawn.PowerLevel;
+    if(!spawn.AdditionalDrops.empty())result["drops"]=spawn.AdditionalDrops;
     return result;
 }
 inline std::string EncodeIdentity(const SpawnTemplate& spawn) {
@@ -17,11 +18,12 @@ inline Json DecodeIdentity(const std::string& text) {
     if(text.empty() || text.size()>NpcIdentity::MaxPayload)throw std::runtime_error("Invalid event identity length");
     auto data=Json::parse(text);
     if(!data.is_object() || !data.contains("version") || !data["version"].is_number_integer()
-        || ((data["version"]!=2 || data.size()!=9+size_t(data.contains("power"))) && (data["version"]!=3 || data.size()!=10+size_t(data.contains("power")) || !data.contains("event") || !data["event"].is_string()))
+        || ((data["version"]!=2 || data.size()!=9+size_t(data.contains("power"))+size_t(data.contains("drops"))) && (data["version"]!=3 || data.size()!=10+size_t(data.contains("power"))+size_t(data.contains("drops")) || !data.contains("event") || !data["event"].is_string()))
         || (data.value("kind",std::string{})!="event-ai" && data.value("kind",std::string{})!="tool-ai" && data.value("kind",std::string{})!="tool-resource")
         || !data.contains("spawn") || !data["spawn"].is_string())throw std::runtime_error("Invalid event identity protocol");
     if(data.contains("power") && (!data["power"].is_number_integer() || data["power"]<1 || data["power"]>100))
         throw std::runtime_error("Invalid event power identity");
+    if(data.contains("drops"))SpawnFields::Drops(data.at("drops"));
     const auto key=data["spawn"].get<std::string>();
     if(key.size()>512 || key.find(':')==key.npos || Dialogue::Reference("_",key)!=key)
         throw std::runtime_error("Invalid event spawn identity");
@@ -38,6 +40,7 @@ inline SpawnTemplate ToolIdentity(const Json& payload) {
     Json input={{"Id",key.substr(key.find(':')+1)},{"Type","AISpawnPoint"},{"EventOnly",true},
         {"AIClass",payload.at("class")},{"Scale",payload.at("scale")}};
     if(payload.contains("power"))input["PowerLevel"]=payload.at("power");
+    if(payload.contains("drops"))input["AdditionalDrops"]=payload.at("drops");
     for(const auto& pair: {std::pair{"name","DisplayName"},std::pair{"boss","BossName"},std::pair{"loot","LootRow"}})
         if(payload.at(pair.first)!= "")input[pair.second]=payload.at(pair.first);
     if(!payload.at("visual").empty())input["VisualEffect"]=payload.at("visual");

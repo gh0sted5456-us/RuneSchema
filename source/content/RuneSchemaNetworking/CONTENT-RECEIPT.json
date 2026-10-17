@@ -1,0 +1,31 @@
+{
+  "SchemaVersion": 1,
+  "Component": "RSNetworking",
+  "Version": "0.7.8.0-alpha",
+  "Engine": "5.6",
+  "VerifiedDate": "2026-10-16",
+  "IdentityContract": {
+    "Class": "/RuneSchema/Networking/BPC_RuneSchemaIdentity.BPC_RuneSchemaIdentity_C",
+    "Field": "IdentityPayload",
+    "Type": "String",
+    "Bytes": 16,
+    "ArrayDim": 1,
+    "Net": true,
+    "RepNotify": true,
+    "Callback": "OnRep_IdentityPayload"
+  },
+  "Verification": {
+    "EditorContract": true,
+    "CookErrors": 0,
+    "CookWarnings": 0,
+    "NativeMenuProbe": "Steam CL248854",
+    "Before": "IdentityPayload and OnRep_IdentityPayload absent",
+    "After": "Identity, primary registry RPCs and world-state checks passed",
+    "MultiplayerWorldValidation": false
+  },
+  "Containers": [
+    {"Name": "Networking_P.pak", "Bytes": 7418, "SHA256": "A6ACB0F8EB59F2FA1B474A6ABC5AD87B525C2F73F959FCB389F0AFF82342C8E5"},
+    {"Name": "Networking_P.ucas", "Bytes": 19936, "SHA256": "238A0E7FACE5A77C62DE9C769E6B1529946D2A61771D0F886F1F5C5F40F59254"},
+    {"Name": "Networking_P.utoc", "Bytes": 997, "SHA256": "02B68BCD65A6AFF98A6F0EB4BA4A2D3C5C10621FA9AE4FD711289A28F9629797"}
+  ]
+}

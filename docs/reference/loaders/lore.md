@@ -26,7 +26,7 @@ Open the entry from a supported dialogue lore action or unlock it normally.
 Cooked entries are registered from their live persistent identities; no ownership declaration is required.
 
 Lore uses the same persistence setting and missing-mod cleanup as journal
-entries on Steam/GOG and Game Pass.
+entries on Steam/Epic and Game Pass.
 
 ## Simple rules
 

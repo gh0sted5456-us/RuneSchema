@@ -13,8 +13,15 @@ struct HandInPlan {
 // must not prevent committing this area's item objectives.
 template<class Counter,class InArea,class Inventory>
 HandInPlan SelectHandIns(const std::vector<Definition>& objectives,
-    Counter counter,InArea inArea,Inventory inventory) {
+    Counter counter,InArea inArea,Inventory inventory,bool any=false) {
     HandInPlan result;
+    // A completed kill/acquisition route wins before considering inventory.
+    // Never charge for an alternative after a counter has satisfied the stage.
+    if(any)for(size_t i=0;i<objectives.size();++i) {
+        const auto value=counter(i);
+        if(value<0 || value>objectives[i].Required.Count)throw std::runtime_error("Quest hand-in counter is outside its requirement");
+        if(value==objectives[i].Required.Count)return result;
+    }
     for(bool optional:{false,true})for(size_t i=0;i<objectives.size();++i) {
         const auto& objective=objectives[i];
         if(objective.Optional!=optional || objective.Kill || objective.Acquire)continue;
@@ -30,6 +37,7 @@ HandInPlan SelectHandIns(const std::vector<Definition>& objectives,
         if(inventory(objective)<requested)continue;
         result.Amounts[objective.Required.Item]=requested;
         result.Objectives.push_back(i);
+        if(any)return result; // First eligible authored route, never all routes.
     }
     return result;
 }

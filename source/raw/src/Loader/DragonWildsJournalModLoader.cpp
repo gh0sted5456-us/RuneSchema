@@ -1,8 +1,11 @@
 #include "Utility/NativeFunctionHook.h"
+#include "Core/CookedPakRegistryManifest.h"
+#include "Core/RegistryEnrollment.h"
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <cwctype>
@@ -37,10 +40,12 @@
 #include "Loader/DragonWildsJournalModLoader.h"
 #include "Loader/DragonWildsRecipeModLoader.h"
 #include "Loader/JournalPlayerAccess.h"
+#include "Loader/JournalPlayerSelection.h"
 #include "Loader/JournalEntryIdentity.h"
 #include "Loader/JournalSaveOwnership.h"
 #include "Runtime/HostServices.h"
 #include "Runtime/Storefront.h"
+#include "Runtime/NetworkContext.h"
 #include "Core/JsonPatchDirective.h"
 #include "Core/SaveRegistrySnapshot.h"
 #include "Core/JournalPlacement.h"
@@ -54,6 +59,8 @@
 #include "Loader/JournalJsonFieldContract.h"
 #include "Generator/NativeCallResolver.h"
 #include "Loader/QuestNativeRegistry.h"
+#include "SDK/WeakObjectHandle.h"
+#include "Core/RegistryObjectIdentity.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -62,41 +69,28 @@ namespace DragonWilds {
     #include "JournalJsonBridge.inl"
     #include "JournalPersistence.inl"
     #include "JournalLorePresentation.inl"
-    DragonWildsJournalModLoader::EntryHandle::EntryHandle(UObject* object):Object(object) {
+    DragonWildsJournalModLoader::EntryHandle::EntryHandle(UObject* object,bool requireRoot):Object(object),RequireRoot(requireRoot) {
         auto* slot=object?FUObjectArray::IndexToObject(object->GetInternalIndex()):nullptr;
-        if(!slot || slot->GetUObject()!=object || !slot->IsValid(false) || !slot->IsRootSet())
-            throw std::runtime_error("Journal cache requires a live rooted entry");
-        Index=object->GetInternalIndex();Serial=slot->GetSerialNumber();Path=object->GetPathName();
+        if(!slot || slot->GetUObject()!=object || !slot->IsValid(false) || (RequireRoot&&!slot->IsRootSet()))
+            throw std::runtime_error("Journal cache object is invalid or its owned root lease is unavailable");
+        // A borrowed cooked acquisition item is retained by its native registry,
+        // not necessarily individually rooted. Give it a stable generation token.
+        const auto weak=PS::WeakObject(object);
+        if(weak.Get()!=object)throw std::runtime_error("Journal cache object generation unavailable");
+        Index=weak.ObjectIndex;Serial=weak.ObjectSerialNumber;Path=object->GetPathName();
     }
     UObject* DragonWildsJournalModLoader::EntryHandle::Get() const {
         auto* slot=Index<0?nullptr:FUObjectArray::IndexToObject(Index);
-        if(!slot || slot->GetUObject()!=Object || !slot->IsValid(false) || !slot->IsRootSet())return nullptr;
+        if(!slot || slot->GetUObject()!=Object || !slot->IsValid(false) || (RequireRoot&&!slot->IsRootSet()))return nullptr;
         const auto current=slot->GetSerialNumber();
-        if(current<0 || Serial<0 || (Serial!=0 && Serial!=current) || Object->GetPathName()!=Path
-            || Object->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed)))return nullptr;
-        // A continuously rooted runtime asset can acquire its first serial later.
-        Serial=current;
+        if(!PS::RegistryObjectIdentity::Matches(true,Object->GetPathName()==Path,true,
+            Object->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed)),
+            RequireRoot,slot->IsRootSet(),Serial,current))return nullptr;
         return Object;
     }
     #include "JournalGroupPlacement.inl"
     #include "JournalHierarchy.inl"
     namespace {
-        bool RegisteredJournalEntry(UObject* entry)
-        {
-            if (!entry) return false;
-            const auto registry = PS::SaveCleanup::ReadRegistry();
-            if (!registry || !registry->JournalsComplete) return false;
-            auto* idProperty = CastField<FStrProperty>(
-                PropertyHelper::GetPropertyByName(
-                    entry->GetClassPrivate(), TEXT("PersistenceID")));
-            if (!idProperty) return false;
-            const auto id = idProperty->GetPropertyValue(
-                idProperty->ContainerPtrToValuePtr<void>(entry));
-            return id.GetCharArray().Num() > 1
-                && registry->Journals.contains(
-                    RC::to_string(RC::StringType(*id)));
-        }
-
         constexpr const TCHAR* EntryClassPaths[] = {
             TEXT("/Script/Dominion.JournalEntryKnowLoreData"),
             TEXT("/Script/Dominion.JournalEntryKnowPeopleData"),
@@ -158,6 +152,25 @@ namespace DragonWilds {
             Hook::UnregisterCallback(m_acquisitionCallbackId);
     }
 
+    void DragonWildsJournalModLoader::ImportCookedDefinitions()
+    {
+        if(m_cookedImported)return;m_cookedImported=true;
+        const std::string lane=m_loreOnly?"Lore":"Journals";
+        try{
+            const auto definitions=PS::CookedPakRegistryManifest::Definitions(lane);
+            m_hasCookedDefinitions=!definitions.empty();
+            if(m_hasCookedDefinitions&&!m_baseEntryClass)throw std::runtime_error("Journal loader is unavailable for cooked declarations");
+            for(const auto& definition:definitions){
+                const auto path=RC::to_generic_string(definition.Path);
+                if(std::any_of(m_defs.begin(),m_defs.end(),[&](const auto& value){return value.Key==path;}))continue;
+                QueueData(nlohmann::json{{definition.Path,definition.Body}},RC::to_generic_string(definition.Owner));
+                if(std::none_of(m_defs.begin(),m_defs.end(),[&](const auto& value){return value.Key==path;}))
+                    throw std::runtime_error("Cooked journal/lore definition was not admitted: "+definition.Path);
+            }
+        }catch(const std::exception& error){PS::RegistryEnrollment::Reject("cooked "+lane,error.what());
+            PS::Log<LogLevel::Error>(STR("Cooked journal/lore declarations rejected; character cleanup is deferred: {}.\n"),PS::ToWideSafe(error.what()));}
+    }
+
     void DragonWildsJournalModLoader::OnLoad(const std::filesystem::path& loaderPath,
         const RC::StringType& modName, const EEngineLifecyclePhase& phase)
     {
@@ -172,8 +185,11 @@ namespace DragonWilds {
     {
         if (phase == EEngineLifecyclePhase::GameInstanceInit && !m_initialJournalApplied)
         {
-            ApplyPendingPatches();
-            ApplyAll();
+            try{
+                ApplyPendingPatches();
+                const auto result=ApplyAll();
+                if(m_hasCookedDefinitions&&result.ErrorCount)PS::RegistryEnrollment::Reject(m_loreOnly?"cooked lore":"cooked journals","journal finalization had unresolved entries");
+            }catch(const std::exception& error){if(m_hasCookedDefinitions)PS::RegistryEnrollment::Reject("cooked journals/lore",error.what());throw;}
         }
     }
 
@@ -305,6 +321,8 @@ namespace DragonWilds {
     {
         ResetFinalizeCaches();
         m_acquisitionUnlocks.clear();
+        m_automaticDelivery.clear();
+        m_reportedUnlockFailures.clear();
         LoadResult result{};
 
         for (auto& def : m_defs)
@@ -322,6 +340,7 @@ namespace DragonWilds {
                     result.ErrorCount++;
                     continue;
                 }
+                const bool automatic=JournalUnlockCondition::Automatic(def.Body,def.Declared);
 
                 if(def.Declared) {
                     auto* id=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(entry->GetClassPrivate(),TEXT("PersistenceID")));
@@ -363,7 +382,7 @@ namespace DragonWilds {
                                 ? expectedPersistence : RC::to_string(def.Key));
                     }
                 }
-                RegisterEntry(entry,def.Owner);
+                RegisterEntry(entry,def.Owner);UObject* acquisitionItem=nullptr;
                 if(def.Body.contains("UnlockOnAcquire")) {
                     if(!def.Body.at("UnlockOnAcquire").is_boolean())
                         throw std::runtime_error("UnlockOnAcquire must be a boolean");
@@ -373,7 +392,7 @@ namespace DragonWilds {
                         auto* item=ResolveSoftReference(ItemDataClassPath,
                             RC::to_generic_string(def.Body.at("ItemData").get<std::string>()),m_itemReferenceIndex);
                         if(!item)throw std::runtime_error("UnlockOnAcquire ItemData could not be resolved");
-                        m_acquisitionUnlocks.push_back({item,def.Key});
+                        acquisitionItem=item;
                     }
                 }
                 if (def.Body.contains("AddTo")) {
@@ -388,10 +407,10 @@ namespace DragonWilds {
                     const auto& persistence=id->GetPropertyValue(id->ContainerPtrToValuePtr<void>(entry));
                     const auto actualId=RC::to_string(*persistence);
                     const auto actualName=RC::to_string(*name->GetPropertyValue(name->ContainerPtrToValuePtr<void>(entry)));
-                    TrackOwnedId(entry,persistence,def.Owner,def.Declared);
+                    TrackOwnedId(entry,persistence,def.Owner,def.Declared,automatic);
                 }
 
-                if (JournalUnlockCondition::Automatic(def.Body, def.Declared))
+                if (automatic)
                 {
                     m_unlock.insert(def.Key);
                 }
@@ -400,6 +419,7 @@ namespace DragonWilds {
                     m_unlock.erase(def.Key);
                 }
 
+                if(acquisitionItem)m_acquisitionUnlocks.push_back({EntryHandle(acquisitionItem,false),def.Key});
                 result.EntriesReady++;
             }
             catch (const std::exception& e)
@@ -801,7 +821,8 @@ namespace DragonWilds {
             throw std::runtime_error("AddTo object is required");
         }
         const auto& addTo = def.Body.at("AddTo");
-        const auto placement=PS::JournalPlacement::Parse(addTo,RC::to_string(def.Key));
+        const auto placement=PS::JournalPlacement::WithNativeGroupKey(
+            PS::JournalPlacement::Parse(addTo,RC::to_string(def.Key)),RC::to_string(entry->GetFName().ToString()));
         auto path = RC::to_generic_string(placement.SubCategory);
         auto keyString = RC::to_generic_string(placement.Key);
         if (path.empty())
@@ -930,6 +951,16 @@ namespace DragonWilds {
         return m_finalizeJournalSubsystem;
     }
 
+    bool DragonWildsJournalModLoader::RegisteredJournalEntry(UObject* entry)
+    {
+        if(!entry||!entry->IsA(m_baseEntryClass)||entry->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_NeedInitialization|RF_NeedLoad|RF_NeedPostLoad|RF_BeginDestroyed|RF_FinishDestroyed)))return false;
+        auto* subsystem=FindJournalSubsystem();
+        // Unlock authorization is this exact live identity/object mapping, not
+        // a whole-character deletion certificate. Unrelated loader failures
+        // must still veto pruning, but must not disable healthy journal entries.
+        return subsystem&&QuestRegistry::NativeRegistry::ResolvesPersistenceIdentity(subsystem,entry,true);
+    }
+
     void DragonWildsJournalModLoader::RegisterEntry(UObject* entry,const RC::StringType& owner)
     {
         (void)owner;
@@ -959,7 +990,8 @@ namespace DragonWilds {
             return;
         }
         size_t parameterCount=0;
-        bool valid=function->GetParmsSize()==32 && !function->GetReturnProperty();
+        bool valid=!function->GetReturnProperty();
+        try {ReflectedContract::Frame(function);}catch(...){valid=false;}
         for(auto* field:TFieldRange<FProperty>(function,EFieldIterationFlags::Default)) {
             if(!field->HasAnyPropertyFlags(CPF_Parm))continue;
             ++parameterCount;
@@ -969,8 +1001,8 @@ namespace DragonWilds {
             auto* inner=array?CastField<FStructProperty>(array->GetInner()):nullptr;
             auto* type=inner?inner->GetStruct().Get():nullptr;
             auto* netId=type?CastField<FUInt16Property>(PropertyHelper::GetPropertyByName(type,TEXT("NetId"))):nullptr;
-            valid=valid && offset>=0 && field->GetOffset_Internal()==offset
-                && field->GetElementSize()==16 && field->GetArrayDim()==1
+            valid=valid && offset>=0 && ReflectedContract::Input(field,function)
+                && field->GetElementSize()==sizeof(FScriptArray) && field->GetArrayDim()==1
                 && type && type->GetPathName()==TEXT("/Script/Dominion.DominionDataAssetNetId")
                 && inner->GetElementSize()==2 && inner->GetArrayDim()==1 && type->GetStructureSize()==2
                 && netId && netId->GetOffset_Internal()==0 && netId->GetElementSize()==2 && netId->GetArrayDim()==1;
@@ -993,51 +1025,89 @@ namespace DragonWilds {
         m_hooksActive = true;
     }
 
-    void DragonWildsJournalModLoader::UnlockEntries(UObject* journalComponent)
+    bool DragonWildsJournalModLoader::UnlockEntries(UObject* journalComponent)
     {
         if (!journalComponent || !journalComponent->IsA(m_journalComponentClass))
         {
             PS::Log<LogLevel::Error>(STR("Journal persistence event supplied an invalid component.\n"));
-            return;
+            return false;
         }
 
-        size_t added=0,unavailable=0;
+        size_t added=0,unavailable=0,newFailures=0;
         for (auto& key : m_unlock)
         {
+            try {
             auto found = m_entries.find(key);
             if (found == m_entries.end())
             {
-                ++unavailable;
-                continue;
+                throw std::runtime_error("Journal entry is missing from the loader cache");
             }
 
             UObject* entry = found->second.Get();
-            if (!RegisteredJournalEntry(entry)) {++unavailable;continue;}
-            // The writer adapter only protects RuneSchema-created transient
-            // identities. Cooked assets are game-owned and must not depend on
+            if (!RegisteredJournalEntry(entry))throw std::runtime_error("Journal entry is not live or its native persistence identity does not resolve to this object");
+            // The adapter protects generated identities and removes orphaned
+            // IDs before native load. Cooked assets must not depend on
             // that adapter to use the native player-unlock path.
             if(m_createdEntries.contains(entry) && !m_nativePersistenceReady) {
-                ++unavailable;
-                PS::RoutineLog("journal", STR("Temporary journal/lore unlock deferred until the native save adapter is ready.\n"));
-                continue;
+                throw std::runtime_error("Journal/lore unlock deferred until native persistence protection is ready");
             }
-            try {
-                auto* subsystem=FindJournalSubsystem();
-                if(!subsystem || !QuestRegistry::NativeRegistry::ResolvesPersistenceIdentity(subsystem,entry,true))
-                    throw std::runtime_error("Native journal registry does not resolve this entry at unlock time");
                 if(JournalPlayerAccess::EnsureUnlocked(journalComponent,entry))++added;
             }catch(const std::exception& error) {
                 ++unavailable;
-                PS::Log<LogLevel::Error>(STR("Journal unlock '{}': {}\n"),key,PS::ToWideSafe(error.what()));
+                const auto failure=RC::to_string(journalComponent->GetPathName())+":"+RC::to_string(key)+":"+error.what();
+                if(m_reportedUnlockFailures.size()<2048&&m_reportedUnlockFailures.insert(failure).second){
+                    ++newFailures;PS::Log<LogLevel::Error>(STR("Journal unlock '{}': {}\n"),key,PS::ToWideSafe(error.what()));
+                }
             }
         }
         if(added)PS::Log<LogLevel::Verbose>(STR("Journal unlock: {} entries added to '{}'. UI visibility still depends on category placement.\n"),added,journalComponent->GetPathName());
-        if(unavailable)PS::Log<LogLevel::Warning>(STR("Journal unlock: {} requested entries unavailable; asset placement does not confirm player unlock.\n"),unavailable);
+        if(unavailable&&newFailures)PS::Log<LogLevel::Warning>(STR("Journal unlock: {} requested entries unavailable; asset placement does not confirm player unlock. Identical failures are suppressed until definitions reload.\n"),unavailable);
+        return unavailable==0;
+    }
+
+    void DragonWildsJournalModLoader::DeliverAutomaticUnlocks(UObject* controller)
+    {
+        if(!m_initialJournalApplied||m_unlock.empty())return;
+        auto* component=FindJournalComponent(controller);if(!component)return;
+        auto* slot=FUObjectArray::IndexToObject(component->GetInternalIndex());
+        if(!slot||slot->GetUObject()!=component||!slot->IsValid(false))return;
+        const auto token=std::to_string(component->GetInternalIndex())+":"+std::to_string(slot->GetSerialNumber());
+        const auto revision=JournalPersistence::LoadRevision.load(std::memory_order_acquire);
+        const auto prior=m_automaticDelivery.find(token);
+        if(slot->GetSerialNumber()>0&&prior!=m_automaticDelivery.end()&&prior->second==revision)return;
+        if(UnlockEntries(component)&&slot->GetSerialNumber()>0){if(m_automaticDelivery.size()>=256)m_automaticDelivery.clear();m_automaticDelivery[token]=revision;}
+    }
+
+    bool DragonWildsJournalModLoader::UnlockForPlayer(UObject* controller,const std::string& reference)
+    {
+        if(!m_initialJournalApplied||!controller||!controller->GetWorld()||controller->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed)))return false;
+        auto key=RC::to_generic_string(reference);UObject* entry=nullptr;
+        if(m_rejectedEntries.contains(key))return false;
+        if(const auto found=m_entries.find(key);found!=m_entries.end())entry=found->second.Get();
+        if(!entry&&!key.starts_with(TEXT("/"))) {
+            const auto separator=reference.find(':');
+            const auto owner=separator==reference.npos?std::string{}:reference.substr(0,separator);
+            const auto id=separator==reference.npos?reference:reference.substr(separator+1);
+            for(const auto& definition:m_defs){
+                if(!owner.empty()&&RC::to_string(definition.Owner)!=owner)continue;
+                if(RC::to_string(definition.Key)!=id&&definition.Body.value("PersistenceID",std::string{})!=id&&definition.Body.value("InternalName",std::string{})!=id)continue;
+                if(m_rejectedEntries.contains(definition.Key))continue;
+                const auto found=m_entries.find(definition.Key);if(found==m_entries.end())continue;
+                if(entry)throw std::runtime_error("Journal interaction reference is ambiguous");entry=found->second.Get();
+            }
+        }
+        if(!entry&&key.starts_with(TEXT("/")))entry=ActorHelper::ResolveObject(key);
+        if(!entry||entry->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed))||!entry->IsA(m_baseEntryClass)||!RegisteredJournalEntry(entry))return false;
+        if(m_createdEntries.contains(entry)&&!m_nativePersistenceReady)return false;
+        auto* component=FindJournalComponent(controller);if(!component)return false;
+        auto* subsystem=FindJournalSubsystem();
+        if(!subsystem||!QuestRegistry::NativeRegistry::ResolvesPersistenceIdentity(subsystem,entry,true))return false;
+        (void)JournalPlayerAccess::EnsureUnlocked(component,entry);return true;
     }
 
     void DragonWildsJournalModLoader::RegisterAcquisitionHook()
     {
-        if(m_acquisitionCallbackId!=Hook::ERROR_ID || m_acquisitionUnlocks.empty())return;
+        if(m_acquisitionCallbackId!=Hook::ERROR_ID || (m_acquisitionUnlocks.empty()&&m_unlock.empty()))return;
         Hook::FCallbackOptions options{};
         options.OwnerModName=TEXT("RuneSchema");
         options.HookName=m_loreOnly?TEXT("RuneSchemaLoreAcquisition"):TEXT("RuneSchemaJournalAcquisition");
@@ -1052,7 +1122,7 @@ namespace DragonWilds {
 
     void DragonWildsJournalModLoader::ObserveAcquisition(UObject* source,UFunction* function)
     {
-        if(m_observingAcquisition || !source || !function || m_acquisitionUnlocks.empty())return;
+        if(m_observingAcquisition || !source || !function || (m_acquisitionUnlocks.empty()&&m_unlock.empty()))return;
         const auto path=function->GetPathName();
         UObject* controller=nullptr;bool credit=true;
         if(path==TEXT("/Game/Gameplay/Character/Player/BP_PlayerController.BP_PlayerController_C:OnInventoryChanged_BrokenItemFTUE"))
@@ -1076,8 +1146,8 @@ namespace DragonWilds {
         m_observingAcquisition=true;
         struct Guard {bool& Value;~Guard(){Value=false;}} guard{m_observingAcquisition};
         std::unordered_map<RC::StringType,UObject*> items;
-        for(const auto& binding:m_acquisitionUnlocks)if(binding.Item)
-            items.emplace(binding.Item->GetPathName(),binding.Item);
+        for(const auto& binding:m_acquisitionUnlocks)if(!m_rejectedEntries.contains(binding.EntryKey))if(auto* item=binding.Item.Get())
+            items.emplace(item->GetPathName(),item);
         std::unordered_set<RC::StringType> added;
         for(const auto& [itemPath,item]:items) {
             ActorHelper::FunctionCall count(inventory,TEXT("/Script/Dominion.InventoryComponent:GetNumItemsByData"));
@@ -1090,8 +1160,9 @@ namespace DragonWilds {
             if(credit && current>previous)added.insert(itemPath);
         }
         if(!journal)return;
+        DeliverAutomaticUnlocks(controller);
         for(const auto& binding:m_acquisitionUnlocks) {
-            if(!binding.Item || !added.contains(binding.Item->GetPathName()))continue;
+            auto* item=binding.Item.Get();if(m_rejectedEntries.contains(binding.EntryKey)||!item||!added.contains(item->GetPathName()))continue;
             const auto entry=m_entries.find(binding.EntryKey);
             if(entry!=m_entries.end())if(auto* object=entry->second.Get();
                 RegisteredJournalEntry(object)
@@ -1102,45 +1173,51 @@ namespace DragonWilds {
 
     UObject* DragonWildsJournalModLoader::FindJournalComponent(UObject* controller)
     {
+        UObject* world=controller?controller->GetWorld():nullptr;
+        bool allowUniqueWorld=false;
+        try {
+            const auto context=PS::Network::Detect(controller);
+            if(!world)world=context.World;
+            allowUniqueWorld=context.Mode==PS::Network::Role::Standalone;
+        }catch(...) {
+            // Exact controller ownership can still be used if role detection
+            // is unavailable; never infer a player from world uniqueness.
+        }
+        if(!world)return nullptr;
+        auto* pawn=controller?ActorHelper::GetObjectRef(controller,TEXT("Pawn")):nullptr;
+        auto* state=controller?ActorHelper::GetObjectRef(controller,TEXT("PlayerState")):nullptr;
         TArray<UObject*> objects;
         UECustom::UObjectGlobals::GetObjectsOfClass(m_journalComponentClass, objects, true);
-        UObject* sameWorld=nullptr;
+        JournalPlayerSelection::Selection<UObject> selection;
         for (auto* object : objects)
         {
-            if (!object || object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject | RF_ArchetypeObject)))continue;
-            if(controller) {
-                if(object->GetWorld()!=controller->GetWorld())continue;
-                bool owned=false;
-                for(auto* outer=object->GetOuterPrivate();outer;outer=outer->GetOuterPrivate())
-                    if(outer==controller){owned=true;break;}
-                if(owned)return object;
-                // Some builds attach JournalComponent beneath a player state
-                // or pawn rather than directly beneath the controller.  A
-                // unique same-world component is safe for single-player; an
-                // ambiguous multiplayer world is deliberately rejected.
-                if(sameWorld)return nullptr;
-                sameWorld=object;
-                continue;
-            }
-            return object;
+            if (!object || object->GetWorld()!=world || object->HasAnyFlags(static_cast<EObjectFlags>(
+                RF_ClassDefaultObject|RF_ArchetypeObject|RF_NeedLoad|RF_NeedPostLoad|RF_NeedInitialization|RF_BeginDestroyed|RF_FinishDestroyed)))continue;
+            bool owned=false;
+            for(auto* outer=object->GetOuterPrivate();controller && outer;outer=outer->GetOuterPrivate())
+                if(outer==controller || (pawn && outer==pawn) || (state && outer==state)){owned=true;break;}
+            selection.Observe(object,owned);
         }
-        return sameWorld;
+        return selection.Result(allowUniqueWorld);
     }
 
-    void DragonWildsJournalModLoader::TrackOwnedId(UObject* entry, const FString& persistenceId,const RC::StringType& owner,bool declared)
+    void DragonWildsJournalModLoader::TrackOwnedId(UObject* entry, const FString& persistenceId,const RC::StringType& owner,bool declared,bool automatic)
     {
+        (void)automatic; // Automatic delivery does not make learned progress transient.
         if ((!m_createdEntries.contains(entry) && !declared) || persistenceId.GetCharArray().Num() <= 1)
         {
             return;
         }
 
         const auto id=RC::to_string(RC::StringType(*persistenceId)),mod=RC::to_string(owner);
+        JournalSave::ValidateId(id);Quests::ValidateOwner(mod);
         const auto [found,added]=m_ownedIds.emplace(id,mod);
         if(!added && found->second!=mod)throw std::runtime_error("Journal persistence ownership transfer refused");
     }
 
     void DragonWildsJournalModLoader::InstallNativePersistence()
     {
-        JournalPersistence::Install(this, JournalSave::Owners(m_ownedIds.begin(),m_ownedIds.end()), m_journalComponentClass);
+        const JournalSave::Owners owned(m_ownedIds.begin(),m_ownedIds.end());
+        JournalPersistence::Install(this,owned,m_journalComponentClass);
     }
 }

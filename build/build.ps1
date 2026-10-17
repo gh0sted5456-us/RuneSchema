@@ -3,27 +3,33 @@ param(
     [switch]$Clean,
     [switch]$PluginOnly,
     [switch]$Tests,
-    [switch]$UpdateMappings
+    [switch]$ManagedUE4SSHost,
+    [switch]$UpdateMappings,
+    [string]$MappingsPath
 )
 $ErrorActionPreference = 'Stop'
-$Version = '0.7.7.9m'
+if ($ManagedUE4SSHost) {
+    throw 'Custom UE4SS hosts are retired. RuneSchema must run on an unmodified UE4SS.dll; build a framework-only package instead.'
+}
+$Version = '0.8.0.0'
 $BuildRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 if (-not (Test-Path -LiteralPath (Join-Path $BuildRoot 'source\raw\CMakeLists.txt') -PathType Leaf)) {
     $BuildRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 }
-$releaseVersionPattern = '^\d+\.\d+\.\d+\.\d+[em]$'
-if ($Version -notmatch $releaseVersionPattern) {
-    throw "RuneSchema release versions must end in lowercase 'e' (experimental) or lowercase 'm' (main): $Version"
+$releaseVersionPattern = '^\d+\.\d+\.\d+(?:\.\d+(?:[em]|-alpha(?:\.\d+)?)?)?$'
+if ($Version -cnotmatch $releaseVersionPattern) {
+    throw "Expected a three- or four-part RuneSchema version, optionally using a legacy four-part channel suffix: $Version"
 }
 $releaseBranch = $env:GITHUB_REF_NAME
 if ([string]::IsNullOrWhiteSpace($releaseBranch) -and (Test-Path -LiteralPath (Join-Path $BuildRoot '.git'))) {
     $branchOutput = & git.exe -C $BuildRoot branch --show-current 2>$null
     $releaseBranch = if ($branchOutput) { ([string]$branchOutput).Trim() } else { '' }
 }
-if ($releaseBranch -eq 'main' -and -not $Version.EndsWith('m')) {
+$legacyChannelVersion = $Version -match '^\d+\.\d+\.\d+\.\d+(?:[em]|-alpha(?:\.\d+)?)$'
+if ($legacyChannelVersion -and $releaseBranch -eq 'main' -and -not $Version.EndsWith('m')) {
     throw "Main builds must end in lowercase 'm': $Version"
 }
-if ($releaseBranch -eq 'experimental' -and -not $Version.EndsWith('e')) {
+if ($legacyChannelVersion -and $releaseBranch -eq 'experimental' -and -not $Version.EndsWith('e')) {
     throw "Experimental builds must end in lowercase 'e': $Version"
 }
 $SourceRoot = Join-Path $BuildRoot 'source'
@@ -110,13 +116,19 @@ try {
         # do not wrap it again or the directory entries become a nested array.
         $root = Invoke-RestMethod -Uri "$api/contents?ref=$commitSha" -Headers $headers
         $versions = @($root | Where-Object {
-            $_.type -eq 'dir' -and $_.name -match '^\d+\.\d+\.\d+\.\d+$'
+            $_.type -eq 'dir' -and $_.name -match '^\d+\.\d+\.\d+(?:\.\d+)?$'
         } | ForEach-Object {
             [pscustomobject]@{ Name = [string]$_.name; Version = [version]($_.name) }
         } | Sort-Object Version -Descending)
         if (-not $versions) { throw 'RSDWArchive does not contain a versioned mapping directory.' }
 
         $version = $versions[0].Name
+        if (Test-Path -LiteralPath $MappingsLock -PathType Leaf) {
+            $priorLock = Get-Content -LiteralPath $MappingsLock -Raw | ConvertFrom-Json
+            if ($priorLock.Version -and [version]$version -lt [version]$priorLock.Version) {
+                throw "Archive mapping $version is older than pinned $($priorLock.Version); mapping lock was not changed."
+            }
+        }
         $entries = Invoke-RestMethod -Uri "$api/contents/$version/usmap`?ref=$commitSha" -Headers $headers
         $maps = @($entries | Where-Object { $_.type -eq 'file' -and $_.name -match '\.usmap$' })
         if ($maps.Count -ne 1) {
@@ -166,14 +178,27 @@ try {
             }
             Get-Content -LiteralPath $MappingsLock -Raw | ConvertFrom-Json
         }
-        if ($lock.Repository -ne $MappingsRepository -or $lock.Sha256 -notmatch '^[0-9a-fA-F]{64}$' -or
+        $nativeCapture = $lock.Source -eq 'NativeCapture'
+        if (($nativeCapture -and ($lock.Schema -ne 1 -or $lock.Platform -ne 'Steam' -or $lock.GameChangelist -le 0)) -or
+            (-not $nativeCapture -and $lock.Repository -ne $MappingsRepository) -or $lock.Sha256 -notmatch '^[0-9a-fA-F]{64}$' -or
             [int64]$lock.Size -le 0 -or [int64]$lock.Size -gt $MaximumMappingsBytes) {
             throw "Mappings lock is invalid: $MappingsLock"
         }
 
         New-Item -ItemType Directory -Path $MappingsCache -Force | Out-Null
         $cacheFile = Join-Path $MappingsCache "$($lock.Sha256.ToLowerInvariant()).usmap"
+        if ($MappingsPath) {
+            $provided = (Get-Item -LiteralPath $MappingsPath -ErrorAction Stop).FullName
+            if ((Get-Item -LiteralPath $provided).Length -ne [int64]$lock.Size -or
+                -not (Assert-Sha256 $provided $lock.Sha256)) {
+                throw 'Provided USMAP does not match the pinned mapping size and SHA-256.'
+            }
+            if ($provided -ne $cacheFile) { Copy-Item -LiteralPath $provided -Destination $cacheFile -Force }
+        }
         if (-not (Assert-Sha256 $cacheFile $lock.Sha256)) {
+            if ($nativeCapture) {
+                throw "The pinned $($lock.Version) native mapping is not cached. Supply its verified capture with -MappingsPath; do not substitute an older mapping."
+            }
             $temporary = "$cacheFile.download"
             Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
             Write-Host "Downloading locked RSDWArchive USMAP $($lock.Version)..." -ForegroundColor Cyan
@@ -185,6 +210,7 @@ try {
             }
             Move-Item -LiteralPath $temporary -Destination $cacheFile -Force
         }
+        if ((Get-Item -LiteralPath $cacheFile).Length -ne [int64]$lock.Size) { throw 'Pinned USMAP cache size changed.' }
         [pscustomobject]@{ Path = $cacheFile; Lock = $lock }
     }
     function Ensure-BuildDependencies {
@@ -257,6 +283,15 @@ try {
                     [void]$builder.AppendLine($_.FullName.Substring($SourceDirectory.Length).Replace('\','/'))
                     [void]$builder.AppendLine((Get-Content -LiteralPath $_.FullName -Raw))
                 }
+
+            # Adding/removing/renaming a .cpp must force configure for source
+            # Helpy is a sibling, not a descendant of raw. Ninja regeneration
+            # is disabled, so fingerprint its explicit build graph too.
+            $helpyCmake = Join-Path (Split-Path $SourceDirectory -Parent) 'helpy\CMakeLists.txt'
+            if ((Split-Path $SourceDirectory -Leaf) -eq 'raw' -and (Test-Path -LiteralPath $helpyCmake -PathType Leaf)) {
+                [void]$builder.AppendLine('../helpy/CMakeLists.txt')
+                [void]$builder.AppendLine((Get-Content -LiteralPath $helpyCmake -Raw))
+            }
 
             # Adding/removing/renaming a .cpp must force configure for source
             # trees that discover files by glob. Smaller subprojects such as
@@ -436,9 +471,9 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         $backup = "$Dll.uncompressed"
         Copy-Item -LiteralPath $Dll -Destination $backup -Force
         try {
-            & $Upx -9 --best --lzma $Dll
+            & $Upx -9 --best --lzma $Dll | Out-Host
             if ($LASTEXITCODE) { throw "UPX declined the DLL (exit $LASTEXITCODE)" }
-            & $Upx -t $Dll
+            & $Upx -t $Dll | Out-Host
             if ($LASTEXITCODE) { throw "UPX verification failed (exit $LASTEXITCODE)" }
             return 'UPX -9 --best --lzma; verified'
         } catch {
@@ -525,6 +560,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
             '-Wno-author',
             '-Wno-deprecated'
         )
+        $configureArgs += '-DRUNESCHEMA_BUILD_MANAGED_UE4SS_HOST=OFF'
         Ensure-CMakeConfigured $RawSource $build $configureArgs 'universal RuneSchema'
         $targets = if ($OnlyPlugin) { @('RuneSchemaHelpyPlugin') } else { @('RuneSchema', 'RuneSchemaHelpyPlugin') }
         Write-Host $(if ($OnlyPlugin) { '=== Compile Helpy plugin only (RuneSchema.dll is untouched) ===' } else { '=== Compile universal RuneSchema ===' }) -ForegroundColor Cyan
@@ -587,7 +623,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
                 if ($LASTEXITCODE) { throw 'UE4SS ABI audit failed for universal RuneSchema.' }
             } else { Write-Warning "Built UE4SS host DLL not found for an ABI audit: $hostDll" }
         }
-        [pscustomobject]@{ Build = $build; Core = $core; Helpy = (Join-Path $build 'RuneSchema.Helpy.dll') }
+        [pscustomobject]@{ Build = $build; Core = $core; Helpy = (Join-Path $build 'RuneSchema.Helpy.dll'); Host = (Join-Path $build "$Configuration\bin\UE4SS.dll") }
     }
     function New-HelpyPluginPackage([string]$HelpyDll) {
         $name = "RuneSchema.Helpy-$Version"
@@ -637,13 +673,24 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         )) {
             New-Item -ItemType Directory -Path $requiredDirectory -Force | Out-Null
         }
-        $sourceSettingsFile = Join-Path $SourceRoot 'settings\settings.jsonc'
+        $sourceSettingsFile = Join-Path $SourceRoot 'settings\settings.ini'
+        # The pinned runtime template predates INI. Never ship its legacy
+        # settings beside the new file and accidentally trigger migration.
+        $legacyPackagedSettings = Join-Path $payload 'settings\settings.jsonc'
+        if (Test-Path -LiteralPath $legacyPackagedSettings -PathType Leaf) {
+            Remove-Item -LiteralPath $legacyPackagedSettings -Force
+        }
         if (Test-Path -LiteralPath $sourceSettingsFile -PathType Leaf) {
-            Copy-Item -LiteralPath $sourceSettingsFile -Destination (Join-Path $payload 'settings\settings.jsonc') -Force
+            Copy-Item -LiteralPath $sourceSettingsFile -Destination (Join-Path $payload 'settings\settings.ini') -Force
         }
         $defaultsReadme = Join-Path $SourceRoot 'settings\defaults\README.md'
         if (Test-Path -LiteralPath $defaultsReadme -PathType Leaf) {
             Copy-Item -LiteralPath $defaultsReadme -Destination (Join-Path $payload 'settings\defaults\README.md') -Force
+        }
+        # Retired authoring examples belong in the website, not in live jobs.
+        foreach ($retiredJob in @('character-editor.example.json', 'building-menu.example.json')) {
+            $retiredPath = Join-Path $payload "settings\jobs\$retiredJob"
+            if (Test-Path -LiteralPath $retiredPath -PathType Leaf) { Remove-Item -LiteralPath $retiredPath -Force }
         }
         $luaBootstrap = Join-Path $SourceRoot 'ue4ss\scripts\main.lua'
         if (-not (Test-Path -LiteralPath $luaBootstrap -PathType Leaf)) {
@@ -651,6 +698,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         }
         New-Item -ItemType Directory -Path (Join-Path $payload 'scripts') -Force | Out-Null
         Copy-Item -LiteralPath $luaBootstrap -Destination (Join-Path $payload 'scripts\main.lua') -Force
+        Copy-Item -LiteralPath (Join-Path $SourceRoot 'ue4ss\scripts\packages-loader.lua') -Destination (Join-Path $payload 'scripts\packages-loader.lua') -Force
         $logicModsHelper = Join-Path $SourceRoot 'ue4ss\scripts\logicmods-register.lua'
         if (-not (Test-Path -LiteralPath $logicModsHelper -PathType Leaf)) {
             throw "RuneSchema LogicMods Lua helper is missing: $logicModsHelper"
@@ -680,7 +728,8 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         # bridges. Reject partial IoStore containers that cannot mount in game.
         foreach ($bridge in @(
             @{ Folder = 'RuneSchema.RegistryBridge\paks\RegistryBridge'; Name = 'RegistryBridge_P' },
-            @{ Folder = 'RSNetworking\paks\Networking'; Name = 'Networking_P' }
+            @{ Folder = 'RSNetworking\paks\Networking'; Name = 'Networking_P' },
+            @{ Folder = 'RuneSchema.QuestItems\paks\RuneSchemaQuestItems'; Name = 'RuneSchemaQuestItems_P' }
         )) {
             $bridgeContainer = Join-Path (Join-Path $payload 'plugins') $bridge.Folder
             foreach ($extension in @('.pak', '.utoc', '.ucas')) {
@@ -691,6 +740,31 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
                 }
             }
         }
+
+        $networkContentLockPath = Join-Path $SourceRoot 'content\RuneSchemaNetworking\CONTENT-RECEIPT.json'
+        $networkContentLock = Get-Content -LiteralPath $networkContentLockPath -Raw | ConvertFrom-Json
+        $networkContainerNames=@($networkContentLock.Containers | ForEach-Object Name | Sort-Object)
+        if (($networkContainerNames -join ',') -ne 'Networking_P.pak,Networking_P.ucas,Networking_P.utoc') {
+            throw 'Networking receipt must cover exactly the complete verified container triplet'
+        }
+        foreach ($container in $networkContentLock.Containers) {
+            $contentFile = Join-Path $payloadPlugins ('RSNetworking\paks\Networking\' + $container.Name)
+            if ((Get-Item -LiteralPath $contentFile).Length -ne $container.Bytes -or (Get-Sha256Hex $contentFile) -ne $container.SHA256) {
+                throw "Shared networking content differs from its verified receipt: $contentFile"
+            }
+        }
+        Copy-Item -LiteralPath $networkContentLockPath -Destination (Join-Path $payloadPlugins 'RSNetworking\CONTENT-RECEIPT.json')
+
+        $questContentLockPath = Join-Path $SourceRoot 'content\RuneSchemaQuestItems\CONTENT-RECEIPT.json'
+        $questContentLock = Get-Content -LiteralPath $questContentLockPath -Raw | ConvertFrom-Json
+        foreach ($container in $questContentLock.Containers) {
+            if ($container.Name -notmatch '^RuneSchemaQuestItems_P\.(pak|utoc|ucas)$') { throw 'Unexpected shared quest-items container name' }
+            $contentFile = Join-Path $payloadPlugins ('RuneSchema.QuestItems\paks\RuneSchemaQuestItems\' + $container.Name)
+            if ((Get-Item -LiteralPath $contentFile).Length -ne $container.Bytes -or (Get-Sha256Hex $contentFile) -ne $container.SHA256) {
+                throw "Shared quest-items content differs from its verified receipt: $contentFile"
+            }
+        }
+        Copy-Item -LiteralPath $questContentLockPath -Destination (Join-Path $payloadPlugins 'RuneSchema.QuestItems\CONTENT-RECEIPT.json')
 
         # UE4SS enable marker.
         Set-Content -LiteralPath (Join-Path $payload 'enabled.txt') -Value '' -Encoding ascii
@@ -713,9 +787,18 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         $report | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath (Join-Path $payload 'settings\DLL-COMPRESSION.json') -Encoding utf8
         $dlls = @(Get-ChildItem -LiteralPath $payload -Filter '*.dll' -File -Recurse | ForEach-Object FullName)
         Attempt-Signing $dlls
+        # Keep the loose payload lean too: the launcher finalizes its notices
+        # after this step, and must not recreate documentation/sample clutter.
+        foreach ($extra in @('dlls/mappings/README.txt', 'settings/defaults/README.md',
+            'settings/DLL-COMPRESSION.json', 'settings/MAPPINGS-SOURCE.json',
+            'settings/jobs/building-menu.example.json', 'settings/jobs/character-editor.example.json')) {
+            $extraPath = Join-Path $payload $extra
+            if (Test-Path -LiteralPath $extraPath -PathType Leaf) { Remove-Item -LiteralPath $extraPath -Force }
+        }
         $zip = Join-Path $DistRoot "$Name.zip"
         if (Test-Path $zip) { Remove-Item -LiteralPath $zip -Force }
         Compress-Archive -LiteralPath $payload -DestinationPath $zip -CompressionLevel Optimal
+        & (Join-Path $BuildRoot 'build/package-runtime.ps1') -SourceArchive $zip -DestinationArchive $zip -RepositoryRoot $BuildRoot
         Write-Host "Created $zip" -ForegroundColor Green
     }
 
@@ -762,7 +845,9 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         } else {
             @(
                 'vendor-offers','vendor-spawn-gate','loader-schemas','npc-catalog','npc-cleanup-contract','player-activity-events',
-                'quest-gameplay-owner','quest-native-contract','quest-definition','event-definition',
+                'quest-gameplay-owner','quest-native-contract','quest-definition','quest-kill-credit','summon-kill-credit','summon-kill-credit-contract','event-definition',
+                'item-cart','asset-preload-plan','helpy-lazy-thread','alpha-ui-contract','icon-capture-schedule','helpy-popup-input','npc-journal-unlocks','helpy-kit-files',
+                'consume-queue','ordered-callbacks','authoring-policy','unreal-readiness','ghost-tools-options','surge-evade-rules','ModFolderLayoutTests','example-mods','startup-trace-optin',
                 'character-entry-recovery-contract',
                 'appearance-defaults-contract',
                 'dialogue-definition','building-preview-safety','building-clone-contract',
@@ -776,8 +861,8 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
                 'loader-folder-case','usmap-index','native-binding-resolution','identity-only-cleanup','persistence-diagnostic-ledger',
                 'vendor-category-refresh-contract','storefront-lanes','state-storage-contract',
                 'equipment-storefront-lane','native-contract','journal-failure-isolation',
-                'journal-wingdk-lane','journal-save-ownership','loader-lifecycle-contract',
-                'recipe-reference-contract','main-menu-log-budget','runtime-widget-v08-contract','ue4ss-companion-bootstrap-contract','config-settings',
+                'journal-wingdk-lane','journal-save-ownership','journal-player-selection','journal-unlock-condition','loader-lifecycle-contract',
+                'recipe-reference-contract','main-menu-log-budget','runtime-widget-contract','ue4ss-companion-bootstrap-contract','config-settings','config-migration',
                 'persistence-mode-contract','preview-refresh-contract','logic-pak-bridge-contract'
             )
         }

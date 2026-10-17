@@ -1,0 +1,33 @@
+Helpy 2.0 component provenance
+
+RuneSchema-derived UI, models, data-only plugin API, and configuration helpers:
+  https://github.com/gh0sted5456-us/RuneSchema
+  Local runeschema-7.8-alpha snapshot, including local refinements.
+  SOURCE-SNAPSHOT.json records the source revision and original hashes.
+  Complete project notices and original community credits are bundled.
+
+PalSchema foundation:
+  https://github.com/Okaetsu/PalSchema
+  Full original MIT notice: PalSchema-MIT.txt.
+
+Dear ImGui 1.92.1, including Win32 and Direct3D 11 backends:
+  https://github.com/ocornut/imgui
+  Local pinned RuneSchema dependency source, reproduced in vendor/imgui.
+  Full original MIT notice: vendor/imgui/LICENSE.txt.
+
+nlohmann/json 3.11.3:
+  https://github.com/nlohmann/json
+  Local pinned RuneSchema dependency headers, reproduced in vendor/json.
+  Full original MIT notice: vendor/json/LICENSE.MIT.
+
+RuneSchema logo and Windows icon are existing project artwork, retained with
+the project branding. Steam and Xbox runtime marks were supplied by the user;
+these marks remain the property of Valve and Microsoft respectively, are not
+relicensed under MIT, and are used only to identify the detected runtime.
+Gold tint and transparency are applied by the renderer, not to the originals.
+Helpy's own code shares RuneSchema's MIT License; third-party notices remain.
+No Jagex artwork, game binaries, Unreal SDK, or game
+catalog dump is included. Sample preview records are synthetic developer data.
+
+Microsoft Windows APIs and the compiler's static runtime are platform/build
+dependencies; no Windows system DLL is redistributed in this package.

@@ -7,6 +7,47 @@ building a preview do not install a mod or change the game data.
 
 ## Open the tools
 
+### Helpy 7.8 alpha
+
+Helpy's external F2 window has a compact **Simple / Advanced** switch in its header. Simple mode keeps everyday item browsing and delivery together; Advanced exposes Transmutate, Recipes, building tools, cleanup, full scans and detailed appearance controls. The preference is stored in `ui.jsonc` under `views.advancedMode`.
+
+The shared item bay defaults to **20 items per page** in a **5 columns × 4 rows** grid. Change the page size below the items (presets or a custom count from 1 to 100), then use **Previous / Next**. Page size changes preserve the first item's approximate position without clearing the cart. The catalog fetches only enough bounded windows to fill the requested page; it does not start a Full Scan. A partial catalog is marked “more available” rather than reporting a guessed total.
+
+Search runs after a short typing pause or immediately on Enter. **All categories** filters item types. **View** contains Grid/List and optional column/row controls; the lower divider still supports free-height resizing. Narrow windows reduce columns and short windows scroll within the page. Preferences are shared across inventory and editor bays and saved in `ui.jsonc` (`views.itemPageSize`, `itemGridColumns`, `itemGridRows`, `itemGridFitRows`).
+
+Choose an item, then **Add to cart**, or drag it into the compact cart. **Give items** is the only primary delivery action. **Loadouts** holds kit import/export; **More** holds list/player refresh and advanced scan tools. An empty cart does not reserve the height of a populated staging chest. Existing colors, scaling, list-view preferences and delivery confirmation semantics are retained.
+
+**Transmutate** separates source selection, customization and the resulting item into connected cards, with the item bay below. Inspect the selected source before creating a clone. Native property and JSON overrides are in a separate expandable section. The source item is not changed.
+
+**Recipes** connects inputs, station/timing and outputs. Drag items from the bottom bay into either side, or select an item and use the add buttons. Quantities are editable; a recipe can have multiple outputs. Choose a native station row and, where applicable, a labeled category. Optional processing duration has minimum and maximum bounds in seconds. These cards stack vertically when the available width is limited.
+
+Use **Browse** to search native recipe metadata, or paste an exact cooked `RecipeData` object path and choose **Load**. Saving an override changes only the authored ingredients, outputs and optional timing; it preserves the cooked recipe's identity. Adding a station is optional and does not remove its original station placements. New recipes require a compatible station. **Save** writes a RuneSchema `/recipes` definition and reports its file path; restart to apply it. It does not silently grant inventory items. Station artwork comes from native row metadata or a cooked preview-icon path, not an automatic web download.
+
+Normal catalog queries combine loaded objects with mounted asset-registry metadata. Unloaded AI/resource candidates remain visible but need **Inspect selected definition** before spawning. Inspection loads only the selected class and checks its native ancestry; native NPC-copy restrictions and resource save-exclusion checks still apply. The coverage message identifies when registry metadata is unavailable. Unknown mod directories are not guessed to be resource or AI classes: authored `/spawns` entries and the explicit Full Scan remain additional discovery paths.
+
+The item inventory is above the cart. Drag an item down, or right-click **Add to cart**, then choose a player and **Deliver**. Selecting an item does not grant it. Cart editing pauses during delivery; entries leave the cart only after matching inventory-delta confirmations. Failed or unconfirmed entries stay staged for inspection, without automatic retries. Advanced mode also offers one-each and stack presets.
+
+PowerLevel badges request the native game texture and display the item's actual native value, with a text fallback. Masterwork labels use native flags/tags; detailed tooltips retain the native `MasterworkType` identifier when supplied by the item. Item names and high PowerLevel do not imply masterwork quality.
+
+Use **Export kit** to save the cart as JSON or commented JSONC. **Import kit** lists kits in the displayed `runtime/Helpy/kits` folder under RuneSchema's per-profile Saved state. Copy shared kits into that folder and choose **Refresh kits**. Selecting a file previews its name/count; **Load into cart** replaces the staged cart, not your inventory. Loaded-item metadata is refreshed on the game thread without mounting missing content. Unknown or unavailable items are checked again at delivery.
+
+Exports use a versioned, data-only `RuneSchemaHelpyKit` format: a schema version, optional name and up to 64 unique cooked item paths with quantities 1..10000. Imports are limited to 128 KiB and do not contain scripts, automatic delivery, target-player selection or authority overrides. Existing exports require explicit replacement confirmation and retain a backup. The in-window kit library does not open a Windows file dialog.
+
+```jsonc
+{
+  "SchemaVersion": 1,
+  "Type": "RuneSchemaHelpyKit",
+  "Name": "Starter sword",
+  "Items": [
+    {"Item": "/Game/Gameplay/Character/Player/Equipment/Held/Sword/ITEM_Sword_Bronze.ITEM_Sword_Bronze", "Count": 1}
+  ]
+}
+```
+
+Delivery uses the existing authoritative inventory grant and confirmation path. **Auto-equip** is disabled until an inventory-instance equip command and its native slot/result contract are mapped; importing a kit cannot enable it. Advanced mode's **Inspect native equip / unlock contracts** exports read-only function metadata without invoking those functions or editing saves.
+
+### RuneSchema authoring workflow
+
 Open RuneSchema Settings, then **Authoring & Tools**. If the tools are off,
 enable **Mod authoring tools** under **General > Runtime** and restart. When
 the game is ready, choose **Activate Tools for this session**. Activation is
@@ -44,7 +85,7 @@ structural loader schemas** provides the full set.
 
 Items, recipes, journal entries, quests, NPCs, spawns, and events have focused
 content choices. Player and nameplate pages include their own guided controls;
-the Items page also points to Helpy's Item Lab for in-world item authoring.
+the Items page also points to Helpy's Transmutate workspace for in-world item authoring.
 
 ## Know what each stage is for
 

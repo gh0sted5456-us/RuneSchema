@@ -61,7 +61,16 @@ int main(int argc,char** argv) {
     require(groundStart!=std::string::npos && groundEnd!=std::string::npos,
         "grounding implementation is missing");
     const auto ground=spawn.substr(groundStart,groundEnd-groundStart);
-    const auto trace=ground.find("if (!UECustom::UKismetSystemLibrary::LineTraceGround(");
+    require(ground.find("else throw PS::Grounding::SurfacePending();")!=std::string::npos
+        && ground.find("state.Obstructed&&state.FloorReference")!=std::string::npos
+        && ground.find("GroundedPlacement::CapsuleSite(")!=std::string::npos
+        && spawn.find("catch (const PS::Grounding::SurfacePending&)")!=std::string::npos
+        && spawn.find("ReconcileGroundingRetries(deltaSeconds)")!=std::string::npos
+        && spawn.find("if(groundRetriesOnly&&!spawn.bCellActivated)continue;")!=std::string::npos
+        && spawn.find("spawn.bExistsInWorld || spawn.bSpawnFailed || spawn.bDeconstructed")!=std::string::npos
+        && spawn.find("|| (spawn.bTemporaryResource && spawn.bTemporaryResourceSpawned)")!=std::string::npos,
+        "ground misses are permanently failed, retried outside activated cells, or lose their bounded tick pump");
+    const auto trace=ground.find("if (!UECustom::UKismetSystemLibrary::FindGroundSurface(");
     const auto failure=ground.find("throw std::runtime_error(",trace);
     const auto placed=ground.find("spawn.Location = FVector(",failure);
     require(trace!=std::string::npos && failure!=std::string::npos

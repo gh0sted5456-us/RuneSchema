@@ -18,9 +18,9 @@ int main(int argc,char** argv){
     const auto entry=Read(argv[5]);
     const auto storefront=Read(argv[6]);
     const auto catalog=Read(argv[7]);
-    Check(Has(plugin,"EmbeddedCatalog()")&&Has(plugin,"F2Catalog::BundledPaths()"),"Helpy DLL owns an embedded seed catalogue");
-    Check(Has(plugin,"state->ToolsCatalog=EmbeddedCatalog()"),"clear and initialization restore the embedded catalogue");
-    Check(Has(plugin,"for(auto it=core.begin();it!=core.end();++it)state->ToolsCatalog[it.key()]=it.value()"),"core updates overlay rather than discard the embedded catalogue");
+    Check(Has(plugin,"HelpyStandaloneWindow")&&Has(plugin,"QuerySubmit"),"standalone Helpy uses a bounded query service");
+    Check(Has(plugin,"state->ToolsCatalog=nlohmann::json::object()"),"initialization does not copy an eager full catalogue");
+    Check(Has(plugin,"for(auto it=payload.begin();it!=payload.end();++it)state->ToolsCatalog[it.key()]=it.value()"),"core catalogue updates are merged");
     const auto begin=menu.find("void InGameQuickMenu::Toggle()");
     const auto end=menu.find("void InGameQuickMenu::SelectPrevious()",begin);
     Check(begin!=std::string::npos&&end!=std::string::npos,"toggle implementation bounded");
@@ -45,7 +45,7 @@ int main(int argc,char** argv){
     Check(!Has(menu,"const auto frame=m_ui.Render(mx,my);bool loadedIcon=false"),
         "one-icon-per-frame loading throttle returned");
     Check(Has(host,"plugin.Manifest.Version")&&Has(host,"plugin.Manifest.ConsoleMessage"),"plugin announcement is manifest driven");
-    Check(Has(entry,"RC::Output::send<RC::LogLevel::Normal>")&&Has(entry,"Runtime storefront:"),"storefront is visible in standard logs");
+    Check(Has(entry,"PS::ConsolidatedLog<RC::LogLevel::Normal>")&&Has(entry,"Runtime storefront:"),"storefront is visible in standard logs and mirrored to RuneSchema.log");
     Check(Has(entry,"RSNetworking is not active. Local loaders remain enabled."),"plugins are optional to RuneSchema core");
     Check(Has(storefront,"GetCurrentPackageFullName")&&Has(storefront,"UE4SS_Signatures")&&Has(storefront,"WinGDK/Windows package executable path"),"storefront pivot combines package, path, and signature evidence");
     Check(Has(catalog,"A missing DLL does not hide the manifest or its PAKs.")&&Has(catalog,"loading without it"),"plugin DLL and dependency mismatches do not suppress PAK discovery");

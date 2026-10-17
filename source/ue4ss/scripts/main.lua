@@ -43,6 +43,17 @@ elseif not logicOk then
     log("[LOGIC-PAK][RUNE-LUA][PARTIAL] Helper unavailable: " .. tostring(logicLoader))
 end
 
+-- A current-session manifest is authoritative. Missing/failed helpers must not
+-- fall through into stale legacy order parsing and reactivate a disabled mod.
+if os.getenv("RUNESCHEMA_UE4SS_PACKAGE_SESSION") then
+    local ok, loader = pcall(dofile, root .. "/scripts/packages-loader.lua")
+    if ok and type(loader) == "function" then
+        local ran, failure = xpcall(function() loader(root) end, debug.traceback)
+        if not ran then log("[PACKAGES][BLOCKED] " .. tostring(failure)) end
+    else log("[PACKAGES][BLOCKED] Package loader helper unavailable: " .. tostring(loader)) end
+    return
+end
+
 local mods_root = root .. "/mods"
 local order_path = mods_root .. "/runeschema.txt"
 local order = io.open(order_path, "r")

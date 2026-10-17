@@ -30,7 +30,7 @@ int main(int argc, char** argv)
         && equipment.find("NativeLane::GamePassNative") != std::string::npos
         && equipment.find("UsesGamePassSurgeContract") != std::string::npos
         && equipment.find("Surge/Dash native contract does not match the active storefront lane") != std::string::npos,
-        "Dash/Surge hooks select only the verified profile for the active Steam/GOG or Game Pass lane");
+        "Dash/Surge hooks select only the verified profile for the active Steam/Epic or Game Pass lane");
     Check(equipment.find("GrantedEffects") != std::string::npos
         && equipment.find("LoadAsset_Blocking") != std::string::npos,
         "Windstep and other cooked GrantedEffects remain reflection-driven and storefront-neutral");

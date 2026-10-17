@@ -138,6 +138,12 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
             const auto id=row.at("QuestId").get<std::string>();
             const bool duplicate=!ids.insert(id).second;
             const bool registryOrphan=registry && registry->QuestsComplete && !registry->Quests.contains(id);
+            // Startup has not prepared the live quest registry yet. Preserve
+            // ownership/progress verbatim; native character hydration performs
+            // verified owner handoff later, not this item/recipe-only pass.
+            if(registry&&!registry->QuestsComplete&&selected.empty()){
+                retained.push_back(row);continue;
+            }
             if(duplicate && !registryOrphan) {
                 retained.push_back(row);continue;
             }

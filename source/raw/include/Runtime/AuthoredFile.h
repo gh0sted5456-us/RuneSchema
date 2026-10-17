@@ -1,6 +1,7 @@
 #pragma once
 // R3v5: exclusive, verified writes. A watcher never sees a partially-written JSON.
 #include "Generator/AuthoringPolicy.h"
+#include "Core/AuthoringDestination.h"
 #include "Runtime/HostServices.h"
 #include <filesystem>
 #include <fstream>
@@ -10,21 +11,19 @@
 #include <Windows.h>
 
 namespace PS::Authoring {
-inline std::filesystem::path Directory(const char* category) {
-    const std::string value(category);
-    if(value!="spawns" && value!="assets" && value!="raw" && value!="journal" && value!="recipes" && value!="npc")throw std::runtime_error("Invalid authoring category");
+inline std::filesystem::path Directory(const char* category,const std::string& mod="runeschema") {
     // ModDirectory is UE4SS/Mods/RuneSchema; this is its content-mod subtree.
-    return HostServices::ModDirectory()/"mods"/"runeschema"/value;
+    return AuthoredDirectory(HostServices::ModDirectory()/"mods",mod,category);
 }
 class StagedFile {
     std::filesystem::path temporary_, final_;
     bool committed_=false,preservePending_=false;
 public:
-    StagedFile(const char* category,const std::string& stem,const nlohmann::json& body) {
+    StagedFile(const char* category,const std::string& stem,const nlohmann::json& body,const std::string& mod="runeschema") {
         if(!SafeFileStem(stem))throw std::runtime_error("Invalid authored filename");
         const auto text=body.dump(2);
         if(text.size()>1024*1024)throw std::runtime_error("Authored document exceeds 1 MiB");
-        const auto folder=Directory(category);
+        const auto folder=Directory(category,mod);
         std::filesystem::create_directories(folder);
         final_=folder/(stem+".json");
         temporary_=folder/(stem+".pending");

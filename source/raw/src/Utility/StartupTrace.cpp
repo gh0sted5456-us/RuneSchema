@@ -1,5 +1,6 @@
 #include "Utility/StartupTrace.h"
 #include "Utility/Config.h"
+#include "Core/BufferedTrace.h"
 #include <Windows.h>
 #include <chrono>
 #include <fstream>
@@ -11,12 +12,14 @@ std::mutex Mutex;
 std::ofstream Stream;
 std::filesystem::path Folder;
 std::chrono::steady_clock::time_point Start;
+BufferedTrace::FlushPolicy Flushes;
 }
 void Begin(const std::filesystem::path& folder) noexcept {
     try {
         std::lock_guard lock(Mutex);
         Folder = folder;
         Start = std::chrono::steady_clock::now();
+        Flushes.Reset();
         std::error_code error;
         std::filesystem::remove(Folder / "startup-failure.log", error);
     } catch (...) {}
@@ -36,12 +39,13 @@ void Mark(std::string_view stage) noexcept {
         if (!Stream) return;
         Stream << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - Start).count()
                << "ms thread=" << GetCurrentThreadId() << ' ' << stage << '\n';
-        Stream.flush();
+        if(Flushes.Record(std::chrono::steady_clock::now(),BufferedTrace::Checkpoint(stage)))Stream.flush();
     } catch (...) {}
 }
 void Fatal(std::string_view stage, std::string_view reason) noexcept {
     try {
         std::lock_guard lock(Mutex);
+        if(Stream.is_open())Stream.flush();
         auto folder = Folder;
         if (folder.empty()) {
             std::error_code error;

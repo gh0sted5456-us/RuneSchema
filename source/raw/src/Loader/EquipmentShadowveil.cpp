@@ -142,7 +142,7 @@ EquipmentShadowveilStatus InitializeEquipmentShadowveil(const ShadowveilRules::R
         const bool server=SelectedProfile->timestamp == ShadowveilNative::ServerTimestamp;
         const bool gamePass=UsesGamePassShadowveilContract();
         PS::Log<LogLevel::Verbose>(TEXT("Equipment Shadowveil ({}): {} wearables; 5 native binding sites validated.\n"),
-            server ? TEXT("server") : gamePass ? TEXT("gamepass") : TEXT("steam-gog"), WearablePaths.size());
+            server ? TEXT("server") : gamePass ? TEXT("gamepass") : TEXT("steam-epic"), WearablePaths.size());
         return {WearablePaths.size(),true,server};
     }
     if(ExecutableTimestamp && ExecutableImageSize)

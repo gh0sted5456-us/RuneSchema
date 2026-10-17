@@ -20,26 +20,25 @@ inline void EnsureLoaded() {
     try {
         if(File.empty())throw std::runtime_error("Helpy plugin settings path was not configured");
         if(std::filesystem::is_regular_file(File))Document=nlohmann::json::parse(ConfigFiles::Read(File),nullptr,true,true);
-        else Document={{"enabled",true},{"toggleKey","F2"}};
+        else Document={{"enabled",true}};
         Enabled=Document.value("enabled",true);
-        const auto name=Document.value("toggleKey",std::string{"F2"});
-        const auto key=HelpyHotkeys::Find(name);
-        if(!key)throw std::runtime_error("Invalid toggleKey; use F1..F24, Insert, Home, End, Pause or ScrollLock");
-        Document["enabled"]=Enabled;Document["toggleKey"]=name;
-        if(!std::filesystem::is_regular_file(File))ConfigFiles::Write(File,"// RuneSchema.Helpy settings. Edit with the game closed.\n"+Document.dump(2)+"\n");
-        HelpyHotkeys::Active=key->code;Status="Helpy plugin settings loaded from "+File.string();
+        // Old Canvas hotkey fields are ignored, not rewritten on every launch.
+        // Desktop F2 input belongs to the window, not to the game's viewport.
+        if(!std::filesystem::exists(File))ConfigFiles::Write(File,"// RuneSchema.Helpy desktop window. F2 opens/closes; F5 reloads the skin.\n"+Document.dump(2)+"\n");
+        Status="Helpy plugin settings loaded from "+File.string();
     }catch(const std::exception& e){Writable=false;Status=e.what();}
 }
 inline bool IsEnabled(){EnsureLoaded();std::lock_guard lock(Mutex);return Enabled;}
 inline bool SetKey(const std::string& name) {
     EnsureLoaded();std::lock_guard lock(Mutex);
     try {
-        const auto key=HelpyHotkeys::Find(name);if(!key)throw std::runtime_error("Unsupported Helpy hotkey");
+        if(name=="F2")throw std::runtime_error("F2 is reserved for standalone Helpy");
+        const auto key=HelpyHotkeys::Find(name);if(!key)throw std::runtime_error("Unsupported legacy hotkey");
         if(!Writable)throw std::runtime_error("Helpy settings are protected after a read/write error; repair the plugin settings.jsonc with the game closed");
-        Document["enabled"]=Enabled;Document["toggleKey"]=name;
-        ConfigFiles::Write(File,"// RuneSchema.Helpy settings. Edit with the game closed.\n"+Document.dump(2)+"\n");
+        Document["enabled"]=Enabled;Document["canvasToggleKey"]=name;Document.erase("toggleKey");
+        ConfigFiles::Write(File,"// RuneSchema.Helpy settings. F2 is standalone Helpy; canvasToggleKey controls the legacy Canvas fallback.\n"+Document.dump(2)+"\n");
         HelpyHotkeys::Active=key->code;HelpyHotkeys::SuppressedUntilRelease=key->code;
-        Status="Helpy hotkey saved: "+name;return true;
+        Status="Legacy Canvas hotkey saved: "+name;return true;
     }catch(const std::exception& e){Status=e.what();return false;}
 }
 inline std::string Message(){std::lock_guard lock(Mutex);return Status;}

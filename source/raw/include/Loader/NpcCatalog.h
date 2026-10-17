@@ -8,8 +8,12 @@
 #include <nlohmann/json.hpp>
 #include "Loader/VendorOffers.h"
 #include "Loader/HumanNpc.h"
+#include "Loader/NpcEquipmentConditions.h"
 #include "Loader/NpcMarkers.h"
 #include "Loader/NpcVisualEffect.h"
+#include "Core/GroundSurface.h"
+#include "Core/NearbyPlacement.h"
+#include "Loader/NpcPlacement.h"
 #include "Loader/TimeOfDay.h"
 #include "Loader/VendorCategoryGate.h"
 
@@ -54,10 +58,18 @@ public:
         // behavior. One NPC definition now serves standalone and multiplayer.
         normalized.erase("Multiplayer");
         Require(normalized, {"Id","DisplayName","VisualSource","Mesh","Materials","IdleAnimation","HideMesh","NoInteract","HideName",
-            "Location","Rotation","Scale","Enabled","EnableCollision","MeshCollision","Type","Appearance","Equipment","HideWeapon","Pose","DialoguePose","Ghost","VisualEffect","Map","OverheadIcon","VendorID","DialogueID","LoreID","LoreEntry","QuestID","TimeOfDay"});
+            "Location","GroundReferenceZ","GroundMigrationRadius","GroundClearance","Rotation","Scale","Enabled","EnableCollision","MeshCollision","Type","Appearance","Equipment","EquipmentWhen","HideWeapon","Pose","DialoguePose","Ghost","VisualEffect","Map","OverheadIcon","VendorID","DialogueID","LoreID","LoreEntry","JournalEntries","QuestID","TimeOfDay"});
+        PS::Grounding::NearbyPolicy::Parse(data);
+        PS::Grounding::Clearance(data);
         const auto& source=normalized;
+        if(source.contains("GroundReferenceZ")){
+            (void)PS::Grounding::Reference(source);
+            if(!source.contains("Location")||!NpcPlacement::Parse(source.at("Location")).Ground)
+                throw std::runtime_error("NPC GroundReferenceZ requires Location.Z '$'");
+        }
         const auto key=Key(mod,source.at("Id").get<std::string>());
         HumanNpc::Validate(source);
+        (void)NpcEquipment::Parse(mod,source);
         for(const auto* field:{"NoInteract","HideName"})
             if(source.contains(field) && !source[field].is_boolean())throw std::runtime_error(std::string(field)+" must be boolean");
         if(source.contains("HideMesh") && (!source["HideMesh"].is_boolean() || source.value("Type",std::string{})!="Prop"))
@@ -67,6 +79,17 @@ public:
             throw std::runtime_error("Use LoreID for a /lore definition or LoreEntry for a legacy/global entry, not both");
         if(source.contains("LoreID"))Reference(mod,source.at("LoreID").get<std::string>());
         if(source.contains("QuestID"))Reference(mod,source.at("QuestID").get<std::string>());
+        if(source.contains("JournalEntries")) {
+            const auto& entries=source.at("JournalEntries");
+            if(!entries.is_array()||entries.empty()||entries.size()>32)throw std::runtime_error("JournalEntries requires 1..32 entry references");
+            std::set<std::string> seen;
+            for(const auto& entry:entries) {
+                if(!entry.is_string())throw std::runtime_error("JournalEntries references must be strings");
+                const auto ref=entry.get<std::string>();
+                if(ref.empty()||ref.size()>1024||ref.find_first_of("\r\n\t")!=ref.npos||!seen.insert(ref).second)throw std::runtime_error("Invalid or duplicate JournalEntries reference");
+                if(ref.front()!='/')Reference(mod,ref);
+            }
+        }
         if(source.contains("LoreEntry") || source.contains("LoreID")) {
             const auto& entry=source.contains("LoreEntry")?source.at("LoreEntry"):source.at("LoreID");
             if(!entry.is_string() || entry.get_ref<const std::string&>().empty() || entry.get_ref<const std::string&>().size()>1024
@@ -196,9 +219,14 @@ private:
         if(data.contains("LoreID"))data["LoreEntry"]=Reference(npc.Mod,data.at("LoreID").get<std::string>());
         if(data.contains("QuestID"))data["QuestID"]=Reference(npc.Mod,data.at("QuestID").get<std::string>());
         if(data.value("NoInteract",false))
-            for(const auto* field:{"VendorID","DialogueID","LoreID","LoreEntry"})data.erase(field);
+            for(const auto* field:{"VendorID","DialogueID","LoreID","LoreEntry","JournalEntries"})data.erase(field);
         data["LoaderID"]=key;data["Stage"]="Visual";
         Json links=Json::object();
+        if(data.contains("JournalEntries")) {
+            for(auto& ref:data["JournalEntries"]){const auto value=ref.get<std::string>();if(value.front()!='/')ref=Reference(npc.Mod,value);}
+            links["JournalEntries"]=data["JournalEntries"];
+            data["Stage"]="Interaction";data["InteractionProperties"]={{"InteractionPrompt","Talk"}};
+        }
         if(data.contains("LoreEntry")) {
             data["Stage"]="Interaction";data["InteractionProperties"]={{"InteractionPrompt","Examine"}};
             links["Lore"]=data.at("LoreEntry");

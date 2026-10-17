@@ -1,0 +1,13 @@
+// Optional explicit dependency declaration for the EXISTING MaxCape mod.
+// Resolves and type-checks the real native mesh-data assets; it does not edit
+// their shared material data or manufacture an equipment hide-cache entry.
+{
+  "SchemaVersion": 1,
+  "Entries": [],
+  "NativeRegistries": {
+    "WearableMeshData": [
+      "/UmbralSands/Gameplay/Character/Player/Equipment/Cape/ITEM_Cape_Fire_MeshData_Male.ITEM_Cape_Fire_MeshData_Male",
+      "/UmbralSands/Gameplay/Character/Player/Equipment/Cape/ITEM_Cape_Fire_MeshData_Female.ITEM_Cape_Fire_MeshData_Female"
+    ]
+  }
+}

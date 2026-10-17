@@ -1,6 +1,7 @@
 #pragma once
 #include "Loader/QuestProgress.h"
 #include "Loader/QuestSaveOwnership.h"
+#include "Loader/QuestDefinitionIdentity.h"
 #include <chrono>
 #include <bit>
 #include <functional>
@@ -50,6 +51,10 @@ class ReceiptJournal {
         const auto hash=Fingerprint();
         Write("RuneSchema.DefLo",std::bit_cast<int32_t>(uint32_t(hash)));
         Write("RuneSchema.DefHi",std::bit_cast<int32_t>(uint32_t(hash>>32)));
+        const auto logic=DefinitionIdentity::Hash(DefinitionIdentity::Progress(document));
+        Write("RuneSchema.LogicLo",std::bit_cast<int32_t>(uint32_t(logic)));
+        Write("RuneSchema.LogicHi",std::bit_cast<int32_t>(uint32_t(logic>>32)));
+        Write("RuneSchema.LogicVersion",1);
     }
     void ResetFresh() const {
         Stamp();
@@ -63,24 +68,33 @@ public:
     ReceiptJournal(const Definition& definition,const Json& json,const std::filesystem::path& legacy,const std::string& character,
         std::function<int(const std::string&)> read,std::function<void(const std::string&,int)> write,
         std::function<bool()> initialized,std::function<void()> initialize,std::function<std::string()> nativeStateName,
-        std::function<int64_t()> currentTime=EpochNow,std::function<void()> resetChanged={}):reader(std::move(read)),writer(std::move(write)),clock(std::move(currentTime)),quest(definition),document(json) {
+        std::function<int64_t()> currentTime=EpochNow,std::function<void()> resetChanged={},std::function<void()> normalizeOwnership={}):reader(std::move(read)),writer(std::move(write)),clock(std::move(currentTime)),quest(definition),document(json) {
         if(!initialized()) {
             const auto old=QuestProgress::Read(legacy,character);
             if(old.at("Quests").contains(quest.Key))throw std::runtime_error("Legacy receipt has no matching native quest; migration refused");
             initialize();
             if(!initialized())throw std::runtime_error("Quest initialization was not confirmed");
         }
+        if(normalizeOwnership)normalizeOwnership();
         const int version=Read("RuneSchema.Version");
         if(!version) {
             auto old=QuestProgress::Read(legacy,character);
             if(old.at("Quests").contains(quest.Key)
+                &&DefinitionIdentity::Progress(old["Quests"][quest.Key].at("Definition"))==DefinitionIdentity::Progress(document))
+                old["Quests"][quest.Key]["Definition"]=document;
+            if(old.at("Quests").contains(quest.Key)
                 && old.at("Quests").at(quest.Key).at("Definition")!=document) {
+                if(old["Quests"][quest.Key].at("State")=="pending")throw std::runtime_error("Changed legacy quest has an unresolved exchange; migration refused");
+                auto state=nativeStateName();const auto separator=state.rfind("::");if(separator!=state.npos)state=state.substr(separator+2);
+                if(resetChanged&&old["Quests"][quest.Key].at("State")=="complete"&&state=="Complete")old["Quests"][quest.Key]["Definition"]=document;
+                else {
                 if(!resetChanged)throw std::runtime_error("Changed legacy quest requires an authoritative reset");
                 resetChanged();
                 ResetFresh();
                 old["Quests"].erase(quest.Key);
                 QuestProgress::Write(legacy,old);
                 return;
+                }
             }
             const auto state=QuestProgress::Status(old,quest,document);
             auto nativeState=nativeStateName();
@@ -99,14 +113,21 @@ public:
             Time("RuneSchema.Clock",Now());Write("RuneSchema.Phase",phase);
             Write("RuneSchema.Version",OwnershipVersion);
         } else if(version!=OwnershipVersion)throw std::runtime_error("Unsupported native quest receipt version");
-        if(!MatchesFingerprint(document)) {
+        const auto match=DefinitionIdentity::Compare(document,reader);
+        if(match!=DefinitionIdentity::Match::Changed){
+            if(match==DefinitionIdentity::Match::Presentation||Read("RuneSchema.LogicVersion")==0)Stamp();
+        }else {
             auto prior=document;prior.erase("Repeatable");
             auto explicitFalse=prior;explicitFalse["Repeatable"]=false;
             auto nativeState=nativeStateName();const auto colon=nativeState.rfind("::");
             if(colon!=nativeState.npos)nativeState=nativeState.substr(colon+2);
+            if(Phase()==2||Phase()==3)throw std::runtime_error("Changed quest has an unresolved exchange; migration refused");
             const bool stableRun=(Phase()==1 && nativeState=="Given")
                 || (Phase()==4 && nativeState=="Complete");
-            if(quest.Repeat.Enabled && !document.contains("Repeat") && stableRun && Run()>=1
+            // Preserve completed history and cooldowns; a definition update is
+            // not permission to pay this character again or erase an exchange.
+            if(resetChanged&&Phase()==4&&nativeState=="Complete")Stamp();
+            else if(quest.Repeat.Enabled && !document.contains("Repeat") && stableRun && Run()>=1
                 && (MatchesFingerprint(prior) || MatchesFingerprint(explicitFalse)))Stamp();
             else if(resetChanged){resetChanged();ResetFresh();}
             else throw std::runtime_error("Saved quest definition changed; explicit migration required");

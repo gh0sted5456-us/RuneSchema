@@ -2,17 +2,20 @@
 #include "Loader/DialogueDefinition.h"
 #include "Loader/NpcVisualEffect.h"
 #include "Loader/TimeOfDay.h"
+#include "Loader/SpawnAuthoringFields.h"
+#include "Core/NearbyPlacement.h"
 #include <array>
 #include <algorithm>
 #include <cmath>
 #include <map>
 namespace DragonWilds::Events {
 using Json=nlohmann::json;
-struct SpawnTemplate {std::string Key,Class,Name;double Scale=1;std::string BossName;Json VisualEffect=Json::object();std::string LootRow;int PowerLevel=-1;};
+struct SpawnTemplate {std::string Key,Class,Name;double Scale=1;std::string BossName;Json VisualEffect=Json::object();std::string LootRow;int PowerLevel=-1;Json AdditionalDrops=Json::array();PS::Grounding::NearbyPolicy Migration;};
 inline SpawnTemplate ParseSpawn(const std::string& mod,const Json& data) {
-    Dialogue::Fields(data,{"Id","Type","EventOnly","AIClass","DisplayName","BossName","Scale","VisualEffect","LootRow","PowerLevel"});
+    Dialogue::Fields(data,{"Id","Type","EventOnly","AIClass","DisplayName","BossName","Scale","VisualEffect","LootRow","PowerLevel","AdditionalDrops","GroundMigrationRadius"});
     if(data.at("Type")!="AISpawnPoint" || data.at("EventOnly")!=true)throw std::runtime_error("Event spawn requires Type AISpawnPoint and EventOnly true");
     SpawnTemplate value{Dialogue::Reference(mod,data.at("Id")),Dialogue::Text(data.at("AIClass"),1024),data.contains("DisplayName")?Dialogue::Text(data.at("DisplayName"),256):std::string{}};
+    value.Migration=PS::Grounding::NearbyPolicy::Parse(data);
     if(value.Class.front()!='/')throw std::runtime_error("Event AIClass requires an asset path");
     if(data.contains("PowerLevel")) {
         const auto& level=data.at("PowerLevel");
@@ -21,6 +24,7 @@ inline SpawnTemplate ParseSpawn(const std::string& mod,const Json& data) {
         value.PowerLevel=level.get<int>();
     }
     if(data.contains("BossName"))value.BossName=Dialogue::Text(data.at("BossName"),128);
+    if(data.contains("AdditionalDrops")){SpawnFields::Drops(data.at("AdditionalDrops"));value.AdditionalDrops=data.at("AdditionalDrops");}
     if(data.contains("LootRow")) {
         value.LootRow=Dialogue::Text(data.at("LootRow"),256);
         if(value.LootRow.find_first_of("\r\n\t")!=std::string::npos)throw std::runtime_error("LootRow cannot contain control whitespace");

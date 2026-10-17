@@ -23,6 +23,17 @@ int main(int argc,char** argv){
         assert(resolved.at("Stage")=="Visual" && resolved.at("EnableCollision")==true);
         assert(!resolved.contains("VendorID") && !resolved.contains("DialogueID"));
         assert(resolved.at("HideName")==true);
+        auto grounded=prop;grounded["Location"][2]="$";grounded["GroundReferenceZ"]=-3550;
+        NpcCatalog groundedCatalog;groundedCatalog.AddNpc("test",grounded);
+        assert(groundedCatalog.Resolve().at(0).Data.at("GroundReferenceZ")==-3550);
+        auto migration=grounded;migration["GroundMigrationRadius"]=400;
+        migration["GroundClearance"]={{"Radius",45},{"HalfHeight",90}};
+        NpcCatalog migrating;migrating.AddNpc("test",migration);
+        assert(migrating.Resolve().at(0).Data.at("GroundMigrationRadius")==400);
+        migration["GroundMigrationRadius"]=1001;
+        assert(Rejects([&]{NpcCatalog c;c.AddNpc("test",migration);}));
+        auto invalidHint=prop;invalidHint["GroundReferenceZ"]=-3550;
+        assert(Rejects([&]{NpcCatalog c;c.AddNpc("test",invalidHint);}));
         for(const auto* field:{"NoInteract","HideName"}) {
             auto bad=prop;bad[field]="true";
             assert(Rejects([&]{NpcCatalog c;c.AddNpc("test",bad);}));
@@ -363,6 +374,18 @@ int main(int argc,char** argv){
     assert(DragonWilds::NpcMarkers::MapLabel(Json::object(),"Jonesy")=="Jonesy");
     assert(DragonWilds::NpcMarkers::MapLabel({{"ShowName",true}},"Jonesy")=="Jonesy");
     assert(DragonWilds::NpcMarkers::MapLabel({{"ShowName",false}},"Jonesy").empty());
+    const auto nativeMarkers=DragonWilds::NpcMarkers::FromDefinition({{"QuestID","example:first_steps"}});
+    for(const auto* group:{"Map","OverheadIcon"}) {
+        assert(nativeMarkers.at(group).at("Enabled")==true);
+        assert(nativeMarkers.at(group).at("Icon")==DragonWilds::NpcMarkers::DefaultIcon);
+    }
+    assert(DragonWilds::NpcMarkers::FromDefinition(Json::object()).empty());
+    const auto explicitMarkers=DragonWilds::NpcMarkers::FromDefinition({{"QuestID","example:first_steps"},
+        {"Map",{{"Enabled",false},{"ShowName",false}}},{"OverheadIcon",{{"Enabled",true},{"Icon","/Game/Custom.Icon"}}}});
+    assert(explicitMarkers.at("Map").at("Enabled")==false&&!explicitMarkers.at("Map").contains("Icon"));
+    assert(explicitMarkers.at("OverheadIcon").at("Icon")=="/Game/Custom.Icon");
+    const auto explicitOff=DragonWilds::NpcMarkers::FromDefinition({{"QuestID","example:first_steps"},{"OverheadIcon",{{"Enabled",false}}}});
+    assert(explicitOff.at("Map").at("Enabled")==true&&explicitOff.at("OverheadIcon").at("Enabled")==false);
     for(const auto& option:{Json("false"),Json(0),Json(),Json::object()}) {
         auto bad=marked;bad["Map"]["ShowName"]=option;NpcCatalog invalidCatalog;
         assert(Rejects([&]{invalidCatalog.AddNpc("BadLabel",bad);}));

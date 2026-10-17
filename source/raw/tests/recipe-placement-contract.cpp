@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <fstream>
+#include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -38,8 +39,9 @@ static void Avoid(const std::string& text, const std::string& token, const char*
 
 int main(int argc, char** argv)
 {
-    if (argc != 4) return 2;
-    const auto loader = Read(argv[1]);
+    if (argc != 5) return 2;
+    const auto headerPath=std::filesystem::path(argv[1]).parent_path().parent_path().parent_path()/"include/Loader/DragonWildsRecipeModLoader.h";
+    const auto loader = Read(argv[1])+"\n"+Read(argv[4])+"\n"+Read(headerPath.string().c_str());
     const auto guide = Read(argv[2]);
     const auto properties = Read(argv[3]);
 
@@ -60,7 +62,7 @@ int main(int argc, char** argv)
         "late-serialized DataTables are no longer replayed");
     Need(loader, "recipe->IsA(acceptedClass)",
         "processing array writes are not type checked");
-    Need(loader, "InspectRuntimeCloneOutputs(recipe,m_itemRoutes,m_ambiguousItemRoutes)",
+    Need(loader, "InspectRuntimeCloneOutputs(recipe,m_itemRoutes,[this]{RefreshItemRoutes();})",
         "timed processing does not validate runtime-clone outputs");
     Need(loader, "RuntimeRecipePath(def.ModName,def.Key)",
         "authored processing recipes do not receive a stable mod-scoped runtime path");
@@ -98,7 +100,7 @@ int main(int argc, char** argv)
     Need(loader, "/Game/RuneSchema/Generated/Recipes/", "generated recipe objects do not use a stable RuneSchema route");
     Need(loader, "RuntimeRecipePath(def.ModName,def.Key)", "authored recipe objects do not use the mod-scoped RuneSchema route");
     Need(loader, "RefreshItemRoutes()", "recipe ItemData PersistenceID index disappeared");
-    Need(loader, "m_itemRoutes.find(reference)", "recipe ItemData PersistenceID routing disappeared");
+    Need(loader, "path=index.Resolve(reference)", "recipe ItemData PersistenceID routing disappeared");
     Need(loader, "Recipe ItemData must be a full object path",
         "recipe ItemData does not enforce the path-first authoring contract");
     Need(loader, "Recipe ItemData path did not resolve to ItemData",
@@ -109,8 +111,26 @@ int main(int argc, char** argv)
         "recipe count truncation is not rejected before station placement");
     Need(loader, "retained fewer entries than were authored",
         "recipe output loss is not rejected before station placement");
-    Need(loader, "propertyName!=\"ItemsConsumed\" && propertyName!=\"ItemsCreated\"",
+    Need(loader, "propertyName!=\"ItemsConsumed\"&&propertyName!=\"ItemsCreated\"",
         "recipe routing is not scoped to native ingredient/output collections");
     Need(loader, "OnFinalizeLoad(", "recipe linking is no longer deferred until all clone assets load");
+    Need(loader,"batch->Category.Contains(","bulk category placement still rescans the full recipe collection per insertion");
+    Need(loader,"batch->Category.CommitAppend(","bulk placement does not track verified appends");
+    Need(loader,"appended recipe path did not verify","category appends are not read back from the live collection");
+    Need(loader,"~PlacementScope(){Active=Before;}","placement membership can survive a batch or row reload");
+    Need(loader,"current->Category.Invalidate();","row serialization can retain stale category membership");
+    Need(loader,"current->Processing.Invalidate()||current->Interrupted","row serialization can discard unverified processing writes silently");
+    Need(loader,"[PERF][RECIPES][PHASES]","recipe work cannot be measured by phase");
+    Need(loader,"processing->Contains(","processing append membership is still linearly rescanned");
+    Need(loader,"processing->CommitAppend(","processing append count/slot checks do not update the ledger");
+    Need(loader,"batch.Processing.VerifyAll(","processing batches lack full ordered native readback");
+    Need(loader,"processing->VerifyOne(","replacements can discard pending appends before verification");
+    Need(loader,"processing->Forget(array);","replacement path does not retire its append ledger");
+    Need(loader,"inline static thread_local PlacementContext* s_placementContext", "placement ledgers are shared across loader threads");
+    Need(loader,"m_preparingPlacementTables.exchange(true", "destination tables can load while native row pointers are batched");
+    Need(loader,"m_placementRevision.fetch_add(1", "serialization cannot invalidate an active batch");
+    Need(loader,"[RECIPES][PROCESSING-BATCH][REJECTED]", "failed ordered readback is silently accepted");
+    Need(loader,"RegistryEnrollment::Reject(\"processing recipe placements\"", "failed processing batches can certify automatic cleanup");
+    Need(loader,"[PERF][RECIPES][PLACEMENTS]", "crafting and processing work cannot be measured separately");
     std::cout << "Recipe placement contract covers crafting categories, processing arrays, exact tables and late replay.\n";
 }

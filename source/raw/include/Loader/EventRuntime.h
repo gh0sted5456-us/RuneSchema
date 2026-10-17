@@ -9,6 +9,11 @@
 #include "Loader/Spawn/RuntimeSupport.h"
 #include "Unreal/UObjectArray.hpp"
 #include "Unreal/World.hpp"
+#include "SDK/WeakObjectHandle.h"
+#include "SDK/Helper/ReflectedContract.h"
+#include "Core/GroundSurface.h"
+#include "Core/GroundingRetry.h"
+#include "Loader/NativeAssetPrefetch.h"
 #include <algorithm>
 #include <functional>
 #include <limits>
@@ -21,6 +26,8 @@ class Runtime {
     using UFunction=RC::Unreal::UFunction;
     using UWorld=RC::Unreal::UWorld;
     using AActor=RC::Unreal::AActor;
+    std::vector<RC::StringType> warmPaths;
+    double warmElapsed=0;
     struct Handle {
         UObject* Object=nullptr;int32_t Index=-1,Serial=0;
         Handle()=default;
@@ -28,7 +35,9 @@ class Runtime {
             using namespace RC::Unreal;
             auto* slot=object?FUObjectArray::IndexToObject(object->GetInternalIndex()):nullptr;
             if(!slot || slot->GetUObject()!=object || !slot->IsValid(false))throw std::runtime_error("Event object identity unavailable");
-            Index=object->GetInternalIndex();Serial=slot->GetSerialNumber();
+            const auto weak=PS::WeakObject(object);
+            if(weak.Get()!=object)throw std::runtime_error("Event object generation unavailable");
+            Index=weak.ObjectIndex;Serial=weak.ObjectSerialNumber;
         }
         UObject* Get()const {
             using namespace RC::Unreal;
@@ -54,6 +63,8 @@ class Runtime {
     bool pendingStop=false;
     bool areaShown=false;
     bool weatherActive=false;
+    bool wavePending=false,initialWavePending=false;
+    PS::Grounding::Retry groundRetry;
     double actionElapsed=0;
     std::set<size_t> completedActions;
     std::string weatherToken;
@@ -105,6 +116,7 @@ class Runtime {
             }
         }
     }
+    void Failure(const std::string& message){if(ReportFailure)ReportFailure(message);else Report(message);}
     void Present(const std::string& text) noexcept {
         if(text.empty() || !Notify)return;
         try {Notify(participantController.Get(),ExpandMessage(text,run.Wave(),definition.Waves.size()),definition.Audience);}
@@ -113,19 +125,20 @@ class Runtime {
     void HideOwnedArea() noexcept {
         if(!areaShown)return;
         try {if(SetArea)SetArea(participantController.Get(),definition,false);}
-        catch(const std::exception& e){try{Report("area cleanup warning: "+std::string(e.what()));}catch(...) {}}
+        catch(const std::exception& e){try{Failure("area cleanup failed: "+std::string(e.what()));}catch(...) {}}
         areaShown=false;
     }
     void RestoreEventWeather() noexcept {
         if(!weatherActive)return;
         try {if(RestoreWeather)RestoreWeather(participantController.Get(),weatherToken);}
-        catch(const std::exception& e){try{Report("weather restore warning: "+std::string(e.what()));}catch(...) {}}
+        catch(const std::exception& e){try{Failure("weather restore failed: "+std::string(e.what()));}catch(...) {}}
         weatherActive=false;weatherToken.clear();
     }
     static UFunction* ZeroArgument(const TCHAR* path) {
         using namespace RC::Unreal;
         auto* fn=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,path,false);
-        if(!fn || fn->GetParmsSize()!=0 || fn->GetReturnProperty())throw std::runtime_error("Event zero-argument function layout changed");
+        ReflectedContract::Frame(fn);
+        if(fn->GetReturnProperty())throw std::runtime_error("Event zero-argument function layout changed");
         for(auto* p:TFieldRange<FProperty>(fn,EFieldIterationFlags::Default))if(p->HasAnyPropertyFlags(CPF_Parm))throw std::runtime_error("Unexpected event function argument");
         return fn;
     }
@@ -146,8 +159,9 @@ class Runtime {
             auto* function=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,TEXT("/Script/Engine.Actor:SetLifeSpan"),false);
             auto* input=function?CastField<FFloatProperty>(function->FindProperty(FName(TEXT("InLifespan"),FNAME_Find))):nullptr;
             size_t count=0;if(function)for(auto* field:TFieldRange<FProperty>(function,EFieldIterationFlags::Default))if(field->HasAnyPropertyFlags(CPF_Parm))++count;
-            if(!function || function->GetParmsSize()!=4 || function->GetReturnProperty() || count!=1 || !input
-                || input->GetOffset_Internal()!=0 || input->GetElementSize()!=4 || input->GetArrayDim()!=1)
+            ReflectedContract::Frame(function);
+            if(function->GetReturnProperty() || count!=1 || !ReflectedContract::Input(input,function)
+                || input->GetElementSize()!=sizeof(float) || input->GetArrayDim()!=1)
                 throw std::runtime_error("Event controller lifespan contract unavailable");
             ActorHelper::FunctionCall(object,function->GetPathName()).Arg(TEXT("InLifespan"),0.01f).Invoke();
         } else {
@@ -168,6 +182,7 @@ class Runtime {
         for(auto& item:owned) {
             bool failed=false;
             auto* actor=item.Actor.Get();
+            if(actor&&DisarmDrops)try{DisarmDrops(actor);}catch(const std::exception& e){error=e.what();remaining.push_back(item);continue;}
             if(auto* controller=item.Controller.Get())try {
                 auto* pawn=ActorHelper::GetObjectRef(controller,TEXT("Pawn"));
                 if(!pawn || pawn==actor)failed=!DestroyOwnedActor(item.Controller);
@@ -183,21 +198,43 @@ class Runtime {
     void SpawnWave(bool announce=true) {
         auto* player=participant.Get();if(!player)throw std::runtime_error("Event participant unavailable");
         auto* world=player->GetWorld();
-        owned.reserve(definition.Waves.at(run.Wave()).size());
+        // Resolve the entire wave before the first actor is constructed. A
+        // streamed-ground miss must never retry an already half-created wave.
+        std::vector<RC::Unreal::FVector> positions;
+        std::vector<PS::SpawnFootprint::Reservation> reservations;
+        positions.reserve(definition.Waves.at(run.Wave()).size());
+        std::set<std::string> validated;
         for(const auto& member:definition.Waves.at(run.Wave())) {
+            if(validated.insert(member.Spawn).second)Validate(member.Spawn);
             RC::Unreal::FVector location(member.Position[0],member.Position[1],member.Position[2]);
             if(member.Ground) {
                 RC::Unreal::FVector impact{};std::string error;
+                PS::Grounding::QueryState groundState;
                 const double anchor=member.RelativeGround?ActorHelper::GetActorLocation(static_cast<AActor*>(player)).Z():member.Position[2];
-                const RC::Unreal::FVector start(member.Position[0],member.Position[1],anchor+5000.0);
-                const RC::Unreal::FVector end(member.Position[0],member.Position[1],anchor-10000.0);
-                if(!UECustom::UKismetSystemLibrary::LineTraceGround(world,start,end,{},impact,error))
-                    throw std::runtime_error(error.empty()?"Event Location.Z $ found no blocking ground surface":"Event Location.Z $ ground trace failed: "+error);
+                const auto search=PS::Grounding::SearchRange::Around(anchor);
+                // Bare '$' describes terrain at the spawn XY, not the floor
+                // under the participant elsewhere. The player's altitude only
+                // bounds discovery; it must not narrow the remote floor window.
+                const std::optional<double> reference=member.RelativeGround?std::nullopt:std::optional<double>{member.Position[2]};
+                const RC::Unreal::FVector start(member.Position[0],member.Position[1],search.Top);
+                const RC::Unreal::FVector end(member.Position[0],member.Position[1],search.Bottom);
+                if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,start,end,{static_cast<AActor*>(player)},impact,error,reference,&groundState)){
+                    if(!error.empty())throw std::runtime_error("Event ground query failed: "+error);
+                    if(groundState.Obstructed&&groundState.FloorReference)
+                        impact=RC::Unreal::FVector(member.Position[0],member.Position[1],*groundState.FloorReference);
+                    else throw PS::Grounding::SurfacePending();
+                }
                 // Match /spawns: keep grounded actors 10 cm clear of the
                 // blocking surface, with GroundOffset as an author delta.
                 location=RC::Unreal::FVector(member.Position[0],member.Position[1],impact.Z()+member.GroundOffset+10.0);
             }
-            auto* actor=Spawn(member.Spawn,definition.Key,world,location);
+            if(member.Ground){if(!PrepareGrounded)throw std::runtime_error("Event footprint provider unavailable");location=PrepareGrounded(member.Spawn,world,location,static_cast<AActor*>(player),reservations,member.GroundOffset+10.0);}
+            positions.push_back(location);
+        }
+        owned.reserve(definition.Waves.at(run.Wave()).size());
+        size_t positionIndex=0;
+        for(const auto& member:definition.Waves.at(run.Wave())) {
+            auto* actor=Spawn(member.Spawn,definition.Key,world,positions.at(positionIndex++),member.Ground?std::optional<double>{member.GroundOffset+10.0}:std::nullopt);
             if(!actor)throw std::runtime_error("Event spawn returned no actor");
             try {owned.push_back({Handle(actor),{}, {},member.Spawn,{}});}catch(...){ActorHelper::DestroyActor(actor);throw;}
             auto& tracking=owned.back();
@@ -218,6 +255,21 @@ class Runtime {
         }
         Report(definition.Key+": wave "+std::to_string(run.Wave()+1)+" started ("+std::to_string(owned.size())+" enemies)");
         if(announce)Present(BossWave() && !definition.Text.BossStarted.empty()?definition.Text.BossStarted:definition.Text.WaveStarted);
+    }
+    bool TrySpawnWave(bool initial) {
+        try{SpawnWave(false);}catch(const PS::Grounding::SurfacePending&){
+            wavePending=true;initialWavePending=initial;
+            if(groundRetry.Missed())Report(definition.Key+": waiting for valid ground and collision-clear spawn space; no wave actors created; retry scheduled");
+            return false;
+        }
+        wavePending=false;initialWavePending=false;groundRetry.Resolved();
+        if(initial){
+            if(definition.EventArea&&definition.EventArea->Visibility!=AreaVisibility::Never&&SetArea)
+                areaShown=SetArea(participantController.Get(),definition,true);
+            Present(definition.Text.Started);
+        }
+        Present(BossWave()&&!definition.Text.BossStarted.empty()?definition.Text.BossStarted:definition.Text.WaveStarted);
+        return true;
     }
 public:
     std::string SpawnForActor(UObject* actor)const {
@@ -252,13 +304,16 @@ public:
         if(!SpawnManifest)throw std::runtime_error("Event spawn manifest provider unavailable");
         return BuildNetworkManifest(catalog.Find(key),SpawnManifest);
     }
-    std::function<AActor*(const std::string&,const std::string&,UWorld*,const RC::Unreal::FVector&)> Spawn;
+    std::function<AActor*(const std::string&,const std::string&,UWorld*,const RC::Unreal::FVector&,std::optional<double>)> Spawn;
+    std::function<RC::Unreal::FVector(const std::string&,UWorld*,const RC::Unreal::FVector&,AActor*,std::vector<PS::SpawnFootprint::Reservation>&,double)> PrepareGrounded;
+    std::function<void(UObject*)> DisarmDrops;
     std::function<void(UObject*,const std::string&,Scope)> Notify;
     std::function<void(AActor*,const Json&)> ApplyActorCue;
     std::function<bool(UObject*,const Definition&,bool)> SetArea;
     std::function<std::string(UObject*,const std::string&)> BeginWeather;
     std::function<void(UObject*,const std::string&)> RestoreWeather;
     std::function<void(const std::string&)> Report=[](const std::string&){};
+    std::function<void(const std::string&)> ReportFailure;
     void Load(const std::string& mod,const Json& data){catalog.Load(mod,data);}
     void Require(const std::string& key)const{catalog.Find(key);}
     void ObserveClientReplica(AActor* actor,const std::string& eventKey) {
@@ -292,10 +347,14 @@ public:
         if(!TimeOfDay::Allows(player,next.Time))return std::string("This encounter is only available during the ")+(next.Time==TimeOfDay::Requirement::Day?"day.":"night.");
         if(next.Weather && (!BeginWeather || !RestoreWeather))throw std::runtime_error("Event weather runtime is unavailable; capture the Weather-Lifecycle diagnostic before enabling this event");
         const auto center=ActorHelper::GetActorLocation(static_cast<AActor*>(player));
+        PS::AssetPreload::Plan<RC::StringType> prefetch;
         for(const auto& wave:next.Waves)for(const auto& member:wave) {
             const double x=member.Position[0]-center.X(),y=member.Position[1]-center.Y(),z=(member.RelativeGround?center.Z():member.Position[2])-center.Z();
             if(x*x+y*y+z*z>20000.0*20000.0)throw std::runtime_error("Event spawn must be within 200 meters of its participant");
-            Validate(member.Spawn);
+            // Check all template references without synchronously loading
+            // every future boss/class during the quest-acceptance callback.
+            if(SpawnManifest){const auto manifest=SpawnManifest(member.Spawn);if(manifest.contains("class")&&manifest["class"].is_string())prefetch.Add(RC::to_generic_string(manifest["class"].get<std::string>()));}
+            else Validate(member.Spawn);
         }
         ZeroArgument(TEXT("/Script/Engine.Pawn:SpawnDefaultController"));
         ZeroArgument(TEXT("/Script/Dominion.DeathComponent:OnHandleDeath"));
@@ -304,16 +363,16 @@ public:
         auto* controller=ActorHelper::GetObjectRef(player,TEXT("Controller"));
         if(!controller || ActorHelper::GetObjectRef(controller,TEXT("Pawn"))!=player)throw std::runtime_error("Event participant controller ownership unavailable");
         const Handle playerHandle(player),controllerHandle(controller);
-        definition=next;participant=playerHandle;participantController=controllerHandle;participantDead=false;pendingStop=false;interval=0;actionElapsed=0;completedActions.clear();areaShown=false;weatherActive=false;weatherToken.clear();run.Start(definition);
+        definition=next;participant=playerHandle;participantController=controllerHandle;participantDead=false;pendingStop=false;interval=0;actionElapsed=0;completedActions.clear();areaShown=false;weatherActive=false;weatherToken.clear();wavePending=false;initialWavePending=false;groundRetry={};run.Start(definition);
+        warmPaths=prefetch.Paths();warmElapsed=0;
         try {
             if(definition.Weather){weatherToken=BeginWeather(controller,*definition.Weather);weatherActive=true;}
-            SpawnWave(false);
-            if(definition.EventArea && definition.EventArea->Visibility!=AreaVisibility::Never && SetArea)
-                areaShown=SetArea(controller,definition,true);
-            Present(definition.Text.Started);
-            Present(BossWave() && !definition.Text.BossStarted.empty()?definition.Text.BossStarted:definition.Text.WaveStarted);
-        }catch(...){run.Fail();HideOwnedArea();RestoreEventWeather();try{Cleanup();}catch(const std::exception& e){Report(e.what());}throw;}
-        return "Encounter started. Defeat all waves, or talk to me again to cancel.";
+            PrefetchCookedAssets(prefetch);
+            // Give native asynchronous I/O a bounded head start. No enemy is
+            // constructed in the dialogue/quest acceptance callback.
+            wavePending=true;initialWavePending=true;
+        }catch(...){run.Fail();HideOwnedArea();RestoreEventWeather();try{Cleanup();}catch(const std::exception& e){Failure(e.what());}throw;}
+        return "Encounter accepted. Preparing enemies and destination ground; talk to me again to cancel.";
     }
     std::string Cancel(const std::string& key,UObject* requester) {
         if(definition.Key!=key || (!run.Active() && owned.empty()))return "That encounter is not running.";
@@ -324,11 +383,11 @@ public:
             || ActorHelper::GetObjectRef(controller,TEXT("Pawn"))!=requester
             || ActorHelper::GetObjectRef(requester,TEXT("Controller"))!=controller)
             return "Only the player who started this encounter can cancel it.";
-        run.Cancel();pendingStop=false;Present(definition.Text.Cancelled);HideOwnedArea();RestoreEventWeather();const bool removed=Cleanup();Report(definition.Key+": cancelled");
+        run.Cancel();pendingStop=false;wavePending=false;groundRetry={};Present(definition.Text.Cancelled);HideOwnedArea();RestoreEventWeather();const bool removed=Cleanup();Report(definition.Key+": cancelled");
         return removed?"Encounter cancelled. Its temporary enemies have been removed.":"Encounter cancelled. Temporary enemy cleanup is finishing.";
     }
     void Reset() {
-        run.Cancel();pendingStop=false;HideOwnedArea();RestoreEventWeather();Cleanup();participant={};participantController={};interval=0;actionElapsed=0;completedActions.clear();
+        run.Cancel();pendingStop=false;wavePending=false;initialWavePending=false;groundRetry={};HideOwnedArea();RestoreEventWeather();Cleanup();participant={};participantController={};interval=0;actionElapsed=0;completedActions.clear();
         for(auto& [key,area]:clientAreas)try{if(SetArea)SetArea(area.Controller.Get(),area.Event,false);}catch(...){}
         clientAreas.clear();clientInterval=0;
     }
@@ -341,6 +400,7 @@ public:
         for(size_t i=0;i<owned.size();++i)if(!run.IsDead(i) &&
             ((path==TEXT("/Script/Dominion.AiDeathComponent:Despawn") && source==owned[i].Death.Get())
              || (path==TEXT("/Script/Engine.Actor:K2_DestroyActor") && source==owned[i].Actor.Get()))) {
+            if(DisarmDrops)DisarmDrops(owned[i].Actor.Get());
             run.Missing(i);pendingStop=true;return;
         }
     }
@@ -350,7 +410,7 @@ public:
         static const RC::Unreal::FName deathName(TEXT("OnHandleDeath"),RC::Unreal::FNAME_Add),actorName(TEXT("BP_OnDeath"),RC::Unreal::FNAME_Add),healthName(TEXT("OnDeathEvent"),RC::Unreal::FNAME_Add);
         if(name!=deathName && name!=actorName && name!=healthName)return;
         const auto path=function->GetPathName();
-        if(path==TEXT("/Script/Dominion.HealthComponent:OnDeathEvent") && function->GetParmsSize()==0) {
+        if(path==TEXT("/Script/Dominion.HealthComponent:OnDeathEvent")) {
             auto* actor=source->GetOuterPrivate();
             if(actor && ActorHelper::GetObjectRef(actor,TEXT("HealthComponent"))==source){
                 if(actor==participant.Get())participantDead=true;
@@ -358,7 +418,7 @@ public:
             }
             return;
         }
-        if(function->GetParmsSize()!=0 || (path!=TEXT("/Script/Dominion.DeathComponent:OnHandleDeath") && path!=TEXT("/Script/Dominion.DominionAICharacter:BP_OnDeath")))return;
+        if(path!=TEXT("/Script/Dominion.DeathComponent:OnHandleDeath") && path!=TEXT("/Script/Dominion.DominionAICharacter:BP_OnDeath"))return;
         if(path==TEXT("/Script/Dominion.DeathComponent:OnHandleDeath") && source->GetOuterPrivate()==participant.Get()){participantDead=true;return;}
         for(size_t i=0;i<owned.size();++i) {
             auto* actor=owned[i].Actor.Get();
@@ -378,13 +438,13 @@ public:
                 for(auto it=clientAreas.begin();it!=clientAreas.end();) {
                     std::erase_if(it->second.Actors,[](const Handle& handle){return !handle.Get();});
                     if(it->second.Actors.empty()) {
-                        try{if(SetArea)SetArea(it->second.Controller.Get(),it->second.Event,false);}catch(const std::exception& e){Report("client area cleanup warning: "+std::string(e.what()));}
+                        try{if(SetArea)SetArea(it->second.Controller.Get(),it->second.Event,false);}catch(const std::exception& e){Failure("client area cleanup failed: "+std::string(e.what()));}
                         it=clientAreas.erase(it);
                     } else ++it;
                 }
             }
         }
-        if(pendingStop){pendingStop=false;Present(definition.Text.Failed);HideOwnedArea();RestoreEventWeather();Cleanup();Report(definition.Key+": despawn is not a kill; encounter stopped");return;}
+        if(pendingStop){pendingStop=false;Present(definition.Text.Failed);HideOwnedArea();RestoreEventWeather();Cleanup();Failure(definition.Key+": despawn is not a kill; encounter stopped");return;}
         if(!run.Active()) {
             if(owned.empty())return;
             if(!std::isfinite(delta) || delta<0)return;
@@ -394,7 +454,7 @@ public:
             Cleanup();
             return;
         }
-        run.Tick(delta);interval+=delta;actionElapsed+=delta;
+        run.Tick(delta);interval+=delta;if(!wavePending)actionElapsed+=delta;else {groundRetry.Advance(delta);warmElapsed+=delta;}
         std::string stopReason=run.Active()?"":"timeout or invalid elapsed time";
         if(participantDead){run.Cancel();stopReason="participant death";}
         if(run.Active() && definition.DespawnTime!=TimeOfDay::Requirement::Any
@@ -424,13 +484,24 @@ public:
         else if(ActorHelper::GetObjectRef(controller,TEXT("Pawn"))!=player || ActorHelper::GetObjectRef(player,TEXT("Controller"))!=controller){run.Cancel();stopReason="participant possession changed";}
         if(run.Active())for(size_t i=0;i<owned.size();++i)if(!owned[i].Actor.Get() && !run.IsDead(i)){run.Missing(i);stopReason="enemy "+std::to_string(i+1)+" handle invalid before confirmed death";break;}
         try {
-            if(!run.Active()){Present(definition.Text.Failed);HideOwnedArea();RestoreEventWeather();Cleanup();Report(definition.Key+": stopped: "+stopReason+"; no completion credited");return;}
+            if(!run.Active()){Present(definition.Text.Failed);HideOwnedArea();RestoreEventWeather();Cleanup();Failure(definition.Key+": stopped: "+stopReason+"; no completion credited");return;}
+            if(wavePending){
+                if(initialWavePending&&warmElapsed<2.0){
+                    const bool loading=std::any_of(warmPaths.begin(),warmPaths.end(),[](const auto& path){auto* object=UECustom::UObjectGlobals::StaticFindObject(nullptr,nullptr,path.c_str(),false);return !object||object->HasAnyFlags(static_cast<RC::Unreal::EObjectFlags>(RC::Unreal::RF_NeedLoad|RC::Unreal::RF_NeedPostLoad|RC::Unreal::RF_NeedInitialization));});
+                    if(loading)return;
+                }
+                // Cell loading can outlive the initial retry burst. The
+                // encounter timeout/cancellation bounds this wait; a ground
+                // miss must not permanently suppress an otherwise valid wave.
+                if(groundRetry.PlacementReady())TrySpawnWave(initialWavePending);
+                return;
+            }
             if(run.WaveComplete()) {
                 if(!Cleanup())return;
                 run.Advance();
-                if(run.Active())SpawnWave();else {Present(definition.Text.Completed);HideOwnedArea();RestoreEventWeather();Report(definition.Key+": complete");}
+                if(run.Active()){groundRetry={};TrySpawnWave(false);}else {Present(definition.Text.Completed);HideOwnedArea();RestoreEventWeather();Report(definition.Key+": complete");}
             }
-        }catch(const std::exception& error){run.Fail();Present(definition.Text.Failed);HideOwnedArea();RestoreEventWeather();try{Cleanup();}catch(const std::exception& cleanup){Report(cleanup.what());}Report(definition.Key+": failed: "+error.what());}
+        }catch(const std::exception& error){run.Fail();Present(definition.Text.Failed);HideOwnedArea();RestoreEventWeather();try{Cleanup();}catch(const std::exception& cleanup){Failure(cleanup.what());}Failure(definition.Key+": failed: "+error.what());}
     }
 };
 }

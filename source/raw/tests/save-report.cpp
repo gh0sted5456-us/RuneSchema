@@ -17,6 +17,16 @@ int main(){
         offhand["Rows"][0]["Slot"]="HeldOnlyLeft";offhand["Rows"][0]["AssetPath"]="/Game/Test/Shield.Shield";
         PS::NpcSaveExport::ApplyResolved(offhand);
         assert(offhand["NPC"]["Equipment"]["OffHand"]=="/Game/Test/Shield.Shield");
+        auto accessories=PS::NpcSaveExport::Preview(source);
+        accessories["Rows"][0]["Slot"]="Trinket";accessories["Rows"][0]["AssetPath"]="/Game/Test/Ring.Ring";
+        accessories["Rows"][1]["Slot"]="Necklace";accessories["Rows"][1]["AssetPath"]="/Game/Test/Amulet.Amulet";
+        PS::NpcSaveExport::ApplyResolved(accessories);
+        assert(accessories["NPC"]["Equipment"]["Trinket"]=="/Game/Test/Ring.Ring");
+        assert(accessories["NPC"]["Equipment"]["Necklace"]=="/Game/Test/Amulet.Amulet");
+        auto alias=PS::NpcSaveExport::Preview(source);
+        alias["Rows"][0]["Slot"]="Trinket2";alias["Rows"][0]["AssetPath"]="/Game/Test/Amulet.Amulet";
+        PS::NpcSaveExport::ApplyResolved(alias);
+        assert(alias["NPC"]["Equipment"].contains("Necklace") && !alias["NPC"]["Equipment"].contains("Trinket2"));
         assert(preview["NPC"]["Appearance"].size()==8 && source==original);
         assert(!preview["NPC"].contains("GameProgress"));
         auto unresolved=PS::NpcSaveExport::Preview(source);PS::NpcSaveExport::ApplyResolved(unresolved);
@@ -26,6 +36,11 @@ int main(){
         ambiguous["Rows"][0]["AssetPath"]="/Game/Test/A.A";ambiguous["Rows"][1]["AssetPath"]="/Game/Test/B.B";
         PS::NpcSaveExport::ApplyResolved(ambiguous);
         assert(!ambiguous["NPC"]["Equipment"].contains("MainHand") && !ambiguous["Warnings"].empty());
+        auto necklaceAmbiguous=PS::NpcSaveExport::Preview(source);
+        necklaceAmbiguous["Rows"][0]["Slot"]="Necklace";necklaceAmbiguous["Rows"][0]["AssetPath"]="/Game/Test/A.A";
+        necklaceAmbiguous["Rows"][1]["Slot"]="Trinket2";necklaceAmbiguous["Rows"][1]["AssetPath"]="/Game/Test/B.B";
+        PS::NpcSaveExport::ApplyResolved(necklaceAmbiguous);
+        assert(necklaceAmbiguous["NPC"]["Equipment"].empty() && !necklaceAmbiguous["Warnings"].empty());
         auto missing=source;missing["GameProgress"]["Inventory"].erase("3");
         assert(PS::NpcSaveExport::Preview(missing)["Warnings"].size()==1);
     }

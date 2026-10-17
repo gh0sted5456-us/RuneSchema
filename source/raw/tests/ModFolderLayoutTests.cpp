@@ -2,11 +2,12 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <chrono>
 
 int main(int argc, char** argv) {
     namespace fs = std::filesystem;
-    if (argc != 2 || fs::exists(argv[1])) return 2;
-    const fs::path root = fs::absolute(argv[1]);
+    if (argc != 2) return 2;
+    const fs::path root = fs::absolute(argv[1])/std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
     fs::create_directories(root);
     int checks = 0;
     auto check = [&](const fs::path& folder, bool expected, bool failed = false) {
@@ -50,4 +51,5 @@ int main(int argc, char** argv) {
     std::error_code stale = std::make_error_code(std::errc::permission_denied);
     if (PS::ModFolderLayout::ContainsLegacyPakContent(root / "empty", stale) || stale) return 3;
     std::cout << ++checks << " filesystem checks passed\n";
+    fs::remove_all(root);
 }

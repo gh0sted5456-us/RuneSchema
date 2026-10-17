@@ -35,8 +35,14 @@
 #include "Utility/Config.h"
 #include "Core/ConfigFiles.h"
 #include "Core/CookedPakRegistryManifest.h"
+#include "Core/HelpyCacheSources.h"
+#include "Core/RegistryEnrollment.h"
 #include "Core/NetworkIdentityPlan.h"
+#include "Core/RegistrationDiagnostics.h"
 #include "Core/NetworkIdentityState.h"
+#include "Loader/AssetProvenance.h"
+#include "Loader/AssetAuthoringMetadata.h"
+#include "Loader/QuestNativeRegistry.h"
 #include "Core/RegistryProvenance.h"
 #include "Core/SaveCleanup.h"
 #include "Core/SaveRegistrySnapshot.h"
@@ -59,6 +65,7 @@ namespace DragonWilds {
         struct NetworkRegistryAudit {
             bool Valid = false;
             std::size_t Count = 0;
+            std::unordered_set<UObject*> Objects;
             std::string Fingerprint;
             std::string Detail;
         };
@@ -84,7 +91,7 @@ namespace DragonWilds {
             }
             auto* array = arrayProperty->ContainerPtrToValuePtr<FScriptArray>(subsystem);
             if (!array || array->Num() < 0
-                || array->Num() > std::numeric_limits<std::uint16_t>::max())
+                || static_cast<std::size_t>(array->Num()) > PS::NetworkIdentityPlan::Capacity)
             {
                 result.Detail = "network registry array has an invalid size";
                 return result;
@@ -145,6 +152,7 @@ namespace DragonWilds {
             }
             result.Valid = true;
             result.Count = orderedPaths.size();
+            result.Objects = std::move(seen);
             result.Fingerprint = PS::NetworkIdentityPlan::Fingerprint(orderedPaths);
             return result;
         }
@@ -514,6 +522,8 @@ namespace DragonWilds {
         // identical, settled registry can authorize pruning. Nothing refreshes
         // or mutates the registries on later menu/world transitions.
         RegisterAll();
+        EquipmentWearableBridge::ReportDiagnostics();
+        PS::NetworkIdentityState::FinishStartupBatch();
         CleanLocalCharacterSavesOnce();
         PS::Log<LogLevel::Normal>(STR(
             "[REGISTRY][LIFECYCLE][SEALED] Startup registration completed once for this game execution; world transitions are read-only.\n"));
@@ -597,7 +607,7 @@ namespace DragonWilds {
             }
         }
         if (changed)
-            RC::Output::send<RC::LogLevel::Normal>(STR(
+            PS::ConsolidatedLog<RC::LogLevel::Normal>(STR(
                 "[RuneSchema] [summary] Save cleanup | missing character IDs removed={} | saves updated={}. Valid IDs kept; originals backed up.\n"),
                 removed, changed);
         else
@@ -716,6 +726,23 @@ namespace DragonWilds {
 
             for (const auto& lane : manifest.AssetLanes)
             {
+                // These lanes use the established journal/lore service for
+                // native registration, placement and unlock triggers.
+                if(lane.Name=="Journals"||lane.Name=="Lore"){
+                    for(const auto& path:lane.Paths)if(manifest.SchemaPaths.contains(path)){
+                        bool verified=false;
+                        try{
+                            auto* entry=ActorHelper::ResolveObject(PS::ToWideSafe(path.c_str()));
+                            auto* type=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Dominion.JournalSubsystem"));
+                            auto* subsystem=type?FindSubsystemInstance(type):nullptr;
+                            verified=entry&&subsystem&&QuestRegistry::NativeRegistry::ResolvesPersistenceIdentity(subsystem,entry,true);
+                        }catch(...){}
+                        if(!verified){PS::RegistryEnrollment::Reject(manifest.Source,"schema journal/lore identity is not registered: "+path);
+                            PS::Log<LogLevel::Error>(STR("[NATIVE-REGISTRY][REJECTED] owner='{}' lane='{}' asset='{}': schema entry has no verified native journal identity; cleanup deferred.\n"),
+                                PS::ToWideSafe(manifest.Owner),PS::ToWideSafe(lane.Name),PS::ToWideSafe(path));}
+                    }
+                    continue;
+                }
                 const auto binding = std::ranges::find_if(m_bindings,
                     [&](const RegistryBinding& value) {
                         const auto tag = RC::to_string(value.StatusTag);
@@ -729,6 +756,8 @@ namespace DragonWilds {
                     });
                 if (binding == m_bindings.end())
                 {
+                    if(lane.Name=="Items"||lane.Name=="Recipes"||lane.Name=="Quests")
+                        PS::RegistryEnrollment::Reject(manifest.Source,"required native registry binding is unavailable: "+lane.Name);
                     PS::Log<LogLevel::Error>(STR(
                         "[PAK-REGISTRY][REJECTED] owner='{}' lane='{}': authoritative live registry binding is unavailable; no registry was modified.\n"),
                         PS::ToWideSafe(manifest.Owner.c_str()),
@@ -746,16 +775,23 @@ namespace DragonWilds {
                         nullptr, nullptr, widePath.c_str(), false);
                     if (!object) object = ActorHelper::ResolveObject(widePath);
                     if (!object || !object->IsA(binding->DataClass)
-                        || (binding->ExcludedClass && object->IsA(binding->ExcludedClass)))
+                        || (binding->ExcludedClass && object->IsA(binding->ExcludedClass))
+                        || PS::AssetMetadata::IsIncomplete(object))
                     {
                         valid = false;
                         failedPath = path;
                         break;
                     }
+                    const auto origin=PS::AssetProvenance::Lookup(object);
+                    if(origin.is_object()&&(!origin.value("Registered",false)||origin.value("LastCloneDefinitionErrors",0)!=0)){
+                        valid=false;failedPath=path;break;
+                    }
                     resolvedObjects.push_back(object);
                 }
                 if (!valid)
                 {
+                    if(lane.Name=="Items"||lane.Name=="Recipes"||lane.Name=="Quests")
+                        PS::RegistryEnrollment::Reject(manifest.Source,"unresolved or wrong-class "+lane.Name+": "+failedPath);
                     m_rejectedManifestAssets.insert(
                         resolvedObjects.begin(), resolvedObjects.end());
                     PS::Log<LogLevel::Error>(STR(
@@ -1334,10 +1370,12 @@ namespace DragonWilds {
             if (!m_registrySummaryReported)
             {
                 m_registrySummaryReported = true;
-                PS::Log<LogLevel::Normal>(STR(
+                const auto published=PS::SaveCleanup::ReadRegistry();
+                if(published&&published->Ready())PS::Log<LogLevel::Normal>(STR(
                     "[REGISTRY][PERSISTENCE-PRUNER][READY] base game and loaded paks: items={}, recipes={}, quests={}, journal={}.\n"),
                     snapshot.Items.size(), snapshot.Recipes.size(),
                     snapshot.Quests.size(), snapshot.Journals.size());
+                else PS::Log<LogLevel::Warning>(STR("[REGISTRY][PERSISTENCE-PRUNER][DEFERRED] Registry enrollment is not certified; automatic character pruning remains disabled. Individually verified content can remain active.\n"));
             }
         }
         else
@@ -1830,7 +1868,8 @@ namespace DragonWilds {
         planInput.reserve(records.size());
         for (std::size_t index = 0; index < records.size(); ++index)
             planInput.push_back({records[index].Identity,
-                records[index].AssetPath, index});
+                records[index].AssetPath, index,
+                baselineAudit.Objects.contains(records[index].Object)});
         std::vector<PS::NetworkIdentityPlan::Candidate> plan;
         try
         {
@@ -1845,9 +1884,8 @@ namespace DragonWilds {
                 PS::ToWideSafe(error.what()));
             return false;
         }
-        constexpr std::size_t IdentityDetailLimit = 12;
-        std::size_t identityDetailLines = 0;
-        std::size_t identityDetailsOmitted = 0;
+        PS::RegistrationDiagnostics::Sources sourceCounts;
+        std::map<std::string,std::string> cacheSourcePaths;
 
         for (const auto& planned : plan)
         {
@@ -1899,6 +1937,8 @@ namespace DragonWilds {
                     throw std::runtime_error("network registry rejected the asset");
                 }
                 if (stats) EquipmentWearableBridge::TryRegister(subsystem, candidate);
+                try{cacheSourcePaths.try_emplace(PS::HelpyCacheSources::Source(record.AssetPath),record.AssetPath);}catch(...){}
+                if(PS::PSConfig::Get()->IsDebugLoggingEnabled())sourceCounts.Add(record.AssetPath,inserted);
                 if (inserted)
                 {
                     if (addedCount) ++*addedCount;
@@ -1907,18 +1947,6 @@ namespace DragonWilds {
                         if (runeSchemaAuthored) ++stats->AddedRuneSchema;
                         else ++stats->AddedCookedOrPak;
                     }
-                    if (identityDetailLines < IdentityDetailLimit)
-                    {
-                        ++identityDetailLines;
-                        PS::Log<LogLevel::Verbose>(STR(
-                            "[REGISTRY][{}][IDENTITY] source={} PersistenceID='{}' asset='{}' subsystem='{}' networkId={}.\n"),
-                            statusTag,
-                            runeSchemaAuthored ? TEXT("runeschema")
-                                               : TEXT("cooked-or-pak"),
-                            *persistenceId, candidate->GetPathName(),
-                            subsystem->GetClassPrivate()->GetName(), networkId);
-                    }
-                    else ++identityDetailsOmitted;
                 }
             }
             catch (const std::exception& e)
@@ -1929,10 +1957,6 @@ namespace DragonWilds {
                     candidate ? candidate->GetName() : STR("<null>"), PS::ToWideSafe(e.what()));
             }
         }
-        if (identityDetailsOmitted)
-            PS::Log<LogLevel::Verbose>(STR(
-                "[REGISTRY][{}][IDENTITY-SUMMARY] {} additional registered identities omitted; aggregate counts follow.\n"),
-                statusTag, identityDetailsOmitted);
         const auto finalAudit = AuditNetworkRegistry(subsystem);
         if (!finalAudit.Valid)
         {
@@ -1944,10 +1968,16 @@ namespace DragonWilds {
         }
         else
         {
+            for(const auto& [source,path]:cacheSourcePaths)PS::HelpyCacheSources::Registered(path);
             const auto auditKey = std::string("network:")
                 + RC::to_string(statusTag ? statusTag : TEXT("UNKNOWN"));
             const auto laneKey = auditKey + ":"
                 + RC::to_string(subsystem->GetClassPrivate()->GetPathName());
+            if(m_registryStatusReported.emplace(laneKey+":sources:"+finalAudit.Fingerprint).second
+                &&PS::PSConfig::Get()->IsDebugLoggingEnabled())
+                for(const auto& [source,count]:sourceCounts.Rows())
+                    PS::Log<LogLevel::Verbose>(STR("[REGISTRY][{}][SOURCE-SUMMARY] source='{}' added={} existing={}; individual asset messages suppressed.\n"),
+                        statusTag,PS::ToWideSafe(source),count.Added,count.Existing);
             PS::NetworkIdentityState::Publish(laneKey, finalAudit.Fingerprint);
             std::map<std::string,std::vector<std::string>> ownerRows;
             for(const auto& planned:plan) {
@@ -2028,7 +2058,7 @@ namespace DragonWilds {
         }
 
         UECustom::FScriptArrayHelper arrayHelper(array, arrayProperty);
-        if (array->Num() >= std::numeric_limits<uint16>::max())
+        if (static_cast<std::size_t>(array->Num()) >= PS::NetworkIdentityPlan::Capacity)
         {
             return -1;
         }

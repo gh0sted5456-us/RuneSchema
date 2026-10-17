@@ -1,3 +1,24 @@
+void DragonWildsSpawnLoader::ReleaseEventAdditionalDrops(UObject* actor) {
+    if(!actor||!GetGameMode(actor->GetWorld()))return;
+    for(auto it=m_bonusHandles.begin();it!=m_bonusHandles.end();){
+        auto* component=it->Component.Get();
+        if(!component){it=m_bonusHandles.erase(it);continue;}
+        if(component->GetOuterPrivate()!=actor){++it;continue;}
+        auto* handle=CastField<FStructProperty>(PropertyHelper::GetPropertyByName(component->GetClassPrivate(),TEXT("EnemyTableRowHandle")));
+        auto* name=handle&&handle->GetStruct()?CastField<FNameProperty>(PropertyHelper::GetPropertyByName(handle->GetStruct().Get(),TEXT("RowName"))):nullptr;
+        if(!ReflectedContract::Fits(handle,component->GetClassPrivate()->GetPropertiesSize())
+            ||!ReflectedContract::Fits(name,handle->GetElementSize())||name->GetElementSize()!=sizeof(FName))
+            throw std::runtime_error("Event bonus loot could not be safely disarmed before cleanup");
+        auto* address=name->ContainerPtrToValuePtr<void>(handle->ContainerPtrToValuePtr<void>(component));
+        if(name->GetPropertyValue(address)==FName(it->Applied,FNAME_Find)){
+            const FName original(it->Original,FNAME_Add);name->SetPropertyValue(address,original);
+            if(name->GetPropertyValue(address)!=original)throw std::runtime_error("Event original loot restoration did not verify");
+        }
+        it=m_bonusHandles.erase(it);
+    }
+    m_bonusApplied.erase(actor);
+}
+
 void DragonWildsSpawnLoader::ClearBonusRows() {
     for(const auto& saved:m_bonusHandles)if(auto* component=saved.Component.Get())try {
         auto* handle=CastField<FStructProperty>(PropertyHelper::GetPropertyByName(component->GetClassPrivate(),TEXT("EnemyTableRowHandle")));
@@ -209,6 +230,8 @@ void DragonWildsSpawnLoader::ApplyAdditionalDrops(UObject* actor,const nlohmann:
         if(m_bonusHandles.size()>=4096)throw std::runtime_error("Additional loot live component limit reached (4096)");
         m_bonusHandles.push_back({PS::WeakObject(component),original.ToString(),cached->second});
         nameProperty->SetPropertyValue(nameProperty->ContainerPtrToValuePtr<void>(handle),FName(cached->second,FNAME_Find));
+        if(nameProperty->GetPropertyValue(nameProperty->ContainerPtrToValuePtr<void>(handle))!=FName(cached->second,FNAME_Find))
+            throw std::runtime_error("Additional loot instance binding did not verify");
         if(m_bonusApplied.size()>=4096)std::erase_if(m_bonusApplied,[](auto& entry){return !entry.second.Get();});
         m_bonusApplied.insert_or_assign(actor,PS::WeakObject(actor));
     }catch(const std::exception& error) {

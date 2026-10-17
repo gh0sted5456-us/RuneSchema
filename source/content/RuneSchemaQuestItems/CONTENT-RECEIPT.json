@@ -1,0 +1,19 @@
+{
+  "SchemaVersion": 1,
+  "Plugin": "RuneSchema.QuestItems",
+  "ContentMount": "/RuneSchemaQuestItems",
+  "Packages": ["/RuneSchemaQuestItems/Blueprints/BP_QuestScroll", "/RuneSchemaQuestItems/Items/ITEM_QuestScroll_Template"],
+  "TemplatePersistenceID": "EvaZqkcGPyMFTdGm-ZOq3A",
+  "TemplateInternalName": "runeschema_quest_scroll_template",
+  "UseItem": {"Const": true, "Native": false, "BlueprintPure": false, "Parameters": 4, "ObservedFrameBytes": 21, "InertEditorCallReturnedFalse": true},
+  "NativeDecode": {"Steam": {"Verified": 2, "Expected": 2}, "GamePass": {"Verified": 2, "Expected": 2}},
+  "EmbeddedQuests": [],
+  "EmbeddedRewards": [],
+  "ModDependencies": [],
+  "LiveGameplayVerified": false,
+  "Containers": [
+    {"Name": "RuneSchemaQuestItems_P.pak", "Bytes": 347, "SHA256": "75E7144577253917F6DA7312EF5E585B12FB728226A22B0938323751A6B555CD"},
+    {"Name": "RuneSchemaQuestItems_P.ucas", "Bytes": 2896, "SHA256": "599C160731FA5216AE0EF76DC641E191877C5C6ADB1AFC08B8D1AF90B241F380"},
+    {"Name": "RuneSchemaQuestItems_P.utoc", "Bytes": 601, "SHA256": "6C4E47572B57E893C9CB67B55F0175C3FEED6AF3CB4852BAAF0AA4A0AB0B981C"}
+  ]
+}

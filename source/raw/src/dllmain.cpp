@@ -14,6 +14,7 @@
 #include "Runtime/HostServices.h"
 #include "Generator/JsonSchemaGenerator.h"
 #include "Generator/InspectionTools.h"
+#include "Core/HelpyAuthoringProtocol.h"
 #include "Generator/SaveViewer.h"
 #include "Generator/SpawnToolsPanel.h"
 #include "Generator/QuestStatusPanel.h"
@@ -34,6 +35,7 @@
 #include "Utility/BuildInfo.h"
 #include "Runtime/Storefront.h"
 #include "Runtime/BPModLoaderIntegration.h"
+#include "Runtime/UE4SSPackageIntegration.h"
 #include "Runtime/MappingBackbone.h"
 #include "Utility/Logging.h"
 #include "Utility/StartupTrace.h"
@@ -57,6 +59,7 @@ struct LoadOrderEditorState {
     bool dirty = false;
     std::string status;
     std::vector<LoadOrderRow> rows;
+    DragonWilds::ModOrderState::Snapshot snapshot;
 };
 
 constexpr auto KnownLoaders=[] {
@@ -95,9 +98,12 @@ std::filesystem::path RuneSchemaModsRoot() {
 }
 
 void RefreshLoadOrderEditor(LoadOrderEditorState& state, const std::filesystem::path& modsRoot,
-    bool strictValues) {
+    bool /*strictValues*/) {
     state.rows.clear();
     state.dirty = false;
+    state.loaded = false;
+    try {
+    state.snapshot=DragonWilds::ModOrderState::Read(DragonWilds::ModLoadOrder::GetOrderPath(modsRoot));
     std::vector<std::string> discovered;
     std::error_code ec;
     for (std::filesystem::directory_iterator it(modsRoot, ec), end; !ec && it != end; it.increment(ec)) {
@@ -106,26 +112,12 @@ void RefreshLoadOrderEditor(LoadOrderEditorState& state, const std::filesystem::
         if (name != "RuneSchema") discovered.push_back(name);
     }
     std::sort(discovered.begin(), discovered.end());
-    std::unordered_map<std::string, bool> enabled;
-    std::vector<std::string> ordered;
-    for (const auto& entry : DragonWilds::ModLoadOrder::Load(
-        DragonWilds::ModLoadOrder::GetOrderPath(modsRoot), strictValues)) {
-        const auto name = RC::to_string(entry.Name);
-        if (!enabled.contains(name)) {
-            enabled.emplace(name, entry.Enabled);
-            ordered.push_back(name);
-        }
-    }
-    for (const auto& name : discovered)
-        if (!enabled.contains(name) && DragonWilds::ModOrderPolicy::ShouldAutoPersist(name)) {
-            enabled.emplace(name, true);
-            ordered.push_back(name);
-        }
-    std::erase_if(ordered, [&](const auto& name) {
-        return !std::binary_search(discovered.begin(), discovered.end(), name);
-    });
-    for (const auto& name : ordered) {
-        LoadOrderRow row{name, enabled.at(name)};
+    if(ec)throw std::runtime_error("Cannot scan mod folders");
+    const auto plan=DragonWilds::ModOrderState::Reconcile(
+        DragonWilds::ModOrderState::Parse(state.snapshot.Contents),discovered);
+    for (const auto& entry : plan.Entries) {
+        const auto& name=entry.Name;
+        LoadOrderRow row{name, entry.Enabled};
         const auto mod = modsRoot / name;
         for (size_t loader = 0; loader < std::size(KnownLoaders); ++loader) {
             const auto folder = mod / KnownLoaders[loader];
@@ -148,9 +140,11 @@ void RefreshLoadOrderEditor(LoadOrderEditorState& state, const std::filesystem::
         }
         state.rows.push_back(std::move(row));
     }
-    DragonWilds::ModOrderPolicy::Apply(state.rows, [](const auto& row) -> const auto& { return row.name; });
     state.loaded = true;
     state.status = ec ? "Load-order scan completed with filesystem warnings." : "Load order loaded from disk.";
+    } catch(const std::exception& error) {
+        state.rows.clear();state.status=std::string("Cannot read load order: ")+error.what()+". No changes saved.";
+    }
 }
 
 bool BeginRuneSchemaTab(const char* label, TabRole role, const ImVec4* custom = nullptr,
@@ -243,6 +237,10 @@ public:
         auto config = PS::PSConfig::Get();
         PS::StartupTrace::Mark("config load begin");
         config->Load();
+        try {
+            for(const auto& diagnostic:PS::UE4SSPackageIntegration::Prepare(std::filesystem::path(PS::HostServices::WorkingDirectory())))
+                PS::Log<LogLevel::Warning>(STR("[UE4SS-PACKAGES] {}\n"),PS::ToWideSafe(diagnostic.c_str()));
+        }catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[UE4SS-PACKAGES][PARTIAL] {}\n"),PS::ToWideSafe(error.what()));}
         const auto& storefront=PS::Storefront::CurrentDetection();
         if (!storefront.DedicatedServer) {
             try {
@@ -289,7 +287,7 @@ public:
                 PS::Log<LogLevel::Warning>(TEXT("[LOGIC-PAK][SERVER][PARTIAL] {}.\n"),
                     PS::ToWideSafe(result.Detail.c_str()));
         }
-        if (!storefront.DedicatedServer) {
+        {
             const auto pluginRoot=std::filesystem::path(PS::HostServices::WorkingDirectory())/"Mods"/"RuneSchema"/"plugins";
             m_pluginHost.Load(pluginRoot);
             for(const auto& message:m_pluginHost.Diagnostics())
@@ -304,27 +302,28 @@ public:
             } catch(const std::exception& error) {
                 PS::Log<LogLevel::Warning>(TEXT("Helpy plugin service validation failed: {}\n"),PS::ToWideSafe(error.what()));
             }
-        } else {
+        }
+        if (storefront.DedicatedServer) {
             PS::Log<LogLevel::Normal>(TEXT(
-                "[SERVER][SAFE-MODE] Dedicated server executable detected. Native GUI/client plugins are suppressed; authoritative registry loaders remain enabled.\n"));
+                "[SERVER][SAFE-MODE] Dedicated server detected. Desktop Helpy is allowed; other client plugins remain suppressed. Authoritative registry loaders remain enabled.\n"));
         }
         PS::UE4SSCompatibility::Report();
         // Storefront selection controls native signature lookup.
-        RC::Output::send<RC::LogLevel::Normal>(TEXT("[RuneSchema] Runtime storefront: {} | reason: {} | package profile: Universal.\n"),
+        PS::ConsolidatedLog<RC::LogLevel::Normal>(TEXT("[RuneSchema] Runtime storefront: {} | reason: {} | package profile: Universal.\n"),
             PS::ToWideSafe(PS::Storefront::Name(storefront.Value)),storefront.Reason);
-        RC::Output::send<RC::LogLevel::Normal>(TEXT("[RuneSchema] Native binding lane: {}.\n"),
+        PS::ConsolidatedLog<RC::LogLevel::Normal>(TEXT("[RuneSchema] Native binding lane: {}.\n"),
             PS::ToWideSafe(PS::Storefront::NativeLaneName(PS::Storefront::CurrentNativeLane())));
         if(storefront.Value==PS::Storefront::Kind::GamePass) {
             const auto signatureState=storefront.HasGamePassSignatures?TEXT("available"):TEXT("missing");
-            RC::Output::send<RC::LogLevel::Normal>(TEXT("[RuneSchema] Game Pass pivot: UE4SS_Signatures={} at {} | isolated WinGDK native lane selected.\n"),
+            PS::ConsolidatedLog<RC::LogLevel::Normal>(TEXT("[RuneSchema] Game Pass pivot: UE4SS_Signatures={} at {} | isolated WinGDK native lane selected.\n"),
                 signatureState,storefront.SignatureRoot.wstring());
         }
         const auto& mapping=PS::MappingBackbone::Current(std::filesystem::path(PS::HostServices::WorkingDirectory()));
         if(mapping.Available)
-            RC::Output::send<RC::LogLevel::Normal>(TEXT("[RuneSchema] Mapping backbone: {} | bytes={} | fingerprint={}.\n"),
+            PS::ConsolidatedLog<RC::LogLevel::Normal>(TEXT("[RuneSchema] Mapping backbone: {} | bytes={} | fingerprint={}.\n"),
                 mapping.Path.wstring(),mapping.Size,PS::ToWideSafe(mapping.Fingerprint.c_str()));
         else
-            RC::Output::send<RC::LogLevel::Normal>(TEXT("[RuneSchema] Mapping backbone: no Mappings.usmap found; live reflection remains authoritative.\n"));
+            PS::ConsolidatedLog<RC::LogLevel::Normal>(TEXT("[RuneSchema] Mapping backbone: no Mappings.usmap found; live reflection remains authoritative.\n"));
         PS::StartupTrace::Mark("signature scan begin");
 
         DragonWilds::SignatureManager::Initialize();
@@ -336,7 +335,7 @@ public:
         MainLoader.PreInitialize();
         PS::StartupTrace::Mark("early hooks complete");
 
-        RC::Output::send<RC::LogLevel::Normal>(STR("[RuneSchema] v{} loaded | UE4SS | network role determined by game state.\n"), ModVersion);
+        PS::ConsolidatedLog<RC::LogLevel::Normal>(STR("[RuneSchema] v{} loaded | UE4SS | network role determined by game state.\n"), ModVersion);
     }
 
     ~RuneSchema() override
@@ -351,6 +350,7 @@ public:
         PS::PlayerTrace::Cancel();
         PS::AppearanceTrace::Cancel();
         PS::NiagaraTest::Unbind();
+        PS::DiagnosticLog::Shutdown();
     }
 
     auto on_ui_init() -> void override
@@ -382,33 +382,6 @@ public:
         });
 
         PS::StartupTrace::Mark("UE4SS RuneSchema tab registered");
-
-    }
-
-    auto render_schema_generator() -> void
-    {
-        static bool loadedTables=false;
-        static char schemaName[97]{};
-        ImGui::SeparatorText("Configure export");
-        ImGui::TextWrapped("Export structural JSON schemas for all 12 loader folders. These are authoring hints, not complete runtime validation or game-data dumps.");
-        ImGui::BeginDisabled(m_schemaBusy.load());
-        ImGui::InputText("Schema export name (optional)",schemaName,sizeof(schemaName));
-        ImGui::Checkbox("Include loaded DataTable fields (slower; enter a world first)",&loadedTables);
-        if (ImGui::Button("Export loader schemas"))
-        {
-            m_schemaBusy=true;
-            m_includeLoadedTables=loadedTables;
-            {std::lock_guard lock(m_schemaStatusMutex);m_schemaExportName=schemaName;}
-            m_generateSchemas=true;
-        }
-        ImGui::EndDisabled();
-        ImGui::TextWrapped("Saved to runtime/live/jobs/exports/schema/<name>_schemas_<timestamp>. Linked schema filenames stay unchanged inside the bundle. Default export does not scan game objects.");
-        {std::lock_guard lock(m_schemaStatusMutex);if(!m_schemaStatus.empty())ImGui::TextWrapped("%s",m_schemaStatus.c_str());}
-
-        if (m_schemaBusy)
-        {
-            ImGui::ProgressBar(-0.5f * (float)ImGui::GetTime(), ImVec2(0.0f, 0.0f), "Generating...");
-        }
 
     }
 
@@ -449,7 +422,7 @@ public:
             ImGui::TextWrapped("Core settings that affect the whole RuneSchema runtime.");
             ImGui::SeparatorText("Messages");
             ImGui::Checkbox("Advanced logging", &settings.advancedLogging);
-            ImGui::TextWrapped("Off: essential startup, compatibility, warnings and errors. On: detailed loader and bridge traces. This does not change UE4SS logging.");
+            ImGui::TextWrapped("RuneSchema.log always mirrors normal RuneSchema messages in the mod root. Advanced logging adds detailed loader and bridge traces to that file only; UE4SS keeps concise output.");
             ImGui::Checkbox("Color-code loader annotations", &settings.colorCodeLoaderAnnotations);
             ImGui::TextWrapped("When enabled, /loader annotations in Server & Loaders > Installed Mods use the matching loader color.");
         } else if(settingsPage==1) {
@@ -484,10 +457,8 @@ public:
             ImGui::SeparatorText("Progress persistence");
             ImGui::Checkbox("Save RuneSchema character customization", &settings.persistence.characterCustomization);
             ImGui::TextWrapped("Off by default. Character option and data-table loaders remain active, but automatic /players appearance assignments do not rewrite CustomizationSaveData.");
-            ImGui::BeginDisabled();
-            ImGui::Checkbox("Allow rejected/corrupt character entry (quarantined)", &settings.persistence.allowCorruptCharacterEntry);
-            ImGui::EndDisabled();
-            ImGui::TextWrapped("Temporarily unavailable: crash-dump analysis identified an unsafe native ProcessPlayerStateLoad ABI. RuneSchema will refuse this setting even if manually enabled, leaving native character acceptance unchanged.");
+            ImGui::Checkbox("Bypass rejected character loads (restart required)", &settings.persistence.allowCorruptCharacterEntry);
+            ImGui::TextWrapped("Off by default. Native character validation and player-state loading both run, then rejected return results are accepted at verified native return gates. This does not repair damaged data or guarantee a complete load. Back up your character before enabling; later game saves can persist incomplete state. Disable the standalone CorruptCharacterBypass first. Restart also applies turning this off.");
             ImGui::TextWrapped("Normal RuneSchema recipe unlocks may persist once their live RecipeData has a valid PersistenceID. Generated vendor recipes remain transient. Safe Clean removes orphaned RuneSchema progress after content registration.");
             ImGui::Checkbox("Save RuneSchema quest progress", &settings.persistence.quests);
             ImGui::TextWrapped("On by default. Off leaves quest definitions available to other loaders but blocks RuneSchema quest actions because native quest progress is save-backed.");
@@ -520,9 +491,9 @@ public:
             settings.helpyAuthority.maximumItemCount=std::clamp(settings.helpyAuthority.maximumItemCount,1,10000);
             settings.helpyAuthority.maximumSpawnCount=std::clamp(settings.helpyAuthority.maximumSpawnCount,1,100);
             settings.helpyAuthority.maximumNpcDurationSeconds=std::clamp(settings.helpyAuthority.maximumNpcDurationSeconds,1,3600);
-            ImGui::TextWrapped("Remote users must also match permittedPlayerGuids or permittedPlayerNames in settings/settings.jsonc. An empty allowlist denies all remote Helpy mutations; GUIDs are preferred.");
+            ImGui::TextWrapped("Remote users must also match permittedPlayerGuids or permittedPlayerNames in settings/settings.ini [helpyAuthority] (legacy JSONC is also supported). An empty allowlist denies all remote Helpy mutations; GUIDs are preferred.");
             ImGui::TextWrapped("Plugin controls are owned by each plugin under plugins/<PluginId>/settings/. Helpy activation and its hotkey are managed by RuneSchema.Helpy.");
-            ImGui::TextWrapped("Settings: settings/settings.jsonc | Live jobs: runtime/live/jobs | Live state: runtime/live/saved");
+            ImGui::TextWrapped("Settings: settings/settings.ini (legacy settings.jsonc supported) | Live jobs: runtime/live/jobs | Live state: runtime/live/saved");
             ImGui::TextWrapped("Hotloading applies supported JSON changes while the game is running. Blueprint patches and ghost appearance changes still require a restart.");
             ImGui::SeparatorText("Load-order prefixes");
             ImGui::TextWrapped("AA_ loads first, then numeric prefixes such as 00_ and 01_ in ascending order, ordinary folders, and ZZ_ last. AA_ and ZZ_ folders are implied enabled and are omitted from generated runeschema.txt files unless you add an explicit override.");
@@ -532,11 +503,7 @@ public:
             ImGui::Text("Runtime: %s", PS::UE4SSCompatibility::DetectedBuild());
             ImGui::Text("Built against: %s", PS::BuildInfo::UE4SSTarget);
             ImGui::Text("Game target: %s", PS::BuildInfo::GameTarget);
-            if (!PS::UE4SSCompatibility::MatchesTarget()) {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.75f, 0.18f, 1.0f));
-                ImGui::TextWrapped("Runtime build differs from the tested API line. Unavailable capabilities are reported separately.");
-                ImGui::PopStyleColor();
-            }
+            ImGui::TextWrapped("No UE4SS build-number ceiling. Runtime features use available capabilities; a future breaking native ABI change can still require a rebuilt RuneSchema.");
             ImGui::SeparatorText("Attribution");
             ImGui::TextWrapped("Based on the original RuneSchema 0.6.0 from Snorkles. This version is maintained by members of the RSDW Modding Community.");
             ImGui::TextWrapped("PalSchema foundation — Okaetsu");
@@ -585,7 +552,7 @@ public:
                 }
             } else if (loadPage == 1) {
             ImGui::SeparatorText("Loader controls and authoring map");
-            ImGui::TextWrapped("Choose a loader on the left. Enable/disable controls affect startup; authoring guidance explains ownership and points to Authoring & Tools. Restart remains the acceptance boundary for server changes unless the loader explicitly supports reload.");
+            ImGui::TextWrapped("Choose a loader on the left. Enable/disable controls affect startup; authoring guidance explains ownership and points to Helpy > Authoring Tools. Restart remains the acceptance boundary for server changes unless the loader explicitly supports reload.");
             bool* enabled[]{
                 &settings.loaders.assets,
                 &settings.loaders.blueprints,
@@ -688,18 +655,18 @@ public:
                             ImGui::TextWrapped("Starter formats are not the full runtime contract. Buildings and players can patch authored definitions even without live-record patch starters.");
                         }
                         if(ImGui::CollapsingHeader("Authoring flow",ImGuiTreeNodeFlags_DefaultOpen)) {
-                            ImGui::TextWrapped("Open Authoring & Tools > Mod Authoring > All Loaders to search this loader, inspect its schema, choose a supported starter format, and export editable JSONC. Export does not install or activate a mod.");
+                            ImGui::TextWrapped("Open Helpy > Authoring Tools > Content & schemas to search this loader, inspect its schema, choose a supported starter format, and export editable JSONC. Export does not install or activate a mod.");
                             ImGui::Text("Patch vanilla: %s",capability.StarterPatch?"starter available":"loader-specific or unavailable");
                             ImGui::Text("Clone: %s",capability.Clone?"supported":"not supported");
                             ImGui::Text("Create authored definition: supported where this loader owns a stable identity");
                             if(loaderName=="players") {
                                 ImGui::SeparatorText("Player authoring coverage");
-                                ImGui::TextWrapped("Direct page: Authoring & Tools > Mod Authoring > Players. Implemented fields include name/GUID/all-player/load-slot targeting; scale; health and stamina; movement and carry weight; attack, defense and named attributes; appearance rows with fallbacks; visual effects; archetype; and inline or reusable nameplates.");
+                                ImGui::TextWrapped("Direct page: Helpy > Authoring Tools > Content & schemas > players. Implemented fields include name/GUID/all-player/load-slot targeting; scale; health and stamina; movement and carry weight; attack, defense and named attributes; appearance rows with fallbacks; visual effects; archetype; and inline or reusable nameplates.");
                                 ImGui::TextWrapped("Use a stable Id for later $Patch operations. Inventory and quest/journal progress remain with their owning loaders.");
                             }
                             if(loaderName=="nameplates") {
                                 ImGui::SeparatorText("Nameplate relationships");
-                                ImGui::TextWrapped("Direct page: Authoring & Tools > Mod Authoring > Nameplates. /players selects a reusable definition with Nameplate.Definition and may override Mode, Icon, Scale, Distance, audience, states, events, SkillXP and timeout.");
+                                ImGui::TextWrapped("Direct page: Helpy > Authoring Tools > Content & schemas > nameplates. /players selects a reusable definition with Nameplate.Definition and may override Mode, Icon, Scale, Distance, audience, states, events, SkillXP and timeout.");
                                 ImGui::TextWrapped("Each current activity state owns a cooked icon. Event rules Pulse, Activate or Deactivate that state. Displayed counters require the next runtime phase and are not serialized by this checkpoint.");
                             }
                         }
@@ -725,9 +692,9 @@ public:
         ImGui::Checkbox("Use runeschema.txt", &settings.loadOrder.enabled);
         ImGui::Checkbox("Create the file automatically", &settings.loadOrder.autoCreate);
         if(ImGui::CollapsingHeader("Advanced file handling")) {
-        ImGui::Checkbox("Add new folders and remove missing folders", &settings.loadOrder.reconcileFolders);
+        ImGui::Checkbox("Add new folders (retain saved choices for missing folders)", &settings.loadOrder.reconcileFolders);
         ImGui::Checkbox("Preserve comments when reconciling", &settings.loadOrder.preserveComments);
-        ImGui::Checkbox("Only accept 0 or 1", &settings.loadOrder.strictValues);
+        ImGui::TextDisabled("Only 1 enables a mod; 0 and invalid values disable it.");
         ImGui::Checkbox("Sort folders when no order file is used", &settings.loadOrder.deterministicFallback);
         }
          ImGui::TextWrapped("Folder order is top-to-bottom. Set a mod to 0 to disable it. Directive documents are queued and applied after ordinary definitions.");
@@ -738,21 +705,28 @@ public:
         if (ImGui::Button("Reload from disk") || !editor.loaded)
             RefreshLoadOrderEditor(editor, modsRoot, settings.loadOrder.strictValues);
         ImGui::SameLine();
+        ImGui::BeginDisabled(!editor.loaded);
         if (ImGui::Button("Save load order")) {
-            DragonWilds::ModOrderPolicy::Apply(editor.rows,
-                [](const auto& row) -> const auto& { return row.name; });
             std::vector<DragonWilds::ModOrderEntry> entries;
             entries.reserve(editor.rows.size());
             for (const auto& row : editor.rows)
                 entries.push_back({PS::ToWideSafe(row.name.c_str()), row.enabled});
             const auto path = DragonWilds::ModLoadOrder::GetOrderPath(modsRoot);
-            const bool saved = settings.loadOrder.preserveComments && std::filesystem::exists(path)
-                ? DragonWilds::ModLoadOrder::SavePreservingComments(path, entries)
-                : DragonWilds::ModLoadOrder::Save(path, entries);
+            const bool saved = settings.loadOrder.preserveComments && editor.snapshot.Exists
+                ? DragonWilds::ModLoadOrder::SavePreservingComments(path, entries, &editor.snapshot)
+                : DragonWilds::ModLoadOrder::Save(path, entries, &editor.snapshot);
             editor.status = saved ? "Saved runeschema.txt. The new order takes effect on the next game load."
-                                  : "Could not save runeschema.txt; see the RuneSchema log.";
+                                  : "Save not applied: the file changed or could not be written. Reload from disk before retrying.";
             editor.dirty = !saved;
+            // Our baseline must be the bytes we saved, not a potentially newer
+            // file read after another writer has changed a setting.
+            if(saved) {
+                std::vector<DragonWilds::ModOrderState::Entry> serialized;
+                for(const auto& row:editor.rows)serialized.push_back({row.name,row.enabled});
+                editor.snapshot={true,DragonWilds::ModOrderState::Serialize(serialized,editor.snapshot,settings.loadOrder.preserveComments)};
+            }
         }
+        ImGui::EndDisabled();
         if (!editor.status.empty()) ImGui::TextWrapped("%s", editor.status.c_str());
         ImGui::SeparatorText("Mods");
         for (size_t index = 0; index < editor.rows.size(); ++index) {
@@ -761,6 +735,7 @@ public:
             if (ImGui::Checkbox("##enabled", &row.enabled)) editor.dirty = true;
             ImGui::SameLine();
             ImGui::TextUnformatted(row.name.c_str());
+            if(!std::filesystem::is_directory(modsRoot/row.name)) {ImGui::SameLine();ImGui::TextDisabled("(not installed; choice retained)");}
             for (const auto loader : row.loaders) {
                 ImGui::SameLine();
                 const auto color = settings.colorCodeLoaderAnnotations
@@ -793,98 +768,6 @@ public:
         ImGui::PopID(); ImGui::EndChild(); }
         ImGui::EndChild();
         EndRuneSchemaTab(); }
-        if (BeginRuneSchemaTab("Authoring & Tools", TabRole::Diagnostics)) {
-            RenderToolsWarning();
-            if(!settings.authoringTools)
-                ImGui::TextWrapped("Mod authoring tools are disabled. Enable them under General > Runtime and restart. The interface remains visible so the setting never appears to remove functionality.");
-            if (m_apiExportCallbackId == Hook::ERROR_ID) {
-                ImGui::TextWrapped("Tools are off. Activation lasts only for this game session and is not saved.");
-                ImGui::BeginDisabled(!m_unrealReady.load()||!settings.authoringTools);
-                if (ImGui::Button("Activate Tools for this session")) ActivateTools();
-                ImGui::EndDisabled();
-            }
-            if (m_apiExportCallbackId != Hook::ERROR_ID) {
-            ImGui::TextWrapped("Author or repair content first; use presets/traces for contracts, inspect when narrowing a target, then review results. Save cleanup is offline and last.");
-            constexpr const char* names[]{"Mod Authoring", "Presets", "Traces", "Inspector", "Results", "Save Cleanup"};
-            constexpr PS::InspectionTools::Section sections[]{
-                PS::InspectionTools::Section::Presets,
-                PS::InspectionTools::Section::Presets,
-                PS::InspectionTools::Section::Traces, PS::InspectionTools::Section::Inspector,
-                PS::InspectionTools::Section::Results};
-            static int selectedTool = 0;
-            ImGui::BeginChild("AdvancedToolsBody", ImVec2(0, 0), false,
-                ImGuiWindowFlags_AlwaysVerticalScrollbar);
-            ImGui::SetNextItemWidth(std::min(360.0f, ImGui::GetContentRegionAvail().x));
-            ImGui::Combo("Workflow stage", &selectedTool, names, 6);
-            ImGui::SeparatorText(names[selectedTool]);
-            ImGui::PushID(names[selectedTool]);
-            ImGui::PushItemWidth(std::max(160.0f, ImGui::GetContentRegionAvail().x * 0.7f));
-            if(selectedTool==5)PS::SaveViewer::RenderCleanup();
-            else if(selectedTool==0) {
-                static int authoringPage=0;
-                constexpr const char* authoringNames[]{"All Loaders","Players","Nameplates","Items","Recipes","Journal","Quests","NPCs","Spawns","Events","Session Cleanup"};
-                constexpr const char* authoringLoaders[]{nullptr,"players","nameplates","assets","recipes","journal","quests","npc","spawns","events",nullptr};
-                ImGui::TextWrapped("Create and export definitions for every RuneSchema loader. Focused pages expose the most common relationships; All Loaders provides the complete 22-loader selector.");
-                ImGui::SetNextItemWidth(std::min(360.0f, ImGui::GetContentRegionAvail().x));
-                ImGui::Combo("Content type", &authoringPage, authoringNames, 11);
-                ImGui::PushID(authoringNames[authoringPage]);
-                if(authoringPage==0) {
-                    ImGui::SeparatorText("All loader authoring");
-                    ImGui::TextWrapped("Choose any loader, search its loaded or authored records, select Patch/Create/Clone where supported, inspect its structural schema, and export an editable JSONC starter.");
-                } else if(authoringPage==1) {
-                    ImGui::SeparatorText("Player rule authoring");
-                    ImGui::TextWrapped("Player rules can target names, GUIDs, all players, or load slots. The schema exposes implemented appearance, vital, movement, capacity, attack, defense, named attribute, visual-effect, archetype, and nameplate fields. Rules may patch another authored rule by stable Id.");
-                    ImGui::TextWrapped("Inventory, quest progress, and journal progress remain with their owning loaders; this page does not perform unrestricted save editing.");
-                    PS::InspectionTools::RenderPlayerNameplateBuilder(false);
-                    ImGui::SeparatorText("Search, patch, and field reference");
-                } else if(authoringPage==2) {
-                    ImGui::SeparatorText("Reusable nameplate authoring");
-                    ImGui::TextWrapped("Create a reusable /nameplates definition, then select it from /players with Nameplate.Definition. Inline player fields override the shared definition. States associate cooked icons with event pulses, activation/deactivation, skill XP, or a GameplayEffect condition.");
-                    ImGui::TextWrapped("Conditions may use built-in activity and skill signals, GameplayEffect state, or exact native/Blueprint event paths with parameter comparisons. This covers quest, event, vendor, recipe, building, gathering, combat, spell, fishing, and emote sources without polling save data.");
-                    PS::InspectionTools::RenderPlayerNameplateBuilder(true);
-                    ImGui::SeparatorText("Search, patch, and field reference");
-                } else if(authoringPage==3) {
-                    ImGui::SeparatorText("Item definition authoring");
-                    ImGui::TextWrapped("Use Helpy > Items > Item Lab for the guided in-world flow. This advanced page searches loaded item assets and builds reflected $Patch or $Clone starters for exact field review.");
-                } else if(authoringPage==4) {
-                    ImGui::SeparatorText("Recipe creation and alteration");
-                    ImGui::TextWrapped("Search installed authored recipes, create a separate recipe identity, or patch an existing authored definition. Item identity remains in /assets; station placement and vendor contributions remain explicit recipe relationships.");
-                } else if(authoringPage==5) {
-                    ImGui::SeparatorText("Journal entry creation and alteration");
-                    ImGui::TextWrapped("Search journal definitions, review pages, images, and unlock placement, then export a create or patch starter. Helpy can create an item-linked entry; this page handles independent and existing journal records.");
-                } else if(authoringPage==6) {
-                    ImGui::SeparatorText("Quest status and debug");
-                    PS::QuestStatusPanel::Render();
-                    ImGui::SeparatorText("Quest definition authoring");
-                } else if(authoringPage==7) {
-                    ImGui::SeparatorText("Character save import");
-                    PS::SaveViewer::RenderNpcExport();
-                    ImGui::SeparatorText("NPC definition authoring");
-                } else if(authoringPage==8) {
-                    ImGui::SeparatorText("Live spawn placement");
-                    PS::SpawnToolsPanel::Render();
-                    ImGui::SeparatorText("Spawn definition authoring");
-                } else if(authoringPage==10) {
-                    PS::SpawnToolsPanel::RenderSessionCleanup();
-                }
-                if(authoringPage!=10)PS::InspectionTools::Render(true,PS::InspectionTools::Section::AssetTemplates,authoringLoaders[authoringPage]);
-                if(authoringPage==0 && ImGui::CollapsingHeader("Export structural loader schemas"))
-                    render_schema_generator();
-                ImGui::PopID();
-            }
-            else PS::InspectionTools::Render(true, sections[selectedTool]);
-            ImGui::Separator();
-            if (selectedTool > 0 && ImGui::Button("Previous stage")) --selectedTool;
-            if (selectedTool > 0 && selectedTool < 5) ImGui::SameLine();
-            if (selectedTool < 5 && ImGui::Button("Next stage")) ++selectedTool;
-            if (ImGui::CollapsingHeader("Recent results"))
-                PS::InspectionTools::RenderHistory();
-            ImGui::PopItemWidth();
-            ImGui::PopID();
-            ImGui::EndChild();
-            }
-            EndRuneSchemaTab();
-        }
         ImGui::EndTabBar();
         }
         ImGui::EndChild(); // SettingsViewport
@@ -902,8 +785,8 @@ public:
                 m_pluginHost.Shutdown();
             });
             MainLoader.Initialize();
-            if (!PS::Storefront::IsDedicatedServer())
-                m_pluginHost.OnUnrealInit();
+            PrepareAuthoringBridge();
+            m_pluginHost.OnUnrealInit();
             PS::StartupTrace::Mark("UE4SS on_unreal_init complete");
             m_unrealReady = true;
             if (!PS::Storefront::IsDedicatedServer()) {
@@ -919,9 +802,11 @@ public:
         }
     }
 
-    void ActivateTools()
+    void PrepareAuthoringBridge()
     {
-        if (m_apiExportCallbackId != Hook::ERROR_ID || !m_unrealReady.load()) return;
+        const auto& settings=PS::PSConfig::Get()->GetSettings();
+        PS::HelpyAuthoring::Bridge.Configure(settings.authoringTools,false);
+        if (!settings.authoringTools || m_apiExportCallbackId != Hook::ERROR_ID) return;
         Hook::FCallbackOptions options{};
         options.OwnerModName = TEXT("RuneSchema");
         options.HookName = TEXT("AuthoringToolsWorldTeardown");
@@ -931,11 +816,13 @@ public:
                 m_schemaBusy=false;
                 {std::lock_guard lock(m_schemaStatusMutex);m_schemaStatus.clear();}
                 PS::InspectionTools::Reset();
+                PS::HelpyAuthoring::Bridge.WorldChanged();
             }, options);
         if (m_toolsWorldCallbackId == Hook::ERROR_ID) return;
         options.HookName = TEXT("ManualAuthoringTools");
         m_apiExportCallbackId = Hook::RegisterEngineTickPostCallback(
             [this](Hook::TCallbackIterationData<void>&, UEngine*, float, bool) {
+                if(!PS::HelpyAuthoring::Bridge.TickActivation())return;
                 if (m_generateSchemas.exchange(false)) {
                     std::string result;
                     try {std::string name;{std::lock_guard lock(m_schemaStatusMutex);name=m_schemaExportName;}result="Exported: "+PS::JsonSchemaGenerator::GenerateSchemaFiles(m_includeLoadedTables.load(),name);}
@@ -949,6 +836,7 @@ public:
             Hook::UnregisterCallback(m_toolsWorldCallbackId);
             m_toolsWorldCallbackId=Hook::ERROR_ID;
         }
+        PS::HelpyAuthoring::Bridge.Configure(settings.authoringTools,m_apiExportCallbackId!=Hook::ERROR_ID);
     }
 
 private:

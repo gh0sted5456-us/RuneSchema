@@ -10,6 +10,8 @@
 #include <string_view>
 #include <Windows.h>
 #include "SDK/WeakObjectHandle.h"
+#include "Runtime/SlowWork.h"
+#include "Core/WorkSlice.h"
 
 #include "Unreal/AActor.hpp"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
@@ -20,7 +22,9 @@
 #include "Loader/DialogueGraphLifecycle.h"
 #include "Loader/DialogueGraphIdentity.h"
 #include "Loader/QuestDamageCredit.h"
+#include "Loader/NativeSummonKillCredit.h"
 #include "Loader/NativeQuestReceipt.h"
+#include "Loader/AssetProvenance.h"
 #include "Loader/NativeDialogueSave.h"
 #include "Loader/DialogueCompletionPresentation.h"
 #include "Loader/NativeQuestCleanup.h"
@@ -43,6 +47,7 @@
 #include "Loader/EventIdentity.h"
 #include "Loader/QuestProgressText.h"
 #include "Loader/QuestHandIns.h"
+#include "Loader/QuestScrollIdentity.h"
 #include "Loader/NativeShopContract.h"
 #include "Generator/AppearanceResolver.h"
 #include "Generator/SaveViewer.h"
@@ -52,6 +57,7 @@
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Classes/KismetSystemLibrary.h"
 #include "SDK/Helper/ActorHelper.h"
+#include "SDK/Helper/GroundedPlacement.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
@@ -125,6 +131,7 @@ namespace DragonWilds {
         FStrProperty* IdentityField(UClass* type);
         UClass* RequireIdentityClass();
         std::string ReadIdentity(UObject* component);
+        AActor* RequireNpcActor(const PS::WeakObjectHandle& identity,UWorld* world,const char* stage);
     }
 #include "NpcNativeShopRefresh.inl"
 #include "NpcMeshSetter.inl"
@@ -134,9 +141,11 @@ namespace DragonWilds {
 #include "NpcInteraction.inl"
 #include "NpcDialogue.inl"
 #include "NpcQuestActions.inl"
+#include "NpcQuestScroll.inl"
 #include "NpcQuestAcquisition.inl"
 #include "NpcQuestPresentation.inl"
 #include "NpcQuestCompletion.inl"
+#include "NpcEquipment.inl"
     namespace {
         constexpr std::string_view DefaultInteractionComponent =
             "/Script/Dominion.InteractionComponent";
@@ -298,16 +307,32 @@ namespace DragonWilds {
                     ++count;
                     if(field->GetFName()==FName(TEXT("Object"),FNAME_Add))input=CastField<FObjectPropertyBase>(field);
                 }
-            if(!library || !function || count!=2 || function->GetParmsSize()!=9
-                || !returned || !returned->IsNativeBool() || returned->GetOffset_Internal()!=8
+            ReflectedContract::Frame(function);
+            if(!library || count!=2
+                || !ReflectedContract::Output(returned,function) || !returned->IsNativeBool()
                 || returned->GetSize()!=1 || returned->GetArrayDim()!=1
                 || !returned->HasAnyPropertyFlags(CPF_ReturnParm)
-                || !input || input->GetOffset_Internal()!=0 || input->GetSize()!=sizeof(UObject*)
+                || !ReflectedContract::Input(input,function) || input->GetSize()!=sizeof(UObject*)
                 || input->GetArrayDim()!=1 || input->HasAnyPropertyFlags(CPF_OutParm|CPF_ReturnParm))
                 throw std::runtime_error("NPC retirement validity function layout unavailable");
             ActorHelper::FunctionCall call(library,TEXT("/Script/Engine.KismetSystemLibrary:IsValid"));
             call.Arg(TEXT("Object"),object).Invoke();
             return call.Result<bool>();
+        }
+        struct NpcLifecyclePending final:std::runtime_error {using std::runtime_error::runtime_error;};
+        AActor* RequireNpcActor(const PS::WeakObjectHandle& identity,UWorld* world,const char* stage) {
+            auto* object=identity.Get();
+            const auto fail=[&](const char* reason)->AActor* {
+                throw NpcLifecyclePending(std::string("NPC lifecycle at ")+stage+": "+reason
+                    +" (index="+std::to_string(identity.ObjectIndex)+", serial="+std::to_string(identity.ObjectSerialNumber)+")");
+            };
+            if(!object)return fail("object generation no longer exists");
+            if(!IsNpcObjectUsable(object))return fail("native IsValid rejected actor");
+            if(!object->IsA<AActor>())throw std::runtime_error("NPC lifecycle identity is not an Actor");
+            if(object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject)))
+                throw std::runtime_error("NPC component owner is a default/archetype actor");
+            if(!world||object->GetWorld()!=world)return fail("actor has no expected live world");
+            return static_cast<AActor*>(object);
         }
     }
 
@@ -321,6 +346,7 @@ namespace DragonWilds {
 
     DragonWildsNpcLoader::~DragonWildsNpcLoader()
     {
+        if(m_summonCreditCallbackId!=Hook::ERROR_ID)Hook::UnregisterCallback(m_summonCreditCallbackId);
         if(HelpyInstance==this)HelpyInstance=nullptr;
         // Shutdown stays on the existing loader lifecycle. Native lifespan is an
         // additional fallback; do not call engine APIs from another thread.
@@ -383,7 +409,9 @@ namespace DragonWilds {
 
     bool DragonWildsNpcLoader::OnInitialize()
     {
+        m_summonNativeCredit=std::make_unique<Quests::Summons::NativeKillCredit>();
         m_events.Report=[](const std::string& message){PS::Log<LogLevel::Normal>(STR("Events: {}.\n"),PS::ToWideSafe(message.c_str()));};
+        m_events.ReportFailure=[this](const std::string& message){ErrorOnce("event-failure:"+message,PS::ToWideSafe("Events: "+message));};
         m_events.ApplyActorCue=[this](AActor* actor,const nlohmann::json& cue){PlayDialogueCue(actor,cue);};
         m_events.SetArea=[this](UObject* controller,const Events::Definition& event,bool show){return m_quests.SetEventArea(controller,event,show);};
         m_events.Notify=[](UObject* controller,const std::string& message,Events::Scope scope) {
@@ -393,24 +421,18 @@ namespace DragonWilds {
                 TEXT("/Script/Dominion.DominionPlayerController:Client_DisplayTextNotification"),false);
             auto* tag=function?CastField<FStructProperty>(function->FindProperty(FName(TEXT("NotificationTag"),FNAME_Find))):nullptr;
             auto* text=function?CastField<FTextProperty>(function->FindProperty(FName(TEXT("Text"),FNAME_Find))):nullptr;
-            size_t count=0;if(function)for(auto* field:TFieldRange<FProperty>(function,EFieldIterationFlags::Default))if(field->HasAnyPropertyFlags(CPF_Parm))++count;
-            if(!function || function->GetParmsSize()!=24 || function->GetReturnProperty() || count!=2
-                || !tag || tag->GetOffset_Internal()!=0 || tag->GetElementSize()!=sizeof(FName) || tag->GetArrayDim()!=1
+            const auto count=ReflectedContract::Count(function);
+            if(function->GetReturnProperty() || count!=2
+                || !ReflectedContract::Input(tag,function) || tag->GetArrayDim()!=1
                 || !tag->GetStruct().Get() || tag->GetStruct().Get()->GetPathName()!=TEXT("/Script/GameplayTags.GameplayTag")
-                || !text || text->GetOffset_Internal()!=8 || text->GetElementSize()!=16 || text->GetArrayDim()!=1)
+                || tag->GetElementSize()!=tag->GetStruct()->GetStructureSize()
+                || !ReflectedContract::Input(text,function) || !ReflectedContract::Text(text))
                 throw std::runtime_error("Native event notification layout changed");
             const auto deliver=[&](UObject* recipient) {
                 if(!recipient || recipient->GetWorld()!=controller->GetWorld())return;
-                std::array<uint8_t,24> params{};
-                text->InitializeValue_InContainer(params.data());
-                try {
-                    PropertyHelper::CopyJsonValueToContainer(params.data(),text,message);
-                    recipient->ProcessEvent(function,params.data());
-                    text->DestroyValue_InContainer(params.data());
-                } catch(...) {
-                    try{text->DestroyValue_InContainer(params.data());}catch(...) {}
-                    throw;
-                }
+                ActorHelper::FunctionCall(recipient,function)
+                    .JsonArg(TEXT("NotificationTag"),nlohmann::json::object())
+                    .JsonArg(TEXT("Text"),message).Invoke();
             };
             if(scope==Events::Scope::Participant){deliver(controller);return;}
             auto* type=ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionPlayerController"));
@@ -442,10 +464,12 @@ namespace DragonWilds {
         options.OwnerModName = TEXT("RuneSchema");
         options.HookName = TEXT("RuneSchemaMerchantInteraction");
         m_interactionCallbackId = Hook::RegisterProcessEventPostCallback(
-            [this](Hook::TCallbackIterationData<void>&, UObject* source,
+            [this](Hook::TCallbackIterationData<void>& dispatch, UObject* source,
                 UFunction* function, void* parameters) {
                 // The observed acknowledgement is the sole shop dispatcher.
                 try {
+                    if(m_summonNativeCredit && m_gameThreadId.load(std::memory_order_relaxed)==GetCurrentThreadId())
+                        m_summonNativeCredit->After(dispatch,source,function,parameters);
                     static const FName onRepIdentity(TEXT("OnRep_IdentityPayload"),FNAME_Add);
                     static const FName receiveBeginPlay(TEXT("ReceiveBeginPlay"),FNAME_Add);
                     static const FName receiveEndPlay(TEXT("ReceiveEndPlay"),FNAME_Add);
@@ -506,6 +530,17 @@ namespace DragonWilds {
                 STR("Unable to register the merchant interaction callback; vendors will not spawn.\n"));
             return false;
         }
+
+        options.HookName=TEXT("RuneSchemaSummonKillCredit");
+        m_summonCreditCallbackId=Hook::RegisterProcessEventPreCallback(
+            [this](Hook::TCallbackIterationData<void>& dispatch,UObject* source,UFunction* function,void* parameters) {
+                if(m_gameThreadId.load(std::memory_order_relaxed)!=GetCurrentThreadId() || !function
+                    || function->GetFName()!=FName(TEXT("OnAIKilled"),FNAME_Add))return;
+                try {m_summonNativeCredit->Before(dispatch,source,function,parameters,m_worldGeneration+1);}
+                catch(const std::exception& error){ErrorOnce("summon-kill-credit",PS::ToWideSafe(error.what()));}
+                catch(...) {}
+            },options);
+        if(m_summonCreditCallbackId==Hook::ERROR_ID)return false;
 
         m_actorObserverId=DragonWildsBlueprintModLoader::RegisterActorInitializedObserver(
             [this](AActor* actor){
@@ -585,8 +620,8 @@ namespace DragonWilds {
         if(!m_clientDialogueHookId)return false;
         options.HookName=TEXT("RuneSchemaDialogueRpcSanitizer");
         m_dialogueTransportCallbackId=Hook::RegisterProcessEventPreCallback(
-            [this](Hook::TCallbackIterationData<void>&,UObject* source,UFunction* function,void* parameters) {
-                try {SanitizeDialogueRpc(source,function,parameters);} catch(const std::exception& error) {
+            [this](Hook::TCallbackIterationData<void>& dispatch,UObject* source,UFunction* function,void* parameters) {
+                try {if(OnQuestScrollUse(dispatch,source,function,parameters))return;SanitizeDialogueRpc(source,function,parameters);} catch(const std::exception& error) {
                     ErrorOnce("dialogue-rpc-sanitize",PS::ToWideSafe(error.what()));
                 } catch(...) {}
             },options);
@@ -612,11 +647,49 @@ namespace DragonWilds {
             }
             if(!m_dialogueRequirementReady)WarnOnce("dialogue-requirements",TEXT("Native dialogue requirement contract unavailable; gated dialogues will not open."));
         }
-        for(const auto& [name,size]:{std::pair{TEXT("Client_OnQuestUpdated"),114},
-            std::pair{TEXT("Client_OnQuestsUpdated"),17},std::pair{TEXT("Client_NotifyTrackedQuestLoaded"),8}}) {
+        for(const auto* name:{TEXT("Client_OnQuestUpdated"),TEXT("Client_OnQuestsUpdated"),TEXT("Client_NotifyTrackedQuestLoaded")}) {
+            try {
             const auto path=RC::StringType(TEXT("/Script/Dominion.QuestProgressComponent:"))+name;
             auto* function=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,path.c_str(),false);
-            if(!function || function->GetParmsSize()!=size)throw std::runtime_error("Native quest delivery contract changed");
+            if(!function || !function->HasAnyFunctionFlags(FUNC_Native)
+                || !function->HasAnyFunctionFlags(FUNC_NetClient) || !function->HasAnyFunctionFlags(FUNC_Net)
+                || function->GetReturnProperty())throw std::runtime_error("Native quest delivery callback unavailable: "+RC::to_string(name));
+            std::vector<std::string> names;
+            std::vector<QuestNative::Field> fields;
+            names.reserve(4);fields.reserve(4);
+            for(auto* property:TFieldRange<FProperty>(function,EFieldIterationFlags::Default)) {
+                if(!property->HasAnyPropertyFlags(CPF_Parm))continue;
+                if(names.size()>=4 || property->GetArrayDim()!=1)throw std::runtime_error("Native quest delivery parameter count changed");
+                QuestNative::Kind kind;
+                if(auto* object=CastField<FObjectPropertyBase>(property)) {
+                    if(!object->GetPropertyClass().Get() || object->GetPropertyClass()->GetPathName()!=TEXT("/Script/Dominion.QuestData"))
+                        throw std::runtime_error("Native quest delivery object type changed");
+                    kind=QuestNative::Kind::Quest;
+                } else if(auto* boolean=CastField<FBoolProperty>(property)) {
+                    if(!boolean->IsNativeBool() || boolean->GetByteOffset()!=0)throw std::runtime_error("Native quest delivery bool changed");
+                    kind=QuestNative::Kind::Boolean;
+                } else if(auto* structure=CastField<FStructProperty>(property)) {
+                    if(!structure->GetStruct().Get() || structure->GetStruct()->GetPathName()!=TEXT("/Script/Dominion.QuestProgress"))
+                        throw std::runtime_error("Native quest delivery progress type changed");
+                    kind=QuestNative::Kind::Progress;
+                } else if(auto* array=CastField<FArrayProperty>(property)) {
+                    auto* inner=CastField<FStructProperty>(array->GetInner());
+                    if(!inner || inner->GetArrayDim()!=1 || !inner->GetStruct().Get()
+                        || inner->GetStruct()->GetPathName()!=TEXT("/Script/Dominion.QuestProgress"))
+                        throw std::runtime_error("Native quest delivery array type changed");
+                    kind=QuestNative::Kind::ProgressArray;
+                } else {
+                    UEnum* enumeration=nullptr;
+                    if(auto* value=CastField<FEnumProperty>(property))enumeration=value->GetEnum();
+                    else if(auto* value=CastField<FByteProperty>(property))enumeration=value->GetEnum().Get();
+                    if(!enumeration || enumeration->GetPathName()!=TEXT("/Script/Dominion.EQuestType"))
+                        throw std::runtime_error("Native quest delivery enum changed");
+                    kind=QuestNative::Kind::QuestType;
+                }
+                names.push_back(RC::to_string(property->GetName()));
+                fields.push_back({names.back(),property->GetOffset_Internal(),property->GetElementSize(),kind,false});
+            }
+            QuestNative::ValidateDelivery(RC::to_string(name),function->GetParmsSize(),fields);
             const auto id=PS::RegisterNativePostHook(function,[this](UnrealScriptFunctionCallableContext& context,void*) {
                 auto* source=context.Context;
                 if(!source || m_gameThreadId.load(std::memory_order_relaxed)!=GetCurrentThreadId())return;
@@ -631,6 +704,10 @@ namespace DragonWilds {
             });
             if(!id)throw std::runtime_error("Native quest delivery hook unavailable");
             m_questDeliveryHooks.emplace_back(function,id);
+            }catch(const std::exception& error) {
+                WarnOnce("quest-client-delivery:"+RC::to_string(name),
+                    PS::ToWideSafe((std::string("Quest client-refresh observer unavailable; native registry and authority progression remain active: ")+error.what()).c_str()));
+            }
         }
         for(const auto* name:{TEXT("GetCurrentObjectiveText"),TEXT("GetObjectiveText")}) {
             const auto path=RC::StringType(TEXT("/Script/Dominion.QuestProgressComponent:"))+name;
@@ -659,18 +736,20 @@ namespace DragonWilds {
                 PumpDialogueShop();
                 PumpDialoguePoseRestores();
                 PumpLoreRequests(deltaSeconds);
-                PumpQuestRefreshes();
-                PumpQuestStatus();
+                PS::SlowWork::Measure("quests.refresh",[&]{PumpQuestRefreshes();});
+                PS::SlowWork::Measure("quests.status",[&]{PumpQuestStatus();});
                 PumpQuestLocationRefreshes(deltaSeconds);
                 PS::SaveViewer::PumpNpcExport();
-                PumpClientReplicas(deltaSeconds);
+                PS::SlowWork::Measure("npcs.client",[&]{PumpClientReplicas(deltaSeconds);});
                 PumpHelpyNpcs();
-                PumpNpcCleanup(deltaSeconds);
+                PS::SlowWork::Measure("npcs.cleanup",[&]{PumpNpcCleanup(deltaSeconds);});
+                ReconcileShownVendorCells(deltaSeconds);
                 ReconcileNpcScales(deltaSeconds);
+                ReconcileNpcEquipment(deltaSeconds);
                 try {
                     if(auto* world=FindLoadedWorld();world && world!=m_legacyNpcSweepWorld) {
                         m_legacyNpcSweepWorld=world;
-                        ScanLegacyPersistentNpcs(world);
+                        PS::SlowWork::Measure("npcs.legacy",[&]{ScanLegacyPersistentNpcs(world);});
                     }
                 } catch(const std::exception& error) {
                     WarnOnce("legacy-npc-sweep",PS::ToWideSafe(error.what()));
@@ -693,22 +772,29 @@ namespace DragonWilds {
                     }
                 } else m_npcTimeElapsed=0;
                 if(m_npcTimeDirty)ReconcileNpcTimeOfDay();
-                if(m_events.NeedsTick())try {m_events.Tick(deltaSeconds);}
+                if(m_events.NeedsTick())try {PS::SlowWork::Measure("quests.events",[&]{m_events.Tick(deltaSeconds);});}
                     catch(const std::exception& error){try{m_events.Reset();}catch(...){}ErrorOnce("event-tick",PS::ToWideSafe(error.what()));}
                 PumpQuestLocations(deltaSeconds);
-                if (m_definitions.empty() || m_scanBudget.Exhausted()) return;
+                if (m_definitions.empty()) return;
                 if (std::none_of(m_definitions.begin(), m_definitions.end(),
                     [](const auto& definition) { return !definition.HelpyTemporary && definition.Enabled && definition.SpawnGate.Pending(); }))
                 {
                     return;
                 }
                 m_scanElapsed += deltaSeconds;
-                if (m_scanElapsed < 0.5) return;
+                if (m_scanElapsed < 0.5&&!m_npcWorkPending) return;
 
-                m_scanElapsed = 0.0;
+                if(m_scanElapsed>=0.5){
+                    for(auto& definition:m_definitions)if(definition.GroundRetry.Pending)definition.GroundRetry.Advance(m_scanElapsed);
+                    m_scanBudget.Advance(m_scanElapsed);m_scanElapsed=0.0;
+                }
+                if(std::none_of(m_definitions.begin(),m_definitions.end(),[&](const auto& definition){
+                    return !definition.HelpyTemporary&&definition.Enabled&&definition.SpawnGate.Pending()
+                        &&definition.GroundRetry.PlacementReady();
+                })){m_npcWorkPending=false;m_npcWorkCursor=0;return;}
                 try
                 {
-                    ScanLoadedActors();
+                    PS::SlowWork::Measure("npcs.scan",[&]{ScanLoadedActors();});
                 }
                 catch (const std::exception& error)
                 {
@@ -758,10 +844,14 @@ namespace DragonWilds {
                 // DataTable assets/rows can survive travel. Keep ownership and
                 // roots until shutdown, rather than forgetting still-live rows.
                 m_applied.clear();
+                m_equipmentWorldGuid.clear();m_equipmentWorld=nullptr;
+                m_appliedNpcEquipment.clear();m_npcEquipmentElapsed=0;
                 m_createdComponents.clear();
                 m_errors.clear();
                 m_scanElapsed = 0.0;
                 m_scanBudget.ResetForMap();
+                m_npcWorkCursor=0;m_npcWorkPending=false;
+                m_cellCatchupCursor=0;m_cellCatchupDelay=0;
                 m_npcTimeDirty=false;
                 m_npcTimeElapsed=0;
                 m_npcScaleElapsed=0;
@@ -784,6 +874,12 @@ namespace DragonWilds {
                     definition.InteractionClass = nullptr;
                     definition.VendorClass = nullptr;
                     definition.CellReadyWorld = nullptr;
+                    definition.GroundResolvedWorld=nullptr;
+                    definition.TargetLocation[0]=definition.AuthoredGroundXY[0];
+                    definition.TargetLocation[1]=definition.AuthoredGroundXY[1];
+                    definition.GroundSearch=PS::Grounding::SearchRange::Around(definition.GroundAnchorZ);
+                    definition.GroundRetry={};
+                    definition.LifecycleFailures=0;
                     definition.SpawnGate.ResetForMap();
                 }
             }, options);
@@ -950,14 +1046,14 @@ namespace DragonWilds {
         VendorDefinition definition;
         definition.HelpySource=data;
         HumanNpc::Validate(data);
+        definition.EquipmentWhen=NpcEquipment::Parse(RC::to_string(modName),data);
         definition.HideMesh=data.value("HideMesh",false);
         definition.HideName=data.value("HideName",false);
         if(data.contains("VisualEffect")) {
             NpcVisualEffect::Validate(data.at("VisualEffect"));
             definition.VisualEffect=data.at("VisualEffect");
         }
-        NpcMarkers::Validate(data);
-        for(const auto* key:{"Map","OverheadIcon"})if(data.contains(key))definition.Markers[key]=data.at(key);
+        definition.Markers=NpcMarkers::FromDefinition(data);
         definition.Human=HumanNpc::IsHuman(data);
         if(data.contains("TimeOfDay")) {
             if(!data.at("TimeOfDay").is_string())throw std::runtime_error("TimeOfDay must be Any, Day, or Night");
@@ -991,6 +1087,7 @@ namespace DragonWilds {
             for(const auto& key:m_dialogues.at(definition.DialogueKey).Events)m_events.Require(key);
         }
         definition.LoreEntry=data.value("LoreEntry",std::string{});
+        definition.JournalEntries=data.value("JournalEntries",std::vector<std::string>{});
         if(data.contains("QuestID")) {
             definition.QuestKey=data.at("QuestID").get<std::string>();
             (void)m_quests.Find("_",definition.QuestKey);
@@ -1045,9 +1142,18 @@ namespace DragonWilds {
         if(data.contains("Location")) {
             const auto placement=NpcPlacement::Parse(data["Location"]);
             std::copy(placement.Position.begin(),placement.Position.end(),definition.TargetLocation);
+            std::copy_n(placement.Position.begin(),2,definition.AuthoredGroundXY);
+            definition.GroundMigration=PS::Grounding::NearbyPolicy::Parse(data);
+            definition.GroundClearance=PS::Grounding::Clearance(data);
             definition.HasTargetLocation=true;
             definition.GroundToSurface=placement.Ground;
             definition.GroundOffset=placement.Offset;
+            definition.GroundAnchorZ=placement.Position[2];
+            definition.GroundReferenceZ=PS::Grounding::Reference(data);
+            if(definition.GroundReferenceZ&&!placement.Ground)
+                throw std::runtime_error("NPC GroundReferenceZ requires Location.Z '$'");
+            if(definition.GroundReferenceZ)definition.GroundAnchorZ=*definition.GroundReferenceZ;
+            definition.GroundSearch=PS::Grounding::SearchRange::Around(definition.GroundAnchorZ);
         }
         ReadVector3(data, "Rotation", definition.SpawnRotation, false);
         ReadVector3(data, "Scale", definition.SpawnScale, true);
@@ -1305,6 +1411,7 @@ namespace DragonWilds {
                                 m_events.Notify(controller,Quests::ObjectiveProgressText(objective,native.GetInt(counter),receipt.Run()),Events::Scope::Participant);
                             }catch(const std::exception& error){ErrorOnce("quest-progress-message:"+key+":"+objective.ObjectiveId,PS::ToWideSafe(error.what()));}
                             changed|=result==Quests::KillResult::Counted;
+                            if(quest.AnyStage(active) && staged.ActiveStage()!=active)break;
                         }
                         if(changed) {
                             Quests::SetStageText(native,quest,staged.ActiveStage());
@@ -1501,7 +1608,7 @@ namespace DragonWilds {
                 if(value.GetCharArray().Num()>1 && value.GetCharArray().Num()<=256)name=RC::StringType(*value);
             }
         }catch(...) {}
-        RC::Output::send<LogLevel::Normal>(STR("[RuneSchema] Player '{}' | Quest '{}' | Stage {} complete.\n"),name,RC::to_generic_string(quest),stage);
+        PS::ConsolidatedLog<LogLevel::Normal>(STR("[RuneSchema] Player '{}' | Quest '{}' | Stage {} complete.\n"),name,RC::to_generic_string(quest),stage);
     }
 
     void DragonWildsNpcLoader::ReconcileQuestLocations(UObject* controller)
@@ -1678,7 +1785,7 @@ namespace DragonWilds {
         if(!matched)return false;
         auto& definition=*matched;
         if(!NpcNetwork::Supported(definition.Human,definition.Resource,
-            definition.Stage==VendorPolicy::VendorStage::Merchant,!definition.DialogueKey.empty(),!definition.RequiredFlag.empty(),!definition.LoreEntry.empty(),definition.Stage==VendorPolicy::VendorStage::Visual))return false;
+            definition.Stage==VendorPolicy::VendorStage::Merchant,!definition.DialogueKey.empty(),!definition.RequiredFlag.empty(),!definition.LoreEntry.empty()||!definition.JournalEntries.empty(),definition.Stage==VendorPolicy::VendorStage::Visual))return false;
         if(PS::Network::Detect(actor).Mode!=PS::Network::Role::Client)return false;
         ActorHelper::FunctionCall authority(actor,TEXT("/Script/Engine.Actor:HasAuthority"));authority.Invoke();
         if(authority.Result<bool>() || !ResolveDefinitionClasses(definition) || !actor->IsA(definition.BaseActorClass))return false;
@@ -1686,7 +1793,7 @@ namespace DragonWilds {
         const bool merchant=definition.Stage==VendorPolicy::VendorStage::Merchant;
         const auto stations=merchant?actor->GetComponentsByClass(definition.VendorClass):TArray<UObject*>{};
         const bool visual=definition.Stage==VendorPolicy::VendorStage::Visual;
-        if(visual && m_applied.contains(ActorKey(actor,definition))){ApplyNetworkDialogueCue(actor,ReadIdentity(actor->GetComponentsByClass(RequireIdentityClass())[0]));return true;}
+        if(visual && m_applied.contains(ActorKey(actor,definition))){RefreshNpcEquipment(actor,definition);ApplyNetworkDialogueCue(actor,ReadIdentity(actor->GetComponentsByClass(RequireIdentityClass())[0]));return true;}
         if(!visual && !NpcNetwork::ClientComponentsReady(interactions.Num(),stations.Num(),merchant))return false;
         const auto key=definition.ModName+":"+definition.Id;
         for(const auto& binding:m_merchantBindings)if(!visual && binding.DefinitionKey==key) {
@@ -1697,6 +1804,7 @@ namespace DragonWilds {
                 // OnRep_IdentityPayload re-enters through this already-configured
                 // path for dialogue poses/emotes. Consume the newer cue revision
                 // before returning; otherwise only the authority sees the cue.
+                RefreshNpcEquipment(actor,definition);
                 ApplyNetworkDialogueCue(actor,ReadIdentity(actor->GetComponentsByClass(RequireIdentityClass())[0]));
                 return true;
             }
@@ -1749,10 +1857,18 @@ namespace DragonWilds {
     }
 
     std::string DragonWildsNpcLoader::NetworkDefinitionFingerprint(UObject* context,const VendorDefinition& definition) {
-        if(definition.DialogueKey.empty() && definition.LockedDialogueKey.empty())return definition.NetworkGameplayFingerprint;
+        if(definition.DialogueKey.empty() && definition.LockedDialogueKey.empty() && definition.EquipmentWhen.empty())return definition.NetworkGameplayFingerprint;
         const auto key=definition.ModName+":"+definition.Id;
         if(const auto found=m_networkDialogueFingerprints.find(key);found!=m_networkDialogueFingerprints.end())return found->second;
         nlohmann::json graphs=nlohmann::json::object();
+        if(!definition.EquipmentWhen.empty()) {
+            nlohmann::json conditions=nlohmann::json::object();
+            for(const auto& rule:definition.EquipmentWhen) {
+                (void)m_quests.Find("_",rule.Quest); // Missing/disabled quests cannot silently bind.
+                conditions[rule.Id]=m_quests.Document(rule.Quest);
+            }
+            graphs["RuneSchema.EquipmentWhen"]=std::move(conditions);
+        }
         for(const auto& id:{definition.DialogueKey,definition.LockedDialogueKey}) {
             if(id.empty())continue;
             const auto& graph=m_dialogues.at(id);
@@ -1815,7 +1931,16 @@ namespace DragonWilds {
         ActorHelper::FunctionCall authority(actor,TEXT("/Script/Engine.Actor:HasAuthority"));authority.Invoke();
         if(!authority.Result<bool>())throw std::runtime_error("Only authority can assign NPC identity");
         auto* component=EnsureComponent(actor,type);
-        const auto payload=NpcIdentity::Encode(definition.ModName,definition.Id,NetworkDefinitionFingerprint(actor,definition));
+        const auto fingerprint=NetworkDefinitionFingerprint(actor,definition);
+        auto payload=NpcIdentity::Encode(definition.ModName,definition.Id,fingerprint);
+        const auto prior=ReadIdentity(component);
+        if(!prior.empty()) {
+            const auto identity=NpcIdentity::Decode(prior);
+            if(identity.Mod!=definition.ModName || identity.Npc!=definition.Id || identity.Fingerprint!=fingerprint)
+                throw std::runtime_error("NPC equipment cannot replace a mismatched identity");
+            payload=prior; // Preserve independently replicated dialogue cues.
+        }
+        if(!definition.EquipmentWhen.empty())payload=NpcIdentity::WithEquipment(payload,ActiveEquipmentRules(actor,definition));
         PropertyHelper::CopyJsonValueToContainer(component,IdentityField(type),payload);
         if(ReadIdentity(component)!=payload)throw std::runtime_error("NPC identity write verification failed");
         RegisterComponent(actor,component,definition);
@@ -1834,18 +1959,28 @@ namespace DragonWilds {
     void DragonWildsNpcLoader::ScanLoadedActors()
     {
         auto* world = FindLoadedWorld();
+        if(!world){m_npcWorkPending=false;m_npcWorkCursor=0;return;}
         if (world && std::none_of(m_definitions.begin(), m_definitions.end(),
             [&](const auto& definition) {
                 return !definition.HelpyTemporary && definition.Enabled && definition.SpawnGate.Pending()
-                    && definition.CellReadyWorld == world;
+                    && definition.CellReadyWorld == world && definition.GroundRetry.PlacementReady();
             })) {
-            if (m_vendorReport.value("Phase", std::string{}) != "Merchant.WaitingForCell") {
-                m_vendorReport["Phase"] = "Merchant.WaitingForCell";
+            const bool groundWaiting=std::any_of(m_definitions.begin(),m_definitions.end(),[&](const auto& definition){
+                return definition.Enabled&&definition.SpawnGate.Pending()&&definition.CellReadyWorld==world&&definition.GroundRetry.Pending;
+            });
+            const auto phase=groundWaiting?"Placement.WaitingForGround":"Merchant.WaitingForCell";
+            m_npcWorkPending=false;m_npcWorkCursor=0;
+            if (m_vendorReport.value("Phase", std::string{}) != phase) {
+                m_vendorReport["Phase"] = phase;
                 WriteVendorStatus();
             }
             return;
         }
-        if (m_scanBudget.Begin(world != nullptr))
+        const bool groundRetryReady=world&&std::any_of(m_definitions.begin(),m_definitions.end(),[&](const auto& definition){
+            return !definition.HelpyTemporary&&definition.Enabled&&definition.SpawnGate.Pending()
+                &&definition.CellReadyWorld==world&&definition.GroundRetry.Pending&&definition.GroundRetry.PlacementReady();
+        });
+        if (m_npcWorkPending || groundRetryReady || m_scanBudget.Begin(world != nullptr))
         {
             // Menu/loading time must not exhaust the bounded asset-ready scans.
             m_vendorReport["ScanPasses"] = m_scanBudget.Passes();
@@ -1858,7 +1993,10 @@ namespace DragonWilds {
             if (!pending) m_vendorReport["Phase"] = "Merchant.AttemptsFinished";
             if (m_scanBudget.Exhausted()) {
                 m_vendorReport["ScanBudgetExhausted"] = true;
-                if (pending) m_vendorReport["Phase"] = "Merchant.ScanBudgetExhausted";
+                if (pending) {
+                    m_vendorReport["Phase"] = "Merchant.WaitingForAssetReadiness";
+                    m_vendorReport["DeferredReadinessSeconds"] = VendorScanBudget::DeferredSeconds;
+                }
             }
             WriteVendorStatus();
         }
@@ -1880,15 +2018,22 @@ namespace DragonWilds {
         const auto network=PS::Network::Detect(world);
         if(network.Mode==PS::Network::Role::Unknown)return;
         const bool multiplayer=network.Mode!=PS::Network::Role::Standalone;
-        for (auto& definition : m_definitions)
+        PS::WorkSlice work;std::size_t visited=0;
+        while(m_npcWorkCursor<m_definitions.size())
         {
+            if(visited++>=32||!work.MayStart()){m_npcWorkPending=true;return;}
+            auto& definition=m_definitions[m_npcWorkCursor++];
             if (definition.HelpyTemporary || !definition.Enabled || !definition.SpawnGate.Pending()
-                || definition.CellReadyWorld != world)
+                || definition.CellReadyWorld != world || !definition.GroundRetry.PlacementReady())
             {
                 continue;
             }
 
             const auto key = definition.ModName + ":" + definition.Id;
+            work.Started();
+            const auto workPhase="npcs.spawn:"+key;
+            static thread_local PS::SlowWork::Meter npcWorkMeter;
+            PS::SlowWork::Scope npcWork(npcWorkMeter,workPhase.c_str());
             if(network.Mode!=PS::Network::Role::Client && definition.Time!=TimeOfDay::Requirement::Any) {
                 try { if(!NpcTimeAllows(world,definition))continue; }
                 catch(const std::exception& error) {
@@ -1897,7 +2042,7 @@ namespace DragonWilds {
                 }
             }
             if(multiplayer && !NpcNetwork::Supported(definition.Human,definition.Resource,
-                definition.Stage==VendorPolicy::VendorStage::Merchant,!definition.DialogueKey.empty(),!definition.RequiredFlag.empty(),!definition.LoreEntry.empty(),definition.Stage==VendorPolicy::VendorStage::Visual)) {
+                definition.Stage==VendorPolicy::VendorStage::Merchant,!definition.DialogueKey.empty(),!definition.RequiredFlag.empty(),!definition.LoreEntry.empty()||!definition.JournalEntries.empty(),definition.Stage==VendorPolicy::VendorStage::Visual)) {
                 WarnOnce("network-unsupported:"+key,RC::to_generic_string("NPC '"+key+"' is not supported by the multiplayer NPC runtime; skipped."));
                 definition.SpawnGate.Begin();continue;
             }
@@ -1935,6 +2080,9 @@ namespace DragonWilds {
                 // Readiness may retry within the timer budget, but actor
                 // construction and row mutation get one attempt per map.
                 if (!ResolveDefinitionClasses(definition)) continue;
+                // Ground readiness is reversible. Do not consume the one-shot
+                // construction gate or mutate shop rows until a surface exists.
+                ResolveNpcGrounding(world,definition);
                 if (!definition.SpawnGate.Begin()) continue;
                 if (definition.Stage == VendorPolicy::VendorStage::Merchant && definition.InlineMerchant) {
                     RecordPhase(definition, "MerchantRow.Before");
@@ -1951,6 +2099,26 @@ namespace DragonWilds {
                         "Vendor '{}' stopped after a failed proxy/attachment attempt; no retry until next map or restart.", definition.Id)));
                 }
             }
+            catch (const PS::Grounding::SurfacePending&)
+            {
+                if(definition.GroundRetry.Missed())PS::Log<LogLevel::Verbose>(
+                    STR("NPC '{}' is waiting for streamed ground collision; placement remains queued.\n"),PS::ToWideSafe(key));
+                RecordPhase(definition,"Placement.WaitingForGround",nullptr,
+                    {{"SearchTopZ",definition.GroundSearch.Top},{"SearchBottomZ",definition.GroundSearch.Bottom},
+                     {"GroundAttempts",definition.GroundRetry.Attempts},{"RetrySeconds",definition.GroundRetry.Wait}});
+            }
+            catch (const NpcLifecyclePending& error)
+            {
+                definition.GroundResolvedWorld=nullptr;
+                ++definition.LifecycleFailures;
+                definition.GroundRetry.Missed();
+                RecordPhase(definition,"Placement.LifecycleWaiting",nullptr,
+                    {{"LifecycleFailure",error.what()},{"LifecycleAttempts",definition.LifecycleFailures},
+                     {"RetrySeconds",definition.GroundRetry.Wait}});
+                if(definition.LifecycleFailures>=3)
+                    ErrorOnce("npc-lifecycle:"+key,PS::ToWideSafe(std::string(error.what())+"; three construction attempts failed, stopped for this map"));
+                else PS::Log<LogLevel::Verbose>(STR("NPC '{}': {}; retry requires owned-proxy cleanup acknowledgement.\n"),PS::ToWideSafe(key),PS::ToWideSafe(error.what()));
+            }
             catch (const std::exception& error)
             {
                 ErrorOnce("spawn:" + key,
@@ -1966,6 +2134,40 @@ namespace DragonWilds {
                     "Vendor '{}' stopped for this map after an unknown failure.", definition.Id)));
             }
         }
+        m_npcWorkCursor=0;m_npcWorkPending=false;
+    }
+
+    void DragonWildsNpcLoader::ResolveNpcGrounding(UWorld* world,VendorDefinition& definition)
+    {
+        if(!definition.GroundToSurface||definition.GroundResolvedWorld==world)return;
+        FVector impact{};std::string error;
+        auto clearance=definition.GroundClearance;
+        if(!clearance&&definition.BaseActorClass)
+            clearance=GroundedPlacement::NativeCapsule(definition.BaseActorClass->GetClassDefaultObject().Get());
+        PS::Grounding::QueryState state;
+        if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,
+            FVector(definition.AuthoredGroundXY[0],definition.AuthoredGroundXY[1],definition.GroundSearch.Top),
+            FVector(definition.AuthoredGroundXY[0],definition.AuthoredGroundXY[1],definition.GroundSearch.Bottom),{},impact,error,definition.GroundReferenceZ,&state)){
+            if(!error.empty())throw std::runtime_error("NPC ground query failed: "+error);
+            if(clearance&&definition.GroundMigration.Radius>0&&state.Obstructed&&state.FloorReference)
+                impact=FVector(definition.AuthoredGroundXY[0],definition.AuthoredGroundXY[1],*state.FloorReference);
+            else throw PS::Grounding::SurfacePending();
+        }
+        definition.TargetLocation[2]=impact.Z()+definition.GroundOffset;
+        if(clearance&&definition.GroundMigration.Radius>0) {
+            const double scale=std::max({definition.SpawnScale[0],definition.SpawnScale[1],definition.SpawnScale[2]});
+            const auto footprint=PS::SpawnFootprint::Scaled(*clearance,scale);
+            std::vector<AActor*> ignored;
+            if(auto* existing=FindSpawnedVendor(world,definition))ignored.push_back(existing);
+            // The author-supplied envelope is above the surface; it does not
+            // silently replace the proxy's native mesh pivot or authored Z.
+            const auto nearby=GroundedPlacement::CapsuleSite(world,
+                FVector(impact.X(),impact.Y(),impact.Z()+2.0),footprint,ignored,definition.GroundMigration,ignored,{},2.0);
+            definition.TargetLocation[0]=nearby.X();definition.TargetLocation[1]=nearby.Y();
+            definition.TargetLocation[2]=nearby.Z()-footprint.HalfHeight-2.0+definition.GroundOffset;
+        }
+        definition.GroundResolvedWorld=world;definition.GroundRetry.Resolved();
+        RecordPhase(definition,"Placement.Grounded",nullptr,{{"GroundZ",impact.Z()},{"PlacedZ",definition.TargetLocation[2]}});
     }
 
     AActor* DragonWildsNpcLoader::SpawnVisualVendor(
@@ -1991,6 +2193,7 @@ namespace DragonWilds {
             (void)NpcIdentity::Encode(definition.ModName,definition.Id,NetworkDefinitionFingerprint(world,definition));
         }
         AActor* actor = nullptr;
+        PS::WeakObjectHandle constructionIdentity;
         const auto retire=[&] {
             if(!actor)return;
             const auto index=actor->GetInternalIndex();
@@ -2053,17 +2256,7 @@ namespace DragonWilds {
             m_applied.erase(ActorKey(actor,definition));
         };
         try {
-        if(definition.GroundToSurface) {
-            FVector impact{};std::string error;
-            std::vector<AActor*> ignored;
-            if(actor)ignored.push_back(actor);
-            if(!UECustom::UKismetSystemLibrary::LineTraceGround(world,
-                FVector(definition.TargetLocation[0],definition.TargetLocation[1],5000.0),
-                FVector(definition.TargetLocation[0],definition.TargetLocation[1],-10000.0),ignored,impact,error))
-                throw std::runtime_error(error.empty()?"NPC Location.Z $ found no blocking surface":"NPC ground trace failed: "+error);
-            definition.TargetLocation[2]=impact.Z()+definition.GroundOffset;
-            RecordPhase(definition,"Placement.Grounded",nullptr,{{"GroundZ",impact.Z()},{"PlacedZ",definition.TargetLocation[2]}});
-        }
+        ResolveNpcGrounding(world,definition);
         if(actor) {
                 const auto readTransform=[&](const TCHAR* path,bool rotation) {
                     auto* getter=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,path);
@@ -2123,6 +2316,7 @@ namespace DragonWilds {
                 definition.SpawnRotation[2]),
             [&](AActor* pending) {
                 actor=pending; // Retain cleanup ownership if deferred initialization throws.
+                constructionIdentity.Assign(pending);
                 if(multiplayer && (!pending->Rename(RC::to_generic_string(definition.NetworkActorName).c_str())
                     || RC::to_string(pending->GetName())!=definition.NetworkActorName))
                     throw std::runtime_error("Stable network NPC name could not be assigned exactly");
@@ -2145,6 +2339,7 @@ namespace DragonWilds {
         }
 
         if (!actor) throw std::runtime_error("SpawnActor returned null");
+        actor=RequireNpcActor(constructionIdentity,world,"FinishSpawningActor");
         HelpyNpcGuards::VerifyExcluded(actor);
         RecordPhase(definition, "Spawn.Finished", actor,
             {{"TransientActor", true}, {"SaveExcluded", true}});
@@ -2236,7 +2431,14 @@ namespace DragonWilds {
         catch (...)
         {
             const auto failure=std::current_exception();
-            try { QueueNpcCleanup(actor); }
+            bool lifecycle=false;
+            try {std::rethrow_exception(failure);}catch(const NpcLifecyclePending&){lifecycle=true;}catch(...){}
+            // Re-arm only this owned failed construction, after retirement is
+            // acknowledged. Never dereference a stale post-construction token.
+            actor=static_cast<AActor*>(constructionIdentity.Get());
+            const bool retry=lifecycle&&definition.LifecycleFailures<2;
+            if(!actor&&retry)definition.SpawnGate.ResetForMap();
+            try { QueueNpcCleanup(actor,retry?definition.ModName+":"+definition.Id:std::string{}); }
             catch(const std::exception& error) {
                 ErrorOnce("npc-queue-cleanup:"+definition.ModName+":"+definition.Id,PS::ToWideSafe(error.what()));
             }
@@ -2816,6 +3018,7 @@ namespace DragonWilds {
         m_pendingClientReplicas.clear();
         m_pendingLoreRequests.clear();
         m_clientReplicaElapsed=0;
+        m_appliedNpcEquipment.clear();m_equipmentWorldGuid.clear();m_equipmentWorld=nullptr;
         // /npcs actors are session-owned and excluded from save persistence.
         // World teardown owns their native destruction; release only our handles.
         m_merchantBindings.clear();
@@ -2857,18 +3060,34 @@ namespace DragonWilds {
         auto* cell = static_cast<UECustom::UWorldPartitionRuntimeLevelStreamingCell*>(object);
         if (!cell || cell->GetIsHLOD()) return;
         auto* world = cell->GetWorld();
-        auto* bounds = cell->GetContentBounds();
+        const auto bounds = cell->GetContentBounds();
         if (!world || !bounds || !bounds->bIsValid) return;
         for (auto& definition : m_definitions) {
             if (definition.HelpyTemporary || !definition.Enabled || !definition.SpawnGate.Pending()) continue;
             const auto x = definition.TargetLocation[0], y = definition.TargetLocation[1];
-            if (x > bounds->Min.X() && x < bounds->Max.X()
-                && y > bounds->Min.Y() && y < bounds->Max.Y()
-                && definition.CellReadyWorld != world) {
-                definition.CellReadyWorld = world;
-                m_scanBudget.ResetForMap();
+            if (x >= bounds->Min.X() && x <= bounds->Max.X()
+                && y >= bounds->Min.Y() && y <= bounds->Max.Y()) {
+                definition.GroundSearch.ObserveCell(bounds->Min.Z(),bounds->Max.Z());
+                definition.GroundRetry.CellShown();
+                if(definition.CellReadyWorld != world){definition.CellReadyWorld = world;m_scanBudget.ResetForMap();}
             }
         }
+    }
+
+    void DragonWildsNpcLoader::ReconcileShownVendorCells(float deltaSeconds)
+    {
+        if(std::none_of(m_definitions.begin(),m_definitions.end(),[](const auto& definition){
+            return !definition.HelpyTemporary&&definition.Enabled&&definition.SpawnGate.Pending();
+        }))return;
+        auto* world=FindLoadedWorld();if(!world)return;
+        if(std::none_of(m_definitions.begin(),m_definitions.end(),[&](const auto& definition){
+            return !definition.HelpyTemporary&&definition.Enabled&&definition.SpawnGate.Pending()&&definition.CellReadyWorld!=world;
+        }))return;
+        // Share /spawns' actual-visible-cell boundary, including cells whose
+        // shown callback preceded definition or pawn readiness. This does not
+        // bypass the existing native-component, identity or collision gates.
+        UECustom::UWorldPartitionRuntimeLevelStreamingCell::VisitShown(world,m_cellCatchupCursor,m_cellCatchupDelay,
+            deltaSeconds,[this](UObject* cell){OnVendorCellShown(cell);});
     }
 
     bool DragonWildsNpcLoader::NpcTimeAllows(UObject* context,const VendorDefinition& definition) const
@@ -3075,7 +3294,7 @@ namespace DragonWilds {
             ApplyComponentProperties(interaction, definition.InteractionProperties, definition);
             if (definition.Stage == VendorPolicy::VendorStage::Interaction) {
                 RegisterComponent(actor, interaction, definition);
-                if(!definition.DialogueKey.empty() || !definition.LoreEntry.empty())BindMerchantInteraction(actor,interaction,nullptr,definition);
+                if(!definition.DialogueKey.empty() || !definition.LoreEntry.empty() || !definition.JournalEntries.empty())BindMerchantInteraction(actor,interaction,nullptr,definition);
                 RecordPhase(definition, "Interaction.Ready", actor);
                 m_applied.insert(key);
                 return true;
@@ -3124,7 +3343,7 @@ namespace DragonWilds {
         AActor* actor, UObject* interaction, UObject* station,
         const VendorDefinition& definition)
     {
-        if (!actor || !interaction || (!station && definition.DialogueKey.empty() && definition.LoreEntry.empty()))
+        if (!actor || !interaction || (!station && definition.DialogueKey.empty() && definition.LoreEntry.empty() && definition.JournalEntries.empty()))
         {
             throw std::runtime_error("merchant interaction binding received a null object");
         }
@@ -3450,7 +3669,6 @@ namespace DragonWilds {
         if (definitionEntry == m_definitions.end() || !definitionEntry->Enabled) return;
         const auto definitionCopy = *definitionEntry;
         const auto* definition = &definitionCopy;
-        if(!isAuthority && definition->LoreEntry.empty())return;
         if(isAuthority && definition->Time!=TimeOfDay::Requirement::Any && !NpcTimeAllows(player,*definition))return;
         const auto generation = m_worldGeneration;
 
@@ -3490,6 +3708,17 @@ namespace DragonWilds {
             };
             if (findOwned(definition->InteractionClass) != source)
                 throw std::runtime_error("event source is not the vendor's unique interaction component");
+            auto* interactingController=ActorHelper::GetObjectRef(player,TEXT("Controller"));
+            bool journalRecipient=isAuthority;
+            if(interactingController&&!isAuthority){ActorHelper::FunctionCall local(interactingController,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();journalRecipient=local.Result<bool>();}
+            if(interactingController&&journalRecipient) {
+                // Unlock failure must not stop the NPC's dialogue or shop.
+                try{if(DeliverAutomaticJournals)DeliverAutomaticJournals(interactingController);}catch(const std::exception& error){ErrorOnce("journal-auto:"+binding->DefinitionKey,PS::ToWideSafe(error.what()));}
+                for(const auto& entry:definition->JournalEntries)try{
+                    if(!UnlockJournal||!UnlockJournal(interactingController,entry))throw std::runtime_error("Registered journal entry or owning player component is not ready");
+                }catch(const std::exception& error){ErrorOnce("journal-talk:"+binding->DefinitionKey+":"+entry,PS::ToWideSafe(error.what()));}
+            }
+            if(!isAuthority&&definition->LoreEntry.empty())return;
             if(!definition->LoreEntry.empty()) {
                 auto* controller=ActorHelper::GetObjectRef(player,TEXT("Controller"));
                 if(!controller)return;
@@ -3503,6 +3732,7 @@ namespace DragonWilds {
                 OpenDialogue(actor,player,*definition);
                 return;
             }
+            if(definition->Stage!=VendorPolicy::VendorStage::Merchant)return;
             OpenNpcShop(actor,player,*definition);
         }
         catch (const std::exception& error)
@@ -3638,14 +3868,32 @@ namespace DragonWilds {
         AActor* actor,
         UClass* componentClass)
     {
+        const PS::WeakObjectHandle identity(actor);
+        auto* expectedWorld=actor?actor->GetWorld():nullptr;
+        actor=RequireNpcActor(identity,expectedWorld,"component preflight");
+        auto* base=ActorHelper::ResolveClass(TEXT("/Script/Engine.ActorComponent"));
+        actor=RequireNpcActor(identity,expectedWorld,"ActorComponent class resolution");
+        if(!componentClass)throw std::runtime_error("NPC component class is null");
+        if(!base)throw std::runtime_error("Native ActorComponent base class is unavailable");
+        if(!componentClass->IsChildOf(base))throw std::runtime_error("NPC component class is not an ActorComponent: "+RC::to_string(componentClass->GetPathName()));
+        if(ActorHelper::IsAbstract(componentClass))throw std::runtime_error("NPC component class is abstract: "+RC::to_string(componentClass->GetPathName()));
+        const auto ownedLive=[&](UObject* component){
+            return component&&component->IsA(componentClass)&&component->GetOuterPrivate()==actor
+                &&component->GetWorld()==actor->GetWorld()
+                &&!component->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed));
+        };
         auto components = actor->GetComponentsByClass(componentClass);
+        UObject* existing=nullptr;
         for (auto* component : components)
         {
-            if (component && component->IsA(componentClass))
+            if (ownedLive(component))
             {
-                return component;
+                if(existing&&existing!=component)
+                    throw std::runtime_error("NPC component ownership is ambiguous for "+RC::to_string(componentClass->GetPathName()));
+                existing=component;
             }
         }
+        if(existing)return existing;
 
         // This is the preferred path. AddComponentByClass is a reflected
         // Blueprint-callable engine helper and performs the normal component
@@ -3667,15 +3915,21 @@ namespace DragonWilds {
             auto* component = add.Result<UObject*>();
             if (component)
             {
+                if(!ownedLive(component))throw std::runtime_error("Engine returned a component outside the requested actor/class/world");
+                bool listed=false;
+                for(auto* owned:actor->GetComponentsByClass(componentClass))if(owned==component)listed=true;
+                if(!listed)throw std::runtime_error("Engine-created component is absent from its actor's owned component list");
                 m_createdComponents.insert(component);
                 return component;
             }
         }
         catch (const std::exception& error)
         {
-            throw std::runtime_error(std::string("Engine component creation failed: ") + error.what());
+            throw std::runtime_error(std::format("Engine component creation failed for '{}' on '{}': {}",
+                RC::to_string(componentClass->GetPathName()),RC::to_string(actor->GetPathName()),error.what()));
         }
-        throw std::runtime_error("AddComponentByClass returned null; no manual ownership fallback is allowed");
+        throw std::runtime_error(std::format("AddComponentByClass returned null for '{}' on '{}'; no component was adopted or manually constructed",
+            RC::to_string(componentClass->GetPathName()),RC::to_string(actor->GetPathName())));
     }
 
     nlohmann::json DragonWildsNpcLoader::VisibleVendorItems(

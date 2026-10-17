@@ -2,12 +2,19 @@
 namespace RC::Unreal { class UFunction; }
 
 #include <string>
+#include <atomic>
 #include <unordered_map>
 #include <unordered_set>
+#include <set>
 #include <vector>
 #include "Loader/DragonWildsModLoaderBase.h"
 #include "nlohmann/json.hpp"
 #include "Loader/NpcCatalog.h"
+#include "Core/DefinitionNameIndex.h"
+#include "Core/RecipeItemRouting.h"
+#include "Core/RecipeBatchWork.h"
+#include "SDK/WeakObjectHandle.h"
+#include "Core/RecipeCatalog.h"
 
 namespace RC::Unreal {
     class UClass;
@@ -45,6 +52,11 @@ namespace DragonWilds {
         ~DragonWildsRecipeModLoader();
         // Allocate identities before assets link recipe-unlocker references.
         void PrepareReferences();
+        void ImportCookedDefinitions();
+        std::vector<RC::StringType> CookedReferencePaths() const;
+        // Game-thread metadata only; definitions that failed registration stay
+        // visible as unavailable, never silently advertised as ready assets.
+        std::vector<PS::RecipeCatalog::Entry> HelpyCatalogEntries() const;
         // Resolve an authored local key, globally unique key, ModID:Key, or
         // cooked object path after PrepareReferences has allocated objects.
         RC::Unreal::UObject* ResolveReference(const RC::StringType& requestingMod,
@@ -69,10 +81,18 @@ namespace DragonWilds {
         std::vector<RecipeDef> m_recipeDefs;
         std::vector<NpcCatalog::StoreOffer> m_storeOffers;
         bool m_autoReloading = false;
+        bool m_cookedImported=false,m_hasCookedDefinitions=false;
+        bool m_discoveryAttempted=false;
+        std::set<std::string> m_discoveryOwnedRows;
+        void ApplyDiscovery();
         bool m_largeRecipeWorkloadWarned = false;
         struct PendingPatch { RC::StringType ModName; std::string Reference; nlohmann::json Changes; };
         std::vector<PendingPatch> m_pendingPatches;
         std::unordered_map<RC::StringType, RC::Unreal::UObject*> m_recipes;
+        PS::DefinitionNameIndex<RC::StringType> m_recipeNameCounts;
+        std::unordered_map<RC::Unreal::FName,PS::WeakObjectHandle> m_nativeRecipesByName;
+        bool m_nativeRecipeIndexReady=false;
+        void RefreshNativeRecipeIndex();
         // Packages backing authored RecipeData objects. Timed processing
         // queues retain recipe references beyond the immediate interaction,
         // so these recipes must never live in /Engine/Transient.
@@ -86,8 +106,48 @@ namespace DragonWilds {
         RC::Unreal::UClass* m_recipeClass = nullptr;
         RC::Unreal::UClass* m_itemDataClass = nullptr;
         RC::Unreal::UClass* m_progressComponentClass = nullptr;
-        std::unordered_map<std::string, RC::Unreal::UObject*> m_itemRoutes;
-        std::unordered_set<std::string> m_ambiguousItemRoutes;
+        PS::RecipeItemRouting::Index m_itemRoutes;
+        using ReferenceBatch=PS::RecipeBatchWork::References<RC::StringType,PS::WeakObjectHandle>;
+        ReferenceBatch* m_referenceBatch=nullptr; // Stack-owned, PrepareReferences only.
+        struct SoftRecipeKey {
+            RC::Unreal::FName Package,Asset;
+            bool operator==(const SoftRecipeKey&)const=default;
+        };
+        struct SoftRecipeHash {
+            size_t operator()(const SoftRecipeKey& value)const {
+                return std::hash<RC::Unreal::FName>{}(value.Package)^(std::hash<RC::Unreal::FName>{}(value.Asset)<<1);
+            }
+        };
+        using CategoryIndex=PS::RecipeBatchWork::AppendIndex<RC::StringType,SoftRecipeKey,SoftRecipeHash>;
+        using ProcessingBatch=PS::RecipeBatchWork::ProcessingAppends<void*,RC::Unreal::UObject*>;
+        struct PlacementCosts {
+            std::uint64_t CraftingNs=0,ProcessingNs=0;
+            std::size_t CraftingCalls=0,ProcessingCalls=0;
+        };
+        struct PlacementContext {
+            const DragonWildsRecipeModLoader* Owner=nullptr;
+            PlacementContext* Before=nullptr;
+            std::uint64_t Revision=0;
+            bool Interrupted=false;
+            bool Failed=false;
+            CategoryIndex Category;
+            ProcessingBatch Processing;
+            PlacementCosts Costs;
+        };
+        inline static thread_local PlacementContext* s_placementContext=nullptr;
+        std::atomic<std::uint64_t> m_placementRevision{0};
+        std::atomic<bool> m_preparingPlacementTables{false};
+        PlacementContext* CurrentPlacementContext() const noexcept {
+            for(auto* current=s_placementContext;current;current=current->Before)if(current->Owner==this){
+                const auto revision=m_placementRevision.load(std::memory_order_acquire);
+                if(current->Revision!=revision){
+                    current->Revision=revision;current->Category.Invalidate();
+                    current->Interrupted=current->Processing.Invalidate()||current->Interrupted;
+                }
+                return current;
+            }
+            return nullptr;
+        }
         std::vector<std::pair<RC::Unreal::UFunction*, int32_t>> m_functionHooks;
         bool m_hooksActive = false;
         std::unordered_map<RC::StringType, std::string> m_vendorRecipeOwners;
@@ -100,7 +160,7 @@ namespace DragonWilds {
         RC::Unreal::UObject* EnsureRuntimePackage(const RC::StringType& packagePath);
         void RefreshItemRoutes();
         nlohmann::json RouteRecipeItemReferences(std::string_view propertyName,
-            const nlohmann::json& authored) const;
+            const nlohmann::json& authored);
 
         void QueueData(const nlohmann::json& data, const RC::StringType& modName);
         void ApplyPendingPatches();

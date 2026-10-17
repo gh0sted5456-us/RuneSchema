@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include "Unreal/NameTypes.hpp"
+#include "Loader/ModOrderState.h"
 
 namespace DragonWilds {
     struct ModOrderEntry { RC::StringType Name; bool Enabled = true; };
@@ -14,10 +15,11 @@ namespace DragonWilds {
         static std::filesystem::path GetOrderPath(const std::filesystem::path& modsFolderPath);
         static std::vector<ModOrderEntry> Load(const std::filesystem::path& path,
             bool strictValues);
+        static std::vector<ModOrderEntry> Parse(std::string_view contents, bool strictValues);
         static bool Save(const std::filesystem::path& path,
-            const std::vector<ModOrderEntry>& entries);
+            const std::vector<ModOrderEntry>& entries, const ModOrderState::Snapshot* expected = nullptr);
         static bool SavePreservingComments(const std::filesystem::path& path,
-            const std::vector<ModOrderEntry>& entries);
+            const std::vector<ModOrderEntry>& entries, const ModOrderState::Snapshot* expected = nullptr);
         static std::vector<RC::StringType> Resolve(
             const std::filesystem::path& modsFolderPath,
             const std::vector<RC::StringType>& discoveredModNames);

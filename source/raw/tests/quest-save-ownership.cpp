@@ -22,4 +22,20 @@ int main(){
     auto duplicate=original;duplicate["GameProgress"]["QuestProgress"]["Quests"].push_back({{"QuestId",id},{"QuestInts",json::array()}});
     assert(Rejects([&]{CleanRemovedQuests(duplicate,{"Example"},true);}));
     assert(CleanRemovedQuests(original,{"DisabledButPresent"},true).Save==original);
+    auto moved=owned;moved["QuestInts"].push_back({{"QuestVariableName","RuneSchema.Owner:PreviousMod"},{"QuestVariableValue",OwnershipVersion}});
+    moved["QuestInts"].push_back({{"QuestVariableName","RuneSchema.Phase"},{"QuestVariableValue",3}});
+    moved["QuestInts"].push_back({{"QuestVariableName","RuneSchema.Objective"},{"QuestVariableValue",17}});
+    moved["QuestInts"].push_back({{"QuestVariableName","NativeCounter"},{"QuestVariableValue",42},{"Future",true}});
+    try{OwnedBy(moved);assert(false);}catch(const std::exception& error){const std::string message=error.what();assert(message.contains(id)&&message.contains("Example")&&message.contains("PreviousMod"));}
+    assert(Rejects([&]{NormalizeOwnership(moved,"CurrentMod",false);}));
+    const auto repaired=NormalizeOwnership(moved,"CurrentMod",true);
+    assert(OwnedBy(repaired)=="CurrentMod"&&repaired["QuestState"]==2&&repaired["UnknownFutureField"]==23);
+    assert(repaired["QuestInts"][0]["QuestVariableName"]=="RuneSchema.Phase"&&repaired["QuestInts"][0]["QuestVariableValue"]==3);
+    assert(repaired["QuestInts"][1]["QuestVariableValue"]==17&&repaired["QuestInts"][2]["Future"]==true);
+    assert(NormalizeOwnership(repaired,"CurrentMod",true)==repaired);
+    auto repeated=repaired;for(const auto& marker:OwnershipVariables("CurrentMod",id))repeated["QuestInts"].push_back(marker);
+    assert(OwnedBy(repeated)=="CurrentMod"&&NormalizeOwnership(repeated,"CurrentMod",true)==repaired);
+    auto mismatched=moved;mismatched["QuestInts"][1]["QuestVariableName"]="RuneSchema.Identity:BAAAAAAAAAAAAAAAAAAAAA";
+    assert(Rejects([&]{NormalizeOwnership(mismatched,"CurrentMod",true);}));
+    assert(moved["QuestInts"].size()==6); // Pure planning never edits the input.
 }

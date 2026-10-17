@@ -140,7 +140,11 @@ namespace UECustom {
         // deceptively similar prologue. It is not ABI-compatible with this
         // TArray-returning wrapper, so only the validated Win64 target may be
         // called directly. WinGDK uses the shared UE4SS providers below.
-        if(PS::Storefront::CurrentNativeLane()==PS::Storefront::NativeLane::SteamNative && nativeGetObjects) {
+        // Prefer the host's public class-hash iterator on every lane. The
+        // server log measured its hash query at ~4 ms versus ~622 ms for an
+        // object-array walk. A client-executable AOB is not a server ABI proof.
+        if(!FUObjectHashTables::IsAvailable() && !PS::Storefront::IsDedicatedServer()
+            && PS::Storefront::CurrentNativeLane()==PS::Storefront::NativeLane::SteamNative && nativeGetObjects) {
             nativeGetObjects(ClassToLookFor,Results,bIncludeDerivedClasses,ExcludeFlags,ExclusionInternalFlags);
             return;
         }

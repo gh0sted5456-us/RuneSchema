@@ -1,5 +1,5 @@
 -- Experimental RuneSchema-only ModActor loader. Enabled by
--- settings.jsonc bpModLoader.luaActorLoader; BPModLoaderMod is not modified.
+-- settings.ini [bpModLoader] luaActorLoader (legacy JSONC supported); BPModLoaderMod is not modified.
 return function(runeRoot)
     local list = io.open(runeRoot .. "/settings/logicmods.lua.generated.txt", "r")
     if not list then

@@ -71,8 +71,14 @@ try {
         [IO.File]::WriteAllBytes($binary, [byte[]](0,1,2,3,255))
         $before[$binary] = Get-Sha256File $binary
         Set-Content -LiteralPath (Join-Path $payload 'LICENSE') -Value 'Existing upstream notice: preserve this exact file.' -Encoding ascii
+        $existingBundle = Join-Path $payload 'settings/licenses'
+        New-Item -ItemType Directory -Path $existingBundle -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $existingBundle 'RuneSchema-Licenses.txt') -Value 'Historical consolidated dependency notice survives repack.' -Encoding ascii
         if ($name -eq 'RuneSchema-0.0.0.0e') {
             New-Item -ItemType Directory -Path (Join-Path $payload 'plugins/RuneSchema.Helpy') -Force | Out-Null
+            $nestedNotices = Join-Path $payload 'plugins/RuneSchema.Helpy/licenses'
+            New-Item -ItemType Directory -Path $nestedNotices -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $nestedNotices 'Unique-Plugin-Notice.txt') -Value 'Unique plugin-only license must survive consolidation.' -Encoding ascii
         }
         Compress-Archive -LiteralPath $payload -DestinationPath (Join-Path $fixture "dist/$name.zip")
     }
@@ -80,15 +86,34 @@ try {
     & $helper -RepositoryRoot $fixture -FinalizeBuild
     foreach ($name in @('RuneSchema-0.0.0.0e', 'RuneSchema.Helpy-0.0.0.0e')) {
         $prefix = if ($name -like 'RuneSchema.Helpy-*') { 'RuneSchema.Helpy' } else { 'RuneSchema' }
-        Assert-Archive (Join-Path $fixture "dist/$name.zip") "$name/$prefix"
+        $archivePrefix = if ($prefix -eq 'RuneSchema') { $prefix } else { "$name/$prefix" }
+        Assert-Archive (Join-Path $fixture "dist/$name.zip") $archivePrefix
         $payload = Join-Path $fixture "dist/$name/$prefix"
         $licenseFiles = @(Get-ChildItem -LiteralPath (Join-Path $payload 'settings/licenses') -File -Recurse)
         Assert-True ($licenseFiles.Count -eq 1 -and $licenseFiles[0].Name -eq 'RuneSchema-Licenses.txt') 'Payload does not contain exactly one consolidated license document.'
         $licenseText = Get-Content -LiteralPath $licenseFiles[0].FullName -Raw
         Assert-True ($licenseText.Contains('Existing upstream notice: preserve this exact file.')) 'Existing inherited notice was lost on the second run.'
+        Assert-True ($licenseText.Contains('Historical consolidated dependency notice survives repack.')) 'Previously consolidated notice was lost.'
+        if ($name -eq 'RuneSchema-0.0.0.0e') {
+            Assert-True ($licenseText.Contains('Unique plugin-only license must survive consolidation.')) 'Plugin-only notice was lost.'
+        }
     }
     foreach ($binary in $before.Keys) {
         Assert-True ((Get-Sha256File $binary) -eq $before[$binary]) 'Binary bytes changed.'
+    }
+    # Bare four-part versions now used by 0.8 must finalize on main too.
+    Set-Content -LiteralPath (Join-Path $fixtureBuild 'build.ps1') -Value '$Version = ''0.8.0.0''' -Encoding ascii
+    $env:GITHUB_REF_NAME = 'main'
+    foreach ($prefix in @('RuneSchema', 'RuneSchema.Helpy')) {
+        $newRoot = Join-Path $fixture "dist/$prefix-0.8.0.0"
+        New-Item -ItemType Directory -Path $newRoot -Force | Out-Null
+        Copy-Item -LiteralPath (Join-Path $fixture "dist/$prefix-0.0.0.0e/$prefix") -Destination $newRoot -Recurse
+        Compress-Archive -LiteralPath (Join-Path $newRoot $prefix) -DestinationPath (Join-Path $fixture "dist/$prefix-0.8.0.0.zip")
+    }
+    & $helper -RepositoryRoot $fixture -FinalizeBuild
+    foreach ($prefix in @('RuneSchema', 'RuneSchema.Helpy')) {
+        $archivePrefix = if ($prefix -eq 'RuneSchema') { $prefix } else { "$prefix-0.8.0.0/$prefix" }
+        Assert-Archive (Join-Path $fixture "dist/$prefix-0.8.0.0.zip") $archivePrefix
     }
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture 'dist/RuneSchema-0.0.0.0e/RuneSchema/plugins/RuneSchema.Helpy/LICENSE'))) 'Nested Helpy license duplicate remains.'
     $nested = Join-Path $fixture 'dist/RuneSchema-0.0.0.0e/RuneSchema/plugins/RuneSchema.Helpy'

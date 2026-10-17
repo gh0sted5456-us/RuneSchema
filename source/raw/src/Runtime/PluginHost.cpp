@@ -5,9 +5,20 @@
 #include "Runtime/HostServices.h"
 #include "Core/UsmapIndex.h"
 #include "Generator/ToolRequest.h"
+#include "Generator/HelpyQueryService.h"
 #include "Utility/BuildInfo.h"
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
+#include "Runtime/Storefront.h"
+#include "Runtime/ExecutableVersion.h"
+#include "Runtime/SteamBuild.h"
+#include "Runtime/UE4SSCompatibility.h"
+#include "Core/HelpySourceCache.h"
+#include "Core/IconCacheBuild.h"
+#include "Core/HelpyAuthoringProtocol.h"
+#include "Core/RuneSchemaSettingsEditor.h"
+#include "Core/CharacterEntryRecovery.h"
+#include "Generator/HelpyRuntimePreferences.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/DragonWildsSignatures.h"
@@ -38,7 +49,36 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
     try {
         const auto request=nlohmann::json::parse(requestJson);const auto action=request.value("Action",std::string{});
         nlohmann::json result;
-        if(action=="Read") {
+        if(action=="Environment")result={{"Storefront",Storefront::Name(Storefront::Current())},{"DedicatedServer",Storefront::IsDedicatedServer()},
+            {"NativeIconCaptureAvailable",!Storefront::IsDedicatedServer()},
+            {"Platform",Storefront::PlatformName(Storefront::CurrentDetection())},
+            {"RuneSchemaVersion",BuildInfo::Version},{"GameVersion",ExecutableVersion::Current()},
+            {"UE4SS",UE4SSCompatibility::Snapshot()},{"Steam",SteamBuild::Snapshot()},{"UpdateChecksAvailable",true}};
+        else if(action=="SettingsRead"){
+            result=RuneSchemaSettingsEditor::Read(HostServices::SettingsDirectory());
+            result["BypassStatus"]=DragonWilds::CharacterEntryRecovery::StatusText();
+        }
+        else if(action=="SettingsSave"){
+            // Never perform a file write during a response-size probe or force
+            // a caller to repeat a successful mutation to retrieve its result.
+            if(!size)return RS_PLUGIN_INVALID_ARGUMENT;
+            if(!response||capacity<RUNESCHEMA_PLUGIN_MAX_MESSAGE){*size=RUNESCHEMA_PLUGIN_MAX_MESSAGE;return RS_PLUGIN_BUFFER_TOO_SMALL;}
+            result=RuneSchemaSettingsEditor::Save(HostServices::SettingsDirectory(),request);
+            result["BypassStatus"]=DragonWilds::CharacterEntryRecovery::StatusText();
+        }
+        else if(action=="IconCacheSources")result=HelpySourceCache::ForClient();
+        else if(action=="IconCacheBuildRead")result=IconCacheBuild::Read();
+        else if(action=="IconCacheBuildStart"){HelpySourceCache::Requested=true;result={{"Accepted",!Storefront::IsDedicatedServer()&&IconCacheBuild::Start(request.value("Source",std::string{}))}};}
+        else if(action=="IconCacheBuildCancel"){IconCacheBuild::Cancel();result={{"Accepted",true}};}
+        else if(action=="IconCacheResetAccounting"){HelpyRuntimePreferences::IconCacheEpoch.fetch_add(1);result={{"Accepted",true}};}
+        else if(action=="AuthoringActivate")result=HelpyAuthoring::Bridge.Activate();
+        else if(action=="AuthoringSubmit") {
+            try {result=HelpyAuthoring::Bridge.Submit(request.at("Request"));}
+            catch(const std::exception& error){result={{"Accepted",false},{"Status",error.what()}};}
+        }
+        else if(action=="AuthoringSnapshot")result=HelpyAuthoring::Bridge.Snapshot(request.value("Revision",uint64_t{}));
+        else if(action=="Read") {
+            SpawnToolRequests::RequestPlayerRoles();
             const auto prior=request.value("Revision",uint64_t{});const auto category=request.value("Category",-1);std::lock_guard lock(SpawnToolRequests::Mutex);
             result={{"Available",SpawnToolRequests::Available.load()},{"Waiting",SpawnToolRequests::Waiting.load()},
                 {"Generation",SpawnToolRequests::Generation.load()},{"Revision",SpawnToolRequests::Revision},
@@ -64,12 +104,20 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
                     snapshot=SpawnToolRequests::Result;
                     for(auto it=SpawnToolRequests::QuickCatalogData.begin();it!=SpawnToolRequests::QuickCatalogData.end();++it)snapshot[it.key()]=it.value();
                 }
-                for(const auto* key:{"Players","CatalogReady","_CatalogIndexing","CatalogStatus","RegistryRecords","UnresolvedAssets",
+                for(const auto* key:{"Players","PlayerRoles","CatalogReady","_CatalogIndexing","CatalogStatus","RegistryRecords","UnresolvedAssets",
                         "MetadataUnavailable","UnclassifiedRecords","CatalogAI","CatalogResources","CatalogCoverage",
                         "IndexStage","IndexDone","IndexTotal","IndexHasTotal","IndexFinished","IndexDetail"})copy(key);
                 result["Snapshot"]=std::move(snapshot);
             }
         } else if(action=="Submit") result={{"Accepted",SpawnToolRequests::TrySubmit(request.at("Request"))}};
+        else if(action=="QuerySubmit") result={{"Accepted",HelpyQueryService::Submit(request.at("Request"))}};
+        else if(action=="MapGroundSubmit") result={{"Accepted",SpawnToolRequests::SubmitMapGround(request.at("Request"))}};
+        else if(action=="QueryCancel") {HelpyQueryService::Cancel(request.value("Category",-1),request.value("CancelGeneration",uint64_t{}));result={{"Accepted",true}};}
+        else if(action=="IconSubmit") {
+            const auto icon=request.value("Icon",std::string{});const bool accepted=!icon.empty()&&icon.size()<=4096
+                &&ItemIconRequests::TrySubmit(nlohmann::json{{"Icon",icon}});
+            result={{"Accepted",accepted}};
+        }
         else if(action=="Completed") {nlohmann::json receipt;const bool found=SpawnToolRequests::TakeCompleted(request.value("RequestId",uint64_t{}),receipt);result={{"Found",found}};if(found)result["Receipt"]=std::move(receipt);}
         else if(action=="Search") {SpawnToolRequests::PrioritizeSearch(request.value("Query",std::string{}));result={{"Accepted",true}};}
         else if(action=="Cancel") {SpawnToolRequests::CancelRequested=true;result={{"Accepted",true}};}
@@ -124,9 +172,9 @@ int32_t RS_PLUGIN_CALL CoreBindings(void*,const char* requestJson,char* response
 }
 void RS_PLUGIN_CALL HostLog(uint32_t level,const char* plugin,const char* message) {
     const auto id=ToWideSafe(plugin?plugin:"unknown"),text=ToWideSafe(message?message:"");
-    if(level==RS_LOG_ERROR)RC::Output::send<RC::LogLevel::Error>(TEXT("[RuneSchema] Plugin {}: {}\n"),id,text);
-    else if(level==RS_LOG_WARNING)RC::Output::send<RC::LogLevel::Warning>(TEXT("[RuneSchema] Plugin {}: {}\n"),id,text);
-    else RC::Output::send<RC::LogLevel::Normal>(TEXT("[RuneSchema] Plugin {}: {}\n"),id,text);
+    if(level==RS_LOG_ERROR)PS::ConsolidatedLog<RC::LogLevel::Error>(TEXT("[RuneSchema] Plugin {}: {}\n"),id,text);
+    else if(level==RS_LOG_WARNING)PS::ConsolidatedLog<RC::LogLevel::Warning>(TEXT("[RuneSchema] Plugin {}: {}\n"),id,text);
+    else PS::ConsolidatedLog<RC::LogLevel::Normal>(TEXT("[RuneSchema] Plugin {}: {}\n"),id,text);
 }
 int32_t RS_PLUGIN_CALL RegisterCapability(const char* plugin,const char* capability) {
     if(!Token(plugin)||!Token(capability)||!ActiveOwner||std::string_view(plugin)!=ActiveOwner)return RS_PLUGIN_INVALID_ARGUMENT;
@@ -200,6 +248,9 @@ void PluginHost::Load(const std::filesystem::path& root) {
     catch(...){m_state->Messages.push_back("plugin catalog rejected by an unknown error; RuneSchema core continues");return;}
     for(const auto& manifest:manifests) {
         if(!manifest.Enabled)continue;
+        // The desktop Helpy frontend has no Unreal imports or viewport hook.
+        // Other client plugins retain the existing dedicated-server exclusion.
+        if(Storefront::IsDedicatedServer()&&manifest.Id!="RuneSchema.Helpy")continue;
         if(manifest.ApiVersion!=RUNESCHEMA_PLUGIN_API_VERSION)
             CompatibilityNotice(manifest.Id+": manifest API "+std::to_string(manifest.ApiVersion)+", host API "+std::to_string(RUNESCHEMA_PLUGIN_API_VERSION)+"; trying native startup");
         if(!manifest.BuiltForRuneSchema.empty()&&manifest.BuiltForRuneSchema!=BuildInfo::Version)
@@ -290,11 +341,13 @@ void PluginHost::OnUnrealInit(){for(auto& plugin:m_state->LoadedPlugins){
     };
     nlohmann::json bootstrap;uint64_t bootstrapRevision=0;{
         std::lock_guard lock(SpawnToolRequests::Mutex);
-        bootstrap={{"Result",SpawnToolRequests::Result},{"Catalog",SpawnToolRequests::QuickCatalogData}};
+        bootstrap={{"Result",SpawnToolRequests::Result}};
         bootstrapRevision=SpawnToolRequests::Revision;
     }SpawnToolRequests::PushUpdate("bootstrap",bootstrap,bootstrapRevision);
 }
 void PluginHost::Shutdown() noexcept {
+    HelpySourceCache::Requested=false;HelpySourceCache::Shutdown();
+    HelpyQueryService::Clear();
     if(!m_state)return;
     SpawnToolRequests::PushUpdate={};
     for(auto iterator=m_state->LoadedPlugins.rbegin();iterator!=m_state->LoadedPlugins.rend();++iterator) {

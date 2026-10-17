@@ -15,6 +15,16 @@ int main(int argc,char** argv) {
     const auto require=[](bool value,const char* message) {
         if(!value) throw std::runtime_error(std::string("Registry bridge lifecycle regression: ")+message);
     };
+    require(source.find("at->Delay=0.5f;")!=std::string::npos,
+        "failed authority attachment retries can hammer reflection every frame");
+    require(source.find("const std::string BuildIdentity{PS::BuildInfo::Version};")!=std::string::npos,
+        "numeric release versions must not lose their last character on the wire");
+    require(source.find("SlowWork::Measure(\"network.attach\"")!=std::string::npos,
+        "slow join attachment work has no phase attribution");
+    require(source.find("CatchUpAuthorityWorld();")!=std::string::npos
+        &&source.find("modes.Num()>64")!=std::string::npos
+        &&source.find("Existing authority worlds are ambiguous")!=std::string::npos,
+        "late dedicated startup can miss the existing world or select an arbitrary one");
     require(header.find("PS::WeakObjectHandle m_pendingMode")!=std::string::npos,
         "pending GameMode is not serial validated");
     require(source.find("m_pendingMode.Assign(mode)")!=std::string::npos

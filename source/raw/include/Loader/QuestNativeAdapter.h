@@ -3,9 +3,13 @@
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
+#include "SDK/Helper/ReflectedContract.h"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
 #include "Unreal/Property/FEnumProperty.hpp"
 #include "SDK/Structs/Custom/FScriptArrayHelper.h"
+#include "Loader/QuestSaveOwnership.h"
+#include "Utility/Logging.h"
+#include "Unreal/Core/HAL/UnrealMemory.hpp"
 #include <vector>
 
 namespace DragonWilds::QuestNative {
@@ -134,8 +138,8 @@ public:
         auto* integers=type?CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(type,TEXT("QuestInts"))):nullptr;
         auto* integerType=integers?CastField<FStructProperty>(integers->GetInner()):nullptr;
         if(!array||array->GetArrayDim()!=1||!inner||!type||type->GetPathName()!=TEXT("/Script/Dominion.QuestProgress")
-            ||!data||data->GetOffset_Internal()!=0||data->GetElementSize()!=sizeof(UObject*)
-            ||!integers||integers->GetOffset_Internal()!=24||integers->GetElementSize()!=sizeof(FScriptArray)
+            ||!ReflectedContract::Fits(data,inner->GetElementSize())||data->GetElementSize()!=sizeof(UObject*)
+            ||!ReflectedContract::Fits(integers,inner->GetElementSize())||integers->GetElementSize()!=sizeof(FScriptArray)
             ||!integerType||!integerType->GetStruct()||integerType->GetStruct()->GetPathName()!=TEXT("/Script/Dominion.QuestInt"))
             throw std::runtime_error("Changed quest reset layout changed");
         auto* raw=array->ContainerPtrToValuePtr<FScriptArray>(component);
@@ -151,6 +155,87 @@ public:
     }
     void ValidateAll() const {
         for(const auto method:{Method::Give,Method::Complete,Method::Initialize,Method::IsInitialized,Method::State,Method::Objective})Function(method);
+    }
+    void NormalizeOwnership(const std::string& owner,const std::string& id,const std::string& key) const {
+        using namespace RC::Unreal;
+        CheckOwner();
+        ActorHelper::FunctionCall authority(controller,TEXT("/Script/Engine.Actor:HasAuthority"));authority.Invoke();
+        if(!authority.Result<bool>())return; // A client never repairs server-owned counters.
+        if(!quest->GetOuterPrivate()||quest->GetOuterPrivate()->GetPathName()!=TEXT("/Engine/Transient")
+            ||!quest->GetName().starts_with(TEXT("RuneSchema_Quest_")))
+            throw std::runtime_error("Quest ownership migration requires an authoritative RuneSchema quest");
+        for(const auto& [field,expected]:{std::pair{TEXT("PersistenceID"),id},std::pair{TEXT("InternalName"),key}}){
+            auto* property=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(quest->GetClassPrivate(),field));
+            if(!property||property->GetArrayDim()!=1||property->GetElementSize()!=sizeof(FString))
+                throw std::runtime_error("Quest ownership asset identity layout changed");
+            const auto& chars=property->GetPropertyValue(property->ContainerPtrToValuePtr<void>(quest)).GetCharArray();
+            if(chars.Num()<2||chars.Num()>1025||!chars.GetData()||chars.GetData()[chars.Num()-1]!=0
+                ||RC::to_string(RC::StringType(chars.GetData(),chars.Num()-1))!=expected)
+                throw std::runtime_error("Quest ownership current declaration identity mismatch");
+        }
+        auto* array=CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(component->GetClassPrivate(),TEXT("Quests")));
+        auto* inner=array?CastField<FStructProperty>(array->GetInner()):nullptr;auto* type=inner?inner->GetStruct().Get():nullptr;
+        auto* data=type?CastField<FObjectPropertyBase>(PropertyHelper::GetPropertyByName(type,TEXT("Data"))):nullptr;
+        auto* integers=type?CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(type,TEXT("QuestInts"))):nullptr;
+        auto* integer=integers?CastField<FStructProperty>(integers->GetInner()):nullptr;auto* integerType=integer?integer->GetStruct().Get():nullptr;
+        if(!array||array->GetArrayDim()!=1||array->GetElementSize()!=sizeof(FScriptArray)||!type
+            ||type->GetPathName()!=TEXT("/Script/Dominion.QuestProgress")
+            ||!ReflectedContract::Fits(data,inner->GetElementSize())||data->GetElementSize()!=sizeof(UObject*)
+            ||!ReflectedContract::Fits(integers,inner->GetElementSize())||integers->GetArrayDim()!=1||integers->GetElementSize()!=sizeof(FScriptArray)
+            ||!integerType||integerType->GetPathName()!=TEXT("/Script/Dominion.QuestInt"))
+            throw std::runtime_error("Quest ownership progress layout changed");
+        auto* name=CastField<FNameProperty>(PropertyHelper::GetPropertyByName(integerType,TEXT("QuestIntName")));
+        auto* number=CastField<FIntProperty>(PropertyHelper::GetPropertyByName(integerType,TEXT("QuestIntValue")));
+        if(integer->GetElementSize()<=0||integer->GetElementSize()>1024
+            ||!ReflectedContract::Fits(name,integer->GetElementSize())||name->GetArrayDim()!=1||name->GetElementSize()!=sizeof(FName)
+            ||!ReflectedContract::Fits(number,integer->GetElementSize())||number->GetArrayDim()!=1||number->GetElementSize()!=sizeof(int32_t))
+            throw std::runtime_error("Quest ownership counter layout changed");
+        auto* rows=array->ContainerPtrToValuePtr<FScriptArray>(component);
+        if(rows->Num()<0||rows->Num()>4096||(rows->Num()&&!rows->GetData()))throw std::runtime_error("Quest ownership progress bounds invalid");
+        void* matched=nullptr;
+        UECustom::FScriptArrayHelper(rows,array).ForEachElement([&](void* row){
+            if(data->GetObjectPropertyValue(data->ContainerPtrToValuePtr<void>(row))==quest){
+                if(matched)throw std::runtime_error("Quest ownership progress identity duplicated");matched=row;
+            }
+        });
+        if(!matched)throw std::runtime_error("Quest ownership progress entry unavailable");
+        auto* live=integers->ContainerPtrToValuePtr<FScriptArray>(matched);
+        if(live->Num()<0||live->Num()>4096||(live->Num()&&!live->GetData()))throw std::runtime_error("Quest ownership counter bounds invalid");
+        const auto read=[&](FScriptArray* values){
+            Quests::SaveJson counters=Quests::SaveJson::array();
+            UECustom::FScriptArrayHelper(values,integers).ForEachElement([&](void* value){
+                counters.push_back({{"QuestVariableName",RC::to_string(name->GetPropertyValue(name->ContainerPtrToValuePtr<void>(value)).ToString())},
+                    {"QuestVariableValue",number->GetPropertyValue(number->ContainerPtrToValuePtr<void>(value))}});
+            });return Quests::SaveJson{{"QuestId",id},{"QuestInts",std::move(counters)}};
+        };
+        const auto original=read(live);const auto info=Quests::InspectOwnership(original);
+        size_t markers=0;for(const auto& value:original["QuestInts"]){const auto& label=value["QuestVariableName"].get_ref<const std::string&>();
+            if(label.starts_with("RuneSchema.Owner:")||label.starts_with("RuneSchema.Identity:"))++markers;}
+        if(info.Owners==std::set<std::string>{owner}&&info.Identity&&markers==2)return;
+        const auto planned=Quests::NormalizeOwnership(original,owner,true);
+        struct Buffer {
+            FArrayProperty* Property;void* Data;
+            explicit Buffer(FArrayProperty* p):Property(p),Data(FMemory::Malloc(p->GetElementSize(),p->GetMinAlignment())){
+                if(!Data)throw std::bad_alloc();Property->InitializeValue(Data);
+            }
+            ~Buffer(){Property->DestroyValue(Data);FMemory::Free(Data);}
+        } old(integers),next(integers);
+        integers->CopyCompleteValue(old.Data,live);
+        UECustom::FScriptArrayHelper output(next.Data,integers);
+        UECustom::FScriptArrayHelper(live,integers).ForEachElement([&](void* value){
+            const auto label=RC::to_string(name->GetPropertyValue(name->ContainerPtrToValuePtr<void>(value)).ToString());
+            if(!label.starts_with("RuneSchema.Owner:")&&!label.starts_with("RuneSchema.Identity:"))output.Add(value);
+        });
+        for(const auto& marker:Quests::OwnershipVariables(owner,id)){
+            UECustom::FManagedValue value;output.InitializeValue(value);
+            name->SetPropertyValue(name->ContainerPtrToValuePtr<void>(value.GetData()),FName(RC::to_generic_string(marker["QuestVariableName"].get<std::string>()).c_str(),FNAME_Add));
+            number->SetPropertyValue(number->ContainerPtrToValuePtr<void>(value.GetData()),Quests::OwnershipVersion);output.Add(value);
+        }
+        if(read(static_cast<FScriptArray*>(next.Data))!=planned)throw std::runtime_error("Quest ownership staged migration did not verify");
+        try {integers->CopyCompleteValue(live,next.Data);if(read(live)!=planned)throw std::runtime_error("Quest ownership migration did not round-trip");}
+        catch(...){integers->CopyCompleteValue(live,old.Data);throw;}
+        if(!info.Owners.empty())PS::ConsolidatedLog<RC::LogLevel::Normal>(STR("[RuneSchema] [QUEST-OWNERSHIP][MIGRATED] quest='{}' PersistenceID='{}' prior_owners={} current_owner='{}'; only ownership markers changed, quest progress retained.\n"),
+            PS::ToWideSafe(key),PS::ToWideSafe(id),PS::ToWideSafe(Quests::SaveJson(info.Owners).dump()),PS::ToWideSafe(owner));
     }
     void SetGiven(bool silent) const {Mutate(Method::Give,silent);}
     template<class Prepare> bool RestartCompleted(Prepare prepare) const {
@@ -187,7 +272,8 @@ public:
         // component; on a listen host it never reaches the host's client HUD,
         // and on a dedicated server it never reaches the owning connection.
         auto* fn=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,TEXT("/Script/Dominion.QuestProgressComponent:Client_OnQuestsUpdated"),false);
-        if(!array || !inner || !fn || fn->GetParmsSize()!=17)throw std::runtime_error("Quest control notification unavailable");
+        ReflectedContract::Frame(fn);
+        if(!array || !inner)throw std::runtime_error("Quest control notification unavailable");
         size_t count=0;FArrayProperty* updated=nullptr;FBoolProperty* loaded=nullptr;
         for(auto* p:TFieldRange<FProperty>(fn,EFieldIterationFlags::Default))if(p->HasAnyPropertyFlags(CPF_Parm)) {
             ++count;if(p->GetFName()==FName(TEXT("UpdatedQuests"),FNAME_Add))updated=CastField<FArrayProperty>(p);
@@ -195,8 +281,8 @@ public:
         }
         auto* item=updated?CastField<FStructProperty>(updated->GetInner()):nullptr;
         if(count!=2 || !fn->HasAnyFunctionFlags(FUNC_Net) || !fn->HasAnyFunctionFlags(FUNC_NetClient)
-            || !updated || updated->GetOffset_Internal()!=0 || updated->GetElementSize()!=16 || !item || item->GetStruct()!=inner->GetStruct()
-            || !loaded || loaded->GetOffset_Internal()!=16 || loaded->GetElementSize()!=1 || !loaded->IsNativeBool())throw std::runtime_error("Quest control notification layout changed");
+            || !ReflectedContract::Input(updated,fn) || updated->GetElementSize()!=sizeof(FScriptArray) || !item || item->GetStruct()!=inner->GetStruct()
+            || !ReflectedContract::Input(loaded,fn) || loaded->GetElementSize()!=1 || !loaded->IsNativeBool())throw std::runtime_error("Quest control notification layout changed");
         auto* values=array->ContainerPtrToValuePtr<FScriptArray>(component);
         if(values->Num()<1 || values->Num()>4096)throw std::runtime_error("Quest control registry count invalid");
         if(invoke)ActorHelper::FunctionCall(component,fn)

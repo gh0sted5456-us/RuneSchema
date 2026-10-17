@@ -43,6 +43,33 @@
           },
           "type": "object"
         },
+        "$QuestScroll": {
+          "additionalProperties": false,
+          "description": "Replace a cooked Blueprint ConsumableItemData UseItem override with authoritative acceptance of an existing local quest Id or Mod:Id. Requires an inert impure script UseItem override returning false (BlueprintPure=false); native-only C++ consumables are not supported. PersistenceID is the expected item identity (not the quest ID). One scroll plus any normal quest start cost is charged only after native acceptance; active/cooldown/prerequisite/missing-quest rejection leaves the scroll. EntryID selects an existing quest entry option. Original cooked use callbacks are not also executed. Restart required.",
+          "properties": {
+            "EntryID": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[^:\\r\\n\\t ]+$",
+              "type": "string"
+            },
+            "PersistenceID": {
+              "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+              "type": "string"
+            },
+            "QuestID": {
+              "maxLength": 257,
+              "minLength": 1,
+              "pattern": "^[^:/\\r\\n\\t ]+(?::[^:/\\r\\n\\t ]+)?$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "QuestID",
+            "PersistenceID"
+          ],
+          "type": "object"
+        },
         "$VisualEffect": {
           "additionalProperties": true,
           "properties": {
@@ -54,6 +81,10 @@
             }
           },
           "type": "object"
+        },
+        "$WearableBridge": {
+          "description": "Request native wearable enumeration/cache enrollment after successful field writes. Supports cooked, PAK and RuneSchema-cloned WearableEquipmentData. Does not allocate item/network identities or fabricate mesh data; false is a no-op, not a global bridge disable.",
+          "type": "boolean"
         },
         "BuildingPieceToUnlock": {
           "anyOf": [

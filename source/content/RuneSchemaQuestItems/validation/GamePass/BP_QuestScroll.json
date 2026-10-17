@@ -1,0 +1,113 @@
+[
+  {
+    "Type": "BlueprintGeneratedClass",
+    "Name": "BP_QuestScroll_C",
+    "Flags": "RF_Public | RF_Transactional | RF_WasLoaded | RF_LoadCompleted",
+    "Class": "UScriptClass'BlueprintGeneratedClass'",
+    "Package": "/RuneSchemaQuestItems/Blueprints/BP_QuestScroll",
+    "SuperStruct": {
+      "ObjectName": "Class'ConsumableItemData'",
+      "ObjectPath": "/Script/Dominion"
+    },
+    "Children": [
+      {
+        "ObjectName": "Function'BP_QuestScroll_C:UseItem'",
+        "ObjectPath": "/RuneSchemaQuestItems/Blueprints/BP_QuestScroll.2"
+      }
+    ],
+    "FuncMap": {
+      "UseItem": {
+        "ObjectName": "Function'BP_QuestScroll_C:UseItem'",
+        "ObjectPath": "/RuneSchemaQuestItems/Blueprints/BP_QuestScroll.2"
+      }
+    },
+    "ClassFlags": "CLASS_CompiledFromBlueprint",
+    "ClassWithin": {
+      "ObjectName": "Class'Object'",
+      "ObjectPath": "/Script/CoreUObject"
+    },
+    "ClassConfigName": "Engine",
+    "Interfaces": [
+      {
+        "Class": {
+          "ObjectName": "Class'UsableItemInterface'",
+          "ObjectPath": "/Script/Dominion"
+        },
+        "PointerProperty": null,
+        "PointerOffset": 0,
+        "bImplementedByK2": true
+      }
+    ],
+    "bCooked": true,
+    "ClassDefaultObject": {
+      "ObjectName": "BP_QuestScroll_C'Default__BP_QuestScroll_C'",
+      "ObjectPath": "/RuneSchemaQuestItems/Blueprints/BP_QuestScroll.1"
+    },
+    "EditorTags": {
+      "BlueprintType": "BPTYPE_Normal",
+      "ImplementedInterfaces": "((Interface=\"/Script/CoreUObject.Class'/Script/Dominion.UsableItemInterface'\"))"
+    }
+  },
+  {
+    "Type": "BP_QuestScroll_C",
+    "Name": "Default__BP_QuestScroll_C",
+    "Flags": "RF_Public | RF_ClassDefaultObject | RF_ArchetypeObject | RF_WasLoaded | RF_LoadCompleted",
+    "Class": "BlueprintGeneratedClass'/RuneSchemaQuestItems/Blueprints/BP_QuestScroll.BP_QuestScroll_C'",
+    "Package": "/RuneSchemaQuestItems/Blueprints/BP_QuestScroll"
+  },
+  {
+    "Type": "Function",
+    "Name": "UseItem",
+    "Flags": "RF_Public | RF_WasLoaded | RF_LoadCompleted",
+    "Class": "UScriptClass'Function'",
+    "Outer": {
+      "ObjectName": "BlueprintGeneratedClass'BP_QuestScroll_C'",
+      "ObjectPath": "/RuneSchemaQuestItems/Blueprints/BP_QuestScroll.0"
+    },
+    "ChildProperties": [
+      {
+        "Type": "ObjectProperty",
+        "Name": "PlayerController",
+        "Flags": "RF_Public",
+        "ElementSize": 8,
+        "PropertyFlags": "BlueprintVisible | BlueprintReadOnly | Parm",
+        "PropertyClass": {
+          "ObjectName": "Class'DominionPlayerController'",
+          "ObjectPath": "/Script/Dominion"
+        }
+      },
+      {
+        "Type": "ObjectProperty",
+        "Name": "Inventory",
+        "Flags": "RF_Public",
+        "ElementSize": 8,
+        "PropertyFlags": "BlueprintVisible | BlueprintReadOnly | Parm | InstancedReference",
+        "PropertyClass": {
+          "ObjectName": "Class'InventoryComponent'",
+          "ObjectPath": "/Script/Dominion"
+        }
+      },
+      {
+        "Type": "IntProperty",
+        "Name": "SlotIndex",
+        "Flags": "RF_Public",
+        "ElementSize": 4,
+        "PropertyFlags": "BlueprintVisible | BlueprintReadOnly | Parm"
+      },
+      {
+        "Type": "BoolProperty",
+        "Name": "ReturnValue",
+        "Flags": "RF_Public",
+        "ElementSize": 1,
+        "PropertyFlags": "Parm | OutParm | ReturnParm",
+        "FieldSize": 1,
+        "ByteOffset": 0,
+        "ByteMask": 1,
+        "FieldMask": 255,
+        "BoolSize": 1,
+        "bIsNativeBool": true
+      }
+    ],
+    "FunctionFlags": "FUNC_Event | FUNC_Public | FUNC_HasOutParms | FUNC_BlueprintCallable | FUNC_BlueprintEvent | FUNC_Const"
+  }
+]

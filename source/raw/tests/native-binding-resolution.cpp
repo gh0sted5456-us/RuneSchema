@@ -1,10 +1,11 @@
 #include <cstdlib>
 #include <fstream>
+#include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <string>
 
-static std::string Read(const char* path)
+static std::string Read(const std::filesystem::path& path)
 {
     std::ifstream file(path, std::ios::binary);
     if (!file) std::exit(2);
@@ -53,8 +54,8 @@ int main(int argc, char** argv)
         "core readiness is visible with standard logging");
     Check(loader.find("Unable to initialize RuneSchema core, signature for UDataTable::Serialize") == std::string::npos,
         "obsolete fatal diagnostic removed");
-    Check(loadOrder.find("create_directories(path.parent_path()") != std::string::npos,
-        "missing mods directory is created before load-order write");
+    Check(loadOrder.find("ModOrderState::WriteExpected(path,baseline,contents)") != std::string::npos,
+        "load-order writes use the snapshot-checked atomic configuration writer");
     Check(host.find("runeschema.bindings") != std::string::npos, "binding discovery service registered");
     Check(host.find("binding.resolve") != std::string::npos, "binding capability registered");
     Check(host.find("ResolveBinding") != std::string::npos, "host binding resolver exported");
@@ -87,20 +88,54 @@ int main(int argc, char** argv)
     Check(storefront.find("DedicatedServer") != std::string::npos,
         "dedicated server executable detection is explicit");
     Check(entrypoint.find("[SERVER][SAFE-MODE]") != std::string::npos
-        && entrypoint.find("if (!storefront.DedicatedServer)") != std::string::npos
+        && entrypoint.find("Desktop Helpy is allowed; other client plugins remain suppressed") != std::string::npos
+        && host.find("if(Storefront::IsDedicatedServer()&&manifest.Id!=\"RuneSchema.Helpy\")continue;") != std::string::npos
         && entrypoint.find("if (m_startupFailed.load(std::memory_order_acquire)) return;") != std::string::npos
         && entrypoint.find("if (!PS::Storefront::IsDedicatedServer())") != std::string::npos
         && entrypoint.find("m_pluginHost.OnUiInit();") != std::string::npos
-        && entrypoint.find("register_tab(STR(\"RuneSchema\")") != std::string::npos,
-        "dedicated server exposes the core UE4SS tab while keeping client plugins suppressed");
-    Check(entrypoint.find("BeginRuneSchemaTab(\"Authoring & Tools\", TabRole::Diagnostics)") != std::string::npos,
-        "dedicated server retains the full RuneSchema authoring page");
-    Check(entrypoint.find("ImGui::Combo(\"Workflow stage\"") != std::string::npos
-        && entrypoint.find("ImGui::Combo(\"Content type\"") != std::string::npos
-        && entrypoint.find("render_schema_generator();") != std::string::npos
-        && entrypoint.find("AdvancedToolsRail") == std::string::npos
-        && entrypoint.find("ModAuthoringRail") == std::string::npos,
-        "advanced authoring follows one vertical workflow and exposes schema export");
+        && entrypoint.find("register_tab(STR(\"RuneSchema\")") != std::string::npos
+        && entrypoint.find("m_pluginHost.OnUnrealInit();") != std::string::npos,
+        "dedicated server permits only standalone Helpy while keeping other client plugins suppressed");
+    const auto rawRoot=std::filesystem::weakly_canonical(argv[7]).parent_path().parent_path();
+    const auto desktopRoot=rawRoot.parent_path()/"helpy"/"source";
+    const auto navigation=Read(desktopRoot/"include/Core/HelpyNavigation.h");
+    const auto desktop=Read(desktopRoot/"src/Generator/HelpyStandaloneWindow.cpp");
+    const auto panel=Read(desktopRoot/"include/Generator/AuthoringPanel.h");
+    const auto protocol=Read(rawRoot/"include/Core/HelpyAuthoringProtocol.h");
+    Check(entrypoint.find("BeginRuneSchemaTab(\"Authoring & Tools\"")==std::string::npos
+        && navigation.find("case Page::Authoring:return \"Authoring Tools\";")!=std::string::npos
+        && desktop.find("case Page::Authoring:")!=std::string::npos
+        && desktop.find("AuthoringPanel::Render();")!=std::string::npos,
+        "desktop Authoring Tools replaces the duplicate legacy authoring tab");
+    const auto serverStart=desktop.find("if(HelpyEnvironment::Server())",desktop.find("void HelpyStandaloneWindow::ThreadMain()"));
+    Check(serverStart!=std::string::npos
+        && desktop.find("CurrentPage=Page::Authoring;",serverStart)!=std::string::npos
+        && desktop.find("ShowWindow(m_hwnd,SW_SHOWNOACTIVATE)",serverStart)!=std::string::npos,
+        "dedicated server opens the desktop authoring route without a local-player dependency");
+    for(const auto* operation:{"AuthoringActivate","AuthoringSubmit","AuthoringSnapshot"})
+        Check(host.find(operation)!=std::string::npos,"native host exposes all desktop authoring service routes");
+    const auto bridgeStart=entrypoint.find("void PrepareAuthoringBridge()");
+    Check(bridgeStart!=std::string::npos,"native authoring bridge is initialized");
+    const auto bridge=entrypoint.substr(bridgeStart,entrypoint.find("\nprivate:",bridgeStart)-bridgeStart);
+    Check(bridge.find("IsDedicatedServer")==std::string::npos
+        && bridge.find("Bridge.Configure(settings.authoringTools,false)")!=std::string::npos
+        && bridge.find("if (!settings.authoringTools || m_apiExportCallbackId != Hook::ERROR_ID) return;")!=std::string::npos
+        && bridge.find("RegisterEngineTickPostCallback")!=std::string::npos
+        && bridge.find("PS::InspectionTools::Tick();")!=std::string::npos
+        && bridge.find("if(!PS::HelpyAuthoring::Bridge.TickActivation())return;")<bridge.find("PS::InspectionTools::Tick();")
+        && bridge.find("Bridge.Configure(settings.authoringTools,m_apiExportCallbackId!=Hook::ERROR_ID)")!=std::string::npos
+        && bridge.find("Bridge.WorldChanged();")!=std::string::npos,
+        "dedicated-server backend preserves config, ready-hook, game-thread activation and world-reset gates");
+    Check(entrypoint.find("PrepareAuthoringBridge();")<entrypoint.find("m_pluginHost.OnUnrealInit();")
+        && protocol.find("if(!enabled||!ready)")!=std::string::npos
+        && protocol.find("if(activation&&enabled&&ready)")!=std::string::npos
+        && protocol.find("if(!enabled||!ready||!active)")!=std::string::npos
+        && panel.find("AuthoringClient::Activate()")!=std::string::npos,
+        "desktop uses explicit session activation after native readiness; requests cannot bypass it");
+    Check(panel.find("ImGui::Combo(\"Workflow\"")!=std::string::npos
+        && panel.find("Export all loader schemas")!=std::string::npos
+        && panel.find("SchemaExport")!=std::string::npos,
+        "desktop authoring keeps workflow navigation and full schema export");
     Check(entrypoint.find("DllMain") == std::string::npos
         && entrypoint.find("return new RuneSchema();") != std::string::npos,
         "RuneSchema performs startup only when UE4SS calls start_mod (mods.txt authority)");

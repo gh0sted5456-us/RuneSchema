@@ -132,19 +132,19 @@ int main(int argc,char** argv){
         && registrar.find("false,")!=registrar.npos,
         "combat persistence registries are missing or can become cleanup authority");
     need(registrar.find("[REGISTRY][{}][ADDED]")!=registrar.npos
-        && registrar.find("[REGISTRY][{}][IDENTITY]")!=registrar.npos
+        && registrar.find("[REGISTRY][{}][SOURCE-SUMMARY]")!=registrar.npos
         && registrar.find("TEXT(\"ITEM\")")!=registrar.npos
         && registrar.find("TEXT(\"RECIPE\")")!=registrar.npos
         && registrar.find("TEXT(\"QUEST\")")!=registrar.npos
         && registrar.find("TEXT(\"COMBAT-SPELL\")")!=registrar.npos
         && registrar.find("TEXT(\"UTILITY-SPELL\")")!=registrar.npos
         && registrar.find("TEXT(\"EQUIPMENT-EFFECT\")")!=registrar.npos
-        && registrar.find("PersistenceID='{}'")!=registrar.npos
-        && registrar.find("networkId={}")!=registrar.npos
+        && registrar.find("source='{}' added={} existing={}")!=registrar.npos
+        && registrar.find("ordered_fingerprint={}")!=registrar.npos
         && registrar.find("[COMBAT-REGISTRY][{}][{}]")!=registrar.npos
         && registrar.find("TEXT(\"MELEE-ATTACK\")")!=registrar.npos
         && registrar.find("TEXT(\"RANGED-EQUIPMENT\")")!=registrar.npos,
-        "new combat registry identities are not announced with actionable status");
+        "combat registry counts, content sources and identity fingerprint are not reported without per-asset spam");
     need(provenance.find("AnnounceRuneSchemaItem")!=provenance.npos
         && provenance.find("RuneSchemaItems")!=provenance.npos
         && assetLoader.find("RegistryProvenance::AnnounceRuneSchemaItem")!=assetLoader.npos
@@ -154,10 +154,11 @@ int main(int argc,char** argv){
         && registrar.find("cooked_or_pak_added")!=registrar.npos,
         "item registration does not verify or report RuneSchema versus cooked/PAK provenance");
     need(assetLoader.find("networkId=deferred-to-settled-registrar")!=assetLoader.npos
-        && assetLoader.find("const bool networkDeferred = PS::Storefront::IsDedicatedServer()")!=assetLoader.npos
+        && assetLoader.find("const bool networkDeferred = PS::NetworkIdentityState::DeferItemEnrollment()")!=assetLoader.npos
+        && registrar.find("PS::NetworkIdentityState::FinishStartupBatch();")!=registrar.npos
         && assetLoader.find("auto* stored = map.FindValue(&key)")!=assetLoader.npos
         && assetLoader.find("reverse.Rehash()") == assetLoader.npos,
-        "dedicated-server clones still interleave raw network-map growth or map insertion is not round-trip verified");
+        "startup peers still differ in early clone network enrollment or map insertion is not round-trip verified");
     need(registrar.find("[REGISTRY][LIFECYCLE][SEALED]")!=registrar.npos
         && registrar.find("world transitions are read-only")!=registrar.npos,
         "one-time registry lifecycle is not announced");

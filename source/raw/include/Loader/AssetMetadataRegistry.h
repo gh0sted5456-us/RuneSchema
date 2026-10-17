@@ -6,6 +6,7 @@ namespace PS::AssetMetadata {
 // never feeds this store. A declaration only describes the definition that supplied it.
 void Record(RC::Unreal::UObject*,const Declaration&,const std::string& owner,bool installedDefinition);
 Declaration Lookup(RC::Unreal::UObject*);
+std::string Owner(RC::Unreal::UObject*);
 bool HasInstalledDefinition(RC::Unreal::UObject*);
 bool IsManaged(RC::Unreal::UObject*);
 void MarkIncomplete(RC::Unreal::UObject*) noexcept;

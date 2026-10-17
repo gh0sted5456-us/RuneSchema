@@ -41,13 +41,14 @@ nlohmann::json DragonWildsNpcLoader::HelpyNpcDocument(const VendorDefinition& so
         throw std::runtime_error("Permanent copies of legacy custom proxy classes need an explicit /npc conversion.");
     auto doc=nlohmann::json::object();
     for(const auto* field:{"DisplayName","VisualSource","Mesh","Materials","IdleAnimation","HideMesh","NoInteract","HideName",
-        "Location","Rotation","Scale","Enabled","EnableCollision","MeshCollision","Type","Appearance","Equipment","Pose","DialoguePose","Ghost","VisualEffect","Map","OverheadIcon","VendorID","DialogueID","LoreID","LoreEntry","QuestID","TimeOfDay"})
+        "Location","Rotation","Scale","Enabled","EnableCollision","MeshCollision","Type","Appearance","Equipment","EquipmentWhen","Pose","DialoguePose","Ghost","VisualEffect","Map","OverheadIcon","VendorID","DialogueID","LoreID","LoreEntry","JournalEntries","QuestID","TimeOfDay"})
         if(source.HelpySource.contains(field))doc[field]=source.HelpySource[field];
     if(doc.contains("LoreID"))doc.erase("LoreEntry"); // Resolve() adds the runtime alias; authored copies keep the preferred reference.
     doc["Id"]=id;doc["Enabled"]=true;doc["TimeOfDay"]="Any";
     if(!source.DialogueKey.empty())doc["DialogueID"]=source.DialogueKey;
     if(!source.LoreEntry.empty() && !doc.contains("LoreID"))doc["LoreEntry"]=source.LoreEntry; // Legacy/global lore reference.
     if(!source.QuestKey.empty())doc["QuestID"]=source.QuestKey;
+    if(!source.JournalEntries.empty())doc["JournalEntries"]=source.JournalEntries; // Keep original mod-qualified references in a new mod's copy.
     if(source.Stage==VendorPolicy::VendorStage::Merchant) {
         if(!source.StoreOwner.starts_with("store:"))
             throw std::runtime_error("This legacy inline merchant has no reusable /vendors store ID; temporary mode only.");
@@ -216,6 +217,7 @@ nlohmann::json DragonWildsNpcLoader::SpawnHelpyNpc(const nlohmann::json& request
     // or inside streamed terrain and prevent normal navigation.
     d.TargetLocation[0]=targetX;d.TargetLocation[1]=targetY;d.TargetLocation[2]=origin.Z();
     d.GroundToSurface=true;d.GroundOffset=100;d.HasTargetLocation=true;d.SpawnRotation[0]=0;d.SpawnRotation[1]=0;d.SpawnRotation[2]=0;
+    d.GroundAnchorZ=origin.Z();d.GroundSearch=PS::Grounding::SearchRange::Around(d.GroundAnchorZ);d.GroundResolvedWorld=nullptr;d.GroundRetry={};
     d.PersistentId=VendorIdentity::ForOwner(VendorOffers::Owner(d.ModName,d.Id));
     if(!ResolveDefinitionClasses(d))throw std::runtime_error("NPC native class/component contracts are not ready.");
     if(!permanent)HelpyNpcGuards::TemporaryClass(d.BaseActorClass);

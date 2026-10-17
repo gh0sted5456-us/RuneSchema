@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <string>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -39,6 +40,9 @@ namespace DragonWilds {
         ~DragonWildsJournalModLoader();
         void SetRecipeService(DragonWildsRecipeModLoader* service) { m_recipeService = service; }
         bool OpenLoreForPlayer(RC::Unreal::UObject* controller,const std::string& reference);
+        bool UnlockForPlayer(RC::Unreal::UObject* controller,const std::string& reference);
+        void DeliverAutomaticUnlocks(RC::Unreal::UObject* controller);
+        void ImportCookedDefinitions();
 
     protected:
         void OnLoad(const std::filesystem::path& loaderPath, const RC::StringType& modName,
@@ -50,6 +54,7 @@ namespace DragonWilds {
 
     private:
         bool m_loreOnly = false;
+        bool m_cookedImported=false,m_hasCookedDefinitions=false;
         DragonWildsRecipeModLoader* m_recipeService = nullptr;
         bool m_initialJournalApplied = false;
         std::vector<JournalDef> m_defs;
@@ -60,7 +65,8 @@ namespace DragonWilds {
             int32_t Index=-1;
             mutable int32_t Serial=0;
             RC::StringType Path;
-            explicit EntryHandle(RC::Unreal::UObject* object);
+            bool RequireRoot=true;
+            explicit EntryHandle(RC::Unreal::UObject* object,bool requireRoot=true);
             RC::Unreal::UObject* Get() const;
         };
         std::unordered_map<RC::StringType, EntryHandle> m_entries;
@@ -74,11 +80,13 @@ namespace DragonWilds {
         RC::Unreal::UClass* m_journalSubsystemClass = nullptr;
         bool m_hooksActive = false;
         bool m_nativePersistenceReady = false;
-        struct AcquisitionUnlock { RC::Unreal::UObject* Item=nullptr; RC::StringType EntryKey; };
+        struct AcquisitionUnlock { EntryHandle Item; RC::StringType EntryKey; };
         std::vector<AcquisitionUnlock> m_acquisitionUnlocks;
         std::unordered_map<std::string,std::unordered_map<RC::StringType,int32_t>> m_acquisitionBaselines;
         RC::Unreal::Hook::GlobalCallbackId m_acquisitionCallbackId = RC::Unreal::Hook::ERROR_ID;
         bool m_observingAcquisition = false;
+        std::unordered_map<std::string,uint64_t> m_automaticDelivery;
+        std::unordered_set<std::string> m_reportedUnlockFailures;
 
         struct ReferenceIndex {
             bool Built = false;
@@ -104,11 +112,12 @@ namespace DragonWilds {
         void RegisterHooks();
         void RegisterAcquisitionHook();
         void ObserveAcquisition(RC::Unreal::UObject* source,RC::Unreal::UFunction* function);
-        void UnlockEntries(RC::Unreal::UObject* journalComponent);
+        bool UnlockEntries(RC::Unreal::UObject* journalComponent);
         RC::Unreal::UObject* FindJournalComponent(RC::Unreal::UObject* controller=nullptr);
         RC::Unreal::UObject* FindJournalSubsystem();
+        bool RegisteredJournalEntry(RC::Unreal::UObject* entry);
 
-        void TrackOwnedId(RC::Unreal::UObject* entry, const RC::Unreal::FString& persistenceId,const RC::StringType& owner,bool declared=false);
+        void TrackOwnedId(RC::Unreal::UObject* entry, const RC::Unreal::FString& persistenceId,const RC::StringType& owner,bool declared,bool automatic);
         void InstallNativePersistence();
         RC::Unreal::UObject* ResolveSoftReference(const TCHAR* classPath,
             const RC::StringType& reference, ReferenceIndex& index);

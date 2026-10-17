@@ -1,3 +1,10 @@
+#include "Core/MapLanding.h"
+#include "Runtime/SlowWork.h"
+#include "Core/SpawnFootprint.h"
+#include "Core/MapTravel.h"
+#include "SDK/Helper/ReflectedContract.h"
+#include "SDK/Helper/PlayerStatus.h"
+#include "Core/SpawnCatalogSearch.h"
 #include "Generator/HelpyReferencePolicy.h"
 #include "Generator/F2CatalogPlan.h"
 #include "Generator/F2BundledPaths.h"
@@ -11,6 +18,10 @@
 #include "Loader/HelpyNpcGuards.h"
 #include "Loader/AssetMetadataRegistry.h"
 #include "Loader/AssetAuthoringMetadata.h"
+#include "Core/HelpySourceCache.h"
+#include "Core/IconCacheBuild.h"
+#include "Generator/AssetSearch.h"
+#include "Generator/HelpyRuntimePreferences.h"
 #include "Utility/NativeFunctionHook.h"
 #include "Runtime/NetworkContext.h"
 #include "Loader/PlayerActivityEvents.h"
@@ -21,6 +32,10 @@ using namespace DragonWilds::SpawnRuntime;
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <deque>
+#include <map>
+#include <set>
+#include <unordered_map>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -42,6 +57,7 @@ using namespace DragonWilds::SpawnRuntime;
 #include "Unreal/Engine/UDataTable.hpp"
 #include "Unreal/Transform.hpp"
 #include "Unreal/UFunctionStructs.hpp"
+#include "Unreal/UObjectArray.hpp"
 #include "Unreal/UObject.hpp"
 #include "Unreal/World.hpp"
 #include "Unreal/UAssetRegistry.hpp"
@@ -59,6 +75,8 @@ using namespace DragonWilds::SpawnRuntime;
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
 #include "Loader/DragonWildsSpawnLoader.h"
+#include "Loader/NativeUnlockEquipContracts.h"
+#include "Core/ItemCart.h"
 #include "Loader/EventIdentity.h"
 #include "Loader/PlayerGhost.h"
 #include "Generator/EventParameters.h"
@@ -67,9 +85,14 @@ using namespace DragonWilds::SpawnRuntime;
 #include "Generator/QuickMenuCatalogRules.h"
 #include "Generator/SpawnAuthoring.h"
 #include "Generator/AssetSearch.h"
+#include "Generator/HelpyIconTrace.h"
+#include "Generator/HelpyQueryService.h"
 #include "Generator/ItemIconThumbnail.h"
+#include "Generator/HelpyMapRuntime.h"
+#include "Generator/HelpyMapTexture.h"
 #include "Loader/SpawnAuthoringFields.h"
 #include "Loader/SpawnPlacementDraft.h"
+#include "SDK/Helper/GroundedPlacement.h"
 #include "Loader/TimeOfDayRuntime.h"
 #include "Core/ConfigFiles.h"
 #include "SDK/Structs/Custom/FManagedStruct.h"
@@ -356,7 +379,9 @@ namespace {
 }
 
 namespace DragonWilds {
+#include "IconCacheBuild.inl"
 #include "SpawnItemIcons.inl"
+#include "MapTravel.inl"
 #include "SpawnTools.inl"
 #include "SpawnAdditionalDrops.inl"
 
@@ -367,6 +392,7 @@ namespace DragonWilds {
 
     DragonWildsSpawnLoader::~DragonWildsSpawnLoader()
     {
+        ToolMapTravelReset(false); // no engine calls during DLL shutdown
         g_f2ReferenceJob.Shutdown(); // join copied-string worker before unloading this DLL
         ClearBonusRows();
         if (m_onLevelShownFunction && m_onLevelShownCallbackId != 0)
@@ -425,6 +451,9 @@ namespace DragonWilds {
             Hook::UnregisterCallback(m_protectedBuildingDestroyGuard);
         }
         PlayerGhost::Clear();
+        PS::IconCacheBuild::PumpAvailable=false;
+        BulkIconJob.Stop("Icon cache builder shut down.");
+        PS::ItemIconThumbnail::Reset();PS::HelpyMapTexture::Reset();
         for (const auto& ref : m_rootedVisualEffectMaterials)
             if (auto* material=ref.Get()) if (material->IsRootSet()) material->ClearRootSet();
     }
@@ -784,6 +813,13 @@ namespace DragonWilds {
         }
         PS::JsonHelpers::ParseVector(locationInput, "Location", spawn.Location);
         spawn.AuthoredLocation = spawn.Location;
+        spawn.GroundMigration=PS::Grounding::NearbyPolicy::Parse(value);
+        spawn.GroundClearance=PS::Grounding::Clearance(value);
+        if(value.value("Type",std::string{})=="RemoveActor"
+            &&(value.contains("GroundMigrationRadius")||value.contains("GroundClearance")))
+            throw std::runtime_error("RemoveActor cannot migrate its removal target");
+        spawn.GroundReferenceZ=PS::Grounding::Reference(value,parsedLocation.Ground?std::optional<double>{}:std::optional<double>{spawn.AuthoredLocation.Z()});
+        spawn.GroundSearch=PS::Grounding::SearchRange::Around(spawn.GroundReferenceZ.value_or(spawn.AuthoredLocation.Z()),spawn.GroundTraceAbove,spawn.GroundTraceBelow);
         // Keep the authored identity stable while giving every /spawns actor
         // a small landscape clearance at its final placement.
         spawn.Location=FVector(spawn.Location.X(),spawn.Location.Y(),spawn.Location.Z()+10.0);
@@ -2525,14 +2561,20 @@ namespace DragonWilds {
             [this](Hook::TCallbackIterationData<void>&, AGameModeBase*) {
                 // Preserve authored item rules while resetting per-world state.
                 PlayerGhost::ClearWorld();
+                ToolMapTravelReset();
                 m_readyWorld = nullptr;
+                MenuIconWorldCache.Reset();NextMenuIconWorldScan={};
                 m_pendingWorld = nullptr;
                 m_pendingCellBounds.clear();
+                m_cellCatchupCursor=0;m_cellCatchupDelay=0;
                 m_toolActors.clear();
                 m_toolPlacements=nlohmann::json::array();
                 PS::SpawnToolRequests::Clear();
+                PS::HelpyQueryService::Clear();
                 PS::ItemIconRequests::Clear();
-                PS::ItemIconRequests::Available=false;
+                m_activeItemIcon.clear();
+                PS::ItemIconThumbnail::Reset();PS::HelpyMapTexture::Reset();
+                PS::ItemIconRequests::SetAvailable(false);
                 m_visualEffectAppliedActors.clear();
                 m_nameplateAppliedActors.clear();
                 m_activeNameplateStates.clear();
@@ -2558,13 +2600,15 @@ namespace DragonWilds {
         m_spawnTickCallbackId = Hook::RegisterEngineTickPostCallback(
             [this](Hook::TCallbackIterationData<void>&, UEngine*, float deltaSeconds, bool) {
                 PlayerGhost::Flush();
-                PumpItemIcons();
-                PumpSpawnTools();
-                ReconcileManagedActorScales(deltaSeconds);
-                ReconcileTimedBuildingProps(deltaSeconds);
+                PS::SlowWork::Measure("helpy.tools",[&]{PumpSpawnTools();});
+                PS::SlowWork::Measure("helpy.icons",[&]{PumpItemIcons();});
+                PS::SlowWork::Measure("spawns.scale",[&]{ReconcileManagedActorScales(deltaSeconds);});
+                PS::SlowWork::Measure("spawns.ground",[&]{ReconcileGroundingRetries(deltaSeconds);});
+                PS::SlowWork::Measure("spawns.conditions",[&]{ReconcileTimedBuildingProps(deltaSeconds);});
                 RetryPendingAINames(deltaSeconds);
                 PumpClientSpawnVisuals(deltaSeconds);
-                RefreshPlayerNameplates(deltaSeconds);
+                PS::SlowWork::Measure("players.presentation",[&]{RefreshPlayerNameplates(deltaSeconds);});
+                ReconcileShownCells(deltaSeconds);
                 if (!m_pendingWorld)
                 {
                     return;
@@ -2577,7 +2621,7 @@ namespace DragonWilds {
 
                 if (IsWorldStillLoaded(world))
                 {
-                    TryProcessSpawns(world, &bounds, STR("cell streamed in"));
+                    PS::SlowWork::Measure("spawns.cell",[&]{TryProcessSpawns(world, &bounds, STR("cell streamed in"));});
                 }
             },
             options);
@@ -2587,7 +2631,7 @@ namespace DragonWilds {
             PS::Log<LogLevel::Error>(STR("Unable to register the spawn tick; spawns will not be created.\n"));
             return false;
         }
-
+        PS::IconCacheBuild::PumpAvailable=true;
         return true;
     }
 
@@ -2600,7 +2644,7 @@ namespace DragonWilds {
         }
 
         auto* world = cell->GetWorld();
-        auto* bounds = cell->GetContentBounds();
+        const auto bounds = cell->GetContentBounds();
         if (!world || !bounds)
         {
             return;
@@ -2612,6 +2656,18 @@ namespace DragonWilds {
             m_pendingWorld = world;
         }
         m_pendingCellBounds.push_back(*bounds);
+    }
+
+    void DragonWildsSpawnLoader::ReconcileShownCells(float deltaSeconds)
+    {
+        if(!m_readyWorld||!IsWorldStillLoaded(m_readyWorld)||!std::isfinite(deltaSeconds)||deltaSeconds<=0)return;
+        const bool authoritative=GetGameMode(m_readyWorld)!=nullptr;
+        if(std::none_of(m_spawns.begin(),m_spawns.end(),[&](const auto& spawn){
+            return (authoritative||spawn.Type==ESpawnEntryType::StaticAssembly)
+                &&!spawn.bExistsInWorld&&!spawn.bSpawnFailed&&!spawn.bCellActivated;
+        }))return;
+        UECustom::UWorldPartitionRuntimeLevelStreamingCell::VisitShown(m_readyWorld,m_cellCatchupCursor,m_cellCatchupDelay,
+            deltaSeconds,[this](UObject* cell){OnCellShown(cell);});
     }
 
     bool DragonWildsSpawnLoader::HasLiveSpawnedAI(UWorld* world, SpawnInfo& spawn)
@@ -2755,6 +2811,11 @@ namespace DragonWilds {
             return false;
         }
 
+        // Validate a known world by object index AND serial, not by rescanning
+        // every UObject on each tool query/tick. New worlds retain the original
+        // safe roster lookup before a handle is captured.
+        if(m_validatedWorld.Get()==world)return true;
+
         auto* worldClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
             nullptr, nullptr, TEXT("/Script/Engine.World"));
         if (!worldClass)
@@ -2768,6 +2829,7 @@ namespace DragonWilds {
         {
             if (candidate == world)
             {
+                m_validatedWorld.Assign(candidate);
                 return true;
             }
         }
@@ -2829,8 +2891,11 @@ namespace DragonWilds {
                         spawn.LiveActor = {};
                         spawn.Location = FVector(spawn.AuthoredLocation.X(),spawn.AuthoredLocation.Y(),spawn.AuthoredLocation.Z()+10.0);
                         spawn.bGroundingResolved = !spawn.bGroundToSurface;
+                        spawn.GroundRetry = {};
+                        spawn.GroundSearch=PS::Grounding::SearchRange::Around(spawn.GroundReferenceZ.value_or(spawn.AuthoredLocation.Z()),spawn.GroundTraceAbove,spawn.GroundTraceBelow);
                     }
                     m_readyWorld = world;
+                    m_groundingRetryElapsed=0;
                     if(authoritative)ApplyPlayerRules();
                     else PS::Log<LogLevel::Verbose>(STR("Client player presentation world ready ({}).\n"),trigger);
 
@@ -2843,7 +2908,7 @@ namespace DragonWilds {
                 const bool hasPending = std::any_of(m_spawns.begin(), m_spawns.end(), [](const SpawnInfo& spawn) {
                     return !spawn.bExistsInWorld && !spawn.bSpawnFailed;
                 });
-                if (authoritative && hasPending && GetAIDirector(world))
+                if (authoritative && hasPending)
                 {
                     ProcessSpawns(world, bounds);
                 }
@@ -2873,16 +2938,19 @@ namespace DragonWilds {
         return std::nullopt;
     }
 
-    void DragonWildsSpawnLoader::ProcessSpawns(UWorld* world, const std::vector<UECustom::FBox>* bounds)
+    void DragonWildsSpawnLoader::ProcessSpawns(UWorld* world, const std::vector<UECustom::FBox>* bounds,bool groundRetriesOnly)
     {
         if (!world)
         {
             return;
         }
 
+        unsigned groundBudget=4;
         for (auto& spawn : m_spawns)
         {
-            if (spawn.bExistsInWorld || spawn.bSpawnFailed)
+            if(groundRetriesOnly&&!spawn.bCellActivated)continue;
+            if (spawn.bExistsInWorld || spawn.bSpawnFailed || spawn.bDeconstructed
+                || (spawn.bTemporaryResource && spawn.bTemporaryResourceSpawned))
             {
                 continue;
             }
@@ -2891,21 +2959,29 @@ namespace DragonWilds {
             {
                 const bool inside = std::any_of(bounds->begin(), bounds->end(),
                     [&](const UECustom::FBox& box) {
-                        return spawn.Location.X() > box.Min.X() && spawn.Location.X() < box.Max.X()
-                            && spawn.Location.Y() > box.Min.Y() && spawn.Location.Y() < box.Max.Y();
+                        return spawn.Location.X() >= box.Min.X() && spawn.Location.X() <= box.Max.X()
+                            && spawn.Location.Y() >= box.Min.Y() && spawn.Location.Y() <= box.Max.Y();
                     });
                 if (!inside)
                 {
                     continue;
                 }
                 spawn.bCellActivated = true;
+                for(const auto& box:*bounds)if(box.bIsValid
+                    &&spawn.Location.X()>=box.Min.X()&&spawn.Location.X()<=box.Max.X()
+                    &&spawn.Location.Y()>=box.Min.Y()&&spawn.Location.Y()<=box.Max.Y())
+                    spawn.GroundSearch.ObserveCell(box.Min.Z(),box.Max.Z());
+                spawn.GroundRetry.CellShown();
             }
-            else if (spawn.Type != ESpawnEntryType::AISpawnPoint)
+            else if (spawn.Type != ESpawnEntryType::AISpawnPoint && !groundRetriesOnly)
             {
                 continue;
             }
             else spawn.bCellActivated = true;
 
+            if(!spawn.GroundRetry.PlacementReady())continue;
+            // Resource/prop placement does not depend on AI-director readiness.
+            if(spawn.Type==ESpawnEntryType::AISpawnPoint&&!GetAIDirector(world))continue;
             try
             {
                 if(spawn.bTemporaryResource && TemporaryResourceCondition(spawn,world)!=true)continue;
@@ -2927,6 +3003,7 @@ namespace DragonWilds {
                     spawn.bTimeAllowed=allowed;
                     if(!allowed)continue;
                 }
+                if(groundRetriesOnly){if(!groundBudget)return;--groundBudget;}
                 ResolveGroundedLocation(world, spawn);
                 switch (spawn.Type)
                 {
@@ -2943,6 +3020,12 @@ namespace DragonWilds {
                     ProcessRemoveActorEntry(world, spawn);
                     break;
                 }
+            }
+            catch (const PS::Grounding::SurfacePending&)
+            {
+                if(spawn.GroundRetry.Missed())PS::Log<LogLevel::Verbose>(
+                    STR("Placement '{}' from '{}' is waiting for a ground surface at ({}, {}); streaming retries are scheduled. Nothing was placed.\n"),
+                    spawn.EntryId,spawn.ModName,spawn.AuthoredLocation.X(),spawn.AuthoredLocation.Y());
             }
             catch (const std::exception& e)
             {
@@ -3076,8 +3159,8 @@ namespace DragonWilds {
             if (!bounds) continue;
             const bool inside = std::any_of(bounds->begin(), bounds->end(),
                 [&](const UECustom::FBox& box) {
-                    return spawn.Location.X() > box.Min.X() && spawn.Location.X() < box.Max.X()
-                        && spawn.Location.Y() > box.Min.Y() && spawn.Location.Y() < box.Max.Y();
+                    return spawn.Location.X() >= box.Min.X() && spawn.Location.X() <= box.Max.X()
+                        && spawn.Location.Y() >= box.Min.Y() && spawn.Location.Y() <= box.Max.Y();
                 });
             if (!inside) continue;
             spawn.bCellActivated = true;
@@ -3176,10 +3259,10 @@ namespace DragonWilds {
 
         const FVector start(
             spawn.AuthoredLocation.X(), spawn.AuthoredLocation.Y(),
-            spawn.AuthoredLocation.Z() + spawn.GroundTraceAbove);
+            spawn.GroundSearch.Top);
         const FVector end(
             spawn.AuthoredLocation.X(), spawn.AuthoredLocation.Y(),
-            spawn.AuthoredLocation.Z() - spawn.GroundTraceBelow);
+            spawn.GroundSearch.Bottom);
         FVector impact{};
         std::string traceError;
         std::vector<AActor*> ignoredActors;
@@ -3190,19 +3273,34 @@ namespace DragonWilds {
                 == ignoredActors.end())
             ignoredActors.push_back(legacy);
 
-        if (!UECustom::UKismetSystemLibrary::LineTraceGround(
-                world, start, end, ignoredActors, impact, traceError))
+        auto clearance=spawn.GroundClearance;
+        if(!clearance&&spawn.Type==ESpawnEntryType::AISpawnPoint) {
+            auto* type=ResolveClass(spawn.AIClassPath);
+            clearance=GroundedPlacement::NativeCapsule(type?type->GetClassDefaultObject().Get():nullptr);
+        }
+        PS::Grounding::QueryState state;
+        if (!UECustom::UKismetSystemLibrary::FindGroundSurface(
+                world, start, end, ignoredActors, impact, traceError,spawn.GroundReferenceZ,&state))
         {
-            throw std::runtime_error(
-                traceError.empty()
-                    ? "Location.Z $ found no blocking ground surface"
-                    : "Location.Z $ ground trace failed: " + traceError);
+            if(!traceError.empty())throw std::runtime_error("Location.Z $ ground trace failed: " + traceError);
+            if(clearance&&spawn.GroundMigration.Radius>0&&state.Obstructed&&state.FloorReference)
+                impact=FVector(spawn.AuthoredLocation.X(),spawn.AuthoredLocation.Y(),*state.FloorReference);
+            else throw PS::Grounding::SurfacePending();
         }
 
         spawn.Location = FVector(
             spawn.AuthoredLocation.X(), spawn.AuthoredLocation.Y(),
             impact.Z() + spawn.GroundZOffset + 10.0);
+        if(clearance&&spawn.GroundMigration.Radius>0) {
+            // A spawn point/prop origin stays at the authored surface offset;
+            // the capsule is its clearance envelope, not a pivot rewrite.
+            const double scale=std::max({spawn.Scale.X(),spawn.Scale.Y(),spawn.Scale.Z()});
+            const auto footprint=PS::SpawnFootprint::Scaled(*clearance,scale);
+            const auto nearby=GroundedPlacement::CapsuleSite(world,FVector(impact.X(),impact.Y(),impact.Z()+2),footprint,ignoredActors,spawn.GroundMigration,ignoredActors,{},2.0);
+            spawn.Location=FVector(nearby.X(),nearby.Y(),nearby.Z()-footprint.HalfHeight-2.0+spawn.GroundZOffset+10.0);
+        }
         spawn.bGroundingResolved = true;
+        spawn.GroundRetry.Resolved();
         PS::Log<LogLevel::Verbose>(
             STR("Resolved Location.Z '$' for {} from trace origin Z {} to ground Z {} (offset {}).\n"),
             spawn.ModName, spawn.AuthoredLocation.Z(), spawn.Location.Z(),
@@ -3267,7 +3365,9 @@ namespace DragonWilds {
     {
         const auto found=m_eventTemplates.find(key);
         if(found==m_eventTemplates.end())throw std::runtime_error("Event spawn definition is missing: "+key);
-        return Events::Identity(found->second);
+        auto manifest=Events::Identity(found->second);
+        manifest["groundMigrationRadius"]=found->second.Migration.Radius;
+        return manifest;
     }
 
     bool DragonWildsSpawnLoader::PresentEventIdentity(AActor* actor,const std::string& payload)
@@ -3302,7 +3402,36 @@ namespace DragonWilds {
         return true;
     }
 
-    AActor* DragonWildsSpawnLoader::SpawnEventAI(const std::string& key,UWorld* world,const FVector& position,bool tool,double yaw,const std::string& eventKey,int toolPowerLevel)
+    namespace {
+    PS::SpawnFootprint::Capsule EventCapsule(UObject* actor){
+        auto* capsule=ActorHelper::GetObjectRef(actor,TEXT("CapsuleComponent"));
+        auto* type=ActorHelper::ResolveClass(TEXT("/Script/Engine.CapsuleComponent"));
+        if(!capsule||!type||!capsule->IsA(type)||capsule->GetOuterPrivate()!=actor
+            ||ActorHelper::GetObjectRef(actor,TEXT("RootComponent"))!=capsule)
+            throw std::runtime_error("Event grounding requires an owned root capsule");
+        ActorHelper::FunctionCall height(capsule,TEXT("/Script/Engine.CapsuleComponent:GetScaledCapsuleHalfHeight"));height.Invoke();
+        ActorHelper::FunctionCall radius(capsule,TEXT("/Script/Engine.CapsuleComponent:GetScaledCapsuleRadius"));radius.Invoke();
+        return PS::SpawnFootprint::Scaled({radius.NumericResult(),height.NumericResult()},1);
+    }
+    }
+    FVector DragonWildsSpawnLoader::PrepareEventGrounded(const std::string& key,UWorld* world,const FVector& foot,AActor* participant,bool rechecking,std::vector<PS::SpawnFootprint::Reservation>* reservations,std::optional<double> clearance){
+        if(!world||!GetGameMode(world))throw std::runtime_error("Event grounding requires world authority");
+        ValidateEventSpawn(key);const auto& definition=m_eventTemplates.at(key);
+        auto* type=ResolveClass(RC::to_generic_string(definition.Class));
+        auto* defaults=type?type->GetClassDefaultObject().Get():nullptr;
+        if(!defaults)throw std::runtime_error("Event AI defaults are unavailable");
+        const auto capsule=PS::SpawnFootprint::Scaled(EventCapsule(defaults),definition.Scale);
+        const std::vector<PS::SpawnFootprint::Reservation> emptyReservations;
+        const auto& reserved=reservations?*reservations:emptyReservations;
+        const auto result=GroundedPlacement::CapsuleSite(world,foot,capsule,{participant},
+            rechecking?PS::Grounding::NearbyPolicy{0}:definition.Migration,
+            rechecking?std::vector<AActor*>{participant}:std::vector<AActor*>{},
+            reserved,clearance);
+        if(reservations)reservations->push_back({{result.X(),result.Y(),result.Z()},capsule});
+        return result;
+    }
+
+    AActor* DragonWildsSpawnLoader::SpawnEventAI(const std::string& key,UWorld* world,const FVector& position,bool tool,double yaw,const std::string& eventKey,int toolPowerLevel,std::optional<double> groundOffset)
     {
         if(!world || !GetGameMode(world))throw std::runtime_error("Event AI can only be spawned by world authority");
         ValidateEventSpawn(key);
@@ -3323,7 +3452,9 @@ namespace DragonWilds {
         naming->Scale=FVector(definition.Scale,definition.Scale,definition.Scale);
         naming->VisualEffect=definition.VisualEffect;
         if(!naming->VisualEffect.empty())naming->VisualEffect["Type"]="Ghost";
+        PS::WeakObjectHandle constructionIdentity;
         auto* actor=ActorHelper::SpawnActor(world,type,position,FRotator(0,yaw,0),[&](AActor* value){
+            constructionIdentity.Assign(value);
             value->SetFlags(RF_Transient);
             // This callback runs before FinishSpawning/BeginPlay; never invent
             // damage/health multipliers as a substitute for native power.
@@ -3334,8 +3465,17 @@ namespace DragonWilds {
             m_customNamedAIActors.erase(value);
             m_aiNameRetryAttempts.erase(value);
             m_liveAIBindings.push_back({PS::WeakObject(value),{},naming});
-        });
+        },ESpawnActorScaleMethod::OverrideRootScale,ESpawnActorCollisionHandlingMethod::AlwaysSpawn,FVector(definition.Scale,definition.Scale,definition.Scale));
         try {
+            const auto requireLive=[&] {
+                auto* live=constructionIdentity.Get();
+                if(live!=actor||!live||live->GetWorld()!=world)throw std::runtime_error("Event actor lifetime changed during native construction; rolled back");
+                auto* validityLibrary=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,TEXT("/Script/Engine.Default__KismetSystemLibrary"),false);
+                ActorHelper::FunctionCall valid(validityLibrary,TEXT("/Script/Engine.KismetSystemLibrary:IsValid"));
+                valid.Arg(TEXT("Object"),actor).Invoke();
+                if(!valid.Result<bool>())throw std::runtime_error("Native event actor validity failed after construction; rolled back");
+            };
+            requireLive();
             auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(type,TEXT("bSkipSpudStore")));
             if(!skip || !skip->GetPropertyValue(skip->ContainerPtrToValuePtr<void>(actor)))throw std::runtime_error("Event AI lost save exclusion during creation");
             if(power) {
@@ -3344,8 +3484,55 @@ namespace DragonWilds {
                 if(actual!=toolPowerLevel)throw std::runtime_error("Native AI initialization replaced the requested PowerLevel; temporary spawn rolled back");
             }
             actor->SetActorScale3D(FVector(definition.Scale,definition.Scale,definition.Scale));
+            if(!eventKey.empty()){
+                const auto expected=PS::SpawnFootprint::Scaled(EventCapsule(type->GetClassDefaultObject().Get()),definition.Scale),actual=EventCapsule(actor);
+                if(std::abs(expected.HalfHeight-actual.HalfHeight)>0.1||std::abs(expected.Radius-actual.Radius)>0.1)
+                    throw std::runtime_error("Event construction changed the preflighted scaled capsule; actor rolled back");
+                const auto placed=ActorHelper::GetActorLocation(actor);
+                if(!std::isfinite(placed.X())||!std::isfinite(placed.Y())||!std::isfinite(placed.Z()))
+                    throw std::runtime_error("Native event construction returned a non-finite actor location; wave rolled back");
+                PS::Log<LogLevel::Verbose>(STR("[EVENT-PLACEMENT] '{}' requested=({},{},{}) actual=({},{},{}) capsule[r={},h={}] scale={}.\n"),
+                    PS::ToWideSafe(key),position.X(),position.Y(),position.Z(),placed.X(),placed.Y(),placed.Z(),actual.Radius,actual.HalfHeight,definition.Scale);
+                if(groundOffset) {
+                    // Native construction may floor-adjust the Character. Re-
+                    // trace the original requested footprint using its scaled
+                    // capsule, then use native collision-checked teleport, never
+                    // an unchecked SetActorLocation or a widened epsilon.
+                    if(!std::isfinite(*groundOffset)||*groundOffset<0)throw std::runtime_error("Event grounded capsule requires non-negative foot clearance");
+                    FVector impact{};std::string error;
+                    const double reference=position.Z()-expected.HalfHeight-*groundOffset;
+                    const auto search=PS::Grounding::SearchRange::Around(reference);
+                    if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,FVector(position.X(),position.Y(),search.Top),FVector(position.X(),position.Y(),search.Bottom),{actor},impact,error,reference))
+                        throw std::runtime_error("Event ground changed during construction; wave rolled back: "+error);
+                    FVector target;
+                    try{target=PrepareEventGrounded(key,world,FVector(position.X(),position.Y(),impact.Z()+*groundOffset),actor,true,nullptr,groundOffset);}
+                    catch(const std::exception& failure){throw std::runtime_error(std::string("Event footprint revalidation failed during construction; wave rolled back: ")+failure.what());}
+                    const auto differs=[&](const FVector& value){return !std::isfinite(value.X())||!std::isfinite(value.Y())||!std::isfinite(value.Z())||std::abs(value.X()-target.X())>1||std::abs(value.Y()-target.Y())>1||std::abs(value.Z()-target.Z())>1;};
+                    if(differs(placed)) {
+                        ActorHelper::FunctionCall relocate(actor,TEXT("/Script/Engine.Actor:K2_TeleportTo"));
+                        relocate.Arg(TEXT("DestLocation"),target).Arg(TEXT("DestRotation"),FRotator(0,yaw,0)).Invoke();
+                        if(!relocate.Result<bool>())throw std::runtime_error("Native collision checks rejected event footprint reconciliation; wave rolled back");
+                    }
+                    requireLive();
+                    const auto retained=EventCapsule(actor);
+                    if(differs(ActorHelper::GetActorLocation(actor))||std::abs(retained.HalfHeight-expected.HalfHeight)>0.1||std::abs(retained.Radius-expected.Radius)>0.1)
+                        throw std::runtime_error("Event actor did not retain its verified grounded capsule; wave rolled back");
+                } else if(std::abs(placed.X()-position.X())>1||std::abs(placed.Y()-position.Y())>1||std::abs(placed.Z()-position.Z())>1)
+                    throw std::runtime_error("Event construction moved an ungrounded authored position; actor rolled back");
+            }
             if(!definition.LootRow.empty() && !ApplyAILootRow(actor,definition.LootRow))
                 throw std::runtime_error("Event enemy loot override could not be applied: "+definition.LootRow);
+            if(!definition.AdditionalDrops.empty()){
+                UObject* loot=nullptr;
+                try{loot=ActorHelper::GetObjectRef(actor,TEXT("LootDrop"));}catch(...){}
+                if(!loot)try{loot=ActorHelper::GetObjectRef(actor,TEXT("LootDrop_GEN_VARIABLE"));}catch(...){}
+                auto* lootType=ActorHelper::ResolveClass(TEXT("/Script/Dominion.LootDropComponent"));
+                if(!loot||!lootType||!loot->IsA(lootType)||loot->GetOuterPrivate()!=actor)
+                    throw std::runtime_error("Event AdditionalDrops requires owned native AI LootDrop; destruction-resource fallback is forbidden");
+                ApplyAdditionalDrops(actor,definition.AdditionalDrops);
+                const auto applied=m_bonusApplied.find(actor);
+                if(applied==m_bonusApplied.end()||applied->second.Get()!=actor)throw std::runtime_error("Event additional loot could not be verified; actor rolled back");
+            }
             ApplyAIDisplayName(actor,definition.Name,definition.BossName);
             ApplyVisualEffect(actor,naming->VisualEffect,TEXT("Event AI"));
             const auto mode=PS::Network::Detect(actor).Mode;
@@ -3357,7 +3544,7 @@ namespace DragonWilds {
                 PublishEventIdentity(actor,identity.dump());
             }
             return actor;
-        }catch(...){ActorHelper::DestroyActor(actor);throw;}
+        }catch(...){if(constructionIdentity.Get()==actor){ReleaseEventAdditionalDrops(actor);ActorHelper::DestroyActor(actor);}throw;}
     }
 
     void DragonWildsSpawnLoader::HandleNetworkWorldState(const std::string& payload)
@@ -3596,7 +3783,9 @@ namespace DragonWilds {
                     if(!skip || !skip->GetPropertyValue(skip->ContainerPtrToValuePtr<void>(spawned)))
                         throw std::runtime_error("Temporary resource save exclusion did not round-trip");
                 }
-            }, ESpawnActorScaleMethod::OverrideRootScale);
+            }, ESpawnActorScaleMethod::OverrideRootScale,
+            spawn.bBuildingProp?ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding:ESpawnActorCollisionHandlingMethod::AlwaysSpawn,
+            spawn.bBuildingProp?spawn.Scale:FVector(1.0,1.0,1.0));
         if(spawn.bTemporaryResource) {
             auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(
                 actor->GetClassPrivate(),TEXT("bSkipSpudStore")));
@@ -3639,6 +3828,23 @@ namespace DragonWilds {
         if(spawn.bTemporaryResource)spawn.bTemporaryResourceSpawned=true;
         PS::Log<LogLevel::Verbose>(STR("Spawned actor '{}' ({}) at {} {} {}\n"), spawn.EntryId,
             actor->GetClassPrivate()->GetName(), spawn.Location.X(), spawn.Location.Y(), spawn.Location.Z());
+    }
+
+    void DragonWildsSpawnLoader::ReconcileGroundingRetries(float deltaSeconds)
+    {
+        if(!std::isfinite(deltaSeconds)||deltaSeconds<=0)return;
+        m_groundingRetryElapsed+=std::min(1.0,static_cast<double>(deltaSeconds));
+        if(m_groundingRetryElapsed<1.0)return;
+        m_groundingRetryElapsed=0;
+        if(!m_readyWorld||!GetGameMode(m_readyWorld))return;
+        bool ready=false;
+        for(auto& spawn:m_spawns)if(spawn.bCellActivated&&!spawn.bExistsInWorld&&!spawn.bSpawnFailed){
+            // A shown cell can precede AI-director/condition readiness as well
+            // as collision. Revisit eligible unplaced entries, not live actors
+            // or saved native-depletion records already marked satisfied.
+            spawn.GroundRetry.Advance(1.0);ready|=spawn.GroundRetry.PlacementReady();
+        }
+        if(ready)ProcessSpawns(m_readyWorld,nullptr,true);
     }
 
     void DragonWildsSpawnLoader::ReconcileTimedBuildingProps(float deltaSeconds)
@@ -3733,6 +3939,7 @@ namespace DragonWilds {
                 spawn.bDeconstructed=true;
             }
             if(spawn.bDeconstructed)continue;
+            if(!spawn.GroundRetry.PlacementReady())continue;
             const bool priorFailure=spawn.bSpawnFailed;
             const bool wasGrounded=spawn.bGroundingResolved;
             spawn.bExistsInWorld=false;spawn.bSpawnFailed=false;
@@ -3745,6 +3952,10 @@ namespace DragonWilds {
                 activationStage=TEXT("creation");
                 if(spawn.Type==ESpawnEntryType::AISpawnPoint)ProcessAISpawnPointEntry(m_readyWorld,spawn);
                 else ProcessActorEntry(m_readyWorld,spawn);
+            }
+            catch(const PS::Grounding::SurfacePending&) {
+                if(spawn.GroundRetry.Missed())PS::Log<LogLevel::Verbose>(
+                    STR("Placement '{}' from '{}' is waiting for a ground surface; streaming retries are scheduled. Nothing was placed.\n"),spawn.EntryId,spawn.ModName);
             }
             catch(const std::exception& error) {
                 spawn.bSpawnFailed=true;

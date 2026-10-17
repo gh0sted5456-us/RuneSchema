@@ -2,6 +2,7 @@
 // Copied registry metadata only: no retained FAssetData buffers or UObject owners.
 // Refresh/Build are game-thread operations. Readers receive value snapshots.
 #include "Generator/ClonePresentation.h"
+#include "Core/MetadataWindow.h"
 #include "Loader/AssetProvenance.h"
 #include "Unreal/UObject.hpp"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
@@ -24,7 +25,9 @@ inline std::mutex Mutex;
 inline bool Ready=false;
 inline std::set<std::string> Paths,ClassPaths;
 inline std::vector<Record> Visuals;
+inline std::vector<Record> Metadata;
 inline std::size_t Skipped=0;
+inline std::uint64_t MetadataRevision=0;
 template<class Text> std::string NativeString(const Text& value) {
     if constexpr(requires {RC::to_string(value);})return RC::to_string(value);
     else if constexpr(requires {value.GetCharArray();}) {
@@ -46,9 +49,9 @@ template<class Asset> std::string AssetClass(Asset& asset) {
     }
     return value;
 }
-inline void Invalidate() {std::scoped_lock lock(Mutex);Ready=false;Paths.clear();ClassPaths.clear();Visuals.clear();Skipped=0;}
+inline void Invalidate() {std::scoped_lock lock(Mutex);Ready=false;Paths.clear();ClassPaths.clear();Visuals.clear();Metadata.clear();Skipped=0;++MetadataRevision;}
 inline void Build(RC::Unreal::TArray<RC::Unreal::FAssetData>& assets) {
-    std::set<std::string> paths,classPaths;std::vector<Record> visuals;std::size_t skipped=0;
+    std::set<std::string> paths,classPaths;std::vector<Record> visuals,metadata;std::size_t skipped=0;
     if(assets.Num()<0||assets.Num()>262144)throw std::runtime_error("Mounted asset registry exceeds the authoring safety limit");
     for(auto& asset:assets) {
         try {
@@ -56,13 +59,19 @@ inline void Build(RC::Unreal::TArray<RC::Unreal::FAssetData>& assets) {
             if(!package.starts_with('/')||package.size()>2048||name.empty()||name.size()>512){++skipped;continue;}
             const auto path=package+"."+name;if(!paths.insert(path).second)continue;
             auto type=AssetClass(asset);
+            metadata.push_back({path,name,type});
             const auto leaf=ClonePresentation::ClassLeaf(type);
             if(leaf.find("Blueprint")!=std::string::npos||leaf=="Class")classPaths.insert(path.ends_with("_C")?path:path+"_C");
             if(ClonePresentation::VisualAssetType(type))visuals.push_back({path,name,std::move(type)});
         }catch(...) {++skipped;}
     }
     std::sort(visuals.begin(),visuals.end(),[](const auto& a,const auto& b){return a.path<b.path;});
-    std::scoped_lock lock(Mutex);Paths=std::move(paths);ClassPaths=std::move(classPaths);Visuals=std::move(visuals);Skipped=skipped;Ready=true;
+    std::sort(metadata.begin(),metadata.end(),[](const auto& a,const auto& b){return a.path<b.path;});
+    std::scoped_lock lock(Mutex);Paths=std::move(paths);ClassPaths=std::move(classPaths);Visuals=std::move(visuals);Metadata=std::move(metadata);Skipped=skipped;Ready=true;++MetadataRevision;
+}
+inline std::vector<Record> MetadataSnapshot() {std::scoped_lock lock(Mutex);return Metadata;}
+inline MetadataPage<Record> MetadataWindow(std::size_t offset,std::size_t limit=128){
+    std::scoped_lock lock(Mutex);return CopyMetadataWindow(Metadata,MetadataRevision,offset,limit);
 }
 inline bool Contains(const std::string& path) {std::scoped_lock lock(Mutex);return Ready&&Paths.contains(path);}
 inline bool ContainsReference(const std::string& path) {std::scoped_lock lock(Mutex);return Ready&&(Paths.contains(path)||ClassPaths.contains(path));}
@@ -71,7 +80,7 @@ inline void Refresh() {
     using namespace RC::Unreal;
     auto interface=UAssetRegistryHelpers::GetAssetRegistry();auto* registry=static_cast<UAssetRegistry*>(interface.ObjectPointer);
     TArray<FAssetData> assets;
-    if(!registry||!registry->GetAllAssets(assets,true)){Invalidate();throw std::runtime_error("Cannot verify cooked assets against the mounted registry");}
+    if(!registry||!registry->GetAllAssets(assets,true)||assets.Num()<=0){Invalidate();throw std::runtime_error("Cannot verify cooked assets against a ready, non-empty mounted registry");}
     Build(assets);
 }
 inline void Ensure() {if(!Available())Refresh();}

@@ -7,6 +7,10 @@
 #include <fstream>
 #include <set>
 #include <string>
+#include <stdexcept>
+#include <iostream>
+#undef assert
+#define assert(expression) do {if(!(expression))throw std::runtime_error("Example contract: " #expression);}while(false)
 
 using Json=nlohmann::json;
 namespace fs=std::filesystem;
@@ -26,8 +30,8 @@ static void Each(const fs::path& directory,Callback callback) {
     }
 }
 
-int main() {
-    const fs::path root="docs/examples/RSv16/ExampleMods/RuneSchema2VendorTest";
+int Run(int argc,char** argv) {
+    assert(argc==2);const fs::path root=argv[1];
     assert(fs::is_directory(root));
     const std::string mod="RuneSchema2VendorTest";
 
@@ -38,7 +42,8 @@ int main() {
         stores.insert(DragonWilds::NpcCatalog::Key(mod,data.at("Id").get<std::string>()));
         assert(!data.contains("Location") && !data.contains("Actor") && !data.contains("Mesh"));
     });
-    Each(root/"npc",[&](const Json& data){npcs.AddNpc(mod,data);});
+    std::set<std::string> authoredNpcs;
+    Each(root/"npc",[&](const Json& data){npcs.AddNpc(mod,data);assert(authoredNpcs.insert(data.at("Id").get<std::string>()).second);});
 
     std::set<std::string> quests;
     Each(root/"quests",[&](const Json& data){
@@ -58,9 +63,14 @@ int main() {
 
     std::set<std::string> spawns;
     Each(root/"spawns",[&](const Json& data){
-        assert(data.is_array());
-        for(const auto& entry:data)
-            spawns.insert(DragonWilds::Events::ParseSpawn(mod,entry).Key);
+        const auto append=[&](const Json& entry){
+            assert(entry.is_object()&&entry.contains("Id")&&entry.at("Id").is_string());
+            // General /spawns includes buildings and permanent placements. Only
+            // event-only templates use the event-spawn parser's smaller contract.
+            if(entry.value("EventOnly",false))spawns.insert(DragonWilds::Events::ParseSpawn(mod,entry).Key);
+            else spawns.insert(mod+":"+entry.at("Id").get<std::string>());
+        };
+        if(data.is_array())for(const auto& entry:data)append(entry);else append(data);
     });
     std::set<std::string> events;
     Each(root/"events",[&](const Json& data){
@@ -82,7 +92,7 @@ int main() {
     });
 
     const auto resolved=npcs.Resolve();
-    assert(resolved.size()==9);
+    assert(resolved.size()==authoredNpcs.size());
     bool cow=false,book=false;
     for(const auto& npc:resolved) {
         if(npc.Data.contains("QuestID"))assert(quests.contains(npc.Data.at("QuestID").get<std::string>()));
@@ -95,4 +105,6 @@ int main() {
         }
     }
     assert(cow && book);
+    return 0;
 }
+int main(int argc,char** argv){try{return Run(argc,argv);}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

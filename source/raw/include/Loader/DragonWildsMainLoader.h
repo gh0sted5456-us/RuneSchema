@@ -7,6 +7,7 @@
 #include <utility>
 #include "Loader/DragonWildsModLoaderBase.h"
 #include "Core/CharacterEntryRecovery.h"
+#include "Core/WorldCleanupPolicy.h"
 #include "Misc/DragonWildsDataRegistrar.h"
 #include "SDK/Classes/Custom/UDataTableStore.h"
 #include "safetyhook.hpp"
@@ -70,6 +71,8 @@ namespace DragonWilds {
 
         void SetupGameInstanceInitLoadersOnce();
 
+        void SetupWorldBuildingCleanup();
+
         void HookDatatableSerialize();
 
         void HookGameInstanceInit();
@@ -107,6 +110,9 @@ namespace DragonWilds {
         std::function<void(std::string)> m_fatalStartupHandler;
         RC::Unreal::Hook::GlobalCallbackId m_coreStartupCallbackId = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::Hook::GlobalCallbackId m_dedicatedServerReadyCallbackId = RC::Unreal::Hook::ERROR_ID;
+        RC::Unreal::Hook::GlobalCallbackId m_worldCleanupRetryId = RC::Unreal::Hook::ERROR_ID;
+        RC::Unreal::Hook::GlobalCallbackId m_worldCleanupBoundaryId = RC::Unreal::Hook::ERROR_ID;
+        std::shared_ptr<PS::WorldCleanupPolicy::MenuWindow> m_worldCleanupWindow;
         std::vector<RC::StringType> m_orderedMods;
 
         static inline std::vector<std::function<void(RC::Unreal::UDataTable*)>> DatatableSerializeCallbacks;

@@ -1,15 +1,25 @@
-# RuneSchema 0.7.7.9m
+# RuneSchema 0.8.0.0
 
 RuneSchema loads enabled mod folders, mounts their cooked content, and connects
-supported definitions to Dragonwilds' live systems. The current package uses
-one DLL for Steam/GOG and Game Pass. The `m` release is the main channel; `e`
-is the experimental channel.
+supported definitions to Dragonwilds' live systems. The main release now uses
+the plain version/tag `0.8.0.0`; `m`/`e` suffixes describe historical releases.
+The package uses one core DLL for Steam/Epic and Game Pass, plus the RSMK plugin.
 
-[Download 0.7.7.9m](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.7.7.9m/RuneSchema-0.7.7.9m.zip)
-· [Experimental 0.7.7.9e](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.7.7.9e/RuneSchema-0.7.7.9e.zip)
+[Download 0.8.0.0](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.0/RuneSchema-0.8.0.0.zip)
+· [Release notes and verification](RELEASE-0.8.0.0.md)
 · [Installation guide](INSTALLATION.md)
 
 ## What changed
+
+This release consolidates the [October 13–16 changelog](ALPHA-CHANGELOG.md):
+the revamped Helpy desktop workspace, source-aware item/icon catalogues,
+Live Log, offline server-setting staging, registry counting/enrollment fixes,
+recipe/journal/quest authoring, streamed placement hardening, bounded loading
+and INI migration. Both DLLs are compressed. The stock UE4SS host is not replaced.
+The release notes distinguish automated verification from outstanding live
+placement, progression and multiplayer acceptance tests.
+
+Earlier foundation improvements retained in this release:
 
 - Custom cooked wearable items can join the game's item enumeration and native
   appearance cache. When equipment changes clear a previously built cache
@@ -20,13 +30,13 @@ is the experimental channel.
   substitute for the item's male/female mesh-data references.
 - The large-recipe warning is an advisory setting. It is enabled by default
   above 50,000 authored recipes, and its threshold can be changed in
-  `settings.jsonc`. It never caps or skips recipe loading.
+  `settings.ini` (`[diagnostics]`; legacy JSONC remains supported). It never caps or skips recipe loading.
 - A mod marked `0` in `runeschema.txt` contributes no RuneSchema definitions,
   PAKs, LogicMods, or Lua companion on the next launch. Enabled mods retain
   their listed order.
 
 The package includes RuneSchema, Helpy, the shared Registry Bridge, and
-RSNetworking. These are one download; optional plugins can be disabled when no
+RSNetworking, plus the shared QuestItems helper. These are one download; optional plugins can be disabled when no
 installed mod requires them. [Choose optional bridges](OPTIONAL-BRIDGES.md).
 
 ## Find the right authoring path

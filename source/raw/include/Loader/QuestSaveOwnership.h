@@ -21,25 +21,52 @@ inline SaveJson OwnershipVariables(const std::string& owner,const std::string& i
         {{"QuestVariableName","RuneSchema.Identity:"+id},{"QuestVariableValue",OwnershipVersion}}
     });
 }
-inline std::string OwnedBy(const SaveJson& row) {
+struct OwnershipInfo {std::set<std::string> Owners;bool Identity=false;};
+inline OwnershipInfo InspectOwnership(const SaveJson& row) {
+    OwnershipInfo result;
     if(!row.is_object() || !row.contains("QuestId") || !row.at("QuestId").is_string() || !row.contains("QuestInts") || !row.at("QuestInts").is_array())return {};
     const auto id=row.at("QuestId").get<std::string>();
-    std::string owner;bool identity=false;
     for(const auto& variable:row.at("QuestInts")) {
         if(!variable.is_object() || !variable.contains("QuestVariableName") || !variable.at("QuestVariableName").is_string())continue;
         const auto name=variable.at("QuestVariableName").get<std::string>();
         if(!name.starts_with("RuneSchema.Owner:") && !name.starts_with("RuneSchema.Identity:"))continue;
-        if(variable.value("QuestVariableValue",SaveJson{})!=OwnershipVersion)throw std::runtime_error("Unsupported quest ownership version; cleanup refused");
+        if(variable.value("QuestVariableValue",SaveJson{})!=OwnershipVersion)throw std::runtime_error("Unsupported quest ownership version for QuestId='"+id+"'; cleanup refused");
         if(name.starts_with("RuneSchema.Owner:")) {
-            if(!owner.empty())throw std::runtime_error("Duplicate quest owner marker");
-            owner=name.substr(17);ValidateOwner(owner);
+            const auto owner=name.substr(17);ValidateOwner(owner);result.Owners.insert(owner);
         } else {
-            if(identity || name!="RuneSchema.Identity:"+id || !IsCanonicalPersistenceId(id))throw std::runtime_error("Quest ownership identity mismatch");
-            identity=true;
+            if(name!="RuneSchema.Identity:"+id || !IsCanonicalPersistenceId(id))throw std::runtime_error("Quest ownership identity mismatch for QuestId='"+id+"'");
+            result.Identity=true;
         }
     }
-    if(owner.empty()!=!identity)throw std::runtime_error("Incomplete quest ownership markers");
-    return identity?owner:std::string{};
+    if(result.Owners.empty()!=!result.Identity)throw std::runtime_error("Incomplete quest ownership markers for QuestId='"+id+"'");
+    return result;
+}
+inline std::string OwnedBy(const SaveJson& row) {
+    const auto info=InspectOwnership(row);
+    if(info.Owners.size()>1){
+        std::string owners;for(const auto& owner:info.Owners){if(!owners.empty())owners+=", ";owners+="'"+owner+"'";}
+        throw std::runtime_error("Quest ownership conflict: QuestId='"+row.at("QuestId").get<std::string>()
+            +"' owners=["+owners+"]. Old-owner markers require a uniquely verified current quest declaration; progress retained.");
+    }
+    return info.Identity?*info.Owners.begin():std::string{};
+}
+// Called only with the uniquely registered current owner. Never choose an
+// owner from array order or mod load order; never reset progress or receipts.
+inline SaveJson NormalizeOwnership(const SaveJson& row,const std::string& currentOwner,bool verified) {
+    if(!verified)throw std::runtime_error("Quest ownership migration requires a uniquely verified current declaration");
+    ValidateOwner(currentOwner);
+    const auto id=row.at("QuestId").get<std::string>();
+    const auto canonical=OwnershipVariables(currentOwner,id);
+    (void)InspectOwnership(row);
+    auto result=row;auto retained=SaveJson::array();
+    for(const auto& variable:row.at("QuestInts")){
+        const auto name=variable.is_object()?variable.value("QuestVariableName",SaveJson{}):SaveJson{};
+        if(name.is_string()&&(name.get_ref<const std::string&>().starts_with("RuneSchema.Owner:")
+            ||name.get_ref<const std::string&>().starts_with("RuneSchema.Identity:")))continue;
+        retained.push_back(variable);
+    }
+    for(const auto& variable:canonical)retained.push_back(variable);
+    result["QuestInts"]=std::move(retained);return result;
 }
 struct CleanupResult {SaveJson Save;std::set<std::string> RemovedQuestIds;};
 // Pure transformation only. Caller must establish a complete successful mod-directory scan,

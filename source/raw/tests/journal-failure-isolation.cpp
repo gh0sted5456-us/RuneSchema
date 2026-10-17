@@ -28,9 +28,21 @@ int main(int argc, char** argv) {
     require(source.find("UObject* entry = found->second.Get();") != std::string::npos);
     require(source.find("m_entries.emplace(def.Key, FWeakObjectPtr(entry))") == std::string::npos);
     require(source.find("m_entries.emplace(def.Key, EntryHandle(entry))") != std::string::npos);
-    require(source.find("Serial!=0 && Serial!=current") != std::string::npos);
+    require(source.find("PS::RegistryObjectIdentity::Matches") != std::string::npos);
+    require(source.find("EntryHandle(acquisitionItem,false)") != std::string::npos);
+    require(source.find("const auto weak=PS::WeakObject(object)") != std::string::npos);
     require(source.find("slot->IsRootSet()") != std::string::npos);
     require(source.find("requested entries unavailable") != std::string::npos);
+    const auto registration=source.find("bool DragonWildsJournalModLoader::RegisteredJournalEntry");
+    const auto registrationEnd=source.find("void DragonWildsJournalModLoader::RegisterEntry",registration);
+    require(registration!=std::string::npos&&registrationEnd!=std::string::npos);
+    const auto eligibility=source.substr(registration,registrationEnd-registration);
+    require(eligibility.find("ResolvesPersistenceIdentity(subsystem,entry,true)")!=std::string::npos);
+    require(eligibility.find("SaveCleanup")==std::string::npos);
+    require(eligibility.find("RegistryEnrollment")==std::string::npos);
+    require(source.find("m_reportedUnlockFailures.insert(failure).second")!=std::string::npos);
+    require(source.find("if(unavailable&&newFailures)")!=std::string::npos);
+    require(source.find("return unavailable==0;")!=std::string::npos); // Failed delivery is retried, not marked learned.
     require(source.find("JournalPlayerAccess::EnsureUnlocked(journalComponent,entry)") != std::string::npos);
     require(source.find("ensureInArray") == std::string::npos);
     require(source.find("m_knownIds") == std::string::npos);
@@ -49,8 +61,8 @@ int main(int argc, char** argv) {
     require(source.find("SaveCharacters") == std::string::npos);
     const auto registered=source.find("RegisterEntry(entry,def.Owner);",apply);
     const auto placed=source.find("Place(entry, def)",registered);
-    const auto owned=source.find("TrackOwnedId(entry,persistence,def.Owner,def.Declared);",placed);
-    require(registered<placed && placed<owned);
+    const auto owned=source.find("TrackOwnedId(entry,persistence,def.Owner,def.Declared,automatic);",placed);
+    require(registered!=std::string::npos && placed!=std::string::npos && owned!=std::string::npos && registered<placed && placed<owned);
     require(source.find("found->Owner!=modName")!=std::string::npos);
     require(source.find("for (const auto* fieldName : {TEXT(\"PersistenceID\"), TEXT(\"InternalName\")})")!=std::string::npos);
     require(source.find("Journal InternalName cannot replace a cooked entry's identity")!=std::string::npos);

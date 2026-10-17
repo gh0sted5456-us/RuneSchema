@@ -5,12 +5,12 @@ published as [`3cbbaee` — update](https://github.com/gh0sted5456-us/RuneSchema
 Repeated revisions are combined into their current behavior rather than counted
 as separate features. Website changes are listed separately below.
 
-!!! warning "Alpha, not a stable release"
-    These changes belong to `runeschema-7.8-alpha`, not the stable 0.7.7.9m
-    release. The latest framework is installed and hash-verified on the test
-    Steam and Game Pass clients. Automated checks do not establish that every
-    new feature works in a live world or on a dedicated server. The final
-    section identifies outstanding acceptance work.
+!!! note "Promoted to RuneSchema 0.8.0.0"
+    The October alpha work is now consolidated on main/tag `0.8.0.0`, using the
+    verified r7 runtime with packaging-only cleanup. The release package matches
+    the installed Steam/Game Pass DLLs. Automated checks do not establish that
+    every new feature works in a live world or on a dedicated server. See the
+    [release notes](RELEASE-0.8.0.0.md) and the remaining acceptance work below.
 
 ## Runtime and loading
 
@@ -241,8 +241,9 @@ the same verified core. Its server helper was tested on disposable INI files,
 not a production server. Both DLLs are compressed; integrity, extracted desktop
 lifecycle and a private UI decompression comparison passed. The native core's
 **269 imports resolve against each unchanged stock Steam/Game Pass UE4SS host**.
-The r5 installation hashes and Game Pass launch alias were verified; the r7
-candidate is not an installation or a stable promotion. The
+The r7 DLLs were subsequently installed and hash-verified on Steam/Game Pass.
+Release preparation reran all 199 core and 45 Helpy checks; the release ZIP
+retains the same compressed DLLs. The
 [candidate record](https://github.com/gh0sted5456-us/RuneSchema/blob/runeschema-7.8-alpha/docs/ALPHA-CANDIDATE.md)
 contains package hashes and per-candidate evidence; older installation labels
 there are historical, not separate current recommendations.
@@ -263,5 +264,5 @@ Still outstanding:
 
 Content authored by COLORS, Shadowmancer and JobBoard remains independently
 owned. Framework support does not imply that every content draft was installed,
-recooked or validated. No stable promotion or release tag is part of this alpha
-update.
+recooked or validated. The original alpha update did not create a release tag;
+the subsequent 0.8.0.0 promotion is documented separately in the release notes.

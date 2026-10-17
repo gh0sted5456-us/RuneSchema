@@ -22,6 +22,11 @@
                     },
                     {
                       "required": [
+                        "EquipmentWhen"
+                      ]
+                    },
+                    {
+                      "required": [
                         "Pose"
                       ]
                     },
@@ -391,6 +396,12 @@
             },
             "Equipment": {
               "additionalProperties": false,
+              "not": {
+                "required": [
+                  "Necklace",
+                  "Trinket2"
+                ]
+              },
               "properties": {
                 "Body": {
                   "description": "WearableEquipmentData whose native Slot is Body.",
@@ -462,6 +473,20 @@
                     }
                   ]
                 },
+                "Necklace": {
+                  "description": "WearableEquipmentData whose native Slot is Necklace (1.0.1).",
+                  "oneOf": [
+                    {
+                      "maxLength": 1024,
+                      "pattern": "^/[^\\r\\n\\t]+$",
+                      "type": "string"
+                    },
+                    {
+                      "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                      "type": "string"
+                    }
+                  ]
+                },
                 "OffHand": {
                   "description": "HeldEquipmentData with native Slot HeldOnlyLeft. Cannot accompany a two-handed MainHand.",
                   "oneOf": [
@@ -489,9 +514,162 @@
                       "type": "string"
                     }
                   ]
+                },
+                "Trinket2": {
+                  "description": "Alias for Necklace. Must reference a native Necklace item; cannot accompany Necklace.",
+                  "oneOf": [
+                    {
+                      "maxLength": 1024,
+                      "pattern": "^/[^\\r\\n\\t]+$",
+                      "type": "string"
+                    },
+                    {
+                      "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                      "type": "string"
+                    }
+                  ]
                 }
               },
               "type": "object"
+            },
+            "EquipmentWhen": {
+              "description": "Human-only durable shared-world equipment consequence. Any authoritative player completion latches this rule for the world-save GUID, including after disconnect/restart. Rule IDs and wearable slots must not overlap; rewards remain per-character quest receipts. Back up RuneSchema saved/progress/worlds with world saves.",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "Equipment": {
+                    "additionalProperties": false,
+                    "minProperties": 1,
+                    "not": {
+                      "required": [
+                        "Necklace",
+                        "Trinket2"
+                      ]
+                    },
+                    "properties": {
+                      "Body": {
+                        "description": "WearableEquipmentData whose native Slot is Body.",
+                        "oneOf": [
+                          {
+                            "maxLength": 1024,
+                            "pattern": "^/[^\\r\\n\\t]+$",
+                            "type": "string"
+                          },
+                          {
+                            "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "Cape": {
+                        "description": "WearableEquipmentData whose native Slot is Cape.",
+                        "oneOf": [
+                          {
+                            "maxLength": 1024,
+                            "pattern": "^/[^\\r\\n\\t]+$",
+                            "type": "string"
+                          },
+                          {
+                            "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "Head": {
+                        "description": "WearableEquipmentData whose native Slot is Head.",
+                        "oneOf": [
+                          {
+                            "maxLength": 1024,
+                            "pattern": "^/[^\\r\\n\\t]+$",
+                            "type": "string"
+                          },
+                          {
+                            "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "Legs": {
+                        "description": "WearableEquipmentData whose native Slot is Legs.",
+                        "oneOf": [
+                          {
+                            "maxLength": 1024,
+                            "pattern": "^/[^\\r\\n\\t]+$",
+                            "type": "string"
+                          },
+                          {
+                            "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "Necklace": {
+                        "description": "WearableEquipmentData whose native Slot is Necklace (1.0.1).",
+                        "oneOf": [
+                          {
+                            "maxLength": 1024,
+                            "pattern": "^/[^\\r\\n\\t]+$",
+                            "type": "string"
+                          },
+                          {
+                            "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "Trinket": {
+                        "description": "WearableEquipmentData whose native Slot is Trinket.",
+                        "oneOf": [
+                          {
+                            "maxLength": 1024,
+                            "pattern": "^/[^\\r\\n\\t]+$",
+                            "type": "string"
+                          },
+                          {
+                            "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "Trinket2": {
+                        "description": "Alias for Necklace. Must reference a native Necklace item; cannot accompany Necklace.",
+                        "oneOf": [
+                          {
+                            "maxLength": 1024,
+                            "pattern": "^/[^\\r\\n\\t]+$",
+                            "type": "string"
+                          },
+                          {
+                            "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "Id": {
+                    "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                    "type": "string"
+                  },
+                  "Policy": {
+                    "const": "WorldEverCompleted"
+                  },
+                  "QuestCompleted": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "Id",
+                  "QuestCompleted",
+                  "Policy",
+                  "Equipment"
+                ],
+                "type": "object"
+              },
+              "maxItems": 16,
+              "minItems": 1,
+              "type": "array"
             },
             "Ghost": {
               "additionalProperties": false,
@@ -507,6 +685,40 @@
                 }
               },
               "type": "object"
+            },
+            "GroundClearance": {
+              "additionalProperties": false,
+              "description": "Unscaled capsule clearance envelope above the surface for props/resources without an owned native capsule. HalfHeight must be at least Radius; verify native/runtime geometry.",
+              "properties": {
+                "HalfHeight": {
+                  "maximum": 100000,
+                  "minimum": 0.1,
+                  "type": "number"
+                },
+                "Radius": {
+                  "maximum": 10000,
+                  "minimum": 0.1,
+                  "type": "number"
+                }
+              },
+              "required": [
+                "Radius",
+                "HalfHeight"
+              ],
+              "type": "object"
+            },
+            "GroundMigrationRadius": {
+              "default": 300,
+              "description": "Bounded nearby collision-clear placement radius in centimetres; 0 disables relocation. Native capsule or GroundClearance required. Authored location and identity remain unchanged.",
+              "maximum": 1000,
+              "minimum": 0,
+              "type": "number"
+            },
+            "GroundReferenceZ": {
+              "description": "Approximate floor height in centimetres, not a placement fallback. Selects collision below this height plus a 45 cm stair allowance. For bare $ without a hint, use the landscape beneath overhead roofs and bridges.",
+              "maximum": 100000000,
+              "minimum": -100000000,
+              "type": "number"
             },
             "HideMesh": {
               "description": "Prop only: hide visual mesh while retaining collision.",
@@ -527,6 +739,18 @@
             },
             "IdleAnimation": {
               "type": "string"
+            },
+            "JournalEntries": {
+              "description": "Unlock these registered journal/lore entries when this NPC is interacted with. Use local entry IDs, Mod:Id, or full cooked asset paths. Works alongside dialogue and shops; native player unlock confirmation is required.",
+              "items": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 32,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
             },
             "Location": {
               "description": "World coordinates as [X,Y,Z] or {X,Y,Z}. Z accepts $, $+offset, or $-offset and resolves to blocking ground.",
@@ -651,7 +875,7 @@
             },
             "NoInteract": {
               "default": false,
-              "description": "Disable interaction and suppress VendorID, DialogueID, LoreID and LoreEntry bindings without changing collision.",
+              "description": "Disable interaction and suppress VendorID, DialogueID, LoreID, LoreEntry and JournalEntries bindings without changing collision.",
               "type": "boolean"
             },
             "OverheadIcon": {
@@ -1149,6 +1373,11 @@
                       },
                       {
                         "required": [
+                          "EquipmentWhen"
+                        ]
+                      },
+                      {
+                        "required": [
                           "Pose"
                         ]
                       },
@@ -1518,6 +1747,12 @@
               },
               "Equipment": {
                 "additionalProperties": false,
+                "not": {
+                  "required": [
+                    "Necklace",
+                    "Trinket2"
+                  ]
+                },
                 "properties": {
                   "Body": {
                     "description": "WearableEquipmentData whose native Slot is Body.",
@@ -1589,6 +1824,20 @@
                       }
                     ]
                   },
+                  "Necklace": {
+                    "description": "WearableEquipmentData whose native Slot is Necklace (1.0.1).",
+                    "oneOf": [
+                      {
+                        "maxLength": 1024,
+                        "pattern": "^/[^\\r\\n\\t]+$",
+                        "type": "string"
+                      },
+                      {
+                        "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                        "type": "string"
+                      }
+                    ]
+                  },
                   "OffHand": {
                     "description": "HeldEquipmentData with native Slot HeldOnlyLeft. Cannot accompany a two-handed MainHand.",
                     "oneOf": [
@@ -1616,9 +1865,162 @@
                         "type": "string"
                       }
                     ]
+                  },
+                  "Trinket2": {
+                    "description": "Alias for Necklace. Must reference a native Necklace item; cannot accompany Necklace.",
+                    "oneOf": [
+                      {
+                        "maxLength": 1024,
+                        "pattern": "^/[^\\r\\n\\t]+$",
+                        "type": "string"
+                      },
+                      {
+                        "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                        "type": "string"
+                      }
+                    ]
                   }
                 },
                 "type": "object"
+              },
+              "EquipmentWhen": {
+                "description": "Human-only durable shared-world equipment consequence. Any authoritative player completion latches this rule for the world-save GUID, including after disconnect/restart. Rule IDs and wearable slots must not overlap; rewards remain per-character quest receipts. Back up RuneSchema saved/progress/worlds with world saves.",
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "Equipment": {
+                      "additionalProperties": false,
+                      "minProperties": 1,
+                      "not": {
+                        "required": [
+                          "Necklace",
+                          "Trinket2"
+                        ]
+                      },
+                      "properties": {
+                        "Body": {
+                          "description": "WearableEquipmentData whose native Slot is Body.",
+                          "oneOf": [
+                            {
+                              "maxLength": 1024,
+                              "pattern": "^/[^\\r\\n\\t]+$",
+                              "type": "string"
+                            },
+                            {
+                              "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "Cape": {
+                          "description": "WearableEquipmentData whose native Slot is Cape.",
+                          "oneOf": [
+                            {
+                              "maxLength": 1024,
+                              "pattern": "^/[^\\r\\n\\t]+$",
+                              "type": "string"
+                            },
+                            {
+                              "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "Head": {
+                          "description": "WearableEquipmentData whose native Slot is Head.",
+                          "oneOf": [
+                            {
+                              "maxLength": 1024,
+                              "pattern": "^/[^\\r\\n\\t]+$",
+                              "type": "string"
+                            },
+                            {
+                              "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "Legs": {
+                          "description": "WearableEquipmentData whose native Slot is Legs.",
+                          "oneOf": [
+                            {
+                              "maxLength": 1024,
+                              "pattern": "^/[^\\r\\n\\t]+$",
+                              "type": "string"
+                            },
+                            {
+                              "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "Necklace": {
+                          "description": "WearableEquipmentData whose native Slot is Necklace (1.0.1).",
+                          "oneOf": [
+                            {
+                              "maxLength": 1024,
+                              "pattern": "^/[^\\r\\n\\t]+$",
+                              "type": "string"
+                            },
+                            {
+                              "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "Trinket": {
+                          "description": "WearableEquipmentData whose native Slot is Trinket.",
+                          "oneOf": [
+                            {
+                              "maxLength": 1024,
+                              "pattern": "^/[^\\r\\n\\t]+$",
+                              "type": "string"
+                            },
+                            {
+                              "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "Trinket2": {
+                          "description": "Alias for Necklace. Must reference a native Necklace item; cannot accompany Necklace.",
+                          "oneOf": [
+                            {
+                              "maxLength": 1024,
+                              "pattern": "^/[^\\r\\n\\t]+$",
+                              "type": "string"
+                            },
+                            {
+                              "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "Id": {
+                      "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                      "type": "string"
+                    },
+                    "Policy": {
+                      "const": "WorldEverCompleted"
+                    },
+                    "QuestCompleted": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "Id",
+                    "QuestCompleted",
+                    "Policy",
+                    "Equipment"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 16,
+                "minItems": 1,
+                "type": "array"
               },
               "Ghost": {
                 "additionalProperties": false,
@@ -1634,6 +2036,40 @@
                   }
                 },
                 "type": "object"
+              },
+              "GroundClearance": {
+                "additionalProperties": false,
+                "description": "Unscaled capsule clearance envelope above the surface for props/resources without an owned native capsule. HalfHeight must be at least Radius; verify native/runtime geometry.",
+                "properties": {
+                  "HalfHeight": {
+                    "maximum": 100000,
+                    "minimum": 0.1,
+                    "type": "number"
+                  },
+                  "Radius": {
+                    "maximum": 10000,
+                    "minimum": 0.1,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "Radius",
+                  "HalfHeight"
+                ],
+                "type": "object"
+              },
+              "GroundMigrationRadius": {
+                "default": 300,
+                "description": "Bounded nearby collision-clear placement radius in centimetres; 0 disables relocation. Native capsule or GroundClearance required. Authored location and identity remain unchanged.",
+                "maximum": 1000,
+                "minimum": 0,
+                "type": "number"
+              },
+              "GroundReferenceZ": {
+                "description": "Approximate floor height in centimetres, not a placement fallback. Selects collision below this height plus a 45 cm stair allowance. For bare $ without a hint, use the landscape beneath overhead roofs and bridges.",
+                "maximum": 100000000,
+                "minimum": -100000000,
+                "type": "number"
               },
               "HideMesh": {
                 "description": "Prop only: hide visual mesh while retaining collision.",
@@ -1654,6 +2090,18 @@
               },
               "IdleAnimation": {
                 "type": "string"
+              },
+              "JournalEntries": {
+                "description": "Unlock these registered journal/lore entries when this NPC is interacted with. Use local entry IDs, Mod:Id, or full cooked asset paths. Works alongside dialogue and shops; native player unlock confirmation is required.",
+                "items": {
+                  "maxLength": 1024,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 32,
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
               },
               "Location": {
                 "description": "World coordinates as [X,Y,Z] or {X,Y,Z}. Z accepts $, $+offset, or $-offset and resolves to blocking ground.",
@@ -1778,7 +2226,7 @@
               },
               "NoInteract": {
                 "default": false,
-                "description": "Disable interaction and suppress VendorID, DialogueID, LoreID and LoreEntry bindings without changing collision.",
+                "description": "Disable interaction and suppress VendorID, DialogueID, LoreID, LoreEntry and JournalEntries bindings without changing collision.",
                 "type": "boolean"
               },
               "OverheadIcon": {
@@ -2283,6 +2731,11 @@
                         },
                         {
                           "required": [
+                            "EquipmentWhen"
+                          ]
+                        },
+                        {
+                          "required": [
                             "Pose"
                           ]
                         },
@@ -2652,6 +3105,12 @@
                 },
                 "Equipment": {
                   "additionalProperties": false,
+                  "not": {
+                    "required": [
+                      "Necklace",
+                      "Trinket2"
+                    ]
+                  },
                   "properties": {
                     "Body": {
                       "description": "WearableEquipmentData whose native Slot is Body.",
@@ -2723,6 +3182,20 @@
                         }
                       ]
                     },
+                    "Necklace": {
+                      "description": "WearableEquipmentData whose native Slot is Necklace (1.0.1).",
+                      "oneOf": [
+                        {
+                          "maxLength": 1024,
+                          "pattern": "^/[^\\r\\n\\t]+$",
+                          "type": "string"
+                        },
+                        {
+                          "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                          "type": "string"
+                        }
+                      ]
+                    },
                     "OffHand": {
                       "description": "HeldEquipmentData with native Slot HeldOnlyLeft. Cannot accompany a two-handed MainHand.",
                       "oneOf": [
@@ -2750,9 +3223,162 @@
                           "type": "string"
                         }
                       ]
+                    },
+                    "Trinket2": {
+                      "description": "Alias for Necklace. Must reference a native Necklace item; cannot accompany Necklace.",
+                      "oneOf": [
+                        {
+                          "maxLength": 1024,
+                          "pattern": "^/[^\\r\\n\\t]+$",
+                          "type": "string"
+                        },
+                        {
+                          "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                          "type": "string"
+                        }
+                      ]
                     }
                   },
                   "type": "object"
+                },
+                "EquipmentWhen": {
+                  "description": "Human-only durable shared-world equipment consequence. Any authoritative player completion latches this rule for the world-save GUID, including after disconnect/restart. Rule IDs and wearable slots must not overlap; rewards remain per-character quest receipts. Back up RuneSchema saved/progress/worlds with world saves.",
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "Equipment": {
+                        "additionalProperties": false,
+                        "minProperties": 1,
+                        "not": {
+                          "required": [
+                            "Necklace",
+                            "Trinket2"
+                          ]
+                        },
+                        "properties": {
+                          "Body": {
+                            "description": "WearableEquipmentData whose native Slot is Body.",
+                            "oneOf": [
+                              {
+                                "maxLength": 1024,
+                                "pattern": "^/[^\\r\\n\\t]+$",
+                                "type": "string"
+                              },
+                              {
+                                "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "Cape": {
+                            "description": "WearableEquipmentData whose native Slot is Cape.",
+                            "oneOf": [
+                              {
+                                "maxLength": 1024,
+                                "pattern": "^/[^\\r\\n\\t]+$",
+                                "type": "string"
+                              },
+                              {
+                                "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "Head": {
+                            "description": "WearableEquipmentData whose native Slot is Head.",
+                            "oneOf": [
+                              {
+                                "maxLength": 1024,
+                                "pattern": "^/[^\\r\\n\\t]+$",
+                                "type": "string"
+                              },
+                              {
+                                "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "Legs": {
+                            "description": "WearableEquipmentData whose native Slot is Legs.",
+                            "oneOf": [
+                              {
+                                "maxLength": 1024,
+                                "pattern": "^/[^\\r\\n\\t]+$",
+                                "type": "string"
+                              },
+                              {
+                                "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "Necklace": {
+                            "description": "WearableEquipmentData whose native Slot is Necklace (1.0.1).",
+                            "oneOf": [
+                              {
+                                "maxLength": 1024,
+                                "pattern": "^/[^\\r\\n\\t]+$",
+                                "type": "string"
+                              },
+                              {
+                                "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "Trinket": {
+                            "description": "WearableEquipmentData whose native Slot is Trinket.",
+                            "oneOf": [
+                              {
+                                "maxLength": 1024,
+                                "pattern": "^/[^\\r\\n\\t]+$",
+                                "type": "string"
+                              },
+                              {
+                                "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "Trinket2": {
+                            "description": "Alias for Necklace. Must reference a native Necklace item; cannot accompany Necklace.",
+                            "oneOf": [
+                              {
+                                "maxLength": 1024,
+                                "pattern": "^/[^\\r\\n\\t]+$",
+                                "type": "string"
+                              },
+                              {
+                                "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                                "type": "string"
+                              }
+                            ]
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "Id": {
+                        "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                        "type": "string"
+                      },
+                      "Policy": {
+                        "const": "WorldEverCompleted"
+                      },
+                      "QuestCompleted": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "Id",
+                      "QuestCompleted",
+                      "Policy",
+                      "Equipment"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 16,
+                  "minItems": 1,
+                  "type": "array"
                 },
                 "Ghost": {
                   "additionalProperties": false,
@@ -2768,6 +3394,40 @@
                     }
                   },
                   "type": "object"
+                },
+                "GroundClearance": {
+                  "additionalProperties": false,
+                  "description": "Unscaled capsule clearance envelope above the surface for props/resources without an owned native capsule. HalfHeight must be at least Radius; verify native/runtime geometry.",
+                  "properties": {
+                    "HalfHeight": {
+                      "maximum": 100000,
+                      "minimum": 0.1,
+                      "type": "number"
+                    },
+                    "Radius": {
+                      "maximum": 10000,
+                      "minimum": 0.1,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "Radius",
+                    "HalfHeight"
+                  ],
+                  "type": "object"
+                },
+                "GroundMigrationRadius": {
+                  "default": 300,
+                  "description": "Bounded nearby collision-clear placement radius in centimetres; 0 disables relocation. Native capsule or GroundClearance required. Authored location and identity remain unchanged.",
+                  "maximum": 1000,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                "GroundReferenceZ": {
+                  "description": "Approximate floor height in centimetres, not a placement fallback. Selects collision below this height plus a 45 cm stair allowance. For bare $ without a hint, use the landscape beneath overhead roofs and bridges.",
+                  "maximum": 100000000,
+                  "minimum": -100000000,
+                  "type": "number"
                 },
                 "HideMesh": {
                   "description": "Prop only: hide visual mesh while retaining collision.",
@@ -2788,6 +3448,18 @@
                 },
                 "IdleAnimation": {
                   "type": "string"
+                },
+                "JournalEntries": {
+                  "description": "Unlock these registered journal/lore entries when this NPC is interacted with. Use local entry IDs, Mod:Id, or full cooked asset paths. Works alongside dialogue and shops; native player unlock confirmation is required.",
+                  "items": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 32,
+                  "minItems": 1,
+                  "type": "array",
+                  "uniqueItems": true
                 },
                 "Location": {
                   "description": "World coordinates as [X,Y,Z] or {X,Y,Z}. Z accepts $, $+offset, or $-offset and resolves to blocking ground.",
@@ -2912,7 +3584,7 @@
                 },
                 "NoInteract": {
                   "default": false,
-                  "description": "Disable interaction and suppress VendorID, DialogueID, LoreID and LoreEntry bindings without changing collision.",
+                  "description": "Disable interaction and suppress VendorID, DialogueID, LoreID, LoreEntry and JournalEntries bindings without changing collision.",
                   "type": "boolean"
                 },
                 "OverheadIcon": {
@@ -3410,6 +4082,11 @@
                           },
                           {
                             "required": [
+                              "EquipmentWhen"
+                            ]
+                          },
+                          {
+                            "required": [
                               "Pose"
                             ]
                           },
@@ -3779,6 +4456,12 @@
                   },
                   "Equipment": {
                     "additionalProperties": false,
+                    "not": {
+                      "required": [
+                        "Necklace",
+                        "Trinket2"
+                      ]
+                    },
                     "properties": {
                       "Body": {
                         "description": "WearableEquipmentData whose native Slot is Body.",
@@ -3850,6 +4533,20 @@
                           }
                         ]
                       },
+                      "Necklace": {
+                        "description": "WearableEquipmentData whose native Slot is Necklace (1.0.1).",
+                        "oneOf": [
+                          {
+                            "maxLength": 1024,
+                            "pattern": "^/[^\\r\\n\\t]+$",
+                            "type": "string"
+                          },
+                          {
+                            "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                            "type": "string"
+                          }
+                        ]
+                      },
                       "OffHand": {
                         "description": "HeldEquipmentData with native Slot HeldOnlyLeft. Cannot accompany a two-handed MainHand.",
                         "oneOf": [
@@ -3877,9 +4574,162 @@
                             "type": "string"
                           }
                         ]
+                      },
+                      "Trinket2": {
+                        "description": "Alias for Necklace. Must reference a native Necklace item; cannot accompany Necklace.",
+                        "oneOf": [
+                          {
+                            "maxLength": 1024,
+                            "pattern": "^/[^\\r\\n\\t]+$",
+                            "type": "string"
+                          },
+                          {
+                            "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                            "type": "string"
+                          }
+                        ]
                       }
                     },
                     "type": "object"
+                  },
+                  "EquipmentWhen": {
+                    "description": "Human-only durable shared-world equipment consequence. Any authoritative player completion latches this rule for the world-save GUID, including after disconnect/restart. Rule IDs and wearable slots must not overlap; rewards remain per-character quest receipts. Back up RuneSchema saved/progress/worlds with world saves.",
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "Equipment": {
+                          "additionalProperties": false,
+                          "minProperties": 1,
+                          "not": {
+                            "required": [
+                              "Necklace",
+                              "Trinket2"
+                            ]
+                          },
+                          "properties": {
+                            "Body": {
+                              "description": "WearableEquipmentData whose native Slot is Body.",
+                              "oneOf": [
+                                {
+                                  "maxLength": 1024,
+                                  "pattern": "^/[^\\r\\n\\t]+$",
+                                  "type": "string"
+                                },
+                                {
+                                  "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "Cape": {
+                              "description": "WearableEquipmentData whose native Slot is Cape.",
+                              "oneOf": [
+                                {
+                                  "maxLength": 1024,
+                                  "pattern": "^/[^\\r\\n\\t]+$",
+                                  "type": "string"
+                                },
+                                {
+                                  "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "Head": {
+                              "description": "WearableEquipmentData whose native Slot is Head.",
+                              "oneOf": [
+                                {
+                                  "maxLength": 1024,
+                                  "pattern": "^/[^\\r\\n\\t]+$",
+                                  "type": "string"
+                                },
+                                {
+                                  "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "Legs": {
+                              "description": "WearableEquipmentData whose native Slot is Legs.",
+                              "oneOf": [
+                                {
+                                  "maxLength": 1024,
+                                  "pattern": "^/[^\\r\\n\\t]+$",
+                                  "type": "string"
+                                },
+                                {
+                                  "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "Necklace": {
+                              "description": "WearableEquipmentData whose native Slot is Necklace (1.0.1).",
+                              "oneOf": [
+                                {
+                                  "maxLength": 1024,
+                                  "pattern": "^/[^\\r\\n\\t]+$",
+                                  "type": "string"
+                                },
+                                {
+                                  "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "Trinket": {
+                              "description": "WearableEquipmentData whose native Slot is Trinket.",
+                              "oneOf": [
+                                {
+                                  "maxLength": 1024,
+                                  "pattern": "^/[^\\r\\n\\t]+$",
+                                  "type": "string"
+                                },
+                                {
+                                  "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "Trinket2": {
+                              "description": "Alias for Necklace. Must reference a native Necklace item; cannot accompany Necklace.",
+                              "oneOf": [
+                                {
+                                  "maxLength": 1024,
+                                  "pattern": "^/[^\\r\\n\\t]+$",
+                                  "type": "string"
+                                },
+                                {
+                                  "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "Id": {
+                          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                          "type": "string"
+                        },
+                        "Policy": {
+                          "const": "WorldEverCompleted"
+                        },
+                        "QuestCompleted": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "Id",
+                        "QuestCompleted",
+                        "Policy",
+                        "Equipment"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 16,
+                    "minItems": 1,
+                    "type": "array"
                   },
                   "Ghost": {
                     "additionalProperties": false,
@@ -3895,6 +4745,40 @@
                       }
                     },
                     "type": "object"
+                  },
+                  "GroundClearance": {
+                    "additionalProperties": false,
+                    "description": "Unscaled capsule clearance envelope above the surface for props/resources without an owned native capsule. HalfHeight must be at least Radius; verify native/runtime geometry.",
+                    "properties": {
+                      "HalfHeight": {
+                        "maximum": 100000,
+                        "minimum": 0.1,
+                        "type": "number"
+                      },
+                      "Radius": {
+                        "maximum": 10000,
+                        "minimum": 0.1,
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "Radius",
+                      "HalfHeight"
+                    ],
+                    "type": "object"
+                  },
+                  "GroundMigrationRadius": {
+                    "default": 300,
+                    "description": "Bounded nearby collision-clear placement radius in centimetres; 0 disables relocation. Native capsule or GroundClearance required. Authored location and identity remain unchanged.",
+                    "maximum": 1000,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "GroundReferenceZ": {
+                    "description": "Approximate floor height in centimetres, not a placement fallback. Selects collision below this height plus a 45 cm stair allowance. For bare $ without a hint, use the landscape beneath overhead roofs and bridges.",
+                    "maximum": 100000000,
+                    "minimum": -100000000,
+                    "type": "number"
                   },
                   "HideMesh": {
                     "description": "Prop only: hide visual mesh while retaining collision.",
@@ -3915,6 +4799,18 @@
                   },
                   "IdleAnimation": {
                     "type": "string"
+                  },
+                  "JournalEntries": {
+                    "description": "Unlock these registered journal/lore entries when this NPC is interacted with. Use local entry IDs, Mod:Id, or full cooked asset paths. Works alongside dialogue and shops; native player unlock confirmation is required.",
+                    "items": {
+                      "maxLength": 1024,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "maxItems": 32,
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
                   },
                   "Location": {
                     "description": "World coordinates as [X,Y,Z] or {X,Y,Z}. Z accepts $, $+offset, or $-offset and resolves to blocking ground.",
@@ -4039,7 +4935,7 @@
                   },
                   "NoInteract": {
                     "default": false,
-                    "description": "Disable interaction and suppress VendorID, DialogueID, LoreID and LoreEntry bindings without changing collision.",
+                    "description": "Disable interaction and suppress VendorID, DialogueID, LoreID, LoreEntry and JournalEntries bindings without changing collision.",
                     "type": "boolean"
                   },
                   "OverheadIcon": {

@@ -3,6 +3,7 @@
 #include "Helpers/String.hpp"
 #include "Core/ConfigFiles.h"
 #include "Utility/ConfigCodec.h"
+#include "Utility/ConfigStore.h"
 #include "Runtime/HostServices.h"
 #include <nlohmann/json.hpp>
 
@@ -78,36 +79,24 @@ namespace PS {
 
     void PSConfig::Load()
     {
+        DiagnosticLog::Initialize();
         m_settings = PSConfigSettings{};
         m_preserveOriginal = true;
-        const auto configFile = GetSettingsPath() / "settings.jsonc";
-        std::string contents;
+        m_configDocument=nlohmann::json::object();
+        m_configFile=GetSettingsPath()/"settings.ini";
         try {
             HostServices::MigrateLegacyLayout();
-            if (!fs::exists(configFile)) {
-                m_preserveOriginal = false;
-                if (Save()) m_status = "Configuration created with default settings.";
-                return;
-            }
-            contents = ConfigFiles::Read(configFile);
+            if(!fs::exists(m_configFile)&&fs::exists(GetSettingsPath()/"settings.jsonc"))m_configFile=GetSettingsPath()/"settings.jsonc";
+            auto loaded=SettingsStore::Load(GetSettingsPath());
+            m_settings=std::move(loaded.Settings);
+            m_configDocument=std::move(loaded.Document);
+            m_configFile=std::move(loaded.File);
+            m_status=std::move(loaded.Status);
+            m_preserveOriginal=false;
+            PS::Log<RC::LogLevel::Normal>(STR("{}\n"),RC::to_generic_string(m_status));
         } catch (const std::exception& error) {
-            m_status = std::string("Cannot read configuration; using session defaults. Original left untouched: ") + error.what();
+            m_status = std::string("Cannot load configuration; using session defaults. Originals left untouched: ") + error.what();
             PS::Log<RC::LogLevel::Error>(STR("{}\n"), RC::to_generic_string(m_status));
-            return;
-        }
-        try {
-            m_settings = DecodeSettings(contents);
-            if(m_settings.plugins.compatibilityNotices!="normal"&&m_settings.plugins.compatibilityNotices!="quiet"&&m_settings.plugins.compatibilityNotices!="off")
-                throw std::runtime_error("Invalid plugins.compatibilityNotices; use normal, quiet, or off");
-            m_preserveOriginal = false;
-            if(contents.find("// RuneSchema settings.")==std::string::npos)
-                ConfigFiles::Write(configFile,EncodeSettings(m_settings));
-            m_status = "Configuration loaded.";
-            PS::Log<RC::LogLevel::Normal>(STR("Config loaded.\n"));
-        } catch (const std::exception& error) {
-            PS::Log<RC::LogLevel::Error>(STR("Invalid configuration; recovering with defaults: {}\n"), RC::to_generic_string(error.what()));
-            // Save preserves the original before attempting any replacement.
-            Save();
         }
     }
 
@@ -119,14 +108,15 @@ namespace PS {
 
     bool PSConfig::Save()
     {
-        const auto configFile = GetSettingsPath() / "settings.jsonc";
+        const auto configFile = m_configFile.empty()?GetSettingsPath()/"settings.ini":m_configFile;
         fs::path backup;
         try {
-            const auto contents = EncodeSettings(m_settings);
-            if(m_settings.plugins.compatibilityNotices!="normal"&&m_settings.plugins.compatibilityNotices!="quiet"&&m_settings.plugins.compatibilityNotices!="off")
-                throw std::runtime_error("Invalid plugins.compatibilityNotices; use normal, quiet, or off");
-            if (m_preserveOriginal) backup = ConfigFiles::Backup(configFile);
+            const auto document=SettingsDocument(m_settings,m_configDocument);
+            const auto contents=configFile.extension()==".ini"?EncodeIniDocument(document):document.dump(2)+"\n";
+            (void)DecodeSettings(document.dump());
+            if (m_preserveOriginal&&fs::exists(configFile)) backup = ConfigFiles::Backup(configFile);
             ConfigFiles::Write(configFile, contents);
+            m_configDocument=document;
             m_preserveOriginal = false;
             m_status = backup.empty() ? "Settings saved. Restart for startup settings."
                 : "Configuration recovered with current settings. Original preserved at: " + backup.string();

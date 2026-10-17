@@ -46,4 +46,23 @@ int main(int argc,char** argv) {
     require(vendor.find("ApplyUnlocksToAllProgressComponents()") == std::string::npos
         && vendor.find("m_unlock.insert(key)") == std::string::npos,
         "Opening a vendor must not replay all recipe unlocks for every player");
+    require(source.find("items.Num()>32768")==std::string::npos
+        &&source.find("Loaded ItemData roster exceeds recipe routing limit")==std::string::npos,
+        "Legitimate large ItemData catalogues are rejected before recipe routing");
+    require(source.find("if(m_itemRoutes.empty())")==std::string::npos
+        &&source.find("m_itemRoutes.Ensure(")!=std::string::npos
+        &&source.find("m_itemRoutes.Reset();")!=std::string::npos,
+        "Empty/failed ItemData routes may rescan per offer or never refresh on a new batch");
+    require(vendor.find("RefreshItemRoutes();")==std::string::npos,
+        "Full-path vendor offers are gated by a global ItemData scan");
+    require(source.find("PS::RecipeItemRouting::Route(")!=std::string::npos
+        &&source.find("PersistenceID no longer matches its live asset")!=std::string::npos,
+        "Recipe routing bypasses shared lookup behavior or live identity validation");
+    require(source.find("m_referenceBatch->Remember(recipe->GetPathName()")!=std::string::npos
+        &&source.find("m_referenceBatch->Resolve(def.Key,load,valid")!=std::string::npos
+        &&source.find("RF_NeedLoad|RF_NeedPostLoad|RF_NeedInitialization")!=std::string::npos,
+        "Cooked reference preparation lacks its scoped live-object snapshot or ready/type validation");
+    require(source.find("~BatchScope(){Active=Before;}")!=std::string::npos
+        &&source.find("[PERF][RECIPES][REFERENCES]")!=std::string::npos,
+        "Recipe preparation snapshot can leak across batches or lacks measured load counters");
 }

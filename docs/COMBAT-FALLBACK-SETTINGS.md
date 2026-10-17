@@ -4,18 +4,19 @@ RuneSchema can turn its optional weapon-registration helpers on or off
 without changing item, recipe, quest, spell-persistence, or save-cleanup
 registries.
 
-Edit `settings/settings.jsonc` with the game closed, or use **Settings > Runtime
+Edit `settings/settings.ini` with the game closed, or use **Settings > Runtime
 > Optional combat fallback**, then restart.
 
-```json
-"combatFallback": {
-  "enabled": false,
-  "additionalWeapons": true,
-  "manifestMelee": true,
-  "rangedEquipment": true,
-  "initialWorldMutation": false
-}
+```ini
+[combatFallback]
+enabled = false
+additionalWeapons = true
+manifestMelee = true
+rangedEquipment = true
+initialWorldMutation = false
 ```
+
+Legacy JSONC remains supported; see [settings and migration](SETTINGS-INI.md).
 
 - `enabled` is the master switch for all optional combat fallback helpers. It
   is disabled by default because normal item, recipe, spell, and save support

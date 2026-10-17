@@ -3,11 +3,21 @@
 #include <HAL/Platform.hpp>
 #include <DynamicOutput/DynamicOutput.hpp>
 #include "Utility/Config.h"
+#include "Utility/DiagnosticLog.h"
 #include <string_view>
 #include <utility>
 #include <cstddef>
 
 namespace PS {
+    // Already-prefixed, normal runtime output is retained in UE4SS and mirrored
+    // to the RuneSchema-only file independently of advancedLogging.
+    template <RC::Unreal::int32 level,typename... Args>
+    void ConsolidatedLog(RC::File::StringViewType content,Args&&... args) {
+        DiagnosticLog::Formatted(content,level==RC::LogLevel::Error||level==RC::LogLevel::Warning,args...);
+        // UE4SS may consume forwarded string arguments. Mirror before handing
+        // them off, otherwise file-only copies lose names/phase/source paths.
+        RC::Output::send<level>(content,std::forward<Args>(args)...);
+    }
     inline auto ToWideSafe(const char* text) -> RC::StringType
     {
         RC::StringType wide;
@@ -40,12 +50,12 @@ namespace PS {
         if (optional_arg == RC::LogLevel::Error)
         {
             auto formatted_log = std::format(STR("[RuneSchema] [error] {}"), content);
-            RC::Output::send<optional_arg>(formatted_log, std::forward<FmtArgs>(fmt_args)...);
+            ConsolidatedLog<optional_arg>(formatted_log,std::forward<FmtArgs>(fmt_args)...);
         }
         else if (optional_arg == RC::LogLevel::Warning)
         {
             auto formatted_log = std::format(STR("[RuneSchema] [warning] {}"), content);
-            RC::Output::send<optional_arg>(formatted_log, std::forward<FmtArgs>(fmt_args)...);
+            ConsolidatedLog<optional_arg>(formatted_log,std::forward<FmtArgs>(fmt_args)...);
         }
         else if (optional_arg == RC::LogLevel::Verbose)
         {
@@ -53,13 +63,13 @@ namespace PS {
             if (!config->IsDebugLoggingEnabled()) return;
 
             auto formatted_log = std::format(STR("[RuneSchema] [diagnostic] {}"), content);
-            RC::Output::send<RC::LogLevel::Normal>(formatted_log, std::forward<FmtArgs>(fmt_args)...);
+            DiagnosticLog::Formatted(formatted_log,false,fmt_args...);
         }
         else
         {
             if (!PS::PSConfig::Get()->IsDebugLoggingEnabled()) return;
             auto formatted_log = std::format(STR("[RuneSchema] {}"), content);
-            RC::Output::send<optional_arg>(formatted_log, std::forward<FmtArgs>(fmt_args)...);
+            DiagnosticLog::Formatted(formatted_log,false,fmt_args...);
         }
     }
 
@@ -82,7 +92,7 @@ namespace PS {
         std::size_t created, std::size_t updated, std::size_t placed,
         std::size_t errors)
     {
-        RC::Output::send<RC::LogLevel::Normal>(
+        ConsolidatedLog<RC::LogLevel::Normal>(
             STR("[RuneSchema] [summary] {} | loaded={} | created={} | updated={} | placed={} | errors={}\n"),
             ToWideSafe(loader), loaded, created, updated, placed, errors);
     }

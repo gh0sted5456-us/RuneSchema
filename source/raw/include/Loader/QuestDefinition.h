@@ -3,6 +3,7 @@
 #include "Loader/ItemIdentity.h"
 #include "Loader/QuestRepeatPolicy.h"
 #include "Loader/TimeOfDay.h"
+#include "Loader/QuestRegion.h"
 #include <map>
 #include <array>
 #include <cmath>
@@ -41,6 +42,11 @@ struct Definition {
     TimeOfDay::Requirement Time=TimeOfDay::Requirement::Any;
     std::string ProgressText,CompleteText;
     bool AnnounceProgress=false;
+    std::string CompletedDescription,SubobjectiveDescription,Hint,QuestDescriptionOverride;
+    bool HideInQuestList=false,ShowInCompletedQuestList=true;
+    std::string Region;
+    std::set<std::string> AnyStages;
+    bool AnyStage(size_t index) const {return AnyStages.contains(Stages.at(index).first);}
 };
 inline ItemAmount ParseItem(const Json& data) {
     const auto item=Dialogue::Text(data.at("Item"),1024);
@@ -53,7 +59,7 @@ inline ItemAmount ParseItem(const Json& data) {
     return {item,count.get<int>(),time};
 }
 inline Definition ParseDefinition(const std::string& mod,const Json& data,bool stageObjective) {
-    Dialogue::Fields(data,{"Id","PersistenceID","Title","Description","Objective","Stages","Category","Prerequisites","Reward","RepeatReward","Repeatable","Repeat","StartCost","EntryOptions","ResultTiers","Completion","TimeOfDay"});
+    Dialogue::Fields(data,{"Id","PersistenceID","Title","Description","CompletedDescription","Region","HideInQuestList","ShowInCompletedQuestList","Objective","Stages","Category","Prerequisites","Reward","RepeatReward","Repeatable","Repeat","StartCost","EntryOptions","ResultTiers","Completion","TimeOfDay"});
     if(data.contains("Stages")) {
         if(data.contains("Objective"))throw std::runtime_error("Quest cannot combine Objective and Stages");
         const auto& stages=data.at("Stages");
@@ -63,7 +69,9 @@ inline Definition ParseDefinition(const std::string& mod,const Json& data,bool s
         auto result=ParseDefinition(mod,base,true);
         std::set<std::string> ids;size_t total=0;
         for(const auto& stage:stages) {
-            Dialogue::Fields(stage,{"Id","Objectives"});const auto id=Dialogue::Id(stage.at("Id"));
+            Dialogue::Fields(stage,{"Id","Objectives","Completion"});const auto id=Dialogue::Id(stage.at("Id"));
+            const auto completion=stage.value("Completion",std::string("All"));
+            if(completion!="All" && completion!="Any")throw std::runtime_error("Stage Completion must be All or Any");
             if(id=="__ready" || id.size()>64 || id.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")!=id.npos || !ids.insert(id).second)
                 throw std::runtime_error("Stage IDs must be unique letters, digits, underscores or hyphens");
             const auto& objectives=stage.at("Objectives");
@@ -81,6 +89,11 @@ inline Definition ParseDefinition(const std::string& mod,const Json& data,bool s
             }
             if(std::none_of(parsed.begin(),parsed.end(),[](const auto& objective){return !objective.Optional;}))
                 throw std::runtime_error("Each stage requires a mandatory objective");
+            if(completion=="Any") {
+                if(parsed.size()<2 || std::any_of(parsed.begin(),parsed.end(),[](const auto& objective){return objective.Optional || objective.Hidden;}))
+                    throw std::runtime_error("Any stage requires at least two visible, mandatory alternatives");
+                result.AnyStages.insert(id);
+            }
             result.Stages.emplace_back(id,std::move(parsed));
         }
         for(const auto& tier:result.ResultTiers)for(const auto& required:tier.Objectives) {
@@ -97,7 +110,7 @@ inline Definition ParseDefinition(const std::string& mod,const Json& data,bool s
     if(!IsCanonicalPersistenceId(persistence))
         throw std::runtime_error("Quest PersistenceID must be a canonical 22-character identity");
     const auto& objective=data.at("Objective");
-    Dialogue::Fields(objective,{"Id","Text","Item","Count","Location","RadiusMeters","Type","AIClasses","IncludeDerived","EventID","SpawnID","Hidden","Optional","ProgressText","CompleteText","AnnounceProgress"});
+    Dialogue::Fields(objective,{"Id","Text","SubobjectiveDescription","Hint","QuestDescriptionOverride","Item","Count","Location","RadiusMeters","Type","AIClasses","IncludeDerived","EventID","SpawnID","Hidden","Optional","ProgressText","CompleteText","AnnounceProgress"});
     Dialogue::Fields(data.at("Reward"),{"Item","Count","TimeOfDay"});
     const auto kind=objective.value("Type",std::string("Collect"));
     if(kind!="Collect" && kind!="Kill" && kind!="Acquire")throw std::runtime_error("Quest objective Type must be Collect, Acquire or Kill");
@@ -145,6 +158,15 @@ inline Definition ParseDefinition(const std::string& mod,const Json& data,bool s
     if(category!="Regular" && category!="Story" && category!="Task")throw std::runtime_error("Quest Category must be Regular, Story, or Task");
     result.Story=category=="Story";
     result.Task=category=="Task";
+    if(data.contains("Region"))result.Region=RegionName(Dialogue::Text(data.at("Region"),80));
+    result.CompletedDescription=data.contains("CompletedDescription")?Dialogue::Text(data.at("CompletedDescription"),2048):result.Description;
+    for(const auto* flag:{"HideInQuestList","ShowInCompletedQuestList"})
+        if(data.contains(flag)&&!data.at(flag).is_boolean())throw std::runtime_error("Quest list visibility fields must be boolean");
+    result.HideInQuestList=data.value("HideInQuestList",false);
+    result.ShowInCompletedQuestList=data.value("ShowInCompletedQuestList",true);
+    if(objective.contains("SubobjectiveDescription"))result.SubobjectiveDescription=Dialogue::Text(objective.at("SubobjectiveDescription"),1024);
+    if(objective.contains("Hint"))result.Hint=Dialogue::Text(objective.at("Hint"),1024);
+    if(objective.contains("QuestDescriptionOverride"))result.QuestDescriptionOverride=Dialogue::Text(objective.at("QuestDescriptionOverride"),2048);
     if(data.contains("Prerequisites")) {
         const auto& prerequisites=data.at("Prerequisites");
         if(!prerequisites.is_array() || prerequisites.size()>32)throw std::runtime_error("Quest Prerequisites must be an array of at most 32 IDs");
@@ -274,13 +296,18 @@ inline int SelectRewardTier(const Definition& quest,const std::string& entry,std
 }
 class Catalog {
     std::map<std::string,Definition> definitions;
-    std::set<std::string> identities;
+    std::map<std::string,std::string> identities,sources;
 public:
-    void Add(const std::string& mod,const Json& data) {
+    void Add(const std::string& mod,const Json& data,const std::string& source="<unspecified schema>") {
         auto definition=Parse(mod,data);
-        if(definitions.contains(definition.Key) || identities.contains(definition.PersistenceId))
-            throw std::runtime_error("Duplicate quest ID or PersistenceID");
-        identities.insert(definition.PersistenceId);
+        const auto sameId=identities.find(definition.PersistenceId);
+        const auto previous=definitions.contains(definition.Key)?definition.Key
+            :sameId!=identities.end()?sameId->second:std::string{};
+        if(!previous.empty())throw std::runtime_error(
+            "Quest declaration conflict: PersistenceID='"+definition.PersistenceId+"'; first quest='"+previous
+            +"' source='"+sources.at(previous)+"'; second quest='"+definition.Key+"' source='"+source
+            +"'. Change the duplicate quest ID/PersistenceID or disable the duplicate declaration; ownership migration is refused.");
+        identities.emplace(definition.PersistenceId,definition.Key);sources.emplace(definition.Key,source);
         definitions.emplace(definition.Key,std::move(definition));
     }
     const Definition& Find(const std::string& mod,const Json& reference) const {

@@ -20,8 +20,10 @@ class DragonWildsEventLoader final:public DragonWildsModLoaderBase {
     static RC::Unreal::UFunction* NativeSignal(const TCHAR* path) {
         using namespace RC::Unreal;
         auto* fn=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,path,false);
-        if(!fn || !(fn->GetFunctionFlags() & FUNC_Native) || fn->GetParmsSize()!=0 || fn->GetReturnProperty())throw std::runtime_error("Event native signal layout unavailable");
-        for(auto* p:TFieldRange<FProperty>(fn,EFieldIterationFlags::Default))if(p->HasAnyPropertyFlags(CPF_Parm))throw std::runtime_error("Event native signal has unexpected arguments");
+        // Observer only: no parameter bytes are read or written. New native
+        // payload fields do not change the meaning of this death/despawn signal.
+        ReflectedContract::Frame(fn);
+        if(!(fn->GetFunctionFlags() & FUNC_Native))throw std::runtime_error("Event native signal layout unavailable");
         return fn;
     }
 public:

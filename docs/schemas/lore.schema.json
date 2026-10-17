@@ -141,26 +141,6 @@
           ],
           "type": "object"
         },
-        "UnlockCondition": {
-          "description": "Native Dominion discovery condition. RuneSchema validates known trigger references and writes the reflected struct; in-game event indexing and persistence require runtime verification.",
-          "type": "object",
-          "required": ["UnlockType"],
-          "properties": {
-            "UnlockType": {"type": "string", "minLength": 1},
-            "UnlockingItemData": {"type": "string", "pattern": "^/"},
-            "UnlockingRecipe": {"type": "string", "pattern": "^/"},
-            "UnlockingInteractionActor": {"type": "string", "pattern": "^/"},
-            "AIData": {"type": "string", "pattern": "^/"},
-            "RegionID": {"type": "integer"},
-            "MapRegion": {"type": "string", "pattern": "^/"}
-          },
-          "allOf": [
-            {"if": {"properties": {"UnlockType": {"pattern": "(^|::)ItemFirstPickup$"}}}, "then": {"required": ["UnlockingItemData"]}},
-            {"if": {"properties": {"UnlockType": {"pattern": "(^|::)RecipeUnlocked$"}}}, "then": {"required": ["UnlockingRecipe"]}},
-            {"if": {"properties": {"UnlockType": {"pattern": "(^|::)Interaction$"}}}, "then": {"required": ["UnlockingInteractionActor"]}},
-            {"if": {"properties": {"UnlockType": {"pattern": "(^|::)AIKill$"}}}, "then": {"required": ["AIData"]}}
-          ]
-        },
         "Type": {
           "const": "Lore",
           "default": "Lore"
@@ -168,6 +148,100 @@
         "Unlock": {
           "description": "Request immediate journal discovery, not a crafting-recipe grant. If omitted, runtime-created entries default to true unless UnlockOnAcquire or UnlockCondition is present; declared cooked entries default to false. False does not revoke previous discovery.",
           "type": "boolean"
+        },
+        "UnlockCondition": {
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "UnlockType": {
+                    "pattern": "(^|::)ItemFirstPickup$"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "UnlockingItemData"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "UnlockType": {
+                    "pattern": "(^|::)RecipeUnlocked$"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "UnlockingRecipe"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "UnlockType": {
+                    "pattern": "(^|::)Interaction$"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "UnlockingInteractionActor"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "UnlockType": {
+                    "pattern": "(^|::)AIKill$"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "AIData"
+                ]
+              }
+            }
+          ],
+          "description": "Native Dominion discovery condition. RuneSchema validates known trigger references and writes the reflected struct; in-game event indexing and persistence require runtime verification.",
+          "properties": {
+            "AIData": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "MapRegion": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "RegionID": {
+              "type": "integer"
+            },
+            "UnlockType": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "UnlockingInteractionActor": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "UnlockingItemData": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "UnlockingRecipe": {
+              "pattern": "^/",
+              "type": "string"
+            }
+          },
+          "required": [
+            "UnlockType"
+          ],
+          "type": "object"
         },
         "UnlockOnAcquire": {
           "default": false,

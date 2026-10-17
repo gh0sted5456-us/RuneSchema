@@ -20,10 +20,18 @@ int main(int argc, char** argv) {
     assert(journal.find("TEXT(\"InternalName\"), TEXT(\"PersistenceID\")") != std::string::npos);
     assert(journal.find("addReference(RC::StringType(characters.GetData(), characters.Num() - 1), object)") != std::string::npos);
     assert(journal.find("m_subCategoryCache") != std::string::npos);
+    assert(journal.find("JournalPlacement::WithNativeGroupKey") != std::string::npos);
+    assert(journal.find("entry->GetFName().ToString()") != std::string::npos);
+    const auto grouped=Read(argv[2]);
+    assert(grouped.find("const FName nativeKey=entry->GetFName()") != std::string::npos);
+    assert(grouped.find("const FName key=nativeKey") != std::string::npos);
+    assert(grouped.find("RemoveJournalMapAliases") != std::string::npos);
     assert(journal.find("FindObjectByClassAndName") == std::string::npos);
     for (int i = 1; i < 4; ++i) {
         const auto source = Read(argv[i]);
-        assert(source.find("PS::WeakObject") == std::string::npos);
+        // The local generation token does not invoke UE4SS's incompatible
+        // object-to-soft-reference converter. Engine FWeakObjectPtr does.
+        assert(source.find("FWeakObjectPtr(") == std::string::npos);
         assert(source.find("WeakPtr.Get") == std::string::npos);
         assert(source.find(".WeakPtr =") == std::string::npos);
         assert(source.find("->WeakPtr =") == std::string::npos);

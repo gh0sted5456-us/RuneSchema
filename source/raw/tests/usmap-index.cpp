@@ -32,13 +32,13 @@ static void AppendName(std::vector<uint8_t>& bytes, const std::string& value)
     bytes.insert(bytes.end(), value.begin(), value.end());
 }
 
-static std::vector<uint8_t> MakeMap()
+static std::vector<uint8_t> MakeMap(const std::string& typePath="/Script/Test.TestType")
 {
     std::vector<uint8_t> payload;
     Append<uint32_t>(payload, 3);
     AppendName(payload, "TestType");
     AppendName(payload, "Health");
-    AppendName(payload, "/Script/Test.TestType");
+    AppendName(payload, typePath);
     Append<uint32_t>(payload, 0); // enums
     Append<uint32_t>(payload, 1); // structs
     Append<int32_t>(payload, 0);  // TestType
@@ -71,7 +71,7 @@ static std::vector<uint8_t> MakeMap()
     return file;
 }
 
-int main()
+int main(int argc,char** argv)
 {
     const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
     const auto root = fs::temp_directory_path() / ("runeschema-usmap-" + std::to_string(stamp));
@@ -109,6 +109,41 @@ int main()
     Check(cached.value("Source", "") == "cache", "second process-shaped query uses cache");
     Check(!index.Snapshot().value("Parsed", true), "cache hit does not parse mapping");
 
+    const auto moduleMap=root/"NativeModule.usmap";
+    const auto moduleBytes=MakeMap("/Script/Test");
+    std::ofstream(moduleMap,std::ios::binary).write(reinterpret_cast<const char*>(moduleBytes.data()),static_cast<std::streamsize>(moduleBytes.size()));
+    // A v1 negative lookup must not survive the corrected path normalization.
+    const nlohmann::json stale={{"SchemaVersion",1},{"Fingerprint","module-fingerprint"},{"Types",{
+        {"/script/test.testtype",{{"Found",false},{"Ambiguous",false}}}}}};
+    std::ofstream(cache/"usmap-module-fingerprint.json")<<stale.dump();
+    index.ResetForTests();
+    const auto qualified=index.Handle(moduleMap,"module-fingerprint",cache,{{"Action","DescribeType"},{"Type","/Script/Test.TestType"}});
+    Check(qualified.value("Found",false),"module path resolves to qualified native type");
+    Check(qualified.at("Type").at("Path")=="/Script/Test.TestType","native module path appends type name");
+    Check(qualified.value("Source","")=="usmap","old negative cache is invalidated");
+    Check(index.Handle(moduleMap,"module-fingerprint",cache,{{"Action","SearchTypes"},{"Query","TestType"}}).at("Results").size()==1,"native type search includes qualified type name");
+    Check(!index.Handle(moduleMap,"module-fingerprint",cache,{{"Action","DescribeType"},{"Type","/Script/Other.TestType"}}).value("Found",true),"wrong module does not resolve by bare-name fallback");
+    const auto blueprintMap=root/"BlueprintPackage.usmap";
+    const auto blueprintBytes=MakeMap("/Game/Test/BP_Test");
+    std::ofstream(blueprintMap,std::ios::binary).write(reinterpret_cast<const char*>(blueprintBytes.data()),static_cast<std::streamsize>(blueprintBytes.size()));
+    index.ResetForTests();
+    Check(index.Handle(blueprintMap,"blueprint-fingerprint",cache,{{"Action","DescribeType"},{"Type","/Game/Test/BP_Test.TestType"}}).value("Found",false),"Blueprint package path resolves to qualified type");
+
+    if(argc==2) {
+        index.ResetForTests();
+        const auto capture=index.Handle(fs::path(argv[1]),"external-native-capture",root/"native-cache",
+            {{"Action","DescribeType"},{"Type","/Script/Dominion.HeldEquipmentData"}});
+        if(!capture.value("Found",false)) {
+            std::cerr<<capture.dump(2)<<'\n'<<index.Handle(fs::path(argv[1]),"external-native-capture",root/"native-cache",
+                {{"Action","DescribeType"},{"Type","HeldEquipmentData"}}).dump(2)<<'\n'<<index.Snapshot().dump(2)<<'\n';
+        }
+        Check(capture.value("Found",false),"native HeldEquipmentData resolves");
+        bool projectileObject=false;
+        for(const auto& field:capture.at("Type").at("Properties"))
+            if(field.value("Name","")=="ProjectileClass")projectileObject=field.value("Type","")=="Object";
+        Check(projectileObject,"1.0.1 ProjectileClass is an Object, not the old SoftObject");
+        std::cout<<"Native 1.0.1 mapping verified.\n";
+    }
     std::error_code error;
     fs::remove_all(root, error);
     std::cout << "USMAP lazy-index contract passed.\n";

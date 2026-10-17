@@ -27,6 +27,26 @@ both. `AdditionalDrops` supports an item, minimum, maximum, and chance. A
 quest-completed condition can latch with `PersistAfterCondition`. `EventOnly`
 templates are definitions for `/events` and do not place permanent actors.
 
+Grounded placements wait for streamed blocking collision. NPCs, spawns,
+event members and authoring previews share the same simple-collision query
+with a complex-collision fallback. Streamed cell height bounds can widen the
+search for installed NPCs and spawns. A missing surface never permits a guessed
+placement height; installed entries retry within a bounded window and can
+retry again when their cell streams in. Event waves resolve every member's
+ground position before constructing any actors.
+
+For stacked surfaces, the floor query starts at the reference height plus a
+45 cm stair allowance, not above the highest roof. Numeric spawn Z is the
+reference; a bare `$` first finds landscape beneath overhead actors. An optional
+`"GroundReferenceZ": -3500` selects an approximate floor for `$` placements on
+stairs, bridge decks, upper floors or mesh-only terrain. This is a search hint,
+not an exact spawn height: a real upward-facing blocking hit is still required.
+Helpy preserves this hint when exporting grounded placements. Event `$` members
+and live placement tools use their participant/player height. Terrain probing
+is bounded to 16 overlapping actors; unsupported or ambiguous collision never
+permits a guessed placement. Ground offsets and the standard 10 cm spawn
+clearance are applied after the hit.
+
 ## Temporary ore and tree nodes
 
 Use an ordinary `Actor` resource entry with **one** lifecycle condition:

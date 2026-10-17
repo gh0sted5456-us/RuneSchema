@@ -268,8 +268,11 @@ namespace DragonWilds {
             if (token == "any" || token == "all" || token == "universal") return true;
             if (token == "gamepass" || token == "wingdk" || token == "xbox")
                 return storefront == PS::Storefront::Kind::GamePass;
-            if (token == "steam" || token == "steamgog" || token == "gog" || token == "win64")
-                return storefront == PS::Storefront::Kind::SteamGog;
+            // Old schema tokens remain aliases; emitted/displayed names use
+            // Steam/Epic. This does not claim a separate GOG distribution.
+            if (token == "steam" || token == "steamepic" || token == "epic"
+                || token == "steamgog" || token == "gog" || token == "win64")
+                return storefront == PS::Storefront::Kind::SteamEpic;
             if (token == "unknown")
                 return storefront == PS::Storefront::Kind::Unknown;
             throw std::runtime_error("Blueprint $RuntimeWidget $Storefront contains an unsupported value");

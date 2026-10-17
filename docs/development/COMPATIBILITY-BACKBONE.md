@@ -1,6 +1,6 @@
 # Compatibility
 
-RuneSchema uses one storefront-aware runtime for Steam/GOG and Game Pass/WinGDK.
+RuneSchema uses one storefront-aware runtime for Steam/Epic and Game Pass/WinGDK.
 
 ## Storefronts
 

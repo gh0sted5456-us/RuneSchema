@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Native recipe discovery policy",
+  "description": "Recipe-level convenience syntax compiled to native ProgressionBundleRow queries. Restart required. Do not combine with Unlock:true. Native evaluation and player progress remain owned by the game.",
+  "oneOf": [
+    {"const": "Native"},
+    {"$ref": "#/definitions/operand"},
+    {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "All": {"$ref": "#/definitions/operands"},
+        "Any": {"$ref": "#/definitions/operands"}
+      },
+      "oneOf": [{"required": ["All"]}, {"required": ["Any"]}]
+    }
+  ],
+  "definitions": {
+    "path": {
+      "type": "string", "maxLength": 1024,
+      "pattern": "^/(?!Script/|Engine/)[^\\s\\\\,\\[\\]]+/[^\\s\\\\,\\[\\]]+\\.[^\\s\\\\,\\[\\]./]+$",
+      "not": {"pattern": "\\.\\."}
+    },
+    "paths": {"type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true, "items": {"$ref": "#/definitions/path"}},
+    "operands": {"type": "array", "minItems": 1, "maxItems": 2, "items": {"$ref": "#/definitions/operand"}},
+    "operand": {
+      "type": "object", "minProperties": 1, "maxProperties": 1, "additionalProperties": false,
+      "properties": {
+        "AllItems": {"$ref": "#/definitions/paths"},
+        "AnyItems": {"$ref": "#/definitions/paths"},
+        "AllActors": {"$ref": "#/definitions/paths"},
+        "AnyActors": {"$ref": "#/definitions/paths"},
+        "SkillLevel": {
+          "type": "object", "additionalProperties": false, "required": ["Skill", "Level"],
+          "properties": {
+            "Skill": {"$ref": "#/definitions/path"},
+            "Level": {"type": "integer", "minimum": 1, "maximum": 100000}
+          }
+        }
+      }
+    }
+  }
+}

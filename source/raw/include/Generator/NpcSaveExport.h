@@ -42,6 +42,7 @@ inline void ApplyResolved(Json& preview) {
         auto slot=row.value("Slot",std::string{});
         if(DragonWilds::HumanNpc::IsMainHandSlot(slot))slot="MainHand";
         else if(DragonWilds::HumanNpc::IsOffHandSlot(slot))slot="OffHand";
+        else slot=DragonWilds::HumanNpc::CanonicalEquipmentSlot(slot);
         bool allowed=false;for(const auto* key:DragonWilds::HumanNpc::EquipmentKeys)if(slot==key)allowed=true;
         if(!allowed || !row.at("AssetPath").is_string()) {
             warnings.push_back("Loadout "+row.at("Location").get<std::string>()+": unresolved or unsupported equipment ("+row.at("PersistenceID").get<std::string>()+")");continue;

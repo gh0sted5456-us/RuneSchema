@@ -77,7 +77,7 @@ kind of work.
 | `registry` | Describe supported presentation or action content. It is not a general item list. |
 | `paks` | Store packaged Unreal content such as meshes, icons, sounds, items, and stations. |
 | `logicmods` | Opt in cooked packages that provide a `ModActor` to Blueprint startup. |
-| `ue4ss` | Carry an optional Lua-only UE4SS companion that starts with this RuneSchema mod. |
+| `ue4ss` | Lua-only UE4SS add-ons, with scripts/configs kept intact; uses unmodified UE4SS. Native/hybrid packages are skipped. |
 
 [Open the complete folder guide](LOADER-WALKTHROUGHS.md).
 
@@ -89,7 +89,7 @@ but they do not automatically start a ModActor. See
 [Compare the two optional UE4SS-backed folders](PSEUDO-LOADERS.md) before
 adding Blueprint startup or a Lua companion.
 
-## Add an optional UE4SS Lua companion
+## Include complete UE4SS packages
 
 Use this only when cooked Blueprints and RuneSchema's data loaders cannot
 express the behavior. Keep the feature inside the same mod folder:
@@ -97,18 +97,21 @@ express the behavior. Keep the feature inside the same mod folder:
 ```text
 MyDragonwildsMod/
   ue4ss/
-    scripts/
-      main.lua
-      my_helpers.lua
+    MyLuaPackage/
+      Scripts/main.lua
+      Scripts/my_helpers.lua
+      config.txt
+    MyNativePackage/
+      dlls/main.dll
+      settings.ini
 ```
 
-The entry point is exactly `ue4ss/scripts/main.lua`. It receives the normal
-UE4SS Lua functions, so it can register hooks, callbacks, keys, and console
-commands. Other `.lua` files beneath `ue4ss/scripts` can be loaded with
-`require`. Use unique module names so two mods do not claim the same Lua module.
-
-This folder is Lua only. Do not place DLLs or a second UE4SS native mod inside
-it. RuneSchema does not load native binaries from a mod's `ue4ss` folder.
+Keep each package intact, including configs, metadata and DLL dependencies.
+The matching managed host uses real UE4SS lifecycles; older hosts have a
+Lua-only compatibility fallback. The managed host is an alpha candidate
+pending in-game validation. Package names must be unique.
+The legacy direct `ue4ss/scripts/main.lua` layout still works; do not mix it
+with child packages in one container.
 
 RuneSchema starts companions once, in the enabled order recorded in
 `RuneSchema/mods/runeschema.txt`. A row set to `0` is not started. A failure in
