@@ -21,12 +21,14 @@ as separate features. Website changes are listed separately below.
 - Added weak-object identity and world-generation checks around deferred operations, cached references and streamed actors.
 - Hardened shutdown and worker/window teardown so pending UI work is not treated as safe engine work after the world or runtime retires.
 - Preserved the stock UE4SS boundary: RuneSchema packages do not replace or patch `UE4SS.dll`.
+- Recooked the stale shared identity component to include replicated `IdentityPayload` and `OnRep_IdentityPayload`; an isolated native old/new comparison reproduces the missing fields and verifies the repair. Packaging now pins the verified networking containers instead of accepting a stale triplet.
 
 ## Registries and cooked content
 
 - Extended PAK registry declarations to recipes, journals and lore, with ordinary loader bodies embedded in cooked metadata where supported.
 - Added conventional-root registry shards so supported declarations can be discovered without depending solely on Asset Registry enumeration.
 - Added bounded, atomic declaration publication, owner/path checks and precedence for loose schema overrides of cooked loader metadata.
+- Added an October 16 follow-up raising the per-document ceiling from 256 to 512 KiB for actual cooked Dye payloads; group/reference budgets and cleanup vetoes remain unchanged. Installed on Steam and Game Pass; live enrollment/pruning still needs acceptance.
 - Extended loose `/registry` declarations to eleven native lanes with explicit `Source: Schema` provenance and native identity checks.
 - Fixed canonical network counting: already registered candidates are validated but no longer reserve new slots a second time.
 - Kept the real 65,535-entry network capacity; genuine overflow reports existing, new and maximum counts instead of silently widening a native type.
@@ -146,6 +148,11 @@ independent UE4SS VM/ModRef.
 
 ## Helpy desktop experience
 
+- Added Live Log navigation with bounded background tailing of RuneSchema.log, severity/subsystem filters, case-insensitive search, pause/follow controls, full-entry details, clipboard copy and local filtered UTF-8 export.
+- Added eight reviewed diagnostic help codes that link to matching troubleshooting sections without putting log text, player identifiers or local paths into the URL.
+- Added a server-local Dedicated Server editor with documented-scalar staging, an offline apply helper, sensitive-value masking, redacted native records, repeated-key preservation, baseline conflict checks and backup-on-apply; the active server INI is never edited by the running Helpy UI.
+- Documented 16 observed server INI keys, separated verified settings from unverified sample entries, and explained native privilege flags without treating account IDs as character GUIDs or granting RuneSchema rights from a nonzero mask.
+
 - Integrated Helpy 2.0.4 work into the separate desktop tool; retained `RuneSchema.Helpy` IDs/state paths while introducing RuneSchema Modding Kit branding.
 - Restored a normal movable desktop window, with F2 hide/reopen and game return, rather than embedding editing in the focused game window.
 - Simplified Simple/Advanced presentation while keeping ordinary item giving available in Simple mode.
@@ -153,6 +160,9 @@ independent UE4SS VM/ModRef.
 - Added real item drag/drop and right-click cart actions, with a shared cart and exact delivery confirmation before clearing delivered entries.
 - Added kit/loadout import/export and local kit-library workflows, with explicit auto-equip support where native validation permits it.
 - Added up to sixteen authoritative recipients for one cart, serialized delivery and stop-on-partial/ambiguous outcomes rather than automatic retries.
+- Added individual recipient removal and a Clear recipients action without changing cart contents or quantities.
+- Removed stale cart player selections on world changes, pruned departed player identities and rejected old-generation roster/receipt messages.
+- Applied case-insensitive A-Z item ordering before pagination, with bounded metadata-only index construction and retained query indexes for repeated searches.
 - Preserved hover descriptions/stats, right-click actions and a selected-item details pane in both docked and detached Item Bay views.
 - Added a separate movable Item Bay with Dock back/close-to-dock, shared selection and cross-window drag/drop.
 - Split item authoring into Transmog/Creation and Recipes workflows with visual source/customize/result and input/station/output layouts.
@@ -211,6 +221,11 @@ not implement grant/revoke/kick administration.
 
 ## Website and documentation
 
+- Matched the website to revamped Helpy: near-black panels, warm ivory text, gold accents, restrained borders, active navigation and the shared RuneSchema logo, with an optional accessible warm-light theme.
+- Rewrote the RuneSchema overview with a readable capabilities introduction followed by loader/runtime functions, package layout, file roles and a first-mod walkthrough; preserved the page URL and legacy section anchors.
+- Added searchable diagnostic help-code targets and a reviewed dedicated-server settings/permissions reference, separating documented settings from unverified sample keys.
+- Corrected an over-escaped site-search separator so diagnostic-code and ordinary word searches tokenize properly; verified that the quest-ownership code finds its troubleshooting entry.
+
 - Simplified top-level navigation into Players, Creators, Servers, Reference and Updates, with collapsible reference groups.
 - Reworked the home page into a quieter responsive layout with one primary action, clear stable/alpha labels and three audience routes.
 - Added quick-guide filtering, aliases, result counts, Clear, Escape reset and Enter-to-open behavior.
@@ -220,9 +235,10 @@ not implement grant/revoke/kick administration.
 
 ## Verification and remaining work
 
-The latest installed candidate passed **184 core tests, 35 Helpy tests and 75
-generated-schema checks**, native builds, canonical UPX integrity and **269 core
-imports against each stock Steam/Game Pass UE4SS host**. Installed framework
+The latest installed networking/registry follow-up passed **185 core tests**;
+the unchanged Helpy previously passed **35 tests**, and the registry correction
+passed **75 generated-schema checks**. Native builds, canonical UPX integrity and
+**269 core imports against each stock Steam/Game Pass UE4SS host** also passed. Installed framework
 hashes and the Game Pass launch alias were verified. The
 [candidate record](https://github.com/gh0sted5456-us/RuneSchema/blob/runeschema-7.8-alpha/docs/ALPHA-CANDIDATE.md)
 contains package hashes and per-candidate evidence; older installation labels

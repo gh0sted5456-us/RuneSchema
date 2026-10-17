@@ -9,19 +9,20 @@ hide:
 <section class="rs-hero" aria-labelledby="rs-home-title">
   <div class="rs-hero__eyebrow">
     <span>RuneSchema for Dragonwilds</span>
-    <span>Steam · GOG · Game Pass</span>
+    <span>Steam · Epic · Game Pass</span>
   </div>
   <h1 id="rs-home-title">Your mods.<br>Your world.</h1>
   <p>A shared runtime for Dragonwilds mods. Install content, create something new, or bring your community together.</p>
   <div class="rs-actions">
     <a class="md-button md-button--primary" href="INSTALLATION/">Get started <span aria-hidden="true">→</span></a>
     <a class="rs-text-link" href="CURRENT-RELEASE/">Stable release · 0.7.7.9m</a>
+    <a class="rs-text-link" href="MOD-HOSTS-AND-GETTING-STARTED/">What is RuneSchema? <span aria-hidden="true">↗</span></a>
   </div>
 </section>
 
 <aside class="rs-release" aria-label="Alpha development">
   <span class="rs-release__tag">In development</span>
-  <p><strong>0.7.8 alpha</strong> — new loader capabilities, Helpy tools, and runtime hardening.</p>
+  <p><strong>0.8.0.0 alpha</strong> — the revamped Helpy workspace, content integration, and runtime hardening.</p>
   <a href="ALPHA-CHANGELOG/">See what changed <span aria-hidden="true">→</span></a>
 </aside>
 
@@ -50,7 +51,7 @@ hide:
   </div>
   <p class="rs-finder__count" id="rs-guide-count" role="status" aria-live="polite">8 quick guides · use site search for all documentation</p>
   <ul class="rs-finder__list" id="rs-guide-list">
-    <li data-rs-keywords="download setup steam gamepass xbox gog upgrade"><a href="INSTALLATION/">Install or update <span aria-hidden="true">→</span></a></li>
+    <li data-rs-keywords="download setup steam gamepass xbox epic upgrade"><a href="INSTALLATION/">Install or update <span aria-hidden="true">→</span></a></li>
     <li data-rs-keywords="enable disable order addons settings"><a href="users/manage-mods/">Manage your mods <span aria-hidden="true">→</span></a></li>
     <li data-rs-keywords="remove uninstall orphan cleanup prune character"><a href="SAFE-SAVE-AND-LEDGER/">Keep saves safe <span aria-hidden="true">→</span></a></li>
     <li data-rs-keywords="pak asset register item"><a href="modders/first-cooked-item/">Add a cooked item <span aria-hidden="true">→</span></a></li>
