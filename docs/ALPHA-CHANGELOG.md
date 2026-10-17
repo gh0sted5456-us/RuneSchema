@@ -235,11 +235,14 @@ not implement grant/revoke/kick administration.
 
 ## Verification and remaining work
 
-The latest installed networking/registry follow-up passed **185 core tests**;
-the unchanged Helpy previously passed **35 tests**, and the registry correction
-passed **75 generated-schema checks**. Native builds, canonical UPX integrity and
-**269 core imports against each stock Steam/Game Pass UE4SS host** also passed. Installed framework
-hashes and the Game Pass launch alias were verified. The
+The installed r5 foundation passed **199 core tests and 42 Helpy tests**. The
+new local r7 Live Log/server-settings candidate passes **45 Helpy tests**, with
+the same verified core. Its server helper was tested on disposable INI files,
+not a production server. Both DLLs are compressed; integrity, extracted desktop
+lifecycle and a private UI decompression comparison passed. The native core's
+**269 imports resolve against each unchanged stock Steam/Game Pass UE4SS host**.
+The r5 installation hashes and Game Pass launch alias were verified; the r7
+candidate is not an installation or a stable promotion. The
 [candidate record](https://github.com/gh0sted5456-us/RuneSchema/blob/runeschema-7.8-alpha/docs/ALPHA-CANDIDATE.md)
 contains package hashes and per-candidate evidence; older installation labels
 there are historical, not separate current recommendations.
