@@ -1,6 +1,6 @@
 # Included Lua UE4SS add-ons
 
-The alpha candidate supports complete Lua-based UE4SS add-ons inside an enabled
+RuneSchema 0.8.0.0 supports complete Lua-based UE4SS add-ons inside an enabled
 RuneSchema mod. Like `paks`, `ue4ss` is a container for separate packages:
 
 ```text

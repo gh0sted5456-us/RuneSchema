@@ -1,8 +1,8 @@
-# Alternative objectives and shared-world NPC equipment (7.8 alpha)
+# Alternative objectives and shared-world NPC equipment
 
-Alpha runtime/schema support. The r3 framework is installed on Steam and Game
-Pass (2026-10-15); these capabilities are not yet live-world validated.
-Both sides of a multiplayer session need this alpha and matching definitions.
+Runtime/schema support is included in RuneSchema 0.8.0.0. Publication does not
+replace live-world acceptance testing for these capabilities. Both sides of a
+multiplayer session need matching framework versions and definitions.
 
 ## One quest, either route
 

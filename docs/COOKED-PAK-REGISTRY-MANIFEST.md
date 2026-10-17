@@ -10,7 +10,7 @@ is accepted rather than duplicated.
 Use this declaration for a cooked catalogue or a gameplay asset that has no
 other reliable native path into its live registry. A small mod may instead
 reference a cooked item through [`assets`](reference/loaders/assets.md) and
-connect it with [`recipes`](reference/loaders/recipes.md). The 7.8 alpha also
+connect it with [`recipes`](reference/loaders/recipes.md). RuneSchema 0.8.0.0 also
 accepts recipe, journal and lore loader metadata inside the cooked declaration,
 so a PAK need not duplicate those pointers in loose files. Do not create
 thousands of empty pointer files for a large PAK.
@@ -79,7 +79,7 @@ own.
 These are the only `NativeRegistries` fields. Each field accepts at most 4,096
 unique paths; a declaration accepts at most 16,384 references in total,
 including `LoaderDefinitions` entries. The cooked JSON string is bounded to
-512 KiB in the corrected 7.8 alpha (older builds: 256 KiB). For larger catalogues, use a conventional root with explicit
+512 KiB in 0.8.0.0 (older builds: 256 KiB). For larger catalogues, use a conventional root with explicit
 `RegistryShards` and marked child assets as described in
 [bounded cooked registry shards](COOKED-REGISTRY-SHARDS.md). Those pages load
 directly, without Asset Registry enumeration or a whole-project registry file.

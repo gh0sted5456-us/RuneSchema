@@ -46,7 +46,7 @@ stable when updating the same quest.
 
 ## Quest lists and completion
 
-7.8 alpha stages also support `Completion: "Any"` for alternative objectives
+RuneSchema 0.8.0.0 stages also support `Completion: "Any"` for alternative objectives
 with one completion/reward receipt. See [alternative objectives and NPC
 equipment consequences](../../QUEST-ALTERNATIVES-AND-NPC-EQUIPMENT.md) for the
 kill-or-hand-in contract, limits, repeat behavior and live-validation status.

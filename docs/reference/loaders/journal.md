@@ -20,11 +20,11 @@ Use a stable, mod-specific key. `Type` selects the native asset class: `Lore`, `
 }
 ```
 
-`Unlock: false` is appropriate when a gameplay event should discover the entry later. `Unlock: true` requests a native player unlock once the owning player's journal component is ready. The alpha loader retries automatic delivery on player inventory activity and RuneSchema NPC interaction, without treating placement as an unlock receipt. A rejected native unlock remains an error; RuneSchema does not force-write the player's unlocked-entry array.
+`Unlock: false` is appropriate when a gameplay event should discover the entry later. `Unlock: true` requests a native player unlock once the owning player's journal component is ready. The loader retries automatic delivery on player inventory activity and RuneSchema NPC interaction, without treating placement as an unlock receipt. A rejected native unlock remains an error; RuneSchema does not force-write the player's unlocked-entry array.
 
 ## Discover an entry when talking to an NPC
 
-In the 7.8 alpha, an `/npc` definition can add `JournalEntries` alongside its normal shop or dialogue:
+In RuneSchema 0.8.0.0, an `/npc` definition can add `JournalEntries` alongside its normal shop or dialogue:
 
 ```jsonc
 "JournalEntries": [

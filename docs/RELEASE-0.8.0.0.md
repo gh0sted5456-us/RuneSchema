@@ -4,7 +4,7 @@ Published from `main`, tag `0.8.0.0`. This release consolidates the October
 13–16 alpha development into the verified r7 runtime and the cleaned package.
 
 [Download the full ZIP](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.0/RuneSchema-0.8.0.0.zip)
-· [Full consolidated changelog](ALPHA-CHANGELOG.md)
+· [Full line-by-line changelog](CHANGELOG-0.8.0.0.md)
 · [Installation](INSTALLATION.md)
 
 ## Included improvements

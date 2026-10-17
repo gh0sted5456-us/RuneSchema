@@ -32,15 +32,15 @@ server owns creation and clients prepare the replicated presentation.
 
 ## Rules
 
-The 7.8 alpha's Human-only `EquipmentWhen` rules can latch wearable changes
+RuneSchema 0.8.0.0's Human-only `EquipmentWhen` rules can latch wearable changes
 after a quest completes in this world. They require an explicit shared-world
 policy; see [equipment consequences](../../QUEST-ALTERNATIVES-AND-NPC-EQUIPMENT.md)
-for persistence, replication and backup requirements. This is candidate-only,
-not a claim of live-world verification.
+for persistence, replication and backup requirements. Released schema support
+is not a claim of live-world verification for every equipment rule.
 
 - Choose a compatible actor role and visual source.
 - Bind `VendorID`, `DialogueID`, `QuestID`, or lore only when needed.
-- The 7.8 alpha's `JournalEntries` list requests native player discovery on interaction without replacing the NPC's shop or dialogue. Use local journal/lore IDs, `Mod:Id`, or full cooked journal paths; see the [journal loader](journal.md). `NoInteract` suppresses these bindings.
+- The `JournalEntries` list requests native player discovery on interaction without replacing the NPC's shop or dialogue. Use local journal/lore IDs, `Mod:Id`, or full cooked journal paths; see the [journal loader](journal.md). `NoInteract` suppresses these bindings.
 - `HideWeapon` suppresses inherited weapon presentation on supported human NPCs.
 - Human `Equipment` accepts `Necklace` for items whose native slot strategy is
   `Necklace`, alongside the existing `Trinket` slot. `Trinket2` is an alias for

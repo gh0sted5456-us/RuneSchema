@@ -89,7 +89,7 @@ but they do not automatically start a ModActor. See
 [Compare the two optional UE4SS-backed folders](PSEUDO-LOADERS.md) before
 adding Blueprint startup or a Lua companion.
 
-## Include complete UE4SS packages
+## Include complete Lua UE4SS packages
 
 Use this only when cooked Blueprints and RuneSchema's data loaders cannot
 express the behavior. Keep the feature inside the same mod folder:
@@ -101,15 +101,17 @@ MyDragonwildsMod/
       Scripts/main.lua
       Scripts/my_helpers.lua
       config.txt
-    MyNativePackage/
-      dlls/main.dll
+    AnotherLuaPackage/
+      Scripts/main.lua
       settings.ini
 ```
 
-Keep each package intact, including configs, metadata and DLL dependencies.
-The matching managed host uses real UE4SS lifecycles; older hosts have a
-Lua-only compatibility fallback. The managed host is an alpha candidate
-pending in-game validation. Package names must be unique.
+Keep each Lua package intact, including configs, helpers and metadata.
+RuneSchema 0.8.0.0 uses its Lua bootstrap on unmodified UE4SS; it does not
+provide a managed/custom host. Nested native or hybrid DLL packages are
+rejected and must instead be installed directly through stock UE4SS.
+Package names must be unique. Package-local Lua context is not an independent
+UE4SS VM/ModRef or a security sandbox.
 The legacy direct `ue4ss/scripts/main.lua` layout still works; do not mix it
 with child packages in one container.
 

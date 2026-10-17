@@ -1,6 +1,6 @@
 # Recipe discovery without separate raw patches
 
-The 7.8 alpha accepts a `Discovery` block directly in each `/recipes` body,
+RuneSchema 0.8.0.0 accepts a `Discovery` block directly in each `/recipes` body,
 including overrides keyed by a full cooked recipe object path. It compiles the
 condition into the game's native `ProgressionBundleRow.UnlockQuery`; it does
 not add a per-frame polling rule engine or force-write character unlock sets.

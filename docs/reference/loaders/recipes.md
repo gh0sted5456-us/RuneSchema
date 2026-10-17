@@ -9,7 +9,7 @@ Crafting, processing, station placement, merchants, and vendor contributions.
 Recipes can feed vanilla crafting or processing rows, vanilla merchants, and
 RuneSchema vendors.
 
-The 7.8 alpha also accepts a recipe-level `Discovery` block for native item
+RuneSchema 0.8.0.0 also accepts a recipe-level `Discovery` block for native item
 pickup, actor-interaction and skill-level prerequisites, including AND/OR
 queries. It works for cooked overrides and in-PAK loader definitions without
 separate `/raw` files. See [recipe discovery](../../RECIPE-DISCOVERY.md) for

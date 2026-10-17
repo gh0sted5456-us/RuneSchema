@@ -1,15 +1,15 @@
 # Advanced Authoring & Tools
 
-RuneSchema gives the in-game authoring page one full-width, top-to-bottom
-workflow. It can help you find a loaded record, prepare an editable JSONC
+RuneSchema 0.8.0.0 provides authoring through Helpy's separate desktop
+workspace. It can help you find a loaded record, prepare an editable JSONC
 starter, check its references, and export it. Opening the page, searching, and
 building a preview do not install a mod or change the game data.
 
 ## Open the tools
 
-### Helpy 7.8 alpha
+### Helpy / RSMK 0.8.0.0
 
-Helpy's external F2 window has a compact **Simple / Advanced** switch in its header. Simple mode keeps everyday item browsing and delivery together; Advanced exposes Transmutate, Recipes, building tools, cleanup, full scans and detailed appearance controls. The preference is stored in `ui.jsonc` under `views.advancedMode`.
+Open Helpy with F2. **Item Service** handles everyday browsing and delivery; **Transmog & Creation**, **Recipes** and **Authoring Tools** provide the authoring workspaces. **Tools**, **Settings** and **Live Log** have separate navigation entries. UI preferences remain in `ui.jsonc`; RuneSchema runtime settings use `settings.ini`.
 
 The shared item bay defaults to **20 items per page** in a **5 columns × 4 rows** grid. Change the page size below the items (presets or a custom count from 1 to 100), then use **Previous / Next**. Page size changes preserve the first item's approximate position without clearing the cart. The catalog fetches only enough bounded windows to fill the requested page; it does not start a Full Scan. A partial catalog is marked “more available” rather than reporting a guessed total.
 
@@ -17,7 +17,7 @@ Search runs after a short typing pause or immediately on Enter. **All categories
 
 Choose an item, then **Add to cart**, or drag it into the compact cart. **Give items** is the only primary delivery action. **Loadouts** holds kit import/export; **More** holds list/player refresh and advanced scan tools. An empty cart does not reserve the height of a populated staging chest. Existing colors, scaling, list-view preferences and delivery confirmation semantics are retained.
 
-**Transmutate** separates source selection, customization and the resulting item into connected cards, with the item bay below. Inspect the selected source before creating a clone. Native property and JSON overrides are in a separate expandable section. The source item is not changed.
+**Transmog & Creation** separates source selection, customization and the resulting item into connected cards, with the item bay below. Inspect the selected source before creating a clone. Native property and JSON overrides are in a separate expandable section. The source item is not changed.
 
 **Recipes** connects inputs, station/timing and outputs. Drag items from the bottom bay into either side, or select an item and use the add buttons. Quantities are editable; a recipe can have multiple outputs. Choose a native station row and, where applicable, a labeled category. Optional processing duration has minimum and maximum bounds in seconds. These cards stack vertically when the available width is limited.
 
@@ -25,7 +25,7 @@ Use **Browse** to search native recipe metadata, or paste an exact cooked `Recip
 
 Normal catalog queries combine loaded objects with mounted asset-registry metadata. Unloaded AI/resource candidates remain visible but need **Inspect selected definition** before spawning. Inspection loads only the selected class and checks its native ancestry; native NPC-copy restrictions and resource save-exclusion checks still apply. The coverage message identifies when registry metadata is unavailable. Unknown mod directories are not guessed to be resource or AI classes: authored `/spawns` entries and the explicit Full Scan remain additional discovery paths.
 
-The item inventory is above the cart. Drag an item down, or right-click **Add to cart**, then choose a player and **Deliver**. Selecting an item does not grant it. Cart editing pauses during delivery; entries leave the cart only after matching inventory-delta confirmations. Failed or unconfirmed entries stay staged for inspection, without automatic retries. Advanced mode also offers one-each and stack presets.
+Drag an item into the cart, or right-click **Add to cart**, select the intended recipients and choose **Give items**. Selecting an item does not grant it. Cart editing pauses during delivery; entries leave the cart only after matching inventory-delta confirmations. Failed or unconfirmed entries stay staged for inspection, without automatic retries. Recipients can be removed individually or cleared without changing item quantities.
 
 PowerLevel badges request the native game texture and display the item's actual native value, with a text fallback. Masterwork labels use native flags/tags; detailed tooltips retain the native `MasterworkType` identifier when supplied by the item. Item names and high PowerLevel do not imply masterwork quality.
 
@@ -48,19 +48,19 @@ Delivery uses the existing authoritative inventory grant and confirmation path. 
 
 ### RuneSchema authoring workflow
 
-Open RuneSchema Settings, then **Authoring & Tools**. If the tools are off,
-enable **Mod authoring tools** under **General > Runtime** and restart. When
-the game is ready, choose **Activate Tools for this session**. Activation is
-temporary; it does not become a permanent setting.
+Open **Authoring Tools** from Helpy's navigation; the old engine-embedded
+settings page is no longer the authoring entry point. If authoring is disabled,
+review its runtime setting in **Settings** and follow the displayed restart or
+session-activation requirements. Engine-backed actions still need a ready
+runtime and their own safety checks.
 
-The **Workflow stage** menu contains Mod Authoring, Presets, Traces, Inspector,
-Results, and Save Cleanup. **Previous stage** and **Next stage** move through
-that order. Recent results are at the bottom of the page. Save Cleanup is last
-because it is a separate offline operation, not part of creating a mod.
+Use the workflow selector for content/schema authoring, presets, traces,
+profiles, inspection and results. Offline save cleanup remains a separate,
+guarded workflow rather than an automatic step in creating a mod.
 
 ## Create an editable starter
 
-1. Choose **Mod Authoring** in Workflow stage.
+1. Choose **Content & schemas** in the workflow selector.
 2. Choose a **Content type**, or use **All Loaders** for the complete loader list.
 3. Choose the loader and **Format**. **Basic starter** is the default. Use
    **$Patch** to change supported existing content, **$Clone** to create a
@@ -85,7 +85,7 @@ structural loader schemas** provides the full set.
 
 Items, recipes, journal entries, quests, NPCs, spawns, and events have focused
 content choices. Player and nameplate pages include their own guided controls;
-the Items page also points to Helpy's Transmutate workspace for in-world item authoring.
+the Items page also points to Helpy's Transmog & Creation workspace for item authoring.
 
 ## Know what each stage is for
 

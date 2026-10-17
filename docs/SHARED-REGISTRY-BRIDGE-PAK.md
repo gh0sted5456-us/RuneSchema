@@ -237,7 +237,7 @@ RuneSchema will leave that unsafe lane unchanged.
   `PDA_RuneSchemaRegistryBridgeBase` exactly once.
 - The mod PAK contains its uniquely named `DA_RuneSchemaRegistry_*` instance.
 - `RegistryOwner` is stable and is not `RuneSchema`, `FModel`, or `Game`.
-- `RuneSchemaRegistryJson` is valid JSON and at most 512 KiB in the corrected 7.8 alpha (older builds: 256 KiB).
+- `RuneSchemaRegistryJson` is valid JSON and at most 512 KiB in 0.8.0.0 (older builds: 256 KiB).
 - Every declared object is cooked into an enabled PAK.
 - The ranged item resolves a complete quick/full collection.
 - Server and clients use matching PAKs and load order.
@@ -249,7 +249,7 @@ For the full lane limits and validation rules, see the
 Large catalogues can use the [bounded shard-index contract](COOKED-REGISTRY-SHARDS.md):
 the conventional root directly lists child assets, without requiring a
 whole-project `AssetRegistry.bin` or metadata enumeration of those children.
-The 7.8 alpha reads `Journals` and `Lore` declarations and in-PAK
+RuneSchema 0.8.0.0 reads `Journals` and `Lore` declarations and in-PAK
 `LoaderDefinitions` for recipe station links and journal/lore placement or
 unlock metadata from the same JSON string. No replacement shared Blueprint
 base or duplicate loose `/assets`, `/recipes`, `/journal` or `/lore` pointer

@@ -73,7 +73,7 @@ detachable Item Bay make content easier to browse and inspect. Crafting,
 transmog, map and authoring workspaces bring related actions together, with
 source-aware icon caches to avoid repeatedly requesting the same pictures.
 
-The 0.8.0.0 development work also includes a searchable Live Log with linked
+RuneSchema 0.8.0.0 also includes a searchable Live Log with linked
 diagnostic codes and a server-local configuration workspace. Server edits
 are staged for offline application; they are not a remote administration
 endpoint or permission bypass. Individual actions still depend on native
@@ -100,10 +100,12 @@ idea needs. Hosting-service reviewers and mod authors can link this page to
 explain the dependency and package contents without redistributing the
 framework inside every add-on.
 
-!!! note "Release channels"
+!!! note "Current release: 0.8.0.0"
     Download the build identified by the [current release page](CURRENT-RELEASE.md).
-    The [0.8.0.0 alpha work](ALPHA-CHANGELOG.md) includes features beyond the
-    stable channel; local candidate checks are not a live-server guarantee.
+    RuneSchema and RSMK now share version **0.8.0.0**, published on main with a
+    matching release tag. Read the [line-by-line changelog](CHANGELOG-0.8.0.0.md)
+    and [release notes](RELEASE-0.8.0.0.md). Automated checks are not a guarantee
+    that every authored feature has passed live-world or multiplayer testing.
 
 <div class="rs-functions-divider" markdown>
 

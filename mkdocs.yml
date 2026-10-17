@@ -151,5 +151,6 @@ nav:
       - Licensing: LICENSING.md
   - Updates:
       - Release 0.8.0.0: RELEASE-0.8.0.0.md
-      - Alpha changelog: ALPHA-CHANGELOG.md
+      - Full 0.8.0.0 changelog: CHANGELOG-0.8.0.0.md
+      - Development history: ALPHA-CHANGELOG.md
       - Current release: CURRENT-RELEASE.md

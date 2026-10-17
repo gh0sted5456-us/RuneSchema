@@ -1,6 +1,6 @@
 # Bounded cooked registry shards
 
-The 7.8 alpha supports a **flat, explicit shard index**. A conventional root
+RuneSchema 0.8.0.0 supports a **flat, explicit shard index**. A conventional root
 inside each enabled mod's PAK lists its child data assets by exact object path.
 RuneSchema loads those assets directly on Steam, Game Pass and dedicated-server
 builds using the same code path. It does not require a whole-project

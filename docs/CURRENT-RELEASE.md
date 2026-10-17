@@ -7,6 +7,7 @@ The package uses one core DLL for Steam/Epic and Game Pass, plus the RSMK plugin
 
 [Download 0.8.0.0](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.0/RuneSchema-0.8.0.0.zip)
 · [Release notes and verification](RELEASE-0.8.0.0.md)
+· [Line-by-line changelog](CHANGELOG-0.8.0.0.md)
 · [Installation guide](INSTALLATION.md)
 
 ## What changed
