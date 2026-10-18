@@ -77,7 +77,7 @@ kind of work.
 | `registry` | Describe supported presentation or action content. It is not a general item list. |
 | `paks` | Store packaged Unreal content such as meshes, icons, sounds, items, and stations. |
 | `logicmods` | Opt in cooked packages that provide a `ModActor` to Blueprint startup. |
-| `ue4ss` | Carry an optional Lua-only UE4SS companion that starts with this RuneSchema mod. |
+| `ue4ss` | Lua-only UE4SS add-ons, with scripts/configs kept intact; uses unmodified UE4SS. Native/hybrid packages are skipped. |
 
 [Open the complete folder guide](LOADER-WALKTHROUGHS.md).
 
@@ -89,7 +89,7 @@ but they do not automatically start a ModActor. See
 [Compare the two optional UE4SS-backed folders](PSEUDO-LOADERS.md) before
 adding Blueprint startup or a Lua companion.
 
-## Add an optional UE4SS Lua companion
+## Include complete Lua UE4SS packages
 
 Use this only when cooked Blueprints and RuneSchema's data loaders cannot
 express the behavior. Keep the feature inside the same mod folder:
@@ -97,18 +97,23 @@ express the behavior. Keep the feature inside the same mod folder:
 ```text
 MyDragonwildsMod/
   ue4ss/
-    scripts/
-      main.lua
-      my_helpers.lua
+    MyLuaPackage/
+      Scripts/main.lua
+      Scripts/my_helpers.lua
+      config.txt
+    AnotherLuaPackage/
+      Scripts/main.lua
+      settings.ini
 ```
 
-The entry point is exactly `ue4ss/scripts/main.lua`. It receives the normal
-UE4SS Lua functions, so it can register hooks, callbacks, keys, and console
-commands. Other `.lua` files beneath `ue4ss/scripts` can be loaded with
-`require`. Use unique module names so two mods do not claim the same Lua module.
-
-This folder is Lua only. Do not place DLLs or a second UE4SS native mod inside
-it. RuneSchema does not load native binaries from a mod's `ue4ss` folder.
+Keep each Lua package intact, including configs, helpers and metadata.
+RuneSchema 0.8.0.0 uses its Lua bootstrap on unmodified UE4SS; it does not
+provide a managed/custom host. Nested native or hybrid DLL packages are
+rejected and must instead be installed directly through stock UE4SS.
+Package names must be unique. Package-local Lua context is not an independent
+UE4SS VM/ModRef or a security sandbox.
+The legacy direct `ue4ss/scripts/main.lua` layout still works; do not mix it
+with child packages in one container.
 
 RuneSchema starts companions once, in the enabled order recorded in
 `RuneSchema/mods/runeschema.txt`. A row set to `0` is not started. A failure in
@@ -189,6 +194,32 @@ For each release candidate:
 7. Restart the game and load the character again.
 8. Test with a second player if the mod changes gameplay.
 9. Disable the mod only on a backup character and confirm safe cleanup.
+
+## Journal/lore workspace (candidate)
+
+Helpy's Journal workspace separates native Journal/Lore, Author, and optional
+Wiki reference articles. Native browsing is read-only: it never grants discovery,
+marks an entry read, or changes a character save. Cached entries not observed in
+the current runtime are explicitly labeled as references.
+
+The Author tab can start with a new entry or copy a native entry's text/art into
+a new draft. Choose a unique mod-prefixed ID, entry type, title, pages, cooked
+image path and native subcategory path. Export writes under Helpy's
+`exports/journal-drafts`; it does not install or overwrite a mod. Review the
+draft against `docs/schemas/journal.schema.json` or `lore.schema.json`, then put
+it in the appropriate folder of your own mod. Lore-loader entries must use the
+Lore type. Discovery defaults to `Unlock: false`; placement and discovery are
+separate contracts. Test references, placement, persistence and unlock conditions
+in a disposable world before sharing.
+
+Helpy maintains `cache/journal/catalog.json` and an observed, unmodified
+`cache/journal/vanilla.json`. An optional supplied baseline may be placed at
+`Mods/RuneSchema/assets/journal/vanilla.json`, using the version-1 native cache
+format. Loading and writing are asynchronous. A completed loaded-object scan is
+not a certified full-game export, and the candidate does not yet ship a verified
+complete vanilla baseline. Game artwork/text remains Jagex content; do not
+relicense it as RuneSchema MIT or mistake Wiki text licensing for game-media
+licensing.
 
 ## Prepare a mod for sharing
 

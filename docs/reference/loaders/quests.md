@@ -9,18 +9,30 @@ Per-character quest definitions, objectives, rewards, and persistence.
 Quests are per-character definitions with stages, objectives, rewards, and a
 stable persistence ID.
 
+Quests can also be accepted through a craftable consumable item using an
+item-side [`$QuestScroll` declaration](../../QUEST-SCROLLS.md) in `/assets`.
+The recipe produces a normal stable-ID item; use activates an existing quest
+through the authoritative acceptance receipt, without requiring station dialogue.
+
 ```json
 {
   "Id": "gather_logs",
-  "PersistenceID": "stable-quest-id",
+  "PersistenceID": "AAAAAAAAAAAAAAAAAAAAAA",
   "Title": "Gather Logs",
+  "Icon": "/Game/Art/UI/Icons/Journal/T_Icon_Journal_Lore_Scraps.T_Icon_Journal_Lore_Scraps",
   "Description": "Bring back five logs.",
+  "CompletedDescription": "The village has the timber it needs.",
+  "Region": "Brynmoor",
+  "ShowInCompletedQuestList": true,
+  "Category": "Regular",
   "Completion": "ReturnToNPC",
   "Stages": [{
     "Id": "gather",
     "Objectives": [{
       "Id": "logs",
-      "Type": "Fetch",
+      "Type": "Collect",
+      "Text": "Bring back five logs.",
+      "Hint": "Look near the forest edge.",
       "Item": "/Game/Gameplay/Items/ITEM_Log.ITEM_Log",
       "Count": 5
     }]
@@ -28,6 +40,97 @@ stable persistence ID.
   "Reward": {"Item":"/Game/Gameplay/Items/ITEM_Reward.ITEM_Reward","Count":1}
 }
 ```
+
+Replace the example item paths with your cooked `ItemData` paths and generate a
+unique, canonical 22-character `PersistenceID` for each quest. Keep that identity
+stable when updating the same quest.
+
+## Quest-board icons (no quest PAK required)
+
+`Icon` is optional presentation metadata: an Unreal texture object path, at most
+2,048 characters. Reference existing game or mounted mod artwork; omitting it or
+using an empty string leaves the board's fallback icon. A JSON-only `/quests`
+definition can use existing game artwork without shipping its own PAK. New
+artwork still needs an asset provider; local image filenames and web URLs are
+not texture references. RuneSchema validates the path syntax, not that the
+texture is mounted or loadable. Boards should keep a fallback for missing art.
+
+Native board plugins can query the `runeschema.tools` C ABI service:
+
+```json
+{"Action":"QuestCatalog","Mod":"MyMod","Offset":0,"Limit":64}
+```
+
+`Mod` and qualified `Key` filters are optional. `Limit` is 1–128; `Offset` is
+0–128. The response contains `Ready`, `Revision`, `Quests`, `Total`,
+`NextOffset`, and `HasMore`. Each quest has `Key`, `Mod`, `PersistenceID`,
+`Title`, `Description`, `Icon`, `Category`, `Region`, and `Repeatable`.
+Internal dialogue-state records are excluded. The catalogue is read-only
+presentation data, not a player's eligibility, progress, or permission to accept
+a quest. A board must integrate this query and use the existing authoritative
+quest-acceptance flow; this does not automatically replace a board's UI.
+
+Changing `Icon` is presentation-only and does not reset progress or reward
+receipts. Older receipts can prove the addition of this previously absent field;
+other unprovable legacy edits still use the normal migration checks.
+
+## Quest lists and completion
+
+RuneSchema 0.8.0.0 stages also support `Completion: "Any"` for alternative objectives
+with one completion/reward receipt. See [alternative objectives and NPC
+equipment consequences](../../QUEST-ALTERNATIVES-AND-NPC-EQUIPMENT.md) for the
+kill-or-hand-in contract, limits, repeat behavior and live-validation status.
+
+A file may contain one definition or an array of definitions. Multiple quests
+remain separate per-character native progress records; accepting another quest
+does not complete the first. `Category` accepts `Regular`, `Story`, or `Task`.
+The game maintains its own tracked-quest selection by quest type; tracking is
+not the same as which quests a player owns or has completed.
+
+`CompletedDescription` controls the native description after completion and
+defaults to `Description`. `ShowInCompletedQuestList` defaults to `true` and
+controls completed-list visibility only: it never completes the quest or grants
+its reward. `HideInQuestList` defaults to `false` and controls the normal list.
+Internal hidden stage records remain hidden from both lists.
+
+Completion still follows the authored `Completion` rule and native quest state.
+Rewards and repeat eligibility remain separate from list presentation. Hiding
+an entry does not remove its persisted progress.
+
+## Quest region
+
+`Region` is the game's native `EQuestRegion` name. Current internal names are
+`Brynmoor`, `Ghornfell`, `Fellhollow`, `Dowdun_Reach`, `Umbral_Sands` and
+`Scorned_Wilderness`. `EQuestRegion::Brynmoor` is also accepted. Names are resolved
+from the running game's reflected enum, not hard-coded numeric IDs or a fixed
+allowlist. A future region added to that same enum can be used in JSON without
+updating RuneSchema. An unavailable name is rejected with a targeted error;
+`None`, `MAX` and numeric IDs are not accepted.
+
+Omitting `Region` preserves legacy behavior, which can display the game's
+missing-region placeholder. RuneSchema does not infer a region from coordinates.
+An arbitrary custom label is not a new native map region: that needs separate
+UI/world support. Quest category, region and objective search radius are distinct.
+
+Presentation-only updates preserve native phase, counters, repeat run and reward
+receipts after the progress fingerprint has been recorded. Old full-document
+receipts can migrate proven additions of `Region`, `CompletedDescription`, and/or `Icon`
+without replaying rewards or resetting progress. Other old presentation edits
+cannot be proven from the old hash alone; migrate to the new receipt before
+changing those fields. Changes to identity, objectives, rewards, costs or repeat
+rules remain gameplay changes and retain their migration/reset checks.
+
+## Objective presentation
+
+Objectives support `SubobjectiveDescription`, `Hint`, and
+`QuestDescriptionOverride` in addition to `Text`. These map to the game's
+structured objective data. A description override applies when that objective
+is selected by native progression; it does not overwrite other quests.
+
+For staged quests, visible objective descriptions, subobjective text and hints
+are combined for the active stage. Hidden objective presentation is excluded
+from that stage summary. `CompleteText` remains progress text, not a replacement
+for the quest-level `CompletedDescription`.
 
 Walkthrough:
 

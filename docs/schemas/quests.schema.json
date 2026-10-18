@@ -63,6 +63,12 @@
             "Task"
           ]
         },
+        "CompletedDescription": {
+          "description": "Native completed quest description; omitted values inherit Description.",
+          "maxLength": 2048,
+          "minLength": 1,
+          "type": "string"
+        },
         "Completion": {
           "default": "ReturnToNPC",
           "enum": [
@@ -113,6 +119,16 @@
           "minItems": 1,
           "type": "array"
         },
+        "HideInQuestList": {
+          "default": false,
+          "type": "boolean"
+        },
+        "Icon": {
+          "description": "Optional quest-board texture object path. Empty uses fallback artwork; URLs and filesystem paths are unsupported.",
+          "maxLength": 2048,
+          "pattern": "^(?:$|/(?!.*//)(?!.*[\\\\:\\u0000-\\u001f\\u007f])[^.]+/[^/.]+\\.[^/.]+)$",
+          "type": "string"
+        },
         "Id": {
           "type": "string"
         },
@@ -146,6 +162,11 @@
                   "default": false,
                   "type": "boolean"
                 },
+                "Hint": {
+                  "maxLength": 1024,
+                  "minLength": 1,
+                  "type": "string"
+                },
                 "Id": {
                   "type": "string"
                 },
@@ -176,11 +197,21 @@
                   "minLength": 1,
                   "type": "string"
                 },
+                "QuestDescriptionOverride": {
+                  "maxLength": 2048,
+                  "minLength": 1,
+                  "type": "string"
+                },
                 "RadiusMeters": {
                   "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
                   "maximum": 10000,
                   "minimum": 0.01,
                   "type": "number"
+                },
+                "SubobjectiveDescription": {
+                  "maxLength": 1024,
+                  "minLength": 1,
+                  "type": "string"
                 },
                 "Text": {
                   "type": "string"
@@ -243,6 +274,11 @@
                   "default": false,
                   "type": "boolean"
                 },
+                "Hint": {
+                  "maxLength": 1024,
+                  "minLength": 1,
+                  "type": "string"
+                },
                 "Id": {
                   "type": "string"
                 },
@@ -271,6 +307,11 @@
                   "minLength": 1,
                   "type": "string"
                 },
+                "QuestDescriptionOverride": {
+                  "maxLength": 2048,
+                  "minLength": 1,
+                  "type": "string"
+                },
                 "RadiusMeters": {
                   "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
                   "maximum": 10000,
@@ -278,6 +319,11 @@
                   "type": "number"
                 },
                 "SpawnID": {
+                  "type": "string"
+                },
+                "SubobjectiveDescription": {
+                  "maxLength": 1024,
+                  "minLength": 1,
                   "type": "string"
                 },
                 "Text": {
@@ -325,6 +371,11 @@
                   "default": false,
                   "type": "boolean"
                 },
+                "Hint": {
+                  "maxLength": 1024,
+                  "minLength": 1,
+                  "type": "string"
+                },
                 "Id": {
                   "type": "string"
                 },
@@ -355,11 +406,21 @@
                   "minLength": 1,
                   "type": "string"
                 },
+                "QuestDescriptionOverride": {
+                  "maxLength": 2048,
+                  "minLength": 1,
+                  "type": "string"
+                },
                 "RadiusMeters": {
                   "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
                   "maximum": 10000,
                   "minimum": 0.01,
                   "type": "number"
+                },
+                "SubobjectiveDescription": {
+                  "maxLength": 1024,
+                  "minLength": 1,
+                  "type": "string"
                 },
                 "Text": {
                   "type": "string"
@@ -390,6 +451,13 @@
           "maxItems": 32,
           "type": "array",
           "uniqueItems": true
+        },
+        "Region": {
+          "description": "Native EQuestRegion name, resolved by reflected enum rather than a numeric ID. Current names: Brynmoor, Ghornfell, Fellhollow, Dowdun_Reach, Umbral_Sands, Scorned_Wilderness. None/MAX are not regions. Omit for legacy behavior; no location is guessed.",
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^(EQuestRegion::)?[A-Za-z][A-Za-z0-9_]*$",
+          "type": "string"
         },
         "Repeat": {
           "additionalProperties": false,
@@ -607,10 +675,33 @@
           ],
           "type": "object"
         },
+        "ShowInCompletedQuestList": {
+          "default": true,
+          "description": "Expose the quest in the native completed list after native completion. Does not complete it or grant rewards.",
+          "type": "boolean"
+        },
         "Stages": {
           "items": {
             "additionalProperties": false,
+            "if": {
+              "properties": {
+                "Completion": {
+                  "const": "Any"
+                }
+              },
+              "required": [
+                "Completion"
+              ]
+            },
             "properties": {
+              "Completion": {
+                "default": "All",
+                "description": "Any completes on the first successful alternative, consumes only that hand-in route, and uses one quest reward receipt. Any requires at least two visible mandatory objectives.",
+                "enum": [
+                  "All",
+                  "Any"
+                ]
+              },
               "Id": {
                 "pattern": "^[A-Za-z0-9_-]{1,64}$",
                 "type": "string"
@@ -646,6 +737,11 @@
                           "default": false,
                           "type": "boolean"
                         },
+                        "Hint": {
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "type": "string"
+                        },
                         "Id": {
                           "type": "string"
                         },
@@ -676,11 +772,21 @@
                           "minLength": 1,
                           "type": "string"
                         },
+                        "QuestDescriptionOverride": {
+                          "maxLength": 2048,
+                          "minLength": 1,
+                          "type": "string"
+                        },
                         "RadiusMeters": {
                           "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
                           "maximum": 10000,
                           "minimum": 0.01,
                           "type": "number"
+                        },
+                        "SubobjectiveDescription": {
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "type": "string"
                         },
                         "Text": {
                           "type": "string"
@@ -743,6 +849,11 @@
                           "default": false,
                           "type": "boolean"
                         },
+                        "Hint": {
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "type": "string"
+                        },
                         "Id": {
                           "type": "string"
                         },
@@ -771,6 +882,11 @@
                           "minLength": 1,
                           "type": "string"
                         },
+                        "QuestDescriptionOverride": {
+                          "maxLength": 2048,
+                          "minLength": 1,
+                          "type": "string"
+                        },
                         "RadiusMeters": {
                           "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
                           "maximum": 10000,
@@ -778,6 +894,11 @@
                           "type": "number"
                         },
                         "SpawnID": {
+                          "type": "string"
+                        },
+                        "SubobjectiveDescription": {
+                          "maxLength": 1024,
+                          "minLength": 1,
                           "type": "string"
                         },
                         "Text": {
@@ -825,6 +946,11 @@
                           "default": false,
                           "type": "boolean"
                         },
+                        "Hint": {
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "type": "string"
+                        },
                         "Id": {
                           "type": "string"
                         },
@@ -855,11 +981,21 @@
                           "minLength": 1,
                           "type": "string"
                         },
+                        "QuestDescriptionOverride": {
+                          "maxLength": 2048,
+                          "minLength": 1,
+                          "type": "string"
+                        },
                         "RadiusMeters": {
                           "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
                           "maximum": 10000,
                           "minimum": 0.01,
                           "type": "number"
+                        },
+                        "SubobjectiveDescription": {
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "type": "string"
                         },
                         "Text": {
                           "type": "string"
@@ -888,6 +1024,23 @@
               "Id",
               "Objectives"
             ],
+            "then": {
+              "properties": {
+                "Objectives": {
+                  "items": {
+                    "properties": {
+                      "Hidden": {
+                        "const": false
+                      },
+                      "Optional": {
+                        "const": false
+                      }
+                    }
+                  },
+                  "minItems": 2
+                }
+              }
+            },
             "type": "object"
           },
           "maxItems": 32,
@@ -1000,6 +1153,12 @@
               "Task"
             ]
           },
+          "CompletedDescription": {
+            "description": "Native completed quest description; omitted values inherit Description.",
+            "maxLength": 2048,
+            "minLength": 1,
+            "type": "string"
+          },
           "Completion": {
             "default": "ReturnToNPC",
             "enum": [
@@ -1050,6 +1209,16 @@
             "minItems": 1,
             "type": "array"
           },
+          "HideInQuestList": {
+            "default": false,
+            "type": "boolean"
+          },
+          "Icon": {
+            "description": "Optional quest-board texture object path. Empty uses fallback artwork; URLs and filesystem paths are unsupported.",
+            "maxLength": 2048,
+            "pattern": "^(?:$|/(?!.*//)(?!.*[\\\\:\\u0000-\\u001f\\u007f])[^.]+/[^/.]+\\.[^/.]+)$",
+            "type": "string"
+          },
           "Id": {
             "type": "string"
           },
@@ -1083,6 +1252,11 @@
                     "default": false,
                     "type": "boolean"
                   },
+                  "Hint": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "Id": {
                     "type": "string"
                   },
@@ -1113,11 +1287,21 @@
                     "minLength": 1,
                     "type": "string"
                   },
+                  "QuestDescriptionOverride": {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "RadiusMeters": {
                     "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
                     "maximum": 10000,
                     "minimum": 0.01,
                     "type": "number"
+                  },
+                  "SubobjectiveDescription": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
                   },
                   "Text": {
                     "type": "string"
@@ -1180,6 +1364,11 @@
                     "default": false,
                     "type": "boolean"
                   },
+                  "Hint": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "Id": {
                     "type": "string"
                   },
@@ -1208,6 +1397,11 @@
                     "minLength": 1,
                     "type": "string"
                   },
+                  "QuestDescriptionOverride": {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "RadiusMeters": {
                     "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
                     "maximum": 10000,
@@ -1215,6 +1409,11 @@
                     "type": "number"
                   },
                   "SpawnID": {
+                    "type": "string"
+                  },
+                  "SubobjectiveDescription": {
+                    "maxLength": 1024,
+                    "minLength": 1,
                     "type": "string"
                   },
                   "Text": {
@@ -1262,6 +1461,11 @@
                     "default": false,
                     "type": "boolean"
                   },
+                  "Hint": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "Id": {
                     "type": "string"
                   },
@@ -1292,11 +1496,21 @@
                     "minLength": 1,
                     "type": "string"
                   },
+                  "QuestDescriptionOverride": {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "RadiusMeters": {
                     "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
                     "maximum": 10000,
                     "minimum": 0.01,
                     "type": "number"
+                  },
+                  "SubobjectiveDescription": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
                   },
                   "Text": {
                     "type": "string"
@@ -1327,6 +1541,13 @@
             "maxItems": 32,
             "type": "array",
             "uniqueItems": true
+          },
+          "Region": {
+            "description": "Native EQuestRegion name, resolved by reflected enum rather than a numeric ID. Current names: Brynmoor, Ghornfell, Fellhollow, Dowdun_Reach, Umbral_Sands, Scorned_Wilderness. None/MAX are not regions. Omit for legacy behavior; no location is guessed.",
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^(EQuestRegion::)?[A-Za-z][A-Za-z0-9_]*$",
+            "type": "string"
           },
           "Repeat": {
             "additionalProperties": false,
@@ -1544,10 +1765,33 @@
             ],
             "type": "object"
           },
+          "ShowInCompletedQuestList": {
+            "default": true,
+            "description": "Expose the quest in the native completed list after native completion. Does not complete it or grant rewards.",
+            "type": "boolean"
+          },
           "Stages": {
             "items": {
               "additionalProperties": false,
+              "if": {
+                "properties": {
+                  "Completion": {
+                    "const": "Any"
+                  }
+                },
+                "required": [
+                  "Completion"
+                ]
+              },
               "properties": {
+                "Completion": {
+                  "default": "All",
+                  "description": "Any completes on the first successful alternative, consumes only that hand-in route, and uses one quest reward receipt. Any requires at least two visible mandatory objectives.",
+                  "enum": [
+                    "All",
+                    "Any"
+                  ]
+                },
                 "Id": {
                   "pattern": "^[A-Za-z0-9_-]{1,64}$",
                   "type": "string"
@@ -1583,6 +1827,11 @@
                             "default": false,
                             "type": "boolean"
                           },
+                          "Hint": {
+                            "maxLength": 1024,
+                            "minLength": 1,
+                            "type": "string"
+                          },
                           "Id": {
                             "type": "string"
                           },
@@ -1613,11 +1862,21 @@
                             "minLength": 1,
                             "type": "string"
                           },
+                          "QuestDescriptionOverride": {
+                            "maxLength": 2048,
+                            "minLength": 1,
+                            "type": "string"
+                          },
                           "RadiusMeters": {
                             "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
                             "maximum": 10000,
                             "minimum": 0.01,
                             "type": "number"
+                          },
+                          "SubobjectiveDescription": {
+                            "maxLength": 1024,
+                            "minLength": 1,
+                            "type": "string"
                           },
                           "Text": {
                             "type": "string"
@@ -1680,6 +1939,11 @@
                             "default": false,
                             "type": "boolean"
                           },
+                          "Hint": {
+                            "maxLength": 1024,
+                            "minLength": 1,
+                            "type": "string"
+                          },
                           "Id": {
                             "type": "string"
                           },
@@ -1708,6 +1972,11 @@
                             "minLength": 1,
                             "type": "string"
                           },
+                          "QuestDescriptionOverride": {
+                            "maxLength": 2048,
+                            "minLength": 1,
+                            "type": "string"
+                          },
                           "RadiusMeters": {
                             "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
                             "maximum": 10000,
@@ -1715,6 +1984,11 @@
                             "type": "number"
                           },
                           "SpawnID": {
+                            "type": "string"
+                          },
+                          "SubobjectiveDescription": {
+                            "maxLength": 1024,
+                            "minLength": 1,
                             "type": "string"
                           },
                           "Text": {
@@ -1762,6 +2036,11 @@
                             "default": false,
                             "type": "boolean"
                           },
+                          "Hint": {
+                            "maxLength": 1024,
+                            "minLength": 1,
+                            "type": "string"
+                          },
                           "Id": {
                             "type": "string"
                           },
@@ -1792,11 +2071,21 @@
                             "minLength": 1,
                             "type": "string"
                           },
+                          "QuestDescriptionOverride": {
+                            "maxLength": 2048,
+                            "minLength": 1,
+                            "type": "string"
+                          },
                           "RadiusMeters": {
                             "description": "Optional search-area radius in meters from Location; omit for the existing point marker.",
                             "maximum": 10000,
                             "minimum": 0.01,
                             "type": "number"
+                          },
+                          "SubobjectiveDescription": {
+                            "maxLength": 1024,
+                            "minLength": 1,
+                            "type": "string"
                           },
                           "Text": {
                             "type": "string"
@@ -1825,6 +2114,23 @@
                 "Id",
                 "Objectives"
               ],
+              "then": {
+                "properties": {
+                  "Objectives": {
+                    "items": {
+                      "properties": {
+                        "Hidden": {
+                          "const": false
+                        },
+                        "Optional": {
+                          "const": false
+                        }
+                      }
+                    },
+                    "minItems": 2
+                  }
+                }
+              },
               "type": "object"
             },
             "maxItems": 32,

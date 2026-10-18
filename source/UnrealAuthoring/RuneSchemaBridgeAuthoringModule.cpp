@@ -1,4 +1,5 @@
 #include "Modules/ModuleManager.h"
+#include "RuneSchemaBridgeAuthoringLibrary.h"
 #include "Containers/Ticker.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraphSchema_K2.h"
@@ -306,11 +307,30 @@ bool AuthorBridges()
 }
 }
 
+bool URuneSchemaBridgeAuthoringLibrary::AuthorNetworkBridges()
+{
+    return AuthorBridges();
+}
+
+FString URuneSchemaBridgeAuthoringLibrary::InspectIdentityContract()
+{
+    UBlueprint* Blueprint=LoadObject<UBlueprint>(nullptr,IdentityPath);
+    UClass* Type=Blueprint?Blueprint->GeneratedClass:nullptr;
+    FStrProperty* Payload=Type?FindFProperty<FStrProperty>(Type,TEXT("IdentityPayload")):nullptr;
+    return FString::Printf(TEXT("{\"ClassFound\":%s,\"StringFound\":%s,\"Size\":%d,\"ExpectedSize\":%d,\"ArrayDim\":%d,\"Net\":%s,\"RepNotify\":%s,\"NotifyFound\":%s}"),
+        Type?TEXT("true"):TEXT("false"),Payload?TEXT("true"):TEXT("false"),
+        Payload?Payload->GetSize():0,int32(sizeof(FString)),Payload?Payload->ArrayDim:0,
+        Payload&&Payload->HasAnyPropertyFlags(CPF_Net)?TEXT("true"):TEXT("false"),
+        Payload&&Payload->HasAnyPropertyFlags(CPF_RepNotify)?TEXT("true"):TEXT("false"),
+        Type&&Type->FindFunctionByName(TEXT("OnRep_IdentityPayload"))?TEXT("true"):TEXT("false"));
+}
+
 class FRuneSchemaBridgeAuthoringModule final : public IModuleInterface
 {
 public:
     virtual void StartupModule() override
     {
+        if (IsRunningCommandlet()) return; // The explicit authoring call owns commandlet order.
         TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([this](float)
         {
             AuthorBridges(); TickHandle.Reset(); return false;

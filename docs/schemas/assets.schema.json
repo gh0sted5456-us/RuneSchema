@@ -43,6 +43,49 @@
           },
           "type": "object"
         },
+        "$QuestScroll": {
+          "additionalProperties": false,
+          "dependencies": {
+            "EntryID": {
+              "properties": {
+                "Action": {
+                  "const": "Accept"
+                }
+              }
+            }
+          },
+          "description": "An authoritative Accept (default) or Abandon action for the bound quest. Requires an inert impure Blueprint UseItem override returning false and the exact stable item identity. EntryID applies only to Accept. Abandon consumes one scroll only after cancelling an active quest; inactive/completed/pending quests consume nothing. Cancelling clears active progress and stops its contract encounter without rewards or refunds. Quest Board acceptance recipes automatically generate a matching cancellation scroll in Quest Cancellations. Original cooked callbacks are not also executed. Restart required.",
+          "properties": {
+            "Action": {
+              "default": "Accept",
+              "enum": [
+                "Accept",
+                "Abandon"
+              ]
+            },
+            "EntryID": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[^:\\r\\n\\t ]+$",
+              "type": "string"
+            },
+            "PersistenceID": {
+              "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+              "type": "string"
+            },
+            "QuestID": {
+              "maxLength": 257,
+              "minLength": 1,
+              "pattern": "^[^:/\\r\\n\\t ]+(?::[^:/\\r\\n\\t ]+)?$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "QuestID",
+            "PersistenceID"
+          ],
+          "type": "object"
+        },
         "$VisualEffect": {
           "additionalProperties": true,
           "properties": {
@@ -54,6 +97,10 @@
             }
           },
           "type": "object"
+        },
+        "$WearableBridge": {
+          "description": "Request native wearable enumeration/cache enrollment after successful field writes. Supports cooked, PAK and RuneSchema-cloned WearableEquipmentData. Does not allocate item/network identities or fabricate mesh data; false is a no-op, not a global bridge disable.",
+          "type": "boolean"
         },
         "BuildingPieceToUnlock": {
           "anyOf": [

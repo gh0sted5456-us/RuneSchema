@@ -10,7 +10,14 @@ int main(){
     for(const auto& c:PS::LoaderCapabilities){
         std::cerr << "Checking starter: " << c.Name << std::endl;
         assert(schemas.contains(c.Name));
-        assert(schemas[c.Name]["x-runeschema-starter-capabilities"]["clone"]==c.Clone);
+        if(std::string(c.Name)=="registry") {
+            // Registry manifests are not ordinary clone/patch starters.
+            assert(!c.Clone && !c.StarterPatch);
+            assert(schemas.at(c.Name).at("properties").contains("Entries"));
+            assert(schemas.at(c.Name).at("required")==json::array({"SchemaVersion","Entries"}));
+            continue;
+        }
+        assert(schemas.at(c.Name).at("x-runeschema-starter-capabilities").at("clone")==c.Clone);
         assert(PS::LoaderTemplate::Patch(c.Name)==c.StarterPatch);
         assert(PS::AuthoredStarters::Supports(c.Name)==c.AuthoredSearch);
         json fields={{"Value",1}};

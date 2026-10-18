@@ -38,7 +38,7 @@ protected:
     }
     void OnLoad(const std::filesystem::path& path,const RC::StringType& mod,const EEngineLifecyclePhase& phase) override {
         if(phase==EEngineLifecyclePhase::PostEngineInit)
-            PS::JsonHelpers::ParseJsonFilesInPath(path,[&](const nlohmann::json& data){npcs->LoadQuests(data,mod);});
+            PS::JsonHelpers::ParseJsonFilesInPathWithSource(path,[&](const nlohmann::json& data,const std::filesystem::path& source){npcs->LoadQuests(data,mod,source.string());});
     }
     void OnAutoReload(const RC::StringType& mod,const std::filesystem::path&) override {
         PS::Log<RC::LogLevel::Warning>(TEXT("Quest changes in {} require a restart.\n"),mod);

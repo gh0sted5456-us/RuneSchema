@@ -10,22 +10,21 @@ exclude_docs: |
 theme:
   name: material
   language: en
-  logo: assets/images/runeschema-icon.png
-  favicon: assets/images/runeschema-icon.png
+  logo: assets/images/runeschema-helpy.png
+  favicon: assets/images/runeschema-helpy.png
+  font: false
   icon:
     repo: fontawesome/brands/github
   palette:
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
-      primary: teal
-      accent: teal
+    - scheme: slate
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
-      primary: teal
-      accent: teal
+    - scheme: default
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
@@ -34,7 +33,6 @@ theme:
     - navigation.instant.prefetch
     - navigation.tracking
     - navigation.tabs
-    - navigation.sections
     - navigation.indexes
     - navigation.top
     - toc.follow
@@ -47,7 +45,7 @@ theme:
 
 plugins:
   - search:
-      separator: '[\\s\\-\\.\\_]+'
+      separator: '[\s._-]+'
 
 markdown_extensions:
   - abbr
@@ -89,7 +87,7 @@ copyright: >-
 
 nav:
   - Home: index.md
-  - Users:
+  - Players:
       - Overview: users/index.md
       - Download: CURRENT-RELEASE.md
       - Install: INSTALLATION.md
@@ -97,7 +95,7 @@ nav:
       - Save safety: SAFE-SAVE-AND-LEDGER.md
       - Platforms and co-op: COMPATIBILITY.md
       - Troubleshooting: TROUBLESHOOTING.md
-  - Modders:
+  - Creators:
       - Overview: modders/index.md
       - First mod: AUTHORING-GUIDE.md
       - First cooked item: modders/first-cooked-item.md
@@ -148,6 +146,11 @@ nav:
           - Niagara: reference/loaders/niagara.md
           - Players: reference/loaders/players.md
       - JSON schemas: SCHEMAS.md
-      - Mod-host file guide: MOD-HOSTS-AND-GETTING-STARTED.md
+      - About RuneSchema & functions: MOD-HOSTS-AND-GETTING-STARTED.md
       - Ask RuneSchema: ASK-RUNESCHEMA.md
       - Licensing: LICENSING.md
+  - Updates:
+      - Release 0.8.0.0: RELEASE-0.8.0.0.md
+      - Full 0.8.0.0 changelog: CHANGELOG-0.8.0.0.md
+      - Development history: ALPHA-CHANGELOG.md
+      - Current release: CURRENT-RELEASE.md

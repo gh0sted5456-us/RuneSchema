@@ -1,6 +1,7 @@
 #include "Generator/DiagnosticExport.h"
 #include "Generator/PlayerTraceOptions.h"
 #include "Runtime/NetworkRole.h"
+#include "Runtime/NetworkStatus.h"
 #include "Runtime/NetworkRoleNotice.h"
 #include <cassert>
 #include <sstream>
@@ -39,6 +40,14 @@ int main() {
     assert(!notices.Observe(Role::DedicatedServer,"other-world"));
     assert(notices.Observe(Role::DedicatedServer,"other-world"));
     assert(Classify(true,true,false)==Role::Standalone);
+    {PS::NetworkStatus::State telemetry;const auto now=std::chrono::steady_clock::now();
+        telemetry.Publish(Role::ListenServer,9,2,now);
+        const auto host=telemetry.Snapshot(9,true,false,now+std::chrono::seconds(1));
+        assert(host["Fresh"]==true&&host["Role"]=="listen-server"&&host["KnownPlayers"]==2&&host["LatencyMs"].is_null());
+        assert(telemetry.Snapshot(10,true,false,now)["Fresh"]==false);
+        assert(telemetry.Snapshot(9,false,false,now)["Role"]=="unknown");
+        assert(telemetry.Snapshot(9,true,false,now+std::chrono::seconds(13))["Fresh"]==false);
+        telemetry.Publish(Role::Standalone,9,1,now);assert(telemetry.Snapshot(9,true,false,now)["Role"]=="standalone");}
     assert(Classify(false,false,false)==Role::Client);
     assert(Classify(false,true,false)==Role::ListenServer);
     assert(Classify(false,true,true)==Role::DedicatedServer);

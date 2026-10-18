@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RuneSchema cooked PAK registry declaration",
+  "description": "JSON string inside an enabled PAK registry asset. Runtime additionally validates live types, identities, cross-document conflicts, the 16384-reference total and 512 KiB UTF-8 string limit.",
+  "type": "object",
+  "required": ["SchemaVersion", "Entries"],
+  "additionalProperties": false,
+  "allOf": [
+    {"not": {"required": ["RegistryShards", "RegistryShard"]}},
+    {"if": {"required": ["RegistryShard"]}, "then": {
+      "properties": {"Entries": {"maxItems": 0}},
+      "anyOf": [{"required": ["NativeRegistries"]}, {"required": ["LoaderDefinitions"]}]
+    }}
+  ],
+  "properties": {
+    "SchemaVersion": {"const": 1},
+    "Entries": {"$ref": "registry.schema.json#/properties/Entries"},
+    "RegistryShards": {
+      "description": "Conventional root only. Exact child assets in this owner's Registry/Shards folder. Runtime also verifies owner, identical package/object name, ASCII name bounds, case-insensitive duplicates and aggregate budgets.",
+      "type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true,
+      "items": {"type": "string", "maxLength": 1024,
+        "pattern": "^/Game/Mods/([A-Za-z0-9_]{1,64})/Registry/Shards/(RSREG_\\1_[A-Za-z0-9_]+)\\.\\2$"}
+    },
+    "RegistryShard": {"description": "Child-only marker. Shards cannot be independently enrolled or include other shards.", "const": true},
+    "NativeRegistries": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Items": {"$ref": "#/definitions/paths"},
+        "Recipes": {"$ref": "#/definitions/paths"},
+        "Quests": {"$ref": "#/definitions/paths"},
+        "Journals": {"$ref": "#/definitions/paths"},
+        "Lore": {"$ref": "#/definitions/paths"},
+        "CombatSpells": {"$ref": "#/definitions/paths"},
+        "UtilitySpells": {"$ref": "#/definitions/paths"},
+        "EquipmentEffects": {"$ref": "#/definitions/paths"},
+        "WearableMeshData": {"$ref": "#/definitions/paths"},
+        "MeleeAttackClasses": {"$ref": "#/definitions/paths"},
+        "RangedAttackClasses": {"$ref": "#/definitions/paths"}
+      }
+    },
+    "LoaderDefinitions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Recipes": {"$ref": "#/definitions/recipeLoaderMap"},
+        "Journals": {"$ref": "#/definitions/loaderMap"},
+        "Lore": {"$ref": "#/definitions/loaderMap"}
+      }
+    }
+  },
+  "definitions": {
+    "path": {
+      "type": "string", "maxLength": 1024,
+      "pattern": "^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/[^\\r\\n\\t]+$",
+      "not": {"pattern": "\\.\\."}
+    },
+    "paths": {"type": "array", "maxItems": 4096, "uniqueItems": true, "items": {"$ref": "#/definitions/path"}},
+    "recipeLoaderMap": {
+      "allOf": [
+        {"$ref": "#/definitions/loaderMap"},
+        {"additionalProperties": {
+          "properties": {"Discovery": {"$ref": "recipe-discovery.schema.json"}},
+          "allOf": [{"if": {"required": ["Discovery"]}, "then": {"properties": {"Unlock": {"const": false}}}}]
+        }}
+      ]
+    },
+    "loaderMap": {
+      "type": "object", "maxProperties": 4096,
+      "propertyNames": {"allOf": [{"$ref": "#/definitions/path"}, {"pattern": "\\.[^/]+$"}]},
+      "additionalProperties": {
+        "type": "object",
+        "properties": {"Unlock": {"type": "boolean", "default": false}},
+        "allOf": [
+          {"not": {"required": ["$Clone"]}},
+          {"not": {"required": ["$Patch"]}},
+          {"not": {"required": ["$Target"]}},
+          {"not": {"required": ["VendorID"]}},
+          {"not": {"required": ["RuneSchemaVendors"]}},
+          {"not": {"required": ["VanillaVendors"]}}
+        ]
+      }
+    }
+  }
+}

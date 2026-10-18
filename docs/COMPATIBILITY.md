@@ -1,13 +1,13 @@
 # Platform and multiplayer support
 
-RuneSchema uses one mod format for Steam, GOG, and Game Pass. Authors do not
+RuneSchema uses one mod format for Steam, Epic, and Game Pass. Authors do not
 need separate JSON files for each store. The game program is different between
 store versions, so the correct RuneSchema and UE4SS package still matters.
 
 ## Character saves
 
 The useful character information is the same kind of game data on each store,
-but the stores keep it in different places. Steam and GOG use normal local save
+but the stores keep it in different places. Steam and Epic use normal local save
 files. Game Pass uses the Xbox save container.
 
 RuneSchema does not move files between stores and does not directly rewrite an

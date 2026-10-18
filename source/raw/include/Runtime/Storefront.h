@@ -7,7 +7,7 @@
 #include <string>
 
 namespace PS::Storefront {
-    enum class Kind { SteamGog, GamePass, Unknown };
+    enum class Kind { SteamEpic, GamePass, Unknown };
     enum class NativeLane { SteamNative, GamePassNative, SharedOnly };
 
     struct Detection {
@@ -19,6 +19,8 @@ namespace PS::Storefront {
         bool HasPackageIdentity{};
         bool HasGamePassSignatures{};
         bool DedicatedServer{};
+        bool EpicLauncher{};
+        bool SteamLauncher{};
     };
 
     inline std::wstring Lower(std::wstring value)
@@ -71,12 +73,26 @@ namespace PS::Storefront {
         } else if (path.find(L"\\win64\\") != std::wstring::npos
             || path.find(L"-win64-") != std::wstring::npos
             || path.find(L"steam") != std::wstring::npos
-            || path.find(L"gog") != std::wstring::npos) {
-            result.Value = Kind::SteamGog;
-            result.Reason = L"Win64/Steam/GOG executable path";
+            || path.find(L"epic") != std::wstring::npos) {
+            result.Value = Kind::SteamEpic;
+            result.Reason = L"Win64/Steam/Epic executable path";
         } else if (result.HasGamePassSignatures) {
             result.Value = Kind::GamePass;
             result.Reason = L"UE4SS_Signatures/StaticConstructObject.lua fallback";
+        }
+        if(result.Value==Kind::SteamEpic&&!result.DedicatedServer) {
+            result.EpicLauncher=path.find(L"\\epic games\\")!=std::wstring::npos
+                ||path.find(L"\\epicgames\\")!=std::wstring::npos;
+            // Epic permits a custom installation directory. Its own marker
+            // is stronger evidence than guessing from an arbitrary Win64 path.
+            auto parent=directory;
+            for(int depth=0;depth<8&&!parent.empty()&&!result.EpicLauncher;++depth) {
+                error.clear();result.EpicLauncher=std::filesystem::is_directory(parent/L".egstore",error);
+                const auto next=parent.parent_path();if(next==parent)break;parent=next;
+            }
+            result.SteamLauncher=!result.EpicLauncher
+                &&(path.find(L"\\steamapps\\")!=std::wstring::npos
+                    ||path.find(L"\\steamlibrary\\")!=std::wstring::npos);
         }
         return result;
     }
@@ -110,7 +126,7 @@ namespace PS::Storefront {
     inline const char* Name(Kind value) noexcept
     {
         switch (value) {
-        case Kind::SteamGog: return "Steam/GOG";
+        case Kind::SteamEpic: return "Steam/Epic";
         case Kind::GamePass: return "Game Pass/WinGDK";
         default: return "Unknown";
         }
@@ -118,7 +134,7 @@ namespace PS::Storefront {
 
     inline bool AllowsSteamNativeSignatures() noexcept
     {
-        return Current() == Kind::SteamGog;
+        return Current() == Kind::SteamEpic;
     }
 
     inline bool AllowsGamePassNativeSignatures() noexcept
@@ -129,7 +145,7 @@ namespace PS::Storefront {
     inline NativeLane CurrentNativeLane() noexcept
     {
         switch (Current()) {
-        case Kind::SteamGog: return NativeLane::SteamNative;
+        case Kind::SteamEpic: return NativeLane::SteamNative;
         case Kind::GamePass: return NativeLane::GamePassNative;
         default: return NativeLane::SharedOnly;
         }
@@ -142,6 +158,14 @@ namespace PS::Storefront {
         case NativeLane::GamePassNative: return "gamepass-native";
         default: return "shared-safe";
         }
+    }
+
+    inline const char* PlatformName(const Detection& value) noexcept {
+        if(value.DedicatedServer)return "Dedicated server";
+        if(value.Value==Kind::GamePass)return "Game Pass";
+        if(value.EpicLauncher)return "Epic Games";
+        if(value.SteamLauncher)return "Steam";
+        return Name(value.Value);
     }
 
     inline bool AllowsEmbeddedAobSignatures() noexcept

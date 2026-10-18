@@ -13,6 +13,8 @@
 #include <map>
 #include <memory>
 #include "Utility/Logging.h"
+#include "Core/QuestPresentationCatalog.h"
+#include "Loader/QuestInspectorModel.h"
 
 namespace DragonWilds::Quests {
 class Service {
@@ -30,8 +32,14 @@ class Service {
     RC::Unreal::UObject* preparedInstance=nullptr;
     RC::Unreal::UObject* preparedSubsystem=nullptr;
     bool preparing=false;
+    bool declarationConflict=false;
     std::set<std::string> hidden;
 public:
+    void PublishPresentation()const{
+        Json rows=Json::array();for(const auto& [key,document]:definitions)
+            if(!hidden.contains(key)&&key.find(":__runeschema_")==key.npos)rows.push_back(BoardMetadata(catalog.Find("_",key)));
+        PS::QuestPresentationCatalog::Publish(std::move(rows));
+    }
     bool QuestOwnsEventArea(RC::Unreal::UObject* controller,const std::string& eventKey) const {
         if(!controller || eventKey.empty())return false;
         for(const auto& [key,document]:definitions)try {
@@ -81,7 +89,7 @@ public:
             {"Title","RuneSchema dialogue progress"},{"Description","Internal player save record"},
             {"Objective",{{"Id","state"},{"Text","Internal"},{"Item","/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment"},{"Count",1}}},
             {"Reward",{{"Item","/Game/Gameplay/Items/Resources/Currency/ITEM_Currency_SoulFragment.ITEM_Currency_SoulFragment"},{"Count",1}}}};
-        Load(mod,document);hidden.insert(key);
+        Load(mod,document);hidden.insert(key);PublishPresentation();
     }
     bool HasAsset(const std::string& key) const{return assets.contains(key);}
     template<class Visit>void ForEachVisible(Visit visit)const {
@@ -164,14 +172,20 @@ public:
             }catch(const std::exception& e){report(key,e.what());}
         }
     }
-    void Load(const std::string& mod,const Json& data) {
+    void Load(const std::string& mod,const Json& data,const std::string& source="<internal quest>") {
         auto pending=catalog;auto documents=definitions;
         const auto add=[&](const Json& entry) {
             if(documents.size()>=128)throw std::runtime_error("Quest definition limit reached");
-            pending.Add(mod,entry);documents.emplace(Parse(mod,entry).Key,entry);
+            try {pending.Add(mod,entry,source);}
+            catch(const std::exception& error){
+                if(std::string_view(error.what()).starts_with("Quest declaration conflict:"))declarationConflict=true;
+                throw;
+            }
+            documents.emplace(Parse(mod,entry).Key,entry);
         };
         if(data.is_array())for(const auto& entry:data)add(entry);else add(data);
         catalog=std::move(pending);definitions=std::move(documents);
+        PublishPresentation();
         for(const auto& [key,document]:definitions){const auto& q=catalog.Find("_",key);if(q.Marker)hasLocations=true;for(const auto& [id,entries]:q.Stages)for(const auto& entry:entries)if(entry.Marker)hasLocations=true;}
     }
     bool Empty() const {return definitions.empty();}
@@ -190,6 +204,7 @@ public:
     }
     void Prepare(RC::Unreal::UObject* context) {
         using namespace RC::Unreal;
+        if(declarationConflict)throw std::runtime_error("Quest declaration conflicts must be resolved before registry preparation or ownership migration; see the annotated mod/source error.");
         if(Empty())return;
         std::set<std::string> visiting,visited;
         const auto validateChain=[&](auto&& self,const std::string& key)->void {

@@ -46,6 +46,7 @@
 #include "Core/JsonPatchDirective.h"
 #include "Core/JsonLoadOrderMerge.h"
 #include "Core/AppearanceDefaults.h"
+#include "Core/PlayerCarryWeight.h"
 #include "Runtime/HostServices.h"
 
 using namespace RC;
@@ -2322,6 +2323,7 @@ namespace DragonWilds {
             || !GetGameMode(m_readyWorld)) return;
         LoadAppearanceProvenance();
         std::unordered_map<std::string, std::string> activeAppearanceOwners;
+        PS::PlayerCarryWeight::Owners carryOwners;
         const auto connected = GetConnectedPlayerNames();
         const auto connectedInLoadOrder = GetConnectedPlayersInLoadOrder();
         for (const auto& rule : m_playerRules)
@@ -2413,6 +2415,17 @@ namespace DragonWilds {
                 {
                     const auto label = target.Name.empty() ? target.Guid : target.Name;
                     const auto auditGuid = actualGuid.empty() ? target.Guid : actualGuid;
+                    if(rule.SetCarryWeight||rule.SetMaxCarryWeight) {
+                        const auto owner=RC::to_string(rule.ModName);
+                        const auto setting=rule.SetMaxCarryWeight?std::format("MaxCarryWeight={}",rule.MaxCarryWeight):std::format("CarryWeightMultiplier={}",rule.CarryWeightMultiplier);
+                        const auto conflict=carryOwners.Record(auditGuid.empty()?label:auditGuid,{owner,setting});
+                        if(conflict) {
+                            const auto diagnostic="carry-override\n"+label+"\n"+conflict->Owner+"\n"+conflict->Setting+"\n"+owner+"\n"+setting;
+                            if(m_reportedPlayerRuleApplications.insert(diagnostic).second)
+                                PS::Log<LogLevel::Warning>(STR("[PLAYERS][CARRY-OVERRIDE] '{}' from '{}' overrides '{}' from '{}' for '{}'; last applied rule wins.\n"),
+                                    RC::to_generic_string(setting),rule.ModName,RC::to_generic_string(conflict->Setting),RC::to_generic_string(conflict->Owner),PS::ToWideSafe(label.c_str()));
+                        }
+                    }
                     const auto key = RC::to_string(rule.ModName) + "\n" + label
                         + "\n" + auditGuid + "\n" + ignored;
                     if (m_reportedPlayerRuleApplications.insert(key).second)
@@ -2796,6 +2809,7 @@ namespace DragonWilds {
             bool walkSpeedApplied = !rule.SetWalkSpeed;
             bool runSpeedApplied = !rule.SetRunSpeed;
             bool carryWeightApplied = !rule.SetCarryWeight && !rule.SetMaxCarryWeight;
+            std::string carryWeightStatus;
             bool poisonResistanceApplied = !rule.SetPoisonResistance;
             bool staminaRecoveryApplied = !rule.SetStaminaRecovery;
             bool physicalAttackApplied = !rule.SetPhysicalAttack;
@@ -3273,6 +3287,19 @@ namespace DragonWilds {
                         state->CarryWeightAttribute, rule.MaxCarryWeight)
                     : applyAttribute(
                         state->CarryWeightAttribute, rule.CarryWeightMultiplier);
+                const auto& baseline=state->CarryWeightAttribute;
+                if(carryWeightApplied&&baseline.Valid) {
+                    const double requested=rule.SetMaxCarryWeight?rule.MaxCarryWeight:baseline.Value*rule.CarryWeightMultiplier;
+                    auto* numeric=CastField<FNumericProperty>(baseline.ValuesProperty->GetInner());
+                    auto* values=baseline.ValuesProperty->ContainerPtrToValuePtr<FScriptArray>(baseline.Attributes);
+                    if(!numeric||!numeric->IsFloatingPoint()||!values||!values->GetData()||!values->IsValidIndex(baseline.Index)) {
+                        carryWeightApplied=false;carryWeightStatus="unsupported: attribute storage changed during refresh";
+                    } else {
+                        const auto actual=numeric->GetFloatingPointPropertyValue(static_cast<uint8*>(values->GetData())+baseline.Index*numeric->GetElementSize());
+                        carryWeightApplied=PS::PlayerCarryWeight::Verified(actual,requested);
+                        carryWeightStatus=std::format("{} (baseline {}, requested {}, readback {})",carryWeightApplied?"applied":"not retained",baseline.Value,requested,actual);
+                    }
+                }
             }
             if (rule.SetPoisonResistance)
             {
@@ -3628,7 +3655,7 @@ namespace DragonWilds {
             appendStatus("walk speed", rule.SetWalkSpeed, walkSpeedApplied);
             appendStatus("run speed", rule.SetRunSpeed, runSpeedApplied);
             appendStatus("carry weight", rule.SetCarryWeight || rule.SetMaxCarryWeight,
-                carryWeightApplied);
+                carryWeightApplied,carryWeightStatus);
             appendStatus("poison resistance", rule.SetPoisonResistance,
                 poisonResistanceApplied);
             appendStatus("stamina recovery", rule.SetStaminaRecovery,

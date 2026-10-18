@@ -1,4 +1,7 @@
 #include "Loader/HelpyDependencyOrder.h"
+#include "Core/RecipeWorkspace.h"
+#include "Core/NetworkIdentityState.h"
+#include "Generator/AssetSearch.h"
 #include "Generator/HelpyStatKey.h"
 #include "Generator/HelpyPropertyValue.h"
 #include "Generator/QuickMenuDecorations.h"
@@ -16,6 +19,8 @@
 #include <memory>
 #include <set>
 #include <algorithm>
+#include <sstream>
+#include <array>
 #include "Loader/AssetProvenance.h"
 #include "Loader/DragonWildsRecipeModLoader.h"
 #include "Runtime/HostServices.h"
@@ -32,6 +37,7 @@
 #include "Unreal/CoreUObject/UObject/FStrProperty.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
 #include "Unreal/Engine/UDataTable.hpp"
+#include "Unreal/UObjectArray.hpp"
 #include "Unreal/UObject.hpp"
 #include "Unreal/UObjectGlobals.hpp"
 #include "Helpers/String.hpp"
@@ -51,12 +57,143 @@
 #include "Core/JsonPatchDirective.h"
 #include "Core/RegistryProvenance.h"
 #include "Loader/PlayerGhost.h"
+#include "Loader/EquipmentWearableBridge.h"
+#include "Loader/WearableBridgeDirective.h"
+#include "Loader/QuestScroll.h"
+#include "Loader/QuestBoardCancellation.h"
+#include "Loader/QuestScrollUseContract.h"
+#include "SDK/Helper/ActorHelper.h"
+#include "Core/CookedPakRegistryManifest.h"
+#include "SDK/Helper/RecipeAssetCatalog.h"
 
 using namespace RC;
 using namespace RC::Unreal;
 
 namespace
 {
+    enum class ImportPolicy { Explicit, Required, Closure };
+    enum class ImportConflict { Error, Reuse, Replace, AllowDuplicate };
+    enum class ExternalImportMode { Off, Plan };
+
+    struct ModuleImportSettings
+    {
+        std::vector<std::string> Modules;
+        ImportPolicy Policy = ImportPolicy::Explicit;
+        ImportConflict Conflict = ImportConflict::Error;
+        bool Atomic = true;
+        bool Dry = false;
+        bool Verbose = false;
+        ExternalImportMode External = ExternalImportMode::Off;
+        nlohmann::json Remap = nlohmann::json::object();
+    };
+
+    bool IsModuleImportDirective(std::string_view key)
+    {
+        return key == "$ImpModule" || key == "$ImpPolicy" || key == "$ImpRemap"
+            || key == "$ImpConflict" || key == "$ImpAtomic" || key == "$ImpDry"
+            || key == "$ImpVerbose" || key == "$ImpExternal";
+    }
+
+    bool HasModuleImportDirectives(const nlohmann::json& body)
+    {
+        if (!body.is_object()) return false;
+        for (const auto& [key, unused] : body.items())
+            if (IsModuleImportDirective(key)) return true;
+        return false;
+    }
+
+    ModuleImportSettings ParseModuleImportSettings(const nlohmann::json& body)
+    {
+        ModuleImportSettings settings;
+        if (!body.contains("$ImpModule"))
+        {
+            if (HasModuleImportDirectives(body))
+                throw std::runtime_error("$ImpModule is required when using $Imp* directives");
+            return settings;
+        }
+
+        const auto& authored = body.at("$ImpModule");
+        const auto add = [&](const nlohmann::json& value) {
+            if (!value.is_string() || value.get_ref<const std::string&>().empty())
+                throw std::runtime_error("$ImpModule entries must be non-empty object-path strings");
+            settings.Modules.push_back(value.get<std::string>());
+        };
+        if (authored.is_string()) add(authored);
+        else if (authored.is_array())
+        {
+            if (authored.empty() || authored.size() > 256)
+                throw std::runtime_error("$ImpModule requires 1..256 entries");
+            for (const auto& value : authored) add(value);
+        }
+        else throw std::runtime_error("$ImpModule must be a string or array of strings");
+
+        if (body.contains("$ImpPolicy"))
+        {
+            if (!body.at("$ImpPolicy").is_string()) throw std::runtime_error("$ImpPolicy must be a string");
+            const auto value = body.at("$ImpPolicy").get<std::string>();
+            if (value == "Explicit") settings.Policy = ImportPolicy::Explicit;
+            else if (value == "Required") settings.Policy = ImportPolicy::Required;
+            else if (value == "Closure") settings.Policy = ImportPolicy::Closure;
+            else throw std::runtime_error("$ImpPolicy must be Explicit, Required, or Closure");
+        }
+        if (body.contains("$ImpConflict"))
+        {
+            if (!body.at("$ImpConflict").is_string()) throw std::runtime_error("$ImpConflict must be a string");
+            const auto value = body.at("$ImpConflict").get<std::string>();
+            if (value == "Error") settings.Conflict = ImportConflict::Error;
+            else if (value == "Reuse") settings.Conflict = ImportConflict::Reuse;
+            else if (value == "Replace") settings.Conflict = ImportConflict::Replace;
+            else if (value == "AllowDuplicate") settings.Conflict = ImportConflict::AllowDuplicate;
+            else throw std::runtime_error("$ImpConflict must be Error, Reuse, Replace, or AllowDuplicate");
+        }
+        if (body.contains("$ImpAtomic"))
+        {
+            if (!body.at("$ImpAtomic").is_boolean()) throw std::runtime_error("$ImpAtomic must be a boolean");
+            settings.Atomic = body.at("$ImpAtomic").get<bool>();
+        }
+        if (body.contains("$ImpDry"))
+        {
+            if (!body.at("$ImpDry").is_boolean()) throw std::runtime_error("$ImpDry must be a boolean");
+            settings.Dry = body.at("$ImpDry").get<bool>();
+        }
+        if (body.contains("$ImpVerbose"))
+        {
+            if (!body.at("$ImpVerbose").is_boolean()) throw std::runtime_error("$ImpVerbose must be a boolean");
+            settings.Verbose = body.at("$ImpVerbose").get<bool>();
+        }
+        if (body.contains("$ImpExternal"))
+        {
+            if (!body.at("$ImpExternal").is_string()) throw std::runtime_error("$ImpExternal must be a string");
+            const auto value = body.at("$ImpExternal").get<std::string>();
+            if (value == "Off") settings.External = ExternalImportMode::Off;
+            else if (value == "Plan") settings.External = ExternalImportMode::Plan;
+            else throw std::runtime_error("$ImpExternal must be Off or Plan");
+        }
+        if (body.contains("$ImpRemap"))
+        {
+            if (!body.at("$ImpRemap").is_object()) throw std::runtime_error("$ImpRemap must be an object");
+            const auto validTarget = [](const nlohmann::json& value) {
+                if (value.is_string()) return !value.get_ref<const std::string&>().empty();
+                if (!value.is_array() || value.empty() || value.size() > 64) return false;
+                return std::all_of(value.begin(), value.end(), [](const nlohmann::json& item) {
+                    return item.is_string() && !item.get_ref<const std::string&>().empty();
+                });
+            };
+            for (const auto& [key, value] : body.at("$ImpRemap").items())
+            {
+                if (key.empty()) throw std::runtime_error("$ImpRemap keys must not be empty");
+                if (validTarget(value)) continue;
+                if (!value.is_object())
+                    throw std::runtime_error("$ImpRemap values must be a string, string array, or scoped object");
+                for (const auto& [dependency, target] : value.items())
+                    if (dependency.empty() || !validTarget(target))
+                        throw std::runtime_error("scoped $ImpRemap entries must map dependency names to a string or string array");
+            }
+            settings.Remap = body.at("$ImpRemap");
+        }
+        return settings;
+    }
+
     bool IsDataAssetTarget(const std::string& target)
     {
         if (target.empty() || target.front() != '/' || target.find("..") != std::string::npos)
@@ -76,7 +213,7 @@ namespace
         {
             if (target.starts_with('$')) continue;
             if (!IsDataAssetTarget(target) || !body.is_object()
-                || body.contains("$Clone") || body.contains("$Patch")) return false;
+                || body.contains("$Clone") || body.contains("$Patch") || HasModuleImportDirectives(body)) return false;
             found = true;
         }
         return found;
@@ -958,6 +1095,9 @@ namespace DragonWilds {
             }
             try
             {
+                (void)PS::WearableBridgeDirective::Requested(normalizedProperties);
+                if(normalizedProperties.contains("$QuestScroll"))
+                    (void)QuestScrolls::Parse(RC::to_string(modName),normalizedProperties.at("$QuestScroll"));
                 if (normalizedProperties.contains("$DominionSpheres"))
                 {
                     if (normalizedProperties.contains("$Clone"))
@@ -1416,9 +1556,17 @@ namespace DragonWilds {
 
         const auto errorsBefore = outResult.ErrorCount;
         const auto writesBefore = outResult.PropertiesWritten;
+        bool wearableRefresh=false;
+        try {
+            wearableRefresh=PS::WearableBridgeDirective::Requested(pendingAsset.Properties);
+            if(wearableRefresh&&!EquipmentWearableBridge::IsWearable(object))throw std::runtime_error("$WearableBridge requires WearableEquipmentData, not a generic item or mesh asset");
+        }catch(const std::exception& error){++outResult.ErrorCount;PS::Log<LogLevel::Error>(STR("Asset wearable directive: {}\n"),PS::ToWideSafe(error.what()));return;}
+        if (HasModuleImportDirectives(pendingAsset.Properties)
+            && !ApplyModuleImports(object, pendingAsset, outResult))
+            return;
         for (auto& [propertyName, propertyValue] : pendingAsset.Properties.items())
         {
-            if (propertyName == "$Append" || propertyName == "$Clone" || propertyName == "$InheritEquipmentStats" || PS::AssetMetadata::IsKey(propertyName))
+            if (propertyName == "$Append" || propertyName == "$Clone" || propertyName == "$InheritEquipmentStats" || propertyName == "$WearableBridge" || propertyName == "$QuestScroll" || IsModuleImportDirective(propertyName) || PS::AssetMetadata::IsKey(propertyName))
             {
                 continue;
             }
@@ -1487,14 +1635,1281 @@ namespace DragonWilds {
         // Metadata is recorded only against an object actually handled by this loader.
         // A native field-write failure cannot grant new clone permissions.
         if(outResult.ErrorCount==errorsBefore) {
+            if(wearableRefresh&&!pendingAsset.Properties.contains("$Clone"))
+                (void)EquipmentWearableBridge::RefreshRegistered(object);
             try {PS::AssetMetadata::Record(object,pendingAsset.Metadata,RC::to_string(pendingAsset.ModName),pendingAsset.InstalledDefinition);}
             catch(const std::exception& e){++outResult.ErrorCount;PS::Log<LogLevel::Error>(STR("Asset metadata: {}\n"),PS::ToWideSafe(e.what()));}
+            if(outResult.ErrorCount==errorsBefore && pendingAsset.Properties.contains("$QuestScroll"))try {
+                const auto scroll=QuestScrolls::Parse(RC::to_string(pendingAsset.ModName),pendingAsset.Properties.at("$QuestScroll"));
+                auto* consumable=ActorHelper::ResolveClass(TEXT("/Script/Dominion.ConsumableItemData"));
+                auto* identity=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(objectClass,TEXT("PersistenceID")));
+                if(!consumable||!object->IsA(consumable)||!identity||identity->GetArrayDim()!=1
+                    ||RC::to_string(RC::StringType(*identity->GetPropertyValue(identity->ContainerPtrToValuePtr<void>(object))))!=scroll.PersistenceId)
+                    throw std::runtime_error("$QuestScroll requires ConsumableItemData with the exact declared stable item PersistenceID");
+                (void)QuestScrolls::RequireUseEvent(object);
+                QuestScrolls::Bind(RC::to_string(object->GetPathName()),scroll);
+            }catch(const std::exception& e){++outResult.ErrorCount;PS::Log<LogLevel::Error>(STR("Quest scroll: {}\n"),PS::ToWideSafe(e.what()));}
         }
         if (outResult.ErrorCount > errorsBefore) {
             PS::Log<LogLevel::Error>(STR("[{}] Asset edit incomplete: {} successful field writes, {} errors. Changes are not rolled back; inspect field errors and restart after correcting the mod.\n"),
                 object->GetPathName(), outResult.PropertiesWritten - writesBefore,
                 outResult.ErrorCount - errorsBefore);
         }
+    }
+
+    bool DragonWildsAssetModLoader::ApplyModuleImports(UObject* object,
+        const PendingAsset& pendingAsset, LoadResult& outResult)
+    {
+        ModuleImportSettings settings;
+        try { settings = ParseModuleImportSettings(pendingAsset.Properties); }
+        catch (const std::exception& error)
+        {
+            ++outResult.ErrorCount;
+            PS::Log<LogLevel::Error>(STR("[{}] Module import rejected: {}.\n"),
+                object->GetName(), PS::ToWideSafe(error.what()));
+            return false;
+        }
+        if (settings.Modules.empty()) return true;
+        if (settings.Policy == ImportPolicy::Explicit && !settings.Remap.empty())
+            PS::Log<LogLevel::Warning>(STR("[{}] $ImpRemap is ignored when $ImpPolicy is Explicit.\n"), object->GetName());
+        ResolvedMember modulesMember;
+        FArrayProperty* arrayProperty = nullptr;
+        FStructProperty* entryProperty = nullptr;
+        FObjectProperty* moduleProperty = nullptr;
+        void* arrayAddress = nullptr;
+        try
+        {
+            modulesMember = ResolveMember(object, object->GetClassPrivate(), nullptr, "Modules.Modules");
+            arrayProperty = PropertyHelper::CastProperty<FArrayProperty>(modulesMember.Property);
+            entryProperty = arrayProperty
+                ? PropertyHelper::CastProperty<FStructProperty>(arrayProperty->GetInner()) : nullptr;
+            moduleProperty = entryProperty
+                ? CastField<FObjectProperty>(PropertyHelper::GetPropertyByName(
+                    entryProperty->GetStruct().Get(), TEXT("Module"))) : nullptr;
+            if (!arrayProperty || !entryProperty || !moduleProperty)
+                throw std::runtime_error("target does not expose a compatible Modules.Modules array");
+            if (moduleProperty->GetElementSize() != sizeof(UObject*))
+                throw std::runtime_error("Modules.Modules.Module has an unexpected object-reference layout");
+            arrayAddress = arrayProperty->ContainerPtrToValuePtr<void>(modulesMember.Container);
+        }
+        catch (const std::exception& error)
+        {
+            ++outResult.ErrorCount;
+            PS::Log<LogLevel::Error>(STR("[{}] Module import target rejected: {}.\n"),
+                object->GetName(), PS::ToWideSafe(error.what()));
+            return false;
+        }
+
+        const auto resolveImport = [&](const std::string& authored) -> UObject* {
+            const auto normalizeUnrealPath = [](std::string path) {
+                std::replace(path.begin(), path.end(), '\\', '/');
+                if (path.rfind("Game/", 0) == 0)
+                    path.insert(path.begin(), '/');
+                return path;
+            };
+
+            const auto fullPathText = normalizeUnrealPath(authored);
+            const auto fullPath = RC::to_generic_string(fullPathText);
+            auto* resolved = UECustom::UObjectGlobals::StaticFindObject<UObject*>(
+                nullptr, nullptr, fullPath.c_str(), false);
+            if (resolved) return resolved;
+
+            UECustom::TSoftObjectPtr<UObject> fullSoft{UECustom::FSoftObjectPath(fullPath)};
+            resolved = UECustom::UKismetSystemLibrary::LoadAsset_Blocking(fullSoft);
+            if (resolved) return resolved;
+
+            const auto colon = fullPathText.find(':');
+            const auto assetText = colon == std::string::npos ? fullPathText : fullPathText.substr(0, colon);
+            const auto assetPath = RC::to_generic_string(assetText);
+            if (assetPath.empty()) return nullptr;
+
+            auto* parent = UECustom::UObjectGlobals::StaticFindObject<UObject*>(
+                nullptr, nullptr, assetPath.c_str(), false);
+            if (!parent)
+            {
+                UECustom::TSoftObjectPtr<UObject> soft{UECustom::FSoftObjectPath(assetPath)};
+                parent = UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
+            }
+
+            resolved = UECustom::UObjectGlobals::StaticFindObject<UObject*>(
+                nullptr, nullptr, fullPath.c_str(), false);
+            if (resolved || !parent || colon == std::string::npos) return resolved;
+
+            const auto childName = fullPathText.substr(colon + 1);
+            UObjectGlobals::ForEachUObject([&](UObject* candidate, int32_t, int32_t) -> LoopAction {
+                if (candidate && candidate->GetOuterPrivate() == parent
+                    && RC::to_string(candidate->GetName()) == childName
+                    && !candidate->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed | RF_FinishDestroyed)))
+                {
+                    resolved = candidate;
+                    return LoopAction::Break;
+                }
+                return LoopAction::Continue;
+            });
+            if (resolved) return resolved;
+
+            try
+            {
+                auto sourceModules = ResolveMember(parent, parent->GetClassPrivate(), nullptr, "Modules.Modules");
+                auto* sourceArrayProperty = PropertyHelper::CastProperty<FArrayProperty>(sourceModules.Property);
+                auto* sourceEntryProperty = sourceArrayProperty
+                    ? PropertyHelper::CastProperty<FStructProperty>(sourceArrayProperty->GetInner()) : nullptr;
+                auto* sourceModuleProperty = sourceEntryProperty
+                    ? CastField<FObjectProperty>(PropertyHelper::GetPropertyByName(
+                        sourceEntryProperty->GetStruct().Get(), TEXT("Module"))) : nullptr;
+                if (!sourceArrayProperty || !sourceEntryProperty || !sourceModuleProperty
+                    || sourceModuleProperty->GetElementSize() != sizeof(UObject*))
+                    return nullptr;
+
+                FScriptArrayHelper sourceArray(sourceArrayProperty,
+                    sourceArrayProperty->ContainerPtrToValuePtr<void>(sourceModules.Container));
+                for (int32 index = 0; index < sourceArray.Num(); ++index)
+                {
+                    auto* entry = sourceArray.GetRawPtr(index);
+                    UObject* candidate = nullptr;
+                    std::memcpy(&candidate, sourceModuleProperty->ContainerPtrToValuePtr<void>(entry), sizeof(candidate));
+                    if (candidate && RC::to_string(candidate->GetName()) == childName
+                        && !candidate->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed | RF_FinishDestroyed)))
+                        return candidate;
+                }
+            }
+            catch (...)
+            {
+            }
+            return nullptr;
+        };
+        const auto moduleName = [](UObject* module, FName& out) -> bool {
+            if (!module || !module->GetClassPrivate()) return false;
+            auto* property = CastField<FNameProperty>(PropertyHelper::GetPropertyByName(
+                module->GetClassPrivate(), TEXT("ModuleName")));
+            if (!property || property->GetArrayDim() != 1 || property->GetElementSize() != sizeof(FName))
+                return false;
+            out = property->GetPropertyValue(property->ContainerPtrToValuePtr<void>(module));
+            return out != FName{};
+        };
+
+        struct DependencyRef
+        {
+            FName Name{};
+            std::string Path;
+            bool Optional = false;
+        };
+        const auto scanDependencies = [](UObject* module) {
+            std::vector<DependencyRef> found;
+            if (!module || !module->GetClassPrivate()) return found;
+            const FName moduleNameField(TEXT("ModuleName"), FNAME_Add);
+            std::size_t visitedFields = 0;
+            const auto walk = [&](auto&& self, void* container, FProperty* first,
+                const std::string& prefix, bool inheritedOptional, int depth) -> void {
+                if (!container || !first || depth > 8) return;
+                for (auto* property = first; property; property = property->GetPropertyLinkNext())
+                {
+                    if (++visitedFields > 1024)
+                        throw std::runtime_error("dependency scan exceeded 1024 reflected fields");
+                    const auto propertyName = RC::to_string(property->GetName());
+                    const auto path = prefix.empty() ? propertyName : prefix + "." + propertyName;
+                    const bool optional = inheritedOptional || propertyName.starts_with("Optional");
+                    if (property->GetFName() == moduleNameField)
+                    {
+                        if (depth == 0) continue;
+                        auto* nameProperty = CastField<FNameProperty>(property);
+                        if (!nameProperty || nameProperty->GetArrayDim() != 1
+                            || nameProperty->GetElementSize() != sizeof(FName))
+                            throw std::runtime_error("dependency ModuleName field has an unexpected layout at " + path);
+                        const auto value = nameProperty->GetPropertyValue(
+                            nameProperty->ContainerPtrToValuePtr<void>(container));
+                        if (value != FName{}) found.push_back({value, path, optional});
+                        continue;
+                    }
+                    if (auto* structProperty = PropertyHelper::CastProperty<FStructProperty>(property))
+                    {
+                        auto* nested = structProperty->ContainerPtrToValuePtr<void>(container);
+                        auto* type = structProperty->GetStruct().Get();
+                        if (nested && type)
+                            self(self, nested, type->GetPropertyLink(), path, optional, depth + 1);
+                    }
+                    else if (auto* arrayProperty = PropertyHelper::CastProperty<FArrayProperty>(property))
+                    {
+                        auto* innerStruct = PropertyHelper::CastProperty<FStructProperty>(arrayProperty->GetInner());
+                        auto* type = innerStruct ? innerStruct->GetStruct().Get() : nullptr;
+                        if (!type) continue;
+                        FScriptArrayHelper array(arrayProperty, arrayProperty->ContainerPtrToValuePtr<void>(container));
+                        if (array.Num() > 256)
+                            throw std::runtime_error("dependency scan refused a struct array larger than 256 entries at " + path);
+                        for (int32 index = 0; index < array.Num(); ++index)
+                            self(self, array.GetRawPtr(index), type->GetPropertyLink(),
+                                path + "[" + std::to_string(index) + "]", optional, depth + 1);
+                    }
+                }
+            };
+            walk(walk, module, module->GetClassPrivate()->GetPropertyLink(), "", false, 0);
+            return found;
+        };
+
+        auto* expectedModuleClass = moduleProperty->GetPropertyClass().Get();
+
+        enum class ExternalReferenceKind { Asset, BehavioralClass, Object, OwnedSubobject, SoftReference, Structural };
+        enum class ExternalReferenceProvenance { Shared, Source, Target, Owned };
+        enum class ExternalDependencyDisposition { Available, Candidate, Owned, Contextual, Unresolved };
+        struct ExternalReference
+        {
+            std::string Module;
+            std::string Path;
+            std::string Target;
+            std::string Class;
+            std::string ClassPath;
+            ExternalReferenceKind Kind = ExternalReferenceKind::Object;
+            ExternalReferenceProvenance Provenance = ExternalReferenceProvenance::Shared;
+            bool Soft = false;
+        };
+        const auto scanExternalReferences = [&](UObject* module) {
+            std::vector<ExternalReference> found;
+            if (!module || !module->GetClassPrivate()) return found;
+            std::size_t visitedFields = 0;
+            const auto modulePath = RC::to_string(module->GetPathName());
+            const auto assetPathOf = [](std::string path) {
+                if (const auto colon = path.find(':'); colon != std::string::npos) path.resize(colon);
+                return path;
+            };
+            const auto directoryOf = [](const std::string& path) {
+                const auto slash = path.rfind('/');
+                return slash == std::string::npos ? std::string{} : path.substr(0, slash + 1);
+            };
+            const auto sourceDirectory = directoryOf(assetPathOf(modulePath));
+            const auto targetDirectory = directoryOf(assetPathOf(RC::to_string(object->GetPathName())));
+            const auto provenanceOf = [&](const std::string& targetPath, bool owned) {
+                if (owned) return ExternalReferenceProvenance::Owned;
+                const auto assetPath = assetPathOf(targetPath);
+                if (!sourceDirectory.empty() && assetPath.starts_with(sourceDirectory))
+                    return ExternalReferenceProvenance::Source;
+                if (!targetDirectory.empty() && assetPath.starts_with(targetDirectory))
+                    return ExternalReferenceProvenance::Target;
+                return ExternalReferenceProvenance::Shared;
+            };
+            const auto isStructuralPath = [](const std::string& path) {
+                return path == "ModuleType" || path.ends_with(".ModuleType")
+                    || path.ends_with(".PropertyClass") || path.ends_with(".MetaClass");
+            };
+            const auto isOwnedByModule = [&](UObject* target) {
+                for (auto* outer = target ? target->GetOuterPrivate() : nullptr; outer; outer = outer->GetOuterPrivate())
+                {
+                    if (outer == module) return true;
+                }
+                return false;
+            };
+            const auto classifyHard = [&](const std::string& path, UObject* target) {
+                if (isStructuralPath(path)) return ExternalReferenceKind::Structural;
+                if (isOwnedByModule(target)) return ExternalReferenceKind::OwnedSubobject;
+                if (target && target->IsA<UClass>()) return ExternalReferenceKind::BehavioralClass;
+                const auto targetPath = target ? RC::to_string(target->GetPathName()) : std::string{};
+                if (targetPath.starts_with("/Game/") && targetPath.find(':') == std::string::npos)
+                    return ExternalReferenceKind::Asset;
+                return ExternalReferenceKind::Object;
+            };
+            const auto addHardReference = [&](const std::string& path, UObject* target) {
+                if (!target || target == module) return;
+                if (expectedModuleClass && target->IsA(expectedModuleClass)) return;
+                const auto targetPath = RC::to_string(target->GetPathName());
+                if (targetPath.empty()) return;
+                const auto* targetClass = target->GetClassPrivate();
+                const auto kind = classifyHard(path, target);
+                found.push_back({modulePath, path, targetPath,
+                    targetClass ? RC::to_string(targetClass->GetName()) : std::string{},
+                    targetClass ? RC::to_string(targetClass->GetPathName()) : std::string{},
+                    kind, provenanceOf(targetPath, kind == ExternalReferenceKind::OwnedSubobject), false});
+            };
+            const auto addSoftReference = [&](const std::string& path, FProperty* property, void* address) {
+                if (!property || !address || property->GetElementSize() != sizeof(UECustom::FSoftObjectPtr)) return;
+                const auto& objectId = static_cast<UECustom::FSoftObjectPtr*>(address)->ObjectID;
+                const auto package = RC::to_string(objectId.GetLongPackageFName().ToString());
+                const auto asset = RC::to_string(objectId.GetAssetFName().ToString());
+                if (package.empty() || package == "None" || asset.empty() || asset == "None") return;
+                std::string target = package + "." + asset;
+                const auto& chars = objectId.SubPathString.GetCharArray();
+                if (chars.Num() > 1 && chars.GetData())
+                {
+                    const auto sub = RC::to_string(RC::StringType(chars.GetData(), chars.Num() - 1));
+                    if (!sub.empty()) target += ":" + sub;
+                }
+                const bool isClass = CastField<FSoftClassProperty>(property) != nullptr;
+                const auto kind = isStructuralPath(path) ? ExternalReferenceKind::Structural
+                                                          : ExternalReferenceKind::SoftReference;
+                found.push_back({modulePath, path, target,
+                    isClass ? "SoftClass" : "SoftObject", std::string{},
+                    kind, provenanceOf(target, false), true});
+            };
+            const auto walk = [&](auto&& self, void* container, FProperty* first,
+                const std::string& prefix, int depth) -> void {
+                if (!container || !first || depth > 8) return;
+                for (auto* property = first; property; property = property->GetPropertyLinkNext())
+                {
+                    if (++visitedFields > 2048)
+                        throw std::runtime_error("external reference scan exceeded 2048 reflected fields");
+                    const auto propertyName = RC::to_string(property->GetName());
+                    const auto path = prefix.empty() ? propertyName : prefix + "." + propertyName;
+                    auto* address = property->ContainerPtrToValuePtr<void>(container);
+                    if (CastField<FSoftObjectProperty>(property) || CastField<FSoftClassProperty>(property))
+                    {
+                        addSoftReference(path, property, address);
+                        continue;
+                    }
+                    if (auto* objectProperty = CastField<FObjectPropertyBase>(property))
+                    {
+                        addHardReference(path, objectProperty->GetObjectPropertyValue(address));
+                        continue;
+                    }
+                    if (auto* structProperty = PropertyHelper::CastProperty<FStructProperty>(property))
+                    {
+                        auto* nested = structProperty->ContainerPtrToValuePtr<void>(container);
+                        auto* type = structProperty->GetStruct().Get();
+                        if (nested && type)
+                            self(self, nested, type->GetPropertyLink(), path, depth + 1);
+                        continue;
+                    }
+                    if (auto* arrayProperty = PropertyHelper::CastProperty<FArrayProperty>(property))
+                    {
+                        FScriptArrayHelper array(arrayProperty, arrayProperty->ContainerPtrToValuePtr<void>(container));
+                        if (array.Num() > 512)
+                            throw std::runtime_error("external reference scan refused an array larger than 512 entries at " + path);
+                        auto* inner = arrayProperty->GetInner();
+                        if (CastField<FSoftObjectProperty>(inner) || CastField<FSoftClassProperty>(inner))
+                        {
+                            for (int32 index = 0; index < array.Num(); ++index)
+                                addSoftReference(path + "[" + std::to_string(index) + "]", inner, array.GetRawPtr(index));
+                            continue;
+                        }
+                        if (auto* innerObject = CastField<FObjectPropertyBase>(inner))
+                        {
+                            for (int32 index = 0; index < array.Num(); ++index)
+                                addHardReference(path + "[" + std::to_string(index) + "]",
+                                    innerObject->GetObjectPropertyValue(array.GetRawPtr(index)));
+                            continue;
+                        }
+                        auto* innerStruct = PropertyHelper::CastProperty<FStructProperty>(inner);
+                        auto* type = innerStruct ? innerStruct->GetStruct().Get() : nullptr;
+                        if (!type) continue;
+                        for (int32 index = 0; index < array.Num(); ++index)
+                            self(self, array.GetRawPtr(index), type->GetPropertyLink(),
+                                path + "[" + std::to_string(index) + "]", depth + 1);
+                    }
+                }
+            };
+            walk(walk, module, module->GetClassPrivate()->GetPropertyLink(), "", 0);
+            std::ranges::sort(found, [](const ExternalReference& left, const ExternalReference& right) {
+                if (left.Kind != right.Kind) return left.Kind < right.Kind;
+                if (left.Module != right.Module) return left.Module < right.Module;
+                if (left.Path != right.Path) return left.Path < right.Path;
+                return left.Target < right.Target;
+            });
+            found.erase(std::unique(found.begin(), found.end(), [](const ExternalReference& left, const ExternalReference& right) {
+                return left.Module == right.Module && left.Path == right.Path && left.Target == right.Target && left.Kind == right.Kind;
+            }), found.end());
+            return found;
+        };
+
+        struct ImportRequest
+        {
+            std::string Source;
+            UObject* Module = nullptr;
+            bool Requested = true;
+            bool Forced = false;
+        };
+        struct DependencyTrace
+        {
+            std::string Parent;
+            std::string Path;
+            std::string Name;
+            std::string Resolved;
+            bool Optional = false;
+            bool Remapped = false;
+        };
+
+        const auto remapTargets = [&](UObject* parent, const std::string& dependency) {
+            std::vector<std::string> targets;
+            if (settings.Remap.empty() || !parent) return targets;
+            const auto read = [&](const nlohmann::json& value) {
+                if (value.is_string()) targets.push_back(value.get<std::string>());
+                else if (value.is_array())
+                    for (const auto& item : value) targets.push_back(item.get<std::string>());
+            };
+            const auto full = RC::to_string(parent->GetPathName());
+            const auto shortName = RC::to_string(parent->GetName());
+            if (const auto scoped = settings.Remap.find(full); scoped != settings.Remap.end() && scoped->is_object())
+                if (const auto mapped = scoped->find(dependency); mapped != scoped->end()) read(*mapped);
+            if (targets.empty())
+                if (const auto scoped = settings.Remap.find(shortName); scoped != settings.Remap.end() && scoped->is_object())
+                    if (const auto mapped = scoped->find(dependency); mapped != scoped->end()) read(*mapped);
+            if (targets.empty())
+                if (const auto mapped = settings.Remap.find(dependency); mapped != settings.Remap.end() && !mapped->is_object())
+                    read(*mapped);
+            return targets;
+        };
+
+        std::vector<ImportRequest> requests;
+        std::vector<DependencyTrace> dependencyTrace;
+        int dependencyErrors = 0;
+        if (settings.Policy == ImportPolicy::Explicit)
+        {
+            requests.reserve(settings.Modules.size());
+            for (const auto& source : settings.Modules)
+                requests.push_back({source, resolveImport(source), true, false});
+        }
+        else
+        {
+            std::map<UObject*, std::size_t> emitted;
+            auto* expectedClass = moduleProperty->GetPropertyClass().Get();
+            const auto sourceCandidates = [&](UObject* parent, const FName& wanted) {
+                std::vector<UObject*> matches;
+                if (!parent || !parent->GetOuterPrivate())
+                    throw std::runtime_error("dependency source module has no owning asset");
+                UObjectGlobals::ForEachUObject([&](UObject* candidate, int32_t, int32_t) -> LoopAction {
+                    if (!candidate || candidate == parent || candidate->GetOuterPrivate() != parent->GetOuterPrivate()
+                        || (expectedClass && !candidate->IsA(expectedClass))
+                        || candidate->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed | RF_FinishDestroyed)))
+                        return LoopAction::Continue;
+                    FName candidateName{};
+                    if (moduleName(candidate, candidateName) && candidateName == wanted)
+                        matches.push_back(candidate);
+                    return LoopAction::Continue;
+                });
+                return matches;
+            };
+            const auto resolveRemapTarget = [&](UObject* parent, const std::string& authored) -> UObject* {
+                if (authored.find('/') != std::string::npos || authored.find(':') != std::string::npos)
+                {
+                    auto* resolved = resolveImport(authored);
+                    if (!resolved) throw std::runtime_error("$ImpRemap target could not be resolved: " + authored);
+                    if (expectedClass && !resolved->IsA(expectedClass))
+                        throw std::runtime_error("$ImpRemap target is not a compatible module: " + authored);
+                    return resolved;
+                }
+                if (!parent || !parent->GetOuterPrivate())
+                    throw std::runtime_error("$ImpRemap shorthand requires a source asset");
+                std::vector<UObject*> matches;
+                UObjectGlobals::ForEachUObject([&](UObject* candidate, int32_t, int32_t) -> LoopAction {
+                    if (!candidate || candidate->GetOuterPrivate() != parent->GetOuterPrivate()
+                        || (expectedClass && !candidate->IsA(expectedClass))
+                        || candidate->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed | RF_FinishDestroyed)))
+                        return LoopAction::Continue;
+                    const auto objectName = RC::to_string(candidate->GetName());
+                    FName candidateModuleName{};
+                    const bool moduleMatch = moduleName(candidate, candidateModuleName)
+                        && RC::to_string(candidateModuleName.ToString()) == authored;
+                    if (objectName == authored || moduleMatch) matches.push_back(candidate);
+                    return LoopAction::Continue;
+                });
+                if (matches.empty()) throw std::runtime_error("$ImpRemap target was not found in the source asset: " + authored);
+                if (matches.size() != 1)
+                    throw std::runtime_error("$ImpRemap target is ambiguous; use an exact object path: " + authored);
+                return matches.front();
+            };
+            const auto resolveDependency = [&](UObject* parent, const FName& wanted,
+                const std::string& dependencyPath) {
+                std::vector<UObject*> resolved;
+                const auto wantedText = RC::to_string(wanted.ToString());
+                const auto mapped = remapTargets(parent, wantedText);
+                if (!mapped.empty())
+                {
+                    bool satisfiesReference = false;
+                    std::set<UObject*> unique;
+                    for (const auto& authored : mapped)
+                    {
+                        auto* target = resolveRemapTarget(parent, authored);
+                        if (!unique.insert(target).second) continue;
+                        resolved.push_back(target);
+                        FName targetName{};
+                        if (moduleName(target, targetName) && targetName == wanted)
+                            satisfiesReference = true;
+                    }
+                    if (!satisfiesReference)
+                        throw std::runtime_error("$ImpRemap for '" + wantedText
+                            + "' must include a module whose ModuleName still satisfies that reference at " + dependencyPath);
+                    return resolved;
+                }
+
+                auto matches = sourceCandidates(parent, wanted);
+                if (matches.empty())
+                    throw std::runtime_error("dependency '" + wantedText
+                        + "' was not found in the source asset at " + dependencyPath);
+                if (matches.size() != 1)
+                {
+                    std::string candidates;
+                    for (auto* candidate : matches)
+                    {
+                        if (!candidates.empty()) candidates += ", ";
+                        candidates += RC::to_string(candidate->GetName());
+                    }
+                    throw std::runtime_error("dependency '" + wantedText
+                        + "' is ambiguous at " + dependencyPath + "; candidates: " + candidates
+                        + "; select one with $ImpRemap");
+                }
+                resolved.push_back(matches.front());
+                return resolved;
+            };
+
+            for (const auto& authoredRoot : settings.Modules)
+            {
+                auto* root = resolveImport(authoredRoot);
+                if (!root)
+                {
+                    ++dependencyErrors;
+                    PS::Log<LogLevel::Error>(STR("[{}] $ImpModule '{}': source object could not be resolved.\n"),
+                        object->GetName(), RC::to_generic_string(authoredRoot));
+                    if (settings.Atomic) break;
+                    continue;
+                }
+                if (expectedClass && !root->IsA(expectedClass))
+                {
+                    ++dependencyErrors;
+                    PS::Log<LogLevel::Error>(STR("[{}] $ImpModule '{}': source object is not compatible with Modules.Modules.Module.\n"),
+                        object->GetName(), RC::to_generic_string(authoredRoot));
+                    if (settings.Atomic) break;
+                    continue;
+                }
+                if (auto existing = emitted.find(root); existing != emitted.end())
+                {
+                    requests[existing->second].Requested = true;
+                    continue;
+                }
+
+                std::vector<ImportRequest> staged;
+                std::vector<DependencyTrace> stagedTrace;
+                std::set<UObject*> stagedDone;
+                std::set<UObject*> visiting;
+                try
+                {
+                    const auto visit = [&](auto&& self, UObject* current, const std::string& sourcePath,
+                        bool explicitlyRequested, bool forcedImport, int depth) -> void {
+                        if (!current) throw std::runtime_error("dependency resolver received a null module");
+                        if (depth > 64) throw std::runtime_error("dependency graph exceeded 64 levels");
+                        if (emitted.contains(current))
+                        {
+                            if (explicitlyRequested) requests[emitted.at(current)].Requested = true;
+                            if (forcedImport) requests[emitted.at(current)].Forced = true;
+                            return;
+                        }
+                        if (stagedDone.contains(current))
+                        {
+                            for (auto& item : staged)
+                            {
+                                if (item.Module != current) continue;
+                                if (explicitlyRequested) item.Requested = true;
+                                if (forcedImport) item.Forced = true;
+                            }
+                            return;
+                        }
+                        if (visiting.contains(current)) return;
+                        visiting.insert(current);
+                        const auto currentDisplay = RC::to_string(current->GetPathName());
+                        for (const auto& dependency : scanDependencies(current))
+                        {
+                            const auto dependencyName = RC::to_string(dependency.Name.ToString());
+                            const bool remapped = !remapTargets(current, dependencyName).empty();
+                            if (dependency.Optional && settings.Policy != ImportPolicy::Closure)
+                            {
+                                stagedTrace.push_back({currentDisplay, dependency.Path, dependencyName, {}, true, remapped});
+                                continue;
+                            }
+                            if (dependency.Optional)
+                            {
+                                try
+                                {
+                                    const auto resolvedModules = resolveDependency(current, dependency.Name, dependency.Path);
+                                    for (auto* resolved : resolvedModules)
+                                    {
+                                        const auto resolvedPath = RC::to_string(resolved->GetPathName());
+                                        stagedTrace.push_back({currentDisplay, dependency.Path, dependencyName, resolvedPath, true, remapped});
+                                        self(self, resolved, resolvedPath, false, remapped, depth + 1);
+                                    }
+                                }
+                                catch (const std::exception& error)
+                                {
+                                    stagedTrace.push_back({currentDisplay, dependency.Path, dependencyName, {}, true, remapped});
+                                    PS::Log<LogLevel::Warning>(STR("[{}] $ImpPolicy Closure skipped optional dependency '{}': {}.\n"),
+                                        object->GetName(), RC::to_generic_string(dependencyName), PS::ToWideSafe(error.what()));
+                                }
+                                continue;
+                            }
+                            const auto resolvedModules = resolveDependency(current, dependency.Name, dependency.Path);
+                            for (auto* resolved : resolvedModules)
+                            {
+                                const auto resolvedPath = RC::to_string(resolved->GetPathName());
+                                stagedTrace.push_back({currentDisplay, dependency.Path, dependencyName, resolvedPath, false, remapped});
+                                self(self, resolved, resolvedPath, false, remapped, depth + 1);
+                            }
+                        }
+                        visiting.erase(current);
+                        stagedDone.insert(current);
+                        if (emitted.size() + staged.size() >= 512)
+                            throw std::runtime_error("dependency closure exceeds 512 modules");
+                        staged.push_back({sourcePath, current, explicitlyRequested, forcedImport});
+                    };
+                    visit(visit, root, authoredRoot, true, false, 0);
+                }
+                catch (const std::exception& error)
+                {
+                    ++dependencyErrors;
+                    PS::Log<LogLevel::Error>(STR("[{}] $ImpModule '{}': dependency resolution failed: {}.\n"),
+                        object->GetName(), RC::to_generic_string(authoredRoot), PS::ToWideSafe(error.what()));
+                    if (settings.Atomic) break;
+                    continue;
+                }
+                for (auto& item : staged)
+                {
+                    if (auto existing = emitted.find(item.Module); existing != emitted.end())
+                    {
+                        if (item.Requested) requests[existing->second].Requested = true;
+                        if (item.Forced) requests[existing->second].Forced = true;
+                        continue;
+                    }
+                    emitted[item.Module] = requests.size();
+                    requests.push_back(std::move(item));
+                }
+                dependencyTrace.insert(dependencyTrace.end(), stagedTrace.begin(), stagedTrace.end());
+            }
+        }
+
+        if (dependencyErrors && settings.Atomic)
+        {
+            ++outResult.ErrorCount;
+            PS::Log<LogLevel::Error>(STR("[{}] $ImpAtomic blocked the complete module-import batch during dependency resolution; destination was not changed.\n"),
+                object->GetName());
+            return false;
+        }
+        outResult.ErrorCount += dependencyErrors;
+
+        enum class ActionKind { Append, Reuse, Replace };
+        struct PlannedAction
+        {
+            ActionKind Kind = ActionKind::Append;
+            std::string Source;
+            UObject* Module = nullptr;
+            int32 ExistingIndex = -1;
+        };
+
+        FScriptArrayHelper inspect(arrayProperty, arrayAddress);
+        const int32 originalModuleCount = inspect.Num();
+        std::vector<UObject*> virtualModules;
+        virtualModules.reserve(static_cast<std::size_t>(originalModuleCount) + requests.size());
+        for (int32 index = 0; index < originalModuleCount; ++index)
+        {
+            auto* element = inspect.GetRawPtr(index);
+            auto* value = moduleProperty->ContainerPtrToValuePtr<void>(element);
+            virtualModules.push_back(moduleProperty->GetObjectPropertyValue(value));
+        }
+
+        std::vector<PlannedAction> plan;
+        int validationErrors = 0;
+        for (const auto& request : requests)
+        {
+            const auto& source = request.Source;
+            auto* imported = request.Module;
+            try
+            {
+                if (!imported) throw std::runtime_error("source object could not be resolved: " + source);
+                auto* expectedClass = moduleProperty->GetPropertyClass().Get();
+                if (expectedClass && !imported->IsA(expectedClass))
+                    throw std::runtime_error("source object is not compatible with Modules.Modules.Module: " + source);
+
+                FName wantedName{};
+                const bool hasName = moduleName(imported, wantedName);
+                std::vector<int32> exactMatches;
+                std::vector<int32> nameMatches;
+                for (std::size_t index = 0; index < virtualModules.size(); ++index)
+                {
+                    auto* existing = virtualModules[index];
+                    if (existing == imported)
+                    {
+                        exactMatches.push_back(static_cast<int32>(index));
+                        continue;
+                    }
+                    if (hasName)
+                    {
+                        FName existingName{};
+                        if (moduleName(existing, existingName) && existingName == wantedName)
+                            nameMatches.push_back(static_cast<int32>(index));
+                    }
+                }
+
+                PlannedAction action{ActionKind::Append, source, imported, -1};
+                if (!exactMatches.empty())
+                {
+                    action.ExistingIndex = exactMatches.front();
+                    action.Kind = ActionKind::Reuse;
+                }
+                else if (!request.Requested && !request.Forced && !nameMatches.empty())
+                {
+                    if (nameMatches.size() != 1)
+                        throw std::runtime_error("required dependency is ambiguous in destination: " + source);
+                    action.ExistingIndex = nameMatches.front();
+                    auto* reused = virtualModules[static_cast<std::size_t>(action.ExistingIndex)];
+                    if (!reused || reused->GetClassPrivate() != imported->GetClassPrivate())
+                        throw std::runtime_error("required dependency has a same-name destination module with an incompatible class: " + source);
+                    action.Kind = ActionKind::Reuse;
+                }
+                else if (settings.Conflict == ImportConflict::AllowDuplicate)
+                {
+                    virtualModules.push_back(imported);
+                }
+                else if (nameMatches.empty())
+                {
+                    virtualModules.push_back(imported);
+                }
+                else
+                {
+                    if (nameMatches.size() != 1)
+                        throw std::runtime_error("module identity is ambiguous in destination: " + source);
+                    action.ExistingIndex = nameMatches.front();
+                    if (settings.Conflict == ImportConflict::Error)
+                        throw std::runtime_error("module conflicts with an existing destination module: " + source);
+                    if (settings.Conflict == ImportConflict::Reuse)
+                    {
+                        auto* reused = virtualModules[static_cast<std::size_t>(action.ExistingIndex)];
+                        if (!reused || reused->GetClassPrivate() != imported->GetClassPrivate())
+                            throw std::runtime_error("$ImpConflict Reuse found the same ModuleName on an incompatible module class: " + source);
+                        action.Kind = ActionKind::Reuse;
+                    }
+                    else
+                    {
+                        if (action.ExistingIndex >= originalModuleCount)
+                            throw std::runtime_error("$ImpConflict Replace cannot target another module from the same import batch; remove the duplicate request");
+                        action.Kind = ActionKind::Replace;
+                        virtualModules[static_cast<std::size_t>(action.ExistingIndex)] = imported;
+                    }
+                }
+                plan.push_back(std::move(action));
+            }
+            catch (const std::exception& error)
+            {
+                ++validationErrors;
+                PS::Log<LogLevel::Error>(STR("[{}] $ImpModule '{}': {}.\n"),
+                    object->GetName(), RC::to_generic_string(source), PS::ToWideSafe(error.what()));
+                if (settings.Atomic) break;
+            }
+        }
+
+        if (validationErrors && settings.Atomic)
+        {
+            ++outResult.ErrorCount;
+            PS::Log<LogLevel::Error>(STR("[{}] $ImpAtomic blocked the complete module-import batch; destination was not changed.\n"),
+                object->GetName());
+            return false;
+        }
+        outResult.ErrorCount += validationErrors;
+
+        int appendCount = 0;
+        int replaceCount = 0;
+        int reuseCount = 0;
+        for (const auto& action : plan)
+        {
+            if (action.Kind == ActionKind::Reuse) { ++reuseCount; continue; }
+            if (settings.Dry) continue;
+            if (action.Kind == ActionKind::Replace)
+            {
+                auto* value = moduleProperty->ContainerPtrToValuePtr<void>(
+                    inspect.GetRawPtr(action.ExistingIndex));
+                auto* replacement = action.Module;
+                FMemory::Memcpy(value, &replacement, sizeof(replacement));
+                ++replaceCount;
+                ++outResult.PropertiesWritten;
+                continue;
+            }
+            UECustom::FScriptArrayHelper destination(arrayAddress, arrayProperty);
+            UECustom::FManagedValue prepared;
+            destination.InitializeValue(prepared);
+            auto* value = moduleProperty->ContainerPtrToValuePtr<void>(prepared.GetData());
+            auto* imported = action.Module;
+            FMemory::Memcpy(value, &imported, sizeof(imported));
+            destination.Add(prepared);
+            ++appendCount;
+            ++outResult.PropertiesWritten;
+        }
+
+        const auto shortObjectName = [](const std::string& path) -> std::string {
+            if (const auto colon = path.rfind(':'); colon != std::string::npos && colon + 1 < path.size())
+                return path.substr(colon + 1);
+            if (const auto dot = path.rfind('.'); dot != std::string::npos && dot + 1 < path.size())
+                return path.substr(dot + 1);
+            if (const auto slash = path.rfind('/'); slash != std::string::npos && slash + 1 < path.size())
+                return path.substr(slash + 1);
+            return path;
+        };
+        const auto actionLabel = [](ActionKind kind) -> const char* {
+            switch (kind)
+            {
+            case ActionKind::Append: return "append";
+            case ActionKind::Reuse: return "reuse";
+            case ActionKind::Replace: return "replace";
+            }
+            return "unknown";
+        };
+
+        if (settings.Dry)
+        {
+            const auto totalErrors = dependencyErrors + validationErrors;
+            std::ostringstream report;
+            report << "[" << RC::to_string(object->GetName()) << "] [$ImpDry]\n\n";
+            report << "IMPORT MAP\n";
+
+            if (!settings.Verbose)
+            {
+                report << "  " << (totalErrors == 0 ? "READY" : "BLOCKED")
+                       << " | requested " << settings.Modules.size()
+                       << " | resolved " << requests.size()
+                       << " | planned " << plan.size()
+                       << " | reused " << reuseCount
+                       << " | errors " << totalErrors << "\n";
+                report << "  Requested: ";
+                if (settings.Modules.empty())
+                {
+                    report << "none\n";
+                }
+                else
+                {
+                    for (std::size_t index = 0; index < settings.Modules.size(); ++index)
+                    {
+                        if (index > 0) report << ", ";
+                        report << shortObjectName(settings.Modules[index]);
+                    }
+                    report << "\n";
+                }
+            }
+            else
+            {
+                report << "  Requested : ";
+                if (settings.Modules.empty())
+                {
+                    report << "none\n";
+                }
+                else if (settings.Modules.size() == 1)
+                {
+                    report << shortObjectName(settings.Modules.front()) << "\n";
+                }
+                else
+                {
+                    report << settings.Modules.size() << " modules\n";
+                    for (const auto& requested : settings.Modules)
+                        report << "    + " << shortObjectName(requested) << "\n";
+                }
+            }
+
+            if (settings.Policy == ImportPolicy::Required || settings.Policy == ImportPolicy::Closure)
+            {
+                std::vector<const DependencyTrace*> required;
+                std::vector<const DependencyTrace*> optional;
+                required.reserve(dependencyTrace.size());
+                optional.reserve(dependencyTrace.size());
+                for (const auto& dependency : dependencyTrace)
+                    (dependency.Optional ? optional : required).push_back(&dependency);
+
+                if (settings.Verbose)
+                {
+                    report << "\n  Required\n";
+                    if (required.empty())
+                    {
+                        report << "    none\n";
+                    }
+                    else
+                    {
+                        std::size_t width = 0;
+                        for (const auto* dependency : required)
+                            width = std::max(width, dependency->Name.size());
+                        for (const auto* dependency : required)
+                        {
+                            report << "    + " << dependency->Name;
+                            if (dependency->Name.size() < width)
+                                report << std::string(width - dependency->Name.size(), ' ');
+                            report << " -> " << shortObjectName(dependency->Resolved);
+                            if (dependency->Remapped) report << " [remap]";
+                            report << "\n";
+                        }
+                    }
+
+                    report << "\n  Optional\n";
+                    if (optional.empty())
+                    {
+                        report << "    none\n";
+                    }
+                    else
+                    {
+                        std::size_t width = 0;
+                        for (const auto* dependency : optional)
+                            width = std::max(width, dependency->Name.size());
+                        for (const auto* dependency : optional)
+                        {
+                            report << "    - " << dependency->Name;
+                            if (dependency->Name.size() < width)
+                                report << std::string(width - dependency->Name.size(), ' ');
+                            if (dependency->Resolved.empty())
+                            {
+                                report << " [skipped]\n";
+                            }
+                            else
+                            {
+                                report << " -> " << shortObjectName(dependency->Resolved) << " [included";
+                                if (dependency->Remapped) report << ", remap";
+                                report << "]\n";
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    report << "\n  Dependencies\n";
+                    const auto printCollapsed = [&](const std::vector<const DependencyTrace*>& traces, bool isOptional) {
+                        std::map<std::string, std::pair<const DependencyTrace*, std::size_t>> collapsed;
+                        for (const auto* dependency : traces)
+                        {
+                            const auto key = dependency->Name + "\x1f" + dependency->Resolved + "\x1f"
+                                + (dependency->Remapped ? "1" : "0") + "\x1f"
+                                + (dependency->Resolved.empty() ? "1" : "0");
+                            auto& entry = collapsed[key];
+                            if (!entry.first) entry.first = dependency;
+                            ++entry.second;
+                        }
+                        if (collapsed.empty())
+                        {
+                            report << "    " << (isOptional ? "optional" : "required") << ": none\n";
+                            return;
+                        }
+                        for (const auto& [unused, entry] : collapsed)
+                        {
+                            const auto* dependency = entry.first;
+                            report << "    " << (isOptional ? "- " : "+ ") << dependency->Name;
+                            if (dependency->Resolved.empty())
+                                report << " [skipped]";
+                            else
+                                report << " -> " << shortObjectName(dependency->Resolved);
+                            if (dependency->Remapped) report << " [remap]";
+                            if (entry.second > 1) report << " x" << entry.second;
+                            report << "\n";
+                        }
+                    };
+                    printCollapsed(required, false);
+                    printCollapsed(optional, true);
+                }
+            }
+
+            std::vector<ExternalReference> externalReferences;
+            std::set<UObject*> externalScanned;
+            std::string externalScanError;
+            try
+            {
+                for (const auto& request : requests)
+                {
+                    if (!request.Module || !externalScanned.insert(request.Module).second) continue;
+                    auto moduleReferences = scanExternalReferences(request.Module);
+                    externalReferences.insert(externalReferences.end(),
+                        moduleReferences.begin(), moduleReferences.end());
+                }
+            }
+            catch (const std::exception& error)
+            {
+                externalScanError = error.what();
+            }
+
+            const auto countKind = [&](ExternalReferenceKind kind) {
+                return std::ranges::count_if(externalReferences, [kind](const ExternalReference& reference) {
+                    return reference.Kind == kind;
+                });
+            };
+            const auto assetCount = countKind(ExternalReferenceKind::Asset);
+            const auto behavioralClassCount = countKind(ExternalReferenceKind::BehavioralClass);
+            const auto objectCount = countKind(ExternalReferenceKind::Object);
+            const auto ownedCount = countKind(ExternalReferenceKind::OwnedSubobject);
+            const auto softCount = countKind(ExternalReferenceKind::SoftReference);
+            const auto structuralCount = countKind(ExternalReferenceKind::Structural);
+            const auto countProvenance = [&](ExternalReferenceProvenance provenance) {
+                return std::ranges::count_if(externalReferences, [provenance](const ExternalReference& reference) {
+                    return reference.Kind != ExternalReferenceKind::Structural
+                        && reference.Provenance == provenance;
+                });
+            };
+            const auto sourceDependencyCount = countProvenance(ExternalReferenceProvenance::Source);
+            const auto sharedDependencyCount = countProvenance(ExternalReferenceProvenance::Shared);
+            const auto targetDependencyCount = countProvenance(ExternalReferenceProvenance::Target);
+            std::set<std::string> modulesWithVisibleDependencies;
+            std::set<std::string> sourceCoupledModules;
+            for (const auto& reference : externalReferences)
+            {
+                if (reference.Kind == ExternalReferenceKind::Structural
+                    || reference.Kind == ExternalReferenceKind::OwnedSubobject)
+                    continue;
+                modulesWithVisibleDependencies.insert(reference.Module);
+                if (reference.Provenance == ExternalReferenceProvenance::Source)
+                    sourceCoupledModules.insert(reference.Module);
+            }
+            const auto selfContainedCount = externalScanned.size() >= modulesWithVisibleDependencies.size()
+                ? externalScanned.size() - modulesWithVisibleDependencies.size() : 0;
+
+            report << "\n  External\n";
+            if (!externalScanError.empty())
+            {
+                report << "    scan failed: " << externalScanError << "\n";
+            }
+            const auto provenanceLabel = [](ExternalReferenceProvenance provenance) -> const char* {
+                switch (provenance)
+                {
+                case ExternalReferenceProvenance::Source: return "source";
+                case ExternalReferenceProvenance::Target: return "target";
+                case ExternalReferenceProvenance::Owned: return "owned";
+                case ExternalReferenceProvenance::Shared: return "shared";
+                }
+                return "unknown";
+            };
+            const auto compactClass = [](const std::string& className) -> std::string {
+                if (className == "BlueprintGeneratedClass") return "BGC";
+                return className;
+            };
+            const auto dependencyDisposition = [&](const ExternalReference& reference) {
+                if (reference.Kind == ExternalReferenceKind::OwnedSubobject
+                    || reference.Provenance == ExternalReferenceProvenance::Owned)
+                    return ExternalDependencyDisposition::Owned;
+                if (reference.Soft)
+                    return ExternalDependencyDisposition::Unresolved;
+                if (reference.Kind == ExternalReferenceKind::Object)
+                    return ExternalDependencyDisposition::Contextual;
+                if (reference.Kind == ExternalReferenceKind::Asset
+                    || reference.Kind == ExternalReferenceKind::BehavioralClass)
+                {
+                    if (reference.Provenance == ExternalReferenceProvenance::Source)
+                        return ExternalDependencyDisposition::Candidate;
+                    return ExternalDependencyDisposition::Available;
+                }
+                return ExternalDependencyDisposition::Contextual;
+            };
+            const auto dispositionLabel = [](ExternalDependencyDisposition disposition) -> const char* {
+                switch (disposition)
+                {
+                case ExternalDependencyDisposition::Available: return "available";
+                case ExternalDependencyDisposition::Candidate: return "candidate";
+                case ExternalDependencyDisposition::Owned: return "owned";
+                case ExternalDependencyDisposition::Contextual: return "contextual";
+                case ExternalDependencyDisposition::Unresolved: return "unresolved";
+                }
+                return "unknown";
+            };
+            const auto printExternalKind = [&](ExternalReferenceKind kind, const char* label) {
+                std::vector<const ExternalReference*> matches;
+                for (const auto& reference : externalReferences)
+                    if (reference.Kind == kind) matches.push_back(&reference);
+                if (matches.empty()) return;
+                if (settings.Verbose)
+                {
+                    report << "\n    " << label << "\n";
+                    std::string currentModule;
+                    for (const auto* reference : matches)
+                    {
+                        if (reference->Module != currentModule)
+                        {
+                            currentModule = reference->Module;
+                            report << "      " << shortObjectName(currentModule) << "\n";
+                        }
+                        report << "        + " << reference->Path << " -> " << shortObjectName(reference->Target);
+                        if (!reference->Class.empty()) report << " [" << reference->Class << "]";
+                        report << " [" << provenanceLabel(reference->Provenance) << "]"
+                               << " [" << dispositionLabel(dependencyDisposition(*reference)) << "]\n";
+                        report << "          path: " << reference->Target << "\n";
+                        if (!reference->ClassPath.empty())
+                            report << "          class: " << reference->ClassPath << "\n";
+                        report << "          state: " << (reference->Soft ? "soft/unloaded" : "loaded") << "\n";
+                    }
+                    return;
+                }
+                if (kind == ExternalReferenceKind::OwnedSubobject) return;
+                for (const auto* reference : matches)
+                {
+                    report << "    + " << shortObjectName(reference->Module) << "." << reference->Path
+                           << " -> " << shortObjectName(reference->Target);
+                    if (!reference->Class.empty()) report << " [" << compactClass(reference->Class) << "]";
+                    report << " [" << provenanceLabel(reference->Provenance) << "]"
+                           << " [" << (reference->Soft ? "soft" : "loaded") << "]"
+                           << " [" << dispositionLabel(dependencyDisposition(*reference)) << "]\n";
+                    if (reference->Soft)
+                        report << "      path: " << reference->Target << "\n";
+                }
+            };
+            printExternalKind(ExternalReferenceKind::Asset, "Assets");
+            printExternalKind(ExternalReferenceKind::BehavioralClass, "Behavioral Classes");
+            printExternalKind(ExternalReferenceKind::Object, "External Objects / Components");
+            printExternalKind(ExternalReferenceKind::OwnedSubobject, "Owned Subobjects");
+            printExternalKind(ExternalReferenceKind::SoftReference, "Soft References");
+            const bool visibleExternal = std::ranges::any_of(externalReferences, [&](const ExternalReference& reference) {
+                return reference.Kind != ExternalReferenceKind::Structural
+                    && (settings.Verbose || reference.Kind != ExternalReferenceKind::OwnedSubobject);
+            });
+            if (!visibleExternal && externalScanError.empty()) report << "    none\n";
+
+            report << "\n  External deps: assets " << assetCount
+                   << " | classes " << behavioralClassCount
+                   << " | objects " << objectCount
+                   << " | owned " << ownedCount
+                   << " | soft " << softCount << "\n";
+
+            std::size_t availableDependencyCount = 0;
+            std::size_t candidateDependencyCount = 0;
+            std::size_t ownedDependencyCount = 0;
+            std::size_t contextualDependencyCount = 0;
+            std::size_t unresolvedDependencyCount = 0;
+            for (const auto& reference : externalReferences)
+            {
+                if (reference.Kind == ExternalReferenceKind::Structural) continue;
+                switch (dependencyDisposition(reference))
+                {
+                case ExternalDependencyDisposition::Available: ++availableDependencyCount; break;
+                case ExternalDependencyDisposition::Candidate: ++candidateDependencyCount; break;
+                case ExternalDependencyDisposition::Owned: ++ownedDependencyCount; break;
+                case ExternalDependencyDisposition::Contextual: ++contextualDependencyCount; break;
+                case ExternalDependencyDisposition::Unresolved: ++unresolvedDependencyCount; break;
+                }
+            }
+            report << "  Safety: available " << availableDependencyCount
+                   << " | candidates " << candidateDependencyCount
+                   << " | contextual " << contextualDependencyCount
+                   << " | unresolved " << unresolvedDependencyCount
+                   << " | owned " << ownedDependencyCount << "\n";
+
+            if (settings.External == ExternalImportMode::Plan)
+            {
+                struct ExternalPlanEntry
+                {
+                    const ExternalReference* Reference = nullptr;
+                    ExternalDependencyDisposition Disposition = ExternalDependencyDisposition::Available;
+                    std::size_t Uses = 0;
+                };
+                std::map<std::string, ExternalPlanEntry> externalPlan;
+                for (const auto& reference : externalReferences)
+                {
+                    if (reference.Kind == ExternalReferenceKind::Structural) continue;
+                    const auto disposition = dependencyDisposition(reference);
+                    const auto key = std::to_string(static_cast<int>(disposition)) + "\x1f" + reference.Target;
+                    auto& entry = externalPlan[key];
+                    if (!entry.Reference)
+                    {
+                        entry.Reference = &reference;
+                        entry.Disposition = disposition;
+                    }
+                    ++entry.Uses;
+                }
+                std::size_t planImportCount = 0;
+                std::size_t planReuseCount = 0;
+                std::size_t planOwnedCount = 0;
+                std::size_t planBlockedCount = 0;
+                for (const auto& [unused, entry] : externalPlan)
+                {
+                    switch (entry.Disposition)
+                    {
+                    case ExternalDependencyDisposition::Candidate: ++planImportCount; break;
+                    case ExternalDependencyDisposition::Available: ++planReuseCount; break;
+                    case ExternalDependencyDisposition::Owned: ++planOwnedCount; break;
+                    case ExternalDependencyDisposition::Contextual:
+                    case ExternalDependencyDisposition::Unresolved: ++planBlockedCount; break;
+                    }
+                }
+                report << "  External plan: import " << planImportCount
+                       << " | reuse " << planReuseCount
+                       << " | owned " << planOwnedCount
+                       << " | blocked " << planBlockedCount << "\n";
+                for (const auto& [unused, entry] : externalPlan)
+                {
+                    if (!entry.Reference) continue;
+                    const auto& reference = *entry.Reference;
+                    const char* operation = "reuse";
+                    switch (entry.Disposition)
+                    {
+                    case ExternalDependencyDisposition::Candidate: operation = "would-import"; break;
+                    case ExternalDependencyDisposition::Available: operation = "reuse"; break;
+                    case ExternalDependencyDisposition::Owned: operation = "travels"; break;
+                    case ExternalDependencyDisposition::Contextual: operation = "blocked-context"; break;
+                    case ExternalDependencyDisposition::Unresolved: operation = "blocked-unresolved"; break;
+                    }
+                    if (!settings.Verbose && entry.Disposition == ExternalDependencyDisposition::Available) continue;
+                    if (!settings.Verbose && entry.Disposition == ExternalDependencyDisposition::Owned) continue;
+                    report << "    " << operation << ": " << shortObjectName(reference.Target);
+                    if (!reference.Class.empty()) report << " [" << compactClass(reference.Class) << "]";
+                    report << " [" << provenanceLabel(reference.Provenance) << "]";
+                    if (entry.Uses > 1) report << " x" << entry.Uses;
+                    report << "\n";
+                    if (settings.Verbose)
+                    {
+                        report << "      from: " << shortObjectName(reference.Module) << "." << reference.Path << "\n";
+                        report << "      path: " << reference.Target << "\n";
+                    }
+                }
+            }
+
+            const bool hasAttentionDependencies = candidateDependencyCount > 0
+                || contextualDependencyCount > 0 || unresolvedDependencyCount > 0;
+            if (hasAttentionDependencies)
+            {
+                report << "  Review\n";
+                for (const auto& reference : externalReferences)
+                {
+                    if (reference.Kind == ExternalReferenceKind::Structural) continue;
+                    const auto disposition = dependencyDisposition(reference);
+                    if (disposition != ExternalDependencyDisposition::Candidate
+                        && disposition != ExternalDependencyDisposition::Contextual
+                        && disposition != ExternalDependencyDisposition::Unresolved)
+                        continue;
+                    report << "    " << dispositionLabel(disposition) << ": "
+                           << shortObjectName(reference.Module) << "." << reference.Path
+                           << " -> " << shortObjectName(reference.Target);
+                    if (!reference.Class.empty())
+                        report << " [" << compactClass(reference.Class) << "]";
+                    report << " [" << provenanceLabel(reference.Provenance) << "]\n";
+                    if (reference.Soft || settings.Verbose)
+                        report << "      path: " << reference.Target << "\n";
+                }
+            }
+
+            report << "  Portability: self " << selfContainedCount
+                   << " | source " << sourceCoupledModules.size()
+                   << " | shared " << sharedDependencyCount
+                   << " | target " << targetDependencyCount << "\n";
+            if (structuralCount > 0)
+                report << "  Structural hidden: " << structuralCount << "\n";
+
+            report << "\n  Plan\n";
+            if (plan.empty())
+            {
+                report << "    none\n";
+            }
+            else
+            {
+                std::size_t step = 0;
+                for (const auto& action : plan)
+                {
+                    ++step;
+                    const auto display = action.Module
+                        ? RC::to_string(action.Module->GetName())
+                        : shortObjectName(action.Source);
+                    report << "    " << step << ". " << display << " ["
+                           << actionLabel(action.Kind) << "]\n";
+                }
+            }
+
+            if (settings.Verbose)
+            {
+                report << "\n  " << (totalErrors == 0 ? "READY" : "BLOCKED") << "\n";
+                report << "  requested " << settings.Modules.size()
+                       << " | resolved " << requests.size()
+                       << " | planned " << plan.size()
+                       << " | reused " << reuseCount
+                       << " | errors " << totalErrors << "\n";
+            }
+
+
+
+            if (totalErrors == 0)
+                PS::Log<LogLevel::Normal>(STR("{}"), RC::to_generic_string(report.str()));
+            else
+                PS::Log<LogLevel::Error>(STR("{}"), RC::to_generic_string(report.str()));
+        }
+        else
+            PS::Log<LogLevel::Normal>(STR("[{}] [$ImpModule] APPLIED | requested {} | resolved {} | appended {} | replaced {} | reused {} | errors {}\n"),
+                object->GetName(), settings.Modules.size(), requests.size(), appendCount, replaceCount, reuseCount,
+                dependencyErrors + validationErrors);
+        return !settings.Atomic || (dependencyErrors + validationErrors) == 0;
     }
 
     void DragonWildsAssetModLoader::ApplyDominionSpheres(UObject* owner,
@@ -1586,6 +3001,45 @@ namespace DragonWilds {
                     object->GetName(), propertyNameWide, PS::ToWideSafe(e.what()));
             }
         }
+    }
+
+    std::vector<RC::StringType> DragonWildsAssetModLoader::CookedReferencePaths()
+    {
+        std::scoped_lock lock{m_mutex};
+        std::vector<RC::StringType> paths;
+        const auto collect=[&](const auto& pending){
+            for(const auto& asset:pending){
+                if(asset.Properties.contains("$Clone")){
+                    const auto& source=asset.Properties.at("$Clone");
+                    if(source.is_string())paths.push_back(NormalizeObjectPath(RC::to_generic_string(source.get<std::string>())));
+                }else if(!asset.ObjectPath.empty())paths.push_back(asset.ObjectPath);
+            }
+        };
+        collect(m_pendingAssets);collect(m_pendingPatches);return paths;
+    }
+
+    UObject* DragonWildsAssetModLoader::EnsureQuestCancellationScroll(const std::string& path,const nlohmann::json& properties)
+    {
+        std::scoped_lock lock{m_mutex};
+        const auto contract=QuestScrolls::Parse(QuestCancellations::Owner,properties.at("$QuestScroll"));
+        if(contract.Action!="Abandon")throw std::runtime_error("Generated cancellation must bind Abandon");
+        PendingAsset pending;
+        pending.Target=RC::to_generic_string(path);pending.ObjectPath=pending.Target;
+        pending.ModName=RC::to_generic_string(QuestCancellations::Owner);pending.Properties=properties;
+        if(const auto bound=QuestScrolls::Find(path);bound && *bound!=contract)
+            throw std::runtime_error("Generated cancellation binding conflicts with an existing item");
+        auto* subsystem=FindItemSubsystem();
+        auto* object=Resolve(pending);bool created=false;
+        if(object && std::find(m_createdAssets.begin(),m_createdAssets.end(),object)==m_createdAssets.end())
+            throw std::runtime_error("Generated cancellation path is occupied by another asset");
+        if(!object){object=CreateFromClone(pending,subsystem);created=object!=nullptr;}
+        if(!object || !IsReadyForPatch(object) || !IsSupportedTarget(object))throw std::runtime_error("Cancellation scroll is not ready");
+        LoadResult result{};Apply(object,pending,result);
+        const bool registered=result.ErrorCount==0 && RegisterCreatedItem(object,pending,subsystem);
+        PS::AssetProvenance::Record(object,properties.at("$Clone").get<std::string>(),QuestCancellations::Owner,created,registered,result.ErrorCount,properties);
+        if(!registered || result.ErrorCount)throw std::runtime_error("Cancellation scroll failed native item registration");
+        PS::AssetAliases::Add(pending.Target,object->GetPathName());
+        return object;
     }
 
     void DragonWildsAssetModLoader::TryApplyPending()
@@ -2004,14 +3458,17 @@ namespace DragonWilds {
                 continue;
             }
 
-            // Dedicated servers publish network IDs after every clone has
+            // All peers publish startup network IDs after every clone has
             // completed identity/property construction. Interleaving TArray
             // and reverse-map growth with repeated UObject cloning can expose
-            // an unsettled server ItemSubsystem to its own registration
+            // an unsettled ItemSubsystem to its own registration
             // callbacks. Persistence/internal maps are installed now so
             // recipes can resolve outputs; DragonWildsDataRegistrar assigns
-            // and verifies all network IDs in one settled startup batch.
-            const bool networkDeferred = PS::Storefront::IsDedicatedServer();
+            // and verifies all network IDs in one settled startup batch. A
+            // client-only early append changes its preserved prefix relative
+            // to the server, despite identical final item counts/mods. Clones
+            // created after this boundary still enroll immediately as before.
+            const bool networkDeferred = PS::NetworkIdentityState::DeferItemEnrollment();
             const auto netId = networkDeferred
                 ? -1 : EnsureItemNetworkIdentity(item, candidate);
             if (!networkDeferred && netId < 0)
@@ -2039,6 +3496,7 @@ namespace DragonWilds {
             }
 
             if (!networkDeferred && firstNetId < 0) firstNetId = netId;
+            if(!networkDeferred)EquipmentWearableBridge::TryRegister(candidate,item);
             ++registeredCount;
         }
 

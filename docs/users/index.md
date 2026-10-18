@@ -22,6 +22,6 @@ RuneSchema itself is enabled in UE4SS `Mods/mods.txt`. Individual add-ons are en
 
 ## Other useful guides
 
-- [Steam, GOG, Game Pass, and co-op](../COMPATIBILITY.md)
+- [Steam, Epic, Game Pass, and co-op](../COMPATIBILITY.md)
 - [What the optional bridges do](../OPTIONAL-BRIDGES.md)
 - [File guide for CurseForge and Nexus](../MOD-HOSTS-AND-GETTING-STARTED.md)

@@ -9,6 +9,8 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <memory>
+#include <atomic>
 
 namespace PS::MappingBackbone {
 namespace fs = std::filesystem;
@@ -94,8 +96,11 @@ inline Mapping Discover(const fs::path& ue4ssRoot)
     return {};
 }
 
-inline const Mapping& Current(const fs::path& ue4ssRoot)
+inline std::atomic<std::shared_ptr<const Mapping>> Generated;
+inline void Activate(Mapping value){Generated.store(std::make_shared<const Mapping>(std::move(value)));}
+inline Mapping Current(const fs::path& ue4ssRoot)
 {
+    if(const auto generated=Generated.load())return *generated;
     static const Mapping mapping = Discover(ue4ssRoot);
     return mapping;
 }

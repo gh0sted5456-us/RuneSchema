@@ -1,5 +1,6 @@
 ---
 hide:
+  - navigation
   - toc
 ---
 
@@ -7,57 +8,61 @@ hide:
 
 <section class="rs-hero" aria-labelledby="rs-home-title">
   <div class="rs-hero__eyebrow">
-    <span>RuneSchema 0.7.7.9m</span>
-    <span>Steam · GOG · Game Pass</span>
+    <span>RuneSchema for Dragonwilds</span>
+    <span>Steam · Epic · Game Pass</span>
   </div>
-  <h1 id="rs-home-title">Make more of Dragonwilds.</h1>
-  <p>RuneSchema gives compatible mods a clear route into the game's content and runtime systems. Install a mod, author one, or run a server—start with the guide that fits you.</p>
+  <h1 id="rs-home-title">Your mods.<br>Your world.</h1>
+  <p>A shared runtime for Dragonwilds mods. Install content, create something new, or bring your community together.</p>
   <div class="rs-actions">
-    <a class="md-button md-button--primary" href="CURRENT-RELEASE/">Download RuneSchema</a>
-    <a class="md-button" href="INSTALLATION/">Installation guide</a>
+    <a class="md-button md-button--primary" href="INSTALLATION/">Get started <span aria-hidden="true">→</span></a>
+    <a class="rs-text-link" href="CURRENT-RELEASE/">Current release · 0.8.0.0</a>
+    <a class="rs-text-link" href="MOD-HOSTS-AND-GETTING-STARTED/">What is RuneSchema? <span aria-hidden="true">↗</span></a>
   </div>
 </section>
+
+<aside class="rs-release" aria-label="Current release">
+  <span class="rs-release__tag">Released on main</span>
+  <p><strong>0.8.0.0</strong> — the revamped Helpy workspace, content integration, and runtime hardening.</p>
+  <a href="RELEASE-0.8.0.0/">Release notes and verification <span aria-hidden="true">→</span></a>
+</aside>
 
 <h2 class="rs-section-heading">Choose your path</h2>
 <div class="rs-paths">
   <article class="rs-path">
-    <h3>Use mods</h3>
-    <p>Install RuneSchema, choose add-ons, and keep your saves in mind when changing a mod list.</p>
-    <a href="users/">For players →</a>
+    <h3><a href="users/">Play with mods <span aria-hidden="true">↗</span></a></h3>
+    <p>Install the runtime, manage your add-ons, and keep your saves safe.</p>
   </article>
   <article class="rs-path">
-    <h3>Create mods</h3>
-    <p>Start with a loader file or bring your own cooked assets, then connect them to native systems.</p>
-    <a href="modders/">For modders →</a>
+    <h3><a href="modders/">Create content <span aria-hidden="true">↗</span></a></h3>
+    <p>Start with a schema or connect cooked assets to the game's native systems.</p>
   </article>
   <article class="rs-path">
-    <h3>Run a server</h3>
-    <p>Set up the authoritative side, align client content, and manage world saves carefully.</p>
-    <a href="servers/">For server owners →</a>
+    <h3><a href="servers/">Run a server <span aria-hidden="true">↗</span></a></h3>
+    <p>Set up your host, match client content, and maintain your world.</p>
   </article>
 </div>
 
 <section class="rs-finder" data-rs-finder aria-labelledby="rs-finder-title">
   <h2 id="rs-finder-title">Find a guide</h2>
-  <label class="rs-finder__label" for="rs-finder-input">What are you trying to do?</label>
-  <input class="rs-finder__input" id="rs-finder-input" type="search" placeholder="Try “station”, “save”, or “server”" autocomplete="off">
-  <ul class="rs-finder__list">
-    <li><a href="INSTALLATION/">Install or update RuneSchema</a></li>
-    <li><a href="users/manage-mods/">Enable, disable, or order mods</a></li>
-    <li><a href="SAFE-SAVE-AND-LEDGER/">Remove a mod safely</a></li>
-    <li><a href="modders/first-cooked-item/">Add a cooked item</a></li>
-    <li><a href="STATIONS-AND-RECIPES/">Connect stations and recipes</a></li>
-    <li><a href="WEAPONS-AND-ITEMS/">Register attacks and spells</a></li>
-    <li><a href="servers/dedicated-setup/">Set up a dedicated server</a></li>
-    <li><a href="LOADER-WALKTHROUGHS/">Browse the loader reference</a></li>
+  <label class="rs-sr-only" for="rs-finder-input">Filter the quick guides</label>
+  <div class="rs-finder__search">
+    <input class="rs-finder__input" id="rs-finder-input" type="search" placeholder="What would you like to do?" autocomplete="off" aria-controls="rs-guide-list" aria-describedby="rs-guide-count">
+    <button class="rs-finder__clear" type="button" hidden>Clear</button>
+  </div>
+  <p class="rs-finder__count" id="rs-guide-count" role="status" aria-live="polite">8 quick guides · use site search for all documentation</p>
+  <ul class="rs-finder__list" id="rs-guide-list">
+    <li data-rs-keywords="download setup steam gamepass xbox epic upgrade"><a href="INSTALLATION/">Install or update <span aria-hidden="true">→</span></a></li>
+    <li data-rs-keywords="enable disable order addons settings"><a href="users/manage-mods/">Manage your mods <span aria-hidden="true">→</span></a></li>
+    <li data-rs-keywords="remove uninstall orphan cleanup prune character"><a href="SAFE-SAVE-AND-LEDGER/">Keep saves safe <span aria-hidden="true">→</span></a></li>
+    <li data-rs-keywords="pak asset register item"><a href="modders/first-cooked-item/">Add a cooked item <span aria-hidden="true">→</span></a></li>
+    <li data-rs-keywords="crafting processing station recipe"><a href="STATIONS-AND-RECIPES/">Connect stations and recipes <span aria-hidden="true">→</span></a></li>
+    <li data-rs-keywords="weapon combat spell attack"><a href="WEAPONS-AND-ITEMS/">Register attacks and spells <span aria-hidden="true">→</span></a></li>
+    <li data-rs-keywords="dedicated co-op coop host multiplayer"><a href="servers/dedicated-setup/">Set up a server <span aria-hidden="true">→</span></a></li>
+    <li data-rs-keywords="schema json jsonc npc quest journal lore spawn building"><a href="LOADER-WALKTHROUGHS/">Choose a loader <span aria-hidden="true">→</span></a></li>
   </ul>
   <p class="rs-finder__empty" role="status" hidden>No matching guide here. Try the site search above.</p>
 </section>
 
-<div class="rs-note">
-  <p><strong>A useful distinction:</strong> a PAK can mount without its assets being registered or usable. The <a href="modders/">modder guide</a> follows that chain; the <a href="SAFE-SAVE-AND-LEDGER/">save guide</a> explains what happens when content is removed.</p>
-</div>
-
-<p>Looking for a specific field? Open the <a href="DOCUMENTATION-INDEX/">documentation map</a> or <a href="ASK-RUNESCHEMA/">Ask RuneSchema</a>.</p>
+<p class="rs-home__footer">Need a specific field? Browse the <a href="DOCUMENTATION-INDEX/">complete reference</a>. Stuck? <a href="ASK-RUNESCHEMA/">Ask the documentation</a>.</p>
 
 </div>

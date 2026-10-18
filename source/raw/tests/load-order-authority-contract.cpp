@@ -24,22 +24,29 @@ static bool HasOrderedPakRootLoop(const std::string& source) {
     compact.reserve(source.size());
     for (const unsigned char ch : source)
         if (!std::isspace(ch)) compact.push_back(static_cast<char>(ch));
-    const std::string loop = "for(constauto&name:ModLoadOrder::Resolve(modsRoot,discovered))";
-    const std::string append = "pakRoots.push_back(modsRoot/name);";
-    // Registry-owner bookkeeping added braces, but the ordered append remains
-    // the first statement of the loop. Do not accept an append outside it.
-    return compact.find(loop + append) != std::string::npos ||
-        compact.find(loop + "{" + append) != std::string::npos;
+    const std::string loop = "for(constauto&name:ModLoadOrder::Resolve(modsRoot,discovered)){";
+    const auto begin=compact.find(loop);if(begin==std::string::npos)return false;
+    size_t end=begin+loop.size(),depth=1;
+    for(;end<compact.size() && depth;++end){if(compact[end]=='{')++depth;else if(compact[end]=='}')--depth;}
+    if(depth)return false;
+    const auto body=compact.substr(begin+loop.size(),end-begin-loop.size()-1);
+    // Mount concrete /paks and /LogicMods directories belonging to each
+    // resolved owner. A recursive mod-root append could bypass enablement.
+    return body.find("constautomodRoot=modsRoot/name;")==0
+        && body.find("autoreadDirectories=PS::ModFolderLayout::PakReadDirectories(modRoot);")!=std::string::npos
+        && body.find("for(constauto&directory:readDirectories)pakRoots.push_back(directory);")!=std::string::npos;
 }
 
 static void VerifyOrderedPakRootMatcher() {
     const char* valid[] = {
-        "for(const auto& name:ModLoadOrder::Resolve(modsRoot,discovered))pakRoots.push_back(modsRoot/name);",
-        "for(const auto& name:ModLoadOrder::Resolve(modsRoot,discovered)) {\n pakRoots.push_back(modsRoot/name);\n Remember(name); }",
-        "for (const auto & name : ModLoadOrder::Resolve( modsRoot, discovered ))\r\n{\t pakRoots.push_back( modsRoot / name ); }"
+        "for(const auto& name:ModLoadOrder::Resolve(modsRoot,discovered)){const auto modRoot=modsRoot/name;auto readDirectories=PS::ModFolderLayout::PakReadDirectories(modRoot);for(const auto& directory:readDirectories)pakRoots.push_back(directory);}",
+        "for (const auto & name : ModLoadOrder::Resolve( modsRoot, discovered )) { const auto modRoot = modsRoot / name; auto readDirectories = PS::ModFolderLayout::PakReadDirectories(modRoot); for (const auto & directory : readDirectories) pakRoots.push_back(directory); Remember(name); }"
     };
     const char* invalid[] = {
-        "for(const auto& name:discovered){pakRoots.push_back(modsRoot/name);}",
+        "for(const auto& name:discovered){const auto modRoot=modsRoot/name;auto readDirectories=PS::ModFolderLayout::PakReadDirectories(modRoot);for(const auto& directory:readDirectories)pakRoots.push_back(directory);}",
+        "for(const auto& name:ModLoadOrder::Resolve(modsRoot,discovered)){const auto modRoot=elsewhere/name;auto readDirectories=PS::ModFolderLayout::PakReadDirectories(modRoot);for(const auto& directory:readDirectories)pakRoots.push_back(directory);}",
+        "for(const auto& name:ModLoadOrder::Resolve(modsRoot,discovered)){const auto modRoot=modsRoot/name;auto readDirectories=PS::ModFolderLayout::PakReadDirectories(elsewhere);for(const auto& directory:readDirectories)pakRoots.push_back(directory);}",
+        "for(const auto& name:ModLoadOrder::Resolve(modsRoot,discovered)){const auto modRoot=modsRoot/name;auto readDirectories=PS::ModFolderLayout::PakReadDirectories(modRoot);}for(const auto& directory:readDirectories)pakRoots.push_back(directory);",
         "for(const auto& name:ModLoadOrder::Resolve(modsRoot,discovered)){pakRoots.push_back(modsRoot);}",
         "for(const auto& name:ModLoadOrder::Resolve(modsRoot,discovered)){}pakRoots.push_back(modsRoot/name);",
         "for(const auto& name:ModLoadOrder::Resolve(modsRoot,discovered));pakRoots.push_back(modsRoot/name);",
@@ -63,7 +70,10 @@ int main(int argc, char** argv) {
     const auto pluginHost = Read(argv[4]);
 
     Require(modOrder, "Explicit runeschema.txt order is authoritative");
-    Require(modOrder, "resolved.insert(resolved.end(), entries.begin(), entries.end())");
+    Require(modOrder, "ModOrderState::Reconcile(ToEntries(entries),names)");
+    Require(modOrder, "ModOrderState::WriteExpected(path,baseline,contents)");
+    Require(modOrder, "&snapshot");
+    Require(modOrder, "refusing stale enablement decisions");
     Require(modOrder, "Unlisted ordinary/numeric mods are appended in discovery order");
     Require(modOrder, "A disabled row wins");
     Require(modOrder, "Zero wins across duplicate rows");

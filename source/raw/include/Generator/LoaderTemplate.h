@@ -9,7 +9,7 @@ inline bool Patch(const std::string& loader){return Capability(loader).StarterPa
 inline bool Append(const std::string& loader){return Capability(loader).Append;}
 inline std::string Help(const std::string& loader) {
     if(loader=="events")return "Experimental temporary AI waves. EventOnly /spawns templates do not place permanent actors. Dialogue Event actions Start/Cancel; no quest rewards or persistence yet. Restart required.";
-    if(loader=="quests")return "Native fetch quests: FetchQuest example. Optional Objective.Location [X,Y,Z]: QuestMarker example (experimental). Keep quest IDs and persistence IDs unique. Dialogue Quest actions accept or turn in. Restart required; local authoritative testing only.";
+    if(loader=="quests")return "Native quests: FetchQuest example. Optional Icon is a texture object path exposed to quest-board plugins; existing game artwork needs no quest PAK. Optional Objective.Location [X,Y,Z]: QuestMarker example. Keep quest IDs and persistence IDs unique. Dialogue Quest actions accept or turn in. Restart required.";
     if(loader=="dialogue")return "Experimental native dialogue. Nodes contain text and up to four Next/End choices. Completion grants one item reward per character; RequiresFlag gates stores. Restart to apply. Review the JonesyStory JSONC example.";
     if(loader=="recipes")return "Unlock defaults to false: adding a recipe to a station/category does not grant it. Unlock:true opts into automatic grants. False does not revoke already learned recipes.";
     if(loader=="effects")return "Alias a verified cooked GameplayEffect Blueprint class to a reusable ModName:Id. Definitions do not clone or patch class defaults. Restart to apply.";

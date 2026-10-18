@@ -17,7 +17,7 @@ class RoleMonitor {
             if(!IsGameplayRoleWorld(RC::to_string(world)))return;
         } catch(...) {return;}
         if(!notices.Observe(context.Mode,RC::to_string(world),true))return;
-        RC::Output::send<RC::LogLevel::Normal>(STR("[RuneSchema] Network mode: {} | authority={} | local presentation={} | world={}\n"),
+        PS::ConsolidatedLog<RC::LogLevel::Normal>(STR("[RuneSchema] Network mode: {} | authority={} | local presentation={} | world={}\n"),
             PS::ToWideSafe(std::string(Label(context.Mode)).c_str()),
             OwnsGameplay(context.Mode)?STR("yes"):STR("no"),
             HasLocalPresentation(context.Mode)?STR("yes"):STR("no"),world);

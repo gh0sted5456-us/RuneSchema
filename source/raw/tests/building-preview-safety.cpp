@@ -19,8 +19,11 @@ int main(int argc,char** argv) {
 
     require(tools.find("VerifyToolBuildingInstance")!=std::string::npos,"instance verifier missing");
     require(tools.find("actor->GetClassPrivate()!=actorClass")!=std::string::npos,"exact actor-class match missing");
-    require(tools.find("RF_ClassDefaultObject|RF_ArchetypeObject|RF_Transient|RF_BeginDestroyed|RF_FinishDestroyed")!=std::string::npos,
-        "native preflight does not exclude transient/default/destroying actors");
+    require(tools.find("RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed")!=std::string::npos,
+        "instance verification does not exclude default/destroying actors");
+    require(tools.find("BuildableActor defaults are not initialized")!=std::string::npos
+        &&tools.find("AdjustIfPossibleButDontSpawnIfColliding")!=std::string::npos,
+        "first-piece construction lost default readiness or native collision validation");
     require(tools.find("Saved building safety is stale; rebuild catalogs in the current world")!=std::string::npos,
         "saved building safety is being trusted across worlds");
     require(tools.find("if(request->contains(\"Grid\"))throw std::runtime_error(\"Building preview grids are disabled")!=std::string::npos,

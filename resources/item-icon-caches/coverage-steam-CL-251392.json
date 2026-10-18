@@ -1,0 +1,13 @@
+{
+  "BuildIssues": [],
+  "CaptureFailed": 0,
+  "Complete": true,
+  "DiscoveryFailed": 0,
+  "Expected": 4271,
+  "ExportIssues": [],
+  "Exported": 4271,
+  "Kind": "Verified full build",
+  "Missing": [],
+  "Scope": "clean native Steam content",
+  "Surveyed": true
+}

@@ -2,19 +2,33 @@
 
 Runtime schema and data-editing framework for **RuneScape: Dragonwilds**.
 
+**RuneSchema and RSMK 0.8.0.0** are published from `main` under the matching
+`0.8.0.0` release tag. This release consolidates the October 13–16 alpha work.
+[Download the full runtime](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.0.0)
+and read the [release notes](docs/RELEASE-0.8.0.0.md), including live-test limits.
+
+Helpy opens in its own window with F2; F7 retains the optional Canvas view.
+The item browser is above a staging cart: drag an item down, or right-click
+and choose **Add to cart**, then confirm a grant to the selected player.
+Drag a cart item back into the browser or use its context menu to remove it.
+Registry, networking, and Helpy remain included plugins in one package,
+with their own manifests and lifecycle.
+
 > **Documentation Website:** https://gh0sted5456-us.github.io/RuneSchema/
 
 [Open the RuneSchema documentation →](https://gh0sted5456-us.github.io/RuneSchema/)
 
 ## Downloads
 
-The repository is source-first. Starting with the next release, RuneSchema ships
-one compiled package containing its bridge plugins. Storefront UE4SS bundles,
-build dependencies, and hashes remain separate GitHub Release assets:
+The repository is source-first. RuneSchema ships one lean compiled package
+containing the core DLL, mapping, Lua runtime, plugin DLLs/assets, default
+settings and consolidated legal notice. Build reports and authoring examples
+belong in the repository/docs, not in the install ZIP. Storefront UE4SS hosts
+and build dependencies remain separate:
 
 https://github.com/gh0sted5456-us/RuneSchema/releases
 
-The RuneSchema runtime detects Steam/GOG and Game Pass/WinGDK
+The RuneSchema runtime detects Steam/Epic and Game Pass/WinGDK
 automatically. UE4SS storefront packages are distributed separately so users
 do not repeatedly download the same runtime with every RuneSchema source
 snapshot.

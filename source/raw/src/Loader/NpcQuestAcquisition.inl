@@ -88,6 +88,7 @@ void DragonWildsNpcLoader::ObserveQuestInventory(UObject* controller,bool credit
                         m_events.Notify(controller,Quests::ObjectiveProgressText(objective,next,receipt.Run()),Events::Scope::Participant);
                     }catch(const std::exception& error){ErrorOnce("quest-progress-message:"+key+":"+objective.ObjectiveId,PS::ToWideSafe(error.what()));}
                     changed=true;
+                    if(quest.AnyStage(active) && next==objective.Required.Count)break;
                 }
                 if(changed) {
                     Quests::SetStageText(native,quest,staged.ActiveStage());

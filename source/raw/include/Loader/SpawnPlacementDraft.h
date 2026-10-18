@@ -17,6 +17,7 @@ inline nlohmann::json StageGroundDraft(nlohmann::json placement,double resolvedZ
         throw std::runtime_error("Spawn placement cannot be staged for ground export");
     placement["Location"]["Z"]=GroundToken(offset);
     placement["$z"]=resolvedZ;
+    placement["GroundReferenceZ"]=resolvedZ;
     placement.erase("Grid");
     return placement;
 }

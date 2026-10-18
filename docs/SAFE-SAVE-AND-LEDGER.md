@@ -25,7 +25,7 @@ such as items, recipes, quests, and journal or lore entries.
 RuneSchema does not remove a valid entry just because it came from a PAK. If the
 PAK item loaded and joined the correct live list, its identity remains valid.
 
-## Steam, GOG, and Game Pass
+## Steam, Epic, and Game Pass
 
 The stores keep saves differently, but RuneSchema uses the same point where the
 game prepares character information. RuneSchema does not directly edit an Xbox

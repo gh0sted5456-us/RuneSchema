@@ -17,6 +17,7 @@ int main() {
     // The dedicated server's internal-name map is sparse; every entry it has
     // must be valid, but it need not cover the authoritative network array.
     Need(V::Validate(entries,{1,2},enabled,reverse,{{"vanilla",1}}).size()==2);
+    Need(V::Validate(entries,{1,2},enabled,reverse,{}).size()==2);
     Reject([&]{V::Validate(entries,{1,2},enabled,reverse,{{"vanilla",1},{"unknown",3}});});
     Need(V::Validate(entries,{1,2},enabled,reverse,
         {{"vanilla",1},{"dye-station",2},{"dye-alias",2}}).size()==2);
@@ -40,6 +41,10 @@ int main() {
     Reject([&]{V::Validate({{"vanilla",1}},{1},{{"Dye","station","dye-station",1}},
         {{1,0}},{{"vanilla",1}},V::ExpectedMode::ProtectPendingDefinition);});
     Reject([&]{V::Validate(entries,{1},enabled);});
+    // A positively identified enabled definition can reach the persistence
+    // map before native network-ID assignment. Never classify it as orphaned.
+    Need(V::Validate(entries,{1},enabled,{{1,0}},{{"vanilla",1}},
+        V::ExpectedMode::ProtectPendingDefinition).contains("dye-station"));
     Reject([&]{V::Validate(entries,{1,1},enabled);});
     Reject([&]{V::Validate(entries,{1,3},enabled);});
     Reject([&]{V::Validate({{"vanilla",1},{"vanilla",2}},{1,2},{});});
@@ -52,5 +57,5 @@ int main() {
         {{1,0}},{{"vanilla",1}});
     Need(afterRemoval.contains("vanilla") && !afterRemoval.contains("dye-station"));
     Need(V::Validate(entries,{1},{},{{1,0}},{{"vanilla",1}}).contains("dye-station"));
-    std::cout << "world-building-registry-validation: 21 cases PASS\n";
+    std::cout << "world-building-registry-validation: PASS (including empty auxiliary alias view)\n";
 }

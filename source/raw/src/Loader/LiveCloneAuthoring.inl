@@ -306,7 +306,7 @@ namespace DragonWilds {
         }
         auto* soft=CloneSoftDelete(source->GetClassPrivate());
         nlohmann::json icon,name,power;
-        CloneReadValue(PropertyHelper::GetPropertyByName(source->GetClassPrivate(),TEXT("Icon")),source,icon);
+        icon=PS::AssetSearch::ItemMetadata(RC::to_string(source->GetPathName())).value("Icon",std::string{});
         CloneReadValue(PropertyHelper::GetPropertyByName(source->GetClassPrivate(),TEXT("Name")),source,name);
         CloneReadValue(PropertyHelper::GetPropertyByName(source->GetClassPrivate(),TEXT("PowerLevel")),source,power);
         return {{"Name",name.is_string()&&!PS::QuickDecorations::MissingDisplayName(name.get<std::string>())?name.get<std::string>():PS::QuickDecorations::ReadableAssetName(sourcePath)},
@@ -319,13 +319,91 @@ namespace DragonWilds {
             {"TemporarySource",m_temporaryToolClones.contains(sourcePath)}};
     }
 
+    nlohmann::json DragonWildsAssetModLoader::RecipeWorkspaceSnapshot(const nlohmann::json& request) {
+        std::scoped_lock lock{m_mutex};
+        const auto sourcePath=request.value("SourceRecipe",std::string{});
+        if(!m_recipeDataClass)throw std::runtime_error("Native recipe class is unavailable");
+        nlohmann::json result={{"Stations",HelpyStationChoices()}};
+        if(sourcePath.empty()) {
+            const auto query=request.value("Query",std::string{});
+            if(query.size()>256)throw std::runtime_error("Recipe search exceeds 256 bytes");
+            if(request.contains("Offset")&&(!request["Offset"].is_number_integer()||request["Offset"]<0||request["Offset"]>PS::RecipeCatalog::MaxEntries))
+                throw std::runtime_error("Recipe catalog offset is invalid");
+            const auto offset=request.value("Offset",std::size_t{});PS::RecipeCatalog::Index index;
+            TArray<UObject*> recipes;std::set<std::string> recipeClasses;
+            UECustom::UObjectGlobals::GetObjectsOfClass(m_recipeDataClass,recipes,true);
+            if(recipes.Num()<0||static_cast<std::size_t>(recipes.Num())>PS::RecipeCatalog::MaxEntries)throw std::runtime_error("Loaded recipe catalog exceeds its metadata safety bound");
+            for(auto* recipe:recipes)if(HelpyReady(recipe)) {
+                const auto path=RC::to_string(recipe->GetPathName());
+                PS::RecipeCatalog::Add(index,{path,PS::QuickDecorations::ReadableAssetName(path),{},{},"Loaded recipe",true});
+                recipeClasses.insert(PS::QuickDecorations::Fold(RC::to_string(recipe->GetClassPrivate()->GetName())));
+            }
+            const bool mountedReady=PS::CookedAssets::TryEnsure();
+            if(mountedReady)for(const auto& record:PS::CookedAssets::MetadataSnapshot()) {
+                const auto type=PS::QuickDecorations::Fold(PS::ClonePresentation::ClassLeaf(record.type));
+                if(type.ends_with("recipedata")||recipeClasses.contains(type))
+                    PS::RecipeCatalog::Add(index,{record.path,PS::QuickDecorations::ReadableAssetName(record.path),{},{},"Cooked candidate",true});
+            }
+            bool subclassesReady=false;std::string metadataWarning;
+            try{
+                for(const auto& path:PS::RecipeAssetCatalog::MountedPaths())PS::RecipeCatalog::Add(index,{path,PS::QuickDecorations::ReadableAssetName(path),{},{},"Cooked candidate",true});
+                subclassesReady=true;
+            }catch(const std::exception& error){metadataWarning=error.what();}
+            for(const auto& manifest:PS::CookedPakRegistryManifest::Snapshot())for(const auto& lane:manifest.AssetLanes)if(lane.Name=="Recipes")
+                for(const auto& path:lane.Paths)PS::RecipeCatalog::Add(index,{path,PS::QuickDecorations::ReadableAssetName(path),manifest.Owner,{},"Declared cooked recipe",true});
+            if(m_recipeService)for(auto entry:m_recipeService->HelpyCatalogEntries())PS::RecipeCatalog::Add(index,std::move(entry));
+            result.update(PS::RecipeCatalog::Page(index,query,offset));
+            result["MountedCatalogReady"]=mountedReady||subclassesReady;result["SubclassCatalogReady"]=subclassesReady;
+            result["MetadataWarning"]=metadataWarning;result["CatalogSize"]=index.size();return result;
+        }
+        PS::Authoring::ValidateObjectPath(sourcePath);auto* recipe=HelpyResolve(sourcePath);
+        if(!recipe->IsA(m_recipeDataClass)||!HelpyReady(recipe))throw std::runtime_error("Selected asset is not a ready RecipeData");
+        result["SourceRecipe"]=sourcePath;
+        result["Placements"]=HelpyRecipePlacements(sourcePath,result["Stations"]);
+        for(const auto* field:{"ItemsConsumed","ItemsCreated","MinProcessingTime","MaxProcessingTime"}) {
+            nlohmann::json value;
+            if(CloneReadValue(PropertyHelper::GetPropertyByName(recipe->GetClassPrivate(),RC::to_generic_string(field)),recipe,value))result[field]=std::move(value);
+        }
+        result["Items"]=nlohmann::json::array();std::set<std::string> describedItems;
+        for(const auto* side:{"ItemsConsumed","ItemsCreated"})if(result.contains(side)&&result[side].is_array())for(const auto& row:result[side]) {
+            const auto item=row.value("ItemData",std::string{});
+            if(!item.empty()&&describedItems.size()<64&&describedItems.insert(item).second)result["Items"].push_back(PS::AssetSearch::ItemMetadata(item));
+        }
+        return result;
+    }
     nlohmann::json DragonWildsAssetModLoader::ExportToolRecipe(const nlohmann::json& request) {
         std::scoped_lock lock{m_mutex};
         const auto sourcePath=request.at("Source").get<std::string>();PS::Authoring::ValidateObjectPath(sourcePath);
         auto* source=HelpyResolve(sourcePath);
         if(!m_itemDataClass||!source->IsA(m_itemDataClass)||!IsReadyForPatch(source))throw std::runtime_error("Recipe output must be a loaded ItemData asset");
         const auto key=PS::ClonePresentation::NewId("RuneSchemaRecipe");
-        const auto document=HelpyRecipeDocument(request.at("Recipe"),sourcePath,key);
+        const auto& options=request.at("Recipe");
+        const auto sourceRecipe=options.value("SourceRecipe",std::string{});
+        nlohmann::json document;
+        if(sourceRecipe.empty())document=HelpyRecipeDocument(options,sourcePath,key);
+        else {
+            PS::Authoring::ValidateObjectPath(sourceRecipe);auto* recipe=HelpyResolve(sourceRecipe);
+            if(!m_recipeDataClass||!recipe->IsA(m_recipeDataClass)||!HelpyReady(recipe)||sourceRecipe.starts_with("/Engine/Transient"))
+                throw std::runtime_error("Recipe override target must be a stable, ready RecipeData asset");
+            auto properties=PS::RecipeWorkspace::Properties(options,sourcePath);
+            for(const auto* side:{"ItemsConsumed","ItemsCreated"})for(const auto& entry:properties.at(side)) {
+                auto* item=HelpyResolve(entry.at("ItemData").get<std::string>());
+                if(!m_itemDataClass||!item->IsA(m_itemDataClass)||!HelpyReady(item))throw std::runtime_error("Recipe override contains unavailable ItemData");
+                const auto origin=PS::AssetProvenance::Lookup(item);
+                if(origin.is_object()&&(!origin.value("Registered",false)||!PS::AssetMetadata::HasInstalledDefinition(item)))
+                    throw std::runtime_error("A saved recipe cannot refer to a session-only item");
+            }
+            for(const auto& [field,value]:properties.items()) {
+                auto* property=PropertyHelper::GetPropertyByName(recipe->GetClassPrivate(),RC::to_generic_string(field));
+                if(!property||!CloneEditable(property))throw std::runtime_error("Native recipe field is unavailable: "+field);
+                CloneValidateOverride(property,value);
+            }
+            document={{sourceRecipe,{{"Properties",std::move(properties)},{"Unlock",options.value("Unlock",false)}}}};
+            if(options.value("AddStation",false)) {
+                const auto placed=HelpyRecipeDocument(options,sourcePath,key);
+                document[sourceRecipe]["AddTo"]=placed.at(key).at("AddTo");
+            }
+        }
         PS::Authoring::StagedFile file("recipes",PS::Authoring::NewName(),document);file.Commit();
         return {{"State","Completed"},{"File",file.Path().string()},{"Key",key},{"RequiresRestart",true}};
     }
@@ -372,9 +450,10 @@ namespace DragonWilds {
 
     nlohmann::json DragonWildsAssetModLoader::CreateToolClone(const nlohmann::json& request,UWorld* world) {
         std::scoped_lock lock{m_mutex};
-        if(!world || !request.value("AcknowledgeExperimental",false))
+        const bool prepare=request.value("Action",std::string{})=="PrepareClone";
+        if(!world || (!prepare&&!request.value("AcknowledgeExperimental",false)))
             throw std::runtime_error("Acknowledge experimental clone testing on a disposable/backed-up save first");
-        if(m_toolCloneCount>=64)throw std::runtime_error("64 live-authored clones reached. Restart before creating more experimental items.");
+        if(!prepare&&m_toolCloneCount>=64)throw std::runtime_error("64 live-authored clones reached. Restart before creating more experimental items.");
         const auto sourcePath=request.at("Source").get<std::string>();
         const bool permanent=request.value("Permanent",false);
         PS::CookedAssets::TryEnsure();
@@ -436,20 +515,21 @@ namespace DragonWilds {
             CloneRequireCookedReferences(mesh);fields[field]=mesh;
         }
         const auto display=request.value("Name",std::string{});
-        auto icon=request.value("Icon",std::string{});const auto iconMode=request.value("IconMode",std::string("Override"));
+        auto icon=request.value("Icon",std::string{});const auto iconMode=request.value("IconMode",icon.empty()?std::string("Auto"):std::string("Override"));
         if(iconMode!="Auto"&&iconMode!="Source"&&iconMode!="Appearance"&&iconMode!="Override")throw std::runtime_error("Unknown clone icon mode");
         if(iconMode!="Override") {
-            UObject* iconSource=source;nlohmann::json value;
+            UObject* iconSource=source;
             if((iconMode=="Auto"||iconMode=="Appearance")&&!appearance.empty())iconSource=HelpyResolve(appearance);
             else if(iconMode=="Appearance")throw std::runtime_error("Appearance icon requires a donor");
-            CloneReadValue(PropertyHelper::GetPropertyByName(iconSource->GetClassPrivate(),TEXT("Icon")),iconSource,value);
-            if(iconMode=="Auto"&&(!value.is_string()||value.get<std::string>().empty()))CloneReadValue(PropertyHelper::GetPropertyByName(type,TEXT("Icon")),source,value);
-            icon=value.is_string()?value.get<std::string>():std::string{};
+            icon=PS::AssetSearch::ItemMetadata(RC::to_string(iconSource->GetPathName())).value("Icon",std::string{});
+            if(iconMode=="Auto"&&icon.empty())icon=PS::AssetSearch::ItemMetadata(RC::to_string(source->GetPathName())).value("Icon",std::string{});
         }
         if(display.size()>256 || display.find('\0')!=display.npos)throw std::runtime_error("Clone display name is too long or invalid");
         if(!display.empty() && !fields.contains("Name"))fields["Name"]=display;
         if(!icon.empty())CloneRequireCookedReferences(icon);
         if(!icon.empty() && !fields.contains("Icon")){PS::Authoring::ValidateObjectPath(icon);fields["Icon"]=icon;}
+        // Explicit advanced field overrides win over donor/source convenience.
+        if(fields.contains("Icon"))icon=fields["Icon"].is_string()?fields["Icon"].get<std::string>():std::string{};
         for(const auto& [key,value]:fields.items()) {
             if(!PS::Authoring::SafeFieldName(key))throw std::runtime_error("Clone identity/directive/soft-delete field cannot be overridden: "+key);
             auto* p=PropertyHelper::GetPropertyByName(type,RC::to_generic_string(key));
@@ -457,10 +537,12 @@ namespace DragonWilds {
             if(value.dump().size()>PS::Authoring::MaxCloneValueBytes)throw std::runtime_error("Clone field is too large: "+key);
             CloneValidateOverride(p,value);
         }
+        UObject* subsystem=nullptr;
+        FMapProperty* persistenceMap=nullptr;FMapProperty* internalMap=nullptr;
+        if(!prepare) {
         auto* subsystemClass=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Dominion.ItemSubsystem"),false);
         if(!subsystemClass)throw std::runtime_error("ItemSubsystem is unavailable");
         TArray<UObject*> candidates;UECustom::UObjectGlobals::GetObjectsOfClass(subsystemClass,candidates,true);
-        UObject* subsystem=nullptr;
         for(auto* candidate:candidates) {
             if(!candidate || candidate->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed)))continue;
             auto* candidateWorld=candidate->GetWorld();if(candidateWorld && candidateWorld!=world)continue;
@@ -468,11 +550,16 @@ namespace DragonWilds {
             subsystem=candidate;
         }
         if(!subsystem)throw std::runtime_error("No current ItemSubsystem is ready");
-        auto* persistenceMap=CastField<FMapProperty>(PropertyHelper::GetPropertyByName(subsystem->GetClassPrivate(),TEXT("PersistenceIDToDataMap")));
-        auto* internalMap=CastField<FMapProperty>(PropertyHelper::GetPropertyByName(subsystem->GetClassPrivate(),TEXT("InternalNameToDataMap")));
+        persistenceMap=CastField<FMapProperty>(PropertyHelper::GetPropertyByName(subsystem->GetClassPrivate(),TEXT("PersistenceIDToDataMap")));
+        internalMap=CastField<FMapProperty>(PropertyHelper::GetPropertyByName(subsystem->GetClassPrivate(),TEXT("InternalNameToDataMap")));
         if(!persistenceMap || !internalMap)throw std::runtime_error("ItemSubsystem registry contract is unavailable");
+        }
         const auto modTag=request.value("ModTag",std::string("RuneSchema"));
         if(modTag.size()>64)throw std::runtime_error("Mod tag exceeds 64 bytes");
+        const auto outputMod=request.value("OutputMod",std::string{});
+        if(!outputMod.empty()&&(!permanent||!PS::Authoring::SafeModFolder(outputMod)))throw std::runtime_error("Choose a safe mod folder for a permanent clone");
+        const auto folder=outputMod.empty()?std::string("runeschema"):outputMod;
+        if(permanent&&!prepare)(void)PS::Authoring::Directory("assets",folder); // Validate containment before constructing or registering anything.
         auto id=request.value("PersistenceID",std::string{});
         if(id.empty())id=PS::ClonePresentation::NewId(modTag);
         if(!PS::ClonePresentation::ValidId(id,modTag)||!IsCanonicalPersistenceId(id))
@@ -514,16 +601,20 @@ namespace DragonWilds {
         fields["$InheritEquipmentStats"]=true;
         if(soft)fields[RC::to_string(soft->GetName())]=!permanent;
         PS::AssetMetadata::Declaration declaration;declaration.modded=true;declaration.runeSchema=true;declaration.cooked=false;declaration.safeToClone=true;
-        PendingAsset pending{RC::to_generic_string(target),RC::to_generic_string(target),TEXT("runeschema"),fields,false,declaration,permanent};
+        PendingAsset pending{RC::to_generic_string(target),RC::to_generic_string(target),RC::to_generic_string(folder),fields,false,declaration,permanent};
         auto savedFields=fields;savedFields["Modded"]={{"RuneSchema",true},{"Cooked",false},{"SafeToClone",true}};
         const auto document=nlohmann::json{{target,savedFields}};
+        // Resolve the exact loader documents without constructing an item,
+        // registering identities, adding stat rows, writing files, or granting it.
+        if(prepare)return {{"State","Prepared"},{"Path",target},{"PersistenceID",id},{"InternalName",name},{"Icon",icon},
+            {"Documents",{{"assets",document},{"raw",rawDocument},{"recipes",recipeDocument},{"journal",journalDocument}}}};
         std::unique_ptr<PS::Authoring::StagedFile> file;
         std::vector<std::unique_ptr<PS::Authoring::StagedFile>> companions;
         if(permanent) {
-            file=std::make_unique<PS::Authoring::StagedFile>("assets",name,document);
-            if(!rawDocument.empty())companions.push_back(std::make_unique<PS::Authoring::StagedFile>("raw",name,rawDocument));
-            if(!recipeDocument.empty())companions.push_back(std::make_unique<PS::Authoring::StagedFile>("recipes",name,recipeDocument));
-            if(!journalDocument.empty())companions.push_back(std::make_unique<PS::Authoring::StagedFile>("journal",name,journalDocument));
+            file=std::make_unique<PS::Authoring::StagedFile>("assets",name,document,folder);
+            if(!rawDocument.empty())companions.push_back(std::make_unique<PS::Authoring::StagedFile>("raw",name,rawDocument,folder));
+            if(!recipeDocument.empty())companions.push_back(std::make_unique<PS::Authoring::StagedFile>("recipes",name,recipeDocument,folder));
+            if(!journalDocument.empty())companions.push_back(std::make_unique<PS::Authoring::StagedFile>("journal",name,journalDocument,folder));
         }
         auto installedFiles=nlohmann::json::array();std::string fileIssue;
         const auto rootCheckpoint=m_createdAssets.size();
@@ -605,8 +696,11 @@ namespace DragonWilds {
         // Nonessential diagnostics must not turn a committed creation into a retryable failure.
         try {PS::AssetProvenance::Record(created,sourcePath,"runeschema",true,registered,0,fields);}
         catch(...) {}
-        return {{"ModTag",modTag},{"AppearanceSource",appearance},{"Mesh",mesh},{"State","Created"},{"Path",target},{"PersistenceID",id},{"InternalName",name},
+        auto actualIcon=icon;
+        try{actualIcon=PS::AssetSearch::ItemMetadata(RC::to_string(created->GetPathName())).value("Icon",std::string{});}catch(...){}
+        return {{"ModTag",modTag},{"OutputMod",permanent?folder:std::string{}},{"AppearanceSource",appearance},{"Mesh",mesh},{"Icon",actualIcon},{"State","Created"},{"Path",target},{"PersistenceID",id},{"InternalName",name},
             {"Permanent",permanent},{"File",file?file->Path().string():std::string{}},{"Files",installedFiles},
+            {"Documents",{{"assets",document},{"raw",rawDocument},{"recipes",recipeDocument},{"journal",journalDocument}}},
             {"PendingFiles",pendingFiles},{"CompanionsReady",fileIssue.empty()},{"CompanionError",fileIssue},{"StatRows",statRows.size()},
             {"CompanionsNeedRestart",!recipeDocument.empty()||!journalDocument.empty()},
             {"SoftDeleteField",soft?RC::to_string(soft->GetName()):std::string{}}};

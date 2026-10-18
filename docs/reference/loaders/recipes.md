@@ -9,6 +9,13 @@ Crafting, processing, station placement, merchants, and vendor contributions.
 Recipes can feed vanilla crafting or processing rows, vanilla merchants, and
 RuneSchema vendors.
 
+RuneSchema 0.8.0.0 also accepts a recipe-level `Discovery` block for native item
+pickup, actor-interaction and skill-level prerequisites, including AND/OR
+queries. It works for cooked overrides and in-PAK loader definitions without
+separate `/raw` files. See [recipe discovery](../../RECIPE-DISCOVERY.md) for
+examples, native limits and the required full restart. Do not combine a
+conditional `Discovery` block with `Unlock: true`.
+
 ```jsonc
 {
   "RECIPE_MY_ITEM": {
@@ -38,6 +45,10 @@ Placement rules:
 - Use `RuneSchemaVendors` for one or more RuneSchema store IDs.
 - Use `VanillaVendors` for native merchant table/row targets.
 - `Unlock:true` grants the recipe; placement alone does not.
+- Grants are learned character progress: already learned recipes are retained
+  without a fresh unlock on each session. Temporary vendor stock remains
+  session-only. Safe Clean removes unresolved orphan recipe IDs after their
+  content is disabled or removed; it does not reset valid active recipes.
 - `PersistenceID` is optional. When omitted, RuneSchema derives a stable ID
   from the mod folder and recipe key.
 - `Order` sorts within a category. Lower values appear first.

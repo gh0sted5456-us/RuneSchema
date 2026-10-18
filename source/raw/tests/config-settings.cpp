@@ -34,6 +34,11 @@ int RunConfigSettings() {
     assert(settings.advancedLogging && settings.loaders.buildings);
     assert(!settings.colorCodeLoaderAnnotations);
     assert(!DecodeSettings("{}").advancedLogging);
+    assert(DecodeSettings("{}").autoUpdateMappings);
+    auto mappingSettings=DecodeSettings(R"({"autoUpdateMappings":false})");
+    assert(!mappingSettings.autoUpdateMappings);
+    assert(!DecodeSettings(EncodeSettings(mappingSettings)).autoUpdateMappings);
+    Rejects([&]{DecodeSettings(R"({"autoUpdateMappings":"yes"})");});
     assert(!DecodeSettings("{}").bpModLoader.patchScript);
     assert(!DecodeSettings("{}").bpModLoader.luaActorLoader);
     assert(DecodeSettings(R"({"bpModLoader":{"patchScript":true}})").bpModLoader.patchScript);

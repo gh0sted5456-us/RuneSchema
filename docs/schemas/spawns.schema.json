@@ -30,6 +30,13 @@
             "EventOnly": {
               "const": true
             },
+            "GroundMigrationRadius": {
+              "default": 300,
+              "description": "Bounded nearby collision-clear placement radius in centimetres; 0 disables relocation. Native capsule or GroundClearance required. Authored location and identity remain unchanged.",
+              "maximum": 1000,
+              "minimum": 0,
+              "type": "number"
+            },
             "Id": {
               "type": "string"
             },
@@ -235,6 +242,12 @@
         "minimum": 0,
         "type": "number"
       },
+      "EventActive": {
+        "description": "Temporary Actor resource exists only while the named RuneSchema event runs in this world. A local Id is qualified with the mod name. It is excluded from world saves and removed when the event ends or is cancelled.",
+        "maxLength": 512,
+        "minLength": 1,
+        "type": "string"
+      },
       "Grid": {
         "additionalProperties": false,
         "properties": {
@@ -261,11 +274,45 @@
         ],
         "type": "object"
       },
+      "GroundClearance": {
+        "additionalProperties": false,
+        "description": "Unscaled capsule clearance envelope above the surface for props/resources without an owned native capsule. HalfHeight must be at least Radius; verify native/runtime geometry.",
+        "properties": {
+          "HalfHeight": {
+            "maximum": 100000,
+            "minimum": 0.1,
+            "type": "number"
+          },
+          "Radius": {
+            "maximum": 10000,
+            "minimum": 0.1,
+            "type": "number"
+          }
+        },
+        "required": [
+          "Radius",
+          "HalfHeight"
+        ],
+        "type": "object"
+      },
+      "GroundMigrationRadius": {
+        "default": 300,
+        "description": "Bounded nearby collision-clear placement radius in centimetres; 0 disables relocation. Native capsule or GroundClearance required. Authored location and identity remain unchanged.",
+        "maximum": 1000,
+        "minimum": 0,
+        "type": "number"
+      },
       "GroundOffset": {
         "default": 0,
         "description": "Centimetre offset above or below the resolved ground. Do not combine with the Location.Z $+offset shorthand.",
         "maximum": 100000,
         "minimum": -100000,
+        "type": "number"
+      },
+      "GroundReferenceZ": {
+        "description": "Approximate floor height in centimetres, not a placement fallback. Selects collision below this height plus a 45 cm stair allowance. For bare $ without a hint, use the landscape beneath overhead roofs and bridges.",
+        "maximum": 100000000,
+        "minimum": -100000000,
         "type": "number"
       },
       "GroundToSurface": {
@@ -342,8 +389,14 @@
         "minimum": 1,
         "type": "integer"
       },
+      "QuestActive": {
+        "description": "Temporary Actor resource exists only while a RuneSchema quest is Given to a connected participant. A local Id is qualified with the mod name. Requires a cooked subclass of the game's ore-node or fellable-tree base with SpudGuid and bSkipSpudStore. The actor is excluded from world saves and removed when the quest is no longer active.",
+        "maxLength": 512,
+        "minLength": 1,
+        "type": "string"
+      },
       "QuestCompleted": {
-        "description": "Activate this placement after a local Id or Mod:Id quest is completed by a connected participant. Combines with TimeOfDay when both are present.",
+        "description": "Activate this placement after a local Id or Mod:Id quest is completed by a connected participant. Quest-linked BuildingProp actors are transient: RuneSchema recreates them while the quest definition is available, and they leave no saved collision shell when that quest or mod is removed. Combines with TimeOfDay when both are present.",
         "maxLength": 512,
         "minLength": 1,
         "type": "string"

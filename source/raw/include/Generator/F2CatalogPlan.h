@@ -65,6 +65,18 @@ inline std::vector<std::string> EnemyRoots() {
     return {"/Game/Gameplay/AI","/Game/Gameplay/NPCs","/DowdunReach/Gameplay/AI",
         "/ScornedWilderness/Gameplay/AI","/UmbralSands/Gameplay/AI"};
 }
+// Registry metadata is a discovery hint only. Directory membership never
+// certifies inheritance, spawn safety, collision or save exclusion.
+inline std::optional<Candidate> MountedCandidate(const std::string& path,const std::string& name,const std::string& type) {
+    if(!ValidObjectPath(path))return {};
+    const auto t=Lower(type),p=Lower(path),n=Lower(name);
+    if(t.ends_with("itemdata")||t.ends_with("equipmentdata")||(n.starts_with("item_")&&n.find("meshdata")==n.npos))return Candidate{path,name,Kind::Item};
+    if(!(t.find("blueprint")!=t.npos||t=="class"||n.starts_with("bp_")))return {};
+    const auto cls=path.ends_with("_C")?path:path+"_C";
+    if(UnderAny(path,ResourceRoots())||p.find("/mining/")!=p.npos||p.find("/trees/")!=p.npos)return Candidate{cls,name,Kind::Resource};
+    if(UnderAny(path,EnemyRoots()))return Candidate{cls,name,p.find("/npcs/")!=p.npos?Kind::Npc:Kind::Enemy};
+    return {};
+}
 struct Sources {
     std::vector<std::string> resources=ResourceRoots(),enemies=EnemyRoots();
     bool onlineReference=true;

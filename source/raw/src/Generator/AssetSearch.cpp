@@ -1,8 +1,23 @@
 #include "Loader/AssetAuthoringMetadata.h"
 #include "Generator/AssetSearch.h"
+#include "Generator/F2CatalogPlan.h"
+#include "Core/ItemCatalogLayout.h"
+#include "Core/AlphabeticalItemCatalog.h"
+#include "Core/PersistentItemCatalog.h"
+#include "Core/ItemCatalogFilter.h"
+#include "Generator/ToolRequest.h"
+#include "Generator/HelpyIconTrace.h"
+#include "Core/HelpyCacheSources.h"
+#include "Core/HelpySourceCache.h"
+#include "Core/ItemSource.h"
+#include "Core/FocusedItemQuery.h"
+#include "Core/ItemFamily.h"
+#include "Core/BoundedLru.h"
+#include "SDK/WeakObjectHandle.h"
 #include "Generator/ItemCatalogMetadata.h"
 #include "Generator/QuickMenuDecorations.h"
 #include "SDK/Helper/CookedAssetLookup.h"
+#include "SDK/Helper/RecipeAssetCatalog.h"
 #include "SDK/Helper/ItemAppearanceMetadata.h"
 #include "Loader/AssetProvenance.h"
 #include "Generator/AssetTemplate.h"
@@ -10,12 +25,14 @@
 #include "Generator/LoaderSchemas.h"
 #include "Core/ConfigFiles.h"
 #include "Runtime/HostServices.h"
+#include "Utility/Logging.h"
 #include <filesystem>
 #include "SDK/Helper/StringTableHelper.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "Unreal/Engine/UDataTable.hpp"
 #include "Unreal/Property/FEnumProperty.hpp"
 #include "SDK/Helper/PropertyHelper.h"
+#include "SDK/Helper/ReflectedContract.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Structs/FSoftObjectPtr.h"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
@@ -23,10 +40,18 @@
 #include "Unreal/CoreUObject/UObject/FStrProperty.hpp"
 #include "Unreal/Property/FTextProperty.hpp"
 #include "Unreal/FText.hpp"
+#include "Unreal/UObjectArray.hpp"
+#include "Unreal/UObjectHashTables.hpp"
 #include "Helpers/String.hpp"
 #include <cmath>
+#include <cctype>
 #include <initializer_list>
 #include <set>
+#include <chrono>
+#include <sstream>
+#include <vector>
+#include <unordered_map>
+#include <unordered_set>
 
 using namespace RC;using namespace RC::Unreal;using namespace DragonWilds;
 using nlohmann::json;
@@ -83,7 +108,7 @@ json Value(FProperty* p,void* container,int size,bool references=true) {
             return {{"AssetPathName",package+"."+asset},{"SubPathString",""}};
     }
     if(references && p->GetElementSize()==sizeof(UObject*)) {
-        if(auto* hardReference=CastField<FObjectProperty>(p)) {
+        if(auto* hardReference=CastField<FObjectPropertyBase>(p)) {
             auto* linked=hardReference->GetObjectPropertyValue(address);
             if(linked && !linked->HasAnyFlags(static_cast<EObjectFlags>(RF_NeedLoad|RF_NeedPostLoad|RF_NeedInitialization|RF_BeginDestroyed|RF_FinishDestroyed)))
                 return to_string(linked->GetPathName());
@@ -95,6 +120,109 @@ json Read(UObject* object,const char* name) {
     return Value(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),to_wstring(name)),object,object->GetClassPrivate()->GetPropertiesSize());
 }
 std::string Text(UObject* object,const char* name) {auto value=Read(object,name);return value.is_string()?value.get<std::string>():std::string{};}
+std::string CheapText(UObject* object,const char* name) {
+    if(!object||!object->GetClassPrivate())return {};
+    auto* p=PropertyHelper::GetPropertyByName(object->GetClassPrivate(),to_wstring(name));
+    if(!p||p->GetArrayDim()!=1||p->GetOffset_Internal()<0)return {};
+    const auto size=object->GetClassPrivate()->GetPropertiesSize();
+    if(p->GetElementSize()<=0||p->GetOffset_Internal()>size||p->GetElementSize()>size-p->GetOffset_Internal())return {};
+    auto* address=p->ContainerPtrToValuePtr<void>(object);
+    if(CastField<FTextProperty>(p))return {};
+    if(CastField<FStrProperty>(p)) {
+        const auto& chars=static_cast<FString*>(address)->GetCharArray();
+        if(chars.Num()<0||chars.Num()>4097||(chars.Num()&&!chars.GetData()))return {};
+        return chars.Num()?to_string(StringType(chars.GetData(),chars.Num()-1)):std::string{};
+    }
+    if(auto* n=CastField<FNameProperty>(p))return to_string(n->GetPropertyValue(address).ToString());
+    return {};
+}
+std::string CachedItemName(UObject* object) {
+    struct Entry {WeakObjectHandle Handle;std::string Name;};
+    static BoundedLru<std::string,Entry> cache(65536);static uint64_t cacheGeneration=0;
+    const auto generation=SpawnToolRequests::Generation.load();
+    if(cacheGeneration!=generation){cache.Clear();cacheGeneration=generation;}
+    if(!object)return {};
+    const auto path=to_string(object->GetPathName());
+    if(auto* entry=cache.Find(path);entry&&entry->Handle.Get()==object)return entry->Name;
+    auto name=Text(object,"Name");
+    if(QuickDecorations::MissingDisplayName(name))name=Text(object,"DisplayName");
+    if(QuickDecorations::MissingDisplayName(name))name=QuickDecorations::ReadableAssetName(to_string(object->GetName()));
+    Entry entry;entry.Handle.Assign(object);entry.Name=name;
+    if(entry.Handle.Get()==object)cache.Put(path,std::move(entry));
+    return name;
+}
+std::string IconReferenceValue(FProperty* p,void* container,int containerSize,int depth=0) {
+    if(!p||!container||depth>4||p->GetArrayDim()!=1)return {};
+    const auto offset=p->GetOffset_Internal(),size=p->GetElementSize();
+    if(offset<0||size<=0||offset>containerSize||size>containerSize-offset)return {};
+    auto* address=p->ContainerPtrToValuePtr<void>(container);
+    if((CastField<FSoftObjectProperty>(p)||CastField<FSoftClassProperty>(p))&&size==sizeof(UECustom::FSoftObjectPtr)) {
+        const auto& path=static_cast<UECustom::FSoftObjectPtr*>(address)->ObjectID;
+        const auto package=to_string(path.GetLongPackageFName().ToString()),asset=to_string(path.GetAssetFName().ToString());
+        if(package.starts_with('/')&&!asset.empty()&&asset!="None"&&path.SubPathString.GetCharArray().Num()<=1)return package+"."+asset;
+    }
+    if(auto* objectProperty=CastField<FObjectPropertyBase>(p)) {
+        if(auto* linked=objectProperty->GetObjectPropertyValue(address))return to_string(linked->GetPathName());
+    }
+    if(CastField<FStrProperty>(p)) {
+        const auto& chars=static_cast<FString*>(address)->GetCharArray();
+        if(chars.Num()>0&&chars.Num()<1025&&chars.GetData()) {
+            auto value=to_string(StringType(chars.GetData(),chars.Num()-1));if(value.starts_with('/'))return value;
+        }
+    }
+    if(auto* structure=CastField<FStructProperty>(p);structure&&structure->GetStruct()) {
+        static constexpr const char* preferred[]={"ResourceObject","Resource","Texture","Texture2D","Icon","Image","Brush","Asset","Object","Value"};
+        auto* type=structure->GetStruct().Get();const auto structSize=size;
+        for(const auto* childName:preferred)if(auto* child=PropertyHelper::GetPropertyByName(type,to_wstring(childName))) {
+            auto value=IconReferenceValue(child,address,structSize,depth+1);if(!value.empty())return value;
+        }
+        std::size_t scanned=0;for(auto* child:TFieldRange<FProperty>(type,EFieldIterationFlags::Default)) {
+            if(++scanned>48)break;const auto childName=to_string(child->GetName());std::string lower=childName;for(auto& c:lower)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            if(lower.find("icon")==std::string::npos&&lower.find("texture")==std::string::npos&&lower.find("image")==std::string::npos&&lower.find("brush")==std::string::npos&&lower.find("resource")==std::string::npos&&lower.find("asset")==std::string::npos)continue;
+            auto value=IconReferenceValue(child,address,structSize,depth+1);if(!value.empty())return value;
+        }
+    }
+    return {};
+}
+std::string PropertyType(FProperty* property) {
+    if(!property)return "<missing>";
+    try{return PropertyHelper::GetPropertyTypeAsUTF8String(property);}catch(...){return to_string(property->GetClass().GetName());}
+}
+void TraceItemIcon(UObject* object,const std::string& selectedField,const std::string& selectedType,const std::string& iconPath,const std::string& candidates) {
+    if(!object || !PS::HelpyIconTrace::Enabled())return;
+    static std::unordered_set<std::string> traced;static std::size_t emitted=0;
+    const auto itemPath=to_string(object->GetPathName());if(emitted>=100||!traced.insert(itemPath).second)return;++emitted;
+    const auto label=CachedItemName(object);const auto cls=object->GetClassPrivate()?to_string(object->GetClassPrivate()->GetPathName()):std::string("<unknown>");
+    PS::HelpyIconTrace::Event("row",itemPath,
+        "item='"+label+"' class='"+cls+"' selected='"+selectedField+"' type='"+selectedType+
+        "' rowIcon='"+iconPath+"' candidates=["+candidates+"]");
+}
+std::string ItemIconPath(UObject* object) {
+    if(!object||!object->GetClassPrivate())return {};
+    static constexpr const char* fields[]={"Icon","ItemIcon","InventoryIcon","DisplayIcon","IconTexture","Thumbnail","CategoryIcon","Image","Brush","Portrait","PortraitTexture","JournalPortrait","CharacterPortrait"};
+    const bool trace=PS::HelpyIconTrace::Enabled();
+    auto* type=object->GetClassPrivate();const auto size=type->GetPropertiesSize();std::string candidates;std::string selectedField,selectedType,result;
+    for(const auto* name:fields)if(auto* p=PropertyHelper::GetPropertyByName(type,to_wstring(name))) {
+        const auto propertyType=trace?PropertyType(p):std::string{};const auto path=IconReferenceValue(p,object,size);
+        if(!candidates.empty())candidates+="; ";candidates+=std::string(name)+":"+propertyType+(path.empty()?"=<none>":"="+path);
+        if(result.empty()&&!path.empty()){result=path;selectedField=name;selectedType=propertyType;}
+        // Every resolved icon must publish the native item -> icon dependency,
+        // including the normal tracing-off path (clones often cross mounts).
+        if(!trace && !result.empty())break;
+    }
+    if(result.empty()) {
+        std::size_t scanned=0;for(auto* p:TFieldRange<FProperty>(type,EFieldIterationFlags::Default)) {
+            if(++scanned>128)break;const auto fieldName=to_string(p->GetName());std::string lower=fieldName;for(auto& c:lower)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            if(lower.find("icon")==std::string::npos&&lower.find("thumbnail")==std::string::npos&&lower.find("image")==std::string::npos&&lower.find("brush")==std::string::npos)continue;
+            const auto propertyType=PropertyType(p);const auto path=IconReferenceValue(p,object,size);
+            if(!candidates.empty())candidates+="; ";candidates+=fieldName+":"+propertyType+(path.empty()?"=<none>":"="+path);
+            if(!path.empty()){result=path;selectedField=fieldName;selectedType=propertyType;break;}
+        }
+    }
+    TraceItemIcon(object,selectedField.empty()?"<none>":selectedField,selectedType.empty()?"<none>":selectedType,result.empty()?"<none>":result,candidates.empty()?"no icon-like reflected properties":candidates);
+    if(!result.empty())PS::HelpyCacheSources::Reference(to_string(object->GetPathName()),result);
+    return result;
+}
 // Read reflected tag structures without guessing offsets or walking arbitrary object graphs.
 std::string TagValue(void* container,int size,FProperty* raw) {
     auto* property=CastField<FStructProperty>(raw);
@@ -203,7 +331,7 @@ json Search(const std::string& query,const std::string& loader) {
         return rows;
     }
     TArray<UObject*> objects;UECustom::UObjectGlobals::GetObjectsOfClass(Class(loader),objects,true);
-    if(objects.Num()>32768)throw std::runtime_error("Loaded item limit exceeded.");
+    if(objects.Num()<0)throw std::runtime_error("Loaded object roster has an invalid size.");
     size_t visitedRows=0;
     for(auto* object:objects) {
         if(!Usable(object))continue;
@@ -235,7 +363,13 @@ json Search(const std::string& query,const std::string& loader) {
     return rows;
 }
 
-json DescribeItem(UObject* object) {
+json NativeItemBadges(UObject* object,const std::string& tags) {
+    return {{"PowerLevel",Read(object,"PowerLevel")},
+        {"Masterwork",QuickDecorations::Token(tags,"masterwork")||ItemBool(object,{"bIsMasterworkItem","bIsMasterwork","IsMasterwork","bMasterwork","Masterwork"})},
+        {"MasterworkType",Read(object,"MasterworkType")},
+        {"CategoryIcon",ReferencePath(object,"CategoryClassIcon")}};
+}
+json DescribeItemWithSource(UObject* object,const ItemSource::Info* knownSource) {
     if(!Usable(object))return nullptr;
     const auto path=to_string(object->GetPathName());
     auto name=Text(object,"Name");if(QuickDecorations::MissingDisplayName(name))name=Text(object,"DisplayName");
@@ -256,27 +390,310 @@ json DescribeItem(UObject* object) {
     const bool consumable=QuickDecorations::Token(tags,"consumable")||classText.find("consumable")!=std::string::npos;
     const bool quest=QuickDecorations::Token(tags,"quest")||ItemBool(object,{"bIsQuestItem","IsQuestItem","bQuestItem"});
     // Do not infer quality from PowerLevel or a user-editable display name.
-    const bool masterwork=QuickDecorations::Token(tags,"masterwork")||ItemBool(object,{"bIsMasterworkItem","bIsMasterwork","IsMasterwork","bMasterwork","Masterwork"});
-    return {{"Name",name},{"Path",path},{"InternalName",Text(object,"InternalName")},
-        {"PersistenceID",Text(object,"PersistenceID")},{"Icon",ReferencePath(object,"Icon")},
+    auto row=json{{"Name",name},{"Path",path},{"InternalName",Text(object,"InternalName")},
+        {"PersistenceID",Text(object,"PersistenceID")},{"Icon",ItemIconPath(object)},
         {"RuneSchema",runtimeClone||declared.runeSchema.value_or(AssetMetadata::IsManaged(object))},{"RuntimeClone",runtimeClone},
         {"RuneSchemaManaged",runtimeClone||declared.runeSchema.value_or(AssetMetadata::IsManaged(object))},
         {"DeclaredModded",declared.modded.value_or(false)},{"DeclaredCooked",declared.cooked.value_or(false)},
         {"CloneEligible",cloneEligible&&!AssetMetadata::IsIncomplete(object)},{"CloneReason",cloneReason},{"Modded",AssetMetadata::Encode(declared)},
         {"Available",!AssetMetadata::IsIncomplete(object)&&(!runtimeClone||provenance.value("Registered",false))},
         {"Reason",AssetMetadata::IsIncomplete(object)?"Helpy companion files incomplete; grants and cloning blocked until repaired":runtimeClone&&!provenance.value("Registered",false)?"Runtime clone is not registered with the item subsystem":""},
-        {"Masterwork",masterwork},{"Consumable",consumable},{"QuestItem",quest},
-        {"CategoryIcon",ReferencePath(object,"CategoryClassIcon")},{"Tags",tags},
+        {"Consumable",consumable},{"QuestItem",quest},{"Tags",tags},
         {"bSoftDeleted",ItemBool(object,{"bSoftDeleted","IsSoftDeleted","bIsSoftDeleted","IsSoftDelete","bIsSoftDelete"})},
         {"Class",to_string(object->GetClassPrivate()->GetPathName())},
-        {"Cooked",CookedAssets::VerifiedLoadedObject(object)},{"AppearanceGroup",ItemAppearanceMetadata::Group(object)},
-        {"PowerLevel",Read(object,"PowerLevel")}};
+        {"Cooked",CookedAssets::VerifiedLoadedObject(object)},{"AppearanceGroup",ItemAppearanceMetadata::Group(object)}};
+    row.update(NativeItemBadges(object,tags));
+    auto source=knownSource?*knownSource:ItemSource::Describe(path,HelpySourceCache::ItemPlan(),HelpySourceCache::NativePluginRoots(),
+        runtimeClone?provenance.value("CreatingMod",std::string{}):std::string{},
+        runtimeClone||declared.modded.value_or(false),!runtimeClone&&AssetMetadata::IsManaged(object),AssetMetadata::Owner(object));
+    if((source.Group==ItemSource::Kind::Vanilla||source.Group==ItemSource::Kind::Expansion)&&!object->HasAnyFlags(RF_WasLoaded))source.Group=ItemSource::Kind::Unknown;
+    row.update(ItemSource::Fields(source));return row;
+}
+json DescribeItem(UObject* object){return DescribeItemWithSource(object,nullptr);}
+
+namespace {
+std::string HelpyBroadItemCategory(UObject* object,const std::string& path,const std::string& name,const std::string& internal,const std::string& tags) {
+    std::string classes;std::size_t depth=0;for(UStruct* ancestor=object&&object->GetClassPrivate()?object->GetClassPrivate():nullptr;ancestor&&depth++<24;ancestor=ancestor->GetSuperStruct())classes+=" "+to_string(ancestor->GetName());
+    const auto hay=QuickDecorations::Fold(path+" "+name+" "+internal+" "+tags+" "+classes);
+    const auto any=[&](std::initializer_list<std::string_view> words){for(const auto word:words)if(hay.find(word)!=std::string::npos)return true;return false;};
+    if(any({"quest","questitem"}))return "Quest";
+    if(any({"ammo","ammunition","arrow","bolt","bullet","shot"}))return "Ammo";
+    if(any({"rune","runes"}))return "Runes";
+    if(any({"armor","armour","helmet"," helm","chestplate","cuirass","gauntlet","glove","boots","greaves","shield","wearableequipmentdata"})||QuickDecorations::Token(hay,"cape"))return "Armor";
+    if(any({"weapon","sword","dagger","mace","spear","halberd","bow","crossbow","staff","wand","pistol","musket","axe_weapon","battleaxe"}))return "Weapons";
+    if(any({"consumable","food","potion","drink","elixir","brew","ration","cooked","meal"}))return "Consumables";
+    if(any({"tool","pickaxe","hatchet","fishingrod","fishing_rod","hammer","shovel","sickle"}))return "Tools";
+    if(any({"building","buildable","furniture","structure","construction","placeable"}))return "Building";
+    if(any({"resource","material","ore","ingot","bar_","_bar","plank","log","timber","hide","leather","fibre","fiber","cloth","stone","crystal","essence","shard","ash","coal"}))return "Resources";
+    return "Misc";
+}
+int HelpyMaxStack(UObject* object) {
+    const auto value=Read(object,"MaxStackSize");
+    try {if(value.is_number_integer())return std::clamp(value.get<int>(),1,10000);if(value.is_number_unsigned())return std::clamp(static_cast<int>(value.get<unsigned>()),1,10000);if(value.is_number_float())return std::clamp(static_cast<int>(value.get<double>()),1,10000);}catch(...){}
+    return 1;
+}
+std::uint64_t HelpyStableId(const std::string& value) {
+    std::uint64_t hash=1469598103934665603ull;
+    for(const unsigned char c:value){hash^=c;hash*=1099511628211ull;}return hash;
+}
+json DescribeItemBasic(UObject* object,const std::string& path,const std::string& name,const std::string& internal,const std::string& tags,const std::string& category) {
+    auto persistence=CheapText(object,"PersistenceID");
+    auto row=json{{"StableId",HelpyStableId(path)},{"Name",name},{"Path",path},
+        {"InternalName",internal},{"PersistenceID",std::move(persistence)},{"Icon",ItemIconPath(object)},
+        {"Class",object&&object->GetClassPrivate()?to_string(object->GetClassPrivate()->GetPathName()):std::string{}},
+        {"Tags",tags},{"Category",category},{"MaxStackSize",HelpyMaxStack(object)}};
+    row.update(NativeItemBadges(object,tags));return row;
+}
 }
 
+std::vector<std::string> IconReferences(UObject* object) {
+    std::set<std::string> paths;if(!Usable(object)||!object->GetClassPrivate())return {};
+    auto* type=object->GetClassPrivate();size_t visited=0;
+    for(auto* field:TFieldRange<FProperty>(type,EFieldIterationFlags::Default)) {
+        if(++visited>256)break;const auto name=F2Catalog::Lower(to_string(field->GetName()));
+        if(name.find("icon")==name.npos&&name.find("thumbnail")==name.npos&&name.find("brush")==name.npos&&name!="image")continue;
+        const auto path=IconReferenceValue(field,object,type->GetPropertiesSize());
+        if(!path.empty()){paths.insert(path);HelpyCacheSources::Reference(to_string(object->GetPathName()),path);}
+    }
+    return {paths.begin(),paths.end()};
+}
+json ItemMetadata(const std::string& path) {
+    auto* item=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,RC::to_generic_string(path).c_str(),false);
+    auto* type=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Dominion.ItemData"),false);
+    if(!Usable(item)||!type||!item->IsA(type))return {{"Path",path},{"Name",QuickDecorations::ReadableAssetName(path)},{"Available",false},{"Reason","Item is not loaded in this session; checked again at delivery."}};
+    auto row=DescribeItem(item);row["MaxStackSize"]=HelpyMaxStack(item);
+    row["Category"]=HelpyBroadItemCategory(item,path,row.value("Name",std::string{}),row.value("InternalName",std::string{}),row.value("Tags",std::string{}));
+    return row;
+}
+std::string PresentationIcon(UObject* object){return object&&object->GetClassPrivate()&&!object->HasAnyFlags(static_cast<EObjectFlags>(RF_NeedLoad|RF_NeedPostLoad|RF_NeedInitialization|RF_BeginDestroyed|RF_FinishDestroyed))?ItemIconPath(object):std::string{};}
+std::string PresentationName(UObject* object){
+    if(!object||!object->GetClassPrivate()||object->HasAnyFlags(static_cast<EObjectFlags>(RF_NeedLoad|RF_NeedPostLoad|RF_NeedInitialization|RF_BeginDestroyed|RF_FinishDestroyed)))return {};
+    for(const auto* name:{TEXT("DisplayName"),TEXT("Name")}){auto* field=PropertyHelper::GetPropertyByName(object->GetClassPrivate(),name);
+        if(ReflectedContract::Fits(field,object->GetClassPrivate()->GetPropertiesSize())&&ReflectedContract::Text(field)){
+            const auto text=to_string(PropertyHelper::GetTextAsString(*field->ContainerPtrToValuePtr<FText>(object)));if(!text.empty()&&text.size()<=1024)return text;
+        }}return {};
+}
+json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,std::uint64_t startSeed,bool randomOrder,
+    const std::string& fieldSet,std::size_t scanBudget,std::uint64_t timeBudgetMicros,bool classIndex) {
+    if(limit<1||limit>128)throw std::runtime_error("Catalog window limit must be 1..128 rows.");
+    if(query.size()>512)throw std::runtime_error("Catalog query and filter controls exceed 512 characters.");
+    if(fieldSet!="BasicRow"&&fieldSet!="Detail")throw std::runtime_error("Unsupported item catalog field projection.");
+    scanBudget=std::clamp<std::size_t>(scanBudget,128,8192);timeBudgetMicros=std::clamp<std::uint64_t>(timeBudgetMicros,100,5000);
+    json rows=json::array();std::vector<std::string> queryTokens;std::string categoryFilter,searchQuery=query;
+    const auto sourceFilter=ItemSource::TakeFilter(searchQuery);
+    const auto sourcePlan=HelpySourceCache::ItemPlan();const auto nativePlugins=HelpySourceCache::NativePluginRoots();
+    constexpr std::string_view categoryPrefix="__helpycat:";
+    if(searchQuery.starts_with(categoryPrefix)){const auto split=searchQuery.find(' ');categoryFilter=AssetTemplate::Fold(searchQuery.substr(categoryPrefix.size(),split==std::string::npos?std::string::npos:split-categoryPrefix.size()));searchQuery=split==std::string::npos?std::string{}:searchQuery.substr(split+1);}
+    const auto familyFilter=ItemFamily::TakeFilter(searchQuery);
+    if(searchQuery.size()>256)throw std::runtime_error("Catalog search text exceeds 256 characters.");
+    if(!searchQuery.empty()){std::istringstream words(searchQuery);std::string word;while(words>>word){word=AssetTemplate::Fold(std::move(word));if(!word.empty())queryTokens.push_back(std::move(word));}}
+    const auto matchesTokens=[&](const std::string& candidate){if(queryTokens.empty())return true;const auto folded=AssetTemplate::Fold(candidate);for(const auto& token:queryTokens)if(folded.find(token)==std::string::npos)return false;return true;};
+    auto* itemType=Class("assets");if(!itemType)throw std::runtime_error("ItemData class is not ready.");
+    const auto objectCount=FUObjectArray::GetNumElements();
+    if(objectCount<0||objectCount>4'000'000)throw std::runtime_error("Global object roster exceeds the safe catalog bound.");
+    static std::string mountedScope;static bool mountedReady=false;static std::vector<CookedAssets::Record> mountedItems;
+    const auto generation=SpawnToolRequests::Generation.load();
+    // A verified content census change may reflect a newly mounted package.
+    // Re-query live ItemData metadata once for that scope, not on every poll or
+    // thumbnail update. This observes mounts; it does not mount/re-register them.
+    const auto metadataScope=json::array({generation,HelpySourceCache::ForClient().value("CatalogKey",std::string{})}).dump();
+    if(!mountedReady||mountedScope!=metadataScope) {
+        if(mountedScope!=metadataScope){mountedReady=false;mountedItems.clear();}
+        bool classMetadataReady=false;
+        try {
+            // Ask the native registry for ItemData (including subclasses),
+            // rather than copying/filtering every art/texture/world record.
+            // This is metadata only: do not bulk-load the returned items.
+            auto paths=RecipeAssetCatalog::MountedPaths(TEXT("ItemData"));
+            if(paths.empty())throw std::runtime_error("Native ItemData metadata is not ready");
+            std::vector<CookedAssets::Record> discovered;discovered.reserve(paths.size());
+            for(auto& path:paths){const auto split=path.rfind('.');const auto name=path.substr(split==path.npos?0:split+1);
+                discovered.push_back({std::move(path),name,"/Script/Dominion.ItemData"});}
+            mountedItems=std::move(discovered);mountedScope=metadataScope;mountedReady=classMetadataReady=true;
+        }catch(const std::exception& error){PS::Log<RC::LogLevel::Verbose>(STR("Item class metadata unavailable; using the bounded catalogue fallback: {}\n"),PS::ToWideSafe(error.what()));}
+        if(!classMetadataReady&&CookedAssets::TryEnsure()) {
+            std::vector<CookedAssets::Record> discovered;
+            for(const auto& record:CookedAssets::MetadataSnapshot()) {
+                const auto hint=F2Catalog::MountedCandidate(record.path,record.name,record.type);
+                if(hint&&hint->kind==F2Catalog::Kind::Item)discovered.push_back(record);
+            }
+            mountedItems=std::move(discovered);mountedScope=metadataScope;mountedReady=true;
+        }
+    }
+    const auto priorityPaths=AssetProvenance::LivePaths();
+    const std::unordered_set<std::string> prioritySet(priorityPaths.begin(),priorityPaths.end());
+    static std::string indexedScope;static std::vector<WeakObjectHandle> indexedItems;
+    const bool useClassIndex=classIndex&&FUObjectHashTables::IsAvailable();
+    if(useClassIndex){
+        const auto scope=json::array({generation,HelpySourceCache::PublishedFingerprint(),priorityPaths}).dump();
+        if(scope!=indexedScope){
+            TArray<UObject*> items;UECustom::UObjectGlobals::GetObjectsOfClass(itemType,items,true);
+            if(items.Num()<0||items.Num()>AlphabeticalItemCatalog::Cache::MaxRows)throw std::runtime_error("Native item class index exceeds its safe bound");
+            indexedItems.clear();indexedItems.reserve(items.Num());
+            for(auto* item:items)if(Usable(item))indexedItems.emplace_back(item);
+            indexedScope=scope;
+        }
+    }
+    // Use the public class hash only when available. Hosts without it keep
+    // the original time-bounded object-array walk, not a synchronous fallback.
+    const ItemCatalogLayout layout{{priorityPaths.size(),useClassIndex?indexedItems.size():static_cast<std::size_t>(objectCount),mountedItems.size()}};
+    const auto total=layout.Total();
+    if(!total)return {{"Rows",std::move(rows)},{"NextOffset",0},{"Start",0},{"HasMore",false},{"Scanned",0},{"MountedMetadataReady",mountedReady}};
+    const std::size_t start=randomOrder?static_cast<std::size_t>(startSeed%total):0;
+    std::size_t visited=std::min(offset,total),scanned=0;const auto begin=std::chrono::steady_clock::now();
+    while(visited<total&&rows.size()<limit&&scanned<scanBudget) {
+        if(scanned>0&&std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-begin).count()>=static_cast<long long>(timeBudgetMicros))break;
+        const std::size_t index=randomOrder?(start+visited)%total:visited;
+        const auto [segment,localIndex]=layout.At(index);
+        if(segment==2) {
+            ++visited;++scanned;const auto& record=mountedItems[localIndex];
+            auto* loaded=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,RC::to_generic_string(record.path).c_str(),false);
+            if(Usable(loaded))continue; // already covered by the native UObject slice
+            const auto name=QuickDecorations::ReadableAssetName(record.path),category=HelpyBroadItemCategory(nullptr,record.path,name,{},record.type);
+            if(!categoryFilter.empty()&&AssetTemplate::Fold(category)!=categoryFilter)continue;
+            const auto source=ItemSource::Describe(record.path,sourcePlan,nativePlugins);
+            if(!ItemSource::Matches(sourceFilter,source)||!ItemFamily::Matches(familyFilter,name))continue;
+            if(!matchesTokens(record.path+" "+name+" "+record.type+" "+category))continue;
+            auto entry=json{{"StableId",HelpyStableId(record.path)},{"Path",record.path},{"Name",name},{"Class",record.type},{"Category",category},
+                {"Cooked",true},{"Mounted",true},{"Loaded",false},{"Available",true},{"Reason","Mounted ItemData candidate; native fields and inventory compatibility are checked when loaded"}};
+            entry.update(ItemSource::Fields(source));rows.push_back(std::move(entry));
+            continue;
+        }
+        UObject* object=nullptr;
+        if(segment==0)object=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,RC::to_generic_string(priorityPaths[localIndex]).c_str(),false);
+        else if(useClassIndex)object=indexedItems[localIndex].Get();
+        else{auto* slot=FUObjectArray::IndexToObject(static_cast<int32>(localIndex));object=slot?slot->GetUObject():nullptr;}
+        ++visited;++scanned;
+        if(!Usable(object)||!object->IsA(itemType))continue;
+        const auto path=to_string(object->GetPathName());if(path.empty())continue;
+        if(segment==1&&prioritySet.contains(path))continue;
+        const auto internal=CheapText(object,"InternalName");const auto name=CachedItemName(object);const auto tags=ItemTags(object);const auto broadCategory=HelpyBroadItemCategory(object,path,name,internal,tags);
+        if(!categoryFilter.empty()&&AssetTemplate::Fold(broadCategory)!=categoryFilter)continue;
+        const auto provenance=AssetProvenance::Lookup(object);const auto declared=AssetMetadata::Lookup(object);
+        const bool runtimeClone=provenance.is_object()&&provenance.value("Confirmed",false);
+        auto source=ItemSource::Describe(path,sourcePlan,nativePlugins,
+            runtimeClone?provenance.value("CreatingMod",std::string{}):std::string{},
+            declared.modded.value_or(false)||runtimeClone,!runtimeClone&&AssetMetadata::IsManaged(object),AssetMetadata::Owner(object));
+        if((source.Group==ItemSource::Kind::Vanilla||source.Group==ItemSource::Kind::Expansion)&&!object->HasAnyFlags(RF_WasLoaded))source.Group=ItemSource::Kind::Unknown;
+        if(!ItemSource::Matches(sourceFilter,source)||!ItemFamily::Matches(familyFilter,name))continue;
+        if(!queryTokens.empty()&&!matchesTokens(path+" "+internal+" "+name+" "+tags+" "+broadCategory+" "+to_string(object->GetClassPrivate()->GetName())))continue;
+        // Reuse this slice's source decision: copying the full mount/owner
+        // census again for every schema clone made large mod lists expensive.
+        auto entry=fieldSet=="Detail"||segment==0?DescribeItemWithSource(object,&source):DescribeItemBasic(object,path,name,internal,tags,broadCategory);
+        if(entry.is_object()){entry["StableId"]=HelpyStableId(path);entry["Category"]=broadCategory;entry.update(ItemSource::Fields(source));rows.push_back(std::move(entry));}
+    }
+    return {{"Rows",std::move(rows)},{"NextOffset",visited},{"Start",start},{"HasMore",visited<total},
+        {"Scanned",scanned},{"BudgetExhausted",visited<total&&scanned>=scanBudget},{"FieldSet",fieldSet},{"MountedMetadataReady",mountedReady}};
+}
+
+namespace {PersistentItemCatalog::Store ItemManifest;PagedItemCatalog::Store ItemPages,ItemPreviewPages;bool ItemRefreshPending=false,ItemRefreshPumping=false;}
+void ShutdownItemCatalog() noexcept {ItemRefreshPending=false;ItemPreviewPages.Shutdown();ItemPages.Shutdown();ItemManifest.Shutdown();}
+void PumpItemCatalog(){
+    if(!ItemRefreshPending)return;
+    ItemRefreshPumping=true;
+    struct ResetPump{~ResetPump(){ItemRefreshPumping=false;}} reset;
+    try{(void)AlphabeticalItemWindow("","",1,"BasicRow");}catch(...){ItemRefreshPending=false;}
+}
+json AlphabeticalItemWindow(const std::string& query,const std::string& cursor,std::size_t limit,const std::string& fieldSet){
+    if(fieldSet!="BasicRow"&&fieldSet!="Detail")throw std::runtime_error("Unsupported item catalog field projection.");
+    // Two consumers must not evict each other's in-progress source snapshot.
+    static auto basicCache=std::make_unique<AlphabeticalItemCatalog::Cache>();
+    static AlphabeticalItemCatalog::Cache detailCache;static std::string basicScope;
+    // Authored runtime items change independently of mounted content. Their
+    // exact live path list invalidates this index without chasing transient
+    // UObject counts (which change constantly while a menu is open).
+    const ItemCatalogFilter::Query filter(query);
+    const auto paths=AssetProvenance::LivePaths();
+    const auto published=HelpySourceCache::ForClient();
+    const auto pageProviders=HelpySourceCache::NativePluginRoots();
+    const auto fingerprint=fieldSet=="BasicRow"?published.value("CatalogKey",std::string{}):HelpySourceCache::PublishedFingerprint();
+    const auto scope=json::array({SpawnToolRequests::Generation.load(),fingerprint,paths,fieldSet}).dump();
+    static FocusedItemQuery::Misses cacheMisses;
+    wchar_t localeName[LOCALE_NAME_MAX_LENGTH]{};GetUserDefaultLocaleName(localeName,LOCALE_NAME_MAX_LENGTH);
+    const auto language=to_string(RC::StringType(localeName));
+    const auto manifest=HelpySourceCache::Directory(false).parent_path()/"item-catalogues"/(HelpySourceCache::Hex(HelpySourceCache::Hash(HostServices::ModDirectory().generic_string()))+".json");
+    const auto decorateSaved=[](json page){
+        const auto plan=HelpySourceCache::ItemPlan();const auto nativePlugins=HelpySourceCache::NativePluginRoots();
+        for(auto& row:page["Rows"]){
+            if(!row.is_object()||row.value("RuntimeClone",false))continue;
+            const auto source=ItemSource::Reattribute(row,plan,nativePlugins);
+            row.update(ItemSource::Fields(source));
+        }return page;
+    };
+    if(fieldSet=="BasicRow"&&(!published.value("Ready",false)||!published.value("Authoritative",false))){
+        ItemRefreshPending=false;
+        if(auto page=ItemPreviewPages.Preview(manifest,language,query,cursor,limit,pageProviders))return decorateSaved(std::move(*page));
+        return {{"Rows",json::array()},{"HasMore",true},{"NextCursor",cursor},{"AlphabeticalReady",false},{"PopulationStage","checking-cache"},{"Coverage","No compatible saved presentation cache; waiting for mounted content verification"}};
+    }
+    const auto focused=[&](size_t offset){
+        auto page=ItemWindow(query,offset,limit,0,false,fieldSet,4096,1800,true);
+        page["NextCursor"]="F:"+std::to_string(page.value("NextOffset",size_t{}));
+        page["AlphabeticalReady"]=true;page["PopulationStage"]="searching-live-items";
+        page["PopulationDone"]=page.value("NextOffset",size_t{});page["CacheHit"]=false;
+        page["Coverage"]="Focused live-item lookup after a verified catalogue miss; no full catalogue rebuild or icon scan.";return page;
+    };
+    if(!query.empty()&&cursor.starts_with("F:")){
+        size_t offset=0;const auto text=std::string_view(cursor).substr(2);const auto [end,error]=std::from_chars(text.data(),text.data()+text.size(),offset);
+        if(text.empty()||error!=std::errc{}||end!=text.data()+text.size())throw std::runtime_error("Invalid focused item search cursor");return focused(offset);
+    }
+    std::string diskScope;static uint64_t waiting=0;
+    if(fieldSet=="BasicRow"){
+        if(basicScope!=scope){basicScope=scope;basicCache=std::make_unique<AlphabeticalItemCatalog::Cache>();basicCache->Scope(scope);ItemManifest.ResetScope();}
+        // Strict reusable pages require the authoritative source census;
+        // presentation previews above remain explicitly provisional.
+        if(!published.value("Ready",false)||!published.value("Authoritative",false))return {{"Rows",json::array()},{"HasMore",true},{"NextCursor","W:"+std::to_string(++waiting)},{"AlphabeticalReady",false},{"PopulationStage","checking-cache"},{"Coverage","Waiting for mounted content verification"}};
+        diskScope=PersistentItemCatalog::DiskScope(published,paths,language);
+        const auto legacyScope=json::array({"item-browse-v1",published.value("Key",std::string{}),paths,language}).dump();
+        if(auto page=ItemPages.Lookup(manifest,diskScope,query,cursor,limit,false,{},pageProviders)){
+            if(page->value("AlphabeticalReady",false))ItemRefreshPending=false;
+            // A verified read is still asynchronous. Keep the old presentation
+            // page visible while the strict scope check runs on its worker.
+            if(!ItemRefreshPumping&&!page->value("AlphabeticalReady",false))
+                if(auto preview=ItemPreviewPages.Preview(manifest,language,query,cursor,limit,pageProviders))return decorateSaved(std::move(*preview));
+            (*page)["CheckingChanges"]=published.value("CheckingChanges",false);
+            const auto plan=HelpySourceCache::ItemPlan();const auto nativePlugins=HelpySourceCache::NativePluginRoots();
+            const auto repair=[plan,nativePlugins](json& row){
+                if(!row.is_object()||row.value("RuntimeClone",false))return false;
+                const auto info=ItemSource::Reattribute(row,plan,nativePlugins);
+                const auto fields=ItemSource::Fields(info);bool changed=false;
+                for(const auto& [key,value]:fields.items())if(!row.contains(key)||row[key]!=value){row[key]=value;changed=true;}return changed;
+            };
+            for(auto& row:(*page)["Rows"])repair(row);
+            if((*page).value("AlphabeticalReady",false))ItemManifest.Repair(manifest,diskScope,repair,json(pageProviders).dump());
+            if(cacheMisses.NeedsLive(scope,query,*page)){auto live=focused(0);live["Reset"]=true;return live;}return *page;
+        }
+        if(!ItemManifest.Restore(manifest,diskScope,basicCache,legacyScope)){
+            if(!ItemRefreshPumping)if(auto preview=ItemPreviewPages.Preview(manifest,language,query,cursor,limit,pageProviders))return decorateSaved(std::move(*preview));
+            return {{"Rows",json::array()},{"HasMore",true},{"NextCursor","W:"+std::to_string(++waiting)},{"AlphabeticalReady",false},{"PopulationStage","reading-catalogue"},{"Coverage","Reading saved item manifest"}};
+        }
+    }
+    auto& cache=fieldSet=="Detail"?detailCache:*basicCache;
+    if(fieldSet=="Detail")cache.Scope(scope);
+    auto result=cache.ReadRecovering(json::array({query,fieldSet}).dump(),cursor,limit,[&](size_t offset){
+        return ItemWindow({},offset,128,0,false,fieldSet,4096,1800,true);
+    },filter);
+    if(fieldSet=="BasicRow"){
+        ItemRefreshPending=!cache.Ready();ItemManifest.Persist(manifest,diskScope,cache);
+        // A genuine content-scope change must not turn a usable saved page
+        // into a blank discovery screen. Continue bounded native slices on
+        // idle game-thread ticks, then replace this presentation in place.
+        if(ItemRefreshPending&&!ItemRefreshPumping)
+            if(auto preview=ItemPreviewPages.Preview(manifest,language,query,cursor,limit,pageProviders)){
+                (*preview)["Coverage"]="Saved presentation cache; mounted content changed. Refreshing the catalogue in bounded background slices; gameplay actions remain live-validated.";
+                (*preview)["RefreshScanned"]=result.value("Scanned",size_t{});return decorateSaved(std::move(*preview));
+            }
+    }
+    result["PopulationStage"]=cache.Ready()?"items-ready":"discovering-items";
+    result["CheckingChanges"]=published.value("CheckingChanges",false);
+    if(fieldSet=="BasicRow"&&!cache.Ready()&&!ItemPages.Failure.empty())result["Coverage"]="Saved catalogue not reusable: "+ItemPages.Failure+". Rebuilding presentation data; gameplay remains live-validated.";
+    if(fieldSet=="BasicRow"&&cacheMisses.NeedsLive(scope,query,result)){auto live=focused(0);live["Reset"]=true;return live;}
+    return result;
+}
 json ItemRoster() {
     json rows=json::array();
-    TArray<UObject*> objects;UECustom::UObjectGlobals::GetObjectsOfClass(Class("assets"),objects,true);
-    if(objects.Num()<0||objects.Num()>32768)throw std::runtime_error("Loaded item roster exceeds its safe bound.");
+    auto* itemType=Class("assets");if(!itemType)throw std::runtime_error("ItemData class is not ready.");
+    TArray<UObject*> objects;UECustom::UObjectGlobals::GetObjectsOfClass(itemType,objects,true);
+    if(objects.Num()<0)throw std::runtime_error("Loaded item roster has an invalid size.");
     std::set<std::string> paths;
     for(auto* object:objects) {
         if(!Usable(object))continue;
@@ -366,7 +783,7 @@ json Reference(const json& entry,const std::string& loader) {
         } else if(CastField<FNameProperty>(field) && size==sizeof(FName)) {
             values[name]=to_string(static_cast<FName*>(address)->ToString());
         } else {
-            if(CastField<FTextProperty>(field) && size!=sizeof(FText))continue;
+            if(CastField<FTextProperty>(field) && !ReflectedContract::Text(field))continue;
             if(CastField<FStrProperty>(field) && size!=sizeof(FString))continue;
             if(auto* boolean=CastField<FBoolProperty>(field);boolean
                 && (!boolean->IsNativeBool() || size!=sizeof(bool) || boolean->GetByteOffset()!=0))continue;

@@ -15,6 +15,23 @@ using Json=nlohmann::json;
 template<class F> bool Rejects(F fn){try{fn();}catch(const std::exception&){return true;}return false;}
 int main(int argc,char** argv){
     {
+        namespace Lore=DragonWilds::LoreBookPresentation;
+        Json book={{"Id","book"},{"Type","Prop"},{"Mesh",Lore::Closed},{"LoreID","fieldbook"},{"Location",{0,0,0}}};
+        const auto visual=Lore::Parse(book);assert(visual.Enabled&&visual.ReadMesh==Lore::Open&&visual.GlowSystem==Lore::Glow);
+        assert(!Lore::ReadState(false,true,false));
+        assert(!*Lore::ReadState(true,false,false)&&!*Lore::ReadState(true,true,true)&&*Lore::ReadState(true,true,false));
+        auto disabled=book;disabled["LorePresentation"]={{"Enabled",false}};assert(!Lore::Parse(disabled).Enabled);
+        auto custom=book;custom["Mesh"]="/Game/Custom/Book.Book";assert(!Lore::Parse(custom).Enabled);
+        custom["LorePresentation"]={{"Enabled",true},{"ReadMesh","/Game/Custom/Open.Open"},{"GlowSystem",""}};
+        assert(Lore::Parse(custom).Enabled&&Lore::Parse(custom).GlowSystem.empty());
+        for(const Json invalid:std::vector<Json>{true,{{"Enabled","yes"}},{{"Unknown",true}},{{"ReadMesh","../book"}},{{"GlowSystem",false}}}){
+            auto bad=book;bad["LorePresentation"]=invalid;assert(Rejects([&]{Lore::Parse(bad);}));
+        }
+        auto bad=custom;bad.erase("LoreID");assert(Rejects([&]{Lore::Parse(bad);}));
+        NpcCatalog books;books.AddNpc("Mod",book);const auto resolved=books.Resolve();
+        assert(Lore::Parse(resolved[0].Data).Enabled&&resolved[0].Data.at("LoreEntry")=="Mod:fieldbook");
+    }
+    {
         Json prop={{"Id","table"},{"Type","Prop"},{"Mesh","/Engine/BasicShapes/Cube.Cube"},
             {"Location",Json::array({0,0,0})},{"NoInteract",true},{"HideName",true},{"EnableCollision",true},
             {"VendorID","missing_shop"},{"DialogueID","missing_dialogue"}};
@@ -23,6 +40,17 @@ int main(int argc,char** argv){
         assert(resolved.at("Stage")=="Visual" && resolved.at("EnableCollision")==true);
         assert(!resolved.contains("VendorID") && !resolved.contains("DialogueID"));
         assert(resolved.at("HideName")==true);
+        auto grounded=prop;grounded["Location"][2]="$";grounded["GroundReferenceZ"]=-3550;
+        NpcCatalog groundedCatalog;groundedCatalog.AddNpc("test",grounded);
+        assert(groundedCatalog.Resolve().at(0).Data.at("GroundReferenceZ")==-3550);
+        auto migration=grounded;migration["GroundMigrationRadius"]=400;
+        migration["GroundClearance"]={{"Radius",45},{"HalfHeight",90}};
+        NpcCatalog migrating;migrating.AddNpc("test",migration);
+        assert(migrating.Resolve().at(0).Data.at("GroundMigrationRadius")==400);
+        migration["GroundMigrationRadius"]=1001;
+        assert(Rejects([&]{NpcCatalog c;c.AddNpc("test",migration);}));
+        auto invalidHint=prop;invalidHint["GroundReferenceZ"]=-3550;
+        assert(Rejects([&]{NpcCatalog c;c.AddNpc("test",invalidHint);}));
         for(const auto* field:{"NoInteract","HideName"}) {
             auto bad=prop;bad[field]="true";
             assert(Rejects([&]{NpcCatalog c;c.AddNpc("test",bad);}));
@@ -363,6 +391,18 @@ int main(int argc,char** argv){
     assert(DragonWilds::NpcMarkers::MapLabel(Json::object(),"Jonesy")=="Jonesy");
     assert(DragonWilds::NpcMarkers::MapLabel({{"ShowName",true}},"Jonesy")=="Jonesy");
     assert(DragonWilds::NpcMarkers::MapLabel({{"ShowName",false}},"Jonesy").empty());
+    const auto nativeMarkers=DragonWilds::NpcMarkers::FromDefinition({{"QuestID","example:first_steps"}});
+    for(const auto* group:{"Map","OverheadIcon"}) {
+        assert(nativeMarkers.at(group).at("Enabled")==true);
+        assert(nativeMarkers.at(group).at("Icon")==DragonWilds::NpcMarkers::DefaultIcon);
+    }
+    assert(DragonWilds::NpcMarkers::FromDefinition(Json::object()).empty());
+    const auto explicitMarkers=DragonWilds::NpcMarkers::FromDefinition({{"QuestID","example:first_steps"},
+        {"Map",{{"Enabled",false},{"ShowName",false}}},{"OverheadIcon",{{"Enabled",true},{"Icon","/Game/Custom.Icon"}}}});
+    assert(explicitMarkers.at("Map").at("Enabled")==false&&!explicitMarkers.at("Map").contains("Icon"));
+    assert(explicitMarkers.at("OverheadIcon").at("Icon")=="/Game/Custom.Icon");
+    const auto explicitOff=DragonWilds::NpcMarkers::FromDefinition({{"QuestID","example:first_steps"},{"OverheadIcon",{{"Enabled",false}}}});
+    assert(explicitOff.at("Map").at("Enabled")==true&&explicitOff.at("OverheadIcon").at("Enabled")==false);
     for(const auto& option:{Json("false"),Json(0),Json(),Json::object()}) {
         auto bad=marked;bad["Map"]["ShowName"]=option;NpcCatalog invalidCatalog;
         assert(Rejects([&]{invalidCatalog.AddNpc("BadLabel",bad);}));

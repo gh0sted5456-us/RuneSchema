@@ -1,6 +1,9 @@
 #pragma once
 #include "Loader/QuestSaveOwnership.h"
 #include "SDK/Helper/ActorHelper.h"
+#include "SDK/Helper/ReflectedContract.h"
+#include "SDK/Structs/Custom/FScriptMapHelper.h"
+#include "Unreal/Property/FEnumProperty.hpp"
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
@@ -11,6 +14,15 @@
 namespace DragonWilds::Quests {
 using namespace RC::Unreal;
 class NativeQuestCleanup {
+    struct ValueBuffer {
+        FProperty* Property;void* Data;
+        ValueBuffer(FProperty* property,const void* source):Property(property),Data(FMemory::Malloc(property->GetSize(),property->GetMinAlignment())) {
+            if(!Data)throw std::bad_alloc();Property->InitializeValue(Data);
+            try{Property->CopyCompleteValue(Data,source);}catch(...){Property->DestroyValue(Data);FMemory::Free(Data);throw;}
+        }
+        ~ValueBuffer(){Property->DestroyValue(Data);FMemory::Free(Data);}
+        ValueBuffer(const ValueBuffer&)=delete;
+    };
     struct ArrayBuffer {
         FArrayProperty* Property;
         void* Data;
@@ -27,17 +39,17 @@ class NativeQuestCleanup {
             inner->InitializeValue(destination);inner->CopyCompleteValue(destination,source);
         }
     };
-    template<class Field>static Field* Required(UScriptStruct* type,const TCHAR* name,int offset,int size) {
+    template<class Field>static Field* Required(UScriptStruct* type,const TCHAR* name,int /*legacyOffset*/,int size) {
         auto* field=CastField<Field>(PropertyHelper::GetPropertyByName(type,name));
-        if(!field || field->GetOffset_Internal()!=offset || field->GetElementSize()!=size || field->GetArrayDim()!=1)
+        if(!ReflectedContract::Fits(field,type->GetStructureSize()) || field->GetElementSize()!=size)
             throw std::runtime_error("Quest cleanup field layout changed");
         return field;
     }
-    static FArrayProperty* ArrayProperty(UObject* owner,const TCHAR* name,const TCHAR* innerName,int size) {
+    static FArrayProperty* ArrayProperty(UObject* owner,const TCHAR* name,const TCHAR* innerName,int /*legacySize*/) {
         auto* p=CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(owner->GetClassPrivate(),name));
         auto* inner=p?CastField<FStructProperty>(p->GetInner()):nullptr;
         if(!p || p->GetElementSize()!=sizeof(FScriptArray) || p->GetArrayDim()!=1 || !inner || !inner->GetStruct()
-            || inner->GetStruct()->GetFName()!=FName(innerName,FNAME_Add) || (size && inner->GetElementSize()!=size)
+            || inner->GetStruct()->GetFName()!=FName(innerName,FNAME_Add) || inner->GetElementSize()<=0 || inner->GetElementSize()>65535
             || inner->GetElementSize()!=inner->GetStruct()->GetStructureSize())throw std::runtime_error("Quest cleanup array layout changed");
         return p;
     }
@@ -66,7 +78,7 @@ public:
         ArrayBuffer retained(property),original(property);property->CopyCompleteValue(original.Data,&live);
         std::set<UObject*> removedAssets;std::set<std::string> removedIds,locations,allIds;
         for(int i=0;i<live.Num();++i) {
-            auto* row=static_cast<uint8_t*>(live.GetData())+i*56;
+            auto* row=static_cast<uint8_t*>(live.GetData())+i*inner->GetElementSize();
             auto& ints=*integers->ContainerPtrToValuePtr<FScriptArray>(row);CheckArray(ints);
             SaveJson savedInts=SaveJson::array();std::string id;std::set<std::string> rowLocations;
             for(int j=0;j<ints.Num();++j) {
@@ -123,27 +135,52 @@ public:
             const auto name=RC::to_string(locationName->GetPropertyValue(locationName->ContainerPtrToValuePtr<void>(row)).ToString());
             if(!locations.contains(name))retainedVisibility.Add(row);
         }
-        auto* tracked=CastField<FObjectPropertyBase>(PropertyHelper::GetPropertyByName(component->GetClassPrivate(),TEXT("TrackedSecondaryQuest")));
-        if(!tracked || tracked->GetElementSize()!=sizeof(UObject*) || tracked->GetArrayDim()!=1)throw std::runtime_error("Tracked quest layout changed");
-        UObject* oldTracked=nullptr;auto* trackedPtr=tracked->ContainerPtrToValuePtr<void>(component);std::memcpy(&oldTracked,trackedPtr,sizeof(oldTracked));
+        FProperty* tracked=PropertyHelper::GetPropertyByName(component->GetClassPrivate(),TEXT("TrackedSecondaryQuest"));
+        if(!tracked)tracked=PropertyHelper::GetPropertyByName(component->GetClassPrivate(),TEXT("TrackedQuestMap"));
+        if(!tracked||tracked->GetArrayDim()!=1||tracked->GetSize()<=0||tracked->GetSize()>256)
+            throw std::runtime_error("Tracked quest layout changed");
+        auto* trackedPtr=tracked->ContainerPtrToValuePtr<void>(component);
+        ValueBuffer oldTracked(tracked,trackedPtr),nextTracked(tracked,trackedPtr);
+        const auto clearRetired=[&](FObjectPropertyBase* field,void* destination) {
+            if(!field||field->GetArrayDim()!=1||field->GetElementSize()!=sizeof(UObject*))
+                throw std::runtime_error("Tracked quest object reference changed");
+            auto* value=field->GetObjectPropertyValue(destination);
+            if(!removedAssets.contains(value))return;
+            UObject* none=nullptr;field->CopyCompleteValue(destination,&none);
+            if(field->GetObjectPropertyValue(destination))throw std::runtime_error("Tracked quest clear did not round-trip");
+        };
+        if(auto* single=CastField<FObjectPropertyBase>(tracked))clearRetired(single,nextTracked.Data);
+        else if(auto* map=CastField<FMapProperty>(tracked)) {
+            auto* key=map->GetKeyProp();UEnum* enumeration=nullptr;
+            if(auto* typed=CastField<FEnumProperty>(key))enumeration=typed->GetEnum();
+            else if(auto* byte=CastField<FByteProperty>(key))enumeration=byte->GetEnum().Get();
+            auto* values=static_cast<FScriptMap*>(nextTracked.Data);
+            auto* objectValue=CastField<FObjectPropertyBase>(map->GetValueProp());
+            if(!enumeration||enumeration->GetPathName()!=TEXT("/Script/Dominion.EQuestType")
+                ||!objectValue||objectValue->GetArrayDim()!=1||objectValue->GetElementSize()!=sizeof(UObject*)
+                ||values->Num()<0||values->Num()>64||values->GetMaxIndex()<0||values->GetMaxIndex()>128)
+                throw std::runtime_error("Tracked quest type map changed");
+            UECustom::FScriptMapHelper view(map,nextTracked.Data);
+            view.ForEachPair([&](void*,void* value){clearRetired(objectValue,value);});
+        } else throw std::runtime_error("Tracked quest property has unsupported type");
         auto* notify=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,TEXT("/Script/Dominion.QuestProgressComponent:OnQuestsUpdated"),false);
-        if(!notify || notify->GetParmsSize()!=17)throw std::runtime_error("Quest cleanup notification unavailable");
+        ReflectedContract::Frame(notify);
         size_t parameters=0;FArrayProperty* updated=nullptr;FBoolProperty* loaded=nullptr;
         for(auto* p:TFieldRange<FProperty>(notify,EFieldIterationFlags::Default))if(p->HasAnyPropertyFlags(CPF_Parm)) {
             ++parameters;if(p->GetFName()==FName(TEXT("UpdatedQuests"),FNAME_Add))updated=CastField<FArrayProperty>(p);
             if(p->GetFName()==FName(TEXT("bFromLoadedState"),FNAME_Add))loaded=CastField<FBoolProperty>(p);
         }
         auto* updatedInner=updated?CastField<FStructProperty>(updated->GetInner()):nullptr;
-        if(parameters!=2 || !updated || updated->GetOffset_Internal()!=0 || updated->GetElementSize()!=16 || !updatedInner || updatedInner->GetStruct()!=inner->GetStruct()
-            || !loaded || loaded->GetOffset_Internal()!=16 || loaded->GetElementSize()!=1 || !loaded->IsNativeBool())throw std::runtime_error("Quest cleanup notification layout changed");
+        if(parameters!=2 || !ReflectedContract::Input(updated,notify) || updated->GetElementSize()!=sizeof(FScriptArray) || !updatedInner || updatedInner->GetStruct()!=inner->GetStruct()
+            || !ReflectedContract::Input(loaded,notify) || loaded->GetElementSize()!=1 || !loaded->IsNativeBool())throw std::runtime_error("Quest cleanup notification layout changed");
         try {
             property->CopyCompleteValue(&live,retained.Data);
             visibility->CopyCompleteValue(&liveVisibility,retainedVisibility.Data);
-            if(removedAssets.contains(oldTracked)){UObject* none=nullptr;std::memcpy(trackedPtr,&none,sizeof(none));}
-            ActorHelper::FunctionCall(component,notify->GetPathName()).Arg(TEXT("UpdatedQuests"),retained.Array()).Arg(TEXT("bFromLoadedState"),false).Invoke();
+            tracked->CopyCompleteValue(trackedPtr,nextTracked.Data);
+            ActorHelper::FunctionCall(component,notify->GetPathName()).ArrayArg(TEXT("UpdatedQuests"),property,&retained.Array()).Arg(TEXT("bFromLoadedState"),false).Invoke();
         }catch(...) {
             property->CopyCompleteValue(&live,original.Data);visibility->CopyCompleteValue(&liveVisibility,oldVisibility.Data);
-            std::memcpy(trackedPtr,&oldTracked,sizeof(oldTracked));throw;
+            tracked->CopyCompleteValue(trackedPtr,oldTracked.Data);throw;
         }
         return {true,removedIds.size()};
     }

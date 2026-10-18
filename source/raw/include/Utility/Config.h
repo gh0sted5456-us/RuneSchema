@@ -146,9 +146,13 @@ namespace PS {
 
     struct PSConfigSettings {
         bool enableAutoReload = false;
+        // One native UE4SS reflection dump per changed executable; restart required.
+        bool autoUpdateMappings = true;
         // Logging detail and advanced authoring/diagnostic facilities are
         // independent. Core loaders and network bridges are never gated here.
         bool advancedLogging = false;
+        // Keep previous RuneSchema sessions in logs/ using UTC date-time names.
+        bool archiveLogs = false;
         bool authoringTools = true;
         // Retained JSON name for compatibility. This now means heavyweight
         // diagnostics/full catalog work, never ordinary mod authoring.
@@ -202,5 +206,7 @@ namespace PS {
         PSConfigSettings m_settings;
         std::string m_status;
         bool m_preserveOriginal = false;
+        std::filesystem::path m_configFile;
+        nlohmann::json m_configDocument = nlohmann::json::object();
     };
 }

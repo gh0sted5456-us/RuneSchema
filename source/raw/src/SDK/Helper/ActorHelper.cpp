@@ -16,6 +16,7 @@
 #include "SDK/Classes/KismetSystemLibrary.h"
 #include "SDK/Classes/TSoftObjectPtr.h"
 #include "SDK/Helper/ActorHelper.h"
+#include "SDK/Helper/ReflectedContract.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Structs/Custom/FScriptSetHelper.h"
 #include "SDK/Structs/FSoftObjectPath.h"
@@ -134,18 +135,20 @@ namespace DragonWilds::ActorHelper {
                        const FVector& Location,
                        const FRotator& Rotation,
                        const std::function<void(AActor*)>& Configure,
-                       ESpawnActorScaleMethod ScaleMethod)
+                       ESpawnActorScaleMethod ScaleMethod,
+                       ESpawnActorCollisionHandlingMethod CollisionMethod,
+                       const FVector& Scale)
     {
         if (!World || !ActorClass)
         {
             throw std::runtime_error("Spawn was given a null world or class");
         }
 
-        auto transform = FTransform(Rotation, Location, FVector(1.0, 1.0, 1.0));
+        auto transform = FTransform(Rotation, Location, Scale);
 
         UObject* worldContext = World;
         AActor* owner = nullptr;
-        auto collision = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+        auto collision = CollisionMethod;
         auto begin = FunctionCall(GetDefaultObject(TEXT("/Script/Engine.Default__GameplayStatics")),
                                   STR("/Script/Engine.GameplayStatics:BeginDeferredActorSpawnFromClass"));
         begin.Arg(STR("WorldContextObject"), worldContext)
@@ -314,6 +317,7 @@ namespace DragonWilds::ActorHelper {
             throw std::runtime_error(std::format("Function '{}' was unavailable", RC::to_string(FunctionPath)));
         }
 
+        ReflectedContract::Frame(m_function);
         m_params.assign(m_function->GetParmsSize(), 0);
     }
 
@@ -322,6 +326,7 @@ namespace DragonWilds::ActorHelper {
     {
         if (!m_self || !m_function)
             throw std::runtime_error("Tried to call a null object or function");
+        ReflectedContract::Frame(m_function);
         const auto size = static_cast<size_t>(m_function->GetParmsSize());
         if (size > 65535)
             throw std::runtime_error("Function parameter buffer is outside the supported range");
@@ -340,7 +345,8 @@ namespace DragonWilds::ActorHelper {
     void FunctionCall::Write(const CharType* Name, const void* Data, size_t Size)
     {
         auto* property = m_function->FindProperty(FName(Name, FNAME_Find));
-        if (!property || property->GetOffset_Internal() < 0
+        if (!ReflectedContract::Fits(property,m_function->GetParmsSize()) || !property->HasAnyPropertyFlags(CPF_Parm)
+            || property->HasAnyPropertyFlags(CPF_ReturnParm) || Size!=static_cast<size_t>(property->GetSize())
             || static_cast<size_t>(property->GetOffset_Internal()) + Size > m_params.size())
         {
             throw std::runtime_error(std::format("Parameter '{}' did not match the live function layout",
@@ -374,10 +380,7 @@ namespace DragonWilds::ActorHelper {
     FunctionCall& FunctionCall::JsonArg(const CharType* Name, const nlohmann::json& Value)
     {
         auto* property = m_function->FindProperty(FName(Name, FNAME_Find));
-        if (!property || property == m_function->GetReturnProperty()
-            || property->GetOffset_Internal() < 0
-            || static_cast<size_t>(property->GetOffset_Internal())
-                + static_cast<size_t>(property->GetElementSize()) > m_params.size())
+        if (!ReflectedContract::Input(property,m_function))
         {
             throw std::runtime_error(std::format("Parameter '{}' did not match the live function layout",
                 RC::to_string(StringType(Name))));
@@ -395,10 +398,8 @@ namespace DragonWilds::ActorHelper {
         auto* destination = CastField<FArrayProperty>(
             m_function->FindProperty(FName(Name, FNAME_Find)));
         auto* source = CastField<FArrayProperty>(SourceProperty);
-        if (!destination || !source || !SourceValue
-            || destination->GetOffset_Internal() < 0
-            || static_cast<size_t>(destination->GetOffset_Internal())
-                + static_cast<size_t>(destination->GetElementSize()) > m_params.size()
+        if (!ReflectedContract::Input(destination,m_function) || !source || !SourceValue
+            || source->GetArrayDim()!=1 || !destination->GetInner() || !source->GetInner()
             || destination->GetInner()->GetClass() != source->GetInner()->GetClass()
             || destination->GetInner()->GetElementSize() != source->GetInner()->GetElementSize())
         {
@@ -426,6 +427,7 @@ namespace DragonWilds::ActorHelper {
         for (auto* property = m_function->GetPropertyLink(); property;
              property = property->GetPropertyLinkNext())
         {
+            if (!ReflectedContract::Input(property,m_function)) continue;
             if (auto* enumProperty = CastField<FEnumProperty>(property);
                 enumProperty && property != m_function->GetReturnProperty())
             {
@@ -458,7 +460,7 @@ namespace DragonWilds::ActorHelper {
     void FunctionCall::ReadReturn(void* Out, size_t Size)
     {
         auto* returnProperty = m_function->GetReturnProperty();
-        if (!returnProperty || returnProperty->GetOffset_Internal() < 0
+        if (!ReflectedContract::Output(returnProperty,m_function) || Size!=static_cast<size_t>(returnProperty->GetSize())
             || static_cast<size_t>(returnProperty->GetOffset_Internal()) + Size > m_params.size())
         {
             throw std::runtime_error("Function return value did not match the live layout");
@@ -478,7 +480,8 @@ namespace DragonWilds::ActorHelper {
     double FunctionCall::NumericResult()
     {
         auto* property = CastField<FNumericProperty>(m_function->GetReturnProperty());
-        if (!property) throw std::runtime_error("Function has no numeric return value");
+        if (!ReflectedContract::Output(property,m_function))
+            throw std::runtime_error("Function has no valid numeric return value");
         auto* address = property->ContainerPtrToValuePtr<void>(m_params.data());
         if (property->IsFloatingPoint()) return property->GetFloatingPointPropertyValue(address);
         if (property->IsInteger())

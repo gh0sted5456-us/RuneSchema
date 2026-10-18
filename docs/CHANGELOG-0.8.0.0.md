@@ -1,0 +1,164 @@
+# RuneSchema and RSMK 0.8.0.0 changelog
+
+Implemented changes consolidated from October 13–16, 2026. Each entry is one line. [Download](CURRENT-RELEASE.md) · [Verification and release notes](RELEASE-0.8.0.0.md).
+
+- Updated RuneSchema and RSMK to version 0.8.0.0.
+- Integrated the revamped Helpy desktop workspace and RuneSchema Modding Kit branding.
+- Restored a movable desktop window with F2 hide/reopen behavior.
+- Added responsive layouts, adjustable Item Bay dimensions and configurable card sizing.
+- Added a detachable Item Bay with shared selection, cross-window drag/drop and Dock back controls.
+- Preserved hover descriptions, statistics, right-click actions and selected-item details in docked and detached views.
+- Corrected native power-level and masterwork badge presentation in item cards and details.
+- Made the RuneSchema logo's R follow the selected accent color while retaining its brackets.
+- Added Steam, Epic, Game Pass and dedicated-server environment branding.
+- Moved runtime/build information into Info and attribution/licensing into Credits and Legal.
+- Added UE4SS build identification and API-contract compatibility checks without a fixed future build-number ceiling.
+- Added GitHub update checks and release-information links.
+- Added alphabetical item ordering before pagination.
+- Retained bounded catalogue/query indexes to avoid rebuilding searches unnecessarily.
+- Fixed expired-catalogue recovery and separated Basic and Detail source indexes.
+- Added category/source filters and RuneSchema badges for modded item placards.
+- Retained source-mod identification in hover and selected-item details.
+- Added View family filtering for related equipment and appearance variants.
+- Combined loaded objects, mounted metadata, cooked declarations and schema definitions for item/recipe discovery.
+- Added typed metadata discovery for equipment and recipe subclasses, including non-ITEM_ asset names.
+- Prevented incomplete or failed mounted discovery from becoming a permanently empty catalogue.
+- Added readable server-side item labels when localized names or textures are unavailable.
+- Added source-aware, cache-first icon storage in AppData.
+- Added source fingerprints and independent invalidation for changed or missing content sources.
+- Moved source comparisons off the game thread.
+- Expanded registered item/building icon discovery beyond conventional UI/Icons folders.
+- Added registered-icon cache building from the main menu with bounded capture, progress counters and cancellation.
+- Added source-filtered .rsmk-icons import/export and native file-drop support.
+- Added a combined Build & export registered icon pack action.
+- Added Clean Icon Cache and Open cache folder controls with confined-path checks.
+- Added display-only imported thumbnails for dedicated-server definitions whose native textures are unavailable.
+- Preserved confirmed clone appearance/icon metadata through cards, cart rows, drag payloads and caches.
+- Kept normal icon capture demand-driven instead of rendering every registered asset at startup.
+- Added shared-cart item drag/drop and right-click actions with authoritative delivery confirmation.
+- Added up to sixteen recipients per cart with serialized, per-player delivery.
+- Added individual recipient removal and Clear recipients without changing cart quantities.
+- Removed phantom recipients on world changes and pruned disconnected players by identity.
+- Rejected stale roster/delivery replies and stopped ambiguous deliveries without automatic replay.
+- Added kit/loadout import/export and local kit-library workflows.
+- Organized item authoring into Transmog & Creation with source, customization and result cards.
+- Added appearance/icon drop targets and permanent-clone export without modifying the original item.
+- Added recipe authoring with ingredient, station, timing, category and output controls.
+- Added native crafting/processing station labels, icons, exact recipe membership and station filtering.
+- Moved advanced authoring into the dedicated Authoring Tools tab.
+- Included schema drafts, captures, traces, profiles, diagnostics, presets, NPC import and effects workflows.
+- Kept offline authoring cleanup separate from normal gameplay actions.
+- Added a widescreen, aspect-correct map with cursor-anchored zoom up to 32×, panning and Fit world.
+- Added correlated ground-Z lookups for map hover and selection.
+- Added map travel through native teleport/loading-screen handling and destination streaming preparation.
+- Added travel-phase/elapsed feedback and pre-departure cancellation.
+- Reduced repeated-travel selection work by skipping unrelated placement lookups.
+- Added a categorized building browser with native labels/icons and bounded metadata paging.
+- Removed the requirement for a matching building to already exist before first placement.
+- Added building-default/root validation, deferred binding, native collision checks and placement readback.
+- Distinguished confirmed placement, saved-but-inactive placement and failure.
+- Kept temporary building placement transient and excluded from saves.
+- Added read-only native-role badges to supported player-roster and map presentation.
+- Added Helpy desktop startup for dedicated servers running in interactive Windows sessions.
+- Enabled dedicated-server item/building/AI/NPC/resource metadata browsing without requiring a local player.
+- Added server-startup catalogue retries and explicit completion/errors for unavailable read requests.
+- Added a server-local Dedicated Server workspace with masked secrets and redacted native records.
+- Added staging for five documented scalar DedicatedServer.ini settings without editing the live server file.
+- Added a stopped-server apply helper with conflict checks, backup and atomic replacement.
+- Preserved repeated keys, unknown settings, comments, encoding and native shutdown bookkeeping during server edits.
+- Switched shipped RuneSchema configuration to settings.ini while retaining legacy settings.jsonc support.
+- Added two-launch JSONC migration with translation/readback first and guarded backup/retirement on a later launch.
+- Preserved conflicting configuration edits, unknown settings and recovery files.
+- Added editable RuneSchema settings in Helpy.
+- Hardened mod enable/disable state and load-order reconciliation.
+- Added complete nested Lua packages under mods/<Owner>/ue4ss/<Package>/ with scripts/configuration retained in place.
+- Added package-local context, callback context, collision checks and duplicate-start prevention.
+- Rejected stale package manifests and preserved parent-mod enablement.
+- Retained the legacy direct Lua companion layout with restart-based lifecycle handling.
+- Retired custom UE4SS-host and native nested-addon loading experiments.
+- Preserved the stock UE4SS.dll boundary for client and server installations.
+- Extended cooked PAK registry declarations to recipes, journals and lore.
+- Added conventional-root registry shards with explicit child-asset paths.
+- Added atomic declaration publication, ownership/path validation and loose-schema override precedence.
+- Raised the cooked declaration document limit from 256 to 512 KiB while retaining aggregate/reference budgets.
+- Extended schema registry declarations to eleven native lanes with explicit provenance checks.
+- Fixed network-identity counting so existing registrations do not reserve new slots twice.
+- Retained the native 65,535-entry capacity with clearer genuine-overflow diagnostics.
+- Removed unrelated 32,768-entry item/recipe discovery limits.
+- Recooked the shared networking identity component with replicated IdentityPayload and RepNotify handling.
+- Pinned verified networking container hashes during packaging.
+- Deferred cleanup certification when required registry enrollment fails.
+- Added recipe-path overrides for automatic unlocks or supported native discovery conditions.
+- Added pickup-history, actor-interaction and skill-level discovery conditions with native AND/OR groups.
+- Preserved native recipe progression and already learned recipes.
+- Limited progression overrides to the selected recipe rather than detaching unrelated progression content.
+- Added discovery staging, native readback and rollback for rejected transactions.
+- Indexed canonical PersistenceID lookups and cached empty/failed lookups without accepting ambiguity.
+- Batched crafting/processing verification with ordered snapshots and stale-storage detection.
+- Added phase/call counters for native recipe loading, discovery and station placement.
+- Expanded journal/lore authoring across native entry types and supported categories.
+- Added validated pickup, recipe, interaction and AI-kill journal discovery conditions.
+- Added NPC JournalEntries discovery alongside normal dialogue and shops.
+- Corrected journal hierarchy/detail keys and preserved earned/unread state.
+- Separated journal registration/category placement from confirmed player unlock delivery.
+- Allowed independently verified journal/lore unlock delivery while unrelated cleanup remains deferred.
+- Coalesced repeated identical unlock failures from combat/inventory callbacks.
+- Expanded quest categories, completed descriptions, completed-list visibility and objective hints.
+- Resolved quest regions through the live native enum instead of a fixed RuneSchema name list.
+- Added guarded migration for quest presentation changes without replaying rewards.
+- Added stage Completion: Any with shared completion/reward receipts.
+- Added deterministic alternative kill/hand-in resolution and consumption of only the winning route.
+- Preserved repeat cooldowns, counters and pending-exchange safeguards against duplicate rewards/costs.
+- Added craftable quest-scroll contracts and the shared RuneSchema.QuestItems helper plugin.
+- Added native scroll-use signature, authority, inventory-slot and item-identity validation.
+- Corrected scroll rejection when the native nonreplicated identity cache is not yet populated.
+- Extended authoritative summon/helper kill attribution and quest kill-credit integration.
+- Added EventOnly AI additional-drop contracts with verified loot-row binding and non-kill restoration.
+- Preserved completed quest/event receipts during eligible definition migration.
+- Unified $, $+offset and $-offset grounding across supported spawn, NPC, vendor and event paths.
+- Made bare $ prefer landscape below roofs/bridges and added GroundReferenceZ for selected upper surfaces.
+- Rejected wall/underside hits and initial overlaps, with bounded reference-floor selection.
+- Corrected trace endpoints and reflected World Partition cell-box/boundary decoding.
+- Kept spawn placement queued while streamed collision is unavailable.
+- Added nearby-safe placement search and collision-aware landing/footprint checks.
+- Added deferred actor identity/lifetime checks and bounded eligible retries.
+- Added scaled event-wave footprint preflight and final-scale construction checks.
+- Preserved numeric-Z placement and post-construction position/collision validation.
+- Added idempotent resource-scale restoration across re-entry.
+- Restricted transient actor retirement to proven RuneSchema ownership.
+- Added Human NPC wearable-slot validation, Necklace/Trinket2 handling and EquipmentWhen rules.
+- Added explicit WorldEverCompleted equipment latches tied to world-save identity.
+- Added $WearableBridge directives for validated cooked or schema-created wearables.
+- Enrolled schema-created wearables after successful native identity registration.
+- Replaced repeated wearable membership scans with weak-validated indexed lookup.
+- Added conflicting quest-owner diagnostics and guarded stale ownership-marker migration.
+- Restricted persistence cleanup to proven unresolved/orphaned identities.
+- Preserved active learned recipes, earned journal progress and unrelated vanilla content during cleanup.
+- Hardened Steam/Game Pass save-provider boundaries and unsupported-format rejection.
+- Added an opt-in, off-by-default corrupt-character entry bypass with native-binding validation and diagnostics.
+- Added carry-weight native readback and conflicting-rule diagnostics.
+- Added weak-object/world-generation checks for deferred work, cached references and streamed actors.
+- Hardened startup readiness, bounded recovery, worker teardown and shutdown handling.
+- Reduced reliance on executable-specific signatures through validated reflected contracts where supported.
+- Added frame-budgeted NPC creation and bounded catalogue/metadata work slices.
+- Added RuneSchema.log alongside consolidated UE4SS logging.
+- Routed verbose/advanced detail into RuneSchema.log while retaining genuine failures in normal output.
+- Fixed normal-log mirroring so forwarded arguments retain phase names and source information.
+- Reduced routine PAK, wearable, placement and unlock spam in favor of bounded source/count summaries.
+- Added rate-limited slow-work attribution and per-NPC construction timing diagnostics.
+- Hardened native notification text validation and delivery-result reporting.
+- Added Live Log with bounded background tailing, rotation/truncation handling and partial-line retention.
+- Added Live Log severity/source filters, case-insensitive search, pause/follow, entry details and clipboard copy.
+- Added local filtered log export without overwriting the active runtime log.
+- Added eight clickable diagnostic help codes without uploading log/player/path data.
+- Cleaned the release ZIP while retaining DLLs, mapping, Lua runtime, plugins/assets and default settings.
+- Consolidated legal notices while preserving plugin-specific and previously bundled dependency notices.
+- Added retained-runtime hash verification during package cleanup.
+- Compressed both RuneSchema and RSMK DLLs and verified package integrity/lifecycle behavior.
+- Updated release metadata and tag validation for 0.8.0.0 while retaining legacy version compatibility.
+- Prevented CI rebuilds from overwriting an existing verified release asset.
+- Matched the website to Helpy's dark/gold styling with an optional light theme.
+- Rewrote the framework overview, package/function reference and getting-started guidance.
+- Added searchable diagnostic help pages and dedicated-server settings/privilege documentation.
+- Simplified site navigation and added responsive audience hubs and quick-guide filtering.
+- Updated loader schemas, examples, platform guidance and safe update/removal instructions.

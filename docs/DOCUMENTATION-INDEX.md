@@ -10,7 +10,7 @@ loader reference only when you need exact folder fields.
 3. [Install or update](INSTALLATION.md)
 4. [Manage enabled mods and their order](users/manage-mods.md)
 5. [Safe removal and character saves](SAFE-SAVE-AND-LEDGER.md)
-6. [Steam, GOG, Game Pass, and co-op](COMPATIBILITY.md)
+6. [Steam, Epic, Game Pass, and co-op](COMPATIBILITY.md)
 7. [Troubleshooting](TROUBLESHOOTING.md)
 
 ## Modders: create content

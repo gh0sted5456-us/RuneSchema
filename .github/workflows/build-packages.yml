@@ -21,7 +21,7 @@ jobs:
         shell: cmd
         env:
           UEPSEUDO_READ_TOKEN: ${{ secrets.UEPSEUDO_READ_TOKEN }}
-        run: call "Build RuneSchema.bat"
+        run: call "Build RuneSchema.bat" -Tests
 
       - name: Upload RuneSchema artifact
         uses: actions/upload-artifact@v4
@@ -37,7 +37,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "${{ github.ref_name }}"
-          $tagMatch = [regex]::Match($tag, '^v?(\d+\.\d+\.\d+\.\d+[em])$')
+          $tagMatch = [regex]::Match($tag, '^v?(\d+\.\d+\.\d+(?:\.\d+(?:[em]|-alpha(?:\.\d+)?)?)?)$')
           if (-not $tagMatch.Success) {
             throw "Unsupported RuneSchema release tag: $tag"
           }
@@ -49,10 +49,25 @@ jobs:
           }
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --title "RuneSchema $tag" --generate-notes
+            if ($releaseVersion -match '-alpha(?:\.\d+)?$') {
+              gh release create $tag --title "RuneSchema $tag" --generate-notes --prerelease --latest=false
+            } else {
+              gh release create $tag --title "RuneSchema $tag" --generate-notes
+            }
           }
           $package = Join-Path dist "RuneSchema-$releaseVersion.zip"
           if (-not (Test-Path -LiteralPath $package -PathType Leaf)) {
             throw "RuneSchema release package not found: $package"
           }
-          gh release upload $tag $package --clobber
+          # Never replace a separately verified release asset with a CI rebuild.
+          # Native compiler timestamps and refreshed mappings can differ even
+          # when source is identical. Existing published assets are immutable.
+          $assetName = [IO.Path]::GetFileName($package)
+          $release = gh release view $tag --json assets | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Could not inspect release assets.' }
+          if (@($release.assets | Where-Object name -eq $assetName).Count -gt 0) {
+            Write-Host "Keeping existing verified release asset: $assetName"
+          } else {
+            gh release upload $tag $package
+            if ($LASTEXITCODE -ne 0) { throw 'Release asset upload failed.' }
+          }

@@ -36,8 +36,8 @@ int main(int argc, char** argv) {
     Require(config.find("bool quests = true;") != std::string::npos,
         "Quest persistence must default on");
     Require(journal.find("if (!m_ownedIds.empty())") != std::string::npos,
-        "Journal native adapter is not installed for transient unlock filtering");
-    Require(journal.find("if (!m_nativePersistenceReady)") != std::string::npos,
+        "Journal native adapter is not installed for ownership and orphan protection");
+    Require(journal.find("m_createdEntries.contains(entry) && !m_nativePersistenceReady") != std::string::npos,
         "Journal temporary unlock delivery is not guarded by the save adapter");
     Require(journal.find("RegisterHooks();") != std::string::npos,
         "Journal loader lifecycle was disabled with persistence");
@@ -45,20 +45,22 @@ int main(int argc, char** argv) {
         "Journal item-acquisition unlock validation is missing");
     Require(journal.find("/Script/Dominion.InventoryComponent:GetNumItemsByData") != std::string::npos,
         "Journal acquisition does not use the native inventory count contract");
-    Require(journal.find("|| !m_nativePersistenceReady)return;") != std::string::npos,
-        "Journal acquisition is not guarded when transient filtering is unavailable");
+    Require(journal.find("!m_createdEntries.contains(object) || m_nativePersistenceReady") != std::string::npos,
+        "Journal acquisition must guard generated entries without blocking cooked entries");
     Require(recipes.find("TEXT(\"RecipesUnlocked\"), TEXT(\"RecipesUnlockedThatShouldNotPersist\")") != std::string::npos,
         "Runtime recipes must enter the native visible unlock set");
     Require(recipes.find("TEXT(\"RecipesUnlockedThatShouldNotPersist\")") != std::string::npos
-        && recipes.find("Publish each automatic recipe into the visible set and the native") != std::string::npos,
-        "Automatic recipe unlocks can still leak transient mod IDs into character saves");
+        && recipes.find("RecipeUnlockPolicy::LearnOnce") != std::string::npos
+        && recipes.find("if(visible.contains(recipe)&&!excluded.contains(recipe))continue;")!=std::string::npos
+        && recipes.find("if(plan.RemoveExclusion)transient.Remove(&recipe);")!=std::string::npos,
+        "Authored recipe unlocks do not persist once per character or fail to migrate legacy exclusions");
     Require(recipes.find("SaveCleanup::ReadRegistry()") == std::string::npos,
         "Recipe unlock delivery must not be gated by a lagging Safe Clean registry snapshot");
     Require(recipes.find("GetSettings().persistence.recipes") == std::string::npos,
         "Recipe persistence must not be configurable");
     Require(recipes.find("if (m_hooksActive || m_recipes.empty())") != std::string::npos,
         "Recipe-unlocker consumables are not observed when automatic unlock is disabled");
-    Require(recipes.find("Explicit game progression remains free to learn persistent recipes") != std::string::npos,
+    Require(recipes.find("Native character progress restores learned IDs on later sessions") != std::string::npos,
         "Recipe persistence policy comment is missing");
     Require(quests.find("GetSettings().persistence.quests") != std::string::npos,
         "Quest actions are not gated by the quest persistence setting");
@@ -68,5 +70,5 @@ int main(int argc, char** argv) {
         "Dialogue loading can still auto-create hidden Ungiven quest records");
     Require(players.find("GetSettings().persistence.characterCustomization") != std::string::npos,
         "Automatic character-customization writes are not independently gated");
-    std::cout << "Automatic journal and recipe unlocks remain transient; explicit progression may persist.\n";
+    std::cout << "Authored journal and recipe unlocks persist per character; temporary storefront offers remain transient.\n";
 }

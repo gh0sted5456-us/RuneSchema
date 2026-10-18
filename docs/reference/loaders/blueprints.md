@@ -64,7 +64,7 @@ When a rule applies to only one storefront, gate the whole block:
 ```
 
 `$Storefront` accepts `"GamePass"`/`"WinGDK"`,
-`"Steam"`/`"SteamGOG"`/`"GOG"`, `"Any"`, or an array of these values.
+`"Steam"`/`"SteamEpic"`/`"Epic"`, `"Any"`, or an array of these values.
 `$SkipMessage` is optional and emitted only when the running storefront is known.
 
 ## Simple rules

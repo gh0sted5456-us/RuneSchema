@@ -8,6 +8,9 @@ RuneSchema work began within the community and is credited to Snorkles in the
 Official repository and distribution work are published under **gh0sted5456-us**.
 The PalSchema foundation is credited separately to Okaetsu.
 
+**Abyss (RSDW Modding Community)** is credited for the initial corrupt-character
+bypass work on which RuneSchema's corrupt-save bypass was based.
+
 ## RuneSchema's code license
 
 Original software and accompanying documentation that RSDW Modding Community

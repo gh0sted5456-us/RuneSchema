@@ -39,7 +39,7 @@ void DragonWildsNpcLoader::TryAutomaticQuests(UObject* controller) {
                 for(size_t pass=0;pass<quest.Stages.size() && !staged.Complete();++pass) {
                     const auto active=staged.ActiveStage();
                     const auto plan=Quests::SelectHandIns(quest.Stages[active].second,
-                        [&](size_t i){return staged.Count(active,i);},inArea,count);
+                        [&](size_t i){return staged.Count(active,i);},inArea,count,quest.AnyStage(active));
                     const auto& amounts=plan.Amounts;
                     if(plan.Objectives.empty())return;
                     const auto exchanged=receipt.StageExchange([&]{
@@ -82,7 +82,9 @@ void DragonWildsNpcLoader::TryAutomaticQuests(UObject* controller) {
                 native.SetComplete(false);
                 auto state=RC::to_string(native.StateName());const auto colon=state.rfind("::");
                 if(colon!=state.npos)state=state.substr(colon+2);
-                return current() && state=="Complete";
+                if(!current() || state!="Complete")return false;
+                RecordQuestEquipment(controller,key);
+                return current();
             },tier);
             if(completed==QuestProgress::Result::Completed)LogQuestStage(controller,key,quest.Stages.empty()?1:quest.Stages.size()+1);
         }catch(const std::exception& error){ErrorOnce("quest-auto-completion:"+key,PS::ToWideSafe(error.what()));}

@@ -1,5 +1,6 @@
 #include "Loader/EventDefinition.h"
 #include "Loader/EventIdentity.h"
+#include "Core/SpawnFootprint.h"
 #include "Generator/SpawnAuthoring.h"
 #include "Loader/SpawnPlacementDraft.h"
 #include "Loader/SpawnAuthoringFields.h"
@@ -73,10 +74,27 @@ int main(){
     bad=data;bad["Waves"][0][0]["Location"]={1,true,3};assert(Rejects([&]{Parse("Test",bad);}));
     Json spawn={{"Id","wolf"},{"Type","AISpawnPoint"},{"EventOnly",true},{"AIClass","/Game/Wolf.Wolf_C"},{"DisplayName","Named wolf"}};
     assert(ParseSpawn("Test",spawn).Name=="Named wolf");
+    auto migrating=spawn;migrating["GroundMigrationRadius"]=600;
+    assert(ParseSpawn("Test",migrating).Migration.Radius==600);
+    migrating["GroundMigrationRadius"]=-1;assert(Rejects([&]{ParseSpawn("Test",migrating);}));
     spawn["BossName"]="Named boss";
     assert(ParseSpawn("Test",spawn).BossName=="Named boss");
     spawn["LootRow"]="RS_TestGold";
     assert(ParseSpawn("Test",spawn).LootRow=="RS_TestGold");
+    auto trophy=spawn;trophy["AdditionalDrops"]=Json::array({{{"Item","/Test/ITEM_Sigil.ITEM_Sigil"},{"Min",1},{"Max",1},{"ChancePercent",100}}});
+    const auto trophySpawn=ParseSpawn("Test",trophy);assert(trophySpawn.AdditionalDrops.size()==1);
+    ValidateIdentity(DecodeIdentity(EncodeIdentity(trophySpawn)),trophySpawn);
+    auto altered=trophySpawn;altered.AdditionalDrops[0]["Max"]=2;
+    assert(Rejects([&]{ValidateIdentity(DecodeIdentity(EncodeIdentity(trophySpawn)),altered);}));
+    auto invalidTrophy=trophy;invalidTrophy["AdditionalDrops"][0]["ChancePercent"]=101;assert(Rejects([&]{ParseSpawn("Test",invalidTrophy);}));
+    invalidTrophy=trophy;invalidTrophy["AdditionalDrops"][0]["Max"]=0;assert(Rejects([&]{ParseSpawn("Test",invalidTrophy);}));
+    const auto capsule=PS::SpawnFootprint::Scaled({40,90},2);assert(capsule.Radius==80&&capsule.HalfHeight==180);
+    int footprintSamples=0;const auto origin=PS::SpawnFootprint::OriginZ(capsule,1010,[&](double,double){++footprintSamples;return 1000.0;});
+    assert(footprintSamples==5&&origin==1190&&origin-capsule.HalfHeight==1010);
+    assert(PS::SpawnFootprint::OriginZ(capsule,1010,[](double x,double){return x>0?1020.0:1000.0;})==1210);
+    assert(Rejects([&]{PS::SpawnFootprint::Scaled({40,90},0);}));
+    assert(Rejects([&]{PS::SpawnFootprint::OriginZ(capsule,1010,[](double x,double){return x>0?1300.0:1000.0;});}));
+    assert(Rejects([&]{PS::SpawnFootprint::OriginZ(capsule,1010,[](double x,double){if(x<0)throw std::runtime_error("No ground");return 1000.0;});}));
     for(const auto& invalid:{Json(""),Json(12),Json("bad\nrow"),Json(std::string(257,'x'))}) {
         auto badLoot=spawn;badLoot["LootRow"]=invalid;assert(Rejects([&]{ParseSpawn("Test",badLoot);}));
     }
@@ -99,6 +117,7 @@ int main(){
     assert(authored["Location"]["X"]==100 && authored["Rotation"]["Yaw"]==90);
     auto staged=PS::SpawnAuthoring::StageGroundDraft(authored,312.5,12.5);
     assert(staged["Location"]["Z"]=="$+12.5" && staged["$z"]==312.5);
+    assert(staged["GroundReferenceZ"]==312.5);
     auto resolved=PS::SpawnAuthoring::ResolveGroundDrafts(Json::array({staged}));
     assert(resolved[0]["Location"]["Z"]==312.5 && !resolved[0].contains("$z"));
     const auto resourceExport=PS::SpawnAuthoring::Placement({{"Type","Actor"},{"Class","/Game/Rock.Rock_C"},{"UseNativeRespawn",true}},"rock_1",{1,2,3},0);

@@ -44,10 +44,13 @@ namespace DragonWilds {
         inline static DragonWildsAssetModLoader* AuthoringInstance=nullptr;
         nlohmann::json InspectToolClone(const std::string& sourcePath,bool requireCloneEligibility=true);
         nlohmann::json ExportToolRecipe(const nlohmann::json& request);
+        nlohmann::json RecipeWorkspaceSnapshot(const nlohmann::json& request);
         nlohmann::json ExportToolOverrides(const nlohmann::json& request);
         nlohmann::json CreateToolClone(const nlohmann::json& request, RC::Unreal::UWorld* world);
         DragonWildsAssetModLoader();
         void SetRecipeService(DragonWildsRecipeModLoader* service) { m_recipeService=service; }
+        std::vector<RC::StringType> CookedReferencePaths();
+        RC::Unreal::UObject* EnsureQuestCancellationScroll(const std::string& path,const nlohmann::json& properties);
 
         ~DragonWildsAssetModLoader();
     protected:
@@ -82,6 +85,7 @@ namespace DragonWilds {
         void ApplyObjectPatches(bool characterMenuReplay = false);
         void RegisterCharacterMenuPatchReplay();
         void Apply(RC::Unreal::UObject* object, const PendingAsset& pendingAsset, LoadResult& outResult);
+        bool ApplyModuleImports(RC::Unreal::UObject* object, const PendingAsset& pendingAsset, LoadResult& outResult);
         void ApplyDominionSpheres(RC::Unreal::UObject* owner,
             const nlohmann::json& definitions, LoadResult& outResult);
         void AppendProperties(RC::Unreal::UObject* object, RC::Unreal::UClass* objectClass, const nlohmann::json& appendData, LoadResult& outResult);

@@ -94,7 +94,7 @@ bool Install(const TCHAR*& failure) {
     const auto lane = PS::Storefront::CurrentNativeLane();
     if (lane != PS::Storefront::NativeLane::SteamNative
         && lane != PS::Storefront::NativeLane::GamePassNative) {
-        failure = TEXT("Surge/Dash native contract requires a verified Steam/GOG or Game Pass lane");
+        failure = TEXT("Surge/Dash native contract requires a verified Steam/Epic or Game Pass lane");
         return false;
     }
     failure = TEXT("unsupported executable build");

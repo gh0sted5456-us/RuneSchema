@@ -9,6 +9,16 @@
 namespace PS::JournalPlacement {
 struct Group { std::string Id, DisplayName; bool CreateIfMissing=false; };
 struct Placement { std::string SubCategory, Key; std::optional<Group> TargetGroup; };
+inline Placement WithNativeGroupKey(Placement placement,const std::string& objectName) {
+    // Group rows are authored as soft entry references, with no independent
+    // row key. Native grouping derives their keys from the asset's FName.
+    // Keep that same key in Data, DataByGroup and the hierarchy reverse index.
+    if(placement.TargetGroup) {
+        if(objectName.empty()||objectName=="None")throw std::runtime_error("Grouped journal entry has no native object name");
+        placement.Key=objectName;
+    }
+    return placement;
+}
 inline std::string RequiredString(const nlohmann::json& object,const char* field) {
     if(!object.contains(field) || !object.at(field).is_string())
         throw std::runtime_error(std::string("Journal placement requires string ")+field);

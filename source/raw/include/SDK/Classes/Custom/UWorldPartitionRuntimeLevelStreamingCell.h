@@ -2,25 +2,28 @@
 
 #include "Unreal/UObject.hpp"
 #include "SDK/Structs/FBox.h"
+#include <functional>
+#include <cstddef>
+#include <optional>
+
+namespace RC::Unreal {class UWorld;}
 
 namespace UECustom {
     class UWorldPartitionRuntimeCellData : public RC::Unreal::UObject {
     public:
-        static constexpr int32_t ContentBoundsOffset = 0x60;
-
-        FBox& GetContentBounds();
+        std::optional<FBox> GetContentBounds();
     };
 
     class UWorldPartitionRuntimeLevelStreamingCell : public RC::Unreal::UObject {
     public:
-        static constexpr int32_t IsHLODOffset = 0x59;
-        static constexpr int32_t RuntimeCellDataOffset = 0xA8;
-
-        bool& GetIsHLOD();
+        bool GetIsHLOD();
+        bool IsShown();
+        static void VisitShown(RC::Unreal::UWorld* world,size_t& cursor,double& delay,
+            float deltaSeconds,const std::function<void(RC::Unreal::UObject*)>& visit);
 
         UWorldPartitionRuntimeCellData* GetRuntimeCellData();
 
 
-        FBox* GetContentBounds();
+        std::optional<FBox> GetContentBounds();
     };
 }

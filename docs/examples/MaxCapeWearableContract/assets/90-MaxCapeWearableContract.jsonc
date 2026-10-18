@@ -1,0 +1,10 @@
+// Add to the EXISTING MaxCape/assets folder alongside 10-MaxCape.json.
+// This patches its existing clone; it does NOT create a second item or ID.
+// The authored path is resolved through RuneSchema's registered clone alias.
+{
+  "/Game/Mods/MaxCape/Items/ITEM_MaxCape.ITEM_MaxCape": {
+    "$WearableBridge": true,
+    "MaleMeshData": "/UmbralSands/Gameplay/Character/Player/Equipment/Cape/ITEM_Cape_Fire_MeshData_Male.ITEM_Cape_Fire_MeshData_Male",
+    "FemaleMeshData": "/UmbralSands/Gameplay/Character/Player/Equipment/Cape/ITEM_Cape_Fire_MeshData_Female.ITEM_Cape_Fire_MeshData_Female"
+  }
+}

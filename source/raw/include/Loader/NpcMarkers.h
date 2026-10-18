@@ -36,6 +36,20 @@ inline void Validate(const nlohmann::json& data) {
         }
     }
 }
+inline nlohmann::json FromDefinition(const nlohmann::json& data) {
+    Validate(data);auto markers=nlohmann::json::object();
+    const auto quest=data.find("QuestID");
+    const bool questNpc=quest!=data.end()&&quest->is_string()&&!quest->get_ref<const std::string&>().empty();
+    for(const auto* group:{"Map","OverheadIcon"}) {
+        if(data.contains(group))markers[group]=data.at(group);
+        else if(questNpc)markers[group]={{"Enabled",true}};
+        // Explicit off/custom values always win. These are NPC location markers,
+        // not a fabricated native quest-completion/availability state.
+        if(markers.contains(group)&&markers[group].value("Enabled",false)&&!markers[group].contains("Icon"))
+            markers[group]["Icon"]=DefaultIcon;
+    }
+    return markers;
+}
 inline std::string MapLabel(const nlohmann::json& options,const std::string& displayName) {
     return options.value("ShowName",true)?displayName:std::string{};
 }

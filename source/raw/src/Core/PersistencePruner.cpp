@@ -15,6 +15,7 @@
 #include "SDK/Classes/KismetSystemLibrary.h"
 #include "SDK/Classes/TSoftObjectPtr.h"
 #include "SDK/Structs/FSoftObjectPath.h"
+#include "SDK/Helper/ReflectedContract.h"
 #include "Utility/Logging.h"
 #include "Utility/Config.h"
 #include "Runtime/HostServices.h"
@@ -108,22 +109,29 @@ void PersistencePruner::PruneBeforeCharacterLoad(
             && s_cleanupConsumedForProcess.load(std::memory_order_acquire))
         || !context || !function || !parameters) return;
 
+    // Optional cleanup must not inspect/copy a character payload while its
+    // authority is unavailable. Leave the original native event untouched.
+    const auto registry = SaveCleanup::ReadRegistry();
+    if (!registry || !registry->Ready()) return;
+
     try {
+        DragonWilds::ReflectedContract::Frame(function);
         FStrProperty* jsonProperty = nullptr;
         void* jsonAddress = nullptr;
         for (auto* field : TFieldRange<FProperty>(
-            function, EFieldIterationFlags::Default)) {
-            if (!field->HasAnyPropertyFlags(CPF_Parm)
-                || field->HasAnyPropertyFlags(CPF_ReturnParm | CPF_OutParm)
-                || field->GetArrayDim() != 1 || field->GetOffset_Internal() < 0
-                || field->GetOffset_Internal() + field->GetElementSize()
-                    > function->GetParmsSize()) continue;
+            function, EFieldIterationFlags::IncludeDeprecated)) {
+            // A FString passed by const/reference is still an input. Only
+            // genuine output-only fields are excluded, not reference inputs.
+            if (!DragonWilds::ReflectedContract::Input(field,function)) continue;
             auto* stringField = CastField<FStrProperty>(field);
-            if (!stringField) continue;
+            if (!stringField || stringField->GetElementSize()!=sizeof(FString)) continue;
             auto* address = stringField->ContainerPtrToValuePtr<void>(parameters);
             const auto value = stringField->GetPropertyValue(address);
-            if (value.GetCharArray().Num() <= 1) continue;
-            const auto utf8 = RC::to_string(RC::StringType(*value));
+            const auto& chars=value.GetCharArray();
+            if(chars.Num()<=1)continue;
+            if(chars.Num()>32*1024*1024||!chars.GetData()||chars.GetData()[chars.Num()-1]!=0)
+                throw std::runtime_error("character JSON string bounds invalid");
+            const auto utf8 = RC::to_string(RC::StringType(chars.GetData(),chars.Num()-1));
             if (utf8.find("\"GameProgress\"") == std::string::npos) continue;
             auto parsed = nlohmann::json::parse(utf8, nullptr, true, true);
             if (SaveCleanup::ClassifyCharacterDocument(parsed)
@@ -151,6 +159,16 @@ void PersistencePruner::PruneCharacterJson(FString& characterJson)
             && s_cleanupConsumedForProcess.load(std::memory_order_acquire))
         || characterJson.GetCharArray().Num() <= 1) return;
 
+    const auto registry = SaveCleanup::ReadRegistry();
+    if (!registry || !registry->Ready()) {
+        if (!m_cleanupDeferredReported) {
+            m_cleanupDeferredReported = true;
+            Log<LogLevel::Warning>(STR(
+                "[PERSISTENCE-PRUNER][DEFERRED] Cleanup skipped: complete applicable live registries are unavailable. Non-blocking: native character loading continues; no persistence ID or character field was changed.\n"));
+        }
+        return;
+    }
+
     try {
         const auto utf8 = RC::to_string(RC::StringType(*characterJson));
         if (utf8.find("\"GameProgress\"") == std::string::npos) return;
@@ -162,16 +180,6 @@ void PersistencePruner::PruneCharacterJson(FString& characterJson)
             ? source.at("meta_data").value("char_guid", std::string{})
             : std::string{};
         if (characterId.empty()) return;
-
-        const auto registry = SaveCleanup::ReadRegistry();
-        if (!registry || !registry->Ready()) {
-            if (!m_cleanupDeferredReported) {
-                m_cleanupDeferredReported = true;
-                Log<LogLevel::Warning>(STR(
-                    "[PERSISTENCE-PRUNER][DEFERRED] Waiting for complete applicable live registries. No persistence ID or character field was changed.\n"));
-            }
-            return;
-        }
 
         ReportValidatedSavedItems(source, *registry);
         // A client performs one automatic cleanup per game execution. A
@@ -269,7 +277,7 @@ void PersistencePruner::PruneCharacterJson(FString& characterJson)
             if (!summary.empty()) summary += ", ";
             summary += kind + "=" + std::to_string(count);
         }
-        RC::Output::send<RC::LogLevel::Normal>(STR(
+        PS::ConsolidatedLog<RC::LogLevel::Normal>(STR(
             "[RuneSchema] [summary] Save cleanup | missing character IDs removed={} ({}) | appearance repaired={} | baseline entries restored={} | valid data kept.\n"),
             orphanCount, ToWideSafe(summary.c_str()), appearanceCount, restored.size());
     } catch (const std::exception& error) {

@@ -20,7 +20,7 @@ bool ToolResourceClass(UClass* type,UClass* actorType,UClass* aiType) {
     for(auto* property:TFieldRange<FProperty>(type,EFieldIterationFlags::Default)) {
         if(auto* component=CastField<FObjectProperty>(property)) {
             auto* componentType=component->GetPropertyClass().Get();if(!componentType)continue;
-            const auto n=PS::QuickUI::Lower(RC::to_string(componentType->GetName()));
+            const auto n=PS::QuickCatalogRules::Lower(RC::to_string(componentType->GetName()));
             for(const auto* token:{"resourcecomponent","harvestcomponent","harvestablecomponent","miningcomponent","fishingcomponent","gatherablecomponent"})
                 if(n.find(token)!=n.npos)return true;
         }
@@ -29,7 +29,7 @@ bool ToolResourceClass(UClass* type,UClass* actorType,UClass* aiType) {
     if(PropertyHelper::GetPropertyByName(type,TEXT("BuildingPieceDataIndex")))return false;
     size_t depth=0;
     for(UStruct* base=type;base&&depth++<64;base=base->GetSuperStruct()) {
-        const auto name=PS::QuickUI::Lower(RC::to_string(base->GetName()));
+        const auto name=PS::QuickCatalogRules::Lower(RC::to_string(base->GetName()));
         if(PS::QuickCatalogRules::MiningName(name)||PS::QuickCatalogRules::ResourceAncestry(name))return true;
     }
     return false;
@@ -39,6 +39,7 @@ nlohmann::json ToolDefinitionRow(UClass* type,const std::string& key,bool ai,con
     nlohmann::json row={{"Key",key},{"Name",ToolReadableName(path)},{"Class",path},{"Type",kind.empty()?(ai?"AI":"Resource"):kind},
         {"Available",concrete},{"Loaded",true},{"Reason",concrete?"":"Abstract base definition; not spawnable"}};
     row["Packaged"]=PS::CookedAssets::VerifiedLoadedObject(type);
+    if(ai){auto* native=ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionAICharacter"));row["SpawnableCharacter"]=native&&type->IsChildOf(native)&&concrete;}
     const auto declared=PS::AssetMetadata::Lookup(type);
     row["RuneSchemaManaged"]=PS::AssetMetadata::IsManaged(type);row["DeclaredModded"]=declared.modded.value_or(false);row["DeclaredCooked"]=declared.cooked.value_or(false);
     if(kind=="NPC") {
@@ -49,7 +50,7 @@ nlohmann::json ToolDefinitionRow(UClass* type,const std::string& key,bool ai,con
         std::string family;
         std::size_t depth=0;
         for(UStruct* base=type;base&&depth++<64;base=base->GetSuperStruct()) {
-            const auto name=PS::QuickUI::Lower(RC::to_string(base->GetName()));
+            const auto name=PS::QuickCatalogRules::Lower(RC::to_string(base->GetName()));
             if(name.find("fellabletree")!=name.npos||name.find("felledtree")!=name.npos||name.find("splittablelog")!=name.npos||name.find("sapling")!=name.npos){family="Tree";break;}
             if(PS::QuickCatalogRules::MiningName(name))family="Mineral";
         }
@@ -57,6 +58,8 @@ nlohmann::json ToolDefinitionRow(UClass* type,const std::string& key,bool ai,con
     }
     // Presentation only: no writes and no fabricated default level.
     if(auto* defaults=type->GetClassDefaultObject().Get();defaults&&!defaults->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed|RF_NeedLoad|RF_NeedPostLoad))) {
+        row["Icon"]=PS::AssetSearch::PresentationIcon(defaults);
+        if(const auto display=PS::AssetSearch::PresentationName(defaults);!display.empty()){row["Name"]=display;row["DisplayName"]=display;}
         if(auto* power=CastField<FNumericProperty>(PropertyHelper::GetPropertyByName(type,TEXT("PowerLevel")));power&&power->GetArrayDim()==1) {
             const auto offset=power->GetOffset_Internal(),size=power->GetElementSize();
             if(offset>=0&&size>0&&offset<=type->GetPropertiesSize()&&size<=type->GetPropertiesSize()-offset) {
@@ -67,6 +70,39 @@ nlohmann::json ToolDefinitionRow(UClass* type,const std::string& key,bool ai,con
         }
     }
     return row;
+}
+nlohmann::json ToolMountedDefinitionHints() {
+    static uint64_t generation=0;static auto rows=nlohmann::json::array();
+    const auto current=PS::SpawnToolRequests::Generation.load();
+    if(current==generation)return rows;
+    rows=nlohmann::json::array();
+    // Metadata only. Never ResolveClass/load every registry candidate here.
+    if(!PS::CookedAssets::TryEnsure())return rows;
+    // A registry that is still starting must be retried, not cached as empty
+    // for the entire world generation (including the dedicated-server lane).
+    generation=current;
+    auto* actorType=ActorHelper::ResolveClass(TEXT("/Script/Engine.Actor"));
+    auto* aiType=ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionAICharacter"));
+    auto* npcType=ActorHelper::ResolveClass(TEXT("/Script/Dominion.InteractableNPC"));
+    for(const auto& record:PS::CookedAssets::MetadataSnapshot()) {
+        const auto candidate=PS::F2Catalog::MountedCandidate(record.path,record.name,record.type);
+        if(!candidate||candidate->kind==PS::F2Catalog::Kind::Item)continue;
+        const bool npc=candidate->kind==PS::F2Catalog::Kind::Npc,ai=candidate->kind==PS::F2Catalog::Kind::Enemy;
+        const auto key=std::string(npc?"@loaded-npc:":ai?"@loaded-ai:":"@loaded-resource:")+candidate->path;
+        auto* loaded=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,RC::to_generic_string(candidate->path).c_str(),false);
+        if(loaded&&actorType&&aiType&&!loaded->HasAnyFlags(static_cast<EObjectFlags>(RF_NeedLoad|RF_NeedPostLoad|RF_BeginDestroyed|RF_FinishDestroyed))) {
+            const bool actualNpc=npcType&&loaded->IsChildOf(npcType),actualAi=!actualNpc&&loaded->IsChildOf(aiType);
+            if((npc&&actualNpc)||(ai&&actualAi)||(!npc&&!ai&&!actualNpc&&!actualAi&&ToolResourceClass(loaded,actorType,aiType))) {
+                rows.push_back(ToolDefinitionRow(loaded,key,actualAi,actualNpc?"NPC":""));continue;
+            }
+        }
+        rows.push_back({{"Key",key},
+            {"Name",ToolReadableName(candidate->path)},{"Class",candidate->path},{"Type",npc?"NPC":ai?"AI":"Resource"},
+            {"Available",false},{"Loaded",false},{"Mounted",true},{"NeedsInspection",true},
+            {"TemporaryAllowed",false},{"PermanentAllowed",false},
+            {"Reason","Mounted native candidate; inspect to verify its actual class before spawning"}});
+    }
+    return rows;
 }
 nlohmann::json ToolLiveDefinitions(const nlohmann::json& authored) {
     auto* classType=ActorHelper::ResolveClass(TEXT("/Script/CoreUObject.Class"));
@@ -178,14 +214,14 @@ struct ToolCatalogIndex {
         for(const auto& row:loaded){const auto key=row.value("Key",std::string{});if(!key.empty())merged[key]=row;}
         auto result=nlohmann::json::array();for(const auto& [key,row]:merged){(void)key;result.push_back(row);}
         std::sort(result.begin(),result.end(),[](const auto& a,const auto& b){
-            const auto an=PS::QuickUI::Lower(a.value("Name",std::string{})),bn=PS::QuickUI::Lower(b.value("Name",std::string{}));
+            const auto an=PS::QuickCatalogRules::Lower(a.value("Name",std::string{})),bn=PS::QuickCatalogRules::Lower(b.value("Name",std::string{}));
             return an==bn?a.value("Key",std::string{})<b.value("Key",std::string{}):an<bn;
         });return result;
     }
     nlohmann::json Items()const {
         auto out=nlohmann::json::array();for(const auto& [path,row]:itemRows){(void)path;out.push_back(row);}
         std::sort(out.begin(),out.end(),[](const auto& a,const auto& b){
-            const auto an=PS::QuickUI::Lower(a.value("Name",std::string{})),bn=PS::QuickUI::Lower(b.value("Name",std::string{}));
+            const auto an=PS::QuickCatalogRules::Lower(a.value("Name",std::string{})),bn=PS::QuickCatalogRules::Lower(b.value("Name",std::string{}));
             return an==bn?a.value("Path",std::string{})<b.value("Path",std::string{}):an<bn;
         });return out;
     }
@@ -311,11 +347,11 @@ struct ToolCatalogIndex {
                 const auto package=ToolNativeString(asset.PackageName().ToString()),name=ToolNativeString(asset.AssetName().ToString());
                 std::string type;try{type=ToolAssetClass(asset);}catch(...){}
                 if(PS::QuickCatalogRules::MissingClassMetadata(type))++unknown;
-                if(name.starts_with("ITEM_")&&name.find("MeshData")==name.npos) {Add({package+"."+name,name,Kind::Item});continue;}
+                if(const auto hint=PS::F2Catalog::MountedCandidate(package+"."+name,name,type);hint&&hint->kind==Kind::Item) {Add(*hint);continue;}
                 if(!PS::QuickCatalogRules::BlueprintCandidate(name,type))continue;
                 const auto path=PS::QuickCatalogRules::GeneratedClassPath(package,name);
                 const bool resource=PS::F2Catalog::UnderAny(package,sources.resources),enemy=PS::F2Catalog::UnderAny(package,sources.enemies);
-                if(fullScan||resource||enemy)Add({path,name,resource?Kind::Resource:enemy?(PS::QuickUI::Lower(package).find("/gameplay/npcs/")!=std::string::npos?Kind::Npc:Kind::Enemy):Kind::ClassCandidate});
+                if(fullScan||resource||enemy)Add({path,name,resource?Kind::Resource:enemy?(PS::QuickCatalogRules::Lower(package).find("/gameplay/npcs/")!=std::string::npos?Kind::Npc:Kind::Enemy):Kind::ClassCandidate});
             }catch(const std::exception& e){partial=true;++unclassified;Issue("Registry record",e.what());}
         }
         referenceStatus="Using mounted game registry; no online path request required.";

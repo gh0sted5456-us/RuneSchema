@@ -103,6 +103,10 @@ private:
     RC::Unreal::UObject* m_worldAuthorityComponent = nullptr;
     RC::Unreal::UObject* m_presentationAuthorityComponent = nullptr;
     PS::WeakObjectHandle m_pendingMode;
+    PS::WeakObjectHandle m_helpyRosterComponent;
+    int64_t m_helpyRosterRevision=0;
+    uint64_t m_helpyRosterGeneration=0;
+    std::chrono::steady_clock::time_point m_helpyRosterRequestedAt{};
     float m_retryElapsed = 0.0f;
     float m_retryInterval = 0.0f;
     uint32_t m_seenRegistryRevision = 0;
@@ -200,6 +204,7 @@ private:
     bool Attach(RC::Unreal::AGameModeBase* mode);
     void StartRetryTick();
     void RetryAttach(float deltaSeconds);
+    void CatchUpAuthorityWorld();
     void Observe(RC::Unreal::UObject* source, RC::Unreal::UFunction* function);
     void ObservePlayerLifecycle(RC::Unreal::UObject* source, RC::Unreal::UFunction* function);
     void ObserveAuthorityPre(RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);

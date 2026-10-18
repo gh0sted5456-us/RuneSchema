@@ -4,7 +4,8 @@ namespace {
         auto* fn=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,path,false);
         auto* result=fn?CastField<FBoolProperty>(fn->GetReturnProperty()):nullptr;
         size_t count=0;if(fn)for(auto* p:TFieldRange<FProperty>(fn,EFieldIterationFlags::Default))if(p->HasAnyPropertyFlags(CPF_Parm))++count;
-        if(!participant || !result || count!=1 || fn->GetParmsSize()!=1 || result->GetOffset_Internal()!=0
+        ReflectedContract::Frame(fn);
+        if(!participant || !ReflectedContract::Output(result,fn) || count!=1
             || result->GetElementSize()!=1 || result->GetArrayDim()!=1 || !result->IsNativeBool() || result->GetByteOffset()!=0)
             throw std::runtime_error("Conversation active-state contract changed");
         ActorHelper::FunctionCall call(participant,path);call.Invoke();return call.Result<bool>();
@@ -46,14 +47,15 @@ namespace {
             Validate(GivePath,49,{{TEXT("ItemData"),0,8},{TEXT("Count"),8,4},{TEXT("DurabilityPercentage"),12,4},{TEXT("GameplayTags"),16,32},{TEXT("ReturnValue"),48,1}});
         }
         struct Field {const TCHAR* Name;int Offset,Size;};
-        void Validate(const TCHAR* path,int size,std::initializer_list<Field> expected) const {
+        void Validate(const TCHAR* path,int /*legacySize*/,std::initializer_list<Field> expected) const {
             auto* fn=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,path);
-            if(!fn || fn->GetParmsSize()!=size)throw std::runtime_error("Native inventory function layout changed");
+            ReflectedContract::Frame(fn);
             size_t count=0;for(auto* field:TFieldRange<FProperty>(fn,EFieldIterationFlags::Default))if(field->HasAnyPropertyFlags(CPF_Parm))++count;
             if(count!=expected.size())throw std::runtime_error("Native inventory parameter count changed");
             for(const auto& spec:expected) {
                 auto* field=fn->FindProperty(FName(spec.Name,FNAME_Find));
-                if(!field || !field->HasAnyPropertyFlags(CPF_Parm) || field->GetArrayDim()!=1 || field->GetOffset_Internal()!=spec.Offset || field->GetElementSize()!=spec.Size)
+                if(!ReflectedContract::Fits(field,fn->GetParmsSize()) || !field->HasAnyPropertyFlags(CPF_Parm)
+                    || (RC::StringType(spec.Name)!=TEXT("GameplayTags") && field->GetElementSize()!=spec.Size))
                     throw std::runtime_error("Native inventory parameter layout changed");
                 const RC::StringType name=spec.Name;
                 if(name==TEXT("ItemData")) {
@@ -61,7 +63,8 @@ namespace {
                     if(!object || !object->GetPropertyClass().Get() || !Item->IsA(object->GetPropertyClass().Get()))throw std::runtime_error("Inventory item parameter type changed");
                 } else if(name==TEXT("GameplayTags")) {
                     auto* structure=CastField<FStructProperty>(field);
-                    if(!structure || !structure->GetStruct().Get() || structure->GetStruct()->GetPathName()!=TEXT("/Script/GameplayTags.GameplayTagContainer"))throw std::runtime_error("Inventory tag parameter type changed");
+                    if(!structure || !structure->GetStruct().Get() || structure->GetStruct()->GetPathName()!=TEXT("/Script/GameplayTags.GameplayTagContainer")
+                        ||field->GetElementSize()!=structure->GetStruct()->GetStructureSize())throw std::runtime_error("Inventory tag parameter type changed");
                 } else if(name==TEXT("DurabilityPercentage")) {
                     if(!CastField<FFloatProperty>(field))throw std::runtime_error("Inventory durability parameter type changed");
                 } else if(spec.Size==4) {
@@ -101,11 +104,8 @@ namespace {
             if(!current())throw std::runtime_error("World changed before reward delivery");
             auto* tagType=UECustom::UObjectGlobals::StaticFindObject<UScriptStruct*>(nullptr,nullptr,TEXT("/Script/GameplayTags.GameplayTagContainer"));
             if(!tagType)throw std::runtime_error("Inventory tag container unavailable");
-            FManagedStruct tags(tagType);
-            struct EmptyTags {uint8_t Bytes[32];} empty{};
-            std::memcpy(&empty,tags.GetData(),sizeof(empty));
             ActorHelper::FunctionCall call(Inventory,GivePath);
-            call.Arg(TEXT("ItemData"),Item).Arg(TEXT("Count"),count).Arg(TEXT("DurabilityPercentage"),1.0f).Arg(TEXT("GameplayTags"),empty).Invoke();
+            call.Arg(TEXT("ItemData"),Item).Arg(TEXT("Count"),count).Arg(TEXT("DurabilityPercentage"),1.0f).JsonArg(TEXT("GameplayTags"),nlohmann::json::object()).Invoke();
             const bool success=call.Result<bool>();
             if(!current())throw std::runtime_error("World changed after reward delivery; receipt remains pending");
             const auto after=Count();
@@ -233,7 +233,7 @@ void DragonWildsNpcLoader::PublishDialogueCue(AActor* actor,const nlohmann::json
     if(components.Num()!=1)return;
     auto payload=nlohmann::json::parse(ReadIdentity(components[0]));
     const auto identity=NpcIdentity::Decode(payload.dump());
-    payload["version"]=2;payload["cueRevision"]=++m_serverDialogueCueRevisions[actor];payload["cue"]=cue;
+    payload["version"]=payload.value("version",1)==3?3:2;payload["cueRevision"]=++m_serverDialogueCueRevisions[actor];payload["cue"]=cue;
     const auto encoded=payload.dump();if(encoded.size()>NpcIdentity::MaxPayload)throw std::runtime_error("NPC visual cue payload is too large");
     PropertyHelper::CopyJsonValueToContainer(components[0],IdentityField(type),encoded);
     if(ReadIdentity(components[0])!=encoded)throw std::runtime_error("NPC visual cue replication write failed");
@@ -378,9 +378,9 @@ bool DragonWildsNpcLoader::DialogueGateAllows(const DialogueCompletionBinding& a
                     const auto& objectives=quest.Stages[index].second;
                     const auto plan=Quests::SelectHandIns(objectives,
                         [&](size_t objective){return progress.Count(index,objective);},
-                        [](const Quests::Definition&){return true;},inventory);
-                    complete=true;
-                    for(size_t objective=0;objective<objectives.size();++objective) {
+                        [](const Quests::Definition&){return true;},inventory,quest.AnyStage(index));
+                    complete=quest.AnyStage(index)?!plan.Objectives.empty():true;
+                    for(size_t objective=0;!quest.AnyStage(index) && objective<objectives.size();++objective) {
                         const auto& value=objectives[objective];
                         if(value.Optional || progress.Count(index,objective)==value.Required.Count)continue;
                         if(value.Kill || value.Acquire
@@ -682,8 +682,8 @@ void DragonWildsNpcLoader::OpenDialogue(AActor* actor,AActor* player,const Vendo
     auto* library=libraryClass?libraryClass->GetClassDefaultObject().Get():nullptr;
     auto* function=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,
         TEXT("/Script/CommonConversationRuntime.ConversationLibrary:StartConversationFromGraph"));
-    if(!library || !function || function->GetParmsSize()!=72)
-        throw std::runtime_error("Native dialogue startup contract differs from the captured 72-byte layout");
+    ReflectedContract::Frame(function);
+    if(!library)throw std::runtime_error("Native dialogue startup library is unavailable");
     const std::array<const TCHAR*,8> names{TEXT("ConversationEntryTag"),TEXT("Instigator"),TEXT("InstigatorTag"),TEXT("Target"),TEXT("TargetTag"),TEXT("Graph"),TEXT("EntryPointIdentifier"),TEXT("ReturnValue")};
     const std::array<int,8> offsets{0,8,16,24,32,40,48,64},sizes{8,8,8,8,8,8,16,8};
     int parameterCount=0;
@@ -691,7 +691,7 @@ void DragonWildsNpcLoader::OpenDialogue(AActor* actor,AActor* player,const Vendo
     if(parameterCount!=8)throw std::runtime_error("Native dialogue startup parameter count changed");
     for(size_t i=0;i<names.size();++i) {
         auto* field=function->FindProperty(FName(names[i],FNAME_Find));
-        if(!field || !field->HasAnyPropertyFlags(CPF_Parm) || field->GetArrayDim()!=1 || field->GetOffset_Internal()!=offsets[i] || field->GetElementSize()!=sizes[i])
+        if(!ReflectedContract::Fits(field,function->GetParmsSize()) || !field->HasAnyPropertyFlags(CPF_Parm) || field->GetElementSize()!=sizes[i])
             throw std::runtime_error("Native dialogue startup parameter changed: "+RC::to_string(names[i]));
         if(i==0 || i==2 || i==4) {
             auto* structure=CastField<FStructProperty>(field);

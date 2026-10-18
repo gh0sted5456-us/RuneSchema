@@ -71,8 +71,8 @@ int main(int argc,char** argv) {
         && loader.find("ApplyUnlocksToWorld(nullptr, !PS::Storefront::IsDedicatedServer())")
             !=std::string::npos,
         "headless server startup treats the expected absence of a player as a recovery failure");
-    require(loader.find("if (m_pendingWorldContext.Get()) RetryWorldRecovery(deltaSeconds)")
-        !=std::string::npos,
+    require(loader.find("if (m_pendingWorldContext.Get()) PS::SlowWork::Measure(\"buildings.recovery\"")!=std::string::npos
+        && loader.find("[&]{RetryWorldRecovery(deltaSeconds);}")!=std::string::npos,
         "building recovery tick performs continuous work after recovery completes");
     require(loader.find("/Script/Engine.PlayerController:ClientRestart")!=std::string::npos,
         "building recovery has no event-driven fallback when InitGameState delivery is missed");

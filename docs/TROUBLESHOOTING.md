@@ -4,6 +4,105 @@ Work from the first failed step instead of changing several files at once. A
 PAK can mount while an item inside it still fails to load, and an item can load
 while its recipe still points to the wrong station.
 
+## Helpy Live Log and help codes
+
+Open **Live Log** in Helpy's left navigation. The **RuneSchema** tab reads
+`RuneSchema/RuneSchema.log`; the **UE4SS** tab reads the host's `ue4ss/UE4SS.log`.
+Each tab retains its own search, filters, selection and scroll position.
+Search text or an `RS-` code, filter by severity
+or subsystem, pause reading, follow the newest entries, and select a row for
+its full message. **Clear view** clears only the viewer, never the log file.
+The recent history is bounded to 4,000 entries / 2 MiB of text; first opening
+reads the recent tail, not an unlimited archive. Each tab has its own limit.
+Log rotation starts a fresh view for the affected file only.
+
+Expand **Filters & colors > Live Log colors** here, or **Settings > Appearance**, to color entries
+by keyword or source/subsystem. Rules are literal and case-insensitive, not
+regular expressions. Keyword matches override source matches; the first rule
+of each kind wins. Colors persist in `ui.jsonc`; they do not rewrite either log.
+
+**Actions > Export filtered entries** saves the currently retained matching entries, with
+their help codes, to a local UTF-8 file. It is not an export of an entire
+previous session or both tabs combined. Open the selected log's folder for
+the original and its rotation backups. Neither live log can be overwritten
+by a filtered export.
+Review player names, IDs and local paths before sharing an export.
+
+Clickable help codes open the matching section below in your browser. No log
+text, player identity or file path is sent in the link. Codes are a Helpy
+interpretation of known diagnostic signatures; the original log is unchanged.
+An unfamiliar warning uses the general guide, not a guessed diagnosis.
+
+### RS-QST-001 — Conflicting quest ownership {#rs-qst-001}
+
+One saved quest identity has competing owner stamps, or more than one enabled
+mod declares it. Preserve the complete message, including the persistence ID
+and source filenames. If a quest moved between mods, enable only the intended
+current declaration and load with the matching updated RuneSchema build: the
+verified live ownership handoff preserves progress and normalizes old stamps.
+A genuine simultaneous declaration conflict must be resolved by the authors.
+Do not delete quest progress or character files to hide the error.
+
+### RS-REG-001 — Registry enrollment deferred or rejected {#rs-reg-001}
+
+Read the complete rejection reason. Deferred certification means RuneSchema
+has not proved the whole registry safe; it is not proof every asset failed.
+Automatic destructive cleanup remains disabled when certification is missing.
+Check required mounts, duplicate identities, registration capacity and the
+first failed enrollment message. Fix the source or installation before using
+an important save. Never force certification or manually remove save entries.
+
+### RS-NET-001 — Client/server registry mismatch {#rs-net-001}
+
+Compare the RuneSchema version, enabled mod list, PAK versions and registry
+fingerprints on both sides. Fully restart after aligning them. Matching mod
+folder names alone does not establish matching content. Preserve logs from
+the same connection attempt on both sides. An authentication success does not
+establish registry parity or prove the server reached a playable world.
+
+### RS-WEAR-001 — Wearable contract not enrolled {#rs-wear-001}
+
+An item exists but its native wearable/hide contract was not confirmed.
+Compare its asset path, slot, mesh/material references and contract declaration
+against the intended item. Re-equip only after the correct package and
+contract load. A visible item can still have the wrong appearance. Do not
+mark an unverified bridge as enrolled simply to suppress the warning.
+
+### RS-PERF-001 — Slow runtime work {#rs-perf-001}
+
+The measured phase exceeded its work budget; this message alone is not a
+network rejection. Record the phase, source, elapsed time and whether the
+spike repeats. Native asset load or actor construction can be indivisible
+even when surrounding discovery is sliced across frames. Turn on advanced
+logging temporarily for detailed attribution in `RuneSchema.log`, then turn
+it off after collecting the evidence. Report the slow phase rather than
+removing the performance check.
+
+### RS-CAT-001 — Item catalogue unavailable or expired {#rs-cat-001}
+
+Retry the catalogue and reset restrictive category/source/search filters.
+Confirm that the matching RuneSchema and Helpy DLLs are installed together.
+An expired page cursor should restart its query rather than append incompatible
+pages. A genuinely unready registry may need startup to finish. Keep the
+failure message and catalogue coverage; a blank icon is not the same as a
+missing item definition. Do not remove item mods or save data as a cache fix.
+
+### RS-SPAWN-001 — Spawn or placement waiting for collision {#rs-spawn-001}
+
+The destination may not have streamed usable floor collision, or a native
+placement check did not confirm success. Move close enough for the cell to
+load, verify the displayed ground Z, and retain the actor/item path and
+placement result. Queued placement is not confirmed placement. Do not force
+an arbitrary Z or repeatedly create duplicates; stacked floors, bridges and
+roofs require the appropriate nearby collision surface.
+
+### RS-LOG-000 — Unfamiliar warning or error {#rs-log-000}
+
+This entry has no more specific reviewed guide yet. Read its complete text
+and the first preceding failure; export the relevant filtered entries and
+record the versions, enabled mods and action that triggered it. Do not treat
+this general code as a root-cause diagnosis. No logs are uploaded by Helpy.
+
 ## RuneSchema does not appear in the log
 
 Check the UE4SS `Mods/mods.txt` file. The line must be:
@@ -14,7 +113,7 @@ RuneSchema : 1
 
 Confirm the RuneSchema DLL is in the expected `RuneSchema/dlls` location and
 that the game was fully closed before the DLL was replaced.
-For the current main package, confirm the startup log identifies `0.7.7.9m`.
+For the current main package, confirm RuneSchema and RSMK identify `0.8.0.0`.
 An older label means an older DLL is still being loaded.
 
 ## A LogicMod starts on a dedicated server
@@ -76,7 +175,7 @@ persistence IDs or internal names.
 By default, RuneSchema warns above 50,000 authored recipes. The warning is
 advisory: RuneSchema continues loading them and does not disable the mod.
 Advanced settings lets you turn the notice off or change its threshold.
-In `settings.jsonc`, use `diagnostics.largeRecipeWorkloadWarning` and
+In `settings.ini` under `[diagnostics]` (or legacy JSONC), use `largeRecipeWorkloadWarning` and
 `diagnostics.largeRecipeWarningThreshold` for the same controls.
 
 ## The recipe reports a missing item

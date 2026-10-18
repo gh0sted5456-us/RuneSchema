@@ -65,7 +65,7 @@ assets merely to make them load.
 ## Compatibility boundary
 
 Native cache refresh is available only for executable profiles whose identity
-and function signatures match the supported Steam/GOG or Game Pass build.
+and function signatures match the supported Steam/Epic or Game Pass build.
 On an unmatched game update, this appearance helper stays inactive while
 ordinary item registration continues. A registered item does not prove that
 its cooked mesh, material, or hide predicates are complete. If a slot shows

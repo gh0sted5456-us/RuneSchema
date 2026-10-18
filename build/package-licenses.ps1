@@ -56,6 +56,17 @@ function Install-LicenseBundle([string]$Payload) {
         $needle = ('=' * 78) + [Environment]::NewLine + 'Inherited payload'
         $appendixStart = $existingText.IndexOf($needle, [StringComparison]::Ordinal)
         if ($appendixStart -ge 0) { $existingAppendix = $existingText.Substring($appendixStart) }
+        $existingBody = if ($appendixStart -ge 0) { $existingText.Substring(0, $appendixStart) } else { $existingText }
+        $newBody = Get-Content -LiteralPath (Join-Path $bundle 'RuneSchema-Licenses.txt') -Raw
+        # Repacking on a machine without the original build caches must not
+        # discard notices that were already consolidated into the input ZIP.
+        if ($existingBody.Trim() -ne $newBody.Trim()) {
+            $inherited += [pscustomobject]@{
+                Name = 'Inherited payload consolidated notices'
+                Content = $existingBody
+                Hash = Get-Sha256File $existingConsolidated
+            }
+        }
     }
     $legacyMain = Join-Path $Payload 'LICENSE'
     if (Test-Path -LiteralPath $legacyMain -PathType Leaf) {
@@ -75,14 +86,29 @@ function Install-LicenseBundle([string]$Payload) {
             }
         }
     }
-    Remove-LegacyLicenseLayout $Payload
-
-    # The release package carries Helpy inside the RuneSchema payload. Keep one
-    # authoritative document instead of duplicating it inside that plugin.
-    $nestedHelpy = Join-Path $Payload 'plugins/RuneSchema.Helpy'
-    if (Test-Path -LiteralPath $nestedHelpy -PathType Container) {
-        Remove-LegacyLicenseLayout $nestedHelpy
+    # Preserve every bundled plugin's exact notices before consolidating them.
+    # Removing Helpy's licenses first used to lose plugin-only notices.
+    $pluginDirectory = Join-Path $Payload 'plugins'
+    if (Test-Path -LiteralPath $pluginDirectory -PathType Container) {
+        foreach ($plugin in Get-ChildItem -LiteralPath $pluginDirectory -Directory) {
+            $pluginNotices = @(Get-ChildItem -LiteralPath $plugin.FullName -File | Where-Object {
+                $_.Name -in @('LICENSE', 'AUTHORS.md', 'LICENSING.md', 'CONTRIBUTING.md', 'THIRD_PARTY_NOTICES.md')
+            })
+            $pluginLicenses = Join-Path $plugin.FullName 'licenses'
+            if (Test-Path -LiteralPath $pluginLicenses -PathType Container) {
+                $pluginNotices += @(Get-ChildItem -LiteralPath $pluginLicenses -File -Recurse)
+            }
+            foreach ($notice in $pluginNotices) {
+                $inherited += [pscustomobject]@{
+                    Name = 'Inherited payload plugin notice: ' + $plugin.Name + '/' + $notice.Name
+                    Content = (Get-Content -LiteralPath $notice.FullName -Raw)
+                    Hash = Get-Sha256File $notice.FullName
+                }
+            }
+            Remove-LegacyLicenseLayout $plugin.FullName
+        }
     }
+    Remove-LegacyLicenseLayout $Payload
     Remove-Item -LiteralPath $destination -Recurse -Force -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Path $destination -Force | Out-Null
     $target = Join-Path $destination 'RuneSchema-Licenses.txt'
@@ -276,7 +302,7 @@ try {
     if ($FinalizeBuild) {
         $buildScript = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'build/build.ps1') -Raw
         $versionMatch = [regex]::Match($buildScript, '(?m)^\$Version\s*=\s*''([^'']+)''')
-        if (-not $versionMatch.Success -or $versionMatch.Groups[1].Value -notmatch '^\d+\.\d+\.\d+\.\d+[em]$') {
+        if (-not $versionMatch.Success -or $versionMatch.Groups[1].Value -notmatch '^\d+\.\d+\.\d+(?:\.\d+(?:[em]|-alpha(?:\.\d+)?)?)?$') {
             throw 'Could not determine the current package version from build/build.ps1.'
         }
         $version = $versionMatch.Groups[1].Value
@@ -285,10 +311,11 @@ try {
             $branchOutput = & git.exe -C $RepositoryRoot branch --show-current 2>$null
             $releaseBranch = if ($branchOutput) { ([string]$branchOutput).Trim() } else { '' }
         }
-        if ($releaseBranch -eq 'main' -and -not $version.EndsWith('m')) {
+        $legacyChannelVersion = $version -match '^\d+\.\d+\.\d+\.\d+(?:[em]|-alpha(?:\.\d+)?)$'
+        if ($legacyChannelVersion -and $releaseBranch -eq 'main' -and -not $version.EndsWith('m')) {
             throw "Refusing to finalize a main package without a lowercase 'm' suffix: $version"
         }
-        if ($releaseBranch -eq 'experimental' -and -not $version.EndsWith('e')) {
+        if ($legacyChannelVersion -and $releaseBranch -eq 'experimental' -and -not $version.EndsWith('e')) {
             throw "Refusing to finalize an experimental package without a lowercase 'e' suffix: $version"
         }
         $dist = Join-Path $RepositoryRoot 'dist'
@@ -302,7 +329,9 @@ try {
             $archive = Join-Path $dist ($package.Name + '.zip')
             if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { continue }
             $payload = Join-Path (Join-Path $dist $package.Name) $package.Payload
-            Write-LicensedArchive $payload $archive $true
+            # Full releases extract directly to RuneSchema, matching the
+            # installation guide and verified public package layout.
+            Write-LicensedArchive $payload $archive ($package.Payload -ne 'RuneSchema')
             $count++
         }
         if ($count -eq 0) { throw 'No current RuneSchema or Helpy build archive was found to finalize.' }

@@ -30,6 +30,12 @@ int main() {
     Require(Accepts({{"UnlockCondition",{{"UnlockType","AIKill"},
         {"AIData","/MyMod/AI/BP_Data.BP_Data_C"}}}}));
     Require(Accepts({{"UnlockCondition",{{"UnlockType","PlayerStart"}}}}));
+    for(const auto* type:{"PlayerStart","RegionUnlocked","Manual","NeverUnlock"})Require(Accepts({{"UnlockCondition",{{"UnlockType",type}}}}));
+    Require(!Accepts({{"UnlockCondition",{{"UnlockType","OtherEnum::Manual"}}}}));
+    Require(!Accepts({{"UnlockCondition",{{"UnlockType","MAX"}}}}));
+    Require(!Accepts({{"UnlockCondition",{{"UnlockType","InventedType"}}}}));
+    Require(!Accepts({{"UnlockCondition",{{"UnlockType",3}}}}));
+    Require(!Accepts({{"UnlockCondition",{{"UnlockType","ItemFirstPickup"},{"UnlockingItemData","/Mod/Bad\n.Bad"}}}}));
     Require(!Accepts({{"UnlockCondition",42}}));
     Require(!Accepts({{"UnlockCondition",{{"UnlockType","ItemFirstPickup"}}}}));
     Require(!Accepts({{"UnlockCondition",{{"UnlockType","RecipeUnlocked"},

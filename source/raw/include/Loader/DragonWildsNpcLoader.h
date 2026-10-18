@@ -7,6 +7,9 @@
 #include "Loader/EventRuntime.h"
 #include "Loader/QuestKillCredit.h"
 #include "Loader/QuestAcquisition.h"
+#include "Loader/QuestScroll.h"
+#include "Loader/NpcEquipmentConditions.h"
+#include "Loader/QuestProgress.h"
 #include <cstdint>
 #include <memory>
 #include <nlohmann/json.hpp>
@@ -17,6 +20,8 @@
 
 #include "Loader/DragonWildsModLoaderBase.h"
 #include "Loader/VendorSpawnGate.h"
+#include "Core/GroundSurface.h"
+#include "Core/GroundingRetry.h"
 #include "Loader/VendorPolicy.h"
 #include "Loader/VendorIdentity.h"
 #include "Loader/VendorTraceBudget.h"
@@ -49,12 +54,15 @@ namespace DragonWilds {
         ~DragonWildsNpcLoader() override;
         void LoadVendors(const nlohmann::json& data, const RC::StringType& modName);
         void LoadDialogues(const nlohmann::json& data,const RC::StringType& modName);
-        void LoadQuests(const nlohmann::json& data,const RC::StringType& mod){m_quests.Load(RC::to_string(mod),data);}
+        void LoadQuests(const nlohmann::json& data,const RC::StringType& mod,const std::string& source="<internal quest>"){m_quests.Load(RC::to_string(mod),data,source);}
         Events::Runtime& EventService(){return m_events;}
         void PublishEventIdentity(RC::Unreal::AActor* actor,const std::string& payload);
         std::function<void(const std::string&,const std::string&)> PublishWorldState;
         std::function<bool(RC::Unreal::AActor*,const std::string&)> PresentEventIdentity;
         std::function<bool(RC::Unreal::UObject*,const std::string&)> OpenLore;
+        std::function<std::optional<bool>(RC::Unreal::UObject*,const std::string&)> LoreRead;
+        std::function<void(RC::Unreal::UObject*)> DeliverAutomaticJournals;
+        std::function<bool(RC::Unreal::UObject*,const std::string&)> UnlockJournal;
         void ObserveEventDespawn(RC::Unreal::UObject* source,RC::Unreal::UFunction* function);
         void ObserveEventDeath(RC::Unreal::UObject* source,RC::Unreal::UFunction* function);
         void ObserveClientEvent(RC::Unreal::AActor* actor,const std::string& eventKey){m_events.ObserveClientReplica(actor,eventKey);}
@@ -98,6 +106,7 @@ namespace DragonWilds {
             bool Resource=false;
             nlohmann::json Appearance=nlohmann::json::object();
             nlohmann::json Equipment=nlohmann::json::object();
+            std::vector<NpcEquipment::Rule> EquipmentWhen;
             bool HideWeapon=false;
             HumanPose::Selection Pose;
             bool HasDialoguePose=false;
@@ -108,6 +117,8 @@ namespace DragonWilds {
             std::string StoreOwner;
             std::string DialogueKey;
             std::string LoreEntry;
+            LoreBookPresentation::Config LorePresentation;
+            std::vector<std::string> JournalEntries;
             std::string QuestKey;
             std::string RequiredFlag;
             std::string LockedDialogueKey;
@@ -136,8 +147,17 @@ namespace DragonWilds {
             std::vector<VendorCategoryGate::Rule> CategoryRules;
             nlohmann::json Materials = nlohmann::json::array();
             double TargetLocation[3]{};
+            double AuthoredGroundXY[2]{};
+            PS::Grounding::NearbyPolicy GroundMigration;
+            std::optional<PS::SpawnFootprint::Capsule> GroundClearance;
             bool GroundToSurface=false;
             double GroundOffset=0;
+            double GroundAnchorZ=0;
+            std::optional<double> GroundReferenceZ;
+            PS::Grounding::SearchRange GroundSearch;
+            PS::Grounding::Retry GroundRetry;
+            unsigned LifecycleFailures=0; // bounded, cleanup-acknowledged construction retries
+            RC::Unreal::UWorld* GroundResolvedWorld=nullptr; // compared only; cleared on travel
             double SpawnRotation[3]{};
             double SpawnScale[3]{ 1.0, 1.0, 1.0 };
             bool HasTargetLocation = false;
@@ -249,7 +269,9 @@ namespace DragonWilds {
             nlohmann::json GateConditions=nlohmann::json::object();
         };
         bool DialogueGateAllows(const DialogueCompletionBinding& action,RC::Unreal::UObject* controller);
-        std::string RunQuestAction(const DialogueCompletionBinding& action,RC::Unreal::UObject* controller,const std::function<bool()>& current);
+        std::string RunQuestAction(const DialogueCompletionBinding& action,RC::Unreal::UObject* controller,const std::function<bool()>& current,
+            RC::Unreal::UObject* scrollItem=nullptr,QuestProgress::Result* observed=nullptr);
+        bool OnQuestScrollUse(RC::Unreal::Hook::TCallbackIterationData<void>& dispatch,RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
         std::unordered_map<RC::Unreal::UObject*,DialogueCompletionBinding> m_dialogueCompletions;
         struct DialogueSession {
             RC::Unreal::UObject* Instance=nullptr;
@@ -316,6 +338,11 @@ namespace DragonWilds {
             int32_t Serial = 0;
         };
         std::vector<SpawnedVendor> m_spawnedVendors;
+        struct LoreVisual {PS::WeakObjectHandle Actor,Glow;std::string Mesh;};
+        std::unordered_map<std::string,LoreVisual> m_loreVisuals;
+        std::unordered_set<std::string> m_loreVisualFailed;
+        double m_loreVisualElapsed=0;size_t m_loreVisualCursor=0;
+        void PumpLoreVisuals(float deltaSeconds);
         struct RetiredVendor {
             const RC::Unreal::UObject* Address=nullptr;
             int32_t Index=-1;
@@ -390,6 +417,8 @@ namespace DragonWilds {
         void PumpLoreRequests(float deltaSeconds);
         double m_scanElapsed = 0.0;
         VendorScanBudget m_scanBudget;
+        std::size_t m_npcWorkCursor=0;
+        bool m_npcWorkPending=false;
         bool m_spawning = false;
         nlohmann::json m_vendorReport = nlohmann::json::object();
         void WriteVendorStatus() noexcept;
@@ -426,11 +455,22 @@ namespace DragonWilds {
         double m_clientReplicaElapsed=0;
         bool m_preparingClientReplica=false;
         void TrySpawnConfiguredVendors(RC::Unreal::UWorld* world);
+        void ResolveNpcGrounding(RC::Unreal::UWorld* world,VendorDefinition& definition);
         RC::Unreal::AActor* SpawnVisualVendor(RC::Unreal::UWorld* world,
             VendorDefinition& definition);
         bool ApplyVendorVisuals(RC::Unreal::AActor* actor,
             VendorDefinition& definition);
         void ApplyHumanVisuals(RC::Unreal::AActor* actor, VendorDefinition& definition);
+        std::vector<std::string> ActiveEquipmentRules(RC::Unreal::UObject* context,const VendorDefinition& definition);
+        nlohmann::json EffectiveNpcEquipment(RC::Unreal::AActor* actor,const VendorDefinition& definition);
+        void RecordQuestEquipment(RC::Unreal::UObject* controller,const std::string& quest);
+        void ReconcileNpcEquipment(float deltaSeconds);
+        void RefreshNpcEquipment(RC::Unreal::AActor* actor,const VendorDefinition& definition);
+        void LoadNpcEquipmentWorld(RC::Unreal::UObject* context);
+        std::string m_equipmentWorldGuid;
+        nlohmann::json m_equipmentWorld;
+        std::unordered_map<std::string,std::string> m_appliedNpcEquipment;
+        double m_npcEquipmentElapsed=0;
         void ApplyNpcVisualEffect(RC::Unreal::UObject* visual,const VendorDefinition& definition);
         RC::Unreal::UObject* FindMeshComponent(RC::Unreal::UObject* actor) const;
         RC::Unreal::AActor* FindVisualSourceActor(
@@ -446,6 +486,9 @@ namespace DragonWilds {
         RC::Unreal::AActor* FindSpawnedVendor(RC::Unreal::UWorld* world,
             const VendorDefinition& definition) const;
         void OnVendorCellShown(RC::Unreal::UObject* cell);
+        void ReconcileShownVendorCells(float deltaSeconds);
+        size_t m_cellCatchupCursor=0;
+        double m_cellCatchupDelay=0;
         bool ApplyVendor(RC::Unreal::AActor* actor, VendorDefinition& definition);
         void BindMerchantInteraction(RC::Unreal::AActor* actor,
             RC::Unreal::UObject* interaction, RC::Unreal::UObject* station,

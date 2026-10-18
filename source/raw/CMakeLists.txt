@@ -1,6 +1,23 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(RuneSchema LANGUAGES CXX)
+project(RuneSchema VERSION 0.8.0.0 LANGUAGES CXX RC)
+
+# Reject leftover source files from the postponed RSDK Workspace/Inspector branch.
+file(GLOB_RECURSE RUNESCHEMA_DEFERRED_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.inl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h")
+foreach(RSDK_FILE IN LISTS RUNESCHEMA_DEFERRED_FILES)
+    if(RSDK_FILE MATCHES "(RSDKWorkspace|LiveProbe|ImportExplorer|WorkspaceGraph|GraphCanvasInteraction|PatchPlanModel)")
+        message(FATAL_ERROR "Deferred RSDK source contaminates HELPY build: ${RSDK_FILE}. Extract into a fresh directory.")
+    endif()
+    file(STRINGS "${RSDK_FILE}" RSDK_LEGACY_SYMBOLS
+        REGEX "SearchLoadedAuthoringTargets|ResolveComponentTargetFacts|RSDKWorkspace|LiveProbe|ImportExplorer|WorkspaceGraph|inspectorHideUnresolved"
+        LIMIT_COUNT 1)
+    if(RSDK_LEGACY_SYMBOLS)
+        message(FATAL_ERROR "Deferred RSDK reference contaminates HELPY build: ${RSDK_FILE}.")
+    endif()
+endforeach()
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -16,7 +33,7 @@ endif()
 include(FetchContent)
 
 set(RUNESCHEMA_UE4SS_TAG "f6d5f9425a31f3e3a4fd185b40148f5aa4d81a44"
-    CACHE STRING "Exact RE-UE4SS commit used to compile this RuneSchema binary")
+    CACHE STRING "Reproducible RE-UE4SS compile SDK; not a runtime build-number restriction")
 FetchContent_Declare(
     UE4SS
     GIT_REPOSITORY https://github.com/UE4SS-RE/RE-UE4SS.git
@@ -27,12 +44,17 @@ FetchContent_Declare(
         "url.https://github.com/.insteadOf=git@github.com:"
         "url.https://github.com/.insteadOf=ssh://git@github.com/"
     GIT_SUBMODULES_RECURSE TRUE
-    # C++ ABI pin for reproducible host-specific builds. UE4SS v4 does not
-    # guarantee ABI compatibility with the 3.0.1 line, so release packaging
-    # compiles one DLL per supported host from this shared RuneSchema source.
+    # Pin the compile dependency for reproducibility, not the installed host.
+    # Newer hosts may run this binary while retaining its required native ABI.
+    # Future breaking C++ ABI changes require a compatible build; no timestamp,
+    # version equality check, or maximum host build gates runtime startup.
     GIT_TAG ${RUNESCHEMA_UE4SS_TAG}
 )
 FetchContent_MakeAvailable(UE4SS)
+option(RUNESCHEMA_BUILD_MANAGED_UE4SS_HOST "Retired: custom UE4SS hosts are not supported" OFF)
+if(RUNESCHEMA_BUILD_MANAGED_UE4SS_HOST)
+    message(FATAL_ERROR "RuneSchema must run on an unmodified UE4SS.dll. Configure RUNESCHEMA_BUILD_MANAGED_UE4SS_HOST=OFF.")
+endif()
 
 if(MSVC AND TARGET UE4SS)
     target_link_options(UE4SS PRIVATE "/PDBALTPATH:UE4SS.pdb")
@@ -85,42 +107,18 @@ file(GLOB_RECURSE SRC_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 list(FILTER SRC_FILES EXCLUDE REGEX "/src/Core/")
-list(FILTER SRC_FILES EXCLUDE REGEX "/src/Generator/InGameQuickMenu\\.cpp$")
+list(FILTER SRC_FILES EXCLUDE REGEX "/src/Generator/HelpyStandaloneWindow\\.cpp$")
 
 add_library(${TARGET} SHARED
     ${SRC_FILES}
+    resources/RuneSchema.rc
     src/Core/AppearanceDefaults.cpp
     src/Core/CharacterEntryRecovery.cpp
     src/Core/PersistencePruner.cpp)
 
 # API-1 Helpy native plugin. All Helpy UI/input ownership lives in this optional
 # binary; multiplayer orchestration remains in the mandatory RuneSchema target.
-add_library(RuneSchemaHelpyPlugin SHARED
-    plugins/helpy/HelpyPlugin.cpp
-    src/Generator/InGameQuickMenu.cpp
-    src/Runtime/HostServices.cpp
-    src/SDK/Classes/Custom/UObjectGlobals.cpp
-    src/SDK/Classes/KismetSystemLibrary.cpp
-    src/SDK/DragonWildsSignatures.cpp
-    src/SDK/StaticClassStorage.cpp
-    src/SDK/Helper/ActorHelper.cpp
-    src/SDK/Helper/ArrayFieldPatch.cpp
-    src/SDK/Helper/Memory.cpp
-    src/SDK/Helper/PropertyHelper.cpp
-    src/SDK/Structs/FSoftObjectPath.cpp
-    src/SDK/Structs/Custom/FManagedValue.cpp
-    src/SDK/Structs/Custom/FManagedStruct.cpp
-    src/SDK/Structs/Custom/FScriptArrayHelper.cpp
-    src/SDK/Structs/Custom/FScriptMapHelper.cpp
-    src/SDK/Structs/Custom/FScriptSetHelper.cpp
-    src/Utility/Config.cpp
-    src/Utility/JsonHelpers.cpp)
-set_target_properties(RuneSchemaHelpyPlugin PROPERTIES OUTPUT_NAME "RuneSchema.Helpy")
-target_compile_definitions(RuneSchemaHelpyPlugin PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-target_include_directories(RuneSchemaHelpyPlugin PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_definitions(RuneSchemaHelpyPlugin PRIVATE _CRT_SECURE_NO_WARNINGS RUNESCHEMA_PLUGIN_CLIENT=1)
-target_link_libraries(RuneSchemaHelpyPlugin PRIVATE
-    RuneSchemaJsonCore UE4SS nlohmann_json::nlohmann_json safetyhook glaze::glaze efsw Zydis Zycore)
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../helpy" "${CMAKE_CURRENT_BINARY_DIR}/helpy")
 
 target_include_directories(${TARGET} PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
@@ -141,6 +139,7 @@ target_link_libraries(${TARGET} PRIVATE
     efsw
     Zydis
     Zycore
+    version
 )
 
 # Apply size optimization to UE4SS's custom Shipping configurations.

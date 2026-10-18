@@ -7,6 +7,7 @@ using namespace PS::SaveCleanup;
 void RequireAt(bool b,int line){if(!b)throw std::runtime_error("Save cleanup regression at line "+std::to_string(line));}
 #define Require(value) RequireAt((value),__LINE__)
 template<class F>bool Rejects(F f){try{f();return false;}catch(const std::exception&){return true;}}
+Json WithoutRetiredJournalMetadata(Json source){source.at("GameProgress").at("Journal").erase(DragonWilds::JournalSave::Manifest);return source;}
 int Run() {
     const std::string id="xBicTfzWYkeOCtOLKtSRFQ";
     auto ints=DragonWilds::Quests::OwnershipVariables("Example",id);
@@ -21,30 +22,39 @@ int Run() {
     Require(ClassifyCharacterDocument(source)==CharacterDocumentKind::Gameplay);
     Require(ClassifyCharacterDocument(profileOnly)==CharacterDocumentKind::ProfileOnly);
     Require(ClassifyCharacterDocument(Json::array())==CharacterDocumentKind::Unsupported);
-    Require(Plan(source,{}).Save==source);
-    Require(Plan(source,{"Example"}).Save==source);
+    const auto normalized=WithoutRetiredJournalMetadata(source);
+    Require(Plan(source,{}).Save==normalized);
+    Require(Plan(source,{"Example"}).Save==normalized);
     auto cleaned=Plan(source,{"Example"},true);
-    Require(cleaned.Owners.at("Example")==2 && cleaned.Removed.size()==3);
+    Require(cleaned.Owners.at("Example")==1 && cleaned.Removed.size()==2);
     const auto& game=cleaned.Save.at("GameProgress");
     Require(game.at("QuestProgress").at("Quests").size()==1 && game.at("QuestProgress").at("QuestTracked")=="");
     Require(game.at("QuestProgress").at("QuestLocations").size()==1);
-    Require(game.at("Journal").at("UnlockedEntries")==Json::array({"vanilla"}));
-    Require(game.at("Journal").at("RuneSchemaOwnership")==Json::array());
+    // Owner selection is not evidence that a journal ID is unresolved. Only
+    // the complete live journal registry can certify orphaned discovery IDs.
+    Require(game.at("Journal").at("UnlockedEntries")==Json::array({"book","vanilla"}));
+    Require(game.at("Journal").at("UnreadEntries")==Json::array({"book"}));
+    Require(!game.at("Journal").contains("RuneSchemaOwnership"));
     Require(game.at("Journal").at("FutureNativeField")==42);
     Require(game.at("Character")==source.at("GameProgress").at("Character"));
     Require(game.at("Inventory")==source.at("GameProgress").at("Inventory"));
     Require(Plan(cleaned.Save,{"Example"}).Save==cleaned.Save);
     auto pending=source;pending["GameProgress"]["QuestProgress"]["Quests"][0]["QuestInts"].push_back({{"QuestVariableName","RuneSchema.Phase"},{"QuestVariableValue",3}});
     Require(Rejects([&]{Plan(pending,{"Example"},true);}));
-    Require(Plan(pending,{}).Save==pending);
+    Require(Plan(pending,{}).Save==WithoutRetiredJournalMetadata(pending));
     auto malformed=source;malformed["GameProgress"]["Journal"]["RuneSchemaOwnership"]={"garbage"};
-    Require(Rejects([&]{Plan(malformed,{"Example"});}));
+    Require(Plan(malformed,{"Example"}).Save==normalized); // Retired metadata is not a cleanup authority.
     Require(Rejects([&]{Plan(Json::array(),{});}));
     Require(AbsentOwners({{"Enabled",1},{"Missing",2}},{{"enabled"}})==std::set<std::string>{"Missing"});
     RegistrySnapshot registry;
     for(int i=0;i<500;++i)registry.Items.insert("item"+std::to_string(i));
     for(int i=0;i<300;++i)registry.Recipes.insert("recipe"+std::to_string(i));
     registry.Quests={id,"vanilla"};registry.QuestsComplete=true;
+    auto movedOwners=source;
+    movedOwners["GameProgress"]["QuestProgress"]["Quests"][0]["QuestInts"].push_back({{"QuestVariableName","RuneSchema.Owner:OldMod"},{"QuestVariableValue",DragonWilds::Quests::OwnershipVersion}});
+    auto earlyRegistry=registry;earlyRegistry.QuestsComplete=false;
+    const auto earlyPlan=Plan(movedOwners,{},false,&earlyRegistry);
+    Require(earlyPlan.Save["GameProgress"]["QuestProgress"]==movedOwners["GameProgress"]["QuestProgress"]);
     auto assetSave=source;
     assetSave["GameProgress"]["Inventory"]["1"]={{"ItemData","item1"}};
     assetSave["GameProgress"]["Loadout"]={{"Head",{{"PlayerInventoryItemIndex",0}}},{"Body",{{"PlayerInventoryItemIndex",1}}}};
@@ -54,7 +64,7 @@ int Run() {
     assetSave["GameProgress"]["Progress"]["PlayerHooksTriggered"]={"unresolved-but-no-complete-hook-registry"};
     // The automatic ownership-only mode must preserve every unowned record,
     // including unresolved third-party assets and equipment.
-    Require(Plan(assetSave,{}).Save==assetSave);
+    Require(Plan(assetSave,{}).Save==WithoutRetiredJournalMetadata(assetSave));
     const auto preserved=Plan(assetSave,{},false,&registry);
     Require(preserved.Save["GameProgress"]["Inventory"].size()==1);
     Require(preserved.Save["GameProgress"]["Loadout"].contains("Body") && !preserved.Save["GameProgress"]["Loadout"].contains("Head"));
@@ -151,7 +161,16 @@ int Run() {
         ==strictIdentity["GameProgress"]["Journal"]["RuneSchemaOwnership"]);
     auto strictDamaged=damaged;
     strictDamaged["GameProgress"]["QuestProgress"]["Quests"].push_back("opaque-third-party-row");
-    Require(Plan(strictDamaged,{}).Save==strictDamaged);
+    Require(Plan(strictDamaged,{}).Save==WithoutRetiredJournalMetadata(strictDamaged));
+    auto journalRegistry=registry;
+    journalRegistry.Journals={"vanilla"};journalRegistry.JournalsComplete=true;
+    const auto orphanJournal=Plan(source,{},false,&journalRegistry,false,true,true);
+    Require(orphanJournal.Save["GameProgress"]["Journal"]["UnlockedEntries"]==Json::array({"vanilla"}));
+    Require(orphanJournal.Save["GameProgress"]["Journal"]["UnreadEntries"].empty());
+    Require(orphanJournal.Save["GameProgress"]["Journal"]["FutureNativeField"]==42);
+    journalRegistry.Journals.insert("book");
+    const auto activeJournal=Plan(source,{},false,&journalRegistry,false,true,true);
+    Require(activeJournal.Save["GameProgress"]["Journal"]==source["GameProgress"]["Journal"]);
     RegistrySnapshot incomplete;
     Require(Rejects([&]{Plan(assetSave,{},false,&incomplete);}));
     PublishRegistry(registry);auto snapshot=ReadRegistry();Require(snapshot && snapshot->Ready());

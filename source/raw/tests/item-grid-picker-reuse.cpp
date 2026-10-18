@@ -24,15 +24,13 @@ int main(int argc,char** argv) {
         "manual asset-path escape hatch disappeared");
     Require(panel.find("AdditionalDropList")!=std::string::npos && panel.find("ChancePercent")!=std::string::npos,
         "Additional Loot summary table is missing");
-    Require(picker.find("int PageSize=25")!=std::string::npos && picker.find("constexpr int columns=5")!=std::string::npos,
-        "fixed 5x5 page/grid contract regressed");
+    Require(picker.find("ImGuiListClipper")!=std::string::npos && picker.find("const int columns=ItemBayLayout::Columns(avail,minCardWidth,spacing,theme.itemGridColumns)")!=std::string::npos,
+        "bounded responsive grid contract regressed");
     Require(picker.find("ItemIconCache::Draw(iconPath")!=std::string::npos,
         "shared picker no longer renders real icons");
-    Require(picker.find("runeSchema?\"RS\":\"LOADED\"")!=std::string::npos,
-        "source badge is missing");
-    Require(picker.find("PersistenceID:")!=std::string::npos && picker.find("Internal:")!=std::string::npos,
+    Require(picker.find("PersistenceID")!=std::string::npos && picker.find("InternalName")!=std::string::npos,
         "hover metadata lost internal name or PersistenceID");
-    Require(picker.find("state.Page=0")!=std::string::npos,
-        "search/page-size changes no longer reset pagination");
-    std::cout<<"PASS: Item grid is shared by inventory and Additional Loot with fixed 5x5 paging, real icons, source badges and metadata.\n";
+    Require(picker.find("state.CatalogRevision=0")!=std::string::npos,
+        "search changes no longer invalidate the visible window");
+    std::cout<<"PASS: Shared item picker retains bounded windows, real icons and metadata.\n";
 }

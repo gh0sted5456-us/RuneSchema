@@ -3,11 +3,12 @@
 #include <mutex>
 #include <unordered_set>
 #include <string>
+#include "Core/RegistryEnrollment.h"
 namespace PS::SaveCleanup {
 struct RegistrySnapshot {
     std::unordered_set<std::string> Items,Recipes,Quests,Journals;
     bool QuestsComplete=false,JournalsComplete=false;
-    bool Ready()const{return Items.size()>=500 && Recipes.size()>=300;}
+    bool Ready()const{return RegistryEnrollment::Healthy()&&Items.size()>=500 && Recipes.size()>=300;}
 };
 inline std::mutex RegistryMutex;
 inline std::shared_ptr<const RegistrySnapshot> CurrentRegistry;

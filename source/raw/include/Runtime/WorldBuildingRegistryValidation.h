@@ -33,8 +33,10 @@ inline std::unordered_set<std::string> Validate(const std::vector<Entry>& persis
         if (!object || !network.insert(object).second || !objects.contains(object))
             throw std::runtime_error("live building NetId registry disagrees with PersistenceID registry");
     if (!reverse.empty() || !internal.empty()) {
-        if (reverse.size() != netIds.size() || internal.empty())
+        if (reverse.size() != netIds.size())
             throw std::runtime_error("live building registry views are incomplete");
+        // Internal-name aliases are auxiliary. Some native builds populate
+        // none; completeness is certified by persistence + forward/reverse IDs.
         std::unordered_map<std::uintptr_t, std::uint16_t> reverseIndex;
         for (const auto& entry : reverse)
             if (!entry.object || !reverseIndex.emplace(entry.object, entry.index).second)
@@ -77,7 +79,8 @@ inline std::unordered_set<std::string> Validate(const std::vector<Entry>& persis
             throw std::runtime_error("enabled building definitions have an empty or duplicate identity");
         const auto found = identities.find(entry.id);
         if (found != identities.end()) {
-            if (found->second != entry.object || !network.contains(entry.object))
+            if (found->second != entry.object || (!network.contains(entry.object)
+                    && expectedMode != ExpectedMode::ProtectPendingDefinition))
                 throw std::runtime_error("enabled building definition disagrees with live registries: owner='"
                     + entry.owner + "' key='" + entry.key + "' PersistenceID='" + entry.id + "'");
             continue;

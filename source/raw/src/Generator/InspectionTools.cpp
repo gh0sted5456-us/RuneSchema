@@ -26,6 +26,9 @@
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
 #include "Runtime/HostServices.h"
 #include "Runtime/NetworkContext.h"
+#include "Core/HelpyAuthoringProtocol.h"
+#include "Generator/ToolRequest.h"
+#include "Generator/JsonSchemaGenerator.h"
 #include <imgui.h>
 #include <chrono>
 #include <cmath>
@@ -673,7 +676,10 @@ namespace {
         }
     }
 }
+#include "InspectionAuthoring.inl"
 void Reset() {
+    desktopQuestId=0;desktopLegacyId=0;
+    SaveViewer::ResetAuthoring();
     NiagaraTest::Reset();
     PlayerGhost::ClearArmorTest();
     PlayerTrace::Cancel();AppearanceTrace::Cancel();
@@ -787,6 +793,7 @@ void RenderPlayerNameplateBuilder(bool nameplateDefinition) {
     ImGui::PopID();
 }
 void Tick() {
+    DesktopAuthoringTick();
     PlayerTrace::Tick();
     AppearanceTrace::Tick();
     if (!hasRequest.load(std::memory_order_relaxed)) return;
@@ -868,7 +875,9 @@ void Tick() {
             assetDraft=nullptr;assetPreview.clear();busy=false;return;
         }
         if(request.action==Action::Clear) {
+            const auto receipt=desktopLegacyId;
             Reset();
+            if(receipt)HelpyAuthoring::Bridge.Complete(receipt,json::object(),"Traces stopped and captured results cleared.");
             return;
         }
         if(request.action==Action::SavedItems || request.action==Action::SavedWorld) {
@@ -1162,7 +1171,7 @@ void Tick() {
         std::lock_guard lock(mutex); snapshot = std::move(result); busy = false;
         status = "Snapshot captured. Open Results to filter fields, copy paths, or export JSON.";
     } catch (const std::exception& error) {
-        std::lock_guard lock(mutex); busy = false; snapshot = nullptr; status = error.what();
+        std::lock_guard lock(mutex); busy = false; snapshot = nullptr; status = error.what();desktopRequestSucceeded=false;
     }
 }
 void Render(bool available, Section section, const char* loader) {

@@ -35,12 +35,29 @@ if not root then
     return
 end
 
+local mappingOk, mappingLoader = pcall(dofile, root .. "/scripts/mapping-loader.lua")
+if mappingOk and type(mappingLoader) == "function" then
+    local ran, failure = pcall(mappingLoader)
+    if not ran then log("[MAPPINGS][DEFERRED] " .. tostring(failure)) end
+end
+
 local logicOk, logicLoader = pcall(dofile, root .. "/scripts/logicmods-loader.lua")
 if logicOk and type(logicLoader) == "function" then
     local started, failure = xpcall(function() logicLoader(root) end, debug.traceback)
     if not started then log("[LOGIC-PAK][RUNE-LUA][PARTIAL] " .. tostring(failure)) end
 elseif not logicOk then
     log("[LOGIC-PAK][RUNE-LUA][PARTIAL] Helper unavailable: " .. tostring(logicLoader))
+end
+
+-- A current-session manifest is authoritative. Missing/failed helpers must not
+-- fall through into stale legacy order parsing and reactivate a disabled mod.
+if os.getenv("RUNESCHEMA_UE4SS_PACKAGE_SESSION") then
+    local ok, loader = pcall(dofile, root .. "/scripts/packages-loader.lua")
+    if ok and type(loader) == "function" then
+        local ran, failure = xpcall(function() loader(root) end, debug.traceback)
+        if not ran then log("[PACKAGES][BLOCKED] " .. tostring(failure)) end
+    else log("[PACKAGES][BLOCKED] Package loader helper unavailable: " .. tostring(loader)) end
+    return
 end
 
 local mods_root = root .. "/mods"

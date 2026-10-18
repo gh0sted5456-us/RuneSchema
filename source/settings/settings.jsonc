@@ -37,7 +37,7 @@
     "quests": true
   },
   "worldSaveCleanup": {
-    // Applies to Steam/GOG, Game Pass, and dedicated-server world cleanup.
+    // Applies to Steam/Epic, Game Pass, and dedicated-server world cleanup.
     // Keep true unless you accept losing the automatic pre-cleanup copy.
     "backupBeforePrune": true
   },

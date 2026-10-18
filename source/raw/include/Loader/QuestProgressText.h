@@ -17,11 +17,12 @@ inline std::string ObjectiveProgressText(const Definition& objective,int value,i
 template<class Read> std::optional<std::string> ProgressText(const Definition& quest,const std::string& objectiveId,Read read) {
     if(objectiveId=="__ready")return std::nullopt;
     std::string text;
+    bool any=false;
     const auto append=[&](const Definition& objective) {
         if(objective.Hidden)return;
         const int value=read(objective);
         if(value<0 || value>objective.Required.Count)throw std::runtime_error("Invalid quest display counter");
-        if(!text.empty())text+='\n';
+        if(!text.empty())text+=any?"\nOR ":"\n";
         text+=ObjectiveProgressText(objective,value);
     };
     if(quest.Stages.empty()) {
@@ -30,6 +31,7 @@ template<class Read> std::optional<std::string> ProgressText(const Definition& q
     } else {
         const auto stage=std::find_if(quest.Stages.begin(),quest.Stages.end(),[&](const auto& value){return value.first==objectiveId;});
         if(stage==quest.Stages.end())return std::nullopt;
+        any=quest.AnyStages.contains(stage->first);
         for(const auto& objective:stage->second)append(objective);
     }
     return text.empty()?std::nullopt:std::optional<std::string>{text};

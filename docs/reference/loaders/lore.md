@@ -26,7 +26,26 @@ Open the entry from a supported dialogue lore action or unlock it normally.
 Cooked entries are registered from their live persistent identities; no ownership declaration is required.
 
 Lore uses the same persistence setting and missing-mod cleanup as journal
-entries on Steam/GOG and Game Pass.
+entries on Steam/Epic and Game Pass.
+
+## Overworld book helpers
+
+A `/npc` `Type: "Prop"` with `LoreID`/`LoreEntry` and the native
+`SM_Lore_Book_01` or `SM_Lore_Book_02` mesh automatically follows the local
+player's journal read state. Unread books use the closed mesh and native
+`NS_LoreItem_Book` glow; read books use the open mesh without that glow.
+Unlocking an entry alone does not count as reading it. The visual check reads
+the native unlocked/unread arrays and never changes another player's progress.
+Opening the helper unlocks its entry through the normal journal contract and
+then requests the native lore popup; merely requesting the popup is not a read
+receipt. Unknown/not-ready state keeps the existing appearance.
+
+Use `"LorePresentation":{"Enabled":false}` to preserve a fixed prop, or provide
+`Enabled: true`, `UnreadMesh`, `ReadMesh`, and optional `GlowSystem` for custom
+mounted art. An empty `GlowSystem` disables this helper's unread glow. Custom
+meshes do not automatically opt in. This controls the overworld helper, not
+Helpy's icon cache. Native component/signature checks remain active. A live
+read/re-entry test is still required on each runtime lane.
 
 ## Simple rules
 

@@ -6,4 +6,8 @@ namespace PS::SaveViewer {
     void RenderCleanup();
     void RenderNpcExport();
     void PumpNpcExport();
+    // Game-thread-only authoring facade. Returns owned JSON, never engine objects.
+    nlohmann::json Authoring(const std::string& operation,const nlohmann::json& arguments);
+    nlohmann::json SaveEditorOperation(const std::string& operation,const nlohmann::json& arguments);
+    void ResetAuthoring();
 }

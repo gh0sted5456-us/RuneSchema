@@ -1,34 +1,122 @@
-# RuneSchema: what it is, what the files do, and how to mod with it
+<section class="rs-intro" aria-labelledby="runeschema-title">
+  <span id="ready-to-use-description-for-curseforge-or-nexus-mods"></span>
+  <p class="rs-intro__eyebrow">The runtime · The content · The tools</p>
+  <h1 id="runeschema-title">RuneSchema</h1>
+  <p class="rs-intro__lead">A shared modding framework for RuneScape: Dragonwilds. Build new content, connect it to the game's systems, and keep each add-on together in one manageable place.</p>
+  <div class="rs-actions">
+    <a class="md-button md-button--primary" href="../INSTALLATION/">Install RuneSchema <span aria-hidden="true">→</span></a>
+    <a class="rs-text-link" href="#functions-and-package-reference">Explore the functions ↓</a>
+  </div>
+</section>
 
-This page is written for players, CurseForge and Nexus Mods reviewers, and
-creators publishing RuneSchema add-ons for *RuneScape: Dragonwilds*. It
-describes the current release. Individual add-ons use only the files
-their feature needs; the framework download contains more files than a typical
-add-on.
+## A foundation for your Dragonwilds mods
 
-## Ready-to-use description for CurseForge or Nexus Mods
+RuneSchema gives creators a consistent way to describe content and connect it
+to *RuneScape: Dragonwilds*. An add-on can be a small JSON/JSONC adjustment to
+an existing item, a new cooked Unreal package, or a larger collection of
+equipment, crafting, characters and stories. The same framework brings those
+pieces together, so an author can concentrate on the mod rather than rebuild
+its loading and integration from scratch.
 
-> RuneSchema is a UE4SS-based modding framework for RuneScape: Dragonwilds.
-> It lets creators add or adjust items, recipes, stations, quests, characters,
-> dialogue, text, and other supported content. A RuneSchema add-on can be a
-> small JSON/JSONC edit, a cooked Unreal PAK, or a combination with optional
-> Lua behavior. Its files stay in one mod folder so players can enable or
-> disable the add-on as a unit. RuneSchema and a supported UE4SS installation
-> are required to use RuneSchema add-ons.
+For players, that means installing RuneSchema once and keeping each add-on in
+its own folder. Content definitions, cooked packages and supported Lua
+companions travel together. The mod list controls which add-ons are enabled
+and their loading order; a simple adjustment does not need a large package,
+and a substantial expansion does not need to scatter its files across the
+installation.
 
-The [current download and release notes](CURRENT-RELEASE.md),
-[installation steps](INSTALLATION.md), and [first-mod guide](AUTHORING-GUIDE.md)
-are maintained here. A mod author can link this page from a CurseForge or Nexus
-listing instead of repackaging the framework in every add-on.
+<div class="rs-capabilities">
+  <article class="rs-capability">
+    <span class="rs-capability__index">01 / CONTENT</span>
+    <h3>Items with a place in the world</h3>
+    <p>Connect equipment, appearances, recipes, crafting stations and buildable pieces. Use schemas, cooked content, or both.</p>
+  </article>
+  <article class="rs-capability">
+    <span class="rs-capability__index">02 / WORLDS</span>
+    <h3>More than an asset collection</h3>
+    <p>Describe NPCs, dialogue, quests, encounters, vendors, resources, journals and lore through supported loader contracts.</p>
+  </article>
+  <article class="rs-capability">
+    <span class="rs-capability__index">03 / WORKSPACE</span>
+    <h3>Tools alongside the runtime</h3>
+    <p>Use Helpy/RSMK to browse content, inspect data, author supported definitions and review runtime diagnostics.</p>
+  </article>
+</div>
 
-RuneSchema is not a replacement for UE4SS or Unreal's cooking tools. It reads
-the enabled mod folders, loads supported definitions in the listed order,
-mounts their cooked packages, and connects supported content to the game
-systems that use it. It also checks supported saved identities against the
-live game lists after enabled content loads. A mounted PAK alone does not prove
-that every asset inside it is registered or usable.
+## From definitions to working content
 
-## What players install
+RuneSchema reads enabled mod folders, mounts their cooked packages and
+registers supported definitions with the native systems that use them. Its
+loaders cover items and equipment, crafting and processing, world actors,
+story content, player rules and presentation. Authors can override supported
+properties without replacing an entire cooked package, while cooked
+registry declarations can announce content through the same framework.
+
+This is an integration layer, not a replacement for Unreal's asset creation
+or cooking tools. New meshes, sounds and other game assets still need a
+compatible cook. Likewise, mounting a PAK does not by itself confirm that its
+items, recipes or quests are registered and usable. RuneSchema validates the
+contracts it knows and reports unresolved requirements instead of treating a
+successful mount as proof that everything worked.
+
+Stable identities matter beyond the first launch. RuneSchema tracks supported
+content ownership and gates cleanup against verified live registration.
+That helps distinguish a genuinely orphaned entry from content that simply
+has not loaded. Backups and safe update/removal practices remain important;
+the framework does not make arbitrary mod-list changes risk-free.
+
+## Helpy: the companion workspace
+
+Helpy, also presented as the RuneSchema Modding Kit (RSMK), puts supported
+runtime tools in a separate desktop workspace. Item Service and the
+detachable Item Bay make content easier to browse and inspect. Crafting,
+transmog, map and authoring workspaces bring related actions together, with
+source-aware icon caches to avoid repeatedly requesting the same pictures.
+
+RuneSchema 0.8.0.0 also includes a searchable Live Log with linked
+diagnostic codes and a server-local configuration workspace. Server edits
+are staged for offline application; they are not a remote administration
+endpoint or permission bypass. Individual actions still depend on native
+readiness, world collision, player context and server authority.
+
+The same principle applies to multiplayer: clients and servers need compatible
+content, and a visual badge is not authorization. A dedicated server running
+in an interactive Windows session can use the desktop workspace; a service
+with no desktop cannot display a window. Client-only visuals may need an
+imported cache, without changing which item definitions the server actually
+has registered.
+
+## One framework, deliberately packaged
+
+RuneSchema runs on a compatible, unmodified UE4SS installation. It does not
+ship a patched replacement `UE4SS.dll`, promise compatibility with every future
+host build, or load native DLL companions from an add-on's `/ue4ss` folder.
+Supported Lua packages and cooked Blueprint companions have their own defined
+layouts and lifecycle rules.
+
+Players can follow the [installation guide](INSTALLATION.md). Creators can
+start with [one small mod](AUTHORING-GUIDE.md), then choose the loaders their
+idea needs. Hosting-service reviewers and mod authors can link this page to
+explain the dependency and package contents without redistributing the
+framework inside every add-on.
+
+!!! note "Current release: 0.8.0.0"
+    Download the build identified by the [current release page](CURRENT-RELEASE.md).
+    RuneSchema and RSMK now share version **0.8.0.0**, published on main with a
+    matching release tag. Read the [line-by-line changelog](CHANGELOG-0.8.0.0.md)
+    and [release notes](RELEASE-0.8.0.0.md). Automated checks are not a guarantee
+    that every authored feature has passed live-world or multiplayer testing.
+
+<div class="rs-functions-divider" markdown>
+
+## Functions and package reference
+
+The practical reference begins here: what each part does, where it belongs,
+and how to put a small add-on together. Include only what your mod needs.
+
+</div>
+
+### What players install
 
 The **RuneSchema framework** is the dependency installed at
 `ue4ss/Mods/RuneSchema/`. The [current release](CURRENT-RELEASE.md) ships one
@@ -51,7 +139,7 @@ ue4ss/Mods/
     dlls/main.dll                 # framework, not an add-on file
     scripts/main.lua              # framework startup helper
     plugins/                      # bundled optional bridges and Helpy
-    settings/settings.jsonc
+    settings/settings.ini         # legacy settings.jsonc auto-migrates
     mods/
       runeschema.txt              # enabled add-ons and their order
       MyMod/
@@ -62,7 +150,9 @@ ue4ss/Mods/
           MyPackage.utoc
           MyPackage.ucas
         logicmods/MyLogic/        # optional ModActor package
-        ue4ss/scripts/main.lua    # optional add-on Lua companion
+        ue4ss/MyLuaPackage/       # optional complete Lua companion
+          Scripts/main.lua
+          config.json
 ```
 
 The example shows possible folders, not a requirement to include every one.
@@ -70,7 +160,7 @@ Keep a `.pak`, `.utoc`, `.ucas`, and any matching `.sig` together when those
 files were produced by the same cook. Do not create empty companion files to
 make a package look complete.
 
-## File types and why they appear
+### File types and why they appear
 
 | File type | Where it belongs | What it does |
 | --- | --- | --- |
@@ -79,9 +169,10 @@ make a package look complete.
 | `.pak` | An add-on's `paks/<Package>/` or `logicmods/<Package>/`; bundled bridge `plugins/*/paks/<Package>/` | Cooked Unreal game assets and data. `logicmods` explicitly opts a package with a ModActor into client-side Blueprint startup; ordinary `paks` does not. |
 | `.utoc`, `.ucas` | Beside the matching `.pak` when the cook generated IoStore files | Matching Unreal container index and data; they are parts of the cooked package, not separate mods. |
 | `.sig` | Beside a cooked package only when generated by the cooking process | Optional matching Unreal package signature. |
-| `.lua` | Framework `scripts/`; optional add-on `ue4ss/scripts/main.lua` and its helpers | UE4SS startup or explicitly packaged add-on behavior. Lua is code and deserves normal script review. |
+| `.lua` | Framework `scripts/`; optional add-on `ue4ss/<LuaPackage>/Scripts/main.lua` and its helpers | UE4SS startup or explicitly packaged Lua behavior. The complete companion keeps its config and helper files. Lua deserves normal script review. |
 | `.dll` | Framework `dlls/main.dll`; bundled native plugin such as `plugins/RuneSchema.Helpy/dll/` | Native UE4SS framework or plugin code. It deserves normal binary review. A DLL inside an add-on's `ue4ss` folder is not a supported RuneSchema companion. |
 | `.usmap` | Framework `dlls/mappings/` | Unreal property/reflection mapping data, not an executable. |
+| `.ps1` | The bundled Helpy assets, for the explicitly run offline server-settings helper | Applies reviewed staged scalar settings only while the server is stopped. It is executable administrative code, not an add-on loader or an automatic startup script. |
 | `.txt` | `enabled.txt`, `plugins.txt`, `mods/runeschema.txt`, mapping notes, and `settings/licenses/` | Enable lists, documentation, and consolidated legal notices. RuneSchema can also write LogicMod handoff lists to `settings/` at runtime. |
 | `.md` | READMEs and installation or authoring guidance | Human-readable documentation; not game code. |
 
@@ -97,7 +188,7 @@ descriptions explain legitimate roles, **not** a request to exempt Lua, DLLs,
 or PAKs from security scanning. Please review executable content as code and
 keep matching Unreal container files together.
 
-## What can an add-on change?
+### Loader functions: what can an add-on change? {#what-can-an-add-on-change}
 
 RuneSchema has 22 data-loader folders. An author uses only the relevant ones:
 
@@ -115,7 +206,21 @@ See the [loader folder guide](LOADER-WALKTHROUGHS.md) for individual details.
 The `paks`, `logicmods`, and `ue4ss` folders are optional companion-content
 folders, not three more JSON loaders.
 
-## Make your first RuneSchema mod
+### Runtime and workspace functions
+
+| Function | What it does | Reference |
+| --- | --- | --- |
+| Enable list and load order | Keeps add-ons independently manageable and places dependencies before consumers | [Manage mods](users/manage-mods.md) |
+| Cooked mounting and declarations | Mounts matching package containers and connects supported registry metadata | [PAK content](PAK-CONTENT-GUIDE.md) |
+| Recipe integration | Connects station, ingredients, outputs and supported discovery policies | [Stations and recipes](STATIONS-AND-RECIPES.md) |
+| Identity and save maintenance | Validates supported ownership/identity records before cleanup; preserves unresolved content when certification is incomplete | [Save safety](SAFE-SAVE-AND-LEDGER.md) |
+| Lua companions | Loads supported packaged Lua behavior without changing UE4SS.dll | [Companion folders](PSEUDO-LOADERS.md) |
+| Helpy authoring | Inspects supported live data and exports reviewed definitions and reports | [Authoring tools](ADVANCED-AUTHORING-TOOLS.md) |
+| Icon caching | Uses source-scoped cached thumbnails, with import/export and bounded capture | [Icon cache](HELPY-ICON-CACHE.md) |
+| Live Log and help codes | Searches/filters recent diagnostics and exports a local snapshot with linked guidance | [Troubleshooting](TROUBLESHOOTING.md#helpy-live-log-and-help-codes) |
+| Server-local settings | Stages documented server settings, then applies them only with the server stopped | [Dedicated server reference](servers/dedicated-setup.md#verified-settings-and-observed-fields) |
+
+### Make your first RuneSchema mod
 
 Start with one visible change to existing content. The included
 [Golden Interaction Text example](examples/GoldenInteractionText/README.md)
@@ -160,7 +265,7 @@ content, follow the [PAK guide](PAK-CONTENT-GUIDE.md); for cooked ModActors or
 Lua, read the [companion-folder guide](PSEUDO-LOADERS.md). Before removing a
 mod from an existing character, read [save safety](SAFE-SAVE-AND-LEDGER.md).
 
-## Suggested description for an add-on listing
+### Suggested description for an add-on listing
 
 > Requires RuneSchema and its supported UE4SS setup. Install this archive's
 > `<ModName>` folder under `ue4ss/Mods/RuneSchema/mods/`, enable it in

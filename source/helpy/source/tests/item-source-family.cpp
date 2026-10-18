@@ -1,0 +1,94 @@
+#include "Core/ItemSource.h"
+#include "Core/ItemFamily.h"
+#include "Core/BoundedLru.h"
+#include <cassert>
+int main(){
+    PS::BoundedLru<int,int> cache(16384);
+    for(int i=0;i<16384;++i)cache.Put(i,i);
+    assert(*cache.Find(0)==0);cache.Put(16384,16384);
+    assert(cache.Size()==16384&&cache.Find(0)&&!cache.Find(1)&&cache.Find(16384));
+    for(int i=16385;i<20000;++i){assert(cache.Find(0));cache.Put(i,i);}
+    assert(cache.Size()==16384&&cache.Find(0));
+    cache.Clear();assert(cache.Size()==0&&!cache.Find(0));
+    using namespace PS;using K=ItemSource::Kind;
+    HelpyCacheSources::Plan plan;plan.Owners["game"]={"Dye"};plan.Owners["custommount"]={"CapeMod"};plan.DeclaredOwners["custommount"]={"CapeMod"};
+    plan.Owners["borrowedicons"]={"CapeMod"};
+    const std::set<std::string> native{"agility","futurefeature"};
+    auto authored=std::make_shared<HelpyCacheSources::Plan::AssetOwnerMap>();
+    (*authored)["/colorsofmoney/weapons/coppertrim/helm"]={"dye_bronzetrim"};
+    (*authored)["/game/items/i"]={"patcher"};plan.AuthoredAssets=authored;
+    auto bronzeSource=ItemSource::Describe("/ColorsOfMoney/Weapons/CopperTrim/Helm.Helm",plan);
+    assert(bronzeSource.Name=="dye_bronzetrim"&&bronzeSource.Evidence=="Exact RuneSchema asset definition");
+    assert(ItemSource::Row(ItemSource::Fields(bronzeSource)).Name=="dye_bronzetrim");
+    assert(ItemSource::Row(ItemSource::Fields(bronzeSource)).Evidence==bronzeSource.Evidence);
+    (*authored)["/colorsofmoney/weapons/coppertrim/helm"].insert("conflicting-mod");
+    assert(ItemSource::Describe("/ColorsOfMoney/Weapons/CopperTrim/Helm.Helm",plan).Name.empty());
+    assert(ItemSource::Describe("/Game/Items/I.I",plan,native).Group==K::Vanilla);
+    assert(ItemSource::Describe("/Game/Mods/Dye/Items/I.I",plan,native).Group==K::Modded);
+    assert(ItemSource::Describe("/Game/RuneSchema/Clones/I.I",plan,native).Group==K::Modded);
+    assert(ItemSource::Describe("/CustomMount/Items/I.I",plan,native).Name.empty()); // mount membership alone is not ownership
+    assert(ItemSource::Describe("/CustomMount/Items/I.I",plan,native).Group==K::Unknown);
+    assert(ItemSource::Describe("/Agility/Items/I.I",plan,native).Group==K::Expansion);
+    assert(ItemSource::Describe("/FutureFeature/Items/I.I",plan,native).Group==K::Expansion);
+    assert(ItemSource::Describe("/UnclaimedMount/Items/I.I",plan,native).Group==K::Unknown);
+    assert(ItemSource::Describe("/BorrowedIcons/Items/I.I",plan,native).Group==K::Unknown);
+    assert(ItemSource::Describe("/Engine/Transient.Item",plan,native).Group==K::Unknown);
+    assert(ItemSource::Row({{"Path","/UnclaimedMount/Items/I.I"},{"Cooked",true}}).Group==K::Unknown);
+    assert(ItemSource::Describe("/Game/Items/Clone.Clone",plan,native,"MyMod").Group==K::Modded);
+    assert(ItemSource::Describe("/Game/Items/Override.Override",plan,native,{},true).Group==K::Vanilla);
+    assert(ItemSource::Describe("/Game/../Private/I.I",plan,native).Group==K::Unknown);
+    auto query=ItemSource::Query(K::Modded,"Armor","steel helm");
+    assert(query=="__helpysource:modded __helpycat:armor steel helm");
+    assert(ItemSource::TakeFilter(query)==K::Modded&&query=="__helpycat:armor steel helm");
+    assert(ItemSource::Matches(K::All,{K::Unknown,{},{}})&&!ItemSource::Matches(K::Vanilla,{K::Modded,{},{}}));
+    assert(ItemSource::Row({{"Path","/Game/Items/X.X"},{"SourceKind","modded"},{"SourceName","Dye"}}).Group==K::Vanilla);
+    assert(ItemSource::Row({{"Path","/Game/Items/X.X"},{"RuntimeClone",true}}).Group==K::Modded);
+    const auto patched=ItemSource::Describe("/Game/Items/X.X",plan,native,{},true,true,"TuningMod");
+    assert(patched.Group==K::Vanilla&&patched.Name=="Dragonwilds"&&patched.Modified&&patched.ModifiedBy=="TuningMod");
+    const std::string tea="/UmbralSands/Gameplay/Items/Resources/Processed/ITEM_Resources_Tea_Dried.ITEM_Resources_Tea_Dried";
+    auto teaPlan=plan;teaPlan.DeclaredOwners["umbralsands"]={"maxcape"};
+    auto borrowed=std::make_shared<HelpyCacheSources::Plan::AssetOwnerMap>();(*borrowed)[HelpyCacheSources::AssetKey(tea)]={"patcher"};teaPlan.AssetOwners=borrowed;
+    const std::set<std::string> official{"umbralsands"};
+    assert(ItemSource::Describe(tea,teaPlan,official).Group==K::Expansion);
+    const auto corrected=ItemSource::Reattribute({{"Path",tea},{"SourceKind","modded"},{"SourceName","maxcape"}},teaPlan,official);
+    assert(corrected.Group==K::Expansion&&!corrected.Modified&&corrected.Name=="UmbralSands");
+    const auto editedTea=ItemSource::Reattribute({{"Path",tea},{"RuneSchemaManaged",true},{"ModifiedBy","TeaTweaks"}},teaPlan,official);
+    assert(editedTea.Group==K::Expansion&&editedTea.Modified&&editedTea.ModifiedBy=="TeaTweaks");
+    assert(ItemSource::Describe(tea,teaPlan,official,"RealCloneCreator",true).Group==K::Modded);
+    HelpyCacheSources::Reset();HelpyCacheSources::Declare("MyCape","/Cape/Items/C.C");HelpyCacheSources::Registered("/Cape/Items/C.C");
+    HelpyCacheSources::Reference("/Cape/Items/C.C","/BorrowedArt/Icons/I.I");
+    const auto ownership=HelpyCacheSources::Snapshot();
+    assert(ownership.Owners.contains("borrowedart")&&!ownership.DeclaredOwners.contains("borrowedart"));
+    assert(ItemSource::Describe("/Cape/Items/C.C",ownership).Name=="mycape");
+    assert(ItemSource::Describe("/BorrowedArt/Items/Other.Other",ownership).Group==K::Unknown);
+    HelpyCacheSources::Reset();
+    const std::string bronze="/ColorsOfMoney/Weapons/BronzeTrim/Scimitar.Scimitar",gold="/ColorsOfMoney/Weapons/GoldTrim/Scimitar.Scimitar";
+    HelpyCacheSources::Declare("Dye_BronzeTrim",bronze);const auto bronzeOnly=HelpyCacheSources::Snapshot();
+    HelpyCacheSources::Declare("Dye_GoldTrim",gold);HelpyCacheSources::Declare("Jobboard_Dyequests","/ColorsOfMoney/Quests/Scroll.Scroll");
+    const auto shared=HelpyCacheSources::Snapshot();
+    assert(shared.AssetOwners&&shared.AssetOwners->size()==3&&bronzeOnly.AssetOwners->size()==1);
+    assert(ItemSource::Describe(bronze,shared).Name=="dye_bronzetrim");
+    assert(ItemSource::Describe("/colorsofmoney/weapons/bronzetrim/scimitar",shared).Name=="dye_bronzetrim");
+    assert(ItemSource::Describe(gold,shared).Name=="dye_goldtrim");
+    assert(ItemSource::Describe("/ColorsOfMoney/Unknown/U.U",shared).Name.empty());
+    assert(ItemSource::Row({{"Path",bronze},{"SourceKind","modded"},{"SourceName",""}}).Name.empty());
+    assert(ItemSource::Describe(bronze,shared,{},"SchemaCloneAuthor").Name=="SchemaCloneAuthor");
+    HelpyCacheSources::Registered(bronze);HelpyCacheSources::Reference(bronze,"/BorrowedIcons/Icons/I.I");
+    assert(!HelpyCacheSources::Snapshot().AssetOwners->contains(HelpyCacheSources::AssetKey("/BorrowedIcons/Icons/I.I")));
+    HelpyCacheSources::Declare("ConflictingProvider",bronze);const auto conflict=HelpyCacheSources::Snapshot();
+    assert(ItemSource::Describe(bronze,conflict).Name.empty()&&ItemSource::Describe(bronze,shared).Name=="dye_bronzetrim");
+    assert(HelpyCacheSources::AssetKey("/ColorsOfMoney/../Private/X.X").empty());
+    HelpyCacheSources::Reset();assert(HelpyCacheSources::Snapshot().AssetOwners->empty()&&shared.AssetOwners->size()==3);
+    const auto family=ItemFamily::Key("Fallen Hoplite's Helm (Dyed Chrome)");
+    assert(family=="fallen_hoplite_dyed_chrome");
+    assert(ItemFamily::Matches(family,"Fallen Hoplite's Gauntlets (Dyed Chrome)"));
+    assert(ItemFamily::Matches(family,"Fallen Hoplite\xe2\x80\x99s Boots (Dyed Chrome)"));
+    assert(ItemFamily::Matches(family,"ITEM_FallenHoplite_Chestplate_DyedChrome"));
+    assert(!ItemFamily::Matches(family,"Fallen Hoplite's Helm (Dyed Gold)"));
+    assert(!ItemFamily::Matches(family,"Steel Helm (Dyed Chrome)"));
+    assert(!ItemFamily::Matches(family,"Fallen Hoplite's Helm"));
+    assert(ItemFamily::Key("Gold coin").empty()&&ItemFamily::Key("Helm").empty());
+    auto familyQuery="__helpyfamily:"+family+" chrome";
+    assert(ItemFamily::TakeFilter(familyQuery)==family&&familyQuery=="chrome");
+    bool rejected=false;try{auto bad=std::string("__helpyfamily:../private");ItemFamily::TakeFilter(bad);}catch(...){rejected=true;}assert(rejected);
+}

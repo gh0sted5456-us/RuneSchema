@@ -41,6 +41,7 @@
 #include "Utility/Logging.h"
 #include "Runtime/Storefront.h"
 #include "Loader/DragonWildsBuildingModLoader.h"
+#include "Runtime/SlowWork.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -2333,7 +2334,7 @@ namespace DragonWilds {
         m_recoveryTickCallbackId = Hook::RegisterEngineTickPostCallback(
             [this](Hook::TCallbackIterationData<void>&, UEngine*,
                 float deltaSeconds, bool) {
-                if (m_pendingWorldContext.Get()) RetryWorldRecovery(deltaSeconds);
+                if (m_pendingWorldContext.Get()) PS::SlowWork::Measure("buildings.recovery",[&]{RetryWorldRecovery(deltaSeconds);});
             },
             retryOptions);
         if (m_recoveryTickCallbackId == Hook::ERROR_ID)

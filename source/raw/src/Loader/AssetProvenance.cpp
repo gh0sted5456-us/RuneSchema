@@ -1,4 +1,5 @@
 #include "Loader/AssetProvenance.h"
+#include "Core/HelpyCacheSources.h"
 #include "Unreal/UObject.hpp"
 #include "SDK/WeakObjectHandle.h"
 #include "Unreal/UObjectArray.hpp"
@@ -6,6 +7,7 @@
 #include "Helpers/String.hpp"
 #include <mutex>
 #include <unordered_map>
+#include <algorithm>
 
 namespace PS::AssetProvenance {
 namespace {
@@ -60,6 +62,7 @@ void Record(RC::Unreal::UObject* object,const std::string& source,const std::str
     auto& entry=found->second;
     entry.lastSource=source.substr(0,1024);entry.lastMod=mod.substr(0,256);
     entry.registered=registered;entry.errors=errors;
+    if(registered&&!errors){HelpyCacheSources::Declare(entry.creator,entry.path);HelpyCacheSources::Registered(entry.path);}
     for(const auto* key:{"InternalName","PersistenceID"})if(definition.contains(key) && definition[key].is_string()) {
         const auto text=definition[key].get<std::string>().substr(0,1024);
         if(std::string_view(key)=="InternalName")entry.internalName=text;else entry.persistenceId=text;
@@ -73,6 +76,15 @@ nlohmann::json Lookup(RC::Unreal::UObject* object) {
     const auto& entry=found->second;
     if(!Matches(entry,object)){entries.erase(found);return nullptr;}
     return Describe(entry);
+}
+std::vector<std::string> LivePaths() {
+    std::lock_guard lock(mutex);std::vector<std::string> paths;
+    for(auto entry=entries.begin();entry!=entries.end();) {
+        if(!Matches(entry->second,entry->first)){entry=entries.erase(entry);continue;}
+        paths.push_back(entry->second.path);++entry;
+    }
+    std::sort(paths.begin(),paths.end());paths.erase(std::unique(paths.begin(),paths.end()),paths.end());
+    return paths;
 }
 void Flush() {
     std::lock_guard lock(mutex);

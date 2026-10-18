@@ -1,0 +1,23 @@
+{
+  "SchemaVersion": 1,
+  "Entries": [],
+  "RegistryShard": true,
+  "LoaderDefinitions": {
+    "Recipes": {
+      "/Example/Recipes/RECIPE_BlackArmor.RECIPE_BlackArmor": {
+        "Unlock": false,
+        "Discovery": {
+          "AllItems": [
+            "/Example/Items/ITEM_BlackDye.ITEM_BlackDye",
+            "/Example/Items/ITEM_Armor.ITEM_Armor"
+          ]
+        },
+        "AddTo": [{
+          "DataTable": "/Example/Stations/DT_Stations.DT_Stations",
+          "Row": "DyeStation",
+          "Category": "Dyes"
+        }]
+      }
+    }
+  }
+}

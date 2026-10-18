@@ -4,6 +4,7 @@
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
 #include "Loader/SummonAttribution.h"
+#include "SDK/Helper/ReflectedContract.h"
 
 namespace DragonWilds::Quests {
 struct AttributedDeath {RC::Unreal::UObject* Victim=nullptr;RC::Unreal::UObject* Player=nullptr;};
@@ -23,15 +24,16 @@ inline AttributedDeath ReadFatalDamage(RC::Unreal::UObject* source,RC::Unreal::U
     };
     auto* target=CastField<FObjectPropertyBase>(parameter(TEXT("Target")));
     auto* damage=CastField<FStructProperty>(parameter(point?TEXT("PointDamageEvent"):TEXT("DamageEvent")));
-    if(fn->GetParmsSize()!=(point?464:248) || !target || !damage || target->GetArrayDim()!=1 || target->GetElementSize()!=8 || target->GetOffset_Internal()!=0
-        || damage->GetArrayDim()!=1 || damage->GetOffset_Internal()!=(point?16:8) || damage->GetElementSize()!=(point?448:240)
+    ReflectedContract::Frame(fn);
+    if(!ReflectedContract::Input(target,fn) || !ReflectedContract::Input(damage,fn) || target->GetArrayDim()!=1 || target->GetElementSize()!=sizeof(UObject*)
+        || damage->GetArrayDim()!=1
         || !target->HasAnyPropertyFlags(CPF_Parm) || !damage->HasAnyPropertyFlags(CPF_Parm))throw std::runtime_error("Kill-credit damage function layout changed");
     auto* type=damage->GetStruct().Get();
-    if(!type || type->GetPathName()!=(point?TEXT("/Script/Dominion.DominionPointDamageEvent"):TEXT("/Script/Dominion.DominionDamageEvent")))throw std::runtime_error("Kill-credit damage struct changed");
+    if(!type || damage->GetElementSize()!=type->GetStructureSize() || type->GetPathName()!=(point?TEXT("/Script/Dominion.DominionPointDamageEvent"):TEXT("/Script/Dominion.DominionDamageEvent")))throw std::runtime_error("Kill-credit damage struct changed");
     auto* fatal=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(type,TEXT("bIsFatalHit")));
     auto* instigator=CastField<FObjectPropertyBase>(PropertyHelper::GetPropertyByName(type,TEXT("Instigator")));
-    if(!fatal || !fatal->IsNativeBool() || fatal->GetByteOffset()!=0 || fatal->GetArrayDim()!=1 || fatal->GetElementSize()!=1 || fatal->GetOffset_Internal()!=224
-        || !instigator || instigator->GetArrayDim()!=1 || instigator->GetElementSize()!=8 || instigator->GetOffset_Internal()!=64)throw std::runtime_error("Kill-credit instigator/fatal fields changed");
+    if(!ReflectedContract::Fits(fatal,type->GetStructureSize()) || !fatal->IsNativeBool() || fatal->GetByteOffset()!=0 || fatal->GetElementSize()!=1
+        || !ReflectedContract::Fits(instigator,type->GetStructureSize()) || instigator->GetElementSize()!=sizeof(UObject*))throw std::runtime_error("Kill-credit instigator/fatal fields changed");
     auto* value=damage->ContainerPtrToValuePtr<void>(parameters);
     if(!fatal->GetPropertyValue(fatal->ContainerPtrToValuePtr<void>(value)))return {};
     auto* victim=target->GetObjectPropertyValue(target->ContainerPtrToValuePtr<void>(parameters));

@@ -3,6 +3,30 @@
   "anyOf": [
     {
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "Contract"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "DespawnTimeOfDay"
+              ]
+            },
+            "properties": {
+              "Scope": {
+                "const": "Participant"
+              }
+            },
+            "required": [
+              "Area"
+            ]
+          }
+        }
+      ],
       "properties": {
         "Actions": {
           "description": "Delayed pose or emote actions applied to live event actors matching SpawnID.",
@@ -341,6 +365,39 @@
           ],
           "type": "object"
         },
+        "Contract": {
+          "additionalProperties": false,
+          "properties": {
+            "ActivationRadiusMeters": {
+              "default": 15,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            },
+            "ExitGraceSeconds": {
+              "default": 10,
+              "maximum": 60,
+              "minimum": 0,
+              "type": "number"
+            },
+            "QuestID": {
+              "maxLength": 257,
+              "minLength": 1,
+              "type": "string"
+            },
+            "SpawnOrigin": {
+              "default": "World",
+              "enum": [
+                "World",
+                "Participant"
+              ]
+            }
+          },
+          "required": [
+            "QuestID"
+          ],
+          "type": "object"
+        },
         "DespawnTimeOfDay": {
           "description": "Retire event actors and restore event weather when this native time state begins.",
           "enum": [
@@ -515,6 +572,30 @@
     {
       "items": {
         "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "Contract"
+              ]
+            },
+            "then": {
+              "not": {
+                "required": [
+                  "DespawnTimeOfDay"
+                ]
+              },
+              "properties": {
+                "Scope": {
+                  "const": "Participant"
+                }
+              },
+              "required": [
+                "Area"
+              ]
+            }
+          }
+        ],
         "properties": {
           "Actions": {
             "description": "Delayed pose or emote actions applied to live event actors matching SpawnID.",
@@ -850,6 +931,39 @@
             "required": [
               "Location",
               "RadiusMeters"
+            ],
+            "type": "object"
+          },
+          "Contract": {
+            "additionalProperties": false,
+            "properties": {
+              "ActivationRadiusMeters": {
+                "default": 15,
+                "maximum": 100,
+                "minimum": 1,
+                "type": "number"
+              },
+              "ExitGraceSeconds": {
+                "default": 10,
+                "maximum": 60,
+                "minimum": 0,
+                "type": "number"
+              },
+              "QuestID": {
+                "maxLength": 257,
+                "minLength": 1,
+                "type": "string"
+              },
+              "SpawnOrigin": {
+                "default": "World",
+                "enum": [
+                  "World",
+                  "Participant"
+                ]
+              }
+            },
+            "required": [
+              "QuestID"
             ],
             "type": "object"
           },

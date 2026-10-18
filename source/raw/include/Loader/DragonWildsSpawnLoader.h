@@ -22,6 +22,9 @@
 #include "Loader/EventDefinition.h"
 #include "Loader/SpawnRadius.h"
 #include "Loader/TimeOfDay.h"
+#include "Core/GroundingRetry.h"
+#include "Core/GroundSurface.h"
+#include "Core/NearbyPlacement.h"
 
 namespace RC::Unreal {
     class AActor;
@@ -58,6 +61,10 @@ namespace DragonWilds {
             nlohmann::json AdditionalDrops=nlohmann::json::array();
             RC::Unreal::FVector Location{};
             RC::Unreal::FVector AuthoredLocation{};
+            PS::Grounding::Retry GroundRetry;
+            PS::Grounding::SearchRange GroundSearch;
+            PS::Grounding::NearbyPolicy GroundMigration;
+            std::optional<PS::SpawnFootprint::Capsule> GroundClearance;
             RC::Unreal::FRotator Rotation{};
             RC::Unreal::FVector Scale{1.0, 1.0, 1.0};
             double DropMultiplier = 1.0;
@@ -98,6 +105,7 @@ namespace DragonWilds {
             bool bGroundToSurface = false;
             bool bGroundingResolved = true;
             double GroundZOffset = 0.0;
+            std::optional<double> GroundReferenceZ;
             double GroundTraceAbove = 5000.0;
             double GroundTraceBelow = 10000.0;
             RC::Unreal::FGuid StableId{};
@@ -118,7 +126,9 @@ namespace DragonWilds {
         void HandleNetworkWorldState(const std::string& payload);
         nlohmann::json EventSpawnManifest(const std::string& key) const;
         void ValidateEventSpawn(const std::string& key);
-        RC::Unreal::AActor* SpawnEventAI(const std::string& key,RC::Unreal::UWorld* world,const RC::Unreal::FVector& position,bool tool=false,double yaw=0,const std::string& eventKey={},int toolPowerLevel=-1);
+        RC::Unreal::AActor* SpawnEventAI(const std::string& key,RC::Unreal::UWorld* world,const RC::Unreal::FVector& position,bool tool=false,double yaw=0,const std::string& eventKey={},int toolPowerLevel=-1,std::optional<double> groundOffset={});
+        RC::Unreal::FVector PrepareEventGrounded(const std::string& key,RC::Unreal::UWorld* world,const RC::Unreal::FVector& foot,RC::Unreal::AActor* participant,bool rechecking=false,std::vector<PS::SpawnFootprint::Reservation>* reservations=nullptr,std::optional<double> clearance={});
+        void ReleaseEventAdditionalDrops(RC::Unreal::UObject* actor);
         void PumpItemIcons();
         void PumpSpawnTools();
         std::vector<PS::WeakObjectHandle> m_toolActors;
@@ -373,6 +383,8 @@ namespace DragonWilds {
         std::vector<OwnedJsonDocument> m_nameplateDocuments;
         std::unordered_map<std::string,nlohmann::json> m_nameplateDefinitions;
         RC::Unreal::UWorld* m_readyWorld = nullptr;
+        PS::WeakObjectHandle m_validatedWorld;
+        std::string m_activeItemIcon;
         RC::Unreal::UWorld* m_pendingWorld = nullptr;
         std::vector<UECustom::FBox> m_pendingCellBounds;
         RC::Unreal::UFunction* m_onLevelShownFunction = nullptr;
@@ -491,7 +503,7 @@ namespace DragonWilds {
         void RegisterRemoveActor(SpawnInfo& spawn, const nlohmann::json& value);
         void ApplyBuildingData(RC::Unreal::AActor* actor,const SpawnInfo& spawn);
         std::pair<bool,std::string> VerifyToolBuildingInstance(RC::Unreal::AActor* actor,RC::Unreal::UObject* building,const SpawnInfo& spawn,RC::Unreal::UWorld* world,bool requireTransient) const;
-        std::pair<bool,std::string> VerifyToolBuildingCandidate(RC::Unreal::UObject* building,const SpawnInfo& spawn,RC::Unreal::UWorld* world) const;
+        std::pair<bool,std::string> VerifyToolBuildingCandidate(RC::Unreal::UObject* building,const SpawnInfo& spawn,RC::Unreal::UWorld* world,bool requireTemporary=true) const;
         void ReconcileTimedBuildingProps(float deltaSeconds);
         void ReconcileManagedActorScales(double deltaSeconds);
         RC::Unreal::UClass* ResolveClass(const RC::StringType& classPath);
@@ -529,12 +541,17 @@ namespace DragonWilds {
         bool IsProtectedBuildingActor(RC::Unreal::AActor* actor) const;
         bool IsWorldStillLoaded(RC::Unreal::UWorld* world);
         void OnCellShown(RC::Unreal::UObject* cellObject);
+        void ReconcileShownCells(float deltaSeconds);
+        size_t m_cellCatchupCursor=0;
+        double m_cellCatchupDelay=0;
         bool HasLiveSpawnedAI(RC::Unreal::UWorld* world, SpawnInfo& spawn);
         std::optional<bool> TemporaryResourceCondition(const SpawnInfo& spawn,RC::Unreal::UWorld* world) const;
         void DestroyLiveSpawnedAI(RC::Unreal::UWorld* world,const SpawnInfo& spawn);
         void RetireTimedActor(RC::Unreal::AActor* actor);
         void TryProcessSpawns(RC::Unreal::UWorld* world, const std::vector<UECustom::FBox>* bounds, const wchar_t* trigger);
-        void ProcessSpawns(RC::Unreal::UWorld* world, const std::vector<UECustom::FBox>* bounds);
+        void ProcessSpawns(RC::Unreal::UWorld* world, const std::vector<UECustom::FBox>* bounds,bool groundRetriesOnly=false);
+        void ReconcileGroundingRetries(float deltaSeconds);
+        double m_groundingRetryElapsed=0;
         void ProcessAISpawnPointEntry(RC::Unreal::UWorld* world, SpawnInfo& spawn);
         void ProcessActorEntry(RC::Unreal::UWorld* world, SpawnInfo& spawn);
         void ProcessStaticAssemblyEntry(RC::Unreal::UWorld* world, SpawnInfo& spawn);

@@ -1,5 +1,4 @@
-// RuneSchema.Helpy owns these settings. Edit with the game closed.
+// Desktop HELPY is F2. Close it or press F2 again to return to the game.
 {
-  "enabled": true,
-  "toggleKey": "F2"
+  "enabled": true
 }

@@ -1,0 +1,23 @@
+{
+  "platform": "GamePass",
+  "expected": 2,
+  "verified": 2,
+  "errors": [],
+  "packages": [
+    {
+      "package": "/RuneSchemaQuestItems/Blueprints/BP_QuestScroll",
+      "exports": 3,
+      "decoded": true
+    },
+    {
+      "package": "/RuneSchemaQuestItems/Items/ITEM_QuestScroll_Template",
+      "exports": 1,
+      "decoded": true
+    }
+  ],
+  "mapping_sha256": "C7F9A522479D2E827F9B792A4D643DF6887B53CE08445ABECBB0C862B34D5C52",
+  "base_game_only": true,
+  "core_dye_loaded": false,
+  "installed": false,
+  "gameplay_verified": false
+}

@@ -1,0 +1,31 @@
+[
+  {
+    "Type": "BP_QuestScroll_C",
+    "Name": "ITEM_QuestScroll_Template",
+    "Flags": "RF_Public | RF_Standalone | RF_Transactional | RF_WasLoaded | RF_LoadCompleted",
+    "Class": "BlueprintGeneratedClass'/RuneSchemaQuestItems/Blueprints/BP_QuestScroll.BP_QuestScroll_C'",
+    "Package": "/RuneSchemaQuestItems/Items/ITEM_QuestScroll_Template",
+    "Template": {
+      "ObjectName": "BP_QuestScroll_C'Default__BP_QuestScroll_C'",
+      "ObjectPath": "/RuneSchemaQuestItems/Blueprints/BP_QuestScroll.1"
+    },
+    "Properties": {
+      "UseVerb": {
+        "CultureInvariantString": "Read"
+      },
+      "Name": {
+        "CultureInvariantString": "Quest Scroll Template (authoring)"
+      },
+      "FlavourText": {
+        "CultureInvariantString": "Authors clone this inert template, assign a new permanent item identity, and bind an existing quest with $QuestScroll. This template grants no quest or reward."
+      },
+      "MaxStackSize": 25,
+      "PersistenceID": "EvaZqkcGPyMFTdGm-ZOq3A",
+      "InternalName": "runeschema_quest_scroll_template",
+      "NativeClass": {
+        "ObjectName": "BlueprintGeneratedClass'BP_QuestScroll_C'",
+        "ObjectPath": "/RuneSchemaQuestItems/Blueprints/BP_QuestScroll.0"
+      }
+    }
+  }
+]

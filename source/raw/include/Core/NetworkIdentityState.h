@@ -4,12 +4,16 @@
 #include <mutex>
 #include <string>
 #include <vector>
+#include <atomic>
 #include "Core/NetworkIdentityPlan.h"
 
 namespace PS::NetworkIdentityState {
     inline std::mutex Gate;
     inline std::map<std::string, std::string> Lanes;
     inline std::map<std::string, std::map<std::string, std::string>> OwnerLanes;
+    inline std::atomic<bool> StartupBatchFinished{false};
+    inline bool DeferItemEnrollment() noexcept {return !StartupBatchFinished.load(std::memory_order_acquire);}
+    inline void FinishStartupBatch() noexcept {StartupBatchFinished.store(true,std::memory_order_release);}
 
     inline void Publish(const std::string& lane, const std::string& fingerprint)
     {
@@ -60,5 +64,6 @@ namespace PS::NetworkIdentityState {
         std::scoped_lock lock(Gate);
         Lanes.clear();
         OwnerLanes.clear();
+        StartupBatchFinished.store(false,std::memory_order_release);
     }
 }

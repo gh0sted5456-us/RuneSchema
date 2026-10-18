@@ -1,7 +1,7 @@
 # Install or update RuneSchema
 
 This guide covers a normal RuneSchema installation and the safest way to update
-an existing setup. The same RuneSchema content format is used on Steam, GOG,
+an existing setup. The same RuneSchema content format is used on Steam, Epic,
 and Game Pass. Use the package intended for your game and UE4SS installation.
 
 New to the framework? Start with [what RuneSchema is, what its files do, and
@@ -18,7 +18,7 @@ You need:
 
 Close the game before replacing RuneSchema, UE4SS, or any PAK files.
 
-Download the [current 0.7.7.9m package](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.7.7.9m/RuneSchema-0.7.7.9m.zip).
+Download the [current 0.8.0.0 package](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.0/RuneSchema-0.8.0.0.zip).
 There is one `RuneSchema-<version>.zip` per release, with the registry and
 networking bridges and Helpy included. No separate Core or Universal choice is
 needed. The `e` suffix identifies an experimental build; `m` identifies main.
@@ -66,8 +66,9 @@ Use `0` only when you want RuneSchema itself to stay completely off.
 If a mod uses the optional `logicmods` folder, RuneSchema's own Lua helper can
 start its cooked ModActor. The release settings enable this route without
 editing BPModLoaderMod. Keep your existing `settings` and `mods` folders when
-updating, and confirm `bpModLoader.luaActorLoader: true` and
-`bpModLoader.patchScript: false` in `settings.jsonc`. A mod's
+updating, and confirm `luaActorLoader = true` and
+`patchScript = false` in the `[bpModLoader]` section of `settings.ini`. Existing
+JSONC settings migrate automatically; see [settings and migration](SETTINGS-INI.md). A mod's
 `ue4ss/scripts/main.lua` companion needs no separate UE4SS `mods.txt` line.
 See [Blueprint and Lua companion folders](PSEUDO-LOADERS.md) for the two layouts.
 
@@ -92,6 +93,49 @@ same name appears more than once, even with different letter case.
 
 The line order is also the RuneSchema mod order. Keep required base mods above
 the patches that depend on them.
+
+Choices are retained for temporarily missing folders, so restoring an update
+does not reactivate a disabled mod. Only `1` enables a folder; invalid values
+remain disabled. Save this file as UTF-8. If it changes while the load-order
+editor is open, reload from disk before saving; stale edits are not applied.
+
+Helpy opens as a separate desktop window with F2. It has its own taskbar entry
+and normal keyboard/mouse focus. Press F2 again or close the window to return
+to the game. Switching to another application does not force it closed.
+
+## Check for updates in Helpy
+
+Open **Settings > Updates & runtime** to compare your installed RuneSchema
+version with GitHub main and the latest published stable release. Automatic
+checks run in the background when Helpy opens, at most once a day. The same
+panel has a manual check and links to GitHub and the community Nexus listing.
+Disable automatic checks there if you prefer an offline setup.
+
+Only public version metadata is requested. Helpy sends no character or world
+data, downloads no update files and never installs an update automatically.
+Results are cached under `%LOCALAPPDATA%\RuneSchema\HELPY\updates.json`.
+Network failures and rate limits appear as unavailable checks, not as proof that
+your installation is current. An alpha version newer than main is shown as ahead;
+different legacy build labels are not treated as ordered version numbers.
+
+Nexus comparison opens its listing in your browser. Helpy does not bypass Nexus
+login or anti-bot protections; its automatic checks use GitHub.
+
+## UE4SS build identity and compatibility
+
+Helpy shows the loaded UE4SS build in its runtime footer and Updates & runtime
+panel. The current startup banner supplies the declared version and Git commit;
+RuneSchema verifies the commit exists in the loaded DLL before reporting it.
+If that identity cannot be established, the build remains unknown rather than
+being guessed from a download filename or another installation's log.
+
+RuneSchema has no runtime build-number ceiling or exact-version rejection rule.
+It detects available capabilities and uses fallbacks for optional APIs. Its
+compile SDK remains pinned for reproducible builds; that is not an installed-host
+version lock. Newer UE4SS hosts must retain RuneSchema's required exported C++
+symbols and ABI. A future breaking ABI change can require a rebuilt RuneSchema,
+so compatibility with every future UE4SS binary cannot be guaranteed. RuneSchema
+updates do not replace or modify `UE4SS.dll`.
 
 ## Update an existing installation
 
@@ -118,8 +162,8 @@ the same as a failed start.
 If RuneSchema cannot start at all, the log should state the reason. Fix that
 first before judging whether an individual mod worked.
 
-For this release, the startup version should read `0.7.7.9m` for the main ZIP
-or `0.7.7.9e` for the experimental ZIP. If it shows an earlier version, check
+For this release, both RuneSchema and RSMK should report `0.8.0.0`.
+If either shows an earlier version, check
 for an old DLL in the active UE4SS installation before troubleshooting the mod.
 
 ## Remove RuneSchema temporarily

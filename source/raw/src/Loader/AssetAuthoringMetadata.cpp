@@ -28,6 +28,7 @@ void Record(RC::Unreal::UObject* object,const Declaration& value,const std::stri
     it->second.owner=owner.substr(0,256);it->second.installed|=installedDefinition;
 }
 Declaration Lookup(RC::Unreal::UObject* object){std::lock_guard lock(mutex);const auto it=Find(object);return it==records.end()?Declaration{}:it->second.declared;}
+std::string Owner(RC::Unreal::UObject* object){std::lock_guard lock(mutex);const auto it=Find(object);return it==records.end()?std::string{}:it->second.owner;}
 bool HasInstalledDefinition(RC::Unreal::UObject* object){std::lock_guard lock(mutex);const auto it=Find(object);return it!=records.end()&&it->second.installed&&!it->second.incomplete;}
 bool IsManaged(RC::Unreal::UObject* object){std::lock_guard lock(mutex);return Find(object)!=records.end();}
 void MarkIncomplete(RC::Unreal::UObject* object) noexcept {
