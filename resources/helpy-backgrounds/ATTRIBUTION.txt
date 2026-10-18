@@ -1,0 +1,24 @@
+Optional RuneScape: Dragonwilds backgrounds for the Helpy mod interface
+
+Artwork: RuneScape / RuneScape: Dragonwilds, copyright Jagex Limited.
+These user-supplied background images retain Jagex's ownership. They are
+provided free of charge as optional imagery for RuneSchema's Helpy interface,
+not as MIT-licensed RuneSchema artwork and not as an official Jagex release.
+
+Created using intellectual property belonging to Jagex Limited under the
+terms of Jagex's Fan Content Policy. This content is not endorsed by or
+affiliated with Jagex.
+
+Fan Content Policy:
+https://legal.jagex.com/docs/policies/fan-content-policy
+Dragonwilds Community Modding Guidelines:
+https://legal.jagex.com/docs/policies/runescape-dragonwilds-community-modding-guidelines
+
+This pack contains eight unmodified PNG images supplied for this purpose.
+The manifest records each original filename, byte size and SHA-256 checksum.
+No game binaries, executable code, item data or save data are included.
+Credit is attribution, not a transfer or sublicense of Jagex's rights.
+
+In Helpy: Settings > Backgrounds > Download backgrounds. Downloaded pictures
+remain optional; preview and apply a selection before it becomes your backdrop.
+You may also place your own pictures in the plugin's assets/backgrounds folder.

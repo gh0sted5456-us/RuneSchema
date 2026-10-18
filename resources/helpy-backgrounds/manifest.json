@@ -1,0 +1,49 @@
+{
+  "Version": 1,
+  "Pack": "RuneScape-Dragonwilds",
+  "Copyright": "Artwork copyright Jagex Limited",
+  "Attribution": "Created using intellectual property belonging to Jagex Limited under the terms of Jagex's Fan Content Policy. This content is not endorsed by or affiliated with Jagex.",
+  "Policy": "https://legal.jagex.com/docs/policies/fan-content-policy",
+  "Files": [
+    {
+      "Name": "chop-chop.png",
+      "Bytes": 4211492,
+      "SHA256": "d2643f59648a6c9b01130d3d13053fa29bf82a13ad1f35e065f6edc1db97a047"
+    },
+    {
+      "Name": "fight-the-undead.png",
+      "Bytes": 3506866,
+      "SHA256": "c4037a9b3a5464a7fd0b4a3d9232102f5b7fd23f53c19f43e3e6071b25b20a22"
+    },
+    {
+      "Name": "friday-night-w-boys.png",
+      "Bytes": 3672270,
+      "SHA256": "01e71cc22f62bb1c656dfa8260714c943d522308bd8370c41c13f83188334822"
+    },
+    {
+      "Name": "goblin-fight.png",
+      "Bytes": 3368740,
+      "SHA256": "52c8cb552a7f97ce9e921e285881c19f9efdbedd0b80379f1f3025daf2fcaeff"
+    },
+    {
+      "Name": "hey-big-sexywebp.png",
+      "Bytes": 3946778,
+      "SHA256": "142b280d53adbc4e48800e75ed76cdd2843166543bd24819191a12807665f598"
+    },
+    {
+      "Name": "into-the-wild.png",
+      "Bytes": 3288278,
+      "SHA256": "0bca061988ffd989c9f3b0dd1b8eadadca6a9fecf371c4d7ba28ec0d798ce2a0"
+    },
+    {
+      "Name": "page_bg_raw.png",
+      "Bytes": 4142971,
+      "SHA256": "5d01b47ea636c83ad6e399c3fb200a41b1e6363caabc1c0f9ddfacd4ac95d95a"
+    },
+    {
+      "Name": "the-ruined-village.png",
+      "Bytes": 2514839,
+      "SHA256": "05c61658109bb2cdd6905a36628b4c6b23ce43ff0784ecbfcbd1860fcaa25857"
+    }
+  ]
+}
