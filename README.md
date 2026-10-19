@@ -2,6 +2,11 @@
 
 Runtime schema and data-editing framework for **RuneScape: Dragonwilds**.
 
+**Experimental: RuneSchema and RSMK 0.8.0.1.** The matching `0.8.0.1` tag
+targets this experimental iteration. See the [0.8.0.1 changelog](docs/CHANGELOG-0.8.0.1.md)
+for changes and remaining live-test limits. Tagged package availability depends
+on the release build completing successfully.
+
 **RuneSchema and RSMK 0.8.0.0** are published from `main` under the matching
 `0.8.0.0` release tag. This release consolidates the October 13–16 alpha work.
 [Download the full runtime](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.0.0)

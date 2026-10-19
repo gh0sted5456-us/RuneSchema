@@ -21,7 +21,7 @@
 namespace {
 HMODULE Module{};
 constexpr RuneSchemaPluginDescriptor Descriptor{sizeof(RuneSchemaPluginDescriptor),RUNESCHEMA_PLUGIN_API_VERSION,
-    "RuneSchema.Helpy","RuneSchema Helpy","0.8.0.0"};
+    "RuneSchema.Helpy","RuneSchema Helpy","0.8.0.1"};
 struct State {const RuneSchemaHostApi* Host{};std::unique_ptr<PS::HelpyStandaloneWindow> Window;
     RC::Unreal::Hook::GlobalCallbackId Tick=RC::Unreal::Hook::ERROR_ID;bool ThemeKeyDown=false;
     std::atomic<bool> ToolsAvailable=false,ToolsWaiting=false;std::atomic<uint64_t> ToolsGeneration=1;
@@ -48,7 +48,7 @@ bool CallCore(State* state,const nlohmann::json& request,nlohmann::json& respons
     try{response=nlohmann::json::parse(output);return true;}catch(...){return false;}
 }
 int32_t RS_PLUGIN_CALL About(void*,const char*,char* response,uint32_t capacity,uint32_t* size) {
-    constexpr char value[]=R"({"plugin":"RuneSchema.Helpy","version":"0.8.0.0","ui":"plugin-dll","umg":false})";
+    constexpr char value[]=R"({"plugin":"RuneSchema.Helpy","version":"0.8.0.1","ui":"plugin-dll","umg":false})";
     if(!size)return RS_PLUGIN_INVALID_ARGUMENT;*size=static_cast<uint32_t>(sizeof(value));
     if(capacity<sizeof(value))return RS_PLUGIN_BUFFER_TOO_SMALL;std::memcpy(response,value,sizeof(value));return RS_PLUGIN_OK;
 }

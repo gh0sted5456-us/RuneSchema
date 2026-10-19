@@ -1,8 +1,12 @@
 # RuneSchema and RSMK 0.8.0.1 changelog
 
-Draft for the next `main` commit, consolidating verified work after the published
-0.8.0.0 release. This document does not mark 0.8.0.1 as published or change the
-runtime version. Repeated development revisions are summarized once below.
+Experimental iteration following the published 0.8.0.0 release. Runtime, RSMK,
+plugin manifests, build packaging and Windows resources now declare 0.8.0.1
+for the matching release tag. Stable `main` is unchanged. Release assets depend
+on the tagged build succeeding; a tag alone does not establish live-game
+verification. Earlier candidate-status notes below record their verification
+at the time of each development checkpoint, not the current version metadata.
+Repeated development revisions are summarized once below.
 
 ## Party equipment and durability follow-up (local build candidate)
 

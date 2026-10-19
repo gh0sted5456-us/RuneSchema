@@ -58,7 +58,7 @@ bool CallCore(State* state,const nlohmann::json& request,nlohmann::json& respons
     }catch(...){return false;}
 }
 int32_t RS_PLUGIN_CALL About(void*,const char*,char* response,uint32_t capacity,uint32_t* size) {
-    constexpr char value[]=R"({"plugin":"RuneSchema.Helpy","version":"0.8.0.0","ui":"plugin-dll","umg":false})";
+    constexpr char value[]=R"({"plugin":"RuneSchema.Helpy","version":"0.8.0.1","ui":"plugin-dll","umg":false})";
     if(!size)return RS_PLUGIN_INVALID_ARGUMENT;*size=static_cast<uint32_t>(sizeof(value));
     if(!response||capacity<sizeof(value))return RS_PLUGIN_BUFFER_TOO_SMALL;std::memcpy(response,value,sizeof(value));return RS_PLUGIN_OK;
 }

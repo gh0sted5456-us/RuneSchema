@@ -1,4 +1,4 @@
-# RSMK 0.8.0.0 integration
+# RSMK 0.8.0.1 integration
 
 ## Grouped navigation candidate
 
@@ -20,7 +20,7 @@ These changes are a local build candidate, not an installed or published release
 
 ## Runtime and content integration
 
-RuneSchema and RSMK now share version `0.8.0.0`, including their manifests and
+RuneSchema and RSMK now share version `0.8.0.1`, including their manifests and
 Windows DLL metadata. Info (next to Credits and Legal) contains framework,
 game and UE4SS versions; the centered footer keeps only the runtime badge,
 readiness dot and F2 hint. Steam/Epic replaces the old Steam/GOG label.

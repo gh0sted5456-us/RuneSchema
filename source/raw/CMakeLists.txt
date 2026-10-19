@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(RuneSchema VERSION 0.8.0.0 LANGUAGES CXX RC)
+project(RuneSchema VERSION 0.8.0.1 LANGUAGES CXX RC)
 
 # Reject leftover source files from the postponed RSDK Workspace/Inspector branch.
 file(GLOB_RECURSE RUNESCHEMA_DEFERRED_FILES

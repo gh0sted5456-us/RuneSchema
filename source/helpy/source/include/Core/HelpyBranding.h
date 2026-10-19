@@ -8,7 +8,7 @@ namespace PS::HelpyBranding {
 inline constexpr char Name[]="RSMK";
 inline constexpr char FullName[]="RuneSchema Modding Kit";
 inline constexpr wchar_t WindowTitle[]=L"RSMK (RuneSchema Modding Kit)";
-inline constexpr char Version[]="0.8.0.0";
+inline constexpr char Version[]="0.8.0.1";
 inline constexpr float RuntimeIconSize=36.f;
 // Original 1920x1080 Resources/SplashScreen.png, never upscaled from an icon.
 // Shared crop preserves its aspect ratio and the gap between the two lines.

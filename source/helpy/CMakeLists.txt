@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Helpy VERSION 0.8.0.0 LANGUAGES CXX RC)
+project(Helpy VERSION 0.8.0.1 LANGUAGES CXX RC)
 if(NOT WIN32 OR NOT MSVC)
   message(FATAL_ERROR "Helpy requires the Windows x64 MSVC toolchain")
 endif()

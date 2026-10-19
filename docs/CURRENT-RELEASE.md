@@ -1,5 +1,10 @@
 # RuneSchema 0.8.0.0
 
+Experimental source is versioned **0.8.0.1**, with a matching release tag.
+See the [experimental changelog](CHANGELOG-0.8.0.1.md). The stable `main`
+release described below remains 0.8.0.0; tagged assets require a successful
+release build.
+
 RuneSchema loads enabled mod folders, mounts their cooked content, and connects
 supported definitions to Dragonwilds' live systems. The main release now uses
 the plain version/tag `0.8.0.0`; `m`/`e` suffixes describe historical releases.

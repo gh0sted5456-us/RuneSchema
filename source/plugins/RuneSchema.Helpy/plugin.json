@@ -1,8 +1,8 @@
 {
   "SchemaVersion": 1,
   "Id": "RuneSchema.Helpy",
-  "Version": "0.8.0.0",
-  "BuiltForRuneSchema": "0.8.0.0",
+  "Version": "0.8.0.1",
+  "BuiltForRuneSchema": "0.8.0.1",
   "EntryPoint": "RuneSchema.Helpy.dll",
   "ConsoleMessage": "Desktop RSMK is ready. F2 opens/closes its separate window; F5 reloads its skin.",
   "Capabilities": [
