@@ -27,18 +27,26 @@ inline bool Listed=false,DraftReady=false,Preview=false,SettingsVisible=false;
 inline float DraftStrength=.12f;
 inline size_t Uploads=0;
 inline std::filesystem::path Folder(){return HelpyPaths::PluginRoot()/"assets"/"backgrounds";}
+inline std::filesystem::path Resolve(const std::string& name){
+    const auto custom=Folder()/std::filesystem::u8path(name);std::error_code error;if(std::filesystem::is_regular_file(custom,error))return custom;
+    if(name=="RuneSchema.png")return HelpyPaths::Asset("RuneSchema.png");
+    if(name=="Dragonwilds.png"||name=="dragonwilds.png")return HelpyPaths::Asset("dragonwilds.png");
+    return custom;
+}
 inline const std::string& Effective(){return Preview?Selection:HelpyImGuiTheme::Current.backgroundFile;}
 inline bool Opaque(){return BackgroundPolicy::Filename(Effective());}
 inline void Refresh(){
     Files.clear();Error.clear();Failed.clear();Listed=true;
-    try{const auto folder=Folder();if(!std::filesystem::is_directory(folder))return;
+    try{const auto folder=Folder();
+        for(const auto* builtin:{"RuneSchema.png","Dragonwilds.png"})if(std::filesystem::is_regular_file(Resolve(builtin)))Files.push_back(builtin);
+        if(!std::filesystem::is_directory(folder))return;
         if(GetFileAttributesW(folder.c_str())&FILE_ATTRIBUTE_REPARSE_POINT)throw std::runtime_error("Background folder links are not supported.");
         size_t inspected=0;for(const auto& file:std::filesystem::directory_iterator(folder)){
             if(++inspected>512){Error="Folder listing limited to 512 entries.";break;}
             const auto utf8=file.path().filename().u8string();const std::string name(utf8.begin(),utf8.end());
             if(!BackgroundPolicy::Filename(name)||!file.is_regular_file()||(GetFileAttributesW(file.path().c_str())&FILE_ATTRIBUTE_REPARSE_POINT))continue;
             if(file.file_size()>20*1024*1024)continue;Files.push_back(name);if(Files.size()==128){Error="Showing the first 128 background images.";break;}
-        }std::sort(Files.begin(),Files.end());
+        }std::sort(Files.begin(),Files.end());Files.erase(std::unique(Files.begin(),Files.end()),Files.end());
         for(const auto& [name,image]:Images)if(image.Texture)Retired.push_back(image.Texture);Images.clear();
     }catch(const std::exception& e){Error=e.what();}
 }
@@ -54,7 +62,7 @@ inline void Pump(){
     while(Images.size()>2){const auto old=std::find_if(Images.begin(),Images.end(),[&](const auto& entry){return !wanted.contains(entry.first);});if(old==Images.end())break;if(old->second.Texture)old->second.Texture->Release();Images.erase(old);}
     if(!Worker.valid()&&Decode){for(const auto& name:{active,SettingsVisible?Selection:std::string{}}){
         if(!BackgroundPolicy::Filename(name)||Images.contains(name)||Failed.contains(name))continue;
-        Pending=name;const auto file=Folder()/std::filesystem::u8path(name);const auto decoder=Decode;
+        Pending=name;const auto file=Resolve(name);const auto decoder=Decode;
         Worker=std::async(std::launch::async,[file,decoder]{try{return decoder(file);}catch(const std::exception& e){return Pixels{0,0,{},e.what()};}catch(...){return Pixels{0,0,{},"Could not decode background."};}});break;
     }}SettingsVisible=false;
 }

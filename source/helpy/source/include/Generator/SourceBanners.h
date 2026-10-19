@@ -48,22 +48,33 @@ inline std::string Owner(const Json& row){
     return SourceBanner::OwnerForItem(row);
 }
 inline void DrawKey(const std::string& owner,ImVec2 a,ImVec2 b,unsigned char opacity=43){
-    if(owner.empty())return;Wanted.insert(owner);const auto found=Images.find(owner);if(found==Images.end()||!found->second.Texture)return;
+    if(owner.empty())return;if(Wanted.insert(owner).second)Next={};const auto found=Images.find(owner);if(found==Images.end()||!found->second.Texture)return;
     auto* draw=ImGui::GetWindowDrawList();draw->PushClipRect(a,b,true);const auto crop=BackgroundPolicy::Cover(256,144,b.x-a.x,b.y-a.y);
     draw->AddImage(ImTextureRef(found->second.Texture),a,b,{crop.Left,crop.Top},{crop.Right,crop.Bottom},IM_COL32(255,255,255,opacity));
     draw->AddRectFilledMultiColor(a,b,IM_COL32(0,0,0,35),IM_COL32(0,0,0,35),IM_COL32(0,0,0,150),IM_COL32(0,0,0,150));draw->PopClipRect();
 }
-inline void Draw(const Json& row,ImVec2 a,ImVec2 b){DrawKey(Owner(row),a,b);}
+inline void Draw(const Json& row,ImVec2 a,ImVec2 b){
+    const auto owner=Owner(row);const auto found=Images.find(owner);
+    if(owner.empty()||found==Images.end()||!found->second.Texture)DrawKey("ui:home-banner.png",a,b);
+    DrawKey(owner,a,b);
+}
+inline void DetailsBackground(const Json& row){const auto a=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();Draw(row,a,{a.x+size.x,a.y+size.y});}
 inline void DrawCard(const std::string& choice,ImVec2 a,ImVec2 b){if(choice.starts_with("source:"))DrawKey(choice.substr(7),a,b,80);else if(choice.starts_with("background:")||choice=="ui:home-banner.png")DrawKey(choice,a,b,80);}
 inline void Pump(){
     if(Worker.valid()&&Worker.wait_for(std::chrono::seconds(0))==std::future_status::ready){try{auto pixels=Worker.get();if(HelpyBackgrounds::Upload)for(auto& [owner,image]:pixels){const auto digest=CacheBundleIO::Hash(std::string_view(reinterpret_cast<const char*>(image.Data.data()),image.Data.size()));if(Digests[owner]==digest)continue;if(auto* texture=HelpyBackgrounds::Upload(image)){if(Images[owner].Texture)Images[owner].Texture->Release();Images[owner]={texture,image.Width,image.Height};Digests[owner]=digest;}}if(SavingArt)Status="Artwork ready. It will be included with this source's exported cache.";}catch(const std::exception& e){Status=e.what();}SavingArt=false;}
-    if(Worker.valid()||std::chrono::steady_clock::now()<Next||!HelpySourceCache::Ready()||!HelpySourceCache::Current.Authoritative||!HelpyBackgrounds::Decode)return;
+    if(Worker.valid()||std::chrono::steady_clock::now()<Next||!HelpyBackgrounds::Decode)return;
     Next=std::chrono::steady_clock::now()+std::chrono::seconds(10);
+    const bool cacheReady=HelpySourceCache::Ready()&&HelpySourceCache::Current.Authoritative;
     const auto snapshot=HelpySourceCache::Current;const auto cache=HelpySourceCache::Directory(false),root=HostServices::ModDirectory(),assets=HelpyPaths::Asset("source-base-game.png").parent_path();const auto decoder=HelpyBackgrounds::Decode;
     const auto wanted=Wanted;std::set<std::string> loaded;for(const auto& [key,image]:Images)loaded.insert(key);
-    Worker=std::async(std::launch::async,[snapshot,cache,root,assets,decoder,wanted,loaded]{EnsureBuiltins(cache,root,snapshot,assets,decoder);std::map<std::string,HelpyBackgrounds::Pixels> result;
-        for(const auto& record:CacheBundleStore::Read(cache,root,snapshot,CacheBundleStore::Locale(),"art")){const auto& data=record.at("Data");if(!data.contains("SourceBannerPixels"))continue;if(result.size()>=64)break;result[record.at("Owner").get<std::string>()]={256,144,SourceBanner::Decode(data["SourceBannerPixels"]),{}};}
-        for(const auto& key:wanted){if(loaded.contains(key))continue;fs::path file;if(key=="ui:home-banner.png")file=HelpyPaths::Asset("home-banner.png");else if(key.starts_with("background:")&&BackgroundPolicy::Filename(key.substr(11)))file=HelpyBackgrounds::Folder()/fs::u8path(key.substr(11));else continue;try{result[key]=Thumbnail(decoder(file));}catch(...){}if(result.size()>=64)break;}return result;});
+    Worker=std::async(std::launch::async,[snapshot,cache,root,assets,decoder,wanted,loaded,cacheReady]{std::map<std::string,HelpyBackgrounds::Pixels> result;
+        if(cacheReady){EnsureBuiltins(cache,root,snapshot,assets,decoder);
+            for(const auto& record:CacheBundleStore::Read(cache,root,snapshot,CacheBundleStore::Locale(),"art")){const auto& data=record.at("Data");if(!data.contains("SourceBannerPixels"))continue;if(result.size()>=64)break;result[record.at("Owner").get<std::string>()]={256,144,SourceBanner::Decode(data["SourceBannerPixels"]),{}};}}
+        for(const auto& key:wanted){if(loaded.contains(key)||result.contains(key))continue;fs::path file;
+            if(key=="ui:home-banner.png")file=HelpyPaths::Asset("home-banner.png");
+            else if(const auto* builtin=SourceBanner::Builtin(key);builtin[0])file=HelpyPaths::Asset(builtin);
+            else if(key.starts_with("background:")&&BackgroundPolicy::Filename(key.substr(11)))file=HelpyBackgrounds::Resolve(key.substr(11));else continue;
+            try{result[key]=Thumbnail(decoder(file));}catch(...){}if(result.size()>=64)break;}return result;});
 }
 inline void SetArtFile(const std::string& owner,const fs::path& selected){
     if(owner.empty()||!ContentSource::Valid(owner)){Status="Select one registered source first.";return;}

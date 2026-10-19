@@ -2,6 +2,7 @@
 #include "Runtime/HelpyPaths.h"
 #include "Runtime/HostServices.h"
 #include "Core/HelpyUiAssets.h"
+#include "Core/HelpyBranding.h"
 #include <windows.h>
 #include <winhttp.h>
 #include <bcrypt.h>
@@ -57,7 +58,9 @@ struct Handle {HINTERNET Value{};~Handle(){if(Value)WinHttpCloseHandle(Value);}o
 Bytes Fetch(const std::string& relative,size_t limit){
     if(Cancelled)throw std::runtime_error("Download cancelled.");
     // Callers supply only compiled artwork names or a validated hex pack name.
-    const std::string path="/gh0sted5456-us/RuneSchema/main/resources/"+relative;
+    // Match the immutable release's compiled hashes. Experimental artwork is
+    // not necessarily present on stable main, and is never a runtime payload.
+    const std::string path=std::string("/gh0sted5456-us/RuneSchema/")+HelpyBranding::Version+"/resources/"+relative;
     const std::wstring wide(path.begin(),path.end());
     Handle session{WinHttpOpen(L"RuneSchema-Helpy-Assets/1",WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,WINHTTP_NO_PROXY_NAME,WINHTTP_NO_PROXY_BYPASS,0)};
     if(!session||!WinHttpSetTimeouts(session,2000,2000,2000,2000))throw std::runtime_error("Download network session unavailable.");

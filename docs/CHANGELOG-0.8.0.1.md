@@ -8,6 +8,26 @@ verification. Earlier candidate-status notes below record their verification
 at the time of each development checkpoint, not the current version metadata.
 Repeated development revisions are summarized once below.
 
+## Final packaging and shared item presentation
+
+- The shared delivery cart uses a responsive grid of full item placards, with
+  quantity and remove controls per card. Inventory delivery, Players and the
+  detachable cart retain the same staging, validation and explicit Give action.
+- Item hover details, pinned details and equipped-item details use faded
+  provider artwork and a short source name such as Base Game, Umbral Sands or
+  Dyes. Technical provenance is reserved for advanced mode; unknown providers
+  remain unknown. Filters distinguish Base Game, Plugins and Mods without
+  treating a mod-provided plugin as official content merely from its path.
+- Runtime ZIPs exclude optional banners, portrait files and background images.
+  Optional UI art remains in GitHub resources and is downloaded, hash-checked
+  and cached locally. Downloads use the matching runtime tag, not stable main.
+  Compiled vector fallbacks and required native runtime files remain available
+  without the download; existing user artwork is not removed by packaging.
+- The full runtime includes its mapping-loader Lua helper. DLL packing retains
+  resources, exports and relocations; locally published archives include a
+  verification manifest and checksums. Packed-core live-game acceptance remains
+  a separate check, not a claim established by automated UI tests.
+
 ## Party equipment and durability follow-up (local build candidate)
 
 - Party rows place identity and vitals on the left, with equipped-item icons

@@ -108,7 +108,7 @@ inline void Contents(){
     const bool populated=!ItemGridPicker::SharedCart.Entries().empty()||!ItemGridPicker::SharedCart.Outcomes().empty()||delivering;
     if(populated){const bool ready=!Container&&!Personal&&ValidSnapshot()&&BindRecipient&&BindRecipient();
         if(!ready)ImGui::TextDisabled("Delivery unavailable for this storage view or stale player snapshot.");
-        ImGui::BeginDisabled(!ready);if(RenderCart)RenderCart(t.Y(330));ImGui::EndDisabled();
+        ImGui::BeginDisabled(!ready);if(RenderCart)RenderCart(t.Y(400));ImGui::EndDisabled();
         if(FocusCart){ImGui::SetScrollHereY(1.f);FocusCart=false;}
     }else ImGui::TextDisabled("Your cart will appear here when you stage items.");
     ImGui::EndChild();ImGui::PopID();

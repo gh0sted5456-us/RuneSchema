@@ -471,7 +471,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         $backup = "$Dll.uncompressed"
         Copy-Item -LiteralPath $Dll -Destination $backup -Force
         try {
-            & $Upx -9 --best --lzma $Dll | Out-Host
+            & $Upx -9 --best --lzma --compress-icons=0 --compress-resources=0 --compress-exports=0 --strip-relocs=0 $Dll | Out-Host
             if ($LASTEXITCODE) { throw "UPX declined the DLL (exit $LASTEXITCODE)" }
             & $Upx -t $Dll | Out-Host
             if ($LASTEXITCODE) { throw "UPX verification failed (exit $LASTEXITCODE)" }
@@ -639,6 +639,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         }
         New-Item -ItemType Directory -Path (Join-Path $payload 'dll') -Force | Out-Null
         Copy-Item -LiteralPath $HelpyDll -Destination (Join-Path $payload 'dll\RuneSchema.Helpy.dll') -Force
+        & (Join-Path $BuildRoot 'build/package-optional-art.ps1') -PayloadRoot $payload -StagingRoot $DistRoot -RepositoryRoot $BuildRoot
         $state = Compress-DllBestEffort (Join-Path $payload 'dll\RuneSchema.Helpy.dll')
         @{ File = 'dll\RuneSchema.Helpy.dll'; State = $state } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $payload 'DLL-COMPRESSION.json') -Encoding utf8
         Attempt-Signing @((Join-Path $payload 'dll\RuneSchema.Helpy.dll'))
@@ -699,6 +700,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         New-Item -ItemType Directory -Path (Join-Path $payload 'scripts') -Force | Out-Null
         Copy-Item -LiteralPath $luaBootstrap -Destination (Join-Path $payload 'scripts\main.lua') -Force
         Copy-Item -LiteralPath (Join-Path $SourceRoot 'ue4ss\scripts\packages-loader.lua') -Destination (Join-Path $payload 'scripts\packages-loader.lua') -Force
+        Copy-Item -LiteralPath (Join-Path $SourceRoot 'ue4ss\scripts\mapping-loader.lua') -Destination (Join-Path $payload 'scripts\mapping-loader.lua') -Force
         $logicModsHelper = Join-Path $SourceRoot 'ue4ss\scripts\logicmods-register.lua'
         if (-not (Test-Path -LiteralPath $logicModsHelper -PathType Leaf)) {
             throw "RuneSchema LogicMods Lua helper is missing: $logicModsHelper"
@@ -723,6 +725,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
             }
         }
         New-Item -ItemType Directory -Path (Join-Path $payload 'plugins\RuneSchema.Helpy\dll') -Force | Out-Null
+        & (Join-Path $BuildRoot 'build/package-optional-art.ps1') -PayloadRoot (Join-Path $payload 'plugins/RuneSchema.Helpy') -StagingRoot $DistRoot -RepositoryRoot $BuildRoot
 
         # The release package promises usable shared registry and networking
         # bridges. Reject partial IoStore containers that cannot mount in game.
@@ -872,6 +875,8 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
 
         $contractPattern = '^(' + (($releaseContracts | ForEach-Object {[regex]::Escape($_)}) -join '|') + ')$'
         Invoke-Checked 'ctest.exe' @('--test-dir', $contractBuild, '--output-on-failure', '-R', $contractPattern) 'Optional contract tests'
+        & (Join-Path $BuildRoot 'build/tests/release-version.ps1') -Root $BuildRoot
+        & (Join-Path $BuildRoot 'build/test-package-optional-art.ps1')
     } else {
         Write-Host "`nSkipping internal contract tests for normal package build." -ForegroundColor DarkGray
         Write-Host "Run Build RuneSchema.bat -Tests to execute the supported local contract suite." -ForegroundColor DarkGray

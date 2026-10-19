@@ -1413,8 +1413,8 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
         const ImVec2 cartMax{MainSurfacePosition.x+MainSurfaceSize.x-cartPad,MainSurfacePosition.y+MainSurfaceSize.y-cartPad};
         ImGui::SetNextWindowSizeConstraints({std::min(t.X(240),cartMax.x-cartMin.x),std::min(t.Y(220),cartMax.y-cartMin.y)},
             {std::max(1.f,cartMax.x-cartMin.x),std::max(1.f,cartMax.y-cartMin.y)});
-        ImGui::SetNextWindowSize(ImVec2(t.X(320),t.Y(440)),ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowPos(ImVec2(MainSurfacePosition.x+std::max(0.0f,MainSurfaceSize.x-t.X(340)),MainSurfacePosition.y+t.Y(95)),ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(t.X(480),t.Y(440)),ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowPos(ImVec2(MainSurfacePosition.x+std::max(0.0f,MainSurfaceSize.x-t.X(500)),MainSurfacePosition.y+t.Y(95)),ImGuiCond_FirstUseEver);
         if(ImGui::Begin("Your cart",&SharedCartVisible,ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoSavedSettings)){
             const auto position=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();
             const ImVec2 fitted{std::clamp(position.x,cartMin.x,std::max(cartMin.x,cartMax.x-size.x)),std::clamp(position.y,cartMin.y,std::max(cartMin.y,cartMax.y-size.y))};
@@ -2131,6 +2131,18 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
             const auto greenBefore=HelpyPreviewHooks::CartVerifiedBadges;
             PreviewCapture=output/"item-service-cart.png";RenderFrame();PreviewCapture.clear();
             if(HelpyPreviewHooks::CartVerifiedBadges==greenBefore)throw std::runtime_error("Runtime-verified cart item has no green check");
+            if(items.size()>1&&width>=1200&&height>=850){
+                const auto secondPath=items[1].at("Path").get<std::string>();
+                ItemGridPicker::AddToCart(items[1]);CurrentPage=Page::Map;SharedCartVisible=true;
+                RenderFrame();HelpyPreviewHooks::CartRects.clear();RenderFrame();
+                const auto first=HelpyPreviewHooks::CartRects.at(stagedPath),second=HelpyPreviewHooks::CartRects.at(secondPath);
+                if(std::abs(first.y-second.y)>2||second.x<=first.x||first.w-first.y<HelpyImGuiTheme::Current.Y(96)){
+                    std::ofstream(output/"cart-layout-debug.txt")<<"first="<<first.x<<","<<first.y<<","<<first.z<<","<<first.w<<" second="<<second.x<<","<<second.y<<","<<second.z<<","<<second.w;
+                    throw std::runtime_error("Delivery cart did not render side-by-side full-height placards");
+                }
+                PreviewCapture=output/"delivery-cart-placards.png";RenderFrame();PreviewCapture.clear();
+                ItemGridPicker::RemoveFromCart(secondPath);SharedCartVisible=false;CurrentPage=Page::Items;RenderFrame();
+            }
             if(!ItemGridPicker::SharedCart.BeginDelivery(999))throw std::runtime_error("Cart receipt fixture did not start");
             ItemGridPicker::SharedCart.CompleteDelivery(999,{{"GrantResults",nlohmann::json::array({{{"Item",stagedPath},{"Count",1},{"State","Rejected"},{"Message","Item unavailable; skipped without blocking other items."}}})}});
             const auto redBefore=HelpyPreviewHooks::CartRejectedBadges;

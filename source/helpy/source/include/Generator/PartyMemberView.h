@@ -31,7 +31,8 @@ inline void DurabilityMeter(const nlohmann::json& item,ImVec2 a,ImVec2 b,int64_t
     if(value){const auto fraction=float(value->Fraction());draw->AddRectFilled({a.x+t.X(2),top},{a.x+t.X(2)+width*fraction,b.y-t.Y(1)},ImGui::GetColorU32(fraction<=.2f?t.error:fraction<=.5f?t.warning:t.success),t.Y(1));}
 }
 inline void EquipmentDetails(const nlohmann::json& item,int64_t now){
-    HelpyImGuiTheme::BeginDetailsTooltip();ImGui::TextUnformatted(ItemPresentation::Text(item,"Name").c_str());
+    HelpyImGuiTheme::BeginDetailsTooltip();SourceBanners::DetailsBackground(item);ImGui::TextUnformatted(ItemPresentation::Text(item,"Name").c_str());
+    ImGui::TextDisabled("Source: %s",ItemSource::DisplayName(ItemSource::Row(item)).c_str());
     ImGui::TextDisabled("Native equipped slot %d",item.value("Slot",0));
     if(const auto value=PartyStats::Read(item,"Durability",now)){
 #if defined(HELPY_PREVIEW)

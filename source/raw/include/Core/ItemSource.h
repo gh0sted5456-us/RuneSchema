@@ -6,11 +6,40 @@
 #include <stdexcept>
 namespace PS::ItemSource {
 enum class Kind { All, Vanilla, Expansion, Modded, Unknown };
-inline constexpr const char* Labels[]{"All sources","Vanilla","Expansion","Modded","Unknown"};
+inline constexpr const char* Labels[]{"All sources","Base Game","Plugins","Mods","Unknown"};
 inline const char* Label(Kind kind){return Labels[static_cast<unsigned>(kind)];}
 inline const char* Token(Kind kind){switch(kind){case Kind::Vanilla:return "vanilla";case Kind::Expansion:return "expansion";case Kind::Modded:return "modded";case Kind::Unknown:return "unknown";default:return "all";}}
-inline Kind Decode(std::string_view value){for(const auto kind:{Kind::All,Kind::Vanilla,Kind::Expansion,Kind::Modded,Kind::Unknown})if(value==Token(kind)||value==Label(kind))return kind;return Kind::Unknown;}
+inline Kind Decode(std::string_view value){
+    for(const auto kind:{Kind::All,Kind::Vanilla,Kind::Expansion,Kind::Modded,Kind::Unknown})if(value==Token(kind)||value==Label(kind))return kind;
+    if(value=="Vanilla")return Kind::Vanilla;if(value=="Expansion")return Kind::Expansion;if(value=="Modded")return Kind::Modded;
+    return Kind::Unknown;
+}
 struct Info {Kind Group=Kind::Unknown;std::string Name,Root,Evidence;bool Modified=false;std::string ModifiedBy;};
+inline std::string DisplayName(const Info& info){
+    if(info.Group==Kind::Vanilla)return "Base Game";
+    if(info.Group==Kind::Unknown||info.Name.empty())return "Unknown";
+    std::string key;for(unsigned char c:HelpyCacheSources::Lower(info.Name))if(c>='a'&&c<='z'||c>='0'&&c<='9')key+=char(c);
+    if(info.Group==Kind::Modded){
+        if(key.starts_with("dye")||key=="jobboarddyequests"||key.starts_with("colorfuldye")||key.starts_with("runeschemadye"))return "Dyes";
+        if(key=="rsdw"||key=="rsdwspears"||key=="spearsscythes"||key=="spearsandscythes"||key=="runeschemaspearsscythes")return "Spears & Scythes";
+        if(key=="flintlocks"||key=="flintlockpistols"||key=="runeschemaflintlockpistols"||key=="gunslinger")return "Flintlock Pistols";
+        if(key=="shadowmancer"||key=="shadowmancerarmor"||key=="runeschemashadowmancer")return "Shadowmancer";
+    }
+    if(info.Group==Kind::Expansion){
+        if(key=="umbralsands")return "Umbral Sands";
+        if(key=="scornedwilderness"||key=="scorchedwilderness")return "Scorched Wilderness";
+        if(key=="dowdunreach")return "Dowdun Reach";
+    }
+    std::string out;const auto& name=info.Name;
+    const auto upper=[](unsigned char c){return c>='A'&&c<='Z';};
+    const auto lower=[](unsigned char c){return c>='a'&&c<='z';};
+    for(size_t i=0;i<name.size();++i){const unsigned char c=name[i];
+        if(c=='_'||c=='-'||c=='/'||c=='.'||c==' '){if(!out.empty()&&out.back()!=' ')out+=' ';continue;}
+        if(i&&!out.empty()&&upper(c)&&out.back()!=' '&&(lower(name[i-1])||(upper(name[i-1])&&i+1<name.size()&&lower(name[i+1]))))out+=' ';
+        out+=char((out.empty()||out.back()==' ')&&lower(c)?c-32:c);
+    }
+    while(!out.empty()&&out.back()==' ')out.pop_back();return out.empty()?"Unknown":out;
+}
 inline Info Describe(const std::string& path,const HelpyCacheSources::Plan& plan={},const std::set<std::string>& nativePlugins={},const std::string& exactOwner={},bool declaredModded=false,bool patched=false,const std::string& patchOwner={}){
     const auto root=ContentSource::Root(path),lower=HelpyCacheSources::Lower(root);
     if(root.empty())return {};
@@ -37,7 +66,7 @@ inline Info Describe(const std::string& path,const HelpyCacheSources::Plan& plan
         // alone proves neither creation nor ownership of this particular item.
         return {Kind::Unknown,{},root,"Mount dependency only; item provider unverified"};
     }
-    if(lower.starts_with("/gamefeatures/plugins/")||lower.starts_with("/plugins/gamefeatures/"))return {Kind::Expansion,leaf,root};
+    if(lower.starts_with("/gamefeatures/plugins/")||lower.starts_with("/plugins/gamefeatures/"))return {Kind::Unknown,leaf,root,"Plugin provider unverified"};
     return {Kind::Unknown,leaf,root};
 }
 inline nlohmann::json Fields(const Info& info){return {{"SourceKind",Token(info.Group)},{"SourceName",info.Name},{"SourceRoot",info.Root},{"SourceEvidence",info.Evidence},{"ModifiedByRuneSchema",info.Modified},{"ModifiedBy",info.ModifiedBy}};}

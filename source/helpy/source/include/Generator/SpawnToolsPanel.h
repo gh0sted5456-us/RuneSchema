@@ -336,35 +336,53 @@ inline void RenderCartDock(ImVec2 size,const std::function<void()>& recipient) {
         if(ImGui::BeginChild("##cart-items",ImVec2(0,listHeight),false)){
             if(empty&&cart.Outcomes().empty()){ImGui::Spacing();ImGui::TextWrapped("Drag items here");ImGui::TextDisabled("or right-click an item.");}
             const auto entries=cart.Entries();
+            const float gap=ImGui::GetStyle().ItemSpacing.x;
+            const float available=std::max(1.f,ImGui::GetContentRegionAvail().x);
+            const int columns=ItemBayLayout::Columns(available,std::max(theme.X(130),theme.X(theme.gridMinCardWidth)),gap,ItemBayLayout::DefaultColumns);
+            const float cardWidth=std::max(1.f,(available-gap*(columns-1))/columns);
+            const float cardHeight=theme.Y(std::max(96.f,theme.gridCardHeight));
+            const float buttonWidth=std::max(1.f,std::min(theme.X(22),(cardWidth-gap*2)/3));
+            const bool wrapControls=cardWidth<theme.X(108);
+            const float controlsHeight=ImGui::GetFrameHeight()*(wrapControls?2.f:1.f)+ImGui::GetStyle().ItemSpacing.y*(wrapControls?2.f:1.f);
+            const float rowHeight=cardHeight+controlsHeight+ImGui::GetStyle().ItemSpacing.y;
             ImGui::BeginDisabled(delivering);
-            for(const auto& entry:entries){
-                const auto name=entry.Row.value("Name",entry.Path),icon=entry.Row.value("Icon",std::string{});
-                ImGui::PushID(entry.Path.c_str());
-                const auto cardMin=ImGui::GetCursorScreenPos();const ImVec2 cardSize(ImGui::GetContentRegionAvail().x,theme.Y(58));
-                ImGui::InvisibleButton("##cart-slot",cardSize);
-                ItemGridPicker::DrawPlacard(entry.Row,cardMin,ImVec2(cardMin.x+cardSize.x-theme.X(24),cardMin.y+cardSize.y),false,ImGui::IsItemHovered());
-                const auto* check=cart.Validation(entry.Path);
-                const bool checkHovered=check&&DrawCartCheck({cardMin.x+cardSize.x,cardMin.y},check->Valid?"Confirmed":"Rejected",check->Message);
+            ImGuiListClipper cartClip;cartClip.Begin(static_cast<int>((entries.size()+columns-1)/columns),rowHeight);
+            while(cartClip.Step())for(int line=cartClip.DisplayStart;line<cartClip.DisplayEnd;++line)for(int column=0;column<columns;++column){
+                const auto index=static_cast<size_t>(line)*columns+column;if(index>=entries.size())break;
+                const auto& entry=entries[index];const auto name=ItemPresentation::Name(entry.Row);
+                if(column)ImGui::SameLine();ImGui::BeginGroup();ImGui::PushID(entry.Path.c_str());
+                const auto cardMin=ImGui::GetCursorScreenPos();const ImVec2 cardMax(cardMin.x+cardWidth,cardMin.y+cardHeight);
+                ImGui::InvisibleButton("##cart-slot",{cardWidth,cardHeight});
 #if defined(HELPY_PREVIEW)
                 HelpyPreviewHooks::CartRects[entry.Path]=HelpyPreviewHooks::LastRect();
 #endif
+                ItemGridPicker::DrawPlacard(entry.Row,cardMin,cardMax,false,ImGui::IsItemHovered());
+                const auto* check=cart.Validation(entry.Path);
+                const bool checkHovered=check&&DrawCartCheck({cardMin.x+cardWidth*.5f+theme.X(11),cardMin.y},check->Valid?"Confirmed":"Rejected",check->Message);
                 if(ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)){
                     ImGui::SetDragDropPayload("RS_CART_PATH",entry.Path.c_str(),entry.Path.size()+1);ImGui::TextUnformatted(name.c_str());ImGui::EndDragDropSource();
                 }
                 if(ImGui::BeginPopupContextItem("##cart-actions")){if(ImGui::MenuItem("Remove from cart"))removePath=entry.Path;ImGui::EndPopup();}
                 if(!checkHovered&&HelpyImGuiTheme::TooltipReady("cart:"+entry.Path,ImGui::IsItemHovered()))ItemGridPicker::VerboseTooltip(entry.Row,name,entry.Path,false,true);
-                int quantity=entry.Quantity;ImGui::SetNextItemWidth(std::max(theme.X(75),ImGui::GetContentRegionAvail().x-theme.X(31)));
-                if(ImGui::InputInt("##quantity",&quantity,1,10))cart.SetQuantity(entry.Path,quantity);
-                ImGui::SameLine();if(ImGui::SmallButton("X"))removePath=entry.Path;
-                ImGui::Separator();ImGui::PopID();
+                int quantity=entry.Quantity;ImGui::SetNextItemWidth(wrapControls?cardWidth:std::max(1.f,cardWidth-buttonWidth*3-gap*3));
+                if(ImGui::InputInt("##quantity",&quantity,0,0))cart.SetQuantity(entry.Path,quantity);
+                if(ImGui::IsItemHovered())ImGui::SetTooltip("Quantity per selected player");
+                if(!wrapControls)ImGui::SameLine();
+                if(ImGui::Button("-",{buttonWidth,0}))cart.SetQuantity(entry.Path,quantity-1);
+                ImGui::SameLine();if(ImGui::Button("+",{buttonWidth,0}))cart.SetQuantity(entry.Path,quantity+1);
+                ImGui::SameLine();if(ImGui::Button("X",{buttonWidth,0}))removePath=entry.Path;
+                if(ImGui::IsItemHovered())ImGui::SetTooltip("Remove from cart");
+                ImGui::PopID();ImGui::EndGroup();
             }
             ImGui::EndDisabled();
             if(!cart.Outcomes().empty()){
                 ImGui::SeparatorText("Last delivery");
-                for(const auto& outcome:cart.Outcomes()){
-                    const auto start=ImGui::GetCursorScreenPos();const ImVec2 extent{ImGui::GetContentRegionAvail().x,theme.Y(58)};
-                    ImGui::Dummy(extent);ItemGridPicker::DrawPlacard(outcome.Item.Row,start,{start.x+extent.x-theme.X(24),start.y+extent.y});
-                    DrawCartCheck({start.x+extent.x,start.y},outcome.State,outcome.Message);
+                size_t outcomeIndex=0;for(const auto& outcome:cart.Outcomes()){
+                    if(outcomeIndex++%columns)ImGui::SameLine();ImGui::BeginGroup();
+                    const auto start=ImGui::GetCursorScreenPos();
+                    ImGui::Dummy({cardWidth,cardHeight});ItemGridPicker::DrawPlacard(outcome.Item.Row,start,{start.x+cardWidth,start.y+cardHeight});
+                    DrawCartCheck({start.x+cardWidth*.5f+theme.X(11),start.y},outcome.State,outcome.Message);
+                    ImGui::EndGroup();
                 }
             }
         }ImGui::EndChild();

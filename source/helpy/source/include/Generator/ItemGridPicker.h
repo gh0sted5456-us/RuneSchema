@@ -113,7 +113,7 @@ inline void DragItem(const json& row){
     if(!ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))return;
     try{auto compact=ItemTransfer::Compact(row);compact["Name"]=ItemPresentation::Name(row);compact["Icon"]=IconForRow(row);const auto data=compact.dump();ImGui::SetDragDropPayload("RS_ITEM_ROW",data.c_str(),data.size()+1);}catch(const std::exception&){}
     ImGui::TextUnformatted(ItemPresentation::Name(row).c_str());
-    ImGui::TextDisabled("Drop into the cart, Transmog & Creation, or recipe inputs/outputs.");ImGui::EndDragDropSource();
+    ImGui::TextDisabled("Drop into the cart, Clone, or recipe inputs/outputs.");ImGui::EndDragDropSource();
 }
 // Quick actions can be hidden in an editor without disabling item transfers.
 inline std::optional<json> AcceptItemDrop(std::string& error) {
@@ -273,9 +273,8 @@ inline void RenderDetailsPopup() {
         if(row.value("Equipped",false))facts.insert(facts.begin(),{"Equipped","Removing this instance also unlinks its loadout slot"});
     }
     const auto itemSource=ItemSource::Row(row);
-    if(itemSource.Group==ItemSource::Kind::Modded)facts.insert(facts.begin(),{"Mod",itemSource.Name.empty()?"Mod source unavailable":itemSource.Name});
-    if(itemSource.Modified)facts.insert(facts.begin(),{"Modified through RuneSchema",itemSource.ModifiedBy.empty()?"Confirmed native item edit":itemSource.ModifiedBy+" (last recorded modifier)"});
-    if(!itemSource.Evidence.empty())facts.insert(facts.begin(),{"Source evidence",itemSource.Evidence});
+    if(itemSource.Modified)facts.insert(facts.begin(),{"Modified by",itemSource.ModifiedBy.empty()?"RuneSchema":itemSource.ModifiedBy});
+    if(theme.advancedMode&&!itemSource.Evidence.empty())facts.insert(facts.begin(),{"Source evidence",itemSource.Evidence});
     auto power=ItemBadges::Power(native);if(!power)power=ItemBadges::Power(row);
     const auto* viewport=ImGui::GetMainViewport();const auto origin=popup.SurfaceSize.x>0?popup.SurfaceMin:viewport->WorkPos,area=popup.SurfaceSize.x>0?popup.SurfaceSize:viewport->WorkSize;const float pad=theme.X(12),gap=theme.X(8);
     float labelWidth=0,valueWidth=0;
@@ -285,7 +284,7 @@ inline void RenderDetailsPopup() {
     const float content=std::max(1.0f,width-pad*2-ImGui::GetStyle().ScrollbarSize);
     const float labelColumn=std::clamp(labelWidth+gap,content*0.48f,content*0.65f),valueColumn=std::max(1.0f,content-labelColumn-gap);
     const auto heightOf=[](const std::string& text,float wrap){return ImGui::CalcTextSize(text.c_str(),nullptr,false,wrap).y;};
-    float height=pad*2+heightOf(title,content)+gap;
+    float height=pad*2+heightOf(title,content)+gap+ImGui::GetTextLineHeightWithSpacing();
     if(!category.empty())height+=ImGui::GetTextLineHeightWithSpacing();if(power)height+=theme.Y(34);if(ItemBadges::Masterwork(row))height+=ImGui::GetTextLineHeightWithSpacing();
     if(!description.empty())height+=heightOf(description,content)+gap*2;
     for(const auto& fact:facts)height+=std::max(heightOf(fact.Label,labelColumn-gap),heightOf(fact.Value,valueColumn))+ImGui::GetStyle().CellPadding.y*2;
@@ -305,6 +304,7 @@ inline void RenderDetailsPopup() {
         popup.Min=ImGui::GetWindowPos();const auto size=ImGui::GetWindowSize();popup.Max={popup.Min.x+size.x,popup.Min.y+size.y};
         SourceBanners::Draw(popup.Row,popup.Min,popup.Max);
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX()+content);ImGui::TextWrapped("%s",title.c_str());
+        ImGui::TextDisabled("Source: %s",ItemSource::DisplayName(itemSource).c_str());
         if(!category.empty())ImGui::TextDisabled("%s",category.c_str());
         if(power){const auto pos=ImGui::GetCursorScreenPos();const float size=theme.Y(28);auto badge=row;badge["PowerLevel"]=*power;badge["Masterwork"]=false;DrawItemBadges(badge,pos,{pos.x+size,pos.y+size},theme);ImGui::Dummy({size,size});ImGui::SameLine();ImGui::Text("Power level %.0f",*power);}
         if(ItemBadges::Masterwork(row))ImGui::TextColored(theme.accentHover,"Masterwork");
@@ -688,10 +688,11 @@ inline void RenderSelectedDetails(){
     ItemDetails::Request(Bay.Selected);const auto* details=ItemDetails::Find(Bay.Selected);
     const auto& row=Bay.DetailsRow;const auto& native=details?details->Native:row;
     if(ImGui::BeginChild("##bay-selected-details",{0,0},false)){
+        SourceBanners::DetailsBackground(row);
         auto name=ItemPresentation::CleanName(ItemPresentation::Text(native,"Name"));if(name.empty())name=ItemPresentation::Name(row);
         const auto a=ImGui::GetCursorScreenPos();const float size=HelpyImGuiTheme::Current.Y(36);
         ItemIconCache::Draw(IconForRow(row),a,{a.x+size,a.y+size},true);ImGui::Dummy({size,size});ImGui::SameLine();ImGui::TextWrapped("%s",name.c_str());
-        const auto origin=ItemSource::Row(row);ImGui::TextDisabled("Source: %s%s%s",ItemSource::Label(origin.Group),origin.Name.empty()?"":" / ",origin.Name.c_str());
+        const auto origin=ItemSource::Row(row);ImGui::TextDisabled("Source: %s",ItemSource::DisplayName(origin).c_str());
         auto power=ItemBadges::Power(native);if(!power)power=ItemBadges::Power(row);
         if(power){const auto pos=ImGui::GetCursorScreenPos();const float badgeSize=HelpyImGuiTheme::Current.Y(28);auto badge=row;badge["PowerLevel"]=*power;DrawItemBadges(badge,pos,{pos.x+badgeSize,pos.y+badgeSize},HelpyImGuiTheme::Current);ImGui::Dummy({badgeSize,badgeSize});ImGui::SameLine();ImGui::Text("Power level %.0f",*power);}
         if(ItemBadges::Masterwork(row))ImGui::TextUnformatted("Masterwork");
@@ -699,9 +700,8 @@ inline void RenderSelectedDetails(){
         if(!description.empty())ImGui::TextWrapped("%s",description.c_str());
         auto facts=ItemPresentation::Facts(native);
         const auto source=ItemSource::Row(row);
-        if(source.Group==ItemSource::Kind::Modded)facts.insert(facts.begin(),{"Mod",source.Name.empty()?"Mod source unavailable":source.Name});
-        if(source.Modified)facts.insert(facts.begin(),{"Modified through RuneSchema",source.ModifiedBy.empty()?"Confirmed native item edit":source.ModifiedBy+" (last recorded modifier)"});
-        if(!source.Evidence.empty())facts.insert(facts.begin(),{"Source evidence",source.Evidence});
+        if(source.Modified)facts.insert(facts.begin(),{"Modified by",source.ModifiedBy.empty()?"RuneSchema":source.ModifiedBy});
+        if(HelpyImGuiTheme::Current.advancedMode&&!source.Evidence.empty())facts.insert(facts.begin(),{"Source evidence",source.Evidence});
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::BayDetailsFacts=facts.size();
 #endif

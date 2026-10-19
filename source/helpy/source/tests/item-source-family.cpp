@@ -11,6 +11,16 @@ int main(){
     assert(cache.Size()==16384&&cache.Find(0));
     cache.Clear();assert(cache.Size()==0&&!cache.Find(0));
     using namespace PS;using K=ItemSource::Kind;
+    assert(std::string(ItemSource::Label(K::Expansion))=="Plugins"&&std::string(ItemSource::Label(K::Modded))=="Mods");
+    assert(ItemSource::Decode("Expansion")==K::Expansion&&ItemSource::Decode("Modded")==K::Modded&&ItemSource::Decode("Vanilla")==K::Vanilla);
+    assert(ItemSource::DisplayName({K::Vanilla,"Dragonwilds"})=="Base Game");
+    assert(ItemSource::DisplayName({K::Modded,"Dye_GoldTrim"})=="Dyes");
+    assert(ItemSource::DisplayName({K::Expansion,"UmbralSands"})=="Umbral Sands");
+    assert(ItemSource::DisplayName({K::Modded,"RSDWSpears"})=="Spears & Scythes");
+    assert(ItemSource::DisplayName({K::Modded,"MyContentPlugin"})=="My Content Plugin");
+    assert(ItemSource::DisplayName({K::Unknown,"UmbralSands"})=="Unknown");
+    assert(ItemSource::Describe("/GameFeatures/Plugins/SomeMod/Items/X.X").Group==K::Unknown);
+    assert(ItemSource::Describe("/GameFeatures/Plugins/SomeMod/Items/X.X",{}, {},{},true).Group==K::Modded);
     HelpyCacheSources::Plan plan;plan.Owners["game"]={"Dye"};plan.Owners["custommount"]={"CapeMod"};plan.DeclaredOwners["custommount"]={"CapeMod"};
     plan.Owners["borrowedicons"]={"CapeMod"};
     const std::set<std::string> native{"agility","futurefeature"};
