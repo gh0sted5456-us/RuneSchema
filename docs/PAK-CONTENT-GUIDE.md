@@ -1,5 +1,18 @@
 # Create new PAK content for RuneSchema
 
+## Step-by-step workflow
+
+1. Author complete Unreal assets under a mod-owned root with stable identities and all dependencies.
+2. Cook/package only the intended mod content; preserve the game's supplied packages and shaders.
+3. Mount through the enabled mod, resolve exact object paths, then enroll content through its owning loader or a cooked registry declaration.
+4. Connect gameplay consumers, restart and verify native registration, actual behavior, save/reload and supported client/server combinations.
+
+JSONC snippets are authoring mock-ups. Replace example paths, IDs and values with
+inspected content; a valid snippet cannot supply missing cooked dependencies.
+
+**Tie-ins:** [Cooked registry declarations](COOKED-PAK-REGISTRY-MANIFEST.md), [first cooked item](modders/first-cooked-item.md), [items](WEAPONS-AND-ITEMS.md) and [stations](STATIONS-AND-RECIPES.md).
+
+
 A PAK is the package that carries new Unreal content into Dragonwilds. Use one
 when your mod needs a new mesh, texture, icon, sound, animation, Blueprint,
 item, recipe, or station that does not already exist in the game.
@@ -229,7 +242,7 @@ required object and guarantees that the setup asks for the exact path.
 
 An `assets` file may reference an existing cooked item without changing it:
 
-```json
+```jsonc
 {
   "/GoldenArsenal/Items/ITEM_GoldenSpear.ITEM_GoldenSpear": {}
 }

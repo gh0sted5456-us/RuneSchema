@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/SourceBanners.h"
 #include "Core/ItemNameOrder.h"
 #include "Core/ItemCatalogFilter.h"
 #include "Generator/HelpyImGuiTheme.h"
@@ -250,6 +251,7 @@ inline void VerboseTooltip(const json& row,const std::string& name,const std::st
     auto& popup=DetailsPopup;
     if(!popup.Open||popup.Path!=path){popup.Row=row;popup.Name=name;popup.Path=path;popup.AnchorMin=ImGui::GetItemRectMin();popup.AnchorMax=ImGui::GetItemRectMax();popup.Min=popup.Max={};}
     popup.AnchorMin=ImGui::GetItemRectMin();popup.AnchorMax=ImGui::GetItemRectMax();
+    popup.Row=row;popup.Name=name; // Different saved instances may share one ItemData path.
     popup.SurfaceMin=DetailsSurfaceMin;popup.SurfaceSize=DetailsSurfaceSize;
     popup.Fits=fits;popup.Open=true;popup.QueuedFrame=ImGui::GetFrameCount();popup.Generation=SpawnToolRequests::CurrentGeneration();
     ImGui::SetKeyOwner(ImGuiKey_MouseWheelY,ImGui::GetItemID(),ImGuiInputFlags_LockThisFrame);
@@ -265,6 +267,11 @@ inline void RenderDetailsPopup() {
     auto title=ItemPresentation::CleanName(ItemPresentation::Text(native,"Name"));if(title.empty())title=popup.Name;
     const auto category=ItemPresentation::Text(row,"Category");auto description=ItemPresentation::Description(native);if(description.empty())description=ItemPresentation::Description(row);
     auto facts=ItemPresentation::Facts(native);
+    if(row.contains("Pointer")){
+        facts.insert(facts.begin(),{"Saved stack",row.value("Count",json(1)).dump()});
+        facts.insert(facts.begin(),{"Saved location",ItemPresentation::Text(row,"Container")+" / "+ItemPresentation::Text(row,"Slot")});
+        if(row.value("Equipped",false))facts.insert(facts.begin(),{"Equipped","Removing this instance also unlinks its loadout slot"});
+    }
     const auto itemSource=ItemSource::Row(row);
     if(itemSource.Group==ItemSource::Kind::Modded)facts.insert(facts.begin(),{"Mod",itemSource.Name.empty()?"Mod source unavailable":itemSource.Name});
     if(itemSource.Modified)facts.insert(facts.begin(),{"Modified through RuneSchema",itemSource.ModifiedBy.empty()?"Confirmed native item edit":itemSource.ModifiedBy+" (last recorded modifier)"});
@@ -296,6 +303,7 @@ inline void RenderDetailsPopup() {
         // a sticky window. Wheel scrolling belongs to the hovered source item.
         if(ImGui::GetIO().MouseWheel!=0)ImGui::SetScrollY(std::clamp(ImGui::GetScrollY()-ImGui::GetIO().MouseWheel*ImGui::GetTextLineHeight()*3,0.0f,ImGui::GetScrollMaxY()));
         popup.Min=ImGui::GetWindowPos();const auto size=ImGui::GetWindowSize();popup.Max={popup.Min.x+size.x,popup.Min.y+size.y};
+        SourceBanners::Draw(popup.Row,popup.Min,popup.Max);
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX()+content);ImGui::TextWrapped("%s",title.c_str());
         if(!category.empty())ImGui::TextDisabled("%s",category.c_str());
         if(power){const auto pos=ImGui::GetCursorScreenPos();const float size=theme.Y(28);auto badge=row;badge["PowerLevel"]=*power;badge["Masterwork"]=false;DrawItemBadges(badge,pos,{pos.x+size,pos.y+size},theme);ImGui::Dummy({size,size});ImGui::SameLine();ImGui::Text("Power level %.0f",*power);}
@@ -304,7 +312,8 @@ inline void RenderDetailsPopup() {
         if(!facts.empty()){ImGui::Separator();if(ImGui::BeginTable("##native-item-facts",2,ImGuiTableFlags_SizingFixedFit,ImVec2(content,0))){
             ImGui::TableSetupColumn("Property",ImGuiTableColumnFlags_WidthFixed,labelColumn);ImGui::TableSetupColumn("Value",ImGuiTableColumnFlags_WidthFixed,valueColumn);
             for(const auto& fact:facts){ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::PushStyleColor(ImGuiCol_Text,theme.textDisabled);ImGui::PushTextWrapPos(0);ImGui::TextWrapped("%s",fact.Label.c_str());ImGui::PopTextWrapPos();ImGui::PopStyleColor();ImGui::TableNextColumn();ImGui::PushTextWrapPos(0);ImGui::TextWrapped("%s",fact.Value.c_str());ImGui::PopTextWrapPos();}ImGui::EndTable();}}
-        if(!entry)ImGui::TextWrapped("%s",SpawnToolRequests::IsAvailable()?"Loading native details...":"Load a world for native details.");else if(!entry->Error.empty())ImGui::TextWrapped("%s",entry->Error.c_str());
+        if(popup.Path.empty())ImGui::TextWrapped("Saved identity is unresolved. Load its source content to retrieve native stats; no item path is guessed.");
+        else if(!entry)ImGui::TextWrapped("%s",SpawnToolRequests::IsAvailable()?"Loading native details...":"Load a world for native details.");else if(!entry->Error.empty())ImGui::TextWrapped("%s",entry->Error.c_str());
         if(theme.verboseTooltips){ImGui::Separator();ImGui::TextWrapped("%s",popup.Path.c_str());}
         if(!popup.Fits)ImGui::TextWrapped("Item path exceeds the supported field size.");ImGui::PopTextWrapPos();
 #if defined(HELPY_PREVIEW)
@@ -454,8 +463,9 @@ inline void DrawPlacard(const json& row,const ImVec2& min,const ImVec2& max,bool
     }
 }
 inline void DrawLoadingSpinner(const HelpyImGuiTheme::Theme& theme,const char* label="Loading items...") {
-    const auto pos=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();const float radius=theme.Y(theme.loadingSpinnerRadius);
-    const ImVec2 center(pos.x+size.x*0.5f,pos.y+size.y*.5f);
+    const auto* draw=ImGui::GetWindowDrawList();const auto a=draw->GetClipRectMin(),b=draw->GetClipRectMax();
+    const float radius=std::max(2.f,std::min(theme.Y(theme.loadingSpinnerRadius),std::min(b.x-a.x,b.y-a.y)*.5f-theme.Y(3)));
+    const ImVec2 center((a.x+b.x)*.5f,(a.y+b.y)*.5f);
     const auto& loading=LazyCatalog::For(0);
     HelpyLoadingIndicator::Draw(center,radius,theme,label,"Stage: "+loading.PopulationStage+"\n"+loading.Coverage+"\nItems received: "+std::to_string(loading.Rows.size())+"\nRecords checked: "+std::to_string(loading.PopulationDone)+(loading.PopulationTotal?" / "+std::to_string(loading.PopulationTotal):" (total not known yet)")+"\nChecking local cache before requesting missing data from the runtime.");
     const auto restore=ImGui::GetCursorScreenPos();ImGui::SetCursorScreenPos({center.x-radius,center.y-radius});ImGui::InvisibleButton("##loading-actions",{radius*2,radius*2});
@@ -482,7 +492,7 @@ inline void PopulationProgress(const LazyCatalog::State& lazy,const std::set<std
         if(view.Busy&&!lazy.Rows.empty()&&lazy.LastError.empty())HelpyLoadingIndicator::Draw({slot.x+size*.5f,slot.y+size*.5f},size*.34f,theme,view.Label,progressDetail);
     }
 }
-inline Result Render(const char* id,const json& catalog,char* filter,size_t filterCapacity,char* selected,size_t selectedCapacity,State& state,uint64_t revision,bool allowMulti=true,bool quickActions=false,bool fillSpace=false,bool uniformCards=false) {
+inline Result Render(const char* id,const json& catalog,char* filter,size_t filterCapacity,char* selected,size_t selectedCapacity,State& state,uint64_t revision,bool allowMulti=true,bool quickActions=false,bool fillSpace=false,bool uniformCards=false,bool showControls=true,float fixedViewport=0) {
     ItemDetails::Poll();Result out;std::set<std::string> visibleIcons;ImGui::PushID(id);LoadViewPreference(state);SyncLegacySelection(state,selected);
     if(!filter||!filterCapacity||!selected||!selectedCapacity){ImGui::TextDisabled("Item picker buffer unavailable.");ImGui::PopID();return out;}
     if(!state.PendingFamilyKey.empty()){
@@ -498,6 +508,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     if(state.CatalogRevision!=revision)Rebuild(catalog,state,revision);out.MatchCount=state.Matches.size();
     const float spacing=ImGui::GetStyle().ItemSpacing.x;
     const float width=ImGui::GetContentRegionAvail().x;
+    if(showControls){
     const float categoryWidth=theme.X(width<theme.X(600)?105:142),sourceWidth=theme.X(width<theme.X(600)?100:132);
     const float controls=categoryWidth+sourceWidth+ImGui::CalcTextSize("Search").x+ImGui::CalcTextSize("View").x+ImGui::GetStyle().FramePadding.x*4+spacing*4;
     ImGui::SetNextItemWidth(std::max(theme.X(90.0f),width-controls));
@@ -541,6 +552,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
         ImGui::TextWrapped("Family: %s",label.c_str());ImGui::SameLine();
         if(ImGui::SmallButton("Clear family")){state.FamilyKey.clear();state.PageIndex=0;state.ResetScroll=true;state.CatalogRevision=0;state.Matches.clear();LazyCatalog::Search(0,BackendQuery(state));}
     }
+    }
     if(LazyCatalog::For(0).Started&&LazyCatalog::For(0).Query!=BackendQuery(state)){LazyCatalog::Search(0,BackendQuery(state));state.Matches.clear();state.CatalogRevision=0;}
     const auto& lazy=LazyCatalog::For(0);
     if(!lazy.LastError.empty()&&!lazy.Pending){
@@ -562,7 +574,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
         ?ItemBayLayout::RowsHeight(theme.itemGridRows,theme.gridCardHeight,gapLogical,theme.contentPaddingY)+2.0f
         :theme.itemResultHeight;
     const float minPane=state.GridView&&theme.itemGridFitRows?std::min(desiredPane,quickActions?140.0f:180.0f):(quickActions?140.0f:180.0f);
-    state.ResultPaneHeightLogical=ItemBayLayout::PaneHeight(desiredPane,maxPane,minPane);
+    state.ResultPaneHeightLogical=fixedViewport>0?fixedViewport:ItemBayLayout::PaneHeight(desiredPane,maxPane,minPane);
     HelpyImGuiTheme::BeginScroll("Rows",ImVec2(0,theme.Y(state.ResultPaneHeightLogical)),true);
     if(state.ResetScroll){ImGui::SetScrollY(0);state.ResetScroll=false;}
     const auto resultPos=ImGui::GetWindowPos(),resultSize=ImGui::GetWindowSize();

@@ -9,10 +9,10 @@ int main(int argc,char** argv){
     if(argc!=3)throw std::runtime_error("Asset source and isolated destination required");
     const std::filesystem::path source=argv[1],destination=argv[2];
     using namespace PS;
-    if(HelpyUiAssets::Files.size()!=14||!HelpyUiAssets::Known("RuneSchema.png")||HelpyUiAssets::Known("../RuneSchema.png")||HelpyUiAssets::Known("main.dll"))throw std::runtime_error("UI artwork whitelist must contain only fixed PNG names");
+    if(HelpyUiAssets::Files.size()!=22||!HelpyUiAssets::Known("source-base-game.png")||!HelpyUiAssets::Known("source-colorfuldye.png")||!HelpyUiAssets::Known("RuneSchema.png")||HelpyUiAssets::Known("../RuneSchema.png")||HelpyUiAssets::Known("main.dll"))throw std::runtime_error("UI artwork whitelist must contain only fixed PNG names");
     if(HelpySplash::TipIndex(-1)!=0||HelpySplash::TipIndex(0)!=0||HelpySplash::TipIndex(7)!=1||HelpySplash::TipIndex(56)!=0)throw std::runtime_error("Splash tips must rotate predictably");
     HelpyDownloads::TestArtwork(source,destination);
-    if(!std::filesystem::is_regular_file(destination/"ready")||HelpyDownloads::Completed()!=14)throw std::runtime_error("Artwork install did not commit complete readiness");
+    if(!std::filesystem::is_regular_file(destination/"ready")||HelpyDownloads::Completed()!=HelpyUiAssets::Files.size())throw std::runtime_error("Artwork install did not commit complete readiness");
     const auto stamp=std::filesystem::last_write_time(destination/"RuneSchema.png");
     HelpyDownloads::TestArtwork(source,destination);
     if(std::filesystem::last_write_time(destination/"RuneSchema.png")!=stamp)throw std::runtime_error("Unchanged artwork was rewritten");

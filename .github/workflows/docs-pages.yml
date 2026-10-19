@@ -9,6 +9,16 @@ on:
       - 'docs/**'
       - 'mkdocs.yml'
       - 'requirements-docs.txt'
+      - 'resources/diagnostics/**'
+      - 'build/*diagnostics.py'
+      - 'build/tests/diagnostics.py'
+      - 'build/tests/diagnostic-links.cjs'
+      - 'source/raw/**'
+      - 'source/helpy/source/**'
+      - 'source/plugins/**'
+      - 'source/tools/**'
+      - 'source/settings/**'
+      - 'plugins/**'
       - '.github/workflows/docs-pages.yml'
   workflow_dispatch:
 
@@ -38,8 +48,17 @@ jobs:
       - name: Install documentation dependencies
         run: pip install -r requirements-docs.txt
 
-      - name: Build documentation
-        run: mkdocs build --strict
+      - name: Audit diagnostics and direct links
+        run: |
+          python build/generate-diagnostics.py --check
+          python build/tests/diagnostics.py
+          node build/tests/diagnostic-links.cjs
+          python build/audit-diagnostics.py
+
+      - name: Build documentation and validate rendered code headers
+        run: |
+          mkdocs build --strict
+          python build/audit-diagnostics.py --site site
 
       - name: Configure GitHub Pages
         if: github.ref == 'refs/heads/main'

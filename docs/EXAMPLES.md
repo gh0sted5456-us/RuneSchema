@@ -50,47 +50,30 @@ operation for the remaining beard rows.
 Use the direct `DA_` form for new work unless the registry-patch transaction
 model is specifically needed.
 
-## Multi-loader quest and event flow
+## Quests and Quest Boards
 
-### Great Tree
+Follow [Build a quest and put it on a Quest Board](modders/quests-and-questboards.md)
+for numbered instructions, a quest definition, a bound acceptance item and a
+crafting-board recipe. The guide explains optional dialogue turn-in, cancellation,
+custom board presentation and authority checks.
 
-The Great Tree sample shows several loaders working as one feature:
-
-1. `/assets` creates quest items and currency.
-2. `/spawns` defines event-only enemies.
-3. `/events` arranges the encounter waves.
-4. `/quests` ties kill and collect objectives to that encounter.
-5. `/raw` adds boss loot.
-6. `/vendors` spends the custom currency.
-7. `/npc` exposes a world object linked to lore.
-
-Files:
-
-- [Items](https://github.com/gh0sted5456-us/RuneSchema/blob/main/docs/examples/GreatTree/assets/85-GreatTreeItems.json)
-- [Quest](https://github.com/gh0sted5456-us/RuneSchema/blob/main/docs/examples/GreatTree/quests/87-GreatTreeStory.json)
-- [Tribe trial event](https://github.com/gh0sted5456-us/RuneSchema/blob/main/docs/examples/GreatTree/events/85-GreatTree-TribeTrial.json)
-- [Event-only spawn templates](https://github.com/gh0sted5456-us/RuneSchema/blob/main/docs/examples/GreatTree/spawns/87-GreatTree-TribeTrial.json)
-- [Boss loot](https://github.com/gh0sted5456-us/RuneSchema/blob/main/docs/examples/GreatTree/raw/85-GreatTreeLoot.json)
-- [Crag vendor](https://github.com/gh0sted5456-us/RuneSchema/blob/main/docs/examples/GreatTree/vendors/85-Crag.json)
-- [Great Tree world object](https://github.com/gh0sted5456-us/RuneSchema/blob/main/docs/examples/GreatTree/npc/85-GreatTree.json)
-
-This is a better starting point for a connected feature than treating each
-loader in isolation.
+These are mock-up authoring starters. Replace sample identities and verify the
+installed provider; they are not shipped gameplay content.
 
 ## Building clones
 
 - [Cooked prop and building example](https://github.com/gh0sted5456-us/RuneSchema/blob/main/docs/examples/BuildingClone/buildings/10-CookedProps.jsonc)
-- [Processing-station override example](https://github.com/gh0sted5456-us/RuneSchema/blob/main/docs/examples/RSv16/ExampleMods/RuneSchemaBuildingOverrideExample/buildings/10-CoinageStations.jsonc)
 
-The first example covers a new building or prop. The station example shows
-cost replacement, accepted fuel changes, fuel slots, processing speed, and
-automatic-start behavior.
+The building example covers a new piece or prop. The
+[buildings walkthrough](reference/loaders/buildings.md) explains cost replacement,
+processing overrides and the station/recipe tie-ins.
 
 ## Recipe unlock items
 
-[Dawnveil recipe unlocker](https://github.com/gh0sted5456-us/RuneSchema/blob/main/docs/examples/RSv16/ExampleMods/RuneSchemaRecipeUnlockConsumable/assets/10-DawnveilRecipeUnlocker.jsonc)
-clones an existing consumable and assigns recipes for it to unlock. Recipe
-names may point to a RuneSchema recipe ID or a compatible cooked recipe path.
+Use the [assets walkthrough](reference/loaders/assets.md) for compatible item
+clones and the [recipe discovery guide](RECIPE-DISCOVERY.md) for native unlock
+conditions. Reference the exact recipe identity; a quest-acceptance scroll is not
+a recipe unlock item.
 
 ## Crafting and processing placement
 
@@ -104,22 +87,14 @@ See [Create stations and recipes](STATIONS-AND-RECIPES.md) for working placement
 shapes. For projects that combine cooked Unreal content with RuneSchema
 registration, see [Create new PAK content](PAK-CONTENT-GUIDE.md).
 
-## Integrated RSv16 test mod
+## All loader mock-ups
 
-`examples/RSv16/ExampleMods/RuneSchema2VendorTest/` remains the broad
-integration example.
-
-Useful entry points:
-
-- [Cow Trader NPC](https://github.com/gh0sted5456-us/RuneSchema/blob/main/docs/examples/RSv16/ExampleMods/RuneSchema2VendorTest/npc/00-CowTrader.jsonc)
-- [Granite Armory vendor](https://github.com/gh0sted5456-us/RuneSchema/blob/main/docs/examples/RSv16/ExampleMods/RuneSchema2VendorTest/vendors/20-GraniteArmory.jsonc)
-- [Granite dialogue](https://github.com/gh0sted5456-us/RuneSchema/blob/main/docs/examples/RSv16/ExampleMods/RuneSchema2VendorTest/dialogue/20-GraniteStory.jsonc)
-- [Granite Goblin Patrol quest](https://github.com/gh0sted5456-us/RuneSchema/blob/main/docs/examples/RSv16/ExampleMods/RuneSchema2VendorTest/quests/60-GraniteGoblinPatrol.jsonc)
-- [Mortimer encounter](https://github.com/gh0sted5456-us/RuneSchema/blob/main/docs/examples/RSv16/ExampleMods/RuneSchema2VendorTest/events/60-MortimerEncounters.json)
-- [Mortimer zombie spawns](https://github.com/gh0sted5456-us/RuneSchema/blob/main/docs/examples/RSv16/ExampleMods/RuneSchema2VendorTest/spawns/60-MortimerZombies.json)
+Each [loader walkthrough](LOADER-WALKTHROUGHS.md) now gives a numbered workflow,
+JSONC mock-up, required asset/identity replacements and links to its consumers.
+Start there instead of installing an unrelated integration fixture.
 
 ## Diagnostics
 
-`examples/RSv16/DiagnosticPresets/` and `examples/RSv16/TraceProfiles/`
-contain targeted diagnostics for equipment, vendors, weather, effects, and
-utility magic.
+Use the [Live Log and troubleshooting guide](TROUBLESHOOTING.md) and
+[diagnostic code reference](ERROR-CODES.md) to investigate the affected subsystem.
+Keep diagnostic collection scoped and review logs before sharing them.

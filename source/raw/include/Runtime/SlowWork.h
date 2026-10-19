@@ -18,7 +18,7 @@ public:
             const auto stamp=std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
             if(const auto report=Stats.Observe(static_cast<uint64_t>(elapsed),static_cast<uint64_t>(stamp))){
                 if(report->PeakMs>=1000)
-                    PS::Log<RC::LogLevel::Warning>(STR("[PERFORMANCE][SLOW-WORK] phase={} elapsed_ms={} peak_ms={} slow_calls={}; attribution only, not a network rejection.\n"),
+                    PS::CodedLog<RC::LogLevel::Warning>(PS::Diagnostics::Id::SlowWork,STR("[PERFORMANCE][SLOW-WORK] phase={} elapsed_ms={} peak_ms={} slow_calls={}; attribution only, not a network rejection.\n"),
                         PS::ToWideSafe(Phase),report->ElapsedMs,report->PeakMs,report->SlowCalls);
                 else PS::Log<RC::LogLevel::Verbose>(STR("[PERFORMANCE][SLOW-WORK] phase={} elapsed_ms={} peak_ms={} slow_calls={}; detailed timing, no gameplay/network rejection.\n"),
                         PS::ToWideSafe(Phase),report->ElapsedMs,report->PeakMs,report->SlowCalls);

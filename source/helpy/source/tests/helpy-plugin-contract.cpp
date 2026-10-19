@@ -82,7 +82,8 @@ int Run(int argc,char** argv){
         if(ServerDesktop){
             HWND own=nullptr;
             for(HWND window=FindWindowExW(nullptr,nullptr,L"RuneSchema.Helpy.Window",nullptr);window;window=FindWindowExW(nullptr,window,L"RuneSchema.Helpy.Window",nullptr)){
-                DWORD pid=0;GetWindowThreadProcessId(window,&pid);if(pid==GetCurrentProcessId()){own=window;break;}
+                DWORD pid=0;GetWindowThreadProcessId(window,&pid);wchar_t caption[128]{};GetWindowTextW(window,caption,128);
+                if(pid==GetCurrentProcessId()&&std::wstring(caption)==PS::HelpyBranding::WindowTitle){own=window;break;}
             }
             Check(own&&IsWindowVisible(own));
             wchar_t title[128]{};GetWindowTextW(own,title,128);Check(std::wstring(title)==PS::HelpyBranding::WindowTitle);

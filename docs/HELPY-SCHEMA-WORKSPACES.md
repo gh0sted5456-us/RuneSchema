@@ -21,7 +21,7 @@ not to the current session or a connected remote server.
 ## Optional workspaces and tool windows
 
 Settings > Workspaces enables **Authoring Tools**, **Tools**, **Live Log**, and
-**Save Editor** independently. They are hidden by default; existing profiles
+**Character Editor** independently. They are hidden by default; existing profiles
 without these choices also start hidden. Settings remains reachable. Hiding a
 workspace is a presentation preference, not an authority or server permission.
 
@@ -32,7 +32,7 @@ windows appear on Helpy's internal taskbar; a Restore button shows the same
 window/state without rebuilding its catalogue. F2 and shutdown include all
 owned tool windows. Detachment/minimization are session-only.
 
-## Save Editor: verified character copies
+## Character Editor: verified character copies
 
 The first pass browses native character JSON, stages supported scalar edits,
 reviews a patch, and exports a new verified copy. Unknown mod fields are

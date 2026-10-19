@@ -1,5 +1,20 @@
 # Lore loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/lore/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Write the pages and choose a stable mod-owned lore key, or resolve an existing cooked lore asset.
+2. Create `lore/10-camp-book.jsonc`; keep Type as Lore and replace the mock-up page text.
+3. Choose normal discovery or a supported dialogue/NPC lore binding. Use a compatible book prop if you want read-state presentation.
+4. Restart and verify discovery, actual viewing, open/non-glowing read presentation and saved progress separately.
+
+**Tie-ins:** [Journal](journal.md) explains native placement/discovery; [NPCs](npc.md) and [dialogue](dialogue.md) provide supported interactions.
+
+
 **Folder:** `RuneSchema/mods/<ModName>/lore/`
 
 Readable lore entries and pages using the journal registry.
@@ -8,7 +23,7 @@ Readable lore entries and pages using the journal registry.
 
 `/lore` uses the journal registry but fixes the entry type to lore.
 
-```json
+```jsonc
 {
   "RS_MyBook": {
     "Type": "Lore",

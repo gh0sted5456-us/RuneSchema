@@ -3,6 +3,14 @@
 #include <fstream>
 using namespace PS::LiveLog;
 int main(){
+    const auto coded=Parse("[2026-10-18T14:15:16.000Z thread=12] [RuneSchema] [warning] [RS-CACHE-003] Content differs: dye_bronze");
+    assert(coded.Time=="14:15:16"&&coded.ReportedCode=="RS-CACHE-003"&&!coded.Suggested&&coded.Message=="Content differs: dye_bronze"&&coded.Scope=="Cache");
+    assert(Guides[coded.Help].Value==PS::Diagnostics::Id::CacheMismatch);
+    const auto unknown=Parse("[RuneSchema] [error] [RS-FUTURE-999] Keep the original condition");assert(unknown.ReportedCode=="RS-FUTURE-999"&&unknown.Help<0&&!unknown.Suggested);
+    assert(!CodeToken("RS-CACHE-003-extra")&&!CodeToken("prefixRS-CACHE-003")&&!CodeToken("RS--003"));
+    History repeats;repeats.Append("[2026-10-18T10:00:00Z] [RuneSchema] [warning] [RS-CACHE-003] Content differs");repeats.Append("[2026-10-18T10:00:01Z] [RuneSchema] [warning] [RS-CACHE-003] Content differs");
+    assert(Grouped(repeats,{},true).size()==1&&Grouped(repeats,{},true)[0].Count==2&&Grouped(repeats,{},false).size()==2);
+    repeats.Append("[RuneSchema] [warning] [RS-CACHE-003] Different owner");assert(Grouped(repeats,{},true).size()==2);
     const auto row=Parse("[2026-10-16T12:00:00Z thread=12] [RuneSchema] [error] [PERSISTENCE-PRUNER] Duplicate quest owner marker.");
     assert(row.Severity==Level::Error&&row.Scope=="PERSISTENCE-PRUNER"&&row.Help==0);
     assert(row.Source=="RuneSchema");
@@ -10,6 +18,9 @@ int main(){
     assert(Parse("[12:00:00] [lua] [MyMod] Warning: delayed").Severity==Level::Warning);
     assert(Parse("[12:00:00] [RegisterHook] hooked").Scope=="RegisterHook");
     assert(Parse("[12:00:00] Error: hook failed").Severity==Level::Error);
+    assert(Parse("[2026.10.18-12.00.00:123][0]LogEOSSDK: Warning: connection delayed").Source=="LogEOSSDK");
+    assert(EOSLine("LogEOSSDK: LogEOS: connection")&&EOSLine("[EOS] socket")&&!EOSLine("LogTemp: general startup"));
+    assert(std::string(StreamName(Stream::Game))=="Game"&&std::string(StreamName(Stream::EOS))=="EOS");
     const auto mod=std::filesystem::path("fixture/ue4ss/Mods/RuneSchema");
     assert(LogPath(mod,Stream::RuneSchema)==mod/"RuneSchema.log");
     assert(LogPath(mod,Stream::UE4SS)==std::filesystem::path("fixture/ue4ss/UE4SS.log"));
@@ -35,10 +46,13 @@ int main(){
     assert(Parse("[RuneSchema] [error] unrecognized error").Help==7);
     assert(Parse("[RuneSchema] session started").Help==-1);
     Filter filter;filter.Query="rs-qst-001";assert(filter.Matches(row));filter.Levels[3]=false;assert(!filter.Matches(row));
-    History history;history.Append(row.Text);filter={};assert(history.Export(filter).starts_with("[RS-QST-001] "));
+    History history;history.Append(row.Text);filter={};assert(history.Export(filter).starts_with("[Suggested reference RS-QST-001] "));
     for(int i=0;i<5000;++i)history.Append("entry "+std::to_string(i));assert(history.Rows.size()==4000&&history.Dropped==1001);
     for(int i=0;i<200;++i)history.Append(std::string(16000,'a'));assert(history.Rows.size()<4000&&history.Dropped>1001);
     const auto directory=std::filesystem::temp_directory_path()/("rsmk-live-log-"+std::to_string(GetCurrentProcessId()));std::filesystem::create_directories(directory);const auto file=directory/"RuneSchema.log";
+    const auto gameFolder=directory/"RSDragonwilds"/"Saved"/"Logs";std::filesystem::create_directories(gameFolder);const auto gameFile=gameFolder/"RSDragonwilds.log";
+    {std::ofstream game(gameFile);game<<"LogEOSSDK: session ready\n";}
+    assert(ResolveGameLog(mod,directory)==gameFile);
     auto append=[&](std::string_view text,bool truncate=false){std::ofstream stream(file,std::ios::binary|(truncate?std::ios::trunc:std::ios::app));stream<<text;};
     assert(!Read(file,{}).Error.empty());append("first\r\npartial",true);auto batch=Read(file,{});assert(batch.Lines==std::vector<std::string>{"first"}&&batch.Next.Partial=="partial");
     const auto hostFile=directory/"UE4SS.log";
@@ -56,6 +70,8 @@ int main(){
     // Readers never block the writer or its rename/rotation.
     const auto writer=CreateFileW(file.c_str(),GENERIC_WRITE,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);assert(writer!=INVALID_HANDLE_VALUE);assert(Read(file,{}).Error.empty());CloseHandle(writer);
     std::ifstream help(RUNESCHEMA_HELP_DOC);assert(help);const std::string documentation((std::istreambuf_iterator<char>(help)),{});
-    for(const auto& guide:Guides){assert(HelpUrl(guide).starts_with("https://gh0sted5456-us.github.io/RuneSchema/TROUBLESHOOTING/#rs-"));assert(documentation.find("{#"+std::string(guide.Anchor)+"}")!=std::string::npos);}
-    std::filesystem::remove(file);std::filesystem::remove(hostFile);std::filesystem::remove(directory/"old.log");std::filesystem::remove(directory);
+    for(const auto& guide:Guides){assert(HelpUrl(guide)==PS::Diagnostics::Url(guide));assert(HelpUrl(guide)==std::string(PS::Diagnostics::Reference)+"#"+std::string(guide.Anchor));assert(documentation.find("{#"+std::string(guide.Anchor)+"}")!=std::string::npos);
+        const auto parsed=Parse("[RuneSchema] [warning] ["+std::string(guide.Code)+"] exact condition");
+        assert(!parsed.Suggested&&parsed.Help>=0&&Guides[parsed.Help].Value==guide.Value);}
+    std::filesystem::remove_all(directory);
 }

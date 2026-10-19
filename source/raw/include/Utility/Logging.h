@@ -4,6 +4,7 @@
 #include <DynamicOutput/DynamicOutput.hpp>
 #include "Utility/Config.h"
 #include "Utility/DiagnosticLog.h"
+#include "Core/DiagnosticCodes.h"
 #include <string_view>
 #include <utility>
 #include <cstddef>
@@ -42,6 +43,15 @@ namespace PS {
                 ? static_cast<RC::CharType>(static_cast<unsigned char>(byte))
                 : STR('?'));
         return wide;
+    }
+
+    // Stable codes are emitted at the decision site, not inferred by the sink.
+    template <RC::Unreal::int32 level,typename... Args>
+    void CodedLog(Diagnostics::Id id,RC::File::StringViewType content,Args&&... args){
+        RC::StringType decorated=STR("[RuneSchema] [");
+        decorated+=level==RC::LogLevel::Error?STR("error"):level==RC::LogLevel::Warning?STR("warning"):STR("info");
+        decorated+=STR("] [");decorated+=ToWideSafe(Diagnostics::Get(id).Code);decorated+=STR("] ");decorated.append(content.data(),content.size());
+        ConsolidatedLog<level>(decorated,std::forward<Args>(args)...);
     }
 
     template <RC::Unreal::int32 optional_arg, typename... FmtArgs>

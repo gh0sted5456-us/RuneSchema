@@ -18,6 +18,9 @@ inline Json Compact(const Json& row) {
         const auto& text=row[key].get_ref<const std::string&>();
         if(text.size()<=1024&&text.find('\0')==text.npos)result[key]=text;
     }
+    if(row.contains("SlotStrategy")&&row["SlotStrategy"].is_string()&&row["SlotStrategy"].get_ref<const std::string&>().size()<=64)result["SlotStrategy"]=row["SlotStrategy"];
+    if(row.contains("NativeSlotVerified")&&row["NativeSlotVerified"].is_boolean())result["NativeSlotVerified"]=row["NativeSlotVerified"];
+    if(row.contains("NativeMagicAmmo")&&row["NativeMagicAmmo"].is_boolean())result["NativeMagicAmmo"]=row["NativeMagicAmmo"];
     return result;
 }
 inline Json Decode(const void* data,std::size_t bytes) {

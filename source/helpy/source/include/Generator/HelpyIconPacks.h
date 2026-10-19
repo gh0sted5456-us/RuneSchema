@@ -4,6 +4,7 @@
 #include "Core/HelpyTaskbar.h"
 #include "Generator/HelpyWindowChrome.h"
 #include "Generator/HelpyBackgrounds.h"
+#include "Generator/SourceBanners.h"
 #include "Generator/HelpyLoadingIndicator.h"
 #include "Generator/ItemIconCache.h"
 #include "Runtime/HostServices.h"
@@ -41,17 +42,20 @@ inline void PollBuild(){
 }
 inline bool Busy(){return Worker.valid();}
 inline void Start(const std::filesystem::path& file,bool importing,const nlohmann::json& coverage=nlohmann::json::object()){
-    if(Busy()||Building()){Status="Wait for the active cache build or pack operation to finish.";return;}
+    if(Busy()||Building()||SourceBanners::Busy()){Status="Wait for the active cache/artwork operation to finish.";return;}
     try{
-        if(HelpyCacheSources::Lower(file.extension().string())!=".rsmk-icons")throw std::runtime_error("Choose a .rsmk-icons file. ZIP downloads must be unpacked first.");
+        const auto extension=HelpyCacheSources::Lower(file.extension().string());
+        if(extension!=".rsmk-icons"&&extension!=".rsmk-cache")throw std::runtime_error("[RS-CACHE-002] Choose a .rsmk-cache bundle or legacy .rsmk-icons pack.");
         if(!HelpySourceCache::Ready()||!HelpySourceCache::Current.Authoritative)throw std::runtime_error("Wait for registered content sources to be ready, then retry.");
         const auto limit=HelpyRuntimePreferences::IconCacheLimitMB.load();if(limit<=0)throw std::runtime_error("Enable Keep icons between launches before using shared packs.");
         const auto snapshot=HelpySourceCache::Current;const auto root=HostServices::ModDirectory(),cache=HelpySourceCache::Directory(false);
         Progress.Cancel=false;Progress.Begin(HelpyIconPack::Phase::Discover);Importing=importing;Packaged=false;CompletionNotify=false;ActiveFile=file;LastOperationOK=false;
         const auto source=SelectedSource;
         const auto policy=HelpyEnvironment::Server()&&ServerDisplayOnly?HelpyIconPack::ImportPolicy::ServerDisplayOnly:HelpyIconPack::ImportPolicy::VerifiedContent;
-        Worker=std::async(std::launch::async,[file,root,cache,snapshot,limit,importing,source,policy,coverage]{
-            return importing?HelpyIconPack::Import(file,root,cache,snapshot,uint64_t(limit)*1024*1024,Progress,policy,source):HelpyIconPack::Export(file,root,cache,snapshot,Progress,source,coverage);
+        const auto journal=HostServices::CacheDirectory()/"journal",assets=HelpyPaths::Asset("source-base-game.png").parent_path();const auto decoder=HelpyBackgrounds::Decode;
+        Worker=std::async(std::launch::async,[file,root,cache,snapshot,limit,importing,source,policy,coverage,journal,assets,decoder]{
+            if(!importing)SourceBanners::EnsureBuiltins(cache,root,snapshot,assets,decoder);
+            return importing?HelpyIconPack::Import(file,root,cache,snapshot,uint64_t(limit)*1024*1024,Progress,policy,source):HelpyIconPack::Export(file,root,cache,snapshot,Progress,source,coverage,CacheBundleStore::Collect(cache,root,journal,snapshot));
         });Status="Verifying content sources in the background...";
     }catch(const std::exception& error){Status=error.what();}
 }
@@ -78,7 +82,7 @@ inline void Poll(){PollBuild();
     }
     if(!Worker.valid()||Worker.wait_for(std::chrono::seconds(0))!=std::future_status::ready)return;
     try{const auto result=Worker.get();Status=result.Message;CompletionNotify=!Packaged||HelpyModIconPacks::NotifyAutomatic(result);if(!Packaged){LastFile=ActiveFile;LastOperationOK=true;}if(Importing&&result.Imported){ItemIconCache::InvalidateIcons(result.ChangedIcons);if(ItemIconCache::RemoteResetAccounting)ItemIconCache::RemoteResetAccounting();}}
-    catch(const std::exception& error){Status=error.what();CompletionNotify=true;if(Importing)ItemIconCache::InvalidateSource();}
+    catch(const std::exception& error){Status=error.what();CompletionNotify=true;} // Last-good images and records remain usable on failed validation.
 }
 inline void PollPackaged(){
     if(Busy()||Building()||!PendingBuildExport.empty()||!HelpySourceCache::Ready()||!HelpySourceCache::Current.Authoritative)return;
@@ -90,9 +94,9 @@ inline void PollPackaged(){
 }
 inline void Shutdown() noexcept {PendingBuildExport.clear();Progress.Cancel=true;if(RemoteBuild)try{nlohmann::json ignored;RemoteBuild({{"Action","IconCacheBuildCancel"}},ignored);}catch(...){}if(Worker.valid())try{(void)Worker.get();}catch(...){};}
 inline void Choose(bool importing,bool buildFirst=false){
-    wchar_t file[32768]{};if(!importing){const auto name=SelectedSource.empty()?std::wstring(L"Helpy icon cache.rsmk-icons"):std::filesystem::path(SelectedSource.substr(SelectedSource.find_last_of('/')+1)+".rsmk-icons").wstring();wcscpy_s(file,name.c_str());}
+    wchar_t file[32768]{};if(!importing){const auto name=SelectedSource.empty()?std::wstring(L"Helpy content cache.rsmk-cache"):std::filesystem::path(SelectedSource.substr(SelectedSource.find_last_of('/')+1)+".rsmk-cache").wstring();wcscpy_s(file,name.c_str());}
     OPENFILENAMEW dialog{};dialog.lStructSize=sizeof(dialog);dialog.hwndOwner=GetActiveWindow();dialog.lpstrFile=file;dialog.nMaxFile=32768;
-    dialog.lpstrFilter=L"Helpy icon cache (*.rsmk-icons)\0*.rsmk-icons\0\0";dialog.lpstrDefExt=L"rsmk-icons";
+    dialog.lpstrFilter=L"Helpy content bundle (*.rsmk-cache;*.rsmk-icons)\0*.rsmk-cache;*.rsmk-icons\0Legacy icons only (*.rsmk-icons)\0*.rsmk-icons\0\0";dialog.lpstrDefExt=L"rsmk-cache";
     dialog.Flags=OFN_EXPLORER|OFN_NOCHANGEDIR|OFN_PATHMUSTEXIST|(importing?OFN_FILEMUSTEXIST:OFN_OVERWRITEPROMPT);
     if(importing?GetOpenFileNameW(&dialog):GetSaveFileNameW(&dialog)){
         if(buildFirst){
@@ -119,8 +123,8 @@ inline void Render(bool catalogueBusy=false){
     if(ImGui::Button("Import..."))Choose(true);
     ImGui::EndDisabled();
     ImGui::SameLine();
-    ImGui::BeginDisabled(Busy()||Building()||catalogueBusy||!RemoteBuild||!BuildState.value("Available",false)||!HelpySourceCache::Ready()||HelpyEnvironment::Server());
-    if(ImGui::Button("Export..."))Choose(false,true);
+    ImGui::BeginDisabled(Busy()||Building()||SourceBanners::Busy()||!HelpySourceCache::Ready());
+    if(ImGui::Button("Export cached bundle..."))Choose(false);
     ImGui::EndDisabled();ImGui::SameLine();
     ImGui::BeginDisabled(Busy()||Building()||catalogueBusy||!RemoteBuild||!BuildState.value("Available",false)||!HelpySourceCache::Ready()||HelpyEnvironment::Server());
     if(ImGui::Button("Build / update")){
@@ -128,7 +132,8 @@ inline void Render(bool catalogueBusy=false){
         else Status="Cache builder is unavailable or already running.";
     }
     ImGui::EndDisabled();
-    ImGui::TextWrapped(HelpyEnvironment::Server()?"Import client packs for server visuals. Native icon capture is unavailable on dedicated servers.":"Import a pack, or build from the game. Matching icons load from cache next launch; only differences are captured.");
+    SourceBanners::ExportArt(SelectedSource,Busy()||Building());
+    ImGui::TextWrapped(HelpyEnvironment::Server()?"Import client packs for server visuals. Native icon capture is unavailable on dedicated servers.":"Bundles include artwork, exact asset paths and known persistence IDs. Cached references stay usable while bounded native reads verify changes; gameplay actions still require live validation.");
     ImGui::BeginDisabled(Busy()||Building()||HelpyDownloads::Busy()||HelpyRuntimePreferences::IconCacheLimitMB.load()<=0||!HelpySourceCache::Ready()||!HelpySourceCache::Current.Authoritative);
     if(ImGui::Button("Download base-game cache"))HelpyDownloads::StartBaseCache(HelpySourceCache::Current.SourceKeys,HelpySourceCache::Current.NativePlugins,HelpyEnvironment::Label(),HelpyEnvironment::GameVersion);
     ImGui::EndDisabled();
@@ -166,13 +171,13 @@ inline void Render(bool catalogueBusy=false){
     if(!BuildState.value("Error",std::string{}).empty())ImGui::TextWrapped("Warning: %s",BuildState["Error"].get_ref<const std::string&>().c_str());
     if(Advanced){
     ImGui::TextWrapped("Writable cache: %s",HostServices::CacheDirectory().string().c_str());
-    ImGui::TextWrapped("Mod authors can ship cache/*.rsmk-icons inside their RuneSchema mod. Matching active sources are imported into Helpy's AppData cache; mod-provided packs are never edited.");
+    ImGui::TextWrapped("Mod authors can ship cache/*.rsmk-cache (or legacy *.rsmk-icons) inside their RuneSchema mod. Typed references are restricted to that active owner; supplied bundles are never edited.");
     ImGui::BeginDisabled(Busy()||Building()||catalogueBusy);
     if(HelpyEnvironment::Server()){
         ImGui::Checkbox("Use client packs as display-only thumbnails",&ServerDisplayOnly);
         ImGui::TextWrapped("Matches exact icon paths in active server sources, even when the server cook omits textures. These pictures may differ from the server version; they are not item definitions and are excluded from verified cache exports.");
     }
-    if(ImGui::Button("Export cached only (partial)..."))Choose(false);ImGui::EndDisabled();
+    if(ImGui::Button("Build missing icons, then export..."))Choose(false,true);ImGui::EndDisabled();
     int megabytes=HelpyRuntimePreferences::IconCacheLimitMB.load();ImGui::BeginDisabled(Busy()||Building());
     if(ImGui::InputInt("Cache limit (MB)",&megabytes,64,256)){HelpyRuntimePreferences::IconCacheLimitMB.store(std::clamp(megabytes,1,16384));HelpyImGuiTheme::SaveCurrent();}ImGui::EndDisabled();
     ImGui::TextWrapped("Packs contain preview pixels, exact asset paths, source mappings and coverage. Imports merge matching sources automatically; missing mods are not registered. No world login is needed for menu capture.");

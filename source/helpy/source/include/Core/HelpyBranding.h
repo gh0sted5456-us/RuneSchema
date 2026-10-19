@@ -22,6 +22,16 @@ inline constexpr char Credits[]="RuneSchema Modding Kit (RSMK) by the RuneSchema
 inline constexpr char Legal[]="RSMK shares RuneSchema's MIT License.\nCopyright (c) 2026 RSDW Modding Community\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the \"Software\"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n\nThird-party components and artwork retain their respective licenses and ownership. Steam and the Steam logo belong to Valve; Epic Games and its logo belong to Epic Games; Xbox and the Xbox logo belong to Microsoft. RuneScape: Dragonwilds belongs to Jagex. Platform marks identify the detected runtime only; no endorsement or affiliation is implied.";
 // Uploaded monochrome marks can have an opaque black background. Convert only
 // their upload buffer to a white alpha mask; never alter the original asset.
+inline void CommunityLayer(std::uint8_t* rgba,bool accent){
+    // Nexus's orange is a separate neutral alpha mask. Tinting is performed
+    // by the draw call, so changing themes never decodes or uploads it again.
+    const int chroma=std::max(0,int(rgba[0])-int(rgba[2]));
+    const unsigned coverage=std::clamp(chroma*255/100,0,255);
+    const unsigned layer=accent?coverage:255-coverage;
+    const unsigned light=std::max({rgba[0],rgba[1],rgba[2]});
+    rgba[3]=static_cast<std::uint8_t>((unsigned(rgba[3])*layer*light+32512)/65025);
+    rgba[0]=rgba[1]=rgba[2]=255;
+}
 inline void MonochromeMask(std::uint8_t* rgba,bool darkForeground=false) {
     const unsigned luminance=(54u*rgba[0]+183u*rgba[1]+19u*rgba[2]+128u)/256u;
     const unsigned coverage=darkForeground?255u-luminance:luminance;

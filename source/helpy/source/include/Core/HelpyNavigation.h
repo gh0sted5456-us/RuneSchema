@@ -7,24 +7,34 @@ enum class Page { Items, Creation, Recipes, Spawns, Map, Tools, Authoring, Setti
 enum class SpawnSection { Resources, Npcs, Ai };
 enum class ToolSection { Settings, Maintenance, Cleanup, Buildings };
 inline constexpr std::array Pages{Page::Home, Page::Items, Page::Creation, Page::Recipes, Page::Spawns, Page::Map, Page::Journal, Page::Authoring, Page::Tools, Page::Settings, Page::LiveLog, Page::SaveEditor, Page::DedicatedServer};
+// Keep route identities stable: regrouping must not reset editors or drafts.
+inline constexpr std::array SidebarPages{Page::Home,Page::Items,Page::Map,Page::Authoring,Page::Tools,Page::Settings,Page::LiveLog,Page::DedicatedServer};
+inline constexpr std::array PlayerTabs{Page::Items,Page::Creation,Page::Recipes,Page::SaveEditor};
+inline constexpr std::array WorldTabs{Page::Map,Page::Spawns,Page::Journal};
+inline constexpr Page Parent(Page page){
+    switch(page){case Page::Creation:case Page::Recipes:case Page::SaveEditor:return Page::Items;
+    case Page::Spawns:case Page::Journal:return Page::Map;default:return page;}
+}
+inline constexpr bool TopLevel(Page page){return Parent(page)==page;}
 inline constexpr const char* Title(Page page) {
     switch(page) {
     case Page::Home:return "Home";
-    case Page::Items:return "Item Service";
-    case Page::Creation:return "Transmog & Creation";
+    case Page::Items:return "Players";
+    case Page::Creation:return "Clone";
     case Page::Recipes:return "Recipes";
     case Page::Spawns:return "Spawns";
-    case Page::Map:return "Map";
+    case Page::Map:return "World";
     case Page::Tools:return "Tools";
     case Page::Settings:return "Settings";
     case Page::Authoring:return "Authoring Tools";
     case Page::LiveLog:return "Live Log";
     case Page::DedicatedServer:return "Server / Co-op";
-    case Page::SaveEditor:return "Save Editor";
+    case Page::SaveEditor:return "Character Editor";
     case Page::Journal:return "Journal";
     }
     return "RSMK";
 }
+inline constexpr const char* TabTitle(Page page){return page==Page::Items?"Items":page==Page::Map?"Map":Title(page);}
 inline constexpr const char* Description(Page page) {
     switch(page) {
     case Page::Home:return "Welcome to RuneSchema. Your tools, cached content and common settings in one place.";
@@ -36,7 +46,7 @@ inline constexpr const char* Description(Page page) {
     case Page::Tools:return "Maintain catalogs and manage session tools.";
     case Page::Settings:return "Configure RuneSchema for the next launch, or adjust RSMK appearance.";
     case Page::Authoring:return "Create content, inspect contracts, and export reviewed drafts and reports.";
-    case Page::LiveLog:return "Search, color and export RuneSchema or UE4SS logs, with linked troubleshooting codes.";
+    case Page::LiveLog:return "Read Game, UE4SS, RuneSchema and EOS logs, with clear events and linked diagnostic references.";
     case Page::DedicatedServer:return "Open co-op session tools or review configuration on the dedicated server itself.";
     case Page::SaveEditor:return "Edit and clean offline character copies using current mod information; review before exporting.";
     case Page::Journal:return "Browse native vanilla/modded journal and lore pages, view artwork, and author new RuneSchema entries. Wiki articles remain optional references.";

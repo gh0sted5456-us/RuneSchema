@@ -1,5 +1,20 @@
 # Equipment loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/equipment/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Resolve the worn ItemData path and verify its native equipment/slot class.
+2. Create `equipment/10-camp-gear.jsonc` with only the behaviors needed by that item.
+3. Replace mock-up item/effect references. Choose Append, Replace or Clear deliberately for granted effects.
+4. Restart and check equip, unequip, death, respawn and reconnect on host and clients; unavailable native behavior is not a successful application.
+
+**Tie-ins:** [Assets](assets.md) creates/patches the item; [effects](effects.md) and [Niagara](niagara.md) supply supported effect references.
+
+
 **Folder:** `RuneSchema/mods/<ModName>/equipment/`
 
 Wear-triggered effects and supported equipment behavior.
@@ -8,7 +23,7 @@ Wear-triggered effects and supported equipment behavior.
 
 Use `/equipment` to bind supported behavior to worn item paths.
 
-```json
+```jsonc
 {
   "SurgeEvadeLegs": {
     "/Game/MyMod/Items/ITEM_DashLegs.ITEM_DashLegs": true

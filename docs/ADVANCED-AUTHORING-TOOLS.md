@@ -1,5 +1,18 @@
 # Advanced Authoring & Tools
 
+## Step-by-step workflow
+
+1. Open Helpy and choose the workspace for the feature you are authoring; searching/previewing does not install changes.
+2. Select an inspected native record or cached reference, then prepare a focused editable starter.
+3. Replace names, identities and paths; check dependencies and export to the relevant loader folder rather than copying a whole unrelated mod.
+4. Review the exported JSONC, enable the mod, restart and verify native behavior separately from the preview.
+
+JSONC snippets are authoring mock-ups. Replace example paths, IDs and values with
+inspected content; a valid snippet cannot supply missing cooked dependencies.
+
+**Tie-ins:** [Loader walkthroughs](LOADER-WALKTHROUGHS.md), [item authoring](WEAPONS-AND-ITEMS.md), [quests and boards](modders/quests-and-questboards.md) and [cache ownership](CACHE-BUNDLES.md).
+
+
 RuneSchema 0.8.0.0 provides authoring through Helpy's separate desktop
 workspace. It can help you find a loaded record, prepare an editable JSONC
 starter, check its references, and export it. Opening the page, searching, and

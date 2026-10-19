@@ -4,8 +4,148 @@ Draft for the next `main` commit, consolidating verified work after the publishe
 0.8.0.0 release. This document does not mark 0.8.0.1 as published or change the
 runtime version. Repeated development revisions are summarized once below.
 
+## Party equipment and durability follow-up (local build candidate)
+
+- Party rows place identity and vitals on the left, with equipped-item icons
+  on the right. Narrow windows wrap the gear rather than shrinking its icons.
+- Fresh, validated native current/maximum durability drives small icon meters
+  and exact numeric hover details. Missing, invalid or expired readings show
+  an unknown marker, not a fabricated empty/full durability meter.
+- The existing three-second equipment snapshot cache is retained. The reader
+  uses native non-networked item getters and includes actual ammunition/rune
+  records in the loadout; it does not equip, repair, grant or change any item.
+- Native core/plugin builds and all 64 regression tests passed, including
+  left/right layout, zero/invalid/stale durability readings, icon meter/hover
+  rendering, and wide/compact/minimum-size navigation. Test images use synthetic
+  fixture items. Live durability checks remain pending; this follow-up is not
+  installed or published.
+
+## Grouped navigation follow-up (local build candidate)
+
+- Renamed Item Service to Players and grouped Items, Clone, Recipes and the
+  optional Character Editor as tabs. Existing editor state and drafts remain
+  separate; changing navigation does not submit an action.
+- Grouped Map, Spawns and the optional Journal under World. Party now defaults
+  to a dark bounded row list below the map, not a movable map overlay. Its
+  independent detachable window and native travel confirmations remain.
+- Reduced duplicate Home/sidebar destinations and remembered each group's last
+  workflow. Optional tab settings and separate Map/Recipes windows are retained.
+- Native core/plugin builds and all 64 regression tests passed, including real
+  tab/sidebar input, group memory, optional-tab hiding, cart preservation,
+  error isolation, docked Party placement, detached windows, and wide/compact/
+  minimum-size rendering. This follow-up is not installed or published; live
+  gameplay validation of the new grouping remains pending.
+
+## Consolidated editor and usability candidate
+
+- Added native character-creation color swatches, native skill icons and
+  XP-curve-backed level staging, and placards linked to the save's actual
+  equipped records. Unknown skill identities are not guessed or inserted.
+- Unified character and item rendering in Preview Window, including Item Bay
+  selection/drop, camera controls and bounded native animation playback.
+- Matched inventory tabs from native eligibility tags (Runes before Ammo),
+  keeping Rune Essence in the general bag and preserving expanded save slots.
+  Aligned inventory/Item Bay control rows and placard panes.
+- Isolated inventory/Item Bay Search and Refresh widget IDs, matched their
+  actual scroll viewports, and shared native hover details with saved-item
+  count, container and equipped-state facts.
+- Added right-click loadout fitting windows filtered by native slot strategy
+  for armor, hands, runes, ammunition, bolts and bait. These read loaded
+  ItemData in bounded slices, do not guess unknown compatibility, and do not
+  equip a live player or rewrite saved equipment.
+- Kept unloaded mounted ore/enemy candidates discoverable with read-only
+  inspection before spawning, while suppressing generic script bases and
+  clearly identified non-character candidate paths.
+- Made community footer icons theme-aware. Nexus's orange accent and white
+  foreground use separate neutral masks; original artwork is unchanged.
+- Added normal journal placement/group, region/discovery and recipe fields;
+  retained a collapsed advanced-schema editor and draft-only export.
+- Moved Clone into Item Service, hid the redundant navigation destination,
+  separated Trees / Ore and stone / Other resources, removed decoration and
+  dispenser clutter, and normalized names such as Copper node (small).
+- Added faded original-provider banners, owner-addressed art in cache packs,
+  image browse/drop at export, and per-character party-card backgrounds.
+  Vanilla patches retain the vanilla banner; borrowed icons do not confer
+  ownership. RSDWSpears maps to Spears & Scythes, Dye variants to Colorful Dye,
+  and the entire Dowdun Reach plugin to The Bastion artwork.
+- Added a RuneSchema.log startup hardware/OS/storage header and a date/time,
+  thread and group on each physical log line. No geographic location or
+  machine/account identifiers are collected by the header.
+- Repaired stale/corrupt generated .usmap replacement: validate before atomic
+  publication, update the current receipt, then retire only prior generated
+  mappings named by that receipt. Shipped/custom mappings are retained.
+  This does not clear, rebuild or change incremental item/journal/icon caches.
+
+Validation is scoped to automated fixtures, wide/compact/minimum renderer
+checks and an isolated Steam main-menu character-copy pass. Game Pass, live
+co-op, every armor/weapon mesh and a real future game-update migration are not
+claimed verified. These changes are staged, not a published release.
+
+The latest control-ID, fitting-picker, mounted-candidate and footer-tint changes
+now build in both the native core/plugin and the standalone UI harness. All
+64 regression tests passed, including wide, compact and minimum-size renderer
+checks. The minimum-size item cart keeps its delivery controls in the viewport.
+An isolated Steam menu-only pass resolved all 12 native loadout pickers,
+including three MagicAmmoData rune types, 15 copper candidates and 128 enemy
+candidates. Copper inspection was read-only and spawned no actor. Native
+animation, skill-level staging, draft item insertion and verified copy export
+also passed. The original BREWER save hash stayed unchanged during this pass.
+Following explicit installation approval, this candidate was installed into
+Steam and Game Pass with verified backups: 34 changed files, 88 installed-file
+checks and 47 unchanged protected settings/dependency files. The Game Pass
+launch view matched the managed installation. No game was launched and no
+settings, mod lists, caches or saves were written by the installer. The
+candidate remains unpublished and the runtime version stays 0.8.0.0.
+
+## Follow-up browser and inventory candidate (r47, private test copy only)
+
+- Added selected-entry details and hover summaries across resource, NPC and
+  enemy browsers. Right-click Hide/Restore and Show hidden use bounded local
+  Helpy preferences keyed by native class, not display names or transient
+  loaded/mounted keys. Searches, refreshes and launches retain hidden choices;
+  no catalog/cache definition is deleted or granted spawn permission.
+- Unified live party inventory with the save editor's Item Bay control strip,
+  placards and details viewer. Matching-height panes support search, source
+  filters and native inventory tabs. Bounded native pages accumulate so later
+  rune/ammo pages remain visible; native equipped records are read separately.
+- Item Bay drops stage the existing shared Item Service cart for the currently
+  verified party character. Quantities, validation, delivery confirmation and
+  receipts use the same cart implementation. No drop immediately grants an
+  item, deletes an owned item, or deposits into a chest. The empty cart is
+  collapsed; staging an item reveals its delivery controls below the panes.
+- Darkened party windows/cards, detached the party by default when players
+  are present, replaced auto-height member cards with deterministic layout,
+  and removed map-overlay size constraints from the detached native surface.
+- Native core/plugin builds and all 64 regression tests passed, including
+  hide/restore in all three spawn browsers, later-page inventory runes,
+  equal-height inventory panes and stable detached-party dimensions.
+  Screenshots are synthetic UI fixtures, not evidence of live chest access.
+- This follow-up is not installed over Steam/Game Pass. Chest ownership,
+  deposits, unlock overrides and save/reload persistence remain unverified
+  and disabled pending a controlled copied-world test. Original worlds and
+  character saves are not test mutation targets.
+
+## Structured diagnostics and shared cache bundles
+
+- Added a quest-to-Quest-Board website walkthrough with downloadable structural starters, distinct dialogue/crafting/plugin routes, authority boundaries and live-test checklists.
+- Standardized all 22 loader walkthroughs and the core authoring guides with numbered workflows, JSONC mock-ups and consumer tie-ins; removed obsolete integration-fixture shortcuts from public guides while retaining validation guidance.
+- Preserved native item references with unknown power levels and matched journal exports against the catalogue content key rather than icon-settings identity.
+
+- Refined Live Log with readable event summaries, timestamps, severity, source, exact or suggested reference codes and grouped consecutive repeats. Original entries remain copyable/exportable.
+- Added Game and EOS tabs alongside RuneSchema and UE4SS. EOS defaults to a clearly labelled category view of the game log; game/EOS tabs can select a local log when automatic discovery is unavailable. No launch flags or game logging settings are changed.
+- Added a single 39-code catalogue generating matching native/Helpy headers and a searchable website reference with meaning, runtime impact and next steps.
+- Added version-2 `.rsmk-cache` bundles carrying typed item/journal/art/portrait/resource records, exact asset paths, known persistence IDs, locale and owner/source routing alongside thumbnails. Legacy `.rsmk-icons` remain supported.
+- Added worker-based imported Item Bay presentation searches and journal/portrait cache consumers. Cached data stays explicitly referential; native delivery, ownership and authority checks remain independent.
+- Committed typed owner/category metadata through an atomic index; partial imports merge rather than erase other categories/owners. Cancelled/failed metadata publication retains the previous index.
+- Added cached-only export without requiring a full sweep, optional build-before-export, automatic active-mod bundle imports, and version-2 GitHub index lookup with legacy fallback.
+- Added an offline vanilla-bundle staging tool and staged a clean Steam menu-pass bundle with 2,903 item/journal references and 4,271 pictures. Metadata coverage remains explicitly partial; this is not a complete-game dump or a claim of GitHub publication.
+- Matched pure native baseline bundles independently of optional mod contributors, while keeping imported baseline artwork separate from mod-verified captures.
+
 ## Helpy Home and presentation
 
+- Renamed the Save Editor destination to Character Editor in the sidebar, Home and workspace visibility settings, retaining existing profile keys and copy-only save safeguards.
+
+- Added opt-in **Open Helpy when the game starts** to Quick Settings; opens the splash once after the desktop renderer is ready, without entering a world or taking game focus.
 - Added a Home landing page with tiles for the workspaces enabled in Settings.
 - Collapsed navigation on Home and restored it when entering a workspace.
 - Added hover descriptions to Home tiles and quick-access settings/cache controls.
@@ -124,7 +264,7 @@ runtime version. Repeated development revisions are summarized once below.
 - Made RuneSchema.log a continuous current-run log independent of Helpy's bounded viewer.
 - Retained RuneSchema's normal messages in UE4SS while keeping advanced detail in the dedicated log.
 - Added an opt-in restart-required log archive setting with UTC datetime filenames and no automatic archive deletion.
-- Split Live Log into RuneSchema and UE4SS tabs with independent search, pause/follow and view controls.
+- Added independent search, pause/follow and view controls per Live Log tab (now Game, UE4SS, RuneSchema and EOS).
 - Consolidated file/folder access and filtered export into Actions while keeping filters/colors available without a verbose default layout.
 - Prevented log export from overwriting active logs or RuneSchema archives.
 - Made uncertified persistence registries defer optional cleanup without blocking native character loading or modifying saves.

@@ -1,5 +1,20 @@
 # Quests loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/quests/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Choose one stable quest ID and unique canonical PersistenceID; decide objective and completion behavior.
+2. Create `quests/10-camp-contract.jsonc` with either Objective or Stages; replace the mock-up asset references and sample identity.
+3. Connect acceptance through dialogue or a bound scroll. ReturnToNPC quests also need a turn-in route.
+4. Restart; verify acceptance, progress, rewards once, per-character state and reload. Add repeat/cost rules only after the basic flow is sound.
+
+**Tie-ins:** [End-to-end Quest Board walkthrough](../../modders/quests-and-questboards.md), [dialogue](dialogue.md), [events](events.md) and [scrolls](../../QUEST-SCROLLS.md).
+
+
 **Folder:** `RuneSchema/mods/<ModName>/quests/`
 
 Per-character quest definitions, objectives, rewards, and persistence.
@@ -9,12 +24,16 @@ Per-character quest definitions, objectives, rewards, and persistence.
 Quests are per-character definitions with stages, objectives, rewards, and a
 stable persistence ID.
 
+Start with the [quest and Quest Board walkthrough](../../modders/quests-and-questboards.md)
+for a downloadable quest, acceptance item and board recipe, plus dialogue and
+multiplayer verification steps.
+
 Quests can also be accepted through a craftable consumable item using an
 item-side [`$QuestScroll` declaration](../../QUEST-SCROLLS.md) in `/assets`.
 The recipe produces a normal stable-ID item; use activates an existing quest
 through the authoritative acceptance receipt, without requiring station dialogue.
 
-```json
+```jsonc
 {
   "Id": "gather_logs",
   "PersistenceID": "AAAAAAAAAAAAAAAAAAAAAA",
@@ -57,7 +76,7 @@ texture is mounted or loadable. Boards should keep a fallback for missing art.
 
 Native board plugins can query the `runeschema.tools` C ABI service:
 
-```json
+```jsonc
 {"Action":"QuestCatalog","Mod":"MyMod","Offset":0,"Limit":64}
 ```
 
@@ -162,9 +181,6 @@ persistent identity across loads and updates.
 
 Bind them from supported dialogue actions.
 
-## Working examples
-
-- [Great Tree: multi-stage story quest](../../examples/GreatTree/quests/87-GreatTreeStory.json)
 
 ---
 

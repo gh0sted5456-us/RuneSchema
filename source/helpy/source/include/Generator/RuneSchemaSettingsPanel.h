@@ -1,5 +1,6 @@
 #pragma once
 #include "Generator/HelpyImGuiTheme.h"
+#include "Runtime/HelpySettings.h"
 #include <nlohmann/json.hpp>
 #include <functional>
 #include <map>
@@ -58,6 +59,11 @@ inline void QuickToggle(const char* label,const char* path,bool risky=false){
     }ImGui::PopID();
 }
 inline void QuickSettings(){
+    static std::string startupStatus;
+    bool autoOpen=HelpySettings::OpenOnGameStart();
+    if(ImGui::Checkbox("Open Helpy when the game starts",&autoOpen)){HelpySettings::SetOpenOnGameStart(autoOpen);startupStatus=HelpySettings::Message();}
+    if(ImGui::IsItemHovered())ImGui::SetTooltip("Opens the Helpy splash once per game launch. F2 still closes/reopens it; it never loads a world or changes saves.");
+    if(!startupStatus.empty())ImGui::TextWrapped("%s",startupStatus.c_str());
     if(!Loaded&&Status.empty())Load();
     if(Loaded){
         QuickToggle("Corrupt Save Bypass","/persistence/allowCorruptCharacterEntry",true);

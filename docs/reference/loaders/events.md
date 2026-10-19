@@ -1,5 +1,20 @@
 # Events loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/events/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Define each enemy/actor template in spawns with EventOnly enabled before building waves.
+2. Create `events/10-camp-encounter.jsonc`, choose a stable event ID and reference the exact SpawnIDs.
+3. Replace coordinates, wave composition, timeout and any quest contract filters. Do not confuse world coordinates with participant-relative offsets.
+4. Connect a supported start/cancel route, restart and verify authority, wave completion, timeout and cleanup without duplicate actors.
+
+**Tie-ins:** [Spawns](spawns.md), [dialogue](dialogue.md), [quests](quests.md) and [quest boards](../../modders/quests-and-questboards.md).
+
+
 **Folder:** `RuneSchema/mods/<ModName>/events/`
 
 Server-owned timed encounters and waves driven by spawn templates.
@@ -8,7 +23,7 @@ Server-owned timed encounters and waves driven by spawn templates.
 
 Events run server-owned waves from `/spawns` entries marked `EventOnly:true`.
 
-```json
+```jsonc
 [
   {
     "Id": "night_attack",
@@ -30,7 +45,7 @@ scope quest kill credit.
 An `EventOnly:true`, `Type:"AISpawnPoint"` template accepts the same
 `AdditionalDrops` array as ordinary AI spawns. A guaranteed shared proof item is:
 
-```json
+```jsonc
 "AdditionalDrops": [
   {"Item":"/YourMod/Items/ITEM_Proof.ITEM_Proof","Min":1,"Max":1,"ChancePercent":100}
 ]
@@ -62,11 +77,11 @@ character-quest reset is needed or permitted by this feature.
 
 ## Quest-bound bounties and survival encounters (development)
 
-This optional contract requires a framework build containing quest-bound
-encounters; the installed r6 binary does not gain it from content JSON alone.
+This optional contract requires framework support for quest-bound encounters.
+A JSON declaration cannot add native support to an older runtime.
 Existing events without `Contract` keep their current behavior.
 
-```json
+```jsonc
 {
   "Id": "milestone_trial",
   "Scope": "Participant",
@@ -140,9 +155,6 @@ it is not a permanent world placement.
 
 Yes. Event IDs can be used to scope kill credit for quest objectives.
 
-## Working examples
-
-- [Great Tree: five-wave tribe trial](../../examples/GreatTree/events/85-GreatTree-TribeTrial.json)
 
 ---
 

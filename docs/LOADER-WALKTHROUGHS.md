@@ -13,8 +13,10 @@ makes a mod easier to test, update, and remove.
 | Add a building or station | `buildings` plus its cooked actor/data in `paks` | `recipes` for station output; `quests` for progression. |
 | Put a recipe into a crafting or processing station | `recipes` | `assets` only if the item also needs loading or adjustment. |
 | Add a quest-driven character | `quests`, `npc`, and `dialogue` | `events`, `spawns`, `journal`, or `lore` for the specific feature. |
+| Offer craftable quest contracts on a Quest Board | `quests`, `assets`, and `recipes` | Follow the [quest-to-board walkthrough](modders/quests-and-questboards.md); install the separate board provider. |
 | Change supported interface text, font, or color | `blueprints` or `strings` | `paks` only for new cooked fonts or widget classes. |
 | Make a large cooked catalogue discoverable | A mod-owned cooked registry asset inside `paks` | Ordinary loaders only for focused patches or missing relationships. |
+| Register existing cooked items without a cooked registry declaration | Loose `registry/*.jsonc` with `NativeRegistries.Items` | Keep the cooked item provider mounted; add recipe/station/discovery tie-ins as needed. |
 
 A loader file cannot cook a missing Unreal asset. A PAK mount cannot, by
 itself, put every packaged object into the live gameplay list. For new content,
@@ -43,7 +45,7 @@ follow [PAK mounting](PAK-CONTENT-GUIDE.md) and the
 | `quests` | Quest definitions and objectives | Yes |
 | `raw` | Rows in existing game tables | Yes |
 | `recipes` | Crafting, processing, dismantling, and station placement | Yes |
-| `registry` | Supported presentation and action declarations | Yes |
+| `registry` | Supported native-registry references, presentation and action declarations | Yes |
 | `spawns` | Enemies, resources, props, and placed actors | Yes |
 | `strings` | Supported text replacements | Usually |
 | `vendors` | Shops and offers | Yes |
@@ -90,11 +92,12 @@ A new station normally uses:
 3. `recipes` to place recipes into the station;
 4. `strings` or `blueprints` only when the station needs additional text or interface changes.
 
-## The registry folder is not an item list
+## The registry folder declares references, not missing assets
 
-The `registry` folder supports presentation and action declarations used by
-specific RuneSchema features. It does not replace the game's item or recipe
-lists and should not be filled with every PAK asset.
+The `registry` folder supports native-registry references as well as presentation
+and action declarations. A loose declaration can announce exact cooked ItemData
+paths when the PAK has no cooked registry declaration. It does not replace
+ItemData construction or automatically scan every asset in a PAK.
 
 For an ordinary-sized mod, make a cooked item available by using its exact path
 in `assets` or in a recipe. For a large catalogue, bake normal item, recipe,
@@ -102,10 +105,13 @@ station, and unlock relationships into the PAK rather than creating thousands
 of empty loader files.
 
 Custom combat, magic, and equipment data can require different authoritative
-game registries. A mod can cook its own registry declaration asset for the
-supported lanes. See the [current lanes and design limits](COOKED-PAK-REGISTRY-MANIFEST.md)
-before relying on one for a new feature. A `registry/*.jsonc` file cannot
-declare `NativeRegistries` and AI attack registration is not a supported lane.
+game registries. A mod can ship a loose registry declaration or cook its own
+declaration asset for the supported lanes. Start with the
+[loose item-registration walkthrough](reference/loaders/registry.md#register-a-cooked-item-without-cooking-a-registry-declaration)
+and consult the [current lanes and design limits](COOKED-PAK-REGISTRY-MANIFEST.md)
+before relying on a lane for a new feature. In particular, attack lanes have
+their own fallback and item-owned collection limits; an accepted path is not
+proof that a global attack registry was installed.
 
 ## Open the detailed loader reference
 

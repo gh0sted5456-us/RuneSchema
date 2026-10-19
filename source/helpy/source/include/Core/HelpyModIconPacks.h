@@ -3,7 +3,7 @@
 namespace PS::HelpyModIconPacks {
 namespace fs=std::filesystem;
 struct Bundle {fs::path File;std::string Owner;std::set<std::string> Groups;};
-inline bool NotifyAutomatic(const HelpyIconPack::Result& result){return result.Imported||result.Warnings;}
+inline bool NotifyAutomatic(const HelpyIconPack::Result& result){return result.Imported||result.RecordsImported||result.Warnings;}
 inline std::vector<Bundle> Discover(const fs::path& root,const HelpySourceCache::Snapshot& snapshot){
     if(!snapshot.Authoritative)return {};
     std::map<std::string,std::set<std::string>> groups;
@@ -19,7 +19,8 @@ inline std::vector<Bundle> Discover(const fs::path& root,const HelpySourceCache:
             if(!fs::is_directory(cache))continue;size_t entries=0;
             for(const auto& file:fs::directory_iterator(cache)){
                 if(++entries>256)throw std::runtime_error("Mod cache folder exceeds 256 entries");
-                if(HelpyCacheSources::Lower(file.path().extension().string())!=".rsmk-icons"||!file.is_regular_file())continue;
+                const auto extension=HelpyCacheSources::Lower(file.path().extension().string());
+                if((extension!=".rsmk-icons"&&extension!=".rsmk-cache")||!file.is_regular_file())continue;
                 HelpyIconPack::Safe(file.path());if(result.size()>=64)throw std::runtime_error("Mod cache discovery exceeds 64 packs");
                 result.push_back({file.path(),owner,groups.at(owner)});
             }
@@ -33,12 +34,12 @@ inline HelpyIconPack::Result Import(const Bundle& bundle,const fs::path& root,co
     if(bundle.Groups.empty())throw std::runtime_error("Mod cache has no active declared roots");
     for(const auto& group:bundle.Groups){const auto declared=snapshot.DeclaredOwners.find(group);
         if(!snapshot.SourceKeys.contains(group)||declared==snapshot.DeclaredOwners.end()||!declared->second.contains(bundle.Owner))throw std::runtime_error("Mod cache ownership is stale");}
-    return HelpyIconPack::Import(bundle.File,root,cache,snapshot,budget,progress,HelpyIconPack::ImportPolicy::VerifiedContent,{},bundle.Groups);
+    return HelpyIconPack::Import(bundle.File,root,cache,snapshot,budget,progress,HelpyIconPack::ImportPolicy::VerifiedContent,{},bundle.Groups,"mods/"+bundle.Owner);
 }
 inline HelpyIconPack::Result ImportAll(const fs::path& root,const fs::path& cache,const HelpySourceCache::Snapshot& snapshot,uint64_t budget,HelpyIconPack::Progress& progress){
     const auto bundles=Discover(root,snapshot);HelpyIconPack::Result result;size_t warnings=0;std::set<std::string> changed;std::string details;
     for(const auto& bundle:bundles){HelpyIconPack::Check(progress);
-        try{auto imported=Import(bundle,root,cache,snapshot,budget,progress);result.Imported+=imported.Imported;result.Unchanged+=imported.Unchanged;result.Skipped+=imported.Skipped;
+        try{auto imported=Import(bundle,root,cache,snapshot,budget,progress);result.Imported+=imported.Imported;result.RecordsImported+=imported.RecordsImported;result.Unchanged+=imported.Unchanged;result.Skipped+=imported.Skipped;
             for(const auto& icon:imported.ChangedIcons)if(changed.size()<HelpyIconPack::MaxIcons)changed.insert(icon);
             if(imported.Skipped)++warnings;
         }catch(const std::exception& error){HelpyIconPack::Check(progress);++warnings;if(details.size()<1024)details+=" "+bundle.Owner+"/"+bundle.File.filename().string()+": "+error.what()+";";}

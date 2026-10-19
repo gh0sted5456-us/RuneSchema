@@ -16,10 +16,12 @@ void HelpyStandaloneWindow::DestroyWorkspacePanel(size_t index){
 bool HelpyStandaloneWindow::SyncWorkspacePanel(size_t index){
     auto& panel=m_workspaces.at(index);const auto task=WorkspaceTask(index);
     if(!WorkspaceDetached(index)||(index==2&&!RuntimeDetailsPanel::Open)||(index==3&&!MapPanel::Data.ShowParty)||(index==4&&!PlayerInventoryPanel::Open)){if(panel.Window)DestroyWorkspacePanel(index);return false;}
+    // A detached party opens only when requested and a current party exists.
+    if(index==3&&(!MapPanel::Data.Snapshot.contains("Players")||MapPanel::Data.Snapshot["Players"].empty())){if(panel.Window)DestroyWorkspacePanel(index);return false;}
     if(HelpyTaskbar::Current.Contains(task)){if(panel.Window)ShowWindow(panel.Window,SW_HIDE);return false;}
     if(!panel.Window){
         RECT parent{};GetWindowRect(m_hwnd,&parent);MONITORINFO monitor{sizeof(monitor)};GetMonitorInfoW(MonitorFromWindow(m_hwnd,MONITOR_DEFAULTTONEAREST),&monitor);
-        const int width=std::min(index==3?360:index==2?680:1000,int(monitor.rcWork.right-monitor.rcWork.left)),height=std::min(index==3?360:index==2?640:760,int(monitor.rcWork.bottom-monitor.rcWork.top));
+        const int width=std::min(index==3?640:index==2?680:1000,int(monitor.rcWork.right-monitor.rcWork.left)),height=std::min(index==3?360:index==2?640:760,int(monitor.rcWork.bottom-monitor.rcWork.top));
         const int x=std::clamp(int(parent.left+48+int(index)*32),int(monitor.rcWork.left),std::max(int(monitor.rcWork.left),int(monitor.rcWork.right)-width));
         const int y=std::clamp(int(parent.top+48+int(index)*32),int(monitor.rcWork.top),std::max(int(monitor.rcWork.top),int(monitor.rcWork.bottom)-height));
         wchar_t windowClass[256]{};GetClassNameW(m_hwnd,windowClass,256);

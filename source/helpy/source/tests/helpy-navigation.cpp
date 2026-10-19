@@ -74,6 +74,10 @@ int main(){
     const auto seven=PS::DesktopBayLayout::Arrange({0,0,1000,700},{0,0,1000,700},{0,0,1000,700},{0,0,1000,700},{0,0,1000,700},{0,0,1000,700},{-400,-200,360,360});
     if(seven.X!=-400||seven.Y!=-200||seven.Party.X!=0||seven.Main.X!=400||seven.Width!=1400)throw std::runtime_error("Party must have an independent detached surface");
     using namespace PS::HelpyBranding;
+    {std::uint8_t orange[]{220,140,40,255},whiteMark[]{255,255,255,255},accentWhite[]{255,255,255,255},baseOrange[]{220,140,40,255};
+        CommunityLayer(orange,true);CommunityLayer(whiteMark,false);CommunityLayer(accentWhite,true);CommunityLayer(baseOrange,false);
+        if(orange[0]!=255||orange[3]==0||whiteMark[3]!=255||accentWhite[3]!=0||baseOrange[3]!=0)throw std::runtime_error("Community theme layers did not separate accent and foreground");
+    }
     {std::uint8_t shadowGold[]{80,60,55,255};LogoLayer(shadowGold,50,100,true);if(shadowGold[0]!=shadowGold[1]||shadowGold[1]!=shadowGold[2]||shadowGold[3]!=255)throw std::runtime_error("The logo's shaded gold must be recolorable too");}
     if(BuildLabel("++dominion+staging-CL-248854")!="CL 248854"||BuildLabel("")!="Not reported"||BuildLabel("0.11.0")!="0.11.0"||BuildLabel("bad-CL-x")!="bad-CL-x")throw std::runtime_error("Build labels must not invent a version");
     std::uint8_t white[]{255,255,255,255},black[]{0,0,0,255},edge[]{255,255,255,100},transparent[]{255,255,255,0};
@@ -117,7 +121,12 @@ int main(){
         if(!Visible(page,{true,true,true,true})||std::string_view(Description(page)).empty())throw std::runtime_error("Enabled workspace is unreachable or unexplained");
         titles.insert(Title(page));
     }
-    const std::set<std::string_view> expected{"Home","Item Service","Transmog & Creation","Recipes","Spawns","Map","Journal","Tools","Settings","Authoring Tools","Live Log","Server / Co-op","Save Editor"};
+    const std::set<std::string_view> expected{"Home","Players","Clone","Recipes","Spawns","World","Journal","Tools","Settings","Authoring Tools","Live Log","Server / Co-op","Character Editor"};
+    if(!Visible(Page::Creation)||TopLevel(Page::Creation)||TopLevel(Page::Recipes)||TopLevel(Page::SaveEditor)||TopLevel(Page::Spawns)||TopLevel(Page::Journal))throw std::runtime_error("Nested workflows must stay reachable without duplicate sidebar entries");
+    if(SidebarPages.size()!=8||PlayerTabs.size()!=4||WorldTabs.size()!=3||std::string_view(TabTitle(Page::Items))!="Items"||std::string_view(TabTitle(Page::Map))!="Map")throw std::runtime_error("Players and World must retain their workflow tabs");
+    for(auto page:SidebarPages)if(!TopLevel(page))throw std::runtime_error("Sidebar contains a nested workflow");
+    for(auto page:PlayerTabs)if(Parent(page)!=Page::Items)throw std::runtime_error("Player workflow has the wrong parent");
+    for(auto page:WorldTabs)if(Parent(page)!=Page::Map)throw std::runtime_error("World workflow has the wrong parent");
     if(titles!=expected)throw std::runtime_error("All destinations must stay reachable");
     for(auto page:{Page::Authoring,Page::Tools,Page::LiveLog,Page::SaveEditor})if(Visible(page))throw std::runtime_error("Optional workspace must require opt-in");
     if(!Visible(Page::Settings)||!Visible(Page::Items)||!Visible(Page::LiveLog,{false,false,true,false})||Visible(Page::Tools,{false,false,true,false}))throw std::runtime_error("Workspace toggles must be independent; Settings stays reachable");

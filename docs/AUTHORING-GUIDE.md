@@ -1,5 +1,18 @@
 # Create your first RuneSchema mod
 
+## Step-by-step workflow
+
+1. Create and enable one stable mod folder under `RuneSchema/mods`; add only the loader folders your feature uses.
+2. Start with one JSONC mock-up from the matching loader walkthrough and replace IDs, asset paths and reflected fields.
+3. Connect the result to its consumer: an item needs a recipe/vendor, a quest needs acceptance, and a station needs its real actor row handle.
+4. Restart, inspect targeted diagnostics, then verify the feature and saved progress before distributing it.
+
+JSONC snippets are authoring mock-ups. Replace example paths, IDs and values with
+inspected content; a valid snippet cannot supply missing cooked dependencies.
+
+**Tie-ins:** [All loaders](LOADER-WALKTHROUGHS.md), [quests and boards](modders/quests-and-questboards.md), [cache bundles](CACHE-BUNDLES.md) and [diagnostic codes](ERROR-CODES.md).
+
+
 RuneSchema lets a mod connect content to Dragonwilds without replacing large
 parts of the game. A small mod can change an existing value with one file. A
 larger mod can combine new PAK content with items, recipes, stations, quests,
@@ -7,7 +20,8 @@ vendors, and interface changes.
 
 This guide explains the shared foundation. The focused guides cover
 [PAK content](PAK-CONTENT-GUIDE.md), [weapons and items](WEAPONS-AND-ITEMS.md),
-and [stations and recipes](STATIONS-AND-RECIPES.md).
+and [stations and recipes](STATIONS-AND-RECIPES.md). For a complete quest-to-board
+flow, follow [Build a quest and put it on a Quest Board](modders/quests-and-questboards.md).
 
 If you prefer a guided starting point, the in-game
 [Advanced Authoring & Tools workflow](ADVANCED-AUTHORING-TOOLS.md) can search

@@ -1,9 +1,32 @@
 #include "Core/ItemCatalogFilter.h"
 #include "Core/FocusedItemQuery.h"
+#include "Core/LoadoutEligibility.h"
+#include "Core/ItemTransfer.h"
 #include <cassert>
 using namespace PS::ItemCatalogFilter;
 template<class F> void Reject(F fn){bool failed=false;try{fn();}catch(...){failed=true;}assert(failed);}
 int main(){
+    for(const auto slot:PS::LoadoutEligibility::Slots){
+        const nlohmann::json row={{"Path","/Game/Native.Item"},{"SlotStrategy",slot},{"NativeSlotVerified",true}};
+        assert(PS::LoadoutEligibility::Matches(row,slot));
+        auto missing=row;missing.erase("NativeSlotVerified");assert(!PS::LoadoutEligibility::Matches(missing,slot));
+        assert(PS::LoadoutEligibility::Matches(PS::ItemTransfer::Compact(row),slot));
+    }
+    for(const auto strategy:{"HeldOnlyLeft","HeldOnlyRight","HeldTwoHanded","HeldAny"}){
+        const nlohmann::json row={{"SlotStrategy",strategy},{"NativeSlotVerified",true}};
+        assert(PS::LoadoutEligibility::Matches(row,"HeldLeft")==(std::string(strategy)=="HeldOnlyLeft"||std::string(strategy)=="HeldAny"));
+        assert(PS::LoadoutEligibility::Matches(row,"HeldRight")!=(std::string(strategy)=="HeldOnlyLeft"));
+        assert(!PS::LoadoutEligibility::Matches(row,"Ammo"));
+    }
+    assert(!PS::LoadoutEligibility::Matches({{"Name","Fire Rune"},{"NativeSlotVerified",true}},"MagicAmmo1"));
+    assert(!PS::LoadoutEligibility::Matches({{"SlotStrategy","MagicAmmo1"},{"NativeSlotVerified",true}},"Ammo"));
+    assert(!PS::LoadoutEligibility::Matches({{"SlotStrategy","CrossbowBolts"},{"NativeSlotVerified",true}},"FishingBait"));
+    assert(!PS::LoadoutEligibility::Valid("Invented"));
+    const nlohmann::json nativeRune={{"Path","/Game/Runes.Fire"},{"NativeSlotVerified",true},{"NativeMagicAmmo",true}};
+    assert(PS::LoadoutEligibility::Matches(nativeRune,"MagicAmmo1"));
+    assert(!PS::LoadoutEligibility::Matches(nativeRune,"Ammo"));
+    assert(!PS::LoadoutEligibility::Matches(nativeRune,"HeldRight"));
+    assert(PS::LoadoutEligibility::Matches(PS::ItemTransfer::Compact(nativeRune),"MagicAmmo1"));
     const nlohmann::json helm={{"Path","/Dye/Armor/ITEM_Helm.ITEM_Helm"},{"Name","Fallen Hoplite's Helm (Dyed Chrome)"},
         {"Category","Armor"},{"SourceKind","modded"},{"SourceName","Dye"},{"InternalName","chrome_helm"},{"Tags","Metal Heavy"},{"Class","/Script/Dominion.ItemData"}};
     assert(Query("")(helm));assert(Query("Chrome helm")(helm));assert(Query("metal Heavy")(helm));assert(Query("dominion")(helm));

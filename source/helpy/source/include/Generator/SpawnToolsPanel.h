@@ -468,7 +468,11 @@ inline void Render(View view) {
         }
     };
     if(!itemPage)recipient();
-    if(view==View::Ai||view==View::Resources){SpawnStudioPanel::Render(result,resultRevision,view==View::Resources,ForcedActorMode<0?1:ForcedActorMode,player);
+    if(view==View::Ai||view==View::Resources){SpawnStudioPanel::Render(result,resultRevision,view==View::Resources,ForcedActorMode<0?1:ForcedActorMode,player,[](const nlohmann::json& row){
+        if(DefinitionPending)return;const auto id=++DefinitionSequence;
+        if(SpawnToolRequests::TrySubmit({{"Action","InspectSpawnDefinition"},{"_Source","HelpyStandalone"},{"_RequestId",id},{"Class",row.at("Class")},{"Key",row.at("Key")},{"ExpectedType",row.at("Type")}}))DefinitionPending=id;
+    });
+    if(!DefinitionStatus.empty())ImGui::TextWrapped("%s",DefinitionStatus.c_str());
         if(!ui.advancedMode||!ImGui::CollapsingHeader("Legacy advanced spawn authoring"))return;
     }
     const auto invalidateSharedPlacement=[&]{actors[0].Confirmed=false;actors[1].Confirmed=false;buildingConfirmed=false;};
@@ -643,12 +647,16 @@ inline void Render(View view) {
     if(view==View::All||view==View::Items||view==View::ItemLab) {
         if(view==View::All||view==View::Items) {
             const float width=ImGui::GetContentRegionAvail().x;
-            const bool sideBySide=width>=ui.X(790.0f);
+            // One placard column plus the narrow cart fits small desktop
+            // windows; stacking both fixed-height panes hides delivery.
+            const bool sideBySide=width>=ui.X(480.0f);
             const float height=std::max(ui.Y(350.0f),ImGui::GetContentRegionAvail().y-ImGui::GetStyle().ItemSpacing.y);
             auto& cartWidthLogical=HelpyImGuiTheme::Current.itemCartWidth;
             const float cartWidth=std::clamp(ui.X(cartWidthLogical),ui.X(210),std::max(ui.X(210),width*.5f)),gap=ui.Y(8);
             const float cartHeight=ui.Y(210.0f);
-            const float browserHeight=sideBySide?height:std::max(ui.Y(140.0f),height-cartHeight-ImGui::GetStyle().ItemSpacing.y);
+            // On short/narrow windows, let the workspace scroll instead of
+            // shrinking the browser below one usable placard row.
+            const float browserHeight=sideBySide?height:std::max(ui.Y(320.0f),height-cartHeight-ImGui::GetStyle().ItemSpacing.y);
             ItemGridPicker::Result inventoryPicker;
             if(ImGui::BeginChild("##item-browser-pane",ImVec2(sideBySide?width-cartWidth-gap:0,browserHeight),false)){
                 inventoryPicker=ItemGridPicker::RenderShared(result,resultRevision,true);

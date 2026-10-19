@@ -1,0 +1,25 @@
+{
+  "Format": 2,
+  "Kind": "RuneSchemaCacheBundles",
+  "Packs": [
+    {
+      "Runtime": "Steam",
+      "GameVersion": "++dominion+live-CL-251392",
+      "Locale": "en-US",
+      "Sources": {
+        "agility": "0b0acdc0118c7e0998e874052623fe6ba30ef71732a1eb850848ecd79f208bbd",
+        "dowdunreach": "1cd3cc3ee41f59fc4f6926a4c244b7bbaa725fba0c84099bab62c32a137c36ee",
+        "fishing": "83ce6ab3245ab2e647bec85bd7a107a5cdb4975ce68d0ff88e3d99bbce11a42f",
+        "futuremajorversion": "6e4757403bc01c6dcd7b5f160f4a3206e7724d0c55728aedb017b1329b28b71c",
+        "game": "422bcca78c2186582b89d6e70ab28c9a918688848967f8dbd564ea07014d082f",
+        "scornedwilderness": "833924901902088c45851c7b518298aa4aad063e3ab90907f65a7961d3e1114a",
+        "umbralsands": "6e545726e874eeba4c3b121d3ffe3218438ec163788d19eaa43251bd9f9cb2c9"
+      },
+      "SHA256": "3224920708eeadb52c483be512497d67f00a1e8b0181758f5eac1564cb342e74",
+      "Bytes": 74519779,
+      "RecordCount": 2903,
+      "IconCount": 4271,
+      "RecordCoverage": "Partial"
+    }
+  ]
+}

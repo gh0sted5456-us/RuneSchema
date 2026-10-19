@@ -1,5 +1,12 @@
 Helpy 2.0 component provenance
 
+Source banners supplied by the project owner (October 2026): base game,
+Scorned/Scorched Wilderness, Umbral Sands, The Bastion, Flintlock Pistols,
+Spears & Scythes, Colorful Dye and Shadowmancer. Game screenshots and game
+artwork remain the property of their respective rights holders, including
+Jagex. User mod promotional artwork is retained under its original ownership;
+including it in an owner-scoped cache does not relicense it as MIT.
+
 RuneSchema-derived UI, models, data-only plugin API, and configuration helpers:
   https://github.com/gh0sted5456-us/RuneSchema
   Local runeschema-7.8-alpha snapshot, including local refinements.

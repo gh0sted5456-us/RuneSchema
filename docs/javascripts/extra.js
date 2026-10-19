@@ -210,3 +210,43 @@ function rsFinderInit() {
 }
 
 rsOnPage(rsFinderInit);
+
+let rsCodeAnchorController;
+function rsCodesInit() {
+  const input = document.getElementById("rs-code-search");
+  const count = document.getElementById("rs-code-count");
+  const cards = Array.from(document.querySelectorAll(".rs-code-card"));
+  if (!input || !count || input.dataset.rsReady) return;
+  if (rsCodeAnchorController) rsCodeAnchorController.abort();
+  rsCodeAnchorController = new AbortController();
+  input.dataset.rsReady = "true";
+  const filter = () => {
+    const words = input.value.toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
+    let visible = 0;
+    cards.forEach((card) => {
+      const text = card.textContent.toLocaleLowerCase();
+      card.hidden = !words.every((word) => text.includes(word));
+      if (!card.hidden) visible++;
+    });
+    count.textContent = visible ? visible + " of " + cards.length + " reference entries" : "No matching code. Try a code family or a shorter symptom.";
+  };
+  input.addEventListener("input", filter);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") { input.value = ""; filter(); }
+  });
+  // A direct code link must remain visible even after a previous search.
+  const revealAnchor = () => {
+    if (!input.isConnected) return;
+    let id;
+    try { id = decodeURIComponent(location.hash.slice(1)); } catch (_) { return; }
+    const anchor = document.getElementById(id);
+    if (!anchor || !anchor.closest(".rs-code-card")) return;
+    input.value = "";
+    filter();
+    anchor.scrollIntoView({ block: "start" });
+  };
+  window.addEventListener("hashchange", revealAnchor, { signal: rsCodeAnchorController.signal });
+  filter();
+  revealAnchor();
+}
+rsOnPage(rsCodesInit);

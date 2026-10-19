@@ -18,6 +18,10 @@ inline uint64_t Pending=0,Sequence=0x5600000000000000ull,Generation=0;
 inline uint64_t Revision=1;
 inline Clock::time_point Next{},Started{};
 inline std::future<Json> Reader;
+inline std::future<Json> BundleReader;
+inline Json BundleArt=Json::array();
+inline std::string BundleStamp;
+inline Clock::time_point NextBundle{};
 inline std::future<std::string> Writer;
 inline std::optional<Json> SaveWanted;
 inline void Poll(){
@@ -31,6 +35,24 @@ inline void Poll(){
         });
     }
     if(Reader.valid()&&Reader.wait_for(std::chrono::seconds(0))==std::future_status::ready){const auto doc=Reader.get();Loaded=true;if(doc.contains("Entries")){Entries=doc["Entries"];++Revision;for(auto& row:Entries)row["ObservedCurrent"]=false;Key=doc.value("SourceKey",std::string{});Status="Cached native entries ready; checking the runtime in the background.";}}
+    if(BundleReader.valid()&&BundleReader.wait_for(std::chrono::seconds(0))==std::future_status::ready){
+        const auto doc=BundleReader.get();
+        if(doc.contains("Records")){
+            BundleStamp=doc.value("Stamp",std::string{});BundleArt=Json::array();auto merged=Json::array();std::set<std::string> paths;size_t bytes=0;
+            for(const auto& row:Entries)if(!row.value("BundleReference",false)){merged.push_back(row);paths.insert(row.value("Path",std::string{}));bytes+=row.dump().size();}
+            for(const auto& reference:doc["Records"]){auto row=reference.at("Data");if(BundleArt.size()<32768)BundleArt.push_back(row);
+                if(reference.at("Kind")=="journal"&&merged.size()<8192&&paths.insert(row.value("Path",std::string{})).second){const auto length=row.dump().size();if(bytes+length<=12*1024*1024){bytes+=length;merged.push_back(std::move(row));}}
+            }Entries=std::move(merged);++Revision;
+        }
+    }
+    if(Loaded&&!BundleReader.valid()&&Clock::now()>=NextBundle&&HelpySourceCache::Ready()){
+        NextBundle=Clock::now()+std::chrono::seconds(3);const auto snapshot=HelpySourceCache::Current;const auto root=HostServices::ModDirectory(),cache=HelpySourceCache::Directory(false);const auto previous=BundleStamp;
+        BundleReader=std::async(std::launch::async,[snapshot,root,cache,previous]()->Json{try{
+            const auto file=CacheBundleStore::Directory(cache,root)/"index.json";CacheBundleIO::Safe(file);if(!std::filesystem::exists(file))return Json::object();
+            const auto stamp=snapshot.Key+"|"+std::to_string(std::filesystem::last_write_time(file).time_since_epoch().count())+"|"+std::to_string(std::filesystem::file_size(file));
+            if(stamp==previous)return Json::object();return {{"Stamp",stamp},{"Records",CacheBundleStore::Read(cache,root,snapshot,CacheBundleStore::Locale())}};
+        }catch(...){return Json::object();}});
+    }
     if(Writer.valid()&&Writer.wait_for(std::chrono::seconds(0))==std::future_status::ready){const auto error=Writer.get();if(!error.empty())Status=error;}
     if(SaveWanted&&!Writer.valid()){const auto doc=std::move(*SaveWanted);SaveWanted.reset();const auto folder=HostServices::CacheDirectory()/"journal";
         Writer=std::async(std::launch::async,[doc,folder](){try{const auto text=doc.dump();HelpyIconPack::Publish(folder/"catalog.json",{text.begin(),text.end()});
@@ -61,5 +83,5 @@ inline void Poll(){
         const auto id=++Sequence;if(SpawnToolRequests::TrySubmit({{"Action","JournalCatalog"},{"Cursor",Cursor},{"_RequestId",id},{"_Source","HelpyStandalone"}})){Pending=id;Started=Clock::now();}
     }
 }
-inline void Shutdown(){if(Reader.valid())Reader.wait();if(Writer.valid())Writer.wait();}
+inline void Shutdown(){if(Reader.valid())Reader.wait();if(BundleReader.valid())BundleReader.wait();if(Writer.valid())Writer.wait();}
 }

@@ -7,9 +7,9 @@
 namespace PS::JournalWorkspace {
 using Json=nlohmann::json;
 inline bool Identifier(const std::string& value){return !value.empty()&&value.size()<=128&&std::all_of(value.begin(),value.end(),[](unsigned char c){return std::isalnum(c)||c=='_'||c=='-';});}
-inline Json Draft(const std::string& id,const std::string& type,const std::string& title,const Json& pages,const std::string& image,const std::string& category) {
+inline Json Draft(const std::string& id,const std::string& type,const std::string& title,const Json& pages,const std::string& image,const std::string& category,const Json& fields=Json::object()) {
     if(!Identifier(id))throw std::runtime_error("Use a unique mod-prefixed ID: letters, numbers, underscore or dash.");
-    if(type!="Lore"&&type!="People"&&type!="Place"&&type!="Treasure"&&type!="World")throw std::runtime_error("Unsupported readable entry type.");
+    if(type!="Lore"&&type!="People"&&type!="Place"&&type!="Treasure"&&type!="World"&&type!="Recipe")throw std::runtime_error("Unsupported journal entry type.");
     if(title.empty()||title.size()>1024||!pages.is_array()||pages.empty()||pages.size()>128)throw std::runtime_error("A title and 1-128 pages are required.");
     size_t total=0;Json descriptions=Json::array();
     for(const auto& page:pages){if(!page.is_string()||page.get_ref<const std::string&>().size()>65536)throw std::runtime_error("Each page must be text, at most 64 KiB.");total+=page.get_ref<const std::string&>().size();descriptions.push_back({{"Description",page}});}
@@ -20,6 +20,15 @@ inline Json Draft(const std::string& id,const std::string& type,const std::strin
     Json body={{"Type",type},{"DisplayName",title},{"PageDescriptions",descriptions},{"Unlock",false}};
     if(!image.empty())body["Image"]=image;
     if(!category.empty())body["AddTo"]={{"SubCategory",category}};
+    if(!fields.is_object()||fields.size()>64||fields.dump().size()>65536)throw std::runtime_error("Additional journal fields must be a bounded object.");
+    for(const auto& [key,value]:fields.items()){if(key=="Type"||key=="DisplayName"||key=="PageDescriptions"||key=="Image")throw std::runtime_error("Use the normal journal controls for title, type, artwork and pages.");body[key]=value;}
+    for(const auto* key:{"Unlock","UnlockOnAcquire"})if(body.contains(key)&&!body[key].is_boolean())throw std::runtime_error("Journal unlock flags must be boolean.");
+    if(body.contains("AddTo")){const auto& placement=body["AddTo"];if(!placement.is_object()||placement.contains("SubCategory")==bool(placement.contains("Section")||placement.contains("Category")))throw std::runtime_error("Choose a native subcategory OR a section/category pair.");if(!placement.contains("SubCategory")&&(!placement.contains("Section")||!placement.contains("Category")||placement["Section"].get<std::string>().empty()||placement["Category"].get<std::string>().empty()))throw std::runtime_error("Both journal Section and Category are required.");if(placement.contains("Group")&&(!placement["Group"].is_object()||!Identifier(placement["Group"].value("Id",std::string{}))))throw std::runtime_error("A valid journal group ID is required.");}
+    if(type=="Recipe"&&(!body.contains("RecipeData")||!body["RecipeData"].is_string()||body["RecipeData"].get_ref<const std::string&>().empty()))throw std::runtime_error("Recipe entries require RecipeData.");
+    if(body.contains("UnlockCondition")){const auto& condition=body["UnlockCondition"];if(!condition.is_object())throw std::runtime_error("UnlockCondition must be an object.");auto trigger=condition.value("UnlockType",std::string{});const auto sep=trigger.rfind("::");if(sep!=trigger.npos)trigger=trigger.substr(sep+2);if(trigger!="PlayerStart"&&trigger!="ItemFirstPickup"&&trigger!="RecipeUnlocked"&&trigger!="Interaction"&&trigger!="AIKill"&&trigger!="RegionUnlocked"&&trigger!="Manual"&&trigger!="NeverUnlock")throw std::runtime_error("Choose a native journal unlock type.");
+        const auto required=trigger=="ItemFirstPickup"?"UnlockingItemData":trigger=="RecipeUnlocked"?"UnlockingRecipe":trigger=="Interaction"?"UnlockingInteractionActor":trigger=="AIKill"?"AIData":"";if(*required&&(!condition.contains(required)||!condition[required].is_string()||!condition[required].get_ref<const std::string&>().starts_with('/')))throw std::runtime_error("This unlock condition requires its cooked trigger asset.");
+        if(condition.contains("MapRegion")&&(!condition["MapRegion"].is_string()||!condition["MapRegion"].get_ref<const std::string&>().starts_with('/')))throw std::runtime_error("MapRegion requires a cooked asset path.");if(condition.contains("RegionID")&&!condition["RegionID"].is_number_integer())throw std::runtime_error("RegionID must be an integer.");
+    }
     return {{id,body}};
 }
 inline Json Cache(const Json& entries,const std::string& key,bool complete) {

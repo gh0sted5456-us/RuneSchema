@@ -377,19 +377,31 @@ inline Json PartyRequest(){
 inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
     const auto& t=HelpyImGuiTheme::Current;
     if(!Data.ShowParty||HelpyTaskbar::Current.Contains(HelpyTaskbar::Window::Party)||Data.PartyDetached!=detached)return;
-    const float roomWidth=std::max(1.0f,mapMax.x-mapMin.x-t.X(12)),roomHeight=std::max(t.Y(48),mapMax.y-mapMin.y-t.Y(12));
-    ImGui::SetNextWindowPos({mapMin.x+t.X(6),mapMin.y+t.Y(6)},ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize({std::min(t.X(260),roomWidth),std::min(t.Y(260),roomHeight)},ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSizeConstraints({std::min(t.X(180),roomWidth),t.Y(48)},{roomWidth,roomHeight});
-    if(detached){ImGui::SetNextWindowPos(mapMin);ImGui::SetNextWindowSize({mapMax.x-mapMin.x,mapMax.y-mapMin.y});}
-    else HelpyWindowChrome::Prepare(Data.PartyChrome);
-    ImGui::SetNextWindowBgAlpha(detached?1.f:.32f);
-    const bool expanded=ImGui::Begin("Party##helpy-map-party",&Data.ShowParty,ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoCollapse|(detached?ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize:ImGuiWindowFlags_None));
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::PartyGear.clear();HelpyPreviewHooks::PartyDurabilityMeters=0;HelpyPreviewHooks::PartyDurabilityDetails=false;
+#endif
+    bool expanded=false;
+    if(detached){
+        ImGui::SetNextWindowPos(mapMin);ImGui::SetNextWindowSize({mapMax.x-mapMin.x,mapMax.y-mapMin.y});
+        ImGui::PushStyleColor(ImGuiCol_WindowBg,ImVec4(.025f,.028f,.025f,1));
+        expanded=ImGui::Begin("Party##helpy-map-party",&Data.ShowParty,ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize);
+        ImGui::PopStyleColor();
+    }else{
+        // A bounded in-flow section, never an overlay or auto-sized window.
+        const float height=std::clamp(ImGui::GetContentRegionAvail().y,t.Y(100),t.Y(240));
+        ImGui::PushStyleColor(ImGuiCol_ChildBg,ImVec4(.025f,.028f,.025f,1));
+        expanded=ImGui::BeginChild("Party##helpy-map-party",{0,height},ImGuiChildFlags_Borders|ImGuiChildFlags_AlwaysUseWindowPadding);
+        ImGui::PopStyleColor();
+    }
     const auto position=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();
-    // Keep the movable overlay reachable after map resizing/detaching.
-    if(!detached&&!Data.PartyChrome.Maximized)ImGui::SetWindowPos({std::clamp(position.x,mapMin.x,std::max(mapMin.x,mapMax.x-size.x)),std::clamp(position.y,mapMin.y,std::max(mapMin.y,mapMax.y-size.y))});
-    if(!detached)HelpyWindowChrome::Render(Data.PartyChrome,HelpyTaskbar::Window::Party);
-    if(expanded){if(HelpyImGuiTheme::SoftButton(detached?"Dock party over map":"Detach Party"))Data.PartyDetached=!detached;ImGui::SameLine();PartyMemberView::Advanced();ImGui::Separator();}
+    if(expanded){
+        ImGui::TextUnformatted("Party");ImGui::SameLine();
+        if(HelpyImGuiTheme::SoftButton(detached?"Dock below map":"Detach Party"))Data.PartyDetached=!detached;
+#if defined(HELPY_PREVIEW)
+        HelpyPreviewHooks::PartyDetach=HelpyPreviewHooks::LastRect();
+#endif
+        ImGui::SameLine();PartyMemberView::Advanced();ImGui::Separator();
+    }
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::MapPartyWindow={ImGui::GetWindowPos().x,ImGui::GetWindowPos().y,ImGui::GetWindowPos().x+size.x,ImGui::GetWindowPos().y+size.y};
 #endif
@@ -403,11 +415,14 @@ inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
     for(const auto& row:*rows){if(!row.is_object())continue;const auto path=ItemPresentation::Text(row,"Path");if(path.empty())continue;
         ImGui::PushID(path.c_str());const auto name=ItemPresentation::Text(row,"Name")+(row.value("IsLocal",false)?" (you)":"");
         ImGui::PushStyleColor(ImGuiCol_Border,ImVec4(.78f,.64f,.36f,.72f));
+        ImGui::PushStyleColor(ImGuiCol_ChildBg,ImVec4(.025f,.028f,.025f,.96f));
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{t.X(6),t.Y(6)});
-        const bool card=ImGui::BeginChild("##party-member-card",{0,0},ImGuiChildFlags_Borders|ImGuiChildFlags_AutoResizeY|ImGuiChildFlags_AlwaysUseWindowPadding,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
-        ImGui::PopStyleVar();ImGui::PopStyleColor();
+        const float cardHeight=PartyMemberView::CardHeight(row,ImGui::GetContentRegionAvail().x-t.X(12));
+        const bool card=ImGui::BeginChild("##party-member-card",{0,cardHeight},ImGuiChildFlags_Borders|ImGuiChildFlags_AlwaysUseWindowPadding,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
+        ImGui::PopStyleVar();ImGui::PopStyleColor(2);
         if(card){
-        if(PartyMemberView::Row(row,Data.PartySelection==path))SelectPartyMember(row);
+        {const auto a=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();SourceBanners::DrawCard(PlayerPortraitPicker::Choices.GetBackground(ItemPresentation::Text(row,"Guid")),a,{a.x+size.x,a.y+size.y});}
+        if(PartyMemberView::Row(row,Data.PartySelection==path,false,true))SelectPartyMember(row);
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::MapPartyRows[path]=HelpyPreviewHooks::LastRect();
 #endif
@@ -424,6 +439,7 @@ inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
 #endif
             ImGui::TextUnformatted(name.c_str());ImGui::Separator();
             if(ImGui::MenuItem("Change portrait...",nullptr,false,!PlayerPortraits::Identity(ItemPresentation::Text(row,"Guid")).empty()))PlayerPortraitPicker::Request(row);
+            PartyMemberView::BackgroundMenu(row);
             if(ImGui::MenuItem("View inventory...",nullptr,false,!ItemPresentation::Text(row,"Guid").empty()))PlayerInventoryPanel::Request(row);
             if(ImGui::MenuItem("Locate on map"))SelectPartyMember(row);
             std::string blocked;try{MapParty::Travel(Data.Snapshot,path,false,Data.Generation,1);}catch(const std::exception& error){blocked=error.what();}
@@ -448,7 +464,6 @@ inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
             if(!runtimeReady)ImGui::TextWrapped("Requires the current host/server party runtime and an idle action queue.");
             ImGui::EndPopup();
         }
-        if(PlayerPortraitPicker::Choices.Equipment&&PartyMemberView::EquipmentFresh(row,PartyMemberView::Now()))PartyMemberView::Equipment(row,PartyMemberView::Now());
         if(PlayerPortraitPicker::Choices.Skills&&PartyMemberView::SkillsFresh(row,PartyMemberView::Now()))PartyMemberView::Skills(row,PartyMemberView::Now());
         }ImGui::EndChild();
         ImGui::PopID();
@@ -480,7 +495,7 @@ inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
 #endif
         ImGui::EndPopup();
     }
-    ImGui::End();
+    if(detached)ImGui::End();else ImGui::EndChild();
 }
 inline std::string WikiUrl(const std::string& name){
     constexpr char hex[]="0123456789ABCDEF";std::string url="https://dragonwilds.runescape.wiki/?search=";
@@ -567,7 +582,10 @@ inline void Render(){
         if(saved)ImGui::TextWrapped("Saved placement: %s",ItemPresentation::Text(Data.PlacementResult,"File").c_str());
     }
     if(!Data.Status.empty())ImGui::TextWrapped("%s",Data.Status.c_str());
-    const auto available=ImGui::GetContentRegionAvail();const float width=std::max(t.X(160),available.x),height=std::max(t.Y(160),available.y-t.Y(24));
+    const auto available=ImGui::GetContentRegionAvail();
+    const bool dockParty=Data.ShowParty&&!Data.PartyDetached&&!HelpyTaskbar::Current.Contains(HelpyTaskbar::Window::Party);
+    const float partyHeight=dockParty?std::clamp(available.y*.36f,t.Y(180),t.Y(240))+ImGui::GetStyle().ItemSpacing.y:0;
+    const float width=std::max(t.X(160),available.x),height=std::max(t.Y(160),available.y-t.Y(24)-partyHeight);
     const auto min=ImGui::GetCursorScreenPos();const ImVec2 max(min.x+width,min.y+height);
     Data.View={width,height,Data.Projection.Valid()?Data.Projection.HalfWidth/Data.Projection.HalfHeight:1,Data.Zoom,Data.Center};
     if(Data.FitRequested){Data.View.Zoom=Data.View.FitZoom();Data.FitRequested=false;}Data.View.Clamp();

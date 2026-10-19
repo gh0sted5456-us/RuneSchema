@@ -103,7 +103,12 @@ namespace {
                 auto* native=ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionAICharacter"));
                 auto* loaded=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,RC::to_generic_string(row.value("Class",std::string{})).c_str(),false);
                 const bool spawnable=native&&loaded&&!loaded->HasAnyFlags(static_cast<EObjectFlags>(RF_NeedLoad|RF_NeedPostLoad|RF_BeginDestroyed|RF_FinishDestroyed))&&loaded->IsChildOf(native)&&!ActorHelper::IsAbstract(loaded);
-                row["SpawnableCharacter"]=spawnable;if(!spawnable)continue;row["Available"]=true;row["NeedsInspection"]=false;
+                row["SpawnableCharacter"]=spawnable;
+                // Unloaded registry candidates remain discoverable. They are
+                // never made spawnable until the existing read-only inspector
+                // resolves and verifies the actual native class.
+                if(!spawnable){if(!row.value("Mounted",false)||!row.value("NeedsInspection",false))continue;}
+                else {row["Available"]=true;row["NeedsInspection"]=false;}
             }
             const auto identity=row.value("Class",row.value("Key",std::string{}));row["StableId"]=ToolStableId(type+":"+identity);
             if(type=="NPC"&&!row.contains("Icon"))if(auto* loaded=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,RC::to_generic_string(identity).c_str(),false))if(auto* defaults=loaded->GetClassDefaultObject().Get();defaults&&!defaults->HasAnyFlags(static_cast<EObjectFlags>(RF_NeedLoad|RF_NeedPostLoad|RF_BeginDestroyed|RF_FinishDestroyed)))row["Icon"]=PS::AssetSearch::PresentationIcon(defaults);

@@ -14,6 +14,13 @@
 
 namespace PS::DiagnosticLog {
 enum class Session { Fresh, ArchivePrevious, Append };
+inline std::string Group(std::string_view text){
+    const auto token=[&](std::string_view prefix)->std::string{const auto begin=text.find(prefix);if(begin==text.npos)return {};const auto end=text.find(']',begin+prefix.size());if(end==text.npos||end-begin>80)return {};auto value=std::string(text.substr(begin+prefix.size(),end-begin-prefix.size()));if(value.empty()||value.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./-")!=value.npos)return {};return value;};
+    if(auto group=token("[group=");!group.empty())return group;if(auto loader=token("[loader=");!loader.empty())return "loader."+loader;
+    if(text.find("[MAPPINGS]")!=text.npos)return "mappings";
+    const auto code=text.find("[RS-");if(code!=text.npos){const auto end=text.find('-',code+4);if(end!=text.npos&&end-code<32){auto value=std::string(text.substr(code+4,end-code-4));for(auto& c:value)if(c>='A'&&c<='Z')c=char(c+32);if(!value.empty()&&value.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789") == value.npos)return value;}}
+    return "runtime";
+}
 // File-only sink: no engine or UE4SS calls from its flushing thread.
 class File {
     std::mutex m_gate;
@@ -107,7 +114,7 @@ public:
             return true;
         }catch(...){std::lock_guard lock(m_gate);Fail();return false;}
     }
-    bool Write(std::string_view text,bool urgent=false) noexcept {
+    bool Write(std::string_view text,bool urgent=false,std::string_view group={}) noexcept {
         try {
             std::lock_guard lock(m_gate);
             if(m_stop||!m_stream.is_open())return false;
@@ -124,9 +131,11 @@ public:
                 <<std::setfill('0')<<std::setw(3)
                 <<std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count()%1000
                 <<"Z thread="<<std::this_thread::get_id()<<"] ";
-            const auto stamp=prefix.str();
-            m_stream.write(stamp.data(),stamp.size());m_stream.write(text.data(),text.size());
-            const bool newline=text.empty()||text.back()!='\n';if(newline)m_stream.put('\n');
+            const auto validGroup=!group.empty()&&group.size()<=64&&group.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./-")==group.npos;
+            const auto stamp=prefix.str()+"[group="+(validGroup?std::string(group):Group(text))+"] ";
+            size_t offset=0;do{const auto end=text.find('\n',offset);auto line=text.substr(offset,end==text.npos?text.size()-offset:end-offset);if(!line.empty()&&line.back()=='\r')line.remove_suffix(1);
+                m_stream.write(stamp.data(),stamp.size());m_stream.write(line.data(),line.size());m_stream.put('\n');if(end==text.npos||end+1==text.size())break;offset=end+1;
+            }while(offset<text.size());
             if(!m_stream){Fail();return false;}
             if(!m_pending)m_deadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(100);
             if(++m_pending>=64||urgent)Flush();

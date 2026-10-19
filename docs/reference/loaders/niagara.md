@@ -1,5 +1,20 @@
 # Niagara loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/niagara/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Cook/mount the system and inspect the exact User.* parameters it exposes.
+2. Create `niagara/10-camp-aura.jsonc`; replace the mock-up system path and attachment socket.
+3. Set supported Boolean/number/vector/color parameters with the correct types; tune offsets on the real skeleton.
+4. Reference the definition through a supported visual-effect consumer and verify attachment/removal on each client.
+
+**Tie-ins:** [Equipment](equipment.md), [NPCs](npc.md) and [players](players.md) supply supported consumers; this loader does not create a system.
+
+
 **Folder:** `RuneSchema/mods/<ModName>/niagara/`
 
 Cooked Niagara systems, attachment settings, and user parameters.
@@ -8,7 +23,7 @@ Cooked Niagara systems, attachment settings, and user parameters.
 
 Niagara definitions wrap a cooked system and attachment settings.
 
-```json
+```jsonc
 {
   "NightAura": {
     "System": "/Game/MyMod/VFX/NS_NightAura.NS_NightAura",

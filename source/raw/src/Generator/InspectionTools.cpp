@@ -26,6 +26,7 @@
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
 #include "Runtime/HostServices.h"
 #include "Runtime/NetworkContext.h"
+#include "Generator/CharacterPreview.h"
 #include "Core/HelpyAuthoringProtocol.h"
 #include "Generator/ToolRequest.h"
 #include "Generator/JsonSchemaGenerator.h"
@@ -793,6 +794,7 @@ void RenderPlayerNameplateBuilder(bool nameplateDefinition) {
     ImGui::PopID();
 }
 void Tick() {
+    CharacterPreview::Tick();
     DesktopAuthoringTick();
     PlayerTrace::Tick();
     AppearanceTrace::Tick();

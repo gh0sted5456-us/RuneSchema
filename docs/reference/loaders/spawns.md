@@ -1,5 +1,20 @@
 # Spawns loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/spawns/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Select an actual compatible AI/resource actor class, not an attack asset or arbitrary Blueprint.
+2. Create `spawns/10-camp-actors.jsonc`; replace the mock-up class and coordinates.
+3. Choose permanent placement, EventOnly template or a supported conditional temporary resource; apply one grounding offset form.
+4. Restart and verify collision, authority, lifecycle and save rules. Confirm missing streamed ground waits rather than placing at a guessed height.
+
+**Tie-ins:** [Events](events.md) consumes EventOnly templates; [quests](quests.md) supplies conditions; [NPCs](npc.md) handles interactable character definitions.
+
+
 **Folder:** `RuneSchema/mods/<ModName>/spawns/`
 
 AI, actors, resources, building props, and event-only templates.
@@ -8,7 +23,7 @@ AI, actors, resources, building props, and event-only templates.
 
 Spawns place AI, actors, resources, and supported building props.
 
-```json
+```jsonc
 [
   {
     "Id": "night_guard",
@@ -57,7 +72,7 @@ including a mod-owned subclass, with `SpudGuid` and
 `bSkipSpudStore` fields. It is spawned only by the world authority, excluded
 from the world save, and removed when the condition stops being active.
 
-```json
+```jsonc
 [
   {
     "Id": "trial_iron",
@@ -98,9 +113,6 @@ No. Pick one ground-offset form for the placement.
 
 Yes. `AdditionalDrops` supports an item plus minimum, maximum, and chance.
 
-## Working examples
-
-- [Great Tree: event-only goblin templates](../../examples/GreatTree/spawns/87-GreatTree-TribeTrial.json)
 
 ---
 

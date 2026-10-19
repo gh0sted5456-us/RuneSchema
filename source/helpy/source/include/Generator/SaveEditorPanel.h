@@ -1,7 +1,13 @@
 #pragma once
+#include "Generator/MapLayerIcons.h"
 #include "Generator/AuthoringPanel.h"
 #include "Generator/ItemIconCache.h"
 #include "Generator/QuickMenuDecorations.h"
+#include "Generator/ItemGridPicker.h"
+#include "Generator/ItemBayBrowser.h"
+#include "Generator/CharacterPreviewPanel.h"
+#include "Core/CharacterWorkbench.h"
+#include "Core/LoadoutEligibility.h"
 #include <commdlg.h>
 #pragma comment(lib,"comdlg32.lib")
 namespace PS::SaveEditorPanel {
@@ -14,8 +20,16 @@ inline bool Offline=false,Confirmed=false,Opened=false;
 inline Json Items=Json::object();inline bool InventoryRequested=false,ConfirmRemoval=false;
 inline std::set<std::string> ItemSelection;inline std::map<std::string,int> StackDrafts;
 inline char ItemSearch[257]{};inline std::string ItemSource;
+inline std::string InventoryGroup="Inventory";
+inline bool InventoryRecordTable=false;
+inline std::string FocusedSavedItem;
+inline Json DroppedInventoryItem=Json::object();
+inline bool FocusInventoryGrid=false;
+#if defined(HELPY_PREVIEW)
+inline size_t SavedPlacardsDrawn=0;
+#endif
 inline std::map<std::string,std::string> ItemNames;
-inline void ResetInventory(){Items=Json::object();ItemSelection.clear();StackDrafts.clear();ItemNames.clear();InventoryRequested=false;ConfirmRemoval=false;}
+inline void ResetInventory(){Items=Json::object();ItemSelection.clear();StackDrafts.clear();ItemNames.clear();InventoryRequested=false;ConfirmRemoval=false;FocusedSavedItem.clear();}
 inline void Invalidate(){Token.clear();Review=Json::object();Confirmed=false;}
 inline void Choose(){
     wchar_t file[32768]{};OPENFILENAMEW dialog{};dialog.lStructSize=sizeof(dialog);dialog.hwndOwner=GetActiveWindow();dialog.lpstrFile=file;dialog.nMaxFile=32768;
@@ -37,7 +51,7 @@ inline void Apply(){
         if(op!="SaveEditorBrowse")Invalidate();
     }
     if(op=="SaveEditorClose"){Opened=false;Browser=Json::object();Invalidate();ResetInventory();}
-    if(op=="SaveEditorInventory"||op=="SaveEditorStack"||op=="SaveEditorRemoveItems"){
+    if(op=="SaveEditorInventory"||op=="SaveEditorStack"||op=="SaveEditorRemoveItems"||op=="SaveEditorAddItem"){
         Items=result;InventoryRequested=true;StackDrafts.clear();ConfirmRemoval=false;
         if(Items.contains("Items"))for(const auto& item:Items["Items"])if(item.contains("DisplayName")&&item["DisplayName"].is_string()&&!item["DisplayName"].get_ref<const std::string&>().empty()&&ItemNames.size()<8192)ItemNames[item.at("PersistenceID").get<std::string>()]=item["DisplayName"].get<std::string>();
         if(op!="SaveEditorInventory"){Invalidate();ItemSelection.clear();Browser=Json::object();Pointer.clear();}
@@ -46,40 +60,92 @@ inline void Apply(){
     if(op=="SaveEditorExport")Invalidate();
 }
 inline std::string ItemText(const Json& row,const char* key){const auto found=row.find(key);return found!=row.end()&&found->is_string()?found->get<std::string>():std::string{};}
-inline void Inventory(){
+inline Json SavedPlacard(const Json& record){
+    auto row=record;const auto path=ItemText(record,"AssetPath");row["Path"]=path;
+    // Native save resolution supplies icons/source; DrawPlacard also reuses
+    // cached details by canonical path. Never scan the whole Item Bay per card.
+    row["Name"]=ItemText(record,"DisplayName");if(row["Name"].get_ref<const std::string&>().empty())row["Name"]=ItemText(record,"InternalName");if(row["Name"].get_ref<const std::string&>().empty())row["Name"]="Unresolved saved item";return row;
+}
+inline void InventoryPlacards(const std::vector<const Json*>& visible,bool compact,size_t offset){
+    const auto& theme=HelpyImGuiTheme::Current;
+    if(FocusInventoryGrid){ImGui::SetScrollHereY(.1f);FocusInventoryGrid=false;}
+#if defined(HELPY_PREVIEW)
+    SavedPlacardsDrawn=0;
+#endif
+    if(ImGui::BeginChild("##saved-inventory-placards",{0,theme.Y(compact?420:300)},true)){
+#if defined(HELPY_PREVIEW)
+        HelpyPreviewHooks::InventoryViewport=HelpyPreviewHooks::WindowRect();
+#endif
+        const auto dropMin=ImGui::GetWindowPos(),dropSize=ImGui::GetWindowSize();
+        const float gap=ImGui::GetStyle().ItemSpacing.x,available=std::max(1.f,ImGui::GetContentRegionAvail().x),minimum=theme.X(theme.gridMinCardWidth);
+        const int columns=ItemBayLayout::Columns(available,minimum,gap,theme.itemGridColumns);const float width=std::max(1.f,(available-gap*(columns-1))/columns),height=theme.Y(theme.gridCardHeight);
+        ImGuiListClipper clipper;clipper.Begin(int((visible.size()+columns-1)/columns),height+ImGui::GetStyle().ItemSpacing.y);
+        while(clipper.Step())for(int line=clipper.DisplayStart;line<clipper.DisplayEnd;++line)for(int column=0;column<columns;++column){const auto index=size_t(line*columns+column);if(index>=visible.size())break;const auto& saved=*visible[index];const auto pointer=saved.at("Pointer").get<std::string>();const auto row=SavedPlacard(saved);const auto path=ItemText(row,"Path"),name=ItemPresentation::Name(row);
+            ImGui::PushID(pointer.c_str());const auto a=ImGui::GetCursorScreenPos();const ImVec2 b(a.x+width,a.y+height);const bool clicked=ImGui::InvisibleButton("##saved-item-card",{width,height}),hovered=ImGui::IsItemHovered();
+            if(clicked){FocusedSavedItem=pointer;if(!ImGui::GetIO().KeyCtrl)ItemSelection.clear();if(!ItemSelection.erase(pointer)&&ItemSelection.size()<128)ItemSelection.insert(pointer);ConfirmRemoval=false;}
+            ItemGridPicker::DrawPlacard(row,a,b,ItemSelection.contains(pointer),hovered);
+#if defined(HELPY_PREVIEW)
+            ++SavedPlacardsDrawn;
+            if(SavedPlacardsDrawn==1)HelpyPreviewHooks::SavedItemRect=HelpyPreviewHooks::LastRect();
+#endif
+            auto* draw=ImGui::GetWindowDrawList();const float footer=std::min(theme.Y(42),height*.42f);const auto count="×"+saved.value("Count",Json(1)).dump();const auto extent=ImGui::CalcTextSize(count.c_str());const ImVec2 quantity(b.x-theme.X(6)-extent.x,b.y-footer-theme.Y(5)-extent.y);
+            draw->AddRectFilled({quantity.x-theme.X(2),quantity.y},{b.x-theme.X(4),quantity.y+extent.y},ImGui::GetColorU32(theme.panelAlt),theme.X(2));draw->AddText(quantity,ImGui::GetColorU32(theme.text),count.c_str());
+            if(saved.value("Equipped",false))draw->AddText({a.x+theme.X(25),b.y-footer-theme.Y(5)-ImGui::GetTextLineHeight()},ImGui::GetColorU32(theme.accent),"Equipped");
+            if(ImGui::BeginDragDropSource()){ImGui::SetDragDropPayload("RS_SAVE_ITEM",pointer.c_str(),pointer.size()+1);ImGui::TextUnformatted(name.c_str());ImGui::EndDragDropSource();}
+            if(ImGui::BeginPopupContextItem("##saved-item-actions")){ImGui::TextWrapped("%s",name.c_str());if(ImGui::MenuItem("Select / edit this saved instance")){FocusedSavedItem=pointer;ItemSelection={pointer};ConfirmRemoval=false;}if(ImGui::MenuItem("Show item details",nullptr,false,!path.empty()))ItemGridPicker::PinDetails(row);ImGui::TextDisabled("Removal requires review below.");ImGui::EndPopup();}
+            if(HelpyImGuiTheme::TooltipReady("saved-item:"+pointer,hovered))ItemGridPicker::VerboseTooltip(row,name,path,false,true);
+            ImGui::PopID();if(column+1<columns&&index+1<visible.size())ImGui::SameLine();
+        }
+        if(visible.empty())ImGui::TextWrapped("No saved items in this tab on the current page.");
+        if(ImGui::BeginDragDropTargetCustom(ImRect(dropMin,{dropMin.x+dropSize.x-ImGui::GetStyle().ScrollbarSize,dropMin.y+dropSize.y}),ImGui::GetID("##saved-inventory-drop"))){if(auto row=ItemGridPicker::AcceptItemDrop(Error))DroppedInventoryItem=*row;ImGui::EndDragDropTarget();}
+    }ImGui::EndChild();
+    if(!FocusedSavedItem.empty())for(const auto* entry:visible)if(entry->at("Pointer")==FocusedSavedItem){const auto& row=*entry;ImGui::SeparatorText("Selected saved instance");ImGui::TextWrapped("%s",ItemPresentation::Name(SavedPlacard(row)).c_str());
+        if(row.value("StackEditable",false)){auto [draft,added]=StackDrafts.try_emplace(FocusedSavedItem,row.at("Count").get<int>());ImGui::SetNextItemWidth(100);ImGui::InputInt("Count",&draft->second,0,0);if(HelpyImGuiTheme::SoftButton("Stage count"))if(AuthoringClient::Submit("SaveEditorStack",{{"Pointer",FocusedSavedItem},{"Count",draft->second},{"Revision",Items.at("Revision")},{"Offset",offset}}))Invalidate();}else ImGui::TextWrapped("Single item · no editable native stack count");break;}
+}
+inline void Inventory(bool compact=false){
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::InventorySearchId=ImGui::GetID("Search");HelpyPreviewHooks::InventoryRefreshId=ImGui::GetID("Refresh");
+#endif
     ImGui::SeparatorText("Inventory");
+    if(ImGui::BeginTabBar("##native-inventory-tabs",ImGuiTabBarFlags_FittingPolicyScroll)){for(const auto* group:CharacterWorkbench::Groups)if(ImGui::BeginTabItem(group)){if(InventoryGroup!=group){InventoryGroup=group;ItemSelection.clear();}ImGui::EndTabItem();}ImGui::EndTabBar();}
     if(!InventoryRequested&&!AuthoringClient::Busy()){InventoryRequested=AuthoringClient::Submit("SaveEditorInventory");}
     const auto offset=Items.value("Offset",size_t{}),total=Items.value("Total",size_t{});
-    if(Button("Refresh inventory names / sources","SaveEditorInventory",{{"Offset",offset}}))InventoryRequested=true;
+    if(!compact&&Button("Refresh inventory names / sources","SaveEditorInventory",{{"Offset",offset}}))InventoryRequested=true;
     if(!Items.contains("Items")){ImGui::TextDisabled("Reading the saved inventory...");return;}
-    ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(235));ImGui::InputTextWithHint("##save-item-search","Search this page: name, ID or source",ItemSearch,sizeof(ItemSearch));ImGui::SameLine();
+    ImGui::SetNextItemWidth(compact?std::max(60.f,ImGui::GetContentRegionAvail().x-HelpyImGuiTheme::Current.X(135)):HelpyImGuiTheme::Current.X(235));ImGui::InputTextWithHint("##save-item-search","Search inventory…",ItemSearch,sizeof(ItemSearch));
+    if(compact){ImGui::SameLine();HelpyImGuiTheme::SoftButton("Search");ImGui::SameLine();if(Button("Refresh","SaveEditorInventory",{{"Offset",offset}}))InventoryRequested=true;}else ImGui::SameLine();
     std::set<std::string> sources;for(const auto& row:Items["Items"]){const auto source=ItemText(row,"SourceName");sources.insert(source.empty()?"Unresolved":source);}
-    if(ImGui::BeginCombo("Source on this page",ItemSource.empty()?"All sources":ItemSource.c_str())){
+    if(compact)ImGui::SetNextItemWidth(-1);
+    if(ImGui::BeginCombo(compact?"##source-on-page":"Source on this page",ItemSource.empty()?"All sources":ItemSource.c_str())){
         if(ImGui::Selectable("All sources",ItemSource.empty()))ItemSource.clear();for(const auto& name:sources)if(ImGui::Selectable(name.c_str(),ItemSource==name))ItemSource=name;ImGui::EndCombo();}
     std::vector<const Json*> visible;auto search=HelpyCacheSources::Lower(ItemSearch);
     for(const auto& row:Items["Items"]){auto source=ItemText(row,"SourceName");if(source.empty())source="Unresolved";
+        if(InventoryGroup=="Equipped"?!row.value("Equipped",false):row.value("Group",CharacterWorkbench::InventoryGroup(row))!=InventoryGroup)continue;
         if(!ItemSource.empty()&&source!=ItemSource)continue;
         const auto text=HelpyCacheSources::Lower(ItemText(row,"DisplayName")+" "+ItemText(row,"PersistenceID")+" "+ItemText(row,"AssetPath")+" "+source);
         if(search.empty()||text.find(search)!=text.npos)visible.push_back(&row);}
     std::stable_sort(visible.begin(),visible.end(),[](const auto* a,const auto* b){return std::pair{ItemText(*a,"SourceName"),ItemText(*a,"DisplayName")}<std::pair{ItemText(*b,"SourceName"),ItemText(*b,"DisplayName")};});
-    if(HelpyImGuiTheme::SoftButton("Select visible")){for(const auto* row:visible)if(ItemSelection.size()<128)ItemSelection.insert(row->at("Pointer").get<std::string>());ConfirmRemoval=false;}ImGui::SameLine();
-    if(HelpyImGuiTheme::SoftButton("Clear selection")){ItemSelection.clear();ConfirmRemoval=false;}ImGui::SameLine();ImGui::TextDisabled("%zu selected · %zu saved item records",ItemSelection.size(),total);
-    if(ImGui::BeginTable("##save-inventory",4,ImGuiTableFlags_BordersInnerH|ImGuiTableFlags_Resizable|ImGuiTableFlags_ScrollY,{0,HelpyImGuiTheme::Current.Y(245)})){
-        ImGui::TableSetupColumn("Select",ImGuiTableColumnFlags_WidthFixed,HelpyImGuiTheme::Current.X(40));ImGui::TableSetupColumn("Item / source");ImGui::TableSetupColumn("Stack",ImGuiTableColumnFlags_WidthFixed,HelpyImGuiTheme::Current.X(120));ImGui::TableSetupColumn("PersistenceID / saved slot");ImGui::TableHeadersRow();
+    if(!compact){if(HelpyImGuiTheme::SoftButton("Select visible")){for(const auto* row:visible)if(ItemSelection.size()<128)ItemSelection.insert(row->at("Pointer").get<std::string>());ConfirmRemoval=false;}ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Clear selection")){ItemSelection.clear();ConfirmRemoval=false;}}
+    ImGui::TextDisabled("%zu items · %zu selected",visible.size(),ItemSelection.size());
+    if(!compact)ImGui::Checkbox("Advanced record table",&InventoryRecordTable);
+    if(!InventoryRecordTable)InventoryPlacards(visible,compact,offset);
+    else if(ImGui::BeginTable("##save-inventory",compact?2:4,ImGuiTableFlags_BordersInnerH|ImGuiTableFlags_Resizable|ImGuiTableFlags_ScrollY,{0,HelpyImGuiTheme::Current.Y(245)})){
+        if(!compact)ImGui::TableSetupColumn("Select",ImGuiTableColumnFlags_WidthFixed,HelpyImGuiTheme::Current.X(40));ImGui::TableSetupColumn("Item / source");ImGui::TableSetupColumn("Stack",ImGuiTableColumnFlags_WidthFixed,HelpyImGuiTheme::Current.X(compact?88:120));if(!compact)ImGui::TableSetupColumn("PersistenceID / saved slot");ImGui::TableHeadersRow();
         for(const auto* entry:visible){const auto& row=*entry;const auto pointer=row.at("Pointer").get<std::string>();ImGui::PushID(pointer.c_str());ImGui::TableNextRow();ImGui::TableNextColumn();
             bool selected=ItemSelection.contains(pointer);if(ImGui::Checkbox("##select",&selected)){if(selected&&ItemSelection.size()<128)ItemSelection.insert(pointer);else ItemSelection.erase(pointer);ConfirmRemoval=false;}
-            ImGui::TableNextColumn();const auto at=ImGui::GetCursorScreenPos();const float size=HelpyImGuiTheme::Current.Y(30);const auto icon=ItemText(row,"Icon");
+            if(compact)ImGui::SameLine();else ImGui::TableNextColumn();const auto at=ImGui::GetCursorScreenPos();const float size=HelpyImGuiTheme::Current.Y(30);const auto icon=ItemText(row,"Icon");
             if(!icon.empty())ItemIconCache::Draw(icon,at,{at.x+size,at.y+size},true);ImGui::Dummy({size,size});ImGui::SameLine();ImGui::BeginGroup();
             auto name=ItemText(row,"DisplayName");if(name.empty())name=ItemText(row,"InternalName");if(name.empty())name="Unresolved item";ImGui::TextWrapped("%s",name.c_str());
-            auto source=ItemText(row,"SourceName");if(source.empty())source="Unresolved — load its content to identify";ImGui::TextDisabled("%s",source.c_str());
-            if(row.value("Equipped",false))ImGui::TextDisabled("Equipped · removing also unlinks its native loadout slot");ImGui::EndGroup();
-            if(ImGui::IsItemHovered()){HelpyImGuiTheme::BeginDetailsTooltip();ImGui::TextWrapped("%s",ItemText(row,"AssetPath").c_str());ImGui::TextWrapped("Instance: %s",row.value("InstanceID",Json{}).dump().c_str());HelpyImGuiTheme::EndDetailsTooltip();}
+            auto source=ItemText(row,"SourceName");if(source.empty())source="Unresolved — load its content to identify";ImGui::TextWrapped("%s",source.c_str());
+            if(row.value("Equipped",false))ImGui::TextWrapped("Equipped · removing also unlinks its native loadout slot");ImGui::EndGroup();
+            if(ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)){ImGui::SetDragDropPayload("RS_SAVE_ITEM",pointer.c_str(),pointer.size()+1);ImGui::TextUnformatted(name.c_str());ImGui::EndDragDropSource();}
+            if(ImGui::IsItemHovered()){HelpyImGuiTheme::BeginDetailsTooltip();ImGui::TextWrapped("%s",ItemText(row,"AssetPath").c_str());ImGui::TextWrapped("Persistence ID: %s",ItemText(row,"PersistenceID").c_str());ImGui::TextWrapped("Saved slot: %s / %s",ItemText(row,"Container").c_str(),ItemText(row,"Slot").c_str());ImGui::TextWrapped("Instance: %s",row.value("InstanceID",Json{}).dump().c_str());HelpyImGuiTheme::EndDetailsTooltip();}
             ImGui::TableNextColumn();if(row.value("StackEditable",false)){
                 auto [draft,added]=StackDrafts.try_emplace(pointer,row.at("Count").get<int>());ImGui::SetNextItemWidth(-1);ImGui::InputInt("##stack",&draft->second,0,0);
                 if(HelpyImGuiTheme::SoftButton("Stage count"))if(AuthoringClient::Submit("SaveEditorStack",{{"Pointer",pointer},{"Count",draft->second},{"Revision",Items.at("Revision")},{"Offset",offset}}))Invalidate();
-                ImGui::TextDisabled("Native max: %s",row.contains("MaxStackSize")?row.at("MaxStackSize").dump().c_str():"unknown; decrease only");
-            }else ImGui::TextDisabled("%s · single/read-only",row.value("Count",Json(1)).dump().c_str());
-            ImGui::TableNextColumn();ImGui::TextWrapped("%s",ItemText(row,"PersistenceID").c_str());ImGui::TextDisabled("%s / %s",ItemText(row,"Container").c_str(),ItemText(row,"Slot").c_str());
+                ImGui::TextWrapped("Max: %s",row.contains("MaxStackSize")?row.at("MaxStackSize").dump().c_str():"unknown; decrease only");
+            }else ImGui::TextWrapped("%s · single/read-only",row.value("Count",Json(1)).dump().c_str());
+            if(!compact){ImGui::TableNextColumn();ImGui::TextWrapped("%s",ItemText(row,"PersistenceID").c_str());ImGui::TextDisabled("%s / %s",ItemText(row,"Container").c_str(),ItemText(row,"Slot").c_str());}
             ImGui::PopID();
         }ImGui::EndTable();
     }
@@ -89,8 +155,11 @@ inline void Inventory(){
         ImGui::Checkbox("I reviewed the selected item instances for removal",&ConfirmRemoval);ImGui::BeginDisabled(!ConfirmRemoval);
         if(Button("Stage selected removals","SaveEditorRemoveItems",{{"Pointers",Json(ItemSelection)},{"Revision",Items.at("Revision")},{"Confirm",ConfirmRemoval}}))Invalidate();ImGui::EndDisabled();
     }
-    ImGui::TextWrapped("Names, icons and sources use currently loaded items. An unresolved ID is not proof that its mod is missing. Changes affect only the draft and require reviewed export.");
+    HelpyImGuiTheme::SoftButton("Drop saved item here to select it for deletion");
+    if(ImGui::BeginDragDropTarget()){if(const auto* drop=ImGui::AcceptDragDropPayload("RS_SAVE_ITEM"))if(drop->DataSize>1&&drop->DataSize<4097&&static_cast<const char*>(drop->Data)[drop->DataSize-1]=='\0'){ItemSelection.insert(static_cast<const char*>(drop->Data));ConfirmRemoval=false;}ImGui::EndDragDropTarget();}
+    if(!compact)ImGui::TextWrapped("Names, icons and sources use currently loaded items. An unresolved ID is not proof that its mod is missing. Changes affect only the draft and require reviewed export.");
     if(Items.contains("MetadataWarning"))ImGui::TextWrapped("%s",Items.at("MetadataWarning").get_ref<const std::string&>().c_str());
+    if(Items.contains("LayoutWarning"))ImGui::TextWrapped("%s",Items.at("LayoutWarning").get_ref<const std::string&>().c_str());
 }
 inline void Edit(){
     if(Button("Refresh saves and mod roots","SaveEditorList"))Error.clear();ImGui::SameLine();
@@ -142,15 +211,18 @@ inline void Edit(){
     }
     const auto& exported=AuthoringClient::Result("SaveEditorExport");if(exported.contains("File"))ImGui::TextWrapped("Export: %s",exported.at("File").get_ref<const std::string&>().c_str());
 }
-inline void Render(){
+#include "Generator/CharacterStudioPanel.inl"
+inline void Render(const Json& catalog=Json::object(),uint64_t catalogRevision=0){
     AuthoringClient::Poll();Apply();const auto& snap=AuthoringClient::Snapshot;
     if(!snap.value("Active",false)){
         ImGui::TextWrapped("Enable RuneSchema authoring support, then activate this session to edit copies. No save is attached automatically.");
         if(HelpyImGuiTheme::SoftButton("Activate save tools"))AuthoringClient::Activate();return;
     }
-    ImGui::BeginDisabled(AuthoringClient::Busy());
+    StudioApply();StudioHeader();
     if(ImGui::BeginTabBar("Save editor workflows")){
-        if(ImGui::BeginTabItem("Edit / export")){Edit();ImGui::EndTabItem();}
+        if(ImGui::BeginTabItem("Character")){Studio(catalog,catalogRevision);ImGui::EndTabItem();}
+        if(ImGui::BeginTabItem("Inventory & Item Bay")){Studio(catalog,catalogRevision,true);ImGui::EndTabItem();}
+        if(ImGui::BeginTabItem("Advanced / export")){Edit();ImGui::EndTabItem();}
         if(ImGui::BeginTabItem("Clean copy")){AuthoringPanel::ApplyResult();AuthoringPanel::Cleanup();ImGui::EndTabItem();}
         if(ImGui::BeginTabItem("Mod roots / compatibility")){
             Button("Refresh roots and runtime","SaveEditorList");const auto& list=AuthoringClient::Result("SaveEditorList");
@@ -159,7 +231,7 @@ inline void Render(){
             if(list.contains("Mods"))for(const auto& row:list["Mods"]){ImGui::Separator();ImGui::TextWrapped("%s — /%s",row.at("Mod").get_ref<const std::string&>().c_str(),row.at("Source").get_ref<const std::string&>().c_str());ImGui::TextWrapped("%s",row.at("Root").get_ref<const std::string&>().c_str());ImGui::TextDisabled("%s",row.value("Registered",false)?"Registered source":"Declared source; not yet registered");}
             ImGui::EndTabItem();
         }ImGui::EndTabBar();
-    }ImGui::EndDisabled();
+    }
     if(!Error.empty())ImGui::TextWrapped("%s",Error.c_str());
     ImGui::TextWrapped("%s",AuthoringClient::Error.empty()?snap.value("Status",std::string{}).c_str():AuthoringClient::Error.c_str());
 }

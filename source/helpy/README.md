@@ -1,5 +1,25 @@
 # RSMK 0.8.0.0 integration
 
+## Grouped navigation candidate
+
+- **Players** contains Items, Clone, Recipes, and the optional Character Editor.
+- **World** contains Map, Spawns, and the optional Journal. Party is a dark,
+  bounded row list below the map: identity/vitals on the left, equipped icons
+  on the right. Fresh native durability appears as an icon meter and exact
+  hover values; unknown readings display `?`. Narrow rows wrap rather than
+  shrinking icons. Detach Party opens its own resizable window;
+  Dock below map returns it without resizing or covering the map.
+- The sidebar remembers each group's last workflow. Home shows group tiles,
+  not duplicate tiles for every nested tool. Optional tabs remain controlled
+  by Settings > Workspaces; hiding a tab does not discard its draft.
+- Existing carts, authoring drafts, inventory views, filters, native permission
+  checks, and explicit delivery/export confirmations remain independent of
+  navigation. Detached Map, Recipes, Item Bay and inventory surfaces still work.
+
+These changes are a local build candidate, not an installed or published release.
+
+## Runtime and content integration
+
 RuneSchema and RSMK now share version `0.8.0.0`, including their manifests and
 Windows DLL metadata. Info (next to Credits and Legal) contains framework,
 game and UE4SS versions; the centered footer keeps only the runtime badge,

@@ -1,0 +1,395 @@
+{
+  "version": 1,
+  "codes": [
+    {
+      "id": "QuestOwnerConflict",
+      "code": "RS-QST-001",
+      "title": "Conflicting quest ownership",
+      "severity": "error",
+      "subsystem": "Quests",
+      "summary": "Multiple definitions claim one quest identity.",
+      "impact": "The conflicting definition cannot be safely enrolled.",
+      "action": "Keep one owner for that ID; review the named mod files."
+    },
+    {
+      "id": "RegistryDeferred",
+      "code": "RS-REG-001",
+      "title": "Registry enrollment is not ready",
+      "severity": "warning",
+      "subsystem": "Registry",
+      "summary": "The complete mounted registry is not certified yet.",
+      "impact": "Automatic cleanup stays disabled; verified content can still run.",
+      "action": "Wait for registration, then check framework and content versions."
+    },
+    {
+      "id": "RegistryMismatch",
+      "code": "RS-NET-001",
+      "title": "Client and server content differ",
+      "severity": "error",
+      "subsystem": "Multiplayer",
+      "summary": "Verified registry fingerprints do not match.",
+      "impact": "Session policy determines the affected owner or operation; a content difference alone does not prove the whole session was rejected. This is not a latency measurement.",
+      "action": "Compare the named owner and protocol/build details; align required content before retrying the affected operation."
+    },
+    {
+      "id": "WearableUnenrolled",
+      "code": "RS-WEAR-001",
+      "title": "Wearable contract is not enrolled",
+      "severity": "warning",
+      "subsystem": "Equipment",
+      "summary": "The native wearable contract is not certified.",
+      "impact": "Unsupported wearable work is skipped rather than guessed.",
+      "action": "Check the equipment definition and native slot contract."
+    },
+    {
+      "id": "SlowWork",
+      "code": "RS-PERF-001",
+      "title": "A runtime task took too long",
+      "severity": "warning",
+      "subsystem": "Performance",
+      "summary": "A measured work slice exceeded its reporting threshold.",
+      "impact": "This attributes slow work; it does not prove network rejection or save corruption.",
+      "action": "Inspect the phase and elapsed time; prefer compatible caches and incremental refresh."
+    },
+    {
+      "id": "CatalogUnavailable",
+      "code": "RS-CAT-001",
+      "title": "Item catalogue is not ready",
+      "severity": "warning",
+      "subsystem": "Items",
+      "summary": "A catalogue or cursor is unavailable, changed or expired.",
+      "impact": "Last-good cached presentation remains usable while the query is rechecked.",
+      "action": "Refresh once; inspect mounted-content changes if it persists."
+    },
+    {
+      "id": "PlacementPending",
+      "code": "RS-SPAWN-001",
+      "title": "Placement needs loaded ground",
+      "severity": "warning",
+      "subsystem": "Spawns",
+      "summary": "Ground or collision is not confirmed at the target.",
+      "impact": "Placement is deferred or refused, not placed at a guessed height.",
+      "action": "Move closer to load the area or choose another point."
+    },
+    {
+      "id": "Unclassified",
+      "code": "RS-LOG-000",
+      "title": "Unclassified diagnostic",
+      "severity": "info",
+      "subsystem": "Console",
+      "summary": "This message has no registered exact diagnostic code.",
+      "impact": "Original severity and raw text remain authoritative.",
+      "action": "Read the original subsystem message; a suggested reference is guidance, not a diagnosed cause."
+    },
+    {
+      "id": "LogUnavailable",
+      "code": "RS-LOG-001",
+      "title": "File logging is unavailable",
+      "severity": "warning",
+      "subsystem": "Console",
+      "summary": "RuneSchema cannot open or safely archive its log.",
+      "impact": "File logging is disabled; UE4SS warnings and summaries remain available.",
+      "action": "Check folder permissions and free space; keep the previous log."
+    },
+    {
+      "id": "LogExportProtected",
+      "code": "RS-LOG-002",
+      "title": "Export destination is protected",
+      "severity": "warning",
+      "subsystem": "Console",
+      "summary": "An export would overwrite a live log or archive.",
+      "impact": "No export is written to that path.",
+      "action": "Choose another filename outside the active log and archive paths."
+    },
+    {
+      "id": "RuntimeContract",
+      "code": "RS-RT-001",
+      "title": "Native API contract changed",
+      "severity": "error",
+      "subsystem": "Runtime",
+      "summary": "A reflected function, field or parameter layout is unsupported.",
+      "impact": "That operation stops; arbitrary memory offsets are not substituted.",
+      "action": "Record the game build, storefront and framework version and update compatible components."
+    },
+    {
+      "id": "RuntimeNotReady",
+      "code": "RS-RT-002",
+      "title": "Runtime is becoming ready",
+      "severity": "info",
+      "subsystem": "Runtime",
+      "summary": "The service is not ready in this world generation.",
+      "impact": "Work waits or returns unavailable, not a fabricated zero.",
+      "action": "Wait for the world to become ready, then retry the specific operation."
+    },
+    {
+      "id": "SourceChanged",
+      "code": "RS-CACHE-001",
+      "title": "Mounted content changed",
+      "severity": "info",
+      "subsystem": "Cache",
+      "summary": "Content identity changed during cache work.",
+      "impact": "The stale result is not committed under the new identity.",
+      "action": "Keep last-good results while the affected owner is rechecked."
+    },
+    {
+      "id": "BundleInvalid",
+      "code": "RS-CACHE-002",
+      "title": "Cache bundle format is invalid",
+      "severity": "error",
+      "subsystem": "Cache",
+      "summary": "The header, version, manifest or record bounds failed validation.",
+      "impact": "The invalid bundle is not activated.",
+      "action": "Download the original bundle again or ask its publisher for a supported export."
+    },
+    {
+      "id": "CacheMismatch",
+      "code": "RS-CACHE-003",
+      "title": "Cache does not match installed content",
+      "severity": "warning",
+      "subsystem": "Cache",
+      "summary": "The portable identity differs or a required source is inactive.",
+      "impact": "Only matching source groups are used; unrelated owners remain intact.",
+      "action": "Use the matching build/mod or local Build / update for the affected source."
+    },
+    {
+      "id": "CacheChecksum",
+      "code": "RS-CACHE-004",
+      "title": "Cache integrity check failed",
+      "severity": "error",
+      "subsystem": "Cache",
+      "summary": "Bytes do not match their declared SHA-256 or pixel layout.",
+      "impact": "Unverified bytes are not accepted as valid cache data.",
+      "action": "Retry the original download; never bypass checksums or rename an unrelated pack."
+    },
+    {
+      "id": "CacheBudget",
+      "code": "RS-CACHE-005",
+      "title": "Cache storage limit reached",
+      "severity": "warning",
+      "subsystem": "Cache",
+      "summary": "The operation exceeds the configured size or record limit.",
+      "impact": "The operation is refused without removing unrelated owners.",
+      "action": "Increase the limit or use explicit old-cache cleanup."
+    },
+    {
+      "id": "CacheCancelled",
+      "code": "RS-CACHE-006",
+      "title": "Cache operation cancelled",
+      "severity": "info",
+      "subsystem": "Cache",
+      "summary": "A user request or changed source generation cancelled work.",
+      "impact": "Valid cached content remains usable; incomplete metadata is not activated.",
+      "action": "Retry when convenient; cancellation alone is not corruption."
+    },
+    {
+      "id": "CachePartial",
+      "code": "RS-CACHE-007",
+      "title": "Bundle has partial coverage",
+      "severity": "warning",
+      "subsystem": "Cache",
+      "summary": "Only the declared observed subset was captured.",
+      "impact": "Missing categories and art can still use local discovery.",
+      "action": "Check coverage by category; a full sweep is optional."
+    },
+    {
+      "id": "CacheOwner",
+      "code": "RS-CACHE-008",
+      "title": "Content owner cannot be verified",
+      "severity": "warning",
+      "subsystem": "Cache",
+      "summary": "A record claims ownership unsupported by active source evidence.",
+      "impact": "The record is skipped; borrowed artwork never reassigns content ownership.",
+      "action": "Correct the publisher manifest or exact asset declarations."
+    },
+    {
+      "id": "CachePublish",
+      "code": "RS-CACHE-009",
+      "title": "Cache update could not be committed",
+      "severity": "error",
+      "subsystem": "Cache",
+      "summary": "A staged cache update could not be safely activated.",
+      "impact": "The previous committed metadata remains usable.",
+      "action": "Check permissions and free space, then retry; keep the last-good cache."
+    },
+    {
+      "id": "CacheLegacy",
+      "code": "RS-CACHE-010",
+      "title": "Legacy icon pack loaded",
+      "severity": "info",
+      "subsystem": "Cache",
+      "summary": "This is an older pixel-only .rsmk-icons pack.",
+      "impact": "Verified pictures can be reused, but it supplies no item or journal records.",
+      "action": "Use a newer .rsmk-cache bundle when published; a sweep is optional."
+    },
+    {
+      "id": "DownloadUnavailable",
+      "code": "RS-DL-001",
+      "title": "Download is unavailable",
+      "severity": "warning",
+      "subsystem": "Downloads",
+      "summary": "A download failed or no compatible publication exists.",
+      "impact": "Cached content and local Build / update remain available.",
+      "action": "Check connectivity and the supported build list, then retry later."
+    },
+    {
+      "id": "DownloadBounds",
+      "code": "RS-DL-002",
+      "title": "Download manifest was rejected",
+      "severity": "error",
+      "subsystem": "Downloads",
+      "summary": "Remote filename, index, size or integrity metadata is unsupported.",
+      "impact": "The download is not imported.",
+      "action": "Use a supported publisher index and keep the previous cache."
+    },
+    {
+      "id": "JournalPartial",
+      "code": "RS-JRN-001",
+      "title": "Journal cache is an observed subset",
+      "severity": "info",
+      "subsystem": "Journal",
+      "summary": "Full-game journal coverage is not certified.",
+      "impact": "Unseen entries are not assumed absent or unlocked.",
+      "action": "Import a compatible journal bundle or observe additional native entries."
+    },
+    {
+      "id": "JournalInvalid",
+      "code": "RS-JRN-002",
+      "title": "Journal cache could not be read",
+      "severity": "warning",
+      "subsystem": "Journal",
+      "summary": "The journal record format or text bounds failed validation.",
+      "impact": "The invalid record set is not used.",
+      "action": "Import a supported bundle or refresh the native journal cache."
+    },
+    {
+      "id": "SaveProtected",
+      "code": "RS-SAVE-001",
+      "title": "Original save is protected",
+      "severity": "warning",
+      "subsystem": "Save safety",
+      "summary": "The operation targets a protected original or active save.",
+      "impact": "No unreviewed original-save change is performed.",
+      "action": "Use the copy-only editor and review its export, or close the relevant world normally."
+    },
+    {
+      "id": "PersistenceUncertified",
+      "code": "RS-SAVE-002",
+      "title": "Persistence cleanup is not certified",
+      "severity": "warning",
+      "subsystem": "Save safety",
+      "summary": "Complete stable registry evidence is unavailable.",
+      "impact": "Automatic pruning stays disabled; no character save is modified by this deferral.",
+      "action": "Resolve readiness first; a missing lookup is not proof of removed content."
+    },
+    {
+      "id": "EquipUnverified",
+      "code": "RS-EQUIP-001",
+      "title": "Auto-equip is unsupported or ambiguous",
+      "severity": "warning",
+      "subsystem": "Equipment",
+      "summary": "An instance, slot or native contract cannot be confirmed.",
+      "impact": "Delivery and equip status stay separate; no duplicate grant is made.",
+      "action": "Equip manually or inspect the named instance and slot."
+    },
+    {
+      "id": "EquipReadback",
+      "code": "RS-EQUIP-002",
+      "title": "Equip result is not confirmed",
+      "severity": "warning",
+      "subsystem": "Equipment",
+      "summary": "Exact-instance readback does not prove the expected result.",
+      "impact": "A native acceptance flag alone is not reported as successful equipping.",
+      "action": "Check inventory and loadout before retrying."
+    },
+    {
+      "id": "PartyStatUnavailable",
+      "code": "RS-PARTY-001",
+      "title": "Player reading is unavailable",
+      "severity": "info",
+      "subsystem": "Party",
+      "summary": "A reading is missing, stale or unsupported.",
+      "impact": "It is not displayed as zero or claimed to be authoritative.",
+      "action": "Wait for fresh data and check support for that field."
+    },
+    {
+      "id": "PartyAuthority",
+      "code": "RS-PARTY-002",
+      "title": "Host authority is required",
+      "severity": "warning",
+      "subsystem": "Party",
+      "summary": "The caller is not authorized for the action.",
+      "impact": "The action is refused; a host badge grants no privilege by itself.",
+      "action": "Use the authorized host/server flow and current selected character."
+    },
+    {
+      "id": "PartyStale",
+      "code": "RS-PARTY-003",
+      "title": "Player or world identity changed",
+      "severity": "warning",
+      "subsystem": "Party",
+      "summary": "The selected character, serial or world generation is stale.",
+      "impact": "The action is not redirected to a different player or reused object.",
+      "action": "Refresh and select the current player or chest again."
+    },
+    {
+      "id": "MapUnloaded",
+      "code": "RS-MAP-001",
+      "title": "Map target is not loaded",
+      "severity": "warning",
+      "subsystem": "Map",
+      "summary": "The selected ground, node or storage actor is unavailable.",
+      "impact": "Unavailable contents are not an empty chest or harvested node.",
+      "action": "Move closer and refresh that target."
+    },
+    {
+      "id": "MapTimerUnknown",
+      "code": "RS-MAP-002",
+      "title": "Resource respawn time is unverified",
+      "severity": "info",
+      "subsystem": "Map",
+      "summary": "The observation does not establish an exact countdown.",
+      "impact": "A cached map marker never invents a timer.",
+      "action": "Observe a nearby live node; cached references only establish locations."
+    },
+    {
+      "id": "ChestAccessUnknown",
+      "code": "RS-CHEST-001",
+      "title": "Chest access contract is unverified",
+      "severity": "warning",
+      "subsystem": "Storage",
+      "summary": "Lock ownership, deposit permissions or persistence semantics are unverified.",
+      "impact": "Direct deposits and unlock overrides stay disabled.",
+      "action": "Use the game interaction until its current native access path is verified."
+    },
+    {
+      "id": "ChestAmbiguous",
+      "code": "RS-CHEST-002",
+      "title": "Storage inventory is ambiguous",
+      "severity": "warning",
+      "subsystem": "Storage",
+      "summary": "The building has no unique owned native inventory.",
+      "impact": "Contents are unavailable, not read from an unrelated component.",
+      "action": "Refresh the target and inspect its native component contract."
+    },
+    {
+      "id": "ItemDeliveryPartial",
+      "code": "RS-ITEM-001",
+      "title": "Some items were not delivered",
+      "severity": "warning",
+      "subsystem": "Items",
+      "summary": "One or more items failed independent delivery validation.",
+      "impact": "Successful deliveries are not repeated to compensate.",
+      "action": "Review cart results and retry only failed items after resolving their cause."
+    },
+    {
+      "id": "SourceUnavailable",
+      "code": "RS-SRC-001",
+      "title": "Content source is not mounted",
+      "severity": "warning",
+      "subsystem": "Content",
+      "summary": "A required content source is absent or unregistered.",
+      "impact": "Its cache cannot create gameplay definitions or prove availability.",
+      "action": "Mount matching content or keep its references marked unavailable."
+    }
+  ]
+}

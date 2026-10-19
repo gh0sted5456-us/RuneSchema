@@ -1,5 +1,20 @@
 # Enums loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/enums/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Identify a supported loaded enum and confirm the consumer already handles the proposed values.
+2. Create `enums/10-camp-values.jsonc` using the mock-up below.
+3. Replace the enum name and supply unqualified value names; do not include EnumName:: in each value.
+4. Restart and inspect enum resolution and the consuming feature. Added names do not implement new game logic.
+
+**Tie-ins:** [Raw](raw.md) and [assets](assets.md) may reference supported enum values; use cooked code/Blueprint content for new behavior.
+
+
 **Folder:** `RuneSchema/mods/<ModName>/enums/`
 
 Extensions to supported loaded enum name sets.
@@ -8,7 +23,7 @@ Extensions to supported loaded enum name sets.
 
 Use `/enums` to add names to a supported loaded enum.
 
-```json
+```jsonc
 {
   "EMyLoadedEnum": ["NewValue", "AnotherValue"]
 }

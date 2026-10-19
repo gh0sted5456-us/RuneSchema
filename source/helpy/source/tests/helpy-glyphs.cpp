@@ -5,6 +5,7 @@
 #include "Core/MapOceanMask.h"
 #include "Core/PlayerPortraits.h"
 #include "Core/SpawnPresentation.h"
+#include "Core/SpawnBrowserPreferences.h"
 #include "Core/JournalWorkspace.h"
 #include "Core/PartyCardLayout.h"
 #include "Core/JournalSections.h"
@@ -19,16 +20,51 @@ static void Check(bool value){if(!value)throw std::runtime_error("Glyph/stat con
 struct Sink{unsigned Commands=0;void Move(float,float){++Commands;}void Line(float,float){++Commands;}void Quad(float,float,float,float){++Commands;}void Cubic(float,float,float,float,float,float){++Commands;}void Close(){++Commands;}void Finish(){}};
 static std::string Svg(const PS::HelpyGlyphs::Glyph& glyph){return "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\"><title>"+std::string(glyph.Label)+"</title><path transform=\"translate(2 2)\" d=\""+glyph.Path+"\" fill=\"none\" stroke=\"#ceb36b\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>";}
 int main(int argc,char** argv)try{
+    {
+        using namespace PS::SpawnBrowserPreferences;Choices preferences;
+        for(const auto* type:{"Resource","NPC","AI"}){
+            nlohmann::json row={{"Type",type},{"Key","mounted-key"},{"Class","/Game/Actors/Example.Example_C"}};
+            const auto original=row;Check(preferences.Visible(row,false));Check(preferences.Set(row,true));
+            Check(!preferences.Visible(row,false)&&preferences.Visible(row,true)&&row==original);
+            row["Key"]="loaded-key";row["Class"]="/game/actors/example.example_c";Check(preferences.Contains(row));
+            auto restored=Choices::Parse(preferences.Json());Check(restored.Contains(row));Check(restored.Set(row,false)&&restored.Visible(row,false));
+        }
+        Check(!preferences.Contains({{"Type","AI"},{"Class","/Different/Example.Example_C"}}));
+        Check(!preferences.Set({{"Type","Resource"},{"Name","No stable identity"}},true));
+        Check(!preferences.Set({{"Type","Item"},{"Key","not-a-spawn"}},true));
+        Check(!preferences.Set({{"Type","AI"},{"Class","bad\nidentity"}},true));
+        bool rejected=false;try{Choices::Parse({{"Version",1},{"Hidden",{"AI|bad\nidentity"}}});}catch(...){rejected=true;}Check(rejected);
+        Choices bounded;for(size_t i=0;i<Choices::Limit;++i)Check(bounded.Set({{"Type","AI"},{"Key",std::to_string(i)}},true));
+        Check(!bounded.Set({{"Type","AI"},{"Key","overflow"}},true));Check(bounded.Set({{"Type","AI"},{"Key","0"}},false));Check(bounded.Set({{"Type","AI"},{"Key","overflow"}},true));
+    }
     using namespace PS;std::set<std::string> ids,paths;
+    for(float width:{1.f,180.f,320.f,332.f,480.f,1000.f}){const auto columns=PartyCardLayout::Split(width);Check(columns.Stats>0&&columns.Equipment>0);
+        if(columns.Beside)Check(columns.Stats>=180&&columns.Stats<=360&&std::abs(columns.Stats+columns.Equipment+columns.Gap-width)<.01f);
+        else Check(columns.Stats==width&&columns.Equipment==width);}
+    Check(!PartyCardLayout::Split(320).Beside&&PartyCardLayout::Split(480).Beside&&!PartyCardLayout::Split(-1).Beside);
+    {const int64_t at=1000; nlohmann::json item={{"Durability",{{"Current",0},{"Maximum",100},{"ObservedUnixMs",at}}}};
+        Check(PartyStats::Read(item,"Durability",at)->Fraction()==0);item["Durability"]["Current"]=25;Check(PartyStats::Read(item,"Durability",at)->Fraction()==.25);
+        Check(!PartyStats::Read(item,"Durability",at+10001));item["Durability"]["Current"]=101;Check(!PartyStats::Read(item,"Durability",at));
+        item["Durability"]["Current"]=0;item["Durability"]["Maximum"]=0;Check(!PartyStats::Read(item,"Durability",at));Check(!PartyStats::Read(nlohmann::json::object(),"Durability",at));}
     for(size_t i=0;i<PortraitGlyphs::All.size();++i){Sink sink;PortraitGlyphs::Replay(i,sink);Check(sink.Commands>5);const auto& geometry=PortraitGlyphs::Geometry(i);Check(geometry.front().Points[0]==(i==0?8:i==1?12:i==2?2:9));}
     for(float width:{1.f,80.f,180.f,360.f,720.f})for(size_t count=1;count<=32;++count){size_t total=0;const float side=std::min(width,26.f);for(const auto& line:PartyCardLayout::Centered(count,width,side,6)){
         const float used=line.Count*side+(line.Count-1)*6;Check(std::abs((2*line.Offset+used)-width)<.01f&&line.Offset>=0);total+=line.Count;}Check(total==count);}
     Check(JournalSections::For({{"Type","World"}})=="World"&&JournalSections::For({{"Type","Recipe"}})=="Recipes"&&JournalSections::For({{"Type","Lore"}})=="Knowledge"&&JournalSections::For({{"Name","Recipe-shaped rock"}}).empty());
     Check(SpawnNames::Display({{"Name","FellableTree Maple"},{"Type","Resource"}}).Name=="Maple Tree");
+    Check(SpawnNames::Display({{"Name","Small Ore Node Copper"},{"Type","Resource"}}).Name=="Copper node (small)");
+    Check(SpawnNames::Display({{"Name","OreNode Copper Medium A1"},{"Type","Resource"}}).Art=="Copper ore");
+    Check(SpawnPresentation::ResourceTab({{"Name","Base Building Decoration Material Processed Gold Bar Single"},{"Type","Resource"}})==-1);
+    Check(SpawnPresentation::ResourceTab({{"Name","DR Recipe Dispenser Book"},{"Type","Resource"}})==-1);
+    Check(SpawnPresentation::ResourceTab({{"Name","Small Ore Node Copper"},{"Type","Resource"}})==1);
+    Check(SpawnPresentation::ResourceTab({{"Name","Small Ore Node Copper"},{"Type","Resource"},{"Mounted",true},{"NeedsInspection",true}})==1);
+    Check(SpawnPresentation::Enemy({{"Type","AI"},{"Class","/Game/Gameplay/AI/Goblin.BP_Goblin_C"},{"Mounted",true},{"NeedsInspection",true},{"Available",false}}));
+    Check(!SpawnPresentation::Enemy({{"Type","AI"},{"Class","/Script/Dominion.DominionAICharacter"},{"SpawnableCharacter",true},{"Available",true}}));
     Check(SpawnNames::Display({{"Name","FelledTree Ash Bare"},{"Type","Resource"}}).Name=="Ash Tree (Felled) (Bare)");
     Check(SpawnNames::Display({{"Name","Internal_Name"},{"DisplayName","A mod author's name"},{"Type","Resource"}}).Name=="A mod author's name");
     {
         const auto draft=JournalWorkspace::Draft("my_mod_lore","Lore","A native story",nlohmann::json::array({"Page one","Page two"}),"/Game/UI/Test.Test","/Game/UI/JournalData/Category.Category");
+        const auto region=JournalWorkspace::Draft("mod_region","Place","Region story",nlohmann::json::array({"Text"}),"","",{{"UnlockCondition",{{"UnlockType","RegionUnlocked"},{"MapRegion","/Game/World/Region.Region"},{"RegionID",7}}},{"AddTo",{{"Section","World"},{"Category","Locations"}}}});
+        Check(region.at("mod_region").at("UnlockCondition").at("RegionID")==7);
         Check(draft["my_mod_lore"]["Unlock"]==false&&draft["my_mod_lore"]["PageDescriptions"].size()==2&&!draft["my_mod_lore"].contains("PersistenceID"));
         for(const auto& bad:{"../bad","/Game/Existing.Entry","bad name"}){bool rejected=false;try{JournalWorkspace::Draft(bad,"Lore","Title",nlohmann::json::array({"Text"}),"","");}catch(...){rejected=true;}Check(rejected);}
         bool rejected=false;try{JournalWorkspace::Draft("mod_entry","Lore","Title",nlohmann::json::array({"Text"}),"https://wiki/image.png","");}catch(...){rejected=true;}Check(rejected);
@@ -43,6 +79,7 @@ int main(int argc,char** argv)try{
     {PlayerPortraits::Choices portraits;const std::string a="0123456789abcdef0123456789abcdef",b="1123456789abcdef0123456789abcdef";
         Check(portraits.Set(a,"/Game/UI/Icons/Tea.Tea")&&portraits.Get(a)=="/Game/UI/Icons/Tea.Tea"&&portraits.Get(b).empty());
         Check(!portraits.Set("a mutable name","/Game/x.x")&&!portraits.Set(a,"C:/file.png")&&!portraits.Set(a,"/Game/../evil.x"));
+        Check(portraits.SetBackground(a,"source:mods/dye"));Check(PlayerPortraits::Choices::Parse(portraits.Json()).GetBackground(a)=="source:mods/dye");Check(!portraits.SetBackground(a,"background:../escape.png"));Check(!portraits.SetBackground(a,"https://example.com/image.png"));
         Check(PlayerPortraits::Choices::Parse(portraits.Json()).Get(a)==portraits.Get(a));Check(portraits.Set(a,"")&&portraits.Get(a).empty());
         Check(PlayerPortraits::Identity("00000000000000000000000000000000").empty());
     }

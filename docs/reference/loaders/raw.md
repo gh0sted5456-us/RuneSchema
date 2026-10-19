@@ -1,5 +1,20 @@
 # Raw / DataTables loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/raw/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Resolve the exact DataTable and inspect the live row struct; prefer a full path when short names are ambiguous.
+2. Create `raw/10-camp-rows.jsonc` with table, row and only the fields being changed.
+3. Replace all mock-up field names/types. Distinguish patching an existing row from constructing a new row with required data.
+4. Restart and inspect rejected properties/read-back, then exercise the asset or station that consumes the row.
+
+**Tie-ins:** [Assets](assets.md) references row handles; [buildings](buildings.md) and [recipes](recipes.md) connect station data.
+
+
 **Folder:** `RuneSchema/mods/<ModName>/raw/`
 
 Supported DataTable row creation and patching.
@@ -8,7 +23,7 @@ Supported DataTable row creation and patching.
 
 `/raw` creates or patches supported DataTable rows.
 
-```json
+```jsonc
 {
   "DT_WearableEquipment": {
     "mymod_legs": {
@@ -75,7 +90,6 @@ writes the matching reflected properties you supplied.
 
 - [Capes: Attack cape override](../../examples/Capes/raw/DT_ITEM_Cape_Attack_override.json)
 - [Capes: Trimmed Magic skillcape](../../examples/Capes/raw/DT_ITEM_Cape_Trimmed_Skillcape_Magic_override.json)
-- [Great Tree: boss loot rows](../../examples/GreatTree/raw/85-GreatTreeLoot.json)
 
 ---
 

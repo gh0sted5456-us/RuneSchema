@@ -30,6 +30,8 @@ struct AuthoringPreviewFixture {
         AuthoringPanel::ResultSelection="SavedWorld";
     }
     AuthoringPreviewFixture(){
+        Character["meta_data"]={{"char_name","Example character"},{"char_guid","fixture-owner"}};
+        for(const auto& field:CharacterWorkbench::Fields)Character["Customization"]["CustomizationData"][field.Key]={{"dataTable","/Script/Engine.DataTable'"+CharacterWorkbench::Table(field)+"'"},{"rowName","ExampleRow"}};
         Host.Configure(true,true);
         AuthoringClient::Remote=[this](const nlohmann::json& request,nlohmann::json& reply){
             const auto action=request.at("Action");
@@ -61,6 +63,16 @@ struct AuthoringPreviewFixture {
                     else if(op=="SaveEditorList")data={{"Runtime","Game Pass/WinGDK"},{"AttachAvailable",false},{"Files",Json::array({{{"Name","Example character"},{"Path","preview-character.json"},{"Storage","Imported JSON payload"}}})},
                         {"Mods",Json::array({{{"Mod","ExampleMod"},{"Source","examplemount"},{"Root","Example RuneSchema/mods/ExampleMod"},{"Registered",true}}})}};
                     else if(op=="SaveEditorOpen"){Editor.Open(Character);data=Editor.Browse();}
+                    else if(op=="SaveEditorAppearance"||op=="SaveEditorAppearanceSet"||op=="SaveEditorRename"){
+                        if(op=="SaveEditorAppearanceSet")Editor.SetAppearance(args.at("Field"),args.at("Row"),args.at("Revision"),{"ExampleRow","AnotherRow"});
+                        if(op=="SaveEditorRename")Editor.Rename(args.at("Name"),args.at("Revision"));
+                        data=Editor.Appearance();data["Choices"]["Fields"]=Json::array();for(const auto& field:CharacterWorkbench::Fields)data["Choices"]["Fields"].push_back({{"Key",field.Key},{"Label",field.Label},{"Rows",{"ExampleRow","AnotherRow"}}});
+                    }
+                    else if(op=="SaveEditorSlotItems"){
+                        const auto slot=args.at("Slot").get<std::string>();data={{"Slot",slot},{"HasMore",false},{"NextOffset",1},
+                            {"Rows",Json::array({{{"Name","Compatible native fixture"},{"Path","/Preview/Fit.Item"},{"SlotStrategy",slot},{"NativeSlotVerified",true}}})}};
+                    }
+                    else if(op=="SaveEditorRender")throw std::runtime_error("Synthetic UI fixture: native game rendering is tested separately in the private game copy.");
                     else if(op=="SaveEditorBrowse")data=Editor.Browse(args.value("Pointer",std::string{}),args.value("Offset",size_t{}));
                     else if(op=="SaveEditorSet"){Editor.Set(args.at("Pointer"),args.at("Value"),args.at("Revision"));data=Editor.Browse("/GameProgress");}
                     else if(op=="SaveEditorInventory"||op=="SaveEditorStack"||op=="SaveEditorRemoveItems"){

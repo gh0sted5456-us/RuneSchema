@@ -10,6 +10,8 @@ std::string ToolReadableName(std::string path) {
 }
 bool ToolResourceClass(UClass* type,UClass* actorType,UClass* aiType) {
     if(!type||!type->IsChildOf(actorType)||type->IsChildOf(aiType))return false;
+    const auto path=PS::QuickCatalogRules::Lower(RC::to_string(type->GetPathName()));
+    for(const auto* noise:{"basebuilding","recipedispenser","decorationmaterial","projectile","attackeffect"})if(path.find(noise)!=path.npos)return false;
     // Discovery is not spawn permission. Keep real resource classes visible;
     // the shared spawn backend still validates save exclusion before mutation.
     // Persistence alone is not evidence that an actor is a resource: prefer

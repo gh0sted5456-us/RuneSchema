@@ -35,7 +35,7 @@ inline void Refresh(){
     std::set<std::string> seed(wiki.begin(),wiki.end());Labels.clear();
     for(const auto& glyph:PortraitGlyphs::All){const auto icon=std::string("/HelpyGlyph/")+glyph.Id+"."+glyph.Id;seed.insert(icon);Labels[icon]=glyph.Label;}
     const auto add=[&](const nlohmann::json& rows){if(!rows.is_array())return;for(const auto& row:rows){const auto icon=ItemPresentation::Text(row,"Icon");if(PlayerPortraits::Icon(icon)){seed.insert(icon);Labels[icon]=ItemPresentation::Text(row,"Name");}}};
-    add(LazyCatalog::For(0).Rows);add(NativeJournalCache::Entries);
+    add(LazyCatalog::For(0).Rows);add(NativeJournalCache::Entries);add(NativeJournalCache::BundleArt);
     for(const auto& [icon,texture]:ItemIconCache::detail::State().Textures)if(texture&&PlayerPortraits::Icon(icon))seed.insert(icon);
     Icons.assign(seed.begin(),seed.end());LastFilter="\1";
     Scan=std::async(std::launch::async,[sources,seed]{Listing result;std::set<std::string> icons=seed;size_t inspected=0;
@@ -70,7 +70,11 @@ inline void Render(){
     const auto area=ImGui::GetMainViewport()->WorkSize;
     ImGui::SetNextWindowSize({std::min(t.X(620),area.x-t.X(24)),std::min(t.Y(500),area.y-t.Y(24))},ImGuiCond_Appearing);
     if(!ImGui::BeginPopupModal("Player portrait",nullptr,ImGuiWindowFlags_NoSavedSettings))return;
-    NativeJournalCache::Poll();if(JournalRevision!=NativeJournalCache::Revision){JournalRevision=NativeJournalCache::Revision;std::set<std::string> merged(Icons.begin(),Icons.end());for(const auto& row:NativeJournalCache::Entries){const auto icon=ItemPresentation::Text(row,"Icon");if(PlayerPortraits::Icon(icon)){merged.insert(icon);Labels[icon]=ItemPresentation::Text(row,"Name");}}Icons.assign(merged.begin(),merged.end());LastFilter="\1";}
+    NativeJournalCache::Poll();if(JournalRevision!=NativeJournalCache::Revision){
+        JournalRevision=NativeJournalCache::Revision;std::set<std::string> merged(Icons.begin(),Icons.end());
+        const auto add=[&](const nlohmann::json& rows){for(const auto& row:rows){const auto icon=ItemPresentation::Text(row,"Icon");if(PlayerPortraits::Icon(icon)){merged.insert(icon);Labels[icon]=ItemPresentation::Text(row,"Name");}}};
+        add(NativeJournalCache::Entries);add(NativeJournalCache::BundleArt);Icons.assign(merged.begin(),merged.end());LastFilter="\1";
+    }
     ImGui::Text("Portrait for %s",Name.c_str());ImGui::TextWrapped("Choose Item Bay icons, native journal artwork or optional cached Wiki portraits. Saved locally for this character, not everyone with the same name.");
     ImGui::BeginDisabled(!Loaded);if(HelpyImGuiTheme::SoftButton("Use default")){Choices.Set(Player,"");SaveWanted=true;ImGui::CloseCurrentPopup();}ImGui::EndDisabled();ImGui::SameLine();
     if(HelpyImGuiTheme::SoftButton("Refresh cache list"))Refresh();ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Close"))ImGui::CloseCurrentPopup();

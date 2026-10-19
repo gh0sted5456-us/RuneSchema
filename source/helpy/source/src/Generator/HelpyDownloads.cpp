@@ -101,15 +101,24 @@ Result InstallArtwork(const std::filesystem::path& folder,const Fetcher& fetch){
 }
 bool Hex(const std::string& text,size_t size){return text.size()==size&&text.find_first_not_of("0123456789abcdef")==text.npos;}
 Result DownloadBase(const std::map<std::string,std::string>& sources,const std::set<std::string>& nativePlugins,const std::string& runtime,const std::string& gameVersion){
-    Count=2;Done=0;const auto bytes=Fetch("item-icon-caches/index.json",256*1024);
-    const auto index=nlohmann::json::parse(bytes,[](int depth,nlohmann::json::parse_event_t,nlohmann::json&){if(depth>16)throw std::runtime_error("Cache index nesting exceeds its limit.");return true;});
-    if(index.value("Format",0)!=1||index.value("Kind",std::string{})!="RuneSchemaBaseGameIcons"||!index.contains("Packs")||!index["Packs"].is_array()||index["Packs"].size()>128)throw std::runtime_error("Invalid base-game cache index.");
+    Count=3;Done=0;
+    for(const bool bundle:{true,false}){
+    const std::string directory=bundle?"cache-bundles":"item-icon-caches";Bytes bytes;
+    try{bytes=Fetch(directory+"/index.json",256*1024);}catch(const std::exception& e){
+        if(bundle&&std::string(e.what()).find("has not been published")!=std::string::npos)continue;throw;
+    }
+    const auto index=nlohmann::json::parse(bytes,[](int depth,nlohmann::json::parse_event_t,nlohmann::json&){if(depth>16)throw std::runtime_error("[RS-DL-002] Cache index nesting exceeds its limit.");return true;});
+    if(index.value("Format",0)!=(bundle?2:1)||index.value("Kind",std::string{})!=(bundle?"RuneSchemaCacheBundles":"RuneSchemaBaseGameIcons")||!index.contains("Packs")||!index["Packs"].is_array()||index["Packs"].size()>128)throw std::runtime_error("[RS-DL-002] Invalid base-game cache index.");
     ++Done;
     for(const auto& pack:index["Packs"]){
         // Machine-local source keys contain timestamps and are not portable.
         // Build/runtime narrows the candidate; pack import independently checks
         // actual game-content SHA-256 before any thumbnails are applied.
         if(gameVersion.empty()||pack.value("GameVersion",std::string{})!=gameVersion||pack.value("Runtime",std::string{})!=runtime)continue;
+        if(bundle){
+            wchar_t language[LOCALE_NAME_MAX_LENGTH]{};GetUserDefaultLocaleName(language,LOCALE_NAME_MAX_LENGTH);std::string locale;for(const auto c:std::wstring(language))locale+=static_cast<char>(c);
+            if(pack.value("Locale",std::string{})!=locale)continue;
+        }
         if(!pack.is_object()||!pack.contains("Sources")||!pack["Sources"].is_object()||pack["Sources"].empty()||pack["Sources"].size()>512||!pack["Sources"].contains("game"))continue;
         bool matches=true;for(const auto& [source,key]:pack["Sources"].items()){
             const auto found=sources.find(source);
@@ -117,12 +126,12 @@ Result DownloadBase(const std::map<std::string,std::string>& sources,const std::
         }if(!matches)continue;
         const auto hash=pack.value("SHA256",std::string{});const auto size=pack.value("Bytes",uint64_t{});
         if(!Hex(hash,64)||size<16||size>256ull*1024*1024)throw std::runtime_error("Invalid base-game cache download bounds.");
-        const auto path=HostServices::CacheDirectory()/"downloads"/(hash+".rsmk-icons");
+        const auto name=hash+(bundle?".rsmk-cache":".rsmk-icons");const auto path=HostServices::CacheDirectory()/"downloads"/name;
         if(!Verified(path,static_cast<size_t>(size),hash)){
-            const auto data=Fetch("item-icon-caches/"+hash+".rsmk-icons",static_cast<size_t>(size));
-            if(data.size()!=size||Hash(data)!=hash)throw std::runtime_error("Base-game cache integrity check failed.");Commit(path,data);
+            const auto data=Fetch(directory+"/"+name,static_cast<size_t>(size));
+            if(data.size()!=size||Hash(data)!=hash)throw std::runtime_error("[RS-CACHE-004] Base-game cache integrity check failed.");Commit(path,data);
         }++Done;return {false,false,false,"Base-game pack downloaded; checking content compatibility before import.",path};
-    }throw std::runtime_error("No compatible base-game cache is published for these active sources. Build / update still works locally.");
+    }}throw std::runtime_error("[RS-DL-001] No compatible base-game cache is published for these active sources. Build / update still works locally.");
 }
 }
 const View& Current(){return State;}

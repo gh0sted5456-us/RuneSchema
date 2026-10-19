@@ -5,6 +5,14 @@
 namespace PS::HelpyUiAssets {
 struct File {const char* Name;size_t Bytes;const char* SHA256;};
 inline constexpr std::array Files{
+    File{"source-base-game.png",4524400,"fad23ef33f8d1e4b26a8238853bc028075ab3f98abc210e80932e5986c224d81"},
+    File{"source-umbral-sands.png",3067770,"4f0923926be681b9f7d72d31eb123b203324859d978981edcc47102c51531fe0"},
+    File{"source-scorched-wilderness.png",4144594,"ea70adf2b7e5b0e745f2b92fc1232fb9728ad6ed6c7a0bea04090672aa5b395c"},
+    File{"source-bastion.png",3675550,"c4ac544169b4e14603a33c4fa1d55014817d6f1774c75b1737faadfcd295fa97"},
+    File{"source-colorfuldye.png",5221157,"8484c93472e9cb9aeb14fc73a48a9bd05b887950af0a6e7b115d4b722bb2bc56"},
+    File{"source-gunslinger.png",3785147,"853298ee52c1bfea7b279f40debdf7ef6ba26721c22a195604731a611008e15b"},
+    File{"source-shadowmancer.png",3748145,"af5602c5a0291aa3de97a4ad75c001f6d0edc3495958cf52bffe98022222f73c"},
+    File{"source-spears-scythes.png",5180487,"0e99258a1f502242d44aea5f4fb763917b10db20de0e3058e5c8f671a19a17bb"},
     File{"curseforge-details.png",1524773,"d3b2406516c90d2f11e39a4f631dfb72c9ba3c59bfe9a62140a538256cdad6bd"},
     File{"curseforge.png",1801,"c3ee332f97df98b504e6a78620f3208acdc0d8f33faf15eefea6ed315b89e3b8"},
     File{"discord.png",4870,"7f4745c9af729592915a6f98b4b4c9911bef6675076a745a0e583369e9e0c0db"},

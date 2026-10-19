@@ -1,5 +1,18 @@
 # Create custom cooked armor
 
+## Step-by-step workflow
+
+1. Prepare a compatible wearable ItemData and the male/female mesh-data records for each intended slot.
+2. Cook the meshes, materials, textures and required body/hair visibility rules together.
+3. Mount/register the item and wearable references, then add crafting/discovery through their owning loaders.
+4. Restart and check both body variants, equip/unequip, death/respawn, remote presentation and saved inventory.
+
+JSONC snippets are authoring mock-ups. Replace example paths, IDs and values with
+inspected content; a valid snippet cannot supply missing cooked dependencies.
+
+**Tie-ins:** [Assets](reference/loaders/assets.md), [equipment](reference/loaders/equipment.md), [raw rows](reference/loaders/raw.md) and [cooked registries](COOKED-PAK-REGISTRY-MANIFEST.md).
+
+
 RuneSchema can help a cooked armor item join Dragonwilds' native
 wearable presentation path. The armor mod still owns its item, meshes,
 materials, textures, and appearance rules. RuneSchema does not paint an item
@@ -40,7 +53,7 @@ You may declare cooked wearable mesh data in your PAK's `RSREG_` or
 `DA_RuneSchemaRegistry` asset. This resolves and class-checks the declared
 dependencies early; it does not substitute for the item bindings above:
 
-```json
+```jsonc
 {
   "SchemaVersion": 1,
   "Entries": [],

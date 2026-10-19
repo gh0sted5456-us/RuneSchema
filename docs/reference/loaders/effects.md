@@ -1,5 +1,20 @@
 # Effects loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/effects/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Cook and mount a GameplayEffect class with the native behavior your feature requires.
+2. Create `effects/10-camp-effects.jsonc`; replace the mock-up's class path with that mounted generated class.
+3. Give the class a stable reusable effect alias; reference it only from a consumer that supports effect IDs.
+4. Restart and verify application/removal through the consumer. An alias does not create a class or edit its defaults.
+
+**Tie-ins:** [Equipment](equipment.md) can consume granted effects; [players](players.md) provides supported player effect rules.
+
+
 **Folder:** `RuneSchema/mods/<ModName>/effects/`
 
 Reusable IDs for cooked GameplayEffect classes.
@@ -8,7 +23,7 @@ Reusable IDs for cooked GameplayEffect classes.
 
 `/effects` assigns virtual IDs to cooked GameplayEffect classes.
 
-```json
+```jsonc
 {
   "Movement/Dash": {
     "Class": "/Game/MyMod/Effects/GE_Dash.GE_Dash_C"

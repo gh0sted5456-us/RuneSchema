@@ -1,5 +1,9 @@
 # Helpy icon cache
 
+For typed item/journal metadata, exported paths and persistence IDs, use
+[content cache bundles](CACHE-BUNDLES.md). The default export is now
+`.rsmk-cache`; the legacy format below remains supported for pictures only.
+
 Helpy stores captured item icons under
 `%LOCALAPPDATA%\RuneSchema\HELPY\runtime\saved\cache\item-icons`.
 Settings > Icon cache provides **Clean Icon Cache** and **Open cache folder**

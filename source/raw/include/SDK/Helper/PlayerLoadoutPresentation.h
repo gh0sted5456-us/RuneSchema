@@ -27,10 +27,20 @@ inline nlohmann::json Read(RC::Unreal::UObject* controller){
     try{auto* loadout=EquipmentDelivery::Owned(controller,TEXT("LoadoutComponent"),TEXT("/Script/Dominion.LoadoutComponent"));
         const auto slots=EquipmentDelivery::Slots(loadout);if(slots.size()>32)return result;
         auto rows=Json::array();for(size_t i=0;i<slots.size();++i){auto* item=slots[i];if(!item)continue;
-            auto* data=EquipmentDelivery::Data(item);auto* type=DragonWilds::ActorHelper::ResolveClass(TEXT("/Script/Dominion.EquipmentData"));
+            auto* data=EquipmentDelivery::Data(item);auto* type=DragonWilds::ActorHelper::ResolveClass(TEXT("/Script/Dominion.ItemData"));
             if(!type||!data||!data->IsA(type))continue;
             const auto path=RC::to_string(data->GetPathName());const auto meta=AssetSearch::ItemMetadata(path);
-            rows.push_back({{"Slot",i},{"Path",path},{"Name",meta.value("Name",std::string{})},{"Icon",meta.value("Icon",std::string{})}});
+            Json row={{"Slot",i},{"Path",path},{"Name",meta.value("Name",std::string{})},{"Icon",meta.value("Icon",std::string{})}};
+            try{
+                // Native, non-networked integer getters verified against the
+                // item instance, not base ItemData durability or a guessed %.
+                EquipmentDelivery::Call current(item,TEXT("/Script/Dominion.Item:GetDurability"),1),maximum(item,TEXT("/Script/Dominion.Item:GetMaxDurability"),1);
+                (void)current.Integer();(void)maximum.Integer();current.Invoke();maximum.Invoke();
+                const auto value=current.Integer(),limit=maximum.Integer();
+                if(value>=0&&limit>0&&limit<=1000000000&&value<=limit)row["Durability"]={{"Current",value},{"Maximum",limit},{"ObservedUnixMs",PlayerVitals::Now()}};
+                else row["DurabilityReason"]="No valid positive native durability range reported";
+            }catch(...){row["DurabilityReason"]="Native durability contract unavailable";}
+            rows.push_back(std::move(row));
         }return {{"Items",std::move(rows)},{"ObservedUnixMs",PlayerVitals::Now()}};
     }catch(...){return result;}
 }

@@ -67,6 +67,7 @@ bool GameWindow(HWND hwnd) {
 }
 using Page=HelpyNavigation::Page;
 Page CurrentPage=Page::Home;
+Page LastPlayersPage=Page::Items,LastWorldPage=Page::Map;
 std::array<bool,2> DetachedWorkspaces{}; // Map, Recipes; presentation state only.
 bool& WorkspaceDetached(size_t index){return index==4?PlayerInventoryPanel::Detached:index==3?MapPanel::Data.PartyDetached:index==2?RuntimeDetailsPanel::Detached:DetachedWorkspaces.at(index);}
 HelpyTaskbar::Window WorkspaceTask(size_t index){return std::array{HelpyTaskbar::Window::Map,HelpyTaskbar::Window::Recipes,HelpyTaskbar::Window::Runtime,HelpyTaskbar::Window::Party,HelpyTaskbar::Window::Inventory}.at(index);}
@@ -88,6 +89,7 @@ struct HomeDetailImage {ID3D11ShaderResourceView* Texture=nullptr;UINT Width=0,H
 std::array<HomeDetailImage,3> HomeDetailImages{};
 int HomeLinkDetails=-1;
 std::array<ID3D11ShaderResourceView*,4> HomeLinkTextures{};
+ID3D11ShaderResourceView* HomeNexusAccentTexture=nullptr;
 struct HomeLink {const char* Name;const char* Description;const char* Url;const wchar_t* NativeUrl;const char* Asset;};
 constexpr std::array HomeLinks{
     HomeLink{"GitHub","RuneSchema source, releases, and issue tracking.","https://github.com/gh0sted5456-us/RuneSchema",L"https://github.com/gh0sted5456-us/RuneSchema","github.png"},
@@ -221,7 +223,7 @@ void RenderToasts(const HelpyImGuiTheme::Theme& t){
     }
 }
 const char* PageTitle(Page page) {
-    return HelpyNavigation::Title(page);
+    return HelpyNavigation::Title(HelpyNavigation::Parent(page));
 }
 HelpyImGuiTheme::Icon PageIcon(Page page) {
     using I=HelpyImGuiTheme::Icon;switch(page){case Page::Items:return I::Item;case Page::Spawns:return I::Resource;
@@ -229,7 +231,7 @@ HelpyImGuiTheme::Icon PageIcon(Page page) {
     case Page::Authoring:case Page::SaveEditor:return I::Authoring;case Page::Tools:return I::Tools;case Page::Settings:return I::Settings;case Page::LiveLog:return I::LiveLog;case Page::DedicatedServer:return I::Server;default:return I::Info;}
 }
 bool NavItem(Page page,const HelpyImGuiTheme::Theme& t) {
-    const bool active=CurrentPage==page;ImGui::PushID(static_cast<int>(page));
+    const bool active=HelpyNavigation::Parent(CurrentPage)==page;ImGui::PushID(static_cast<int>(page));
     ImGui::PushStyleColor(ImGuiCol_Header,active?t.navigationActive:t.navigation);
     ImGui::PushStyleColor(ImGuiCol_HeaderHovered,t.navigationHover);ImGui::PushStyleColor(ImGuiCol_HeaderActive,t.navigationActive);
     const float w=ImGui::GetContentRegionAvail().x;const bool compact=w<t.X(120.0f);
@@ -237,11 +239,50 @@ bool NavItem(Page page,const HelpyImGuiTheme::Theme& t) {
     const auto textSize=ImGui::CalcTextSize(PageTitle(page),nullptr,false,textWidth);
     const float h=std::max(t.Y(t.navigationItemHeight),textSize.y+t.Y(18.0f));
     const bool clicked=ImGui::Selectable("##nav",active,ImGuiSelectableFlags_None,ImVec2(w,h));
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::Navigation[PageTitle(page)]=HelpyPreviewHooks::LastRect();
+#endif
     const auto a=ImGui::GetItemRectMin(),b=ImGui::GetItemRectMax();const float icon=t.Y(t.navigationIconSize);
     HelpyImGuiTheme::DrawIcon(PageIcon(page),ImVec2(compact?(a.x+b.x)*0.5f:a.x+t.X(18.0f),(a.y+b.y)*0.5f),icon,active?t.accentHover:t.icon);
     if(!compact)ImGui::GetWindowDrawList()->AddText(ImGui::GetFont(),ImGui::GetFontSize(),ImVec2(a.x+t.X(36.0f),a.y+(h-textSize.y)*.5f),ImGui::GetColorU32(active?t.text:t.textDisabled),PageTitle(page),nullptr,textWidth);
     else if(ImGui::IsItemHovered())ImGui::SetTooltip("%s",PageTitle(page));
-    ImGui::PopStyleColor(3);ImGui::PopID();if(clicked)CurrentPage=page;return clicked;
+    ImGui::PopStyleColor(3);ImGui::PopID();
+    if(clicked){
+        const auto target=page==Page::Items?LastPlayersPage:page==Page::Map?LastWorldPage:page;
+        CurrentPage=HelpyNavigation::Available(target,t.workspaces,HelpyEnvironment::Server())?target:page;
+    }return clicked;
+}
+
+void RenderWorkspaceTabs(const HelpyImGuiTheme::Theme& t){
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::WorkspaceTabs.clear();
+#endif
+    const auto parent=HelpyNavigation::Parent(CurrentPage);
+    if(parent!=Page::Items&&parent!=Page::Map)return;
+    // Route-backed tabs change immediately and wrap on narrow windows. There
+    // is no second, deferred ImGui selection that can dispatch an old editor.
+    const float width=ImGui::GetContentRegionAvail().x,gap=ImGui::GetStyle().ItemSpacing.x;
+    float used=0;ImGui::PushID(parent==Page::Items?"players-workflows":"world-workflows");
+    const auto tab=[&](Page page){
+        if(!HelpyNavigation::Available(page,t.workspaces,HelpyEnvironment::Server()))return;
+        const auto label=HelpyNavigation::TabTitle(page);
+        const float side=std::min(width,ImGui::CalcTextSize(label).x+ImGui::GetStyle().FramePadding.x*2+t.X(12));
+        if(used>0&&used+gap+side<=width){ImGui::SameLine();used+=gap;}else used=0;
+        const bool active=CurrentPage==page;
+        ImGui::PushStyleColor(ImGuiCol_Header,active?t.navigationActive:t.panel);
+        ImGui::PushStyleColor(ImGuiCol_Text,active?t.accentHover:t.textDisabled);
+        const bool clicked=ImGui::Selectable(label,active,ImGuiSelectableFlags_None,{side,ImGui::GetFrameHeight()});
+        ImGui::PopStyleColor(2);
+        if(active){const auto a=ImGui::GetItemRectMin(),b=ImGui::GetItemRectMax();ImGui::GetWindowDrawList()->AddLine({a.x,b.y},{b.x,b.y},ImGui::GetColorU32(t.accent),t.Y(2));}
+#if defined(HELPY_PREVIEW)
+        HelpyPreviewHooks::WorkspaceTabs[label]=HelpyPreviewHooks::LastRect();
+#endif
+        if(clicked)CurrentPage=page;used+=side;
+    };
+    if(parent==Page::Items)for(auto page:HelpyNavigation::PlayerTabs)tab(page);
+    else for(auto page:HelpyNavigation::WorldTabs)tab(page);
+    ImGui::PopID();ImGui::Separator();
+    if(parent==Page::Items)LastPlayersPage=CurrentPage;else LastWorldPage=CurrentPage;
 }
 
 bool ReadBrandPixels(const char* asset,UINT& width,UINT& height,std::vector<unsigned char>& pixels){
@@ -295,7 +336,14 @@ void LoadBrandTextures(ID3D11Device* device) {
     for(size_t i=0;i<detailAssets.size();++i){auto& image=HomeDetailImages[i];std::vector<unsigned char> pixels;
         if(ReadBrandPixels(detailAssets[i],image.Width,image.Height,pixels))image.Texture=UploadBrandPixels(device,image.Width,image.Height,pixels);
     }
-    for(size_t i=0;i<HomeLinks.size();++i)HomeLinkTextures[i]=LoadBrand(device,HomeLinks[i].Asset);
+    for(size_t i=0;i<HomeLinks.size();++i){
+        if(i!=1){HomeLinkTextures[i]=LoadBrand(device,HomeLinks[i].Asset,true);continue;}
+        UINT width=0,height=0;std::vector<unsigned char> pixels;
+        if(ReadBrandPixels(HomeLinks[i].Asset,width,height,pixels)){
+            auto accent=pixels;for(size_t p=0;p<pixels.size();p+=4){HelpyBranding::CommunityLayer(pixels.data()+p,false);HelpyBranding::CommunityLayer(accent.data()+p,true);}
+            HomeLinkTextures[i]=UploadBrandPixels(device,width,height,pixels);HomeNexusAccentTexture=UploadBrandPixels(device,width,height,accent);
+        }
+    }
     RuntimeDetailsPanel::GameLogo=ImTextureRef(GameBrandTexture);
     LoadingRingTexture=LoadBrand(device,"loading-ring.png",true);HelpyLoadingIndicator::Texture=ImTextureRef(LoadingRingTexture);
     BrandTexture=LoadBrand(device,"RuneSchema.png",false,1);
@@ -324,9 +372,11 @@ void LoadBrandTextures(ID3D11Device* device) {
     ItemGridPicker::ModLogo=ImTextureRef(BrandTexture);ItemGridPicker::ModLogoAccent=ImTextureRef(BrandAccentTexture);
 }
 void ReleaseBrandTextures(bool shutdownBackgrounds=true) {
+    SourceBanners::Shutdown();
     if(shutdownBackgrounds)HelpyBackgrounds::Shutdown();
     for(auto& image:HomeDetailImages){if(image.Texture)image.Texture->Release();image={};}
     for(auto*& texture:HomeLinkTextures)if(texture){texture->Release();texture=nullptr;}
+    if(HomeNexusAccentTexture){HomeNexusAccentTexture->Release();HomeNexusAccentTexture=nullptr;}
     for(auto& part:SplashSprites){if(part.Texture)part.Texture->Release();part={};}
     ItemGridPicker::ModLogo={};ItemGridPicker::ModLogoAccent={};HelpyLoadingIndicator::Texture={};RuntimeDetailsPanel::GameLogo={};
     for(auto** view:{&BrandTexture,&BrandAccentTexture,&GameBrandTexture,&LoadingRingTexture,&HomeBannerTexture,&SteamTexture,&EpicTexture,&XboxTexture})if(*view){(*view)->Release();*view=nullptr;}
@@ -351,20 +401,15 @@ void DrawRuneExit(ImDrawList* draw,ImVec2 a,ImVec2 b,const HelpyImGuiTheme::Them
     if(BrandAccentTexture){auto tint=theme.accent;tint.w=opacity*exit.Fade;draw->AddImage(ImTextureRef(BrandAccentTexture),a,b,{0,0},{1,1},ImGui::GetColorU32(tint));}
 }
 constexpr std::array HomeDestinations{
-    HomeDestination{Page::Items,"Items",HelpyImGuiTheme::Icon::Item,"Browse items, inspect their details, and drag them into your delivery cart."},
-    HomeDestination{Page::Map,"Map",HelpyImGuiTheme::Icon::Map,"Explore the map, find players, and use the available travel and placement tools."},
-    HomeDestination{Page::Journal,"Journal",HelpyImGuiTheme::Icon::Info,HelpyNavigation::Description(Page::Journal)},
-    HomeDestination{Page::Creation,"Transmog",HelpyImGuiTheme::Icon::Appearance,"Combine an item's stats with a compatible appearance, or create your own item."},
-    HomeDestination{Page::Recipes,"Recipes",HelpyImGuiTheme::Icon::Lab,"Find crafting recipes or build one with ingredients, a station, and outputs."},
+    HomeDestination{Page::Items,"Players",HelpyImGuiTheme::Icon::Item,"Items, Clone, Recipes and the optional Character Editor. Review your cart or offline draft before delivery or export."},
+    HomeDestination{Page::Map,"World",HelpyImGuiTheme::Icon::Map,"Map and detachable party rows, Spawns, and Journal. Travel and placement still require confirmation."},
     HomeDestination{Page::Settings,"Settings",HelpyImGuiTheme::Icon::Settings,"Personalize Helpy, choose which workspaces appear, and edit RuneSchema settings."},
-    HomeDestination{Page::Spawns,"Spawns",HelpyImGuiTheme::Icon::Resource,HelpyNavigation::Description(Page::Spawns)},
     HomeDestination{Page::Authoring,"Authoring Tools",HelpyImGuiTheme::Icon::Authoring,HelpyNavigation::Description(Page::Authoring)},
     HomeDestination{Page::Tools,"Tools",HelpyImGuiTheme::Icon::Tools,HelpyNavigation::Description(Page::Tools)},
     HomeDestination{Page::LiveLog,"Live Log",HelpyImGuiTheme::Icon::LiveLog,HelpyNavigation::Description(Page::LiveLog)},
-    HomeDestination{Page::SaveEditor,"Save Editor",HelpyImGuiTheme::Icon::Authoring,HelpyNavigation::Description(Page::SaveEditor)},
     HomeDestination{Page::DedicatedServer,"Server / Co-op",HelpyImGuiTheme::Icon::Server,HelpyNavigation::Description(Page::DedicatedServer)}
 };
-static_assert(HomeDestinations.size()+1==HelpyNavigation::Pages.size(),"Every workspace needs a Home tile");
+static_assert(HomeDestinations.size()+1==HelpyNavigation::SidebarPages.size(),"Every top-level workspace needs a Home tile");
 size_t HomeFocused=0;
 double HomeLinkTouched=0;
 ImVec2 HomeLinkAnchor{};
@@ -482,7 +527,11 @@ void RenderHome(const HelpyImGuiTheme::Theme& theme){
 #if defined(HELPY_PREVIEW)
         PreviewHomeLinks[i]=HelpyPreviewHooks::LastRect();
 #endif
-        if(HomeLinkTextures[i]){const float inset=theme.Y(5);draw->AddImage(ImTextureRef(HomeLinkTextures[i]),{start.x+inset,start.y+inset},{start.x+linkSize-inset,start.y+linkSize-inset});}
+        if(HomeLinkTextures[i]){const float inset=theme.Y(5);const ImVec2 a{start.x+inset,start.y+inset},b{start.x+linkSize-inset,start.y+linkSize-inset};
+            const bool hovered=ImGui::IsItemHovered()||ImGui::IsItemFocused();
+            draw->AddImage(ImTextureRef(HomeLinkTextures[i]),a,b,{0,0},{1,1},ImGui::GetColorU32(i==1?theme.text:hovered?theme.accentHover:theme.accent));
+            if(i==1&&HomeNexusAccentTexture)draw->AddImage(ImTextureRef(HomeNexusAccentTexture),a,b,{0,0},{1,1},ImGui::GetColorU32(hovered?theme.accentHover:theme.accent));
+        }
         if(ImGui::IsItemHovered()||(ImGui::IsItemFocused()&&ImGui::GetIO().NavVisible)){
             HomeLinkDetails=static_cast<int>(i);HomeLinkTouched=ImGui::GetTime();HomeLinkAnchor={start.x+linkSize*.5f,start.y-theme.Y(6)};
         }
@@ -1162,7 +1211,12 @@ void RenderSettings(const HelpyImGuiTheme::Theme& t) {
     ImGui::Dummy(ImVec2(1,t.Y(12.0f)));ImGui::SeparatorText("Hotkeys");ImGui::Text("F2");ImGui::SameLine(t.X(70.0f));ImGui::TextUnformatted("Toggle RSMK");ImGui::Text("F5");ImGui::SameLine(t.X(70.0f));ImGui::TextUnformatted("Reload live skin");
 }
 void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
-    if(!HelpyNavigation::Available(CurrentPage,t.workspaces,HelpyEnvironment::Server()))CurrentPage=Page::Settings;
+    if(!HelpyNavigation::Available(CurrentPage,t.workspaces,HelpyEnvironment::Server())){
+        const auto parent=HelpyNavigation::Parent(CurrentPage);
+        CurrentPage=parent!=CurrentPage?parent:Page::Settings;
+    }
+    if(HelpyNavigation::Parent(CurrentPage)==Page::Items)LastPlayersPage=CurrentPage;
+    if(HelpyNavigation::Parent(CurrentPage)==Page::Map)LastWorldPage=CurrentPage;
     const bool showSidebar=HelpyNavigation::ShowSidebar(CurrentPage);
 #if defined(HELPY_PREVIEW)
     PreviewSidebarVisible=showSidebar;
@@ -1210,7 +1264,7 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
     centered("RuneSchema");
     ImGui::Dummy(ImVec2(1,t.Y(8.0f)));ImGui::Separator();ImGui::Dummy(ImVec2(1,t.Y(5.0f)));
     if(ImGui::BeginChild("##helpy-destinations",ImVec2(0,0),false))
-        for(auto page:HelpyNavigation::Pages)if(HelpyNavigation::Available(page,t.workspaces,HelpyEnvironment::Server()))NavItem(page,t);
+        for(auto page:HelpyNavigation::SidebarPages)if(HelpyNavigation::Available(page,t.workspaces,HelpyEnvironment::Server()))NavItem(page,t);
     ImGui::EndChild();
     ImGui::EndChild();ImGui::PopStyleColor();
 
@@ -1230,6 +1284,7 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
     }
     ImGui::BeginChild("##helpy-content",ImVec2(0,0),false,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
     RenderInformationBar(t);
+    RenderWorkspaceTabs(t);
     if(CurrentPage==Page::Map||CurrentPage==Page::Recipes){
         const size_t index=CurrentPage==Page::Map?0:1;
         if(HelpyImGuiTheme::SoftButton(DetachedWorkspaces[index]?"Dock back":index==0?"Detach Map":"Detach Recipes"))DetachedWorkspaces[index]=!DetachedWorkspaces[index];
@@ -1264,7 +1319,7 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
                 case Page::Recipes:if(!DetachedWorkspaces[1])SpawnToolsPanel::Render(SpawnToolsPanel::View::Recipes);else ImGui::TextWrapped("Recipes is open in a separate window. The shared Item Bay remains available below or detached.");break;
                 case Page::Map:if(!DetachedWorkspaces[0])MapPanel::Render();else ImGui::TextWrapped("Map is open in a separate window. Minimized windows can be restored from Helpy's taskbar.");break;
                 case Page::LiveLog:LiveLogPanel::Render();break;
-                case Page::SaveEditor:SaveEditorPanel::Render();break;
+                case Page::SaveEditor:SpawnToolsPanel::RefreshSnapshot(0);SaveEditorPanel::Render(SpawnToolsPanel::UiSnapshot,SpawnToolsPanel::UiRevision);break;
                 case Page::Journal:JournalPanel::Render();break;
                 case Page::DedicatedServer:
                     ImGui::SeparatorText("Session tools");
@@ -1280,9 +1335,9 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
                     if(ImGui::BeginTabBar("Configuration sections")){
                         if(ImGui::BeginTabItem("Workspaces")){
                             auto& options=HelpyImGuiTheme::Current.workspaces;bool changed=false;
-                            ImGui::TextWrapped("Choose which optional workspaces appear as Home tiles and in the sidebar. Your choices are saved for the next launch. Hiding a workspace does not change server permissions or discard its draft.");
+                            ImGui::TextWrapped("Choose optional workspaces and tabs. Character Editor appears inside Players; Journal appears inside World. Your choices are saved for the next launch. Hiding a section does not change permissions or discard its draft.");
                             changed|=ImGui::Checkbox("Authoring Tools",&options.Authoring);changed|=ImGui::Checkbox("Tools",&options.Tools);
-                            changed|=ImGui::Checkbox("Live Log",&options.LiveLog);changed|=ImGui::Checkbox("Save Editor",&options.SaveEditor);
+                            changed|=ImGui::Checkbox("Live Log",&options.LiveLog);changed|=ImGui::Checkbox("Character Editor",&options.SaveEditor);
                             changed|=ImGui::Checkbox("Server / Co-op",&options.ServerTools);
                             changed|=ImGui::Checkbox("Journal",&options.Journal);
                             if(changed)HelpyImGuiTheme::SaveCurrent();ImGui::EndTabItem();
@@ -1354,9 +1409,16 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
     }
     ItemGridPicker::DockedBay=false;ImGui::EndChild();
     if(SharedCartVisible&&cartAllowed){
+        const float cartPad=t.X(8);const ImVec2 cartMin{MainSurfacePosition.x+cartPad,MainSurfacePosition.y+cartPad};
+        const ImVec2 cartMax{MainSurfacePosition.x+MainSurfaceSize.x-cartPad,MainSurfacePosition.y+MainSurfaceSize.y-cartPad};
+        ImGui::SetNextWindowSizeConstraints({std::min(t.X(240),cartMax.x-cartMin.x),std::min(t.Y(220),cartMax.y-cartMin.y)},
+            {std::max(1.f,cartMax.x-cartMin.x),std::max(1.f,cartMax.y-cartMin.y)});
         ImGui::SetNextWindowSize(ImVec2(t.X(320),t.Y(440)),ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowPos(ImVec2(MainSurfacePosition.x+std::max(0.0f,MainSurfaceSize.x-t.X(340)),MainSurfacePosition.y+t.Y(95)),ImGuiCond_FirstUseEver);
         if(ImGui::Begin("Your cart",&SharedCartVisible,ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoSavedSettings)){
+            const auto position=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();
+            const ImVec2 fitted{std::clamp(position.x,cartMin.x,std::max(cartMin.x,cartMax.x-size.x)),std::clamp(position.y,cartMin.y,std::max(cartMin.y,cartMax.y-size.y))};
+            if(fitted.x!=position.x||fitted.y!=position.y)ImGui::SetWindowPos(fitted);
             if(CurrentPage==Page::Tools)SpawnToolsPanel::RefreshSnapshot(-1);
             SpawnToolsPanel::RenderCartDock(ImVec2(0,0),[]{SpawnToolsPanel::RenderCartRecipient(SpawnToolsPanel::UiSnapshot);});
         }ImGui::End();
@@ -1411,7 +1473,9 @@ void HelpyStandaloneWindow::ThreadMain() {
     const auto cleanup=[&](void*){
         m_publishedWindow=nullptr;ClosePopup();
         if(ImGui::GetCurrentContext()){
+            CharacterPreviewPanel::Shutdown();
             if(ImGui::GetIO().BackendRendererUserData)ImGui_ImplDX11_Shutdown();
+            CharacterPreviewPanel::ReleaseTexture();
             if(ImGui::GetIO().BackendPlatformUserData)ImGui_ImplWin32_Shutdown();
             ImGui::DestroyContext();
         }
@@ -1443,6 +1507,12 @@ void HelpyStandaloneWindow::ThreadMain() {
         LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());QueuePlayerRefresh(true);
     }
     m_ready=true;m_started=true;
+    // Opt-in only, once after the renderer is ready. No recurring reopen or
+    // game-thread polling; dedicated servers retain their existing entry page.
+    if(!HelpyEnvironment::Server()&&HelpySettings::OpenOnGameStart()){
+        ShowWindow(m_hwnd,SW_SHOWNOACTIVATE);m_visible=true;
+        LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());
+    }
     MSG msg{};bool done=false,themeKeyDown=false;
     while(!done&&!m_stop.load()) {
         // Hotkeys belong to Helpy's window thread. No engine tick callback,
@@ -1532,6 +1602,8 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
     const char* familyNames[]{"Fallen Hoplite's Helm (Dyed Chrome)","Fallen Hoplite's Chestplate (Dyed Chrome)","Fallen Hoplite's Greaves (Dyed Chrome)","Fallen Hoplite's Helm (Dyed Gold)"};
     for(int i=1;i<=4;++i){items[i]["Name"]=familyNames[i-1];items[i]["SourceKind"]="modded";items[i]["SourceName"]="Dye";}
     for(const auto* type:{"NPC","AI","Resource"})for(int i=0;i<8;++i){const auto id=std::string(type)+std::to_string(i);definitions.push_back({{"Key",id},{"Name",std::string(type==std::string_view("Resource")?"Oak tree":type==std::string_view("NPC")?"Village trader":"Wild enemy")+" "+std::to_string(i+1)},{"Class","/Preview/Actors/"+id+"."+id+"_C"},{"Type",type},{"ResourceFamily","Tree"},{"Available",true},{"Loaded",true},{"TemporaryAllowed",false},{"PermanentAllowed",false},{"Reason","Preview data; gameplay actions disabled"}});}
+    for(auto& definition:definitions){definition["SourceName"]="Fixture source";if(definition["Type"]=="AI")definition["SpawnableCharacter"]=true;}
+    MapPanel::Data.PartyDetached=false; // Exercise the default party rows beneath the map.
     nlohmann::json snapshot={{"Status","Sample data preview - game actions disabled."},{"Items",items},{"Definitions",definitions},{"Players",nlohmann::json::array({{{"Path","preview-player"},{"Name","Preview player"}}})},{"CatalogReady",true},{"CatalogStatus","Sample catalog for layout review"}};
     snapshot["Players"][0]["RoleStatus"]=PlayerStatus::Describe(14,{1,2,4,8,128},true);
     std::deque<nlohmann::json> queries;uint64_t revision=10;bool previewLoading=false;
@@ -1571,7 +1643,12 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
         if(action=="RecipeWorkspaceCatalog"){
             detailReceipts[id]={{"RecipeWorkspaceCatalog",{{"Stations",nlohmann::json::array({{{"Id","preview-station"},{"DisplayName","Crafting station"},{"Icon",QuickDecorations::CraftingStationIcon},{"Path","/Preview/Station"}}})},{"Recipes",nlohmann::json::array()}}}};return true;
         }
-        if(action=="InspectPlayerInventory"||action=="InspectContainerInventory"){detailReceipts[id]={{"InventorySnapshot",{{"Items",nlohmann::json::array({{{"Name","Ash Logs"},{"Path","/Preview/Items/Ash.Ash"},{"Icon",items[0]["Icon"]},{"Slot",0},{"Count",12}}})},{"Player",request.value("Player",std::string{})},{"PlayerGuid",request.value("PlayerGuid",std::string{})},{"Generation",uint64_t(1)},{"Container",action=="InspectContainerInventory"},{"LockState","Unknown"},{"CanDeposit",false},{"CanOverrideUnlock",false},{"Personal",request.value("Personal",false)},{"ObservedUnixMs",PartyMemberView::Now()},{"HasMore",false},{"Slots",32}}},{"Status","Synthetic native inventory; no game actions called."}};return true;}
+        if(action=="InspectPlayerInventory"||action=="InspectContainerInventory"){
+            const bool storage=action=="InspectContainerInventory"||request.value("Personal",false);const int offset=request.value("Offset",0);
+            auto rows=nlohmann::json::array();if(offset==0){rows.push_back({{"Name","Ash Logs"},{"Path","/Preview/Items/Ash.Ash"},{"Icon",items[0]["Icon"]},{"Slot",0},{"Count",12},{"Group","Quick slots"}});rows.push_back({{"Name","Copper ore"},{"Path",items[3]["Path"]},{"Icon",items[0]["Icon"]},{"Slot",8},{"Count",5},{"Group","Inventory"}});}
+            else{rows.push_back({{"Name","Fire Rune"},{"Path",items[9]["Path"]},{"Icon",items[0]["Icon"]},{"Slot",40},{"Count",6},{"Group","Runes"}});rows.push_back({{"Name","Wooden Arrow"},{"Path",items[11]["Path"]},{"Icon",items[0]["Icon"]},{"Slot",48},{"Count",20},{"Group","Ammo"}});}
+            detailReceipts[id]={{"InventorySnapshot",{{"Items",rows},{"Loadout",nlohmann::json::array()},{"Offset",offset},{"NextOffset",offset+32},{"Player",request.value("Player",std::string{})},{"PlayerGuid",request.value("PlayerGuid",std::string{})},{"Generation",uint64_t(1)},{"Container",action=="InspectContainerInventory"},{"LockState","Unknown"},{"CanDeposit",false},{"CanOverrideUnlock",false},{"Personal",request.value("Personal",false)},{"ObservedUnixMs",PartyMemberView::Now()},{"HasMore",!storage&&offset==0},{"Slots",storage?32:64}}},{"Status","Synthetic native inventory; no game actions called."}};return true;
+        }
         if(request.value("Action",std::string{})!="InspectClone"||!request.value("InspectDetails",false))return false;
         const auto source=request.value("Source",std::string{});
         detailReceipts[request.at("_RequestId").get<uint64_t>()]={{"ItemDetails",{{"Source",source},{"Name","Stone"},{"PowerLevel",0},
@@ -1625,11 +1702,17 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
             LiveLogPanel::History.Append("[2026-10-16T12:30:00.000Z thread=14] [RuneSchema] [summary] recipes loaded=46515 errors=0");
             LiveLogPanel::History.Append("[2026-10-16T12:30:01.000Z thread=14] [RuneSchema] [warning] [PERFORMANCE][SLOW-WORK] phase=npcs.spawn:ExampleVendor elapsed_ms=185");
             LiveLogPanel::History.Append("[2026-10-16T12:30:02.000Z thread=14] [RuneSchema] [error] [PERSISTENCE-PRUNER] Duplicate quest owner marker. ExampleMod and OldExampleMod declare the same quest.");
+            LiveLogPanel::History.Append("[2026-10-18T12:30:03.000Z thread=14] [RuneSchema] [warning] [RS-CACHE-001] Source changed: ExampleMod. Previous presentation retained.");
+            LiveLogPanel::History.Append("[2026-10-18T12:30:04.000Z thread=14] [RuneSchema] [warning] [RS-CACHE-001] Source changed: ExampleMod. Previous presentation retained.");
+            LiveLogPanel::History.Append("[2026-10-18T12:30:05.000Z thread=14] [RuneSchema] [warning] [RS-CACHE-001] Source changed: ExampleMod. Previous presentation retained.");
             LiveLogPanel::Selected=LiveLogPanel::History.Rows.back().Id;
             LiveLogPanel::Streams[1].History.Clear();
             LiveLogPanel::Streams[1].History.Append("[2026-10-17 12:30:00] UE4SS - preview fixture (not an installed build)");
             LiveLogPanel::Streams[1].History.Append("[2026-10-17 12:30:01] [Lua] [ExampleMod] Fixture addon initialized");
             LiveLogPanel::Streams[1].History.Append("[2026-10-17 12:30:02] [RegisterHook] Fixture callback registered");
+            LiveLogPanel::Streams[2].History.Clear();LiveLogPanel::Streams[2].History.Append("[2026.10.18-12.30.01:123][0]LogInit: Display: Preview game log fixture");
+            LiveLogPanel::Streams[2].History.Append("[2026.10.18-12.30.02:123][0]LogEOSSDK: Warning: Preview connection delayed");
+            LiveLogPanel::Streams[3].History.Clear();LiveLogPanel::Streams[3].History.Append("[2026.10.18-12.30.02:123][0]LogEOSSDK: Warning: Preview connection delayed");
             {
                 SplashEntered=false;SplashExit={};SplashStarted=ImGui::GetTime();
                 for(int i=0;i<3;++i)RenderFrame();
@@ -1751,6 +1834,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 HelpyImGuiTheme::Current.accent={1.f,.35f,.25f,1.f};PreviewCapture=output/"home-coral.png";RenderFrame();PreviewCapture.clear();
                 HelpyImGuiTheme::Current.accent=accent;CurrentPage=Page::LiveLog;}
             LiveLogPanel::PreviewUE4SS=true;for(int i=0;i<4;++i)RenderFrame();PreviewCapture=output/"live-log-ue4ss.png";RenderFrame();PreviewCapture.clear();LiveLogPanel::PreviewUE4SS=false;
+            for(const int stream:{2,3}){LiveLogPanel::PreviewStream=stream;for(int i=0;i<3;++i)RenderFrame();PreviewCapture=output/(stream==2?"live-log-game.png":"live-log-eos.png");RenderFrame();PreviewCapture.clear();}LiveLogPanel::PreviewStream=-1;
             const auto previousEnvironment=HelpyEnvironment::Current;HelpyEnvironment::Current=HelpyEnvironment::Kind::Dedicated;
             DedicatedServerPanel::Preview=true;DedicatedServerPanel::Initialized=true;DedicatedServerPanel::File=L"Preview only/RSDragonwilds/Saved/Config/WindowsServer/DedicatedServer.ini";
             DedicatedServerPanel::Draft.emplace("[/Script/Dominion.DedicatedServerSettings]\r\nOwnerId=example-account-id\r\nServerName=Example RuneSchema server\r\nAdminPassword=preview-not-a-real-password\r\nDefaultWorldName=ExampleWorld\r\nWorldPassword=\r\nKnownPlayerList=(UserId=fixture,LastAdminPassword=must-stay-redacted)\r\n");
@@ -1814,7 +1898,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                     CurrentPage=Page::Home;for(int i=0;i<2;++i)RenderFrame();
                     if(PreviewSidebarVisible)throw std::runtime_error("Home did not collapse its sidebar");
                     if(!PreviewHomeFits){PreviewCapture=output/"home-layout-failed.png";RenderFrame();PreviewCapture.clear();throw std::runtime_error("Home controls or cache progress escaped the visible area, workspace mask="+std::to_string(mask));}
-                    for(auto page:HelpyNavigation::Pages)if(page!=Page::Home){
+                    for(auto page:HelpyNavigation::SidebarPages)if(page!=Page::Home){
                         size_t count=0;
                         for(size_t index=0;index<HomeDestinations.size();++index)if(HomeDestinations[index].Target==page&&PreviewHomeTiles[index].z>PreviewHomeTiles[index].x)++count;
                         if(count!=(HelpyNavigation::Available(page,HelpyImGuiTheme::Current.workspaces,HelpyEnvironment::Server())?1:0))
@@ -1838,6 +1922,32 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                     if(CurrentPage!=HomeDestinations[index].Target)throw std::runtime_error("Home destination opened the wrong tool");
                     if(!PreviewSidebarVisible)throw std::runtime_error("Opening a Home tile did not restore navigation");
                 }
+                // Exercise real tab and sidebar input, not only direct routes.
+                const auto cartBeforeGrouping=ItemGridPicker::SharedCart.Payload();
+                CurrentPage=Page::Items;for(int i=0;i<4;++i)RenderFrame();
+                for(auto page:HelpyNavigation::PlayerTabs){
+                    if(!HelpyNavigation::Available(page,enabledWorkspaces,HelpyEnvironment::Server()))continue;
+                    const auto label=HelpyNavigation::TabTitle(page);click(Hooks::WorkspaceTabs.at(label));
+                    if(CurrentPage!=page)throw std::runtime_error(std::string("Players tab did not open: ")+label);
+                }
+                const auto lastPlayerTab=CurrentPage;
+                PreviewCapture=output/"players-grouped.png";RenderFrame();PreviewCapture.clear();
+                CurrentPage=Page::Map;for(int i=0;i<4;++i)RenderFrame();
+                for(auto page:HelpyNavigation::WorldTabs){
+                    if(!HelpyNavigation::Available(page,enabledWorkspaces,HelpyEnvironment::Server()))continue;
+                    const auto label=HelpyNavigation::TabTitle(page);click(Hooks::WorkspaceTabs.at(label));
+                    if(CurrentPage!=page)throw std::runtime_error(std::string("World tab did not open: ")+label);
+                }
+                const auto lastWorldTab=CurrentPage;
+                PreviewCapture=output/"world-grouped.png";RenderFrame();PreviewCapture.clear();
+                click(Hooks::Navigation.at("Players"));
+                if(CurrentPage!=lastPlayerTab)throw std::runtime_error("Players did not remember its previous workflow");
+                click(Hooks::Navigation.at("World"));
+                if(CurrentPage!=lastWorldTab)throw std::runtime_error("World did not remember its previous workflow");
+                if(ItemGridPicker::SharedCart.Payload()!=cartBeforeGrouping)throw std::runtime_error("Grouped navigation changed the delivery cart");
+                HelpyImGuiTheme::Current.workspaces.SaveEditor=false;CurrentPage=Page::SaveEditor;for(int i=0;i<4;++i)RenderFrame();
+                if(CurrentPage!=Page::Items||Hooks::WorkspaceTabs.contains("Character Editor"))throw std::runtime_error("Hidden Character Editor did not return to Players");
+                HelpyImGuiTheme::Current.workspaces=enabledWorkspaces;
                 CurrentPage=Page::Home;for(int i=0;i<3;++i)RenderFrame();
                 if(!HomeBannerTexture||!BrandTexture)throw std::runtime_error("Discord banner or centered Home logo is missing");
                 for(size_t index=0;index<HomeLinks.size();++index){
@@ -1977,11 +2087,30 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
             JournalAuthorPanel::Template(NativeJournalCache::Entries[0]);for(int i=0;i<4;++i)RenderFrame();PreviewCapture=output/"journal-author.png";RenderFrame();PreviewCapture.clear();
             CurrentPage=Page::SaveEditor;
             if(!AuthoringClient::Submit("SaveEditorList"))throw std::runtime_error("Save editor list admission failed");AuthoringClient::Poll(true);RenderFrame();
+            for(int i=0;i<8;++i){AuthoringClient::Poll(true);RenderFrame();} // Drain automatic studio startup reads before the next user action.
             if(!AuthoringClient::Submit("SaveEditorOpen",{{"Path","preview-character.json"},{"Offline",true}}))throw std::runtime_error("Save editor open admission failed");AuthoringClient::Poll(true);RenderFrame();
-            AuthoringClient::Poll(true);RenderFrame(); // Complete the inventory page requested by the production view.
+            for(int i=0;i<8;++i){AuthoringClient::Poll(true);RenderFrame();} // Appearance tables, inventory and one bounded preview request.
+            SaveEditorPanel::StudioShowPreview=false;SaveEditorPanel::FocusInventoryGrid=true;for(int i=0;i<3;++i)RenderFrame();
+            if(SaveEditorPanel::InventoryRecordTable||!SaveEditorPanel::SavedPlacardsDrawn)throw std::runtime_error("Saved inventory did not use the shared Item Bay placards");
+            if(!HelpyPreviewHooks::InventorySearchId||HelpyPreviewHooks::InventorySearchId==HelpyPreviewHooks::BaySearchId||HelpyPreviewHooks::InventoryRefreshId==HelpyPreviewHooks::BayRefreshId)throw std::runtime_error("Inventory and Item Bay share Search/Refresh IDs");
+            if(std::abs((HelpyPreviewHooks::InventoryViewport.w-HelpyPreviewHooks::InventoryViewport.y)-(HelpyPreviewHooks::Browser.w-HelpyPreviewHooks::Browser.y))>1.f)throw std::runtime_error("Inventory and Item Bay grid heights differ");
+            for(const auto slot:LoadoutEligibility::Slots){
+                SaveEditorPanel::StudioSlot=std::string(slot);SaveEditorPanel::StudioSlotQuery.clear();SaveEditorPanel::StudioSlotRows=nlohmann::json::array();SaveEditorPanel::StudioSlotOffset=0;SaveEditorPanel::StudioSlotMore=SaveEditorPanel::StudioSlotOpen=true;
+                for(int i=0;i<5;++i){AuthoringClient::Poll(true);RenderFrame();}
+                if(SaveEditorPanel::StudioSlotRows.empty()||!LoadoutEligibility::Matches(SaveEditorPanel::StudioSlotRows[0],slot))throw std::runtime_error("Native loadout picker failed its slot filter");
+                SaveEditorPanel::StudioResetSlot();
+            }
+            SaveEditorPanel::StudioShowPreview=true;RenderFrame();
+            {
+                CharacterPreviewFrame::Channel testPixels;const auto name="Local\\RuneSchema.CharacterPreview."+std::to_string(GetCurrentProcessId())+".UITest";testPixels.Open(name,true);
+                if(!testPixels.Lock())throw std::runtime_error("Native preview transport test lock failed");auto* frame=testPixels.Get();std::memset(frame->Pixels,160,CharacterPreviewFrame::Bytes);frame->Serial=1;std::snprintf(frame->Status,sizeof(frame->Status),"Synthetic transport check · no Unreal rendering in this fixture");testPixels.Unlock();
+                CharacterPreviewPanel::Attach(name);RenderFrame();RenderFrame();
+                if(CharacterPreviewPanel::Serial!=1||!CharacterPreviewPanel::Texture||CharacterPreviewPanel::Texture->GetTexID()==ImTextureID_Invalid)throw std::runtime_error("Native preview pixels did not reach the D3D texture");
+                CharacterPreviewPanel::Close();
+            }
             if(!AuthoringClient::Submit("SaveEditorBrowse",{{"Pointer","/GameProgress"}}))throw std::runtime_error("Save editor browse admission failed");AuthoringClient::Poll(true);RenderFrame();
             if(!AuthoringClient::Submit("SaveEditorSet",{{"Pointer","/GameProgress/Health"},{"Value",75},{"Revision",SaveEditorPanel::Browser.at("Revision")}}))throw std::runtime_error("Save editor edit admission failed");AuthoringClient::Poll(true);RenderFrame();
-            AuthoringClient::Poll(true);RenderFrame();
+            for(int i=0;i<8;++i){AuthoringClient::Poll(true);RenderFrame();}
             if(!AuthoringClient::Submit("SaveEditorPreview"))throw std::runtime_error("Save editor preview admission failed");AuthoringClient::Poll(true);RenderFrame();
             if(SaveEditorPanel::Token.empty()||SaveEditorPanel::Review.at("Count")!=1||authoringFixture.Character["GameProgress"]["Health"]!=100)throw std::runtime_error("Copy editor changed its source or lost review");
             PreviewCapture=output/"save-editor.png";RenderFrame();PreviewCapture.clear();
@@ -2108,10 +2237,10 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 SharedCartVisible=false;ItemGridPicker::ClearSharedCart();
                 CurrentPage=Page::Map;for(int i=0;i<6;++i)RenderFrame();
                 check(MapPanel::Data.Projection.Valid()&&MapPanel::Data.Texture&&MapPanel::Data.Texture->Status==ImTextureStatus_OK,"Map did not load native-format image and alignment");
-                check(Hooks::MapPartyWindow.x>=Hooks::Map.x&&Hooks::MapPartyWindow.y>=Hooks::Map.y&&Hooks::MapPartyWindow.z<=Hooks::Map.z&&Hooks::MapPartyWindow.w<=Hooks::Map.w,"Party overlay escaped the map bounds");
-                const auto partyBefore=Hooks::MapPartyWindow;const ImVec2 partyTitle{partyBefore.x+(partyBefore.z-partyBefore.x)*.5f,partyBefore.y+8};
-                drag(partyTitle,{partyTitle.x+60,partyTitle.y+35});
-                check(Hooks::MapPartyWindow.x>partyBefore.x+20&&Hooks::MapPartyWindow.y>partyBefore.y+10,"Party overlay did not move independently over the map");
+                check(Hooks::MapPartyWindow.y>=Hooks::Map.w&&Hooks::MapPartyWindow.x>=Hooks::Map.x-1&&Hooks::MapPartyWindow.z<=Hooks::Map.z+1,"Party must occupy a separate section below the map");
+                const auto partyBefore=Hooks::MapPartyWindow;for(int i=0;i<12;++i)RenderFrame();
+                check(std::abs(Hooks::MapPartyWindow.w-partyBefore.w)<1&&std::abs(Hooks::MapPartyWindow.y-partyBefore.y)<1,"Docked party section drifted between frames");
+                PreviewCapture=output/"world-party-docked.png";RenderFrame();PreviewCapture.clear();
                 check(Hooks::MapPartyRows.contains("preview-other"),"Map party list omitted a connected member");
                 mapPlacement=nlohmann::json::object();
                 mouse(center(Hooks::MapPartyRows.at("preview-other")),true);mouse(Hooks::Mouse,false,3);
@@ -2120,7 +2249,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 partyMenu();const auto contextBefore=Hooks::MapPartyContext;
                 for(int i=0;i<120;++i)RenderFrame();
                 check(std::abs((Hooks::MapPartyContext.z-Hooks::MapPartyContext.x)-(contextBefore.z-contextBefore.x))<1&&std::abs((Hooks::MapPartyContext.w-Hooks::MapPartyContext.y)-(contextBefore.w-contextBefore.y))<1,"Party context menu self-resized over repeated frames");
-                check(Hooks::MapPartyContext.y>Hooks::MapPartyWindow.y&&Hooks::MapPartyContext.z<=ImGui::GetIO().DisplaySize.x,"Party menu lost its row anchor or escaped the viewport");
+                check(Hooks::MapPartyContext.y>=0&&Hooks::MapPartyContext.w<=ImGui::GetIO().DisplaySize.y&&Hooks::MapPartyContext.z<=ImGui::GetIO().DisplaySize.x,"Party menu escaped the viewport");
                 mouse(center(Hooks::MapPartyTeleport),true);mouse(Hooks::Mouse,false,3);
                 check(mapPlacement.empty()&&MapPanel::Data.PartyTarget=="preview-other"&&!MapPanel::Data.PartyRecall,"Party menu must require confirmation before teleport");
                 PreviewCapture=output/"map-party-confirm.png";RenderFrame();PreviewCapture.clear();
@@ -2235,6 +2364,22 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                     CurrentPage=Page::Spawns;PreviewWantedSpawn=section;for(int i=0;i<4;++i)RenderFrame();check(CurrentSpawn==section,"Requested spawn section did not render");
                     PreviewCapture=output/(section==HelpyNavigation::SpawnSection::Npcs?"spawns-npcs.png":"spawns-ai.png");RenderFrame();PreviewCapture.clear();
                 }
+                // Same hide/details behavior for resources, NPCs and enemies.
+                for(const auto section:{HelpyNavigation::SpawnSection::Resources,HelpyNavigation::SpawnSection::Npcs,HelpyNavigation::SpawnSection::Ai}){
+                    CurrentPage=Page::Spawns;PreviewWantedSpawn=section;for(int i=0;i<5;++i)RenderFrame();
+                    auto& state=section==HelpyNavigation::SpawnSection::Resources?SpawnStudioPanel::Resources:section==HelpyNavigation::SpawnSection::Npcs?SpawnStudioPanel::Npcs:SpawnStudioPanel::Enemies;
+                    const auto key=section==HelpyNavigation::SpawnSection::Resources?"Resource0":section==HelpyNavigation::SpawnSection::Npcs?"NPC0":"AI0";
+                    const auto row=std::find_if(definitions.begin(),definitions.end(),[&](const auto& entry){return entry.value("Key",std::string{})==key;});
+                    check(row!=definitions.end(),"Missing spawn browser fixture");SpawnBrowserSettings::Choices.Set(*row,false);++SpawnBrowserSettings::Revision;
+                    state.ShowHidden=false;state.Selected=key;state.Rebuild=true;for(int i=0;i<3;++i)RenderFrame();
+                    check(Hooks::SpawnDetails==key,"Selected spawn details were not rendered");
+                    PreviewCapture=output/(std::string("spawn-details-")+key+".png");RenderFrame();PreviewCapture.clear();
+                    SpawnStudioPanel::SetHidden(state,*row,true);for(int i=0;i<3;++i)RenderFrame();
+                    check(!state.Selected.size()&&std::none_of(state.Matches.begin(),state.Matches.end(),[&](size_t at){return SpawnToolsPanel::UiSnapshot["Definitions"][at].value("Key",std::string{})==key;}),"Hidden spawn remained visible or selected");
+                    state.ShowHidden=true;state.Rebuild=true;for(int i=0;i<3;++i)RenderFrame();
+                    check(std::any_of(state.Matches.begin(),state.Matches.end(),[&](size_t at){return SpawnToolsPanel::UiSnapshot["Definitions"][at].value("Key",std::string{})==key;}),"Show hidden did not recover the spawn entry");
+                    SpawnStudioPanel::SetHidden(state,*row,false);state.ShowHidden=false;state.Rebuild=true;for(int i=0;i<3;++i)RenderFrame();
+                }
                 for(const auto section:{HelpyNavigation::ToolSection::Maintenance,HelpyNavigation::ToolSection::Cleanup}){
                     CurrentPage=Page::Tools;PreviewWantedTool=section;for(int i=0;i<4;++i)RenderFrame();check(CurrentTool==section,"Requested tools section did not render");
                     PreviewCapture=output/(section==HelpyNavigation::ToolSection::Maintenance?"tools-maintenance.png":"tools-cleanup.png");RenderFrame();PreviewCapture.clear();
@@ -2342,23 +2487,37 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 check(!PageErrors[0].empty(),"Page error state should persist until explicitly retried");PageErrors[0].clear();
             }
             if(width>=1200&&height>=850){
-                namespace Hooks=HelpyPreviewHooks;ImGui::ClosePopupsOverWindow(nullptr,false);CurrentPage=Page::Map;MapPanel::Data.ShowParty=true;MapPanel::Data.PartyDetached=false;HelpyTaskbar::Current.Restore(HelpyTaskbar::Window::Party);auto original=snapshot["Players"];
+                namespace Hooks=HelpyPreviewHooks;const auto check=[](bool okay,const char* message){if(!okay)throw std::runtime_error(message);};ImGui::ClosePopupsOverWindow(nullptr,false);CurrentPage=Page::Map;MapPanel::Data.ShowParty=true;MapPanel::Data.PartyDetached=false;HelpyTaskbar::Current.Restore(HelpyTaskbar::Window::Party);auto original=snapshot["Players"];
                 const auto equipmentChoice=PlayerPortraitPicker::Choices.Equipment;PlayerPortraitPicker::Choices.Equipment=true;
-                auto gear=nlohmann::json::array();for(int i=0;i<8;++i)gear.push_back({{"Slot",i},{"Name","Equipped preview"},{"Icon",items[i%items.size()]["Icon"]}});
+                auto gear=nlohmann::json::array();for(int i=0;i<8;++i)gear.push_back({{"Slot",i},{"Name","Equipped preview"},{"Icon",items[i%items.size()]["Icon"]},{"Durability",{{"Current",i==0?0:100-i*12},{"Maximum",100},{"ObservedUnixMs",PartyMemberView::Now()}}}});
                 const auto originalMapPlayers=MapPanel::Data.Snapshot["Players"];
                 MapPanel::Data.Snapshot["Players"][0]["Equipment"]={{"Items",gear},{"ObservedUnixMs",PartyMemberView::Now()}};
-                MapPanel::Data.Next=MapPanel::Clock::now()+std::chrono::seconds(20);for(int i=0;i<8;++i)RenderFrame();PreviewCapture=output/"party-centered-equipment.png";RenderFrame();PreviewCapture.clear();
+                for(const auto* key:{"Health","Stamina","SpecialPower","Hunger","Thirst","RestLevel"})MapPanel::Data.Snapshot["Players"][0]["Stats"][key]={{"Current",73},{"Maximum",100},{"ObservedUnixMs",PartyMemberView::Now()}};
+                MapPanel::Data.Next=MapPanel::Clock::now()+std::chrono::seconds(20);for(int i=0;i<8;++i)RenderFrame();PreviewCapture=output/"party-stats-left-gear-right.png";RenderFrame();PreviewCapture.clear();
+                const auto gearKey=MapPanel::Data.Snapshot["Players"][0].value("Path",std::string{})+":0";
+                check(Hooks::PartyDurabilityMeters==8&&Hooks::PartyGear.contains(gearKey),"Party equipped icons did not render native-style durability meters");
+                const auto gearRect=Hooks::PartyGear.at(gearKey);check(gearRect.x>Hooks::MapPartyWindow.x+(Hooks::MapPartyWindow.z-Hooks::MapPartyWindow.x)*.3f,"Equipped icons must be on the right of party stats");
+                Hooks::MouseEnabled=true;Hooks::MouseDown=false;Hooks::Mouse={(gearRect.x+gearRect.z)*.5f,(gearRect.y+gearRect.w)*.5f};for(int i=0;i<4;++i)RenderFrame();
+                check(Hooks::PartyDurabilityDetails,"Equipped-item hover omitted exact durability details");PreviewCapture=output/"party-durability-hover.png";RenderFrame();PreviewCapture.clear();Hooks::MouseEnabled=false;
                 MapPanel::Data.Snapshot["Players"]=originalMapPlayers;snapshot["Players"]=original;PlayerPortraitPicker::Choices.Equipment=equipmentChoice;
                 auto member=original[0];member["Guid"]="11223344556677889900aabbccddeeff";member["Name"]="Portrait preview";
                 PlayerPortraitPicker::Request(member);if(PlayerPortraitPicker::Icons.size()<4)throw std::runtime_error("Original SVG portraits missing from shared gallery");
                 for(int i=0;i<6;++i)RenderFrame();PreviewCapture=output/"portrait-themed.png";RenderFrame();PreviewCapture.clear();ImGui::ClosePopupsOverWindow(nullptr,false);
                 PlayerInventoryPanel::Request(member);for(int i=0;i<8;++i)RenderFrame();
                 if(!m_workspaces[4].Window||PlayerInventoryPanel::Snapshot.value("PlayerGuid",std::string{})!=member.value("Guid",std::string{}))throw std::runtime_error("Inventory did not detach or retain the selected character");
+                check(PlayerInventoryPanel::Snapshot["Items"].size()==4,"Inventory workbench did not accumulate later native pages");
+                check(std::any_of(PlayerInventoryPanel::Snapshot["Items"].begin(),PlayerInventoryPanel::Snapshot["Items"].end(),[](const auto& row){return row.value("Group",std::string{})=="Runes";}),"Native rune page was missing from the unified inventory snapshot");
+                check(std::abs((Hooks::LiveInventoryViewport.w-Hooks::LiveInventoryViewport.y)-(Hooks::Browser.w-Hooks::Browser.y))<2,"Live inventory and Item Bay have different viewport heights");
                 CapturePreview(m_device,m_context,m_workspaces[4].Swap,output/"inventory-detached.png");
                 SendMessageW(m_workspaces[4].Window,WM_SYSCOMMAND,SC_MINIMIZE,0);RenderFrame();
                 if(!HelpyTaskbar::Current.Contains(HelpyTaskbar::Window::Inventory))throw std::runtime_error("Inventory minimize missed Helpy taskbar");
                 HelpyTaskbar::Current.Restore(HelpyTaskbar::Window::Inventory);RenderFrame();SendMessageW(m_workspaces[4].Window,WM_CLOSE,0,0);RenderFrame();
                 if(PlayerInventoryPanel::Open||m_workspaces[4].Window)throw std::runtime_error("Inventory close did not release only its own surface");
+                MapPanel::Data.ShowParty=true;MapPanel::Data.PartyDetached=true;for(int i=0;i<4;++i)RenderFrame();
+                check(m_workspaces[3].Window!=nullptr,"Party did not create its independent native window");
+                const auto partySize=Hooks::MapPartyWindow;for(int i=0;i<12;++i)RenderFrame();
+                check(std::abs((partySize.z-partySize.x)-(Hooks::MapPartyWindow.z-Hooks::MapPartyWindow.x))<1&&std::abs((partySize.w-partySize.y)-(Hooks::MapPartyWindow.w-Hooks::MapPartyWindow.y))<1,"Detached party size drifted between frames");
+                CapturePreview(m_device,m_context,m_workspaces[3].Swap,output/"party-detached-stable.png");
                 const nlohmann::json chest={{"Kind","Chest"},{"Path","preview-chest"},{"Name","Iron Chest"},{"ObjectIndex",42},{"ObjectSerial",7},{"Location",{190000,70000,100}},{"Managed",false},{"Loaded",true}};
                 ImGui::ClosePopupsOverWindow(nullptr,false);MapPanel::Data.Popup=false;MapPanel::Data.PartyPicking.clear();MapPanel::Data.MarkerSearch[0]=0;
                 MapPanel::Data.Snapshot["Markers"].push_back(chest);MapPanel::Data.ShowChests=true;MapPanel::Data.ShowParty=false;MapPanel::Data.Next=MapPanel::Clock::now()+std::chrono::seconds(20);MapPanel::Data.FitRequested=true;for(int i=0;i<4;++i)RenderFrame();
@@ -2378,7 +2537,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
         }
     }catch(const std::exception& error){std::filesystem::create_directories(output);std::ofstream(output/"render-error.txt")<<error.what();result=4;}
     RuneSchemaSettingsPanel::Remote={};ItemIconCache::ClearRemote();LazyCatalog::ClearRemote();SpawnToolRequests::ClearRemote();
-    JournalPanel::Shutdown();PlayerPortraitPicker::Shutdown();DestroyItemBay();DestroyIconCache();for(size_t i=0;i<m_workspaces.size();++i)DestroyWorkspacePanel(i);ImGui_ImplDX11_Shutdown();HelpyWikiIcons::Shutdown();ImGui_ImplWin32_Shutdown();ImGui::DestroyContext();ReleaseBrandTextures();DestroyDevice();
+    JournalPanel::Shutdown();SpawnBrowserSettings::Shutdown();PlayerPortraitPicker::Shutdown();CharacterPreviewPanel::Shutdown();DestroyItemBay();DestroyIconCache();for(size_t i=0;i<m_workspaces.size();++i)DestroyWorkspacePanel(i);ImGui_ImplDX11_Shutdown();CharacterPreviewPanel::ReleaseTexture();HelpyWikiIcons::Shutdown();ImGui_ImplWin32_Shutdown();ImGui::DestroyContext();ReleaseBrandTextures();DestroyDevice();
     DestroyWindow(m_hwnd);m_hwnd=nullptr;UnregisterClassW(wc.lpszClassName,m_module);if(SUCCEEDED(com))CoUninitialize();return result;
 }
 #endif
@@ -2425,15 +2584,27 @@ void HelpyStandaloneWindow::RenderFrame() {
     }
     HelpyImGuiTheme::Poll();
     HelpyBackgrounds::Pump();
+    SourceBanners::Pump();
 #if !defined(HELPY_PREVIEW)
     HelpyIconPacks::PollPackaged();
     if(HelpyUpdates::Tick(HelpyImGuiTheme::Current.automaticUpdateChecks,HelpyEnvironment::UpdateChecksAvailable,HelpyEnvironment::RuneSchemaVersion))
         PushToast("RuneSchema update available. See Settings > Updates & runtime.",6.0);
 #endif
     ApplyCaptionTheme(m_hwnd,HelpyImGuiTheme::Current);
-    PlayerPortraitPicker::Pump();
+    PlayerPortraitPicker::Pump();SpawnBrowserSettings::Pump();
     if(MapPanel::Data.PartyDetached)MapPanel::Poll();
     PlayerInventoryPanel::Poll();
+    if(PlayerInventoryPanel::Open&&!PlayerInventoryPanel::Container)SpawnToolsPanel::RefreshSnapshot(0);
+    PlayerInventoryPanel::BindRecipient=[] {
+        using namespace PlayerInventoryPanel;
+        const auto path=ItemPresentation::Text(Target,"Path");const auto guid=ItemPresentation::Text(Target,"Guid");
+        const auto* current=SpawnToolsPanel::CurrentCartPlayer(SpawnToolsPanel::UiSnapshot,path);
+        if(Container||Personal||ItemGridPicker::SharedCart.Delivery()||Generation!=SpawnToolRequests::CurrentGeneration()||guid.empty()||!current||ItemPresentation::Text(*current,"Guid")!=guid)return false;
+        const auto targets=SpawnToolsPanel::EffectiveCartRecipients();
+        if(targets.size()!=1||targets[0].Path!=path){SpawnToolsPanel::SelectedPlayer=path;SpawnToolsPanel::CartRecipients={{path,ItemPresentation::Text(*current,"Name")}};SpawnToolsPanel::CartRecipientsChosen=true;SpawnToolsPanel::InvalidateCartChecks();}
+        return true;
+    };
+    PlayerInventoryPanel::RenderCart=[](float height){SpawnToolsPanel::RenderCartDock({0,height},[]{ImGui::TextWrapped("%s · player inventory",PlayerInventoryPanel::Target.value("Name",std::string("Player")).c_str());});};
     const bool bayVisible=SyncItemBay(),cacheVisible=SyncIconCache();const std::array workspaceVisible{SyncWorkspacePanel(0),SyncWorkspacePanel(1),SyncWorkspacePanel(2),SyncWorkspacePanel(3),SyncWorkspacePanel(4)};
     ImGui_ImplDX11_NewFrame();ImGui_ImplWin32_NewFrame();auto& frameIo=ImGui::GetIO();const auto& t=HelpyImGuiTheme::Current;SelectUiFontFamily(t.fontFamily);frameIo.FontDefault=UiRegularFont;frameIo.FontGlobalScale=std::clamp(t.Scale()*t.fontScale,0.50f,4.00f);
     MainSurfacePosition={0,0};MainSurfaceSize=frameIo.DisplaySize;DesktopBayLayout::Canvas bayCanvas;
@@ -2515,7 +2686,7 @@ void HelpyStandaloneWindow::RenderFrame() {
     }
     for(size_t i=0;i<m_workspaces.size();++i)if(workspaceVisible[i]){
         const auto rect=WorkspaceRect(i,bayCanvas);
-        if(i==3){HelpyImGuiTheme::Scope skin(t);MapPanel::Party({rect.X,rect.Y},{rect.X+rect.Width,rect.Y+rect.Height},true);continue;}
+        if(i==3){HelpyImGuiTheme::Scope skin(t);MapPanel::Party({rect.X,rect.Y},{rect.X+rect.Width,rect.Y+rect.Height},true);if(!MapPanel::Data.PartyDetached)CurrentPage=Page::Map;continue;}
         ItemGridPicker::DetailsSurfaceMin={rect.X,rect.Y};ItemGridPicker::DetailsSurfaceSize={rect.Width,rect.Height};
         ImGui::SetNextWindowPos({rect.X,rect.Y});ImGui::SetNextWindowSize({rect.Width,rect.Height});
         ImGui::PushStyleColor(ImGuiCol_WindowBg,t.window);ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,0);
@@ -2663,9 +2834,11 @@ LRESULT CALLBACK HelpyStandaloneWindow::WndProc(HWND hwnd,UINT msg,WPARAM wParam
     case WM_DROPFILES: {
         const auto drop=reinterpret_cast<HDROP>(wParam);const auto count=DragQueryFileW(drop,0xffffffff,nullptr,0);wchar_t path[32768]{};
         const auto length=count==1?DragQueryFileW(drop,0,nullptr,0):0;
-        if(length>0&&length<32768){DragQueryFileW(drop,0,path,32768);HelpyIconPacks::Start(path,true);}
-        else HelpyIconPacks::Status="Drop one .rsmk-icons file at a time.";
-        DragFinish(drop);PushToast(HelpyIconPacks::Status,5.0);return 0;
+        bool art=false;if(length>0&&length<32768){DragQueryFileW(drop,0,path,32768);const auto extension=HelpyCacheSources::Lower(std::filesystem::path(path).extension().string());art=extension==".png"||extension==".jpg"||extension==".jpeg"||extension==".webp";
+            if(art){if(!SourceBanners::DropOwner.empty()&&ImGui::GetCurrentContext()&&ImGui::GetFrameCount()-SourceBanners::DropFrame<=2)SourceBanners::SetArtFile(SourceBanners::DropOwner,path);else SourceBanners::Status="Open the cache exporter and select one source before dropping its artwork.";}
+            else HelpyIconPacks::Start(path,true);
+        }else HelpyIconPacks::Status="Drop one cache bundle or source artwork image at a time.";
+        DragFinish(drop);PushToast(art?SourceBanners::Status:HelpyIconPacks::Status,5.0);return 0;
     }
     case WM_GETMINMAXINFO: {
         auto* info=reinterpret_cast<MINMAXINFO*>(lParam);const UINT dpi=GetDpiForWindow(hwnd);const float scale=dpi?static_cast<float>(dpi)/96.0f:1.0f;

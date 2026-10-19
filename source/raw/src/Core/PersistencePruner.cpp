@@ -163,7 +163,7 @@ void PersistencePruner::PruneCharacterJson(FString& characterJson)
     if (!registry || !registry->Ready()) {
         if (!m_cleanupDeferredReported) {
             m_cleanupDeferredReported = true;
-            Log<LogLevel::Warning>(STR(
+            CodedLog<LogLevel::Warning>(Diagnostics::Id::PersistenceUncertified,STR(
                 "[PERSISTENCE-PRUNER][DEFERRED] Cleanup skipped: complete applicable live registries are unavailable. Non-blocking: native character loading continues; no persistence ID or character field was changed.\n"));
         }
         return;

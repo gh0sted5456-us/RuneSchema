@@ -3,6 +3,14 @@
   "Version": "1",
   "Kind": "RuneSchemaHelpyUI",
   "Files": [
+    {"Name":"source-base-game.png","Bytes":4524400,"SHA256":"fad23ef33f8d1e4b26a8238853bc028075ab3f98abc210e80932e5986c224d81"},
+    {"Name":"source-umbral-sands.png","Bytes":3067770,"SHA256":"4f0923926be681b9f7d72d31eb123b203324859d978981edcc47102c51531fe0"},
+    {"Name":"source-scorched-wilderness.png","Bytes":4144594,"SHA256":"ea70adf2b7e5b0e745f2b92fc1232fb9728ad6ed6c7a0bea04090672aa5b395c"},
+    {"Name":"source-bastion.png","Bytes":3675550,"SHA256":"c4ac544169b4e14603a33c4fa1d55014817d6f1774c75b1737faadfcd295fa97"},
+    {"Name":"source-colorfuldye.png","Bytes":5221157,"SHA256":"8484c93472e9cb9aeb14fc73a48a9bd05b887950af0a6e7b115d4b722bb2bc56"},
+    {"Name":"source-gunslinger.png","Bytes":3785147,"SHA256":"853298ee52c1bfea7b279f40debdf7ef6ba26721c22a195604731a611008e15b"},
+    {"Name":"source-shadowmancer.png","Bytes":3748145,"SHA256":"af5602c5a0291aa3de97a4ad75c001f6d0edc3495958cf52bffe98022222f73c"},
+    {"Name":"source-spears-scythes.png","Bytes":5180487,"SHA256":"0e99258a1f502242d44aea5f4fb763917b10db20de0e3058e5c8f671a19a17bb"},
     {
       "Name": "curseforge-details.png",
       "Bytes": 1524773,

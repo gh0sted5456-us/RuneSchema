@@ -1,4 +1,5 @@
 #include "Generator/SaveViewer.h"
+#include "Generator/AssetSearch.h"
 #include "Generator/SaveReport.h"
 #include "Generator/ItemCatalogMetadata.h"
 #include "Generator/NpcSaveExport.h"
@@ -8,6 +9,7 @@
 #include "Core/SaveCleanup.h"
 #include "Core/AuthoringCleanupPreview.h"
 #include "Core/CharacterSaveEditor.h"
+#include "Generator/CharacterPreview.h"
 #include "Core/HelpyCacheSources.h"
 #include "Runtime/HostServices.h"
 #include "Runtime/Storefront.h"
@@ -152,11 +154,12 @@ namespace {
                 auto& row=rows[index];
                 if(seen.contains(id)) {
                     row["DisplayName"]=nullptr;row["InternalName"]=nullptr;row["AssetPath"]=nullptr;row["Origin"]="Ambiguous PersistenceID";
-                    if(details){row.erase("Icon");row.erase("SourceName");row.erase("SourceKind");row.erase("Category");row.erase("MaxStackSize");}
+                    if(details){row.erase("Icon");row.erase("SourceName");row.erase("SourceKind");row.erase("Category");row.erase("NativeCategory");row.erase("MaxStackSize");}
                 }else {
                     row["DisplayName"]=DisplayName(object);row["InternalName"]=StringField(object,TEXT("InternalName"));row["AssetPath"]=path;
                     row["Origin"]=SaveReport::Origin(path);
                     if(details){const auto info=PS::AssetSearch::DescribeItem(object);for(const auto* key:{"Icon","SourceName","SourceRoot","SourceKind","Category","Description"})if(info.contains(key))row[key]=info.at(key);
+                        if(info.contains("Tags")&&info["Tags"].is_string())row["NativeCategory"]=info["Tags"];
                         if(auto* maximum=CastField<FNumericProperty>(TextField(object,TEXT("MaxStackSize")));maximum&&maximum->IsInteger()&&maximum->GetElementSize()==4){const auto limit=maximum->GetSignedIntPropertyValue(maximum->ContainerPtrToValuePtr<void>(object));if(limit>=1&&limit<=10000)row["MaxStackSize"]=limit;}}
                 }
             }

@@ -6,6 +6,7 @@
 using namespace PS::DiagnosticLog;
 std::string Read(const std::filesystem::path& path){std::ifstream f(path,std::ios::binary);return {std::istreambuf_iterator<char>(f),{}};}
 int main(){
+    assert(Group("[RuneSchema] [loader=recipes] done")=="loader.recipes");assert(Group("[RS-CACHE-003] mismatch")=="cache");assert(Group("[group=system] startup")=="system");assert(Group("[group=bad\nvalue]")=="runtime");
     const auto root=std::filesystem::temp_directory_path()/("runeschema-log-test-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     std::filesystem::create_directories(root);
     const auto path=root/"RuneSchema.log";
@@ -47,5 +48,6 @@ int main(){
     assert(!sink.Open(root/"missing"/"RuneSchema.log"));assert(sink.TakeFailure());assert(!sink.TakeFailure());
     assert(!std::filesystem::exists(root/"missing"));
     assert(!sink.Open(root));assert(sink.TakeFailure());sink.Close();
+    assert(sink.Open(path));assert(sink.Write("[group=system] line one\nline two\n",true));sink.Close();const auto multiline=Read(path);assert(std::count(multiline.begin(),multiline.end(),'\n')==2);assert(multiline.find("[group=system]")!=multiline.rfind("[group=system]"));
     std::filesystem::remove_all(root);
 }

@@ -267,3 +267,14 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+/* Diagnostic catalogue: searchable without replacing accessible deep links. */
+.rs-code-tools { padding: 1rem; margin: 1.2rem 0; border: 1px solid var(--md-default-fg-color--lightest); border-radius: .55rem; background: var(--md-code-bg-color); }
+.rs-code-tools label { display: block; font-weight: 650; margin-bottom: .5rem; }
+.rs-code-tools input { width: 100%; border: 1px solid var(--md-default-fg-color--lighter); border-radius: .3rem; padding: .65rem; background: var(--md-default-bg-color); color: var(--md-default-fg-color); font: inherit; }
+.rs-code-tools input:focus-visible { outline: 2px solid var(--md-accent-fg-color); outline-offset: 3px; }
+.rs-code-tools p { margin-bottom: 0; font-size: .8rem; color: var(--md-default-fg-color--light); }
+.rs-code-card { padding: 1rem 1.2rem; margin: 1rem 0; border: 1px solid var(--md-default-fg-color--lightest); border-left: 3px solid var(--md-accent-fg-color); border-radius: .4rem; }
+.rs-code-card[data-rs-severity="warning"] { border-left-color: #c5a65a; }
+.rs-code-card[data-rs-severity="error"] { border-left-color: #df7272; }
+.rs-code-card h2 { margin-top: 0; font-size: 1.1rem; scroll-margin-top: 5rem; }
+.rs-code-card[hidden] { display: none !important; }

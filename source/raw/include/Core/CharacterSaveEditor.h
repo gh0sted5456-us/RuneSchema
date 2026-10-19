@@ -8,6 +8,8 @@
 #include <stdexcept>
 #include <set>
 #include <vector>
+#include <map>
+#include "Core/CharacterWorkbench.h"
 
 // Independent, copy-only character editing. No file I/O or provider writes.
 namespace PS::CharacterSaveEditor {
@@ -55,6 +57,48 @@ public:
     void Open(const Json& value){Reset();RequireCharacter(value);original=value;draft=value;}
     bool Ready()const{return !original.is_null();}
     const Json& Original()const{return original;}
+    const Json& Draft()const{if(!Ready())throw std::runtime_error("Open a character copy first");return draft;}
+    uint64_t Revision()const{return revision;}
+    void SetSkillLevel(const std::string& id,int level,uint64_t expected,const Json& thresholds,int maximum){
+        if(!Ready()||expected!=revision||maximum<1||maximum>200||level<1||level>maximum||!thresholds.is_array()||thresholds.size()<size_t(maximum))throw std::runtime_error("Verified native skill thresholds and current revision required");
+        int64_t previous=-1;for(int i=0;i<maximum;++i){const auto& value=thresholds[i];if(!value.is_number_integer()||value<0||value>2147483647||value.get<int64_t>()<=previous)throw std::runtime_error("Invalid native skill XP curve");previous=value.get<int64_t>();}
+        auto next=draft;auto& skills=next.at("GameProgress").at("Skills").at("Skills");if(!skills.is_array()||skills.size()>128)throw std::runtime_error("Unsupported saved skills");Json* chosen=nullptr;for(auto& skill:skills)if(skill.value("Id",std::string{})==id){if(chosen)throw std::runtime_error("Duplicate skill identity");chosen=&skill;}
+        if(!chosen||!chosen->contains("Xp")||!chosen->at("Xp").is_number_integer())throw std::runtime_error("Saved skill XP unavailable");(*chosen)["Xp"]=thresholds[level-1];Commit(std::move(next),expected);
+    }
+    Json Loadout()const{
+        const auto& game=Draft().at("GameProgress");Json rows=Json::array();if(!game.contains("Loadout"))return rows;const auto& loadout=game.at("Loadout");if(!loadout.is_object()||loadout.size()>65)throw std::runtime_error("Unsupported saved loadout");
+        for(const auto& [key,value]:loadout.items())if(key!="MaxSlotIndex"){
+            if(key.empty()||key.size()>2||key.find_first_not_of("0123456789")!=key.npos||std::stoi(key)>63||!value.is_object())continue;const auto index=value.value("PlayerInventoryItemIndex",-1);if(index<0||index>4096)continue;const auto slot=std::to_string(index);const auto& bag=game.at("Inventory");if(!bag.contains(slot)||!bag[slot].is_object()||!bag[slot].contains("ItemData"))continue;
+            rows.push_back({{"LoadoutSlot",std::stoi(key)},{"Slot",slot},{"Pointer","/GameProgress/Inventory/"+slot},{"PersistenceID",bag[slot].at("ItemData")},{"Equipped",true},{"Count",bag[slot].value("Count",Json(1))}});
+        }return rows;
+    }
+    Json Appearance()const{return {{"Name",draft.contains("meta_data")?draft.at("meta_data").value("char_name",std::string{}):std::string{}},{"Appearance",CharacterWorkbench::Appearance(Draft())},{"Revision",revision},{"BeardColorSupported",false}};}
+    void SetAppearance(const std::string& key,const std::string& row,uint64_t expected,const std::set<std::string>& verifiedRows){
+        SetAppearanceBatch({{key,row}},expected,{{key,verifiedRows}});
+    }
+    void SetAppearanceBatch(const std::map<std::string,std::string>& changes,uint64_t expected,const std::map<std::string,std::set<std::string>>& verifiedRows){
+        if(!Ready()||expected!=revision||changes.empty()||changes.size()>CharacterWorkbench::Fields.size())throw std::runtime_error("Refresh the native appearance choices and editor revision");
+        auto next=draft;
+        for(const auto& [key,row]:changes){const auto choices=verifiedRows.find(key);if(choices==verifiedRows.end()||!choices->second.contains(row))throw std::runtime_error("Appearance row is not in the verified native table");const auto& field=CharacterWorkbench::Find(key);(void)CharacterWorkbench::Row(CharacterWorkbench::Appearance(draft),field);next["Customization"]["CustomizationData"][key]["rowName"]=row;}
+        Commit(std::move(next),expected);
+    }
+    void Rename(const std::string& name,uint64_t expected){
+        if(!Ready()||expected!=revision||name.empty()||name.size()>96||!draft.contains("meta_data")||!draft["meta_data"].contains("char_name")||!draft["meta_data"]["char_name"].is_string())throw std::runtime_error("Native character name unavailable or invalid");
+        for(unsigned char c:name)if(c<32||c==127||c=='/'||c=='\\'||c==':'||c=='"'||c=='<'||c=='>'||c=='|'||c=='?'||c=='*')throw std::runtime_error("Character name contains unsupported characters");
+        if(name.front()==' '||name.back()==' '||name.back()=='.')throw std::runtime_error("Remove leading/trailing spaces or dots from the character name");
+        auto next=draft;next["meta_data"]["char_name"]=name;Commit(std::move(next),expected);
+    }
+    // The host constructs native base records or copies an exact same-ItemData
+    // saved template. Never trust a UI-supplied record or overwrite a slot.
+    void AddRecord(const Json& record,uint64_t expected,const std::string& container="Inventory",int verifiedSlot=-1){
+        if(!Ready()||expected!=revision||(container!="Inventory"&&container!="PersonalInventory")||!record.is_object()||!record.contains("ItemData")||!record["ItemData"].is_string()||!record.contains("GUID")||!record["GUID"].is_string())throw std::runtime_error("Verified native item record and current revision required");
+        const auto& slots=draft.at("GameProgress").at(container);if(!slots.is_object()||slots.size()>4096||!slots.contains("MaxSlotIndex")||!slots["MaxSlotIndex"].is_number_integer())throw std::runtime_error("Native inventory layout unavailable");
+        int64_t index=slots["MaxSlotIndex"].get<int64_t>();if(index< -1||index>=2147483646)throw std::runtime_error("Native inventory index exceeds its bound");
+        for(const auto& [key,item]:slots.items())if(key!="MaxSlotIndex"){const auto [unused,slot]=ItemPointer("/GameProgress/"+container+"/"+key);index=std::max(index,std::stoll(slot));}
+        for(const auto* c:{"Inventory","PersonalInventory"})if(draft["GameProgress"].contains(c))for(const auto& item:draft["GameProgress"][c])if(item.is_object()&&item.value("GUID",std::string{})==record["GUID"].get<std::string>())throw std::runtime_error("Duplicate item instance GUID");
+        const int64_t destination=verifiedSlot>=0?verifiedSlot:index+1;if(destination>4096||slots.contains(std::to_string(destination)))throw std::runtime_error("Native target slot is occupied or exceeds the supported bound");
+        auto next=draft;next["GameProgress"][container][std::to_string(destination)]=record;next["GameProgress"][container]["MaxSlotIndex"]=std::max(index,destination);Commit(std::move(next),expected);
+    }
     std::string ItemIdentity(const std::string& pointer)const{(void)ItemPointer(pointer);if(!Ready())throw std::runtime_error("Open a character copy first");return draft.at(Json::json_pointer(pointer)).at("ItemData").get<std::string>();}
     Json Inventory(size_t offset=0)const{
         if(!Ready())throw std::runtime_error("Open a character copy first");if(offset>8192)throw std::runtime_error("Inventory offset exceeds bounds");Json rows=Json::array();size_t total=0;

@@ -6,9 +6,19 @@ while its recipe still points to the wrong station.
 
 ## Helpy Live Log and help codes
 
+The [diagnostic code reference](ERROR-CODES.md) explains each stable code,
+its effect and the next step. Older uncoded messages can show a **suggested
+reference**, not a diagnosed cause. Consecutive repeats can be grouped without
+dropping the underlying entries from a filtered export.
+
 Open **Live Log** in Helpy's left navigation. The **RuneSchema** tab reads
 `RuneSchema/RuneSchema.log`; the **UE4SS** tab reads the host's `ue4ss/UE4SS.log`.
 Each tab retains its own search, filters, selection and scroll position.
+The **Game** tab discovers a recent Dragonwilds log under the game's saved-log
+folders. **EOS** shows EOS SDK categories from that game log, not a fabricated
+independent stream. Either tab can choose an existing log through **Actions**.
+The exact file path appears on hover. Shipping builds may not create game logs;
+Helpy reports this rather than enabling logging or altering launch arguments.
 Search text or an `RS-` code, filter by severity
 or subsystem, pause reading, follow the newest entries, and select a row for
 its full message. **Clear view** clears only the viewer, never the log file.
@@ -28,10 +38,20 @@ the original and its rotation backups. Neither live log can be overwritten
 by a filtered export.
 Review player names, IDs and local paths before sharing an export.
 
-Clickable help codes open the matching section below in your browser. No log
-text, player identity or file path is sent in the link. Codes are a Helpy
-interpretation of known diagnostic signatures; the original log is unchanged.
-An unfamiliar warning uses the general guide, not a guessed diagnosis.
+To open Helpy once at game startup, enable **Home > Quick settings > Open
+Helpy when the game starts**. It is opt-in and takes effect next launch.
+F2 still closes/reopens the window. It never enters a world.
+
+For slow item discovery, sharing caches or changed mods, see
+[cache bundles and background verification](CACHE-BUNDLES.md).
+
+Clickable help codes open a per-code header on the shared
+[diagnostic code reference](ERROR-CODES.md), which lists every registered RS
+code and bridge reason with causes and troubleshooting. No log text, player
+identity or file path is sent in the link. An exact emitted code is distinct
+from a **suggested reference** for an older uncoded message; the original log
+and severity remain authoritative. The older sections below remain available
+for existing bookmarks, with additional context rather than a second code catalogue.
 
 ### RS-QST-001 — Conflicting quest ownership {#rs-qst-001}
 
