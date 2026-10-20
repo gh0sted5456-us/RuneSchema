@@ -118,6 +118,7 @@ nav:
       - Bridge diagnostics: BRIDGE-DIAGNOSTICS.md
   - Reference:
       - Guide map: DOCUMENTATION-INDEX.md
+      - Error codes: ERROR-CODES.md
       - Find a loader: LOADER-WALKTHROUGHS.md
       - Loaders · Content:
           - Assets: reference/loaders/assets.md
