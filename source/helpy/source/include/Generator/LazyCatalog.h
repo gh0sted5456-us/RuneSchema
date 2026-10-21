@@ -27,7 +27,7 @@ struct State {
     bool CacheHit=false,CheckingChanges=false,Refreshing=false,CachePreview=false;
     bool HasMore=true,Pending=false,Started=false,PreparingAlphabetical=false;
     uint64_t AppliedRevision=0,CancelGeneration=1,ActiveRequestId=0,RuntimeGeneration=0,LastResponseId=0;
-    uint64_t CacheClock=0;
+    uint64_t CacheClock=0,RowsRevision=0;
     int FillTarget=0,StalledWindows=0;
     std::chrono::steady_clock::time_point RequestedAt{};
     std::chrono::steady_clock::time_point ResumeAt{};
@@ -35,6 +35,7 @@ struct State {
     std::unordered_set<std::string> RandomSeen;
 };
 inline std::array<State,3> Windows{};
+inline uint64_t RowsClock=0;
 // UI-thread-only native icon confirmations. They never introduce items or
 // survive a world/source change. Keep query caches from restoring old artwork.
 inline std::unordered_map<std::string,std::string> NativeIcons;
@@ -90,7 +91,7 @@ inline bool RestoreCache(int category,const std::string& query,uint64_t generati
     auto& state=For(category);const auto key=category==0&&query.empty()?std::string("@alphabetical"):query;
     const auto found=state.Cache.find(key);if(found==state.Cache.end()||found->second.Generation!=generation)return false;
     found->second.LastUsed=++state.CacheClock;
-    state.Query=query;state.Rows=found->second.Rows;state.NextCursor=found->second.NextCursor;state.HasMore=found->second.HasMore;
+    state.Query=query;state.Rows=found->second.Rows;state.RowsRevision=++RowsClock;state.NextCursor=found->second.NextCursor;state.HasMore=found->second.HasMore;
     state.Coverage=found->second.Coverage;
     state.CachePreview=found->second.CachePreview;
     state.CheckingChanges=found->second.Stale;
@@ -115,7 +116,7 @@ inline bool Request(int category,const char* mode,const std::string& query,bool 
     if(!SubmitRequest(request)){state.LastError="The runtime did not accept this request. Retry when the world is ready.";return false;}
     state.Started=true;state.Pending=true;state.ActiveRequestId=requestId;state.RuntimeGeneration=generation;
     state.RequestedAt=std::chrono::steady_clock::now();
-    if(reset){state.Refreshing=state.Query==query&&!state.Rows.empty();state.RefreshRows=json::array();state.RefreshRequired=state.Refreshing?state.Rows.size():0;state.RandomSeen.clear();if(!state.Refreshing)state.Rows=json::array();state.NextCursor.clear();state.LastError.clear();state.ResumeAt={};state.StalledWindows=0;state.HasMore=true;state.Query=query;state.FillTarget=state.Refreshing?std::max({state.FillTarget,limit,static_cast<int>(state.Rows.size())}):limit;state.PreparingAlphabetical=std::string_view(mode)=="Alphabetical";state.PopulationStage="checking-cache";state.PopulationDone=state.PopulationTotal=0;state.CacheHit=false;}
+    if(reset){state.Refreshing=state.Query==query&&!state.Rows.empty();state.RefreshRows=json::array();state.RefreshRequired=state.Refreshing?state.Rows.size():0;state.RandomSeen.clear();if(!state.Refreshing){state.Rows=json::array();state.RowsRevision=++RowsClock;}state.NextCursor.clear();state.LastError.clear();state.ResumeAt={};state.StalledWindows=0;state.HasMore=true;state.Query=query;state.FillTarget=state.Refreshing?std::max({state.FillTarget,limit,static_cast<int>(state.Rows.size())}):limit;state.PreparingAlphabetical=std::string_view(mode)=="Alphabetical";state.PopulationStage="checking-cache";state.PopulationDone=state.PopulationTotal=0;state.CacheHit=false;}
     return true;
 }
 inline bool Search(int category,const std::string& query) {
@@ -186,6 +187,7 @@ inline void ApplyWindow(const json& window,uint64_t revision) {
     state.LastResponseId=requestId;
     state.AppliedRevision=revision;state.RuntimeGeneration=generation;
     const bool reset=window.value("Reset",false);const bool randomItems=category==0&&window.value("Mode",std::string{})=="Random";
+    if(!state.Refreshing)state.RowsRevision=++RowsClock;
     state.PreparingAlphabetical=category==0&&window.contains("AlphabeticalReady")&&!window.value("AlphabeticalReady",false);
     state.PopulationStage=window.value("PopulationStage",state.PreparingAlphabetical?std::string("discovering-items"):std::string("items-ready"));
     state.PopulationDone=window.value("PopulationDone",window.value("IndexedItems",uint64_t{}));state.PopulationTotal=window.value("PopulationTotal",uint64_t{});
@@ -206,7 +208,7 @@ inline void ApplyWindow(const json& window,uint64_t revision) {
     const auto received=destination.size();
     if(state.Refreshing&&window.value("Error",std::string{}).empty()
         &&(state.RefreshRows.size()>=state.RefreshRequired||!window.value("HasMore",false))){
-        if(state.Rows!=state.RefreshRows)state.Rows=std::move(state.RefreshRows);
+        if(state.Rows!=state.RefreshRows){state.Rows=std::move(state.RefreshRows);state.RowsRevision=++RowsClock;}
         state.RefreshRows=json::array();state.RefreshRequired=0;state.Refreshing=false;
     }
     state.NextCursor=window.value("NextCursor",std::string{});state.HasMore=window.value("HasMore",false);state.Pending=false;state.ActiveRequestId=0;state.LastError=window.value("Error",std::string{});
@@ -234,8 +236,9 @@ inline void ReleaseFailedWindow(uint64_t revision,const json& snapshot) {
 inline void Overlay(json& snapshot,int category){if(category>=0&&category<=2){auto& state=For(category);const auto* key=KeyFor(category);
     // The original Helpy host can already have a populated live catalogue.
     // Empty asynchronous slices must not replace those real rows with nothing.
-    if(state.Query.empty()&&state.Rows.empty()&&snapshot.contains(key)&&snapshot[key].is_array()&&!snapshot[key].empty())return;
-    if(state.Started||!state.Rows.empty())snapshot[key]=state.Rows;
+    if(state.Query.empty()&&state.Rows.empty()&&snapshot.contains(key)&&snapshot[key].is_array()&&!snapshot[key].empty()){snapshot.erase("_CatalogRowsRevision");return;}
+    if(state.Started||!state.Rows.empty()){snapshot[key]=state.Rows;snapshot["_CatalogRowsRevision"]=state.RowsRevision;}
+    else snapshot.erase("_CatalogRowsRevision");
 }}
 inline void InvalidateSources(bool removed){
     // A disk replacement/removal is not proof that an already mounted asset
@@ -267,5 +270,5 @@ inline void RefreshSourceMetadata(const HelpyCacheSources::Plan& plan,const std:
     ++state.AppliedRevision;
     if(state.Query.starts_with("__helpysource:"))Retry(0);
 }
-inline void ResetForGeneration(uint64_t generation){for(auto& state:Windows){if(state.RuntimeGeneration!=generation){NativeIcons.clear();const auto cancel=state.CancelGeneration;state=State{};state.CancelGeneration=cancel;state.RuntimeGeneration=generation;}}}
+inline void ResetForGeneration(uint64_t generation){for(auto& state:Windows){if(state.RuntimeGeneration!=generation){NativeIcons.clear();const auto cancel=state.CancelGeneration;state=State{};state.CancelGeneration=cancel;state.RuntimeGeneration=generation;state.RowsRevision=++RowsClock;}}}
 }

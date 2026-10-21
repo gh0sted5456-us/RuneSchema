@@ -3,6 +3,7 @@
 #include "Loader/QuestNetworkId.h"
 #include "Loader/QuestObjectReference.h"
 #include "Loader/ItemIdentity.h"
+#include "Core/SaveRegistrySnapshot.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Structs/Custom/FScriptMapHelper.h"
@@ -221,6 +222,8 @@ private:
         // No allocations or callbacks after publication starts. Stage destructors
         // release the old containers, not the newly published entries.
         idStage.Publish();nameStage.Publish();assetStage.Publish();reverseStage.Publish();arrayStage.Publish();
+        // Non-throwing additive bookkeeping, after the native maps commit.
+        PS::SaveCleanup::IncludeVerifiedIdentity(journal?PS::SaveCleanup::VerifiedKind::Journal:PS::SaveCleanup::VerifiedKind::Quest,RC::to_string(persistenceText));
         return plan.Id;
     }
 };

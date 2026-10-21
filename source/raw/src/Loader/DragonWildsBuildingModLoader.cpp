@@ -270,8 +270,18 @@ namespace DragonWilds {
             Hook::UnregisterCallback(m_recoveryTickCallbackId);
     }
 
+    nlohmann::json DragonWildsBuildingModLoader::PlanToolImport(const nlohmann::json& data){
+        if(!data.is_object()||data.value("schema",std::string{})!="rsdwtools.buildings.v1"||!data.contains("pieces")||!data["pieces"].is_array()||data["pieces"].empty()||data["pieces"].size()>4096)
+            throw std::runtime_error("Choose an rsdwtools.buildings.v1 export with 1-4096 pieces");
+        std::unordered_set<int64_t> ids;for(const auto& piece:data["pieces"]){
+            if(!piece.is_object()||!piece.contains("piece_id")||!piece["piece_id"].is_number_integer()||!ids.insert(piece["piece_id"].get<int64_t>()).second)throw std::runtime_error("Prefab has missing or duplicate piece IDs; nothing saved");
+        }
+        nlohmann::json plan=nlohmann::json::array();ReadDefinitions(data,TEXT("runeschema"),&plan);
+        if(plan.empty())throw std::runtime_error("Prefab could not be prepared; no placements were saved. Check RuneSchema's buildings log.");
+        return plan;
+    }
     void DragonWildsBuildingModLoader::ReadDefinitions(
-        const nlohmann::json& data, const RC::StringType& modName)
+        const nlohmann::json& data, const RC::StringType& modName,nlohmann::json* plan)
     {
         if(data.is_object() && data.value("schema",std::string{})=="rsdwtools.buildings.v1") {
             if(!data.contains("pieces") || !data.at("pieces").is_array()) {
@@ -412,6 +422,7 @@ namespace DragonWilds {
                         {"Scale",{{"X",number("scale_x",1)},{"Y",number("scale_y",1)},{"Z",number("scale_z",1)}}}});
                 }
             } catch(const std::exception& error) {
+                if(plan)throw;
                 ++rejected;PS::Log<LogLevel::Error>(STR("{}: RSDW Base Builder piece rejected: {}.\n"),modName,PS::ToWideSafe(error.what()));
             }
             if(!staticPieces.empty()) {
@@ -427,6 +438,7 @@ namespace DragonWilds {
                     {"Scale",{{"X",1},{"Y",1},{"Z",1}}},{"GroundToSurface",false},
                     {"CollisionProfile","BlockAll"},{"Pieces",std::move(staticPieces)}});
             }
+            if(plan){*plan=std::move(placements);return;}
             if(ImportPlacements && !placements.empty())ImportPlacements(placements,modName);
             else if(!placements.empty())PS::Log<LogLevel::Error>(STR("{}: RSDW Base Builder placement service is unavailable; definitions and other loaders continue.\n"),modName);
             const auto extras=(data.contains("items")&&data.at("items").is_array()?data.at("items").size():0)

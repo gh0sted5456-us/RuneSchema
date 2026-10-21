@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace PS::HelpyBranding {
 inline constexpr char Name[]="RSMK";
@@ -26,11 +27,24 @@ inline void CommunityLayer(std::uint8_t* rgba,bool accent){
     // Nexus's orange is a separate neutral alpha mask. Tinting is performed
     // by the draw call, so changing themes never decodes or uploads it again.
     const int chroma=std::max(0,int(rgba[0])-int(rgba[2]));
-    const unsigned coverage=std::clamp(chroma*255/100,0,255);
+    const unsigned coverage=std::clamp((chroma-12)*255/48,0,255);
     const unsigned layer=accent?coverage:255-coverage;
     const unsigned light=std::max({rgba[0],rgba[1],rgba[2]});
     rgba[3]=static_cast<std::uint8_t>((unsigned(rgba[3])*layer*light+32512)/65025);
     rgba[0]=rgba[1]=rgba[2]=255;
+}
+// Trim transparent/black padding after mask conversion, contain-fit each mark
+// on the same square canvas. Originals on disk remain untouched.
+inline void NormalizeMark(unsigned& width,unsigned& height,std::vector<std::uint8_t>& pixels){
+    if(!width||!height||pixels.size()!=size_t(width)*height*4)return;
+    unsigned left=width,top=height,right=0,bottom=0;
+    for(unsigned y=0;y<height;++y)for(unsigned x=0;x<width;++x)if(pixels[(size_t(y)*width+x)*4+3]>16){left=std::min(left,x);right=std::max(right,x+1);top=std::min(top,y);bottom=std::max(bottom,y+1);}
+    if(right<=left||bottom<=top)return;
+    constexpr unsigned side=96,content=88;std::vector<std::uint8_t> result(side*side*4);
+    const double scale=double(content)/std::max(right-left,bottom-top);const unsigned w=std::max(1u,unsigned((right-left)*scale)),h=std::max(1u,unsigned((bottom-top)*scale));
+    for(unsigned y=0;y<h;++y)for(unsigned x=0;x<w;++x){const unsigned sx=left+std::min(right-left-1,unsigned(x/scale)),sy=top+std::min(bottom-top-1,unsigned(y/scale));
+        std::copy_n(pixels.data()+(size_t(sy)*width+sx)*4,4,result.data()+((size_t(y+(side-h)/2)*side+x+(side-w)/2)*4));}
+    width=height=side;pixels=std::move(result);
 }
 inline void MonochromeMask(std::uint8_t* rgba,bool darkForeground=false) {
     const unsigned luminance=(54u*rgba[0]+183u*rgba[1]+19u*rgba[2]+128u)/256u;

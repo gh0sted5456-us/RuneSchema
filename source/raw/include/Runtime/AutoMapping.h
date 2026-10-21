@@ -5,6 +5,8 @@
 #include "Core/ConfigFiles.h"
 #include "Core/UsmapIndex.h"
 #include "Core/MappingRetention.h"
+#include "Core/RuntimeModPath.h"
+#include "Core/MappingCompatibility.h"
 #include "Utility/Logging.h"
 #include "Utility/Config.h"
 #include "Unreal/Hooks.hpp"
@@ -42,8 +44,11 @@ inline void Prune(const Json& receipt)noexcept{try{
 inline void Prepare()noexcept{try{
     if(!PSConfig::Get()->GetSettings().autoUpdateMappings||GetEnvironmentVariableW(L"RUNESCHEMA_DISABLE_AUTO_MAPPING",nullptr,0))return;
     wchar_t executable[32768]{};const auto length=GetModuleFileNameW(nullptr,executable,_countof(executable));if(!length||length>=_countof(executable))return;
-    const fs::path binary(executable);Build=Key(binary.filename().generic_string()+"|"+ExecutableVersion::Current()+"|"+std::to_string(fs::file_size(binary))+"|"+std::to_string(fs::last_write_time(binary).time_since_epoch().count()));
-    Root=HostServices::CacheDirectory()/"mappings"/"automatic";Host=HostServices::WorkingDirectory();Safe(Root);Safe(Host);
+    const fs::path binary(executable);
+    // Resolve the managed package alias once; redirects inside the cache remain forbidden.
+    const auto [root,host]=RuntimeModPath::MappingRoots(HostServices::ModDirectory(),HostServices::WorkingDirectory(),HostServices::CacheDirectory());
+    Root=root;Host=host;Safe(Root);Safe(Host);
+    Build=Key(MappingCompatibility::Identity(binary,Host,Host/"Mods/RuneSchema",ExecutableVersion::Current()));
     const auto receipt=Root/"current.json";
     if(fs::is_regular_file(receipt))try{Safe(receipt);const auto saved=Json::parse(ConfigFiles::Read(receipt,8192));const auto fingerprint=saved.value("Fingerprint",std::string{});if(saved.value("Version",0)==1&&MappingRetention::Identity(saved))Previous=saved;
         if(saved.value("Version",0)==1&&saved.value("Build",std::string{})==Build&&Hex(fingerprint)){

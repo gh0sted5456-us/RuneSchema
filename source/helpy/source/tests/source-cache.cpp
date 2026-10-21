@@ -6,7 +6,7 @@
 struct CacheProviderManifest {
     struct Lane {std::vector<std::string> Paths;};
     std::string Owner;std::vector<Lane> AssetLanes;
-    std::vector<std::string> WearableMeshData,MeleeAttackClasses,RangedAttackClasses;
+    std::vector<std::string> WearableMeshData,MeleeAttackClasses,RangedAttackClasses,CacheAssets;
     nlohmann::json LoaderDefinitions=nlohmann::json::object();
 };
 int main(int argc,char** argv)try{namespace fs=std::filesystem;using namespace PS::HelpySourceCache;
@@ -158,6 +158,9 @@ int main(int argc,char** argv)try{namespace fs=std::filesystem;using namespace P
     InspectingRevision=nowPlan.Revision;Worker=std::async(std::launch::async,[metadataOnly]{return metadataOnly;});Worker.wait();
     assert(!Poll(root));assert(Current.PlanRevision==nowPlan.Revision&&ForClient().value("Ready",false));
     assert(!Worker.valid()&&Next-std::chrono::steady_clock::now()>std::chrono::seconds(50));
+    {auto remote=Document(Current);remote["PlanRevision"]=Current.PlanRevision+1;remote["ContentRevision"]=Current.ContentRevision+1;
+        assert(!AcceptRemote(remote));assert(Current.PlanRevision==remote["PlanRevision"]&&Current.ContentRevision==remote["ContentRevision"]);
+    }
     Shutdown();
     {auto partial=Current;partial.Authoritative=true;partial.Complete=false;assert(!Document(partial).value("Ready",true));
         const auto sourceFile=Directory(false)/"sources.json";fs::create_directories(sourceFile.parent_path());{std::ofstream out(sourceFile);out<<"last-good-source-snapshot";}
@@ -167,10 +170,12 @@ int main(int argc,char** argv)try{namespace fs=std::filesystem;using namespace P
     PS::HelpyCacheSources::Reset();
     CacheProviderManifest provider;provider.Owner="Second";provider.AssetLanes={{{"/SharedMount/Items/I.I","/SharedMount/Items/J.J"}}};
     provider.WearableMeshData={"/WearableMount/M.M"};provider.LoaderDefinitions={{"Recipes",{{"/RecipeMount/R.R",nlohmann::json::object()}}}};
+    provider.CacheAssets={"/SharedMount/Icons/Original.Original"};
     PS::HelpyCacheSources::DeclareManifest(provider);
     auto providerPlan=PS::HelpyCacheSources::Snapshot();assert(providerPlan.Registered.empty());
     assert(providerPlan.AssetOwners->at(PS::HelpyCacheSources::AssetKey("/SharedMount/Items/I.I")).contains("second"));
     assert(providerPlan.AssetOwners->at(PS::HelpyCacheSources::AssetKey("/SharedMount/Items/J.J")).contains("second"));
+    assert(providerPlan.AssetOwners->at("/sharedmount/icons/original")==std::set<std::string>{"second"});
     assert(providerPlan.Owners.at("sharedmount").contains("second")&&providerPlan.Owners.at("wearablemount").contains("second")&&providerPlan.Owners.at("recipemount").contains("second"));
     PS::HelpyCacheSources::Registered("/SharedMount/Items/I.I");providerPlan=PS::HelpyCacheSources::Snapshot();
     const auto pak=second.parent_path().parent_path()/"paks"/"Second.pak";fs::create_directories(pak.parent_path());{std::ofstream out(pak);out<<"original provider pixels";}

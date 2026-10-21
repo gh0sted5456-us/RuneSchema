@@ -51,7 +51,13 @@ void ResetCharacterEditor(){CharacterPreview::Reset();characterEditor.Session.Re
 json SaveEditorOperation(const std::string& op,const json& args){
     if(op=="SaveEditorList"){
         json files=json::array(),warnings=json::array();
-        for(const auto& file:ImportedSaves())files.push_back({{"Name",file.filename().string()},{"Path",SavePathText(file)},{"Storage","Imported JSON payload"}});
+        size_t metadataBudget=16*1024*1024;
+        const auto append=[&](const fs::path& file,const char* storage,const char* provider){
+            std::string name=file.stem().string();std::error_code ec;const auto size=fs::file_size(file,ec);
+            if(!ec&&size<=512*1024&&size<=metadataBudget){metadataBudget-=size;try{const auto save=Read(file);if(save.contains("meta_data")&&save["meta_data"].is_object()){const auto label=save["meta_data"].value("char_name",std::string{});if(!label.empty()&&label.size()<=128)name=label;}}catch(...){}}
+            files.push_back({{"Name",name},{"FileName",file.filename().string()},{"Path",SavePathText(file)},{"Storage",storage},{"Provider",provider}});
+        };
+        for(const auto& file:ImportedSaves()){if(files.size()>=512){warnings.push_back("Save list limited to 512 entries");break;}append(file,"Imported JSON payload","Imported");}
         // Steam/Epic JSON is also editable while running Game Pass. This is a
         // source-format decision, not inferred from the active storefront.
         wchar_t local[32768]{};const auto count=GetEnvironmentVariableW(L"LOCALAPPDATA",local,_countof(local));
@@ -59,9 +65,11 @@ json SaveEditorOperation(const std::string& op,const json& args){
             const auto folder=fs::path(local)/"RSDragonwilds/Saved/SaveCharacters";std::error_code ec;
             if(fs::is_directory(folder,ec)){size_t entries=0;for(const auto& entry:fs::directory_iterator(folder)){
                 if(++entries>512){warnings.push_back("Local save list limited to 512 entries");break;}
-                if(entry.is_regular_file()&&entry.path().extension()==L".json")files.push_back({{"Name",entry.path().filename().string()},{"Path",SavePathText(entry.path())},{"Storage","Steam/Epic JSON"}});
+                if(files.size()>=512)break;
+                if(entry.is_regular_file()&&entry.path().extension()==L".json")append(entry.path(),"Steam/Epic JSON","SteamEpic");
             }}
         }
+        std::stable_sort(files.begin(),files.end(),[](const auto& a,const auto& b){return std::pair{a.at("Name").template get<std::string>(),a.at("Path").template get<std::string>()}<std::pair{b.at("Name").template get<std::string>(),b.at("Path").template get<std::string>()};});
         return {{"Files",files},{"Mods",EditorMods()},{"Warnings",warnings},{"Runtime",Storefront::Name(Storefront::Current())},
             {"AttachAvailable",false},{"Status","Edit imported character JSON from either runtime. Native Steam/Epic and Game Pass attachment adapters are not yet verified; export copies only."}};
     }
@@ -75,6 +83,15 @@ json SaveEditorOperation(const std::string& op,const json& args){
     }
     if(op=="SaveEditorClose"){ResetCharacterEditor();return {{"Status","Draft discarded. Original unchanged."}};}
     if(op=="SaveEditorRenderStop"){CharacterPreview::Reset();return {{"Status","Native preview stopped; transient scene released."}};}
+    if(op=="SaveEditorSlotItems"){
+        if(args.value("CacheFirst",false)){
+            const auto slot=args.at("Slot").get<std::string>();auto page=AssetSearch::AlphabeticalItemWindow("__helpyslot:"+slot+" "+args.value("Query",std::string{}),args.value("Cursor",std::string{}),48,"BasicRow");
+            page["Slot"]=slot;page["NextOffset"]=args.value("Offset",size_t{})+1;return page;
+        }
+        const auto slot=args.at("Slot").get<std::string>();auto page=AssetSearch::LoadoutWindow(slot,args.value("Query",std::string{}),args.value("Offset",size_t{}));page["Slot"]=slot;page["Coverage"]="Mounted and loaded native ItemData; slot metadata verified before inclusion.";return page;
+    }
+    // Item inspection is independent of an offline character draft.
+    if(op=="SaveEditorRender"&&args.value("View",std::string{})=="Item")return CharacterPreview::Render(json::object(),args);
     const auto source=EditorSource();
     if(op=="SaveEditorAppearance"||op=="SaveEditorAppearanceSet"||op=="SaveEditorRename"){
         if(characterEditor.Choices.empty())characterEditor.Choices=CharacterPreview::Choices();
@@ -92,12 +109,6 @@ json SaveEditorOperation(const std::string& op,const json& args){
         }
         if(op=="SaveEditorRename")characterEditor.Session.Rename(args.at("Name").get<std::string>(),args.at("Revision").get<uint64_t>());
         auto result=characterEditor.Session.Appearance();result["Choices"]=characterEditor.Choices;result["Status"]="Appearance/name changes affect the draft only; review and export a copy.";return result;
-    }
-    if(op=="SaveEditorSlotItems"){
-        if(!characterEditor.Session.Ready())throw std::runtime_error("Open a character copy first");const auto slot=args.at("Slot").get<std::string>();
-        auto page=AssetSearch::LoadoutWindow(slot,args.value("Query",std::string{}),args.value("Offset",size_t{}));
-        page["Slot"]=slot;page["Coverage"]="Native loaded ItemData only · refresh after loading additional content. Compatibility is not equip permission.";
-        return page;
     }
     if(op=="SaveEditorRender")return CharacterPreview::Render(CharacterWorkbench::Appearance(characterEditor.Session.Draft()),args);
     if(op=="SaveEditorSkills"||op=="SaveEditorSkillSet"){

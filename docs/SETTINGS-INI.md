@@ -30,6 +30,118 @@ ordinary numbers, quoted strings and JSON arrays. Plain words are also accepted
 for string settings. Semicolon and hash introduce comments outside quoted
 strings. Missing keys keep their built-in defaults; unknown keys are preserved.
 
+## Loading modes and Save Bypass
+
+Home > Quick settings offers Normal and Quick Launch. Vanilla Load is under
+Advanced. **Save Bypass** remains a separate, confirmed toggle:
+
+- **Normal (Less Restrictive)** (default): manual selection with `dom.PersistenceStrictMode=0`
+  retained across loads and menu returns for the game session.
+- **Quick Launch**: the same Less Restrictive policy plus automatic selection
+  of the saved character/world, loading-screen skip and camera fade after possession.
+- **Vanilla Load** (Advanced): use native strictness and manual character/world selection.
+
+Dedicated servers expose only **Save Bypass** as a loading control, not these
+client modes or character/world selectors. The server still auto-starts its
+configured world. With bypass enabled it also requests session-long native
+tolerant loading; with bypass disabled RuneSchema leaves native strictness alone.
+Pruning runs in either case. Client `quickLaunch.mode` is ignored on servers.
+
+Vanilla Load does not disable RuneSchema's registry-based orphan pruning.
+Hold Shift during startup to skip automatic launch; this does not cancel the
+selected session strictness policy.
+If a native world load has already been requested, Shift restores the loading
+screen but does not cancel that game-owned load.
+
+Choose a character and world in Quick settings, then **Save launch options**.
+You can change the selection whenever Helpy is connected; changes apply on the
+next game launch, never travel out of the running world. Native save choices
+are refreshed in the main menu. Both manual modes retain the previous selection for later.
+Options are stored in the existing `RuneSchema/settings/settings.ini`:
+
+```ini
+[quickLaunch]
+mode = "lessRestrictive"
+characterName = "BREWER"
+worldName = "Example world slot"
+```
+
+`mode` accepts `vanilla`, `lessRestrictive`, or `quickLaunch`. Old settings without
+`mode` migrate `enabled=false` to Normal (Less Restrictive) and `enabled=true` to
+Quick Launch. An explicit `mode="vanilla"` remains Vanilla Load. The legacy
+`enabled` and `softLoading` keys are synchronized aliases, not separate controls.
+Only Quick Launch requires selected names. Names must identify
+an existing native character and world slot. Ambiguous character names, unsupported
+native signatures, unavailable lifecycle hooks or a timeout stop automatic loading
+without retrying. Disable the standalone QuickLoad mod before using this option.
+The supplied standalone mod's INI is not rewritten or silently enabled.
+
+The separate bypass setting remains:
+
+```ini
+[persistence]
+allowCorruptCharacterEntry = false
+```
+
+Neither relaxed mode turns bypass on. Save Bypass changes only rejected native
+acceptance results on clients; dedicated servers also tie tolerant mode to that
+sole toggle. Relaxed modes verify the
+native tolerant policy at menu/world and character-load boundaries, retain it
+after the load handler returns, and reapply it if a native transition resets it.
+The prior value is restored only on RuneSchema shutdown when a valid native
+context remains available; nothing changes the game's disk configuration or
+unmodded future sessions. If the native variable or setter cannot be verified,
+RuneSchema logs the failure and does not claim tolerant loading succeeded.
+Registry-based orphan cleanup remains independent of the loading mode and
+Save Bypass, and does not wait for all pending
+clone/quest registrations. Exact declared pending identities remain protected.
+Neither tolerant loading nor bypass restores unreadable progress, guarantees entry,
+or proves that an in-memory prune has been persisted to disk. Keep original backups.
+
+Quick settings keeps the mode, Save and independent Save Bypass toggle visible.
+Character/world choices appear only for Quick Launch. Hover controls for details.
+Manual slot-name entry, refresh/reload and less-common switches are under **Advanced**.
+
+## Additional Logging Information
+
+Live Log offers an opt-in **Additional Logging Information** toggle and an
+**Options** popover. The master switch and every field default to off:
+
+```ini
+[additionalLogging]
+enabled = false
+filePaths = false
+region = false
+networkRates = false
+savePaths = false
+averageLatency = false
+```
+
+The viewer saves these options with a settings backup. Changes made through its
+popover apply on the next sampler tick; direct INI/advanced-settings edits apply
+at restart. Context is appended only to the existing UE4SS-derived
+`ue4ss/Mods/RuneSchema/RuneSchema.log`, not to a new directory or external service.
+Date/time/group prefixes and existing Game/UE4SS messages are unchanged.
+
+- `filePaths`: executable, mod, cache and log locations from existing path helpers.
+- `region`: the configured Windows country/region; no GPS or IP-geolocation lookup.
+- `networkRates`: observed upload/download traffic in Mbps across active physical
+  Ethernet/Wi-Fi adapters. It includes other applications, not just the game. Two
+  comparable samples are required; this is not a capacity estimate or speed test.
+- `savePaths`: known native save-provider directories, never save contents. Active
+  payload filenames are reported as unavailable when the provider does not expose
+  them; Game Pass WGS ownership remains with the native provider.
+- `averageLatency`: mean native player ping for an observed multiplayer cohort,
+  with sample counts and server/client scope. Zero, invalid and unavailable values
+  are excluded; an empty sample is **unavailable**, not zero latency. Client
+  replicated values may be stale.
+
+Paths/region are emitted when an enabled selection changes; rates and latency
+sample every 30 seconds. Native ping reads are sliced across game ticks. Turning
+the master switch off stops new additional samples, but does not erase prior
+rows or redact paths already present in ordinary native/mod messages. Review logs
+before sharing, particularly when either path option is enabled.
+
 ## Continuous logs and optional archives
 
 `RuneSchema.log` continuously records the current run in the mod root, including

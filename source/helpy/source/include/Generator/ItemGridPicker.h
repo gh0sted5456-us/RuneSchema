@@ -1,8 +1,10 @@
 #pragma once
 #include "Generator/SourceBanners.h"
+#include "Generator/PersonalizationPanel.h"
 #include "Core/ItemNameOrder.h"
 #include "Core/ItemCatalogFilter.h"
 #include "Generator/HelpyImGuiTheme.h"
+#include "Generator/DragFeedback.h"
 #include "Generator/ItemIconCache.h"
 #include "Generator/HelpyIconPacks.h"
 #include "Generator/ToolRequest.h"
@@ -15,8 +17,10 @@
 #include "Core/ItemSource.h"
 #include "Core/ItemFamily.h"
 #include "Core/ItemPopulation.h"
+#include "Core/LoadoutEligibility.h"
 #include "Generator/HelpyLoadingIndicator.h"
 #include "Core/HelpyPreviewHooks.h"
+#include "Core/ItemPreviewRequest.h"
 #include "Generator/QuickMenuDecorations.h"
 #include "Runtime/HostServices.h"
 #include <algorithm>
@@ -33,11 +37,19 @@
 #include <imgui_internal.h>
 namespace PS::ItemGridPicker {
 using json=nlohmann::json;
+inline json CachedSlotRows(const std::string& slot,const std::string& query,uint64_t generation){
+    json result=json::array();const auto& cache=LazyCatalog::For(0);if(cache.RuntimeGeneration!=generation)return result;
+    std::unordered_set<std::string> seen;const ItemCatalogFilter::Query filter(query);
+    const auto append=[&](const json& rows){for(const auto& row:rows){const auto path=ItemPresentation::Text(row,"Path");if(result.size()<2048&&!path.empty()&&LoadoutEligibility::Matches(row,slot)&&filter(row)&&seen.insert(path).second)result.push_back(row);}};
+    append(cache.Rows);for(const auto& [key,window]:cache.Cache)if(window.Generation==generation)append(window.Rows);return result;
+}
 inline void DrawItemBadges(const json& row,const ImVec2& min,const ImVec2& max,const HelpyImGuiTheme::Theme& theme,float badgeSize=28.0f,bool masterwork=true);
 struct State {
     std::string Query,SelectedPath,ActiveCategory{"All"};
     ItemSource::Kind SourceFilter=ItemSource::Kind::All;
     std::string FamilyKey,PendingFamilyKey;
+    bool FavoritesOnly=false;std::string PersonalTag;
+    uint64_t PersonalRevision=~uint64_t{};
     std::string SearchInput;
     double SearchDue=0;
     int PageIndex=0,PageSize=ItemPaging::DefaultSize;
@@ -67,7 +79,7 @@ inline bool ResizeDivider(const char* id,bool horizontal,float& value,float mini
     const auto a=ImGui::GetItemRectMin(),b=ImGui::GetItemRectMax();const auto c=ImVec2((a.x+b.x)*.5f,(a.y+b.y)*.5f);
     const float extent=theme.X(active||hover?42:28);
     ImGui::GetWindowDrawList()->AddLine(horizontal?ImVec2(c.x-extent*.5f,c.y):ImVec2(c.x,c.y-extent*.5f),horizontal?ImVec2(c.x+extent*.5f,c.y):ImVec2(c.x,c.y+extent*.5f),ImGui::GetColorU32(active||hover?theme.accentHover:theme.border),theme.X(2));
-    if(hover&&!active)ImGui::SetTooltip("Drag to resize");
+    if(hover&&!active)PS::HelpyImGuiTheme::Tooltip("Drag to resize");
     auto* storage=ImGui::GetStateStorage();const auto key=ImGui::GetID("dirty");
     if(active){const float delta=horizontal?ImGui::GetIO().MouseDelta.y:ImGui::GetIO().MouseDelta.x;
         if(delta!=0){value=std::clamp(value+delta*unitsPerPixel,minimum,std::max(minimum,maximum));storage->SetBool(key,true);}}
@@ -91,7 +103,7 @@ inline void IconCacheControl(bool catalogueBusy){
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::IconCache=HelpyPreviewHooks::LastRect();
 #endif
-    if(ImGui::IsItemHovered())ImGui::SetTooltip("Import a shared pack, pull game icons, export or update differences");
+    if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("Import a shared pack, pull game icons, export or update differences");
 }
 inline std::string CartStatus;
 inline ImVec2 DetailsSurfaceMin{},DetailsSurfaceSize{};
@@ -106,14 +118,16 @@ inline std::string IconForRow(const json& row){
 inline bool AddToCart(const json& row){if(!row.is_object())return false;auto current=row;current["Name"]=ItemPresentation::Name(row);current["Icon"]=IconForRow(row);const bool added=SharedCart.Add(current);if(added)CartStatus.clear();else CartStatus=SharedCart.Delivery()?"Wait for delivery to complete before changing the cart.":"Cart accepts up to 64 distinct items with canonical asset paths.";return added;}
 inline void RemoveFromCart(const std::string& path){SharedCart.Remove(path);}
 inline void ClearSharedCart(){SharedCart.Clear();CartStatus.clear();}
+inline void HeldItem(const json& row,const char* kind="Item"){
+    auto* texture=ItemIconCache::Get(IconForRow(row));DragFeedback::Held(kind,ItemPresentation::Name(row).c_str(),texture&&texture->Status==ImTextureStatus_OK?texture->GetTexRef():ImTextureRef{});
+}
 inline void DragItem(const json& row){
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::ItemRects[row.value("Path",std::string{})]=HelpyPreviewHooks::LastRect();
 #endif
-    if(!ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))return;
+    if(!ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID|ImGuiDragDropFlags_SourceNoPreviewTooltip))return;
     try{auto compact=ItemTransfer::Compact(row);compact["Name"]=ItemPresentation::Name(row);compact["Icon"]=IconForRow(row);const auto data=compact.dump();ImGui::SetDragDropPayload("RS_ITEM_ROW",data.c_str(),data.size()+1);}catch(const std::exception&){}
-    ImGui::TextUnformatted(ItemPresentation::Name(row).c_str());
-    ImGui::TextDisabled("Drop into the cart, Clone, or recipe inputs/outputs.");ImGui::EndDragDropSource();
+    HeldItem(row);ImGui::EndDragDropSource();
 }
 // Quick actions can be hidden in an editor without disabling item transfers.
 inline std::optional<json> AcceptItemDrop(std::string& error) {
@@ -134,8 +148,8 @@ struct Result {
     json ActionItems=json::array();
 };
 inline std::string Lower(std::string value){for(auto& c:value)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));return value;}
-inline std::string BackendQuery(const State& state){return ItemSource::Query(state.SourceFilter,state.ActiveCategory,
-    state.FamilyKey.empty()?state.Query:"__helpyfamily:"+state.FamilyKey+(state.Query.empty()?std::string{}:" "+state.Query));}
+inline std::string BackendQuery(const State& state){const auto query=HelpyPersonalization::QueryUsesLabels(state.Query)?std::string{}:state.Query;return ItemSource::Query(state.SourceFilter,state.ActiveCategory,
+    state.FamilyKey.empty()?query:"__helpyfamily:"+state.FamilyKey+(query.empty()?std::string{}:" "+query));}
 inline int MaxStack(const json& row){try{const auto it=row.find("MaxStackSize");if(it!=row.end()){if(it->is_number_integer())return std::clamp(it->get<int>(),1,10000);if(it->is_number_unsigned())return std::clamp(static_cast<int>(it->get<unsigned>()),1,10000);if(it->is_number_float())return std::clamp(static_cast<int>(it->get<double>()),1,10000);}}catch(...){}return 1;}
 inline const json* Find(const json& catalog,const char* selected) {
     if(!selected||!*selected||!catalog.contains("Items")||!catalog["Items"].is_array())return nullptr;
@@ -160,9 +174,9 @@ inline void Rebuild(const json& catalog,State& state,uint64_t revision) {
         const auto& row=items[i];
         if(!row.is_object())continue;
         if(!HelpyImGuiTheme::Current.itemShowPlaceholders&&ItemPresentation::Placeholder(row))continue;
-        if(!ItemSource::Matches(state.SourceFilter,ItemSource::Row(row))||!ItemFamily::Matches(state.FamilyKey,ItemPresentation::Name(row)))continue;
+        if(!ItemSource::Matches(state.SourceFilter,ItemSource::Row(row))||!ItemFamily::Matches(state.FamilyKey,ItemPresentation::OriginalName(row))||!PersonalizationPanel::Matches(row,state.FavoritesOnly,state.PersonalTag))continue;
         if(state.ActiveCategory!="All"&&row.value("Category",std::string("Misc"))!=state.ActiveCategory)continue;
-        if(query(row))state.Matches.push_back(i);
+        const auto labels=HelpyPersonalization::SearchText(row);if(labels.empty()){if(query(row))state.Matches.push_back(i);}else{auto searchable=row;searchable["Tags"]=ItemPresentation::Text(row,"Tags")+" "+labels;if(query(searchable))state.Matches.push_back(i);}
     }
     // Legacy/full snapshots and imported UI fixtures use the same A-Z order
     // as native paged browsing. Cache each key once rather than constructing
@@ -201,17 +215,15 @@ inline void LayoutControls() {
     if(ImGui::BeginPopup("##item-bay-layout")) {
         ImGui::TextUnformatted("Item view");ImGui::Separator();
         ImGui::Checkbox("Search as I type",&SearchAsYouType);
-        if(ImGui::Checkbox("Show [PH] placeholder items",&theme.itemShowPlaceholders))dirty=true;
         if(ImGui::RadioButton("Grid",theme.itemGridView)){theme.itemGridView=true;dirty=true;}ImGui::SameLine();
         if(ImGui::RadioButton("List",!theme.itemGridView)){theme.itemGridView=false;dirty=true;}
-        ImGui::SeparatorText("Grid layout");ImGui::SetNextItemWidth(theme.X(180.0f));
+        if(ImGui::CollapsingHeader("Layout & advanced")){ImGui::SetNextItemWidth(theme.X(180.0f));
         if(ImGui::SliderInt("Columns",&theme.itemGridColumns,1,ItemBayLayout::MaxColumns))dirty=true;
         ImGui::SetNextItemWidth(theme.X(180.0f));
         if(ImGui::SliderInt("Rows",&theme.itemGridRows,1,ItemBayLayout::MaxRows)){theme.itemGridFitRows=true;dirty=true;}
         if(ImGui::Checkbox("Size grid by rows",&theme.itemGridFitRows))dirty=true;
-        ImGui::TextDisabled("Fits the available window. Page size is below the items.");
-        ImGui::TextDisabled("Drag the lower divider for a free-height pane.");
-        if(HelpyImGuiTheme::SoftButton("Reset to 5 x 4")){theme.itemGridColumns=ItemBayLayout::DefaultColumns;theme.itemGridRows=ItemBayLayout::DefaultRows;theme.itemGridFitRows=true;dirty=true;}
+        if(ImGui::Checkbox("Show [PH] placeholder items",&theme.itemShowPlaceholders))dirty=true;
+        if(HelpyImGuiTheme::SoftButton("Reset to 5 x 4")){theme.itemGridColumns=ItemBayLayout::DefaultColumns;theme.itemGridRows=ItemBayLayout::DefaultRows;theme.itemGridFitRows=true;dirty=true;}}
         if(HelpyImGuiTheme::SoftButton("Reload items")){ItemIconCache::RetryFailed();LazyCatalog::Retry(0);}ImGui::EndPopup();
     }
     if(dirty&&!ImGui::IsAnyItemActive()){HelpyImGuiTheme::SaveCurrent();dirty=false;}
@@ -264,7 +276,7 @@ inline void RenderDetailsPopup() {
         ||ImGui::IsMouseDown(0)||ImGui::IsMouseDown(1)){popup.Open=false;return;}
     ItemDetails::Poll();const auto& row=popup.Row;const auto* entry=ItemDetails::Find(popup.Path);const auto& native=entry?entry->Native:row;
     const auto& theme=HelpyImGuiTheme::Current;HelpyImGuiTheme::Scope skin(theme);
-    auto title=ItemPresentation::CleanName(ItemPresentation::Text(native,"Name"));if(title.empty())title=popup.Name;
+    auto title=HelpyPersonalization::Nickname(HelpyPersonalization::ItemKey(row));if(title.empty())title=ItemPresentation::CleanName(ItemPresentation::Text(native,"Name"));if(title.empty())title=popup.Name;
     const auto category=ItemPresentation::Text(row,"Category");auto description=ItemPresentation::Description(native);if(description.empty())description=ItemPresentation::Description(row);
     auto facts=ItemPresentation::Facts(native);
     if(row.contains("Pointer")){
@@ -304,6 +316,7 @@ inline void RenderDetailsPopup() {
         popup.Min=ImGui::GetWindowPos();const auto size=ImGui::GetWindowSize();popup.Max={popup.Min.x+size.x,popup.Min.y+size.y};
         SourceBanners::Draw(popup.Row,popup.Min,popup.Max);
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX()+content);ImGui::TextWrapped("%s",title.c_str());
+        if(!HelpyPersonalization::Nickname(HelpyPersonalization::ItemKey(row)).empty())ImGui::TextDisabled("{%s}",ItemPresentation::OriginalName(row).c_str());
         ImGui::TextDisabled("Source: %s",ItemSource::DisplayName(itemSource).c_str());
         if(!category.empty())ImGui::TextDisabled("%s",category.c_str());
         if(power){const auto pos=ImGui::GetCursorScreenPos();const float size=theme.Y(28);auto badge=row;badge["PowerLevel"]=*power;badge["Masterwork"]=false;DrawItemBadges(badge,pos,{pos.x+size,pos.y+size},theme);ImGui::Dummy({size,size});ImGui::SameLine();ImGui::Text("Power level %.0f",*power);}
@@ -321,14 +334,18 @@ inline void RenderDetailsPopup() {
 #endif
     }ImGui::End();ImGui::PopStyleVar();
 }
+inline void InspectActions(const json& row){
+    if(ImGui::MenuItem("Preview",nullptr,false,ItemPreviewRequest::Valid(row)))ItemPreviewRequest::Show(row);
+    if(ImGui::MenuItem("Show item details"))PinDetails(row);
+}
 inline void ContextMenu(const json& catalog,const json& row,const std::string& path,const std::string& name,char* selected,size_t selectedCapacity,State& state,Result& out,bool allowMulti,bool persistCart,bool allowGive=true) {
     if(!ImGui::BeginPopupContextItem("##item-actions"))return;
     const size_t selectedCount=state.SelectedPaths.size();const bool multi=selectedCount>1&&IsSelected(state,path);
-    ImGui::TextUnformatted(name.c_str());ImGui::TextDisabled("Max stack: %d",MaxStack(row));
+    ImGui::TextUnformatted(name.c_str());
     const auto origin=ItemSource::Row(row);ImGui::TextDisabled("Source: %s%s%s",ItemSource::Label(origin.Group),origin.Name.empty()?"":" / ",origin.Name.c_str());
     if(multi)ImGui::TextDisabled("Actions apply to all %zu selected items.",selectedCount);ImGui::Separator();
-    if(ImGui::MenuItem("Show item details"))PinDetails(row);
-    const auto family=ItemFamily::Key(name);
+    InspectActions(row);
+    const auto family=ItemFamily::Key(ItemPresentation::OriginalName(row));
     if(ImGui::MenuItem("View family",nullptr,false,!family.empty()))state.PendingFamilyKey=family;
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::ViewFamily=HelpyPreviewHooks::LastRect();
@@ -340,13 +357,14 @@ inline void ContextMenu(const json& catalog,const json& row,const std::string& p
     HelpyPreviewHooks::AddCart=HelpyPreviewHooks::LastRect();
 #endif
     ImGui::Separator();
-    if(!allowGive){if(ImGui::MenuItem("Reload item details",nullptr,false,ItemDetails::Pending==0))ItemDetails::Reload(path);ImGui::EndPopup();return;}
+    PersonalizationPanel::Menu(row);
     const std::string giveStackLabel=multi?("Give full stack ("+std::to_string(selectedCount)+" selected)"):"Give full stack";
     const std::string giveOneLabel=multi?("Give one ("+std::to_string(selectedCount)+" selected)"):"Give one";
-    if(ImGui::MenuItem(giveStackLabel.c_str())){out.RequestedAction=ContextAction::GiveStack;out.ActionPath=path;out.ActionCount=MaxStack(row);out.ActionItems=BuildActionItems(catalog,state,path,true);}
-    if(ImGui::MenuItem(giveOneLabel.c_str())){out.RequestedAction=ContextAction::GiveOne;out.ActionPath=path;out.ActionCount=1;out.ActionItems=BuildActionItems(catalog,state,path,false);}
-    ImGui::Separator();
-    if(ImGui::MenuItem("Reload item details",nullptr,false,ItemDetails::Pending==0))ItemDetails::Reload(path);
+    if(allowGive&&ImGui::BeginMenu("Give")){
+        if(ImGui::MenuItem(giveOneLabel.c_str())){out.RequestedAction=ContextAction::GiveOne;out.ActionPath=path;out.ActionCount=1;out.ActionItems=BuildActionItems(catalog,state,path,false);}
+        if(ImGui::MenuItem(giveStackLabel.c_str())){out.RequestedAction=ContextAction::GiveStack;out.ActionPath=path;out.ActionCount=MaxStack(row);out.ActionItems=BuildActionItems(catalog,state,path,true);}ImGui::EndMenu();
+    }
+    if(ImGui::BeginMenu("Advanced")){if(ImGui::MenuItem("Reload item details",nullptr,false,ItemDetails::Pending==0))ItemDetails::Reload(path);ImGui::EndMenu();}
     ImGui::EndPopup();
 }
 inline std::string Ellipsize(const std::string& text,float maxWidth) {
@@ -413,7 +431,7 @@ inline void PlacardTitle(const std::string& name,const ImVec2& min,const ImVec2&
 }
 // All item surfaces (browser, recipe nodes, creation slots, cart) share this
 // renderer. Compact cards keep the same artwork, title, badge and border rules.
-inline void DrawPlacard(const json& row,const ImVec2& min,const ImVec2& max,bool selected=false,bool hovered=false) {
+inline void DrawPlacard(const json& row,const ImVec2& min,const ImVec2& max,bool selected=false,bool hovered=false,float footerLeftInset=0) {
     const auto& theme=HelpyImGuiTheme::Current;auto* draw=ImGui::GetWindowDrawList();
     const auto path=ItemPresentation::Text(row,"Path");const auto* details=ItemDetails::Find(path);
     const auto name=ItemPresentation::Name(row);
@@ -427,7 +445,7 @@ inline void DrawPlacard(const json& row,const ImVec2& min,const ImVec2& max,bool
     auto titleTheme=theme;if(masterwork)titleTheme.text=theme.accentHover;
     const auto border=masterwork?HelpyImGuiTheme::Mix(theme.border,theme.accentHover,0.42f):theme.border;
     draw->AddRectFilled(min,max,ImGui::GetColorU32(HelpyImGuiTheme::Mix(selected?theme.selection:theme.panelAlt,theme.controlHover,fade*0.7f)),theme.X(theme.childRounding));
-    draw->AddRect(min,max,ImGui::GetColorU32(HelpyImGuiTheme::Mix(border,theme.accent,std::max(selected?0.45f:0.0f,fade*0.75f))),theme.X(theme.childRounding),0,theme.X(1.0f));
+    draw->AddRect(min,max,ImGui::GetColorU32(selected?theme.accentHover:HelpyImGuiTheme::Mix(border,theme.accent,fade*0.75f)),theme.X(theme.childRounding),0,theme.X(selected?2.0f:1.0f));
     const float extent=std::max(1.0f,std::min({theme.Y(theme.gridIconSize),width-theme.X(20),height-footer-theme.Y(12)}));
     const ImVec2 artMin(compact?min.x+theme.X(6):min.x+(width-extent)*0.5f,min.y+(height-footer-extent)*0.5f),artMax(artMin.x+extent,artMin.y+extent);
     if(icon.empty()||!ItemIconCache::Draw(icon,artMin,artMax,true))DrawPlaceholder(artMin,artMax,theme);
@@ -439,7 +457,7 @@ inline void DrawPlacard(const json& row,const ImVec2& min,const ImVec2& max,bool
         if(hasPower)DrawItemBadges(row,ImVec2(max.x-theme.X(30)-sourceWidth-sourceGap,min.y+theme.Y(5)),max,theme,22,false);
     }else{
         const float top=max.y-footer;draw->AddLine(ImVec2(min.x+theme.X(8),top),ImVec2(max.x-theme.X(8),top),ImGui::GetColorU32(theme.border));
-        PlacardTitle(name,ImVec2(min.x+theme.X(9),top+theme.Y(2)),ImVec2(max.x-theme.X(9),max.y-theme.Y(3)),titleTheme);
+        PlacardTitle(name,ImVec2(min.x+theme.X(9)+std::max(0.f,footerLeftInset),top+theme.Y(2)),ImVec2(max.x-theme.X(9),max.y-theme.Y(3)),titleTheme);
         DrawItemBadges(row,ImVec2(min.x+theme.X(6),min.y+theme.Y(4)),max,theme,28,false);
     }
     if(masterwork){
@@ -453,6 +471,7 @@ inline void DrawPlacard(const json& row,const ImVec2& min,const ImVec2& max,bool
     // Modified vanilla/official content retains its original provider; use a
     // small bottom-left edit mark rather than the mod-created top-right logo.
     const auto origin=ItemSource::Row(row);
+    PersonalizationPanel::Marks(row,artMin,artMax);
     if(origin.Modified){
         const float size=theme.Y(compact?12:16);const ImVec2 point{min.x+theme.X(5),max.y-footer-size-theme.Y(4)};
         draw->AddRectFilled(point,{point.x+size,point.y+size},ImGui::GetColorU32(theme.panelAlt),theme.X(2));
@@ -492,17 +511,18 @@ inline void PopulationProgress(const LazyCatalog::State& lazy,const std::set<std
         if(view.Busy&&!lazy.Rows.empty()&&lazy.LastError.empty())HelpyLoadingIndicator::Draw({slot.x+size*.5f,slot.y+size*.5f},size*.34f,theme,view.Label,progressDetail);
     }
 }
-inline Result Render(const char* id,const json& catalog,char* filter,size_t filterCapacity,char* selected,size_t selectedCapacity,State& state,uint64_t revision,bool allowMulti=true,bool quickActions=false,bool fillSpace=false,bool uniformCards=false,bool showControls=true,float fixedViewport=0) {
+inline Result Render(const char* id,const json& catalog,char* filter,size_t filterCapacity,char* selected,size_t selectedCapacity,State& state,uint64_t revision,bool allowMulti=true,bool quickActions=false,bool fillSpace=false,bool uniformCards=false,bool showControls=true,float fixedViewport=0,const LazyCatalog::State* localCatalog=nullptr) {
     ItemDetails::Poll();Result out;std::set<std::string> visibleIcons;ImGui::PushID(id);LoadViewPreference(state);SyncLegacySelection(state,selected);
+    if(state.PersonalRevision!=HelpyPersonalization::Revision.load()){state.PersonalRevision=HelpyPersonalization::Revision.load();state.CatalogRevision=0;state.Matches.clear();state.PageIndex=0;state.ResetScroll=true;}
     if(!filter||!filterCapacity||!selected||!selectedCapacity){ImGui::TextDisabled("Item picker buffer unavailable.");ImGui::PopID();return out;}
     if(!state.PendingFamilyKey.empty()){
         state.FamilyKey=std::move(state.PendingFamilyKey);state.PendingFamilyKey.clear();state.Query.clear();state.SearchInput.clear();filter[0]=0;
-        state.ActiveCategory="All";HelpyImGuiTheme::Current.itemCategory="All";state.PageIndex=0;state.ResetScroll=true;state.CatalogRevision=0;state.Matches.clear();
-        LazyCatalog::Search(0,BackendQuery(state));
+        state.ActiveCategory="All";if(!localCatalog)HelpyImGuiTheme::Current.itemCategory="All";state.PageIndex=0;state.ResetScroll=true;state.CatalogRevision=0;state.Matches.clear();
+        if(!localCatalog)LazyCatalog::Search(0,BackendQuery(state));
     }
     const auto sourcePreference=ItemSource::Decode(HelpyImGuiTheme::Current.itemSource);
-    if(state.SourceFilter!=sourcePreference){state.SourceFilter=sourcePreference;state.CatalogRevision=0;state.Matches.clear();state.PageIndex=0;state.ResetScroll=true;LazyCatalog::Search(0,BackendQuery(state));}
-    const auto& theme=HelpyImGuiTheme::Current;if(state.ActiveCategory!=theme.itemCategory){state.ActiveCategory=theme.itemCategory;state.Matches.clear();state.CatalogRevision=0;state.PageIndex=0;state.ResetScroll=true;}
+    if(!localCatalog&&state.SourceFilter!=sourcePreference){state.SourceFilter=sourcePreference;state.CatalogRevision=0;state.Matches.clear();state.PageIndex=0;state.ResetScroll=true;LazyCatalog::Search(0,BackendQuery(state));}
+    const auto& theme=HelpyImGuiTheme::Current;if(!localCatalog&&state.ActiveCategory!=theme.itemCategory){state.ActiveCategory=theme.itemCategory;state.Matches.clear();state.CatalogRevision=0;state.PageIndex=0;state.ResetScroll=true;}
     if(state.ShowPlaceholders!=theme.itemShowPlaceholders){state.ShowPlaceholders=theme.itemShowPlaceholders;state.PageIndex=0;state.ResetScroll=true;Rebuild(catalog,state,revision);}
     if(state.PageSize!=theme.itemPageSize){state.PageIndex=ItemPaging::Resize(state.PageIndex,state.PageSize,theme.itemPageSize);state.PageSize=ItemPaging::Size(theme.itemPageSize);state.ResetScroll=true;}
     if(state.CatalogRevision!=revision)Rebuild(catalog,state,revision);out.MatchCount=state.Matches.size();
@@ -546,6 +566,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     HelpyPreviewHooks::SourceFilter=HelpyPreviewHooks::LastRect();
 #endif
     inlineControl(theme.X(96));LayoutControls();state.GridView=theme.itemGridView;
+    if(PersonalizationPanel::Filters(state.FavoritesOnly,state.PersonalTag)){state.CatalogRevision=0;state.Matches.clear();state.PageIndex=0;state.ResetScroll=true;}
     PopulationProgress(LazyCatalog::For(0),state.VisibleProgressIcons,true);
     if(!state.FamilyKey.empty()){
         auto label=state.FamilyKey;std::replace(label.begin(),label.end(),'_',' ');for(size_t i=0;i<label.size();++i)if(i==0||label[i-1]==' ')label[i]=static_cast<char>(std::toupper(static_cast<unsigned char>(label[i])));
@@ -553,8 +574,8 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
         if(ImGui::SmallButton("Clear family")){state.FamilyKey.clear();state.PageIndex=0;state.ResetScroll=true;state.CatalogRevision=0;state.Matches.clear();LazyCatalog::Search(0,BackendQuery(state));}
     }
     }
-    if(LazyCatalog::For(0).Started&&LazyCatalog::For(0).Query!=BackendQuery(state)){LazyCatalog::Search(0,BackendQuery(state));state.Matches.clear();state.CatalogRevision=0;}
-    const auto& lazy=LazyCatalog::For(0);
+    if(!localCatalog&&LazyCatalog::For(0).Started&&LazyCatalog::For(0).Query!=BackendQuery(state)){LazyCatalog::Search(0,BackendQuery(state));state.Matches.clear();state.CatalogRevision=0;}
+    const auto& lazy=localCatalog?*localCatalog:LazyCatalog::For(0);
     if(!lazy.LastError.empty()&&!lazy.Pending){
         ImGui::PushStyleColor(ImGuiCol_Text,theme.warning);ImGui::TextWrapped("%s",lazy.LastError.c_str());ImGui::PopStyleColor();
         if(ImGui::SmallButton("Retry loading items"))LazyCatalog::Retry(0);
@@ -565,7 +586,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     }
     const auto page=ItemPaging::Slice(state.Matches.size(),state.PageIndex,state.PageSize,lazy.HasMore);
     const int wanted=(state.PageIndex+1)*state.PageSize;
-    LazyCatalog::FillTo(0,static_cast<int>(lazy.Rows.size())+std::max(0,wanted-static_cast<int>(state.Matches.size())));
+    if(!localCatalog)LazyCatalog::FillTo(0,static_cast<int>(lazy.Rows.size())+std::max(0,wanted-static_cast<int>(state.Matches.size())));
     if(state.ProgressPage!=state.PageIndex){state.ProgressPage=state.PageIndex;state.VisibleProgressIcons.clear();}
     const float availableLogical=ImGui::GetContentRegionAvail().y/std::max(0.01f,theme.Scale()*theme.density);
     const float maxPane=std::max(96.0f,availableLogical-(fillSpace?56.0f:quickActions?ItemPaging::CartHeight(SharedCart.Entries().size(),theme.advancedMode)+80.0f:100.0f));
@@ -586,7 +607,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
         ImGui::EndDragDropTarget();
     }
     const bool populationWait=lazy.LastError.empty()&&(!lazy.Started||lazy.Pending||lazy.PreparingAlphabetical||lazy.HasMore)&&state.Matches.empty();
-    if(populationWait){const auto progress=ItemPopulation::Describe(lazy.PopulationStage,false,lazy.PopulationDone,{},lazy.CheckingChanges,lazy.PopulationTotal);DrawLoadingSpinner(theme,progress.Label.c_str());}
+    if(populationWait){if(localCatalog)ImGui::TextDisabled("Checking the cached matching items…");else{const auto progress=ItemPopulation::Describe(lazy.PopulationStage,false,lazy.PopulationDone,{},lazy.CheckingChanges,lazy.PopulationTotal);DrawLoadingSpinner(theme,progress.Label.c_str());}}
     else if(catalog.contains("Items")&&catalog["Items"].is_array()) {
         const auto& items=catalog["Items"];const int total=static_cast<int>(page.Count);
         if(!state.GridView) {
@@ -689,9 +710,10 @@ inline void RenderSelectedDetails(){
     const auto& row=Bay.DetailsRow;const auto& native=details?details->Native:row;
     if(ImGui::BeginChild("##bay-selected-details",{0,0},false)){
         SourceBanners::DetailsBackground(row);
-        auto name=ItemPresentation::CleanName(ItemPresentation::Text(native,"Name"));if(name.empty())name=ItemPresentation::Name(row);
+        auto name=HelpyPersonalization::Nickname(HelpyPersonalization::ItemKey(row));if(name.empty())name=ItemPresentation::CleanName(ItemPresentation::Text(native,"Name"));if(name.empty())name=ItemPresentation::Name(row);
         const auto a=ImGui::GetCursorScreenPos();const float size=HelpyImGuiTheme::Current.Y(36);
         ItemIconCache::Draw(IconForRow(row),a,{a.x+size,a.y+size},true);ImGui::Dummy({size,size});ImGui::SameLine();ImGui::TextWrapped("%s",name.c_str());
+        if(!HelpyPersonalization::Nickname(HelpyPersonalization::ItemKey(row)).empty())ImGui::TextDisabled("{%s}",ItemPresentation::OriginalName(row).c_str());
         const auto origin=ItemSource::Row(row);ImGui::TextDisabled("Source: %s",ItemSource::DisplayName(origin).c_str());
         auto power=ItemBadges::Power(native);if(!power)power=ItemBadges::Power(row);
         if(power){const auto pos=ImGui::GetCursorScreenPos();const float badgeSize=HelpyImGuiTheme::Current.Y(28);auto badge=row;badge["PowerLevel"]=*power;DrawItemBadges(badge,pos,{pos.x+badgeSize,pos.y+badgeSize},HelpyImGuiTheme::Current);ImGui::Dummy({badgeSize,badgeSize});ImGui::SameLine();ImGui::Text("Power level %.0f",*power);}

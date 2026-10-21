@@ -27,6 +27,7 @@ struct Snapshot {
     std::map<std::string,std::set<std::string>> DeclaredOwners;
     std::map<std::string,std::filesystem::path> FilePaths; // Worker-local; never sent to a client or exported.
     std::shared_ptr<const HelpyCacheSources::Plan::AssetOwnerMap> AuthoredAssets;
+    std::shared_ptr<const HelpyCacheSources::Plan::AssetOwnerMap> AssetOwners;
 };
 inline uint64_t Hash(std::string_view value,uint64_t seed=1469598103934665603ull){for(unsigned char c:value){seed^=c;seed*=1099511628211ull;}return seed;}
 inline std::string Hex(uint64_t value){char text[17]{};std::snprintf(text,sizeof(text),"%016llx",static_cast<unsigned long long>(value));return text;}
@@ -93,6 +94,7 @@ inline Snapshot Inspect(const std::filesystem::path& root,const HelpyCacheSource
     Snapshot result;result.Authoritative=plan.Authoritative;result.Complete=plan.Complete;result.PlanRevision=plan.Revision;result.ContentRevision=plan.ContentRevision;
     result.Owners=plan.Owners;result.FilePaths=std::move(filePaths);
     result.AuthoredAssets=std::move(authored);
+    result.AssetOwners=plan.AssetOwners;
     result.DeclaredOwners=plan.DeclaredOwners;
     // Feature descriptors may be packaged inside the game's own base .pak,
     // not loose .uplugin files. Read only that native container's manifest.
@@ -152,6 +154,15 @@ inline std::string Error;
 inline std::function<bool(nlohmann::json&)> RemoteSnapshot;
 inline std::mutex PublishedMutex;
 inline nlohmann::json Published={{"Ready",false}};
+inline std::shared_ptr<const HelpyCacheSources::Plan::AssetOwnerMap> PublishedAuthoredAssets;
+inline Snapshot OwnershipSnapshot(){
+    std::lock_guard lock(PublishedMutex);const auto plan=HelpyCacheSources::Snapshot();
+    if(!Published.value("Ready",false)||!plan.Complete||Published.value("ContentRevision",uint64_t{})!=plan.ContentRevision)
+        throw std::runtime_error("Cache ownership is still being verified");
+    Snapshot result;result.Key=Published.at("Key").get<std::string>();result.ContentRevision=plan.ContentRevision;
+    result.SourceKeys=Published.at("Sources").get<std::map<std::string,std::string>>();
+    result.AssetOwners=plan.AssetOwners;result.AuthoredAssets=PublishedAuthoredAssets;return result;
+}
 inline std::set<std::string> NativePluginRoots(){
     std::lock_guard lock(PublishedMutex);std::set<std::string> result;
     if(const auto values=Published.find("NativePlugins");values!=Published.end()&&values->is_array()&&values->size()<=512)
@@ -196,7 +207,9 @@ inline bool AcceptRemote(const nlohmann::json& value){
             next.NativePlugins.insert(name);
         }
     }
-    if(next.Key==Current.Key&&next.NativePlugins==Current.NativePlugins&&next.DeclaredOwners==Current.DeclaredOwners)return false;
+    if(next.Key==Current.Key&&next.NativePlugins==Current.NativePlugins&&next.DeclaredOwners==Current.DeclaredOwners){
+        Current.PlanRevision=next.PlanRevision;Current.ContentRevision=next.ContentRevision;return false;
+    }
     bool removed=false;for(const auto& [group,key]:Current.SourceKeys)if(!next.SourceKeys.contains(group)){removed=true;break;}
     const bool invalidate=InvalidatesCatalog(Current,next);
     Current=std::move(next);++Revision;if(removed)RemovalRevision=Revision;if(invalidate)CatalogInvalidationRevision=Revision;return true;
@@ -232,7 +245,7 @@ inline bool Poll(const std::filesystem::path& root){
             Current=std::move(result);++Revision;if(removed)RemovalRevision=Revision;if(invalidate)CatalogInvalidationRevision=Revision;changed=true;}
         else Current=std::move(result); // A metadata-only revision still completes live source verification.
         Error.clear();
-        {std::lock_guard lock(PublishedMutex);Published=Document(Current);}
+        {std::lock_guard lock(PublishedMutex);Published=Document(Current);PublishedAuthoredAssets=Current.AuthoredAssets;}
     }catch(const std::exception& error){Error=error.what();}Next=now+std::chrono::seconds(Error.empty()?60:5);}
     if(!Worker.valid()&&(now>=Next||InspectingRevision!=plan.Revision)){InspectingRevision=plan.Revision;
         Worker=std::async(std::launch::async,[root,plan]{auto value=Inspect(root,plan);Persist(value);return value;});}return changed;

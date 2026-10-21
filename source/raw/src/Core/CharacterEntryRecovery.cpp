@@ -1,4 +1,5 @@
 #include "Core/CharacterEntryRecovery.h"
+#include "Core/CharacterLoadAudit.h"
 #include "Core/CharacterEntryReturnGate.h"
 #include "SDK/DragonWildsSignatures.h"
 #include "Runtime/NativeExecutableDiscovery.h"
@@ -109,11 +110,15 @@ bool CharacterEntryRecovery::IsActive() const noexcept{return static_cast<bool>(
 void CharacterEntryRecovery::AcceptCharacter(SafetyHookContext& context) {
     if(context.rax&0xffu)return;
     context.rax=PS::CharacterEntryBypassPlan::AcceptRejected(context.rax);
+    const auto token=PS::CharacterLoadAudit::Token();
+    if(token){if(PS::CharacterLoadAudit::Bypassed(PS::CharacterLoadAudit::Gate::Validation))PS::Log<LogLevel::Warning>(STR("[SAVE-ENTRY][BYPASSED] load={} native character validation rejected; acceptance overridden. This is not a record-rejection, world-entry or persisted-save receipt.\n"),token);return;}
     if(!Reported.exchange(true))PS::Log<LogLevel::Warning>(STR("[SAVE-ENTRY][BYPASSED] Native character validation rejected this load; the opt-in bypass allowed it to continue. This is not a save-data repair; retain your original backup.\n"));
 }
 void CharacterEntryRecovery::AcceptPlayerState(SafetyHookContext& context) {
     if(context.rax&0xffu)return;
     context.rax=PS::CharacterEntryBypassPlan::AcceptRejected(context.rax);
+    const auto token=PS::CharacterLoadAudit::Token();
+    if(token){if(PS::CharacterLoadAudit::Bypassed(PS::CharacterLoadAudit::Gate::PlayerState))PS::Log<LogLevel::Warning>(STR("[SAVE-ENTRY][BYPASSED][PLAYER-STATE] load={} native player-state rejection overridden after native work. World entry and persisted save remain unverified.\n"),token);return;}
     if(!PlayerStateReported.exchange(true))PS::Log<LogLevel::Warning>(STR("[SAVE-ENTRY][BYPASSED][PLAYER-STATE] Native ProcessPlayerStateLoad returned rejection; the opt-in bypass accepted its return result. Native loading was not skipped.\n"));
 }
 }

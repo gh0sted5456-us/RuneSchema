@@ -125,3 +125,115 @@ the failure. The paired candidate replaces that narrower implementation; test it
 with the standalone mod completely disabled before claiming in-game success.
 
 For backup and recovery procedures, see [Manual save recovery](MANUAL-SAVE-RECOVERY.md).
+
+## Selective pruning investigation — 19 October 2026
+
+The target is a composed load path, not a bypass that rewrites characters:
+prepare world-dependent definitions, prune proven invalid records, allow native
+hydration to run, observe whether acceptance bypass was needed, then verify
+world entry and a subsequent persisted save independently. Pending declarations
+must not veto general cleanup; their exact typed identities are retained while
+other certified orphans are removed.
+
+The installed Steam executable contains distinct diagnostics for missing item
+data, failure to create an item, and failure to load item state. Food, drink and
+potion diagnostics also include explicit "skipping" variants. These static
+strings support investigating selective native rejection, but do not establish
+that all loaders skip only one record, or provide a verified callable callback.
+The cached October 16 Steam disassembly also shows early failure branches in
+ProcessPlayerStateLoad before later loading stages. Accepting its return cannot
+retroactively execute those skipped stages. This finding is scoped to that
+audited function version, not a new binding for every current executable.
+
+Two failure classes must remain separate:
+
+- A persistence identity absent from a certified applicable registry can make
+  all records depending on that absent asset orphaned.
+- A valid asset whose instance state failed to deserialize is a record-level
+  failure. Repair must identify its container/slot and verify the exact original
+  record before removing that instance. Other instances sharing the same ID
+  must remain intact. A failure Boolean alone cannot authorize this removal.
+
+Future record-level repair needs a verified native failure producer with attempt
+identity, record location, failure classification and record-content evidence.
+It must preserve the original before applying a bounded edit and must not retry
+native hydration via an assumed ABI or loop repeatedly after failure. Unfamiliar
+fields are not automatically unreadable data. No such native rejection callback
+or automatic native retry was added in this investigation.
+
+Logging must reflect evidence rather than an assumed success chain:
+
+1. GAME-REJECTED-RECORD only after native record-level evidence; otherwise name
+   the cause REGISTRY-CONFIRMED-ORPHAN, never claim the game rejected it.
+2. PRUNED-PAYLOAD after a verified in-memory transformation; include record kind
+   and count. This is not a disk-save receipt.
+3. BYPASSED only when a verified acceptance hook changes a rejected result.
+4. WORLD-ENTERED only after an actual world/player readiness observation.
+5. SAVE-VERIFIED only after native persistence and readback prove the specific
+   removals and preservation of unaffected data. Normal WGS/provider rules still
+   apply; do not bypass the provider and edit its files.
+
+Current registry cleanup and acceptance bypass are implemented separately.
+Native instance-rejection capture, attempt-correlated world-entry/persistence
+receipts and a genuine failing-save round-trip remain unverified. Do not print
+the proposed complete success story before those events are independently seen.
+
+## Native tolerant loading and the developer proposal — 19 October 2026
+
+The user supplied a screenshot of a game developer proposing a character-save
+"modded" flag: relax loading when removed mods leave unexpected data, preserve
+readable progress, and return to strict validation after a clean unmodded load.
+The message explicitly describes an idea, not a shipped field or API. Do not add
+an invented flag to native character JSON, clear unknown native metadata, or
+claim this proposal already applies to world saves.
+
+Read-only analysis of the installed Steam executable found the existing
+`dom.PersistenceStrictMode` console variable. Its native help describes missing
+or unknown player-save data as a load failure under strict mode. The missing
+ItemData branch reads this variable; when tolerant, that branch can return a
+present optional containing no item rather than the failure result. This is
+evidence for selective missing-item tolerance in that audited executable, not
+proof that every malformed instance, oversized inventory or world record can be
+recovered. Instance-state deserialization failure is a separate native branch.
+
+The local implementation incorporates the proposal's loading principle without
+inventing a native save-format field:
+
+1. Keep registry-confirmed orphan pruning independent of acceptance bypass.
+   Exact pending declarations protect only their own typed IDs.
+2. On clients, `quickLaunch.mode` chooses Vanilla Load, Less Restrictive or
+   Quick Launch. The latter two hold native strict mode off across loads and
+   menu returns for the session. Save Bypass is independent in every client mode.
+   Dedicated servers have only the bypass loading toggle: it also requests the
+   session tolerant policy, without selecting or starting a world on their behalf.
+3. Resolve and validate reflected console getter/setter layouts. Read the
+   original value, set strict mode off only when it was on, and require readback.
+   Unavailable/unknown values never count as successful activation. A failed
+   setter/readback attempts rollback.
+4. Verify policy at map and character-load boundaries, and reapply it if native
+   code reset the variable. Do not restore strictness when a load returns or
+   Quick Launch finishes/cancels. Restore the original value only at shutdown
+   when possible. An already-tolerant original value is never changed to strict.
+   Failed restoration is explicitly logged as unverified.
+5. Correlate committed payload-prune counts and actual acceptance overrides with
+   a thread-local load token. Nested ambiguous loads suppress further exact
+   attribution; unrelated threads cannot inherit that token.
+
+The console variable is process-wide and remains off for the selected session.
+This is not a native per-character modded flag and does not promise recovery of
+asynchronous/direct native loader failures. The mode is saved in RuneSchema's
+settings.ini, but no native game configuration is written. An unverified
+restoration must remain an explicit
+failure, not a promise that the live value was restored. No original save is
+edited by this policy lease, and world-save recovery remains a separate path.
+Live validation must establish
+whether these supported callback boundaries cover the relevant native hydration
+and whether console writes are available on each storefront.
+
+`PRUNED-PAYLOAD` is emitted only after native argument writeback succeeds.
+`HANDLER-RETURNED` reports the scoped counts but explicitly does not claim world
+entry or persisted removal. Native record-rejection capture, world-entry
+correlation, and a native save/readback receipt remain future work. The proposed
+modded flag must not be cleared merely because a handler returned or a Boolean
+bypass fired. If a real native flag is introduced later, use its verified schema
+and lifecycle rather than guessing its spelling or semantics.

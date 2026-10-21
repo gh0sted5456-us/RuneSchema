@@ -45,6 +45,13 @@ int main(){
     definition["Type"]="AI";const auto temporary=PS::MapSpawnRequest::Build(p,p.Center,definition,"player",false,4,250,124);assert(temporary["Permanent"]==false&&temporary["Resource"]==false&&temporary["Count"]==4&&temporary["PlacementRadius"]==250);
     const auto building=PS::MapSpawnRequest::Building(p,p.Center,{{"Path","/Game/Building/TeleportStone.TeleportStone"}},"named-player",true,90,125);
     assert(building["Action"]=="SpawnBuilding"&&building["Player"]=="named-player"&&building["Permanent"]==true&&building["Count"]==1&&building["Yaw"]==90);
+    auto prefab=nlohmann::json{{"schema","rsdwtools.buildings.v1"},{"pieces",nlohmann::json::array({{{"piece_id",1},{"piece_data_name","/Game/Buildings/Wall.Wall"},{"x",10},{"y",20},{"z",30}}})}};
+    const auto import=PS::MapSpawnRequest::Prefab(p,p.Center,prefab,"named-player",90,42,128);
+    assert(import["Action"]=="ImportBuildings"&&import["Document"]==prefab&&import["Generation"]==42&&import["Yaw"]==90&&import["_RequestId"]==128);
+    for(const auto bad:nlohmann::json::array({nullptr,nlohmann::json::object(),{{"schema","other"},{"pieces",prefab["pieces"]}},{{"schema","rsdwtools.buildings.v1"},{"pieces",nlohmann::json::array()}}})){
+        rejected=false;try{PS::MapSpawnRequest::Prefab(p,p.Center,bad,"named-player",0,42,129);}catch(...){rejected=true;}assert(rejected);
+    }
+    rejected=false;try{PS::MapSpawnRequest::Prefab(p,{1e9,0},prefab,"named-player",0,42,129);}catch(...){rejected=true;}assert(rejected);
     const auto teleport=PS::MapSpawnRequest::Target(p,p.ToWorld({.25,.75}),"MapTeleport","named-player",126);assert(teleport["Action"]=="MapTeleport"&&teleport["Player"]=="named-player");
     rejected=false;try{PS::MapSpawnRequest::Target(p,p.Center,"MapTeleport","",127);}catch(...){rejected=true;}assert(rejected);
     for(const auto dimensions:std::array{Point{1600,600},Point{760,900},Point{3440,900},Point{800,800}}){

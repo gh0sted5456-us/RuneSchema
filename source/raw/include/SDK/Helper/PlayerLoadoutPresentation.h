@@ -1,6 +1,7 @@
 #pragma once
 #include "SDK/Helper/EquipmentDelivery.h"
 #include "Generator/AssetSearch.h"
+#include "Generator/CharacterPreview.h"
 namespace PS::PlayerLoadoutPresentation {
 inline nlohmann::json Skills(RC::Unreal::UObject* controller){
     using namespace RC::Unreal;namespace AH=DragonWilds::ActorHelper;namespace PH=DragonWilds::PropertyHelper;namespace C=DragonWilds::ReflectedContract;
@@ -30,7 +31,8 @@ inline nlohmann::json Read(RC::Unreal::UObject* controller){
             auto* data=EquipmentDelivery::Data(item);auto* type=DragonWilds::ActorHelper::ResolveClass(TEXT("/Script/Dominion.ItemData"));
             if(!type||!data||!data->IsA(type))continue;
             const auto path=RC::to_string(data->GetPathName());const auto meta=AssetSearch::ItemMetadata(path);
-            Json row={{"Slot",i},{"Path",path},{"Name",meta.value("Name",std::string{})},{"Icon",meta.value("Icon",std::string{})}};
+            Json row=meta;row["Slot"]=i;row["Path"]=path;row["Instance"]=EquipmentDelivery::Identity(item);
+            try{row["Location"]=CharacterPreview::LoadoutSlot(int(i));}catch(...){row["Location"]="Unknown";}
             try{
                 // Native, non-networked integer getters verified against the
                 // item instance, not base ItemData durability or a guessed %.

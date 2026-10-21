@@ -3,6 +3,7 @@
 #include "Runtime/HostServices.h"
 #include "Core/HelpyUiAssets.h"
 #include "Core/HelpyBranding.h"
+#include "Core/BaseCacheDownloads.h"
 #include <windows.h>
 #include <winhttp.h>
 #include <bcrypt.h>
@@ -60,7 +61,7 @@ Bytes Fetch(const std::string& relative,size_t limit){
     // Callers supply only compiled artwork names or a validated hex pack name.
     // Match the immutable release's compiled hashes. Experimental artwork is
     // not necessarily present on stable main, and is never a runtime payload.
-    const std::string path=std::string("/gh0sted5456-us/RuneSchema/")+HelpyBranding::Version+"/resources/"+relative;
+    const std::string path=std::string("/gh0sted5456-us/RuneSchema/")+"86c8c20ca6a8fb696781669179b3ef942114bf08/resources/"+relative;
     const std::wstring wide(path.begin(),path.end());
     Handle session{WinHttpOpen(L"RuneSchema-Helpy-Assets/1",WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,WINHTTP_NO_PROXY_NAME,WINHTTP_NO_PROXY_BYPASS,0)};
     if(!session||!WinHttpSetTimeouts(session,2000,2000,2000,2000))throw std::runtime_error("Download network session unavailable.");
@@ -81,7 +82,8 @@ Bytes Fetch(const std::string& relative,size_t limit){
 }
 void Commit(const std::filesystem::path& path,const Bytes& bytes){
     Safe(path);std::filesystem::create_directories(path.parent_path());Safe(path);
-    const auto temporary=path.parent_path()/(path.filename().wstring()+L"."+std::to_wstring(GetCurrentProcessId())+L".tmp");Safe(temporary);
+    static std::atomic<uint64_t> stagingSequence{0};
+    const auto temporary=path.parent_path()/(path.filename().wstring()+L"."+std::to_wstring(GetCurrentProcessId())+L"."+std::to_wstring(GetTickCount64())+L"."+std::to_wstring(++stagingSequence)+L".tmp");Safe(temporary);
     HANDLE file=CreateFileW(temporary.c_str(),GENERIC_WRITE,0,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);
     if(file==INVALID_HANDLE_VALUE)throw std::runtime_error("Cannot stage download; an unfinished staging file may remain.");
     DWORD written=0;const bool ok=bytes.size()<=MAXDWORD&&WriteFile(file,bytes.data(),static_cast<DWORD>(bytes.size()),&written,nullptr)&&written==bytes.size()&&FlushFileBuffers(file);CloseHandle(file);
@@ -113,27 +115,18 @@ Result DownloadBase(const std::map<std::string,std::string>& sources,const std::
     const auto index=nlohmann::json::parse(bytes,[](int depth,nlohmann::json::parse_event_t,nlohmann::json&){if(depth>16)throw std::runtime_error("[RS-DL-002] Cache index nesting exceeds its limit.");return true;});
     if(index.value("Format",0)!=(bundle?2:1)||index.value("Kind",std::string{})!=(bundle?"RuneSchemaCacheBundles":"RuneSchemaBaseGameIcons")||!index.contains("Packs")||!index["Packs"].is_array()||index["Packs"].size()>128)throw std::runtime_error("[RS-DL-002] Invalid base-game cache index.");
     ++Done;
-    for(const auto& pack:index["Packs"]){
+    wchar_t language[LOCALE_NAME_MAX_LENGTH]{};GetUserDefaultLocaleName(language,LOCALE_NAME_MAX_LENGTH);std::string locale;for(const auto c:std::wstring(language))locale+=static_cast<char>(c);
+    for(const auto& pack:BaseCacheDownloads::Candidates(index["Packs"],sources,nativePlugins,runtime,gameVersion,locale,bundle)){
         // Machine-local source keys contain timestamps and are not portable.
         // Build/runtime narrows the candidate; pack import independently checks
         // actual game-content SHA-256 before any thumbnails are applied.
-        if(gameVersion.empty()||pack.value("GameVersion",std::string{})!=gameVersion||pack.value("Runtime",std::string{})!=runtime)continue;
-        if(bundle){
-            wchar_t language[LOCALE_NAME_MAX_LENGTH]{};GetUserDefaultLocaleName(language,LOCALE_NAME_MAX_LENGTH);std::string locale;for(const auto c:std::wstring(language))locale+=static_cast<char>(c);
-            if(pack.value("Locale",std::string{})!=locale)continue;
-        }
-        if(!pack.is_object()||!pack.contains("Sources")||!pack["Sources"].is_object()||pack["Sources"].empty()||pack["Sources"].size()>512||!pack["Sources"].contains("game"))continue;
-        bool matches=true;for(const auto& [source,key]:pack["Sources"].items()){
-            const auto found=sources.find(source);
-            if((source!="game"&&source!="engine"&&!nativePlugins.contains(source))||!key.is_string()||!Hex(key.get<std::string>(),64)||found==sources.end())matches=false;
-        }if(!matches)continue;
         const auto hash=pack.value("SHA256",std::string{});const auto size=pack.value("Bytes",uint64_t{});
         if(!Hex(hash,64)||size<16||size>256ull*1024*1024)throw std::runtime_error("Invalid base-game cache download bounds.");
         const auto name=hash+(bundle?".rsmk-cache":".rsmk-icons");const auto path=HostServices::CacheDirectory()/"downloads"/name;
         if(!Verified(path,static_cast<size_t>(size),hash)){
             const auto data=Fetch(directory+"/"+name,static_cast<size_t>(size));
             if(data.size()!=size||Hash(data)!=hash)throw std::runtime_error("[RS-CACHE-004] Base-game cache integrity check failed.");Commit(path,data);
-        }++Done;return {false,false,false,"Base-game pack downloaded; checking content compatibility before import.",path};
+        }++Done;return {false,false,false,runtime=="Dedicated server"?"Native base-game pack downloaded; server imports use display-only thumbnails, not gameplay authority.":"Base-game pack downloaded; checking native content compatibility before import.",path};
     }}throw std::runtime_error("[RS-DL-001] No compatible base-game cache is published for these active sources. Build / update still works locally.");
 }
 }
@@ -167,6 +160,13 @@ bool Poll(){
     }catch(const std::exception& error){State.Status=error.what();return false;}
 }
 std::filesystem::path TakeBaseCache(){auto file=std::move(PendingPack);PendingPack.clear();return file;}
+bool ReleaseImportedPack(const std::filesystem::path& file) noexcept{
+    try{
+        const auto root=std::filesystem::absolute(HostServices::CacheDirectory()/"downloads").lexically_normal(),target=std::filesystem::absolute(file).lexically_normal();
+        if(target.parent_path()!=root||!Hex(target.stem().string(),64)||(target.extension()!=L".rsmk-cache"&&target.extension()!=L".rsmk-icons"))return false;
+        Safe(target);if(!std::filesystem::is_regular_file(target))return false;return DeleteFileW(target.c_str())!=0;
+    }catch(...){return false;}
+}
 void DismissHint(){State.HintDismissed=true;try{Commit(Folder()/"hint-dismissed",Bytes{'1'});}catch(...){};}
 void Cancel()noexcept{Cancelled=true;}
 void Shutdown()noexcept{Cancelled=true;if(Worker.valid())try{(void)Worker.get();}catch(...){}Initialized=false;}

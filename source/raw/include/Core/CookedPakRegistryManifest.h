@@ -29,6 +29,7 @@ namespace PS::CookedPakRegistryManifest {
         std::vector<std::string> WearableMeshData;
         std::vector<std::string> MeleeAttackClasses;
         std::vector<std::string> RangedAttackClasses;
+        std::vector<std::string> CacheAssets; // Exact original artwork declarations; never native gameplay registration.
         std::uint64_t Fingerprint = 0;
     };
 
@@ -104,11 +105,11 @@ namespace PS::CookedPakRegistryManifest {
         const auto native = document.value("NativeRegistries",nlohmann::json::object());
         if (!native.is_object())
             throw std::runtime_error("NativeRegistries must be an object");
-        static constexpr std::array<const char*, 11> Allowed{{
+        static constexpr std::array<const char*, 12> Allowed{{
             "Items", "Recipes", "Quests", "CombatSpells", "UtilitySpells",
             "Journals", "Lore",
             "EquipmentEffects", "WearableMeshData", "MeleeAttackClasses",
-            "RangedAttackClasses"}};
+            "RangedAttackClasses", "CacheAssets"}};
         for (const auto& [key, unused] : native.items())
         {
             (void)unused;
@@ -133,6 +134,13 @@ namespace PS::CookedPakRegistryManifest {
             native, "MeleeAttackClasses", total);
         result.RangedAttackClasses = Detail::ReadPaths(
             native, "RangedAttackClasses", total);
+        result.CacheAssets = Detail::ReadPaths(native,"CacheAssets",total);
+        for(const auto& path:result.CacheAssets){
+            const auto dot=path.find('.',path.find_last_of('/')+1);
+            if(dot==path.npos||dot==path.size()-1||path.find_first_of("\\:")!=path.npos
+                ||std::any_of(path.begin(),path.end(),[](unsigned char c){return c<32||c==127;}))
+                throw std::runtime_error("NativeRegistries.CacheAssets requires full original artwork object paths");
+        }
         if(document.contains("LoaderDefinitions")){
             const auto& definitions=document.at("LoaderDefinitions");
             if(!definitions.is_object())throw std::runtime_error("LoaderDefinitions must be an object");
@@ -168,6 +176,7 @@ namespace PS::CookedPakRegistryManifest {
         for (const auto& path : result.MeleeAttackClasses) Detail::Hash(hash, path);
         Detail::Hash(hash, "RangedAttackClasses");
         for (const auto& path : result.RangedAttackClasses) Detail::Hash(hash, path);
+        Detail::Hash(hash,"CacheAssets");for(const auto& path:result.CacheAssets)Detail::Hash(hash,path);
         Detail::Hash(hash,result.LoaderDefinitions.dump());
         if(!result.SchemaPaths.empty()){Detail::Hash(hash,"SchemaReferences");for(const auto& path:result.SchemaPaths)Detail::Hash(hash,path);}
         result.Fingerprint = hash;
@@ -179,17 +188,6 @@ namespace PS::CookedPakRegistryManifest {
             [&](const Manifest& value) {return value.Owner==result.Owner&&value.Source==result.Source;});
         if(existing==manifests.end())manifests.push_back(result);else *existing=result;
     }
-    inline bool Publish(const nlohmann::json& document, const std::string& owner,
-        const std::string& source, Manifest* published = nullptr)
-    {
-        const auto result=Parse(document,owner,source);
-        if(!result)return false;
-        std::scoped_lock lock(Detail::Mutex);
-        Upsert(Detail::Manifests,*result);
-        if (published) *published = *result;
-        return true;
-    }
-
     inline std::vector<Manifest> Snapshot()
     {
         std::scoped_lock lock(Detail::Mutex);
@@ -242,6 +240,17 @@ namespace PS::CookedPakRegistryManifest {
         for(const auto& manifest:batch)Upsert(next,manifest);
         for(const auto* lane:{"Recipes","Journals","Lore"})(void)MergeDefinitions(next,lane);
         Detail::Manifests.swap(next);
+    }
+    inline bool Publish(const nlohmann::json& document, const std::string& owner,
+        const std::string& source, Manifest* published = nullptr)
+    {
+        const auto result=Parse(document,owner,source);
+        if(!result)return false;
+        // Loose and single cooked documents use the same all-or-nothing
+        // conflict validation as sharded declarations.
+        PublishBatch({*result});
+        if(published)*published=*result;
+        return true;
     }
 
     inline void Reset()

@@ -74,6 +74,8 @@ int main(){
     const auto seven=PS::DesktopBayLayout::Arrange({0,0,1000,700},{0,0,1000,700},{0,0,1000,700},{0,0,1000,700},{0,0,1000,700},{0,0,1000,700},{-400,-200,360,360});
     if(seven.X!=-400||seven.Y!=-200||seven.Party.X!=0||seven.Main.X!=400||seven.Width!=1400)throw std::runtime_error("Party must have an independent detached surface");
     using namespace PS::HelpyBranding;
+    {unsigned width=8,height=4;std::vector<std::uint8_t> pixels(width*height*4);for(unsigned y=1;y<3;++y)for(unsigned x=2;x<6;++x){const auto at=(y*width+x)*4;pixels[at]=pixels[at+1]=pixels[at+2]=pixels[at+3]=255;}
+        NormalizeMark(width,height,pixels);if(width!=96||height!=96||pixels.size()!=96*96*4||pixels[3]!=0||pixels[(48*96+48)*4+3]!=255)throw std::runtime_error("Social marks must be trimmed, centered and square without stretching");}
     {std::uint8_t orange[]{220,140,40,255},whiteMark[]{255,255,255,255},accentWhite[]{255,255,255,255},baseOrange[]{220,140,40,255};
         CommunityLayer(orange,true);CommunityLayer(whiteMark,false);CommunityLayer(accentWhite,true);CommunityLayer(baseOrange,false);
         if(orange[0]!=255||orange[3]==0||whiteMark[3]!=255||accentWhite[3]!=0||baseOrange[3]!=0)throw std::runtime_error("Community theme layers did not separate accent and foreground");
@@ -121,15 +123,16 @@ int main(){
         if(!Visible(page,{true,true,true,true})||std::string_view(Description(page)).empty())throw std::runtime_error("Enabled workspace is unreachable or unexplained");
         titles.insert(Title(page));
     }
-    const std::set<std::string_view> expected{"Home","Players","Clone","Recipes","Spawns","World","Journal","Tools","Settings","Authoring Tools","Live Log","Server / Co-op","Character Editor"};
+    const std::set<std::string_view> expected{"Home","Players","Clone","Recipes","Spawns","World","Journal","Tools","Settings","Authoring","Live Log","Server / Co-op","Character Editor","Mods"};
     if(!Visible(Page::Creation)||TopLevel(Page::Creation)||TopLevel(Page::Recipes)||TopLevel(Page::SaveEditor)||TopLevel(Page::Spawns)||TopLevel(Page::Journal))throw std::runtime_error("Nested workflows must stay reachable without duplicate sidebar entries");
-    if(SidebarPages.size()!=8||PlayerTabs.size()!=4||WorldTabs.size()!=3||std::string_view(TabTitle(Page::Items))!="Items"||std::string_view(TabTitle(Page::Map))!="Map")throw std::runtime_error("Players and World must retain their workflow tabs");
+    if(SidebarPages.size()!=8||!TopLevel(Page::Mods)||!Visible(Page::Mods)||PlayerTabs.size()!=4||WorldTabs.size()!=3||ToolTabs.size()!=2||Parent(Page::Authoring)!=Page::Tools||TopLevel(Page::Authoring)||std::string_view(TabTitle(Page::Items))!="Items"||std::string_view(TabTitle(Page::Map))!="Map")throw std::runtime_error("Mods must be top-level while Players, World and Tools retain their nested workflow tabs");
+    if(!Visible(Page::Tools,{true,false})||!Visible(Page::Authoring,{true,false})||Visible(Page::Authoring,{false,true}))throw std::runtime_error("Legacy authoring-only settings must expose Tools without enabling Authoring for tools-only users");
     for(auto page:SidebarPages)if(!TopLevel(page))throw std::runtime_error("Sidebar contains a nested workflow");
     for(auto page:PlayerTabs)if(Parent(page)!=Page::Items)throw std::runtime_error("Player workflow has the wrong parent");
     for(auto page:WorldTabs)if(Parent(page)!=Page::Map)throw std::runtime_error("World workflow has the wrong parent");
     if(titles!=expected)throw std::runtime_error("All destinations must stay reachable");
-    for(auto page:{Page::Authoring,Page::Tools,Page::LiveLog,Page::SaveEditor})if(Visible(page))throw std::runtime_error("Optional workspace must require opt-in");
-    if(!Visible(Page::Settings)||!Visible(Page::Items)||!Visible(Page::LiveLog,{false,false,true,false})||Visible(Page::Tools,{false,false,true,false}))throw std::runtime_error("Workspace toggles must be independent; Settings stays reachable");
+    for(auto page:{Page::Authoring,Page::LiveLog,Page::SaveEditor})if(Visible(page))throw std::runtime_error("Optional workspace must require opt-in");
+    if(!Visible(Page::Settings)||!Visible(Page::Items)||!Visible(Page::LiveLog,{false,false,true,false})||!Visible(Page::Tools))throw std::runtime_error("Settings and the Tools Item Cache must stay reachable without optional workspaces");
     for(int mask=0;mask<64;++mask){
         const Workspaces enabled{bool(mask&1),bool(mask&2),bool(mask&4),bool(mask&8),bool(mask&16),bool(mask&32)};
         for(auto page:Pages){

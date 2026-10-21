@@ -31,6 +31,13 @@ int main(){
         {"Category","Armor"},{"SourceKind","modded"},{"SourceName","Dye"},{"InternalName","chrome_helm"},{"Tags","Metal Heavy"},{"Class","/Script/Dominion.ItemData"}};
     assert(Query("")(helm));assert(Query("Chrome helm")(helm));assert(Query("metal Heavy")(helm));assert(Query("dominion")(helm));
     assert(Query("__helpysource:modded __helpycat:armor __helpyfamily:fallen_hoplite_dyed_chrome chrome")(helm));
+    auto nativeHelm=helm;nativeHelm["NativeSlotVerified"]=true;nativeHelm["SlotStrategy"]="Head";
+    assert(Query("__helpyslot:Head __helpysource:modded __helpycat:armor __helpyfamily:fallen_hoplite_dyed_chrome chrome")(nativeHelm));
+    assert(!Query("__helpyslot:Head")(helm));
+    assert(!Query("__helpyslot:Body")(nativeHelm));
+    Reject([]{Query invalid("__helpyslot:Invented");});
+    const nlohmann::json necklace={{"SlotStrategy","Necklace"},{"NativeSlotVerified",true}};
+    assert(Query("__helpyslot:Trinket")(necklace)&&Query("__helpyslot:Trinket2")(necklace));
     assert(!Query("__helpysource:vanilla")(helm));assert(!Query("__helpycat:weapons")(helm));assert(!Query("__helpyfamily:fallen_hoplite_dyed_gold")(helm));assert(!Query("chrome wood")(helm));
     auto sword=helm;sword["Name"]="Bronze sword";sword["SourceKind"]="vanilla";sword["Category"]="Weapons";
     assert(Query("__helpysource:vanilla __helpycat:weapons bronze")(sword));

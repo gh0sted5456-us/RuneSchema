@@ -18,7 +18,7 @@ inline Json Index(const fs::path& folder){
     return doc;
 }
 inline HelpyCacheSources::Plan Plan(const HelpySourceCache::Snapshot& snapshot){
-    HelpyCacheSources::Plan plan;plan.Authoritative=snapshot.Authoritative;plan.Owners=snapshot.Owners;plan.DeclaredOwners=snapshot.DeclaredOwners;plan.AuthoredAssets=snapshot.AuthoredAssets;
+    HelpyCacheSources::Plan plan;plan.Authoritative=snapshot.Authoritative;plan.Owners=snapshot.Owners;plan.DeclaredOwners=snapshot.DeclaredOwners;plan.AuthoredAssets=snapshot.AuthoredAssets;plan.AssetOwners=snapshot.AssetOwners;
     for(const auto& [source,key]:snapshot.SourceKeys)plan.Registered.insert(source);return plan;
 }
 inline bool ActiveOwner(const CacheBundle::Record& row,const HelpySourceCache::Snapshot& snapshot){return snapshot.SourceKeys.contains(row.Source)&&CacheBundle::Owned(row,Plan(snapshot),snapshot.NativePlugins);}

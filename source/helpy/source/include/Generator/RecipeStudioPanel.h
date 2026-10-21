@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyImGuiTheme.h"
 #include "Core/RecipeWorkspace.h"
 #include "Generator/ItemGridPicker.h"
 #include "Generator/ToolRequest.h"
@@ -203,7 +204,7 @@ inline void Render(const Json& catalog,uint64_t revision) {
         for(const auto& row:s.Catalog.value("Recipes",Json::array())){const auto path=row.value("Path",std::string{}),reference=row.value("Reference",path),owner=row.value("Owner",std::string{});
             ImGui::PushID((path+reference).c_str());ImGui::BeginDisabled(path.empty()||!row.value("Available",true));
             const auto label=row.value("Name",path)+(owner.empty()?"":"  ["+owner+"]");if(ImGui::Selectable(label.c_str()))Submit({{"Action","InspectRecipe"},{"SourceRecipe",path}});
-            ImGui::EndDisabled();if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("%s\n%s",path.empty()?reference.c_str():path.c_str(),row.value("Available",true)?row.value("Source",std::string{}).c_str():"Definition is present but its native recipe is not ready; inspect loader errors.");ImGui::PopID();}ImGui::EndCombo();
+            ImGui::EndDisabled();if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))PS::HelpyImGuiTheme::Tooltip("%s\n%s",path.empty()?reference.c_str():path.c_str(),row.value("Available",true)?row.value("Source",std::string{}).c_str():"Definition is present but its native recipe is not ready; inspect loader errors.");ImGui::PopID();}ImGui::EndCombo();
     }
     if(s.Catalog.contains("Total"))ImGui::TextDisabled("%zu matching recipes",s.Catalog.value("Total",std::size_t{}));
     if(s.Catalog.contains("MountedCatalogReady")&&!s.Catalog.value("MountedCatalogReady",false))ImGui::TextWrapped("Mounted content metadata is unavailable; showing loaded recipes and declared definitions only. Browse again when ready.");

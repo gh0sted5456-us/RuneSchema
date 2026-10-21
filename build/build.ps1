@@ -625,6 +625,10 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         }
         [pscustomobject]@{ Build = $build; Core = $core; Helpy = (Join-Path $build 'RuneSchema.Helpy.dll'); Host = (Join-Path $build "$Configuration\bin\UE4SS.dll") }
     }
+    function Copy-HelpyDlls([string]$HelpyDll,[string]$Destination) {
+        New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+        Copy-Item -LiteralPath $HelpyDll -Destination (Join-Path $Destination 'RuneSchema.Helpy.dll') -Force
+    }
     function New-HelpyPluginPackage([string]$HelpyDll) {
         $name = "RuneSchema.Helpy-$Version"
         $packageRoot = Join-Path $DistRoot $name
@@ -638,11 +642,12 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
             }
         }
         New-Item -ItemType Directory -Path (Join-Path $payload 'dll') -Force | Out-Null
-        Copy-Item -LiteralPath $HelpyDll -Destination (Join-Path $payload 'dll\RuneSchema.Helpy.dll') -Force
+        Copy-HelpyDlls $HelpyDll (Join-Path $payload 'dll')
         & (Join-Path $BuildRoot 'build/package-optional-art.ps1') -PayloadRoot $payload -StagingRoot $DistRoot -RepositoryRoot $BuildRoot
-        $state = Compress-DllBestEffort (Join-Path $payload 'dll\RuneSchema.Helpy.dll')
-        @{ File = 'dll\RuneSchema.Helpy.dll'; State = $state } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $payload 'DLL-COMPRESSION.json') -Encoding utf8
-        Attempt-Signing @((Join-Path $payload 'dll\RuneSchema.Helpy.dll'))
+        $dlls=@(Get-ChildItem -LiteralPath (Join-Path $payload 'dll') -Filter '*.dll' -File | ForEach-Object FullName)
+        $report=foreach($dll in $dlls){@{File=[IO.Path]::GetFileName($dll);State=(Compress-DllBestEffort $dll)}}
+        $report | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $payload 'DLL-COMPRESSION.json') -Encoding utf8
+        Attempt-Signing $dlls
         $zip = Join-Path $DistRoot "$name.zip"
         if (Test-Path $zip) { Remove-Item -LiteralPath $zip -Force }
         Compress-Archive -LiteralPath $payload -DestinationPath $zip -CompressionLevel Optimal
@@ -781,7 +786,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         New-Item -ItemType Directory -Path $mappingDirectory -Force | Out-Null
         Copy-Item -LiteralPath $Mappings.Path -Destination (Join-Path $mappingDirectory 'Mappings.usmap') -Force
         $Mappings.Lock | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $payload 'settings\MAPPINGS-SOURCE.json') -Encoding utf8
-        Copy-Item -LiteralPath $HelpyDll -Destination (Join-Path $payload 'plugins\RuneSchema.Helpy\dll\RuneSchema.Helpy.dll') -Force
+        Copy-HelpyDlls $HelpyDll (Join-Path $payload 'plugins\RuneSchema.Helpy\dll')
         $report = foreach ($dll in Get-ChildItem -LiteralPath $payload -Filter '*.dll' -File -Recurse) {
             $before = $dll.Length; $state = Compress-DllBestEffort $dll.FullName
             [pscustomobject]@{ File = $dll.FullName.Substring($payload.Length + 1); Before = $before; After = (Get-Item $dll.FullName).Length; State = $state }
@@ -861,7 +866,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
                 'presentation-transport-contract','summoning-authority-contract','cooked-registry-discovery-contract',
                 'json-document','asset-patch-v2-contract','helpy-instant-open',
                 'plugin-catalog-compatibility','recipe-placement-contract',
-                'loader-folder-case','usmap-index','native-binding-resolution','identity-only-cleanup','persistence-diagnostic-ledger',
+                'loader-folder-case','usmap-index','native-binding-resolution','identity-only-cleanup','persistence-diagnostic-ledger','native-persistence-policy','character-load-audit','quick-load-settings','quick-launch-contract','quick-launch-configuration','additional-logging',
                 'vendor-category-refresh-contract','storefront-lanes','state-storage-contract',
                 'equipment-storefront-lane','native-contract','journal-failure-isolation',
                 'journal-wingdk-lane','journal-save-ownership','journal-player-selection','journal-unlock-condition','loader-lifecycle-contract',

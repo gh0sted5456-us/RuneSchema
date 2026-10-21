@@ -72,13 +72,14 @@ PS::WeakObjectHandle itemVisual;
 std::array<PS::WeakObjectHandle,2> rigLights;
 constexpr std::array PreviewMeshes{L"InvisMeshComponent",L"InvisHairMeshComponent",L"BodyMeshComponent",L"HeadMeshComponent",L"HairZone1MeshComponent",L"FacialHairZone1MeshComponent",L"BodyDefaultOutfitMeshComponent",L"LegsDefaultOutfitMeshComponent",L"HeadOutfitMeshComponent",L"BodyOutfitMeshComponent",L"LegsOutfitMeshComponent",L"CapeOutfitMeshComponent",L"TrinketOutfitMeshComponent",L"OffhandPropMeshComponent"};
 std::string mode,lastAppearance,lastEquipment,lastItem;
-bool pending=false,dirty=true;int lastAngle=999,lastPitch=999,lastZoom=0,followups=0;
+bool pending=false,readingMask=false,dirty=true;int lastAngle=999,lastPitch=999,lastZoom=0,followups=0;
 Clock::time_point due{},next{},followAt{};
 Clock::time_point freezeAt{};
 bool awaitingPose=false;
 int lastAnimation=-1,lastPlaying=-1;
 bool bodyFramed=false;double bodyCenter=1090.,bodyDistance=480.;
 uint64_t session=0;
+int renderSide=512,frameInterval=33;
 struct Cached {std::vector<unsigned char> Pixels;uint64_t Used=0;};
 std::map<std::tuple<int,int,int>,Cached> angles;size_t cacheBytes=0;uint64_t cacheClock=0;
 std::vector<unsigned char> pixels;
@@ -92,7 +93,7 @@ void DestroyScene(){
     if(auto* target=targetLease.Get()){try{Call(Find(L"/Script/Engine.Default__KismetRenderingLibrary"),L"/Script/Engine.KismetRenderingLibrary:ReleaseRenderTarget2D").Obj(L"TextureRenderTarget",target).Invoke();if(target->IsRootSet())target->ClearRootSet();}catch(...){}}
     targetLease.Reset();componentLease.Reset();itemVisual.Reset();for(auto& light:rigLights)light.Reset();
     for(auto it=actors.rbegin();it!=actors.rend();++it)if(auto* actor=it->Get())try{Call(actor,L"/Script/Engine.Actor:K2_DestroyActor").Invoke();}catch(...){}
-    actors.clear();worldLease.Reset();World=Preview=Capture=Target=Component=nullptr;pending=false;followups=0;awaitingPose=false;bodyFramed=false;lastAnimation=lastPlaying=-1;lastAppearance.clear();lastEquipment.clear();lastItem.clear();mode.clear();Invalidate();
+    actors.clear();worldLease.Reset();World=Preview=Capture=Target=Component=nullptr;pending=false;readingMask=false;followups=0;awaitingPose=false;bodyFramed=false;lastAnimation=lastPlaying=-1;lastAppearance.clear();lastEquipment.clear();lastItem.clear();mode.clear();Invalidate();
 }
 UObject* Spawn(const wchar_t* path,double x,double y,double z){
     auto* cls=Load(path);if(!cls||!cls->IsA<UClass>())throw std::runtime_error("Native preview class unavailable");
@@ -103,16 +104,32 @@ UObject* Spawn(const wchar_t* path,double x,double y,double z){
     Call(actor,L"/Script/Engine.Actor:SetReplicates").Text(L"bInReplicates",L"False").Invoke();
     Call(actor,L"/Script/Engine.Actor:SetActorEnableCollision").Text(L"bNewActorEnableCollision",L"False").Invoke();
     Call finish(Find(L"/Script/Engine.Default__GameplayStatics"),L"/Script/Engine.GameplayStatics:FinishSpawningActor");
-    finish.Obj(L"Actor",actor).Text(L"SpawnTransform",Transform(x,y,z)).Text(L"TransformScaleMethod",L"OverrideRootScale").Invoke();if(finish.Object()!=actor)throw std::runtime_error("Transient preview construction failed");return actor;
+    finish.Obj(L"Actor",actor).Text(L"SpawnTransform",Transform(x,y,z)).Text(L"TransformScaleMethod",L"OverrideRootScale").Invoke();if(finish.Object()!=actor)throw std::runtime_error("Transient preview construction failed");Call(actor,L"/Script/Engine.Actor:SetActorHiddenInGame").Text(L"bNewHidden",L"False").Invoke();return actor;
 }
 void Setup(){
+    // Prefer the local controller's current world, never a remote/dedicated
+    // world or an arbitrary loaded map. Cosmetic actors stay transient,
+    // non-replicated and collision-free (see Spawn).
+    bool gameplayWorld=false;
+    if(auto* type=Find(L"/Script/Dominion.DominionPlayerController")){
+        TArray<UObject*> controllers;UECustom::UObjectGlobals::GetObjectsOfClass(static_cast<UClass*>(type),controllers,true);
+        if(controllers.Num()>64)throw std::runtime_error("Ambiguous local preview controllers");
+        for(auto* controller:controllers)if(controller&&controller->GetWorld()&&!controller->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed))){
+            Call local(controller,L"/Script/Engine.Controller:IsLocalController");local.Invoke();if(local.Bool()){
+                const bool gameplay=DragonWilds::ActorHelper::GetObjectRef(controller,L"Pawn")!=nullptr;
+                if(gameplayWorld&&!gameplay)continue;
+                if(gameplay&&!gameplayWorld){World=nullptr;gameplayWorld=true;}
+                if(World&&World!=controller->GetWorld())throw std::runtime_error("Ambiguous local preview world");World=controller->GetWorld();
+            }
+        }
+    }
     std::vector<UObject*> worlds;UObjectGlobals::FindAllOf(STR("World"),worlds);
-    for(auto* candidate:worlds)if(candidate&&!candidate->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed))&&candidate->GetPathName()==L"/Game/Maps/L_FrontEnd.L_FrontEnd"){if(World)throw std::runtime_error("Ambiguous frontend preview world");World=candidate;}
-    if(!World)throw std::runtime_error("Native preview currently requires the main menu. Live-world preview is not yet verified.");
+    if(!World)for(auto* candidate:worlds)if(candidate&&!candidate->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed))&&candidate->GetPathName()==L"/Game/Maps/L_FrontEnd.L_FrontEnd"){if(World)throw std::runtime_error("Ambiguous frontend preview world");World=candidate;}
+    if(!World)throw std::runtime_error("Preview needs the main menu or a local game world. No preview is created on a dedicated server.");
     worldLease.Assign(World);
     Capture=Spawn(L"/Script/Engine.SceneCapture2D",20480,20000,1090);Component=ObjectMember(Capture,L"CaptureComponent2D");componentLease.Assign(Component);
     Call create(Find(L"/Script/Engine.Default__KismetRenderingLibrary"),L"/Script/Engine.KismetRenderingLibrary:CreateRenderTarget2D");
-    create.Obj(L"WorldContextObject",World).Text(L"Width",L"512").Text(L"Height",L"512").Text(L"Format",L"RTF_RGBA8_SRGB").Text(L"ClearColor",L"(R=0.015,G=0.018,B=0.02,A=1)").Text(L"bAutoGenerateMipMaps",L"False").Text(L"bSupportUAVs",L"False").Invoke();
+    create.Obj(L"WorldContextObject",World).Text(L"Width",std::to_wstring(renderSide)).Text(L"Height",std::to_wstring(renderSide)).Text(L"Format",L"RTF_RGBA8_SRGB").Text(L"ClearColor",L"(R=0.015,G=0.018,B=0.02,A=1)").Text(L"bAutoGenerateMipMaps",L"False").Text(L"bSupportUAVs",L"False").Invoke();
     Target=create.Object();if(!Target)throw std::runtime_error("Native render target unavailable");targetLease.Assign(Target);Target->SetRootSet();
     ObjMember(Component,L"TextureTarget",Target);TextMember(Component,L"bCaptureEveryFrame",L"False");TextMember(Component,L"bCaptureOnMovement",L"False");TextMember(Component,L"PrimitiveRenderMode",L"PRM_UseShowOnlyList");TextMember(Component,L"CaptureSource",L"SCS_FinalColorLDR");TextMember(Component,L"FOVAngle",L"28");TextMember(Component,L"PostProcessBlendWeight",L"0");
     size_t lightIndex=0;for(const auto& point:std::vector<std::array<double,4>>{{20135,19955,1220,12000},{20120,20090,1190,8000}}){auto* light=Spawn(L"/Script/Engine.PointLight",point[0],point[1],point[2]);rigLights[lightIndex++].Assign(light);auto* component=ObjectMember(light,L"LightComponent");Call(component,L"/Script/Engine.SceneComponent:SetMobility").Text(L"NewMobility",L"Movable").Invoke();Call(component,L"/Script/Engine.LightComponent:SetIntensity").Text(L"NewIntensity",std::to_wstring(point[3])).Invoke();TextMember(component,L"AttenuationRadius",L"1000");}
@@ -154,7 +171,7 @@ void Item(const std::string& path){
     Preview=Spawn(skeletal?L"/Script/Engine.SkeletalMeshActor":L"/Script/Engine.StaticMeshActor",20000,20000,1100);
     auto* mesh=ObjectMember(Preview,skeletal?L"SkeletalMeshComponent":L"StaticMeshComponent");if(!mesh)throw std::runtime_error("Native display mesh component unavailable");
     Call(mesh,L"/Script/Engine.SceneComponent:SetMobility").Text(L"NewMobility",L"Movable").Invoke();
-    if(skeletal)Call(mesh,L"/Script/Engine.SkeletalMeshComponent:SetSkeletalMesh").Obj(L"NewMesh",visual).Text(L"bReinitPose",L"True").Invoke();
+    if(skeletal)Call(mesh,L"/Script/Engine.SkinnedMeshComponent:SetSkinnedAssetAndUpdate").Obj(L"NewMesh",visual).Text(L"bReinitPose",L"True").Invoke();
     else{Call set(mesh,L"/Script/Engine.StaticMeshComponent:SetStaticMesh");set.Obj(L"NewMesh",visual).Invoke();if(!set.Bool())throw std::runtime_error("Native item mesh rejected");}
     itemVisual.Assign(mesh);lastItem=path;
 }
@@ -192,14 +209,22 @@ void Playback(bool playing){
         TextMember(mesh,L"bPauseAnims",playing?L"False":L"True");
     }
 }
-void Read(){
+bool Read(){
     Call read(Find(L"/Script/Engine.Default__KismetRenderingLibrary"),L"/Script/Engine.KismetRenderingLibrary:ReadRenderTarget");read.Obj(L"WorldContextObject",World).Obj(L"TextureRenderTarget",Target).Text(L"bNormalize",L"False").Invoke();if(!read.Bool())throw std::runtime_error("Native preview readback failed");
     auto* p=CastField<FArrayProperty>(read.Prop(L"OutSamples"));auto* inner=p?CastField<FStructProperty>(p->GetInner()):nullptr;auto* a=static_cast<FScriptArray*>(read.Value(L"OutSamples"));
-    if(!inner||!inner->GetStruct()||inner->GetSize()!=4||!a||a->Num()!=512*512||!a->GetData())throw std::runtime_error("Native pixel array changed");
+    if(!inner||!inner->GetStruct()||inner->GetSize()!=4||!a||a->Num()!=renderSide*renderSide||!a->GetData())throw std::runtime_error("Native pixel array changed");
     int n=0;for(const auto* name:{L"B",L"G",L"R",L"A"}){auto* c=CastField<FNumericProperty>(inner->GetStruct()->FindProperty(FName(name,FNAME_Find)));if(!c||!c->IsInteger()||c->GetOffset_Internal()!=n++||c->GetSize()!=1||c->GetArrayDim()!=1)throw std::runtime_error("Native pixel layout changed");}
-    pixels.resize(CharacterPreviewFrame::Bytes);const auto* bgra=static_cast<const unsigned char*>(a->GetData());for(size_t i=0;i<pixels.size();i+=4){pixels[i]=bgra[i+2];pixels[i+1]=bgra[i+1];pixels[i+2]=bgra[i];pixels[i+3]=255;}
+    pixels.resize(CharacterPreviewFrame::Bytes);const auto* bgra=static_cast<const unsigned char*>(a->GetData());
+    for(unsigned y=0;y<CharacterPreviewFrame::Side;++y)for(unsigned x=0;x<CharacterPreviewFrame::Side;++x){const auto i=(y*CharacterPreviewFrame::Side+x)*4,source=((y*renderSide/CharacterPreviewFrame::Side)*renderSide+x*renderSide/CharacterPreviewFrame::Side)*4;
+        if(readingMask)pixels[i+3]=255-bgra[source+3];
+        else{pixels[i]=bgra[source+2];pixels[i+1]=bgra[source+1];pixels[i+2]=bgra[source];pixels[i+3]=255;}}
+    // Keep final-color RGB and obtain inverse opacity from a separate native
+    // capture. Never key transparency from black pixels (black gear is valid).
+    if(!readingMask){TextMember(Component,L"CaptureSource",L"SCS_SceneColorHDR");Call(Component,L"/Script/Engine.SceneCaptureComponent2D:CaptureScene").Invoke();readingMask=true;return false;}
+    readingMask=false;TextMember(Component,L"CaptureSource",L"SCS_FinalColorLDR");
     if(lastAnimation!=1){constexpr size_t limit=96*1024*1024;while(cacheBytes+pixels.size()>limit&&!angles.empty()){auto old=std::min_element(angles.begin(),angles.end(),[](const auto&a,const auto&b){return a.second.Used<b.second.Used;});cacheBytes-=old->second.Pixels.size();angles.erase(old);}auto key=std::tuple{lastAngle,lastPitch,lastZoom};if(auto old=angles.find(key);old!=angles.end()){cacheBytes-=old->second.Pixels.size();angles.erase(old);}angles.emplace(key,Cached{pixels,++cacheClock});cacheBytes+=pixels.size();}
-    if(channel.Lock()){std::memcpy(channel.Get()->Pixels,pixels.data(),pixels.size());++channel.Get()->Serial;std::snprintf(channel.Get()->Status,256,lastPlaying==1?"Native preview animation · preview actors only":"Native game preview · 512 px · idle frames reused");channel.Unlock();}
+    if(channel.Lock()){std::memcpy(channel.Get()->Pixels,pixels.data(),pixels.size());++channel.Get()->Serial;std::snprintf(channel.Get()->Status,256,"Native preview · %d px · %s",renderSide,lastPlaying==1?"animation (preview only)":"idle frame reused");channel.Unlock();}
+    return true;
 }
 } // namespace
 Json Choices(){
@@ -265,6 +290,9 @@ Json Render(const Json& appearance,const Json& request){
     const auto wanted=request.value("View",std::string("Head"));if(wanted!="Head"&&wanted!="Body"&&wanted!="Item")throw std::runtime_error("Invalid native preview view");
     const auto equipment=request.value("Equipment",Json::object());if(!equipment.is_object()||equipment.size()>8)throw std::runtime_error("Preview outfit exceeds its bound");
     try{
+        const auto quality=request.value("Quality",2);if(quality<0||quality>2)throw std::runtime_error("Invalid preview quality");
+        const int side=quality==0?256:quality==1?384:512;
+        if(side!=renderSide){DestroyScene();renderSide=side;}frameInterval=quality==0?100:quality==1?50:33;
         const auto path=request.value("Path",std::string{});if(wanted=="Item"&&(path.empty()||path.size()>1024||!path.starts_with('/')||path.find_first_of("\r\n\t'")!=path.npos))throw std::runtime_error("Choose an Item Bay entry with a canonical native asset path");
         if(!mode.empty()&&((mode=="Item")!=(wanted=="Item")||(wanted=="Item"&&lastItem!=path)))DestroyScene();
         if(!World||!worldLease.Get()){DestroyScene();Setup();}
@@ -298,7 +326,7 @@ void Tick(){
     try{
         if(!worldLease.Get()||!componentLease.Get()||!targetLease.Get()){Reset();return;}
         int yaw=0,zoom=100,pitch=0,animation=0,playing=0;bool stop=false;if(!channel.Lock())return;auto* data=channel.Get();yaw=data->Yaw;zoom=data->Zoom;pitch=data->Pitch;animation=data->Animation==1?1:0;playing=animation&&data->Playing==1?1:0;stop=data->Stop||GetTickCount64()-data->Heartbeat>2500;channel.Unlock();if(stop){Reset();return;}
-        const auto now=Clock::now();if(pending){Read();pending=false;}
+        const auto now=Clock::now();if(pending){pending=!Read();if(pending)return;}
         if(followups&&now>=followAt){Invalidate();--followups;followAt=now+std::chrono::milliseconds(800);StandardPose();}
         if(awaitingPose&&now>=freezeAt){for(const auto* name:PreviewMeshes)if(auto* mesh=ObjectMember(Preview,name))TextMember(mesh,L"bPauseAnims",L"True");awaitingPose=false;Invalidate();}
         if(now<due||now<next||awaitingPose)return;
@@ -311,7 +339,7 @@ void Tick(){
         if(mode!="Item"&&playing)dirty=true;
         yaw=std::clamp(yaw/2*2,-180,180);zoom=std::clamp(zoom,70,150);
         pitch=std::clamp(pitch/2*2,-40,40);if(!dirty&&yaw==lastAngle&&pitch==lastPitch&&zoom==lastZoom)return;lastAngle=yaw;lastPitch=pitch;lastZoom=zoom;dirty=false;
-        if(const auto cached=angles.find({yaw,pitch,zoom});!animation&&cached!=angles.end()){cached->second.Used=++cacheClock;if(channel.Lock()){std::memcpy(channel.Get()->Pixels,cached->second.Pixels.data(),CharacterPreviewFrame::Bytes);++channel.Get()->Serial;channel.Unlock();}next=now+std::chrono::milliseconds(33);return;}
+        if(const auto cached=angles.find({yaw,pitch,zoom});!animation&&cached!=angles.end()){cached->second.Used=++cacheClock;if(channel.Lock()){std::memcpy(channel.Get()->Pixels,cached->second.Pixels.data(),CharacterPreviewFrame::Bytes);++channel.Get()->Serial;channel.Unlock();}next=now+std::chrono::milliseconds(frameInterval);return;}
         Call(Preview,L"/Script/Engine.Actor:K2_SetActorRotation").Text(L"NewRotation",L"(Pitch=0,Yaw="+std::to_wstring(yaw-90)+L",Roll=0)").Text(L"bTeleportPhysics",L"True").Invoke();
         if(mode=="Body"&&!bodyFramed)FrameBody();const auto bounds=Bounds(mode=="Item"?itemVisual.Get():ObjectMember(Preview,L"HeadMeshComponent"));const double distance=(mode=="Item"?std::clamp(bounds[3]*4.5,15.,2000.):mode=="Head"?105.:bodyDistance)*100./zoom,z=mode=="Item"?bounds[2]:mode=="Head"?bounds[2]+2:bodyCenter;
         if(mode=="Item")for(size_t i=0;i<rigLights.size();++i)if(auto* light=rigLights[i].Get()){
@@ -319,8 +347,8 @@ void Tick(){
             auto* component=ObjectMember(light,L"LightComponent");const double intensity=std::clamp((i?8000.:12000.)*std::pow(distance/480.,2),8000.,1000000.);Call(component,L"/Script/Engine.LightComponent:SetIntensity").Text(L"NewIntensity",std::to_wstring(intensity)).Invoke();TextMember(component,L"AttenuationRadius",std::to_wstring(std::clamp(distance*4.,1000.,10000.)));
         }
         const double orbit=pitch*3.141592653589793/180.;Call(Capture,L"/Script/Engine.Actor:K2_SetActorLocation").Text(L"NewLocation",Vector((mode=="Item"?bounds[0]:20000)+distance*std::cos(orbit),mode=="Item"?bounds[1]:20000,z+distance*std::sin(orbit))).Text(L"bSweep",L"False").Text(L"bTeleport",L"True").Invoke();Call(Capture,L"/Script/Engine.Actor:K2_SetActorRotation").Text(L"NewRotation",L"(Pitch="+std::to_wstring(-1-pitch)+L",Yaw=180,Roll=0)").Text(L"bTeleportPhysics",L"True").Invoke();
-        Call(Component,L"/Script/Engine.SceneCaptureComponent2D:CaptureScene").Invoke();pending=true;next=now+std::chrono::milliseconds(33);
+        Call(Component,L"/Script/Engine.SceneCaptureComponent2D:CaptureScene").Invoke();pending=true;next=now+std::chrono::milliseconds(frameInterval);
     }catch(const std::exception& e){Status(e.what());DestroyScene();}
 }
-void Reset(){DestroyScene();channel.Close();}
+void Reset(){if(channel.Lock()){channel.Get()->Stop=1;std::snprintf(channel.Get()->Status,256,"Preview world changed; reconnecting…");channel.Unlock();}DestroyScene();channel.Close();}
 }

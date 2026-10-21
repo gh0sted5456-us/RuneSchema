@@ -101,6 +101,7 @@ own.
 | `WearableMeshData` | Resolves and class-checks named mesh-data dependencies. | An equipped wearable item that references the correct male/female mesh data, meshes, materials, and hide rules. |
 | `MeleeAttackClasses` | Supplies an ordered class plan to the optional melee fallback. | Complete cooked attack classes in intended order; enable the specific fallback setting. |
 | `RangedAttackClasses` | Accepted by the schema but **not installed** as a global ranged class list. | Use an item-owned ranged collection instead. |
+| `CacheAssets` | Declares exact original artwork ownership for source-targeted Helpy caches. Never enrolls a texture as an item or makes gameplay content available. | Full object paths of original artwork belonging to this mod; omit borrowed base-game/plugin artwork. |
 
 These are the only `NativeRegistries` fields. Each field accepts at most 4,096
 unique paths; a declaration accepts at most 16,384 references in total,

@@ -1,5 +1,7 @@
 #include <algorithm>
 #include "Core/HelpyCacheSources.h"
+#include "Core/ModIdentity.h"
+#include "Core/ConfigFiles.h"
 #include <array>
 #include <atomic>
 #include <cctype>
@@ -808,7 +810,7 @@ namespace {
         InstallNativeSpudDeserializeProbe();
     }
 
-    struct ModIdentity { std::string Id; std::string Name; std::string Author="Unknown Author"; std::string Website; bool Present=false; };
+    using ModIdentity=PS::ModIdentity::Record;
     std::string TrimIdentity(std::string value) {
         const auto first=value.find_first_not_of(" \t\r\n");
         if(first==std::string::npos)return {};
@@ -818,26 +820,7 @@ namespace {
     ModIdentity ReadModIdentity(const fs::path& root,const RC::StringType& folder) {
         ModIdentity result;result.Id=RC::to_string(folder);result.Name=result.Id;
         const auto file=root/"ID.txt";if(!fs::exists(file))return result;
-        result.Present=true;std::ifstream input(file);if(!input)throw std::runtime_error("ID.txt could not be opened");
-        std::string line;bool structured=false;
-        while(std::getline(input,line)) {
-            line=TrimIdentity(line);if(line.empty()||line.starts_with('#'))continue;
-            const auto split=line.find_first_of(":=");
-            if(split==std::string::npos) {if(!structured){result.Id=line;result.Name=line;}continue;}
-            structured=true;auto key=TrimIdentity(line.substr(0,split));auto value=TrimIdentity(line.substr(split+1));
-            if(key=="ModID"||key=="ModId")result.Id=value;
-            else if(key=="Name"||key=="ModName")result.Name=value;
-            else if(key=="Author"||key=="ModAuthor")result.Author=value;
-            else if(key=="Website"||key=="ModWebsite"||key=="ModSite")result.Website=value;
-        }
-        if(result.Id.empty())throw std::runtime_error("ID.txt requires ModID when the file is present");
-        if(result.Name.empty())result.Name=result.Id;
-        if(result.Author.empty())throw std::runtime_error("ID.txt Author cannot be empty");
-        if(result.Id.size()>128||result.Name.size()>256||result.Author.size()>256||result.Website.size()>2048)
-            throw std::runtime_error("ID.txt metadata exceeds its safe length limit");
-        if(!result.Website.empty()&&!result.Website.starts_with("https://")&&!result.Website.starts_with("http://"))
-            throw std::runtime_error("ID.txt Website must be an http or https link");
-        return result;
+        return PS::ModIdentity::Parse(PS::ConfigFiles::Read(file,64*1024),result.Id);
     }
 }
 
@@ -1277,6 +1260,7 @@ namespace DragonWilds {
         RegisterLoader(std::move(recipes));
         auto npcs=std::make_unique<DragonWildsNpcLoader>(recipeService);
         auto* npcService=npcs.get();
+        m_dataRegistrar.SetCharacterRegistryPreparation([npcService](RC::Unreal::UObject* context){npcService->PrepareQuests(context);});
         m_registryBridge.QuestControl=[npcService](RC::Unreal::UObject* player,const std::string& quest,
             const std::string& action,const std::string& payload){
             return npcService->HandleNetworkQuestControl(player,quest,action,payload);
@@ -1313,6 +1297,7 @@ namespace DragonWilds {
 
         auto spawnLoader = std::make_unique<DragonWildsSpawnLoader>();
         m_spawnLoader = spawnLoader.get();
+        m_spawnLoader->PlanBuildingImport=[service=m_buildingLoader](const nlohmann::json& document){return service->PlanToolImport(document);};
         m_buildingLoader->ImportPlacements=[service=m_spawnLoader](const nlohmann::json& placements,const RC::StringType& mod){
             service->LoadBuildingPlacements(placements,mod);
         };
@@ -1683,7 +1668,7 @@ namespace DragonWilds {
                 }
                 if(engineLifecyclePhase==EEngineLifecyclePhase::PostEngineInit && modSuccessful) {
                     PS::Log<LogLevel::Normal>(STR("[MOD:{}][OK] '{}' by '{}' loaded.\n"), modName,
-                        PS::ToWideSafe(identity.Name.c_str()),PS::ToWideSafe(identity.Author.c_str()));
+                        PS::ToWideSafe(identity.DisplayName().c_str()),PS::ToWideSafe(identity.Author.c_str()));
                 } else if(engineLifecyclePhase==EEngineLifecyclePhase::PostEngineInit) {
                     PS::Log<LogLevel::Warning>(STR("[MOD:{}][PARTIAL] One or more sections were skipped; successfully loaded sections remain active.\n"),modName);
                 }

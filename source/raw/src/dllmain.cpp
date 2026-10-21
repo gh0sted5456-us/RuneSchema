@@ -29,6 +29,9 @@
 #include "Generator/PlayerTrace.h"
 #include "Loader/DragonWildsMainLoader.h"
 #include "Runtime/PluginHost.h"
+#include "Runtime/QuickLoad.h"
+#include "Runtime/AdditionalLogging.h"
+#include "Runtime/ModHealthService.h"
 #include "Loader/ModLoadOrder.h"
 #include "Loader/ModOrderPolicy.h"
 #include "Utility/Config.h"
@@ -38,6 +41,7 @@
 #include "Runtime/UE4SSPackageIntegration.h"
 #include "Runtime/MappingBackbone.h"
 #include "Runtime/AutoMapping.h"
+#include "Runtime/ConsoleCommands.h"
 #include "Utility/Logging.h"
 #include "Utility/StartupTrace.h"
 #include "SDK/DragonWildsSignatures.h"
@@ -238,6 +242,7 @@ public:
         auto config = PS::PSConfig::Get();
         PS::StartupTrace::Mark("config load begin");
         config->Load();
+        PS::QuickLoad::InitializeEarly();
         PS::AutoMapping::Prepare();
         try {
             for(const auto& diagnostic:PS::UE4SSPackageIntegration::Prepare(std::filesystem::path(PS::HostServices::WorkingDirectory())))
@@ -342,6 +347,10 @@ public:
 
     ~RuneSchema() override
     {
+        m_consoleCommands.Shutdown();
+        PS::ModHealthService::Shutdown();
+        PS::QuickLoad::Shutdown();
+        PS::AdditionalLogging::Shutdown();
         m_pluginHost.Shutdown();
         m_networkRoleMonitor.Stop();
         PS::RuntimeJobs::Shutdown();
@@ -784,15 +793,23 @@ public:
         try {
             PS::StartupTrace::Mark("UE4SS on_unreal_init begin");
             MainLoader.SetFatalStartupHandler([this](std::string) {
+                m_consoleCommands.Shutdown();
+                PS::ModHealthService::Shutdown();
                 m_startupFailed.store(true,std::memory_order_release);
+                PS::QuickLoad::Shutdown();
+                PS::AdditionalLogging::Shutdown();
                 m_networkRoleMonitor.Stop();
                 PS::RuntimeJobs::Shutdown();
                 m_pluginHost.Shutdown();
             });
             MainLoader.Initialize();
+            PS::ModHealthService::Initialize();
+            PS::QuickLoad::Initialize();
+            PS::AdditionalLogging::Initialize();
             PrepareAuthoringBridge();
             m_pluginHost.OnUnrealInit();
             PS::AutoMapping::Start();
+            m_consoleCommands.Start(m_pluginHost);
             PS::StartupTrace::Mark("UE4SS on_unreal_init complete");
             m_unrealReady = true;
             if (!PS::Storefront::IsDedicatedServer()) {
@@ -801,9 +818,17 @@ public:
             }
         } catch (const std::exception& error) {
             m_startupFailed.store(true,std::memory_order_release);
+            m_consoleCommands.Shutdown();
+            PS::ModHealthService::Shutdown();
+            PS::QuickLoad::Shutdown();
+            PS::AdditionalLogging::Shutdown();
             MainLoader.AbortStartup("unreal-init",error.what());
         } catch (...) {
             m_startupFailed.store(true,std::memory_order_release);
+            m_consoleCommands.Shutdown();
+            PS::ModHealthService::Shutdown();
+            PS::QuickLoad::Shutdown();
+            PS::AdditionalLogging::Shutdown();
             MainLoader.AbortStartup("unreal-init","unknown exception");
         }
     }
@@ -849,6 +874,7 @@ private:
     PS::Network::RoleMonitor m_networkRoleMonitor;
     DragonWilds::DragonWildsMainLoader MainLoader;
     PS::PluginHost m_pluginHost;
+    PS::Console::Commands m_consoleCommands;
     std::atomic<bool> m_generateSchemas = false;
     std::atomic<bool> m_schemaBusy = false;
     std::atomic<bool> m_includeLoadedTables = false;

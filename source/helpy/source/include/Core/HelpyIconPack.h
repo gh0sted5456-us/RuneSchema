@@ -167,8 +167,13 @@ inline Result Import(const fs::path& file,const fs::path& root,const fs::path& c
     if(!source.empty()&&!ContentSource::Valid(source))throw std::runtime_error("Invalid cache source selection");
     Safe(file);const auto size=fs::file_size(file);std::ifstream input(file,std::ios::binary);uint64_t start=0;const auto manifest=Header(input,start,size);
     HelpyCacheSources::Plan originPlan;originPlan.Owners=snapshot.Owners;
-    const auto inScope=[&](const Entry& entry){return (allowedGroups.empty()||allowedGroups.contains(entry.Source))&&(source.empty()||(entry.Origins.empty()?ContentSource::Origins(entry.Icon,originPlan):entry.Origins).contains(source));};
     const auto recordScope=[&](const CacheBundle::Record& row){return policy==ImportPolicy::VerifiedContent&&(source.empty()||source==row.Owner)&&(allowedOwner.empty()||row.Owner==allowedOwner)&&(allowedGroups.empty()||allowedGroups.contains(row.Source))&&CacheBundleStore::ActiveOwner(row,snapshot);};
+    std::map<std::string,std::set<std::string>> borrowed;
+    for(const auto& row:manifest.Records)if(recordScope(row)&&CacheBundle::OriginalOwnerProven(row,CacheBundleStore::Plan(snapshot),snapshot.NativePlugins)){
+        const auto icon=row.Data.value("Icon",std::string{}),group=HelpyCacheSources::Source(icon);
+        if(!icon.empty()&&(group=="game"||group=="engine"||snapshot.NativePlugins.contains(group)))borrowed[icon].insert(row.Source);
+    }
+    const auto inScope=[&](const Entry& entry){return ((allowedGroups.empty()||allowedGroups.contains(entry.Source))&&(source.empty()||(entry.Origins.empty()?ContentSource::Origins(entry.Icon,originPlan):entry.Origins).contains(source)))||borrowed.contains(entry.Icon);};
     std::set<std::string> wanted;for(const auto& entry:manifest.Icons)if(inScope(entry)&&snapshot.SourceKeys.contains(entry.Source))wanted.insert(entry.Source);
     if(manifest.Locale==CacheBundleStore::Locale())for(const auto& row:manifest.Records)if(recordScope(row))wanted.insert(row.Source);
     if(wanted.empty())return {0,manifest.Icons.size()+manifest.Records.size(),0,"[RS-CACHE-003] No matching active sources or locale. Nothing imported."};
@@ -193,6 +198,9 @@ inline Result Import(const fs::path& file,const fs::path& root,const fs::path& c
         const auto keys=Portable(root,snapshot,wanted,cache,progress,nativeBundle);
         for(const auto& [group,key]:keys)if(manifest.Sources.at(group)==key)matches.insert(group);
     }
+    // Borrowed native artwork is admitted only with a matching owning module,
+    // never merely because the pack claims a native icon as its own.
+    for(auto it=borrowed.begin();it!=borrowed.end();)if(std::none_of(it->second.begin(),it->second.end(),[&](const auto& group){return matches.contains(group);}))it=borrowed.erase(it);else ++it;
     uint64_t total=0;for(const auto& e:manifest.Icons)if(inScope(e)&&matches.contains(e.Source))total+=e.Bytes;
     uint64_t existing=0;Safe(cache);if(fs::exists(cache)){size_t inspected=0;for(auto it=fs::recursive_directory_iterator(cache);it!=fs::recursive_directory_iterator();++it){Check(progress);Safe(it->path());if(++inspected>MaxIcons*8)throw std::runtime_error("Cache has too many files; clean old caches first");if(it->is_regular_file()&&it->path().extension()==L".rsicon")existing+=it->file_size();}}
     for(const auto& e:manifest.Icons)if(inScope(e)&&matches.contains(e.Source)){const auto target=Target(cache,snapshot,e.Icon);Safe(target);if(fs::is_regular_file(target))existing-=std::min(existing,fs::file_size(target));}
@@ -221,6 +229,13 @@ inline Result Import(const fs::path& file,const fs::path& root,const fs::path& c
 inline Result Export(const fs::path& file,const fs::path& root,const fs::path& cache,const HelpySourceCache::Snapshot& snapshot,Progress& progress,const std::string& source={},const nlohmann::json& coverage=nlohmann::json::object(),const nlohmann::json& references=nlohmann::json::array()){
     if(!source.empty()&&!ContentSource::Valid(source))throw std::runtime_error("Invalid cache source selection");
     const bool surveyed=!coverage.empty();const auto expected=surveyed?IconCacheCoverage::Expected(coverage,source,nlohmann::json(snapshot.SourceKeys)):std::set<std::string>{};
+    const auto plan=CacheBundleStore::Plan(snapshot);const bool targeted=source.starts_with("mods/");
+    const bool bundle=HelpyCacheSources::Lower(file.extension().string())==".rsmk-cache";
+    auto records=nlohmann::json::array();std::set<std::string> referenced;size_t unproven=0;
+    for(const auto& row:CacheBundle::Records(references))if((source.empty()||row.Owner==source)&&CacheBundleStore::ActiveOwner(row,snapshot)){
+        if(targeted&&!CacheBundle::OriginalOwnerProven(row,plan,snapshot.NativePlugins)){++unproven;continue;}
+        records.push_back(CacheBundle::Document(row));const auto icon=row.Data.value("Icon",std::string{});if(!icon.empty())referenced.insert(icon);
+    }
     progress.Begin(Phase::Discover);Safe(cache);std::map<std::string,fs::path> icons;std::map<std::string,std::set<std::string>> origins;size_t inspected=0;
     if(fs::exists(cache))for(auto it=fs::recursive_directory_iterator(cache);it!=fs::recursive_directory_iterator();++it){Check(progress);if(++inspected>MaxIcons*8)throw std::runtime_error("Cache has too many files; clean old caches first");
         progress.Done=inspected;Safe(it->path());if(!it->is_regular_file()||it->path().extension()!=L".rsicon")continue;
@@ -230,11 +245,15 @@ inline Result Export(const fs::path& file,const fs::path& root,const fs::path& c
             std::set<std::string> values;
             if(index.contains("Origins")&&index["Origins"].is_array()&&index["Origins"].size()<=128)for(const auto& value:index["Origins"])if(value.is_string()&&ContentSource::Valid(value.get<std::string>()))values.insert(value.get<std::string>());
             if(values.empty()){HelpyCacheSources::Plan plan;plan.Owners=snapshot.Owners;values=ContentSource::Origins(icon,plan);}
-            if(Target(cache,snapshot,icon)==it->path()&&(surveyed?expected.contains(icon):(source.empty()||values.contains(source)))){icons[icon]=it->path();origins[icon]=std::move(values);}}catch(...){}
+            const auto group=HelpyCacheSources::Source(icon);const bool native=group=="game"||group=="engine"||snapshot.NativePlugins.contains(group);
+            const CacheBundle::Record art{"art",source,group,icon,"",nlohmann::json::object()};
+            const bool owned=!targeted||CacheBundle::OriginalOwnerProven(art,plan,snapshot.NativePlugins);
+            const bool dependency=bundle&&targeted&&native&&referenced.contains(icon);
+            const bool selected=source.empty()||(targeted?(owned||dependency):values.contains(source));
+            if(Target(cache,snapshot,icon)==it->path()&&(surveyed?expected.contains(icon)&&(!targeted||owned||dependency):selected)){
+                if(dependency)values={group=="game"||group=="engine"?"core":"plugins/"+group};else if(targeted&&owned)values={source};icons[icon]=it->path();origins[icon]=std::move(values);}}catch(...){}
     }
-    const bool bundle=HelpyCacheSources::Lower(file.extension().string())==".rsmk-cache";
-    auto records=nlohmann::json::array();
-    if(bundle)for(const auto& row:CacheBundle::Records(references))if((source.empty()||row.Owner==source)&&CacheBundleStore::ActiveOwner(row,snapshot))records.push_back(CacheBundle::Document(row));
+    if(!bundle)records=nlohmann::json::array();
     if(icons.empty()&&records.empty())throw std::runtime_error("[RS-CACHE-007] No cached presentation records or indexed icons to export yet.");
     if(icons.size()>MaxIcons)throw std::runtime_error("Too many icons for one pack");std::set<std::string> wanted;for(const auto& [icon,path]:icons)wanted.insert(HelpyCacheSources::Source(icon));
     for(const auto& row:records)wanted.insert(row.at("Source").get<std::string>());
@@ -242,7 +261,7 @@ inline Result Export(const fs::path& file,const fs::path& root,const fs::path& c
     if(bundle){
         auto verified=nlohmann::json::array();for(const auto& row:records)if(keys.contains(row.at("Source").get<std::string>()))verified.push_back(row);
         document["Kind"]="RuneSchemaCacheBundle";document["Locale"]=CacheBundleStore::Locale();document["Records"]=std::move(verified);
-        document["RecordCoverage"]={{"Complete",false},{"Scope","Observed cached references only; missing persistence IDs are explicitly unknown"}};
+        document["RecordCoverage"]={{"Complete",false},{"ExcludedUnprovenOwner",unproven},{"Scope",source.empty()?"all observed cached references":source},{"Note","Observed references only; missing persistence IDs are unknown"}};
     }
     uint64_t payload=0;std::vector<std::pair<fs::path,std::string>> selected;progress.Begin(Phase::Validate,icons.size());
     std::set<std::string> exported;auto warnings=nlohmann::json::array();
@@ -267,6 +286,7 @@ inline Result Export(const fs::path& file,const fs::path& root,const fs::path& c
     }catch(...){std::error_code ec;fs::remove(temporary,ec);throw;}
     progress.Stage=Phase::Complete;Result result;result.Exported=selected.size();result.Message=(full?"Full cache exported: ":"Exported with warnings: ")+std::to_string(result.Exported)+(surveyed?" / "+std::to_string(expected.size())+" icons.":" icons; coverage has not been scanned.");
     if(bundle){result.RecordsExported=document["Records"].size();result.Message+=" "+std::to_string(result.RecordsExported)+" typed records with exact paths and known persistence IDs. Record coverage is partial, not a full-game dump.";}
+    if(unproven)result.Message+=" "+std::to_string(unproven)+" references excluded: exact module ownership is unproven.";
     if(!full){if(surveyed)result.Message+=" Missing "+std::to_string(missing.size())+"; discovery failures "+std::to_string(coverage.value("DiscoveryFailed",size_t{}))+".";
         result.Message+=" Coverage details are included in the pack.";}return result;
 }

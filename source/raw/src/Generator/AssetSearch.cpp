@@ -429,23 +429,36 @@ json DescribeItemWithSource(UObject* object,const ItemSource::Info* knownSource)
 json DescribeItem(UObject* object){return DescribeItemWithSource(object,nullptr);}
 json LoadoutWindow(const std::string& slot,const std::string& query,std::size_t offset){
     if(!LoadoutEligibility::Valid(slot)||query.size()>256)throw std::runtime_error("Invalid native slot search");
-    static std::vector<WeakObjectHandle> candidates;static std::string activeSlot,activeQuery;static uint64_t generation=0;
+    static std::vector<std::string> candidates;static std::string activeSlot,activeQuery,scope,coverage;
     const auto current=SpawnToolRequests::Generation.load();
-    if(offset==0||generation!=current||activeSlot!=slot||activeQuery!=query){
+    const auto currentScope=json::array({current,HelpySourceCache::ForClient().value("CatalogKey",std::string{})}).dump();
+    if(offset==0||scope!=currentScope||activeSlot!=slot||activeQuery!=query){
         auto* itemType=Class("assets");if(!itemType)throw std::runtime_error("Native ItemData is not ready");
         TArray<UObject*> items;UECustom::UObjectGlobals::GetObjectsOfClass(itemType,items,true);
         if(items.Num()<0||items.Num()>32768)throw std::runtime_error("Loaded item roster exceeds the fitting bound");
-        candidates.clear();for(auto* item:items)if(Usable(item))candidates.emplace_back(item);
-        activeSlot=slot;activeQuery=query;generation=current;
+        std::set<std::string> paths;for(auto* item:items)if(Usable(item))paths.insert(to_string(item->GetPathName()));
+        // A frontend/normal play session does not preload every armor ItemData.
+        // Enumerate mounted metadata as well; load and verify a bounded slice.
+        coverage="Loaded and mounted item definitions";
+        try{for(auto& path:RecipeAssetCatalog::MountedPaths(TEXT("ItemData")))paths.insert(std::move(path));}
+        catch(...){coverage="Loaded item definitions only; mounted metadata unavailable";if(paths.empty())throw;}
+        if(paths.size()>32768)throw std::runtime_error("Mounted fitting roster exceeds its bound");
+        candidates.assign(paths.begin(),paths.end());
+        activeSlot=slot;activeQuery=query;scope=currentScope;
     }
     if(offset>candidates.size())throw std::runtime_error("Native slot cursor expired; refresh the picker");
     const ItemCatalogFilter::Query match(query);auto rows=json::array();const auto begin=std::chrono::steady_clock::now();size_t scanned=0;
-    while(offset<candidates.size()&&rows.size()<48&&scanned<512){
+    size_t loaded=0;
+    while(offset<candidates.size()&&rows.size()<48&&scanned<512&&loaded<4){
         if(scanned&&std::chrono::steady_clock::now()-begin>std::chrono::microseconds(1800))break;
-        auto* item=candidates[offset++].Get();++scanned;if(!Usable(item)||!LoadoutEligibility::Matches(NativeLoadoutFields(item),slot))continue;
+        const auto& path=candidates[offset++];++scanned;
+        auto* item=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,to_wstring(path).c_str(),false);
+        if(!Usable(item)){++loaded;try{item=ActorHelper::ResolveObject(to_wstring(path));}catch(...){continue;}}
+        auto* type=Class("assets");
+        if(!Usable(item)||!type||!item->IsA(type)||!LoadoutEligibility::Matches(NativeLoadoutFields(item),slot))continue;
         auto row=DescribeItem(item);if(!match(row))continue;rows.push_back(std::move(row));
     }
-    return {{"Rows",std::move(rows)},{"NextOffset",offset},{"HasMore",offset<candidates.size()},{"Scanned",scanned}};
+    return {{"Rows",std::move(rows)},{"NextOffset",offset},{"HasMore",offset<candidates.size()},{"Scanned",scanned},{"Coverage",coverage}};
 }
 
 namespace {

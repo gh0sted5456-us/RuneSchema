@@ -1,5 +1,6 @@
 #pragma once
 #include "Core/BackgroundPolicy.h"
+#include "Core/HelpyUiAssets.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Runtime/HelpyPaths.h"
 #include "Core/HelpyPreviewHooks.h"
@@ -14,7 +15,9 @@
 #include <vector>
 namespace PS::HelpyBackgrounds {
 struct Pixels {unsigned Width=0,Height=0;std::vector<unsigned char> Data;std::string Error;};
-struct Image {ID3D11ShaderResourceView* Texture=nullptr;unsigned Width=0,Height=0;};
+struct Image {ID3D11ShaderResourceView* Texture=nullptr;unsigned Width=0,Height=0;ImVec2 UV0{0,0},UV1{1,1};};
+inline std::set<std::string> Auxiliary;
+inline void RequestImage(const std::string& name){if(HelpyUiAssets::Known(name))Auxiliary.insert(name);}
 inline std::function<Pixels(const std::filesystem::path&)> Decode;
 inline std::function<ID3D11ShaderResourceView*(const Pixels&)> Upload;
 inline std::future<Pixels> Worker;
@@ -31,6 +34,7 @@ inline std::filesystem::path Resolve(const std::string& name){
     const auto custom=Folder()/std::filesystem::u8path(name);std::error_code error;if(std::filesystem::is_regular_file(custom,error))return custom;
     if(name=="RuneSchema.png")return HelpyPaths::Asset("RuneSchema.png");
     if(name=="Dragonwilds.png"||name=="dragonwilds.png")return HelpyPaths::Asset("dragonwilds.png");
+    if(HelpyUiAssets::Known(name))return HelpyPaths::Asset(name.c_str());
     return custom;
 }
 inline const std::string& Effective(){return Preview?Selection:HelpyImGuiTheme::Current.backgroundFile;}
@@ -55,12 +59,14 @@ inline void Pump(){
     for(auto* texture:Retired)texture->Release();Retired.clear();
     if(Worker.valid()&&Worker.wait_for(std::chrono::seconds(0))==std::future_status::ready){
         auto pixels=Worker.get();
-        if(pixels.Error.empty()&&Upload){if(auto* texture=Upload(pixels)){Images[Pending]={texture,pixels.Width,pixels.Height};++Uploads;}else pixels.Error="Could not upload background texture.";}
+        if(pixels.Error.empty()&&Upload){if(auto* texture=Upload(pixels)){Image image{texture,pixels.Width,pixels.Height};
+            if(Pending.starts_with("scale-")){unsigned left=pixels.Width,top=pixels.Height,right=0,bottom=0;for(unsigned y=0;y<pixels.Height;++y)for(unsigned x=0;x<pixels.Width;++x)if(pixels.Data[(size_t(y)*pixels.Width+x)*4+3]>32){left=std::min(left,x);top=std::min(top,y);right=std::max(right,x+1);bottom=std::max(bottom,y+1);}if(right>left&&bottom>top){image.UV0={float(left)/pixels.Width,float(top)/pixels.Height};image.UV1={float(right)/pixels.Width,float(bottom)/pixels.Height};}}
+            Images[Pending]=image;++Uploads;}else pixels.Error="Could not upload background texture.";}
         if(!pixels.Error.empty()){Failed.insert(Pending);Error=pixels.Error;}Pending.clear();
     }
-    const auto active=Effective();const std::set<std::string> wanted{active,SettingsVisible?Selection:std::string{}};
-    while(Images.size()>2){const auto old=std::find_if(Images.begin(),Images.end(),[&](const auto& entry){return !wanted.contains(entry.first);});if(old==Images.end())break;if(old->second.Texture)old->second.Texture->Release();Images.erase(old);}
-    if(!Worker.valid()&&Decode){for(const auto& name:{active,SettingsVisible?Selection:std::string{}}){
+    const auto active=Effective();auto wanted=std::move(Auxiliary);Auxiliary.clear();wanted.insert(active);wanted.insert(SettingsVisible?Selection:std::string{});
+    while(Images.size()>6){const auto old=std::find_if(Images.begin(),Images.end(),[&](const auto& entry){return !wanted.contains(entry.first);});if(old==Images.end())break;if(old->second.Texture)old->second.Texture->Release();Images.erase(old);}
+    if(!Worker.valid()&&Decode){for(const auto& name:wanted){
         if(!BackgroundPolicy::Filename(name)||Images.contains(name)||Failed.contains(name))continue;
         Pending=name;const auto file=Resolve(name);const auto decoder=Decode;
         Worker=std::async(std::launch::async,[file,decoder]{try{return decoder(file);}catch(const std::exception& e){return Pixels{0,0,{},e.what()};}catch(...){return Pixels{0,0,{},"Could not decode background."};}});break;

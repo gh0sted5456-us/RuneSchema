@@ -69,7 +69,7 @@ inline void Envelope(const Json& document,bool shard){
         &&document.at("RegistryShard")==true&&document.at("Entries").empty(),"shards require RegistryShard:true and Entries:[]");
 }
 inline std::size_t References(const CookedPakRegistryManifest::Manifest& manifest){
-    std::size_t count=manifest.WearableMeshData.size()+manifest.MeleeAttackClasses.size()+manifest.RangedAttackClasses.size();
+    std::size_t count=manifest.WearableMeshData.size()+manifest.MeleeAttackClasses.size()+manifest.RangedAttackClasses.size()+manifest.CacheAssets.size();
     for(const auto& lane:manifest.AssetLanes)count+=lane.Paths.size();
     for(const auto& [lane,definitions]:manifest.LoaderDefinitions.items()){(void)lane;count+=definitions.size();}
     return count;

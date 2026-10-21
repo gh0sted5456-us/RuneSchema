@@ -8,6 +8,26 @@ int main(){
     assert(Guides[coded.Help].Value==PS::Diagnostics::Id::CacheMismatch);
     const auto unknown=Parse("[RuneSchema] [error] [RS-FUTURE-999] Keep the original condition");assert(unknown.ReportedCode=="RS-FUTURE-999"&&unknown.Help<0&&!unknown.Suggested);
     assert(!CodeToken("RS-CACHE-003-extra")&&!CodeToken("prefixRS-CACHE-003")&&!CodeToken("RS--003"));
+    assert(ReferenceUrl(unknown).ends_with("#rs-log-000"));
+    const auto native=Parse("[2026.10.20-03.44.12:123][ 77]LogAnimation: Warning: Skeleton GUID is out-of-date, /Game/Mods/Flintlocks/Montage");
+    assert(native.Time=="03:44:12"&&native.Source=="LogAnimation"&&native.Suggested&&Guides[native.Help].Value==PS::Diagnostics::Id::NativeSkeleton);
+    assert(ReferenceUrl(native).ends_with("#rs-game-002"));
+    for(const auto& [message,code]:std::vector<std::pair<std::string,std::string>>{
+        {"LogPlayerVitalsUI: Warning: UPlayerVitalsWidget::RemovePlayerActionInstancesUpdatedCallback: Failed to remove function callback for vitals","RS-GAME-006"},
+        {"LogNetSessionSettings: Error: Could not get User Settings!","RS-GAME-007"},
+        {"LogDominionUI: Error: Tick(): Expected UDominionUserSettings to exist by now, rethinking this function.","RS-GAME-007"},
+        {"LogCrowdFollowing: Warning: Unable to find RecastNavMesh instance while trying to create UCrowdManager instance","RS-GAME-008"},
+        {"DominionLog: Warning: URegistryTagSubsystem::UnregisterTaggedObject : Tried to unregister BP_Anvil","RS-GAME-009"},
+        {"LogSentinel: Error: Unrecognized native failure (provider=123)","RS-GAME-000"}}){
+        const auto entry=Parse("[2026.10.20-22.51.58:123][Standalone]"+message);
+        assert(entry.Source==message.substr(0,message.find(':'))&&entry.Text.ends_with(message)&&entry.Suggested&&Guides[entry.Help].Code==code);
+        assert(entry.Severity==(message.find("Error:")!=message.npos?Level::Error:Level::Warning));
+    }
+    const auto explicitNative=Parse("[RS-RT-001] LogTemp: Error: Could not get User Settings!");assert(!explicitNative.Suggested&&Guides[explicitNative.Help].Value==PS::Diagnostics::Id::RuntimeContract);
+    assert(Parse("[2026-10-20T12:00:00Z thread=1] [group=runtime] [RuneSchema] [warning] delayed").Source=="RuneSchema");
+    Filter words;words.Query="source:loganimation guid -optional";assert(words.Matches(native));
+    words.Query="\"skeleton guid\" level:warning code:rs-game-002";assert(words.Matches(native));
+    words.Query="skeleton -guid";assert(!words.Matches(native));words.Query="guid missing";assert(!words.Matches(native));
     History repeats;repeats.Append("[2026-10-18T10:00:00Z] [RuneSchema] [warning] [RS-CACHE-003] Content differs");repeats.Append("[2026-10-18T10:00:01Z] [RuneSchema] [warning] [RS-CACHE-003] Content differs");
     assert(Grouped(repeats,{},true).size()==1&&Grouped(repeats,{},true)[0].Count==2&&Grouped(repeats,{},false).size()==2);
     repeats.Append("[RuneSchema] [warning] [RS-CACHE-003] Different owner");assert(Grouped(repeats,{},true).size()==2);
@@ -53,6 +73,8 @@ int main(){
     const auto gameFolder=directory/"RSDragonwilds"/"Saved"/"Logs";std::filesystem::create_directories(gameFolder);const auto gameFile=gameFolder/"RSDragonwilds.log";
     {std::ofstream game(gameFile);game<<"LogEOSSDK: session ready\n";}
     assert(ResolveGameLog(mod,directory)==gameFile);
+    assert(GameBinaryDirectory("LogInit: Base Directory: D:/Steam/Binaries/Win64/\r\nother")=="D:/Steam/Binaries/Win64/");
+    assert(GameBinaryDirectory("LogInit: Base Directory: \n").empty());assert(GameBinaryDirectory("unrelated log").empty());
     auto append=[&](std::string_view text,bool truncate=false){std::ofstream stream(file,std::ios::binary|(truncate?std::ios::trunc:std::ios::app));stream<<text;};
     assert(!Read(file,{}).Error.empty());append("first\r\npartial",true);auto batch=Read(file,{});assert(batch.Lines==std::vector<std::string>{"first"}&&batch.Next.Partial=="partial");
     const auto hostFile=directory/"UE4SS.log";

@@ -133,10 +133,12 @@ for recipes, journal/lore metadata and the lane-specific limits.
 
 ### Native registration from a schema mod
 
-Enabled loose `registry/*.jsonc` files now accept the same eleven
+Enabled loose `registry/*.jsonc` files accept the same
 `NativeRegistries` lanes as cooked `RSREG_` declarations: Items, Recipes,
 Quests, CombatSpells, UtilitySpells, EquipmentEffects, Journals, Lore,
-WearableMeshData, MeleeAttackClasses and RangedAttackClasses. The PAK container
+WearableMeshData, MeleeAttackClasses and RangedAttackClasses. The metadata-only
+`CacheAssets` field is also accepted in both formats for exact original artwork
+ownership. It does not register textures as gameplay items. The PAK container
 is not a prerequisite for announcing these references.
 
 ```jsonc

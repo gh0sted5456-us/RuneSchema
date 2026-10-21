@@ -4,6 +4,40 @@ Work from the first failed step instead of changing several files at once. A
 PAK can mount while an item inside it still fails to load, and an item can load
 while its recipe still points to the wrong station.
 
+## RuneSchema console commands
+
+In the game console, run `rs help` (or `runeschema help`). The console must
+already be enabled; the stock UE4SS ConsoleEnablerMod normally binds F10 and
+tilde. RuneSchema does not replace the console or install a remote shell.
+Stock UE4SS's `HookLocalPlayerExec` must remain enabled. These commands use
+that hook; `rs help` lists them even if `DumpConsoleCommands` does not.
+
+| Command | Result |
+| --- | --- |
+| `rs status` | Runtime, game/framework versions and host compatibility. |
+| `rs network` | Observed world/network role and freshness, not a multiplayer round-trip test. |
+| `rs mappings` | Active mapping identity/index; does not force regeneration. |
+| `rs services` | Loaded plugin services, capabilities and connections. |
+| `rs vision` | Helpy's cached native styling status and bounded diagnostic samples. |
+| `rs menu` / `rs exitmenu` | Request the local player's native pause/exit menu. Close the console to see it. |
+
+Diagnostics do not change saves, settings, gear or layouts. `rs menu` is the
+only UI action: it does not click Exit, disconnect, travel, or quit. It requires
+a local, possessed world player and matching native menu reflection contracts;
+dedicated servers have no local-player menu. A request or selected Pause screen
+is not proof that the screen is visibly open. Unavailable contracts are reported
+without guessing offsets or invoking an alternate function.
+
+`rs vision` requires Helpy and its native component. `Active=true` is not a
+health certification: check viewport dimensions, Errors, Unsupported, Deferred,
+Scanning and Complete. Its samples prioritize errors and group repeated reasons;
+they are not the full inventory tree. The command never starts a scan or applies
+a layout. Command replies also appear under `[CONSOLE]` in RuneSchema.log.
+
+Automatic styling preserves minimap/world-map image and border brushes,
+including RuneUI's live map artwork. Unclassified controls retain their native
+appearance; the unsafe spell Cost subtree remains deferred rather than traversed.
+
 ## Helpy Live Log and help codes
 
 The [diagnostic code reference](ERROR-CODES.md) explains each stable code,

@@ -14,7 +14,7 @@ int main(int argc,char** argv){
     const auto begin=source.find("void RenderRuntimeBadge(const HelpyImGuiTheme::Theme& t) {"),end=source.find("void ApplyCaptionTheme(",begin);
     if(begin==source.npos||end==source.npos)throw std::runtime_error("Runtime icon implementation missing");
     const auto badge=source.substr(begin,end-begin);
-    for(const auto* required:{"HelpyEnvironment::Label()","F2  close / reopen","EpicTexture","BeginTooltip()","RuntimeDetailsPanel::Request()","IsItemHovered()","IsItemFocused()"})
+    for(const auto* required:{"HelpyEnvironment::Label()","F2  close / reopen","EpicTexture","BeginDetailsTooltip()","RuntimeDetailsPanel::Request()","IsItemHovered()","IsItemFocused()"})
         if(badge.find(required)==badge.npos)throw std::runtime_error("Runtime icon details, platform mark or Info action missing");
     if(source.find("RenderRuntimeFooter(")!=source.npos||source.find("RuntimeFooterHeight(")!=source.npos)
         throw std::runtime_error("Runtime information must not leave a duplicate bottom footer");

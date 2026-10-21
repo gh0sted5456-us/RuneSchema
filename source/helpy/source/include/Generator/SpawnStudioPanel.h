@@ -1,14 +1,25 @@
 #pragma once
+#include "Generator/HelpyImGuiTheme.h"
 #include "Core/SpawnPresentation.h"
 #include "Core/SpawnNames.h"
+#include "Core/SpawnScale.h"
+#include "Generator/HelpyBackgrounds.h"
 #include "Generator/LazyCatalog.h"
 #include "Generator/HelpyNodes.h"
 #include "Generator/MapLayerIcons.h"
 #include "Generator/PlayerPortraitPicker.h"
 #include "Generator/SpawnBrowserSettings.h"
 namespace PS::SpawnStudioPanel {
-struct State {std::string Selected,Query,Player;char Search[257]{},Name[129]{};float Scale=1,Radius=500,Yaw=0,Height=0;int Count=1,Mode=0,Power=1;bool Permanent=false,Confirmed=false,OverridePower=false,ShowHidden=false,Rebuild=true;uint64_t Revision=0,Generation=0,PreferencesRevision=0;std::vector<size_t> Matches;};
+struct State {std::string Selected,Query,Player;char Search[257]{},Name[129]{};float Scale=1,Radius=500,Yaw=0,Height=0;int Count=1,Mode=0,Power=1;bool Permanent=false,Confirmed=false,OverridePower=false,ShowHidden=false,Rebuild=true;uint64_t Revision=0,Generation=0,PreferencesRevision=0,RowsRevision=0;size_t RowCount=0;std::vector<size_t> Matches;};
 inline State Resources,Npcs,Enemies;
+inline void RefreshMatches(State& s,const nlohmann::json& rows,uint64_t revision,uint64_t rowsRevision,bool resource,bool npc){
+    if(!s.Rebuild&&s.Revision==revision&&s.RowsRevision==rowsRevision&&s.RowCount==rows.size()&&s.PreferencesRevision==SpawnBrowserSettings::Revision)return;
+    s.Rebuild=false;s.Revision=revision;s.RowsRevision=rowsRevision;s.RowCount=rows.size();s.PreferencesRevision=SpawnBrowserSettings::Revision;s.Matches.clear();
+    for(size_t i=0;i<rows.size();++i){const auto& row=rows[i];if(!row.is_object())continue;const auto type=SpawnCatalogSearch::Text(row,"Type");
+        if(resource){if(SpawnPresentation::ResourceTab(row)!=s.Mode)continue;}else if(npc?type!="NPC":!SpawnPresentation::Enemy(row))continue;
+        if(SpawnCatalogSearch::Matches(row,s.Query)&&SpawnBrowserSettings::Choices.Visible(row,s.ShowHidden))s.Matches.push_back(i);
+    }
+}
 inline uint64_t JournalRevision=0;
 inline std::map<std::string,std::string> JournalArt;
 inline std::string Icon(const nlohmann::json& row){
@@ -45,17 +56,27 @@ inline void SetHidden(State& s,const nlohmann::json& row,bool hidden){
     if(SpawnBrowserSettings::Set(row,hidden)){s.Rebuild=true;s.Confirmed=false;if(hidden&&!s.ShowHidden)s.Selected.clear();}
 }
 inline void Silhouette(ImDrawList*,ImVec2 foot,float height,int kind,ImU32 color){PortraitArt::Draw(kind,{foot.x-height*.5f,foot.y-height},{foot.x+height*.5f,foot.y},color);}
-inline void ScaleReference(float scale,int kind,const std::string& name,const std::string& icon,const std::string& playerIcon){const auto& t=HelpyImGuiTheme::Current;const float width=std::max(t.X(160),ImGui::GetContentRegionAvail().x),height=t.Y(126);const auto a=ImGui::GetCursorScreenPos();ImGui::Dummy({width,height});auto* draw=ImGui::GetWindowDrawList();
-    const float visual=std::clamp(scale,.25f,4.f),unit=t.Y(88)/std::max(1.f,visual);const float floor=a.y+t.Y(108);draw->AddLine({a.x+t.X(12),floor},{a.x+width-t.X(12),floor},ImGui::GetColorU32(t.border));
-    if(!PlayerPortraitPicker::DrawCached(playerIcon,{a.x+width*.28f-unit*.5f,floor-unit},{a.x+width*.28f+unit*.5f,floor}))Silhouette(draw,{a.x+width*.28f,floor},unit,0,ImGui::GetColorU32(t.textDisabled));
+inline void ScaleReference(float scale,int kind,const std::string& name,const std::string& icon,const std::string& playerIcon,const nlohmann::json& row){auto& t=HelpyImGuiTheme::Current;
+    if(ImGui::Checkbox("Journal character reference",&t.scaleUsePortrait))HelpyImGuiTheme::SaveCurrent();
+    const std::array<std::pair<const char*,const char*>,5> choices{{{"NuLL","scale-null.png"},{"Lonestar","scale-lonestar.png"},{"iGhrazi","scale-ighrazi.png"},{"Hauler","scale-hauler.png"},{"Selected player portrait","@player"}}};
+    if(t.scaleUsePortrait){const auto selected=t.scaleReferenceIcon.empty()?std::string("scale-null.png"):t.scaleReferenceIcon;const char* title="NuLL";for(const auto& choice:choices)if(selected==choice.second)title=choice.first;
+        ImGui::SetNextItemWidth(-1);if(ImGui::BeginCombo("##scale-reference-art",title)){for(const auto& choice:choices)if(ImGui::Selectable(choice.first,selected==choice.second)){t.scaleReferenceIcon=choice.second;HelpyImGuiTheme::SaveCurrent();}ImGui::EndCombo();}}
+    const float width=std::max(t.X(160),ImGui::GetContentRegionAvail().x),height=t.Y(156);const auto a=ImGui::GetCursorScreenPos();ImGui::Dummy({width,height});auto* draw=ImGui::GetWindowDrawList();
+    const float visual=float(std::clamp(SpawnScale::Ratio(row,scale),.05,100.)),unit=t.Y(118)/std::max(1.f,visual);const float floor=a.y+t.Y(136);draw->AddLine({a.x+t.X(12),floor},{a.x+width-t.X(12),floor},ImGui::GetColorU32(t.border));
+    bool reference=false;const auto art=t.scaleReferenceIcon.empty()?std::string("scale-null.png"):t.scaleReferenceIcon;
+    if(t.scaleUsePortrait&&art!="@player"){
+        HelpyBackgrounds::RequestImage(art);if(const auto* image=HelpyBackgrounds::Find(art);image&&image->Texture){const float aspect=image->Width*(image->UV1.x-image->UV0.x)/(image->Height*(image->UV1.y-image->UV0.y)),w=std::min(width*.42f,unit*aspect);draw->AddImage(ImTextureRef(image->Texture),{a.x+width*.28f-w*.5f,floor-unit},{a.x+width*.28f+w*.5f,floor},image->UV0,image->UV1);reference=true;}
+    }else if(t.scaleUsePortrait)reference=PlayerPortraitPicker::DrawCached(playerIcon,{a.x+width*.28f-unit*.5f,floor-unit},{a.x+width*.28f+unit*.5f,floor});
+    if(!reference)Silhouette(draw,{a.x+width*.28f,floor},unit,0,ImGui::GetColorU32(t.textDisabled));
     const ImVec2 lo{a.x+width*.72f-unit*visual*.5f,floor-unit*visual},hi{a.x+width*.72f+unit*visual*.5f,floor};
     if(!ItemIconCache::Draw(icon,lo,hi,true)&&!HelpyWikiIcons::Draw(name,lo,hi))Silhouette(draw,{a.x+width*.72f,floor},unit*visual,kind,ImGui::GetColorU32(t.accentHover));
-    draw->AddText({a.x+width*.28f-t.X(22),floor+t.Y(3)},ImGui::GetColorU32(t.textDisabled),"Player 1x");draw->AddText({a.x+width*.72f-t.X(20),floor+t.Y(3)},ImGui::GetColorU32(t.text),"Selected");
-    ImGui::TextDisabled("Relative portrait preview (visual range 0.25-4x); asset heights vary.");}
+    draw->AddText({a.x+width*.28f-t.X(35),floor+t.Y(3)},ImGui::GetColorU32(t.textDisabled),"1.80 m reference");draw->AddText({a.x+width*.72f-t.X(20),floor+t.Y(3)},ImGui::GetColorU32(t.text),"Selected");
+    if(const auto measured=SpawnScale::Height(row)){ImGui::Text("Scaled height: %.2f m",*measured*scale/100.);ImGui::TextDisabled("%s",row.value("PreviewHeightBasis",std::string("Native measurement")).c_str());}
+    else ImGui::TextDisabled("Height unavailable · illustration only, not measured size");}
 inline void Render(const nlohmann::json& snapshot,uint64_t revision,bool resource,int actorMode,const std::string& player,std::function<void(const nlohmann::json&)> inspect={}){
     NativeJournalCache::Poll();SpawnBrowserSettings::Pump();
     auto& s=resource?Resources:actorMode==0?Npcs:Enemies;const bool npc=!resource&&actorMode==0;const int category=resource?2:1;const auto& t=HelpyImGuiTheme::Current;
-    const auto generation=SpawnToolRequests::CurrentGeneration();if(s.Generation!=generation||s.Player!=player){s.Generation=generation;s.Player=player;s.Confirmed=false;}
+    const auto generation=SpawnToolRequests::CurrentGeneration();if(s.Generation!=generation||s.Player!=player){s.Generation=generation;s.Player=player;s.Confirmed=false;s.Rebuild=true;}
     ImGui::TextDisabled("1  Choose a spawn     2  Set placement     3  Review and spawn");
     auto& lazy=LazyCatalog::For(category);if(!lazy.Started&&!lazy.Pending)LazyCatalog::Search(category,s.Query);
     const bool wide=ImGui::GetContentRegionAvail().x>=t.X(740);const bool table=wide&&ImGui::BeginTable("##spawn-studio",2,ImGuiTableFlags_SizingStretchProp);
@@ -63,17 +84,14 @@ inline void Render(const nlohmann::json& snapshot,uint64_t revision,bool resourc
     ImGui::SeparatorText("Choose spawn");
     if(resource){int mode=0;for(const auto* label:{"Trees","Ore / stone","Other resources"}){if(mode&&ImGui::GetContentRegionAvail().x>t.X(125))ImGui::SameLine();if(ImGui::RadioButton(label,s.Mode==mode)){s.Mode=mode;s.Selected.clear();s.Confirmed=false;s.Rebuild=true;}++mode;}}
     ImGui::SetNextItemWidth(std::max(t.X(120),ImGui::GetContentRegionAvail().x-t.X(80)));const bool search=ImGui::InputTextWithHint("##spawn-search","Search name or source...",s.Search,sizeof(s.Search),ImGuiInputTextFlags_EnterReturnsTrue);ImGui::SameLine();
-    if(HelpyImGuiTheme::SoftButton("Search")||search){s.Query=s.Search;s.Confirmed=false;s.Revision=0;LazyCatalog::Search(category,s.Query);}
+    if(HelpyImGuiTheme::SoftButton("Search")||search){s.Query=s.Search;s.Confirmed=false;s.Rebuild=true;LazyCatalog::Search(category,s.Query);}
     if(ImGui::Checkbox("Show hidden",&s.ShowHidden)){s.Rebuild=true;s.Confirmed=false;}
-    if(ImGui::IsItemHovered())ImGui::SetTooltip("Include hidden results. Right-click an entry or select it to restore it.\nOnly your local Helpy browser preferences change; no cache entry is deleted.");
+    if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("Include hidden results. Right-click an entry or select it to restore it.\nOnly your local Helpy browser preferences change; no cache entry is deleted.");
     if(!SpawnBrowserSettings::Error.empty()){ImGui::TextWrapped("%s",SpawnBrowserSettings::Error.c_str());if(HelpyImGuiTheme::SoftButton("Retry preferences"))SpawnBrowserSettings::Retry();}
     const auto at=snapshot.find("Definitions");const nlohmann::json empty=nlohmann::json::array();const auto& rows=at!=snapshot.end()&&at->is_array()?*at:empty;
-    if(s.Rebuild||s.Revision!=revision||s.PreferencesRevision!=SpawnBrowserSettings::Revision){s.Rebuild=false;s.Revision=revision;s.PreferencesRevision=SpawnBrowserSettings::Revision;s.Matches.clear();for(size_t i=0;i<rows.size();++i){const auto& row=rows[i];const auto type=SpawnCatalogSearch::Text(row,"Type");
-        if(resource){if(SpawnPresentation::ResourceTab(row)!=s.Mode)continue;}
-        else if(npc?type!="NPC":!SpawnPresentation::Enemy(row))continue;
-        if(SpawnCatalogSearch::Matches(row,s.Query)&&SpawnBrowserSettings::Choices.Visible(row,s.ShowHidden))s.Matches.push_back(i);}}
+    RefreshMatches(s,rows,revision,snapshot.value("_CatalogRowsRevision",uint64_t{}),resource,npc);
     ImGui::BeginChild("##spawn-browser",{0,t.Y(wide?350:220)},true);ImGuiListClipper clip;clip.Begin(int(s.Matches.size()));
-    while(clip.Step())for(int i=clip.DisplayStart;i<clip.DisplayEnd;++i){const auto& row=rows[s.Matches[i]];const auto key=SpawnCatalogSearch::Text(row,"Key");const auto label=SpawnNames::Display(row);ImGui::PushID(key.c_str());
+    while(clip.Step())for(int i=clip.DisplayStart;i<clip.DisplayEnd;++i){if(i<0||size_t(i)>=s.Matches.size()||s.Matches[i]>=rows.size()){s.Rebuild=true;continue;}const auto& row=rows[s.Matches[i]];if(!row.is_object()){s.Rebuild=true;continue;}const auto key=SpawnCatalogSearch::Text(row,"Key");const auto label=SpawnNames::Display(row);ImGui::PushID(key.c_str());
         const auto a=ImGui::GetCursorScreenPos();const float side=t.Y(24);ImGui::Dummy({side,side});
         if(!ItemIconCache::Draw(Icon(row),a,{a.x+side,a.y+side},true)&&!HelpyWikiIcons::Draw(label.Art,a,{a.x+side,a.y+side}))MapLayerIcons::Draw(resource?(s.Mode==0?"trees":"ore"):npc?"npcs":"creatures",{a.x+side*.5f,a.y+side*.5f},side);
         const auto title=(label.Name.empty()?key:label.Name)+(SpawnBrowserSettings::Choices.Contains(row)?" · Hidden":"");
@@ -81,7 +99,7 @@ inline void Render(const nlohmann::json& snapshot,uint64_t revision,bool resourc
 #ifdef HELPY_PREVIEW
         HelpyPreviewHooks::SpawnRows[key]=HelpyPreviewHooks::LastRect();
 #endif
-        if(ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)){ImGui::SetNextWindowSizeConstraints({t.X(240),0},{t.X(360),FLT_MAX});ImGui::BeginTooltip();Details(row,true);ImGui::EndTooltip();}
+        if(ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)){ImGui::SetNextWindowSizeConstraints({t.X(240),0},{t.X(360),FLT_MAX});PS::HelpyImGuiTheme::BeginDetailsTooltip();Details(row,true);PS::HelpyImGuiTheme::EndDetailsTooltip();}
         if(ImGui::BeginPopupContextItem("##spawn-entry-actions")){
             if(ImGui::MenuItem("View details")){s.Selected=key;s.Confirmed=false;}
             const bool hidden=SpawnBrowserSettings::Choices.Contains(row);
@@ -93,7 +111,7 @@ inline void Render(const nlohmann::json& snapshot,uint64_t revision,bool resourc
     ImGui::EndChild();
     if(lazy.HasMore&&!lazy.Pending&&s.Matches.size()<24)LazyCatalog::More(category);
     if(lazy.HasMore&&!lazy.Pending&&HelpyImGuiTheme::SoftButton("More results"))LazyCatalog::More(category);
-    ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Refresh")){LazyCatalog::Retry(category);s.Revision=0;s.Confirmed=false;}
+    ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Refresh")){LazyCatalog::Retry(category);s.Rebuild=true;s.Confirmed=false;}
     if(table)ImGui::TableNextColumn();
     const nlohmann::json* chosen=nullptr;for(const auto& row:rows)if(row.value("Key",std::string{})==s.Selected){chosen=&row;break;}
     ImGui::SeparatorText("Details");
@@ -112,7 +130,7 @@ inline void Render(const nlohmann::json& snapshot,uint64_t revision,bool resourc
         if(HelpyImGuiTheme::SoftButton("Inspect selected definition")){inspect(*chosen);s.Revision=0;s.Confirmed=false;}
         ImGui::EndDisabled();
     }
-    if(ImGui::SliderFloat("Scale",&s.Scale,.1f,10.f,"%.2fx"))s.Confirmed=false;ScaleReference(s.Scale,resource?(s.Mode==0?1:2):npc?0:3,chosen?SpawnNames::Display(*chosen).Art:"",chosen?Icon(*chosen):"",playerIcon);
+    if(ImGui::SliderFloat("Scale",&s.Scale,.1f,10.f,"%.2fx"))s.Confirmed=false;ScaleReference(s.Scale,resource?(s.Mode==0?1:2):npc?0:3,chosen?SpawnNames::Display(*chosen).Art:"",chosen?Icon(*chosen):"",playerIcon,chosen?*chosen:nlohmann::json::object());
     if(!npc&&ImGui::SliderInt("Count",&s.Count,1,20))s.Confirmed=false;
     float metres=s.Radius/100;if(ImGui::SliderFloat("Radius",&metres,0,50,"%.1f m")){s.Radius=metres*100;s.Confirmed=false;}
     if(ImGui::Checkbox("Permanent placement",&s.Permanent))s.Confirmed=false;ImGui::TextWrapped("%s",s.Permanent?"Installed RuneSchema placement, restored on load.":"Temporary actors; native save-exclusion checks still apply.");

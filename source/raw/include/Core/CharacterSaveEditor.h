@@ -59,6 +59,7 @@ public:
     const Json& Original()const{return original;}
     const Json& Draft()const{if(!Ready())throw std::runtime_error("Open a character copy first");return draft;}
     uint64_t Revision()const{return revision;}
+    std::string CharacterGuid()const{const auto& value=Draft();const auto found=value.find("GUID");return found!=value.end()&&found->is_string()?found->get<std::string>():std::string{};}
     void SetSkillLevel(const std::string& id,int level,uint64_t expected,const Json& thresholds,int maximum){
         if(!Ready()||expected!=revision||maximum<1||maximum>200||level<1||level>maximum||!thresholds.is_array()||thresholds.size()<size_t(maximum))throw std::runtime_error("Verified native skill thresholds and current revision required");
         int64_t previous=-1;for(int i=0;i<maximum;++i){const auto& value=thresholds[i];if(!value.is_number_integer()||value<0||value>2147483647||value.get<int64_t>()<=previous)throw std::runtime_error("Invalid native skill XP curve");previous=value.get<int64_t>();}
@@ -72,7 +73,7 @@ public:
             rows.push_back({{"LoadoutSlot",std::stoi(key)},{"Slot",slot},{"Pointer","/GameProgress/Inventory/"+slot},{"PersistenceID",bag[slot].at("ItemData")},{"Equipped",true},{"Count",bag[slot].value("Count",Json(1))}});
         }return rows;
     }
-    Json Appearance()const{return {{"Name",draft.contains("meta_data")?draft.at("meta_data").value("char_name",std::string{}):std::string{}},{"Appearance",CharacterWorkbench::Appearance(Draft())},{"Revision",revision},{"BeardColorSupported",false}};}
+    Json Appearance()const{return {{"Name",draft.contains("meta_data")?draft.at("meta_data").value("char_name",std::string{}):std::string{}},{"CharacterGuid",CharacterGuid()},{"Appearance",CharacterWorkbench::Appearance(Draft())},{"Revision",revision},{"BeardColorSupported",false}};}
     void SetAppearance(const std::string& key,const std::string& row,uint64_t expected,const std::set<std::string>& verifiedRows){
         SetAppearanceBatch({{key,row}},expected,{{key,verifiedRows}});
     }
@@ -164,7 +165,7 @@ public:
         };
         if(value.is_structured()){size_t index=0;for(auto it=value.begin();it!=value.end();++it,++index){if(index<offset)continue;if(rows.size()==100)break;add(value.is_object()?it.key():std::to_string(index),it.value());}}
         else add(path.substr(path.find_last_of('/')+1),value);
-        return {{"Pointer",path},{"Rows",rows},{"Total",value.is_structured()?value.size():1},{"Offset",offset},{"Revision",revision}};
+        return {{"Pointer",path},{"Rows",rows},{"Total",value.is_structured()?value.size():1},{"Offset",offset},{"Revision",revision},{"CharacterGuid",CharacterGuid()}};
     }
     void Set(const std::string& path,const Json& value,uint64_t expected){
         receipt.clear();review=nullptr;

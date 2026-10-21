@@ -32,6 +32,19 @@ int main()
     assert(published.MeleeAttackClasses.size() == 2);
     assert(published.RangedAttackClasses.size() == 1);
     assert(published.Fingerprint != 0);
+    auto artwork=document;artwork["NativeRegistries"]["CacheAssets"]={"/Example/Icons/T_Original.T_Original"};
+    const auto loose=Parse(artwork,"ExampleMod","registry/example.jsonc");
+    const auto cooked=Parse(artwork,"ExampleMod","pak:/Example.RSREG_Test");
+    assert(loose&&cooked&&loose->Fingerprint==cooked->Fingerprint);
+    assert(loose->CacheAssets==cooked->CacheAssets&&loose->CacheAssets.size()==1);
+    assert(loose->AssetLanes.size()==published.AssetLanes.size());
+    assert(loose->Fingerprint!=published.Fingerprint);
+    auto badArt=artwork;badArt["NativeRegistries"]["CacheAssets"]={"../bad"};
+    bool invalidArt=false;try{Parse(badArt,"ExampleMod","registry/bad.jsonc");}catch(const std::runtime_error&){invalidArt=true;}assert(invalidArt);
+    for(const auto* bad:{"/Example/Icons/NoObject","/Example/Icons/Empty.","/Example/Icons/T.T:Subobject"}){
+        badArt=artwork;badArt["NativeRegistries"]["CacheAssets"]={bad};invalidArt=false;
+        try{Parse(badArt,"ExampleMod","registry/bad.jsonc");}catch(const std::runtime_error&){invalidArt=true;}assert(invalidArt);
+    }
     assert(Snapshot().size() == 1);
 
     auto differentMesh = document;
@@ -95,11 +108,11 @@ int main()
     auto conflict=metadata;
     conflict["LoaderDefinitions"]["Journals"][journal]["Unlock"]=false;
     Manifest conflictMetadata;
-    assert(Publish(conflict,"Example","pak:/Example.RSREG_Duplicate",&conflictMetadata));
+    conflictMetadata=*Parse(conflict,"Example","pak:/Example.RSREG_Duplicate");
     assert(firstMetadata.Fingerprint!=conflictMetadata.Fingerprint);
     rejected=false;
-    try{Definitions("Journals");}catch(const std::runtime_error&){rejected=true;}
-    assert(rejected);
+    try{Publish(conflict,"Example","pak:/Example.RSREG_Duplicate");}catch(const std::runtime_error&){rejected=true;}
+    assert(rejected&&Definitions("Journals")[0].Body==journalBody);
 
     const auto rejectDocument=[&](const nlohmann::json& value){
         const auto before=Snapshot().size();bool failed=false;
@@ -120,10 +133,9 @@ int main()
     rejectDocument(oversized);
     Reset();
     assert(Publish(enrolled,"Example","pak:/Example.RSREG_Base"));
-    assert(Publish({{"NativeRegistries",{{"Lore",{journal}}}}},"Other","pak:/Other.RSREG_Test"));
     rejected=false;
-    try{Definitions("Journals");}catch(const std::runtime_error&){rejected=true;}
-    assert(rejected);
+    try{Publish({{"NativeRegistries",{{"Lore",{journal}}}}},"Other","pak:/Other.RSREG_Test");}catch(const std::runtime_error&){rejected=true;}
+    assert(rejected&&Snapshot().size()==1);
     // Loose /registry files share lane validation but must not synthesize a
     // cooked definition for an asset constructed by a schema loader.
     Reset();const std::string runtime="/Game/RuneSchema/Example/Recipes/R_One.R_One";

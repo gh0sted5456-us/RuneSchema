@@ -12,12 +12,24 @@ inline bool StudioShowPreview=true;
 inline std::string StudioPreviewMode="Body";
 inline int StudioQuantity=1;inline bool StudioPersonal=false,StudioConfirm=false,StudioListRequested=false,StudioAppearanceRequested=false;
 inline double StudioLastDraw=0;
-inline std::string StudioSlot,StudioSlotQuery;
+inline std::string StudioSlot,StudioSlotQuery,StudioSlotCursor;
 inline char StudioSlotSearch[257]{};
 inline Json StudioSlotRows=Json::array();
 inline size_t StudioSlotOffset=0;inline bool StudioSlotMore=false,StudioSlotPending=false,StudioSlotOpen=false;
 inline std::string StudioSlotError;
-inline void StudioResetSlot(){StudioSlotOpen=StudioSlotPending=StudioSlotMore=false;StudioSlotRows=Json::array();StudioSlotOffset=0;StudioSlot.clear();StudioSlotQuery.clear();StudioSlotError.clear();}
+inline char StudioSaveSearch[129]{};
+inline std::string StudioSaveName;
+inline std::string StudioPendingSave,StudioPendingName;
+inline bool StudioSwitchSave=false;
+inline void StudioSelectSave(const std::string& path,const std::string& name){
+    if(Opened&&path==File)return;
+    if(Opened&&path!=File){StudioPendingSave=path;StudioPendingName=name;StudioSwitchSave=true;return;}
+    AuthoringPanel::Copy(File,sizeof(File),path);StudioSaveName=name;Invalidate();
+    if(Offline&&!AuthoringClient::Busy())AuthoringClient::Submit("SaveEditorOpen",{{"Path",File},{"Offline",true}});
+}
+inline void StudioResetSlot(){StudioSlotOpen=StudioSlotPending=StudioSlotMore=false;StudioSlotRows=Json::array();StudioSlotOffset=0;StudioSlot.clear();StudioSlotQuery.clear();StudioSlotCursor.clear();StudioSlotError.clear();}
+inline void StudioRefreshSlot(){StudioSlotRows=ItemGridPicker::CachedSlotRows(StudioSlot,StudioSlotQuery,SpawnToolRequests::CurrentGeneration());StudioSlotOffset=0;StudioSlotCursor.clear();StudioSlotMore=true;StudioSlotError.clear();}
+inline bool StudioRequestSlot(){return AuthoringClient::Submit("SaveEditorSlotItems",{{"Slot",StudioSlot},{"Query",StudioSlotQuery},{"Offset",StudioSlotOffset},{"Cursor",StudioSlotCursor},{"CacheFirst",true}});}
 inline void StudioApply(){
     const auto generation=AuthoringClient::Snapshot.value("Generation",uint64_t{});
     if(generation!=StudioGeneration){StudioResetSlot();StudioGeneration=generation;StudioReceipt=0;StudioAppearance=Json::object();StudioRequestedView.clear();StudioEquipment=Json::object();StudioListRequested=false;StudioAppearanceRequested=false;StudioAddition=Json::object();StudioSelected=Json::object();StudioSkillsRequested=false;StudioSkills=Json::object();StudioSkillDrafts.clear();StudioSavedLoadout=Json::array();StudioLoadoutLoaded=false;CharacterPreviewPanel::Close();}
@@ -27,8 +39,8 @@ inline void StudioApply(){
     if(op=="SaveEditorSlotItems"){
         StudioSlotPending=false;
         if(StudioSlotOpen&&result.value("Slot",std::string{})==StudioSlot){
-            if(result.contains("Rows"))for(const auto& row:result["Rows"])if(StudioSlotRows.size()<2048&&LoadoutEligibility::Matches(row,StudioSlot))StudioSlotRows.push_back(row);
-            StudioSlotOffset=result.value("NextOffset",size_t{});StudioSlotMore=result.value("HasMore",false);
+            if(result.contains("Rows"))for(const auto& row:result["Rows"])if(StudioSlotRows.size()<2048&&LoadoutEligibility::Matches(row,StudioSlot)){const auto path=ItemPresentation::Text(row,"Path");auto found=std::find_if(StudioSlotRows.begin(),StudioSlotRows.end(),[&](const auto& old){return ItemPresentation::Text(old,"Path")==path;});if(found==StudioSlotRows.end())StudioSlotRows.push_back(row);else *found=row;}
+            const auto next=result.value("NextOffset",size_t{});StudioSlotCursor=result.value("NextCursor",std::string{});StudioSlotMore=result.value("HasMore",false)&&next>StudioSlotOffset;StudioSlotOffset=next;
         }
     }
     if(op=="SaveEditorOpen"||op=="SaveEditorClose"){StudioResetSlot();StudioAppearance=Json::object();StudioAppearanceRequested=false;StudioSkillsRequested=false;StudioSkills=Json::object();StudioSkillDrafts.clear();StudioSavedLoadout=Json::array();StudioLoadoutLoaded=false;StudioEquipment=Json::object();StudioRequestedView.clear();CharacterPreviewPanel::Close();}
@@ -48,17 +60,31 @@ inline void StudioHeader(){
     if(!StudioListRequested&&!AuthoringClient::Busy())StudioListRequested=AuthoringClient::Submit("SaveEditorList");
     const auto& list=AuthoringClient::Result("SaveEditorList");
     ImGui::SetNextItemWidth(std::max(200.f,ImGui::GetContentRegionAvail().x*.6f));
-    const auto current=File[0]?std::filesystem::path(File).filename().string():std::string("Choose a character save");
-    if(ImGui::BeginCombo("##character-studio-save",current.c_str())){if(list.contains("Files"))for(const auto& file:list["Files"]){const auto path=file.at("Path").get<std::string>();if(ImGui::Selectable(file.at("Name").get_ref<const std::string&>().c_str(),path==File)){AuthoringPanel::Copy(File,sizeof(File),path);Invalidate();}}ImGui::EndCombo();}
-    ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Import JSON..."))Choose();ImGui::SameLine();if(Button("Refresh saves","SaveEditorList"))StudioListRequested=true;
+    const auto current=File[0]?(StudioSaveName.empty()?std::filesystem::path(File).filename().string():StudioSaveName):std::string("Choose a character save");
+    if(ImGui::BeginCombo("##character-studio-save",current.c_str())){
+        ImGui::InputTextWithHint("##filter-saves","Find a character…",StudioSaveSearch,sizeof(StudioSaveSearch));
+        if(list.contains("Files"))for(const auto& file:list["Files"]){const auto path=file.at("Path").get<std::string>(),name=file.at("Name").get<std::string>();
+            const auto text=HelpyCacheSources::Lower(name+" "+file.value("Storage",std::string{})+" "+file.value("FileName",std::string{}));if(text.find(HelpyCacheSources::Lower(StudioSaveSearch))==text.npos)continue;
+            ImGui::PushID(path.c_str());ProviderIcon(file);if(ImGui::Selectable(name.c_str(),path==File))StudioSelectSave(path,name);
+            if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("%s\n%s",file.value("Storage",std::string{}).c_str(),file.value("FileName",name).c_str());ImGui::PopID();}
+        if(!list.contains("Files")||list["Files"].empty())ImGui::TextDisabled("No JSON saves found. Import a character JSON copy.");ImGui::EndCombo();}
+    if(ImGui::GetContentRegionAvail().x>HelpyImGuiTheme::Current.X(250))ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Import JSON...")){const std::string before=File;Choose();const std::string picked=File;AuthoringPanel::Copy(File,sizeof(File),before);if(picked!=before)StudioSelectSave(picked,std::filesystem::path(picked).stem().string());}ImGui::SameLine();if(Button("Refresh saves","SaveEditorList"))StudioListRequested=true;
+    if(StudioSwitchSave){ImGui::OpenPopup("Switch character?");StudioSwitchSave=false;}
+    if(ImGui::BeginPopupModal("Switch character?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
+        ImGui::TextWrapped("Discard the current preview draft and select %s? Original saves stay untouched.",StudioPendingName.c_str());
+        ImGui::BeginDisabled(AuthoringClient::Busy());if(ImGui::Button("Discard draft and switch")){
+            if(AuthoringClient::Submit("SaveEditorClose")){AuthoringPanel::Copy(File,sizeof(File),StudioPendingSave);StudioSaveName=StudioPendingName;Invalidate();ImGui::CloseCurrentPopup();}
+        }ImGui::EndDisabled();ImGui::SameLine();if(ImGui::Button("Keep current draft"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
+    }
     ImGui::Checkbox("This character is not currently loaded",&Offline);ImGui::SameLine();ImGui::BeginDisabled(!Offline||!File[0]);Button("Open character copy","SaveEditorOpen",{{"Path",File},{"Offline",Offline}});ImGui::EndDisabled();
-    ImGui::TextDisabled("Native game rendering · preview only · original save is never overwritten");
+    if(list.contains("Files"))for(const auto& file:list["Files"])if(file.value("Path",std::string{})==File){ProviderIcon(file);ImGui::TextDisabled("%s",file.value("Storage",std::string{}).c_str());break;}
+    ImGui::TextDisabled("Copy-only editing · original save is never overwritten");
     if(Opened&&!StudioAppearanceRequested&&!AuthoringClient::Busy())StudioAppearanceRequested=AuthoringClient::Submit("SaveEditorAppearance");
     if(Opened&&StudioAppearance.empty()&&StudioAppearanceRequested&&HelpyImGuiTheme::SoftButton("Retry native appearance choices"))StudioAppearanceRequested=false;
     ImGui::TextDisabled("Save-format reference: RSDWTools / RSDWArchive · native rendering: RuneSchema");
 }
 inline void StudioReview(){
-    ImGui::Separator();Button("Review save changes","SaveEditorPreview");ImGui::SameLine();Button("Discard save draft","SaveEditorClose");
+    ImGui::Separator();const float width=ImGui::CalcTextSize("Review save changesDiscard save draft").x+ImGui::GetStyle().FramePadding.x*4+ImGui::GetStyle().ItemSpacing.x;ImGui::SetCursorPosX(ImGui::GetCursorPosX()+std::max(0.f,(ImGui::GetContentRegionAvail().x-width)*.5f));Button("Review save changes","SaveEditorPreview");ImGui::SameLine();Button("Discard save draft","SaveEditorClose");
     if(!Token.empty()){
         ImGui::SeparatorText("Review edited copy");if(Review.contains("Summary"))for(const auto& row:Review["Summary"]){ImGui::TextWrapped("%s",row.at("Label").get_ref<const std::string&>().c_str());ImGui::TextDisabled("%s",row.at("Field").get_ref<const std::string&>().c_str());if(row.contains("Before")||row.contains("After"))ImGui::TextWrapped("%s → %s",row.value("Before",Json{}).dump().c_str(),row.value("After",Json{}).dump().c_str());}
         ImGui::Checkbox("I reviewed these changes; export a new copy",&Confirmed);ImGui::BeginDisabled(!Confirmed);Button("Export edited character copy","SaveEditorExport",{{"Token",Token},{"Confirm",Confirmed}});ImGui::EndDisabled();
@@ -131,8 +157,8 @@ inline void StudioSlotPicker(){
         ImGui::SetNextItemWidth(std::max(60.f,ImGui::GetContentRegionAvail().x-theme.X(135)));
         const bool enter=ImGui::InputTextWithHint("##slot-search","Search compatible items…",StudioSlotSearch,sizeof(StudioSlotSearch),ImGuiInputTextFlags_EnterReturnsTrue);
         ImGui::SameLine();ImGui::BeginDisabled(StudioSlotPending);const bool search=HelpyImGuiTheme::SoftButton("Search");ImGui::SameLine();const bool refresh=HelpyImGuiTheme::SoftButton("Refresh");ImGui::EndDisabled();
-        if((search||refresh||enter)&&!StudioSlotPending){StudioSlotQuery=StudioSlotSearch;StudioSlotRows=Json::array();StudioSlotOffset=0;StudioSlotMore=true;StudioSlotError.clear();}
-        if(!StudioSlotPending&&StudioSlotMore&&StudioSlotRows.size()<48&&!AuthoringClient::Busy())StudioSlotPending=AuthoringClient::Submit("SaveEditorSlotItems",{{"Slot",StudioSlot},{"Query",StudioSlotQuery},{"Offset",StudioSlotOffset}});
+        if((search||refresh||enter)&&!StudioSlotPending){StudioSlotQuery=StudioSlotSearch;StudioRefreshSlot();}
+        if(!StudioSlotPending&&StudioSlotMore&&(StudioSlotOffset==0||StudioSlotRows.size()<48)&&!AuthoringClient::Busy())StudioSlotPending=StudioRequestSlot();
         if(!StudioSlotError.empty())ImGui::TextWrapped("%s",StudioSlotError.c_str());
         ImGui::BeginChild("##compatible-slot-items",{0,theme.Y(340)},true);
         const float gap=ImGui::GetStyle().ItemSpacing.x,available=ImGui::GetContentRegionAvail().x;
@@ -149,9 +175,9 @@ inline void StudioSlotPicker(){
         }
         if(StudioSlotRows.empty())ImGui::TextWrapped("%s",StudioSlotPending||StudioSlotMore?"Reading compatible native items…":"No compatible loaded items. Load additional content and refresh.");
         ImGui::EndChild();
-        ImGui::TextDisabled("%zu compatible items · native slot strategy",StudioSlotRows.size());
-        ImGui::BeginDisabled(StudioSlotPending||!StudioSlotMore||StudioSlotRows.size()>=2048);if(HelpyImGuiTheme::SoftButton("More compatible items"))StudioSlotPending=AuthoringClient::Submit("SaveEditorSlotItems",{{"Slot",StudioSlot},{"Query",StudioSlotQuery},{"Offset",StudioSlotOffset}});ImGui::EndDisabled();
-        ImGui::TextWrapped("Compatibility is read from loaded native ItemData, not names. Refresh after loading new content. Skill/use requirements are not bypassed.");
+        ImGui::TextDisabled("%zu compatible items",StudioSlotRows.size());
+        ImGui::BeginDisabled(StudioSlotPending||!StudioSlotMore||StudioSlotRows.size()>=2048);if(HelpyImGuiTheme::SoftButton("More"))StudioSlotPending=StudioRequestSlot();ImGui::EndDisabled();
+        if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Uses the shared Item Bay cache. Equipment compatibility and native use requirements still apply.");
     }ImGui::End();
 }
 inline void StudioGear(){
@@ -168,7 +194,7 @@ inline void StudioGear(){
         if(!path.empty()){ItemGridPicker::DrawPlacard(item,a,b,false,hovered);if(clicked){StudioSelected=item;StudioPreviewMode="Item";StudioRequestedView.clear();}}
         else{auto* draw=ImGui::GetWindowDrawList();draw->AddRectFilled(a,b,ImGui::GetColorU32(theme.panelAlt),4);draw->AddRect(a,b,ImGui::GetColorU32(theme.border),4);MapLayerIcons::Draw(glyph,{(a.x+b.x)*.5f,a.y+theme.Y(48)},theme.Y(28));}
         auto* draw=ImGui::GetWindowDrawList();const auto extent=ImGui::CalcTextSize(title);draw->AddRectFilled(a,{b.x,a.y+theme.Y(18)},ImGui::GetColorU32(theme.panelAlt),3);MapLayerIcons::Draw(glyph,{a.x+theme.X(10),a.y+theme.Y(9)},theme.Y(13));draw->AddText({std::max(a.x+theme.X(20),(a.x+b.x-extent.x)*.5f),a.y+theme.Y(2)},ImGui::GetColorU32(theme.accent),title);
-        if(ImGui::IsItemClicked(ImGuiMouseButton_Right)&&!StudioSlotPending){StudioSlot=slot;StudioSlotQuery.clear();StudioSlotSearch[0]=0;StudioSlotRows=Json::array();StudioSlotOffset=0;StudioSlotMore=true;StudioSlotOpen=true;StudioSlotError.clear();}
+        if(ImGui::IsItemClicked(ImGuiMouseButton_Right)&&!StudioSlotPending){StudioSlot=slot;StudioSlotQuery.clear();StudioSlotSearch[0]=0;StudioRefreshSlot();StudioSlotOpen=true;}
         if(ImGui::BeginDragDropTarget()){if(auto row=ItemGridPicker::AcceptItemDrop(Error))StudioFit(*row,slot);ImGui::EndDragDropTarget();}
         if(hovered){HelpyImGuiTheme::BeginDetailsTooltip();ImGui::TextUnformatted(slot);ImGui::TextWrapped("%s",path.empty()?"Empty saved slot":ItemPresentation::Name(item).c_str());ImGui::TextUnformatted("Drag to preview only. Saved equipment is not changed.");HelpyImGuiTheme::EndDetailsTooltip();}ImGui::PopID();
     }ImGui::EndTable();}
@@ -185,22 +211,31 @@ inline void Studio(const Json& catalog,uint64_t revision,bool inventoryOnly=fals
     if(StudioView!=view){StudioView=view;StudioRequestedView.clear();CharacterPreviewPanel::Yaw=CharacterPreviewPanel::Pitch=0;CharacterPreviewPanel::Zoom=100;}
     if(!Opened){ImGui::TextWrapped("Choose a character save and open a copy above. Appearance, equipment fitting and item previews do not attach to the live player.");return;}
     if(!inventoryOnly){
+        if(ImGui::CollapsingHeader("Preview & editor settings")){
+            auto& prefs=HelpyImGuiTheme::Current;bool changed=false;const char* presets[]={"Economy · 256 px / 10 fps","Balanced · 384 px / 20 fps","Detail · 512 px / 30 fps"};
+            if(ImGui::Combo("Fidelity",&prefs.previewQuality,presets,3)){StudioRequestedView.clear();changed=true;}
+            changed|=ImGui::Checkbox("Enable animation controls",&prefs.previewAnimate);changed|=ImGui::Checkbox("Show technical preview details",&prefs.previewDetails);changed|=ImGui::Checkbox("Advanced editor tools",&prefs.advancedMode);if(changed)HelpyImGuiTheme::SaveCurrent();
+            ImGui::TextDisabled("Idle previews reuse their last frame. FPS applies only while changing the view or playing animation.");
+        }
         if(ImGui::Checkbox("Show character preview",&StudioShowPreview)&&StudioShowPreview)StudioRequestedView.clear();
         for(const auto& option:std::array<std::pair<const char*,const char*>,3>{{{"Full body","Body"},{"Portrait","Head"},{"Item","Item"}}}){ImGui::SameLine();if(ImGui::RadioButton(option.first,StudioPreviewMode==option.second)){StudioPreviewMode=option.second;StudioRequestedView.clear();CharacterPreviewPanel::Yaw=CharacterPreviewPanel::Pitch=0;CharacterPreviewPanel::Zoom=100;}}view=StudioPreviewMode;
         if(HelpyImGuiTheme::SoftButton("Inventory & Item Bay below"))FocusInventoryGrid=true;
     }
-    if(!inventoryOnly&&StudioShowPreview&&StudioRequestedView!=view&&!StudioAppearance.empty()&&!AuthoringClient::Busy()){
-        Json args={{"View",view},{"Equipment",std::string_view(view)=="Head"?Json::object():StudioEquipment}};if(std::string_view(view)=="Item")args["Path"]=StudioSelected.value("Path",std::string{});
+    if(CharacterPreviewPanel::Reconnect){StudioRequestedView.clear();CharacterPreviewPanel::Reconnect=false;}
+    if(ItemPreviewRequest::Open)StudioRequestedView.clear();
+    if(!inventoryOnly&&StudioShowPreview&&!ItemPreviewRequest::Open&&StudioRequestedView!=view&&!StudioAppearance.empty()&&!AuthoringClient::Busy()){
+        Json args={{"View",view},{"Quality",theme.previewQuality},{"Equipment",std::string_view(view)=="Head"?Json::object():StudioEquipment}};if(std::string_view(view)=="Item")args["Path"]=StudioSelected.value("Path",std::string{});
         if(std::string_view(view)!="Item"||!StudioSelected.empty())if(AuthoringClient::Submit("SaveEditorRender",args))StudioRequestedView=view;
     }
     const bool wide=ImGui::GetContentRegionAvail().x>640;const int columns=wide?2:1;
-    if(!inventoryOnly&&StudioShowPreview&&ImGui::BeginTable("##native-character-studio",columns,ImGuiTableFlags_Resizable|ImGuiTableFlags_SizingStretchProp|ImGuiTableFlags_BordersInnerV)){
-        if(wide){ImGui::TableSetupColumn("Preview",ImGuiTableColumnFlags_WidthStretch,1.1f);ImGui::TableSetupColumn("Appearance tools",ImGuiTableColumnFlags_WidthStretch,1.3f);}ImGui::TableNextRow();ImGui::TableNextColumn();
+    if(!inventoryOnly&&ImGui::BeginTable("##native-character-studio",StudioShowPreview?columns:1,ImGuiTableFlags_Resizable|ImGuiTableFlags_SizingStretchProp|ImGuiTableFlags_BordersInnerV)){
+        if(wide&&StudioShowPreview){ImGui::TableSetupColumn("Preview",ImGuiTableColumnFlags_WidthStretch,1.1f);ImGui::TableSetupColumn("Appearance tools",ImGuiTableColumnFlags_WidthStretch,1.3f);}ImGui::TableNextRow();ImGui::TableNextColumn();
+        if(StudioShowPreview){
         ImGui::SeparatorText("Preview Window");
-        CharacterPreviewPanel::Draw(HelpyImGuiTheme::Current.Y(std::string_view(view)=="Body"?390:280));
+        if(!ItemPreviewRequest::Open)CharacterPreviewPanel::Draw(HelpyImGuiTheme::Current.Y(std::string_view(view)=="Body"?390:280));else ImGui::TextWrapped("Item preview is open in the detached Preview Window.");
         if(!CharacterPreviewPanel::DroppedItem.empty()){StudioSelected=CharacterPreviewPanel::DroppedItem;CharacterPreviewPanel::DroppedItem=Json::object();StudioPreviewMode="Item";StudioRequestedView.clear();}
         if(HelpyImGuiTheme::SoftButton("Refresh native preview"))StudioRequestedView.clear();
-        if(wide)ImGui::TableNextColumn();ImGui::BeginDisabled(AuthoringClient::Busy());
+        if(wide)ImGui::TableNextColumn();}
         ImGui::TextUnformatted("Character name");ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##character-name","Character name",StudioName,sizeof(StudioName));
         if(StudioAppearance.contains("Revision"))if(Button("Stage character name","SaveEditorRename",{{"Name",StudioName},{"Revision",StudioAppearance.at("Revision")}}))Invalidate();
         if(ImGui::BeginTabBar("##character-tools")){
@@ -210,11 +245,11 @@ inline void Studio(const Json& catalog,uint64_t revision,bool inventoryOnly=fals
             ImGui::EndTabBar();
         }
         if(std::string_view(view)=="Item"){ImGui::SeparatorText("Selected Item Bay preview");ImGui::TextWrapped("%s",StudioSelected.empty()?"Choose an item below":ItemPresentation::Name(StudioSelected).c_str());}
-        ImGui::EndDisabled();ImGui::EndTable();
+        ImGui::EndTable();
     }
     ImGui::SeparatorText("Inventory workbench · Item Bay → saved inventory");
     if(ImGui::BeginTable("##native-inventory-workbench",columns,ImGuiTableFlags_Resizable|ImGuiTableFlags_SizingStretchSame)){
-        ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::PushID("saved-inventory-pane");ImGui::BeginDisabled(AuthoringClient::Busy());Inventory(true);ImGui::EndDisabled();
+        ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::PushID("saved-inventory-pane");Inventory(true);
         if(!DroppedInventoryItem.empty()){StudioStageAddition(DroppedInventoryItem);DroppedInventoryItem=Json::object();}
         HelpyImGuiTheme::SoftButton("Drop Item Bay item here to stage an addition");if(ImGui::BeginDragDropTarget()){if(auto item=ItemGridPicker::AcceptItemDrop(Error))StudioStageAddition(*item);ImGui::EndDragDropTarget();}
         ImGui::PopID();if(wide)ImGui::TableNextColumn();ImGui::PushID("studio-item-bay-pane");ImGui::SeparatorText("Item Bay");Json bay=catalog;LazyCatalog::Overlay(bay,0);

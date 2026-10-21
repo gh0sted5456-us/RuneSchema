@@ -11,6 +11,14 @@ inline std::map<std::string,HelpyBackgrounds::Image> Images;
 inline std::map<std::string,std::string> Digests;
 inline std::set<std::string> Wanted;
 inline std::chrono::steady_clock::time_point Next{};
+// Presentation-only manifest images for unmounted/disabled mod placards.
+// These are never imported as verified source-cache records or item banners.
+inline std::map<std::string,fs::path> ModCardFiles;
+inline void QueueModCard(const std::string& owner,const fs::path& file){
+    const auto key="mod-card:"+owner;
+    if(!ModCardFiles.contains(key)||ModCardFiles[key]!=file){ModCardFiles[key]=file;Next={};}
+    if(Wanted.insert(key).second)Next={};
+}
 inline std::string Status;
 inline std::string DropOwner,ArtFile;
 inline int DropFrame=-100;
@@ -66,12 +74,17 @@ inline void Pump(){
     Next=std::chrono::steady_clock::now()+std::chrono::seconds(10);
     const bool cacheReady=HelpySourceCache::Ready()&&HelpySourceCache::Current.Authoritative;
     const auto snapshot=HelpySourceCache::Current;const auto cache=HelpySourceCache::Directory(false),root=HostServices::ModDirectory(),assets=HelpyPaths::Asset("source-base-game.png").parent_path();const auto decoder=HelpyBackgrounds::Decode;
-    const auto wanted=Wanted;std::set<std::string> loaded;for(const auto& [key,image]:Images)loaded.insert(key);
-    Worker=std::async(std::launch::async,[snapshot,cache,root,assets,decoder,wanted,loaded,cacheReady]{std::map<std::string,HelpyBackgrounds::Pixels> result;
+    const auto wanted=Wanted;const auto modCards=ModCardFiles;std::set<std::string> loaded;for(const auto& [key,image]:Images)loaded.insert(key);
+    Worker=std::async(std::launch::async,[snapshot,cache,root,assets,decoder,wanted,loaded,cacheReady,modCards]{std::map<std::string,HelpyBackgrounds::Pixels> result;
         if(cacheReady){EnsureBuiltins(cache,root,snapshot,assets,decoder);
             for(const auto& record:CacheBundleStore::Read(cache,root,snapshot,CacheBundleStore::Locale(),"art")){const auto& data=record.at("Data");if(!data.contains("SourceBannerPixels"))continue;if(result.size()>=64)break;result[record.at("Owner").get<std::string>()]={256,144,SourceBanner::Decode(data["SourceBannerPixels"]),{}};}}
         for(const auto& key:wanted){if(loaded.contains(key)||result.contains(key))continue;fs::path file;
-            if(key=="ui:home-banner.png")file=HelpyPaths::Asset("home-banner.png");
+            if(key.starts_with("mod-card:")&&modCards.contains(key)){
+                file=modCards.at(key);bool safe=true;
+                for(auto current=fs::absolute(file);!current.empty();){const auto attrs=GetFileAttributesW(current.c_str());if(attrs!=INVALID_FILE_ATTRIBUTES&&(attrs&FILE_ATTRIBUTE_REPARSE_POINT)){safe=false;break;}const auto parent=current.parent_path();if(parent==current)break;current=parent;}
+                std::error_code error;if(!safe||!fs::is_regular_file(file,error)||error||fs::file_size(file,error)>20*1024*1024||error)continue;
+            }
+            else if(key=="ui:home-banner.png")file=HelpyPaths::Asset("home-banner.png");
             else if(const auto* builtin=SourceBanner::Builtin(key);builtin[0])file=HelpyPaths::Asset(builtin);
             else if(key.starts_with("background:")&&BackgroundPolicy::Filename(key.substr(11)))file=HelpyBackgrounds::Resolve(key.substr(11));else continue;
             try{result[key]=Thumbnail(decoder(file));}catch(...){}if(result.size()>=64)break;}return result;});

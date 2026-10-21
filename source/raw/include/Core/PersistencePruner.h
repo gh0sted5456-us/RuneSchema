@@ -1,6 +1,6 @@
 #pragma once
 
-#include <atomic>
+#include <cstddef>
 
 namespace RC::Unreal {
 class FString;
@@ -12,12 +12,11 @@ namespace PS {
 class PersistencePruner {
 public:
     void PrepareForStartup() noexcept;
-    void PruneCharacterJson(RC::Unreal::FString& characterJson);
-    void PruneBeforeCharacterLoad(RC::Unreal::UObject* context,
+    std::size_t PruneCharacterJson(RC::Unreal::FString& characterJson);
+    bool PruneBeforeCharacterLoad(RC::Unreal::UObject* context,
         RC::Unreal::UFunction* function, void* parameters);
 
 private:
-    static inline std::atomic_bool s_cleanupConsumedForProcess{false};
     bool m_cleanupDeferredReported = false;
 };
 }

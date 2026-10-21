@@ -8,7 +8,7 @@ bool Start(const std::vector<std::string>& names,const std::string& build);
 void Poll();
 bool Busy();
 const std::string& Status();
-bool Draw(const std::string& name,ImVec2 minimum,ImVec2 maximum);
+bool Draw(const std::string& name,ImVec2 minimum,ImVec2 maximum,ImU32 tint=IM_COL32_WHITE,bool circle=false);
 std::vector<std::string> Portraits();
 std::vector<std::string> Names();
 std::string Label(const std::string& portrait);

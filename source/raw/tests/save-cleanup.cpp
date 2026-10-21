@@ -1,4 +1,5 @@
 #include "Core/SaveCleanup.h"
+#include "Generator/ClonePresentation.h"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -10,6 +11,9 @@ template<class F>bool Rejects(F f){try{f();return false;}catch(const std::except
 Json WithoutRetiredJournalMetadata(Json source){source.at("GameProgress").at("Journal").erase(DragonWilds::JournalSave::Manifest);return source;}
 int Run() {
     const std::string id="xBicTfzWYkeOCtOLKtSRFQ";
+    for(size_t at=0;at<id.size();++at)for(int character=0;character<128;++character){auto candidate=id;candidate[at]=static_cast<char>(character);
+        Require(PS::ClonePresentation::ValidId(candidate,"AnyMod")==DragonWilds::IsCanonicalPersistenceId(candidate));}
+    for(int i=0;i<2048;++i)Require(DragonWilds::IsCanonicalPersistenceId(PS::ClonePresentation::NewId("AnyMod")));
     auto ints=DragonWilds::Quests::OwnershipVariables("Example",id);
     ints.push_back({{"QuestVariableName","RuneSchema.Location:owned-location"},{"QuestVariableValue",7001}});
     Json source={{"GameProgress",{{"Character",{{"Name","Preserve me"}}},{"Inventory",{{"0",{{"ItemData","unrelated"}}}}},
@@ -174,6 +178,90 @@ int Run() {
     RegistrySnapshot incomplete;
     Require(Rejects([&]{Plan(assetSave,{},false,&incomplete);}));
     PublishRegistry(registry);auto snapshot=ReadRegistry();Require(snapshot && snapshot->Ready());
+    {
+        using Kind=PS::RegistryEnrollment::IdentityKind;
+        PS::RegistryEnrollment::Await("quest:late",Kind::Quest,"late-quest");PS::RegistryEnrollment::Await("clone:late",Kind::Item,"late-clone");
+        PS::RegistryEnrollment::Await("quest:late",Kind::Quest,"late-quest"); // duplicate discovery is one obligation
+        PS::RegistryEnrollment::Await("journal:late",Kind::Journal,"late-journal");
+        PS::RegistryEnrollment::Await("recipe:late",Kind::Recipe,"late-recipe");
+        Require(PS::RegistryEnrollment::PendingCount()==4 && snapshot->Ready());
+        PublishRegistry(registry);auto waiting=ReadRegistry();Require(waiting&&waiting->Ready());
+        auto duringLoad=assetSave;
+        auto& game=duringLoad["GameProgress"];
+        game["Inventory"]["0"]["ItemData"]="late-clone";game["Inventory"]["8"]={{"ItemData","orphan-item"}};
+        game["PersonalInventory"]["0"]={{"ItemData","late-clone"}};game["PersonalInventory"]["1"]={{"ItemData","orphan-item"}};
+        game["QuestProgress"]["Quests"].push_back({{"QuestId","late-quest"}});
+        game["QuestProgress"]["Quests"].push_back({{"QuestId","orphan-quest"}});
+        game["QuestProgress"]["QuestTracked"]="late-quest";
+        game["Journal"]={{"UnlockedEntries",{"late-journal","orphan-journal"}},{"UnreadEntries",{"late-journal","orphan-journal"}}};
+        game["Progress"]={{"RecipesUnlocked",{"late-recipe","orphan-recipe"}},{"ItemsPickedUp",{"late-clone","orphan-item"}}};
+        auto live=*waiting;live.JournalsComplete=true;
+        const auto general=Plan(duringLoad,{},false,&live,false,true,true);const auto& cleaned=general.Save["GameProgress"];
+        Require(cleaned["Inventory"].contains("0")&&!cleaned["Inventory"].contains("8"));
+        Require(cleaned["PersonalInventory"].contains("0")&&!cleaned["PersonalInventory"].contains("1"));
+        Require(cleaned["QuestProgress"]["QuestTracked"]=="late-quest");
+        bool pendingQuest=false,orphanQuest=false;for(const auto& q:cleaned["QuestProgress"]["Quests"]){pendingQuest|=q.value("QuestId",std::string{})=="late-quest";orphanQuest|=q.value("QuestId",std::string{})=="orphan-quest";}
+        Require(pendingQuest&&!orphanQuest);
+        Require(cleaned["Journal"]["UnlockedEntries"]==Json::array({"late-journal"}));
+        Require(cleaned["Progress"]["RecipesUnlocked"]==Json::array({"late-recipe"}));
+        Require(cleaned["Progress"]["ItemsPickedUp"]==Json::array({"late-clone"}));
+        Require(!general.Removed.empty()&&Plan(general.Save,{},false,&live,false,true,true).Removed.empty());
+        // Protection is registry-specific: a pending quest cannot preserve an item.
+        Require(!PS::RegistryEnrollment::IsPending(Kind::Item,"late-quest"));
+        Require(IncludeVerifiedIdentity(VerifiedKind::Quest,"late-quest"));
+        Require(IncludeVerifiedIdentity(VerifiedKind::Item,"late-clone"));
+        PS::RegistryEnrollment::Complete("quest:late");Require(ReadRegistry()->Ready());
+        PS::RegistryEnrollment::Complete("unknown");Require(ReadRegistry()->Ready());
+        PS::RegistryEnrollment::Complete("clone:late");auto settled=ReadRegistry();Require(settled->Ready());
+        Require(settled->Quests.contains("late-quest")&&settled->Items.contains("late-clone"));
+        auto beforeWorld=assetSave;beforeWorld["GameProgress"]["Inventory"]["0"]["ItemData"]="late-clone";
+        auto afterWorld=Plan(beforeWorld,{},false,settled.get(),false,true,true);
+        Require(afterWorld.Save["GameProgress"]["Inventory"].contains("0"));
+        // Another character in the same world also receives complete cleanup.
+        auto another=assetSave;another["GameProgress"]["Inventory"]["9"]={{"ItemData","orphan-from-removed-mod"}};
+        Require(!Plan(another,{},false,settled.get(),false,true,true).Save["GameProgress"]["Inventory"].contains("9"));
+        // On the next launch after mod removal there are no pending declarations.
+        // Their old IDs must not be exempt from orphan cleanup.
+        PS::RegistryEnrollment::Reset();PublishRegistry(registry);
+        auto removedMod=Plan(general.Save,{},false,&live,false,true,true);
+        Require(!removedMod.Save["GameProgress"]["Inventory"].contains("0"));
+        Require(removedMod.Save["GameProgress"]["QuestProgress"]["QuestTracked"]=="");
+        Require(removedMod.Save["GameProgress"]["Journal"]["UnlockedEntries"].empty());
+        Require(removedMod.Save["GameProgress"]["Progress"]["RecipesUnlocked"].empty());
+    }
+    {
+        const auto clone=PS::ClonePresentation::NewId("AnyMod");Require(DragonWilds::IsCanonicalPersistenceId(clone));
+        Require(PS::ClonePresentation::ValidId(id,"NotTheOriginalMod"));
+        Require(IncludeVerifiedIdentity(VerifiedKind::Item,clone));Require(!snapshot->Items.contains(clone));
+        auto live=ReadRegistry();Require(live->Items.contains(clone)&&live->Ready());
+        Require(IncludeVerifiedIdentity(VerifiedKind::Quest,clone));Require(IncludeVerifiedIdentity(VerifiedKind::Journal,clone));
+        live=ReadRegistry();Require(live->Quests.contains(clone)&&live->Journals.contains(clone));
+        Require(Plan(movedOwners,{},false,live.get(),false,true,true).Save["GameProgress"]["QuestProgress"]==movedOwners["GameProgress"]["QuestProgress"]);
+        auto mixed=assetSave;mixed["GameProgress"]["Inventory"]["0"]["ItemData"]=clone;
+        mixed["GameProgress"]["Inventory"]["7"]={{"ItemData","removed-mod-item"}};
+        mixed["GameProgress"]["PersonalInventory"]["0"]={{"ItemData","removed-mod-item"}};
+        mixed["GameProgress"]["Loadout"]["Head"]={{"PlayerInventoryItemIndex",7}};
+        auto& quests=mixed["GameProgress"]["QuestProgress"]["Quests"];
+        quests.push_back({{"QuestId","removed-mod-without-ints"}});
+        auto locationInts=Json::array({{{"QuestVariableName","RuneSchema.Location:removed-mod-location"},{"QuestVariableValue",7001}}});
+        quests.push_back({{"QuestId","removed-mod-location-quest"},{"QuestInts",locationInts}});
+        mixed["GameProgress"]["QuestProgress"]["QuestLocations"].push_back({{"QuestLocationId","removed-mod-location"}});
+        quests.push_back({{"QuestId","removed-mod-broken-markers"},{"QuestInts",{{{"QuestVariableName","RuneSchema.Owner:"},{"QuestVariableValue",-1}}}}});
+        auto cleaned=Plan(mixed,{},false,live.get(),false,true,true);
+        Require(cleaned.Save["GameProgress"]["Inventory"]["0"]["ItemData"]==clone);
+        Require(!cleaned.Save["GameProgress"]["Inventory"].contains("7"));
+        Require(cleaned.Save["GameProgress"]["PersonalInventory"].empty());
+        Require(!cleaned.Save["GameProgress"]["Loadout"].contains("Head"));
+        Require(cleaned.Save["GameProgress"]["QuestProgress"]["Quests"].size()==2);
+        Require(cleaned.Save["GameProgress"]["QuestProgress"]["QuestLocations"].size()==2);
+        Require(Plan(cleaned.Save,{},false,live.get(),false,true,true).Save==cleaned.Save);
+        // Simulate next launch after the clone mod is removed: no prefix/owner
+        // exception may keep an identity that no longer resolves.
+        PublishRegistry(registry);live=ReadRegistry();
+        auto retired=Plan(cleaned.Save,{},false,live.get(),false,true,true);
+        Require(!retired.Save["GameProgress"]["Inventory"].contains("0"));
+        PublishRegistry({});Require(!IncludeVerifiedIdentity(VerifiedKind::Item,clone)&&!ReadRegistry());
+    }
     PublishRegistry({});Require(!ReadRegistry() && snapshot->Ready());
     return 0;
 }

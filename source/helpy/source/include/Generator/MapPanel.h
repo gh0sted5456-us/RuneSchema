@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyImGuiTheme.h"
 #include "Core/MapProjection.h"
 #include "Core/MapViewport.h"
 #include "Core/MapSpawnRequest.h"
@@ -28,7 +29,8 @@ struct State {
     float Zoom=1,Radius=300,Yaw=0;int Kind=2,Count=1,Operation=0,SpawnType=0;
     bool Permanent=false,Popup=false,ShowPlayers=true,HasPoint=false,Dragged=false,ProbeWanted=false,BuildingsWanted=false,BuildingsMore=false;
     bool NearMarker=false,TravelAction=false,CancelSent=false;
-    bool BuildingBrowserOpen=false,BuildingAction=false;
+    bool BuildingBrowserOpen=false,BuildingAction=false,BuildingPick=false;
+    Json Prefab=Json::object();std::string PrefabName;
     int BuildingCategory=-1;
     Json BuildingCategories=Json::array(),PlacementResult=Json::object();
     bool FitRequested=false,HoverActive=false,GroundReadSelected=false;
@@ -59,6 +61,15 @@ struct State {
     ImTextureData* Texture=nullptr;std::vector<ImTextureData*> Retired;
 };
 inline State Data;
+inline void ImportPrefab(){
+    wchar_t file[32768]{};OPENFILENAMEW dialog{sizeof(dialog)};dialog.hwndOwner=GetActiveWindow();dialog.lpstrFile=file;dialog.nMaxFile=32768;dialog.lpstrFilter=L"RSDW Builder export (*.json)\0*.json\0\0";dialog.Flags=OFN_EXPLORER|OFN_NOCHANGEDIR|OFN_FILEMUSTEXIST;
+    if(!GetOpenFileNameW(&dialog))return;
+    try{const std::filesystem::path path(file);if(std::filesystem::file_size(path)>1024*1024)throw std::runtime_error("Prefab export exceeds 1 MiB");
+        std::ifstream input(path,std::ios::binary);if(!input)throw std::runtime_error("Cannot read prefab export");auto document=Json::parse(input);
+        MapSpawnRequest::Prefab(Data.Projection,Data.Point,document,"validation",Data.Yaw,Data.Generation,0);
+        Data.Prefab=std::move(document);Data.PrefabName=path.filename().string();Data.Building=Json::object();Data.Error.clear();
+    }catch(const std::exception& error){Data.Error=error.what();}
+}
 inline bool RiskOverlayActive(){return Data.Operation==2||!Data.PartyPicking.empty()||Data.PartyConfirmWanted;}
 inline std::pair<std::string,std::string> RiskIdentity(){
     const auto path=!Data.PartyPicking.empty()?Data.PartyPicking:Data.PartyConfirmWanted?Data.PartyMoving:Data.Operation==2?SpawnToolsPanel::SelectedPlayer:std::string{};
@@ -207,10 +218,10 @@ inline void BuildingBrowser(){
     bool open=true;
     if(!ImGui::BeginPopupModal("Building menu",&open,ImGuiWindowFlags_NoSavedSettings)){Data.BuildingBrowserOpen=false;return;}
     Data.BuildingBrowserOpen=true;
-    ImGui::TextDisabled("Native building catalogue · icons and categories from the game");
+    ImGui::TextDisabled("Game building menu");
     ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##building-menu-search","Search pieces, categories or groups...",Data.BuildingSearch,sizeof(Data.BuildingSearch));
     if(Data.BuildingsPending||Data.BuildingsWanted)ImGui::TextDisabled("Loading menu... %zu pieces received",Data.Buildings.size());
-    else ImGui::TextDisabled("%zu pieces · select a piece, then use selection",Data.Buildings.size());
+    else ImGui::TextDisabled("%zu pieces",Data.Buildings.size());
     const float body=std::max(t.Y(80),ImGui::GetContentRegionAvail().y-ImGui::GetFrameHeightWithSpacing()*2-t.Y(12));
     if(ImGui::BeginChild("##building-categories",ImVec2(t.X(150),body),true)){
         if(ImGui::Selectable("All categories",Data.BuildingCategory<0))Data.BuildingCategory=-1;
@@ -232,7 +243,7 @@ inline void BuildingBrowser(){
             const auto path=ItemPresentation::Text(row,"Path"),name=ItemPresentation::Text(row,"Name");ImGui::PushID(path.c_str());
             const auto start=ImGui::GetCursorScreenPos();const bool selected=path==ItemPresentation::Text(Data.Building,"Path");
             ImGui::PushStyleColor(ImGuiCol_Header,selected?t.selection:t.panelAlt);
-            if(ImGui::Selectable("##piece",selected,ImGuiSelectableFlags_None,ImVec2(cardWidth,t.Y(116))))Data.Building=row;
+            if(ImGui::Selectable("##piece",selected,ImGuiSelectableFlags_None,ImVec2(cardWidth,t.Y(116)))){Data.Building=row;Data.Prefab=Json::object();Data.PrefabName.clear();}
 #if defined(HELPY_PREVIEW)
             HelpyPreviewHooks::BuildingCards[path]=HelpyPreviewHooks::LastRect();
 #endif
@@ -241,7 +252,7 @@ inline void BuildingBrowser(){
             if(!ItemIconCache::Draw(ItemPresentation::Text(row,"Icon"),a,b,true))HelpyImGuiTheme::DrawIcon(HelpyImGuiTheme::Icon::Building,ImVec2((a.x+b.x)*.5f,(a.y+b.y)*.5f),icon*.6f,t.textDisabled);
             ImGui::GetWindowDrawList()->AddRect(start,ImVec2(start.x+cardWidth,start.y+t.Y(116)),ImGui::GetColorU32(selected?t.accent:t.border),t.X(5));
             ImGui::GetWindowDrawList()->AddText(ImGui::GetFont(),ImGui::GetFontSize(),ImVec2(start.x+t.X(7),start.y+t.Y(70)),ImGui::GetColorU32(t.text),name.c_str(),nullptr,cardWidth-t.X(14));
-            if(hovered)ImGui::SetTooltip("%s\n%s / %s",name.c_str(),ItemPresentation::Text(row,"Category").c_str(),ItemPresentation::Text(row,"Group").c_str());
+            if(hovered)PS::HelpyImGuiTheme::Tooltip("%s\n%s / %s",name.c_str(),ItemPresentation::Text(row,"Category").c_str(),ItemPresentation::Text(row,"Group").c_str());
             ImGui::PopID();++shown;
         }
         if(!shown)ImGui::TextWrapped("%s",Data.BuildingsPending||Data.BuildingsWanted?"Looking through the game's menu...":"No pieces match this search/category.");
@@ -311,18 +322,20 @@ inline void PlacePopup(){
     if(!Data.Definition.empty())ImGui::TextWrapped("Selected: %s",ItemPresentation::Text(Data.Definition,"Name").c_str());
     if(!window.LastError.empty())ImGui::TextWrapped("%s",window.LastError.c_str());
     }else if(Data.Operation==1){
-        if(HelpyImGuiTheme::SoftButton("Browse building menu",ImVec2(-1,0))){Data.BuildingBrowserOpen=true;if(Data.BuildingsMore){Data.BuildingsOffset=Data.BuildingsNext;Data.BuildingsWanted=true;}ImGui::OpenPopup("Building menu");}
+        if(HelpyImGuiTheme::SoftButton("Browse building menu",ImVec2(-1,0))){Data.BuildingBrowserOpen=true;if(Data.Buildings.empty()||Data.BuildingsMore){Data.BuildingsOffset=Data.Buildings.empty()?0:Data.BuildingsNext;Data.BuildingsWanted=true;}ImGui::OpenPopup("Building menu");}
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::BuildingBrowse=HelpyPreviewHooks::LastRect();
 #endif
         BuildingBrowser();
-        ImGui::TextWrapped("Selected: %s",Data.Building.empty()?"Choose a building piece":ItemPresentation::Text(Data.Building,"Name").c_str());
+        if(HelpyImGuiTheme::SoftButton("Import prefab...",ImVec2(-1,0)))ImportPrefab();
+        ImGui::TextWrapped("Selected: %s",!Data.Prefab.empty()?Data.PrefabName.c_str():Data.Building.empty()?"Choose a building piece":ItemPresentation::Text(Data.Building,"Name").c_str());
+        if(!Data.Prefab.empty()){ImGui::Text("%zu pieces · centered here",Data.Prefab["pieces"].size());if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("The layout's bounds center goes at the selected ground point. Relative height, scale and rotation are preserved. Ghosted pieces are excluded.");ImGui::TextDisabled("Buildings only; stored items aren't copied.");}
         if(Data.BuildingsPending||Data.BuildingsWanted)ImGui::TextDisabled("Reading the game's building menu...");
         ImGui::SetNextItemWidth(t.X(140));ImGui::SliderFloat("Rotation",&Data.Yaw,0,360,"%.0f degrees");
-        ImGui::TextWrapped("Pieces must pass the game's building checks. Placement uses one piece at a time.");
+        if(Data.Prefab.empty())ImGui::TextDisabled("Native building checks apply.");
     }
     if(Data.Operation!=2){
-    ImGui::Separator();if(Data.Operation==1){Data.Permanent=true;ImGui::TextWrapped("Persistent building placement. Saved only when you choose Place & save building.");}
+    ImGui::Separator();if(Data.Operation==1){Data.Permanent=true;}
     else{if(ImGui::RadioButton("Temporary",!Data.Permanent))Data.Permanent=false;ImGui::SameLine();if(ImGui::RadioButton("Permanent",Data.Permanent))Data.Permanent=true;}
     ImGui::TextDisabled("%s",Data.Permanent?"Saved as RuneSchema placements.":"Temporary placement for this session.");
     }
@@ -333,7 +346,7 @@ inline void PlacePopup(){
     ImGui::TextUnformatted(Data.Operation==2?"Player to teleport":"Player context");SpawnToolsPanel::RenderCartRecipient(SpawnToolsPanel::UiSnapshot);
     if(Data.Operation==2)ImGui::TextWrapped("%s",Data.NearMarker?"Loads this destination, checks ground beside the stone (within 2 metres), then uses native travel.":"Loads the destination before departure, verifies a safe landing, then uses the game's native travel and loading screen. Unsafe or unavailable ground cancels departure.");
     ImGui::EndChild();
-    const bool choice=Data.Operation==2||(Data.Operation==1?!Data.Building.empty():!Data.Definition.empty());
+    const bool choice=Data.Operation==2||(Data.Operation==1?(!Data.Building.empty()||!Data.Prefab.empty()):!Data.Definition.empty());
     const bool authority=Data.Operation==0||Data.Snapshot.value("CanBuildAndTeleport",false);
     if(!authority)ImGui::TextWrapped("Use the host's RSMK for building placement and player teleportation.");
     const bool destinationReady=Data.Operation==2||groundReady;
@@ -343,9 +356,9 @@ inline void PlacePopup(){
     if(Data.Operation==1&&!groundReady&&!Data.ProbePending&&!Data.ProbeWanted&&HelpyImGuiTheme::SoftButton("Retry ground")){Data.Ground=Json::object();Data.ProbeWanted=true;}
     if(SpawnToolRequests::IsWaiting())ImGui::TextDisabled("Finishing the current runtime request...");
     ImGui::BeginDisabled(!ready);
-    const char* action=Data.Operation==2?"Teleport player here":Data.Operation==1?(Data.Permanent?"Place & save building":"Place building here"):(Data.Permanent?"Spawn & save placement":"Spawn here");
+    const char* action=Data.Operation==2?"Teleport player here":Data.Operation==1?(!Data.Prefab.empty()?"Place & save prefab":Data.Permanent?"Place & save building":"Place building here"):(Data.Permanent?"Spawn & save placement":"Spawn here");
     if(HelpyImGuiTheme::SoftButton(action,ImVec2(-1,0))){try{
-        const auto id=++Data.Sequence;auto request=Data.Operation==2?MapSpawnRequest::Target(Data.Projection,Data.Point,"MapTeleport",SpawnToolsPanel::SelectedPlayer,id):Data.Operation==1?MapSpawnRequest::Building(Data.Projection,Data.Point,Data.Building,SpawnToolsPanel::SelectedPlayer,Data.Permanent,Data.Yaw,id):MapSpawnRequest::Build(Data.Projection,Data.Point,Data.Definition,SpawnToolsPanel::SelectedPlayer,Data.Permanent,Data.Count,Data.Radius,id);
+        const auto id=++Data.Sequence;auto request=Data.Operation==2?MapSpawnRequest::Target(Data.Projection,Data.Point,"MapTeleport",SpawnToolsPanel::SelectedPlayer,id):Data.Operation==1?(!Data.Prefab.empty()?MapSpawnRequest::Prefab(Data.Projection,Data.Point,Data.Prefab,SpawnToolsPanel::SelectedPlayer,Data.Yaw,Data.Generation,id):MapSpawnRequest::Building(Data.Projection,Data.Point,Data.Building,SpawnToolsPanel::SelectedPlayer,Data.Permanent,Data.Yaw,id)):MapSpawnRequest::Build(Data.Projection,Data.Point,Data.Definition,SpawnToolsPanel::SelectedPlayer,Data.Permanent,Data.Count,Data.Radius,id);
         request["NearMarker"]=Data.Operation==2&&Data.NearMarker;
         // Z is a measured hint for destination streaming. Runtime collision
         // is always re-traced before placement/departure; never trust stale UI Z.
@@ -379,6 +392,7 @@ inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
     if(!Data.ShowParty||HelpyTaskbar::Current.Contains(HelpyTaskbar::Window::Party)||Data.PartyDetached!=detached)return;
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::PartyGear.clear();HelpyPreviewHooks::PartyDurabilityMeters=0;HelpyPreviewHooks::PartyDurabilityDetails=false;
+    HelpyPreviewHooks::PartyPower.clear();HelpyPreviewHooks::PartyPortraits.clear();HelpyPreviewHooks::PartyMeters.clear();
 #endif
     bool expanded=false;
     if(detached){
@@ -401,6 +415,7 @@ inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
         HelpyPreviewHooks::PartyDetach=HelpyPreviewHooks::LastRect();
 #endif
         ImGui::SameLine();PartyMemberView::Advanced();ImGui::Separator();
+        if(!PlayerInventoryPanel::RepairStatus.empty())ImGui::TextWrapped("%s",PlayerInventoryPanel::RepairStatus.c_str());
     }
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::MapPartyWindow={ImGui::GetWindowPos().x,ImGui::GetWindowPos().y,ImGui::GetWindowPos().x+size.x,ImGui::GetWindowPos().y+size.y};
@@ -412,21 +427,25 @@ inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
     ImGui::PushStyleColor(ImGuiCol_ChildBg,ImVec4(0,0,0,0));
     ImGui::BeginChild("##map-party",{0,0},false);
     ImGui::PopStyleColor();
+    const bool placards=PlayerPortraitPicker::Choices.CompactParty;const float cardWidth=placards?std::min(t.X(310),ImGui::GetContentRegionAvail().x):ImGui::GetContentRegionAvail().x;
+    const auto cardColumns=std::max(1,int((ImGui::GetContentRegionAvail().x+ImGui::GetStyle().ItemSpacing.x)/(cardWidth+ImGui::GetStyle().ItemSpacing.x)));size_t cardIndex=0;
     for(const auto& row:*rows){if(!row.is_object())continue;const auto path=ItemPresentation::Text(row,"Path");if(path.empty())continue;
+        if(placards&&cardIndex++%cardColumns)ImGui::SameLine();
         ImGui::PushID(path.c_str());const auto name=ItemPresentation::Text(row,"Name")+(row.value("IsLocal",false)?" (you)":"");
-        ImGui::PushStyleColor(ImGuiCol_Border,ImVec4(.78f,.64f,.36f,.72f));
-        ImGui::PushStyleColor(ImGuiCol_ChildBg,ImVec4(.025f,.028f,.025f,.96f));
+        ImGui::PushStyleColor(ImGuiCol_Border,PartyMemberView::Border(row));
+        ImGui::PushStyleColor(ImGuiCol_ChildBg,ImVec4(t.panelAlt.x,t.panelAlt.y,t.panelAlt.z,.96f));
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{t.X(6),t.Y(6)});
-        const float cardHeight=PartyMemberView::CardHeight(row,ImGui::GetContentRegionAvail().x-t.X(12));
-        const bool card=ImGui::BeginChild("##party-member-card",{0,cardHeight},ImGuiChildFlags_Borders|ImGuiChildFlags_AlwaysUseWindowPadding,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
+        const float cardHeight=PartyMemberView::CardHeight(row,cardWidth-t.X(12));
+        const bool card=ImGui::BeginChild("##party-member-card",{cardWidth,cardHeight},ImGuiChildFlags_Borders|ImGuiChildFlags_AlwaysUseWindowPadding,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
         ImGui::PopStyleVar();ImGui::PopStyleColor(2);
         if(card){
         {const auto a=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();SourceBanners::DrawCard(PlayerPortraitPicker::Choices.GetBackground(ItemPresentation::Text(row,"Guid")),a,{a.x+size.x,a.y+size.y});}
+        PartyMemberView::RestoreGear=PlayerInventoryPanel::RestoreGear;PartyMemberView::ChangeGear=PlayerInventoryPanel::ChangeGear;
         if(PartyMemberView::Row(row,Data.PartySelection==path,false,true))SelectPartyMember(row);
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::MapPartyRows[path]=HelpyPreviewHooks::LastRect();
 #endif
-        if(ImGui::IsItemHovered()&&ImGui::IsMouseReleased(ImGuiMouseButton_Right)){Data.PartyContextAnchor=ImGui::GetMousePos();ImGui::OpenPopup("##party-options");}
+        if(!PartyMemberView::GearContext&&ImGui::IsItemHovered()&&ImGui::IsMouseReleased(ImGuiMouseButton_Right)){Data.PartyContextAnchor=ImGui::GetMousePos();ImGui::OpenPopup("##party-options");}
         if(ImGui::IsPopupOpen("##party-options")){
             const auto area=ImGui::GetMainViewport()->WorkSize,origin=ImGui::GetMainViewport()->WorkPos;const float width=std::min(t.X(320),area.x-t.X(24));
             ImGui::SetNextWindowPos({std::clamp(Data.PartyContextAnchor.x,origin.x+t.X(8),std::max(origin.x+t.X(8),origin.x+area.x-width-t.X(8))),std::clamp(Data.PartyContextAnchor.y,origin.y+t.Y(8),std::max(origin.y+t.Y(8),origin.y+area.y-t.Y(220)))},ImGuiCond_Appearing);
@@ -464,7 +483,7 @@ inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
             if(!runtimeReady)ImGui::TextWrapped("Requires the current host/server party runtime and an idle action queue.");
             ImGui::EndPopup();
         }
-        if(PlayerPortraitPicker::Choices.Skills&&PartyMemberView::SkillsFresh(row,PartyMemberView::Now()))PartyMemberView::Skills(row,PartyMemberView::Now());
+        if(!PlayerPortraitPicker::Choices.CompactParty&&PlayerPortraitPicker::Choices.Skills&&PartyMemberView::SkillsFresh(row,PartyMemberView::Now()))PartyMemberView::Skills(row,PartyMemberView::Now());
         }ImGui::EndChild();
         ImGui::PopID();
     }ImGui::EndChild();}
@@ -508,7 +527,7 @@ inline void ResourceDetails(){
     bool open=true;if(!ImGui::BeginPopupModal("Map resource details",&open,ImGuiWindowFlags_NoSavedSettings))return;
     auto& item=Data.ResourceDetails;const auto name=ItemPresentation::Text(item,"Name");ImGui::TextUnformatted(name.c_str());
     ImGui::TextDisabled("X %.0f   Y %.0f",item.value("X",0.0),item.value("Y",0.0));ImGui::Separator();
-    if(ImGui::BeginTabBar("##resource-details-tabs")){
+    if(ImGui::BeginTabBar("##resource-details-tabs",ImGuiTabBarFlags_Reorderable)){
         if(ImGui::BeginTabItem("Live availability")){
             // Refresh the selected native node by exact path only. A wiki point
             // is not silently matched to the nearest node or claimed available.
@@ -546,6 +565,8 @@ inline void Render(){
     inlineIfRoom(t.X(160));ImGui::SetNextItemWidth(t.X(120));ImGui::SliderFloat("Zoom",&Data.Zoom,static_cast<float>(Data.View.FitZoom()),32,"%.1fx",ImGuiSliderFlags_Logarithmic);
     inlineIfRoom(t.X(80));if(ImGui::Checkbox("Players",&Data.ShowPlayers))SaveNativeFilters();
     inlineIfRoom(t.X(70));ImGui::Checkbox("Party",&Data.ShowParty);
+    inlineIfRoom(t.X(90));if(ImGui::Checkbox("Chests",&Data.ShowChests)){SaveNativeFilters();Data.Next={};}
+    inlineIfRoom(t.X(70));if(HelpyImGuiTheme::SoftButton(Data.BuildingPick?"Cancel build":"Build...")){Data.BuildingPick=!Data.BuildingPick;if(Data.BuildingPick){Data.Operation=1;Data.Permanent=true;Data.Status="Click the map to choose a building or prefab position.";}}
     const char* hint="LMB select · drag to pan · RMB options · scroll to zoom";inlineIfRoom(ImGui::CalcTextSize(hint).x);ImGui::TextDisabled("%s",hint);
     Filters();ImGui::SameLine();ImGui::SetNextItemWidth(std::min(t.X(300),ImGui::GetContentRegionAvail().x));ImGui::InputTextWithHint("##map-marker-search","Find iron, oak, chest, lore...",Data.MarkerSearch,sizeof(Data.MarkerSearch));
 #if defined(HELPY_PREVIEW)
@@ -632,13 +653,14 @@ inline void Render(){
         const MapProjection::Point xy{location[0].get<double>(),location[1].get<double>()};if(!Data.Projection.Contains(xy))continue;const auto uv=Data.Projection.ToUV(xy);
         if(uv.X<uvMin.x||uv.X>uvMax.x||uv.Y<uvMin.y||uv.Y>uvMax.y)continue;
         const auto pixel=Data.View.ToPixel(uv);const ImVec2 point(min.x+static_cast<float>(pixel.X),min.y+static_cast<float>(pixel.Y));
-        const bool portrait=PlayerPortraitPicker::DrawCached(PlayerPortraitPicker::Icon(player),{point.x-t.X(12),point.y-t.Y(12)},{point.x+t.X(12),point.y+t.Y(12)});
-        if(!portrait)draw->AddCircleFilled(point,t.X(6),ImGui::GetColorU32(t.accentHover));draw->AddCircle(point,t.X(portrait?13:7),IM_COL32(255,255,255,255));const auto name=ItemPresentation::Text(player,"Name");
+        const auto color=PartyMemberView::NativeColor(player);const auto tint=color?ImGui::GetColorU32(*color):IM_COL32_WHITE;
+#if defined(HELPY_PREVIEW)
+        HelpyPreviewHooks::MapPlayerTints[ItemPresentation::Text(player,"Path")]=tint;
+#endif
+        const bool portrait=PlayerPortraitPicker::DrawCached(PlayerPortraitPicker::Icon(player),{point.x-t.X(12),point.y-t.Y(12)},{point.x+t.X(12),point.y+t.Y(12)},tint);
+        if(!portrait)draw->AddCircleFilled(point,t.X(6),color?tint:ImGui::GetColorU32(t.accentHover));draw->AddCircle(point,t.X(portrait?13:7),tint);
         const float distance=(io.MousePos.x-point.x)*(io.MousePos.x-point.x)+(io.MousePos.y-point.y)*(io.MousePos.y-point.y);
         if(hovered&&distance<playerDistance){playerDistance=distance;hoveredPlayer=&player;}
-        const auto* role=PlayerBadges::Find(player);const bool decorated=PlayerBadges::Draw(draw,{point.x+t.X(16),point.y},t.Y(15),role);
-        draw->AddText(ImVec2(point.x+t.X(decorated?28:10),point.y-t.Y(7)),ImGui::GetColorU32(t.text),name.c_str());
-        const auto mouse=ImGui::GetIO().MousePos;if(role&&std::abs(mouse.x-point.x)<t.X(24)&&std::abs(mouse.y-point.y)<t.Y(12))ImGui::SetTooltip("%s\n%s",name.c_str(),PlayerBadges::Tooltip(*role).c_str());
     }
     const Json* hoveredMarker=nullptr;float nearest=t.X(11)*t.X(11);
     const auto screen=[&](MapProjection::Point xy){const auto pixel=Data.View.ToPixel(Data.Projection.ToUV(xy));return ImVec2(min.x+static_cast<float>(pixel.X),min.y+static_cast<float>(pixel.Y));};
@@ -707,7 +729,7 @@ inline void Render(){
         draw->AddRectFilled({min.x+4,max.y-t.Y(32)},{max.x-4,max.y-4},IM_COL32(0,0,0,220));draw->AddText(ImVec2(min.x+t.X(10),max.y-t.Y(24)),ImGui::GetColorU32(t.accentHover),label);
         const bool context=ImGui::IsMouseReleased(ImGuiMouseButton_Right);
         if(context||(ImGui::IsMouseReleased(ImGuiMouseButton_Left)&&!Data.Dragged)){
-            const bool resourceClick=!context&&Data.PartyPicking.empty()&&(!hoveredPlayer||playerDistance>nearest);
+            const bool resourceClick=!context&&!Data.BuildingPick&&Data.PartyPicking.empty()&&(!hoveredPlayer||playerDistance>nearest);
             if(resourceClick&&hoveredMarker&&ItemPresentation::Text(*hoveredMarker,"Kind")=="Chest")PlayerInventoryPanel::RequestContainer(*hoveredMarker);
             if(resourceClick&&hoveredReference&&referenceCount==1){const auto& category=mapCache.Data->Categories[hoveredReference->Category];Data.ResourceDetails={{"Name",hoveredReference->Name},{"WikiName",category.Name},{"Note",hoveredReference->Note},{"X",hoveredReference->X},{"Y",hoveredReference->Y}};Data.ResourceDetailsWanted=true;}
             if(resourceClick&&hoveredMarker&&ItemPresentation::Text(*hoveredMarker,"Kind")=="Resource"){Data.ResourceDetails=*hoveredMarker;Data.ResourceDetails["X"]=(*hoveredMarker)["Location"][0];Data.ResourceDetails["Y"]=(*hoveredMarker)["Location"][1];Data.ResourceDetailsWanted=true;}
@@ -718,7 +740,7 @@ inline void Render(){
             const bool samePoint=haveZ&&Data.Point.X==Data.HoverPoint.X&&Data.Point.Y==Data.HoverPoint.Y;
             Data.HasPoint=true;Data.Ground=samePoint?Data.HoverGround:Json::object();Data.GroundReadPending=0;Data.GroundReadSelected=true;Data.NextGroundRead={};Data.ProbeWanted=Data.Operation!=2&&context&&!samePoint;
             if(!context&&!Data.PartyPicking.empty()){Data.PartyMapPoint=Data.Point;Data.PartyPicking.clear();Data.PartyConfirmWanted=true;Data.ProbeWanted=false;}
-            if(context){Data.MapPopupAnchor=io.MousePos;Data.Popup=true;ImGui::OpenPopup("##map-place");}
+            if(context||Data.BuildingPick){Data.ProbeWanted=Data.Operation!=2&&!samePoint;Data.MapPopupAnchor=io.MousePos;Data.Popup=true;Data.BuildingPick=false;ImGui::OpenPopup("##map-place");}
         }
     }else{Data.HoverActive=false;Data.HoverGround=Json::object();if(!Data.GroundReadSelected)Data.GroundReadPending=0;}
     if(hoveredMarker){const auto label=ItemPresentation::Text(*hoveredMarker,"Name")+(ItemPresentation::Text(*hoveredMarker,"Kind")=="Lodestone"?" · RMB for travel options":"");draw->AddRectFilled({min.x+4,min.y+4},{max.x-4,min.y+t.Y(30)},IM_COL32(0,0,0,225));draw->AddText({min.x+t.X(10),min.y+t.Y(8)},ImGui::GetColorU32(t.text),label.c_str());

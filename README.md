@@ -40,6 +40,20 @@ snapshot.
 
 ## Building
 
+### Native menu console commands
+
+In a loaded world, use `rs inventory open`, `rs inventory close`, or
+`rs inventory toggle` in the game's console. The same actions work with
+`spellbook`, `map`, `journal`, `skills`, `settings`, `buildmenu`, and `menu`
+(pause). Omitting the action means `open`; `runeschema` aliases `rs`.
+`rs help` lists the commands. These requests use the game's input router,
+retain its pause/interaction guards, and never select Exit or change save data.
+The console closes first using a configured native console key; the menu request
+runs after command return. `rs closeconsole` only closes the console.
+Dedicated servers have no local menus. Queued requests and results appear in RuneSchema.log.
+
+### Compile
+
 Run `Build RuneSchema.bat` from the repository root.
 
 The builder downloads the small pinned build-dependency bundle on first use,

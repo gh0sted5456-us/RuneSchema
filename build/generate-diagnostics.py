@@ -86,10 +86,11 @@ def outputs():
     page += ["</div>", "", "## Coverage and external codes", "",
              "The audit scans first-party runtime and Helpy source, plugins and build scripts for literal RS codes and typed diagnostic IDs. Test-only future-code fixtures and generated catalogues are excluded. It rejects undocumented codes and unknown typed IDs. Every registered code and bridge reason must have causes, troubleshooting and a unique generated header. The documentation build also validates the rendered HTML anchors.", "",
              "Windows error numbers, HRESULTs, HTTP status codes, UE4SS messages and EOS results belong to their respective providers; they are not RuneSchema RS codes. Keep their original value and surrounding message. Ordinary log tags such as `[PERSISTENCE-PRUNER]` identify a subsystem, not an error number.", "",
+             "`RS-GAME-*` entries are RuneSchema troubleshooting references for native game messages, not codes emitted by the game. Helpy marks symptom matches as suggested, preserves the original message and severity, and uses `RS-GAME-000` when no specific native diagnosis matches.", "",
              "## For mod authors", "",
              "Emit a registered code at the actual decision site. Never reuse it for another condition, classify absent readings as zero, or turn performance attribution into network failure. Keep dynamic paths, counts and native details in the original message.", "",
              "The stable catalogue lives at `resources/diagnostics/codes.json`, condition-specific checks at `resources/diagnostics/guidance.json`, and bridge reasons at `resources/diagnostics/bridge-reasons.json`. Run `python build/generate-diagnostics.py --check` and `python build/audit-diagnostics.py`; runtime and Helpy headers, public JSON and this page must agree. Use `PS::Diagnostics::Url(entry)` for RS links and `BridgeReasonUrl(reason)` for known bridge reasons; never maintain a second reference URL or derive diagnoses from arbitrary text.", "",
-             "See [troubleshooting](TROUBLESHOOTING.md) and [icon cache controls](HELPY-ICON-CACHE.md).", ""]
+             "See [troubleshooting](TROUBLESHOOTING.md).", ""]
     return {
         ROOT / "source/raw/include/Core/DiagnosticCodes.h": text,
         ROOT / "source/helpy/source/include/Core/DiagnosticCodes.h": text,

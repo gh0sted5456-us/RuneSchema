@@ -945,6 +945,14 @@ void RegistryBridge::ObserveClientTransport(UObject* source,UFunction* function,
                     auto row=nlohmann::json{{"Name",player.value("Name",std::string("Player"))},{"Path",player.value("Guid",std::string{})},{"Guid",player.value("Guid",std::string{})}};
                     if(player.contains("PlayerId")&&player["PlayerId"].is_number_integer())row["PlayerId"]=player["PlayerId"];
                     if(player.contains("RoleStatus")&&PS::PlayerStatus::Valid(player["RoleStatus"]))row["RoleStatus"]=player["RoleStatus"];
+                    if(player.value("NativePlayerColorVerified",false)&&player.contains("NativePlayerColor")&&player["NativePlayerColor"].is_array()&&player["NativePlayerColor"].size()==4){
+                        bool valid=true;for(const auto& channel:player["NativePlayerColor"])if(!channel.is_number()||!std::isfinite(channel.get<double>())||channel.get<double>()<0||channel.get<double>()>1){valid=false;break;}
+                        if(valid&&player["NativePlayerColor"][3].get<double>()>0){row["NativePlayerColor"]=player["NativePlayerColor"];row["NativePlayerColorVerified"]=true;}
+                    }
+                    if(player.contains("Platform")&&player["Platform"].is_string()){
+                        const auto platform=player["Platform"].get<std::string>();
+                        if(platform=="Steam"||platform=="Epic"||platform=="Game Pass"||platform=="Xbox"||platform=="PS5"||platform=="Switch 2"||platform=="Jagex"||platform=="Unknown")row["Platform"]=platform;
+                    }
                     if(player.contains("StatWire"))row["Stats"]=PS::PartyStatWire::Decode(player["StatWire"],std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(),elapsed);
                     rows.push_back(std::move(row));
                 }

@@ -45,5 +45,15 @@ int main()
         LR"(D:\Games\RSDragonwilds\Binaries\Win64\RSDragonwilds-Win64-Shipping.exe)", true);
     assert(packaged.Value == Kind::GamePass);
 
+    assert(PlayerPlatform("Unknown",true,gamePass)=="Game Pass");
+    assert(PlayerPlatform("Unknown",true,packaged)=="Game Pass");
+    assert(PlayerPlatform("Unknown",true,steam)=="Steam");
+    assert(PlayerPlatform("Unknown",true,epic)=="Epic");
+    assert(PlayerPlatform("Unknown",false,gamePass)=="Unknown");
+    assert(PlayerPlatform("Unknown",true,dedicated)=="Unknown");
+    assert(PlayerPlatform("Unknown",true,Detection{})=="Unknown");
+    assert(PlayerPlatform("PS5",true,gamePass)=="PS5");
+    assert(PlayerPlatform("Steam",false,gamePass)=="Steam");
+
     std::cout << "Storefront lane selection passed.\n";
 }

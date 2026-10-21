@@ -36,6 +36,45 @@ bool ToolResourceClass(UClass* type,UClass* actorType,UClass* aiType) {
     }
     return false;
 }
+// Read-only CDO measurements. Never spawn a resource just to measure it.
+// Ambiguous multipart/rotated assemblies deliberately remain unmeasured.
+void ToolPreviewHeight(UObject* defaults,nlohmann::json& row){
+    const auto number=[](UObject* object,const TCHAR* name)->std::optional<double>{
+        auto* p=CastField<FNumericProperty>(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),name));
+        if(!p||!p->IsFloatingPoint()||p->GetArrayDim()!=1||p->GetOffset_Internal()<0||p->GetOffset_Internal()+p->GetSize()>object->GetClassPrivate()->GetPropertiesSize())return {};
+        const double value=p->GetFloatingPointPropertyValue(p->ContainerPtrToValuePtr<void>(object));return std::isfinite(value)?std::optional<double>(value):std::nullopt;
+    };
+    try{
+        if(auto* capsule=ActorHelper::GetObjectRef(defaults,TEXT("CapsuleComponent")))if(auto half=number(capsule,TEXT("CapsuleHalfHeight"));half&&*half>0&&*half<50000){row["PreviewHeightCm"]=*half*2;row["PreviewHeightBasis"]="Native collision capsule (not visual mesh)";return;}
+        auto* componentType=ActorHelper::ResolveClass(TEXT("/Script/Engine.StaticMeshComponent"));if(!componentType)return;
+        std::set<UObject*> meshes;
+        for(auto* field:TFieldRange<FProperty>(defaults->GetClassPrivate(),EFieldIterationFlags::Default))if(auto* object=CastField<FObjectProperty>(field);object&&object->GetArrayDim()==1&&object->GetOffset_Internal()>=0&&object->GetOffset_Internal()+object->GetSize()<=defaults->GetClassPrivate()->GetPropertiesSize()){
+            auto* value=object->GetObjectPropertyValue(object->ContainerPtrToValuePtr<void>(defaults));if(value&&value->IsA(componentType))meshes.insert(value);
+        }
+        if(meshes.size()!=1)return;auto* component=*meshes.begin();auto* mesh=ActorHelper::GetObjectRef(component,TEXT("StaticMesh"));if(!mesh)return;
+        const auto axis=[](FStructProperty* structure,void* value,const TCHAR* key)->double{
+            if(!structure||!structure->GetStruct())throw std::runtime_error("Missing measured vector");
+            auto* p=CastField<FNumericProperty>(structure->GetStruct()->FindProperty(FName(key,FNAME_Find)));
+            if(!p||!p->IsFloatingPoint()||p->GetOffset_Internal()<0||p->GetOffset_Internal()+p->GetSize()>structure->GetSize())throw std::runtime_error("Measured vector layout changed");
+            return p->GetFloatingPointPropertyValue(p->ContainerPtrToValuePtr<void>(value));
+        };
+        auto* scale=CastField<FStructProperty>(PropertyHelper::GetPropertyByName(component->GetClassPrivate(),TEXT("RelativeScale3D")));
+        auto* rotation=CastField<FStructProperty>(PropertyHelper::GetPropertyByName(component->GetClassPrivate(),TEXT("RelativeRotation")));
+        const auto fits=[&](FProperty* p){return p&&p->GetOffset_Internal()>=0&&p->GetOffset_Internal()+p->GetSize()<=component->GetClassPrivate()->GetPropertiesSize();};
+        if(!fits(scale)||!fits(rotation))return;
+        const double z=std::abs(axis(scale,scale->ContainerPtrToValuePtr<void>(component),TEXT("Z")));
+        if(std::abs(axis(rotation,rotation->ContainerPtrToValuePtr<void>(component),TEXT("Pitch")))>.01||std::abs(axis(rotation,rotation->ContainerPtrToValuePtr<void>(component),TEXT("Roll")))>.01)return;
+        auto* fn=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,TEXT("/Script/Engine.StaticMesh:GetBoundingBox"));
+        if(!fn||!fn->HasAnyFunctionFlags(FUNC_Native)||fn->HasAnyFunctionFlags(FUNC_Net)||fn->GetParmsSize()>512)return;
+        auto* ret=CastField<FStructProperty>(fn->GetReturnProperty());if(!ret||!ret->GetStruct()||ret->GetStruct()->GetPathName()!=TEXT("/Script/CoreUObject.Box")||ret->GetOffset_Internal()<0||ret->GetOffset_Internal()+ret->GetSize()>fn->GetParmsSize())return;
+        for(auto* p:TFieldRange<FProperty>(fn,EFieldIterationFlags::Default))if(p->HasAnyPropertyFlags(CPF_Parm)&&!p->HasAnyPropertyFlags(CPF_ReturnParm))return;
+        std::vector<uint8_t> bytes(std::max<int>(1,fn->GetParmsSize()));mesh->ProcessEvent(fn,bytes.data());auto* box=ret->ContainerPtrToValuePtr<void>(bytes.data());
+        auto* lo=CastField<FStructProperty>(ret->GetStruct()->FindProperty(FName(TEXT("Min"),FNAME_Find)));auto* hi=CastField<FStructProperty>(ret->GetStruct()->FindProperty(FName(TEXT("Max"),FNAME_Find)));
+        if(!lo||!hi||lo->GetOffset_Internal()<0||hi->GetOffset_Internal()<0||lo->GetOffset_Internal()+lo->GetSize()>ret->GetSize()||hi->GetOffset_Internal()+hi->GetSize()>ret->GetSize())return;
+        const double height=(axis(hi,hi->ContainerPtrToValuePtr<void>(box),TEXT("Z"))-axis(lo,lo->ContainerPtrToValuePtr<void>(box),TEXT("Z")))*z;
+        if(std::isfinite(height)&&height>1&&height<100000){row["PreviewHeightCm"]=height;row["PreviewHeightBasis"]="Native single-mesh local bounds (component Z scale)";}
+    }catch(...){} // Missing measurements are not guessed from names.
+}
 nlohmann::json ToolDefinitionRow(UClass* type,const std::string& key,bool ai,const std::string& kind={}) {
     const auto path=RC::to_string(type->GetPathName());const bool concrete=!ActorHelper::IsAbstract(type);
     nlohmann::json row={{"Key",key},{"Name",ToolReadableName(path)},{"Class",path},{"Type",kind.empty()?(ai?"AI":"Resource"):kind},
@@ -60,6 +99,7 @@ nlohmann::json ToolDefinitionRow(UClass* type,const std::string& key,bool ai,con
     }
     // Presentation only: no writes and no fabricated default level.
     if(auto* defaults=type->GetClassDefaultObject().Get();defaults&&!defaults->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed|RF_NeedLoad|RF_NeedPostLoad))) {
+        ToolPreviewHeight(defaults,row);
         row["Icon"]=PS::AssetSearch::PresentationIcon(defaults);
         if(const auto display=PS::AssetSearch::PresentationName(defaults);!display.empty()){row["Name"]=display;row["DisplayName"]=display;}
         if(auto* power=CastField<FNumericProperty>(PropertyHelper::GetPropertyByName(type,TEXT("PowerLevel")));power&&power->GetArrayDim()==1) {

@@ -563,9 +563,9 @@ namespace DragonWilds {
         auto id=request.value("PersistenceID",std::string{});
         if(id.empty())id=PS::ClonePresentation::NewId(modTag);
         if(!PS::ClonePresentation::ValidId(id,modTag)||!IsCanonicalPersistenceId(id))
-            throw std::runtime_error("Clone PersistenceID is not a canonical RS7 identifier for this mod tag");
+            throw std::runtime_error("Clone PersistenceID must be a canonical 22-character URL-safe identifier");
         // Shared v5 file naming is retained so existing reload and save ownership work unchanged.
-        const auto name="RS_v5_"+id;
+        const auto name=PS::ClonePresentation::InternalName(id);
         const auto target="/Game/RuneSchema/runeschema/Items/"+name+"."+name;
         const auto statChanges=request.value("StatOverrides",nlohmann::json::object());
         if(!statChanges.is_object()||statChanges.size()>32||statChanges.dump().size()>PS::Authoring::MaxCloneDocumentBytes)throw std::runtime_error("Invalid stat overrides");

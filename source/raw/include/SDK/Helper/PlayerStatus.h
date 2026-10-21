@@ -1,11 +1,14 @@
 #pragma once
 #include "Core/PlayerStatus.h"
 #include "Runtime/NetworkContext.h"
+#include "Runtime/Storefront.h"
 #include "SDK/Helper/ReflectedContract.h"
 #include <Unreal/Property/FStructProperty.hpp>
+#include <Unreal/Property/FStrProperty.hpp>
 #include <Unreal/UEnum.hpp>
 #include <cstring>
 #include <format>
+#include <cmath>
 namespace PS::PlayerStatusRuntime {
 using namespace RC::Unreal;
 namespace AH=DragonWilds::ActorHelper;namespace PH=DragonWilds::PropertyHelper;
@@ -31,7 +34,50 @@ inline int PlayerId(UObject* state) {
     if(!property||property->GetElementSize()!=sizeof(int32_t)||!DragonWilds::ReflectedContract::Fits(property,state->GetClassPrivate()->GetPropertiesSize()))return -1;
     return property->GetPropertyValue(property->ContainerPtrToValuePtr<void>(state));
 }
+inline void Color(UObject* state,nlohmann::json& row) {
+    try {
+        if(!state)return;
+        auto* data=CastField<FStructProperty>(PH::GetPropertyByName(state->GetClassPrivate(),TEXT("PlayerColor")));
+        if(!data||!data->GetStruct()||data->GetStruct()->GetPathName()!=TEXT("/Script/Dominion.PlayerColor")
+            ||!DragonWilds::ReflectedContract::Fits(data,state->GetClassPrivate()->GetPropertiesSize()))return;
+        auto* color=CastField<FStructProperty>(PH::GetPropertyByName(data->GetStruct().Get(),TEXT("Color")));
+        if(!color||!color->GetStruct()||color->GetStruct()->GetPathName()!=TEXT("/Script/CoreUObject.LinearColor")||color->GetElementSize()!=sizeof(float)*4
+            ||!DragonWilds::ReflectedContract::Fits(color,data->GetElementSize()))return;
+        std::array<float,4> rgba{};std::memcpy(rgba.data(),color->ContainerPtrToValuePtr<void>(data->ContainerPtrToValuePtr<void>(state)),sizeof(rgba));
+        if(rgba[3]<=0||std::any_of(rgba.begin(),rgba.end(),[](float v){return !std::isfinite(v)||v<0||v>1;}))return;
+        row["NativePlayerColor"]=rgba;row["NativePlayerColorVerified"]=true;
+    }catch(...){}
+}
+inline std::string Platform(UObject* state) {
+    try {
+        if(!state)return "Unknown";
+        auto* data=CastField<FStructProperty>(PH::GetPropertyByName(state->GetClassPrivate(),TEXT("PlatformData")));
+        if(!data||!data->GetStruct()||data->GetStruct()->GetPathName()!=TEXT("/Script/Dominion.DomPlatformData")
+            ||!DragonWilds::ReflectedContract::Fits(data,state->GetClassPrivate()->GetPropertiesSize()))return "Unknown";
+        auto* name=CastField<FStrProperty>(PH::GetPropertyByName(data->GetStruct().Get(),TEXT("PlatformName")));
+        if(!name||name->GetElementSize()!=sizeof(FString)||!DragonWilds::ReflectedContract::Fits(name,data->GetElementSize()))return "Unknown";
+        const auto& chars=name->ContainerPtrToValuePtr<FString>(data->ContainerPtrToValuePtr<void>(state))->GetCharArray();
+        if(chars.Num()<2||chars.Num()>65||!chars.GetData()||chars.GetData()[chars.Num()-1]!=0)return "Unknown";
+        auto value=RC::to_string(RC::StringType(chars.GetData(),chars.Num()-1));for(auto& ch:value)if(ch>='A'&&ch<='Z')ch+=32;
+        if(value=="steam"||value=="cpsteam")return "Steam";
+        if(value=="wingdk"||value=="gdk"||value=="cpgdk")return "Game Pass";
+        if(value=="epic"||value=="epicgames"||value=="cpepic")return "Epic";
+        if(value=="ps5"||value=="cpps5")return "PS5";
+        if(value=="xbx"||value=="xbox"||value=="cpxbox")return "Xbox";
+        if(value=="switch2"||value=="cpnintendo")return "Switch 2";
+        if(value=="jagex")return "Jagex";
+    }catch(...){}return "Unknown";
+}
 // Game-thread, read-only presentation. Does not admit any gameplay operation.
+inline std::string Platform(UObject* state,bool local) {
+    return Storefront::PlayerPlatform(Platform(state),local,Storefront::CurrentDetection());
+}
+inline std::string ControllerPlatform(UObject* controller) {
+    if(!controller)return "Unknown";
+    bool local=false;
+    try {AH::FunctionCall query(controller,TEXT("/Script/Engine.Controller:IsLocalController"));query.Invoke();local=query.Result<bool>();}catch(...){}
+    return Platform(AH::GetObjectRef(controller,TEXT("PlayerState")),local);
+}
 inline nlohmann::json Read(UObject* controller) {
     bool host=false;PlayerStatus::Flags flags;
     try {

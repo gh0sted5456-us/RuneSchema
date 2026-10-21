@@ -185,6 +185,7 @@ public:
         };
         if(data.is_array())for(const auto& entry:data)add(entry);else add(data);
         catalog=std::move(pending);definitions=std::move(documents);
+        for(const auto& [key,document]:definitions)PS::RegistryEnrollment::Await("quest:"+key,PS::RegistryEnrollment::IdentityKind::Quest,catalog.Find("_",key).PersistenceId);
         PublishPresentation();
         for(const auto& [key,document]:definitions){const auto& q=catalog.Find("_",key);if(q.Marker)hasLocations=true;for(const auto& [id,entries]:q.Stages)for(const auto& entry:entries)if(entry.Marker)hasLocations=true;}
     }
@@ -204,6 +205,7 @@ public:
     }
     void Prepare(RC::Unreal::UObject* context) {
         using namespace RC::Unreal;
+        for(const auto& [key,document]:definitions)PS::RegistryEnrollment::Await("quest:"+key,PS::RegistryEnrollment::IdentityKind::Quest,catalog.Find("_",key).PersistenceId);
         if(declarationConflict)throw std::runtime_error("Quest declaration conflicts must be resolved before registry preparation or ownership migration; see the annotated mod/source error.");
         if(Empty())return;
         std::set<std::string> visiting,visited;
@@ -237,7 +239,7 @@ public:
                 if(found==assets.end() || !QuestRegistry::NativeRegistry::ResolvesPersistenceIdentity(
                         subsystem,found->second->Get())) {resolves=false;break;}
             }
-            if(resolves)return;
+            if(resolves){for(const auto& [key,document]:definitions)PS::RegistryEnrollment::Complete("quest:"+key);return;}
             PS::Log<RC::LogLevel::Warning>(STR(
                 "[QUEST-REGISTRY][REENTRY] Live quest identity maps were reset; re-registering {} RuneSchema quest(s) before character load.\n"),
                 definitions.size());
@@ -260,6 +262,7 @@ public:
             assets.at(key)->MarkRegistered();
         }
         networkManifest=std::move(manifest);preparedInstance=instance;preparedSubsystem=subsystem;
+        for(const auto& [key,document]:definitions)PS::RegistryEnrollment::Complete("quest:"+key);
     }
     const Json& NetworkManifest() const {return networkManifest;}
 };

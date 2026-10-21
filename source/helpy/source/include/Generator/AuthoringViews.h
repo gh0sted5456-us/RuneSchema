@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyImGuiTheme.h"
 #include "Generator/AuthoringClient.h"
 #include <imgui.h>
 #include <array>
@@ -76,7 +77,7 @@ inline void SavedReport(const Json& report,bool world){
             for(const auto* key:{"DisplayName","InternalName","PersistenceID",world?"Owner":"Location","Origin"}){ImGui::TableSetColumnIndex(column++);
                 auto value=row.contains(key)?row[key].is_string()?row[key].get<std::string>():row[key].dump():"Unresolved";
                 if(world&&std::string_view(key)=="Owner"&&row.contains("State"))value+=" / "+row["State"].dump();
-                ImGui::TextUnformatted(value.c_str());if(ImGui::IsItemHovered())ImGui::SetTooltip("%s",value.c_str());}
+                ImGui::TextUnformatted(value.c_str());if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("%s",value.c_str());}
         }ImGui::EndTable();
     }ImGui::TextDisabled("Display filters do not remove rows from exports.");
 }

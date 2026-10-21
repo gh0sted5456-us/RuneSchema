@@ -70,7 +70,8 @@ inline Json Request(Draft& draft,Mode mode,const std::string& player,bool prepar
     Json direct,stats;SplitValues(mode==Mode::Creation?ParseValues(draft.Editor.data()):Json::object(),draft.Inspection,direct,stats);
     const bool permanent=prepare||draft.Permanent;
     const std::string tag=permanent?draft.Mod:"RuneSchema";
-    if(!ClonePresentation::ValidId(draft.Id,tag))draft.Id=ClonePresentation::NewId(tag);
+    if(draft.Id.empty())draft.Id=ClonePresentation::NewId(tag);
+    if(!ClonePresentation::ValidId(draft.Id,tag))throw std::runtime_error("Invalid PersistenceID. Use Generate ID or enter a canonical 22-character ID.");
     auto request=Authoring::CloneRequest(draft.Source.at("Path"),draft.Name,draft.Icon,std::move(direct),permanent,prepare?false:draft.Give,draft.Count,
         prepare||draft.Acknowledged,prepare?"export":player,tag,draft.Id,mode==Mode::Transmog?draft.Appearance.value("Path",std::string{}):std::string{},"","",permanent?draft.Mod:"");
     request["StatOverrides"]=std::move(stats);request["IconMode"]=draft.Icon[0]?"Override":"Auto";

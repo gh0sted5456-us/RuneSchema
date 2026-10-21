@@ -27,6 +27,7 @@ namespace DragonWilds {
         std::vector<PS::WorldBuildingRegistryValidation::Expected> CleanupExpectations();
         void RejectCleanup(const std::string& reason);
         std::function<void(const nlohmann::json&,const RC::StringType&)> ImportPlacements;
+        nlohmann::json PlanToolImport(const nlohmann::json& data);
 
     protected:
         void OnLoad(const std::filesystem::path& loaderPath, const RC::StringType& modName,
@@ -78,7 +79,7 @@ namespace DragonWilds {
             std::unordered_map<RC::Unreal::UObject*, RC::Unreal::int32> BuildingPieceDataIndices;
         };
 
-        void ReadDefinitions(const nlohmann::json& data, const RC::StringType& modName);
+        void ReadDefinitions(const nlohmann::json& data, const RC::StringType& modName,nlohmann::json* plan=nullptr);
         void ApplyPatch(const nlohmann::json& patch, const RC::StringType& modName);
         void ApplyDefinitions();
         RC::Unreal::UObject* LoadBuilding(

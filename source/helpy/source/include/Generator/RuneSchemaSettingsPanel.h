@@ -1,6 +1,7 @@
 #pragma once
 #include "Generator/HelpyImGuiTheme.h"
 #include "Runtime/HelpySettings.h"
+#include "Core/HelpyEnvironment.h"
 #include <nlohmann/json.hpp>
 #include <functional>
 #include <map>
@@ -12,6 +13,7 @@ using json=nlohmann::json;
 inline std::function<bool(const json&,json&)> Remote;
 inline json Snapshot=json::object(),Draft=json::object();
 inline bool Loaded=false,Dirty=false;
+inline bool QuickToggleError=false;
 inline std::string Status;
 inline char Filter[128]{};
 inline std::map<std::string,std::string> ArrayText;
@@ -41,11 +43,12 @@ inline void Save(){
     Accept(result);Status=result.value("Status",std::string("Saved. Restart Dragonwilds to apply."));
 }
 inline void SaveQuick(const std::string& path,bool value){
+    QuickToggleError=true;
     if(!Loaded||!Patch().empty()){Status="Finish or discard the Settings draft before using quick toggles.";return;}
     json result;if(!Remote||!Remote({{"Action","SettingsSave"},{"ExpectedContents",Snapshot.at("ExpectedContents")},{"Patch",{{path,value}}}},result)){
         Status="Save was not confirmed; reload settings before retrying.";return;}
     if(!result.value("Ok",false)){Status=result.value("Status",std::string("Setting was not saved."));return;}
-    Accept(result);Status="Saved for the next game launch. The running session has not changed.";
+    Accept(result);QuickToggleError=false;Status="Saved for the next game launch. The running session has not changed.";
 }
 inline void QuickToggle(const char* label,const char* path,bool risky=false){
     const auto pointer=json::json_pointer(path);if(!Snapshot.at("Editable").contains(path)||!Snapshot.at("Document").contains(pointer))return;
@@ -59,24 +62,81 @@ inline void QuickToggle(const char* label,const char* path,bool risky=false){
     }ImGui::PopID();
 }
 inline void QuickSettings(){
-    static std::string startupStatus;
-    bool autoOpen=HelpySettings::OpenOnGameStart();
-    if(ImGui::Checkbox("Open Helpy when the game starts",&autoOpen)){HelpySettings::SetOpenOnGameStart(autoOpen);startupStatus=HelpySettings::Message();}
-    if(ImGui::IsItemHovered())ImGui::SetTooltip("Opens the Helpy splash once per game launch. F2 still closes/reopens it; it never loads a world or changes saves.");
-    if(!startupStatus.empty())ImGui::TextWrapped("%s",startupStatus.c_str());
+    const auto hint=[](const std::string& text){if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)){
+        PS::HelpyImGuiTheme::BeginDetailsTooltip();ImGui::PushTextWrapPos(ImGui::GetFontSize()*28);ImGui::TextUnformatted(text.c_str());ImGui::PopTextWrapPos();PS::HelpyImGuiTheme::EndDetailsTooltip();}};
     if(!Loaded&&Status.empty())Load();
-    if(Loaded){
-        QuickToggle("Corrupt Save Bypass","/persistence/allowCorruptCharacterEntry",true);
-        ImGui::TextWrapped("Bypass is not a repair. Keep a backup; disabling a separate bypass may also be required.");
-        ImGui::TextWrapped("Current session: %s",Snapshot.value("BypassStatus",std::string("Not reported")).c_str());
-        QuickToggle("Automatic reflection mapping updates","/autoUpdateMappings");
-        QuickToggle("Detailed RuneSchema logging","/advancedLogging");
-        QuickToggle("Archive RuneSchema logs","/archiveLogs");
-        ImGui::TextDisabled("These switches save settings for the next launch, not live changes.");
-        if(!Patch().empty())ImGui::TextWrapped("An unsaved Settings draft is open. Save or discard it there before using quick switches.");
+    {
+        static json quick=json::object();static char character[257]{},world[257]{};static int mode=1;static bool dirty=false,unconfirmed=false;static std::string message;
+        static bool saved=false;static int choicePolls=0;static double nextChoicePoll=0,retryRead=0;
+        const auto load=[&](bool discard){json result;if(!Remote||!Remote({{"Action","QuickLoadRead"}},result)||!result.is_object()||!result.value("Ok",false)){message=result.is_object()?result.value("Status",std::string("Quick Launch service unavailable; use a matching core build.")):"Quick Launch service unavailable; use a matching core build.";return;}
+            const auto& selectionDoc=result.at("Document");
+            if(!selectionDoc.value("Mode",json{}).is_string()||(selectionDoc["Mode"]!="vanilla"&&selectionDoc["Mode"]!="lessRestrictive"&&selectionDoc["Mode"]!="quickLaunch")){message="Loading modes require a matching RuneSchema core build.";unconfirmed=true;return;}
+            if(!discard&&!quick.empty()){
+                if(quick.at("ExpectedContents")!=result.at("ExpectedContents")){
+                    if(quick.at("Document")!=result.at("Document")){message="Launch options changed on disk. Reload launch options before saving.";unconfirmed=true;return;}
+                    quick["ExpectedContents"]=result.at("ExpectedContents"); // Only unrelated settings changed; retain this launch draft.
+                }
+                quick["Characters"]=result.value("Characters",json::array());quick["Worlds"]=result.value("Worlds",json::array());message=result.value("Status",std::string{});return;
+            }
+            quick=result;const auto& doc=result.at("Document");const auto selection=doc.at("Mode").get<std::string>();mode=selection=="quickLaunch"?2:selection=="lessRestrictive"?1:0;std::snprintf(character,sizeof(character),"%s",doc.value("CharacterName",std::string{}).c_str());std::snprintf(world,sizeof(world),"%s",doc.value("WorldName",std::string{}).c_str());dirty=false;unconfirmed=false;message=result.value("Status",std::string{});};
+        if(quick.empty()&&ImGui::GetTime()>=retryRead){load(true);retryRead=ImGui::GetTime()+1;choicePolls=3;nextChoicePoll=ImGui::GetTime()+.5;}
+        if(!quick.empty()&&choicePolls&&ImGui::GetTime()>=nextChoicePoll){load(false);--choicePolls;nextChoicePoll=ImGui::GetTime()+.5;}
+        ImGui::BeginDisabled(quick.empty()||quick.value("DedicatedServer",false));
+        if(!quick.value("DedicatedServer",false)){
+        ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(250));
+        if(ImGui::BeginCombo("Launch mode",mode==2?"Quick Launch":mode==0?"Vanilla Load (advanced)":"Normal (Less Restrictive)")){
+            if(ImGui::Selectable("Normal (Less Restrictive)",mode==1)){mode=1;dirty=true;saved=false;}
+            if(ImGui::Selectable("Quick Launch",mode==2)){mode=2;dirty=true;saved=false;}ImGui::EndCombo();
+        }
+        hint("Vanilla Load keeps the game's native strictness. Less Restrictive keeps dom.PersistenceStrictMode=0 across loads for the session. Quick Launch uses Less Restrictive loading and opens the selected character/world with a camera fade. Hold Shift to skip automatic launch; the selected session policy remains. Pruning runs in every mode. Save Bypass is independent. Changes apply next launch; missing content may be lost when the game saves.");
+        const auto choose=[&](const char* label,const char* key,char* text){
+            ImGui::PushID(key);ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(250));
+            if(ImGui::BeginCombo(label,*text?text:"Choose...")){
+                for(const auto& row:quick.value(key,json::array())){const auto name=row.value("Name",std::string{});
+                    if(ImGui::Selectable(name.c_str(),name==text)){std::snprintf(text,257,"%s",name.c_str());dirty=true;saved=false;}}
+                if(quick.value(key,json::array()).empty())ImGui::TextDisabled("No choices cached. Refresh in the main menu.");ImGui::EndCombo();
+            }
+            hint("Saved for future launches. You can change this while playing without leaving the current world. Native choices refresh in the main menu; refresh and manual entry are under Advanced.");ImGui::PopID();
+        };
+        if(mode==2){choose("Character","Characters",character);choose("World","Worlds",world);}
+        ImGui::BeginDisabled(!dirty||quick.empty()||unconfirmed||!Patch().empty());
+        if(HelpyImGuiTheme::SoftButton("Save launch options",{ImGui::GetContentRegionAvail().x,HelpyImGuiTheme::Current.Y(28)})){
+            json result;if(Remote&&Remote({{"Action","QuickLoadSave"},{"ExpectedContents",quick.at("ExpectedContents")},{"Document",{{"Mode",mode==2?"quickLaunch":mode==1?"lessRestrictive":"vanilla"},{"CharacterName",character},{"WorldName",world}}}},result)&&result.is_object()&&result.value("Ok",false)){quick=result;dirty=false;saved=true;Load();}else unconfirmed=true;
+            message=result.is_object()?result.value("Status",std::string("Quick Launch save unconfirmed; reload before retrying.")):"Quick Launch save unconfirmed; reload before retrying.";
+        }ImGui::EndDisabled();
+        hint("Saves only launch options in RuneSchema/settings/settings.ini, with a backup. Applies on the next game launch; Save Bypass is unchanged. Finish any open Settings draft first.");
+        }
+        ImGui::EndDisabled();
+        if(unconfirmed||quick.empty()){ImGui::TextColored(HelpyImGuiTheme::Current.error,"Launch settings need attention. Hover for details.");hint(message);}
+        else if(saved){ImGui::TextDisabled("Saved for next launch");hint(message);}
+        ImGui::Separator();
+        bool scrap=HelpySettings::ScrapRefunds();if(ImGui::Checkbox("Scrap refunds",&scrap))HelpySettings::SetScrapRefunds(scrap);
+        hint("Enables Scrap in inventory item actions. Scrap uses native deletion and refunds verified crafting components as world drops. Ordinary X/Delete is unchanged. Scrapped items are not recoverable from Helpy Storage. Applies immediately.\n"+HelpySettings::Message());
+        if(Loaded){QuickToggle("Save Bypass","/persistence/allowCorruptCharacterEntry",true);
+            hint("On clients: available with all three modes, without changing their strictness. On dedicated servers: the only loading toggle, also requesting session-long tolerant loading; native server world startup stays unchanged. Does not repair unreadable data. Back up saves and disable any standalone bypass first. Next launch only.\n\nCurrent session: "+Snapshot.value("BypassStatus",std::string("Not reported")));}
+        if(QuickToggleError||!Loaded){ImGui::TextColored(HelpyImGuiTheme::Current.error,"RuneSchema settings need attention. Hover for details.");hint(Status);}
+        if(ImGui::TreeNode("Advanced")){
+            ImGui::BeginDisabled(quick.empty()||quick.value("DedicatedServer",false));
+            if(!quick.value("DedicatedServer",false)){
+            bool vanilla=mode==0;if(ImGui::Checkbox("Vanilla Load",&vanilla)){mode=vanilla?0:1;dirty=true;saved=false;}
+            hint("Advanced: use native strictness instead of the default Less Restrictive policy. Orphan pruning remains active. Save launch options to apply next launch; Save Bypass stays independent.");
+            const auto choices=[&](const char* label,const char* key,char* text){ImGui::PushID(key);ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(250));dirty|=ImGui::InputText(label,text,257);ImGui::PopID();};
+            choices("Character name","Characters",character);hint("Manual native character display name. Ambiguous names are refused at launch.");
+            choices("World slot name","Worlds",world);hint("Manual native world slot name, not a save-file path.");
+            if(HelpyImGuiTheme::SoftButton("Refresh choices")){load(false);choicePolls=3;nextChoicePoll=ImGui::GetTime()+.5;}hint("Refresh native character/world choices in the main menu without discarding your selection.");ImGui::SameLine();
+            if(HelpyImGuiTheme::SoftButton("Reload launch options"))load(true);hint("Discard this launch draft and reread settings.ini. Required after an unconfirmed save.");
+            }
+            ImGui::EndDisabled();
+            bool autoOpen=HelpySettings::OpenOnGameStart();
+            if(ImGui::Checkbox("Open Helpy at startup",&autoOpen))HelpySettings::SetOpenOnGameStart(autoOpen);
+            hint("Opens Helpy once per launch. F2 closes/reopens it; this never loads a world.\n"+HelpySettings::Message());
+            if(Loaded){QuickToggle("Automatic reflection mapping updates","/autoUpdateMappings");hint("Refreshes stale .usmap reflection mappings at startup. Does not reset content caches.");
+                QuickToggle("Detailed RuneSchema logging","/advancedLogging");hint("Adds detailed RuneSchema diagnostics on the next launch.");
+                QuickToggle("Archive RuneSchema logs","/archiveLogs");hint("Preserves previous sessions in logs/. Archives are not automatically deleted.");}
+            if(HelpyImGuiTheme::SoftButton("Reload RuneSchema settings")){Load();QuickToggleError=false;}hint(Status);
+            ImGui::TreePop();
+        }
     }
-    if(!Status.empty())ImGui::TextWrapped("%s",Status.c_str());
-    if(HelpyImGuiTheme::SoftButton("Reload quick settings"))Load();
 }
 inline void Field(const std::string& key,json& value,const std::string& path){
     ImGui::PushID(path.c_str());const auto label=Label(key);bool changed=false;
@@ -99,6 +159,7 @@ inline void Field(const std::string& key,json& value,const std::string& path){
     if(changed)Dirty=true;
     if(path=="/persistence/allowCorruptCharacterEntry"){
         ImGui::TextWrapped("Runs native character validation and player-state loading, then accepts rejected return results at both verified native return gates. Restart required. Disable the standalone bypass first.");
+        ImGui::TextWrapped("On clients, independent of Vanilla Load, Less Restrictive and Quick Launch. On dedicated servers, this is the only loading toggle and also requests session-long tolerant loading; the server starts its world normally.");
         ImGui::TextWrapped("This does not repair unreadable data. Back up the character; later game saves can persist incomplete progress.");
         ImGui::TextWrapped("Current session: %s",Snapshot.value("BypassStatus",std::string("Not reported")).c_str());
     }
@@ -132,6 +193,7 @@ inline void Render(){
     const auto render=[&](auto&& self,json& object,const std::string& prefix)->void{
         for(auto& [key,value]:object.items()){
             const auto path=prefix+"/"+key;
+            if(HelpyEnvironment::Server()&&path=="/quickLaunch")continue;
             if(value.is_object()){
                 bool has=false;for(const auto& [field,type]:editable.items())if(field.starts_with(path+"/")&&matches(field)){has=true;break;}
                 if(has&&ImGui::CollapsingHeader(Label(key).c_str(),filter.empty()?0:ImGuiTreeNodeFlags_DefaultOpen))self(self,value,path);

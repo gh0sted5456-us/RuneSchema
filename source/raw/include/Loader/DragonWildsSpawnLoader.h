@@ -25,6 +25,7 @@
 #include "Core/GroundingRetry.h"
 #include "Core/GroundSurface.h"
 #include "Core/NearbyPlacement.h"
+namespace PS {class NativeDeleteObserver;}
 
 namespace RC::Unreal {
     class AActor;
@@ -117,6 +118,7 @@ namespace DragonWilds {
         std::function<void(RC::Unreal::AActor*,const std::string&)> PublishEventIdentity;
         std::function<void(RC::Unreal::AActor*,const std::string&)> PresentEventState;
         std::function<bool(const std::string&,const std::string&)> ForwardHelpyAuthority;
+        std::function<nlohmann::json(const nlohmann::json&)> PlanBuildingImport;
         std::function<bool(RC::Unreal::UWorld*,const std::string&)> IsQuestCompleted;
         std::function<bool(RC::Unreal::UWorld*,const std::string&)> IsQuestActive;
         std::function<bool(RC::Unreal::UWorld*,const std::string&)> IsEventActive;
@@ -383,6 +385,7 @@ namespace DragonWilds {
         std::vector<OwnedJsonDocument> m_nameplateDocuments;
         std::unordered_map<std::string,nlohmann::json> m_nameplateDefinitions;
         RC::Unreal::UWorld* m_readyWorld = nullptr;
+        std::unique_ptr<PS::NativeDeleteObserver> m_deleteObserver;
         PS::WeakObjectHandle m_validatedWorld;
         std::string m_activeItemIcon;
         RC::Unreal::UWorld* m_pendingWorld = nullptr;

@@ -32,7 +32,7 @@ inline void Render(State& state,HelpyTaskbar::Window task){
         if(maximize){draw->AddRect({pos.x+inset,pos.y+inset},{pos.x+side-inset,pos.y+side-inset},color,0,0,1);
             if(state.Maximized)draw->AddLine({pos.x+inset*1.5f,pos.y+inset*.5f},{pos.x+side-inset*.5f,pos.y+inset*.5f},color);}
         else draw->AddLine({pos.x+inset,pos.y+side*.65f},{pos.x+side-inset,pos.y+side*.65f},color,1.5f);
-        if(hover)ImGui::SetTooltip("%s",label);
+        if(hover)PS::HelpyImGuiTheme::Tooltip("%s",label);
 #if defined(HELPY_PREVIEW)
         const auto bounds=ImVec4(rect.Min.x,rect.Min.y,rect.Max.x,rect.Max.y);
         HelpyPreviewHooks::WindowControls[std::string(window->Name)+(maximize?"/maximize":"/minimize")]=bounds;

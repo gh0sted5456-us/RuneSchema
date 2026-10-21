@@ -168,7 +168,7 @@ namespace {
             || !fields.contains("InternalName") || !fields["InternalName"].is_string())
             throw std::runtime_error("Clone draft requires an output path, $Clone, PersistenceID and InternalName");
         const auto id=fields["PersistenceID"].get<std::string>();
-        if(id.size()!=22 || std::string("AQgw").find(id.back())==std::string::npos)throw std::runtime_error("Clone PersistenceID is invalid");
+        if(!DragonWilds::IsCanonicalPersistenceId(id))throw std::runtime_error("Clone PersistenceID is invalid");
         const auto directory=PS::HostServices::ExportsDirectory()/"assets";std::filesystem::create_directories(directory);
         const auto stamp=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         const auto file=directory/("clone_"+std::to_string(stamp)+".json");
@@ -250,7 +250,9 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
             if(!target||ambiguous||target->GetWorld()!=player->GetWorld())continue;
             roster.push_back({{"Name",connected.Name},{"Guid",connected.Guid},
                 {"PlayerId",PS::PlayerStatusRuntime::PlayerId(ActorHelper::GetObjectRef(target,TEXT("PlayerState")))},
+                {"Platform",PS::PlayerStatusRuntime::ControllerPlatform(target)},
                 {"RoleStatus",PS::PlayerStatusRuntime::Read(target)}});
+            PS::PlayerStatusRuntime::Color(ActorHelper::GetObjectRef(target,TEXT("PlayerState")),roster.back());
         }
         for(auto& row:roster){bool ambiguous=false;auto* target=FindPlayerControllerByGuid(row.at("Guid").get<std::string>(),ambiguous);
             if(target&&!ambiguous)if(auto* pawn=ActorHelper::GetObjectRef(target,TEXT("Pawn")))row["StatWire"]=PS::PartyStatWire::Encode(PS::PlayerVitals::Details(pawn,true),PS::PlayerVitals::Now());}
@@ -319,6 +321,8 @@ std::pair<bool,std::string> DragonWildsSpawnLoader::VerifyToolBuildingInstance(A
         return {false,"BuildableActor is not a concrete actor class"};
     if(actor->GetWorld()!=world)return {false,"Building actor belongs to another world"};
     if(actor->GetClassPrivate()!=actorClass)return {false,"Building actor class does not exactly match BuildableActor"};
+    auto* scene=ActorHelper::ResolveClass(TEXT("/Script/Engine.SceneComponent"));auto* root=ActorHelper::GetObjectRef(actor,TEXT("RootComponent"));
+    if(!scene||!root||!root->IsA(scene))return {false,"Constructed building has no native scene root"};
     if(actor->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed)))
         return {false,"Building actor is a default/archetype/destroying object"};
     if(requireTransient && !actor->HasAnyFlags(RF_Transient))
@@ -373,7 +377,19 @@ std::pair<bool,std::string> DragonWildsSpawnLoader::VerifyToolBuildingCandidate(
         return {false,"BuildableActor defaults are not initialized"};
     auto* root=ActorHelper::GetObjectRef(defaults,TEXT("RootComponent"));
     auto* scene=ActorHelper::ResolveClass(TEXT("/Script/Engine.SceneComponent"));
-    if(!root||!scene||!root->IsA(scene))return {false,"BuildableActor has no native scene root"};
+    bool hasRoot=root&&scene&&root->IsA(scene);
+    // Blueprint construction can create the root after deferred spawning; the CDO need not own it.
+    size_t rootClasses=0;for(auto* type=actorClass;!hasRoot&&scene&&type&&rootClasses++<64;type=static_cast<UClass*>(type->GetSuperStruct())){
+        auto* scriptField=CastField<FObjectProperty>(PropertyHelper::GetPropertyByName(type->GetClassPrivate(),TEXT("SimpleConstructionScript")));if(!scriptField)continue;
+        auto* script=scriptField->GetObjectPropertyValue(scriptField->ContainerPtrToValuePtr<void>(type));if(!script)continue;
+        auto* nodes=CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(script->GetClassPrivate(),TEXT("RootNodes")));auto* nodeType=nodes?CastField<FObjectProperty>(nodes->GetInner()):nullptr;if(!nodeType)continue;
+        FScriptArrayHelper values(nodes,nodes->ContainerPtrToValuePtr<void>(script));if(values.Num()<0||values.Num()>64)return {false,"Building Blueprint root-node limit exceeded"};
+        for(int index=0;index<values.Num();++index)if(auto* node=nodeType->GetObjectPropertyValue(values.GetRawPtr(index))){
+            auto* componentField=CastField<FObjectProperty>(PropertyHelper::GetPropertyByName(node->GetClassPrivate(),TEXT("ComponentTemplate")));if(!componentField)continue;
+            auto* component=componentField->GetObjectPropertyValue(componentField->ContainerPtrToValuePtr<void>(node));if(component&&component->IsA(scene)){hasRoot=true;break;}
+        }
+    }
+    if(!hasRoot)return {false,"BuildableActor has no native or Blueprint scene root"};
     if(spawn.BuildingDataPath!=RC::to_string(building->GetPathName()))return {false,"Selected building differs from the validated data-binding source"};
     // RegisterBuildingProp preflights the exact writable reference/index types.
     // Bind them on the deferred instance before construction, not on shared
@@ -396,7 +412,9 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
                 if(!controller||ambiguous||controller->GetWorld()!=m_readyWorld)continue;
                 rows.push_back({{"Name",connected.Name},{"Path",RC::to_string(controller->GetPathName())},{"Guid",connected.Guid},
                     {"PlayerId",PS::PlayerStatusRuntime::PlayerId(ActorHelper::GetObjectRef(controller,TEXT("PlayerState")))},
+                    {"Platform",PS::PlayerStatusRuntime::ControllerPlatform(controller)},
                     {"RoleStatus",PS::PlayerStatusRuntime::Read(controller)}});
+                PS::PlayerStatusRuntime::Color(ActorHelper::GetObjectRef(controller,TEXT("PlayerState")),rows.back());
             }
             for(auto& row:rows){bool ambiguous=false;auto* target=FindPlayerControllerByGuid(row.at("Guid").get<std::string>(),ambiguous);
                 if(target&&!ambiguous)if(auto* pawn=ActorHelper::GetObjectRef(target,TEXT("Pawn"))){row["Stats"]=PS::PlayerVitals::Details(pawn,true);row["Health"]=row["Stats"]["Health"];row["Equipment"]=PS::PlayerLoadoutPresentation::Cached(target,row.value("Guid",std::string{}),PS::SpawnToolRequests::CurrentGeneration());}}
@@ -702,14 +720,18 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
                 if(chars.Num()>1 && chars.Num()<256 && chars.GetData() && chars.GetData()[chars.Num()-1]==0)name=RC::to_string(RC::StringType(chars.GetData(),chars.Num()-1));
             }
             const auto path=RC::to_string(controller->GetPathName());
+            bool isLocal=false;
+            try{ActorHelper::FunctionCall local(controller,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();isLocal=local.Result<bool>();}catch(...){}
             auto playerRow=nlohmann::json{{"Name",name},{"Path",path},{"Guid",GetPlayerCharacterGuid(controller)},
+                {"IsLocal",isLocal},
                 {"PlayerId",PS::PlayerStatusRuntime::PlayerId(ActorHelper::GetObjectRef(controller,TEXT("PlayerState")))},
+                {"Platform",PS::PlayerStatusRuntime::Platform(ActorHelper::GetObjectRef(controller,TEXT("PlayerState")),isLocal)},
                 {"RoleStatus",action=="QuickPlayers"?PS::PlayerStatusRuntime::Read(controller):nlohmann::json::object()}};
+            PS::PlayerStatusRuntime::Color(ActorHelper::GetObjectRef(controller,TEXT("PlayerState")),playerRow);
             try{if(auto* playerPawn=static_cast<AActor*>(ActorHelper::GetObjectRef(controller,TEXT("Pawn")))){
                 const auto position=ActorHelper::GetActorLocation(playerPawn);playerRow["Location"]={position.X(),position.Y(),position.Z()};
                 if(action=="MapSnapshot"||action=="QuickPlayers"){playerRow["Stats"]=PS::PlayerVitals::Details(playerPawn,true);playerRow["Health"]=playerRow["Stats"]["Health"];playerRow["Equipment"]=PS::PlayerLoadoutPresentation::Cached(controller,playerRow.value("Guid",std::string{}),PS::SpawnToolRequests::CurrentGeneration());}
             }}catch(...){}
-            if(action=="MapSnapshot")try{ActorHelper::FunctionCall local(controller,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();playerRow["IsLocal"]=local.Result<bool>();}catch(...){playerRow["IsLocal"]=false;}
             players.push_back(std::move(playerRow));
             if(path==request->value("Player",std::string{})){if(selected)throw std::runtime_error("Player selection is ambiguous; refresh");selected=controller;}
         }
@@ -896,7 +918,9 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
                         {"Location",nlohmann::json::array({0,0,0})},{"Rotation",{{"Pitch",0},{"Yaw",0},{"Roll",0}}}};
                     SpawnInfo prototype;prototype.ModName=TEXT("__RuneSchemaTools");prototype.EntryId=TEXT("catalog-preflight");
                     RegisterBuildingProp(prototype,authored);
-                    const auto [safe,reason]=VerifyToolBuildingCandidate(object,prototype,catalogWorld);
+                    const auto [safe,reason]=VerifyToolBuildingCandidate(object,prototype,catalogWorld,false);
+                    const auto [temporarySafe,temporaryReason]=VerifyToolBuildingCandidate(object,prototype,catalogWorld,true);
+                    row["TemporarySafe"]=temporarySafe;row["TemporarySafetyReason"]=temporaryReason;
                     row["Safe"]=safe;row["SafetyReason"]=reason;row["ActorClass"]=RC::to_string(prototype.ClassPath);
                     if(safe)++safeBuildingCount;
                 } catch(const std::exception& error) {
@@ -936,11 +960,26 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
         if(!selected)throw std::runtime_error("Selected authoritative player is unavailable; refresh");
         auto* world=selected->GetWorld();
         if(!world||!GetGameMode(world))throw std::runtime_error("Only the authoritative server may run spawn tools");
+        if(action=="RestorePlayerGear"||action=="ChangePlayerGear"){
+            if(world!=m_readyWorld||request->value("Generation",uint64_t{})!=PS::SpawnToolRequests::CurrentGeneration()||request->value("PlayerGuid",std::string{}).empty()||request->value("PlayerGuid",std::string{})!=GetPlayerCharacterGuid(selected))throw std::runtime_error("Gear target/world changed; refresh the party member");
+            const auto outcome=action=="RestorePlayerGear"?PS::PlayerGearActions::Restore(selected,*request):PS::PlayerGearActions::Change(selected,*request);
+            PS::SpawnToolRequests::Publish({{"EquipmentAction",outcome},{"Status",outcome.at("Status")}});return;
+        }
         if(action=="InspectPlayerInventory"){
             if(world!=m_readyWorld)throw std::runtime_error("Inventory target is not in the current ready world");
             if(request->value("Generation",uint64_t{})!=PS::SpawnToolRequests::CurrentGeneration()||request->value("PlayerGuid",std::string{}).empty()||request->value("PlayerGuid",std::string{})!=GetPlayerCharacterGuid(selected))throw std::runtime_error("Inventory target/world changed; refresh the party member");
             auto snapshot=PS::PlayerInventoryPresentation::Read(selected,*request);snapshot["Player"]=request->at("Player");snapshot["PlayerGuid"]=request->at("PlayerGuid");snapshot["Generation"]=PS::SpawnToolRequests::CurrentGeneration();
             PS::SpawnToolRequests::Publish({{"InventorySnapshot",snapshot},{"Status","Read native player inventory; no items or save files changed."}});return;
+        }
+        if(action=="InspectScrapItem"||action=="ScrapInventoryItem"){
+            if(world!=m_readyWorld||request->value("Generation",uint64_t{})!=PS::SpawnToolRequests::CurrentGeneration()
+                ||request->value("PlayerGuid",std::string{}).empty()||request->value("PlayerGuid",std::string{})!=GetPlayerCharacterGuid(selected))
+                throw std::runtime_error("Scrap target/world changed; refresh the item");
+            const auto outcome=action=="InspectScrapItem"?PS::PlayerInventoryScrap::Preview(selected,*request):PS::PlayerInventoryScrap::Commit(selected,*request,[&]{
+                return world==m_readyWorld&&request->value("Generation",uint64_t{})==PS::SpawnToolRequests::CurrentGeneration()
+                    &&request->value("PlayerGuid",std::string{})==GetPlayerCharacterGuid(selected);
+            });
+            PS::SpawnToolRequests::Publish({{"InventoryAction",outcome},{"Status",outcome.at("Status")}});return;
         }
         if(action=="MapTeleport"){
             auto* pawn=static_cast<AActor*>(ActorHelper::GetObjectRef(selected,TEXT("Pawn")));if(!pawn)throw std::runtime_error("Selected player has no active character");
@@ -1043,6 +1082,44 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
             GiveToolItem(selected,request->at("Item").get<std::string>(),request->at("Count").get<int32_t>());
             auto result=PS::SpawnToolRequests::Read();result["Players"]=players;
             result["Status"]=std::format("Granted {} item(s) to the selected authoritative player and confirmed the inventory delta.",request->at("Count").get<int32_t>());
+            PS::SpawnToolRequests::Publish(std::move(result));return;
+        }
+        if(action=="ImportBuildings") {
+            if(world!=m_readyWorld||request->value("Generation",uint64_t{})!=PS::SpawnToolRequests::CurrentGeneration())throw std::runtime_error("World changed; select the prefab position again");
+            if(!PlanBuildingImport)throw std::runtime_error("RSDW Builder importer is unavailable");
+            auto document=request->at("Document");if(document.dump().size()>1024*1024)throw std::runtime_error("Prefab export exceeds 1 MiB");
+            auto* pawn=static_cast<AActor*>(ActorHelper::GetObjectRef(selected,TEXT("Pawn")));const auto ground=ToolMapGround(world,*request,pawn);
+            const double yaw=request->value("Yaw",0.0);if(!std::isfinite(yaw))throw std::runtime_error("Prefab rotation must be finite");
+            document["RuneSchemaPlacement"]={{"Location",{{"X",ground.X()},{"Y",ground.Y()},{"Z",ground.Z()}}},{"Rotation",{{"Yaw",yaw}}},{"OriginMode","BoundsCenter"},{"ImportMode","NativeBuildingPieces"},{"AllowDeconstruction",true},{"IncludeGhosted",false}};
+            auto plan=PlanBuildingImport(document);const auto stem=PS::Authoring::NewName();
+            double lowest=std::numeric_limits<double>::max();for(const auto& piece:plan)lowest=std::min(lowest,piece.at("Location").at("Z").get<double>());
+            if(!std::isfinite(lowest))throw std::runtime_error("Prefab height is invalid");
+            const auto checkpoint=m_spawns.size(),reportedCheckpoint=m_reportedNewSpawns;if(checkpoint+plan.size()>65536)throw std::runtime_error("Spawn definition limit reached");
+            const auto projection=PS::HelpyMapRuntime::Projection(world);std::unique_ptr<PS::Authoring::StagedFile> file;
+            try{
+                for(auto& piece:plan){
+                    piece["Id"]=stem+"-"+piece.at("Id").get<std::string>();
+                    // Center in XY, but put the lowest piece on ground rather than burying half the build.
+                    piece["Location"]["Z"]=piece.at("Location").at("Z").get<double>()+ground.Z()-lowest;const auto& position=piece.at("Location");
+                    if(!projection.Contains({position.at("X").get<double>(),position.at("Y").get<double>()})||!position.at("Z").is_number()||!std::isfinite(position.at("Z").get<double>())||position.at("Z").get<double>()<projection.MinZ||position.at("Z").get<double>()>projection.MaxZ)throw std::runtime_error("Prefab extends outside the native world bounds; nothing saved");
+                    RegisterSpawn(piece,TEXT("runeschema"));const auto& spawn=m_spawns.back();auto* building=ActorHelper::ResolveObject(RC::to_generic_string(spawn.BuildingDataPath));
+                    const auto [safe,reason]=VerifyToolBuildingCandidate(building,spawn,world,false);if(!safe)throw std::runtime_error("Prefab piece "+spawn.BuildingDataPath+": "+reason);
+                }
+                file=std::make_unique<PS::Authoring::StagedFile>("spawns",stem,plan);{std::scoped_lock lock{m_toolSpawnFileMutex};m_toolSpawnFiles.insert(file->Path().lexically_normal());}file->Commit();
+            }catch(...){if(file){std::scoped_lock lock{m_toolSpawnFileMutex};m_toolSpawnFiles.erase(file->Path().lexically_normal());}m_spawns.resize(checkpoint);m_reportedNewSpawns=reportedCheckpoint;throw;}
+            size_t active=0;std::string activationError;
+            for(size_t index=checkpoint;index<m_spawns.size();++index)try{
+                auto& spawn=m_spawns[index];ProcessActorEntry(world,spawn);auto* live=spawn.LiveActor.Get();auto* building=ActorHelper::ResolveObject(RC::to_generic_string(spawn.BuildingDataPath));
+                if(spawn.bExistsInWorld&&live&&live->IsA<AActor>()){
+                    const auto [safe,reason]=VerifyToolBuildingInstance(static_cast<AActor*>(live),building,spawn,world,false);
+                    if(safe)++active;else if(activationError.empty())activationError=reason;
+                }
+            }catch(const std::exception& error){if(activationError.empty())activationError=error.what();}
+            auto result=PS::SpawnToolRequests::Read();const bool complete=active==plan.size();
+            result["Status"]=std::format("Prefab saved: {} of {} pieces active. {}",active,plan.size(),complete?"Placement confirmed.":"Some pieces are pending or failed; do not place a duplicate.");
+            result["SpawnResult"]={{"Permanent",true},{"File",file->Path().string()},{"Active",complete},{"Created",active},{"Requested",plan.size()},{"State",complete?"Completed":"SavedActivationIncomplete"},{"Location",{ground.X(),ground.Y(),ground.Z()}}};
+            if(!activationError.empty())result["SpawnResult"]["Error"]=activationError;
+            PS::Log<LogLevel::Normal>(STR("[HELPY][BUILDING][IMPORT] request={} active={} requested={} file={}\n"),requestId,active,plan.size(),file->Path().wstring());
             PS::SpawnToolRequests::Publish(std::move(result));return;
         }
         if(action=="SpawnBuilding") {
@@ -1393,7 +1470,7 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
         PS::SpawnToolRequests::Publish(std::move(result));
     }catch(const std::exception& e){
         auto result=PS::SpawnToolRequests::Read();result["Status"]=e.what();
-        if(request->value("Action",std::string{})=="SpawnBuilding"){
+        if(request->value("Action",std::string{})=="SpawnBuilding"||request->value("Action",std::string{})=="ImportBuildings"){
             result["SpawnResult"]={{"State","Stopped"},{"Active",false},{"Error",e.what()}};
             PS::Log<LogLevel::Warning>(STR("[HELPY][BUILDING][FAILED] request={} reason={}\n"),requestId,RC::to_generic_string(e.what()));
         }
@@ -1406,7 +1483,7 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
         PS::SpawnToolRequests::Publish(std::move(result));
     }catch(...){
         auto result=PS::SpawnToolRequests::Read();result["Status"]="The runtime action stopped after an unknown error; inspect the world or inventory before retrying.";
-        if(request->value("Action",std::string{})=="SpawnBuilding")result["SpawnResult"]={{"State","Stopped"},{"Active",false},{"Error",result["Status"]}};
+        if(request->value("Action",std::string{})=="SpawnBuilding"||request->value("Action",std::string{})=="ImportBuildings")result["SpawnResult"]={{"State","Stopped"},{"Active",false},{"Error",result["Status"]}};
         if(request->value("Action",std::string{})=="CreateClone")result["CloneResult"]={{"State","Stopped"}};
         if(f2Spawn){result["SpawnResult"]={{"State","Stopped"},{"Stage",spawnStage}};PS::Log<LogLevel::Warning>(STR("RuneSchema Helpy spawn #{} stopped [{}]: unknown error.\n"),requestId,RC::to_generic_string(spawnStage));}
         PS::SpawnToolRequests::Publish(std::move(result));

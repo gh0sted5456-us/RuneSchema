@@ -257,13 +257,15 @@ void DragonWildsRegistryLoader::LoadDocument(const json& input,const std::string
         PS::Log<RC::LogLevel::Verbose>(STR("[NATIVE-REGISTRY][DECLARED] owner='{}' asset_paths={} loader_definitions={} melee_classes={} ranged_classes={} fingerprint={:016x} source='{}'.\n"),
             PS::ToWideSafe(owner.c_str()),assetCount,definitionCount,nativeManifest.MeleeAttackClasses.size(),nativeManifest.RangedAttackClasses.size(),nativeManifest.Fingerprint,PS::ToWideSafe(source.c_str()));
     }
+    std::string rejection;
     std::size_t ordinal=0;for(const auto& entry:document["Entries"]) {++ordinal;
         const auto id=entry.is_object()?entry.value("Id",std::string("<missing Id>")):std::string("<non-object>");
         try {auto normalized=NormalizeEntry(entry,owner);
             m_audit.push_back({{"Key",normalized["key"]},{"Owner",owner},{"Source",source},{"Status","Accepted"},{"PresentationCount",normalized["presentation"].size()}});
             m_modEntries.push_back(std::move(normalized));
-        }catch(const std::exception& error){m_audit.push_back({{"Key",owner+":"+id},{"Owner",owner},{"Source",source},{"Status","Rejected"},{"Reason",error.what()}});PS::Log<RC::LogLevel::Error>(STR("Registry '{}:{}' in '{}' (entry #{}) rejected: {}.\n"),PS::ToWideSafe(owner.c_str()),PS::ToWideSafe(id.c_str()),PS::ToWideSafe(source.c_str()),ordinal,PS::ToWideSafe(error.what()));}
+        }catch(const std::exception& error){rejection=error.what();m_audit.push_back({{"Key",owner+":"+id},{"Owner",owner},{"Source",source},{"Status","Rejected"},{"Reason",error.what()}});PS::Log<RC::LogLevel::Error>(STR("Registry '{}:{}' in '{}' (entry #{}) rejected: {}.\n"),PS::ToWideSafe(owner.c_str()),PS::ToWideSafe(id.c_str()),PS::ToWideSafe(source.c_str()),ordinal,PS::ToWideSafe(error.what()));}
     }
+    PS::RegistryEnrollment::RecordDeclaration(owner,source,rejection);
 }
 
 void DragonWildsRegistryLoader::OnLoad(const std::filesystem::path& path,const RC::StringType& mod,
@@ -277,6 +279,7 @@ void DragonWildsRegistryLoader::OnLoad(const std::filesystem::path& path,const R
             const auto source=relative.generic_string();
             try {LoadDocument(document,owner,source);}
             catch(const std::exception& error) {
+                PS::RegistryEnrollment::RecordDeclaration(owner,source,error.what());
                 if(document.is_object()&&(document.contains("NativeRegistries")||document.contains("LoaderDefinitions")))
                     PS::RegistryEnrollment::Reject(owner+":"+source,error.what());
                 m_audit.push_back({{"Owner",owner},{"Source",source},{"Status","Rejected"},{"Reason",error.what()}});
@@ -323,7 +326,8 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
         if(!expectedOwner.empty()&&owner!=expectedOwner)throw std::runtime_error("conventional cooked registry owner does not match its enabled mod folder");
         return {owner,PS::CookedRegistryShards::ParseJson(document),document.size()};
     };
-    const auto reject=[&](const std::string& path,const std::exception& error) {
+    const auto reject=[&](const std::string& path,const std::exception& error,const std::string& owner) {
+        PS::RegistryEnrollment::RecordDeclaration(owner,"pak:"+path,error.what());
         PS::RegistryEnrollment::Reject("pak:"+path,error.what());
         m_audit.push_back({{"Owner","<cooked>"},{"Source","pak:"+path},{"Status","Rejected"},{"Reason",error.what()}});
         PS::Log<RC::LogLevel::Error>(STR("Cooked registry asset '{}' rejected: {}.\n"),PS::ToWideSafe(path.c_str()),PS::ToWideSafe(error.what()));
@@ -353,6 +357,7 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
                 m_modEntries.swap(nextEntries);m_audit.swap(nextAudit);
             }catch(...){m_keys.swap(previousKeys);throw;}
             for(const auto& manifest:group.Manifests)PS::HelpyCacheSources::DeclareManifest(manifest);
+            PS::RegistryEnrollment::RecordDeclaration(group.Owner,"pak:"+path);
             for(const auto& member:group.Paths)handled.insert(PS::CookedRegistryShards::Fold(member));
             PS::Log<RC::LogLevel::Normal>(STR("[PAK-REGISTRY][SHARDS][READY] owner='{}' documents={} references={} bytes={} root='{}'.\n"),
                 PS::ToWideSafe(group.Owner.c_str()),group.Paths.size(),group.References,group.Bytes,PS::ToWideSafe(path.c_str()));
@@ -372,7 +377,7 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
         try {auto* object=ActorHelper::ResolveObject(PS::ToWideSafe(path.c_str()));
             if(!object)continue;
             consume(object,path,owner);++conventional;}
-        catch(const std::exception& error){failedOwners.insert(owner);reject(path,error);}
+        catch(const std::exception& error){failedOwners.insert(owner);reject(path,error,owner);}
     }
     if(metadataReady)for(auto& asset:assets) {
         const auto name=RC::to_string(asset.AssetName().ToString());if(!name.starts_with("DA_RuneSchemaRegistry")&&!name.starts_with("RSREG_"))continue;
@@ -384,11 +389,11 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
             // A child must never partially enroll if its root failed or is
             // missing. Report once per enabled owner, not once per shard.
             if(enabled!=owners.end()&&!failedOwners.contains(*enabled)&&unindexedOwners.insert(*enabled).second)
-                reject(path,std::runtime_error("Unindexed registry shards were not enrolled; a complete conventional root is required"));
+                reject(path,std::runtime_error("Unindexed registry shards were not enrolled; a complete conventional root is required"),*enabled);
             continue;
         }
         try {consume(ActorHelper::ResolveObject(PS::ToWideSafe(path.c_str())),path,{});}
-        catch(const std::exception& error){reject(path,error);}
+        catch(const std::exception& error){const auto begin=std::string("/Game/Mods/").size();const auto end=path.find('/',begin);const auto owner=path.starts_with("/Game/Mods/")&&end!=path.npos?path.substr(begin,end-begin):std::string{};reject(path,error,owner);}
     }
     if(conventional)PS::Log<RC::LogLevel::Normal>(STR("Registry: directly loaded {} conventional cooked declaration{} missing from Asset Registry metadata.\n"),conventional,conventional==1?TEXT(""):TEXT("s"));
 }

@@ -7,6 +7,9 @@
 #include "SDK/Helper/PlayerVitals.h"
 #include "Core/PartyStatWire.h"
 #include "SDK/Helper/EquipmentDelivery.h"
+#include "SDK/Helper/PlayerGearActions.h"
+#include "SDK/Helper/PlayerInventoryScrap.h"
+#include "SDK/Helper/NativeDeleteObserver.h"
 #include "SDK/Helper/PlayerLoadoutPresentation.h"
 #include "SDK/Helper/ResourceObservation.h"
 #include "SDK/Helper/ReflectedContract.h"
@@ -403,6 +406,7 @@ namespace DragonWilds {
 
     DragonWildsSpawnLoader::~DragonWildsSpawnLoader()
     {
+        m_deleteObserver.reset();
         ToolMapTravelReset(false); // no engine calls during DLL shutdown
         g_f2ReferenceJob.Shutdown(); // join copied-string worker before unloading this DLL
         ClearBonusRows();
@@ -655,6 +659,10 @@ namespace DragonWilds {
 
     bool DragonWildsSpawnLoader::OnInitialize()
     {
+        if(!m_deleteObserver){m_deleteObserver=std::make_unique<PS::NativeDeleteObserver>([this](UObject* controller){
+            if(!controller||!controller->GetWorld()||controller->GetWorld()!=m_readyWorld||!GetGameMode(controller->GetWorld()))return std::string{};
+            return GetPlayerCharacterGuid(controller);
+        });m_deleteObserver->Install();}
         SetupAIScaleHook();
         SetupAIBindingHooks();
         SetupPlayerJoinHooks();
@@ -2575,6 +2583,7 @@ namespace DragonWilds {
                 PlayerGhost::ClearWorld();
                 ToolMapTravelReset();
                 m_readyWorld = nullptr;
+                if(m_deleteObserver)m_deleteObserver->Reset();
                 MenuIconWorldCache.Reset();NextMenuIconWorldScan={};
                 m_pendingWorld = nullptr;
                 m_pendingCellBounds.clear();

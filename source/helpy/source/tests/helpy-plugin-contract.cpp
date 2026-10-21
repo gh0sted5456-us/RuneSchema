@@ -54,7 +54,15 @@ int Run(int argc,char** argv){
     Check(initialize(&host,&instance)==RS_PLUGIN_OK&&instance);
     const auto cleanup=[&](void*){shutdown(instance);FreeLibrary(dll);};
     std::unique_ptr<void,decltype(cleanup)> guard(reinterpret_cast<void*>(1),cleanup);
-    Check(Capabilities.size()==6&&Services.size()==2);
+    Check(Capabilities.size()==6&&Services.size()==3&&Services.contains("helpy.inventory"));
+    {const auto inventory=Services.at("helpy.inventory");uint32_t bytes=0;
+        Check(inventory.Call(inventory.Context,R"({"Action":"Capabilities"})",nullptr,0,&bytes)==RS_PLUGIN_BUFFER_TOO_SMALL);
+        std::vector<char> reply(bytes);Check(inventory.Call(inventory.Context,R"({"Action":"Capabilities"})",reply.data(),bytes,&bytes)==RS_PLUGIN_OK);
+        const auto caps=nlohmann::json::parse(reply.data());Check(caps.at("ScrapPlanner")==true&&caps.at("NativeRestore")==false);
+        Check(inventory.Call(inventory.Context,R"({"Action":"PrepareDelete"})",nullptr,0,&bytes)==RS_PLUGIN_BUFFER_TOO_SMALL&&bytes==4096);
+        reply.resize(bytes-1);Check(inventory.Call(inventory.Context,R"({"Action":"PrepareDelete"})",reply.data(),static_cast<uint32_t>(reply.size()),&bytes)==RS_PLUGIN_BUFFER_TOO_SMALL&&bytes==4096);
+    }
+    Check(!Services.contains("helpy.vision.status"));
     // Mirror the real host's post-initialize manifest gate. Loading the DLL
     // alone does not prove the host will keep it or start its F2 window.
     auto manifest=std::filesystem::path(argv[1]).parent_path().parent_path()/"plugin.json";

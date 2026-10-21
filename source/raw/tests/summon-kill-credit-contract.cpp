@@ -25,6 +25,11 @@ int main(int argc,char** argv) {
     require(resolver.find("IsConfused")!=std::string::npos && resolver.find("ShouldFollowConfuser")!=std::string::npos);
     require(quest.find("Summons::CreditedPlayer")!=std::string::npos);
     require(quest.find("Summons::DeadVictim")!=std::string::npos);
+    // Reject non-AI destructibles before reading their nonexistent AI field.
+    const auto aiOnly=quest.find("!Summons::DeadVictim(victim,player))return {};");
+    const auto aiComponent=quest.find("ActorHelper::GetObjectRef(victim,TEXT(\"AiDamageComponent\"))");
+    require(aiOnly!=std::string::npos && aiComponent!=std::string::npos && aiOnly<aiComponent);
+    require(resolver.find("!victim->IsA(ai)")!=std::string::npos);
     require(native.find("ProgressComponent:OnAIKilled")!=std::string::npos);
     require(native.find("source->GetOuterPrivate()!=controller")!=std::string::npos);
     require(native.find("GetObjectRef(controller,TEXT(\"ProgressComponent\"))!=source")!=std::string::npos);

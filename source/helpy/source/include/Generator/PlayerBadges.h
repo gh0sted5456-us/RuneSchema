@@ -43,6 +43,6 @@ inline void Inline(const nlohmann::json& row) {
     const bool fullWidth=b.x>=right-ImGui::GetStyle().ItemSpacing.x;
     const ImVec2 center{fullWidth?std::min(b.x-size*.6f,a.x+ImGui::CalcTextSize(name.c_str()).x+size):std::min(right-size*.6f,b.x+size*.8f),(a.y+b.y)*.5f};
     Draw(ImGui::GetWindowDrawList(),center,size,role);
-    if(ImGui::IsWindowHovered()&&ImGui::IsMouseHoveringRect({center.x-size*.5f,center.y-size*.5f},{center.x+size*.5f,center.y+size*.5f}))ImGui::SetTooltip("%s",Tooltip(*role).c_str());
+    if(ImGui::IsWindowHovered()&&ImGui::IsMouseHoveringRect({center.x-size*.5f,center.y-size*.5f},{center.x+size*.5f,center.y+size*.5f}))PS::HelpyImGuiTheme::Tooltip("%s",Tooltip(*role).c_str());
 }
 }

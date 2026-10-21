@@ -31,6 +31,7 @@ public:
     FProperty* Return(){auto* p=fn->GetReturnProperty();if(!C::Output(p,fn))throw std::runtime_error("Equipment return changed");return p;}
     Call& Object(const TCHAR* name,UObject* value){auto* p=CastField<FObjectProperty>(Field(name));if(!p||!C::Input(p,fn)||p->GetSize()!=sizeof(UObject*)||!p->GetPropertyClass()||(value&&!value->IsA(p->GetPropertyClass().Get())))throw std::runtime_error("Equipment object input changed");std::memcpy(p->ContainerPtrToValuePtr<void>(bytes.data()),&value,sizeof(value));return *this;}
     Call& Integer(const TCHAR* name,int value){auto* p=CastField<FIntProperty>(Field(name));if(!p||!C::Input(p,fn))throw std::runtime_error("Equipment integer input changed");*p->ContainerPtrToValuePtr<int32_t>(bytes.data())=value;return *this;}
+    Call& Struct(const TCHAR* name,const TCHAR* path,const nlohmann::json& value){auto* p=CastField<FStructProperty>(Field(name));if(!p||!C::Input(p,fn)||!p->GetStruct()||p->GetStruct()->GetPathName()!=path)throw std::runtime_error("Native struct parameter changed");DragonWilds::PropertyHelper::CopyJsonValueToContainer(bytes.data(),p,value);return *this;}
     void Invoke(){self->ProcessEvent(fn,bytes.data());}
     bool Bool(){auto* p=CastField<FBoolProperty>(Return());if(!p)throw std::runtime_error("Equipment bool return changed");return p->GetPropertyValueInContainer(bytes.data());}
     int Integer(){auto* p=CastField<FIntProperty>(Return());if(!p)throw std::runtime_error("Equipment integer result changed");return *p->ContainerPtrToValuePtr<int32_t>(bytes.data());}

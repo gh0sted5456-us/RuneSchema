@@ -1,5 +1,6 @@
 #include "Loader/HelpyDependencyOrder.h"
 #include "Core/RecipeWorkspace.h"
+#include "Core/SaveRegistrySnapshot.h"
 #include "Core/NetworkIdentityState.h"
 #include "Generator/AssetSearch.h"
 #include "Generator/HelpyStatKey.h"
@@ -1054,6 +1055,9 @@ namespace DragonWilds {
             }
 
             nlohmann::json normalizedProperties = properties;
+            if(properties.contains("$Clone"))
+                PS::RegistryEnrollment::Await("clone:"+RC::to_string(modName)+":"+target,PS::RegistryEnrollment::IdentityKind::Item,
+                    properties.value("PersistenceID",nlohmann::json{}).is_string()?properties.at("PersistenceID").get<std::string>():std::string{});
             std::string effectiveTarget = target;
             bool isPatch = false;
             auto metadata=documentMetadata;
@@ -3165,6 +3169,8 @@ namespace DragonWilds {
             else ++batchResult.TargetsUpdated;
             batchResult.PropertiesWritten += result.PropertiesWritten;
             batchResult.ErrorCount += result.ErrorCount;
+            if(isClone && registered && result.ErrorCount==0)
+                PS::RegistryEnrollment::Complete("clone:"+RC::to_string(it->ModName)+":"+RC::to_string(it->Target));
 
             return true;
         });
@@ -3508,6 +3514,9 @@ namespace DragonWilds {
                 pendingAsset.Target);
             return false;
         }
+
+        PS::SaveCleanup::IncludeVerifiedIdentity(PS::SaveCleanup::VerifiedKind::Item,
+            RC::to_string(RC::StringType(*persistenceId)));
 
         if (PS::Storefront::IsDedicatedServer())
             PS::Log<LogLevel::Verbose>(STR(

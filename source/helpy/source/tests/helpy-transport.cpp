@@ -2,6 +2,7 @@
 // The fixture renderer alone cannot catch a lost host/plugin message.
 #include "../plugins/helpy/HelpyPlugin.cpp"
 #include "Generator/SpawnToolsPanel.h"
+#include "Generator/PlayerInventoryPanel.h"
 #include "Core/MapProjection.h"
 #include "Core/MapSpawnRequest.h"
 #include <cassert>
@@ -11,13 +12,19 @@ json LastQuery,LastSubmission,HostSnapshot={{"Players",json::array({{{"Path","/P
 uint64_t HostGeneration=41,HostRevision=8;
 bool ThrowHost=false;
 unsigned SettingsWrites=0;
+std::map<std::string,unsigned> GuardedCalls;
 json SettingsDoc={{"advancedLogging",false},{"persistence",{{"allowCorruptCharacterEntry",false}}},{"future",std::string(10000,'x')}};
 PS::HelpyAuthoring::Session AuthoringHost;
 int32_t RS_PLUGIN_CALL HostCall(const char*,const char* service,const char* input,char* output,uint32_t capacity,uint32_t* size){
     if(ThrowHost)throw std::runtime_error("host read failed");
     assert(std::string(service)=="runeschema.tools");
     const auto request=json::parse(input);json reply;
-    if(request["Action"]=="SettingsRead"||request["Action"]=="SettingsSave"){
+    const auto action=request.value("Action",std::string{});
+    if(action=="ModsRead"||action=="ModsSave"||action=="ModsImport"||action=="QuickLoadSave"||action=="AdditionalLoggingSave"){
+        if(!output||capacity<RUNESCHEMA_PLUGIN_MAX_MESSAGE){*size=RUNESCHEMA_PLUGIN_MAX_MESSAGE;return RS_PLUGIN_BUFFER_TOO_SMALL;}
+        ++GuardedCalls[action];reply={{"Ok",true},{"Root","D:/XboxGames/Active/RuneSchema"},{"Rows",json::array()},{"Padding",std::string(10000,'x')}};
+    }
+    else if(request["Action"]=="SettingsRead"||request["Action"]=="SettingsSave"){
         if(request["Action"]=="SettingsSave"){
             ++SettingsWrites;assert(output&&capacity==RUNESCHEMA_PLUGIN_MAX_MESSAGE);
             assert(request["ExpectedContents"]=="fixture-contents");
@@ -51,6 +58,9 @@ int main(){
     }
     PS::HelpyEnvironment::Configure({{"DedicatedServer",true}});
     RuneSchemaHostApi host{};host.CallService=HostCall;State state{&host};ConfigureTransport(&state);
+    for(const auto* action:{"ModsRead","ModsSave","ModsImport","QuickLoadSave","AdditionalLoggingSave"}){
+        json reply;assert(CallCore(&state,{{"Action",action}},reply)&&reply.at("Ok")==true&&reply.at("Root")=="D:/XboxGames/Active/RuneSchema");assert(GuardedCalls[action]==1);
+    }
     assert(state.ToolsGeneration==41&&state.ToolsAvailable&&state.Players.size()==1); // No bootstrap push required.
     const auto unchangedRevision=state.ToolsRevision;SyncHost(&state,true);SyncHost(&state,true);
     assert(state.ToolsRevision==unchangedRevision); // Heartbeats do not invalidate row/order caches.
@@ -256,7 +266,65 @@ int main(){
     assert(Cart::EffectiveCartRecipients()[0].Path=="/Player/Single"&&PS::ItemGridPicker::SharedCart.Payload()==staged);
     json lateReceipt;assert(!PS::SpawnToolRequests::TakeCompleted(interrupted,lateReceipt));
     Cart::CartNeedsReview=false;assert(Cart::ClearCartRecipients());PS::ItemGridPicker::ClearSharedCart();
+    // A busy read/validation does not require another click or submit a grant twice.
+    Cart::SelectedPlayer="/Player/Single";Cart::CartRecipientsChosen=false;Cart::CartNeedsReview=false;
+    assert(PS::ItemGridPicker::SharedCart.Add({{"Path","/Game/Items/Queued.Queued"}}));
+    Cart::CartBatch.Begin(PS::ItemGridPicker::SharedCart.Payload(),Cart::EffectiveCartRecipients());
+    const auto queued=++Cart::CartSequence;assert(PS::ItemGridPicker::SharedCart.BeginDelivery(queued));
+    LastSubmission=json::object();state.ToolsWaiting=true;Cart::PollCartDelivery();Cart::PollCartDelivery();assert(LastSubmission.empty());
+    state.ToolsWaiting=false;Cart::PollCartDelivery();const auto once=LastSubmission;
+    assert(once["Action"]=="GiveItems"&&once["Player"]=="/Player/Single"&&Cart::CartBatch.Pending());
+    Cart::PollCartDelivery();assert(LastSubmission==once);Cart::CartBatch.Stop();Cart::PollCartDelivery();PS::ItemGridPicker::ClearSharedCart();Cart::CartNeedsReview=false;
     ThrowHost=true;json ignored;assert(!CallCore(&state,{{"Action","Read"}},ignored));
+    {namespace A=PS::AuthoringClient;A::Clear();bool busy=true;
+        A::Remote=[&](const json&,json& reply){reply={{"Generation",77},{"Revision",busy?1:2},{"RequestId",uint64_t(778)},{"Operation","SaveEditorSlotItems"},{"Busy",busy},{"Result",{{"Rows",json::array({{{"Name","Cape"}}})}}}};return true;};
+        A::Poll(true);assert(A::LastReceipt==0&&A::Result("SaveEditorSlotItems").empty());busy=false;A::Poll(true);assert(A::LastReceipt==778&&A::Result("SaveEditorSlotItems")["Rows"].size()==1);A::Clear();}
+    {namespace A=PS::AuthoringClient;namespace P=PS::PlayerInventoryPanel;uint64_t requestId=0;bool complete=false;
+        A::Snapshot={{"Generation",uint64_t(81)},{"Active",true},{"Enabled",true},{"Ready",true},{"Busy",false}};
+        A::Remote=[&](const json& request,json& reply){if(request["Action"]=="AuthoringSubmit"){assert(request["Request"]["Operation"]=="SaveEditorSlotItems"&&request["Request"]["Arguments"]["Slot"]=="Cape"&&request["Request"]["Arguments"]["CacheFirst"]==true);requestId=request["Request"]["RequestId"].get<uint64_t>();reply={{"Accepted",true}};return true;}
+            reply={{"Generation",uint64_t(81)},{"Revision",uint64_t(complete?3:2)},{"Active",true},{"Enabled",true},{"Ready",true},{"Busy",requestId&&!complete},{"RequestId",requestId},{"Operation","SaveEditorSlotItems"},{"Result",complete?json{{"Slot","Cape"},{"Rows",json::array({{{"Name","Cape"},{"NativeSlotVerified",true},{"SlotStrategy","Cape"}}})},{"NextOffset",1},{"HasMore",false}}:json::object()}};return true;};
+        P::Open=true;P::Generation=PS::SpawnToolRequests::CurrentGeneration();P::ChangingGear=true;P::GearLocation="Cape";P::GearRows=json::array();P::GearCatalogRequest=0;P::GearMore=true;P::GearOffset=0;P::GearPending=0;P::Pending=0;P::Refresh=false;P::Bay.Query.clear();P::GearQuery.clear();
+        P::Poll();assert(requestId&&P::GearCatalogRequest==requestId&&P::GearRows.empty());A::Poll(true);assert(P::GearCatalogRequest&&A::LastReceipt==0);
+        complete=true;A::Poll(true);P::Poll();assert(P::GearRows.size()==1&&!P::GearMore&&P::GearCatalogRequest==0);P::Open=false;P::ChangingGear=false;A::Clear();}
+    {namespace P=PS::PlayerInventoryPanel;auto& cache=PS::LazyCatalog::For(0);const auto saved=cache;
+        cache={};cache.RuntimeGeneration=PS::SpawnToolRequests::CurrentGeneration();cache.Query="unrelated-global-filter";
+        const json cape={{"Name","Native cape"},{"Path","/Game/Cape.Cape"},{"SlotStrategy","Cape"},{"NativeSlotVerified",true}};
+        auto head=cape;head["Path"]="/Game/Head.Head";head["SlotStrategy"]="Head";
+        auto unverified=cape;unverified["Path"]="/Game/Unknown.Unknown";unverified.erase("NativeSlotVerified");
+        cache.Rows=json::array({cape,head,unverified});cache.Cache["duplicate"]={json::array({cape}),"",false,cache.RuntimeGeneration};
+        auto stale=cape;stale["Path"]="/Game/Stale.Stale";cache.Cache["stale"]={json::array({stale}),"",false,cache.RuntimeGeneration+1};
+        P::ChangeGear({{"Name","Player"}},{{"Location","Cape"}});
+        assert(P::GearRows==json::array({cape})&&cache.Query=="unrelated-global-filter"&&P::Bay.ActiveCategory=="All");
+        P::Open=false;P::ChangingGear=false;P::Refresh=false;cache=saved;}
+    {namespace P=PS::PlayerInventoryPanel;
+        ThrowHost=false;state.ToolsAvailable=true;state.ToolsWaiting=false;P::Open=false;P::Detached=false;P::Refresh=false;P::Target={{"Name","Keep inspector target"}};
+        const json player={{"Path","/Player/Repair"},{"Guid","0123456789abcdef0123456789abcdef"}},item={{"Path","/Game/Gear.Gear"},{"Instance",{1,2,3,4}},{"Slot",2}};
+        P::RestoreGear(player,item);const auto repair=P::RepairPending;
+        assert(repair&&LastSubmission["Action"]=="RestorePlayerGear"&&LastSubmission["Player"]==player["Path"]&&LastSubmission["PlayerGuid"]==player["Guid"]&&LastSubmission["Instance"]==item["Instance"]&&LastSubmission["Slot"]==2);
+        assert(!P::Open&&!P::Detached&&!P::Refresh&&P::Target["Name"]=="Keep inspector target");
+        P::RestoreGear(player,item);assert(P::RepairPending==repair&&LastSubmission["_RequestId"]==repair);
+        state.Completed[repair]={{"EquipmentAction",{{"Confirmed",true}}}};state.ToolsWaiting=false;P::Poll();assert(!P::RepairPending&&P::RepairStatus=="Durability restored."&&!P::Open);
+        P::RestoreGear(player,item);assert(P::RepairPending);P::RepairStarted-=std::chrono::seconds(16);P::Poll();assert(!P::RepairPending&&P::RepairStatus.find("unconfirmed")!=std::string::npos&&!P::Open);
+        state.ToolsWaiting=false;P::RestoreGear(player,item);assert(P::RepairPending);P::RepairGeneration=PS::SpawnToolRequests::CurrentGeneration()+1;P::Poll();assert(!P::RepairPending&&P::RepairStatus.find("World changed")!=std::string::npos&&!P::Open);state.ToolsWaiting=false;
+    }
+    {namespace P=PS::PlayerInventoryPanel;
+        const auto directory=PS::HostServices::StateDirectory()/("scrap-transport-"+std::to_string(GetCurrentProcessId()));
+        PS::ConfigFiles::Write(directory/"settings"/"settings.jsonc",R"({"enabled":true,"scrapRefunds":true})");PS::HelpySettings::Configure(directory);
+        const bool enabled=PS::HelpySettings::ScrapRefunds();if(!enabled)std::fprintf(stderr,"Scrap fixture settings: %s\n",PS::HelpySettings::Message().c_str());assert(enabled);
+        assert(PS::HelpyPersonalization::Load(directory/"marks.json"));
+        P::Request({{"Path","/Player/Scrap"},{"Guid","11111111222222223333333344444444"}});P::Refresh=false;P::Snapshot={{"ObservedUnixMs",1}};
+        const json row={{"Path","/Game/Items/Axe.Axe"},{"Instance",{1,2,3,4}},{"PlayerGuid",P::Target["Guid"]},{"Slot",8},{"Count",2}};
+        assert(P::ScrapEligible(row));P::ScrapItem=row;state.ToolsWaiting=false;P::ScrapAction(false);const auto preview=P::ScrapPending;
+        assert(preview&&LastSubmission["Action"]=="InspectScrapItem"&&LastSubmission["Quantity"]==2);
+        const json plan={{"PlayerGuid",P::Target["Guid"]},{"Generation",P::Generation},{"Refunds",json::array({{{"Path","/Game/Items/Wood.Wood"},{"Count",6}}})}};
+        state.Completed[preview]={{"InventoryAction",{{"State","Preview"},{"Plan",plan}}}};state.ToolsWaiting=false;P::PollScrap();
+        assert(P::ScrapConfirm&&P::ScrapPlan==plan&&!P::ScrapPending);P::ScrapAction(true);const auto commit=P::ScrapPending;
+        assert(commit&&LastSubmission["Action"]=="ScrapInventoryItem"&&LastSubmission["ExpectedPlan"]==plan);
+        P::ScrapAction(true);assert(P::ScrapPending==commit&&LastSubmission["_RequestId"]==commit);
+        state.Completed[commit]={{"InventoryAction",{{"State","Unconfirmed"},{"Confirmed",false}}}};state.ToolsWaiting=false;P::PollScrap();
+        assert(P::ScrapUnconfirmed&&!P::ScrapEligible(row)&&P::Refresh);P::Open=false;P::ScrapConfirm=false;P::ScrapPending=0;
+        std::filesystem::remove_all(directory);PS::HelpySettings::Configure({});
+    }
     PS::ItemIconCache::ClearRemote();ClearRemote();PS::SpawnToolRequests::ClearRemote();
     PS::RuneSchemaSettingsPanel::Remote={};
 }

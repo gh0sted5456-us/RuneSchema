@@ -103,7 +103,7 @@ void Poll(){
     }catch(...){entry.Image.clear();}
     for(auto& entry:Entries)if(entry.Texture&&entry.Texture->Status==ImTextureStatus_OK&&entry.Texture->Pixels)entry.Texture->DestroyPixels();
 }
-bool Draw(const std::string& name,ImVec2 a,ImVec2 b){if(!ImGui::IsRectVisible(a,b))return false;auto* entry=Find(name);if(!entry)return false;entry->Wanted=ImGui::GetFrameCount();if(!entry->Texture||entry->Texture->Status!=ImTextureStatus_OK)return false;ImGui::GetWindowDrawList()->AddImage(entry->Texture->GetTexRef(),a,b);return true;}
+bool Draw(const std::string& name,ImVec2 a,ImVec2 b,ImU32 tint,bool circle){if(!ImGui::IsRectVisible(a,b))return false;auto* entry=Find(name);if(!entry)return false;entry->Wanted=ImGui::GetFrameCount();if(!entry->Texture||entry->Texture->Status!=ImTextureStatus_OK)return false;ImGui::GetWindowDrawList()->AddImageRounded(entry->Texture->GetTexRef(),a,b,{0,0},{1,1},tint,circle?std::min(b.x-a.x,b.y-a.y)*.5f:0);return true;}
 std::vector<std::string> Portraits(){std::vector<std::string> out;for(const auto& entry:Entries)if(!entry.Image.empty())out.push_back(Portrait(entry.Key));return out;}
 std::vector<std::string> Names(){std::vector<std::string> out;for(const auto& entry:Entries)out.push_back(entry.Name);return out;}
 std::string Label(const std::string& key){const auto* entry=Find(key);return entry?entry->Name:key;}

@@ -1,6 +1,7 @@
 #pragma once
 #if defined(HELPY_PREVIEW)
 #include <imgui.h>
+#include <array>
 #include <map>
 #include <string>
 #include <optional>
@@ -8,6 +9,7 @@
 namespace PS::HelpyPreviewHooks {
 inline unsigned ModifiedItemBadges=0;
 inline unsigned CartVerifiedBadges=0,CartRejectedBadges=0,CartUncertainBadges=0;
+inline ImVec4 DeliveryBadge{};inline ImVec2 DeliveryBadgeBottomLeft{};
 inline ImVec4 CacheDetach{},CacheAdvanced{};
 inline size_t BayDetailsFacts=0;
 inline std::map<std::string,ImVec4> ItemRects,CartRects;
@@ -28,8 +30,12 @@ inline std::map<std::string,ImVec4> MapPartyRows;
 inline ImVec4 MapPartyWindow{};
 inline ImVec4 PartyDetach{};
 inline std::map<std::string,ImVec4> PartyGear;
+inline std::map<std::string,ImVec4> PartyPortraits,PartyPower,PartyPlatforms;
+inline std::map<std::string,ImU32> MapPlayerTints;
+inline std::map<std::string,ImVec4> PartyMeters;
 inline unsigned PartyDurabilityMeters=0;
 inline bool PartyDurabilityDetails=false;
+inline std::string PartyDetailSections;
 inline ImVec4 MapPartyContext{},MapPopupWindow{};
 inline ImVec4 MapPartyTeleport{},MapPartyRecall{},MapPartyConfirm{},MapPartyCancel{};
 inline ImVec4 MapFiltersButton{},MapMarkerSearch{};

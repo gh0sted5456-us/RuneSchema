@@ -174,5 +174,19 @@ int main(){
         {"Reset",true},{"Rows",json::array({{{"Path","/Mod/Updated"}}})},{"HasMore",false},{"AlphabeticalReady",true}},145);
     assert(health.Rows.size()==1&&health.Rows[0]["Path"]=="/Mod/Updated"&&!health.Refreshing);
     assert(Search(0,"new source search")); // No permanent source-removal latch.
+    ConfigureRemote([](json){return true;},[](int,uint64_t){});
+    auto& actors=For(1);actors=State{};actors.RuntimeGeneration=13;
+    assert(Search(1,"old actors"));
+    ApplyWindow({{"Category",1},{"CancelGeneration",actors.CancelGeneration},{"RuntimeGeneration",13},{"RequestId",actors.ActiveRequestId},
+        {"Rows",json::array({{{"Key","A"},{"Type","NPC"}}})},{"HasMore",false}},500);
+    json actorSnapshot;Overlay(actorSnapshot,1);const auto oldRowsRevision=actorSnapshot.at("_CatalogRowsRevision");
+    assert(Search(1,"empty actors"));Overlay(actorSnapshot,1);
+    assert(actorSnapshot.at("Definitions").empty()&&actorSnapshot.at("_CatalogRowsRevision")!=oldRowsRevision);
+    const auto emptyRowsRevision=actorSnapshot.at("_CatalogRowsRevision");
+    ApplyWindow({{"Category",1},{"CancelGeneration",actors.CancelGeneration},{"RuntimeGeneration",13},{"RequestId",actors.ActiveRequestId},
+        {"Rows",json::array({{{"Key","B"},{"Type","NPC"}}})},{"HasMore",false}},500);
+    Overlay(actorSnapshot,1);assert(actorSnapshot.at("_CatalogRowsRevision")!=emptyRowsRevision);
+    assert(Search(1,"old actors"));Overlay(actorSnapshot,1);
+    assert(actorSnapshot.at("Definitions")[0]["Key"]=="A"&&actorSnapshot.at("_CatalogRowsRevision")!=oldRowsRevision);
     ClearRemote();
 }

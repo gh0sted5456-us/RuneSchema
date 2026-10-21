@@ -8,7 +8,7 @@ struct Columns {bool Beside=false;float Stats=0,Equipment=0,Gap=0;};
 inline Columns Split(float width){
     if(!std::isfinite(width)||width<=0)return {};
     if(width<332)return {false,width,width,0};
-    const float stats=std::clamp(width*.42f,180.f,360.f);
+    const float stats=std::clamp(width*.28f,180.f,280.f);
     return {true,stats,width-stats-12,12};
 }
 inline std::vector<Line> Centered(size_t count,float width,float side,float gap){

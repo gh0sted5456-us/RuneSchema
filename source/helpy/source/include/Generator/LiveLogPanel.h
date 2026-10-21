@@ -1,6 +1,7 @@
 #pragma once
 #include "Core/LiveLog.h"
 #include "Generator/HelpyImGuiTheme.h"
+#include "Generator/RuneSchemaSettingsPanel.h"
 #include "Runtime/HostServices.h"
 #include <commdlg.h>
 #include <shellapi.h>
@@ -110,10 +111,13 @@ inline void RenderStream(size_t index){
     auto& Paused=state.Paused;auto& Follow=state.Follow;auto& NextRead=state.NextRead;auto& Levels=state.Levels;
     auto& Search=state.Search;auto& Scope=state.Scope;auto& Dirty=state.Dirty;auto& Revision=state.Revision;auto& Scopes=state.Scopes;auto& Visible=state.Visible;
     ImGui::TextColored(Paused?theme.warning:theme.accentHover,"%s",Paused?"PAUSED":"LIVE");ImGui::SameLine();const auto filename=Path(index).filename().string();ImGui::TextDisabled("%s",filename.c_str());
-    if(ImGui::IsItemHovered())ImGui::SetTooltip("%s",Path(index).string().c_str());
-    if(index==3)ImGui::TextDisabled("EOS categories from the game log; a separate EOS file can be selected in Actions.");
-    if(index>=2&&!ReadError.empty())ImGui::TextWrapped("This game build may not emit a log. No logging or launch flags are changed. Select an existing log in Actions if it lives elsewhere.");
-    ImGui::SetNextItemWidth(std::min(theme.X(380),ImGui::GetContentRegionAvail().x));Dirty|=ImGui::InputTextWithHint("##log-search","Search text or diagnostic code...",Search,sizeof(Search));
+    if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("%s",Path(index).string().c_str());
+    if(index==3){ImGui::TextDisabled("EOS events from the game log");if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Use Actions to choose a separate EOS log.");}
+    ImGui::SetNextItemWidth(std::max(theme.X(60),std::min(theme.X(380),ImGui::GetContentRegionAvail().x-theme.X(60))));Dirty|=ImGui::InputTextWithHint("##log-search","Search words, phrases or codes…",Search,sizeof(Search));
+    if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("All words must match. Use quotes for a phrase, -word to exclude, or source:, code: and level:. Example: source:loganimation guid -optional");
+    ImGui::SameLine();ImGui::BeginDisabled(!Search[0]);if(ImGui::SmallButton("Clear")){Search[0]=0;Dirty=true;}ImGui::EndDisabled();
+    int preset=std::all_of(Levels.begin(),Levels.end(),[](bool value){return value;})?0:Levels==std::array<bool,4>{false,false,true,true}?1:Levels==std::array<bool,4>{false,false,false,true}?2:3;
+    ImGui::SetNextItemWidth(theme.X(180));if(ImGui::Combo("Severity",&preset,"All\0Warnings + errors\0Errors\0Custom\0")){if(preset<3){Levels={preset==0,preset==0,preset<=1,true};Dirty=true;}}
     if(ImGui::Checkbox("Pause",&Paused))NextRead={};ImGui::SameLine();ImGui::Checkbox("Follow newest",&Follow);ImGui::SameLine();
     if(HelpyImGuiTheme::SoftButton("Actions"))ImGui::OpenPopup("Log actions");
     if(ImGui::BeginPopup("Log actions")){
@@ -137,7 +141,7 @@ inline void RenderStream(size_t index){
         ImGui::EndPopup();
     }
     const bool changed=Revision!=History.Revision;
-    if(changed){Scopes.clear();state.Counts={};for(const auto& row:History.Rows){if(!row.Scope.empty())Scopes.insert(row.Scope);++state.Counts[static_cast<size_t>(row.Severity)];}}
+    if(changed){Scopes.clear();for(const auto& row:History.Rows)if(!row.Scope.empty())Scopes.insert(row.Scope);}
     const bool filtersActive=!Scope.empty()||std::any_of(Levels.begin(),Levels.end(),[](bool enabled){return !enabled;});
     if(ImGui::CollapsingHeader(filtersActive?"Filters & colors (active)###log-filters":"Filters & colors###log-filters")){
         for(size_t i=0;i<Levels.size();++i){if(i)ImGui::SameLine();Dirty|=ImGui::Checkbox(LiveLog::Label(static_cast<LiveLog::Level>(i)),&Levels[i]);}
@@ -148,9 +152,9 @@ inline void RenderStream(size_t index){
         RenderColors();ImGui::TextDisabled("Viewer limit: 4,000 rows / 2 MiB per tab. Full files stay on disk.");
     }
     const LiveLog::Filter filter{Levels,LiveLog::Lower(Search),Scope};
-    if(Dirty||changed){Visible=LiveLog::Grouped(History,filter,state.GroupRepeats);Revision=History.Revision;Dirty=false;}
-    ImGui::TextDisabled("%zu events  |  %zu warnings  |  %zu errors",Visible.size(),state.Counts[2],state.Counts[3]);
-    if(ImGui::IsItemHovered())ImGui::SetTooltip("%zu retained; %zu older rows dropped from this view only. Disk logs are unchanged.",History.Rows.size(),History.Dropped);
+    if(Dirty||changed){Visible=LiveLog::Grouped(History,filter,state.GroupRepeats);state.Counts={};for(const auto& group:Visible)state.Counts[static_cast<size_t>(History.Rows[group.First].Severity)]+=group.Count;Revision=History.Revision;Dirty=false;}
+    ImGui::TextDisabled("%zu groups  |  %zu warnings  |  %zu errors",Visible.size(),state.Counts[2],state.Counts[3]);
+    if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("%zu retained; %zu older rows dropped from this view only. Disk logs are unchanged.",History.Rows.size(),History.Dropped);
     if(!ReadError.empty())ImGui::TextColored(theme.warning,"%s",ReadError.c_str());if(!Status.empty())ImGui::TextWrapped("%s",Status.c_str());
     const auto selected=std::find_if(History.Rows.begin(),History.Rows.end(),[&](const auto& row){return row.Id==Selected;});
     const auto available=ImGui::GetContentRegionAvail();const bool compact=available.x<theme.X(720);
@@ -165,10 +169,10 @@ inline void RenderStream(size_t index){
             ImGui::PushStyleColor(ImGuiCol_Text,color);if(ImGui::Selectable(LiveLog::Label(row.Severity),Selected==row.Id,ImGuiSelectableFlags_SpanAllColumns|ImGuiSelectableFlags_AllowOverlap))Selected=row.Id;ImGui::PopStyleColor();
             if(!compact){ImGui::TableNextColumn();ImGui::TextDisabled("%s",row.Time.c_str());ImGui::TableNextColumn();ImGui::TextUnformatted(row.Scope.c_str());ImGui::TableNextColumn();
                 if(row.Help>=0){const auto& guide=LiveLog::Guides[row.Help];const auto label=(row.Suggested?"~ ":"")+std::string(guide.Code);if(ImGui::SmallButton(label.c_str())){const auto url=LiveLog::HelpUrl(guide);ShellExecuteA(nullptr,"open",url.c_str(),nullptr,nullptr,SW_SHOWNORMAL);}
-                    if(ImGui::IsItemHovered())ImGui::SetTooltip("%s\n%s\nOpens the code reference. No log content is sent.",guide.Title.data(),row.Suggested?"Suggested reference only; not an emitted diagnosis.":"Exact emitted diagnostic code.");
-                }else if(!row.ReportedCode.empty())ImGui::TextDisabled("%s",row.ReportedCode.c_str());}
+                    if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("%s\n%s\nOpens the code reference. No log content is sent.",guide.Title.data(),row.Suggested?"Suggested reference only; not an emitted diagnosis.":"Exact emitted diagnostic code.");
+                }else if(!row.ReportedCode.empty()){if(ImGui::SmallButton(row.ReportedCode.c_str())){const auto url=LiveLog::ReferenceUrl(row);ShellExecuteA(nullptr,"open",url.c_str(),nullptr,nullptr,SW_SHOWNORMAL);}if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Unknown code retained exactly. Opens the general reference without inventing a diagnosis.");}}
             ImGui::TableNextColumn();const auto title=row.Help>=0&&!row.Suggested?LiveLog::Guides[row.Help].Title:std::string_view(row.Message);ImGui::TextUnformatted(title.data(),title.data()+title.size());
-            if(ImGui::IsItemHovered())ImGui::SetTooltip("%s\nSelect the event for meaning, next steps and the original entry.",row.Message.c_str());
+            if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("%s\nSelect the event for meaning, next steps and the original entry.",row.Message.c_str());
             ImGui::TableNextColumn();if(group.Count>1)ImGui::TextColored(theme.accentHover,"x%zu",group.Count);else ImGui::TextDisabled("1");ImGui::PopID();}
         if(Follow&&changed)ImGui::SetScrollY(ImGui::GetScrollMaxY());ImGui::EndTable();
     }
@@ -179,13 +183,42 @@ inline void RenderStream(size_t index){
             if(selected->Help>=0){const auto& guide=LiveLog::Guides[selected->Help];ImGui::SeparatorText(selected->Suggested?"Suggested reference - not a diagnosed cause":guide.Title.data());
                 ImGui::TextWrapped("%s",guide.Summary.data());ImGui::TextWrapped("Runtime response: %s",guide.Impact.data());ImGui::TextColored(theme.accentHover,"Next step");ImGui::TextWrapped("%s",guide.Action.data());
                 if(ImGui::SmallButton("Open code reference")){const auto url=LiveLog::HelpUrl(guide);ShellExecuteA(nullptr,"open",url.c_str(),nullptr,nullptr,SW_SHOWNORMAL);}ImGui::SameLine();if(ImGui::SmallButton("Copy code"))ImGui::SetClipboardText(guide.Code.data());
-            }else{ImGui::TextWrapped("%s",selected->Message.c_str());if(!selected->ReportedCode.empty())ImGui::TextDisabled("Unrecognized code retained exactly: %s",selected->ReportedCode.c_str());}
+            }else{ImGui::TextWrapped("%s",selected->Message.c_str());if(!selected->ReportedCode.empty())ImGui::TextDisabled("Unrecognized code: %s",selected->ReportedCode.c_str());if(ImGui::SmallButton("Open reference")){const auto url=LiveLog::ReferenceUrl(*selected);ShellExecuteA(nullptr,"open",url.c_str(),nullptr,nullptr,SW_SHOWNORMAL);}}
             if(state.RawDetails){ImGui::SeparatorText("Original entry");ImGui::TextWrapped("%s",selected->Text.c_str());}
         }ImGui::EndChild();
     }
 }
 inline void Render(){
-    if(ImGui::BeginTabBar("Live log streams")){
+    static nlohmann::json options=nlohmann::json::object();static std::string optionStatus;static bool optionError=false;static double nextOptionsRead=0;
+    const auto hint=[](const std::string& text){if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)){PS::HelpyImGuiTheme::BeginDetailsTooltip();ImGui::PushTextWrapPos(ImGui::GetFontSize()*28);ImGui::TextUnformatted(text.c_str());ImGui::PopTextWrapPos();PS::HelpyImGuiTheme::EndDetailsTooltip();}};
+    const auto readOptions=[&](){nlohmann::json result;if(RuneSchemaSettingsPanel::Remote&&RuneSchemaSettingsPanel::Remote({{"Action","AdditionalLoggingRead"}},result)&&result.is_object()&&result.value("Ok",false)){options=result;optionError=false;optionStatus.clear();}
+        else{optionError=true;optionStatus=result.is_object()?result.value("Status",std::string("Additional logging requires a matching RuneSchema core.")):"Additional logging requires a matching RuneSchema core.";}};
+    if(options.empty()&&ImGui::GetTime()>=nextOptionsRead){readOptions();nextOptionsRead=ImGui::GetTime()+2;}
+    const auto saveOption=[&](const char* key,bool enabled){auto document=options.at("Document");document[key]=enabled;nlohmann::json result;
+        if(RuneSchemaSettingsPanel::Remote&&RuneSchemaSettingsPanel::Remote({{"Action","AdditionalLoggingSave"},{"Document",document},{"ExpectedContents",options.at("ExpectedContents")}},result)&&result.is_object()&&result.value("Ok",false)){
+            options=result;optionError=false;optionStatus=result.value("Status",std::string{});if(RuneSchemaSettingsPanel::Patch().empty())RuneSchemaSettingsPanel::Load();
+        }else{optionError=true;optionStatus=result.is_object()?result.value("Status",std::string("Change unconfirmed. Reload before retrying.")):"Change unconfirmed. Reload before retrying.";}
+    };
+    bool enabled=!options.empty()&&options.at("Document").value("enabled",false);
+    ImGui::BeginDisabled(options.empty()||optionError||!RuneSchemaSettingsPanel::Patch().empty());
+    if(ImGui::Checkbox("Additional Logging Information",&enabled)){saveOption("enabled",enabled);if(enabled&&!optionError)ImGui::OpenPopup("Additional logging options");}
+    hint("Optional context in RuneSchema.log only. Off by default. Select individual fields in Options; saved changes apply on the next sampler tick. Full local paths can reveal personal folder names. Turning this off does not erase existing entries or redact paths already present in ordinary native/mod messages.");
+    ImGui::EndDisabled();ImGui::SameLine();
+    if(HelpyImGuiTheme::SoftButton("Options##additional-logging"))ImGui::OpenPopup("Additional logging options");
+    if(ImGui::BeginPopup("Additional logging options")){
+        const auto option=[&](const char* label,const char* key,const char* description){bool selected=!options.empty()&&options.at("Document").value(key,false);
+            ImGui::BeginDisabled(options.empty()||optionError||!RuneSchemaSettingsPanel::Patch().empty());if(ImGui::Checkbox(label,&selected))saveOption(key,selected);hint(description);ImGui::EndDisabled();};
+        option("Installation / log paths","filePaths","Full executable, RuneSchema, cache and log paths. Can reveal usernames in directory names.");
+        option("Windows region","region","Configured Windows country/region. No IP lookup, GPS, location permission or geolocation service.");
+        option("Upload / download rates","networkRates","Observed traffic across active physical Ethernet/Wi-Fi interfaces, in Mbps. Device-wide traffic, not game-only traffic or connection capacity. Needs two comparable samples; no speed test is performed.");
+        option("Save provider paths","savePaths","Known character/world provider directories, not save contents. Game Pass payload filenames remain provider-owned and may not be exposed.");
+        option("World average network latency","averageLatency","Mean native player ping in a verified multiplayer world, with observed/total sample counts. Zero/invalid samples are excluded. Client-replicated ping can be stale; unavailable data is never reported as zero latency.");
+        if(HelpyImGuiTheme::SoftButton("Reload logging options"))readOptions();
+        if(!optionStatus.empty()){ImGui::TextDisabled(optionError?"Change needs attention — hover for details.":"Saved — hover for details.");hint(optionStatus);}
+        ImGui::EndPopup();
+    }
+    if(optionError){ImGui::TextColored(HelpyImGuiTheme::Current.warning,"Logging options need attention. Hover for details.");hint(optionStatus);}
+    if(ImGui::BeginTabBar("Live log streams",ImGuiTabBarFlags_Reorderable)){
         if(ImGui::BeginTabItem("Game",nullptr,PreviewStream==2?ImGuiTabItemFlags_SetSelected:0)){ImGui::PushID("Game stream");RenderStream(2);ImGui::PopID();ImGui::EndTabItem();}
         if(ImGui::BeginTabItem("UE4SS",nullptr,Preview&&PreviewUE4SS?ImGuiTabItemFlags_SetSelected:0)){ImGui::PushID("UE4SS stream");RenderStream(1);ImGui::PopID();ImGui::EndTabItem();}
         if(ImGui::BeginTabItem("RuneSchema",nullptr,Preview&&!PreviewUE4SS&&PreviewStream<0?ImGuiTabItemFlags_SetSelected:0)){ImGui::PushID("RuneSchema stream");RenderStream(0);ImGui::PopID();ImGui::EndTabItem();}

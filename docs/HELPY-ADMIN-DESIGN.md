@@ -143,3 +143,57 @@ disconnect, durable-save failure, immediate revocation, badge expiry and a
 second player/map observer. Include a regular mask-14 player, a separately
 configured owner, and distinct account/character IDs. A client UI fixture or
 offline mapping inspection cannot establish those runtime claims.
+
+### Runtime declaration and mapping diagnostics
+
+Mods shows registrar-owned accepted/rejected declaration counts and bounded
+source/reason details from the connected runtime. Acceptance means a declaration
+was parsed and enrolled; it does not certify every native reference or gameplay
+operation. An optional conventional cooked-root lookup can miss when a mod uses
+loose JSON or another cooked asset path. Those two missing-path probe warnings
+remain in Live Log but do not alone mark the mod unhealthy. Registrar rejections,
+other warnings, and errors are still reported. Explicit mod ownership takes
+precedence over dependency paths mentioned in a log message.
+
+Automatic reflection mappings resolve the host-provided runtime directory by
+handle and verify its identity before using its canonical path. The Game Pass
+WindowsApps package junction is therefore supported without allowing redirects
+inside the mapping cache. Generated replacements must pass the existing native
+type and fingerprint checks before activation and retirement of old generated
+files. Shipped/custom mappings and the last working fallback remain protected.
+Compatibility is rechecked at launch using the game executable/version, UE4SS
+and RuneSchema binaries, load-order files, game containers, and installed mod/
+plugin containers and JSON declarations. Changed file names, sizes or write
+times invalidate the generated mapping identity. This conservatively includes
+disabled installed content, so changing it may cause an extra generation.
+Generated runtime/cache files and standalone artwork are excluded to avoid a
+regeneration loop. This is a bounded file-identity check, not a claim to detect
+an external binary patch that preserves all file metadata or to reflect every
+unloaded Blueprint. Native dump capability, permissions and validation failures
+retain the fallback and report the specific reason instead of accepting an
+invalid replacement.
+
+Home is a single larger house icon at the bottom-left of the navigation rail,
+with a hover label; other routes remain
+reorderable. Party placards show three compact critical meters above interactive
+equipped items; advanced display settings retain the wider row layout. Food,
+hydration, rest, and skill levels are the only member-hover details. Equipped
+items retain their own hover details and right-click actions on the placard.
+
+Change gear opens a focused Item Bay without the inventory pane or unrelated
+category preferences. Verified matching rows already cached for the current
+runtime appear immediately; remaining pages use the shared backend catalogue.
+Owned-item swaps retain native instance, slot and host-authority validation.
+New items are staged through the existing delivery cart, not granted implicitly.
+Item previews use the reflected SkinnedMeshComponent.SetSkinnedAssetAndUpdate
+contract; preview calls still require native, non-networked functions and checked
+owner, parameter types and extents. No gameplay item Blueprint is spawned.
+
+The Buildings panel can submit world X/Y coordinates in Unreal centimetres to
+the same TargetLocation path as map placement. The runtime checks native map
+bounds and traces loaded ground; Height offset controls the vertical offset.
+Unknown ground or a failed binding check produces no placement. Permanent
+placements remain available through the World map placement workflow.
+
+Helpy focuses on its desktop tools and does not replace or restyle the game's HUD.
+RuneSchema's native console menu commands remain available independently of Helpy.

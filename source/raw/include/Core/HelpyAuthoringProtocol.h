@@ -40,7 +40,9 @@ inline Json Validate(Json request){
     Require(std::find(Operations.begin(),Operations.end(),operation)!=Operations.end(),"Unsupported authoring operation");
     if(!request.contains("Arguments"))request["Arguments"]=Json::object();const auto& args=request["Arguments"];
     Require(args.is_object(),"Arguments must be an object");
-    for(const auto* key:{"Loader","Name","Mod","Id","Path","Query","SelectedObject","Token","Player","Definition","State","Icon","Marker"})Text(args,key,key==std::string("Query")?256:4096);
+    if(operation=="SaveEditorRender"&&args.contains("Quality"))Require(args["Quality"].is_number_integer()&&args["Quality"].get<int>()>=0&&args["Quality"].get<int>()<=2,"Preview quality must be 0, 1 or 2");
+    const bool cachedSlotQuery=operation=="SaveEditorSlotItems"&&args.contains("CacheFirst")&&args["CacheFirst"]==true;
+    for(const auto* key:{"Loader","Name","Mod","Id","Path","Query","SelectedObject","Token","Player","Definition","State","Icon","Marker"})Text(args,key,key==std::string("Query")?(cachedSlotQuery?448:256):4096);
     for(const auto* key:{"Confirm","Offline","ReadValues","EraseProgress","PruneInvalid","IncludeLoadedTables","Extended","Jsonc","DelayCrosshair","UseProfileTarget"})if(args.contains(key))Require(args[key].is_boolean(),"Expected a boolean option");
     for(const auto* key:{"Limit","Mode","DelaySeconds","ArmorSlots"})if(args.contains(key))Require(args[key].is_number_integer(),"Expected an integer option");
     if(args.contains("Limit"))Require(args["Limit"]>=1&&args["Limit"]<=500,"Object limit must be 1..500");
@@ -66,7 +68,9 @@ inline Json Validate(Json request){
     if(operation=="SaveEditorSet")Require(args.contains("Value")&&args.contains("Revision")&&args["Revision"].is_number_unsigned(),"Value and editor revision required");
     if(operation=="SaveEditorSlotItems"){
         Require(args.contains("Slot")&&args["Slot"].is_string()&&args["Slot"].get_ref<const std::string&>().size()<=32,"Native loadout slot is required");
-        Require(!args.contains("Query")||(args["Query"].is_string()&&args["Query"].get_ref<const std::string&>().size()<=256),"Slot search exceeds its bound");
+        Require(!args.contains("CacheFirst")||args["CacheFirst"].is_boolean(),"Invalid cached slot search mode");
+        Require(!args.contains("Query")||(args["Query"].is_string()&&args["Query"].get_ref<const std::string&>().size()<=(args.value("CacheFirst",false)?448:256)),"Slot search exceeds its bound");
+        if(args.contains("Cursor"))Text(args,"Cursor",2048);
         Require(!args.contains("Offset")||(args["Offset"].is_number_integer()&&args["Offset"]>=0&&args["Offset"]<=4000000),"Slot search cursor exceeds its bound");
     }
     if(operation=="SaveEditorInventory"||operation=="SaveEditorStack"||operation=="SaveEditorRemoveItems")Require(!args.contains("Offset")||(args["Offset"].is_number_integer()&&args["Offset"]>=0&&args["Offset"]<=8192),"Inventory offset must be 0..8192");

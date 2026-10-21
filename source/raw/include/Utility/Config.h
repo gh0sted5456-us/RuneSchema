@@ -117,6 +117,25 @@ namespace PS {
         bool backupBeforePrune = true;
     };
 
+    struct QuickLaunchSettings {
+        // mode is authoritative; enabled/softLoading remain legacy aliases.
+        std::string mode = "lessRestrictive";
+        bool enabled = false;
+        std::string characterName;
+        std::string worldName;
+        bool softLoading = true;
+    };
+
+    struct AdditionalLoggingSettings {
+        // Privacy-sensitive context is opt-in; no address lookup or speed test.
+        bool enabled = false;
+        bool filePaths = false;
+        bool region = false;
+        bool networkRates = false;
+        bool savePaths = false;
+        bool averageLatency = false;
+    };
+
     struct DefaultRecoverySettings {
         // Recovery is an opt-in merge. It never replaces a healthy live save.
         bool enabled = false;
@@ -170,6 +189,8 @@ namespace PS {
         BPModLoaderSettings bpModLoader{};
         PluginSettings plugins{};
         PersistenceSettings persistence{};
+        QuickLaunchSettings quickLaunch{};
+        AdditionalLoggingSettings additionalLogging{};
         WorldSaveCleanupSettings worldSaveCleanup{};
         DefaultRecoverySettings defaultRecovery{};
         HelpyAuthoritySettings helpyAuthority{};

@@ -48,6 +48,8 @@
 #include "Core/SaveRegistrySnapshot.h"
 #include "Runtime/Storefront.h"
 #include "Runtime/HostServices.h"
+#include "Runtime/NativePersistenceRecovery.h"
+#include "Core/CharacterLoadAudit.h"
 #include "Misc/DragonWildsDataRegistrar.h"
 #include "Loader/EquipmentWearableBridge.h"
 #include "Unreal/UAssetRegistryHelpers.hpp"
@@ -505,6 +507,7 @@ namespace DragonWilds {
         if (m_initialized) return;
 
         m_pruner.PrepareForStartup();
+        m_registrationThread=GetCurrentThreadId();
         if (!ResolveBindings()) return;
 
         const auto& combat = PS::PSConfig::Get()->GetSettings().combatFallback;
@@ -978,6 +981,11 @@ namespace DragonWilds {
 
     void DragonWildsDataRegistrar::Shutdown()
     {
+        (void)PS::CharacterLoadAudit::End(m_nativePolicyAttempt);
+        m_nativePolicyContext=nullptr;m_nativePolicyFunction=nullptr;m_nativePolicyParameters=nullptr;
+        if(m_characterJsonPostHook!=Hook::ERROR_ID)Hook::UnregisterCallback(m_characterJsonPostHook);
+        m_characterJsonPostHook=Hook::ERROR_ID;
+        m_prepareCharacterRegistries={};
         if (m_characterJsonHook != Hook::ERROR_ID)
             Hook::UnregisterCallback(m_characterJsonHook);
         m_characterJsonHook = Hook::ERROR_ID;
@@ -1017,6 +1025,19 @@ namespace DragonWilds {
         Hook::FCallbackOptions preflightOptions{};
         preflightOptions.OwnerModName = TEXT("RuneSchema");
         preflightOptions.HookName = TEXT("CharacterJsonSavePreflight");
+        auto postOptions=preflightOptions;postOptions.HookName=TEXT("CharacterNativePolicyRestore");
+        m_characterJsonPostHook=Hook::RegisterProcessEventPostCallback(
+            [this](Hook::TCallbackIterationData<void>&,UObject* source,UFunction* function,void* parameters){
+                if(!m_nativePolicyContext||source!=m_nativePolicyContext||function!=m_nativePolicyFunction
+                    ||parameters!=m_nativePolicyParameters||GetCurrentThreadId()!=m_registrationThread)return;
+                m_nativePolicyContext=nullptr;m_nativePolicyFunction=nullptr;m_nativePolicyParameters=nullptr;
+                PS::NativePersistenceRecovery::EnsureSessionPolicy(source);
+                if(const auto receipt=PS::CharacterLoadAudit::End(m_nativePolicyAttempt)){
+                    const auto report=[&]<auto Level>(){PS::Log<Level>(STR("[CHARACTER-LOAD][HANDLER-RETURNED] load={} registry_pruned={} validation_bypasses={} player_state_bypasses={} attribution_ambiguous={}; world entry and persisted save are not yet verified.\n"),receipt->Token,receipt->RegistryPruned,receipt->ValidationBypasses,receipt->PlayerStateBypasses,receipt->Ambiguous);};
+                    if(receipt->RegistryPruned||receipt->ValidationBypasses||receipt->PlayerStateBypasses||receipt->Ambiguous)report.template operator()<LogLevel::Normal>();
+                    else report.template operator()<LogLevel::Verbose>();
+                }
+            },postOptions);
         m_characterJsonHook = Hook::RegisterProcessEventPreCallback(
             [this](Hook::TCallbackIterationData<void>&, UObject* source,
                 UFunction* function, void* parameters) {
@@ -1094,7 +1115,22 @@ namespace DragonWilds {
     void DragonWildsDataRegistrar::ScrubCharacterJsonBeforeLoad(
         UObject* context, UFunction* function, void* parameters)
     {
-        m_pruner.PruneBeforeCharacterLoad(context, function, parameters);
+        if(GetCurrentThreadId()==m_registrationThread)PS::NativePersistenceRecovery::EnsureSessionPolicy(context);
+        // This is targeted, idempotent preparation of already-declared quests,
+        // not another RegisterAll()/asset scan. Run it before payload inspection
+        // even if the load event precedes InitGameState's ready notification.
+        if(m_prepareCharacterRegistries)try{m_prepareCharacterRegistries(context);}
+        catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR(
+            "[PERSISTENCE-PRUNER][PENDING-IDENTITIES] Quest preparation is incomplete: {}. Only declared pending identities are retained; general cleanup continues.\n"),PS::ToWideSafe(error.what()));}
+        if(m_nativePolicyContext)PS::CharacterLoadAudit::Ambiguous();
+        const auto auditToken=m_characterJsonPostHook!=Hook::ERROR_ID&&!m_nativePolicyContext&&GetCurrentThreadId()==m_registrationThread?PS::CharacterLoadAudit::Begin():0;
+        bool gameplayPayload=false;
+        try{gameplayPayload=m_pruner.PruneBeforeCharacterLoad(context,function,parameters);}
+        catch(...){if(auditToken)(void)PS::CharacterLoadAudit::End(auditToken);throw;}
+        if(!gameplayPayload){if(auditToken)(void)PS::CharacterLoadAudit::End(auditToken);return;}
+        if(!auditToken)return;
+        m_nativePolicyAttempt=auditToken;
+        m_nativePolicyContext=context;m_nativePolicyFunction=function;m_nativePolicyParameters=parameters;
     }
 
     void DragonWildsDataRegistrar::RegisterAll()

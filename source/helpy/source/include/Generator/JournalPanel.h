@@ -24,5 +24,5 @@ inline void Wiki(){
     ImGui::TextWrapped("Artwork and game journal media: copyright Jagex Ltd, via the Dragonwilds Wiki. Wiki text: CC BY-NC-SA 3.0. Third-party media is not RuneSchema MIT.");
 }
 inline void Shutdown(){NativeJournalCache::Shutdown();JournalAuthorPanel::Shutdown();}
-inline void Render(){if(ImGui::BeginTabBar("##journal-tabs")){if(ImGui::BeginTabItem("Journal / Lore")){NativeJournalPanel::Render();ImGui::EndTabItem();}const auto flags=JournalAuthorPanel::OpenRequested?ImGuiTabItemFlags_SetSelected:ImGuiTabItemFlags_None;JournalAuthorPanel::OpenRequested=false;if(ImGui::BeginTabItem("Author",nullptr,flags)){JournalAuthorPanel::Render();ImGui::EndTabItem();}if(ImGui::BeginTabItem("Wiki reference")){Wiki();ImGui::EndTabItem();}ImGui::EndTabBar();}}
+inline void Render(){if(ImGui::BeginTabBar("##journal-tabs",ImGuiTabBarFlags_Reorderable)){if(ImGui::BeginTabItem("Journal / Lore")){NativeJournalPanel::Render();ImGui::EndTabItem();}const auto flags=JournalAuthorPanel::OpenRequested?ImGuiTabItemFlags_SetSelected:ImGuiTabItemFlags_None;JournalAuthorPanel::OpenRequested=false;if(ImGui::BeginTabItem("Author",nullptr,flags)){JournalAuthorPanel::Render();ImGui::EndTabItem();}if(ImGui::BeginTabItem("Wiki reference")){Wiki();ImGui::EndTabItem();}ImGui::EndTabBar();}}
 }

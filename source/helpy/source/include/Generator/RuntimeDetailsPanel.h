@@ -100,7 +100,7 @@ inline void RenderContents(){
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::RuntimeDetach=HelpyPreviewHooks::LastRect();
 #endif
-    if(ImGui::BeginTabBar("Runtime details tabs")){
+    if(ImGui::BeginTabBar("Runtime details tabs",ImGuiTabBarFlags_Reorderable)){
         const auto requested=Selected;const bool select=SelectTab;
         for(const auto tab:{Tab::Runtime,Tab::Attributions,Tab::Legal}){
             const char* name=tab==Tab::Runtime?"Runtime":tab==Tab::Attributions?"Attributions":"Legal";

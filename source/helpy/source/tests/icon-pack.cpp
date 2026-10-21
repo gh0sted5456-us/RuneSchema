@@ -65,13 +65,14 @@ int Run(){
     Publish(Target(cache,first,icon2),pixels);
     Index(Target(cache,first,icon),icon,{"mods/colorsofmoney"});Index(Target(cache,first,icon),icon); // browsing must retain origin metadata
     const auto originIndex=Json(Read(Target(cache,first,icon).wstring()+L".json",8192));assert(originIndex["Origins"][0]=="mods/colorsofmoney");
-    const auto sourcePack=fixture/"ColorsOfMoney.rsmk-icons";
-    assert(Export(sourcePack,root,cache,first,progress,"mods/colorsofmoney").Exported==1);
+    Reject([&]{Export(fixture/"False-owner.rsmk-icons",root,cache,first,progress,"mods/colorsofmoney");});
+    const auto sourcePack=fixture/"First.rsmk-icons";
+    assert(Export(sourcePack,root,cache,first,progress,"mods/first").Exported==1);
     const auto filteredCache=fixture/"source-filtered-import";
-    auto filteredImport=Import(sourcePack,root2,filteredCache,second,1024*1024,progress,ImportPolicy::VerifiedContent,"mods/colorsofmoney");
+    auto filteredImport=Import(sourcePack,root2,filteredCache,second,1024*1024,progress,ImportPolicy::VerifiedContent,"mods/first");
     assert(filteredImport.Imported==1&&fs::exists(Target(filteredCache,second,icon))&&!fs::exists(Target(filteredCache,second,icon2)));
     assert(Import(sourcePack,root2,fixture/"source-absent",second,1024*1024,progress,ImportPolicy::VerifiedContent,"mods/absent").Imported==0);
-    {std::ifstream file(sourcePack,std::ios::binary);uint64_t begin=0;const auto filtered=Header(file,begin,fs::file_size(sourcePack));assert(filtered.Icons.size()==1&&filtered.Icons[0].Icon==icon&&filtered.Icons[0].Origins.contains("mods/colorsofmoney"));}
+    {std::ifstream file(sourcePack,std::ios::binary);uint64_t begin=0;const auto filtered=Header(file,begin,fs::file_size(sourcePack));assert(filtered.Icons.size()==1&&filtered.Icons[0].Icon==icon&&filtered.Icons[0].Origins==std::set<std::string>{"mods/first"});}
     Reject([&]{Export(fixture/"empty.rsmk-icons",root,cache,first,progress,"mods/absent");});assert(!fs::exists(fixture/"empty.rsmk-icons"));
     Reject([&]{Export(fixture/"invalid.rsmk-icons",root,cache,first,progress,"../outside");});
     auto result=Import(pack,root2,cache2,second,1024*1024,progress);assert(result.Imported==2&&result.Skipped==0);assert(Read(Target(cache2,second,icon),100000)==pixels);
@@ -91,7 +92,7 @@ int Run(){
     assert(Read(Target(cache2,second,icon2),100000)==pixels&&fs::last_write_time(unchangedFile)==marker);
     result=Import(sourcePack,root2,cache2,second,1024*1024,progress);assert(result.Imported==0&&result.Unchanged==1);
     Index(Target(cache2,second,icon),icon);
-    assert(Json(Read(Target(cache2,second,icon).wstring()+L".json",8192))["Origins"][0]=="mods/colorsofmoney");
+    assert(Json(Read(Target(cache2,second,icon).wstring()+L".json",8192))["Origins"][0]=="mods/first");
     // Editing one mod must neither import its stale icons nor exclude others.
     write(root2/"mods"/"Second"/"paks"/"Second.pak","new texture data");second=HelpySourceCache::Inspect(root2,plan);
     result=Import(pack,root2,cache2,second,1024*1024,progress);assert(result.Imported==0&&result.Unchanged==1&&result.Skipped==1);assert(!fs::exists(Target(cache2,second,icon2)));

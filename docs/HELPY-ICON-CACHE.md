@@ -6,7 +6,7 @@ For typed item/journal metadata, exported paths and persistence IDs, use
 
 Helpy stores captured item icons under
 `%LOCALAPPDATA%\RuneSchema\HELPY\runtime\saved\cache\item-icons`.
-Settings > Icon cache provides **Clean Icon Cache** and **Open cache folder**
+Settings > Item Cache provides **Clean Icon Cache** and **Open cache folder**
 in both simple and advanced modes. The link opens Windows File Explorer for
 manual management. Close Helpy/the game before manually removing files; visible
 icons can otherwise be captured again while browsing. Cache cleanup does not
@@ -18,6 +18,12 @@ does not capture every texture in the game. Normal browsing tries the compatible
 local disk thumbnail before submitting a native capture request. Missing or
 invalid thumbnails fall back to the game's capture pipeline and are saved for
 later use when persistence is enabled. No all-assets scan runs at startup.
+
+Item Bay, inventory gear changes and Character Editor share the same cached
+catalogue and icon store. Disk thumbnail reads and index updates run off the UI
+thread; at most one completed disk thumbnail is uploaded per UI update. Buttons
+keep their geometry while artwork arrives. A real source change still invalidates
+its entries, and native equipment/use checks remain authoritative.
 
 Helpy owns and maintains this writable AppData cache, not the mod's installation
 folder. A mod can supply optional `cache/*.rsmk-icons` packs inside its RuneSchema

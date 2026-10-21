@@ -19,4 +19,17 @@ inline void PublishRegistry(RegistrySnapshot snapshot) {
 inline std::shared_ptr<const RegistrySnapshot> ReadRegistry() {
     std::lock_guard lock(RegistryMutex);return CurrentRegistry;
 }
+using VerifiedKind=RegistryEnrollment::IdentityKind;
+// Only call after exact native identity-map readback. This is additive:
+// it cannot certify an incomplete registry or turn an old cache into authority.
+inline bool IncludeVerifiedIdentity(VerifiedKind kind,const std::string& id) noexcept {
+    std::lock_guard lock(RegistryMutex);
+    if(!CurrentRegistry||id.empty()||id.size()>1024)return false;
+    try{
+        auto next=std::make_shared<RegistrySnapshot>(*CurrentRegistry);
+        auto& ids=kind==VerifiedKind::Item?next->Items:kind==VerifiedKind::Recipe?next->Recipes:kind==VerifiedKind::Quest?next->Quests:next->Journals;
+        if(!ids.insert(id).second)return true;
+        CurrentRegistry=std::move(next);return true;
+    }catch(...){CurrentRegistry.reset();return false;} // Fail closed for deletion, never fail a committed native registration.
+}
 }

@@ -22,6 +22,8 @@
 #include <string_view>
 #include <stdexcept>
 #include <unordered_map>
+#include <cstdarg>
+#include <cstdio>
 
 namespace PS::HelpyImGuiTheme {
 
@@ -64,6 +66,9 @@ struct Theme {
     float backgroundStrength{.12f};
     bool dpiAware{true},autoReload{true},textBold{false},verboseTooltips{false},itemGridView{true},aiGridView{false},advancedMode{false};
     bool automaticUpdateChecks{true};
+    int previewQuality{2}; // Economy 256px / Balanced 384px / Detail 512px.
+    bool previewAnimate{false},previewDetails{false},scaleUsePortrait{true};
+    std::string scaleReferenceIcon;
     HelpyNavigation::Workspaces workspaces;
     float itemResultHeight{320.0f},aiResultHeight{320.0f};
     float itemBayBrowseRatio{0.74f},dockedBayHeight{280.0f},itemCartWidth{270.0f};
@@ -94,11 +99,14 @@ inline void BeginDetailsTooltip(float logicalWidth=420.0f) {
     const float height=std::max(1.0f,area.y-Current.Y(24));
     ImGui::SetNextWindowSize({width,0},ImGuiCond_Always);
     ImGui::SetNextWindowSizeConstraints({width,0},{width,height});
+    auto background=Current.panelAlt;background.w=std::max(.94f,background.w);
+    ImGui::PushStyleColor(ImGuiCol_PopupBg,background);ImGui::PushStyleColor(ImGuiCol_Border,Current.border);
     ImGui::BeginTooltip();
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX()+std::max(1.0f,width-ImGui::GetStyle().WindowPadding.x*2-ImGui::GetStyle().ScrollbarSize));
     if(ImGui::GetIO().MouseWheel!=0)ImGui::SetScrollY(std::clamp(ImGui::GetScrollY()-ImGui::GetIO().MouseWheel*ImGui::GetTextLineHeight()*3,0.0f,ImGui::GetScrollMaxY()));
 }
-inline void EndDetailsTooltip(){ImGui::PopTextWrapPos();ImGui::EndTooltip();}
+inline void EndDetailsTooltip(){ImGui::PopTextWrapPos();ImGui::EndTooltip();ImGui::PopStyleColor(2);}
+inline void Tooltip(const char* format,...){char text[8192]{};va_list arguments;va_start(arguments,format);std::vsnprintf(text,sizeof(text),format,arguments);va_end(arguments);BeginDetailsTooltip();ImGui::TextUnformatted(text);EndDetailsTooltip();}
 struct HoverState{float Amount=0;int Frame=-1;};
 inline std::unordered_map<ImGuiID,HoverState> HoverStates;
 inline ImVec4 Mix(ImVec4 from,ImVec4 to,float amount){return {from.x+(to.x-from.x)*amount,from.y+(to.y-from.y)*amount,from.z+(to.z-from.z)*amount,from.w+(to.w-from.w)*amount};}
@@ -189,6 +197,7 @@ inline nlohmann::json DocumentFrom(const Theme& t,int iconCacheMB) {
         {"views",{{"advancedMode",t.advancedMode},{"itemGrid",t.itemGridView},{"itemPageSize",t.itemPageSize},{"itemGridColumns",t.itemGridColumns},{"itemGridRows",t.itemGridRows},{"itemGridFitRows",t.itemGridFitRows},{"itemShowPlaceholders",t.itemShowPlaceholders},{"aiGrid",t.aiGridView},{"itemResultHeight",t.itemResultHeight},{"aiResultHeight",t.aiResultHeight},{"itemCategory",t.itemCategory},{"itemSource",t.itemSource},{"itemBayBrowseRatio",t.itemBayBrowseRatio},{"dockedBayHeight",t.dockedBayHeight},{"itemCartWidth",t.itemCartWidth}}},
         {"cache",{{"iconCacheMB",std::clamp(iconCacheMB,0,16384)}}},
         {"updates",{{"automaticChecks",t.automaticUpdateChecks}}},
+        {"preview",{{"quality",t.previewQuality},{"animation",t.previewAnimate},{"details",t.previewDetails},{"scaleUsePortrait",t.scaleUsePortrait},{"scaleReferenceIcon",t.scaleReferenceIcon}}},
         {"runtime",{{"timeUnit",t.runtimeTimeUnit}}},
         {"background",{{"file",t.backgroundFile},{"strength",t.backgroundStrength}}},
         {"liveLog",{{"colorRules",LiveLog::WriteColors(t.logColors)}}},
@@ -255,6 +264,7 @@ inline void Reload(bool createIfMissing=true) {
         next.dpiAware=display.value("dpiAware",true);next.userScale=ReadFloat(display,"userScale",1.18f,0.60f,2.50f);
         next.fontScale=ReadFloat(display,"fontScale",1.34f,0.70f,1.75f);next.density=ReadFloat(display,"density",1.14f,0.65f,1.50f);try{next.fontFamily=display.value("fontFamily",std::string("Segoe UI"));}catch(...){next.fontFamily="Segoe UI";}next.textBold=display.value("textBold",false);next.verboseTooltips=display.value("verboseTooltips",false);next.tooltipDelay=ReadFloat(display,"tooltipDelay",next.tooltipDelay,0.0f,2.0f);
         const auto workspaces=doc.value("workspaces",nlohmann::json::object());next.workspaces={workspaces.value("authoring",false),workspaces.value("tools",false),workspaces.value("liveLog",false),workspaces.value("saveEditor",false),workspaces.value("serverTools",false),workspaces.value("journal",true)};
+        const auto preview=doc.value("preview",nlohmann::json::object());next.previewQuality=ReadInt(preview,"quality",2,0,2);next.previewAnimate=preview.value("animation",false);next.previewDetails=preview.value("details",false);next.scaleUsePortrait=preview.value("scaleUsePortrait",true);next.scaleReferenceIcon=preview.value("scaleReferenceIcon",std::string{});
         const auto views=doc.value("views",nlohmann::json::object());next.advancedMode=views.value("advancedMode",false);next.itemGridView=views.value("itemGrid",true);next.aiGridView=views.value("aiGrid",false);next.itemResultHeight=ReadFloat(views,"itemResultHeight",320.0f,180.0f,900.0f);next.aiResultHeight=ReadFloat(views,"aiResultHeight",320.0f,180.0f,900.0f);try{const auto value=views.value("itemCategory",std::string("All"));if(value=="All"||value=="Weapons"||value=="Armor"||value=="Consumables"||value=="Ammo"||value=="Resources"||value=="Tools"||value=="Building"||value=="Quest"||value=="Misc")next.itemCategory=value;}catch(...){}
         try{const auto value=views.value("itemSource",std::string("all"));const auto kind=ItemSource::Decode(value);if(value==ItemSource::Token(kind))next.itemSource=value;}catch(...){}
         next.itemBayBrowseRatio=ReadFloat(views,"itemBayBrowseRatio",0.74f,0.25f,0.90f);

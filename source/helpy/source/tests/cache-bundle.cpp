@@ -1,5 +1,6 @@
 #include "Core/HelpyIconPack.h"
 #include "Core/CacheBundleItems.h"
+#include "Core/HelpyCacheOwnership.h"
 #include <cassert>
 #include <iostream>
 #undef assert
@@ -7,6 +8,17 @@
 using namespace PS;using Json=nlohmann::json;namespace fs=std::filesystem;
 template<class F> void Reject(F fn){bool caught=false;try{fn();}catch(...){caught=true;}assert(caught);}
 int main(){try{
+    assert(ContentSource::Mod("RSDWSpears")=="mods/rsdwspears");
+    assert(ContentSource::Mod("Dye_GoldTrim")=="mods/dye_goldtrim");
+    assert(ContentSource::Mod("../Other").empty());
+    // Context actions must use the same canonical owner as the source dropdown.
+    {std::ifstream input(fs::path(__FILE__).parent_path()/"../include/Generator/ModsPanel.h");
+        assert(input.good());const std::string source((std::istreambuf_iterator<char>(input)),{});
+        assert(source.find("const auto source=ContentSource::Mod(owner);")!=source.npos);
+        size_t count=0,at=0;while((at=source.find("HelpyIconPacks::SelectedSource=source;",at))!=source.npos){++count;++at;}
+        assert(count==2&&source.find("HelpyIconPacks::SelectedSource=\"mods/\"+owner;")==source.npos);
+        count=0;at=0;while((at=source.find("nullptr,false,!source.empty()",at))!=source.npos){++count;++at;}assert(count==3);
+    }
     std::vector<unsigned char> pixels(SourceBanner::Width*SourceBanner::Height*4,130);const auto banner=SourceBanner::Encode(pixels);assert(SourceBanner::Decode(banner)==pixels);
     auto bannerRecord=CacheBundle::Parse({{"Kind","art"},{"Owner","mods/dye"},{"Path","/Dye/__Helpy__/Banner.Banner"},{"Data",{{"Name","Dye"},{"SourceBannerPixels",banner}}}});
     assert(CacheBundle::Parse(CacheBundle::Document(bannerRecord)).Data.at("SourceBannerPixels")==banner);
@@ -42,6 +54,10 @@ int main(){try{
     native.Path=path;native.Source="examplemount";assert(!CacheBundle::Owned(native,plan,{}));
     auto borrowed=row;borrowed.Owner="mods/other";assert(!CacheBundle::Owned(borrowed,plan,{}));
     auto shared=plan;shared.DeclaredOwners["examplemount"].insert("other");assert(CacheBundle::Owned(row,shared,{})&&!CacheBundle::OriginalOwnerProven(row,shared,{}));
+    {auto declared=std::make_shared<HelpyCacheSources::Plan::AssetOwnerMap>(),authoredConflict=std::make_shared<HelpyCacheSources::Plan::AssetOwnerMap>();
+        (*declared)[HelpyCacheSources::AssetKey(path)]={"example"};(*authoredConflict)[HelpyCacheSources::AssetKey(path)]={"other"};
+        auto conflicting=shared;conflicting.AssetOwners=declared;conflicting.AuthoredAssets=authoredConflict;
+        assert(!CacheBundle::OriginalOwnerProven(row,conflicting,{}));}
     const auto fixture=fs::temp_directory_path()/("rsmk-content-bundle-"+std::to_string(GetCurrentProcessId()));fs::create_directories(fixture);
     const auto root=fixture/"Game"/"Binaries"/"Win64"/"ue4ss"/"Mods"/"RuneSchema",cache=fixture/"cache"/"item-icons";
     const auto pak=fixture/"Game"/"Content"/"Paks"/"Game.pak";fs::create_directories(pak.parent_path());{std::ofstream out(pak);out<<"native content";}
@@ -87,6 +103,37 @@ int main(){try{
     imported=HelpyIconPack::Import(bundle,root,fixture/"visuals"/"item-icons",snapshot,1024*1024,progress,HelpyIconPack::ImportPolicy::ServerDisplayOnly);assert(imported.RecordsImported==0);
     auto document=Json{{"Version",2},{"Kind","RuneSchemaCacheBundle"},{"Locale",locale},{"Sources",{{"examplemount",std::string(64,'0')}}},{"Icons",Json::array()},{"Records",Json::array({original})}};
     assert(HelpyIconPack::Parse(document,0).Records.size()==1);document["Records"][0]["Path"]="/Other/Bad.Bad";Reject([&]{HelpyIconPack::Parse(document,0);});
+    {
+        const std::string borrowedIcon="/Game/Art/T_Health.T_Health",unrelatedIcon="/Game/Art/T_Unrelated.T_Unrelated";
+        std::vector<char> thumb(20,100);std::memcpy(thumb.data(),"RSI3",4);const uint32_t dimensions[]{1,1,4};std::memcpy(thumb.data()+4,dimensions,12);
+        for(const auto& icon:{borrowedIcon,unrelatedIcon}){const auto target=HelpyIconPack::Target(cache,snapshot,icon);HelpyIconPack::Publish(target,thumb);HelpyIconPack::Index(target,icon,{"core"});}
+        const auto targeted=fixture/"Example-targeted.rsmk-cache";
+        assert(HelpyIconPack::Export(targeted,root,cache,snapshot,progress,"mods/example",Json::object(),Json::array({original,journal})).Exported==1);
+        {std::ifstream file(targeted,std::ios::binary);uint64_t start=0;const auto manifest=HelpyIconPack::Header(file,start,fs::file_size(targeted));assert(manifest.Icons.size()==1&&manifest.Icons[0].Icon==borrowedIcon&&manifest.Icons[0].Origins==std::set<std::string>{"core"}&&manifest.Records.size()==2);}
+        const auto targetCache=fixture/"targeted-import"/"item-icons";
+        const auto targetedImport=HelpyIconPack::Import(targeted,root,targetCache,snapshot,1024*1024,progress,HelpyIconPack::ImportPolicy::VerifiedContent,{}, {"examplemount"},"mods/example");
+        assert(targetedImport.Imported==1&&targetedImport.RecordsImported==2&&!fs::exists(HelpyIconPack::Target(targetCache,snapshot,unrelatedIcon)));
+        auto sharedSnapshot=snapshot;sharedSnapshot.DeclaredOwners["examplemount"].insert("other");
+        Reject([&]{HelpyIconPack::Export(fixture/"unproven.rsmk-cache",root,cache,sharedSnapshot,progress,"mods/example",Json::object(),Json::array({original,journal}));});
+        auto exact=std::make_shared<HelpyCacheSources::Plan::AssetOwnerMap>();(*exact)[HelpyCacheSources::AssetKey(path)]={"example"};sharedSnapshot.AssetOwners=exact;
+        const auto proven=HelpyIconPack::Export(fixture/"proven.rsmk-cache",root,cache,sharedSnapshot,progress,"mods/example",Json::object(),Json::array({original,journal}));assert(proven.RecordsExported==1&&proven.Exported==1);
+        // The remote DLL must recover exact declarations, including original
+        // artwork, without borrowing another mod's assets in the same mount.
+        const std::string ownArt="/ExampleMount/Art/T_Original.T_Original",otherArt="/ExampleMount/Art/T_Other.T_Other";
+        for(const auto& icon:{ownArt,otherArt}){const auto target=HelpyIconPack::Target(cache,snapshot,icon);HelpyIconPack::Publish(target,thumb);HelpyIconPack::Index(target,icon,{icon==ownArt?"mods/example":"mods/other"});}
+        (*exact)[HelpyCacheSources::AssetKey(ownArt)]={"example"};(*exact)[HelpyCacheSources::AssetKey(otherArt)]={"other"};
+        auto remote=sharedSnapshot;remote.AssetOwners.reset();remote.AuthoredAssets.reset();
+        const auto verified=HelpyCacheOwnership::Fetch(remote,"mods/example",[&](const Json& q,Json& r){r=HelpyCacheOwnership::Page(sharedSnapshot,q);return true;});
+        const auto remotePack=fixture/"remote-owned.rsmk-cache";
+        const auto remoteResult=HelpyIconPack::Export(remotePack,root,cache,verified,progress,"mods/example",Json::object(),Json::array({original,journal}));
+        assert(remoteResult.RecordsExported==1&&remoteResult.Exported==2);
+        const auto remoteImport=HelpyIconPack::Import(remotePack,root,fixture/"remote-import"/"item-icons",verified,1024*1024,progress,HelpyIconPack::ImportPolicy::VerifiedContent,{},{"examplemount"},"mods/example");
+        assert(remoteImport.Imported==2&&remoteImport.RecordsImported==1);
+        assert(!fs::exists(HelpyIconPack::Target(fixture/"remote-import"/"item-icons",verified,otherArt)));
+        {std::ofstream changed(mod);changed<<"{\"changed\":true}";}const auto changed=HelpySourceCache::Inspect(root,plan);
+        const auto skipped=HelpyIconPack::Import(targeted,root,fixture/"changed-import"/"item-icons",changed,1024*1024,progress,HelpyIconPack::ImportPolicy::VerifiedContent,{}, {"examplemount"},"mods/example");assert(skipped.Imported==0&&skipped.RecordsImported==0);
+        {std::ofstream restored(mod);restored<<"{}";}
+    }
     // Native baseline bundles remain useful with optional native-namespace patches.
     auto patchedPlan=plan;patchedPlan.Owners["game"]={"example"};patchedPlan.DeclaredOwners["game"]={"example"};
     auto patched=HelpySourceCache::Inspect(root,patchedPlan);patched.DeclaredOwners=patchedPlan.DeclaredOwners;

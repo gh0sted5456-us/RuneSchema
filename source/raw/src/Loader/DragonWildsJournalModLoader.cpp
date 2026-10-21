@@ -291,6 +291,8 @@ namespace DragonWilds {
                 continue;
             }
             JournalDef replacement{ wideKey, body, modName };
+            PS::RegistryEnrollment::Await("journal:"+RC::to_string(modName)+":"+RC::to_string(wideKey),PS::RegistryEnrollment::IdentityKind::Journal,
+                body.value("PersistenceID",nlohmann::json{}).is_string()?body.at("PersistenceID").get<std::string>():key);
             m_rejectedEntries.erase(wideKey);
             if (found == m_defs.end())
             {
@@ -435,6 +437,7 @@ namespace DragonWilds {
 
                 if(acquisitionItem)m_acquisitionUnlocks.push_back({EntryHandle(acquisitionItem,false),def.Key});
                 result.EntriesReady++;
+                PS::RegistryEnrollment::Complete("journal:"+RC::to_string(def.Owner)+":"+RC::to_string(def.Key));
             }
             catch (const std::exception& e)
             {

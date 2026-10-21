@@ -168,6 +168,14 @@ namespace PS::Storefront {
         return Name(value.Value);
     }
 
+    inline std::string PlayerPlatform(std::string native, bool local, const Detection& runtime) {
+        if(native!="Unknown" || !local || runtime.DedicatedServer)return native;
+        if(runtime.Value==Kind::GamePass)return "Game Pass";
+        if(runtime.EpicLauncher)return "Epic";
+        if(runtime.SteamLauncher)return "Steam";
+        return native;
+    }
+
     inline bool AllowsEmbeddedAobSignatures() noexcept
     {
         const auto lane = CurrentNativeLane();

@@ -10,6 +10,10 @@ inline nlohmann::json Building(const MapProjection::Projection& projection,MapPr
     const auto path=ItemPresentation::Text(piece,"Path");if(path.empty()||path.front()!='/'||!std::isfinite(yaw))throw std::runtime_error("Choose a native building piece");
     auto request=Target(projection,point,"SpawnBuilding",player,id);request.update({{"Building",path},{"Count",1},{"Distance",5.0},{"Scale",1.0},{"Yaw",yaw},{"Height",0.0},{"Permanent",permanent},{"AllowDeconstruction",true}});return request;
 }
+inline nlohmann::json Prefab(const MapProjection::Projection& projection,MapProjection::Point point,const nlohmann::json& document,const std::string& player,double yaw,uint64_t generation,uint64_t id){
+    if(!document.is_object()||document.value("schema",std::string{})!="rsdwtools.buildings.v1"||!document.contains("pieces")||!document["pieces"].is_array()||document["pieces"].empty()||document["pieces"].size()>4096||document.dump().size()>1024*1024||!std::isfinite(yaw))throw std::runtime_error("Choose an RSDW Builder export (1-4096 pieces, up to 1 MiB)");
+    auto request=Target(projection,point,"ImportBuildings",player,id);request.update({{"Document",document},{"Yaw",yaw},{"Generation",generation}});return request;
+}
 inline nlohmann::json Build(const MapProjection::Projection& projection,MapProjection::Point point,const nlohmann::json& definition,
     const std::string& player,bool permanent,int count,double radius,uint64_t requestId) {
     const auto type=ItemPresentation::Text(definition,"Type");const auto key=ItemPresentation::Text(definition,"Key"),path=ItemPresentation::Text(definition,"Class");

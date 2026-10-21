@@ -81,6 +81,7 @@ template<class Manifest> inline void DeclareManifest(const Manifest& manifest) n
         for(const auto& path:manifest.WearableMeshData)add(path);
         for(const auto& path:manifest.MeleeAttackClasses)add(path);
         for(const auto& path:manifest.RangedAttackClasses)add(path);
+        for(const auto& path:manifest.CacheAssets)add(path);
         for(const auto& [lane,entries]:manifest.LoaderDefinitions.items())for(const auto& [path,body]:entries.items())add(path);
     }catch(...){} // Optional bookkeeping cannot undo an accepted registry.
 }

@@ -4,7 +4,7 @@ RuneSchema's stable diagnostic catalogue. A code identifies a condition, not a c
 
 The Live Console shows a readable event title, timestamp, repeated-event count and details with meaning, impact and next steps. Raw entries remain copyable; the viewer never changes disk logs.
 
-This page contains **39 stable RS codes** and **19 bridge reason codes**. Every entry has its own permanent header link on this page. A catalogue entry is not a claim that every operation already emits that code: older messages can remain uncoded and suggested references stay explicitly labelled.
+This page contains **49 stable RS codes** and **19 bridge reason codes**. Every entry has its own permanent header link on this page. A catalogue entry is not a claim that every operation already emits that code: older messages can remain uncoded and suggested references stay explicitly labelled.
 
 ## Read a code safely
 
@@ -40,6 +40,7 @@ This page contains **39 stable RS codes** and **19 bridge reason codes**. Every 
 | RS-CHEST | Storage |
 | RS-ITEM | Items |
 | RS-SRC | Content |
+| RS-GAME | Game items |
 
 <div class="rs-code-catalogue" markdown="1">
 
@@ -1135,6 +1136,286 @@ Enable/install the matching content and let registration finish, or leave its re
 
 </section>
 
+<section class="rs-code-card" data-rs-code="RS-GAME-001" data-rs-severity="error" markdown="1">
+
+## RS-GAME-001: Item power-level row name is invalid {#rs-game-001}
+
+**Game items · Typical level: error**
+
+The game cannot interpret the power-level digits in an item's data-table row name.
+
+**Common reasons**
+
+ChangePowerLevelInRowName rejected a row whose expected numeric positions contain non-digits. This often indicates authored or cloned row naming, not an obsolete USMAP.
+
+**What RuneSchema does**
+
+The native power-level update for that item failed; a mapping refresh does not rename cooked rows.
+
+**What to do next**
+
+Report the named item and its row name to the content author. Correct the native row naming scheme and recook the asset.
+
+**Troubleshooting checks**
+
+Keep the exact item and row name. Compare it with a working native item of the same type and power-level family. Repair the authoring definition and recook; do not delete unrelated save content or suppress the error.
+
+[Direct link to RS-GAME-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GAME-002" data-rs-severity="warning" markdown="1">
+
+## RS-GAME-002: Cooked animation skeleton GUID is stale {#rs-game-002}
+
+**Game animation · Typical level: warning**
+
+A cooked animation refers to an older skeleton identity.
+
+**Common reasons**
+
+The engine found an animation/skeleton identity mismatch left in cooked content. Registry enrollment does not repair that cooked relationship.
+
+**What RuneSchema does**
+
+The engine reports an asset consistency warning; this alone is not proof of a corrupt save.
+
+**What to do next**
+
+The author should resave the affected source animation against its current skeleton and recook it.
+
+**Troubleshooting checks**
+
+Check the exact montage or sequence in the message. Resave it in the matching Unreal project against the intended skeleton, recook and verify that the warning disappears on the target platform.
+
+[Direct link to RS-GAME-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GAME-003" data-rs-severity="warning" markdown="1">
+
+## RS-GAME-003: Native package or object was not found {#rs-game-003}
+
+**Game packages · Typical level: warning**
+
+An engine package or object lookup did not resolve at the reported path.
+
+**Common reasons**
+
+A package may be unmounted, incorrectly named or unavailable; alternatively an optional conventional registry lookup may legitimately be absent while another declaration works.
+
+**What RuneSchema does**
+
+A required asset may be missing, or an optional conventional-path probe may have found no asset. Read the surrounding declaration result.
+
+**What to do next**
+
+Check the exact cooked package path and mount. Do not mark a mod broken solely because an optional guessed registry path is absent.
+
+**Troubleshooting checks**
+
+Read the owning registrar's accepted/rejected result and exact path. Verify archive contents and mounts before changing declarations. Do not invent a native asset or treat cache artwork as package registration.
+
+[Direct link to RS-GAME-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GAME-004" data-rs-severity="error" markdown="1">
+
+## RS-GAME-004: Material shader data is invalid {#rs-game-004}
+
+**Game materials · Typical level: error**
+
+The engine could not use a material's cooked shader map.
+
+**Common reasons**
+
+The named material lacks a usable shader map for this game/platform/cook, or the engine reports an unnamed invalid material resource.
+
+**What RuneSchema does**
+
+The affected material may render incorrectly; the warning is not a persistence-ID diagnosis.
+
+**What to do next**
+
+Check the named material, target platform and cooking settings. Use a matching cooked build; preserve the original error.
+
+**Troubleshooting checks**
+
+Keep surrounding asset-loading errors and game/storefront versions. Compare the package with the correct cooked target. A USMAP rebuild cannot manufacture missing shader data.
+
+[Direct link to RS-GAME-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-004)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GAME-005" data-rs-severity="error" markdown="1">
+
+## RS-GAME-005: Blueprint accessed a missing object {#rs-game-005}
+
+**Game scripts · Typical level: error**
+
+A native Blueprint message reports an Accessed None object reference.
+
+**Common reasons**
+
+A Blueprint attempted to access an object that is absent, destroyed or not initialized at the point of use.
+
+**What RuneSchema does**
+
+The reported Blueprint operation may not have completed. This reference does not identify who caused the missing object.
+
+**What to do next**
+
+Capture the Blueprint/function and first preceding error. The content author should validate that object before using it.
+
+**Troubleshooting checks**
+
+Retain the native Blueprint, function and call-site text. Inspect initialization order and earlier load failures. A suggested reference is guidance, not proof of mod ownership or a completed action.
+
+[Direct link to RS-GAME-005](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-005)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GAME-000" data-rs-severity="warning" markdown="1">
+
+## RS-GAME-000: Native game warning or error {#rs-game-000}
+
+**Game · Typical level: warning**
+
+A native game warning or error has no more specific RuneSchema reference yet.
+
+**Common reasons**
+
+No specific classifier matched this native category and message. The original error may include an engine, EOS, HTTP or platform-owned code.
+
+**What RuneSchema does**
+
+The original message and severity remain authoritative. This reference is not a diagnosis or a game-issued error code.
+
+**What to do next**
+
+Keep the original category, message, provider code and surrounding events. Report the first failure and when it occurred.
+
+**Troubleshooting checks**
+
+Read the original message and first preceding failure. Keep provider codes unchanged. Record game build, storefront and whether the event occurred during startup, play or shutdown; this generic reference does not claim a root cause.
+
+[Direct link to RS-GAME-000](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-000)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GAME-006" data-rs-severity="warning" markdown="1">
+
+## RS-GAME-006: Vitals UI callback cleanup failed {#rs-game-006}
+
+**Game UI · Typical level: warning**
+
+The native vitals widget could not remove a registered callback.
+
+**Common reasons**
+
+A native vitals-widget callback could not be removed. This can occur while widgets or their owners are being destroyed.
+
+**What RuneSchema does**
+
+The widget may be tearing down. This message alone does not establish save corruption or mod failure.
+
+**What to do next**
+
+Check whether this occurs only during exit or also during play. Preserve the callback name and earlier UI errors.
+
+**Troubleshooting checks**
+
+Record the exact callback and whether the UI malfunctions while playing. Compare the timestamp with world exit and shutdown. Do not mark a mod unhealthy solely because of an unattributed teardown warning.
+
+[Direct link to RS-GAME-006](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-006)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GAME-007" data-rs-severity="warning" markdown="1">
+
+## RS-GAME-007: Native user settings unavailable {#rs-game-007}
+
+**Game settings · Typical level: warning**
+
+The game could not find its expected native user settings object.
+
+**Common reasons**
+
+A native settings access occurred before initialization, after teardown, or while its expected settings object was unavailable.
+
+**What RuneSchema does**
+
+Settings access may fail. During shutdown the object may already be unavailable; this is not evidence of a corrupt character save.
+
+**What to do next**
+
+Check the timing and whether settings still work while playing. Capture preceding initialization errors; do not delete saves to silence this warning.
+
+**Troubleshooting checks**
+
+Check whether settings work during normal play. Preserve the earliest settings initialization failure. A shutdown-only message does not justify deleting configuration or character/world saves.
+
+[Direct link to RS-GAME-007](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-007)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GAME-008" data-rs-severity="warning" markdown="1">
+
+## RS-GAME-008: Native crowd navigation unavailable {#rs-game-008}
+
+**Game navigation · Typical level: warning**
+
+The native crowd manager could not find a RecastNavMesh instance.
+
+**Common reasons**
+
+The crowd manager did not find a RecastNavMesh in its current world. The world may be loading or already tearing down.
+
+**What RuneSchema does**
+
+Crowd navigation may be unavailable in the current world lifecycle stage. A teardown-only warning does not prove broken map content.
+
+**What to do next**
+
+Record the world and whether AI is affected during play. Compare with world initialization or teardown events.
+
+**Troubleshooting checks**
+
+Record the world and any AI navigation symptoms during play. Keep surrounding load/teardown events. Do not generate replacement navigation data or blame a mod without asset evidence.
+
+[Direct link to RS-GAME-008](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-008)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GAME-009" data-rs-severity="warning" markdown="1">
+
+## RS-GAME-009: Native tagged-object cleanup mismatch {#rs-game-009}
+
+**Game object lifecycle · Typical level: warning**
+
+The native registry-tag subsystem could not unregister a tagged object as expected.
+
+**Common reasons**
+
+Native tagged-object registration and cleanup did not agree about an object's lifecycle.
+
+**What RuneSchema does**
+
+This concerns native gameplay-object tags, not RuneSchema persistence-ID declarations. It does not authorize save pruning.
+
+**What to do next**
+
+Preserve the exact object and lifecycle stage. Investigate repeated failures during play separately from shutdown-only messages.
+
+**Troubleshooting checks**
+
+Capture the full object path and preceding lifecycle messages. This is not the RuneSchema persistence-ID registry, and neither automatic pruning nor invented declarations will repair it.
+
+[Direct link to RS-GAME-009](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-009)
+
+</section>
+
 ## Bridge reason codes
 
 These lower-level values appear as `reasonCode` in `NetworkBridgeDiagnostics.json`. Read them together with `stage`, `outcome`, `channel` and `correlationId`; accepted stages are not necessarily completed actions. Some exception classifications are coarse hints. Receipts can also carry bounded free-text detail: arbitrary detail is not a new registered code. Known reasons include a `referenceUrl` pointing here; unknown detail is preserved without inventing a diagnosis.
@@ -1451,10 +1732,12 @@ The audit scans first-party runtime and Helpy source, plugins and build scripts 
 
 Windows error numbers, HRESULTs, HTTP status codes, UE4SS messages and EOS results belong to their respective providers; they are not RuneSchema RS codes. Keep their original value and surrounding message. Ordinary log tags such as `[PERSISTENCE-PRUNER]` identify a subsystem, not an error number.
 
+`RS-GAME-*` entries are RuneSchema troubleshooting references for native game messages, not codes emitted by the game. Helpy marks symptom matches as suggested, preserves the original message and severity, and uses `RS-GAME-000` when no specific native diagnosis matches.
+
 ## For mod authors
 
 Emit a registered code at the actual decision site. Never reuse it for another condition, classify absent readings as zero, or turn performance attribution into network failure. Keep dynamic paths, counts and native details in the original message.
 
 The stable catalogue lives at `resources/diagnostics/codes.json`, condition-specific checks at `resources/diagnostics/guidance.json`, and bridge reasons at `resources/diagnostics/bridge-reasons.json`. Run `python build/generate-diagnostics.py --check` and `python build/audit-diagnostics.py`; runtime and Helpy headers, public JSON and this page must agree. Use `PS::Diagnostics::Url(entry)` for RS links and `BridgeReasonUrl(reason)` for known bridge reasons; never maintain a second reference URL or derive diagnoses from arbitrary text.
 
-See [troubleshooting](TROUBLESHOOTING.md) and [icon cache controls](HELPY-ICON-CACHE.md).
+See [troubleshooting](TROUBLESHOOTING.md).

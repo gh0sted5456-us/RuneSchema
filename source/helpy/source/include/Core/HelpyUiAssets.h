@@ -5,6 +5,15 @@
 namespace PS::HelpyUiAssets {
 struct File {const char* Name;size_t Bytes;const char* SHA256;};
 inline constexpr std::array Files{
+    File{"power-abovezone.png",6628,"7930188b3efaff835b1a0e9bf4453c50646581c039c74d2e9ab20236092b7d9e"},
+    File{"power-atzone.png",6190,"e972b54980ee964d9709b2cdc3eeb4d16944f662e8ce47a45e00087e68edfd0b"},
+    File{"power-belowzone.png",6070,"59736b95602b4c4c4cfe4d3961eefa131c837cadb44ad39c33168116723fd042"},
+    File{"power-severelybelowzone.png",5744,"8a3e0454f63f574456c708de3ade7da106d5286b56fa7c31ac7f7be1aaee246f"},
+    File{"power-neutralzone.png",6066,"bdd68fe728347c018577313364d787327773914c50846608c991997ffbe1c958"},
+    File{"scale-null.png",1188284,"89ec441aeca2923f238f732adb54a12c2423c32ce9e41d5365248e5bf2b51582"},
+    File{"scale-lonestar.png",958961,"cf1f40fce7deaab3d1b471eaecd37ebf059b9c45b3d5362448c94e9f631cc9bc"},
+    File{"scale-ighrazi.png",902069,"f8ca38840eb4b4a1b746481b6f75f2785264ba821bf9f4db3140baa87cae2432"},
+    File{"scale-hauler.png",1012187,"1135b34e4a3f59ddbe02a6f5c753c318e4ef9d64d25cb2838cd9b115fb8b309d"},
     File{"source-base-game.png",4524400,"fad23ef33f8d1e4b26a8238853bc028075ab3f98abc210e80932e5986c224d81"},
     File{"source-umbral-sands.png",3067770,"4f0923926be681b9f7d72d31eb123b203324859d978981edcc47102c51531fe0"},
     File{"source-scorched-wilderness.png",4144594,"ea70adf2b7e5b0e745f2b92fc1232fb9728ad6ed6c7a0bea04090672aa5b395c"},

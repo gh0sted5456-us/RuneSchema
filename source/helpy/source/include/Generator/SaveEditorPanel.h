@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyImGuiTheme.h"
 #include "Generator/MapLayerIcons.h"
 #include "Generator/AuthoringPanel.h"
 #include "Generator/ItemIconCache.h"
@@ -6,6 +7,7 @@
 #include "Generator/ItemGridPicker.h"
 #include "Generator/ItemBayBrowser.h"
 #include "Generator/CharacterPreviewPanel.h"
+#include "Generator/HelpyStoragePanel.h"
 #include "Core/CharacterWorkbench.h"
 #include "Core/LoadoutEligibility.h"
 #include <commdlg.h>
@@ -17,11 +19,21 @@ inline std::string Pointer,Selected,Token,Error;
 inline Json Browser=Json::object(),Review=Json::object();
 inline uint64_t Applied=0,Generation=0;
 inline bool Offline=false,Confirmed=false,Opened=false;
+inline ImTextureRef SteamIcon, EpicIcon, XboxIcon;
+inline void ProviderIcon(const Json& file){
+    const auto provider=file.value("Provider",std::string("Imported"));const float side=HelpyImGuiTheme::Current.Y(20);
+    const auto icon=[&](ImTextureRef texture,const char* fallback){if(texture.GetTexID())ImGui::Image(texture,{side,side});else ImGui::TextUnformatted(fallback);ImGui::SameLine();};
+    if(provider=="Steam"||provider=="SteamEpic")icon(SteamIcon,"Steam");
+    if(provider=="Epic"||provider=="SteamEpic")icon(EpicIcon,"Epic");
+    if(provider=="GamePass")icon(XboxIcon,"Xbox");
+    if(provider=="Imported")icon({},"JSON");
+}
 inline Json Items=Json::object();inline bool InventoryRequested=false,ConfirmRemoval=false;
 inline std::set<std::string> ItemSelection;inline std::map<std::string,int> StackDrafts;
 inline char ItemSearch[257]{};inline std::string ItemSource;
 inline std::string InventoryGroup="Inventory";
 inline bool InventoryRecordTable=false;
+inline bool FavoritesOnly=false;inline std::string PersonalTag;
 inline std::string FocusedSavedItem;
 inline Json DroppedInventoryItem=Json::object();
 inline bool FocusInventoryGrid=false;
@@ -36,7 +48,13 @@ inline void Choose(){
     dialog.lpstrFilter=L"Character JSON payload (*.json)\0*.json\0\0";dialog.Flags=OFN_EXPLORER|OFN_NOCHANGEDIR|OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST;
     if(GetOpenFileNameW(&dialog)){const auto text=std::filesystem::path(file).u8string();AuthoringPanel::Copy(File,sizeof(File),std::string(text.begin(),text.end()));Invalidate();}
 }
-inline bool Button(const char* label,const char* op,const Json& args=Json::object()){return AuthoringPanel::Button(label,op,args);}
+inline bool Button(const char* label,const char* op,const Json& args=Json::object()){
+    if(std::string_view(op)=="SaveEditorRemoveItems"&&args.contains("Pointers")){
+        bool safe=Items.contains("Items");if(safe)for(const auto& pointer:args.at("Pointers")){const Json* found=nullptr;for(const auto& row:Items["Items"])if(row.at("Pointer")==pointer){found=&row;break;}
+            if(!found||HelpyPersonalization::Locked(*found)){safe=false;break;}}
+        if(!safe){ImGui::BeginDisabled();AuthoringPanel::Button(label,op,args);ImGui::EndDisabled();ImGui::TextWrapped("A selected item is locked or no longer on the current page. Refresh and review the selection.");return false;}
+    }return AuthoringPanel::Button(label,op,args);
+}
 inline void Browse(const std::string& pointer,size_t offset=0){Selected.clear();AuthoringClient::Submit("SaveEditorBrowse",{{"Pointer",pointer},{"Offset",offset}});}
 inline void Apply(){
     const auto& snap=AuthoringClient::Snapshot;const auto generation=snap.value("Generation",uint64_t{});
@@ -82,7 +100,7 @@ inline void InventoryPlacards(const std::vector<const Json*>& visible,bool compa
         ImGuiListClipper clipper;clipper.Begin(int((visible.size()+columns-1)/columns),height+ImGui::GetStyle().ItemSpacing.y);
         while(clipper.Step())for(int line=clipper.DisplayStart;line<clipper.DisplayEnd;++line)for(int column=0;column<columns;++column){const auto index=size_t(line*columns+column);if(index>=visible.size())break;const auto& saved=*visible[index];const auto pointer=saved.at("Pointer").get<std::string>();const auto row=SavedPlacard(saved);const auto path=ItemText(row,"Path"),name=ItemPresentation::Name(row);
             ImGui::PushID(pointer.c_str());const auto a=ImGui::GetCursorScreenPos();const ImVec2 b(a.x+width,a.y+height);const bool clicked=ImGui::InvisibleButton("##saved-item-card",{width,height}),hovered=ImGui::IsItemHovered();
-            if(clicked){FocusedSavedItem=pointer;if(!ImGui::GetIO().KeyCtrl)ItemSelection.clear();if(!ItemSelection.erase(pointer)&&ItemSelection.size()<128)ItemSelection.insert(pointer);ConfirmRemoval=false;}
+            if(clicked){FocusedSavedItem=pointer;if(!ImGui::GetIO().KeyCtrl)ItemSelection.clear();if(!ItemSelection.erase(pointer)&&ItemSelection.size()<128&&!HelpyPersonalization::Locked(row))ItemSelection.insert(pointer);ConfirmRemoval=false;}
             ItemGridPicker::DrawPlacard(row,a,b,ItemSelection.contains(pointer),hovered);
 #if defined(HELPY_PREVIEW)
             ++SavedPlacardsDrawn;
@@ -91,8 +109,8 @@ inline void InventoryPlacards(const std::vector<const Json*>& visible,bool compa
             auto* draw=ImGui::GetWindowDrawList();const float footer=std::min(theme.Y(42),height*.42f);const auto count="×"+saved.value("Count",Json(1)).dump();const auto extent=ImGui::CalcTextSize(count.c_str());const ImVec2 quantity(b.x-theme.X(6)-extent.x,b.y-footer-theme.Y(5)-extent.y);
             draw->AddRectFilled({quantity.x-theme.X(2),quantity.y},{b.x-theme.X(4),quantity.y+extent.y},ImGui::GetColorU32(theme.panelAlt),theme.X(2));draw->AddText(quantity,ImGui::GetColorU32(theme.text),count.c_str());
             if(saved.value("Equipped",false))draw->AddText({a.x+theme.X(25),b.y-footer-theme.Y(5)-ImGui::GetTextLineHeight()},ImGui::GetColorU32(theme.accent),"Equipped");
-            if(ImGui::BeginDragDropSource()){ImGui::SetDragDropPayload("RS_SAVE_ITEM",pointer.c_str(),pointer.size()+1);ImGui::TextUnformatted(name.c_str());ImGui::EndDragDropSource();}
-            if(ImGui::BeginPopupContextItem("##saved-item-actions")){ImGui::TextWrapped("%s",name.c_str());if(ImGui::MenuItem("Select / edit this saved instance")){FocusedSavedItem=pointer;ItemSelection={pointer};ConfirmRemoval=false;}if(ImGui::MenuItem("Show item details",nullptr,false,!path.empty()))ItemGridPicker::PinDetails(row);ImGui::TextDisabled("Removal requires review below.");ImGui::EndPopup();}
+            if(ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoPreviewTooltip)){ImGui::SetDragDropPayload("RS_SAVE_ITEM",pointer.c_str(),pointer.size()+1);ItemGridPicker::HeldItem(row,"Saved item");ImGui::EndDragDropSource();}
+            if(ImGui::BeginPopupContextItem("##saved-item-actions")){PersonalizationPanel::Menu(row);ImGui::TextWrapped("%s",name.c_str());if(ImGui::MenuItem("Preview",nullptr,false,ItemPreviewRequest::Valid(row)))ItemPreviewRequest::Show(row);if(ImGui::MenuItem("Select / edit this saved instance")){FocusedSavedItem=pointer;ItemSelection={pointer};ConfirmRemoval=false;}if(ImGui::MenuItem("Show item details",nullptr,false,!path.empty()))ItemGridPicker::PinDetails(row);ImGui::TextDisabled("Removal requires review below.");ImGui::EndPopup();}
             if(HelpyImGuiTheme::TooltipReady("saved-item:"+pointer,hovered))ItemGridPicker::VerboseTooltip(row,name,path,false,true);
             ImGui::PopID();if(column+1<columns&&index+1<visible.size())ImGui::SameLine();
         }
@@ -107,7 +125,7 @@ inline void Inventory(bool compact=false){
     HelpyPreviewHooks::InventorySearchId=ImGui::GetID("Search");HelpyPreviewHooks::InventoryRefreshId=ImGui::GetID("Refresh");
 #endif
     ImGui::SeparatorText("Inventory");
-    if(ImGui::BeginTabBar("##native-inventory-tabs",ImGuiTabBarFlags_FittingPolicyScroll)){for(const auto* group:CharacterWorkbench::Groups)if(ImGui::BeginTabItem(group)){if(InventoryGroup!=group){InventoryGroup=group;ItemSelection.clear();}ImGui::EndTabItem();}ImGui::EndTabBar();}
+    if(ImGui::BeginTabBar("##native-inventory-tabs",ImGuiTabBarFlags_FittingPolicyScroll|ImGuiTabBarFlags_Reorderable)){for(const auto* group:CharacterWorkbench::Groups)if(ImGui::BeginTabItem(group)){if(InventoryGroup!=group){InventoryGroup=group;ItemSelection.clear();}ImGui::EndTabItem();}ImGui::EndTabBar();}
     if(!InventoryRequested&&!AuthoringClient::Busy()){InventoryRequested=AuthoringClient::Submit("SaveEditorInventory");}
     const auto offset=Items.value("Offset",size_t{}),total=Items.value("Total",size_t{});
     if(!compact&&Button("Refresh inventory names / sources","SaveEditorInventory",{{"Offset",offset}}))InventoryRequested=true;
@@ -118,31 +136,36 @@ inline void Inventory(bool compact=false){
     if(compact)ImGui::SetNextItemWidth(-1);
     if(ImGui::BeginCombo(compact?"##source-on-page":"Source on this page",ItemSource.empty()?"All sources":ItemSource.c_str())){
         if(ImGui::Selectable("All sources",ItemSource.empty()))ItemSource.clear();for(const auto& name:sources)if(ImGui::Selectable(name.c_str(),ItemSource==name))ItemSource=name;ImGui::EndCombo();}
+    PersonalizationPanel::Filters(FavoritesOnly,PersonalTag);
     std::vector<const Json*> visible;auto search=HelpyCacheSources::Lower(ItemSearch);
     for(const auto& row:Items["Items"]){auto source=ItemText(row,"SourceName");if(source.empty())source="Unresolved";
         if(InventoryGroup=="Equipped"?!row.value("Equipped",false):row.value("Group",CharacterWorkbench::InventoryGroup(row))!=InventoryGroup)continue;
         if(!ItemSource.empty()&&source!=ItemSource)continue;
-        const auto text=HelpyCacheSources::Lower(ItemText(row,"DisplayName")+" "+ItemText(row,"PersistenceID")+" "+ItemText(row,"AssetPath")+" "+source);
+        if(!PersonalizationPanel::Matches(row,FavoritesOnly,PersonalTag))continue;
+        const auto text=HelpyCacheSources::Lower(ItemText(row,"DisplayName")+" "+HelpyPersonalization::SearchText(row)+" "+ItemText(row,"PersistenceID")+" "+ItemText(row,"AssetPath")+" "+source);
         if(search.empty()||text.find(search)!=text.npos)visible.push_back(&row);}
     std::stable_sort(visible.begin(),visible.end(),[](const auto* a,const auto* b){return std::pair{ItemText(*a,"SourceName"),ItemText(*a,"DisplayName")}<std::pair{ItemText(*b,"SourceName"),ItemText(*b,"DisplayName")};});
-    if(!compact){if(HelpyImGuiTheme::SoftButton("Select visible")){for(const auto* row:visible)if(ItemSelection.size()<128)ItemSelection.insert(row->at("Pointer").get<std::string>());ConfirmRemoval=false;}ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Clear selection")){ItemSelection.clear();ConfirmRemoval=false;}}
+    if(!compact){if(HelpyImGuiTheme::SoftButton("Select visible")){for(const auto* row:visible)if(ItemSelection.size()<128&&!HelpyPersonalization::Locked(*row))ItemSelection.insert(row->at("Pointer").get<std::string>());ConfirmRemoval=false;}ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Clear selection")){ItemSelection.clear();ConfirmRemoval=false;}}
+    const auto selectRemoval=[&](bool junk){ItemSelection.clear();ConfirmRemoval=false;for(const auto* row:visible)if(HelpyPersonalization::BulkEligible(*row,junk))ItemSelection.insert(row->at("Pointer").get<std::string>());};
+    if(HelpyImGuiTheme::SoftButton("Remove Junk..."))selectRemoval(true);if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("Select junk on this filtered page for reviewed draft removal. Skips locked, favorite, equipped and unresolved items.");
+    ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Remove All..."))selectRemoval(false);if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("Select eligible items on this filtered page, not unseen pages. Nothing is removed until confirmed and staged; export is separate.");
     ImGui::TextDisabled("%zu items · %zu selected",visible.size(),ItemSelection.size());
     if(!compact)ImGui::Checkbox("Advanced record table",&InventoryRecordTable);
     if(!InventoryRecordTable)InventoryPlacards(visible,compact,offset);
     else if(ImGui::BeginTable("##save-inventory",compact?2:4,ImGuiTableFlags_BordersInnerH|ImGuiTableFlags_Resizable|ImGuiTableFlags_ScrollY,{0,HelpyImGuiTheme::Current.Y(245)})){
         if(!compact)ImGui::TableSetupColumn("Select",ImGuiTableColumnFlags_WidthFixed,HelpyImGuiTheme::Current.X(40));ImGui::TableSetupColumn("Item / source");ImGui::TableSetupColumn("Stack",ImGuiTableColumnFlags_WidthFixed,HelpyImGuiTheme::Current.X(compact?88:120));if(!compact)ImGui::TableSetupColumn("PersistenceID / saved slot");ImGui::TableHeadersRow();
         for(const auto* entry:visible){const auto& row=*entry;const auto pointer=row.at("Pointer").get<std::string>();ImGui::PushID(pointer.c_str());ImGui::TableNextRow();ImGui::TableNextColumn();
-            bool selected=ItemSelection.contains(pointer);if(ImGui::Checkbox("##select",&selected)){if(selected&&ItemSelection.size()<128)ItemSelection.insert(pointer);else ItemSelection.erase(pointer);ConfirmRemoval=false;}
+            bool selected=ItemSelection.contains(pointer);ImGui::BeginDisabled(HelpyPersonalization::Locked(row));if(ImGui::Checkbox("##select",&selected)){if(selected&&ItemSelection.size()<128)ItemSelection.insert(pointer);else ItemSelection.erase(pointer);ConfirmRemoval=false;}ImGui::EndDisabled();
             if(compact)ImGui::SameLine();else ImGui::TableNextColumn();const auto at=ImGui::GetCursorScreenPos();const float size=HelpyImGuiTheme::Current.Y(30);const auto icon=ItemText(row,"Icon");
             if(!icon.empty())ItemIconCache::Draw(icon,at,{at.x+size,at.y+size},true);ImGui::Dummy({size,size});ImGui::SameLine();ImGui::BeginGroup();
             auto name=ItemText(row,"DisplayName");if(name.empty())name=ItemText(row,"InternalName");if(name.empty())name="Unresolved item";ImGui::TextWrapped("%s",name.c_str());
             auto source=ItemText(row,"SourceName");if(source.empty())source="Unresolved — load its content to identify";ImGui::TextWrapped("%s",source.c_str());
             if(row.value("Equipped",false))ImGui::TextWrapped("Equipped · removing also unlinks its native loadout slot");ImGui::EndGroup();
-            if(ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)){ImGui::SetDragDropPayload("RS_SAVE_ITEM",pointer.c_str(),pointer.size()+1);ImGui::TextUnformatted(name.c_str());ImGui::EndDragDropSource();}
+            if(ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID|ImGuiDragDropFlags_SourceNoPreviewTooltip)){ImGui::SetDragDropPayload("RS_SAVE_ITEM",pointer.c_str(),pointer.size()+1);ItemGridPicker::HeldItem(row,"Saved item");ImGui::EndDragDropSource();}
             if(ImGui::IsItemHovered()){HelpyImGuiTheme::BeginDetailsTooltip();ImGui::TextWrapped("%s",ItemText(row,"AssetPath").c_str());ImGui::TextWrapped("Persistence ID: %s",ItemText(row,"PersistenceID").c_str());ImGui::TextWrapped("Saved slot: %s / %s",ItemText(row,"Container").c_str(),ItemText(row,"Slot").c_str());ImGui::TextWrapped("Instance: %s",row.value("InstanceID",Json{}).dump().c_str());HelpyImGuiTheme::EndDetailsTooltip();}
             ImGui::TableNextColumn();if(row.value("StackEditable",false)){
                 auto [draft,added]=StackDrafts.try_emplace(pointer,row.at("Count").get<int>());ImGui::SetNextItemWidth(-1);ImGui::InputInt("##stack",&draft->second,0,0);
-                if(HelpyImGuiTheme::SoftButton("Stage count"))if(AuthoringClient::Submit("SaveEditorStack",{{"Pointer",pointer},{"Count",draft->second},{"Revision",Items.at("Revision")},{"Offset",offset}}))Invalidate();
+                ImGui::BeginDisabled(HelpyPersonalization::Locked(row));if(HelpyImGuiTheme::SoftButton("Stage count"))if(AuthoringClient::Submit("SaveEditorStack",{{"Pointer",pointer},{"Count",draft->second},{"Revision",Items.at("Revision")},{"Offset",offset}}))Invalidate();ImGui::EndDisabled();
                 ImGui::TextWrapped("Max: %s",row.contains("MaxStackSize")?row.at("MaxStackSize").dump().c_str():"unknown; decrease only");
             }else ImGui::TextWrapped("%s · single/read-only",row.value("Count",Json(1)).dump().c_str());
             if(!compact){ImGui::TableNextColumn();ImGui::TextWrapped("%s",ItemText(row,"PersistenceID").c_str());ImGui::TextDisabled("%s / %s",ItemText(row,"Container").c_str(),ItemText(row,"Slot").c_str());}
@@ -219,12 +242,20 @@ inline void Render(const Json& catalog=Json::object(),uint64_t catalogRevision=0
         if(HelpyImGuiTheme::SoftButton("Activate save tools"))AuthoringClient::Activate();return;
     }
     StudioApply();StudioHeader();
-    if(ImGui::BeginTabBar("Save editor workflows")){
+    if(ImGui::BeginTabBar("Save editor workflows",ImGuiTabBarFlags_Reorderable)){
         if(ImGui::BeginTabItem("Character")){Studio(catalog,catalogRevision);ImGui::EndTabItem();}
         if(ImGui::BeginTabItem("Inventory & Item Bay")){Studio(catalog,catalogRevision,true);ImGui::EndTabItem();}
-        if(ImGui::BeginTabItem("Advanced / export")){Edit();ImGui::EndTabItem();}
-        if(ImGui::BeginTabItem("Clean copy")){AuthoringPanel::ApplyResult();AuthoringPanel::Cleanup();ImGui::EndTabItem();}
-        if(ImGui::BeginTabItem("Mod roots / compatibility")){
+        if(ImGui::BeginTabItem("Helpy Storage")){if(Opened)HelpyStoragePanel::Render(Browser.value("CharacterGuid",StudioAppearance.value("CharacterGuid",std::string{})));else ImGui::TextDisabled("Open a character save above.");ImGui::EndTabItem();}
+        if(ImGui::BeginTabItem("Convert / export")){
+            ImGui::SeparatorText("1  Choose source");ImGui::TextWrapped("%s",File[0]?File:"Choose a character save above.");
+            ImGui::SeparatorText("2  Choose destination");
+            ImGui::TextUnformatted("Steam / Epic · verified character JSON copy");
+            ImGui::BeginDisabled();ImGui::Button("Xbox / Game Pass · provider adapter unavailable");ImGui::EndDisabled();
+            ImGui::TextWrapped("A JSON export is not a WGS conversion. Game Pass attachment is unavailable until its save-provider adapter is verified. Never place JSON directly into WGS storage.");
+            ImGui::SeparatorText("3  Review and export");if(Opened)StudioReview();else ImGui::TextDisabled("Open an offline character copy first.");ImGui::EndTabItem();}
+        if(HelpyImGuiTheme::Current.advancedMode&&ImGui::BeginTabItem("Advanced / export")){Edit();ImGui::EndTabItem();}
+        if(HelpyImGuiTheme::Current.advancedMode&&ImGui::BeginTabItem("Clean copy")){AuthoringPanel::ApplyResult();AuthoringPanel::Cleanup();ImGui::EndTabItem();}
+        if(HelpyImGuiTheme::Current.advancedMode&&ImGui::BeginTabItem("Mod roots / compatibility")){
             Button("Refresh roots and runtime","SaveEditorList");const auto& list=AuthoringClient::Result("SaveEditorList");
             ImGui::TextWrapped("Runtime: %s",list.value("Runtime",std::string("Waiting for host")).c_str());
             ImGui::TextWrapped("Imported Steam/Epic character JSON remains editable on Game Pass. Attaching/converting requires the runtime's verified native save-provider adapter; it is not enabled in this build. Never copy JSON directly into WGS storage.");

@@ -18,7 +18,7 @@ public:
     bool HasCapability(const std::string& capability) const;
     bool HasConnection(const std::string& connection) const;
     std::vector<std::string> Connections() const;
-    std::string Call(const std::string& caller,const std::string& service,const std::string& request) const;
+    static std::string Call(const std::string& caller,const std::string& service,const std::string& request);
     std::vector<std::string> Diagnostics() const;
 private:
     struct State;

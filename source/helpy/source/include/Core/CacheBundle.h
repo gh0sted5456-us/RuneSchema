@@ -78,7 +78,11 @@ inline bool Owned(const Record& row,const HelpyCacheSources::Plan& plan,const st
 inline bool OriginalOwnerProven(const Record& row,const HelpyCacheSources::Plan& plan,const std::set<std::string>& nativePlugins){
     if(!Owned(row,plan,nativePlugins))return false;if(!row.Owner.starts_with("mods/"))return true;
     const auto owner=row.Owner.substr(5),key=HelpyCacheSources::AssetKey(row.Path);
-    for(const auto& evidence:{plan.AssetOwners,plan.AuthoredAssets})if(evidence){const auto found=evidence->find(key);if(found!=evidence->end())return found->second.size()==1&&found->second.contains(owner);}
+    bool exact=false;
+    for(const auto& evidence:{plan.AssetOwners,plan.AuthoredAssets})if(evidence){const auto found=evidence->find(key);if(found!=evidence->end()){
+        exact=true;if(found->second.size()!=1||!found->second.contains(owner))return false;
+    }}
+    if(exact)return true;
     const auto found=plan.DeclaredOwners.find(row.Source);return found!=plan.DeclaredOwners.end()&&found->second.size()==1;
 }
 inline std::string Route(const Record& row){return row.Owner+"|"+row.Kind+"|"+row.Source;}

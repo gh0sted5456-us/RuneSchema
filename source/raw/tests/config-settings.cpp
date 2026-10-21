@@ -45,6 +45,10 @@ int RunConfigSettings() {
     assert(DecodeSettings(R"({"bpModLoader":{"luaActorLoader":true}})").bpModLoader.luaActorLoader);
     assert(!DecodeSettings("{}").persistence.characterCustomization);
     assert(!DecodeSettings("{}").persistence.allowCorruptCharacterEntry);
+    assert(PSConfigSettings{}.quickLaunch.mode=="lessRestrictive"&&PSConfigSettings{}.quickLaunch.softLoading);
+    assert(DecodeSettings("{}").quickLaunch.mode=="lessRestrictive"&&DecodeSettings("{}").quickLaunch.softLoading&&!DecodeSettings("{}").quickLaunch.enabled);
+    const auto vanilla=DecodeSettings(R"({"quickLaunch":{"mode":"vanilla"}})");
+    assert(vanilla.quickLaunch.mode=="vanilla"&&!vanilla.quickLaunch.softLoading&&!vanilla.persistence.allowCorruptCharacterEntry);
     assert(DecodeSettings("{}").persistence.quests);
     assert(!DecodeSettings("{}").defaultRecovery.enabled);
     assert(!DecodeSettings("{}").defaultRecovery.useExternalDefault);

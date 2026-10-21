@@ -14,7 +14,7 @@ inline bool Matches(const nlohmann::json& row,std::string_view slot){
     if(row.value("NativeMagicAmmo",false))return slot=="MagicAmmo1";
     const auto strategy=row.value("SlotStrategy",std::string{});
     if(strategy==slot)return true;
-    if(slot=="Trinket2")return strategy=="Trinket"||strategy=="Necklace";
+    if(slot=="Trinket"||slot=="Trinket2")return strategy=="Trinket"||strategy=="Necklace";
     if(slot=="HeldRight")return strategy=="HeldOnlyRight"||strategy=="HeldTwoHanded"||strategy=="HeldAny";
     if(slot=="HeldLeft")return strategy=="HeldOnlyLeft"||strategy=="HeldAny";
     return false;

@@ -10,6 +10,7 @@ int main(){
         {"Customization",{{"DisplayName","Before"},{"Unknown",42}}},{"UnknownFutureSection",{{"Keep",true}}}};
     Session session;Reject([&]{session.Open({{"World","SPUD"}});});session.Open(original);
     auto root=session.Browse();assert(root["Rows"].size()==4);
+    assert(root["CharacterGuid"]=="identity"&&session.CharacterGuid()=="identity");
     auto game=session.Browse("/GameProgress");const auto revision=game["Revision"].get<uint64_t>();
     session.Set("/GameProgress/Health",75,revision);
     Reject([&]{session.Set("/GameProgress/Health",60,revision);});

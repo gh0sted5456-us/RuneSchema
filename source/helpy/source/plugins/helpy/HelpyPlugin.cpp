@@ -20,6 +20,8 @@
 #include "Runtime/HelpyPaths.h"
 #include "Core/HelpyEnvironment.h"
 #include "Core/HelpyBranding.h"
+#include "Generator/HelpyStoragePanel.h"
+#include "Core/HelpyInventoryService.h"
 #include "Core/HelpySourceCache.h"
 #include "Runtime/HelpyUpdates.h"
 #include "Runtime/HelpyDownloads.h"
@@ -34,13 +36,13 @@ struct State {const RuneSchemaHostApi* Host{};std::unique_ptr<PS::HelpyStandalon
     std::mutex ToolsMutex;uint64_t ToolsRevision=0; nlohmann::json ToolsResult=nlohmann::json::object(),ToolsCatalog=nlohmann::json::object(),Players=nlohmann::json::array();std::deque<nlohmann::json> IconResults;
     std::map<uint64_t,nlohmann::json> Completed;std::map<uint64_t,std::string> IconDictionary;std::deque<nlohmann::json> QueryResults;uint64_t HostRevision=0;std::chrono::steady_clock::time_point NextHostRead{};
     nlohmann::json MapGroundReply=nlohmann::json::object();
-    bool LoggedQuery=false,LoggedRows=false,LoggedIcon=false;};
+    bool LoggedQuery=false,LoggedRows=false,LoggedIcon=false;std::atomic<bool> InventoryReady=false;};
 bool CallCore(State* state,const nlohmann::json& request,nlohmann::json& response) {
     try {
     if(!state||!state->Host)return false;
     const auto input=request.dump();
     const auto action=request.value("Action",std::string{});
-    const bool readOnly=action=="Read"||action=="AuthoringSnapshot"||action=="SettingsRead";
+    const bool readOnly=action=="Read"||action=="AuthoringSnapshot"||action=="SettingsRead"||action=="ModsRead"||action=="IconCacheOwnership";
     uint32_t size=0;
     std::string output;
     if(readOnly){
@@ -48,7 +50,10 @@ bool CallCore(State* state,const nlohmann::json& request,nlohmann::json& respons
         if(probe!=RS_PLUGIN_BUFFER_TOO_SMALL||!size||size>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return false;
         output.resize(size);
     }else{
-        output.resize(action=="Completed"||action=="SettingsSave"?RUNESCHEMA_PLUGIN_MAX_MESSAGE:4096);
+        // These core operations reject an undersized buffer before doing any
+        // work. Allocate once: never retry a mutation just to fetch its reply.
+        const bool maximum=action=="Completed"||action=="SettingsSave"||action=="ModsSave"||action=="ModsImport"||action=="QuickLoadSave"||action=="AdditionalLoggingSave";
+        output.resize(maximum?RUNESCHEMA_PLUGIN_MAX_MESSAGE:4096);
     }
     const auto code=state->Host->CallService(Descriptor.Id,"runeschema.tools",input.c_str(),output.data(),static_cast<uint32_t>(output.size()),&size);
     if(code!=RS_PLUGIN_OK||!size||size>output.size())return false;
@@ -62,12 +67,25 @@ int32_t RS_PLUGIN_CALL About(void*,const char*,char* response,uint32_t capacity,
     if(!size)return RS_PLUGIN_INVALID_ARGUMENT;*size=static_cast<uint32_t>(sizeof(value));
     if(!response||capacity<sizeof(value))return RS_PLUGIN_BUFFER_TOO_SMALL;std::memcpy(response,value,sizeof(value));return RS_PLUGIN_OK;
 }
+int32_t RS_PLUGIN_CALL InventoryService(void* context,const char* requestJson,char* response,uint32_t capacity,uint32_t* size){
+    auto* state=static_cast<State*>(context);if(!state||!requestJson||!size)return RS_PLUGIN_INVALID_ARGUMENT;
+    try{
+        const auto request=nlohmann::json::parse(requestJson);const auto action=request.value("Action",std::string{});
+        // Mutations return bounded acknowledgements, not the complete storage document.
+        if(PS::HelpyInventoryService::Mutating(action)&&(!response||capacity<PS::HelpyInventoryService::MutationReplyBytes)){*size=PS::HelpyInventoryService::MutationReplyBytes;return RS_PLUGIN_BUFFER_TOO_SMALL;}
+        const auto value=action!="Capabilities"&&!state->InventoryReady.load()?nlohmann::json{{"Error","Helpy inventory service is not initialized"}}:
+            PS::HelpyInventoryService::Run(PS::HostServices::StateDirectory(),request);
+        const auto text=value.dump();if(text.size()+1>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return RS_PLUGIN_FAILED;
+        *size=static_cast<uint32_t>(text.size()+1);if(!response||capacity<*size)return RS_PLUGIN_BUFFER_TOO_SMALL;
+        std::memcpy(response,text.c_str(),*size);return RS_PLUGIN_OK;
+    }catch(...){return RS_PLUGIN_FAILED;}
+}
 void StoreReceipt(State* state,const nlohmann::json& result) {
     // Progress retains the mutation slot; only final acknowledgements complete it.
     if(result.value("_InProgress",false))return;
     const auto id=result.value("_RequestId",uint64_t{});if(!id)return;
     nlohmann::json receipt={{"Status",result.value("Status",std::string("Completed."))}};
-    for(const auto* key:{"InventorySnapshot","JournalCatalog","GrantResults","SpawnResult","SpawnDefinition","CloneResult","CloneSource","CloneAppearance","ItemDetails","MapSnapshot","MapBuildings","MapPoint","RecipeExportResult","RecipeWorkspaceCatalog","RecipeWorkspaceSource","ItemOverrideExportResult","KitMetadata","NativeContracts"})
+    for(const auto* key:{"InventorySnapshot","EquipmentAction","InventoryAction","StorageResult","JournalCatalog","GrantResults","SpawnResult","SpawnDefinition","CloneResult","CloneSource","CloneAppearance","ItemDetails","MapSnapshot","MapBuildings","MapPoint","RecipeExportResult","RecipeWorkspaceCatalog","RecipeWorkspaceSource","ItemOverrideExportResult","KitMetadata","NativeContracts"})
         if(result.contains(key))receipt[key]=result[key];
     state->Completed[id]=std::move(receipt);while(state->Completed.size()>16)state->Completed.erase(state->Completed.begin());
 }
@@ -221,6 +239,7 @@ extern "C" __declspec(dllexport) int32_t RS_PLUGIN_CALL RuneSchemaPlugin_Initial
     for(const auto* capability:capabilities)if(host->RegisterCapability(Descriptor.Id,capability)!=RS_PLUGIN_OK){delete state;return RS_PLUGIN_DUPLICATE;}
     if(host->RegisterService(Descriptor.Id,"helpy.about",About,state)!=RS_PLUGIN_OK){delete state;return RS_PLUGIN_DUPLICATE;}
     if(host->RegisterService(Descriptor.Id,"helpy.tools.push",ToolsPush,state)!=RS_PLUGIN_OK){delete state;return RS_PLUGIN_DUPLICATE;}
+    if(host->RegisterService(Descriptor.Id,"helpy.inventory",InventoryService,state)!=RS_PLUGIN_OK){delete state;return RS_PLUGIN_DUPLICATE;}
     const auto initialized="RSMK "+std::string(PS::HelpyBranding::Version)+" native GUI plugin initialized";
     host->Log(RS_LOG_INFO,Descriptor.Id,initialized.c_str());*instance=state;return RS_PLUGIN_OK;
 }
@@ -234,6 +253,8 @@ extern "C" __declspec(dllexport) int32_t RS_PLUGIN_CALL RuneSchemaPlugin_OnUnrea
         PS::HelpySettings::Configure(PS::HelpyPaths::PluginRoot());
         PS::HelpySettings::EnsureLoaded();
         if(!PS::HelpySettings::IsEnabled()){state->Host->Log(RS_LOG_INFO,Descriptor.Id,"disabled by plugin settings");return RS_PLUGIN_OK;}
+        if(!PS::HelpyPersonalization::Initialized)PS::HelpyPersonalization::Load(PS::HostServices::StateDirectory()/"personalization.json");
+        state->InventoryReady=true;
         state->Host->Log(RS_LOG_INFO,Descriptor.Id,"using RuneSchema host reflection services");
         ConfigureTransport(state);
         nlohmann::json environment;
@@ -253,7 +274,9 @@ extern "C" __declspec(dllexport) int32_t RS_PLUGIN_CALL RuneSchemaPlugin_OnUnrea
 }
 extern "C" __declspec(dllexport) void RS_PLUGIN_CALL RuneSchemaPlugin_Shutdown(void* instance) noexcept {
     auto* state=static_cast<State*>(instance);if(!state)return;
+    state->InventoryReady=false;
     if(state->Window)state->Window->Shutdown();
+    PS::HelpyStoragePanel::Shutdown();
     PS::HelpyUpdates::Shutdown();
     PS::HelpyDownloads::Shutdown();
     PS::HelpyMapCache::Shutdown();

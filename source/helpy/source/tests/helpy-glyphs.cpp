@@ -10,6 +10,7 @@
 #include "Core/PartyCardLayout.h"
 #include "Core/JournalSections.h"
 #include "Core/SpawnNames.h"
+#include "Core/SpawnScale.h"
 #include "Core/PortraitGlyphs.h"
 #include <filesystem>
 #include <fstream>
@@ -38,10 +39,13 @@ int main(int argc,char** argv)try{
         Check(!bounded.Set({{"Type","AI"},{"Key","overflow"}},true));Check(bounded.Set({{"Type","AI"},{"Key","0"}},false));Check(bounded.Set({{"Type","AI"},{"Key","overflow"}},true));
     }
     using namespace PS;std::set<std::string> ids,paths;
+    Check(!SpawnScale::Height(nlohmann::json::object()));Check(!SpawnScale::Height({{"PreviewHeightCm","bad"}}));Check(!SpawnScale::Height({{"PreviewHeightCm",0}}));
+    Check(SpawnScale::Ratio({{"PreviewHeightCm",360}},2)==4);Check(SpawnScale::Ratio(nlohmann::json::object(),2)==2);
     for(float width:{1.f,180.f,320.f,332.f,480.f,1000.f}){const auto columns=PartyCardLayout::Split(width);Check(columns.Stats>0&&columns.Equipment>0);
-        if(columns.Beside)Check(columns.Stats>=180&&columns.Stats<=360&&std::abs(columns.Stats+columns.Equipment+columns.Gap-width)<.01f);
+        if(columns.Beside)Check(columns.Stats>=180&&columns.Stats<=280&&std::abs(columns.Stats+columns.Equipment+columns.Gap-width)<.01f);
         else Check(columns.Stats==width&&columns.Equipment==width);}
     Check(!PartyCardLayout::Split(320).Beside&&PartyCardLayout::Split(480).Beside&&!PartyCardLayout::Split(-1).Beside);
+    Check(PartyCardLayout::Split(1000).Stats==280&&PartyCardLayout::Split(1000).Equipment==708);
     {const int64_t at=1000; nlohmann::json item={{"Durability",{{"Current",0},{"Maximum",100},{"ObservedUnixMs",at}}}};
         Check(PartyStats::Read(item,"Durability",at)->Fraction()==0);item["Durability"]["Current"]=25;Check(PartyStats::Read(item,"Durability",at)->Fraction()==.25);
         Check(!PartyStats::Read(item,"Durability",at+10001));item["Durability"]["Current"]=101;Check(!PartyStats::Read(item,"Durability",at));
@@ -82,6 +86,14 @@ int main(int argc,char** argv)try{
         Check(portraits.SetBackground(a,"source:mods/dye"));Check(PlayerPortraits::Choices::Parse(portraits.Json()).GetBackground(a)=="source:mods/dye");Check(!portraits.SetBackground(a,"background:../escape.png"));Check(!portraits.SetBackground(a,"https://example.com/image.png"));
         Check(PlayerPortraits::Choices::Parse(portraits.Json()).Get(a)==portraits.Get(a));Check(portraits.Set(a,"")&&portraits.Get(a).empty());
         Check(PlayerPortraits::Identity("00000000000000000000000000000000").empty());
+        Check(portraits.Set(a,"/HelpyPortrait/"+a+"."+a)&&PlayerPortraits::Choices::Parse(portraits.Json()).Get(a)==portraits.Get(a));
+        const auto center=PlayerPortraits::Frame(400,200,{});Check(center.Left==.25f&&center.Top==0&&center.Right==.75f&&center.Bottom==1);
+        Check(PlayerPortraits::Srgb(0)==0&&std::abs(PlayerPortraits::Srgb(1)-1)<.00001f&&std::abs(PlayerPortraits::Srgb(.25f)-.537099f)<.00001f);
+        const auto edge=PlayerPortraits::Frame(400,200,{-100,100,2});Check(edge.Left==0&&edge.Bottom==1&&edge.Right==.25f&&edge.Top==.5f);
+        const auto invalid=PlayerPortraits::Frame(400,200,{NAN,INFINITY,NAN});Check(invalid.Left==center.Left&&invalid.Top==center.Top);
+        std::vector<unsigned char> face{255,0,0,255,0,255,0,255,0,0,255,255,255,255,255,255};
+        const auto crop=PlayerPortraits::Cropped(face,2,2,{});Check(crop.size()==256*256*4&&crop.front()==255&&crop[255*4+1]==255&&crop.back()==255);
+        Check(PlayerPortraits::Cropped({},0,0,{}).empty()&&PlayerPortraits::Cropped(face,4097,1,{}).empty()&&PlayerPortraits::Cropped(face,1,1,{}).empty());
     }
     {std::vector<unsigned char> pixels(128*128*4,0);
         // Opaque land excludes its interior transparent lake from the sea flood.

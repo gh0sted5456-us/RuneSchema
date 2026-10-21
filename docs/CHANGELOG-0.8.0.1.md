@@ -10,6 +10,40 @@ Repeated development revisions are summarized once below.
 
 ## Final packaging and shared item presentation
 
+### Helpy menu cleanup (local r81 candidate)
+
+Desktop follow-up (r82, local candidate): dragging navigation, Home tiles, items,
+cart rows, saved items and mods shows a cursor-following themed card and source
+outline. Item cards reuse resident artwork without starting additional captures.
+Compatible navigation targets are outlined and save their new order on release.
+Selected items have a stronger gold border. Item menus group labels/favorites/
+locks/tags under Organize, direct grant quantities under Give and technical
+refresh under Advanced. Layout tuning and mod metadata stay collapsed until
+requested. Transfers and native item validation are unchanged.
+
+- Character Editor and live gear replacement use the same cache-first Item Bay
+  catalogue and eligibility filters. Disk thumbnail reading/indexing moves off
+  the UI thread, with one completed disk texture upload per UI update.
+- Home drops its cache launcher in favor of Settings > Item Cache. Existing
+  source/character artwork and the native World map decorate tiles when ready;
+  fixed-size themed fallbacks preserve layout while images load.
+- Hover panes share theme-backed, viewport-bounded rendering. Shorter prompts
+  leave explanations in details. Compact party cards place gear below vitals;
+  player hover details retain survival stats/skills without duplicate equipment.
+- Live Log supports word/phrase search, exclusions, source/code/level terms and
+  severity presets. Native UE timestamps/frame tags parse cleanly. Known native
+  messages have explanatory game references; unknown messages use the generic
+  reference without pretending to be emitted RuneSchema codes. Website changes
+  are prepared locally, not yet published.
+- Per-runtime local mod-health history separates current issues from lifetime
+  counts, drops absent folders and excludes other processes' game logs. Mod
+  context menus expose author-declared websites and installed folders. Background
+  health refresh no longer disables all mod controls.
+- Automated checks: 74 UI tests, 2 mod-management/history tests, 10 loading-mode
+  regression tests and 273 UE4SS imports checked against both installed hosts.
+  This candidate is not installed; live performance and current-source cache
+  compatibility remain unverified.
+
 - The shared delivery cart uses a responsive grid of full item placards, with
   quantity and remove controls per card. Inventory delivery, Players and the
   detachable cart retain the same staging, validation and explicit Give action.

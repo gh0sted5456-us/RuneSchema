@@ -40,6 +40,11 @@ inline std::filesystem::path ResolveGameLog(const std::filesystem::path& mod,con
     }return found?newest:(!local.empty()?local/"RSDragonwilds"/"Saved"/"Logs"/"RSDragonwilds.log":LogPath(mod,Stream::Game));
 }
 inline bool EOSLine(std::string_view text){const auto value=Lower(text);return value.find("logeos")!=value.npos||value.find("[eos]")!=value.npos||value.find("[eossdk]")!=value.npos||value.find("eos_")!=value.npos;}
+inline std::string GameBinaryDirectory(std::string_view header){
+    constexpr std::string_view marker="LogInit: Base Directory: ";const auto at=header.find(marker);if(at==header.npos)return {};
+    const auto start=at+marker.size(),end=header.find_first_of("\r\n",start);auto path=std::string(header.substr(start,end==header.npos?header.size()-start:end-start));
+    if(path.empty()||path.size()>32768||std::any_of(path.begin(),path.end(),[](unsigned char c){return c<32||c==127;}))return {};return path;
+}
 inline std::filesystem::path ArchivePath(const std::filesystem::path& mod){return mod/"logs";}
 // Caller resolves filesystem aliases first; compare normalized Windows names.
 inline bool ProtectedExport(const std::filesystem::path& destination,const std::filesystem::path& mod){
@@ -51,6 +56,7 @@ inline bool ProtectedExport(const std::filesystem::path& destination,const std::
     return false;
 }
 struct Entry {std::uint64_t Id{};Level Severity=Level::Info;std::string Text,Search,Scope,Source,Time,Message,ReportedCode;int Help=-1;bool Suggested=false;};
+inline std::string ReferenceUrl(const Entry& entry){return entry.Help>=0?HelpUrl(Guides[entry.Help]):Diagnostics::Url(Diagnostics::Get(Diagnostics::Id::Unclassified));}
 inline bool CodeToken(std::string_view token){
     if(!token.starts_with("RS-")||token.size()>32)return false;const auto dash=token.find('-',3);
     return dash!=token.npos&&dash>3&&token.size()==dash+4&&std::all_of(token.begin()+3,token.begin()+dash,[](char c){return c>='A'&&c<='Z';})&&std::all_of(token.begin()+dash+1,token.end(),[](char c){return c>='0'&&c<='9';});
@@ -58,7 +64,7 @@ inline bool CodeToken(std::string_view token){
 inline Entry Parse(std::string text){
     Entry entry;entry.Text=std::move(text);entry.Search=Lower(entry.Text);const auto& s=entry.Search;
     size_t body=0;for(unsigned tags=0;tags<16;){while(body<entry.Text.size()&&entry.Text[body]==' ')++body;if(body>=entry.Text.size()||entry.Text[body]!='[')break;const auto end=entry.Text.find(']',body);if(end==entry.Text.npos||end-body>256)break;
-        const auto token=entry.Text.substr(body+1,end-body-1);if(!tags&&!token.empty()&&std::isdigit(static_cast<unsigned char>(token.front()))){const auto space=token.find(' ');entry.Time=token.substr(0,space);if(entry.Time.size()>=19&&entry.Time[10]=='T')entry.Time=entry.Time.substr(11,8);}
+        const auto token=entry.Text.substr(body+1,end-body-1);if(!tags&&!token.empty()&&std::isdigit(static_cast<unsigned char>(token.front()))){const auto space=token.find(' ');entry.Time=token.substr(0,space);if(entry.Time.size()>=19&&(entry.Time[10]=='T'||entry.Time[10]=='-')){entry.Time=entry.Time.substr(11,8);std::replace(entry.Time.begin(),entry.Time.end(),'.',':');}}
         if(CodeToken(token)){entry.ReportedCode=token;if(const auto* code=Diagnostics::Find(token))entry.Help=int(code-Guides.data());}
         body=end+1;++tags;
     }entry.Message=entry.Text.substr(body);if(entry.Message.empty())entry.Message=entry.Text;
@@ -70,8 +76,10 @@ inline Entry Parse(std::string text){
     for(size_t begin=0;(begin=s.find('[',begin))!=s.npos;){
         const auto end=s.find(']',begin);if(end==s.npos)break;
         auto token=entry.Text.substr(begin+1,end-begin-1);begin=end+1;
+        const auto first=token.find_first_not_of(" ");if(first==token.npos)continue;token=token.substr(first,token.find_last_not_of(" ")-first+1);
         if(token.empty()||token.size()>128||std::isdigit(static_cast<unsigned char>(token.front())))continue;
         const auto lower=Lower(token);
+        if(lower.starts_with("group=")||lower.starts_with("thread="))continue;
         if(lower=="error"||lower=="fatal"||lower=="warning"||lower=="warn"||lower=="diagnostic"||lower=="verbose"||lower=="info"||CodeToken(token))continue;
         if(entry.Source.empty()){entry.Source=std::move(token);if(lower!="lua")break;}
         else if(Lower(entry.Source)=="lua"){entry.Source=std::move(token);break;}
@@ -81,18 +89,29 @@ inline Entry Parse(std::string text){
         while(begin<s.size()){while(begin<s.size()&&s[begin]==' ')++begin;if(begin>=s.size()||s[begin]!='[')break;const auto end=s.find(']',begin);if(end==s.npos)break;
             auto token=entry.Text.substr(begin+1,end-begin-1);const auto lower=Lower(token);
             if(lower!="warning"&&lower!="warn"&&lower!="error"&&lower!="diagnostic"&&lower!="verbose"&&lower!="summary"&&lower!="info"&&!CodeToken(token)){entry.Scope=std::move(token);break;}begin=end+1;}}
-    if(entry.Source.empty()&&entry.Message.starts_with("Log")){const auto colon=entry.Message.find(':');if(colon!=std::string::npos&&colon<96&&std::all_of(entry.Message.begin(),entry.Message.begin()+colon,[](unsigned char c){return std::isalnum(c)||c=='_';})){entry.Source=entry.Message.substr(0,colon);entry.Message.erase(0,colon+1);while(!entry.Message.empty()&&entry.Message.front()==' ')entry.Message.erase(0,1);}}
+    if(entry.Message.starts_with("Log")||entry.Message.starts_with("DominionLog:")){const auto colon=entry.Message.find(':');if(colon!=std::string::npos&&colon<96&&std::all_of(entry.Message.begin(),entry.Message.begin()+colon,[](unsigned char c){return std::isalnum(c)||c=='_';})){entry.Source=entry.Message.substr(0,colon);entry.Message.erase(0,colon+1);while(!entry.Message.empty()&&entry.Message.front()==' ')entry.Message.erase(0,1);}}
     if(entry.Scope.empty())entry.Scope=entry.Help>=0?std::string(Guides[entry.Help].Subsystem):entry.Source;
     if(!entry.ReportedCode.empty())return entry;
     for(size_t i=0;i<Guides.size();++i)if(s.find(Lower(Guides[i].Code))!=s.npos){entry.Help=static_cast<int>(i);entry.Suggested=true;return entry;}
-    if(s.find("duplicate quest owner")!=s.npos||s.find("ownership conflict")!=s.npos||s.find("duplicate quest persistence")!=s.npos)entry.Help=0;
+    const auto gameReference=[&](Diagnostics::Id id){entry.Help=int(&Diagnostics::Get(id)-Guides.data());};
+    if(s.find("changepowerlevelinrowname")!=s.npos)gameReference(Diagnostics::Id::NativePowerRow);
+    else if(s.find("skeleton guid")!=s.npos&&s.find("out-of-date")!=s.npos)gameReference(Diagnostics::Id::NativeSkeleton);
+    else if(s.find("loadpackage: skippackage:")!=s.npos||s.find("failed to find object")!=s.npos)gameReference(Diagnostics::Id::NativePackage);
+    else if(s.find("invalid shadermap")!=s.npos)gameReference(Diagnostics::Id::NativeShader);
+    else if(s.find("accessed none")!=s.npos)gameReference(Diagnostics::Id::NativeScript);
+    else if(s.find("failed to remove function callback")!=s.npos&&s.find("vitals")!=s.npos)gameReference(Diagnostics::Id::NativeUiCallback);
+    else if(s.find("could not get user settings")!=s.npos||s.find("expected udominionusersettings")!=s.npos||s.find("failed to find user settings during shutdown")!=s.npos)gameReference(Diagnostics::Id::NativeUserSettings);
+    else if(s.find("unable to find recastnavmesh")!=s.npos)gameReference(Diagnostics::Id::NativeNavigation);
+    else if(s.find("uregistrytagsubsystem::unregistertaggedobject")!=s.npos)gameReference(Diagnostics::Id::NativeTagLifecycle);
+    else if((entry.Source.starts_with("Log")||entry.Source=="DominionLog")&&(entry.Severity==Level::Warning||entry.Severity==Level::Error))gameReference(Diagnostics::Id::NativeUnclassified);
+    else if(s.find("duplicate quest owner")!=s.npos||s.find("ownership conflict")!=s.npos||s.find("duplicate quest persistence")!=s.npos)entry.Help=0;
     else if(s.find("mismatch")!=s.npos&&(s.find("registry")!=s.npos||s.find("fingerprint")!=s.npos||s.find("network")!=s.npos))entry.Help=2;
     else if(s.find("wearable-bridge")!=s.npos&&s.find("not-enrolled")!=s.npos)entry.Help=3;
     else if(s.find("slow-work")!=s.npos)entry.Help=4;
     else if(s.find("catalog")!=s.npos&&(s.find("expired")!=s.npos||s.find("unavailable")!=s.npos))entry.Help=5;
     else if((s.find("spawn")!=s.npos||s.find("placement")!=s.npos)&&(s.find("collision")!=s.npos||s.find("not confirmed placed")!=s.npos))entry.Help=6;
     else if(s.find("registry")!=s.npos&&(s.find("deferred")!=s.npos||s.find("rejected")!=s.npos||s.find("not certified")!=s.npos))entry.Help=1;
-    else if(entry.Severity==Level::Warning||entry.Severity==Level::Error)entry.Help=7;
+    else if(entry.Severity==Level::Warning||entry.Severity==Level::Error){if(entry.Source.starts_with("Log")||entry.Source=="DominionLog")gameReference(Diagnostics::Id::NativeUnclassified);else entry.Help=7;}
     entry.Suggested=entry.Help>=0;return entry;
 }
 struct ColorRule {
@@ -124,7 +143,22 @@ inline std::optional<std::array<float,4>> Color(const Entry& entry,const std::ve
 }
 struct Filter {
     std::array<bool,4> Levels{true,true,true,true};std::string Query,Scope;
-    bool Matches(const Entry& entry)const{return Levels[static_cast<size_t>(entry.Severity)]&&(Scope.empty()||entry.Scope==Scope)&&(Query.empty()||entry.Search.find(Query)!=std::string::npos||(entry.Help>=0&&Lower(Guides[entry.Help].Code).find(Query)!=std::string::npos));}
+    bool Matches(const Entry& entry)const{
+        if(!Levels[static_cast<size_t>(entry.Severity)]||(!Scope.empty()&&entry.Scope!=Scope))return false;
+        for(size_t at=0;at<Query.size();){
+            while(at<Query.size()&&std::isspace(static_cast<unsigned char>(Query[at])))++at;
+            if(at==Query.size())break;bool exclude=Query[at]=='-';if(exclude)++at;
+            std::string term;bool quoted=false;
+            while(at<Query.size()){const char c=Query[at++];if(c=='"'){quoted=!quoted;continue;}if(!quoted&&std::isspace(static_cast<unsigned char>(c)))break;term+=c;}
+            if(term.empty())continue;bool match=false;
+            const auto code=entry.Help>=0?Lower(Guides[entry.Help].Code):Lower(entry.ReportedCode);
+            if(term.starts_with("source:"))match=Lower(entry.Source+" "+entry.Scope).find(term.substr(7))!=std::string::npos;
+            else if(term.starts_with("code:"))match=code.find(term.substr(5))!=std::string::npos||Lower(entry.ReportedCode).find(term.substr(5))!=std::string::npos;
+            else if(term.starts_with("level:"))match=Lower(Label(entry.Severity))==term.substr(6);
+            else match=entry.Search.find(term)!=std::string::npos||code.find(term)!=std::string::npos;
+            if(match==exclude)return false;
+        }return true;
+    }
 };
 class History {
     std::uint64_t m_next=1;size_t m_bytes=0;
@@ -144,7 +178,7 @@ inline std::vector<Group> Grouped(const History& history,const Filter& filter,bo
 struct Cursor {std::uint64_t Offset=0,Identity=0;std::string Partial;bool Started=false,Discard=false;};
 struct Batch {Cursor Next;std::vector<std::string> Lines;std::string Error;bool Reset=false,Skipped=false,More=false;std::filesystem::path File;};
 // Runs only on the viewer's background I/O task. Never touches engine objects.
-inline Batch Read(const std::filesystem::path& path,Cursor cursor){
+inline Batch Read(const std::filesystem::path& path,Cursor cursor,bool recentTail=true){
     Batch batch;batch.Next=cursor;batch.File=path;
 #ifdef _WIN32
     const auto handle=CreateFileW(path.c_str(),GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
@@ -155,7 +189,7 @@ inline Batch Read(const std::filesystem::path& path,Cursor cursor){
     const auto identity=(std::uint64_t(info.nFileIndexHigh)<<32)|info.nFileIndexLow;
     auto& next=batch.Next;
     if(!next.Started||identity!=next.Identity||size<next.Offset){batch.Reset=next.Started;next={};next.Started=true;next.Identity=identity;
-        if(size>1024*1024){next.Offset=size-1024*1024;next.Discard=true;batch.Skipped=true;}}
+        if(recentTail&&size>1024*1024){next.Offset=size-1024*1024;next.Discard=true;batch.Skipped=true;}}
     const auto count=static_cast<DWORD>(std::min<std::uint64_t>(256*1024,size-next.Offset));
     if(!count)return batch;
     LARGE_INTEGER offset{};offset.QuadPart=next.Offset;if(!SetFilePointerEx(handle,offset,nullptr,FILE_BEGIN)){batch.Error="Cannot seek in the log file.";return batch;}

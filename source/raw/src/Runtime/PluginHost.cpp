@@ -18,12 +18,17 @@
 #include "Runtime/UE4SSCompatibility.h"
 #include "Runtime/NetworkStatus.h"
 #include "Core/HelpySourceCache.h"
+#include "Core/HelpyCacheOwnership.h"
 #include "Core/IconCacheBuild.h"
 #include "Core/HelpyAuthoringProtocol.h"
 #include "Core/RuneSchemaSettingsEditor.h"
 #include "Core/CharacterEntryRecovery.h"
+#include "Runtime/QuickLoad.h"
+#include "Runtime/AdditionalLogging.h"
+#include "Runtime/ModManagerService.h"
 #include "Generator/HelpyRuntimePreferences.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
+#include "SDK/WeakObjectHandle.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/DragonWildsSignatures.h"
 #include <windows.h>
@@ -63,6 +68,23 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
             SpawnToolRequests::RequestPlayerRoles();
             result=NetworkStatus::Current.Snapshot(SpawnToolRequests::Generation.load(),SpawnToolRequests::Available.load(),SpawnToolRequests::Waiting.load());
         }
+        else if(action=="ModsRead"||action=="ModsSave"||action=="ModsImport"){
+            if(!size)return RS_PLUGIN_INVALID_ARGUMENT;
+            if(!response||capacity<RUNESCHEMA_PLUGIN_MAX_MESSAGE){*size=RUNESCHEMA_PLUGIN_MAX_MESSAGE;return RS_PLUGIN_BUFFER_TOO_SMALL;}
+            result=ModManager::Service(request);
+        }
+        else if(action=="QuickLoadRead")result=QuickLoad::Read();
+        else if(action=="AdditionalLoggingRead")result=AdditionalLogging::Read();
+        else if(action=="AdditionalLoggingSave"){
+            if(!size)return RS_PLUGIN_INVALID_ARGUMENT;
+            if(!response||capacity<RUNESCHEMA_PLUGIN_MAX_MESSAGE){*size=RUNESCHEMA_PLUGIN_MAX_MESSAGE;return RS_PLUGIN_BUFFER_TOO_SMALL;}
+            result=AdditionalLogging::Save(request);
+        }
+        else if(action=="QuickLoadSave"){
+            if(!size)return RS_PLUGIN_INVALID_ARGUMENT;
+            if(!response||capacity<RUNESCHEMA_PLUGIN_MAX_MESSAGE){*size=RUNESCHEMA_PLUGIN_MAX_MESSAGE;return RS_PLUGIN_BUFFER_TOO_SMALL;}
+            result=QuickLoad::Save(request);
+        }
         else if(action=="SettingsRead"){
             result=RuneSchemaSettingsEditor::Read(HostServices::SettingsDirectory());
             result["BypassStatus"]=DragonWilds::CharacterEntryRecovery::StatusText();
@@ -77,6 +99,7 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
         }
         else if(action=="QuestCatalog")result=QuestPresentationCatalog::Read(request);
         else if(action=="IconCacheSources")result=HelpySourceCache::ForClient();
+        else if(action=="IconCacheOwnership")result=HelpyCacheOwnership::Page(HelpySourceCache::OwnershipSnapshot(),request);
         else if(action=="IconCacheBuildRead")result=IconCacheBuild::Read(request.value("IncludeManifest",false));
         else if(action=="IconCacheBuildStart"){HelpySourceCache::Requested=true;result={{"Accepted",!Storefront::IsDedicatedServer()&&IconCacheBuild::Start(request.value("Source",std::string{}))}};}
         else if(action=="IconCacheBuildCancel"){IconCacheBuild::Cancel();result={{"Accepted",true}};}
@@ -232,8 +255,13 @@ void* RS_PLUGIN_CALL ResolveBinding(const char* caller,const char* binding) {
     if(source=="unresolved")return nullptr;
     return DragonWilds::SignatureManager::GetSignature(binding);
 }
+int32_t RS_PLUGIN_CALL ObjectIdentity(void* object,int32_t* index,int32_t* serial){
+    if(!object||!index||!serial)return RS_PLUGIN_INVALID_ARGUMENT;*index=-1;*serial=0;
+    try{const WeakObjectHandle handle(static_cast<RC::Unreal::UObject*>(object));if(handle.Get()!=object)return RS_PLUGIN_NOT_FOUND;*index=handle.ObjectIndex;*serial=handle.ObjectSerialNumber;return RS_PLUGIN_OK;}catch(...){return RS_PLUGIN_FAILED;}
+}
+void* RS_PLUGIN_CALL ResolveObjectIdentity(int32_t index,int32_t serial){WeakObjectHandle handle;handle.ObjectIndex=index;handle.ObjectSerialNumber=serial;return handle.Get();}
 constexpr RuneSchemaHostApi HostApi{sizeof(RuneSchemaHostApi),RUNESCHEMA_PLUGIN_API_VERSION,HostLog,RegisterCapability,
-    RegisterService,CallService,FindObject,ForEachObjectOfClass,FindFieldClass,IsFieldA,ResolveBinding};
+    RegisterService,CallService,FindObject,ForEachObjectOfClass,FindFieldClass,IsFieldA,ResolveBinding,ObjectIdentity,ResolveObjectIdentity};
 void CompatibilityNotice(const std::string& message) {
     const auto mode=PSConfig::Get()->GetSettings().plugins.compatibilityNotices;
     if(mode=="off")return;
@@ -371,7 +399,7 @@ void PluginHost::Shutdown() noexcept {
 bool PluginHost::HasCapability(const std::string& capability) const {std::scoped_lock lock(Gate);return Capabilities.contains(capability);}
 bool PluginHost::HasConnection(const std::string& connection) const {std::scoped_lock lock(Gate);return ActiveConnections.contains(connection);}
 std::vector<std::string> PluginHost::Connections() const {std::scoped_lock lock(Gate);std::vector<std::string> result;result.reserve(ActiveConnections.size());for(const auto& [name,owner]:ActiveConnections)result.push_back(name);std::sort(result.begin(),result.end());return result;}
-std::string PluginHost::Call(const std::string& caller,const std::string& service,const std::string& request) const {
+std::string PluginHost::Call(const std::string& caller,const std::string& service,const std::string& request) {
     uint32_t size=0;auto result=CallService(caller.c_str(),service.c_str(),request.c_str(),nullptr,0,&size);
     if(result!=RS_PLUGIN_BUFFER_TOO_SMALL&&result!=RS_PLUGIN_OK)throw std::runtime_error("Plugin service unavailable: "+service);
     if(!size||size>RUNESCHEMA_PLUGIN_MAX_MESSAGE)throw std::runtime_error("Plugin service returned an invalid size: "+service);
