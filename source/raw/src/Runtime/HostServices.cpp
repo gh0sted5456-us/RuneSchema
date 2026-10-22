@@ -52,6 +52,7 @@ namespace PS::HostServices {
     std::filesystem::path WorkingDirectory() {
         return RC::UE4SSProgram::get_program().get_working_directory();
     }
+    std::filesystem::path ProfileDirectory(){return LocalAppDataDirectory()/L"RuneSchema"/L"runeschema.profile";}
     std::filesystem::path RuntimeDirectory() {
         const auto path = ModDirectory() / "runtime" / "live";
         std::error_code error;
@@ -65,9 +66,8 @@ namespace PS::HostServices {
         return package.empty() ? LegacyStateDirectory() : package;
     }
     std::filesystem::path XboxSaveRoot() {
-        if (Storefront::Current() != Storefront::Kind::GamePass) return {};
-        const auto family = PackageFamilyName();
-        if (family.empty()) return {};
+        auto family = PackageFamilyName();
+        if (family.empty()) family = L"JagexLimited.Dominion_srxstwq7wczqa";
         return LocalAppDataDirectory() / L"Packages" / family
             / L"SystemAppData" / L"wgs";
     }

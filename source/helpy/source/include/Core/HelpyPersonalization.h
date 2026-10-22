@@ -7,6 +7,7 @@
 #include <atomic>
 #include <set>
 #include <sstream>
+#include <optional>
 #include <windows.h>
 
 namespace PS::HelpyPersonalization {
@@ -34,8 +35,16 @@ inline std::string StackKey(const Json& row){
     std::string instance;for(const auto& word:row["Instance"]){if(!word.is_number_integer()||word.get<int64_t>()<0||word.get<uint64_t>()>UINT32_MAX)return {};char text[9]{};std::snprintf(text,sizeof(text),"%08x",word.get<uint32_t>());instance+=text;}
     if(instance==std::string(32,'0'))return {};return "stack:"+player+":"+instance+":"+item.substr(5);
 }
+inline std::string TypeKey(const Json& row){const auto item=ItemKey(row);if(!row.is_object()||!row.contains("PlayerGuid"))return item;const auto guid=row["PlayerGuid"].is_string()?Guid(row["PlayerGuid"].get<std::string>()):std::string{};return guid.empty()||item.empty()?std::string{}:"type:"+guid+":"+item.substr(5);}
+inline bool TypeKeyValid(const std::string& key){return key.size()>39&&key.starts_with("type:")&&key[37]==':'&&Guid(key.substr(5,32))==key.substr(5,32)&&ItemKey(Json{{"Path",key.substr(38)}})=="item:"+key.substr(38)&&key.find("..",38)==key.npos;}
 inline Json Get(const std::string& key){std::shared_lock lock(Gate);const auto found=Entries.find(key);return found==Entries.end()?Json::object():*found;}
-inline Json Effective(const Json& row){auto result=Get(ItemKey(row));const auto key=StackKey(row);if(!key.empty()){const auto stack=Get(key);for(const auto& [field,value]:stack.items())result[field]=value;}return result;}
+inline Json Effective(const Json& row){
+    auto result=Get(ItemKey(row));const auto type=TypeKey(row);
+    if(type!=ItemKey(row)){result["Favorite"]=false;auto tags=result.value("Tags",Json::array());Json clean=Json::array();for(const auto& tag:tags)if(Fold(tag.get<std::string>())!="junk")clean.push_back(tag);result["Tags"]=clean;}
+    const std::string prefix=row.value("MarksReadOnly",false)?"remote:":"";
+    for(const auto& key:{type,StackKey(row)})if(!key.empty()){const auto mark=Get(prefix+key);for(const auto& [field,value]:mark.items())result[field]=value;}
+    return result;
+}
 inline std::string Nickname(const std::string& key){const auto row=Get(key);return row.value("Nickname",std::string{});}
 inline bool Favorite(const Json& row){return Effective(row).value("Favorite",false);}
 inline bool Locked(const Json& row){return Effective(row).value("Locked",false);}
@@ -47,29 +56,36 @@ inline bool QueryUsesLabels(const std::string& text){std::istringstream input(Fo
 inline Json Validate(const Json& document){
     if(!document.is_object()||document.value("Format",0)!=1||!document.contains("Entries")||!document["Entries"].is_object()||document["Entries"].size()>16384)throw std::runtime_error("Invalid Helpy personalization file.");
     auto output=Json::object();for(const auto& [key,row]:document["Entries"].items()){
-        const bool stack=StackKeyValid(key);
-        if((!key.starts_with("item:/")&&!key.starts_with("mod:")&&!stack)||!Text(key,stack?4168:4101)||!row.is_object()||row.size()>4)throw std::runtime_error("Invalid personalization key.");
+        const auto identity=key.starts_with("remote:")?key.substr(7):key;const bool stack=StackKeyValid(identity),type=TypeKeyValid(identity);
+        if((!key.starts_with("item:/")&&!key.starts_with("mod:")&&!stack&&!type)||!Text(key,4175)||!row.is_object()||row.size()>4)throw std::runtime_error("Invalid personalization key.");
         const auto nickname=row.value("Nickname",std::string{});if(!Text(nickname))throw std::runtime_error("Nickname is too long or contains invalid characters.");
         Json entry={{"Nickname",Trim(nickname)},{"Favorite",row.value("Favorite",false)},{"Locked",row.value("Locked",false)},{"Tags",Json::array()}};
         if(row.contains("Tags")){if(!row["Tags"].is_array()||row["Tags"].size()>12)throw std::runtime_error("Use at most 12 tags per item.");std::set<std::string> seen;
             for(const auto& value:row["Tags"]){const auto tag=Trim(value.get<std::string>());if(tag.empty()||!Text(tag,48))throw std::runtime_error("Tags must contain 1-48 bytes of visible text.");if(seen.insert(Fold(tag)).second)entry["Tags"].push_back(tag);}}
-        if(stack)for(const char* field:{"Nickname","Favorite","Locked","Tags"})if(!row.contains(field))entry.erase(field);
+        if(stack||type)for(const char* field:{"Nickname","Favorite","Locked","Tags"})if(!row.contains(field))entry.erase(field);
         output[Fold(key)]=std::move(entry);
     }return output;
 }
 inline void Safe(const std::filesystem::path& path){for(auto current=std::filesystem::absolute(path).lexically_normal();!current.empty();){const auto flags=GetFileAttributesW(current.c_str());if(flags!=INVALID_FILE_ATTRIBUTES&&(flags&FILE_ATTRIBUTE_REPARSE_POINT))throw std::runtime_error("Personalization storage must not contain links.");const auto parent=current.parent_path();if(parent==current)break;current=parent;}}
 inline bool Load(const std::filesystem::path& file){std::unique_lock lock(Gate);File=file;Initialized=true;Ready=false;try{Safe(file);Existed=std::filesystem::exists(file);Baseline=Existed?ConfigFiles::Read(file,4*1024*1024):std::string{};Entries=Existed?Validate(Json::parse(Baseline)):Json::object();Status.clear();Ready=true;++Revision;return true;}catch(const std::exception& error){Status=error.what();return false;}}
-inline bool Set(const std::string& key,const Json& patch){
+inline bool SetMany(const Json& patches,std::optional<uint64_t> expectedRevision=std::nullopt){
     std::unique_lock lock(Gate);try{
-        if(!Initialized||!Ready||File.empty()||key.empty())throw std::runtime_error("Personalization storage or a stable item identity is unavailable.");
+        if(!Initialized||!Ready||File.empty()||!patches.is_object()||patches.empty())throw std::runtime_error("Personalization storage or a stable item identity is unavailable.");
+        if(expectedRevision&&*expectedRevision!=Revision.load())throw std::runtime_error("Item marks changed; refresh before marking again.");
         uint64_t hash=1469598103934665603ull;for(unsigned char c:Fold(std::filesystem::absolute(File).generic_string())){hash^=c;hash*=1099511628211ull;}
         const auto name=L"Local\\RuneSchema-Personalization-"+std::to_wstring(hash);HANDLE mutex=CreateMutexW(nullptr,FALSE,name.c_str());
         if(!mutex)throw std::runtime_error("Cannot lock personalization settings.");const auto wait=WaitForSingleObject(mutex,1000);if(wait!=WAIT_OBJECT_0&&wait!=WAIT_ABANDONED){CloseHandle(mutex);throw std::runtime_error("Personalization settings are busy.");}
         struct Release{HANDLE Value;~Release(){ReleaseMutex(Value);CloseHandle(Value);}}release{mutex};
         Safe(File);const bool exists=std::filesystem::exists(File);if(exists!=Existed||(exists&&ConfigFiles::Read(File,4*1024*1024)!=Baseline))throw std::runtime_error("Personalization changed in another window. Reload before saving.");
-        auto next=Entries;auto value=next.value(Fold(key),Json::object());for(const auto& [field,data]:patch.items()){if(StackKeyValid(key)&&data.is_null())value.erase(field);else value[field]=data;}next[Fold(key)]=std::move(value);
+        auto next=Entries;for(const auto& [key,patch]:patches.items()){
+            if(patch.is_null()){next.erase(Fold(key));continue;}
+            if(!patch.is_object())throw std::runtime_error("Invalid mark patch.");
+            auto value=next.value(Fold(key),Json::object());const auto identity=key.starts_with("remote:")?key.substr(7):key;
+            for(const auto& [field,data]:patch.items()){if((StackKeyValid(identity)||TypeKeyValid(identity))&&data.is_null())value.erase(field);else value[field]=data;}next[Fold(key)]=std::move(value);
+        }
         next=Validate({{"Format",1},{"Entries",next}});const auto text=Json{{"Format",1},{"Entries",next}}.dump(2);if(text.size()>4*1024*1024)throw std::runtime_error("Personalization settings exceed 4 MiB.");
-        ConfigFiles::Write(File,text);Entries=std::move(next);Baseline=text;Existed=true;Status="Saved in Helpy only.";++Revision;return true;
+        if(next==Entries)return true;ConfigFiles::Write(File,text);Entries=std::move(next);Baseline=text;Existed=true;Status="Saved.";++Revision;return true;
     }catch(const std::exception& error){Status=error.what();return false;}
 }
+inline bool Set(const std::string& key,const Json& patch,std::optional<uint64_t> expectedRevision=std::nullopt){return SetMany(Json{{key,patch}},expectedRevision);}
 }

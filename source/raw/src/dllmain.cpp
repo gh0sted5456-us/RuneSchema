@@ -470,8 +470,8 @@ public:
             ImGui::SeparatorText("Progress persistence");
             ImGui::Checkbox("Save RuneSchema character customization", &settings.persistence.characterCustomization);
             ImGui::TextWrapped("Off by default. Character option and data-table loaders remain active, but automatic /players appearance assignments do not rewrite CustomizationSaveData.");
-            ImGui::Checkbox("Bypass rejected character loads (restart required)", &settings.persistence.allowCorruptCharacterEntry);
-            ImGui::TextWrapped("Off by default. Native character validation and player-state loading both run, then rejected return results are accepted at verified native return gates. This does not repair damaged data or guarantee a complete load. Back up your character before enabling; later game saves can persist incomplete state. Disable the standalone CorruptCharacterBypass first. Restart also applies turning this off.");
+            ImGui::Checkbox("Save Bypass by default (restart required)", &settings.persistence.allowCorruptCharacterEntry);
+            ImGui::TextWrapped("Unchecked: Normal and Quick Launch use bypass only after native rejection, including direct native loads. Checked: prefer bypass by default. Native loading runs once. Dedicated servers use only this toggle. This does not repair damaged data or guarantee a complete load. Keep backups and disable any standalone bypass. Restart required.");
             ImGui::TextWrapped("Normal RuneSchema recipe unlocks may persist once their live RecipeData has a valid PersistenceID. Generated vendor recipes remain transient. Safe Clean removes orphaned RuneSchema progress after content registration.");
             ImGui::Checkbox("Save RuneSchema quest progress", &settings.persistence.quests);
             ImGui::TextWrapped("On by default. Off leaves quest definitions available to other loaders but blocks RuneSchema quest actions because native quest progress is save-backed.");

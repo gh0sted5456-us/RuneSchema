@@ -54,9 +54,21 @@ json SaveEditorOperation(const std::string& op,const json& args){
         size_t metadataBudget=16*1024*1024;
         const auto append=[&](const fs::path& file,const char* storage,const char* provider){
             std::string name=file.stem().string();std::error_code ec;const auto size=fs::file_size(file,ec);
-            if(!ec&&size<=512*1024&&size<=metadataBudget){metadataBudget-=size;try{const auto save=Read(file);if(save.contains("meta_data")&&save["meta_data"].is_object()){const auto label=save["meta_data"].value("char_name",std::string{});if(!label.empty()&&label.size()<=128)name=label;}}catch(...){}}
-            files.push_back({{"Name",name},{"FileName",file.filename().string()},{"Path",SavePathText(file)},{"Storage",storage},{"Provider",provider}});
+            std::string guid;const bool xbox=std::string_view(provider)=="GamePass";bool character=false;
+            if(!ec&&size<=1024*1024&&size<=metadataBudget){metadataBudget-=size;try{const auto save=Read(file);guid=CharacterSaveEditor::Identity(save);character=XboxCharacterSaves::Character(save);if(save.contains("meta_data")&&save["meta_data"].is_object()){const auto label=save["meta_data"].value("char_name",std::string{});if(!label.empty()&&label.size()<=128)name=label;}}catch(...){}}
+            if(xbox&&!character)return;
+            if(xbox&&std::any_of(files.begin(),files.end(),[&](const auto& row){return row.value("Provider",std::string{})=="GamePass"&&row.value("CharacterGuid",std::string{})==guid;}))return;
+            files.push_back({{"Name",name},{"FileName",file.filename().string()},{"Path",SavePathText(file)},{"Storage",storage},{"Provider",provider},{"CharacterGuid",guid}});
         };
+        std::vector<std::pair<fs::file_time_type,fs::path>> xboxFiles;
+        for(const auto& file:XboxCharacterSaves::Candidates(HostServices::XboxSaveRoot())){
+            std::error_code ec;const auto time=fs::last_write_time(file,ec);if(!ec)xboxFiles.emplace_back(time,file);
+        }
+        std::sort(xboxFiles.begin(),xboxFiles.end(),std::greater<>());
+        for(const auto& [time,file]:xboxFiles){
+            if(files.size()>=512){warnings.push_back("Save list limited to 512 entries");break;}
+            append(file,"Xbox / Game Pass · read-only source","GamePass");
+        }
         for(const auto& file:ImportedSaves()){if(files.size()>=512){warnings.push_back("Save list limited to 512 entries");break;}append(file,"Imported JSON payload","Imported");}
         // Steam/Epic JSON is also editable while running Game Pass. This is a
         // source-format decision, not inferred from the active storefront.
@@ -69,17 +81,45 @@ json SaveEditorOperation(const std::string& op,const json& args){
                 if(entry.is_regular_file()&&entry.path().extension()==L".json")append(entry.path(),"Steam/Epic JSON","SteamEpic");
             }}
         }
+        try{const auto profileCharacters=HostServices::ProfileDirectory()/"characters";HelpyKitFiles::NoRedirect(profileCharacters);std::error_code profileError;
+        if(fs::is_directory(profileCharacters,profileError)){
+            size_t folders=0,profileFiles=0;for(const auto& character:fs::directory_iterator(profileCharacters)){
+                if(++folders>256||files.size()>=512||profileFiles>=1024)break;
+                HelpyKitFiles::NoRedirect(character.path());if(!character.is_directory()||CharacterSaveEditor::Guid(character.path().filename().string()).empty())continue;
+                for(const auto* kind:{"snapshots","exports"}){
+                    const auto folder=character.path()/kind;HelpyKitFiles::NoRedirect(folder);if(!fs::is_directory(folder,profileError))continue;
+                    std::vector<std::pair<fs::file_time_type,fs::path>> copies;size_t inspected=0;
+                    for(const auto& copy:fs::directory_iterator(folder)){if(++inspected>256||++profileFiles>1024)break;HelpyKitFiles::NoRedirect(copy.path());if(copy.is_regular_file()&&copy.path().extension()==L".json")copies.emplace_back(copy.last_write_time(),copy.path());}
+                    std::sort(copies.begin(),copies.end(),std::greater<>());size_t shown=0;
+                    for(const auto& [time,path]:copies){if(++shown>3||files.size()>=512)break;append(path,"RuneSchema profile copy","Profile");}
+                }
+            }
+        }
+        }catch(const std::exception& error){warnings.push_back(std::string("Profile copies unavailable: ")+error.what());}
         std::stable_sort(files.begin(),files.end(),[](const auto& a,const auto& b){return std::pair{a.at("Name").template get<std::string>(),a.at("Path").template get<std::string>()}<std::pair{b.at("Name").template get<std::string>(),b.at("Path").template get<std::string>()};});
         return {{"Files",files},{"Mods",EditorMods()},{"Warnings",warnings},{"Runtime",Storefront::Name(Storefront::Current())},
-            {"AttachAvailable",false},{"Status","Edit imported character JSON from either runtime. Native Steam/Epic and Game Pass attachment adapters are not yet verified; export copies only."}};
+            {"AttachAvailable",false},{"Status","Steam/Epic and Xbox character saves · copy-only editing. Xbox provider containers are never modified."}};
     }
     if(op=="SaveEditorOpen"){
         ResetCharacterEditor();
-        if(!args.value("Offline",false))throw std::runtime_error("Confirm this character is not loaded before opening its save");
-        const auto path=SaveInput(args);const auto stamp=fs::last_write_time(path);const auto size=fs::file_size(path);auto source=Read(path);
+        const bool copyOnly=args.value("CopyOnly",false);
+        if(!args.value("Offline",false)&&!copyOnly)throw std::runtime_error("Open an isolated copy or confirm this character is offline");
+        const auto text=args.at("Path").get<std::string>();auto path=fs::canonical(fs::path(std::u8string(text.begin(),text.end())));
+        const bool xbox=path.extension()!=L".json";
+        if(xbox&&!XboxCharacterSaves::Candidate(HostServices::XboxSaveRoot(),path))throw std::runtime_error("Choose a discovered Xbox character payload, not a provider index or world container");
+        const auto stamp=fs::last_write_time(path);const auto size=fs::file_size(path);auto source=Read(path);
         if(fs::last_write_time(path)!=stamp||fs::file_size(path)!=size)throw std::runtime_error("Save changed during read; retry");
-        characterEditor.Session.Open(source);characterEditor.Path=path;characterEditor.Time=stamp;characterEditor.Size=size;
-        auto result=characterEditor.Session.Browse();result["Path"]=SavePathText(path);result["Format"]="Native character JSON";result["Status"]="Character copy opened. Unknown fields and mod IDs are preserved.";return result;
+        if(xbox&&!XboxCharacterSaves::Character(source))throw std::runtime_error("This Xbox blob is not a supported character JSON payload");
+        CharacterSaveEditor::RequireCharacter(source);
+        if(args.contains("CharacterGuid")){
+            const auto expected=CharacterSaveEditor::Guid(args.at("CharacterGuid"));
+            if(expected.empty()||CharacterSaveEditor::Identity(source)!=expected)throw std::runtime_error("Selected save no longer matches the current character; refresh saves");
+        }
+        const auto originalPath=SavePathText(path);
+        if((xbox||copyOnly)&&CharacterSaveEditor::Identity(source).empty())throw std::runtime_error("Character identity is unavailable; no profile copy was created");
+        if(xbox||copyOnly)path=WriteSaveCopy(HostServices::ProfileDirectory()/"characters"/CharacterSaveEditor::Identity(source)/"snapshots",xbox?"xbox-character":"character",source,path);
+        characterEditor.Session.Open(source);characterEditor.Path=path;characterEditor.Time=fs::last_write_time(path);characterEditor.Size=fs::file_size(path);
+        auto result=characterEditor.Session.Browse();result["Path"]=SavePathText(path);result["OriginalPath"]=originalPath;result["CopyOnly"]=xbox||copyOnly;result["Format"]="Native character JSON";result["Status"]="Saved snapshot opened. Edits export a separate copy, not the live character.";return result;
     }
     if(op=="SaveEditorClose"){ResetCharacterEditor();return {{"Status","Draft discarded. Original unchanged."}};}
     if(op=="SaveEditorRenderStop"){CharacterPreview::Reset();return {{"Status","Native preview stopped; transient scene released."}};}
@@ -155,7 +195,7 @@ json SaveEditorOperation(const std::string& op,const json& args){
     if(op=="SaveEditorPreview")return characterEditor.Session.Preview(source);
     if(op=="SaveEditorExport"){
         const auto document=characterEditor.Session.Consume(source,args.at("Token").get<std::string>(),args.value("Confirm",false));
-        return {{"File",SavePathText(WriteSaveCopy(HostServices::ExportsDirectory()/"saves","edited",document,characterEditor.Path))},
+        return {{"File",SavePathText(WriteSaveCopy(HostServices::ProfileDirectory()/"characters"/characterEditor.Session.CharacterGuid()/"exports","edited",document,characterEditor.Path))},
             {"Status","Verified character copy exported. Original unchanged; no runtime attachment or platform conversion was performed."}};
     }
     throw std::runtime_error("Unknown save-editor operation");

@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/RuneSchemaProfile.h"
 #include "Generator/ToolRequest.h"
 #include "Generator/HelpyWindowChrome.h"
 #include "Generator/ItemBayBrowser.h"
@@ -25,8 +26,7 @@ inline std::function<void(float)> RenderCart;
 inline int Offset=0;inline uint64_t Pending=0,Sequence=0x5700000000000000ull,Generation=0,Revision=1;
 inline std::chrono::steady_clock::time_point Started{};
 inline HelpyWindowChrome::State Chrome;
-inline Json ScrapItem,ScrapPlan;inline uint64_t ScrapPending=0;inline bool ScrapCommitting=false,ScrapUnconfirmed=false,ScrapConfirm=false;inline std::chrono::steady_clock::time_point ScrapStarted{};
-inline void Request(const Json& row){Target=row;Snapshot=Json::object();Offset=0;Personal=false;Container=false;Pending=0;Group="Inventory";SelectedSlot.clear();SelectedInventory=Json::object();ChangingGear=false;GearMutationUnconfirmed=false;GearCatalogRequest=0;ScrapPending=0;ScrapPlan=Json::object();ScrapConfirm=false;ScrapUnconfirmed=false;Open=true;Detached=true;Refresh=true;Generation=SpawnToolRequests::CurrentGeneration();Status="Reading native inventory...";HelpyTaskbar::Current.Restore(HelpyTaskbar::Window::Inventory);}
+inline void Request(const Json& row){Target=row;Snapshot=Json::object();Offset=0;Personal=false;Container=false;Pending=0;Group="Inventory";SelectedSlot.clear();SelectedInventory=Json::object();ChangingGear=false;GearMutationUnconfirmed=false;GearCatalogRequest=0;Open=true;Detached=true;Refresh=true;Generation=SpawnToolRequests::CurrentGeneration();Status="Reading native inventory...";HelpyTaskbar::Current.Restore(HelpyTaskbar::Window::Inventory);}
 inline void ResetGearCatalog(){
     GearRows=Json::array();GearOffset=0;GearWanted=48;GearCursor.clear();GearMore=LoadoutEligibility::Valid(GearLocation);GearQuery=ItemGridPicker::BackendQuery(Bay);++GearRevision;Bay.CatalogRevision=0;Bay.PageIndex=0;
     GearRows=ItemGridPicker::CachedSlotRows(GearLocation,GearQuery,Generation);
@@ -58,43 +58,8 @@ inline void PollRepair(){
 inline void RequestContainer(const Json& row){Request(row);Container=true;Group="Storage";Status="Reading loaded placed-storage contents...";}
 inline void Reload(){Offset=0;Snapshot=Json::object();Refresh=true;++Revision;}
 inline bool ValidSnapshot(){return Snapshot.contains("ObservedUnixMs")&&Generation==SpawnToolRequests::CurrentGeneration();}
-inline bool ScrapEligible(const Json& row){return HelpySettings::ScrapRefunds()&&ValidSnapshot()&&!Container&&!Personal&&Group!="Equipped"&&!ChangingGear
-    &&!Pending&&!GearPending&&!RepairPending&&!ScrapPending&&!ScrapUnconfirmed&&!ItemGridPicker::SharedCart.Delivery()
-    &&row.value("Count",0)>0&&row.value("Slot",-1)>=0&&!HelpyPersonalization::StackKey(row).empty()&&HelpyPersonalization::BulkEligible(row,false);}
-inline void ScrapAction(bool commit){
-    if(!ScrapEligible(ScrapItem)){Status="Scrap unavailable: refresh inventory or unprotect this stack.";return;}
-    Json request={{"Action",commit?"ScrapInventoryItem":"InspectScrapItem"},{"_RequestId",++Sequence},{"_Source","HelpyStandalone"},
-        {"Player",Target.value("Path",std::string{})},{"PlayerGuid",Target.value("Guid",std::string{})},{"Generation",Generation},
-        {"Path",ScrapItem.at("Path")},{"Slot",ScrapItem.at("Slot")},{"Instance",ScrapItem.at("Instance")},{"Quantity",ScrapItem.at("Count")}};
-    if(commit)request["ExpectedPlan"]=ScrapPlan;
-    const auto id=request.at("_RequestId").get<uint64_t>();
-    if(SpawnToolRequests::TrySubmit(request)){ScrapPending=id;ScrapCommitting=commit;ScrapStarted=std::chrono::steady_clock::now();Status=commit?"Scrapping stack…":"Calculating crafting refund…";}
-    else Status="Runtime busy; Scrap was not submitted.";
-}
-inline void PollScrap(){
-    if(!ScrapPending)return;
-    if(Generation!=SpawnToolRequests::CurrentGeneration()){ScrapUnconfirmed|=ScrapCommitting;ScrapPending=0;ScrapConfirm=false;ScrapPlan=Json::object();Status="World changed; inspect inventory and drops. No retry.";return;}
-    Json result;if(SpawnToolRequests::TakeCompleted(ScrapPending,result)){
-        ScrapPending=0;const auto action=result.value("InventoryAction",Json::object());Status=result.value("Status",std::string("Scrap returned without a receipt."));
-        if(ScrapCommitting){ScrapUnconfirmed=action.value("State",std::string{})!="Rejected"&&!action.value("Confirmed",false);ScrapPlan=Json::object();Reload();}
-        else if(action.value("State",std::string{})=="Preview"&&action.contains("Plan")&&action["Plan"].value("Generation",uint64_t{})==Generation
-            &&action["Plan"].value("PlayerGuid",std::string{})==Target.value("Guid",std::string{})){ScrapPlan=action.at("Plan");ScrapConfirm=true;}
-    }else if(std::chrono::steady_clock::now()-ScrapStarted>std::chrono::seconds(15)){ScrapPending=0;ScrapUnconfirmed|=ScrapCommitting;Status=ScrapCommitting?"Scrap result unconfirmed. Inspect inventory and drops; no retry.":"Refund preview timed out; no Scrap was requested.";}
-}
-inline void ScrapConfirmation(){
-    if(ScrapConfirm){ImGui::OpenPopup("Scrap stack?");ScrapConfirm=false;}
-    if(ImGui::BeginPopupModal("Scrap stack?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
-        ImGui::Text("%s ×%d",ItemPresentation::Name(ScrapItem).c_str(),ScrapItem.value("Count",0));
-        ImGui::TextUnformatted("Crafting components to drop beside the player:");
-        for(const auto& row:ScrapPlan.value("Refunds",Json::array()))ImGui::BulletText("%s ×%lld",ItemPresentation::Name(row).c_str(),row.value("Count",int64_t{}));
-        ImGui::TextDisabled("Deletes the whole stack. No recovery-bin copy.");
-        ImGui::BeginDisabled(!ScrapEligible(ScrapItem));if(HelpyImGuiTheme::SoftButton("Delete & refund")){ScrapAction(true);ImGui::CloseCurrentPopup();}ImGui::EndDisabled();
-        ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Cancel")){ScrapPlan=Json::object();ImGui::CloseCurrentPopup();}ImGui::EndPopup();
-    }
-}
 inline void Poll(){
     PollRepair();
-    PollScrap();
     if(!Open)return;
     if(Generation!=SpawnToolRequests::CurrentGeneration()){Snapshot=Json::object();Pending=0;Refresh=false;GearMutationUnconfirmed|=GearPending!=0;GearPending=0;GearCatalogRequest=0;GearMore=false;Status="World changed; close this view and select a current party member.";return;}
     if(GearPending){Json result;if(SpawnToolRequests::TakeCompleted(GearPending,result)){GearPending=0;Status=result.value("Status",std::string("Gear action returned without a receipt; inspect inventory."));GearMutationUnconfirmed=!result.value("EquipmentAction",Json::object()).value("Confirmed",false);Reload();}}
@@ -170,8 +135,6 @@ inline void Inventory(float height){
         const auto count=std::string("×")+std::to_string(row.value("Count",1));const auto extent=ImGui::CalcTextSize(count.c_str());ImGui::GetWindowDrawList()->AddText({a.x+width-extent.x-t.X(8),a.y+t.Y(6)},ImGui::GetColorU32(t.text),count.c_str());
         if(HelpyImGuiTheme::TooltipReady("live-inventory:"+slot,ImGui::IsItemHovered()))ItemGridPicker::VerboseTooltip(row,name,path,false,true);
         if(ImGui::BeginPopupContextItem("##inventory-item-actions")){ImGui::TextUnformatted(name.c_str());ImGui::Separator();ItemGridPicker::InspectActions(row);ImGui::Separator();PersonalizationPanel::Menu(row);
-            ImGui::Separator();if(ImGui::MenuItem("Scrap stack…",nullptr,false,ScrapEligible(row))){ScrapItem=row;ScrapPlan=Json::object();ScrapAction(false);}
-            if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))HelpyImGuiTheme::Tooltip("%s",HelpySettings::ScrapRefunds()?"Preview the native crafting refund. Unequip and unprotect the stack first.":"Enable Scrap refunds in Home quick settings.");
             ImGui::TextDisabled("Slot %s · count %d",slot.c_str(),row.value("Count",1));ImGui::EndPopup();}
         ImGui::PopID();
     }
@@ -181,8 +144,7 @@ inline void Inventory(float height){
 }
 inline void Contents(){
     const auto& t=HelpyImGuiTheme::Current;ImGui::PushID("live-inventory-workbench");
-    ScrapConfirmation();
-    ImGui::TextWrapped("%s",Target.value("Name",std::string("Player")).c_str());ImGui::SameLine();if(HelpyImGuiTheme::SoftButton(Detached?"Dock inventory":"Detach inventory"))Detached=!Detached;
+    ImGui::TextWrapped("%s",RuneSchemaProfile::Name(Target).c_str());ImGui::SameLine();if(HelpyImGuiTheme::SoftButton(Detached?"Dock inventory":"Detach inventory"))Detached=!Detached;
     const bool delivering=ItemGridPicker::SharedCart.Delivery()!=0;if(WasDelivering&&!delivering&&Generation==SpawnToolRequests::CurrentGeneration())Reload();WasDelivering=delivering;
     ImGui::BeginChild("##inventory-workbench-body",{0,0});
     if(Container){ImGui::TextWrapped("Lock status: Unknown · locked by: not verified");ImGui::TextWrapped("%s",Snapshot.value("AccessReason",std::string("Direct chest deposits and unlock overrides require a verified native access contract.")).c_str());}

@@ -8,6 +8,7 @@ namespace {
         uint64_t Generation=0;std::chrono::steady_clock::time_point Next{},NextProgress{};
         std::string Phase;
         std::string LastGroundError;
+        size_t Candidate=0;
     };
     std::optional<ToolMapTravelJob> g_mapTravel;
     std::int64_t ToolMapTravelTime(){return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();}
@@ -101,6 +102,11 @@ namespace {
             if(!CastField<FEnumProperty>(state))throw std::runtime_error("Streaming activation state is unavailable");
             PropertyHelper::CopyJsonValueToContainer(source,state,"Activated");
             ActorHelper::FunctionCall finish(anchor,TEXT("/Script/Engine.Actor:FinishAddComponent"));finish.Arg(TEXT("Component"),source).Arg(TEXT("bManualAttachment"),true).Arg(TEXT("RelativeTransform"),FTransform{}).Invoke();
+            // This is an ActorComponent: its provider uses the owning actor, not scene attachment.
+            ActorHelper::FunctionCall owner(source,TEXT("/Script/Engine.ActorComponent:GetOwner"));owner.Invoke();
+            const auto at=ActorHelper::GetActorLocation(anchor);
+            if(owner.Result<UObject*>()!=anchor||anchor->GetWorld()!=world||!std::isfinite(at.X())||!std::isfinite(at.Y())||!std::isfinite(at.Z())||std::abs(at.X()-point.X)>2||std::abs(at.Y()-point.Y)>2)
+                throw std::runtime_error("Destination streaming source owner/location could not be verified");
             ActorHelper::FunctionCall enable(source,TEXT("/Script/Engine.WorldPartitionStreamingSourceComponent:EnableStreamingSource"));enable.Invoke();
             ActorHelper::FunctionCall enabled(source,TEXT("/Script/Engine.WorldPartitionStreamingSourceComponent:IsStreamingSourceEnabled"));enabled.Invoke();
             if(!enabled.Result<bool>())throw std::runtime_error("The destination streaming source did not enable");
@@ -133,11 +139,19 @@ namespace {
             if(step!=PS::MapTravel::Gate::Step::Probe){ToolMapTravelProgress("Preparing","Loading destination terrain...");return true;}
             ToolMapTravelProgress("Checking ground","Checking safe landing and player clearance...");
             try{
-                std::map<std::pair<double,double>,double> heights;
-                job.Landing=PS::MapLanding::ResolveNear(job.Projection,job.Point,job.Radius,job.HalfHeight,job.NearMarker,[&](PS::MapProjection::Point sample,double top,double bottom){
-                    FVector hit{};std::string error;if(!UECustom::UKismetSystemLibrary::FindGroundSurface(activeWorld,FVector(sample.X,sample.Y,top),FVector(sample.X,sample.Y,bottom),{pawn},hit,error))throw std::runtime_error(error.empty()?"No blocking ground surface":error);
+                const auto candidates=PS::MapLanding::TravelCandidates(job.Point,job.NearMarker);
+                const auto candidate=candidates[job.Candidate++%candidates.size()];
+                std::map<std::pair<double,double>,double> heights;std::optional<double> reference;
+                // One footprint per tick: keep loading/cancel/UI responsive while searching nearby.
+                job.Landing=PS::MapLanding::ResolveNear(job.Projection,candidate,job.Radius,job.HalfHeight,false,[&](PS::MapProjection::Point sample,double top,double bottom){
+                    FVector hit{};std::string error;if(!UECustom::UKismetSystemLibrary::FindGroundSurface(activeWorld,FVector(sample.X,sample.Y,top),FVector(sample.X,sample.Y,bottom),{pawn},hit,error,reference))throw std::runtime_error(error.empty()?"No blocking ground surface":error);
+                    if(!reference)reference=hit.Z();
                     heights[{sample.X,sample.Y}]=hit.Z();return PS::MapLanding::Position{hit.X(),hit.Y(),hit.Z()};
                 });
+                std::string clearanceError;
+                const bool blocked=UECustom::UKismetSystemLibrary::CapsuleBlocked(activeWorld,FVector(job.Landing.X,job.Landing.Y,job.Landing.Z),job.Radius,job.HalfHeight,{pawn},clearanceError);
+                if(!clearanceError.empty())throw std::runtime_error(clearanceError);
+                if(blocked)throw std::runtime_error("Player clearance blocked; checking nearby ground");
                 job.GroundZ=heights.at({job.Landing.X,job.Landing.Y});
             }catch(const std::exception& error){job.LastGroundError=error.what();return true;}
             PS::SpawnToolRequests::Progress("Ground verified; starting native travel...",{{"MapPoint",{{"GroundAvailable",true},{"Location",{job.Landing.X,job.Landing.Y,job.GroundZ}}}}});

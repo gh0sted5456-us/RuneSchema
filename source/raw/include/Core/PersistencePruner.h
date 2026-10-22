@@ -12,7 +12,7 @@ namespace PS {
 class PersistencePruner {
 public:
     void PrepareForStartup() noexcept;
-    std::size_t PruneCharacterJson(RC::Unreal::FString& characterJson);
+    std::size_t PruneCharacterJson(RC::Unreal::FString& characterJson,bool* prepared=nullptr);
     bool PruneBeforeCharacterLoad(RC::Unreal::UObject* context,
         RC::Unreal::UFunction* function, void* parameters);
 

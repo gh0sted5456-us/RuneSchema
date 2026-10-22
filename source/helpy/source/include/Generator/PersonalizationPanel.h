@@ -16,7 +16,7 @@ inline void Edit(const std::string& key,const std::string& original,bool item){
 }
 inline void Menu(const Json& row){
     if(!ImGui::BeginMenu("Organize"))return;
-    const auto key=HelpyPersonalization::ItemKey(row);ImGui::BeginDisabled(key.empty());
+    const auto key=HelpyPersonalization::TypeKey(row);ImGui::BeginDisabled(key.empty()||row.value("MarksReadOnly",false));
     if(ImGui::MenuItem("Nickname & tags..."))Edit(key,ItemPresentation::OriginalName(row),true);
     const bool favorite=HelpyPersonalization::Favorite(row),locked=HelpyPersonalization::Locked(row),junk=HelpyPersonalization::Tagged(row,"junk");
     const auto type=HelpyPersonalization::Get(key);const bool typeFavorite=type.value("Favorite",false),typeLocked=type.value("Locked",false);
@@ -38,7 +38,7 @@ inline bool Filters(bool& favorites,std::string& tag){
     bool changed=false;if(HelpyImGuiTheme::SoftButton("Favorites / tags"))ImGui::OpenPopup("##personal-filters");
     if(ImGui::BeginPopup("##personal-filters")){changed|=ImGui::Checkbox("Favorites only",&favorites);ImGui::Separator();
         if(ImGui::Selectable("All tags",tag.empty())){tag.clear();changed=true;}
-        std::set<std::string> tags;{std::shared_lock lock(HelpyPersonalization::Gate);for(const auto& [key,row]:HelpyPersonalization::Entries.items())if((key.starts_with("item:")||HelpyPersonalization::StackKeyValid(key))&&row.contains("Tags"))for(const auto& value:row["Tags"])tags.insert(value.get<std::string>());}
+        std::set<std::string> tags;{std::shared_lock lock(HelpyPersonalization::Gate);for(const auto& [key,row]:HelpyPersonalization::Entries.items())if((key.starts_with("item:")||HelpyPersonalization::TypeKeyValid(key)||HelpyPersonalization::StackKeyValid(key))&&row.contains("Tags"))for(const auto& value:row["Tags"])tags.insert(value.get<std::string>());}
         for(const auto& value:tags)if(ImGui::Selectable(value.c_str(),value==tag)){tag=value;changed=true;}
         if(ImGui::MenuItem("Reload saved labels"))HelpyPersonalization::Load(HelpyPersonalization::File);
         ImGui::TextDisabled("Locks protect every copy of an item type in Helpy.");ImGui::EndPopup();}

@@ -10,7 +10,7 @@ namespace PS::CacheBundleItems {
 using Json=nlohmann::json;using Clock=std::chrono::steady_clock;
 inline Json Page(const Json& records,const std::string& query,const std::string& cursor,size_t limit){
     if(!limit||limit>128)throw std::runtime_error("[RS-CACHE-002] Invalid bundle page size.");
-    std::vector<Json> rows;for(const auto& record:records)if(record.value("Kind",std::string{})=="items")rows.push_back(record.at("Data"));
+    std::vector<Json> rows;for(const auto& record:records)if(record.value("Kind",std::string{})=="items"){auto row=record.at("Data");ItemCategory::Repair(row);rows.push_back(std::move(row));}
     std::sort(rows.begin(),rows.end(),[](const auto& a,const auto& b){const auto an=HelpyCacheSources::Lower(a.value("Name",std::string{})),bn=HelpyCacheSources::Lower(b.value("Name",std::string{}));return an==bn?a.at("Path")<b.at("Path"):an<bn;});
     const auto ticket=HelpySourceCache::Hex(HelpySourceCache::Hash(records.dump()));size_t offset=0;bool reset=false;
     if(!cursor.empty()){const auto prefix="B:"+ticket+":";if(cursor.starts_with(prefix)){

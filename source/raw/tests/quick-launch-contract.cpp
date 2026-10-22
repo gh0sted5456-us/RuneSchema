@@ -8,7 +8,7 @@ int main(int argc,char** argv){
     Need(argc==2,"source/raw root required");const std::filesystem::path root=argv[1];
     const auto read=[](const std::filesystem::path& path){std::ifstream stream(path,std::ios::binary);Need(bool(stream),"contract source unavailable");return std::string(std::istreambuf_iterator<char>(stream),{});};
     const auto ui=read(root/"../helpy/source/include/Generator/RuneSchemaSettingsPanel.h");
-    Need(ui.find("ImGui::BeginCombo(\"Launch mode\"")!=ui.npos&&ui.find("ImGui::Selectable(\"Normal (Less Restrictive)\"")!=ui.npos&&ui.find("ImGui::Selectable(\"Quick Launch\"")!=ui.npos,"launch selector must offer Normal and Quick Launch");
+    Need(ui.find("ImGui::BeginCombo(\"Launch mode\"")!=ui.npos&&ui.find("ImGui::Selectable(\"Normal\"")!=ui.npos&&ui.find("ImGui::Selectable(\"Quick Launch\"")!=ui.npos,"launch selector must offer Normal and Quick Launch");
     Need(ui.find("ImGui::TreeNode(\"Advanced\")")<ui.find("ImGui::Checkbox(\"Vanilla Load\""),"Vanilla Load belongs under Advanced");
     Need(ui.find("QuickToggle(\"Save Bypass\",\"/persistence/allowCorruptCharacterEntry\",true)")!=ui.npos,"Save Bypass remains an independent confirmed toggle");
     const auto quick=read(root/"src/Runtime/QuickLoad.cpp");

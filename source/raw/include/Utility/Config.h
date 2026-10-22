@@ -102,7 +102,8 @@ namespace PS {
         // Automatic /players appearance assignments stay read-only while
         // false. Character option/table loaders remain active.
         bool characterCustomization = false;
-        // Emergency compatibility path; disabled unless explicitly requested.
+        // Prefer bypass by default; false uses failure-only fallback on clients.
+        // Dedicated servers keep this as their only loading toggle.
         // Never stack it over the standalone CorruptCharacterBypass mod.
         bool allowCorruptCharacterEntry = false;
         // Native quest progress is inherently save-backed. When false,

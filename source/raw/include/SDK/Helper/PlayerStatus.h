@@ -2,6 +2,7 @@
 #include "Core/PlayerStatus.h"
 #include "Runtime/NetworkContext.h"
 #include "Runtime/Storefront.h"
+#include "Runtime/SteamBuild.h"
 #include "SDK/Helper/ReflectedContract.h"
 #include <Unreal/Property/FStructProperty.hpp>
 #include <Unreal/Property/FStrProperty.hpp>
@@ -48,6 +49,22 @@ inline void Color(UObject* state,nlohmann::json& row) {
         row["NativePlayerColor"]=rgba;row["NativePlayerColorVerified"]=true;
     }catch(...){}
 }
+inline std::string AccountName(UObject* state,bool local=false) {
+    try {
+        if(local){const auto steam=SteamBuild::PersonaName();if(!steam.empty())return steam;}
+        if(!state)return {};
+        auto* data=CastField<FStructProperty>(PH::GetPropertyByName(state->GetClassPrivate(),TEXT("PlatformData")));
+        if(!data||!data->GetStruct()||data->GetStruct()->GetPathName()!=TEXT("/Script/Dominion.DomPlatformData")
+            ||!DragonWilds::ReflectedContract::Fits(data,state->GetClassPrivate()->GetPropertiesSize()))return {};
+        auto* name=CastField<FStrProperty>(PH::GetPropertyByName(data->GetStruct().Get(),TEXT("DisplayName")));
+        if(!name||name->GetElementSize()!=sizeof(FString)||!DragonWilds::ReflectedContract::Fits(name,data->GetElementSize()))return {};
+        const auto& chars=name->ContainerPtrToValuePtr<FString>(data->ContainerPtrToValuePtr<void>(state))->GetCharArray();
+        if(chars.Num()<2||chars.Num()>129||!chars.GetData()||chars.GetData()[chars.Num()-1]!=0)return {};
+        auto value=RC::to_string(RC::StringType(chars.GetData(),chars.Num()-1));
+        if(value.size()>128||std::any_of(value.begin(),value.end(),[](unsigned char c){return c<32||c==127;}))return {};
+        return value;
+    }catch(...) {return {};}
+}
 inline std::string Platform(UObject* state) {
     try {
         if(!state)return "Unknown";
@@ -77,6 +94,12 @@ inline std::string ControllerPlatform(UObject* controller) {
     bool local=false;
     try {AH::FunctionCall query(controller,TEXT("/Script/Engine.Controller:IsLocalController"));query.Invoke();local=query.Result<bool>();}catch(...){}
     return Platform(AH::GetObjectRef(controller,TEXT("PlayerState")),local);
+}
+inline std::string ControllerAccountName(UObject* controller) {
+    if(!controller)return {};
+    bool local=false;
+    try {AH::FunctionCall query(controller,TEXT("/Script/Engine.Controller:IsLocalController"));query.Invoke();local=query.Result<bool>();}catch(...){}
+    return AccountName(AH::GetObjectRef(controller,TEXT("PlayerState")),local);
 }
 inline nlohmann::json Read(UObject* controller) {
     bool host=false;PlayerStatus::Flags flags;

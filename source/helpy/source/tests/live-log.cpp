@@ -3,6 +3,10 @@
 #include <fstream>
 using namespace PS::LiveLog;
 int main(){
+    const auto bypass=Parse("[RuneSchema] [info] [SAVE-ENTRY][BYPASSED][PLAYER-STATE] Save Bypass initiated (player state). Details: RuneSchema.log.");
+    assert(bypass.Severity==Level::Info);
+    const auto bypassDetail=Parse("[RuneSchema] [diagnostic] [SAVE-ENTRY][BYPASSED][PLAYER-STATE][UNATTRIBUTED] Native loading ran once; progress retention remains unverified.");
+    assert(bypassDetail.Severity==Level::Diagnostic);
     const auto coded=Parse("[2026-10-18T14:15:16.000Z thread=12] [RuneSchema] [warning] [RS-CACHE-003] Content differs: dye_bronze");
     assert(coded.Time=="14:15:16"&&coded.ReportedCode=="RS-CACHE-003"&&!coded.Suggested&&coded.Message=="Content differs: dye_bronze"&&coded.Scope=="Cache");
     assert(Guides[coded.Help].Value==PS::Diagnostics::Id::CacheMismatch);

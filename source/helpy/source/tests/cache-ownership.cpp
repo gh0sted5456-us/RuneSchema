@@ -16,6 +16,10 @@ int main(){
     assert(result.AssetOwners->at("/shared/art").contains("dye"));
     assert(!result.AssetOwners->contains("/shared/other")&&!result.AssetOwners->contains("/unregistered/a"));
     const auto all=Fetch(snapshot,{},read);assert(all.AssetOwners->size()==303);
+    auto provisional=snapshot;provisional.Provisional=true;const auto before=calls;bool waiting=false;
+    try{Fetch(provisional,{},read);}catch(const Unavailable&){waiting=true;}assert(waiting&&calls==before);
+    waiting=false;try{Fetch(snapshot,{},[](const Json&,Json&){return false;});}catch(const Unavailable&){waiting=true;}assert(waiting);
+    assert(Fetch(snapshot,{},read).AssetOwners->size()==303); // A later live-ready attempt succeeds without replacing last-good cache data.
     const auto reject=[&](Read provider){bool failed=false;try{Fetch(snapshot,"mods/dye",provider);}catch(const std::exception&){failed=true;}assert(failed);};
     reject([](const Json&,Json&){return false;});
     reject([&](const Json& q,Json& r){r=Page(snapshot,q);r["ContentRevision"]=8;return true;});

@@ -10,7 +10,7 @@
 #include "Generator/PlayerPortraitPicker.h"
 #include "Generator/SpawnBrowserSettings.h"
 namespace PS::SpawnStudioPanel {
-struct State {std::string Selected,Query,Player;char Search[257]{},Name[129]{};float Scale=1,Radius=500,Yaw=0,Height=0;int Count=1,Mode=0,Power=1;bool Permanent=false,Confirmed=false,OverridePower=false,ShowHidden=false,Rebuild=true;uint64_t Revision=0,Generation=0,PreferencesRevision=0,RowsRevision=0;size_t RowCount=0;std::vector<size_t> Matches;};
+struct State {std::string Selected,Query,Player;char Search[257]{},Name[129]{};float Scale=1,Radius=500,Yaw=0,Height=0;int Count=1,Mode=0,Power=1;bool Permanent=false,Confirmed=false,OverridePower=false,ShowHidden=false,Rebuild=true;uint64_t Revision=0,Generation=0,PreferencesRevision=0,RowsRevision=0,FilterRevision=0;size_t RowCount=0;std::vector<size_t> Matches;};
 inline State Resources,Npcs,Enemies;
 inline void RefreshMatches(State& s,const nlohmann::json& rows,uint64_t revision,uint64_t rowsRevision,bool resource,bool npc){
     if(!s.Rebuild&&s.Revision==revision&&s.RowsRevision==rowsRevision&&s.RowCount==rows.size()&&s.PreferencesRevision==SpawnBrowserSettings::Revision)return;
@@ -76,9 +76,12 @@ inline void ScaleReference(float scale,int kind,const std::string& name,const st
 inline void Render(const nlohmann::json& snapshot,uint64_t revision,bool resource,int actorMode,const std::string& player,std::function<void(const nlohmann::json&)> inspect={}){
     NativeJournalCache::Poll();SpawnBrowserSettings::Pump();
     auto& s=resource?Resources:actorMode==0?Npcs:Enemies;const bool npc=!resource&&actorMode==0;const int category=resource?2:1;const auto& t=HelpyImGuiTheme::Current;
+    const std::string filterKind=resource?"Resources":npc?"NPCs":"Enemies";
+    if(SpawnBrowserSettings::Loaded&&s.FilterRevision!=SpawnBrowserSettings::FilterRevision){const auto filter=SpawnBrowserSettings::Choices.Filter(filterKind);s.Query=filter.Query;std::snprintf(s.Search,sizeof(s.Search),"%s",s.Query.c_str());s.ShowHidden=filter.ShowHidden;s.Mode=filter.Mode;s.FilterRevision=SpawnBrowserSettings::FilterRevision;s.Rebuild=true;s.Confirmed=false;s.Selected.clear();}
+    SpawnBrowserSettings::SetFilter(filterKind,{s.Query,s.ShowHidden,resource?s.Mode:0});
     const auto generation=SpawnToolRequests::CurrentGeneration();if(s.Generation!=generation||s.Player!=player){s.Generation=generation;s.Player=player;s.Confirmed=false;s.Rebuild=true;}
     ImGui::TextDisabled("1  Choose a spawn     2  Set placement     3  Review and spawn");
-    auto& lazy=LazyCatalog::For(category);if(!lazy.Started&&!lazy.Pending)LazyCatalog::Search(category,s.Query);
+    auto& lazy=LazyCatalog::For(category);if(!lazy.Pending&&(!lazy.Started||lazy.Query!=s.Query))LazyCatalog::Search(category,s.Query);
     const bool wide=ImGui::GetContentRegionAvail().x>=t.X(740);const bool table=wide&&ImGui::BeginTable("##spawn-studio",2,ImGuiTableFlags_SizingStretchProp);
     if(table){ImGui::TableSetupColumn("Browse",ImGuiTableColumnFlags_WidthStretch,1.15f);ImGui::TableSetupColumn("Placement",ImGuiTableColumnFlags_WidthStretch,1);ImGui::TableNextColumn();}
     ImGui::SeparatorText("Choose spawn");

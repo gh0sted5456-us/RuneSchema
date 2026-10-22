@@ -15,7 +15,7 @@ fs::path SaveInput(const json& args) {
     return path;
 }
 fs::path WriteSaveCopy(const fs::path& folder,const std::string& prefix,const json& value,const fs::path& original={}) {
-    fs::create_directories(folder);auto text=value.dump(2);
+    HelpyKitFiles::NoRedirect(folder);fs::create_directories(folder);auto text=value.dump(2);
     if(!original.empty()){
         std::ifstream encoding(original,std::ios::binary);char bom[2]{};encoding.read(bom,2);
         if(static_cast<unsigned char>(bom[0])==0xff&&static_cast<unsigned char>(bom[1])==0xfe){

@@ -148,8 +148,10 @@ bool PersistencePruner::PruneBeforeCharacterLoad(
         }
         if (!jsonProperty) return false;
         auto value = jsonProperty->GetPropertyValue(jsonAddress);
-        const auto pruned=PruneCharacterJson(value);
+        bool prepared=false;
+        const auto pruned=PruneCharacterJson(value,&prepared);
         jsonProperty->SetPropertyValue(jsonAddress, value);
+        if(prepared)CharacterLoadAudit::Prepared();
         CharacterLoadAudit::Pruned(pruned);
         if(pruned)Log<LogLevel::Normal>(STR("[PERSISTENCE-PRUNER][PRUNED-PAYLOAD] load={} registry_confirmed_orphan_records={} native argument writeback verified; persisted save removal is not yet verified.\n"),CharacterLoadAudit::Token(),pruned);
         return true;
@@ -161,8 +163,9 @@ bool PersistencePruner::PruneBeforeCharacterLoad(
     return false;
 }
 
-std::size_t PersistencePruner::PruneCharacterJson(FString& characterJson)
+std::size_t PersistencePruner::PruneCharacterJson(FString& characterJson,bool* prepared)
 {
+    if(prepared)*prepared=false;
     if (characterJson.GetCharArray().Num() <= 1) return 0;
 
     const auto registry = SaveCleanup::ReadRegistry();
@@ -252,6 +255,7 @@ std::size_t PersistencePruner::PruneCharacterJson(FString& characterJson)
         }
 
         if (cleaned.Removed.empty() && restored.empty()) {
+            if(prepared)*prepared=true;
             Log<LogLevel::Verbose>(STR(
                 "[PERSISTENCE-PRUNER][CHECKED] No confirmed orphan IDs; pending declarations={} are protected individually, not a cleanup barrier. No persistence data was changed.\n"),RegistryEnrollment::PendingCount());
             return 0;
@@ -264,6 +268,7 @@ std::size_t PersistencePruner::PruneCharacterJson(FString& characterJson)
             "clean character JSON did not survive native writeback");
         std::size_t removed=0;for(const auto& row:cleaned.Removed)if(row.value("Kind",std::string{})!="Appearance")++removed;
         characterJson=std::move(replacement);applied=true;committedRemovals=removed;
+        if(prepared)*prepared=true;
 
         std::map<std::string, std::size_t> counts;
         std::size_t orphanCount = 0;

@@ -31,6 +31,7 @@ inline bool LastOperationOK=false;
 inline bool Packaged=false;
 inline bool CompletionNotify=false;
 inline std::string PackagedKey;
+inline std::chrono::steady_clock::time_point NextPackaged{};
 inline std::function<bool(const nlohmann::json&,nlohmann::json&)> RemoteBuild;
 inline nlohmann::json BuildState=nlohmann::json::object();
 inline std::string SelectedSource;
@@ -49,7 +50,7 @@ inline void Start(const std::filesystem::path& file,bool importing,const nlohman
     try{
         const auto extension=HelpyCacheSources::Lower(file.extension().string());
         if(extension!=".rsmk-icons"&&extension!=".rsmk-cache")throw std::runtime_error("[RS-CACHE-002] Choose a .rsmk-cache bundle or legacy .rsmk-icons pack.");
-        if(!HelpySourceCache::Ready()||!HelpySourceCache::Current.Authoritative)throw std::runtime_error("Wait for registered content sources to be ready, then retry.");
+        if(!HelpySourceCache::Ready()||!HelpySourceCache::Current.Authoritative||HelpySourceCache::Current.Provisional)throw std::runtime_error("Wait for live content-source verification, then retry. Cached content is retained.");
         const auto limit=HelpyRuntimePreferences::IconCacheLimitMB.load();if(limit<=0)throw std::runtime_error("Enable Keep icons between launches before using shared packs.");
         const auto snapshot=HelpySourceCache::Current;const auto root=HostServices::ModDirectory(),cache=HelpySourceCache::Directory(false);
         Progress.Cancel=false;Progress.Begin(HelpyIconPack::Phase::Discover);Importing=importing;Packaged=false;CompletionNotify=false;ActiveFile=file;LastOperationOK=false;
@@ -87,10 +88,14 @@ inline void Poll(){PollBuild();
     }
     if(!Worker.valid()||Worker.wait_for(std::chrono::seconds(0))!=std::future_status::ready)return;
     try{const auto result=Worker.get();Status=result.Message;CompletionNotify=!Packaged||HelpyModIconPacks::NotifyAutomatic(result);if(!Packaged){LastFile=ActiveFile;LastOperationOK=true;}if(Importing&&result.Imported){ItemIconCache::InvalidateIcons(result.ChangedIcons);if(ItemIconCache::RemoteResetAccounting)ItemIconCache::RemoteResetAccounting();}if(Importing&&!Packaged&&(result.Imported||result.Unchanged||result.RecordsImported)&&HelpyDownloads::ReleaseImportedPack(ActiveFile))Status+=" Download staging removed; imported cache retained.";}
+    catch(const HelpyCacheOwnership::Unavailable& error){
+        Status=error.what();CompletionNotify=!Packaged;
+        if(Packaged){PackagedKey.clear();NextPackaged=std::chrono::steady_clock::now()+std::chrono::seconds(2);}
+    }
     catch(const std::exception& error){Status=error.what();CompletionNotify=true;} // Last-good images and records remain usable on failed validation.
 }
 inline void PollPackaged(){
-    if(Busy()||Building()||!PendingBuildExport.empty()||!HelpySourceCache::Ready()||!HelpySourceCache::Current.Authoritative)return;
+    if(Busy()||Building()||!PendingBuildExport.empty()||!HelpySourceCache::Ready()||!HelpySourceCache::Current.Authoritative||HelpySourceCache::Current.Provisional||std::chrono::steady_clock::now()<NextPackaged)return;
     const auto limit=HelpyRuntimePreferences::IconCacheLimitMB.load();if(limit<=0)return;
     const auto snapshot=HelpySourceCache::Current;if(PackagedKey==snapshot.Key)return;PackagedKey=snapshot.Key;
     const auto root=HostServices::ModDirectory(),cache=HelpySourceCache::Directory(false);

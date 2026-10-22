@@ -1,5 +1,6 @@
 #pragma once
 #include "Core/PlayerPortraits.h"
+#include "Core/RuneSchemaProfile.h"
 #include "Core/ItemPresentation.h"
 #include "Generator/ItemIconCache.h"
 #include "Generator/HelpyImGuiTheme.h"
@@ -37,8 +38,8 @@ inline uint64_t JournalRevision=0;
 inline char Search[129]{};
 inline bool Initialized=false,Loaded=false,SaveWanted=false,OpenWanted=false;
 inline std::atomic<bool> CancelScan=false;
-inline std::filesystem::path File(){return HostServices::SavedDirectory()/"player-portraits.json";}
-inline std::filesystem::path PortraitFile(const std::string& guid){return File().parent_path()/"portraits"/(guid+".rsicon");}
+inline std::filesystem::path File(){return RuneSchemaProfile::Ready?RuneSchemaProfile::Data("portraits.json"):HostServices::SavedDirectory()/"player-portraits.json";}
+inline std::filesystem::path PortraitFile(const std::string& guid){const auto current=File().parent_path()/"portraits"/(guid+".rsicon");return current;}
 inline void ClearDraft(){if(DraftTexture)Retired.emplace_back(DraftTexture,ImGui::GetFrameCount());DraftTexture=nullptr;Draft={};Crop={};}
 inline void Import(const std::filesystem::path& file){
     if(ImportWorker.valid()||CropWorker.valid()){Error="Finish the current portrait first.";return;}
@@ -97,15 +98,16 @@ inline void Refresh(){
         }}catch(const std::exception& e){result.Error=e.what();}
         result.Icons.assign(icons.begin(),icons.end());return result;});
 }
-inline std::string Icon(const nlohmann::json& row){const auto guid=row.value("Guid",std::string{});const auto saved=Choices.Get(guid);return saved.empty()?row.value("Icon",std::string{}):saved;}
-inline void Request(const nlohmann::json& row){Pump();if(ImportWorker.valid()||CropWorker.valid())return;ClearDraft();Player=PlayerPortraits::Identity(row.value("Guid",std::string{}));Name=row.value("Name",std::string{});if(Player.empty())return;OpenWanted=true;Search[0]=0;Error.clear();Refresh();}
+inline std::string PictureId(const nlohmann::json& row){return row.value("IsLocal",false)&&RuneSchemaProfile::Ready?RuneSchemaProfile::Id():row.value("Guid",std::string{});}
+inline std::string Icon(const nlohmann::json& row){auto saved=Choices.Get(PictureId(row));if(saved.empty())saved=Choices.Get(row.value("Guid",std::string{}));return saved.empty()?row.value("Icon",std::string{}):saved;}
+inline void Request(const nlohmann::json& row){Pump();if(ImportWorker.valid()||CropWorker.valid())return;ClearDraft();Player=PlayerPortraits::Identity(PictureId(row));Name=row.value("Name",std::string{});if(Player.empty())return;OpenWanted=true;Search[0]=0;Error.clear();Refresh();}
 inline bool DrawCached(const std::string& icon,ImVec2 a,ImVec2 b,ImU32 tint=0){
     if(icon.empty()||!ImGui::IsRectVisible(a,b))return false;
     const bool colored=tint!=0;if(!colored)tint=IM_COL32_WHITE;
     if(icon.starts_with("/HelpyPortrait/")){
         const auto guid=PlayerPortraits::Identity(icon.substr(15,32));if(guid.empty()||icon!="/HelpyPortrait/"+guid+"."+guid)return false;
         if(auto it=Pictures.find(guid);it!=Pictures.end()){it->second.Frame=ImGui::GetFrameCount();ImGui::GetWindowDrawList()->AddImageRounded(ImTextureRef(it->second.Texture),a,b,{0,0},{1,1},tint,(b.x-a.x)*.5f);return true;}
-        if(!DiskWorker.valid()&&!Missing.contains(guid)){DiskPlayer=guid;DiskRevision=PictureRevision;const auto file=PortraitFile(guid);DiskWorker=std::async(std::launch::async,[file]{HelpyBackgrounds::Pixels result;try{HelpyIconPack::Safe(file);int w=0,h=0;if(!ItemIconCache::detail::ReadThumbnail(file,w,h,result.Data))throw std::runtime_error("Portrait unavailable");result.Width=w;result.Height=h;}catch(const std::exception& e){result.Error=e.what();}return result;});}return false;
+        if(!DiskWorker.valid()&&!Missing.contains(guid)){DiskPlayer=guid;DiskRevision=PictureRevision;auto file=PortraitFile(guid);if(!std::filesystem::exists(file)){const auto legacy=HostServices::SavedDirectory()/"portraits"/(guid+".rsicon");if(std::filesystem::exists(legacy))file=legacy;}DiskWorker=std::async(std::launch::async,[file]{HelpyBackgrounds::Pixels result;try{HelpyIconPack::Safe(file);int w=0,h=0;if(!ItemIconCache::detail::ReadThumbnail(file,w,h,result.Data))throw std::runtime_error("Portrait unavailable");result.Width=w;result.Height=h;}catch(const std::exception& e){result.Error=e.what();}return result;});}return false;
     }
     if(const auto kind=PortraitArt::Kind(icon);kind>=0){const auto color=colored?tint:ImGui::GetColorU32(HelpyImGuiTheme::Current.accentHover);auto* draw=ImGui::GetWindowDrawList();draw->AddCircleFilled({(a.x+b.x)*.5f,(a.y+b.y)*.5f},std::min(b.x-a.x,b.y-a.y)*.5f,ImGui::GetColorU32(HelpyImGuiTheme::Current.panelAlt));draw->AddCircle({(a.x+b.x)*.5f,(a.y+b.y)*.5f},std::min(b.x-a.x,b.y-a.y)*.5f,color);PortraitArt::Draw(kind,{a.x+(b.x-a.x)*.1f,a.y+(b.y-a.y)*.1f},{b.x-(b.x-a.x)*.1f,b.y-(b.y-a.y)*.1f},color);return true;}
     if(icon.starts_with("/HelpyWiki/"))return HelpyWikiIcons::Draw(icon,a,b,tint,true);

@@ -14,6 +14,20 @@
 // Independent, copy-only character editing. No file I/O or provider writes.
 namespace PS::CharacterSaveEditor {
 using Json=nlohmann::json;
+inline std::string Guid(const Json& value){
+    if(!value.is_string())return {};auto id=value.get<std::string>();
+    if(id.size()!=32||id.find_first_not_of("0123456789abcdefABCDEF")!=id.npos||id.find_first_not_of('0')==id.npos)return {};
+    for(auto& c:id)if(c>='a'&&c<='f')c=char(c-'a'+'A');return id;
+}
+inline std::string Identity(const Json& value){
+    if(!value.is_object())return {};
+    const auto metadata=value.find("meta_data"),legacy=value.find("GUID");
+    if(metadata!=value.end()&&metadata->is_object()&&metadata->contains("char_guid")){
+        const auto id=Guid(metadata->at("char_guid"));
+        if(legacy!=value.end()&&Guid(*legacy)!=id)return {};return id;
+    }
+    return legacy==value.end()?std::string{}:Guid(*legacy);
+}
 inline void RequireCharacter(const Json& value){
     if(!value.is_object()||!value.contains("GameProgress")||!value.at("GameProgress").is_object())
         throw std::runtime_error("This editor requires a native GameProgress character JSON payload. World/SPUD and Xbox provider containers need a separate adapter.");
@@ -59,7 +73,7 @@ public:
     const Json& Original()const{return original;}
     const Json& Draft()const{if(!Ready())throw std::runtime_error("Open a character copy first");return draft;}
     uint64_t Revision()const{return revision;}
-    std::string CharacterGuid()const{const auto& value=Draft();const auto found=value.find("GUID");return found!=value.end()&&found->is_string()?found->get<std::string>():std::string{};}
+    std::string CharacterGuid()const{return Identity(Draft());}
     void SetSkillLevel(const std::string& id,int level,uint64_t expected,const Json& thresholds,int maximum){
         if(!Ready()||expected!=revision||maximum<1||maximum>200||level<1||level>maximum||!thresholds.is_array()||thresholds.size()<size_t(maximum))throw std::runtime_error("Verified native skill thresholds and current revision required");
         int64_t previous=-1;for(int i=0;i<maximum;++i){const auto& value=thresholds[i];if(!value.is_number_integer()||value<0||value>2147483647||value.get<int64_t>()<=previous)throw std::runtime_error("Invalid native skill XP curve");previous=value.get<int64_t>();}

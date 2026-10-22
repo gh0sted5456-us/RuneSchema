@@ -175,7 +175,7 @@ inline void Rebuild(const json& catalog,State& state,uint64_t revision) {
         if(!row.is_object())continue;
         if(!HelpyImGuiTheme::Current.itemShowPlaceholders&&ItemPresentation::Placeholder(row))continue;
         if(!ItemSource::Matches(state.SourceFilter,ItemSource::Row(row))||!ItemFamily::Matches(state.FamilyKey,ItemPresentation::OriginalName(row))||!PersonalizationPanel::Matches(row,state.FavoritesOnly,state.PersonalTag))continue;
-        if(state.ActiveCategory!="All"&&row.value("Category",std::string("Misc"))!=state.ActiveCategory)continue;
+        if(state.ActiveCategory!="All"&&ItemCategory::Resolve(row)!=state.ActiveCategory)continue;
         const auto labels=HelpyPersonalization::SearchText(row);if(labels.empty()){if(query(row))state.Matches.push_back(i);}else{auto searchable=row;searchable["Tags"]=ItemPresentation::Text(row,"Tags")+" "+labels;if(query(searchable))state.Matches.push_back(i);}
     }
     // Legacy/full snapshots and imported UI fixtures use the same A-Z order
@@ -540,11 +540,10 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
         state.SearchDue=0;state.Query=filter;state.PageIndex=0;state.ResetScroll=true;
         LazyCatalog::Search(0,BackendQuery(state));state.Matches.clear();state.CatalogRevision=0;
     }
-    static constexpr const char* categories[]={"All","Weapons","Armor","Consumables","Ammo","Resources","Tools","Building","Quest","Misc"};
     const auto inlineControl=[&](float next){if(ImGui::GetItemRectMax().x+spacing+next<=ImGui::GetWindowPos().x+ImGui::GetWindowContentRegionMax().x)ImGui::SameLine();};
     inlineControl(categoryWidth);ImGui::SetNextItemWidth(categoryWidth);
     if(ImGui::BeginCombo("##item-category",state.ActiveCategory=="All"?"All categories":state.ActiveCategory.c_str())){
-        for(const char* category:categories)if(ImGui::Selectable(category,state.ActiveCategory==category)){
+        for(const char* category:ItemCategory::Categories)if(ImGui::Selectable(category,state.ActiveCategory==category)){
             state.ActiveCategory=category;HelpyImGuiTheme::Current.itemCategory=category;HelpyImGuiTheme::SaveCurrent();
             state.PageIndex=0;state.ResetScroll=true;LazyCatalog::Search(0,BackendQuery(state));state.Matches.clear();state.CatalogRevision=0;
         }ImGui::EndCombo();

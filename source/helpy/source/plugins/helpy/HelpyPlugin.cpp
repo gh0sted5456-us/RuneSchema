@@ -20,8 +20,8 @@
 #include "Runtime/HelpyPaths.h"
 #include "Core/HelpyEnvironment.h"
 #include "Core/HelpyBranding.h"
-#include "Generator/HelpyStoragePanel.h"
 #include "Core/HelpyInventoryService.h"
+#include "Core/RuneSchemaProfile.h"
 #include "Core/HelpySourceCache.h"
 #include "Runtime/HelpyUpdates.h"
 #include "Runtime/HelpyDownloads.h"
@@ -73,8 +73,10 @@ int32_t RS_PLUGIN_CALL InventoryService(void* context,const char* requestJson,ch
         const auto request=nlohmann::json::parse(requestJson);const auto action=request.value("Action",std::string{});
         // Mutations return bounded acknowledgements, not the complete storage document.
         if(PS::HelpyInventoryService::Mutating(action)&&(!response||capacity<PS::HelpyInventoryService::MutationReplyBytes)){*size=PS::HelpyInventoryService::MutationReplyBytes;return RS_PLUGIN_BUFFER_TOO_SMALL;}
-        const auto value=action!="Capabilities"&&!state->InventoryReady.load()?nlohmann::json{{"Error","Helpy inventory service is not initialized"}}:
-            PS::HelpyInventoryService::Run(PS::HostServices::StateDirectory(),request);
+        nlohmann::json value;
+        if(action!="Capabilities"&&!state->InventoryReady.load())value={{"Error","Helpy inventory service is not initialized"}};
+        else try{value=PS::HelpyInventoryService::Run(PS::HostServices::StateDirectory(),request);}
+        catch(const std::exception& error){value={{"Error",error.what()}};}
         const auto text=value.dump();if(text.size()+1>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return RS_PLUGIN_FAILED;
         *size=static_cast<uint32_t>(text.size()+1);if(!response||capacity<*size)return RS_PLUGIN_BUFFER_TOO_SMALL;
         std::memcpy(response,text.c_str(),*size);return RS_PLUGIN_OK;
@@ -253,7 +255,8 @@ extern "C" __declspec(dllexport) int32_t RS_PLUGIN_CALL RuneSchemaPlugin_OnUnrea
         PS::HelpySettings::Configure(PS::HelpyPaths::PluginRoot());
         PS::HelpySettings::EnsureLoaded();
         if(!PS::HelpySettings::IsEnabled()){state->Host->Log(RS_LOG_INFO,Descriptor.Id,"disabled by plugin settings");return RS_PLUGIN_OK;}
-        if(!PS::HelpyPersonalization::Initialized)PS::HelpyPersonalization::Load(PS::HostServices::StateDirectory()/"personalization.json");
+        if(!PS::RuneSchemaProfile::Initialized)PS::RuneSchemaProfile::Load(PS::HostServices::StateDirectory());
+        if(!PS::HelpyPersonalization::Initialized)PS::HelpyPersonalization::Load(PS::RuneSchemaProfile::Ready?PS::RuneSchemaProfile::Data("labels.json"):PS::HostServices::StateDirectory()/"personalization.json");
         state->InventoryReady=true;
         state->Host->Log(RS_LOG_INFO,Descriptor.Id,"using RuneSchema host reflection services");
         ConfigureTransport(state);
@@ -275,8 +278,8 @@ extern "C" __declspec(dllexport) int32_t RS_PLUGIN_CALL RuneSchemaPlugin_OnUnrea
 extern "C" __declspec(dllexport) void RS_PLUGIN_CALL RuneSchemaPlugin_Shutdown(void* instance) noexcept {
     auto* state=static_cast<State*>(instance);if(!state)return;
     state->InventoryReady=false;
+    PS::RuneSchemaProfile::Shutdown();
     if(state->Window)state->Window->Shutdown();
-    PS::HelpyStoragePanel::Shutdown();
     PS::HelpyUpdates::Shutdown();
     PS::HelpyDownloads::Shutdown();
     PS::HelpyMapCache::Shutdown();

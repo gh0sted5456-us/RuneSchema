@@ -8,8 +8,8 @@
 #include "Core/PartyStatWire.h"
 #include "SDK/Helper/EquipmentDelivery.h"
 #include "SDK/Helper/PlayerGearActions.h"
-#include "SDK/Helper/PlayerInventoryScrap.h"
-#include "SDK/Helper/NativeDeleteObserver.h"
+#include "SDK/Helper/NativeInventoryMarks.h"
+#include "SDK/Helper/InventoryMarkRelay.h"
 #include "SDK/Helper/PlayerLoadoutPresentation.h"
 #include "SDK/Helper/ResourceObservation.h"
 #include "SDK/Helper/ReflectedContract.h"
@@ -406,7 +406,6 @@ namespace DragonWilds {
 
     DragonWildsSpawnLoader::~DragonWildsSpawnLoader()
     {
-        m_deleteObserver.reset();
         ToolMapTravelReset(false); // no engine calls during DLL shutdown
         g_f2ReferenceJob.Shutdown(); // join copied-string worker before unloading this DLL
         ClearBonusRows();
@@ -659,10 +658,11 @@ namespace DragonWilds {
 
     bool DragonWildsSpawnLoader::OnInitialize()
     {
-        if(!m_deleteObserver){m_deleteObserver=std::make_unique<PS::NativeDeleteObserver>([this](UObject* controller){
-            if(!controller||!controller->GetWorld()||controller->GetWorld()!=m_readyWorld||!GetGameMode(controller->GetWorld()))return std::string{};
+        if(!m_markRelay)m_markRelay=std::make_unique<PS::InventoryMarkRelay>();
+        if(!m_inventoryMarks){m_inventoryMarks=std::make_unique<PS::NativeInventoryMarks>([this](UObject* controller){
+            if(!controller||!controller->GetWorld()||controller->GetWorld()!=m_readyWorld)return std::string{};
             return GetPlayerCharacterGuid(controller);
-        });m_deleteObserver->Install();}
+        });m_inventoryMarks->Install();}
         SetupAIScaleHook();
         SetupAIBindingHooks();
         SetupPlayerJoinHooks();
@@ -2583,7 +2583,8 @@ namespace DragonWilds {
                 PlayerGhost::ClearWorld();
                 ToolMapTravelReset();
                 m_readyWorld = nullptr;
-                if(m_deleteObserver)m_deleteObserver->Reset();
+                if(m_inventoryMarks)m_inventoryMarks->Reset();
+                if(m_markRelay)m_markRelay->Reset();
                 MenuIconWorldCache.Reset();NextMenuIconWorldScan={};
                 m_pendingWorld = nullptr;
                 m_pendingCellBounds.clear();
@@ -2620,6 +2621,8 @@ namespace DragonWilds {
 
         m_spawnTickCallbackId = Hook::RegisterEngineTickPostCallback(
             [this](Hook::TCallbackIterationData<void>&, UEngine*, float deltaSeconds, bool) {
+                if(m_inventoryMarks)m_inventoryMarks->Tick();
+                if(m_markRelay)m_markRelay->Tick(m_readyWorld,PS::SpawnToolRequests::Generation.load(),[this](UObject* controller){return GetPlayerCharacterGuid(controller);},ForwardHelpyAuthority);
                 PlayerGhost::Flush();
                 PS::SlowWork::Measure("helpy.tools",[&]{PumpSpawnTools();});
                 PS::SlowWork::Measure("helpy.icons",[&]{PumpItemIcons();});

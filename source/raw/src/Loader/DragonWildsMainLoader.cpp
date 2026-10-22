@@ -1,5 +1,6 @@
 #include <algorithm>
 #include "Core/HelpyCacheSources.h"
+#include "Core/NativePersistencePolicy.h"
 #include "Core/ModIdentity.h"
 #include "Core/ConfigFiles.h"
 #include <array>
@@ -902,7 +903,9 @@ namespace DragonWilds {
 
     void DragonWildsMainLoader::PreInitialize()
     {
-        if (PS::PSConfig::Get()->GetSettings().persistence.allowCorruptCharacterEntry)
+        const auto& settings=PS::PSConfig::Get()->GetSettings();
+        if (PS::NativePersistencePolicy::BypassRequested(PS::Storefront::IsDedicatedServer(),
+                settings.persistence.allowCorruptCharacterEntry,settings.quickLaunch.mode))
             m_characterEntryRecovery.Initialize();
         HookDatatableSerialize();
         SetupAlternativePakPathReader();
@@ -1265,8 +1268,9 @@ namespace DragonWilds {
             const std::string& action,const std::string& payload){
             return npcService->HandleNetworkQuestControl(player,quest,action,payload);
         };
-        m_registryBridge.ClientNotification=[npcService](RC::Unreal::UObject* player,const std::string& channel,
+        m_registryBridge.ClientNotification=[this,npcService](RC::Unreal::UObject* player,const std::string& channel,
             const std::string& entity,const std::string& payload){
+            if(channel=="helpy.marks"){if(m_spawnLoader)m_spawnLoader->HandleNetworkHelpyMarks(player,payload);return;}
             npcService->HandleNetworkNotification(player,channel,entity,payload);
         };
         npcService->PublishWorldState=[this](const std::string& instance,const std::string& record){

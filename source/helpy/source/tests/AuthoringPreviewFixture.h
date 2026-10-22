@@ -10,6 +10,8 @@ struct AuthoringPreviewFixture {
     HelpyAuthoring::Session Host;
     using Json=nlohmann::json;
     nlohmann::json Last;
+    bool CharacterSaveAvailable=true;
+    size_t CharacterSaveLists=0;
     CharacterSaveEditor::Session Editor;
     Json Character={{"GameProgress",{{"Health",100},{"Version",86},{"Inventory",{{"MaxSlotIndex",8},{"0",{{"ItemData","example-modded-id"},{"GUID","fixture-instance-1"},{"Count",5}}},{"8",{{"ItemData","example-vanilla-id"},{"GUID","fixture-instance-2"}}}}}}},{"UnknownModSection",{{"Keep",true}}}};
     static Json Event(){return {{"function","/Preview/Player:OnGatheredResource"},{"parameters",{{"Amount",3},{"IsRare",false}}}};}
@@ -30,7 +32,7 @@ struct AuthoringPreviewFixture {
         AuthoringPanel::ResultSelection="SavedWorld";
     }
     AuthoringPreviewFixture(){
-        Character["meta_data"]={{"char_name","Example character"},{"char_guid","fixture-owner"}};
+        Character["meta_data"]={{"char_name","Example character"},{"char_guid","1234567890abcdef1234567890abcdef"}};
         for(const auto& field:CharacterWorkbench::Fields)Character["Customization"]["CustomizationData"][field.Key]={{"dataTable","/Script/Engine.DataTable'"+CharacterWorkbench::Table(field)+"'"},{"rowName","ExampleRow"}};
         Host.Configure(true,true);
         AuthoringClient::Remote=[this](const nlohmann::json& request,nlohmann::json& reply){
@@ -60,8 +62,12 @@ struct AuthoringPreviewFixture {
                     else if(op=="CleanupInspect")data={{"Owners",Json::array({{{"Owner","RemovedExampleMod"},{"Count",2},{"Installed",false}}})},{"RegistryReady",false}};
                     else if(op=="CleanupPreview")data={{"Token","preview-only"},{"Removed",Json::array({{{"Owner","RemovedExampleMod"},{"Path","Inventory[0]"}}})}};
                     else if(op=="NiagaraPresets")data={{"Documents",Json::array({{{"Name","Sample fire effect"},{"Attachments",Json::array()}}})}};
-                    else if(op=="SaveEditorList")data={{"Runtime","Game Pass/WinGDK"},{"AttachAvailable",false},{"Files",Json::array({{{"Name","Example character"},{"Path","preview-character.json"},{"Storage","Imported JSON payload"}}})},
-                        {"Mods",Json::array({{{"Mod","ExampleMod"},{"Source","examplemount"},{"Root","Example RuneSchema/mods/ExampleMod"},{"Registered",true}}})}};
+                    else if(op=="SaveEditorList"){
+                        ++CharacterSaveLists;
+                        data={{"Runtime","Game Pass/WinGDK"},{"AttachAvailable",false},{"Files",Json::array({{{"Name","Example character"},{"Path","preview-character.json"},{"Storage","Xbox / Game Pass · read-only source"},{"Provider","GamePass"},{"CharacterGuid","1234567890abcdef1234567890abcdef"}}})},
+                            {"Mods",Json::array({{{"Mod","ExampleMod"},{"Source","examplemount"},{"Root","Example RuneSchema/mods/ExampleMod"},{"Registered",true}}})}};
+                        if(!CharacterSaveAvailable)data["Files"]=Json::array();
+                    }
                     else if(op=="SaveEditorOpen"){Editor.Open(Character);data=Editor.Browse();}
                     else if(op=="SaveEditorAppearance"||op=="SaveEditorAppearanceSet"||op=="SaveEditorRename"){
                         if(op=="SaveEditorAppearanceSet")Editor.SetAppearance(args.at("Field"),args.at("Row"),args.at("Revision"),{"ExampleRow","AnotherRow"});

@@ -1,5 +1,6 @@
 #pragma once
 #include "Core/ItemSource.h"
+#include "Core/ItemCategory.h"
 #include "Core/ItemFamily.h"
 #include "Core/LoadoutEligibility.h"
 #include <sstream>
@@ -21,9 +22,10 @@ struct Query {
         if(!row.is_object())return false;
         if(!Slot.empty()&&!LoadoutEligibility::Matches(row,Slot))return false;
         const auto text=[&](const char* key){const auto field=row.find(key);return field!=row.end()&&field->is_string()?field->get<std::string>():std::string{};};
-        if(!ItemSource::Matches(Source,ItemSource::Row(row))||(!Category.empty()&&HelpyCacheSources::Lower(text("Category"))!=Category)||!ItemFamily::Matches(Family,text("Name")))return false;
+        const auto category=ItemCategory::Resolve(row);
+        if(!ItemSource::Matches(Source,ItemSource::Row(row))||(!Category.empty()&&HelpyCacheSources::Lower(category)!=Category)||!ItemFamily::Matches(Family,text("Name")))return false;
         if(Words.empty())return true;
-        const auto searchable=HelpyCacheSources::Lower(text("Path")+" "+text("Name")+" "+text("InternalName")+" "+text("PersistenceID")+" "+text("Tags")+" "+text("Category")+" "+text("Class"));
+        const auto searchable=HelpyCacheSources::Lower(text("Path")+" "+text("Name")+" "+text("InternalName")+" "+text("PersistenceID")+" "+text("Tags")+" "+category+" "+text("Class"));
         for(const auto& word:Words)if(searchable.find(word)==searchable.npos)return false;return true;
     }
 };

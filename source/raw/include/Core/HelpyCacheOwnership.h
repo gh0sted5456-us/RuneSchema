@@ -25,14 +25,16 @@ inline Json Page(const HelpySourceCache::Snapshot& snapshot,const Json& request)
         {"After",after},{"Next",cursor},{"Complete",a==declared.end()&&b==authored.end()},{"Paths",paths}};
 }
 using Read=std::function<bool(const Json&,Json&)>;
+struct Unavailable final:std::runtime_error {using std::runtime_error::runtime_error;};
 inline HelpySourceCache::Snapshot Fetch(HelpySourceCache::Snapshot snapshot,const std::string& source,const Read& read){
+    if(snapshot.Provisional)throw Unavailable("Waiting for live cache ownership verification; cached content is retained.");
     if(!source.empty()&&!source.starts_with("mods/"))return snapshot;
     if(!Scope(source))throw std::runtime_error("Invalid mod cache source");
     if(!read)return snapshot; // In-process callers already carry immutable exact ownership.
     auto owners=std::make_shared<Owners>();std::string after;
     for(size_t page=0;page<8192;++page){
         Json response;const Json request={{"Action","IconCacheOwnership"},{"Source",source},{"After",after},{"Key",snapshot.Key},{"ContentRevision",snapshot.ContentRevision},{"Sources",snapshot.SourceKeys}};
-        if(!read(request,response))throw std::runtime_error("Exact cache ownership unavailable; update RuneSchema core and retry");
+        if(!read(request,response))throw Unavailable("Cache ownership is not ready or changed; retry after live source verification.");
         if(!response.is_object()||response.at("Key")!=snapshot.Key||response.at("ContentRevision")!=snapshot.ContentRevision
             ||response.at("Sources")!=Json(snapshot.SourceKeys)||response.at("Source")!=source||response.at("After")!=after
             ||!response.at("Paths").is_object()||response.at("Paths").size()>128||!response.at("Complete").is_boolean())

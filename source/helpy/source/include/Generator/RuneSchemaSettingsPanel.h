@@ -56,7 +56,7 @@ inline void QuickToggle(const char* label,const char* path,bool risky=false){
     if(ImGui::Checkbox(label,&value)){if(risky&&value)ImGui::OpenPopup("Confirm save bypass");else SaveQuick(path,value);}ImGui::EndDisabled();
     if(ImGui::BeginPopupModal("Confirm save bypass",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX()+HelpyImGuiTheme::Current.X(390));
-        ImGui::TextWrapped("Enable Corrupt Save Bypass for the next launch? Back up your character first and disable any standalone bypass. This does not repair the save; later saves may persist incomplete progress.");ImGui::PopTextWrapPos();
+        ImGui::TextWrapped("Use Save Bypass by default next launch, rather than failure-only fallback? Back up your character and disable any standalone bypass. This does not repair the save; later saves may persist incomplete progress.");ImGui::PopTextWrapPos();
         if(HelpyImGuiTheme::SoftButton("Save for next launch")){SaveQuick(path,true);ImGui::CloseCurrentPopup();}ImGui::SameLine();
         if(HelpyImGuiTheme::SoftButton("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
     }ImGui::PopID();
@@ -84,11 +84,11 @@ inline void QuickSettings(){
         ImGui::BeginDisabled(quick.empty()||quick.value("DedicatedServer",false));
         if(!quick.value("DedicatedServer",false)){
         ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(250));
-        if(ImGui::BeginCombo("Launch mode",mode==2?"Quick Launch":mode==0?"Vanilla Load (advanced)":"Normal (Less Restrictive)")){
-            if(ImGui::Selectable("Normal (Less Restrictive)",mode==1)){mode=1;dirty=true;saved=false;}
+        if(ImGui::BeginCombo("Launch mode",mode==2?"Quick Launch":mode==0?"Vanilla Load (advanced)":"Normal")){
+            if(ImGui::Selectable("Normal",mode==1)){mode=1;dirty=true;saved=false;}
             if(ImGui::Selectable("Quick Launch",mode==2)){mode=2;dirty=true;saved=false;}ImGui::EndCombo();
         }
-        hint("Vanilla Load keeps the game's native strictness. Less Restrictive keeps dom.PersistenceStrictMode=0 across loads for the session. Quick Launch uses Less Restrictive loading and opens the selected character/world with a camera fade. Hold Shift to skip automatic launch; the selected session policy remains. Pruning runs in every mode. Save Bypass is independent. Changes apply next launch; missing content may be lost when the game saves.");
+        hint("Both modes use Less Restrictive loading and orphan pruning, with bypass as a fallback after native rejection. Quick Launch opens your selected character/world; hold Shift to skip automatic launch. Applies next launch. Missing content may be lost when the game saves.");
         const auto choose=[&](const char* label,const char* key,char* text){
             ImGui::PushID(key);ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(250));
             if(ImGui::BeginCombo(label,*text?text:"Choose...")){
@@ -110,16 +110,14 @@ inline void QuickSettings(){
         if(unconfirmed||quick.empty()){ImGui::TextColored(HelpyImGuiTheme::Current.error,"Launch settings need attention. Hover for details.");hint(message);}
         else if(saved){ImGui::TextDisabled("Saved for next launch");hint(message);}
         ImGui::Separator();
-        bool scrap=HelpySettings::ScrapRefunds();if(ImGui::Checkbox("Scrap refunds",&scrap))HelpySettings::SetScrapRefunds(scrap);
-        hint("Enables Scrap in inventory item actions. Scrap uses native deletion and refunds verified crafting components as world drops. Ordinary X/Delete is unchanged. Scrapped items are not recoverable from Helpy Storage. Applies immediately.\n"+HelpySettings::Message());
         if(Loaded){QuickToggle("Save Bypass","/persistence/allowCorruptCharacterEntry",true);
-            hint("On clients: available with all three modes, without changing their strictness. On dedicated servers: the only loading toggle, also requesting session-long tolerant loading; native server world startup stays unchanged. Does not repair unreadable data. Back up saves and disable any standalone bypass first. Next launch only.\n\nCurrent session: "+Snapshot.value("BypassStatus",std::string("Not reported")));}
+            hint("Checked: use bypass by default. Unchecked: Normal and Quick Launch use it only after native rejection, including direct native loads. Native loading still runs once. On dedicated servers this is the only loading toggle. Does not repair unreadable data; keep backups and disable any standalone bypass. Next launch only.\n\nCurrent session: "+Snapshot.value("BypassStatus",std::string("Not reported")));}
         if(QuickToggleError||!Loaded){ImGui::TextColored(HelpyImGuiTheme::Current.error,"RuneSchema settings need attention. Hover for details.");hint(Status);}
         if(ImGui::TreeNode("Advanced")){
             ImGui::BeginDisabled(quick.empty()||quick.value("DedicatedServer",false));
             if(!quick.value("DedicatedServer",false)){
             bool vanilla=mode==0;if(ImGui::Checkbox("Vanilla Load",&vanilla)){mode=vanilla?0:1;dirty=true;saved=false;}
-            hint("Advanced: use native strictness instead of the default Less Restrictive policy. Orphan pruning remains active. Save launch options to apply next launch; Save Bypass stays independent.");
+            hint("Native strictness; automatic fallback is off. Orphan pruning remains active. The Save Bypass checkbox can still force bypass by default. Applies next launch.");
             const auto choices=[&](const char* label,const char* key,char* text){ImGui::PushID(key);ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(250));dirty|=ImGui::InputText(label,text,257);ImGui::PopID();};
             choices("Character name","Characters",character);hint("Manual native character display name. Ambiguous names are refused at launch.");
             choices("World slot name","Worlds",world);hint("Manual native world slot name, not a save-file path.");
@@ -158,8 +156,8 @@ inline void Field(const std::string& key,json& value,const std::string& path){
     }
     if(changed)Dirty=true;
     if(path=="/persistence/allowCorruptCharacterEntry"){
-        ImGui::TextWrapped("Runs native character validation and player-state loading, then accepts rejected return results at both verified native return gates. Restart required. Disable the standalone bypass first.");
-        ImGui::TextWrapped("On clients, independent of Vanilla Load, Less Restrictive and Quick Launch. On dedicated servers, this is the only loading toggle and also requests session-long tolerant loading; the server starts its world normally.");
+        ImGui::TextWrapped("Use Save Bypass by default. When off, Normal and Quick Launch use failure-only fallback after native rejection. Native loading runs once; no automatic reload. Restart required. Disable the standalone bypass first.");
+        ImGui::TextWrapped("On dedicated servers this is the only loading toggle and also enables Less Restrictive loading; native world startup is unchanged.");
         ImGui::TextWrapped("This does not repair unreadable data. Back up the character; later game saves can persist incomplete progress.");
         ImGui::TextWrapped("Current session: %s",Snapshot.value("BypassStatus",std::string("Not reported")).c_str());
     }
@@ -180,7 +178,7 @@ inline void Render(){
         if(Draft.at(pointer).get<bool>()&&!Snapshot.at("Document").at(pointer).get<bool>())ImGui::OpenPopup("Enable character validation bypass?");else Save();
     }ImGui::EndDisabled();
     if(ImGui::BeginPopupModal("Enable character validation bypass?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
-        ImGui::TextWrapped("Save the opt-in bypass for the next launch? Keep an original character backup and fully disable CorruptCharacterBypass. This does not guarantee complete character loading or progress retention.");
+        ImGui::TextWrapped("Use Save Bypass by default next launch? Keep an original character backup and disable CorruptCharacterBypass. This does not guarantee complete loading or progress retention.");
         if(HelpyImGuiTheme::SoftButton("Save for next launch")){Save();ImGui::CloseCurrentPopup();}ImGui::SameLine();
         if(HelpyImGuiTheme::SoftButton("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
     }

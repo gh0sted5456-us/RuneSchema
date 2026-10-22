@@ -123,15 +123,15 @@ int main(){
         if(!Visible(page,{true,true,true,true})||std::string_view(Description(page)).empty())throw std::runtime_error("Enabled workspace is unreachable or unexplained");
         titles.insert(Title(page));
     }
-    const std::set<std::string_view> expected{"Home","Players","Clone","Recipes","Spawns","World","Journal","Tools","Settings","Authoring","Live Log","Server / Co-op","Character Editor","Mods"};
+    const std::set<std::string_view> expected{"Home","Players","Clone","Recipes","Spawns","World","Journal","Tools","Settings","Authoring","Live Log","Server / Co-op","Character","Mods","Profile"};
     if(!Visible(Page::Creation)||TopLevel(Page::Creation)||TopLevel(Page::Recipes)||TopLevel(Page::SaveEditor)||TopLevel(Page::Spawns)||TopLevel(Page::Journal))throw std::runtime_error("Nested workflows must stay reachable without duplicate sidebar entries");
-    if(SidebarPages.size()!=8||!TopLevel(Page::Mods)||!Visible(Page::Mods)||PlayerTabs.size()!=4||WorldTabs.size()!=3||ToolTabs.size()!=2||Parent(Page::Authoring)!=Page::Tools||TopLevel(Page::Authoring)||std::string_view(TabTitle(Page::Items))!="Items"||std::string_view(TabTitle(Page::Map))!="Map")throw std::runtime_error("Mods must be top-level while Players, World and Tools retain their nested workflow tabs");
+    if(SidebarPages.size()!=8||!TopLevel(Page::Mods)||!Visible(Page::Mods)||PlayerTabs.size()!=3||ProfileTabs.size()!=2||Parent(Page::SaveEditor)!=Page::Profile||WorldTabs.size()!=3||ToolTabs.size()!=2||Parent(Page::Authoring)!=Page::Tools||TopLevel(Page::Authoring)||std::string_view(TabTitle(Page::Items))!="Items"||std::string_view(TabTitle(Page::Map))!="Map")throw std::runtime_error("Mods must be top-level while Players, World and Tools retain their nested workflow tabs");
     if(!Visible(Page::Tools,{true,false})||!Visible(Page::Authoring,{true,false})||Visible(Page::Authoring,{false,true}))throw std::runtime_error("Legacy authoring-only settings must expose Tools without enabling Authoring for tools-only users");
     for(auto page:SidebarPages)if(!TopLevel(page))throw std::runtime_error("Sidebar contains a nested workflow");
     for(auto page:PlayerTabs)if(Parent(page)!=Page::Items)throw std::runtime_error("Player workflow has the wrong parent");
     for(auto page:WorldTabs)if(Parent(page)!=Page::Map)throw std::runtime_error("World workflow has the wrong parent");
     if(titles!=expected)throw std::runtime_error("All destinations must stay reachable");
-    for(auto page:{Page::Authoring,Page::LiveLog,Page::SaveEditor})if(Visible(page))throw std::runtime_error("Optional workspace must require opt-in");
+    for(auto page:{Page::Authoring,Page::LiveLog})if(Visible(page))throw std::runtime_error("Optional workspace must require opt-in");
     if(!Visible(Page::Settings)||!Visible(Page::Items)||!Visible(Page::LiveLog,{false,false,true,false})||!Visible(Page::Tools))throw std::runtime_error("Settings and the Tools Item Cache must stay reachable without optional workspaces");
     for(int mask=0;mask<64;++mask){
         const Workspaces enabled{bool(mask&1),bool(mask&2),bool(mask&4),bool(mask&8),bool(mask&16),bool(mask&32)};

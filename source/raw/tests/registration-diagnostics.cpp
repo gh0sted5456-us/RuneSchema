@@ -1,4 +1,5 @@
 #include "Core/RegistrationDiagnostics.h"
+#include "Core/ItemCategory.h"
 #include <cassert>
 #include <fstream>
 #include <iterator>
@@ -29,5 +30,8 @@ int main(int argc,char** argv){
     const auto roster=catalogue.substr(catalogue.find("json ItemRoster()"),catalogue.find("json Capture(")-catalogue.find("json ItemRoster()"));
     assert(roster.find("objects.Num()>32768")==std::string::npos&&catalogue.find("AssetProvenance::LivePaths()")!=std::string::npos);
     assert(catalogue.find("segment==1&&prioritySet.contains(path)")!=std::string::npos);
-    assert(catalogue.find("Token(hay,\"cape\")")!=std::string::npos&&catalogue.find("wearableequipmentdata")!=std::string::npos);
+    assert(catalogue.find("ItemCategory::Classify(path,name,internal,tags,classes)")!=std::string::npos);
+    assert(PS::ItemCategory::Classify("/Game/Mods/RuneSchema/ITEM_Cape.ITEM_Cape","Max Cape","","","")=="Armor");
+    assert(PS::ItemCategory::Classify("/Game/Mods/Test.Item","Unknown","","","WearableEquipmentData ItemData")=="Armor");
+    assert(PS::ItemCategory::Classify("/Game/Mods/Runescape/Test.Test","Unknown","","","").empty());
 }

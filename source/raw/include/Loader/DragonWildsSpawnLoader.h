@@ -25,7 +25,7 @@
 #include "Core/GroundingRetry.h"
 #include "Core/GroundSurface.h"
 #include "Core/NearbyPlacement.h"
-namespace PS {class NativeDeleteObserver;}
+namespace PS {class NativeInventoryMarks;class InventoryMarkRelay;}
 
 namespace RC::Unreal {
     class AActor;
@@ -122,6 +122,7 @@ namespace DragonWilds {
         std::function<bool(RC::Unreal::UWorld*,const std::string&)> IsQuestCompleted;
         std::function<bool(RC::Unreal::UWorld*,const std::string&)> IsQuestActive;
         std::function<bool(RC::Unreal::UWorld*,const std::string&)> IsEventActive;
+        void HandleNetworkHelpyMarks(RC::Unreal::UObject* player,const std::string& payload);
         std::string HandleNetworkHelpyAuthority(RC::Unreal::UObject* player,const std::string& action,const std::string& payload);
         void LoadBuildingPlacements(const nlohmann::json& data,const RC::StringType& modName){LoadSpawns(data,modName);}
         bool PresentEventIdentity(RC::Unreal::AActor* actor,const std::string& payload);
@@ -385,7 +386,8 @@ namespace DragonWilds {
         std::vector<OwnedJsonDocument> m_nameplateDocuments;
         std::unordered_map<std::string,nlohmann::json> m_nameplateDefinitions;
         RC::Unreal::UWorld* m_readyWorld = nullptr;
-        std::unique_ptr<PS::NativeDeleteObserver> m_deleteObserver;
+        std::unique_ptr<PS::NativeInventoryMarks> m_inventoryMarks;
+        std::unique_ptr<PS::InventoryMarkRelay> m_markRelay;
         PS::WeakObjectHandle m_validatedWorld;
         std::string m_activeItemIcon;
         RC::Unreal::UWorld* m_pendingWorld = nullptr;

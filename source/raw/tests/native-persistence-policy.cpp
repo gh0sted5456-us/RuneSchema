@@ -7,6 +7,10 @@ int main(){
     for(bool bypass:{false,true})for(const auto* mode:{"vanilla","lessRestrictive","quickLaunch"}){
         assert(SessionRequested(false,bypass,mode)==(std::string_view(mode)!="vanilla"));
         assert(SessionRequested(true,bypass,mode)==bypass);
+        assert(BypassRequested(false,bypass,mode)==(bypass||std::string_view(mode)!="vanilla"));
+        assert(BypassRequested(true,bypass,mode)==bypass);
+        // Direct native loads have no reflected preflight token; rejection fallback still applies.
+        assert(BypassRequested(false,bypass,mode)==(SessionRequested(false,bypass,mode)||bypass));
     }
     assert(Parse(" 0 ")==false&&Parse("True")==true&&Parse("1")==true);
     assert(!Parse("")&&!Parse("missing")&&!Parse("42")&&!Parse("false; other.command"));

@@ -19,20 +19,34 @@ inline size_t StudioSlotOffset=0;inline bool StudioSlotMore=false,StudioSlotPend
 inline std::string StudioSlotError;
 inline char StudioSaveSearch[129]{};
 inline std::string StudioSaveName;
-inline std::string StudioPendingSave,StudioPendingName;
-inline bool StudioSwitchSave=false;
-inline void StudioSelectSave(const std::string& path,const std::string& name){
-    if(Opened&&path==File)return;
-    if(Opened&&path!=File){StudioPendingSave=path;StudioPendingName=name;StudioSwitchSave=true;return;}
+inline std::string StudioPendingSave,StudioPendingName,StudioPendingGuid;
+inline bool StudioSwitchSave=false,StudioOpenPending=false;
+inline std::string StudioLiveSeen,StudioLiveAttempt;
+inline double StudioNextSaveRefresh=0;
+inline const Json* StudioCurrentSave(const Json& list,const std::string& guid,const std::string& platform){
+    const auto id=HelpyPersonalization::Guid(guid);if(id.empty()||!list.contains("Files")||!list["Files"].is_array())return nullptr;
+    const bool xbox=platform=="Game Pass"||platform=="GamePass";
+    const bool steam=platform=="Steam"||platform=="Epic"||platform=="Steam/Epic";
+    const Json* match=nullptr;
+    for(const auto& row:list["Files"]){
+        if(HelpyPersonalization::Guid(row.value("CharacterGuid",std::string{}))!=id)continue;
+        const auto provider=row.value("Provider",std::string{});
+        if(provider=="Imported"||(xbox&&provider!="GamePass")||(steam&&provider!="SteamEpic"&&provider!=platform))continue;
+        if(match)return nullptr;match=&row;
+    }return match;
+}
+inline void StudioSelectSave(const std::string& path,const std::string& name,const std::string& guid={}){
+    if(Opened&&path==File&&(guid.empty()||HelpyPersonalization::Guid(guid)==HelpyPersonalization::Guid(Browser.value("CharacterGuid",std::string{}))))return;
+    if(Opened){StudioPendingSave=path;StudioPendingName=name;StudioPendingGuid=guid;StudioSwitchSave=true;return;}
     AuthoringPanel::Copy(File,sizeof(File),path);StudioSaveName=name;Invalidate();
-    if(Offline&&!AuthoringClient::Busy())AuthoringClient::Submit("SaveEditorOpen",{{"Path",File},{"Offline",true}});
+    if(!AuthoringClient::Busy()){Json args={{"Path",File},{"CopyOnly",true}};if(!guid.empty())args["CharacterGuid"]=guid;AuthoringClient::Submit("SaveEditorOpen",args);}
 }
 inline void StudioResetSlot(){StudioSlotOpen=StudioSlotPending=StudioSlotMore=false;StudioSlotRows=Json::array();StudioSlotOffset=0;StudioSlot.clear();StudioSlotQuery.clear();StudioSlotCursor.clear();StudioSlotError.clear();}
 inline void StudioRefreshSlot(){StudioSlotRows=ItemGridPicker::CachedSlotRows(StudioSlot,StudioSlotQuery,SpawnToolRequests::CurrentGeneration());StudioSlotOffset=0;StudioSlotCursor.clear();StudioSlotMore=true;StudioSlotError.clear();}
 inline bool StudioRequestSlot(){return AuthoringClient::Submit("SaveEditorSlotItems",{{"Slot",StudioSlot},{"Query",StudioSlotQuery},{"Offset",StudioSlotOffset},{"Cursor",StudioSlotCursor},{"CacheFirst",true}});}
 inline void StudioApply(){
     const auto generation=AuthoringClient::Snapshot.value("Generation",uint64_t{});
-    if(generation!=StudioGeneration){StudioResetSlot();StudioGeneration=generation;StudioReceipt=0;StudioAppearance=Json::object();StudioRequestedView.clear();StudioEquipment=Json::object();StudioListRequested=false;StudioAppearanceRequested=false;StudioAddition=Json::object();StudioSelected=Json::object();StudioSkillsRequested=false;StudioSkills=Json::object();StudioSkillDrafts.clear();StudioSavedLoadout=Json::array();StudioLoadoutLoaded=false;CharacterPreviewPanel::Close();}
+    if(generation!=StudioGeneration){StudioResetSlot();StudioGeneration=generation;StudioReceipt=0;StudioAppearance=Json::object();StudioRequestedView.clear();StudioEquipment=Json::object();StudioListRequested=false;StudioAppearanceRequested=false;StudioAddition=Json::object();StudioSelected=Json::object();StudioSkillsRequested=false;StudioSkills=Json::object();StudioSkillDrafts.clear();StudioSavedLoadout=Json::array();StudioLoadoutLoaded=false;StudioLiveSeen.clear();StudioLiveAttempt.clear();StudioOpenPending=StudioSwitchSave=false;CharacterPreviewPanel::Close();}
     const auto id=AuthoringClient::Snapshot.value("RequestId",uint64_t{});if(!id||id==StudioReceipt)return;StudioReceipt=id;
     const auto op=AuthoringClient::Snapshot.value("Operation",std::string{});const auto& result=AuthoringClient::Result(op.c_str());
     if(result.contains("Error")){if(op=="SaveEditorRender")CharacterPreviewPanel::Fail(result.at("Error").get<std::string>());if(op=="SaveEditorSlotItems"){StudioSlotPending=false;StudioSlotMore=false;StudioSlotError=result.at("Error").get<std::string>();}return;}
@@ -57,31 +71,56 @@ inline void StudioApply(){
     if(op=="SaveEditorRender"&&result.contains("Channel"))try{CharacterPreviewPanel::Attach(result.at("Channel").get<std::string>());CharacterPreviewPanel::AnimationName=result.value("AnimationName",std::string{});}catch(const std::exception& error){CharacterPreviewPanel::Status=error.what();}
 }
 inline void StudioHeader(){
-    if(!StudioListRequested&&!AuthoringClient::Busy())StudioListRequested=AuthoringClient::Submit("SaveEditorList");
+    const auto live=FollowCurrentCharacter?LiveCharacterGuid:std::string{};
+    if(live!=StudioLiveSeen){StudioLiveSeen=live;StudioLiveAttempt.clear();StudioListRequested=false;StudioNextSaveRefresh=0;}
+    const double now=ImGui::GetTime();
+    const bool missing=!live.empty()&&StudioLiveAttempt!=live&&!StudioCurrentSave(AuthoringClient::Result("SaveEditorList"),live,LiveCharacterPlatform);
+    // Xbox can publish metadata before its first gameplay save. Retry only an unmatched visible character.
+    if((!StudioListRequested||missing)&&now>=StudioNextSaveRefresh&&!AuthoringClient::Busy()){
+        StudioNextSaveRefresh=now+10;
+        StudioListRequested=AuthoringClient::Submit("SaveEditorList");
+    }
     const auto& list=AuthoringClient::Result("SaveEditorList");
+    if(StudioOpenPending&&!Opened&&!AuthoringClient::Busy()){
+        Json args={{"Path",File},{"CopyOnly",true}};if(!StudioPendingGuid.empty())args["CharacterGuid"]=StudioPendingGuid;
+        if(AuthoringClient::Submit("SaveEditorOpen",args))StudioOpenPending=false;
+    }
+    if(!live.empty()&&StudioLiveAttempt!=live&&!AuthoringClient::Busy()){
+        if(const auto* match=StudioCurrentSave(list,live,LiveCharacterPlatform)){
+            const auto path=match->at("Path").get<std::string>(),name=match->at("Name").get<std::string>();
+            if(Opened){StudioLiveAttempt=live;if(HelpyPersonalization::Guid(Browser.value("CharacterGuid",std::string{}))!=HelpyPersonalization::Guid(live))StudioSelectSave(path,name,live);}
+            else if(AuthoringClient::Submit("SaveEditorOpen",{{"Path",path},{"CopyOnly",true},{"CharacterGuid",live}})){
+                AuthoringPanel::Copy(File,sizeof(File),path);StudioSaveName=name;StudioLiveAttempt=live;Invalidate();
+            }
+        }
+    }
+    if(ImGui::Checkbox("Follow current character",&FollowCurrentCharacter)){StudioLiveSeen.clear();StudioLiveAttempt.clear();}
+    if(FollowCurrentCharacter&&!live.empty()&&!Opened&&!AuthoringClient::Busy())ImGui::TextDisabled("Waiting for a matching gameplay save · checking automatically");
     ImGui::SetNextItemWidth(std::max(200.f,ImGui::GetContentRegionAvail().x*.6f));
     const auto current=File[0]?(StudioSaveName.empty()?std::filesystem::path(File).filename().string():StudioSaveName):std::string("Choose a character save");
     if(ImGui::BeginCombo("##character-studio-save",current.c_str())){
         ImGui::InputTextWithHint("##filter-saves","Find a character…",StudioSaveSearch,sizeof(StudioSaveSearch));
         if(list.contains("Files"))for(const auto& file:list["Files"]){const auto path=file.at("Path").get<std::string>(),name=file.at("Name").get<std::string>();
             const auto text=HelpyCacheSources::Lower(name+" "+file.value("Storage",std::string{})+" "+file.value("FileName",std::string{}));if(text.find(HelpyCacheSources::Lower(StudioSaveSearch))==text.npos)continue;
-            ImGui::PushID(path.c_str());ProviderIcon(file);if(ImGui::Selectable(name.c_str(),path==File))StudioSelectSave(path,name);
+            ImGui::PushID(path.c_str());ProviderIcon(file);if(ImGui::Selectable(name.c_str(),path==File)){FollowCurrentCharacter=false;StudioSelectSave(path,name);}
             if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("%s\n%s",file.value("Storage",std::string{}).c_str(),file.value("FileName",name).c_str());ImGui::PopID();}
-        if(!list.contains("Files")||list["Files"].empty())ImGui::TextDisabled("No JSON saves found. Import a character JSON copy.");ImGui::EndCombo();}
-    if(ImGui::GetContentRegionAvail().x>HelpyImGuiTheme::Current.X(250))ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Import JSON...")){const std::string before=File;Choose();const std::string picked=File;AuthoringPanel::Copy(File,sizeof(File),before);if(picked!=before)StudioSelectSave(picked,std::filesystem::path(picked).stem().string());}ImGui::SameLine();if(Button("Refresh saves","SaveEditorList"))StudioListRequested=true;
+        if(!list.contains("Files")||list["Files"].empty())ImGui::TextDisabled("No character saves found. Refresh or import a JSON copy.");ImGui::EndCombo();}
+    if(ImGui::GetContentRegionAvail().x>HelpyImGuiTheme::Current.X(250))ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Import JSON...")){const std::string before=File;Choose();const std::string picked=File;AuthoringPanel::Copy(File,sizeof(File),before);if(picked!=before){FollowCurrentCharacter=false;StudioSelectSave(picked,std::filesystem::path(picked).stem().string());}}ImGui::SameLine();if(Button("Refresh saves","SaveEditorList")){StudioListRequested=true;StudioLiveAttempt.clear();StudioNextSaveRefresh=now+10;}
     if(StudioSwitchSave){ImGui::OpenPopup("Switch character?");StudioSwitchSave=false;}
     if(ImGui::BeginPopupModal("Switch character?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
         ImGui::TextWrapped("Discard the current preview draft and select %s? Original saves stay untouched.",StudioPendingName.c_str());
         ImGui::BeginDisabled(AuthoringClient::Busy());if(ImGui::Button("Discard draft and switch")){
-            if(AuthoringClient::Submit("SaveEditorClose")){AuthoringPanel::Copy(File,sizeof(File),StudioPendingSave);StudioSaveName=StudioPendingName;Invalidate();ImGui::CloseCurrentPopup();}
+            if(AuthoringClient::Submit("SaveEditorClose")){AuthoringPanel::Copy(File,sizeof(File),StudioPendingSave);StudioSaveName=StudioPendingName;StudioOpenPending=true;Invalidate();ImGui::CloseCurrentPopup();}
         }ImGui::EndDisabled();ImGui::SameLine();if(ImGui::Button("Keep current draft"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
     }
-    ImGui::Checkbox("This character is not currently loaded",&Offline);ImGui::SameLine();ImGui::BeginDisabled(!Offline||!File[0]);Button("Open character copy","SaveEditorOpen",{{"Path",File},{"Offline",Offline}});ImGui::EndDisabled();
+    ImGui::BeginDisabled(!File[0]||AuthoringClient::Busy());if(HelpyImGuiTheme::SoftButton(Opened?"Reload saved copy":"Open saved copy")){
+        if(Opened){StudioPendingSave=File;StudioPendingName=StudioSaveName;StudioPendingGuid=Browser.value("CharacterGuid",std::string{});StudioSwitchSave=true;}
+        else if(AuthoringClient::Submit("SaveEditorOpen",{{"Path",File},{"CopyOnly",true}}))Invalidate();
+    }ImGui::EndDisabled();
     if(list.contains("Files"))for(const auto& file:list["Files"])if(file.value("Path",std::string{})==File){ProviderIcon(file);ImGui::TextDisabled("%s",file.value("Storage",std::string{}).c_str());break;}
-    ImGui::TextDisabled("Copy-only editing · original save is never overwritten");
+    ImGui::TextDisabled("Saved snapshot · edits export a copy, not the live character");
     if(Opened&&!StudioAppearanceRequested&&!AuthoringClient::Busy())StudioAppearanceRequested=AuthoringClient::Submit("SaveEditorAppearance");
     if(Opened&&StudioAppearance.empty()&&StudioAppearanceRequested&&HelpyImGuiTheme::SoftButton("Retry native appearance choices"))StudioAppearanceRequested=false;
-    ImGui::TextDisabled("Save-format reference: RSDWTools / RSDWArchive · native rendering: RuneSchema");
 }
 inline void StudioReview(){
     ImGui::Separator();const float width=ImGui::CalcTextSize("Review save changesDiscard save draft").x+ImGui::GetStyle().FramePadding.x*4+ImGui::GetStyle().ItemSpacing.x;ImGui::SetCursorPosX(ImGui::GetCursorPosX()+std::max(0.f,(ImGui::GetContentRegionAvail().x-width)*.5f));Button("Review save changes","SaveEditorPreview");ImGui::SameLine();Button("Discard save draft","SaveEditorClose");
@@ -202,14 +241,12 @@ inline void StudioGear(){
 inline void Studio(const Json& catalog,uint64_t revision,bool inventoryOnly=false){
     const auto& theme=HelpyImGuiTheme::Current;
     if(!inventoryOnly){
-        ImGui::TextColored(theme.accent,"YOUR CHARACTER, ALL IN ONE PLACE");
-        ImGui::TextWrapped("%s / Character workspace",StudioAppearance.value("Name",std::string("Choose a character")).c_str());
-        ImGui::Separator();
+        ImGui::SeparatorText("Appearance & skills");
     }
     std::string view=StudioPreviewMode;
     const double now=ImGui::GetTime();if(now-StudioLastDraw>1.5)StudioRequestedView.clear();StudioLastDraw=now;
     if(StudioView!=view){StudioView=view;StudioRequestedView.clear();CharacterPreviewPanel::Yaw=CharacterPreviewPanel::Pitch=0;CharacterPreviewPanel::Zoom=100;}
-    if(!Opened){ImGui::TextWrapped("Choose a character save and open a copy above. Appearance, equipment fitting and item previews do not attach to the live player.");return;}
+    if(!Opened){ImGui::TextWrapped("Choose a saved copy above.");return;}
     if(!inventoryOnly){
         if(ImGui::CollapsingHeader("Preview & editor settings")){
             auto& prefs=HelpyImGuiTheme::Current;bool changed=false;const char* presets[]={"Economy · 256 px / 10 fps","Balanced · 384 px / 20 fps","Detail · 512 px / 30 fps"};

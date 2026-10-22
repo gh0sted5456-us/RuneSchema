@@ -220,10 +220,12 @@ namespace {
     }
 }
 
+void DragonWildsSpawnLoader::HandleNetworkHelpyMarks(UObject* player,const std::string& payload){if(m_markRelay)m_markRelay->Receive(player,payload);}
+
 std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,const std::string& action,const std::string& payload) {
     if(!player || !player->GetWorld() || !GetGameMode(player->GetWorld()))
         throw std::runtime_error("Helpy authority request did not arrive in an authoritative world");
-    if(action!="GiveItems" && action!="Spawn" && action!="Players")
+    if(action!="GiveItems" && action!="Spawn" && action!="Players" && action!="InventoryMarks")
         throw std::runtime_error("Helpy authority action is not permitted");
     if(payload.empty() || payload.size()>256*1024)
         throw std::runtime_error("Helpy authority payload exceeds the safe bound");
@@ -237,6 +239,28 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
 
     const auto& policy=PS::PSConfig::Get()->GetSettings().helpyAuthority;
     const auto playerGuid=GetPlayerCharacterGuid(controller);
+    if(action=="InventoryMarks"){
+        const auto normalize=[](std::string value){std::string out;for(unsigned char c:value){if(c=='-'||c=='{'||c=='}')continue;if(!std::isxdigit(c))return std::string{};out+=static_cast<char>(std::tolower(c));}return out.size()==32&&out!=std::string(32,'0')?out:std::string{};};
+        const auto guid=normalize(playerGuid);
+        if(payload.size()>3500||guid.empty()||ActorHelper::GetObjectRef(controller,TEXT("Pawn"))!=player)throw std::runtime_error("Public profile requires the active owned player");
+        if(request.contains("ProfileAction")){
+            const auto operation=request.at("ProfileAction").get<std::string>();const auto id=request.at("RequestId").get<uint64_t>();if(!id)throw std::runtime_error("Invalid profile request");
+            if(operation=="Publish"){
+                PS::InventoryMarkService::Call({{"Action","ReceivePublicProfile"},{"CharacterGuid",guid},{"Profile",request.at("Profile")}});
+                return nlohmann::json{{"Kind","HelpyProfilePublished1"},{"RequestId",id},{"CharacterGuid",guid}}.dump();
+            }
+            if(operation!="Read")throw std::runtime_error("Invalid profile operation");
+            const auto targetGuid=request.at("CharacterGuid").get<std::string>();if(normalize(targetGuid)!=targetGuid)throw std::runtime_error("Invalid profile target");
+            bool ambiguous=false;auto* target=FindPlayerControllerByGuid(targetGuid,ambiguous);if(!target||ambiguous||target->GetWorld()!=player->GetWorld())throw std::runtime_error("Profile target is not connected");
+            ActorHelper::FunctionCall local(target,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();
+            const auto result=PS::InventoryMarkService::Call({{"Action","ReadPublicProfile"},{"CharacterGuid",targetGuid},{"Local",local.Result<bool>()}});
+            return nlohmann::json{{"Kind","HelpyProfile1"},{"RequestId",id},{"CharacterGuid",targetGuid},{"Profile",result.at("Profile")}}.dump();
+        }
+        const auto& batch=request.at("Batch");
+        if(payload.size()>3500||guid.empty()||batch.at("CharacterGuid")!=guid||ActorHelper::GetObjectRef(controller,TEXT("Pawn"))!=player)
+            throw std::runtime_error("A player may sync only their own active character marks");
+        return PS::InventoryMarkService::Call({{"Action","ReceiveMarks"},{"Batch",batch}}).dump();
+    }
     std::string playerName;
     if(auto* state=ActorHelper::GetObjectRef(controller,TEXT("PlayerState"))) {
         ActorHelper::FunctionCall getName(state,TEXT("/Script/Engine.PlayerState:GetPlayerName"));getName.Invoke();
@@ -250,7 +274,7 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
             if(!target||ambiguous||target->GetWorld()!=player->GetWorld())continue;
             roster.push_back({{"Name",connected.Name},{"Guid",connected.Guid},
                 {"PlayerId",PS::PlayerStatusRuntime::PlayerId(ActorHelper::GetObjectRef(target,TEXT("PlayerState")))},
-                {"Platform",PS::PlayerStatusRuntime::ControllerPlatform(target)},
+                {"Platform",PS::PlayerStatusRuntime::ControllerPlatform(target)},{"PlatformAccountName",PS::PlayerStatusRuntime::ControllerAccountName(target)},
                 {"RoleStatus",PS::PlayerStatusRuntime::Read(target)}});
             PS::PlayerStatusRuntime::Color(ActorHelper::GetObjectRef(target,TEXT("PlayerState")),roster.back());
         }
@@ -260,6 +284,7 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
         // server exceeds it, rather than sending a truncated stat message.
         auto response=nlohmann::json{{"Kind","HelpyPlayers1"},{"Players",roster}};
         if(response.dump().size()>3900)for(auto& row:response["Players"])row.erase("StatWire");
+        if(response.dump().size()>3900)for(auto& row:response["Players"])row.erase("PlatformAccountName");
         return response.dump();
     }
     const auto permitted=[&]{
@@ -323,6 +348,9 @@ std::pair<bool,std::string> DragonWildsSpawnLoader::VerifyToolBuildingInstance(A
     if(actor->GetClassPrivate()!=actorClass)return {false,"Building actor class does not exactly match BuildableActor"};
     auto* scene=ActorHelper::ResolveClass(TEXT("/Script/Engine.SceneComponent"));auto* root=ActorHelper::GetObjectRef(actor,TEXT("RootComponent"));
     if(!scene||!root||!root->IsA(scene))return {false,"Constructed building has no native scene root"};
+    const auto actual=ActorHelper::GetActorLocation(actor);
+    if(!PS::SpawnAuthoring::PositionMatches({spawn.Location.X(),spawn.Location.Y(),spawn.Location.Z()},{actual.X(),actual.Y(),actual.Z()}))
+        return {false,std::format("Building actor did not retain the requested position: expected [{},{},{}], observed [{},{},{}]",spawn.Location.X(),spawn.Location.Y(),spawn.Location.Z(),actual.X(),actual.Y(),actual.Z())};
     if(actor->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed)))
         return {false,"Building actor is a default/archetype/destroying object"};
     if(requireTransient && !actor->HasAnyFlags(RF_Transient))
@@ -410,9 +438,11 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
             for(const auto& connected:GetConnectedPlayersInLoadOrder()) {
                 if(rows.size()>=256)break;bool ambiguous=false;auto* controller=FindPlayerControllerByGuid(connected.Guid,ambiguous);
                 if(!controller||ambiguous||controller->GetWorld()!=m_readyWorld)continue;
+                bool isLocal=false;try{ActorHelper::FunctionCall local(controller,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();isLocal=local.Result<bool>();}catch(...){}
                 rows.push_back({{"Name",connected.Name},{"Path",RC::to_string(controller->GetPathName())},{"Guid",connected.Guid},
+                    {"IsLocal",isLocal},
                     {"PlayerId",PS::PlayerStatusRuntime::PlayerId(ActorHelper::GetObjectRef(controller,TEXT("PlayerState")))},
-                    {"Platform",PS::PlayerStatusRuntime::ControllerPlatform(controller)},
+                    {"Platform",PS::PlayerStatusRuntime::ControllerPlatform(controller)},{"PlatformAccountName",PS::PlayerStatusRuntime::ControllerAccountName(controller)},
                     {"RoleStatus",PS::PlayerStatusRuntime::Read(controller)}});
                 PS::PlayerStatusRuntime::Color(ActorHelper::GetObjectRef(controller,TEXT("PlayerState")),rows.back());
             }
@@ -725,7 +755,7 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
             auto playerRow=nlohmann::json{{"Name",name},{"Path",path},{"Guid",GetPlayerCharacterGuid(controller)},
                 {"IsLocal",isLocal},
                 {"PlayerId",PS::PlayerStatusRuntime::PlayerId(ActorHelper::GetObjectRef(controller,TEXT("PlayerState")))},
-                {"Platform",PS::PlayerStatusRuntime::Platform(ActorHelper::GetObjectRef(controller,TEXT("PlayerState")),isLocal)},
+                {"Platform",PS::PlayerStatusRuntime::Platform(ActorHelper::GetObjectRef(controller,TEXT("PlayerState")),isLocal)},{"PlatformAccountName",PS::PlayerStatusRuntime::ControllerAccountName(controller)},
                 {"RoleStatus",action=="QuickPlayers"?PS::PlayerStatusRuntime::Read(controller):nlohmann::json::object()}};
             PS::PlayerStatusRuntime::Color(ActorHelper::GetObjectRef(controller,TEXT("PlayerState")),playerRow);
             try{if(auto* playerPawn=static_cast<AActor*>(ActorHelper::GetObjectRef(controller,TEXT("Pawn")))){
@@ -971,16 +1001,6 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
             auto snapshot=PS::PlayerInventoryPresentation::Read(selected,*request);snapshot["Player"]=request->at("Player");snapshot["PlayerGuid"]=request->at("PlayerGuid");snapshot["Generation"]=PS::SpawnToolRequests::CurrentGeneration();
             PS::SpawnToolRequests::Publish({{"InventorySnapshot",snapshot},{"Status","Read native player inventory; no items or save files changed."}});return;
         }
-        if(action=="InspectScrapItem"||action=="ScrapInventoryItem"){
-            if(world!=m_readyWorld||request->value("Generation",uint64_t{})!=PS::SpawnToolRequests::CurrentGeneration()
-                ||request->value("PlayerGuid",std::string{}).empty()||request->value("PlayerGuid",std::string{})!=GetPlayerCharacterGuid(selected))
-                throw std::runtime_error("Scrap target/world changed; refresh the item");
-            const auto outcome=action=="InspectScrapItem"?PS::PlayerInventoryScrap::Preview(selected,*request):PS::PlayerInventoryScrap::Commit(selected,*request,[&]{
-                return world==m_readyWorld&&request->value("Generation",uint64_t{})==PS::SpawnToolRequests::CurrentGeneration()
-                    &&request->value("PlayerGuid",std::string{})==GetPlayerCharacterGuid(selected);
-            });
-            PS::SpawnToolRequests::Publish({{"InventoryAction",outcome},{"Status",outcome.at("Status")}});return;
-        }
         if(action=="MapTeleport"){
             auto* pawn=static_cast<AActor*>(ActorHelper::GetObjectRef(selected,TEXT("Pawn")));if(!pawn)throw std::runtime_error("Selected player has no active character");
             if(request->contains("TargetPlayer")||request->value("PartyPoint",false)){
@@ -1172,18 +1192,28 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
                 try{ProcessActorEntry(world,m_spawns[checkpoint]);result["Status"]=m_spawns[checkpoint].bExistsInWorld?"Building placement saved and activated.":"Building placement saved; activation is pending. Do not create a duplicate.";}
                 catch(const std::exception& error){result["Status"]=std::string("Building placement saved; activation failed. Do not create a duplicate. ")+error.what();}
                 auto* live=m_spawns[checkpoint].LiveActor.Get();
-                const bool active=m_spawns[checkpoint].bExistsInWorld&&live&&live->IsA<AActor>()
-                    &&VerifyToolBuildingInstance(static_cast<AActor*>(live),buildingObject,m_spawns[checkpoint],world,false).first;
+                const auto verification=m_spawns[checkpoint].bExistsInWorld&&live&&live->IsA<AActor>()
+                    ?VerifyToolBuildingInstance(static_cast<AActor*>(live),buildingObject,m_spawns[checkpoint],world,false)
+                    :std::pair<bool,std::string>{false,"No matching live building actor was available"};
+                const bool active=verification.first;
                 result["SpawnResult"]={{"Permanent",true},{"File",file->Path().string()},{"Active",active},{"Building",buildingPath},{"Location",{position.X(),position.Y(),position.Z()}},{"State",active?"Completed":"SavedActivationIncomplete"}};
-                if(active){const auto actual=ActorHelper::GetActorLocation(static_cast<AActor*>(live));result["SpawnResult"]["Location"]={actual.X(),actual.Y(),actual.Z()};}
+                result["SpawnResult"]["RequestedLocation"]={position.X(),position.Y(),position.Z()};
+                if(live&&live->IsA<AActor>()){const auto actual=ActorHelper::GetActorLocation(static_cast<AActor*>(live));result["SpawnResult"]["ObservedLocation"]={actual.X(),actual.Y(),actual.Z()};if(active)result["SpawnResult"]["Location"]=result["SpawnResult"]["ObservedLocation"];}
                 else {
-                    result["SpawnResult"]["ActivationStatus"]=result.value("Status",std::string{});
-                    result["Status"]="Building placement saved, but a matching live actor was not confirmed. Do not place a duplicate. "+result.value("Status",std::string{});
+                    result["SpawnResult"]["ObservedLocation"]=nullptr;
                 }
+                if(!active){
+                    result["SpawnResult"]["Error"]=verification.second;
+                    result["SpawnResult"]["ActivationStatus"]=result.value("Status",std::string{});
+                    result["Status"]="Building placement saved; native placement verification failed. Do not place a duplicate.";
+                }
+                else result["Status"]="Building placement saved and verified at the requested position.";
+                PS::Log<LogLevel::Normal>(STR("[HELPY][BUILDING][RESULT] request={} active={} expected=[{},{},{}] file='{}' detail='{}'\n"),requestId,active,position.X(),position.Y(),position.Z(),file->Path().wstring(),PS::ToWideSafe(verification.second.c_str()));
                 PS::SpawnToolRequests::Publish(std::move(result));return;
             }
             try {
                 for(const auto& position:positions) {
+                    prototype.Location=position;
                     auto* actor=ActorHelper::SpawnActor(world,buildingClass,position,FRotator(0,yaw,0),[&](AActor* value){
                         value->SetFlags(RF_Transient);
                         auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(value->GetClassPrivate(),TEXT("bSkipSpudStore")));

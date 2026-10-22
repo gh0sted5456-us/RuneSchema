@@ -75,7 +75,9 @@ int main(int argc, char** argv)
         "appearance recovery lacks baked defaults or isolated opt-in external selection");
     Check(registrar.find("ScrubCharacterJsonBeforeLoad") != std::string::npos,
         "shared native character-load preflight is missing");
-    Check(pruner.find("s_cleanupConsumedForProcess") != std::string::npos
+    Check(pruner.find("s_cleanupConsumedForProcess") == std::string::npos
+        && pruner.find("bool PersistencePruner::PruneBeforeCharacterLoad") != std::string::npos
+        && registrar.find("m_pruner.PruneBeforeCharacterLoad") != std::string::npos
         && registrar.find("Hook::RegisterProcessEventPreCallback") != std::string::npos
         && registrar.find("[PERSISTENCE-PRUNER][REFLECTED-BOUNDARY-READY]") != std::string::npos
         && registrar.find("ForEachUObject") == std::string::npos
@@ -95,11 +97,12 @@ int main(int argc, char** argv)
         "automatic pruning is not based on one sealed startup registry without a manifest or ledger");
     Check(registrar.find("fingerprint != m_registryCandidateFingerprint") != std::string::npos
         && pruner.find("m_checkedCharacters") == std::string::npos
-        && pruner.find("s_cleanupConsumedForProcess.exchange(") != std::string::npos
-        && pruner.find("if (!dedicatedServer && s_cleanupConsumedForProcess.exchange(")
-            != std::string::npos
-        && pruner.find("if (cleaned.Removed.empty() && restored.empty())") != std::string::npos,
-        "automatic pruning is not client-global/server-per-payload gated by a stable registry and a nonempty removal plan");
+        && pruner.find("Every incoming gameplay payload is checked") != std::string::npos
+        && pruner.find("if (!registry || !registry->Ready())") < pruner.find("SaveCleanup::Plan(")
+        && pruner.find("if (characterId.empty()) return 0;") != std::string::npos
+        && pruner.find("if (cleaned.Removed.empty() && restored.empty())") != std::string::npos
+        && pruner.find("verified != serialized") < pruner.find("characterJson=std::move(replacement)"),
+        "each character payload must use a certified registry, stable identity, verified writeback and a nonempty removal plan");
     Check(registrar.find("for (auto* subsystem : subsystems)") != std::string::npos
         && registrar.find("const auto registered = RegisterMissing") != std::string::npos
         && registrar.find("registrationsComplete = registered && registrationsComplete") != std::string::npos

@@ -79,7 +79,7 @@ nlohmann::json PlayerLocations(UWorld* world){
             bool isLocal=false;try{AH::FunctionCall local(player,TEXT("/Script/Engine.Pawn:IsLocallyControlled"));local.Invoke();isLocal=local.Result<bool>();}catch(...){}
             const auto stats=isLocal?PS::PlayerVitals::Details(player,false):nlohmann::json{{"Source","Waiting for authenticated server stats"}};
             rows.push_back({{"Path",RC::to_string(player->GetPathName())},{"Name",std::move(name)},
-                {"Platform",PS::PlayerStatusRuntime::Platform(state,isLocal)},
+                {"Platform",PS::PlayerStatusRuntime::Platform(state,isLocal)},{"PlatformAccountName",PS::PlayerStatusRuntime::AccountName(state,isLocal)},
                 {"PlayerId",PS::PlayerStatusRuntime::PlayerId(state)},{"Guid",PS::PlayerStatusRuntime::CharacterGuid(state)},{"IsLocal",isLocal},{"Health",stats["Health"]},{"Stats",stats},{"Location",{point.X(),point.Y(),point.Z()}}});
             PS::PlayerStatusRuntime::Color(state,rows.back());
         }catch(const std::exception&){} // One despawning pawn must not hide the map.

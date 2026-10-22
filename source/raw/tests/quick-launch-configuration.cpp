@@ -4,6 +4,9 @@
 #define Need(x) do{if(!(x))throw std::runtime_error(#x);}while(false)
 int main(){
     using namespace PS;using Json=nlohmann::json;
+    const auto defaults=DecodeSettings("{}");
+    Need(defaults.quickLaunch.mode=="lessRestrictive"&&defaults.quickLaunch.softLoading&&!defaults.quickLaunch.enabled);
+    Need(!defaults.persistence.allowCorruptCharacterEntry&&defaults.worldSaveCleanup.backupBeforePrune);
     const auto root=std::filesystem::temp_directory_path()/("quick-launch-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     const auto file=root/"settings.ini";
     auto document=SettingsDocument(PSConfigSettings{});document["futureSection"]={{"keep","unchanged"}};
@@ -28,9 +31,9 @@ int main(){
         Need(rejected&&ConfigFiles::Read(file)==preserved);
     }
     // Unset legacy mode inherits Less Restrictive; explicit Vanilla stays opt-in.
-    for(bool enabled:{false,true}){
+    for(bool enabled:{false,true})for(bool softLoading:{false,true}){
         auto legacy=SettingsDocument(PSConfigSettings{});legacy["quickLaunch"].erase("mode");
-        legacy["quickLaunch"]["enabled"]=enabled;legacy["quickLaunch"]["softLoading"]=true;
+        legacy["quickLaunch"]["enabled"]=enabled;legacy["quickLaunch"]["softLoading"]=softLoading;
         ConfigFiles::Write(file,EncodeIniDocument(legacy));const auto snapshot=QuickLaunchConfiguration::Read(root);
         Need(snapshot.at("Document").at("Mode")== (enabled?"quickLaunch":"lessRestrictive"));
     }

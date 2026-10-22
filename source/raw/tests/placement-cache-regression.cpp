@@ -34,6 +34,10 @@ int main(int argc,char** argv){
     const auto emptyGuard=catalog.find("if(paths.empty())throw",classQuery),classCommit=catalog.find("mountedReady=classMetadataReady=true",classQuery);
     Check(classQuery!=std::string::npos&&emptyGuard<classCommit&&classCommit<ensure,"Targeted ItemData metadata must reject an empty/unready registry before committing");
     Check(catalog.find("cache.ReadRecovering(")!=std::string::npos,"Stale alphabetic cursors strand the item list instead of safely replacing the window");
+    Check(catalog.find("indexedPaths.emplace(to_string(item->GetPathName()),indexedItems.back())")!=std::string::npos
+        &&catalog.find("captured->second.Get()==object")!=std::string::npos
+        &&catalog.find("if(Usable(loaded))continue")==std::string::npos,
+        "Mounted items loaded after the class snapshot must remain discoverable, including recycled UObject handles");
     Check(catalog.find("ItemManifest.Restore(manifest,diskScope,basicCache,legacyScope)")!=std::string::npos&&catalog.find("ItemManifest.Persist(manifest,diskScope,cache)")!=std::string::npos,"Item browsing must restore and retain a verified source-scoped manifest");
     Check(catalog.find("PersistentItemCatalog::DiskScope(published,paths,language)")!=std::string::npos,"Item browsing must use the stable content catalogue fingerprint");
     Check(catalog.find("published.value(\"Authoritative\",false)")<catalog.find("ItemManifest.Restore("),"Saved item rows must wait for the live mounted source manifest");

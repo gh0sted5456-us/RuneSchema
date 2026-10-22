@@ -20,9 +20,9 @@ not to the current session or a connected remote server.
 
 ## Optional workspaces and tool windows
 
-Settings > Workspaces enables **Authoring Tools**, **Tools**, **Live Log**, and
-**Character Editor** independently. They are hidden by default; existing profiles
-without these choices also start hidden. Settings remains reachable. Hiding a
+Settings > Workspaces enables **Authoring Tools**, **Tools**, and **Live Log**.
+**Character** is always available within [Profile](HELPY-PROFILES.md). The advanced
+workspaces remain opt-in; Settings and Profile remain reachable. Hiding a
 workspace is a presentation preference, not an authority or server permission.
 
 Map and Recipes can detach into themed desktop windows, sharing their existing

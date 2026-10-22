@@ -13,11 +13,12 @@ int main(int argc,char**argv){
     assert(P::Nickname(P::ModKey("rsdwspears"))=="Spears & Scythes"&&P::ItemKey({{"Name","Stone"}}).empty());
     auto stack=item;stack["PlayerGuid"]="11111111-22222222-33333333-44444444";stack["Instance"]={1,2,3,4};auto other=stack;other["Instance"]={5,6,7,8};
     const auto stackKey=P::StackKey(stack);assert(P::StackKeyValid(stackKey)&&P::StackKey(item).empty());
-    assert(P::Set(key,{{"Favorite",true},{"Tags",nlohmann::json::array()}})&&P::Favorite(stack)&&P::Favorite(other));
+    const auto type=P::TypeKey(stack);assert(P::TypeKeyValid(type)&&P::TypeKey(item)==key);
+    assert(P::Set(type,{{"Favorite",true},{"Tags",nlohmann::json::array()}})&&P::Favorite(stack)&&P::Favorite(other));
     assert(P::Set(stackKey,{{"Favorite",false},{"Tags",{"junk"}}})&&!P::Favorite(stack)&&P::Favorite(other)&&P::Tagged(stack,"junk")&&!P::Tagged(other,"junk"));
     assert(P::Set(stackKey,{{"Favorite",nullptr},{"Tags",nullptr}})&&P::Favorite(stack));
     assert(!P::StackKeyValid("stack:../foreign")&&!P::Set("stack:../foreign",{{"Favorite",true}}));
-    auto foreign=stack;foreign["PlayerGuid"]="aaaaaaaa-bbbbbbbb-cccccccc-dddddddd";assert(P::StackKey(foreign)!=stackKey);
+    auto foreign=stack;foreign["PlayerGuid"]="aaaaaaaa-bbbbbbbb-cccccccc-dddddddd";assert(P::StackKey(foreign)!=stackKey&&!P::Favorite(foreign));
     assert(!P::Set(key,{{"Nickname","bad\nname"}}));assert(!P::Set("item:../bad",{{"Nickname","no"}}));
     const auto contents=ConfigFiles::Read(file);ConfigFiles::Write(file,"{\"Format\":1,\"Entries\":{}}");assert(!P::Set(key,{{"Nickname","must not overwrite"}}));assert(ConfigFiles::Read(file)!="must not overwrite");
     ConfigFiles::Write(file,"invalid");assert(!P::Load(file)&&!P::Set(key,{{"Nickname","must not replace invalid data"}}));assert(ConfigFiles::Read(file)=="invalid");

@@ -3,6 +3,25 @@
 Status: paired native return bypass implemented in the alpha candidate.
 An installed RuneSchema-only corrupted-character load remains to be tested.
 
+### October 21 correction: direct native rejection fallback
+
+The Game Pass session at 22:42 verified `dom.PersistenceStrictMode=0`, but
+provided no reflected character-preflight receipt for the observed load
+attempts. The previous automatic-fallback policy required that receipt, so
+direct native calls were ineligible for fallback even in Normal/Quick Launch.
+The correction uses the same mode policy for hook arming and rejection
+handling. Both client modes now permit a rejected return to be accepted even
+without a reflected-preflight token. Vanilla Load and dedicated servers still
+require the explicit bypass setting. The native functions run once, their
+successful results remain unchanged, and paired-hook verification and standalone
+conflict checks remain mandatory. Unattributed overrides are explicitly logged;
+they do not claim payload pruning, complete loading or retained progress.
+
+This is a broader rejection fallback, not a parser or save repair. Native work
+may already have skipped later stages before returning failure. Keep backups
+and verify a disposable load/save round-trip before claiming recovery. The
+Conjurer-removal rejection has not yet been reproduced with this correction.
+
 RuneSchema lets native character validation and player-state loading finish,
 then accepts their rejected Boolean return results. This matches the two native
 functions intercepted by the original CorruptCharacterBypass. The bypass itself
@@ -17,7 +36,8 @@ The intended sequence is:
 3. At its verified return epilogue, after native processing and result production
    finish, RuneSchema inspects the Boolean result.
 4. A valid result remains unchanged. An invalid result becomes valid when the
-   bypass was enabled at startup.
+   startup mode permits rejection fallback (Normal/Quick Launch on clients, or
+   the explicit bypass setting in Vanilla Load/on dedicated servers).
 5. The original register and stack restoration completes, and the function
    returns to its original caller.
 
@@ -34,8 +54,9 @@ design. A forced success result cannot undo changes made inside either function.
 
 ## Activation and discovery
 
-Retain `persistence.allowCorruptCharacterEntry`, off by default. A restart applies
-both enabling and disabling. Do not add a competing setting or alter UE4SS.dll.
+Retain `persistence.allowCorruptCharacterEntry`, off by default. Client Normal
+and Quick Launch also arm failure-only fallback without changing this setting.
+A restart applies mode/toggle changes. Do not alter UE4SS.dll.
 
 Before activation, identify both native functions using unique executable-code
 matches at exact x64 unwind entries. Steam and Game Pass have separate verified
@@ -78,6 +99,12 @@ missing validator, unverified paired return gates, standalone conflict, hook
 preparation failure and hook activation failure. Do not report READY merely because the
 setting is enabled, or report a character recovered merely because a hook fired.
 
+An actual override emits a short informational `Save Bypass initiated` entry
+in UE4SS/live output. Full attribution, native-rejection and save-retention
+caveats go directly to RuneSchema.log, independent of debug logging. Activation
+failures remain warnings. No message promises that subsequent loads cannot
+require bypass again.
+
 Advanced diagnostics may include the storefront, executable fingerprint,
 discovery stage, candidate counts, selected relative addresses, original versus
 effective acceptance and a bypass counter. Do not log save contents or character
@@ -86,8 +113,9 @@ to the acceptance callback.
 
 ## Verification required before installation
 
-- With the switch off, native acceptance and rejection remain unchanged.
-- With the switch on, native validation runs exactly once with unchanged register
+- In Vanilla Load/on dedicated servers with the switch off, native acceptance
+  and rejection remain unchanged.
+- When the mode or switch permits fallback, native validation runs exactly once with unchanged register
   and stack arguments. A false result becomes true at each verified return tail;
   true results remain unchanged. Both functions' callers receive these results.
 - Callback removal restores native rejection. Hook activation failures and

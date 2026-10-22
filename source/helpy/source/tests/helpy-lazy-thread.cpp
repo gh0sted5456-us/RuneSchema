@@ -12,6 +12,11 @@ int main(){
     std::thread producer([]{for(unsigned i=0;i<20000;++i)BackendSignal(10);});
     // Producer does not read or mutate any UI-owned JSON or state.
     producer.join();assert(submissions==0);assert(!For(0).Pending);
+    auto& stoneState=For(0);
+    ApplyWindow({{"Category",0},{"CancelGeneration",stoneState.CancelGeneration},{"Rows",json::array({
+        {{"Path","/Game/ITEM_Stone.ITEM_Stone"},{"Name","Stone"},{"Category","Building"},{"Tags","Item.BuildingResource"}}})},{"HasMore",false}},1);
+    assert(stoneState.Rows.size()==1&&stoneState.Rows[0]["Category"]=="Resources");
+    For(0)=State{};
     PumpBackendSignal();assert(submissions==1);assert(For(0).Pending);
     BackendSignal(10);PumpBackendSignal();assert(submissions==1);
     ResetForGeneration(11);assert(For(0).RuntimeGeneration==11 && For(0).Rows.empty());

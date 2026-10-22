@@ -307,24 +307,6 @@ int main(){
         P::RestoreGear(player,item);assert(P::RepairPending);P::RepairStarted-=std::chrono::seconds(16);P::Poll();assert(!P::RepairPending&&P::RepairStatus.find("unconfirmed")!=std::string::npos&&!P::Open);
         state.ToolsWaiting=false;P::RestoreGear(player,item);assert(P::RepairPending);P::RepairGeneration=PS::SpawnToolRequests::CurrentGeneration()+1;P::Poll();assert(!P::RepairPending&&P::RepairStatus.find("World changed")!=std::string::npos&&!P::Open);state.ToolsWaiting=false;
     }
-    {namespace P=PS::PlayerInventoryPanel;
-        const auto directory=PS::HostServices::StateDirectory()/("scrap-transport-"+std::to_string(GetCurrentProcessId()));
-        PS::ConfigFiles::Write(directory/"settings"/"settings.jsonc",R"({"enabled":true,"scrapRefunds":true})");PS::HelpySettings::Configure(directory);
-        const bool enabled=PS::HelpySettings::ScrapRefunds();if(!enabled)std::fprintf(stderr,"Scrap fixture settings: %s\n",PS::HelpySettings::Message().c_str());assert(enabled);
-        assert(PS::HelpyPersonalization::Load(directory/"marks.json"));
-        P::Request({{"Path","/Player/Scrap"},{"Guid","11111111222222223333333344444444"}});P::Refresh=false;P::Snapshot={{"ObservedUnixMs",1}};
-        const json row={{"Path","/Game/Items/Axe.Axe"},{"Instance",{1,2,3,4}},{"PlayerGuid",P::Target["Guid"]},{"Slot",8},{"Count",2}};
-        assert(P::ScrapEligible(row));P::ScrapItem=row;state.ToolsWaiting=false;P::ScrapAction(false);const auto preview=P::ScrapPending;
-        assert(preview&&LastSubmission["Action"]=="InspectScrapItem"&&LastSubmission["Quantity"]==2);
-        const json plan={{"PlayerGuid",P::Target["Guid"]},{"Generation",P::Generation},{"Refunds",json::array({{{"Path","/Game/Items/Wood.Wood"},{"Count",6}}})}};
-        state.Completed[preview]={{"InventoryAction",{{"State","Preview"},{"Plan",plan}}}};state.ToolsWaiting=false;P::PollScrap();
-        assert(P::ScrapConfirm&&P::ScrapPlan==plan&&!P::ScrapPending);P::ScrapAction(true);const auto commit=P::ScrapPending;
-        assert(commit&&LastSubmission["Action"]=="ScrapInventoryItem"&&LastSubmission["ExpectedPlan"]==plan);
-        P::ScrapAction(true);assert(P::ScrapPending==commit&&LastSubmission["_RequestId"]==commit);
-        state.Completed[commit]={{"InventoryAction",{{"State","Unconfirmed"},{"Confirmed",false}}}};state.ToolsWaiting=false;P::PollScrap();
-        assert(P::ScrapUnconfirmed&&!P::ScrapEligible(row)&&P::Refresh);P::Open=false;P::ScrapConfirm=false;P::ScrapPending=0;
-        std::filesystem::remove_all(directory);PS::HelpySettings::Configure({});
-    }
     PS::ItemIconCache::ClearRemote();ClearRemote();PS::SpawnToolRequests::ClearRemote();
     PS::RuneSchemaSettingsPanel::Remote={};
 }

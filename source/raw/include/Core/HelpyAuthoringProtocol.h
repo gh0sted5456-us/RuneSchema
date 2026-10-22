@@ -57,7 +57,7 @@ inline Json Validate(Json request){
     }
     if(operation=="CleanupExport")Require(args.value("Confirm",false)&&!Text(args,"Token",128,true).empty(),"Review and confirm a cleanup preview before export");
     if(operation=="CleanupInspect"||operation=="NpcPreview")Text(args,"Path",4096,true);
-    if(operation=="SaveEditorOpen"){Text(args,"Path",4096,true);Require(args.value("Offline",false),"Confirm the character is offline");}
+    if(operation=="SaveEditorOpen"){Text(args,"Path",4096,true);Require(args.value("Offline",false)||args.value("CopyOnly",false),"Open an isolated copy or confirm the character is offline");if(args.contains("CharacterGuid"))Text(args,"CharacterGuid",32,true);}
     if(operation=="SaveEditorAppearanceSet"){Text(args,"Field",64,true);Text(args,"Row",128,true);Require(args.contains("Revision")&&args["Revision"].is_number_unsigned(),"Current editor revision required");}
     if(operation=="SaveEditorRename"){Text(args,"Name",96,true);Require(args.contains("Revision")&&args["Revision"].is_number_unsigned(),"Current editor revision required");}
     if(operation=="SaveEditorSkillSet"){Text(args,"Id",128,true);Require(args.contains("Level")&&args["Level"].is_number_integer()&&args["Level"]>=1&&args["Level"]<=200,"Skill level must be 1..200");Require(args.contains("Revision")&&args["Revision"].is_number_unsigned(),"Current editor revision required");}

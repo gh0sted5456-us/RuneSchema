@@ -37,6 +37,20 @@ int main(int argc,char** argv)try{
         bool rejected=false;try{Choices::Parse({{"Version",1},{"Hidden",{"AI|bad\nidentity"}}});}catch(...){rejected=true;}Check(rejected);
         Choices bounded;for(size_t i=0;i<Choices::Limit;++i)Check(bounded.Set({{"Type","AI"},{"Key",std::to_string(i)}},true));
         Check(!bounded.Set({{"Type","AI"},{"Key","overflow"}},true));Check(bounded.Set({{"Type","AI"},{"Key","0"}},false));Check(bounded.Set({{"Type","AI"},{"Key","overflow"}},true));
+        const auto legacy=Choices::Parse({{"Version",1},{"Hidden",{"Resource|/Game/Tree.Tree_C"}}});Check(legacy.Hidden.contains("Resource|/game/tree.tree_c")&&legacy.Json().at("Version")==2);
+        Choices filters;Check(filters.SetFilter("Resources",{"yew",true,0}));Check(!filters.SetFilter("Resources",{"yew",true,0}));Check(filters.SetFilter("NPCs",{"merchant",false,0}));
+        auto roundtrip=Choices::Parse(filters.Json());Check(roundtrip.Filter("Resources").Query=="yew"&&roundtrip.Filter("Resources").ShowHidden&&roundtrip.Filter("NPCs").Query=="merchant");
+        auto merged=legacy.Merge(roundtrip);Check(merged.Hidden==legacy.Hidden&&merged.Filter("Resources").Query=="yew"&&legacy.Filters.empty());
+        for(const auto& bad:std::vector<nlohmann::json>{
+            {{"Version",2},{"Hidden",nlohmann::json::array()},{"Filters",nlohmann::json::object()},{"Scale",2}},
+            {{"Version",2},{"Hidden",nlohmann::json::array()},{"Filters",{{"Resources",{{"Query","x"},{"ShowHidden",true},{"Mode",3}}}}}},
+            {{"Version",2},{"Hidden",nlohmann::json::array()},{"Filters",{{"NPCs",{{"Query","x"},{"ShowHidden",true},{"Mode",1}}}}}},
+            {{"Version",2},{"Hidden",nlohmann::json::array()},{"Filters",{{"Resources",{{"Query","x\n"},{"ShowHidden",true},{"Mode",0}}}}}},
+            {{"Version",2},{"Hidden",nlohmann::json::array()},{"Filters",{{"Resources",{{"Query",std::string(257,'x')},{"ShowHidden",true},{"Mode",0}}}}}},
+            {{"Version",2},{"Hidden",nlohmann::json::array()},{"Filters",{{"Resources",{{"Query","x"},{"ShowHidden","yes"},{"Mode",0}}}}}}}){
+            rejected=false;try{Choices::Parse(bad);}catch(...){rejected=true;}Check(rejected);
+        }
+        Choices overflow;Check(overflow.Set({{"Type","Resource"},{"Key","new"}},true));rejected=false;try{(void)bounded.Merge(overflow);}catch(...){rejected=true;}Check(rejected&&bounded.Hidden.size()==Choices::Limit);
     }
     using namespace PS;std::set<std::string> ids,paths;
     Check(!SpawnScale::Height(nlohmann::json::object()));Check(!SpawnScale::Height({{"PreviewHeightCm","bad"}}));Check(!SpawnScale::Height({{"PreviewHeightCm",0}}));

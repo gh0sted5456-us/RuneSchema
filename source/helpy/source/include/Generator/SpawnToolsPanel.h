@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/RuneSchemaProfile.h"
 #include "Generator/ToolRequest.h"
 #include "Runtime/HelpySettings.h"
 #include "Generator/ItemCloneRequest.h"
@@ -99,7 +100,7 @@ inline void ReconcileCartRecipients(const nlohmann::json& snapshot){
     // player to a new player who happens to have the same name.
     std::erase_if(CartRecipients,[&](const auto& recipient){return !CurrentCartPlayer(snapshot,recipient.Path);});
     for(auto& recipient:CartRecipients){
-        const auto* row=CurrentCartPlayer(snapshot,recipient.Path);recipient.Name=ItemPresentation::Text(*row,"Name");
+        const auto* row=CurrentCartPlayer(snapshot,recipient.Path);recipient.Name=RuneSchemaProfile::Name(*row);
         if(recipient.Name.empty())recipient.Name=recipient.Path;
     }
     if(!CurrentCartPlayer(snapshot,SelectedPlayer))SelectedPlayer.clear();
@@ -136,7 +137,7 @@ inline void RefreshKitMetadata() {
 inline void RenderKitLibrary() {
     static std::vector<std::string> files;static std::string selected,error;
     static nlohmann::json preview;static char exportName[81]{};static bool asJsonc=true,replace=false;
-    const auto directory=HostServices::RuntimeDirectory()/"Helpy"/"kits";
+    const auto directory=RuneSchemaProfile::Ready?RuneSchemaProfile::Data("loadouts"):HostServices::RuntimeDirectory()/"Helpy"/"kits";
     const auto refresh=[&]{try{files=HelpyKitFiles::List(directory);error.clear();}catch(const std::exception& e){files.clear();error=e.what();}};
     ImGui::BeginDisabled(ItemGridPicker::SharedCart.Delivery()!=0);
     if(ImGui::SmallButton("Import kit")){selected.clear();preview=nullptr;refresh();ImGui::OpenPopup("Import RSMK kit");}
@@ -234,9 +235,9 @@ inline bool RenderCartRecipient(const nlohmann::json& result) {
     if(ImGui::BeginCombo("##item-recipient",label.c_str())){
         if(players)for(const auto& row:*players){const auto path=ItemPresentation::Text(row,"Path");if(path.empty())continue;
             bool checked=std::any_of(selected.begin(),selected.end(),[&](const auto& item){return item.Path==path;});
-            ImGui::PushID(path.c_str());if(ImGui::Selectable(ItemPresentation::Text(row,"Name").c_str(),checked,ImGuiSelectableFlags_DontClosePopups)){checked=!checked;
+            ImGui::PushID(path.c_str());if(ImGui::Selectable(RuneSchemaProfile::Name(row).c_str(),checked,ImGuiSelectableFlags_DontClosePopups)){checked=!checked;
                 if(!CartRecipientsChosen){CartRecipients=selected;CartRecipientsChosen=true;}
-                if(checked){if(CartRecipients.size()<CartDeliveryBatch::Plan::MaxPlayers){CartRecipients.push_back({path,ItemPresentation::Text(row,"Name")});SelectedPlayer=path;changed=true;}}
+                if(checked){if(CartRecipients.size()<CartDeliveryBatch::Plan::MaxPlayers){CartRecipients.push_back({path,RuneSchemaProfile::Name(row)});SelectedPlayer=path;changed=true;}}
                 else changed=RemoveCartRecipient(path)||changed;
             }ImGui::PopID();}
         if(ImGui::Selectable("Refresh players"))SpawnToolRequests::Submit({{"Action","QuickPlayers"}});ImGui::EndCombo();
@@ -758,11 +759,11 @@ inline void RenderSessionCleanup() {
     ImGui::TextWrapped("Clean only actors and staged placements created by the current Mod Authoring session. Installed /spawns content and saves are not changed.");
     if(HelpyImGuiTheme::SoftButton("Refresh authoritative players"))SpawnToolRequests::Submit({{"Action","QuickPlayers"}});
     auto label=std::string("Select player");
-    if(result.contains("Players"))for(const auto& row:result["Players"])if(row.value("Path",std::string{})==player)label=row.value("Name",label);
+    if(result.contains("Players"))for(const auto& row:result["Players"])if(row.value("Path",std::string{})==player)label=RuneSchemaProfile::Name(row);
     if(ImGui::BeginCombo("Player##cleanup",label.c_str())) {
         if(result.contains("Players"))for(const auto& row:result["Players"]) {
             const auto path=row.value("Path",std::string{});ImGui::PushID(path.c_str());
-            if(ImGui::Selectable(row.value("Name",std::string("Player")).c_str(),player==path))player=path;
+            if(ImGui::Selectable(RuneSchemaProfile::Name(row).c_str(),player==path))player=path;
             ImGui::PopID();
         }
         ImGui::EndCombo();

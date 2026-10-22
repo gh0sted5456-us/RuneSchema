@@ -83,9 +83,15 @@ The separate bypass setting remains:
 allowCorruptCharacterEntry = false
 ```
 
-Neither relaxed mode turns bypass on. Save Bypass changes only rejected native
-acceptance results on clients; dedicated servers also tie tolerant mode to that
-sole toggle. Relaxed modes verify the
+Neither relaxed mode changes the saved bypass checkbox. Both automatically
+override rejected returns from the paired, verified native acceptance functions,
+after those functions execute normally. This includes direct native calls that
+do not pass through the reflected character preflight callback. A preflight
+receipt is diagnostic evidence, not permission to use the fallback. Successful
+native results remain untouched; no native load is replayed or skipped.
+Vanilla Load and dedicated servers require the explicit Save Bypass checkbox
+for acceptance overrides; servers also tie tolerant mode to that sole toggle.
+Relaxed modes verify the
 native tolerant policy at menu/world and character-load boundaries, retain it
 after the load handler returns, and reapply it if a native transition resets it.
 The prior value is restored only on RuneSchema shutdown when a valid native

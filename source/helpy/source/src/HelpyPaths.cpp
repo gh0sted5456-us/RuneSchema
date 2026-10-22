@@ -42,6 +42,7 @@ std::filesystem::path WorkingDirectory(){return ModDirectory().parent_path().par
 std::filesystem::path SettingsDirectory(){return ModDirectory()/"settings";}
 // Helpy-owned mutable data stays writable even in a protected game install.
 std::filesystem::path StateDirectory(){return LocalData()/"RuneSchema"/"HELPY";}
+std::filesystem::path ProfileDirectory(){return LocalData()/"RuneSchema"/"runeschema.profile";}
 std::filesystem::path RuntimeDirectory(){return StateDirectory()/"runtime";}
 std::filesystem::path SavedDirectory(){return RuntimeDirectory()/"saved";}
 std::filesystem::path CacheDirectory(){return SavedDirectory()/"cache";}

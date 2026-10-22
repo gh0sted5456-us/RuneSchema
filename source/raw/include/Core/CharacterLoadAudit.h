@@ -5,7 +5,7 @@
 #include <optional>
 namespace PS::CharacterLoadAudit {
 enum class Gate { Validation,PlayerState };
-struct Receipt {std::uint64_t Token=0;std::size_t RegistryPruned=0,ValidationBypasses=0,PlayerStateBypasses=0;bool Ambiguous=false;};
+struct Receipt {std::uint64_t Token=0;std::size_t RegistryPruned=0,ValidationBypasses=0,PlayerStateBypasses=0;bool Ambiguous=false,GameplayPrepared=false;};
 inline std::atomic<std::uint64_t> Next{0};
 inline thread_local Receipt Current;
 inline std::uint64_t Begin()noexcept{
@@ -15,6 +15,8 @@ inline std::uint64_t Begin()noexcept{
     Current={token};return token;
 }
 inline std::uint64_t Token()noexcept{return Current.Ambiguous?0:Current.Token;}
+inline void Prepared()noexcept{if(Token())Current.GameplayPrepared=true;}
+inline bool PreparedForFallback()noexcept{return Token()&&Current.GameplayPrepared;}
 inline void Ambiguous()noexcept{if(Current.Token)Current.Ambiguous=true;}
 inline void Pruned(std::size_t count)noexcept{if(Token())Current.RegistryPruned+=count;}
 inline bool Bypassed(Gate gate)noexcept{

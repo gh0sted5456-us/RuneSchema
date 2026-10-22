@@ -25,6 +25,8 @@ inline std::string Nickname(const Json& row){const auto owner=row.at("Name").get
 inline bool PreviewChecked=false;
 inline size_t PreviewPlacards=0;
 inline size_t PreviewNativeBadges=0,PreviewArtCards=0;
+inline std::vector<size_t> PreviewBadgeOrders;
+inline std::vector<ImU32> PreviewBadgeTints;
 #endif
 inline void Start(Json request){
     if(Worker.valid()){Status="An operation is already in progress.";return;}
@@ -69,18 +71,22 @@ inline void HealthDetails(const Json& row,const ModHealth::State& state,bool che
     if(!checked)ImGui::TextDisabled("Logs not checked yet");HelpyImGuiTheme::EndDetailsTooltip();
 }
 inline void OrderBadge(size_t order,const ModHealth::State& state,bool checked,ImVec2 a,float size){
-    const ImVec4 color=state.Errors||state.RejectedDeclarations?ImVec4(.95f,.28f,.25f,1):state.Warnings||!checked?ImVec4(.95f,.75f,.25f,1):ImVec4(.25f,.8f,.45f,1);
+    const ImVec4 color=!order?ImVec4(0,0,0,1):state.Errors||state.RejectedDeclarations?ImVec4(.95f,.28f,.25f,1):state.Warnings||!checked?ImVec4(.95f,.75f,.25f,1):ImVec4(.25f,.8f,.45f,1);
     auto* draw=ImGui::GetWindowDrawList();const ImVec2 b{a.x+size,a.y+size};
-    const char* art=state.Errors||state.RejectedDeclarations?"power-severelybelowzone.png":state.Warnings||!checked?"power-atzone.png":"power-abovezone.png";
+    const char* art=!order?"power-neutralzone.png":state.Errors||state.RejectedDeclarations?"power-severelybelowzone.png":state.Warnings||!checked?"power-atzone.png":"power-abovezone.png";
+    const ImU32 tint=order?IM_COL32_WHITE:IM_COL32(0,0,0,255);
+#if defined(HELPY_PREVIEW)
+    PreviewBadgeOrders.push_back(order);PreviewBadgeTints.push_back(tint);
+#endif
     HelpyBackgrounds::RequestImage(art);
-    if(const auto* image=HelpyBackgrounds::Find(art);image&&image->Texture){draw->AddImage(ImTextureRef(image->Texture),a,b);
+    if(const auto* image=HelpyBackgrounds::Find(art);image&&image->Texture){draw->AddImage(ImTextureRef(image->Texture),a,b,{0,0},{1,1},tint);
 #if defined(HELPY_PREVIEW)
         ++PreviewNativeBadges;
 #endif
     }
     else {ItemIconCache::Queue(QuickDecorations::PowerLevelBadge,true);const ImVec2 diamond[]{{a.x+size*.5f,a.y},{b.x,a.y+size*.5f},{a.x+size*.5f,b.y},{a.x,a.y+size*.5f}};draw->AddConvexPolyFilled(diamond,4,ImGui::GetColorU32(color));draw->AddPolyline(diamond,4,IM_COL32(255,255,255,100),ImDrawFlags_Closed,1);}
-    const auto label=std::to_string(order);const auto text=ImGui::CalcTextSize(label.c_str());const ImVec2 at{a.x+(size-text.x)*.5f,a.y+(size-text.y)*.5f};
-    draw->AddText({at.x+1,at.y+1},IM_COL32(0,0,0,255),label.c_str());draw->AddText(at,IM_COL32(255,255,255,255),label.c_str());
+    if(order){const auto label=std::to_string(order);const auto text=ImGui::CalcTextSize(label.c_str());const ImVec2 at{a.x+(size-text.x)*.5f,a.y+(size-text.y)*.5f};
+        draw->AddText({at.x+1,at.y+1},IM_COL32(0,0,0,255),label.c_str());draw->AddText(at,IM_COL32(255,255,255,255),label.c_str());}
 }
 inline void Render(){
     Poll();const auto& theme=HelpyImGuiTheme::Current;
@@ -114,11 +120,13 @@ inline void Render(){
         else for(size_t stream:{size_t(0),size_t(2)})for(const auto& entry:LiveLogPanel::Streams[stream].History.Rows)ModHealth::Observe(state,owner,entry,stream?"Game":"RuneSchema");}HealthRevision=revision;}
     int moveFrom=-1,moveTo=-1;
 #if defined(HELPY_PREVIEW)
-    PreviewPlacards=0;PreviewNativeBadges=0;PreviewArtCards=0;
+    PreviewPlacards=0;PreviewNativeBadges=0;PreviewArtCards=0;PreviewBadgeOrders.clear();PreviewBadgeTints.clear();
 #endif
     ImGui::BeginDisabled(Worker.valid()&&WorkerMutates);
     if(ImGui::BeginChild("mods-list",{0,std::max(theme.Y(100),ImGui::GetContentRegionAvail().y-theme.Y(70))},ImGuiChildFlags_Borders)){
+        size_t activeOrder=0;
         for(size_t i=0;i<Rows.size();++i){auto& row=Rows[i];const auto owner=row.at("Name").get<std::string>();
+            const size_t order=row.value("Enabled",false)&&row.value("Present",false)?++activeOrder:0;
             const auto nickname=Nickname(row);
             if(Search[0]&&LiveLog::Lower(owner+" "+nickname).find(LiveLog::Lower(Search))==std::string::npos)continue;
             ImGui::PushID(owner.c_str());const auto& health=Health[owner];
@@ -134,7 +142,7 @@ inline void Render(){
                 if(SourceBanners::Images.contains(source)||SourceBanners::Images.contains("mod-card:"+owner))++PreviewArtCards;
 #endif
                 const ImVec2 badgeAt{a.x+theme.X(10),a.y+theme.Y(17)};const float badgeSize=theme.Y(44);
-                ImGui::SetCursorScreenPos(badgeAt);ImGui::InvisibleButton("##health-order",{badgeSize,badgeSize});OrderBadge(i+1,health,checked,badgeAt,badgeSize);
+                ImGui::SetCursorScreenPos(badgeAt);ImGui::InvisibleButton("##health-order",{badgeSize,badgeSize});OrderBadge(order,health,checked,badgeAt,badgeSize);
                 if(ImGui::IsItemHovered())HealthDetails(row,health,checked);
                 const ImVec2 titleAt{a.x+theme.X(68),a.y+theme.Y(12)};const float titleWidth=std::max(theme.X(40),size.x-theme.X(190));
                 ImGui::SetCursorScreenPos(titleAt);ImGui::InvisibleButton("##mod-title",{titleWidth,theme.Y(60)});

@@ -91,6 +91,9 @@ int main(){try{
     auto page=CacheBundleItems::Page(references,"Health","",40);assert(page["Rows"].size()==1&&page["Rows"][0]["PersistenceID"]==row.PersistenceID);
     assert(page["CachePreview"]==true&&!page["HasMore"].get<bool>());
     assert(CacheBundleItems::Page(references,"missing","",40)["Rows"].empty());
+    auto stoneReference=references[0];stoneReference["Data"]={{"Path","/Game/Items/ITEM_Stone.ITEM_Stone"},{"Name","Stone"},{"Category","Building"},{"Tags","Item.BuildingResource ItemFilter.Material.Mineral"}};
+    const auto stonePage=CacheBundleItems::Page(Json::array({stoneReference}),"__helpycat:resources stone","",40);
+    assert(stonePage["Rows"].size()==1&&stonePage["Rows"][0]["Category"]=="Resources");
     const auto bundle=fixture/"Example.rsmk-cache";HelpyIconPack::Progress progress;
     const auto exported=HelpyIconPack::Export(bundle,root,cache,snapshot,progress,{},Json::object(),Json::array({original,journal}));
     assert(exported.Exported==0&&exported.RecordsExported==2);

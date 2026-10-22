@@ -899,6 +899,7 @@ void RegistryBridge::HandleGenericRequest(UObject* source,UFunction* function,vo
         if(AuthorityChannel) {
             const auto detail=AuthorityChannel(caster,channel,entity,action,payloadText);
             if(channel=="helpy.authority"&&action=="Players")SendNotification(source,"helpy.players","all",revision,detail);
+            if(channel=="helpy.authority"&&action=="InventoryMarks")SendNotification(source,"helpy.marks",entity,revision,detail);
             SendReceipt(source,channel,entity,revision,true,detail.empty()?"Authority action completed.":detail);return;
         }
         throw std::runtime_error("Unsupported RuneSchema action channel");
@@ -948,6 +949,10 @@ void RegistryBridge::ObserveClientTransport(UObject* source,UFunction* function,
                     if(player.value("NativePlayerColorVerified",false)&&player.contains("NativePlayerColor")&&player["NativePlayerColor"].is_array()&&player["NativePlayerColor"].size()==4){
                         bool valid=true;for(const auto& channel:player["NativePlayerColor"])if(!channel.is_number()||!std::isfinite(channel.get<double>())||channel.get<double>()<0||channel.get<double>()>1){valid=false;break;}
                         if(valid&&player["NativePlayerColor"][3].get<double>()>0){row["NativePlayerColor"]=player["NativePlayerColor"];row["NativePlayerColorVerified"]=true;}
+                    }
+                    if(player.contains("PlatformAccountName")&&player["PlatformAccountName"].is_string()){
+                        const auto account=player["PlatformAccountName"].get<std::string>();
+                        if(account.size()<=128&&std::none_of(account.begin(),account.end(),[](unsigned char c){return c<32||c==127;}))row["PlatformAccountName"]=account;
                     }
                     if(player.contains("Platform")&&player["Platform"].is_string()){
                         const auto platform=player["Platform"].get<std::string>();

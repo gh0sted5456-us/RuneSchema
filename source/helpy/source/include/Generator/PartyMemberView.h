@@ -15,9 +15,11 @@
 #include <chrono>
 #include <cstdio>
 #include <cmath>
+#include <shellapi.h>
 namespace PS::PartyMemberView {
 inline std::function<void(const nlohmann::json&,const nlohmann::json&)> RestoreGear,ChangeGear;
 inline ImTextureRef SteamIcon,EpicIcon,XboxIcon;
+inline ImTextureRef PlatformIcon(const std::string& platform){return platform=="Steam"?SteamIcon:platform=="Epic"||platform=="Epic Games"?EpicIcon:platform=="Game Pass"||platform=="Xbox"?XboxIcon:ImTextureRef{};}
 inline bool GearContext=false;
 inline bool InspectorOpen=false;inline nlohmann::json Inspector;inline uint64_t InspectorGeneration=0;
 inline void Inspect(const nlohmann::json& row){Inspector=row;InspectorGeneration=SpawnToolRequests::CurrentGeneration();InspectorOpen=true;}
@@ -138,7 +140,7 @@ inline void Advanced(){
     if(changed)PlayerPortraitPicker::SaveWanted=true;ImGui::TextWrapped("Double-click a portrait or use Change portrait in the member's right-click menu.");ImGui::EndPopup();
 }
 inline void Details(const nlohmann::json& row,int64_t now){
-    HelpyImGuiTheme::BeginDetailsTooltip();ImGui::TextUnformatted(ItemPresentation::Text(row,"Name").c_str());ImGui::Separator();
+    HelpyImGuiTheme::BeginDetailsTooltip();ImGui::TextUnformatted(RuneSchemaProfile::Name(row).c_str());ImGui::Separator();
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::PartyDetailSections.clear();
 #endif
@@ -184,7 +186,7 @@ inline bool Row(const nlohmann::json& row,bool selected,bool keepPopup=false,boo
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::PartyPlatforms[ItemPresentation::Text(row,"Path")]={platformMin.x,platformMin.y,platformMax.x,platformMax.y};
 #endif
-    const auto platformIcon=platform=="Steam"?SteamIcon:platform=="Epic"?EpicIcon:platform=="Game Pass"||platform=="Xbox"?XboxIcon:ImTextureRef{};
+    const auto platformIcon=PlatformIcon(platform);
     if(platformIcon.GetTexID())draw->AddImage(platformIcon,{start.x+(side-t.Y(12))*.5f,platformMin.y},{start.x+(side+t.Y(12))*.5f,platformMax.y},{0,0},{1,1},ImGui::GetColorU32(t.icon));
     else {const char* label=known?platform.c_str():"?";const float font=t.Y(8);const auto extent=ImGui::GetFont()->CalcTextSizeA(font,1000,0,label);draw->AddText(ImGui::GetFont(),font,{start.x+(side-extent.x)*.5f,platformMin.y},ImGui::GetColorU32(t.textDisabled),label);}
     const bool platformHovered=ImGui::IsItemHovered()&&ImGui::IsMouseHoveringRect(platformMin,platformMax);
@@ -195,7 +197,7 @@ inline bool Row(const nlohmann::json& row,bool selected,bool keepPopup=false,boo
     const auto* role=PlayerBadges::Find(row);const bool haveRole=display.Roles&&role&&role->value("Role",std::string("unknown"))!="unknown";
     const float nameRight=std::max(textX,right-(haveRole?t.X(19):0));
     const ImVec4 clip{textX,start.y,nameRight,start.y+height};
-    auto name=ItemPresentation::Text(row,"Name");if(name.empty())name="Unnamed player";if(row.value("IsLocal",false))name+=" (you)";
+    auto name=RuneSchemaProfile::Name(row);if(name.empty())name="Unnamed player";if(row.value("IsLocal",false))name+=" (you)";
     draw->AddText(ImGui::GetFont(),ImGui::GetFontSize(),{textX,start.y+t.Y(3)},ImGui::GetColorU32(t.text),name.c_str(),nullptr,0,&clip);
     const ImVec2 badge{std::min(nameRight,textX+ImGui::CalcTextSize(name.c_str()).x)+t.X(10),start.y+t.Y(10)};
     if(haveRole)PlayerBadges::Draw(draw,badge,t.Y(14),role);
@@ -223,17 +225,34 @@ inline bool Row(const nlohmann::json& row,bool selected,bool keepPopup=false,boo
         }
     }
     const bool gearHovered=gear&&GearRow(row,columns.Beside?ImVec2{start.x+columns.Stats+columns.Gap,start.y}:ImVec2{start.x,start.y+StatsHeight(statsWidth)+t.Y(8)},columns.Equipment,now);
-    if(platformHovered)PS::HelpyImGuiTheme::Tooltip(known?"Reported platform: %s":"Platform not reported",platform.c_str());
+    if(platformHovered){const auto account=ItemPresentation::Text(row,"PlatformAccountName");const auto text=known?("Platform: "+platform+(account.empty()?"\nAccount name unavailable":"\nGame-reported account: "+account)):std::string("Platform not reported");PS::HelpyImGuiTheme::Tooltip("%s",text.c_str());}
     else if(!gearHovered&&haveRole&&ImGui::IsWindowHovered()&&ImGui::IsMouseHoveringRect({badge.x-t.X(8),badge.y-t.Y(8)},{badge.x+t.X(8),badge.y+t.Y(8)}))PS::HelpyImGuiTheme::Tooltip("%s",PlayerBadges::Tooltip(*role).c_str());
     else if(!gearHovered&&!GearContext&&ImGui::IsItemHovered()&&!ImGui::IsMouseDown(ImGuiMouseButton_Right))Details(row,now);
     return clicked&&!gearHovered;
 }
+inline bool ProfileOpen=false;inline nlohmann::json ProfilePlayer;inline uint64_t ProfileGeneration=0;
+inline void ViewProfile(const nlohmann::json& row){ProfilePlayer=row;ProfileGeneration=SpawnToolRequests::CurrentGeneration();ProfileOpen=true;}
+inline void RenderProfile(){
+    if(!ProfileOpen)return;if(ProfileGeneration!=SpawnToolRequests::CurrentGeneration()){ProfileOpen=false;ProfilePlayer=nlohmann::json::object();return;}
+    const auto& t=HelpyImGuiTheme::Current;HelpyImGuiTheme::Scope skin(t);const auto* viewport=ImGui::GetMainViewport();ImGui::SetNextWindowPos({viewport->WorkPos.x+viewport->WorkSize.x*.5f,viewport->WorkPos.y+viewport->WorkSize.y*.5f},ImGuiCond_Appearing,{.5f,.5f});ImGui::SetNextWindowSize({std::min(t.X(400),ImGui::GetIO().DisplaySize.x-t.X(24)),0},ImGuiCond_Appearing);
+    if(ImGui::Begin("Player profile###helpy-player-profile",&ProfileOpen,ImGuiWindowFlags_AlwaysAutoResize)){
+        ImGui::TextWrapped("%s",RuneSchemaProfile::Name(ProfilePlayer).c_str());const auto profile=RuneSchemaProfile::PublicFor(ItemPresentation::Text(ProfilePlayer,"Guid"),ProfilePlayer.value("IsLocal",false));
+        const auto platform=ItemPresentation::Text(ProfilePlayer,"Platform"),account=ItemPresentation::Text(ProfilePlayer,"PlatformAccountName");ImGui::TextDisabled("%s",platform.empty()?"Platform unavailable":platform.c_str());if(!account.empty())ImGui::TextWrapped("Game-reported account: %s",account.c_str());
+        if(profile.is_null())ImGui::TextWrapped("No shared profile received. Both ends need the updated RuneSchema/Helpy.");
+        else {
+            ImGui::SeparatorText("Public details");for(const auto& [key,value]:profile.at("Social").items()){const auto text=value.get<std::string>();if(text.empty())continue;if(key=="Discord")ImGui::TextWrapped("Discord: %s",text.c_str());else if(ImGui::TextLink((key+" profile").c_str())){const std::wstring url(text.begin(),text.end());ShellExecuteW(nullptr,L"open",url.c_str(),nullptr,nullptr,SW_SHOWNORMAL);}}
+            ImGui::TextDisabled("Shared by this player; links are not verified");
+            if(ImGui::CollapsingHeader("Platforms played"))for(const auto& value:profile.at("Platforms"))ImGui::TextUnformatted(value.get_ref<const std::string&>().c_str());
+        }
+    }ImGui::End();
+}
 inline void RenderInspector(){
+    RenderProfile();
     if(!InspectorOpen)return;if(InspectorGeneration!=SpawnToolRequests::CurrentGeneration()){InspectorOpen=false;Inspector=nlohmann::json::object();return;}
     const auto& t=HelpyImGuiTheme::Current;HelpyImGuiTheme::Scope skin(t);
     ImGui::SetNextWindowSize({t.X(560),t.Y(270)},ImGuiCond_FirstUseEver);ImGui::SetNextWindowSizeConstraints({t.X(260),t.Y(120)},{ImGui::GetIO().DisplaySize.x-t.X(24),ImGui::GetIO().DisplaySize.y-t.Y(24)});
     if(ImGui::Begin("Party equipment###party-equipment-inspector",&InspectorOpen)){
-        ImGui::TextUnformatted(ItemPresentation::Text(Inspector,"Name").c_str());ImGui::TextDisabled("Right-click equipped items for Preview, Restore durability, or Change gear.");
+        ImGui::TextUnformatted(RuneSchemaProfile::Name(Inspector).c_str());ImGui::TextDisabled("Right-click equipped items for Preview, Restore durability, or Change gear.");
         const auto start=ImGui::GetCursorScreenPos();const float width=ImGui::GetContentRegionAvail().x;ImGui::InvisibleButton("##equipped-region",{width,GearHeight(Inspector,width)});GearRow(Inspector,start,width,Now());
     }ImGui::End();
 }

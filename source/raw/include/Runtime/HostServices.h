@@ -9,6 +9,7 @@ namespace PS::HostServices {
     // inside the installed UE4SS mod. This root is shared by runtime settings,
     // backups, exports, and diagnostics.
     std::filesystem::path StateDirectory();
+    std::filesystem::path ProfileDirectory();
     // Provider-owned Xbox Game Save root. This is exposed for diagnostics and
     // format validation only; runtime cleanup must flow through the active
     // save provider rather than rewriting containers.index in-process.

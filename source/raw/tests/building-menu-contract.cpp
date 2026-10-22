@@ -17,6 +17,8 @@ int main(int argc,char** argv){
     for(const auto* proof:{"BuildableActor defaults are not initialized","BuildableActor has no native or Blueprint scene root","Constructed building has no native scene root","SimpleConstructionScript","ComponentTemplate","Selected building differs from the validated data-binding source","AdjustIfPossibleButDontSpawnIfColliding","VerifyToolBuildingInstance(actor,buildingObject,prototype,world,true)"})
         Check(tools.find(proof)!=std::string::npos,"First-placement replacement lost native default, collision or post-construction binding checks");
     Check(tools.find("LiveActor.Get()")!=std::string::npos&&tools.find("SavedActivationIncomplete")!=std::string::npos,"Saved placement must not imply a confirmed live building");
+    Check(tools.find("PS::SpawnAuthoring::PositionMatches(")!=std::string::npos&&tools.find("Building actor did not retain the requested position")!=std::string::npos,"Data binding alone must not confirm a building moved to world origin");
+    for(const auto* field:{"\"RequestedLocation\"","\"ObservedLocation\"","[HELPY][BUILDING][RESULT]","prototype.Location=position;"})Check(tools.find(field)!=std::string::npos,"Building position evidence or temporary placement target missing");
     const auto ui=Read(source/"helpy/source/include/Generator/MapPanel.h");
     const auto panel=Read(source/"helpy/source/include/Generator/SpawnToolsPanel.h");
     Check(panel.find("Place at world coordinates")!=std::string::npos&&panel.find("request[\"TargetLocation\"]={{\"X\",buildingX},{\"Y\",buildingY}}")!=std::string::npos,"Building coordinate controls must use the validated native map-placement path");
@@ -35,4 +37,9 @@ int main(int argc,char** argv){
     Check(ui.find("Import prefab...")!=std::string::npos&&ui.find("Place & save prefab")!=std::string::npos,"Prefab map placement controls missing");
     const auto players=Read(source/"raw/src/Loader/Spawn/PlayerRules.cpp");
     Check(players.find("PlayerCarryWeight::Verified(actual,requested)")!=std::string::npos&&players.find("CARRY-OVERRIDE")!=std::string::npos,"Capacity claims require native readback and conflict diagnostics");
+    const auto accounts=Read(source/"raw/include/SDK/Helper/PlayerStatus.h"),steam=Read(source/"raw/include/Runtime/SteamBuild.h");
+    Check(accounts.find("if(local){const auto steam=SteamBuild::PersonaName();")!=std::string::npos&&runtime.find("AccountName(state,isLocal)")!=std::string::npos,"A remote player must never inherit the local Steam account");
+    Check(accounts.find("ControllerAccountName(UObject* controller)")!=std::string::npos&&tools.find("ControllerAccountName(target)")!=std::string::npos&&tools.find("ControllerAccountName(controller)")!=std::string::npos,"Map and player rosters must use the same local-aware account provider");
+    for(const auto* field:{"SteamAPI_SteamFriends_v017","SteamAPI_ISteamFriends_GetPersonaName","GetModuleHandleW","strnlen_s(name,129)","Storefront::IsDedicatedServer()","EpicLauncher"})Check(steam.find(field)!=std::string::npos,"Steam persona lookup lost its runtime or bounds gate");
+    for(const auto* unsafe:{"SteamAPI_Init","SteamAPI_Shutdown","LoadLibrary","GetProcAddress(module,\"SteamAPI_GetHSteamUser"})Check(steam.find(unsafe)==std::string::npos,"Persona lookup must reuse only initialized flat Steamworks exports");
 }

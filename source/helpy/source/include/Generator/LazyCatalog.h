@@ -1,6 +1,7 @@
 #pragma once
 #include "Generator/ToolRequest.h"
 #include "Core/ItemSource.h"
+#include "Core/ItemCategory.h"
 #include <algorithm>
 #include <atomic>
 #include <array>
@@ -202,7 +203,7 @@ inline void ApplyWindow(const json& window,uint64_t revision) {
     if(window.contains("Rows")&&window["Rows"].is_array())for(const auto& row:window["Rows"]) {
         if(!row.is_object())continue;
         if(randomItems){const auto identity=RandomIdentity(row);if(!identity.empty()&&!state.RandomSeen.insert(identity).second)continue;}
-        auto current=row;if(category==0){const auto icon=NativeIcons.find(row.value("Path",std::string{}));if(icon!=NativeIcons.end())current["Icon"]=icon->second;}
+        auto current=row;if(category==0){ItemCategory::Repair(current);const auto icon=NativeIcons.find(row.value("Path",std::string{}));if(icon!=NativeIcons.end())current["Icon"]=icon->second;}
         destination.push_back(std::move(current));
     }
     const auto received=destination.size();

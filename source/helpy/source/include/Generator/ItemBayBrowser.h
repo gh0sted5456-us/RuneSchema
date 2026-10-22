@@ -7,7 +7,7 @@ namespace PS::ItemBayBrowser {
 inline void Controls(ItemGridPicker::State& state,char* filter,size_t capacity,const std::function<void()>& refreshOverride={},bool categories=true){
     const auto refresh=[&]{state.CatalogRevision=0;state.Matches.clear();state.PageIndex=0;state.ResetScroll=true;if(refreshOverride)refreshOverride();else LazyCatalog::Search(0,ItemGridPicker::BackendQuery(state));};
     if(categories&&ImGui::BeginTabBar("##item-bay-tabs",ImGuiTabBarFlags_FittingPolicyScroll|ImGuiTabBarFlags_Reorderable)){
-        for(const auto* category:{"All","Weapons","Armor","Consumables","Ammo","Resources","Tools","Quest"})if(ImGui::BeginTabItem(category)){
+        for(const auto* category:ItemCategory::Categories)if(ImGui::BeginTabItem(category)){
             if(state.ActiveCategory!=category){state.ActiveCategory=category;HelpyImGuiTheme::Current.itemCategory=category;refresh();}ImGui::EndTabItem();
         }ImGui::EndTabBar();
     }

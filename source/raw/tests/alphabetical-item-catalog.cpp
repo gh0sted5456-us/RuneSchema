@@ -6,7 +6,7 @@
 #include <iostream>
 using namespace PS::AlphabeticalItemCatalog;
 template<class F> void Reject(F fn){bool rejected=false;try{fn();}catch(...){rejected=true;}assert(rejected);}
-int main(int argc,char** argv){
+int main(int argc,char** argv){try{
     assert(PS::ItemNameOrder::Key("  aPPLe \t","path")==PS::ItemNameOrder::Key("Apple","path"));
     Cache cache;cache.Scope("world/source/clone-1");unsigned scans=0;
     const auto source=[&](size_t offset){
@@ -29,6 +29,15 @@ int main(int argc,char** argv){
     // any UObject scan, and remains isolated to its verified source scope.
     const auto folder=std::filesystem::temp_directory_path()/("rsmk-item-manifest-"+std::to_string(GetCurrentProcessId()));
     std::filesystem::create_directories(folder);const auto file=folder/"items.json";
+    const Json oldStone={{"Path","/Game/Gameplay/Items/Resources/Mineral/ITEM_Resources_Stone.ITEM_Resources_Stone"},
+        {"Name","Stone"},{"Category","Building"},{"Tags","Item.BuildingResource ItemFilter.Material.Mineral"}};
+    const auto stoneFile=folder/"stone.json";
+    PS::PagedItemCatalog::Save(stoneFile,"old-category-policy",{std::make_shared<const Json>(oldStone)});
+    const auto stonePage=PS::PagedItemCatalog::Read(PS::PagedItemCatalog::File(stoneFile),"old-category-policy","__helpycat:resources Stone","",24);
+    assert(stonePage["Rows"].size()==1&&stonePage["Rows"][0]["Category"]=="Resources");
+    Cache oldCache;oldCache.Restore(Json::array({oldStone}));
+    assert(oldCache.Snapshot()[0]->at("Category")=="Resources");
+    std::filesystem::remove(PS::PagedItemCatalog::File(stoneFile));
     PS::PersistentItemCatalog::Save(file,"mounted-content-1",cache.Snapshot());
     auto restored=PS::PersistentItemCatalog::Load(file,"mounted-content-1");assert(restored&&restored->Ready());
     auto saved=restored->Read("all","",2,[&](size_t){assert(false);return Json{};});
@@ -153,4 +162,4 @@ int main(int argc,char** argv){
         assert(read(argv[1])==read(argv[2]));
         if(argc==4){const auto native=read(argv[3]);assert(native.find("PS::AssetSearch::AlphabeticalItemWindow(query,cursor,limit,fieldSet)")!=std::string::npos);}
     }
-}
+}catch(const std::exception& error){std::cerr<<error.what()<<"\n";return 1;}}

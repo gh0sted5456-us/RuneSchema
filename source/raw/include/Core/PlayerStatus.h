@@ -89,4 +89,13 @@ struct Cache {
         return nullptr;
     }
 };
+inline const Json* LocalCharacter(const Json& catalog){
+    const auto players=catalog.find("Players");if(players==catalog.end()||!players->is_array())return nullptr;
+    const Json* local=nullptr;
+    for(const auto& row:*players){
+        if(!row.is_object()||!row.contains("IsLocal")||row["IsLocal"]!=true)continue;
+        if(local||!row.contains("Guid")||!row["Guid"].is_string()||Cache::Guid(row["Guid"].get<std::string>()).empty())return nullptr;
+        local=&row;
+    }return local;
+}
 }

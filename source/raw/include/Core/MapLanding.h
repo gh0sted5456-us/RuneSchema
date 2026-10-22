@@ -34,6 +34,12 @@ template<class Query> Position ResolveNear(const MapProjection::Projection& map,
     std::string error;for(const auto candidate:Candidates(point,nearby))try{return Resolve(map,candidate,radius,halfHeight,terrain);}catch(const std::exception& failure){error=failure.what();}
     throw std::runtime_error(error.empty()?"No verified landing beside this marker":error);
 }
+inline std::vector<MapProjection::Point> TravelCandidates(MapProjection::Point point,bool marker){
+    std::vector<MapProjection::Point> points{point};
+    for(const double radius:marker?std::array{200.,400.,800.}:std::array{100.,200.,400.})
+        for(int i=0;i<8;++i){const double angle=i*0.7853981633974483;points.push_back({point.X+std::cos(angle)*radius,point.Y+std::sin(angle)*radius});}
+    return points;
+}
 inline bool Matches(Position wanted,Position landed){
     return std::isfinite(landed.X)&&std::isfinite(landed.Y)&&std::isfinite(landed.Z)&&std::abs(wanted.X-landed.X)<=2&&std::abs(wanted.Y-landed.Y)<=2&&std::abs(wanted.Z-landed.Z)<=2;
 }

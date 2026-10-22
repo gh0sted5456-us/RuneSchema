@@ -58,9 +58,10 @@ int Run(int argc,char** argv){
     {const auto inventory=Services.at("helpy.inventory");uint32_t bytes=0;
         Check(inventory.Call(inventory.Context,R"({"Action":"Capabilities"})",nullptr,0,&bytes)==RS_PLUGIN_BUFFER_TOO_SMALL);
         std::vector<char> reply(bytes);Check(inventory.Call(inventory.Context,R"({"Action":"Capabilities"})",reply.data(),bytes,&bytes)==RS_PLUGIN_OK);
-        const auto caps=nlohmann::json::parse(reply.data());Check(caps.at("ScrapPlanner")==true&&caps.at("NativeRestore")==false);
-        Check(inventory.Call(inventory.Context,R"({"Action":"PrepareDelete"})",nullptr,0,&bytes)==RS_PLUGIN_BUFFER_TOO_SMALL&&bytes==4096);
-        reply.resize(bytes-1);Check(inventory.Call(inventory.Context,R"({"Action":"PrepareDelete"})",reply.data(),static_cast<uint32_t>(reply.size()),&bytes)==RS_PLUGIN_BUFFER_TOO_SMALL&&bytes==4096);
+        const auto caps=nlohmann::json::parse(reply.data());Check(caps.at("GameFavorites").is_boolean()&&!caps.contains("ScrapPlanner")&&!caps.contains("StorageFormat"));
+        Check(inventory.Call(inventory.Context,R"({"Action":"CycleMark"})",nullptr,0,&bytes)==RS_PLUGIN_BUFFER_TOO_SMALL&&bytes==4096);
+        Check(inventory.Call(inventory.Context,R"({"Action":"CycleMark"})",nullptr,0,&bytes)==RS_PLUGIN_BUFFER_TOO_SMALL&&bytes==4096);
+        reply.resize(bytes-1);Check(inventory.Call(inventory.Context,R"({"Action":"CycleMark"})",reply.data(),static_cast<uint32_t>(reply.size()),&bytes)==RS_PLUGIN_BUFFER_TOO_SMALL&&bytes==4096);
     }
     Check(!Services.contains("helpy.vision.status"));
     // Mirror the real host's post-initialize manifest gate. Loading the DLL
@@ -87,6 +88,12 @@ int Run(int argc,char** argv){
         Check(start&&start(instance)==RS_PLUGIN_OK);
         bool ready=false;for(const auto& log:Logs)if(log.find("standalone RSMK ready")!=std::string::npos)ready=true;
         Check(ready);
+        {const auto inventory=Services.at("helpy.inventory");uint32_t bytes=0;
+            const char* invalid=R"({"Action":"ScrapPlan","Recipes":false})";
+            Check(inventory.Call(inventory.Context,invalid,nullptr,0,&bytes)==RS_PLUGIN_BUFFER_TOO_SMALL);
+            std::vector<char> reply(bytes);Check(inventory.Call(inventory.Context,invalid,reply.data(),bytes,&bytes)==RS_PLUGIN_OK);
+            Check(nlohmann::json::parse(reply.data()).at("Error")=="Unknown Helpy inventory operation");
+        }
         if(ServerDesktop){
             HWND own=nullptr;
             for(HWND window=FindWindowExW(nullptr,nullptr,L"RuneSchema.Helpy.Window",nullptr);window;window=FindWindowExW(nullptr,window,L"RuneSchema.Helpy.Window",nullptr)){

@@ -374,7 +374,7 @@ inline void SelectPartyMember(const Json& player){
     Data.PartySelection=ItemPresentation::Text(player,"Path");
     const auto at=player.find("Location");if(at==player.end()||!at->is_array()||at->size()!=3||!(*at)[0].is_number()||!(*at)[1].is_number())return;
     const MapProjection::Point point{(*at)[0].get<double>(),(*at)[1].get<double>()};if(!Data.Projection.Contains(point))return;
-    Data.Point=point;Data.HasPoint=true;Data.SelectionName=ItemPresentation::Text(player,"Name");Data.Center=Data.Projection.ToUV(point);Data.NearMarker=false;
+    Data.Point=point;Data.HasPoint=true;Data.SelectionName=RuneSchemaProfile::Name(player);Data.Center=Data.Projection.ToUV(point);Data.NearMarker=false;
 }
 inline void PlanPartyTravel(const std::string& moving,const std::string& destination,bool map=false,bool picking=false){
     Data.PartyMoving=moving;Data.PartyDestination=destination;Data.PartyToMap=map;Data.PartyMapPoint=Data.Point;
@@ -431,7 +431,7 @@ inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
     const auto cardColumns=std::max(1,int((ImGui::GetContentRegionAvail().x+ImGui::GetStyle().ItemSpacing.x)/(cardWidth+ImGui::GetStyle().ItemSpacing.x)));size_t cardIndex=0;
     for(const auto& row:*rows){if(!row.is_object())continue;const auto path=ItemPresentation::Text(row,"Path");if(path.empty())continue;
         if(placards&&cardIndex++%cardColumns)ImGui::SameLine();
-        ImGui::PushID(path.c_str());const auto name=ItemPresentation::Text(row,"Name")+(row.value("IsLocal",false)?" (you)":"");
+        ImGui::PushID(path.c_str());const auto name=RuneSchemaProfile::Name(row)+(row.value("IsLocal",false)?" (you)":"");
         ImGui::PushStyleColor(ImGuiCol_Border,PartyMemberView::Border(row));
         ImGui::PushStyleColor(ImGuiCol_ChildBg,ImVec4(t.panelAlt.x,t.panelAlt.y,t.panelAlt.z,.96f));
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{t.X(6),t.Y(6)});
@@ -457,6 +457,7 @@ inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
             const auto a=ImGui::GetWindowPos(),b=ImGui::GetWindowSize();HelpyPreviewHooks::MapPartyContext={a.x,a.y,a.x+b.x,a.y+b.y};
 #endif
             ImGui::TextUnformatted(name.c_str());ImGui::Separator();
+            if(ImGui::MenuItem("View profile..."))PartyMemberView::ViewProfile(row);
             if(ImGui::MenuItem("Change portrait...",nullptr,false,!PlayerPortraits::Identity(ItemPresentation::Text(row,"Guid")).empty()))PlayerPortraitPicker::Request(row);
             PartyMemberView::BackgroundMenu(row);
             if(ImGui::MenuItem("View inventory...",nullptr,false,!ItemPresentation::Text(row,"Guid").empty()))PlayerInventoryPanel::Request(row);
@@ -474,7 +475,7 @@ inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
 #endif
             if(ImGui::BeginMenu("Teleport member to...",runtimeReady)){
                 for(const auto& destination:*rows){const auto target=ItemPresentation::Text(destination,"Path");if(target.empty()||target==path)continue;ImGui::PushID(target.c_str());
-                    const auto label=ItemPresentation::Text(destination,"Name")+(destination.value("IsLocal",false)?" (me)":"");
+                    const auto label=RuneSchemaProfile::Name(destination)+(destination.value("IsLocal",false)?" (me)":"");
                     if(ImGui::MenuItem(label.c_str()))PlanPartyTravel(path,target);ImGui::PopID();
                 }
                 ImGui::Separator();if(ImGui::MenuItem("Selected map point",nullptr,false,Data.HasPoint&&Data.Projection.Contains(Data.Point)))PlanPartyTravel(path,"",true);
@@ -494,7 +495,7 @@ inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
     }
     if(ImGui::BeginPopupModal("Confirm party travel",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
         const auto* moving=MapParty::Find(Data.Snapshot,Data.PartyMoving);const auto* target=MapParty::Find(Data.Snapshot,Data.PartyDestination);
-        const auto name=moving?ItemPresentation::Text(*moving,"Name"):std::string("Disconnected player");
+        const auto name=moving?RuneSchemaProfile::Name(*moving):std::string("Disconnected player");
         if(Data.PartyToMap)ImGui::TextWrapped("Teleport %s to map point X %.0f, Y %.0f?",name.c_str(),Data.PartyMapPoint.X,Data.PartyMapPoint.Y);
         else ImGui::TextWrapped("Teleport %s to %s?",name.c_str(),target?ItemPresentation::Text(*target,"Name").c_str():"Disconnected player");
         ImGui::TextWrapped("The host checks current identities and a safe landing before departure.");
@@ -736,7 +737,7 @@ inline void Render(){
             Data.Point=point;Data.NearMarker=false;Data.SelectionName.clear();
             if(hoveredReference&&referenceCount==1){Data.Point={hoveredReference->X,hoveredReference->Y};Data.SelectionName=hoveredReference->Name+" (cached reference)";}
             if(hoveredMarker){const auto& loc=hoveredMarker->at("Location");Data.Point={loc[0].get<double>(),loc[1].get<double>()};Data.SelectionName=ItemPresentation::Text(*hoveredMarker,"Name");if(ItemPresentation::Text(*hoveredMarker,"Kind")=="Lodestone"){Data.Operation=2;Data.NearMarker=true;}}
-            if(hoveredPlayer&&playerDistance<=nearest){const auto& loc=hoveredPlayer->at("Location");Data.Point={loc[0].get<double>(),loc[1].get<double>()};Data.SelectionName=ItemPresentation::Text(*hoveredPlayer,"Name");Data.PartySelection=ItemPresentation::Text(*hoveredPlayer,"Path");Data.NearMarker=false;}
+            if(hoveredPlayer&&playerDistance<=nearest){const auto& loc=hoveredPlayer->at("Location");Data.Point={loc[0].get<double>(),loc[1].get<double>()};Data.SelectionName=RuneSchemaProfile::Name(*hoveredPlayer);Data.PartySelection=ItemPresentation::Text(*hoveredPlayer,"Path");Data.NearMarker=false;}
             const bool samePoint=haveZ&&Data.Point.X==Data.HoverPoint.X&&Data.Point.Y==Data.HoverPoint.Y;
             Data.HasPoint=true;Data.Ground=samePoint?Data.HoverGround:Json::object();Data.GroundReadPending=0;Data.GroundReadSelected=true;Data.NextGroundRead={};Data.ProbeWanted=Data.Operation!=2&&context&&!samePoint;
             if(!context&&!Data.PartyPicking.empty()){Data.PartyMapPoint=Data.Point;Data.PartyPicking.clear();Data.PartyConfirmWanted=true;Data.ProbeWanted=false;}

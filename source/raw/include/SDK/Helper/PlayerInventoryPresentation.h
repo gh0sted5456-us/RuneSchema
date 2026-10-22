@@ -23,7 +23,8 @@ inline nlohmann::json Read(RC::Unreal::UObject* controller,const nlohmann::json&
         if(equipment.value("HasMore",false))throw std::runtime_error("Native equipment snapshot exceeds its 32-slot bound");
         result["Loadout"]=equipment.at("Items");for(auto& row:result["Loadout"]){row["Group"]="Equipped";row["Equipped"]=true;}
     }catch(const std::exception& error){result["LoadoutError"]=error.what();}
-    for(const char* field:{"Items","Loadout"})if(result.contains(field))for(auto& item:result[field])if(item.contains("Instance"))item["PlayerGuid"]=request.value("PlayerGuid",std::string{});
+    bool local=false;try{EquipmentDelivery::Call query(controller,TEXT("/Script/Engine.Controller:IsLocalController"),1);query.Invoke();local=query.Bool();}catch(...){}
+    for(const char* field:{"Items","Loadout"})if(result.contains(field))for(auto& item:result[field])if(item.contains("Instance")){item["PlayerGuid"]=request.value("PlayerGuid",std::string{});item["MarksReadOnly"]=!local;}
     return result;
 }
 inline bool StorageClass(RC::Unreal::UClass* type){

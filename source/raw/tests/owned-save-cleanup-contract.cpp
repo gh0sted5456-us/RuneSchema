@@ -15,6 +15,10 @@ int main(int argc,char** argv){
         &&registrar.find("NativePersistencePolicy::Release")==registrar.npos,
         "native load audit must match its payload without restoring the session loading policy");
     const auto beforeLoad=registrar.find("void DragonWildsDataRegistrar::ScrubCharacterJsonBeforeLoad");
+    need(pruner.find("if(prepared)*prepared=false;")!=pruner.npos
+        &&pruner.find("jsonProperty->SetPropertyValue(jsonAddress, value);")<pruner.find("if(prepared)CharacterLoadAudit::Prepared();")
+        &&pruner.find("if(prepared)*prepared=true;")!=pruner.npos,
+        "automatic bypass eligibility must follow successful gameplay preflight and native payload writeback, never mere JSON discovery");
     need(registrar.find("m_prepareCharacterRegistries(context)",beforeLoad)<registrar.find("m_pruner.PruneBeforeCharacterLoad",beforeLoad)
         &&mainLoader.find("SetCharacterRegistryPreparation")!=mainLoader.npos
         &&quests.find("RegistryEnrollment::Await(\"quest:\"")!=quests.npos
@@ -217,7 +221,7 @@ int main(int argc,char** argv){
         && pruner.find("MergeBaseline")!=pruner.npos,
         "baseline recovery is missing or old snapshot replacement machinery returned");
     need(registrar.find("m_pruner.PruneBeforeCharacterLoad")!=registrar.npos
-        && pruner.find("PruneCharacterJson(value)")!=pruner.npos
+        && pruner.find("PruneCharacterJson(value,&prepared)")!=pruner.npos
         && registrar.find("SaveCleanup::Plan(source")!=registrar.npos
         && registrar.find("startupRegistry.QuestsComplete = false")!=registrar.npos
         && registrar.find("startupRegistry.JournalsComplete = false")!=registrar.npos

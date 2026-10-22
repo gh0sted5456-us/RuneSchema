@@ -424,7 +424,7 @@ json DescribeItemWithSource(UObject* object,const ItemSource::Info* knownSource)
         runtimeClone?provenance.value("CreatingMod",std::string{}):std::string{},
         runtimeClone||declared.modded.value_or(false),!runtimeClone&&AssetMetadata::IsManaged(object),AssetMetadata::Owner(object));
     if((source.Group==ItemSource::Kind::Vanilla||source.Group==ItemSource::Kind::Expansion)&&!object->HasAnyFlags(RF_WasLoaded))source.Group=ItemSource::Kind::Unknown;
-    row.update(ItemSource::Fields(source));return row;
+    row.update(ItemSource::Fields(source));ItemCategory::Repair(row);return row;
 }
 json DescribeItem(UObject* object){return DescribeItemWithSource(object,nullptr);}
 json LoadoutWindow(const std::string& slot,const std::string& query,std::size_t offset){
@@ -464,18 +464,8 @@ json LoadoutWindow(const std::string& slot,const std::string& query,std::size_t 
 namespace {
 std::string HelpyBroadItemCategory(UObject* object,const std::string& path,const std::string& name,const std::string& internal,const std::string& tags) {
     std::string classes;std::size_t depth=0;for(UStruct* ancestor=object&&object->GetClassPrivate()?object->GetClassPrivate():nullptr;ancestor&&depth++<24;ancestor=ancestor->GetSuperStruct())classes+=" "+to_string(ancestor->GetName());
-    const auto hay=QuickDecorations::Fold(path+" "+name+" "+internal+" "+tags+" "+classes);
-    const auto any=[&](std::initializer_list<std::string_view> words){for(const auto word:words)if(hay.find(word)!=std::string::npos)return true;return false;};
-    if(any({"quest","questitem"}))return "Quest";
-    if(any({"ammo","ammunition","arrow","bolt","bullet","shot"}))return "Ammo";
-    if(any({"rune","runes"}))return "Runes";
-    if(any({"armor","armour","helmet"," helm","chestplate","cuirass","gauntlet","glove","boots","greaves","shield","wearableequipmentdata"})||QuickDecorations::Token(hay,"cape"))return "Armor";
-    if(any({"weapon","sword","dagger","mace","spear","halberd","bow","crossbow","staff","wand","pistol","musket","axe_weapon","battleaxe"}))return "Weapons";
-    if(any({"consumable","food","potion","drink","elixir","brew","ration","cooked","meal"}))return "Consumables";
-    if(any({"tool","pickaxe","hatchet","fishingrod","fishing_rod","hammer","shovel","sickle"}))return "Tools";
-    if(any({"building","buildable","furniture","structure","construction","placeable"}))return "Building";
-    if(any({"resource","material","ore","ingot","bar_","_bar","plank","log","timber","hide","leather","fibre","fiber","cloth","stone","crystal","essence","shard","ash","coal"}))return "Resources";
-    return "Misc";
+    const auto category=ItemCategory::Classify(path,name,internal,tags,classes);
+    return category.empty()?"Misc":category;
 }
 int HelpyMaxStack(UObject* object) {
     const auto value=Read(object,"MaxStackSize");
@@ -573,14 +563,15 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
     const auto priorityPaths=AssetProvenance::LivePaths();
     const std::unordered_set<std::string> prioritySet(priorityPaths.begin(),priorityPaths.end());
     static std::string indexedScope;static std::vector<WeakObjectHandle> indexedItems;
+    static std::unordered_map<std::string,WeakObjectHandle> indexedPaths;
     const bool useClassIndex=classIndex&&FUObjectHashTables::IsAvailable();
     if(useClassIndex){
         const auto scope=json::array({generation,HelpySourceCache::PublishedFingerprint(),priorityPaths}).dump();
         if(scope!=indexedScope){
             TArray<UObject*> items;UECustom::UObjectGlobals::GetObjectsOfClass(itemType,items,true);
             if(items.Num()<0||items.Num()>AlphabeticalItemCatalog::Cache::MaxRows)throw std::runtime_error("Native item class index exceeds its safe bound");
-            indexedItems.clear();indexedItems.reserve(items.Num());
-            for(auto* item:items)if(Usable(item))indexedItems.emplace_back(item);
+            indexedItems.clear();indexedItems.reserve(items.Num());indexedPaths.clear();
+            for(auto* item:items)if(Usable(item)){indexedItems.emplace_back(item);indexedPaths.emplace(to_string(item->GetPathName()),indexedItems.back());}
             indexedScope=scope;
         }
     }
@@ -595,10 +586,16 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
         if(scanned>0&&std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-begin).count()>=static_cast<long long>(timeBudgetMicros))break;
         const std::size_t index=randomOrder?(start+visited)%total:visited;
         const auto [segment,localIndex]=layout.At(index);
+        UObject* object=nullptr;
+        ++visited;++scanned;
         if(segment==2) {
-            ++visited;++scanned;const auto& record=mountedItems[localIndex];
-            auto* loaded=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,RC::to_generic_string(record.path).c_str(),false);
-            if(Usable(loaded))continue; // already covered by the native UObject slice
+            const auto& record=mountedItems[localIndex];
+            object=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,RC::to_generic_string(record.path).c_str(),false);
+            if(Usable(object)){
+                const auto captured=indexedPaths.find(record.path);
+                // Loading after the class snapshot must not make an item disappear from both slices.
+                if(prioritySet.contains(record.path)||!useClassIndex||(captured!=indexedPaths.end()&&captured->second.Get()==object))continue;
+            }else{
             const auto name=QuickDecorations::ReadableAssetName(record.path),category=HelpyBroadItemCategory(nullptr,record.path,name,{},record.type);
             if(!categoryFilter.empty()&&AssetTemplate::Fold(category)!=categoryFilter)continue;
             const auto source=ItemSource::Describe(record.path,sourcePlan,nativePlugins);
@@ -608,12 +605,11 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
                 {"Cooked",true},{"Mounted",true},{"Loaded",false},{"Available",true},{"Reason","Mounted ItemData candidate; native fields and inventory compatibility are checked when loaded"}};
             entry.update(ItemSource::Fields(source));rows.push_back(std::move(entry));
             continue;
+            }
         }
-        UObject* object=nullptr;
         if(segment==0)object=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,RC::to_generic_string(priorityPaths[localIndex]).c_str(),false);
-        else if(useClassIndex)object=indexedItems[localIndex].Get();
-        else{auto* slot=FUObjectArray::IndexToObject(static_cast<int32>(localIndex));object=slot?slot->GetUObject():nullptr;}
-        ++visited;++scanned;
+        else if(segment==1){if(useClassIndex)object=indexedItems[localIndex].Get();
+            else{auto* slot=FUObjectArray::IndexToObject(static_cast<int32>(localIndex));object=slot?slot->GetUObject():nullptr;}}
         if(!Usable(object)||!object->IsA(itemType))continue;
         const auto path=to_string(object->GetPathName());if(path.empty())continue;
         if(segment==1&&prioritySet.contains(path))continue;

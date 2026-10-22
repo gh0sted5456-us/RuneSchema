@@ -1,16 +1,52 @@
 #include "Core/CharacterSaveEditor.h"
+#include "Core/XboxCharacterSaves.h"
+#include "Core/NativeInventoryMarkClick.h"
+#include <fstream>
 #include "Core/HelpyAuthoringProtocol.h"
 #include <cassert>
 using namespace PS::CharacterSaveEditor;
 template<class F>void Reject(F fn){bool caught=false;try{fn();}catch(const std::exception&){caught=true;}assert(caught);}
 int main(){
-    Json original={{"GUID","identity"},{"GameProgress",{{"Version",86},{"Health",100},{"SkillXP",{{"Mining",125}}},
+    PS::NativeInventoryMarkClick click;
+    assert(click.Step(true,"stack").empty()&&click.Step(false,"stack").empty());
+    assert(click.Step(true,"stack").empty()&&click.Step(false,"stack")=="stack");
+    assert(click.Step(false,"stack").empty());
+    assert(click.Step(true,"stack").empty()&&click.Step(true,"other").empty()&&click.Step(false,"other").empty());
+    assert(click.Step(true,"stack").empty());click.Reset();assert(click.Step(false,"stack").empty());
+    assert(click.Step(true,"").empty()&&click.Step(false,"stack").empty());
+    assert(click.Step(true,"stack").empty()&&click.Step(false,"other").empty());
+    PS::NativeInventoryMarkClick middle;
+    assert(middle.Step(false,"").empty());
+    for(int i=0;i<3;++i){assert(middle.Step(true,"stone").empty());assert(middle.Step(false,"stone")=="stone");assert(middle.Step(false,"stone").empty());}
+    assert(middle.Step(true,"stone").empty());middle.Reset();assert(middle.Step(false,"stone").empty());
+    assert(middle.Step(true,"stone").empty()&&middle.Step(false,"other-character-stone").empty());
+    const auto fixture=std::filesystem::absolute("test-temp/xbox-character-saves");
+    std::filesystem::create_directories(fixture/"account"/"container");
+    const auto blob=fixture/"account"/"container"/"1234567890ABCDEF1234567890ABCDEF";
+    {std::ofstream output(blob);output<<"{}";}
+    assert(PS::XboxCharacterSaves::Candidate(fixture,blob));
+    {std::ofstream output(fixture/"account"/"container"/"containers.index");output<<"index";}
+    {std::ofstream output(fixture/"account"/"container"/"character.json");output<<"{}";}
+    assert(!PS::XboxCharacterSaves::Candidate(fixture,fixture/"account"/"container"/"containers.index"));
+    assert(!PS::XboxCharacterSaves::Candidate(fixture/"account",blob));
+    assert(!PS::XboxCharacterSaves::Candidate(fixture/"elsewhere",blob));
+    assert(PS::XboxCharacterSaves::Candidates(fixture).size()==1);
+    Json original={{"GUID","1234567890ABCDEF1234567890ABCDEF"},{"GameProgress",{{"Version",86},{"Health",100},{"SkillXP",{{"Mining",125}}},
         {"Inventory",{{"0",{{"ItemData","modded-item"},{"GUID","item-guid"},{"Amount",3},{"UnknownModField",{{"Keep",true}}}}},{"MaxSlotIndex",0}}},
         {"Progress",{{"RecipesUnlocked",{"modded-recipe"}}}},{"QuestProgress",{{"QuestInts",{{"QuestVariableName","RuneSchema.Owner:Mod"},{"QuestVariableValue",1}}}}}}},
         {"Customization",{{"DisplayName","Before"},{"Unknown",42}}},{"UnknownFutureSection",{{"Keep",true}}}};
     Session session;Reject([&]{session.Open({{"World","SPUD"}});});session.Open(original);
     auto root=session.Browse();assert(root["Rows"].size()==4);
-    assert(root["CharacterGuid"]=="identity"&&session.CharacterGuid()=="identity");
+    assert(root["CharacterGuid"]==original["GUID"]&&session.CharacterGuid()==original["GUID"].get<std::string>());
+    auto xbox=original;xbox.erase("GUID");xbox["meta_data"]={{"char_guid","1234567890abcdef1234567890abcdef"}};
+    assert(Identity(xbox)==original["GUID"].get<std::string>());
+    assert(PS::XboxCharacterSaves::Character(xbox));
+    auto metadata=xbox;metadata["GameProgress"].erase("Inventory");assert(!PS::XboxCharacterSaves::Character(metadata));
+    assert(!PS::XboxCharacterSaves::Character(Json{{"World","SPUD"}}));
+    xbox["GUID"]="FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";assert(Identity(xbox).empty());
+    xbox.erase("GUID");for(const auto& invalid:Json::array({"", "identity", "00000000000000000000000000000000", 123})){
+        xbox["meta_data"]["char_guid"]=invalid;assert(Identity(xbox).empty());
+    }
     auto game=session.Browse("/GameProgress");const auto revision=game["Revision"].get<uint64_t>();
     session.Set("/GameProgress/Health",75,revision);
     Reject([&]{session.Set("/GameProgress/Health",60,revision);});
@@ -40,6 +76,8 @@ int main(){
     Reject([&]{PS::HelpyAuthoring::Validate(request("SaveEditorOpen",{{"Path","save.json"},{"Offline",false}}));});
     Reject([&]{PS::HelpyAuthoring::Validate(request("SaveEditorExport",{{"Token","x"},{"Confirm",false}}));});
     assert(PS::HelpyAuthoring::Validate(request("SaveEditorOpen",{{"Path","save.json"},{"Offline",true}}))["Operation"]=="SaveEditorOpen");
+    assert(PS::HelpyAuthoring::Validate(request("SaveEditorOpen",{{"Path","save.json"},{"CopyOnly",true},{"CharacterGuid","1234567890abcdef1234567890abcdef"}}))["Operation"]=="SaveEditorOpen");
+    Reject([&]{PS::HelpyAuthoring::Validate(request("SaveEditorOpen",{{"Path","save.json"},{"CopyOnly",false}}));});
     auto inventory=original;auto& progress=inventory["GameProgress"];
     progress["Inventory"]={{"MaxSlotIndex",10},{"2",{{"ItemData","coin"},{"GUID","keep-instance"},{"Count",20},{"UnknownModField",{{"Keep",true}}}}},{"7",{{"ItemData","helm"},{"GUID","keep-helm"}}}};
     progress["PersonalInventory"]={{"MaxSlotIndex",4},{"1",{{"ItemData","ore"},{"Count",4},{"ModData","preserve elsewhere"}}}};

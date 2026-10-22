@@ -7,8 +7,8 @@
 #include "Generator/ItemGridPicker.h"
 #include "Generator/ItemBayBrowser.h"
 #include "Generator/CharacterPreviewPanel.h"
-#include "Generator/HelpyStoragePanel.h"
 #include "Core/CharacterWorkbench.h"
+#include "Core/PlayerStatus.h"
 #include "Core/LoadoutEligibility.h"
 #include <commdlg.h>
 #pragma comment(lib,"comdlg32.lib")
@@ -19,6 +19,17 @@ inline std::string Pointer,Selected,Token,Error;
 inline Json Browser=Json::object(),Review=Json::object();
 inline uint64_t Applied=0,Generation=0;
 inline bool Offline=false,Confirmed=false,Opened=false;
+inline bool FollowCurrentCharacter=true;
+inline std::string LiveCharacterGuid;
+inline std::string LiveCharacterPlatform;
+inline std::string ViewedCurrentGuid;
+inline std::string ProfileCharacterGuid,ProfileCharacterPlatform;
+inline bool ProfileListRequested=false;
+inline bool RequestProfileCharacter(const std::string& guid,const std::string& platform){
+    const auto id=HelpyPersonalization::Guid(guid);if(id.empty())return false;
+    ProfileCharacterGuid=id;ProfileCharacterPlatform=platform;ProfileListRequested=false;FollowCurrentCharacter=false;Error.clear();return true;
+}
+inline bool WorkflowInitialized=false;
 inline ImTextureRef SteamIcon, EpicIcon, XboxIcon;
 inline void ProviderIcon(const Json& file){
     const auto provider=file.value("Provider",std::string("Imported"));const float side=HelpyImGuiTheme::Current.Y(20);
@@ -68,6 +79,7 @@ inline void Apply(){
         if(op=="SaveEditorOpen"||op=="SaveEditorSet")ResetInventory();
         if(op!="SaveEditorBrowse")Invalidate();
     }
+    if(op=="SaveEditorOpen")Error.clear();
     if(op=="SaveEditorClose"){Opened=false;Browser=Json::object();Invalidate();ResetInventory();}
     if(op=="SaveEditorInventory"||op=="SaveEditorStack"||op=="SaveEditorRemoveItems"||op=="SaveEditorAddItem"){
         Items=result;InventoryRequested=true;StackDrafts.clear();ConfirmRemoval=false;
@@ -237,25 +249,39 @@ inline void Edit(){
 #include "Generator/CharacterStudioPanel.inl"
 inline void Render(const Json& catalog=Json::object(),uint64_t catalogRevision=0){
     AuthoringClient::Poll();Apply();const auto& snap=AuthoringClient::Snapshot;
-    if(!snap.value("Active",false)){
-        ImGui::TextWrapped("Enable RuneSchema authoring support, then activate this session to edit copies. No save is attached automatically.");
-        if(HelpyImGuiTheme::SoftButton("Activate save tools"))AuthoringClient::Activate();return;
+    const bool active=snap.value("Active",false);const auto* local=PlayerStatus::LocalCharacter(catalog);
+    LiveCharacterGuid=local?PlayerStatus::Cache::Guid(local->at("Guid").get<std::string>()):std::string{};
+    LiveCharacterPlatform=local?local->value("Platform",std::string{}):std::string{};
+    const bool selectCharacter=!WorkflowInitialized||(FollowCurrentCharacter&&!LiveCharacterGuid.empty()&&LiveCharacterGuid!=ViewedCurrentGuid);WorkflowInitialized=true;ViewedCurrentGuid=LiveCharacterGuid;
+    const auto activate=[](){ImGui::TextWrapped("Activate save tools to edit offline character copies.");if(HelpyImGuiTheme::SoftButton("Activate save tools"))AuthoringClient::Activate();};
+    if(local){ProviderIcon(Json{{"Provider",local->value("Platform",std::string{})=="Game Pass"?"GamePass":local->value("Platform",std::string{})}});ImGui::Text("Current character: %s",local->value("Name",std::string("Player")).c_str());}
+    StudioApply();
+    if(!ProfileCharacterGuid.empty()){
+        if(!active)AuthoringClient::EnsureActive();
+        else if(!AuthoringClient::Busy()){
+            if(!ProfileListRequested){ProfileListRequested=AuthoringClient::Submit("SaveEditorList");}
+            else {
+                if(const auto* match=StudioCurrentSave(AuthoringClient::Result("SaveEditorList"),ProfileCharacterGuid,ProfileCharacterPlatform))StudioSelectSave(match->at("Path").get<std::string>(),match->at("Name").get<std::string>(),ProfileCharacterGuid);
+                else Error="No unique local save found for this character/platform. Choose a save or import a JSON copy.";
+                ProfileCharacterGuid.clear();ProfileCharacterPlatform.clear();
+            }
+        }
     }
-    StudioApply();StudioHeader();
+    if(local&&FollowCurrentCharacter&&!active)AuthoringClient::EnsureActive();
+    if(active)StudioHeader();
     if(ImGui::BeginTabBar("Save editor workflows",ImGuiTabBarFlags_Reorderable)){
-        if(ImGui::BeginTabItem("Character")){Studio(catalog,catalogRevision);ImGui::EndTabItem();}
-        if(ImGui::BeginTabItem("Inventory & Item Bay")){Studio(catalog,catalogRevision,true);ImGui::EndTabItem();}
-        if(ImGui::BeginTabItem("Helpy Storage")){if(Opened)HelpyStoragePanel::Render(Browser.value("CharacterGuid",StudioAppearance.value("CharacterGuid",std::string{})));else ImGui::TextDisabled("Open a character save above.");ImGui::EndTabItem();}
-        if(ImGui::BeginTabItem("Convert / export")){
+        if(ImGui::BeginTabItem("Appearance",nullptr,selectCharacter?ImGuiTabItemFlags_SetSelected:0)){if(active){Studio(catalog,catalogRevision);}else activate();ImGui::EndTabItem();}
+        if(ImGui::BeginTabItem("Inventory")){if(active){Studio(catalog,catalogRevision,true);}else activate();ImGui::EndTabItem();}
+        if(active&&ImGui::BeginTabItem("Export copy")){
             ImGui::SeparatorText("1  Choose source");ImGui::TextWrapped("%s",File[0]?File:"Choose a character save above.");
             ImGui::SeparatorText("2  Choose destination");
             ImGui::TextUnformatted("Steam / Epic · verified character JSON copy");
             ImGui::BeginDisabled();ImGui::Button("Xbox / Game Pass · provider adapter unavailable");ImGui::EndDisabled();
             ImGui::TextWrapped("A JSON export is not a WGS conversion. Game Pass attachment is unavailable until its save-provider adapter is verified. Never place JSON directly into WGS storage.");
             ImGui::SeparatorText("3  Review and export");if(Opened)StudioReview();else ImGui::TextDisabled("Open an offline character copy first.");ImGui::EndTabItem();}
-        if(HelpyImGuiTheme::Current.advancedMode&&ImGui::BeginTabItem("Advanced / export")){Edit();ImGui::EndTabItem();}
-        if(HelpyImGuiTheme::Current.advancedMode&&ImGui::BeginTabItem("Clean copy")){AuthoringPanel::ApplyResult();AuthoringPanel::Cleanup();ImGui::EndTabItem();}
-        if(HelpyImGuiTheme::Current.advancedMode&&ImGui::BeginTabItem("Mod roots / compatibility")){
+        if(active&&HelpyImGuiTheme::Current.advancedMode&&ImGui::BeginTabItem("Advanced / export")){Edit();ImGui::EndTabItem();}
+        if(active&&HelpyImGuiTheme::Current.advancedMode&&ImGui::BeginTabItem("Clean copy")){AuthoringPanel::ApplyResult();AuthoringPanel::Cleanup();ImGui::EndTabItem();}
+        if(active&&HelpyImGuiTheme::Current.advancedMode&&ImGui::BeginTabItem("Mod roots / compatibility")){
             Button("Refresh roots and runtime","SaveEditorList");const auto& list=AuthoringClient::Result("SaveEditorList");
             ImGui::TextWrapped("Runtime: %s",list.value("Runtime",std::string("Waiting for host")).c_str());
             ImGui::TextWrapped("Imported Steam/Epic character JSON remains editable on Game Pass. Attaching/converting requires the runtime's verified native save-provider adapter; it is not enabled in this build. Never copy JSON directly into WGS storage.");

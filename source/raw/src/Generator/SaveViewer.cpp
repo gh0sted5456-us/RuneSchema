@@ -1,4 +1,5 @@
 #include "Generator/SaveViewer.h"
+#include "Core/HelpyKitFiles.h"
 #include "Generator/AssetSearch.h"
 #include "Generator/SaveReport.h"
 #include "Generator/ItemCatalogMetadata.h"
@@ -9,6 +10,7 @@
 #include "Core/SaveCleanup.h"
 #include "Core/AuthoringCleanupPreview.h"
 #include "Core/CharacterSaveEditor.h"
+#include "Core/XboxCharacterSaves.h"
 #include "Generator/CharacterPreview.h"
 #include "Core/HelpyCacheSources.h"
 #include "Runtime/HostServices.h"
