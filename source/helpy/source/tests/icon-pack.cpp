@@ -72,6 +72,14 @@ int Run(){
     auto filteredImport=Import(sourcePack,root2,filteredCache,second,1024*1024,progress,ImportPolicy::VerifiedContent,"mods/first");
     assert(filteredImport.Imported==1&&fs::exists(Target(filteredCache,second,icon))&&!fs::exists(Target(filteredCache,second,icon2)));
     assert(Import(sourcePack,root2,fixture/"source-absent",second,1024*1024,progress,ImportPolicy::VerifiedContent,"mods/absent").Imported==0);
+    const auto shared=fixture/"core"/"cache",sharedFile=HelpyModIconPacks::SharedFile(shared,"mods/first");
+    assert(sharedFile==shared/"mods"/"first"/"shared.rsmk-cache");
+    Reject([&]{HelpyModIconPacks::SharedFile(shared,"mods/../escape");});
+    Reject([&]{HelpyModIconPacks::SharedFile(shared,"core");});
+    assert(Export(sharedFile,root,cache,first,progress,"mods/first").Exported==1);
+    const auto sharedBundles=HelpyModIconPacks::Discover(root2,second,shared);assert(sharedBundles.size()==1&&sharedBundles[0].Owner=="first");
+    auto sharedImport=HelpyModIconPacks::ImportAll(root2,fixture/"shared-target",second,1024*1024,progress,shared);assert(sharedImport.Imported==1&&sharedImport.Warnings==0);
+    assert(HelpyModIconPacks::Discover(root2,inactive,shared).empty());
     {std::ifstream file(sourcePack,std::ios::binary);uint64_t begin=0;const auto filtered=Header(file,begin,fs::file_size(sourcePack));assert(filtered.Icons.size()==1&&filtered.Icons[0].Icon==icon&&filtered.Icons[0].Origins==std::set<std::string>{"mods/first"});}
     Reject([&]{Export(fixture/"empty.rsmk-icons",root,cache,first,progress,"mods/absent");});assert(!fs::exists(fixture/"empty.rsmk-icons"));
     Reject([&]{Export(fixture/"invalid.rsmk-icons",root,cache,first,progress,"../outside");});

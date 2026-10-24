@@ -2,8 +2,15 @@
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string>
+#include <algorithm>
+#include <optional>
 
 namespace PS::RuntimeJobs {
+    struct SearchCursor {
+        size_t Position=0,End;
+        explicit SearchCursor(size_t count):End(std::min(count,size_t(500000))){}
+        std::optional<size_t> Next(size_t count){if(Position>=std::min(End,count))return {};return Position++;}
+    };
     inline void Validate(const nlohmann::json& job) {
         if (!job.is_object()) throw std::runtime_error("Job must be an object");
         for (const auto& [key, value] : job.items())

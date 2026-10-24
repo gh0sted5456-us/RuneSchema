@@ -2,6 +2,7 @@
 #include "Loader/DragonWildsNpcLoader.h"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnosticB3C.h"
 #include "Utility/NativeFunctionHook.h"
 namespace DragonWilds {
 class DragonWildsEventLoader final:public DragonWildsModLoaderBase {
@@ -35,6 +36,9 @@ protected:
         if(!npcs || !npcs->HasInitialized())return false;
         RC::Unreal::Hook::FCallbackOptions options{};options.OwnerModName=TEXT("RuneSchema");options.HookName=TEXT("EventDespawnGuard");
         observer=RC::Unreal::Hook::RegisterProcessEventPreCallback([this](auto&,auto* source,auto* function,void*) {
+            if(!function)return;
+            static const RC::Unreal::FName despawn(TEXT("Despawn"),RC::Unreal::FNAME_Add),destroy(TEXT("K2_DestroyActor"),RC::Unreal::FNAME_Add);
+            const auto name=function->GetFName();if(name!=despawn&&name!=destroy)return;
             try{npcs->ObserveEventDespawn(source,function);}catch(...){}
         },options);
         try {
@@ -51,6 +55,8 @@ protected:
             return true;
         }catch(const std::exception& error){
             RemoveHooks();
+            PS::StructuredDiagnosticB3C::Report("RS-CORE-038","Error","Blocked","LoaderCore",
+                "Native event hooks unavailable",error.what(),{}, {},"EventHooks","Validation");
             PS::Log<RC::LogLevel::Error>(TEXT("Events disabled: {}.\n"),PS::ToWideSafe(error.what()));
             return false;
         }
@@ -59,6 +65,8 @@ protected:
         if(phase==EEngineLifecyclePhase::PostEngineInit)PS::JsonHelpers::ParseJsonFilesInPath(path,[&](const nlohmann::json& data){npcs->LoadEvents(data,mod);});
     }
     void OnAutoReload(const RC::StringType& mod,const std::filesystem::path&)override {
+        PS::StructuredDiagnosticB3C::Report("RS-CORE-039","Warning","Deferred","LoaderCore",
+            "Event reload requires restart","Event changes are not applied through live reload.",RC::to_string(mod),{},"EventReload","Reload");
         PS::Log<RC::LogLevel::Warning>(TEXT("Event changes in {} require a restart.\n"),mod);
     }
 };

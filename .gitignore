@@ -10,6 +10,12 @@ build/
 /build/tests/*
 !/build/tests/diagnostics.py
 !/build/tests/diagnostic-links.cjs
+!/build/*.ps1
+!/build/*.bat
+!/build/*.py
+!/build/*.json
+!/build/tests/*.ps1
+!/build/tests/*.py
 build-*/
 out/
 outputs/

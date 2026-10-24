@@ -2,6 +2,7 @@
 #include "Core/RuneSchemaUpdateInfo.h"
 #include "Core/SteamNewsInfo.h"
 #include "Core/ConfigFiles.h"
+#include "Core/RuneSchemaDataRoot.h"
 #include <windows.h>
 #include <winhttp.h>
 #include <nlohmann/json.hpp>
@@ -19,7 +20,7 @@ namespace {
 View Result;std::future<View> Worker;std::atomic_bool Cancelled=false;std::atomic_int Progress=0;
 bool Loaded=false;std::chrono::steady_clock::time_point NextManual{};
 std::int64_t Now(){return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();}
-std::filesystem::path CachePath(){const auto* appdata=std::getenv("LOCALAPPDATA");return appdata&&*appdata?std::filesystem::path(appdata)/"RuneSchema"/"HELPY"/"updates.json":std::filesystem::path{};}
+std::filesystem::path CachePath(){return RuneSchemaData::SharedDirectory("HELPY")/"updates.json";}
 void Load(){
     if(Loaded)return;Loaded=true;
     try{

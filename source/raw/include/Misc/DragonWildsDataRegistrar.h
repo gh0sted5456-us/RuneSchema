@@ -90,6 +90,7 @@ namespace DragonWilds {
 
         bool ResolveBindings();
         void PreloadMountedPersistenceAssets();
+        void RegisterDeclaredNativeFamilies();
         void ScrubCharacterJsonBeforeLoad(RC::Unreal::UObject* context,
             RC::Unreal::UFunction* function, void* parameters);
         void InstallHooks();

@@ -167,8 +167,8 @@ inline ImRect StationNode(float height) {
                     if(s.Override&&!original)s.AddStation=true;
                     if(s.Station.contains("Category"))std::snprintf(s.Category,sizeof(s.Category),"%s",s.Station.value("Category",std::string{}).c_str());
                 }
-                if(ImGui::IsItemHovered()){HelpyImGuiTheme::BeginDetailsTooltip();ImGui::TextUnformatted(station.value("DisplayName",name).c_str());
-                    if(t.verboseTooltips)ImGui::TextWrapped("%s",ItemPresentation::Text(station,"Path").c_str());HelpyImGuiTheme::EndDetailsTooltip();}
+                if(ImGui::IsItemHovered()){HelpyImGuiTheme::BeginDetailsTooltip();PS::HelpyImGuiTheme::DetailsTextUnformatted(station.value("DisplayName",name).c_str());
+                    if(t.verboseTooltips)PS::HelpyImGuiTheme::DetailsText("%s",ItemPresentation::Text(station,"Path").c_str());HelpyImGuiTheme::EndDetailsTooltip();}
                 ImGui::PopID();
             }
             if(!matches)ImGui::TextDisabled("No loaded compatible stations match.");ImGui::EndCombo();

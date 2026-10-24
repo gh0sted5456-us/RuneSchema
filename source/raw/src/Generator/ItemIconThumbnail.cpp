@@ -3,6 +3,7 @@
 #include "Generator/HelpyIconTrace.h"
 #include "Generator/HelpyRuntimePreferences.h"
 #include "Core/IconCaptureSchedule.h"
+#include "Core/IconColorBytes.h"
 #include "Core/IconDiskMaintenance.h"
 #include "Runtime/SlowWork.h"
 #include "Core/IconDrawContext.h"
@@ -39,6 +40,7 @@
 #include <chrono>
 #include <memory>
 #include <cmath>
+#include <future>
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -49,6 +51,8 @@ namespace {
     constexpr int ThumbnailSize=64;
     constexpr std::uintmax_t LiveSessionCacheLimitBytes=32ull*1024ull*1024ull;
     PS::IconDiskMaintenance::Worker DiskMaintenance;
+    std::future<void> PendingWrite;
+    nlohmann::json PendingWriteReply;
     const auto SessionCacheStarted=std::filesystem::file_time_type::clock::now();
 
 
@@ -275,6 +279,13 @@ namespace {
         };
         auto* red=channel(TEXT("R"));auto* green=channel(TEXT("G"));auto* blue=channel(TEXT("B"));auto* alpha=channel(TEXT("A"));
         const auto stride=inner->GetElementSize();if(stride<=0 || stride>64)throw std::runtime_error("FColor stride is invalid");
+        const std::array<FNumericProperty*,4> channels{red,green,blue,alpha};
+        for(auto* field:channels)if(!ReflectedContract::Fits(field,stride))throw std::runtime_error("FColor channel exceeds its sample stride");
+        if(std::all_of(channels.begin(),channels.end(),[](auto* field){return field->GetElementSize()==1&&field->GetArrayDim()==1;})){
+            // Validate the reflected byte layout once, not four virtual reads per pixel.
+            if(auto bytes=IconCapture::ColorBytes({static_cast<const unsigned char*>(array->GetData()),static_cast<size_t>(array->Num())*stride},
+                static_cast<size_t>(array->Num()),static_cast<size_t>(stride),{red->GetOffset_Internal(),green->GetOffset_Internal(),blue->GetOffset_Internal(),alpha->GetOffset_Internal()}))return std::move(*bytes);
+        }
         std::vector<unsigned char> rgba(static_cast<size_t>(array->Num())*4);
         for(int32_t index=0;index<array->Num();++index) {
             auto* sample=static_cast<uint8_t*>(array->GetData())+static_cast<size_t>(index)*static_cast<size_t>(stride);
@@ -379,6 +390,13 @@ nlohmann::json Render(UWorld* world,const std::string& iconPath) {
     if(iconPath.empty()||iconPath.size()>1024||iconPath.front()!='/')throw std::runtime_error("Item icon request requires a canonical texture path");
     HelpySourceCache::Poll(HostServices::ModDirectory());if(!HelpySourceCache::Ready())return {{"Icon",iconPath},{"Status","Pending"}};
     const auto cachedFile=OutputFile(iconPath);
+    if(PendingWrite.valid()) {
+        if(PendingWrite.wait_for(std::chrono::seconds(0))!=std::future_status::ready)return {{"Icon",iconPath},{"Status","Pending"}};
+        auto reply=std::move(PendingWriteReply);PendingWriteReply=nlohmann::json{};
+        const bool matching=reply.value("Icon",std::string{})==iconPath&&reply.value("File",std::string{})==cachedFile.string();
+        try{PendingWrite.get();}catch(...){if(matching)throw;}
+        if(matching){QueueCacheMaintenance(cachedFile);return reply;}
+    }
     if(PS::SlowWork::Measure("helpy.icons.cache-read",[&]{return CachedThumbnail(cachedFile);})) {ActiveCapture.reset();PS::HelpyIconTrace::Event("core-cache-hit",iconPath,"file='"+cachedFile.string()+"'");QueueCacheMaintenance(cachedFile);return {{"Icon",iconPath},{"File",cachedFile.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",true},{"SourceKey",HelpySourceCache::Fingerprint(iconPath)}};}
     if(!world)throw std::runtime_error("Item icon rendering requires a loaded world");
     if(RendererWorld.Get()!=world){Reset();RendererWorld.Assign(world);}
@@ -407,10 +425,13 @@ nlohmann::json Render(UWorld* world,const std::string& iconPath) {
                 return {{"Icon",iconPath},{"Status","Pending"}};
             }
             if(alpha==0)for(std::size_t i=0;i+3<pixels.size();i+=4)pixels[i+3]=std::max({pixels[i],pixels[i+1],pixels[i+2]});
-            PS::SlowWork::Measure("helpy.icons.cache-write",[&]{WriteThumbnail(cachedFile,pixels);});
-            QueueCacheMaintenance(cachedFile);
             const auto result=nlohmann::json{{"Icon",iconPath},{"File",cachedFile.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",false},{"SourceKey",HelpySourceCache::Fingerprint(iconPath)},{"ColdLoad",capture.Cold},{"ResolvedClass",capture.ResolvedClass},{"ResolvedChain",capture.ResolvedChain}};
-            ActiveCapture.reset();return result;
+            PendingWriteReply=result;
+            // Only owned bytes/path cross this boundary; success is published after commit.
+            PendingWrite=std::async(std::launch::async,[file=cachedFile,pixels=std::move(pixels)]{
+                PS::SlowWork::Measure("helpy.icons.cache-write",[&]{WriteThumbnail(file,pixels);});
+            });
+            ActiveCapture.reset();return {{"Icon",iconPath},{"Status","Pending"}};
         };
         if(capture.Timing.CanRead(now))return readCapture();
         if(!capture.Timing.CanDraw(now))return {{"Icon",iconPath},{"Status","Pending"}};
@@ -462,7 +483,7 @@ nlohmann::json Render(UWorld* world,const std::string& iconPath) {
     capture->Texture.Hold(texture);capture->Timing.Begin(CaptureNow());ActiveCapture=std::move(capture);
     return {{"Icon",iconPath},{"Status","Pending"}};
 }
-void ShutdownDiskCache() noexcept {DiskMaintenance.Shutdown();}
+void ShutdownDiskCache() noexcept {if(PendingWrite.valid())try{PendingWrite.get();}catch(...){}PendingWriteReply=nlohmann::json{};DiskMaintenance.Shutdown();}
 void Reset() noexcept {
     ActiveCapture.reset();
     try{CaptureCleanup.Run([&]{if(auto* target=RendererTarget.Get())ReleaseRenderTarget(DefaultRenderingLibrary(),target);});}catch(...){}

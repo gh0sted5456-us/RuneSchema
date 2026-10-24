@@ -5,8 +5,8 @@
 #include <cctype>
 namespace PS::NativePersistencePolicy {
 inline constexpr const char* Variable="dom.PersistenceStrictMode";
-inline bool SessionRequested(bool dedicated,bool bypass,std::string_view mode)noexcept{return dedicated?bypass:mode!="vanilla";}
-inline bool BypassRequested(bool dedicated,bool bypass,std::string_view mode)noexcept{return bypass||(!dedicated&&mode!="vanilla");}
+inline bool SessionRequested(bool dedicated,bool /*bypass*/,std::string_view mode)noexcept{return dedicated||mode!="vanilla";}
+inline bool BypassRequested(bool dedicated,bool bypass,std::string_view mode)noexcept{return bypass||dedicated||mode!="vanilla";}
 enum class Outcome { Disabled,Unavailable,AlreadyTolerant,Applied,Failed,Restored,RestoreFailed };
 struct Lease {bool RestoreNeeded=false;};
 inline std::optional<bool> Parse(std::string_view value){

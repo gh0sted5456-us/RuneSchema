@@ -272,19 +272,19 @@ inline void BuildingBrowser(){
 inline void PlacePopup(){
     const auto& theme=HelpyImGuiTheme::Current;
     if(!ImGui::IsPopupOpen("##map-place")){Data.Popup=false;return;}
-    const auto display=ImGui::GetIO().DisplaySize;
+    const auto* viewport=ImGui::GetMainViewport();const auto display=viewport->WorkSize;
     const ImVec2 size{std::min(theme.X(400),display.x-theme.X(24)),std::min(theme.Y(650),display.y-theme.Y(24))};
     // Fill-width children cannot be measured by an auto-fit parent. Pin both
     // axes for the lifetime of this popup instead of shrinking one frame at a time.
     ImGui::SetNextWindowSize(size,ImGuiCond_Always);
-    ImGui::SetNextWindowPos({std::clamp(Data.MapPopupAnchor.x,theme.X(8),std::max(theme.X(8),display.x-size.x-theme.X(8))),std::clamp(Data.MapPopupAnchor.y,theme.Y(8),std::max(theme.Y(8),display.y-size.y-theme.Y(8)))},ImGuiCond_Always);
+    ImGui::SetNextWindowPos(viewport->GetWorkCenter(),ImGuiCond_Always,{.5f,.5f});
     if(!ImGui::BeginPopup("##map-place")){Data.Popup=false;return;}Data.Popup=true;const auto& t=HelpyImGuiTheme::Current;
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::MapPopupWindow={ImGui::GetWindowPos().x,ImGui::GetWindowPos().y,ImGui::GetWindowPos().x+size.x,ImGui::GetWindowPos().y+size.y};
 #endif
     ImGui::BeginChild("##map-options-body",{0,std::max(t.Y(60),ImGui::GetContentRegionAvail().y-t.Y(110))},false);
-    ImGui::TextUnformatted(Data.SelectionName.empty()?"Selected map point":Data.SelectionName.c_str());
-    ImGui::Text("X %.0f   Y %.0f",Data.Point.X,Data.Point.Y);
+    HelpyImGuiTheme::DetailsTextUnformatted(Data.SelectionName.empty()?"Selected map point":Data.SelectionName.c_str());
+    HelpyImGuiTheme::DetailsText("X %.0f   Y %.0f",Data.Point.X,Data.Point.Y);
     const bool groundReady=Data.Ground.value("GroundAvailable",false)&&Data.Ground.contains("Location")&&Data.Ground["Location"].is_array()&&Data.Ground["Location"].size()==3;
     if(groundReady){ImGui::Text("Z %.0f (ground)",Data.Ground["Location"][2].get<double>());ImGui::SameLine();if(ImGui::SmallButton("Copy coordinates")){char value[128];std::snprintf(value,sizeof(value),"X=%.0f Y=%.0f Z=%.0f",Data.Point.X,Data.Point.Y,Data.Ground["Location"][2].get<double>());ImGui::SetClipboardText(value);}}
     else if(Data.Operation!=2)ImGui::TextWrapped("%s",Data.ProbePending||Data.ProbeWanted?"Reading ground height...":ItemPresentation::Text(Data.Ground,"Error").c_str());
@@ -746,9 +746,10 @@ inline void Render(){
     }else{Data.HoverActive=false;Data.HoverGround=Json::object();if(!Data.GroundReadSelected)Data.GroundReadPending=0;}
     if(hoveredMarker){const auto label=ItemPresentation::Text(*hoveredMarker,"Name")+(ItemPresentation::Text(*hoveredMarker,"Kind")=="Lodestone"?" · RMB for travel options":"");draw->AddRectFilled({min.x+4,min.y+4},{max.x-4,min.y+t.Y(30)},IM_COL32(0,0,0,225));draw->AddText({min.x+t.X(10),min.y+t.Y(8)},ImGui::GetColorU32(t.text),label.c_str());
         if(hoveredMarker->contains("ResourceObservation")&&!Data.Popup){const auto& node=hoveredMarker->at("ResourceObservation");const auto at=node.value("ObservedUnixMs",int64_t{}),now=PartyMemberView::Now();
-            HelpyImGuiTheme::BeginDetailsTooltip();ImGui::TextUnformatted(label.c_str());
-            if(at>0&&now>=at&&now-at<=10000){if(node.contains("Quantity"))ImGui::Text("%s: %d / %d",ItemPresentation::Text(node,"State").c_str(),node.value("Quantity",0),node.value("Maximum",0));ImGui::TextWrapped("%s",ItemPresentation::Text(node,"TimerReason").c_str());}
-            else ImGui::TextWrapped("Observation expired; waiting for a nearby loaded node check.");HelpyImGuiTheme::EndDetailsTooltip();}
+            const auto& location=hoveredMarker->at("Location");const auto markerAt=screen({location[0].get<double>(),location[1].get<double>()});const float radius=t.X(8);
+            HelpyImGuiTheme::BeginDetailsTooltip({markerAt.x-radius,markerAt.y-radius},{markerAt.x+radius,markerAt.y+radius});PS::HelpyImGuiTheme::DetailsTextUnformatted(label.c_str());
+            if(at>0&&now>=at&&now-at<=10000){if(node.contains("Quantity"))PS::HelpyImGuiTheme::DetailsText("%s: %d / %d",ItemPresentation::Text(node,"State").c_str(),node.value("Quantity",0),node.value("Maximum",0));PS::HelpyImGuiTheme::DetailsText("%s",ItemPresentation::Text(node,"TimerReason").c_str());}
+            else PS::HelpyImGuiTheme::DetailsText("Observation expired; waiting for a nearby loaded node check.");HelpyImGuiTheme::EndDetailsTooltip();}
     }
     else if(hoveredReference){const auto& category=mapCache.Data->Categories[hoveredReference->Category];const auto label=hoveredReference->Name+" · "+category.Name+" · cached reference"+(referenceCount>1?" ("+std::to_string(referenceCount)+" nearby; zoom in)":"");draw->AddRectFilled({min.x+4,min.y+4},{max.x-4,min.y+t.Y(30)},IM_COL32(0,0,0,225));draw->AddText({min.x+t.X(10),min.y+t.Y(8)},ImGui::GetColorU32(t.text),label.c_str());}
     draw->PopClipRect();draw->AddRect(min,max,ImGui::GetColorU32(t.border));PlacePopup();

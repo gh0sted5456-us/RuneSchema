@@ -40,6 +40,7 @@
 #include "Utility/JsonHelpers.h"
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnosticB3C.h"
 #include "Loader/DragonWildsSpawnLoader.h"
 #include "Loader/DragonWildsBlueprintModLoader.h"
 #include "Loader/PlayerAttributeNames.h"
@@ -145,7 +146,10 @@ namespace DragonWilds {
 
         PS::JsonHelpers::ParseJsonFilesInPathWithSourceIsolated(loaderPath,
             [&](const nlohmann::json& data,const fs::path& source){m_playerDocuments.push_back({modName,data,source.generic_string()});},
-            [&](const fs::path& file,const std::string& error){PS::Log<LogLevel::Error>(STR("Player file '{}' in mod '{}' rejected: {}.\n"),file.native(),modName,PS::ToWideSafe(error.c_str()));});
+            [&](const fs::path& file,const std::string& error){PS::LogStructuredFallback<LogLevel::Error>(
+                PS::StructuredDiagnosticB3C::Report("RS-CORE-042","Error","Skipped","LoaderCore",
+                "Player definition file rejected",error,RC::to_string(modName),file.generic_string(),"PlayerRules","Parsing"),
+                STR("Player file '{}' in mod '{}' rejected: {}.\n"),file.native(),modName,PS::ToWideSafe(error.c_str()));});
     }
 
     void DragonWildsSpawnLoader::LoadNameplateDefinitions(
@@ -157,7 +161,10 @@ namespace DragonWilds {
             });
         PS::JsonHelpers::ParseJsonFilesInPathWithSourceIsolated(loaderPath,
             [&](const nlohmann::json& data,const fs::path& source){m_nameplateDocuments.push_back({modName,data,source.generic_string()});},
-            [&](const fs::path& file,const std::string& error){PS::Log<LogLevel::Error>(STR("Nameplate file '{}' in mod '{}' rejected: {}.\n"),file.native(),modName,PS::ToWideSafe(error.c_str()));});
+            [&](const fs::path& file,const std::string& error){PS::LogStructuredFallback<LogLevel::Error>(
+                PS::StructuredDiagnosticB3C::Report("RS-CORE-043","Error","Skipped","LoaderCore",
+                "Nameplate definition file rejected",error,RC::to_string(modName),file.generic_string(),"Nameplates","Parsing"),
+                STR("Nameplate file '{}' in mod '{}' rejected: {}.\n"),file.native(),modName,PS::ToWideSafe(error.c_str()));});
     }
 
     void DragonWildsSpawnLoader::FinalizeNameplateDefinitions()
@@ -166,7 +173,10 @@ namespace DragonWilds {
         for (const auto& document : m_nameplateDocuments)
         {
             if (!document.Document.is_array()) {
-                PS::Log<LogLevel::Error>(STR("Nameplates file '{}' in mod '{}' rejected: root must be an array.\n"),PS::ToWideSafe(document.SourceFile.c_str()),document.ModName);
+                PS::LogStructuredFallback<LogLevel::Error>(
+                    PS::StructuredDiagnosticB3C::Report("RS-CORE-044","Error","Skipped","LoaderCore",
+                    "Nameplate root invalid","Nameplate definitions must be an array.",RC::to_string(document.ModName),document.SourceFile,"Nameplates","Validation"),
+                    STR("Nameplates file '{}' in mod '{}' rejected: root must be an array.\n"),PS::ToWideSafe(document.SourceFile.c_str()),document.ModName);
                 continue;
             }
             std::size_t ordinal=0;
@@ -187,7 +197,11 @@ namespace DragonWilds {
                         throw std::runtime_error("duplicate namespaced Id");
                 } catch(const std::exception& error) {
                     const auto id=entry.is_object()?entry.value("Id",std::string("<missing Id>")):std::string("<non-object>");
-                    PS::Log<LogLevel::Error>(STR("Nameplate '{}:{}' in file '{}' (entry #{}) rejected: {}.\n"),
+                    PS::LogStructuredFallback<LogLevel::Error>(
+                        PS::StructuredDiagnosticB3C::Report("RS-CORE-045","Error","Skipped","LoaderCore",
+                        "Nameplate entry rejected",error.what(),RC::to_string(document.ModName),document.SourceFile,
+                        "Nameplate:"+id,"Validation"),
+                        STR("Nameplate '{}:{}' in file '{}' (entry #{}) rejected: {}.\n"),
                         document.ModName,PS::ToWideSafe(id.c_str()),PS::ToWideSafe(document.SourceFile.c_str()),ordinal,PS::ToWideSafe(error.what()));
                 }
             }
@@ -781,7 +795,10 @@ namespace DragonWilds {
         {
             if (!owned.Document.is_array())
             {
-                PS::Log<LogLevel::Error>(STR("Players file for {} must be an array.\n"), owned.ModName);
+                PS::LogStructuredFallback<LogLevel::Error>(
+                    PS::StructuredDiagnosticB3C::Report("RS-CORE-046","Error","Skipped","LoaderCore",
+                    "Player definitions root invalid","Players document root must be an array.",RC::to_string(owned.ModName),owned.SourceFile,"PlayerRules","Validation"),
+                    STR("Players file for {} must be an array.\n"), owned.ModName);
                 continue;
             }
             std::size_t ordinal = 0;
@@ -820,7 +837,10 @@ namespace DragonWilds {
                 }
                 catch (const std::exception& error)
                 {
-                    PS::Log<LogLevel::Error>(STR("Player rule from {} was rejected: {}.\n"),
+                    PS::LogStructuredFallback<LogLevel::Error>(
+                        PS::StructuredDiagnosticB3C::Report("RS-CORE-047","Error","Skipped","LoaderCore",
+                        "Player rule entry rejected",error.what(),RC::to_string(owned.ModName),owned.SourceFile,"PlayerRules","Validation"),
+                        STR("Player rule from {} was rejected: {}.\n"),
                         owned.ModName, PS::ToWideSafe(error.what()));
                 }
             }
@@ -836,7 +856,10 @@ namespace DragonWilds {
             const auto found = byReference.find(reference);
             if (found == byReference.end())
             {
-                PS::Log<LogLevel::Error>(STR("{}: player $Patch target '{}' was not loaded; no rule was created.\n"),
+                PS::LogStructuredFallback<LogLevel::Error>(
+                    PS::StructuredDiagnosticB3C::Report("RS-CORE-048","Error","Skipped","LoaderCore",
+                    "Player patch target missing","The referenced player rule was not loaded.",RC::to_string(patch.Owner),{},reference,"Resolution"),
+                    STR("{}: player $Patch target '{}' was not loaded; no rule was created.\n"),
                     patch.Owner, RC::to_generic_string(reference));
                 ++patchErrors;
                 continue;
@@ -858,7 +881,10 @@ namespace DragonWilds {
             try { ParsePlayerRulesDocument(nlohmann::json::array({definition.Body}), definition.Owner); }
             catch (const std::exception& error)
             {
-                PS::Log<LogLevel::Error>(STR("Failed to register player rule '{}' from {}: {}.\n"),
+                PS::LogStructuredFallback<LogLevel::Error>(
+                    PS::StructuredDiagnosticB3C::Report("RS-CORE-049","Error","Skipped","LoaderCore",
+                    "Player rule registration failed",error.what(),RC::to_string(definition.Owner),{},definition.Reference,"Application"),
+                    STR("Failed to register player rule '{}' from {}: {}.\n"),
                     RC::to_generic_string(definition.Reference), definition.Owner,
                     PS::ToWideSafe(error.what()));
             }

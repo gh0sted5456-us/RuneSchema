@@ -16,7 +16,8 @@
 namespace PS::AutoMapping {
 namespace fs=std::filesystem;using Json=nlohmann::json;
 inline fs::path Root,Host,Request;inline std::string Build,Nonce;inline bool Pending=false;inline double Elapsed=0;inline ULONGLONG Started=0;
-inline Json Previous=Json::object();
+struct CacheLease {HANDLE Handle=INVALID_HANDLE_VALUE;~CacheLease(){if(Handle!=INVALID_HANDLE_VALUE)CloseHandle(Handle);}};
+inline CacheLease Lease;
 inline std::map<fs::path,std::pair<uintmax_t,fs::file_time_type>> Before;
 inline std::string Key(std::string_view text){uint64_t hash=14695981039346656037ull;for(unsigned char c:text){hash^=c;hash*=1099511628211ull;}std::ostringstream out;out<<std::hex<<std::setfill('0')<<std::setw(16)<<hash;return out.str();}
 inline bool Hex(const std::string& value){return value.size()==16&&value.find_first_not_of("0123456789abcdef")==value.npos;}
@@ -35,27 +36,40 @@ inline MappingBackbone::Mapping Validate(const fs::path& file){
     return {file,bytes,fingerprint,true};
 }
 inline void Prune(const Json& receipt)noexcept{try{
-    // Only exact hash-addressed generated files from a previous committed
-    // receipt are eligible. No recursive delete, host dump, shipped fallback,
-    // index directory, custom mapping or neighbouring file is ever targeted.
-    const auto removed=MappingRetention::RemoveRetired(Root,receipt,[](const fs::path& file,const std::string& fingerprint){if(Validate(file).Fingerprint!=fingerprint)throw std::runtime_error("Current generated mapping did not validate; old files retained");},[](const fs::path& file){Safe(file);});
-    if(removed)ConsolidatedLog<RC::LogLevel::Normal>(STR("[RuneSchema] [MAPPINGS][CLEANUP] Removed {} superseded generated .usmap file(s) after validating the active replacement. Shipped/custom mappings retained.\n"),removed);
+    const auto validate=[](const fs::path& file,const std::string& fingerprint){if(Validate(file).Fingerprint!=fingerprint)throw std::runtime_error("Current generated mapping did not validate; old files retained");};
+    const auto safe=[](const fs::path& file){Safe(file);};const auto active=MappingRetention::File(Root,receipt);
+    const auto removed=MappingRetention::Cleanup(Root,receipt,active,validate,safe);
+    if(removed)ConsolidatedLog<RC::LogLevel::Normal>(STR("[RuneSchema] [MAPPINGS][CLEANUP] Removed {} retired generated mapping/cache file(s); custom files retained.\n"),removed);
 }catch(const std::exception& error){Log<RC::LogLevel::Warning>(STR("[MAPPINGS][CLEANUP] New mapping is retained; old-file cleanup deferred: {}\n"),ToWideSafe(error.what()));}}
+inline void FinishRequest()noexcept{try{
+    if(Request.empty())return;
+    for(const auto& path:{Request,fs::path(Request.wstring()+L".result")}){Safe(path);fs::remove(path);}
+    SetEnvironmentVariableW(L"RUNESCHEMA_AUTO_MAPPING_REQUEST",nullptr);_putenv_s("RUNESCHEMA_AUTO_MAPPING_REQUEST","");
+}catch(...){/* Stale handoff files are bounded by the next validated cache cleanup. */}}
 inline void Prepare()noexcept{try{
-    if(!PSConfig::Get()->GetSettings().autoUpdateMappings||GetEnvironmentVariableW(L"RUNESCHEMA_DISABLE_AUTO_MAPPING",nullptr,0))return;
+    if(Lease.Handle!=INVALID_HANDLE_VALUE)return;
     wchar_t executable[32768]{};const auto length=GetModuleFileNameW(nullptr,executable,_countof(executable));if(!length||length>=_countof(executable))return;
     const fs::path binary(executable);
     // Resolve the managed package alias once; redirects inside the cache remain forbidden.
-    const auto [root,host]=RuntimeModPath::MappingRoots(HostServices::ModDirectory(),HostServices::WorkingDirectory(),HostServices::CacheDirectory());
-    Root=root;Host=host;Safe(Root);Safe(Host);
+    Host=RuntimeModPath::Resolve(HostServices::WorkingDirectory());
+    const auto mod=RuntimeModPath::Resolve(HostServices::ModDirectory());
+    if(mod.parent_path().parent_path()!=Host)throw std::runtime_error("Automatic mapping runtime directory identity differs");
+    Root=HostServices::MappingCacheDirectory();Safe(Root);Safe(Host);fs::create_directories(Root);
+    const auto lock=Root/"cache.lock";Safe(lock);
+    Lease.Handle=CreateFileW(lock.c_str(),GENERIC_READ|GENERIC_WRITE,0,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
+    if(Lease.Handle==INVALID_HANDLE_VALUE)throw std::runtime_error("Platform mapping cache is busy or inaccessible; no cache files changed");
     Build=Key(MappingCompatibility::Identity(binary,Host,Host/"Mods/RuneSchema",ExecutableVersion::Current()));
     const auto receipt=Root/"current.json";
-    if(fs::is_regular_file(receipt))try{Safe(receipt);const auto saved=Json::parse(ConfigFiles::Read(receipt,8192));const auto fingerprint=saved.value("Fingerprint",std::string{});if(saved.value("Version",0)==1&&MappingRetention::Identity(saved))Previous=saved;
+    if(fs::is_regular_file(receipt))try{Safe(receipt);const auto saved=Json::parse(ConfigFiles::Read(receipt,8192));const auto fingerprint=saved.value("Fingerprint",std::string{});
         if(saved.value("Version",0)==1&&saved.value("Build",std::string{})==Build&&Hex(fingerprint)){
             auto mapping=Validate(Root/Build/(fingerprint+".usmap"));if(mapping.Fingerprint!=fingerprint)throw std::runtime_error("Cached generated mapping fingerprint changed");
-            MappingBackbone::Activate(std::move(mapping));Prune(saved);return;
+            MappingBackbone::Activate(std::move(mapping));Prune(saved);
+            ConsolidatedLog<RC::LogLevel::Normal>(STR("[RuneSchema] [MAPPINGS][READY] Reusing the validated platform runtime mapping.\n"));return;
         }
-    }catch(const std::exception&){/* Retain shipped fallback and regenerate; never trust a broken receipt. */}
+    }catch(const std::exception&){/* Never activate an invalid or mismatched cache; capture a replacement. */}
+    if(!PSConfig::Get()->GetSettings().autoUpdateMappings||GetEnvironmentVariableW(L"RUNESCHEMA_DISABLE_AUTO_MAPPING",nullptr,0)){
+        ConsolidatedLog<RC::LogLevel::Normal>(STR("[RuneSchema] [MAPPINGS][UNAVAILABLE] No matching cached mapping; automatic capture is disabled. Live reflection remains active.\n"));return;
+    }
     fs::create_directories(Root/"requests");Nonce=Key(Build+"|"+std::to_string(GetCurrentProcessId())+"|"+std::to_string(GetTickCount64()));Request=Root/"requests"/(Nonce+".request");Safe(Request);
     size_t count=0;for(const auto& entry:fs::directory_iterator(Host))if(entry.is_regular_file()&&entry.path().extension()==L".usmap"){
         if(++count>64)throw std::runtime_error("Automatic mapping candidate limit exceeded");Safe(entry.path());Before[entry.path()]={entry.file_size(),entry.last_write_time()};
@@ -65,8 +79,8 @@ inline void Prepare()noexcept{try{
     if(!SetEnvironmentVariableW(L"RUNESCHEMA_AUTO_MAPPING_REQUEST",Request.c_str())||_putenv_s("RUNESCHEMA_AUTO_MAPPING_REQUEST",requestPath.c_str())!=0)
         throw std::runtime_error("Automatic mapping Lua/CRT handoff failed");
     Pending=true;Started=GetTickCount64();
-    ConsolidatedLog<RC::LogLevel::Normal>(STR("[RuneSchema] [MAPPINGS][UPDATE] Game build needs a fresh reflection mapping; native UE4SS dump queued. Existing mapping and native safety checks remain active.\n"));
-}catch(const std::exception& error){Pending=false;Log<RC::LogLevel::Warning>(STR("[MAPPINGS][DEFERRED] {}. Last working mapping retained.\n"),ToWideSafe(error.what()));}}
+    ConsolidatedLog<RC::LogLevel::Normal>(STR("[RuneSchema] [MAPPINGS][CAPTURE] No matching cached mapping yet; native UE4SS capture queued. Once capture completes, the next launch will reuse it. Live reflection and native safety checks remain active.\n"));
+}catch(const std::exception& error){Pending=false;FinishRequest();Log<RC::LogLevel::Warning>(STR("[MAPPINGS][DEFERRED] {}. Existing cache files retained; live reflection remains active.\n"),ToWideSafe(error.what()));}}
 inline void Start(){if(!Pending)return;
     RC::Unreal::Hook::FCallbackOptions options{};options.OwnerModName=STR("RuneSchema");options.HookName=STR("RuneSchemaAutoMapping");
     RC::Unreal::Hook::RegisterEngineTickPostCallback([](auto& iteration,RC::Unreal::UEngine*,float delta,bool){
@@ -92,11 +106,11 @@ inline void Start(){if(!Pending)return;
             }
             auto published=Validate(destination);if(published.Fingerprint!=mapping.Fingerprint)throw std::runtime_error("Published mapping differs");
             const auto receipt=Root/"current.json";Safe(receipt);if(fs::exists(receipt))ConfigFiles::Backup(receipt);
-            Json nextReceipt={{"Version",1},{"Build",Build},{"Fingerprint",published.Fingerprint},{"Coverage","Native and currently loaded Blueprint reflection; not an unloaded-asset sweep"}};nextReceipt["Retired"]=MappingRetention::Retired(Previous,nextReceipt);
+            Json nextReceipt={{"Version",1},{"Build",Build},{"Fingerprint",published.Fingerprint},{"Coverage","Native and currently loaded Blueprint reflection; not an unloaded-asset sweep"}};
             ConfigFiles::Write(receipt,nextReceipt.dump(2));
-            MappingBackbone::Activate(std::move(published));Pending=false;Prune(nextReceipt);
-            ConsolidatedLog<RC::LogLevel::Normal>(STR("[RuneSchema] [MAPPINGS][UPDATED] Fresh UE4SS reflection mapping validated and activated; shipped fallback and native hook guards retained.\n"));
-        }catch(const std::exception& error){Pending=false;Log<RC::LogLevel::Warning>(STR("[MAPPINGS][DEFERRED] {}. Last working mapping retained.\n"),ToWideSafe(error.what()));}
+            MappingBackbone::Activate(std::move(published));Pending=false;FinishRequest();Prune(nextReceipt);
+            ConsolidatedLog<RC::LogLevel::Normal>(STR("[RuneSchema] [MAPPINGS][UPDATED] Mapping validated and cached in this runtime; available now and reusable on the next launch. Native hook guards retained.\n"));
+        }catch(const std::exception& error){Pending=false;FinishRequest();Log<RC::LogLevel::Warning>(STR("[MAPPINGS][DEFERRED] {}. Existing cache files retained; live reflection remains active.\n"),ToWideSafe(error.what()));}
         if(!Pending)iteration.RemoveSelf();
     },options);
 }

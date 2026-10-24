@@ -1,5 +1,8 @@
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnostics.h"
+#include "Utility/StructuredDiagnosticB3.h"
+#include "Core/JsonDocument.h"
 #include "Helpers/String.hpp"
 #include "Core/ConfigFiles.h"
 #include "Utility/ConfigCodec.h"
@@ -79,12 +82,29 @@ namespace PS {
 
     void PSConfig::Load()
     {
+        JsonHelpers::SetDiagnosticReporter(+[](const char* code,const fs::path& file,
+                const std::string& field,const std::string& detail) noexcept {
+            try {
+                auto provenance=StructuredDiagnosticB3::FromPath(file);
+                if(std::string_view(code)=="RS-JSON-005")provenance.File.clear();
+                provenance.OperationId=StructuredDiagnosticB2::NewOperationId("json");
+                const std::string identifier=code;
+                const bool missing=identifier=="RS-JSON-002";
+                const bool incompatible=identifier=="RS-JSON-003";
+                const bool limit=identifier=="RS-JSON-004"||identifier=="RS-JSON-005";
+                const auto title=missing?"Required JSON field missing":incompatible?
+                    "JSON field has wrong type":limit?"JSON safety limit exceeded":"JSON definition could not be parsed";
+                (void)StructuredDiagnosticB3::Report(identifier,"Error",missing||incompatible||limit?"Blocked":"Failed",
+                    "JsonParser",title,detail,std::move(provenance),
+                    (identifier=="RS-JSON-005")?"Discovery":(missing||incompatible||limit)?"Validation":"Parsing",field);
+            }catch(...){}
+        });
         m_settings = PSConfigSettings{};
         m_preserveOriginal = true;
         m_configDocument=nlohmann::json::object();
         m_configFile=GetSettingsPath()/"settings.ini";
         try {
-            HostServices::MigrateLegacyLayout();
+            HostServices::InitializeRuntimeLayout();
             if(!fs::exists(m_configFile)&&fs::exists(GetSettingsPath()/"settings.jsonc"))m_configFile=GetSettingsPath()/"settings.jsonc";
             auto loaded=SettingsStore::Load(GetSettingsPath());
             m_settings=std::move(loaded.Settings);
@@ -93,12 +113,14 @@ namespace PS {
             m_status=std::move(loaded.Status);
             m_preserveOriginal=false;
             DiagnosticLog::Initialize(m_settings.archiveLogs);
+            StructuredDiagnostics::Initialize();
             PS::Log<RC::LogLevel::Normal>(STR("{}\n"),RC::to_generic_string(m_status));
         } catch (const std::exception& error) {
             // Invalid configuration must not discard the earlier diagnostic log.
             DiagnosticLog::Initialize(false,false);
+            StructuredDiagnostics::Initialize();
             m_status = std::string("Cannot load configuration; using session defaults. Originals left untouched: ") + error.what();
-            PS::Log<RC::LogLevel::Error>(STR("{}\n"), RC::to_generic_string(m_status));
+            PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::ConfigLoadFailed, STR("{}\n"), RC::to_generic_string(m_status));
         }
     }
 
@@ -122,12 +144,12 @@ namespace PS {
             m_preserveOriginal = false;
             m_status = backup.empty() ? "Settings saved. Restart for startup settings."
                 : "Configuration recovered with current settings. Original preserved at: " + backup.string();
-            if (!backup.empty()) PS::Log<RC::LogLevel::Warning>(STR("{}\n"), RC::to_generic_string(m_status));
+            if (!backup.empty()) PS::CodedLog<RC::LogLevel::Warning>(PS::Diagnostics::Id::ConfigRecovered, STR("{}\n"), RC::to_generic_string(m_status));
             return true;
         } catch (const std::exception& error) {
             m_status = std::string("Settings NOT saved; changes are session-only. ") + error.what();
             if (!backup.empty()) m_status += " Original backup: " + backup.string();
-            PS::Log<RC::LogLevel::Error>(STR("{}\n"), RC::to_generic_string(m_status));
+            PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::ConfigSaveFailed, STR("{}\n"), RC::to_generic_string(m_status));
             return false;
         }
     }

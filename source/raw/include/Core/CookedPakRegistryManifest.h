@@ -13,6 +13,7 @@
 #include <optional>
 #include <set>
 #include <nlohmann/json.hpp>
+#include "Core/NativeDataFamilies.h"
 
 namespace PS::CookedPakRegistryManifest {
     struct Lane {
@@ -64,6 +65,18 @@ namespace PS::CookedPakRegistryManifest {
             value *= Prime;
         }
 
+        inline std::string Fold(std::string value){for(auto& c:value)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));return value;}
+        inline bool OwnedObjectPath(const std::string& path,const std::string& owner){
+            if(owner.empty()||owner.size()>96||!std::all_of(owner.begin(),owner.end(),[](unsigned char c){return (c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='_'||c=='-'||c=='.';})
+                ||!ValidAssetPath(path)||path.find_first_of("\\: ")!=path.npos
+                ||std::any_of(path.begin(),path.end(),[](unsigned char c){return c<33||c>126;}))return false;
+            const auto dot=path.find('.',path.find_last_of('/')+1);
+            const auto folded=Fold(path),name=Fold(owner);
+            if(name=="game"||name=="engine"||name=="script"||name=="runeschema"||name=="fmodel")return false;
+            return dot!=path.npos&&dot<path.size()-1&&path.find('.',dot+1)==path.npos
+                &&(folded.starts_with("/"+name+"/")||folded.starts_with("/game/mods/"+name+"/"));
+        }
+
         inline std::vector<std::string> ReadPaths(const nlohmann::json& root,
             const char* field, std::size_t& total,std::set<std::string>* schemaPaths=nullptr)
         {
@@ -105,15 +118,15 @@ namespace PS::CookedPakRegistryManifest {
         const auto native = document.value("NativeRegistries",nlohmann::json::object());
         if (!native.is_object())
             throw std::runtime_error("NativeRegistries must be an object");
-        static constexpr std::array<const char*, 12> Allowed{{
+        static constexpr std::array<const char*, 15> Allowed{{
             "Items", "Recipes", "Quests", "CombatSpells", "UtilitySpells",
             "Journals", "Lore",
             "EquipmentEffects", "WearableMeshData", "MeleeAttackClasses",
-            "RangedAttackClasses", "CacheAssets"}};
+            "RangedAttackClasses", "CacheAssets", "Skills", "SkillPerks", "Enums"}};
         for (const auto& [key, unused] : native.items())
         {
             (void)unused;
-            if (std::ranges::find(Allowed, key) == Allowed.end())
+            if (std::ranges::find(Allowed, key) == Allowed.end()&&!PS::NativeDataFamilies::Find(key))
                 throw std::runtime_error("NativeRegistries contains unsupported lane '"
                     + key + "'");
         }
@@ -127,6 +140,25 @@ namespace PS::CookedPakRegistryManifest {
         {
             auto paths = Detail::ReadPaths(native, lane, total,&result.SchemaPaths);
             if (!paths.empty()) result.AssetLanes.push_back({lane, std::move(paths)});
+        }
+        for(const auto* lane:{"Skills","SkillPerks","Enums"}){
+            auto paths=Detail::ReadPaths(native,lane,total);std::set<std::string> unique;
+            for(const auto& path:paths){
+                if(!Detail::OwnedObjectPath(path,owner))throw std::runtime_error(std::string("NativeRegistries.")+lane+" requires full mod-owned cooked object paths");
+                if(!unique.insert(Detail::Fold(path)).second)throw std::runtime_error("Duplicate mod-owned object path (case-insensitive)");
+            }
+            std::ranges::sort(paths);
+            if(!paths.empty())result.AssetLanes.push_back({lane,std::move(paths)});
+        }
+        for(const auto& family:PS::NativeDataFamilies::Families){
+            auto paths=Detail::ReadPaths(native,family.Lane,total);std::set<std::string> unique;
+            for(const auto& path:paths){
+                const auto dot=path.find('.',path.find_last_of('/')+1);
+                if(dot==path.npos||dot==path.size()-1||path.find('.',dot+1)!=path.npos||path.find_first_of("\\: ")!=path.npos
+                    ||std::any_of(path.begin(),path.end(),[](unsigned char c){return c<33||c>126;}))throw std::runtime_error(std::string("NativeRegistries.")+family.Lane+" requires exact cooked object paths");
+                if(!unique.insert(Detail::Fold(path)).second)throw std::runtime_error("Duplicate cooked object path (case-insensitive)");
+            }
+            std::ranges::sort(paths);if(!paths.empty())result.AssetLanes.push_back({family.Lane,std::move(paths)});
         }
         result.WearableMeshData = Detail::ReadPaths(
             native, "WearableMeshData", total,&result.SchemaPaths);
@@ -188,6 +220,7 @@ namespace PS::CookedPakRegistryManifest {
             [&](const Manifest& value) {return value.Owner==result.Owner&&value.Source==result.Source;});
         if(existing==manifests.end())manifests.push_back(result);else *existing=result;
     }
+    inline bool HasPublishedDeclarations(){std::scoped_lock lock(Detail::Mutex);return !Detail::Manifests.empty();}
     inline std::vector<Manifest> Snapshot()
     {
         std::scoped_lock lock(Detail::Mutex);
@@ -238,6 +271,12 @@ namespace PS::CookedPakRegistryManifest {
         std::scoped_lock lock(Detail::Mutex);
         auto next=Detail::Manifests;
         for(const auto& manifest:batch)Upsert(next,manifest);
+        std::map<std::string,std::pair<std::string,std::string>> ownership;
+        for(const auto& manifest:next)for(const auto& lane:manifest.AssetLanes)if(lane.Name=="Skills"||lane.Name=="SkillPerks"||lane.Name=="Enums")
+            for(const auto& path:lane.Paths){const auto claim=std::pair{Detail::Fold(manifest.Owner),lane.Name};
+                const auto [found,inserted]=ownership.emplace(Detail::Fold(path),claim);
+                if(!inserted&&found->second!=claim)throw std::runtime_error("Conflicting owner or native lane for cooked object: "+path);
+            }
         for(const auto* lane:{"Recipes","Journals","Lore"})(void)MergeDefinitions(next,lane);
         Detail::Manifests.swap(next);
     }

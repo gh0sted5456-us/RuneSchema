@@ -8,6 +8,7 @@
 #include <vector>
 namespace PS::HelpyPreviewHooks {
 inline unsigned ModifiedItemBadges=0;
+inline unsigned RuntimeBadgeDraws=0;
 inline unsigned CartVerifiedBadges=0,CartRejectedBadges=0,CartUncertainBadges=0;
 inline ImVec4 DeliveryBadge{};inline ImVec2 DeliveryBadgeBottomLeft{};
 inline ImVec4 CacheDetach{},CacheAdvanced{};
@@ -18,6 +19,8 @@ inline ImVec4 RecipientsClear{};
 inline std::map<std::string,ImVec4> AuthoringButtons;
 inline std::map<std::string,ImVec4> WorkspaceTabs;
 inline std::map<std::string,ImVec4> Navigation;
+inline std::map<std::string,ImVec4> BugFields;
+inline ImVec4 BugSubmit{};
 inline ImVec4 Browser{},Cart{},Inputs{},Outputs{},Give{},AddCart{};
 inline ImVec4 InventoryViewport{},SavedItemRect{};
 inline ImVec4 LiveInventoryViewport{};
@@ -44,7 +47,7 @@ inline bool MapForceGroupsOpen=false;
 inline std::map<std::string,ImVec4> MapCategoryControls;
 inline size_t MapReferenceMatches=0,MapReferenceClusters=0;
 inline ImVec4 MapSpawn{};
-inline ImVec4 RuntimeBadge{},InformationBar{},PageHeading{};
+inline ImVec4 RuntimeBadge{},InformationBar{},PageHeading{},NavigationRail{};
 inline ImVec4 RuntimeGameLogo{},SplashEnter{};
 inline ImVec4 BackgroundPicture{};
 inline size_t BackgroundDraws=0;
@@ -82,6 +85,7 @@ inline size_t LoadingRings=0;
 inline size_t LoadingDetailsShown=0;
 inline std::string LoadingDetailsText;
 inline ImVec4 LoadingRect{};
+inline ImVec4 LoadingDetailsRect{};
 inline std::map<std::string,ImVec4> ResizeHandles;
 inline bool MouseEnabled=false,MouseDown=false,RightDown=false;
 inline std::string TooltipPath;

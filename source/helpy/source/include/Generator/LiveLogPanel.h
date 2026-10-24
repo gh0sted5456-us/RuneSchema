@@ -1,5 +1,7 @@
 #pragma once
 #include "Core/LiveLog.h"
+#include "Core/DiagnosticLegacyIntake.h"
+#include "Core/StructuredDiagnosticRegistry.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Generator/RuneSchemaSettingsPanel.h"
 #include "Runtime/HostServices.h"
@@ -7,6 +9,9 @@
 #include <shellapi.h>
 #include <future>
 #include <fstream>
+#include <functional>
+#include <deque>
+#include <cmath>
 #include <set>
 
 namespace PS::LiveLogPanel {
@@ -23,6 +28,8 @@ struct StreamState {
     std::vector<LiveLog::Group> Visible;
     std::array<size_t,4> Counts{};
     std::set<std::string> Scopes;
+    std::deque<std::string> PausedLines;
+    size_t PausedBytes=0;
     std::uint64_t Selected=0,Revision=~std::uint64_t{};
 };
 inline std::array<StreamState,4> Streams;
@@ -34,9 +41,14 @@ inline size_t ExportStream=0;
 inline bool Preview=false;
 inline bool PreviewUE4SS=false;
 inline int PreviewStream=-1;
-inline auto Path(size_t index){return Streams[index].File.empty()?LiveLog::LogPath(HostServices::ModDirectory(),static_cast<LiveLog::Stream>(index)):Streams[index].File;}
-inline void Shutdown(){for(auto& stream:Streams)if(stream.Worker.valid())try{(void)stream.Worker.get();}catch(...){}if(ExportWorker.valid())try{(void)ExportWorker.get();}catch(...){};}
-inline void Poll(size_t index){
+inline std::function<void(const LiveLog::Entry&)> OnEntry;
+inline std::function<void(const LiveLog::Entry&)> OnBackfillEntry;
+inline bool RuneSchemaLiveReady=false;
+inline std::uint64_t RevealId=0;
+inline bool SelectRuneSchemaTab=false;
+inline auto Path(size_t index=0){return Streams[index].File.empty()?LiveLog::LogPath(HostServices::ModDirectory(),static_cast<LiveLog::Stream>(index)):Streams[index].File;}
+inline void Shutdown(){OnEntry={};OnBackfillEntry={};for(auto& stream:Streams)if(stream.Worker.valid())try{(void)stream.Worker.get();}catch(...){}if(ExportWorker.valid())try{(void)ExportWorker.get();}catch(...){};}
+inline void Poll(size_t index,bool background=false){
     auto& state=Streams[index];auto& Worker=state.Worker;auto& Cursor=state.Cursor;auto& History=state.History;
     auto& ReadError=state.ReadError;auto& Status=state.Status;auto& Selected=state.Selected;auto& NextRead=state.NextRead;
     if(ExportWorker.valid()&&ExportWorker.wait_for(std::chrono::seconds(0))==std::future_status::ready){try{Streams[ExportStream].Status=ExportWorker.get();}catch(...){Streams[ExportStream].Status="Export failed.";}}
@@ -46,20 +58,63 @@ inline void Poll(size_t index){
             if(batch.Reset||(!state.File.empty()&&state.File!=batch.File)){History.Clear();Selected=0;Status="Log rotated or changed; showing the new file.";}
             state.File=std::move(batch.File);
             if(batch.Skipped)Status="Showing the recent log tail; the original full log is unchanged.";
-            for(auto& line:batch.Lines)History.Append(std::move(line));
+            for(auto& line:batch.Lines){
+                if(index==0 && state.Paused){
+                    const auto entry=LiveLog::Parse(line);
+                    if(RuneSchemaLiveReady){if(OnEntry)OnEntry(entry);}
+                    else if(OnBackfillEntry)OnBackfillEntry(entry);
+                    state.PausedBytes+=line.size();state.PausedLines.push_back(std::move(line));
+                    while(state.PausedLines.size()>4000||state.PausedBytes>2*1024*1024){
+                        state.PausedBytes-=state.PausedLines.front().size();state.PausedLines.pop_front();
+                    }
+                }else{
+                    History.Append(std::move(line));
+                    if(index==0){
+                        const auto& entry=History.Rows.back();
+                        if(RuneSchemaLiveReady){if(OnEntry)OnEntry(entry);}
+                        else if(OnBackfillEntry)OnBackfillEntry(entry);
+                    }
+                }
+            }
+            if(index==0&&!batch.More&&(!batch.Error.empty()||batch.Next.Started))RuneSchemaLiveReady=true;
         }catch(const std::exception& error){ReadError=error.what();}
     }
+    if(index==0&&!state.Paused&&!state.PausedLines.empty()){
+        while(!state.PausedLines.empty()){
+            state.PausedBytes-=state.PausedLines.front().size();
+            History.Append(std::move(state.PausedLines.front()));state.PausedLines.pop_front();
+        }
+    }
     const auto now=std::chrono::steady_clock::now();
-    if(!state.Paused&&!Worker.valid()&&now>=NextRead){
-        NextRead=now+std::chrono::milliseconds(250);const auto path=Path(index),override=state.Override,mod=HostServices::ModDirectory();const auto cursor=Cursor;const auto previous=state.File;
+    if((index==0||!state.Paused)&&!Worker.valid()&&now>=NextRead){
+        NextRead=now+std::chrono::milliseconds(background?1000:250);const auto path=Path(index),override=state.Override,mod=HostServices::ModDirectory();const auto cursor=Cursor;const auto previous=state.File;
         wchar_t local[32768]{};const auto length=GetEnvironmentVariableW(L"LOCALAPPDATA",local,32768);const std::filesystem::path localRoot=length&&length<32768?local:L"";
         Worker=std::async(std::launch::async,[path,override,mod,localRoot,cursor,previous,index]{
             const auto file=!override.empty()?override:index>=2?LiveLog::ResolveGameLog(mod,localRoot):path;
-            auto batch=LiveLog::Read(file,previous.empty()||previous==file?cursor:LiveLog::Cursor{});
+            auto batch=LiveLog::Read(file,previous.empty()||previous==file?cursor:LiveLog::Cursor{},
+                                     true,index==0?4ULL*1024*1024:1024ULL*1024);
             if(!previous.empty()&&previous!=file)batch.Reset=true;
             if(index==3)std::erase_if(batch.Lines,[](const auto& line){return !LiveLog::EOSLine(line);});return batch;
         });
     }
+}
+inline void Poll(){Poll(0);}
+inline void DrainPending(){
+    auto& stream=Streams[0];
+    if(!stream.Worker.valid())return;
+    stream.Worker.wait();
+    stream.NextRead=std::chrono::steady_clock::now()+std::chrono::hours(24);
+    Poll(0);
+}
+inline bool Reveal(std::uint64_t id){
+    if(!id)return false;
+    auto& state=Streams[0];
+    const auto found=std::find_if(state.History.Rows.begin(),state.History.Rows.end(),[&](const auto& row){return row.Id==id;});
+    if(found==state.History.Rows.end())return false;
+    state.Selected=id;RevealId=id;SelectRuneSchemaTab=true;state.Follow=false;
+    state.GroupRepeats=false;state.Scope.clear();state.Search[0]=0;
+    state.Levels={true,true,true,true};state.Dirty=true;
+    return true;
 }
 inline void Export(size_t index,const LiveLog::Filter& filter){
     auto& Status=Streams[index].Status;
@@ -163,18 +218,36 @@ inline void RenderStream(size_t index){
         ImGui::TableSetupColumn("Level",ImGuiTableColumnFlags_WidthFixed,theme.X(70));
         if(!compact){ImGui::TableSetupColumn("Time",ImGuiTableColumnFlags_WidthFixed,theme.X(76));ImGui::TableSetupColumn("Source",ImGuiTableColumnFlags_WidthFixed,theme.X(105));ImGui::TableSetupColumn("Reference",ImGuiTableColumnFlags_WidthFixed,theme.X(125));}
         ImGui::TableSetupColumn("Event");ImGui::TableSetupColumn("Count",ImGuiTableColumnFlags_WidthFixed,theme.X(42));ImGui::TableSetupScrollFreeze(0,1);ImGui::TableHeadersRow();
-        ImGuiListClipper clipper;clipper.Begin(static_cast<int>(Visible.size()));while(clipper.Step())for(int index=clipper.DisplayStart;index<clipper.DisplayEnd;++index){const auto& group=Visible[index];const auto& row=History.Rows[group.First];ImGui::PushID(static_cast<int>(row.Id));ImGui::TableNextRow();ImGui::TableNextColumn();
+        ImGuiListClipper clipper;clipper.Begin(static_cast<int>(Visible.size()));while(clipper.Step())for(int visibleIndex=clipper.DisplayStart;visibleIndex<clipper.DisplayEnd;++visibleIndex){const auto& group=Visible[visibleIndex];const auto& row=History.Rows[group.First];ImGui::PushID(static_cast<int>(row.Id));ImGui::TableNextRow();
+            ImGui::TableNextColumn();
             auto color=row.Severity==LiveLog::Level::Error?theme.error:row.Severity==LiveLog::Level::Warning?theme.warning:row.Severity==LiveLog::Level::Diagnostic?theme.textDisabled:theme.text;
             if(const auto custom=LiveLog::Color(row,theme.logColors))color={(*custom)[0],(*custom)[1],(*custom)[2],(*custom)[3]};
-            ImGui::PushStyleColor(ImGuiCol_Text,color);if(ImGui::Selectable(LiveLog::Label(row.Severity),Selected==row.Id,ImGuiSelectableFlags_SpanAllColumns|ImGuiSelectableFlags_AllowOverlap))Selected=row.Id;ImGui::PopStyleColor();
+            ImGui::PushStyleColor(ImGuiCol_Text,color);if(ImGui::Selectable(LiveLog::Label(row.Severity),Selected==row.Id,ImGuiSelectableFlags_SpanAllColumns|ImGuiSelectableFlags_AllowOverlap))Selected=row.Id;ImGui::PopStyleColor();if(index==0&&row.Id==RevealId){ImGui::SetScrollHereY(.5f);RevealId=0;}
             if(!compact){ImGui::TableNextColumn();ImGui::TextDisabled("%s",row.Time.c_str());ImGui::TableNextColumn();ImGui::TextUnformatted(row.Scope.c_str());ImGui::TableNextColumn();
-                if(row.Help>=0){const auto& guide=LiveLog::Guides[row.Help];const auto label=(row.Suggested?"~ ":"")+std::string(guide.Code);if(ImGui::SmallButton(label.c_str())){const auto url=LiveLog::HelpUrl(guide);ShellExecuteA(nullptr,"open",url.c_str(),nullptr,nullptr,SW_SHOWNORMAL);}
+                if(!row.ReportedCode.empty() && StructuredDiagnosticRegistry::Find(row.ReportedCode)){
+                    const auto* def=StructuredDiagnosticRegistry::Find(row.ReportedCode);
+                    ImGui::TextColored(row.Severity==LiveLog::Level::Warning?theme.warning:row.Severity==LiveLog::Level::Error?theme.error:theme.info,
+                        "%s",row.ReportedCode.c_str());
+                    if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Code emitted in the original log. The structured registry may define the same identifier separately.\n%.*s",static_cast<int>(def->Description.size()),def->Description.data());
+                }else if(row.Help>=0){const auto& guide=LiveLog::Guides[row.Help];const auto label=(row.Suggested?"~ ":"")+std::string(guide.Code);if(ImGui::SmallButton(label.c_str())){const auto url=LiveLog::HelpUrl(guide);ShellExecuteA(nullptr,"open",url.c_str(),nullptr,nullptr,SW_SHOWNORMAL);}
                     if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("%s\n%s\nOpens the code reference. No log content is sent.",guide.Title.data(),row.Suggested?"Suggested reference only; not an emitted diagnosis.":"Exact emitted diagnostic code.");
-                }else if(!row.ReportedCode.empty()){if(ImGui::SmallButton(row.ReportedCode.c_str())){const auto url=LiveLog::ReferenceUrl(row);ShellExecuteA(nullptr,"open",url.c_str(),nullptr,nullptr,SW_SHOWNORMAL);}if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Unknown code retained exactly. Opens the general reference without inventing a diagnosis.");}}
-            ImGui::TableNextColumn();const auto title=row.Help>=0&&!row.Suggested?LiveLog::Guides[row.Help].Title:std::string_view(row.Message);ImGui::TextUnformatted(title.data(),title.data()+title.size());
+                }else if(!row.ReportedCode.empty()){ImGui::TextUnformatted(row.ReportedCode.c_str());if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Code present in the original line, but not registered locally. No match is fabricated.");}}
+            ImGui::TableNextColumn();
+            if(compact&&!row.ReportedCode.empty()&&StructuredDiagnosticRegistry::Find(row.ReportedCode)){
+                ImGui::TextColored(row.Severity==LiveLog::Level::Warning?theme.warning:row.Severity==LiveLog::Level::Error?theme.error:theme.info,
+                    "%s",row.ReportedCode.c_str());ImGui::SameLine();
+            }
+            const auto title=row.Help>=0&&!row.Suggested?LiveLog::Guides[row.Help].Title:std::string_view(row.Message);ImGui::TextUnformatted(title.data(),title.data()+title.size());
             if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("%s\nSelect the event for meaning, next steps and the original entry.",row.Message.c_str());
             ImGui::TableNextColumn();if(group.Count>1)ImGui::TextColored(theme.accentHover,"x%zu",group.Count);else ImGui::TextDisabled("1");ImGui::PopID();}
-        if(Follow&&changed)ImGui::SetScrollY(ImGui::GetScrollMaxY());ImGui::EndTable();
+        if(index==0&&RevealId){
+            const auto it=std::find_if(Visible.begin(),Visible.end(),[&](const auto& group){return History.Rows[group.First].Id==RevealId;});
+            if(it!=Visible.end()){
+                const auto target=static_cast<float>(it-Visible.begin())*ImGui::GetTextLineHeightWithSpacing();
+                ImGui::SetScrollY(target);
+                // Keep pending until a row is drawn in the virtualized list.
+            }else{state.Status="The original log row has left the bounded viewer. Read the retained diagnostic evidence instead.";RevealId=0;}
+        }else if(Follow&&changed)ImGui::SetScrollY(ImGui::GetScrollMaxY());ImGui::EndTable();
     }
     if(selected!=History.Rows.end()){
         if(ImGui::BeginChild("Selected log details",ImVec2(0,0),true)){
@@ -221,7 +294,7 @@ inline void Render(){
     if(ImGui::BeginTabBar("Live log streams",ImGuiTabBarFlags_Reorderable)){
         if(ImGui::BeginTabItem("Game",nullptr,PreviewStream==2?ImGuiTabItemFlags_SetSelected:0)){ImGui::PushID("Game stream");RenderStream(2);ImGui::PopID();ImGui::EndTabItem();}
         if(ImGui::BeginTabItem("UE4SS",nullptr,Preview&&PreviewUE4SS?ImGuiTabItemFlags_SetSelected:0)){ImGui::PushID("UE4SS stream");RenderStream(1);ImGui::PopID();ImGui::EndTabItem();}
-        if(ImGui::BeginTabItem("RuneSchema",nullptr,Preview&&!PreviewUE4SS&&PreviewStream<0?ImGuiTabItemFlags_SetSelected:0)){ImGui::PushID("RuneSchema stream");RenderStream(0);ImGui::PopID();ImGui::EndTabItem();}
+        if(ImGui::BeginTabItem("RuneSchema",nullptr,(SelectRuneSchemaTab||Preview&&!PreviewUE4SS&&PreviewStream<0)?ImGuiTabItemFlags_SetSelected:0)){ImGui::PushID("RuneSchema stream");RenderStream(0);ImGui::PopID();ImGui::EndTabItem();SelectRuneSchemaTab=false;}
         if(ImGui::BeginTabItem("EOS",nullptr,PreviewStream==3?ImGuiTabItemFlags_SetSelected:0)){ImGui::PushID("EOS stream");RenderStream(3);ImGui::PopID();ImGui::EndTabItem();}
         ImGui::EndTabBar();
     }

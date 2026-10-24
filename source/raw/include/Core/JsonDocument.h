@@ -5,6 +5,8 @@
 #include "nlohmann/json_fwd.hpp"
 
 namespace PS::JsonHelpers {
+    using DiagnosticReporter = void (*)(const char* code,const std::filesystem::path& file,const std::string& field,const std::string& detail) noexcept;
+    void SetDiagnosticReporter(DiagnosticReporter reporter) noexcept;
     bool FieldExists(const nlohmann::json& data, const std::string& fieldName);
     void ValidateFieldExists(const nlohmann::json& data, const std::string& fieldName);
     void ParseDouble(const nlohmann::json& value, const std::string& fieldName, double& outValue);

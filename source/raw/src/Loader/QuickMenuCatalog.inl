@@ -455,7 +455,7 @@ struct ToolCatalogIndex {
         stopped=true;active=false;finished=false;if(waitingReference)g_f2ReferenceJob.Cancel();waitingReference=false;stage="Index stopped";
         try{SaveCache();PS::SpawnToolRequests::CatalogProgress(Snapshot(reason,true));}catch(...){}
     }
-    bool Tick() {
+    bool Tick(PS::WorkSlice& work) {
         if(generation&&generation!=PS::SpawnToolRequests::Generation.load()){Reset();return false;}
         try {
             if(auto reference=g_f2ReferenceJob.Poll()) {
@@ -481,8 +481,9 @@ struct ToolCatalogIndex {
             if(!current||current->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed))) {Stop("World expired; refresh in the current world");return false;}
             if(PS::SpawnToolRequests::CancelRequested.exchange(false)){Stop("Index stopped; discovered paths retained");return false;}
             const auto start=std::chrono::steady_clock::now();std::size_t attempted=0;
-            while(attempted++<4) {
+            while(attempted++<4&&work.MayStart()) {
                 auto next=plan.Pop();if(!next)break;
+                work.Started();
                 stage=std::string("Caching ")+(next->kind==Kind::Item?"items":next->kind==Kind::Resource?"resources":next->kind==Kind::Npc?"NPCs":next->kind==Kind::Enemy?"AI":"class candidates");
                 try {
                     if(next->kind==Kind::Item) {

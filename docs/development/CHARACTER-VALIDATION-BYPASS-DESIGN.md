@@ -3,6 +3,16 @@
 Status: paired native return bypass implemented in the alpha candidate.
 An installed RuneSchema-only corrupted-character load remains to be tested.
 
+### October 22 follow-up: independent cleanup and server defaults
+
+Character cleanup now runs by independently certified identity domain and skips
+unsupported sections without canceling other verified repairs. Completed quest
+history remains; incomplete orphans are pruned after a verified backup.
+Dedicated servers now default to tolerant native loading followed by rejection-only
+fallback, as Normal/Quick Launch clients do. Explicit client Vanilla Load remains
+an opt-out. Native notifications distinguish character receipts from generic
+local-session fallback. Earlier server-checkbox requirements below are historical.
+
 ### October 21 correction: direct native rejection fallback
 
 The Game Pass session at 22:42 verified `dom.PersistenceStrictMode=0`, but

@@ -4,6 +4,7 @@
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
 #include "Utility/ModFolderLayout.h"
+#include "Utility/StructuredDiagnosticB3D.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -52,8 +53,11 @@ namespace DragonWilds {
             if(!resolved)return true;
             loaderPath=*resolved;
         } catch(const std::exception& error) {
-            PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL][MOD:{}] Folder resolution failed: {}.\n"),
-                RC::to_generic_string(m_modFolderType),modName,PS::ToWideSafe(error.what()));
+            if (!PS::StructuredDiagnosticB3D::Report("RS-LOAD-001","Warning","Skipped",
+                "Loader folder discovery failed",error.what(),m_modFolderType,"Discovery",
+                RC::to_string(modName)))
+                PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL][MOD:{}] Folder resolution failed: {}.\n"),
+                    RC::to_generic_string(m_modFolderType),modName,PS::ToWideSafe(error.what()));
             return false;
         }
 
@@ -77,13 +81,20 @@ namespace DragonWilds {
                 RC::to_generic_string(m_modFolderType), modName);
         }
         catch(const std::exception& error) {
-            PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL][MOD:{}] Section skipped: {}. Remaining sections continue.\n"),
-                RC::to_generic_string(m_modFolderType),modName,PS::ToWideSafe(error.what()));
+            if (!PS::StructuredDiagnosticB3D::Report("RS-LOAD-003","Warning","Partial",
+                "Loader section raised an exception",error.what(),m_modFolderType,"Application",
+                RC::to_string(modName)))
+                PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL][MOD:{}] Section skipped: {}. Remaining sections continue.\n"),
+                    RC::to_generic_string(m_modFolderType),modName,PS::ToWideSafe(error.what()));
             return false;
         }
         catch(...) {
-            PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL][MOD:{}] Section skipped after an unknown failure. Remaining sections continue.\n"),
-                RC::to_generic_string(m_modFolderType),modName);
+            if (!PS::StructuredDiagnosticB3D::Report("RS-LOAD-004","Warning","Partial",
+                "Loader section raised an unknown exception",
+                "An exception of unknown type interrupted this section; other sections continue.",
+                m_modFolderType,"Application",RC::to_string(modName)))
+                PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL][MOD:{}] Section skipped after an unknown failure. Remaining sections continue.\n"),
+                    RC::to_generic_string(m_modFolderType),modName);
             return false;
         }
         const auto elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -191,7 +202,11 @@ namespace DragonWilds {
         const auto started=std::chrono::steady_clock::now();
         if (!OnInitialize())
         {
-            PS::Log<LogLevel::Warning>(STR("[LOADER:{}][DISABLED] Required capability is unavailable; other loaders continue.\n"), RC::to_generic_string(m_modFolderType));
+            if (!PS::StructuredDiagnosticB3D::Report("RS-LOAD-002","Warning","Blocked",
+                "Loader capability unavailable",
+                "The loader rejected initialization because a required capability is unavailable; other loaders continue.",
+                m_modFolderType,"Resolution"))
+                PS::Log<LogLevel::Warning>(STR("[LOADER:{}][DISABLED] Required capability is unavailable; other loaders continue.\n"), RC::to_generic_string(m_modFolderType));
             return;
         }
 

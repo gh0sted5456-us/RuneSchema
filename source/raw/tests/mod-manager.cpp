@@ -48,6 +48,8 @@ int main(int argc,char**argv){
         PS::ConfigFiles::Write(root/"mods/Alpha/ID.txt","ModID=stable-alpha\nName=Alpha display\nBuild=test\nNexusModID=123\nNexusFileID=456\nDescription=From ID.txt\n");const auto info=Metadata(root/"mods/Alpha");assert(info["modId"]=="stable-alpha"&&info["name"]=="Alpha display"&&info["build"]=="test"&&info["nexusModId"]=="123"&&info["nexusFileId"]=="456"&&info["description"]=="example");
     }
     auto state=Read(root,true);assert(state["Rows"].size()==2&&state["Rows"][0]["Name"]=="Alpha"&&state["Rows"][0]["Enabled"]==false);
+    fs::create_directories(root/"mods/Beta/cache");PS::ConfigFiles::Write(root/"mods/Beta/cache/mod.png","fixture-pixels");
+    const auto banner=Read(root,true);assert(banner["Rows"][1]["BannerRelative"]=="cache/mod.png");
     auto request=state;request["Rows"][0]["Enabled"]=true;std::swap(request["Rows"][0],request["Rows"][1]);
     const auto saved=Save(root,true,request);assert(saved["Rows"][0]["Name"]=="Beta"&&saved["Rows"][1]["Enabled"]==true);
     assert(PS::ConfigFiles::Read(root/"mods/runeschema.txt").find("preserve this comment")!=std::string::npos);

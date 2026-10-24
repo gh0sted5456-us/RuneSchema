@@ -19,14 +19,14 @@ inline std::string Source(std::string_view path) {
     if(path.empty()||path.front()!='/'||path.size()>4096||path.find("..")!=path.npos)return {};
     const auto text=Lower(std::string(path));auto end=text.find('/',1);
     if(end==text.npos||end==1)return {};
-    if(text.starts_with("/game/mods/")||text.starts_with("/game/runeschema/")) {
-        const auto owner=text.find('/',end+1);if(owner!=text.npos){const auto next=text.find('/',owner+1);if(next!=text.npos)end=next;}
-    }
+    for(const std::string_view prefix:{"/game/mods/","/game/runeschema/","/game/gameplay/mods/"})
+        if(text.starts_with(prefix)){const auto next=text.find('/',prefix.size());if(next!=text.npos)end=next;break;}
     auto source=text.substr(1,end-1);
     if(source.size()>192||source.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_-/.")!=source.npos)return {};
     return source;
 }
 struct Plan {
+    std::map<std::string,std::string> DisplayNames;
     bool Authoritative=false,Complete=true;
     std::uint64_t Revision=0;
     std::map<std::string,std::set<std::string>> Owners;
@@ -36,9 +36,19 @@ struct Plan {
     using AssetOwnerMap=std::map<std::string,std::set<std::string>>;
     std::shared_ptr<const AssetOwnerMap> AssetOwners; // Immutable, process-local exact-path declarations; never sent wholesale to Helpy.
     std::shared_ptr<const AssetOwnerMap> AuthoredAssets; // Exact /assets targets inspected on the filesystem worker, not mount guesses.
+    std::shared_ptr<const AssetOwnerMap> ContainerAssets; // Exact package -> supplying container owner tokens; discovery, never gameplay authority.
+    std::shared_ptr<const AssetOwnerMap> ContainerFiles; // Exact package -> logical container filenames, including ambiguous suppliers.
 };
 inline std::mutex Mutex;
 inline Plan Current;
+inline void SetDisplayName(const std::string& owner,const std::string& label) noexcept {try{
+    if(owner.empty()||owner.size()>128||owner.find("..")!=owner.npos||owner=="."||owner.find_first_of("/\\\r\n\t:")!=owner.npos||label.empty()||label.size()>256
+        ||std::any_of(owner.begin(),owner.end(),[](unsigned char c){return c<32||c==127;})
+        ||std::any_of(label.begin(),label.end(),[](unsigned char c){return c<32||c==127;}))return;
+    std::lock_guard lock(Mutex);const auto key=Lower(owner);
+    if(Current.DisplayNames.size()>=512&&!Current.DisplayNames.contains(key))return;
+    if(Current.DisplayNames[key]!=label){Current.DisplayNames[key]=label;++Current.Revision;}
+}catch(...) {}}
 inline std::shared_ptr<Plan::AssetOwnerMap> CurrentAssetOwners=std::make_shared<Plan::AssetOwnerMap>();
 inline std::string AssetKey(const std::string& path){
     if(Source(path).empty()||path.find_first_of("\\\r\n\t:")!=path.npos||std::any_of(path.begin(),path.end(),[](unsigned char c){return c<32||c==127;}))return {};

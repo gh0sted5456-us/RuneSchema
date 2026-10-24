@@ -5,6 +5,7 @@
 
 #include "nlohmann/json.hpp"
 #include "Loader/DragonWildsModLoaderBase.h"
+#include "Utility/StructuredDiagnosticOutcomeEvidence.h"
 
 namespace DragonWilds {
 
@@ -31,7 +32,8 @@ namespace DragonWilds {
 
         using ReplacementMap = std::unordered_map<std::wstring, Replacement>;
 
-        void LoadStrings(const nlohmann::json& data, const RC::StringType& modName);
+        void LoadStrings(const nlohmann::json& data, const RC::StringType& modName,
+            PS::StructuredDiagnosticOutcomeEvidence::AppliedProgress& applied);
 
         void AddEntry(ReplacementMap& target, const std::wstring& source, const std::wstring& replacement,
             const RC::StringType& modName, const std::wstring& scope);

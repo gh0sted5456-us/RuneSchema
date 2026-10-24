@@ -35,7 +35,7 @@ struct BulkIconCacheJob {
     Clock::time_point Began{},NextPublish{},WaitingSince{};
     void Publish(bool force=false) {
         const auto now=Clock::now();if(!force&&now<NextPublish)return;NextPublish=now+std::chrono::milliseconds(200);
-        const auto choices=PS::ContentSource::Choices(PS::HelpyCacheSources::Snapshot());
+        const auto choices=PS::ContentSource::Choices(PS::HelpySourceCache::ItemPlan());
         PS::IconCacheBuild::Publish({{"Available",true},{"Active",Active},{"Stage",Stage},{"Source",Source},
             {"ScanDone",ObjectAt+MetadataAt},{"ScanTotal",ObjectTotal+MetadataTotal},{"Total",Icons.size()},
             {"Done",At},{"CacheHits",Hits},{"Captured",Captured},{"Failed",Failed},{"Error",Error},{"Sources",choices},
@@ -90,7 +90,7 @@ struct BulkIconCacheJob {
             if(PS::IconCacheBuild::Cancelled()){Stop("Cancelled; completed thumbnails remain cached.");return;}
             const auto limitMB=PS::ItemIconThumbnail::CacheLimitMB();
             if(limitMB<=0)throw std::runtime_error("Enable Keep icons between launches before building a cache.");
-            auto plan=PS::HelpyCacheSources::Snapshot();
+            auto plan=PS::HelpySourceCache::ItemPlan();
             if(!PS::HelpySourceCache::Ready()||!plan.Authoritative||plan.Registered.empty()) {
                 if(Clock::now()-WaitingSince>std::chrono::seconds(60))throw std::runtime_error("Registered source identities are not ready; retry after startup completes.");
                 Stage="Waiting for registered sources";Publish();return;
@@ -188,7 +188,7 @@ struct BulkIconCacheJob {
             if(uint64_t(Icons.size())*(16+64*64*4)>uint64_t(limitMB)*1024*1024){
                 Stage="More cache space needed";Publish();return;
             }
-            plan=PS::HelpyCacheSources::Snapshot();
+            plan=PS::HelpySourceCache::ItemPlan();
             if(PS::HelpySourceCache::Current.PlanRevision!=plan.Revision) {
                 if(Clock::now()-WaitingSince>std::chrono::seconds(60))throw std::runtime_error("Source fingerprints did not settle; retry when content registration is stable.");
                 Stage="Waiting for source fingerprints";Publish();return;

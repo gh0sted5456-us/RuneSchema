@@ -42,7 +42,7 @@ bool CallCore(State* state,const nlohmann::json& request,nlohmann::json& respons
     if(!state||!state->Host)return false;
     const auto input=request.dump();
     const auto action=request.value("Action",std::string{});
-    const bool readOnly=action=="Read"||action=="AuthoringSnapshot"||action=="SettingsRead"||action=="ModsRead"||action=="IconCacheOwnership";
+    const bool readOnly=action=="Read"||action=="AuthoringSnapshot"||action=="SettingsRead"||action=="ModsRead"||action=="IconCacheOwnership"||action=="IconCacheSources";
     uint32_t size=0;
     std::string output;
     if(readOnly){

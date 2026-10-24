@@ -1,5 +1,6 @@
 #include "Core/CharacterEntryRecovery.h"
 #include "Core/CharacterLoadAudit.h"
+#include "Core/LoadProtectionNotice.h"
 #include "Core/NativePersistencePolicy.h"
 #include "Runtime/Storefront.h"
 #include "Core/CharacterEntryReturnGate.h"
@@ -120,8 +121,10 @@ void CharacterEntryRecovery::AcceptCharacter(SafetyHookContext& context) {
     if(!MayBypass())return;
     context.rax=PS::CharacterEntryBypassPlan::AcceptRejected(context.rax);
     const auto token=PS::CharacterLoadAudit::Token();
+    if(token)PS::LoadProtectionNotice::Record(PS::CharacterLoadAudit::Current.Character,0,0,true);
     const bool first=token?PS::CharacterLoadAudit::Bypassed(PS::CharacterLoadAudit::Gate::Validation):!Reported.exchange(true);
     if(!first)return;
+    if(!token)PS::LoadProtectionNotice::SessionBypasses.fetch_add(1,std::memory_order_relaxed);
     PS::ConsolidatedLog<LogLevel::Normal>(STR("[RuneSchema] [info] [SAVE-ENTRY][BYPASSED] Save Bypass initiated (character validation). Details: RuneSchema.log.\n"));
     if(token)PS::DiagnosticLog::Formatted(STR("[RuneSchema] [diagnostic] [SAVE-ENTRY][BYPASSED] load={} native character validation rejected; acceptance overridden. This is not a record-rejection, world-entry or persisted-save receipt.\n"),false,token);
     else PS::DiagnosticLog::Write(STR("[RuneSchema] [diagnostic] [SAVE-ENTRY][BYPASSED][UNATTRIBUTED] Native character validation rejected; the configured policy accepted its return. No reflected gameplay preflight receipt was observed. Pruning, world entry and progress retention are not verified; keep your backup.\n"));
@@ -131,8 +134,10 @@ void CharacterEntryRecovery::AcceptPlayerState(SafetyHookContext& context) {
     if(!MayBypass())return;
     context.rax=PS::CharacterEntryBypassPlan::AcceptRejected(context.rax);
     const auto token=PS::CharacterLoadAudit::Token();
+    if(token)PS::LoadProtectionNotice::Record(PS::CharacterLoadAudit::Current.Character,0,0,true);
     const bool first=token?PS::CharacterLoadAudit::Bypassed(PS::CharacterLoadAudit::Gate::PlayerState):!PlayerStateReported.exchange(true);
     if(!first)return;
+    if(!token)PS::LoadProtectionNotice::SessionBypasses.fetch_add(1,std::memory_order_relaxed);
     PS::ConsolidatedLog<LogLevel::Normal>(STR("[RuneSchema] [info] [SAVE-ENTRY][BYPASSED][PLAYER-STATE] Save Bypass initiated (player state). Details: RuneSchema.log.\n"));
     if(token)PS::DiagnosticLog::Formatted(STR("[RuneSchema] [diagnostic] [SAVE-ENTRY][BYPASSED][PLAYER-STATE] load={} native player-state rejection overridden after native work. World entry and persisted save remain unverified.\n"),false,token);
     else PS::DiagnosticLog::Write(STR("[RuneSchema] [diagnostic] [SAVE-ENTRY][BYPASSED][PLAYER-STATE][UNATTRIBUTED] Native ProcessPlayerStateLoad rejected; the configured policy accepted its return. Native loading ran once. No reflected gameplay preflight receipt was observed; world entry and progress retention remain unverified.\n"));

@@ -17,7 +17,9 @@ int main(int argc,char** argv) {
     Need(loader,"LoadAndApplyRawTargets();","exact raw DataTable targets are not eagerly prepared");
     Need(loader,"path.starts_with('/') && path.find('.')!=std::string::npos","exact DataTable paths are not recognized");
     Need(loader,"LoadAsset_Blocking(soft)","unloaded DataTables are not loaded on demand");
-    Need(loader,"m_appliedExactTargets.insert(path).second","exact targets can be applied twice during synchronous serialization");
+    Need(loader,"applied.Cursor.Consume(it->second.size()","raw targets can be applied twice during synchronous serialization");
+    Need(loader,"m_rawTargetsReady=true;","raw rules can be applied before finalization");
+    Need(loader,"RawDestinations(datatable)","qualified targets must share the native composite-parent route");
     Need(loader,"Apply(datatable->GetName(), datatable);","legacy short-name tables lost compatibility");
     std::cout<<"Raw DataTable contract supports exact paths and legacy names without double application.\n";
 }

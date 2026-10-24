@@ -60,6 +60,8 @@ inline std::vector<Record> Records(const Json& records){
     for(const auto& value:records){auto row=Parse(value);if(!unique.insert(row.Owner+"|"+row.Kind+"|"+row.Path).second)throw std::runtime_error("[RS-CACHE-002] Duplicate bundle identity.");result.push_back(std::move(row));}return result;
 }
 inline bool Owned(const Record& row,const HelpyCacheSources::Plan& plan,const std::set<std::string>& nativePlugins){
+    if(plan.ContainerAssets){const auto found=plan.ContainerAssets->find(HelpyCacheSources::AssetKey(row.Path));
+        if(found!=plan.ContainerAssets->end())return found->second.size()==1&&found->second.contains(row.Owner);}
     const auto root=HelpyCacheSources::Lower(ContentSource::Root(row.Path));
     if(row.Owner=="core")return (root=="/game"||root=="/engine")&&row.Source.find('/')==row.Source.npos;
     if(row.Owner.starts_with("plugins/"))return nativePlugins.contains(row.Source)&&row.Owner=="plugins/"+row.Source;
@@ -76,6 +78,8 @@ inline bool Owned(const Record& row,const HelpyCacheSources::Plan& plan,const st
     return declared!=plan.DeclaredOwners.end()&&declared->second.contains(owner);
 }
 inline bool OriginalOwnerProven(const Record& row,const HelpyCacheSources::Plan& plan,const std::set<std::string>& nativePlugins){
+    if(plan.ContainerAssets){const auto found=plan.ContainerAssets->find(HelpyCacheSources::AssetKey(row.Path));
+        if(found!=plan.ContainerAssets->end())return found->second.size()==1&&found->second.contains(row.Owner);}
     if(!Owned(row,plan,nativePlugins))return false;if(!row.Owner.starts_with("mods/"))return true;
     const auto owner=row.Owner.substr(5),key=HelpyCacheSources::AssetKey(row.Path);
     bool exact=false;

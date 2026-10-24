@@ -37,6 +37,7 @@
 #include "Utility/JsonHelpers.h"
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnosticB3C.h"
 #include "Loader/DragonWildsJournalModLoader.h"
 #include "Loader/DragonWildsRecipeModLoader.h"
 #include "Loader/JournalPlayerAccess.h"
@@ -182,7 +183,10 @@ namespace DragonWilds {
                     throw std::runtime_error("Cooked journal/lore definition was not admitted: "+definition.Path);
             }
         }catch(const std::exception& error){PS::RegistryEnrollment::Reject("cooked "+lane,error.what());
-            PS::Log<LogLevel::Error>(STR("Cooked journal/lore declarations rejected; character cleanup is deferred: {}.\n"),PS::ToWideSafe(error.what()));}
+            PS::LogStructuredFallback<LogLevel::Error>(
+                PS::StructuredDiagnosticB3C::Report("RS-JRN-007","Error","Partial","JournalLoader",
+                "Cooked journal declarations rejected",error.what(),{}, {},lane,"Validation"),
+                STR("Cooked journal/lore declarations rejected; character cleanup is deferred: {}.\n"),PS::ToWideSafe(error.what()));}
     }
 
     void DragonWildsJournalModLoader::OnLoad(const std::filesystem::path& loaderPath,
@@ -202,8 +206,8 @@ namespace DragonWilds {
             try{
                 ApplyPendingPatches();
                 const auto result=ApplyAll();
-                if(m_hasCookedDefinitions&&result.ErrorCount)PS::RegistryEnrollment::Reject(m_loreOnly?"cooked lore":"cooked journals","journal finalization had unresolved entries");
-            }catch(const std::exception& error){if(m_hasCookedDefinitions)PS::RegistryEnrollment::Reject("cooked journals/lore",error.what());throw;}
+                if(m_hasCookedDefinitions&&result.ErrorCount)PS::RegistryEnrollment::Reject(m_loreOnly?"cooked lore":"cooked journals","journal finalization had unresolved entries",PS::RegistryEnrollment::IdentityKind::Journal);
+            }catch(const std::exception& error){if(m_hasCookedDefinitions)PS::RegistryEnrollment::Reject("cooked journals/lore",error.what(),PS::RegistryEnrollment::IdentityKind::Journal);throw;}
         }
     }
 
@@ -238,8 +242,10 @@ namespace DragonWilds {
         if (!m_baseEntryClass || !m_noBiomeSubCategoryClass
             || !m_journalComponentClass || !m_journalSubsystemClass)
         {
-            PS::Log<LogLevel::Error>(STR("Unable to initialize {}, required Dominion journal classes were not found.\n"),
-                GetDisplayName());
+            if (!PS::StructuredDiagnosticB3C::Report("RS-JRN-001","Error","Failed","JournalLoader",
+                "Journal runtime classes unavailable","Required Dominion journal classes were not found.",{}, {},{},"Resolution"))
+                PS::Log<LogLevel::Error>(STR("Unable to initialize {}, required Dominion journal classes were not found.\n"),
+                    GetDisplayName());
             return false;
         }
 
@@ -250,7 +256,9 @@ namespace DragonWilds {
     {
         if (!data.is_object())
         {
-            PS::Log<LogLevel::Error>(STR("Journal JSON root must be an object.\n"));
+            if (!PS::StructuredDiagnosticB3C::Report("RS-JRN-002","Error","Skipped","JournalLoader",
+                "Invalid journal document root","Journal JSON root must be an object.",RC::to_string(modName)))
+                PS::Log<LogLevel::Error>(STR("Journal JSON root must be an object.\n"));
             return;
         }
 
@@ -263,8 +271,10 @@ namespace DragonWilds {
 
             if (!body.is_object())
             {
-                PS::Log<LogLevel::Error>(STR("Journal entry '{}' must be an object. Skipping.\n"),
-                    RC::to_generic_string(key));
+                if (!PS::StructuredDiagnosticB3C::Report("RS-JRN-003","Error","Skipped","JournalLoader",
+                    "Invalid journal entry","Journal entry must be a JSON object.",RC::to_string(modName),{},key))
+                    PS::Log<LogLevel::Error>(STR("Journal entry '{}' must be an object. Skipping.\n"),
+                        RC::to_generic_string(key));
                 continue;
             }
 
@@ -280,14 +290,18 @@ namespace DragonWilds {
             }
             catch (const std::exception& error)
             {
-                PS::Log<LogLevel::Error>(STR("Journal patch '{}': {}. Skipping.\n"),
-                    wideKey, PS::ToWideSafe(error.what()));
+                if (!PS::StructuredDiagnosticB3C::Report("RS-JRN-005","Error","Skipped","JournalLoader",
+                    "Journal patch rejected",error.what(),RC::to_string(modName),{},key,"Validation"))
+                    PS::Log<LogLevel::Error>(STR("Journal patch '{}': {}. Skipping.\n"),
+                        wideKey, PS::ToWideSafe(error.what()));
                 continue;
             }
             auto found = std::find_if(m_defs.begin(), m_defs.end(),
                 [&](const JournalDef& def) { return def.Key == wideKey; });
             if(found!=m_defs.end() && !wideKey.starts_with(TEXT("/")) && found->Owner!=modName) {
-                PS::Log<LogLevel::Error>(STR("Journal '{}' is already owned by '{}'; duplicate from '{}' rejected.\n"),wideKey,found->Owner,modName);
+                if (!PS::StructuredDiagnosticB3C::Report("RS-JRN-006","Error","Blocked","JournalLoader",
+                    "Journal ownership conflict","An existing journal entry is owned by a different mod.",RC::to_string(modName),{},key,"Validation"))
+                    PS::Log<LogLevel::Error>(STR("Journal '{}' is already owned by '{}'; duplicate from '{}' rejected.\n"),wideKey,found->Owner,modName);
                 continue;
             }
             JournalDef replacement{ wideKey, body, modName };
@@ -317,7 +331,10 @@ namespace DragonWilds {
                 [&](const JournalDef& def) { return def.Key == wideKey; });
             if (found == m_defs.end())
             {
-                PS::Log<LogLevel::Error>(STR("Journal $Patch target '{}' was not loaded; no entry was created.\n"), wideKey);
+                if (!PS::StructuredDiagnosticB3C::Report("RS-JRN-004","Error","Blocked","JournalLoader",
+                    "Journal patch target unavailable","Journal $Patch target was not loaded; no entry was created.",
+                    RC::to_string(patch.Owner),{},key,"Resolution"))
+                    PS::Log<LogLevel::Error>(STR("Journal $Patch target '{}' was not loaded; no entry was created.\n"), wideKey);
                 ++errors;
                 continue;
             }
@@ -1003,7 +1020,10 @@ namespace DragonWilds {
             nullptr, nullptr, PersistenceLoadedPath);
         if (!function)
         {
-            PS::Log<LogLevel::Error>(STR("Journal persistence event was not found; custom entry unlocks are disabled.\n"));
+            PS::LogStructuredFallback<LogLevel::Error>(
+                PS::StructuredDiagnosticB3C::Report("RS-JRN-008","Error","Blocked","JournalLoader",
+                "Journal persistence event unavailable","Native unlock delivery was not enabled.",{}, {},"JournalPersistenceEvent","Resolution"),
+                STR("Journal persistence event was not found; custom entry unlocks are disabled.\n"));
             return;
         }
         size_t parameterCount=0;
@@ -1025,18 +1045,30 @@ namespace DragonWilds {
                 && netId && netId->GetOffset_Internal()==0 && netId->GetElementSize()==2 && netId->GetArrayDim()==1;
         }
         if(!valid || parameterCount!=2) {
-            PS::Log<LogLevel::Error>(STR("Journal persistence event layout changed; unlock hook was not installed.\n"));
+            PS::LogStructuredFallback<LogLevel::Error>(
+                PS::StructuredDiagnosticB3C::Report("RS-JRN-009","Error","Blocked","JournalLoader",
+                "Journal persistence event layout incompatible","The expected two-array parameter contract was not satisfied.",{}, {},"JournalPersistenceEvent","Validation"),
+                STR("Journal persistence event layout changed; unlock hook was not installed.\n"));
             return;
         }
         const auto hookId=PS::RegisterNativePostHook(function, [this](UnrealScriptFunctionCallableContext& context, void*) {
             try {UnlockEntries(context.Context);}
             catch(const std::exception& error) {
-                PS::Log<LogLevel::Error>(STR("Journal persistence unlock failed: {}\n"),PS::ToWideSafe(error.what()));
+                PS::LogStructuredFallback<LogLevel::Error>(
+                    PS::StructuredDiagnosticB3C::Report("RS-JRN-010","Error","Partial","JournalLoader",
+                    "Journal unlock callback failed",error.what(),{}, {},"JournalUnlock","Application"),
+                    STR("Journal persistence unlock failed: {}\n"),PS::ToWideSafe(error.what()));
             }
-            catch(...) {PS::Log<LogLevel::Error>(STR("Journal persistence unlock failed with an unknown exception.\n"));}
+            catch(...) {PS::LogStructuredFallback<LogLevel::Error>(
+                PS::StructuredDiagnosticB3C::Report("RS-JRN-010","Error","Partial","JournalLoader",
+                    "Journal unlock callback failed","Unknown native callback exception.",{}, {},"JournalUnlock","Application"),
+                STR("Journal persistence unlock failed with an unknown exception.\n"));}
         });
         if(!hookId) {
-            PS::Log<LogLevel::Error>(STR("Journal persistence hook registration failed; custom unlock delivery is unavailable.\n"));
+            PS::LogStructuredFallback<LogLevel::Error>(
+                PS::StructuredDiagnosticB3C::Report("RS-JRN-011","Error","Blocked","JournalLoader",
+                "Journal persistence hook unavailable","Native unlock delivery hook registration failed.",{}, {},"JournalPersistenceHook","Validation"),
+                STR("Journal persistence hook registration failed; custom unlock delivery is unavailable.\n"));
             return;
         }
         m_hooksActive = true;
@@ -1046,7 +1078,10 @@ namespace DragonWilds {
     {
         if (!journalComponent || !journalComponent->IsA(m_journalComponentClass))
         {
-            PS::Log<LogLevel::Error>(STR("Journal persistence event supplied an invalid component.\n"));
+            PS::LogStructuredFallback<LogLevel::Error>(
+                PS::StructuredDiagnosticB3C::Report("RS-JRN-012","Error","Skipped","JournalLoader",
+                "Journal event component invalid","The supplied component was missing or not a journal component.",{}, {},"JournalComponent","Validation"),
+                STR("Journal persistence event supplied an invalid component.\n"));
             return false;
         }
 
@@ -1073,6 +1108,8 @@ namespace DragonWilds {
                 ++unavailable;
                 const auto failure=RC::to_string(journalComponent->GetPathName())+":"+RC::to_string(key)+":"+error.what();
                 if(m_reportedUnlockFailures.size()<2048&&m_reportedUnlockFailures.insert(failure).second){
+                    PS::StructuredDiagnosticB3C::Report("RS-JRN-013","Error","Skipped","JournalLoader",
+                        "Journal unlock unavailable",error.what(),{}, {},RC::to_string(key),"Application");
                     ++newFailures;PS::Log<LogLevel::Error>(STR("Journal unlock '{}': {}\n"),key,PS::ToWideSafe(error.what()));
                 }
             }
@@ -1132,14 +1169,21 @@ namespace DragonWilds {
             [this](Hook::TCallbackIterationData<void>&,UObject* source,UFunction* function,void*) {
                 try {ObserveAcquisition(source,function);} catch(...) {}
             },options);
-        if(m_acquisitionCallbackId==Hook::ERROR_ID)
-            PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL] Item-acquisition unlock observer was unavailable.\n"),
+        if(m_acquisitionCallbackId==Hook::ERROR_ID) {
+            PS::LogStructuredFallback<LogLevel::Warning>(
+                PS::StructuredDiagnosticB3C::Report("RS-JRN-014","Warning","Partial","JournalLoader",
+                "Journal acquisition observer unavailable","Automatic item-acquisition unlock observation could not be registered.",{}, {},GetModFolderType(),"Validation"),
+                STR("[LOADER:{}][PARTIAL] Item-acquisition unlock observer was unavailable.\n"),
                 RC::to_generic_string(GetModFolderType()));
+    }
+
     }
 
     void DragonWildsJournalModLoader::ObserveAcquisition(UObject* source,UFunction* function)
     {
         if(m_observingAcquisition || !source || !function || (m_acquisitionUnlocks.empty()&&m_unlock.empty()))return;
+        static const FName changed(TEXT("OnInventoryChanged_BrokenItemFTUE"),FNAME_Add),received(TEXT("OnReceiveInventoryChanged"),FNAME_Add),loaded(TEXT("OnRep_HasLoadedFromSave"),FNAME_Add);
+        const auto name=function->GetFName();if(name!=changed&&name!=received&&name!=loaded)return;
         const auto path=function->GetPathName();
         UObject* controller=nullptr;bool credit=true;
         if(path==TEXT("/Game/Gameplay/Character/Player/BP_PlayerController.BP_PlayerController_C:OnInventoryChanged_BrokenItemFTUE"))

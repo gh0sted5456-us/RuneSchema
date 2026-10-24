@@ -1,7 +1,9 @@
 #pragma once
+#include "Core/RuneSchemaDataRoot.h"
 #include "Core/NativeContentProviders.h"
 #include "Core/HelpyCacheSources.h"
 #include "Core/ContentSource.h"
+#include "Core/PakDiscovery.h"
 #include <nlohmann/json.hpp>
 #include <functional>
 #include <atomic>
@@ -20,7 +22,10 @@
 #include <windows.h>
 namespace PS::HelpySourceCache {
 struct Snapshot {
+    std::map<std::string,std::string> DisplayNames;
     std::string Key,CatalogKey;std::set<std::string> Files,NativePlugins;
+    std::string FileKey;uint64_t IconBase=0;
+    std::map<std::string,uint64_t> OwnerHashes;
     bool Authoritative=false,Provisional=false,Complete=true;uint64_t PlanRevision=0,ContentRevision=0;
     std::map<std::string,std::string> SourceKeys;
     std::map<std::string,std::set<std::string>> Owners;
@@ -28,9 +33,29 @@ struct Snapshot {
     std::map<std::string,std::filesystem::path> FilePaths; // Worker-local; never sent to a client or exported.
     std::shared_ptr<const HelpyCacheSources::Plan::AssetOwnerMap> AuthoredAssets;
     std::shared_ptr<const HelpyCacheSources::Plan::AssetOwnerMap> AssetOwners;
+    std::shared_ptr<const HelpyCacheSources::Plan::AssetOwnerMap> ContainerAssets,ContainerFiles;
+    nlohmann::json Containers=nlohmann::json::object();
 };
 inline uint64_t Hash(std::string_view value,uint64_t seed=1469598103934665603ull){for(unsigned char c:value){seed^=c;seed*=1099511628211ull;}return seed;}
 inline std::string Hex(uint64_t value){char text[17]{};std::snprintf(text,sizeof(text),"%016llx",static_cast<unsigned long long>(value));return text;}
+// Icon references/labels can change without changing any verified content.
+inline Snapshot Replan(Snapshot result,const HelpyCacheSources::Plan& plan){
+    if(result.FileKey.empty()||result.ContentRevision!=plan.ContentRevision||result.Authoritative!=plan.Authoritative)
+        throw std::runtime_error("Source content requires fresh discovery");
+    result.PlanRevision=plan.Revision;result.Complete=plan.Complete;result.DisplayNames=plan.DisplayNames;
+    result.AssetOwners=plan.AssetOwners;result.DeclaredOwners=plan.DeclaredOwners;
+    for(const auto& [group,owners]:plan.Owners)result.Owners[group].insert(owners.begin(),owners.end());
+    result.SourceKeys.clear();uint64_t hash=std::stoull(result.FileKey,nullptr,16);
+    if(plan.Authoritative){auto registered=plan.Registered;if(registered.contains("game"))registered.insert("engine");
+        for(const auto& group:registered){uint64_t key=Hash(group,result.IconBase);const auto owners=result.Owners.find(group);
+            if(owners!=result.Owners.end())for(const auto& owner:owners->second){const auto found=result.OwnerHashes.find(owner);
+                key=Hash(owner+"|"+(found==result.OwnerHashes.end()?"missing":Hex(found->second)),key);}
+            result.SourceKeys.emplace(group,Hex(key));
+        }
+        for(const auto& [group,key]:result.SourceKeys)hash=Hash(group+"|"+key,hash);
+    }
+    result.Key=Hex(hash);return result;
+}
 inline std::filesystem::path NativePath(const std::filesystem::path& path){
     auto value=std::filesystem::absolute(path).lexically_normal().wstring();
     if(value.starts_with(L"\\\\?\\"))return value;
@@ -41,7 +66,8 @@ inline Snapshot Inspect(const std::filesystem::path& root,const HelpyCacheSource
     const auto source=NativePath(root);std::map<std::string,std::string> records;size_t count=0;
     std::map<std::string,std::filesystem::path> filePaths;
     auto authored=std::make_shared<HelpyCacheSources::Plan::AssetOwnerMap>();
-    const auto activeOwners=HelpyCacheSources::ActiveOwners(plan);
+    auto activeOwners=HelpyCacheSources::ActiveOwners(plan);
+    const auto pakRoots=PakDiscovery::ReadRoots();for(const auto& folder:pakRoots)if(!folder.Owner.empty())activeOwners.insert(folder.Owner);
     const auto binary=source.parent_path().parent_path().parent_path();
     const auto game=binary.parent_path().parent_path();
     const auto add=[&](const std::filesystem::directory_entry& entry){
@@ -58,6 +84,7 @@ inline Snapshot Inspect(const std::filesystem::path& root,const HelpyCacheSource
         std::transform(name.begin(),name.end(),name.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
         const auto owner=HelpyCacheSources::FileOwner(name);
         if(plan.Authoritative&&!owner.empty()&&!activeOwners.contains(owner))return;
+        if(records.contains(name))return;
         if(++count>100000)throw std::runtime_error("Source cache manifest exceeds its file bound");
         auto record=std::to_string(entry.file_size())+":"+std::to_string(entry.last_write_time().time_since_epoch().count());
         // Small authored files include content, so same-size edits cannot reuse metadata.
@@ -91,8 +118,9 @@ inline Snapshot Inspect(const std::filesystem::path& root,const HelpyCacheSource
     if(std::filesystem::is_directory(binary))for(const auto& entry:std::filesystem::directory_iterator(binary))add(entry);
     tree(binary.parent_path().parent_path()/"Content"/"Paks");
     tree(game/"Plugins");tree(game/"GameFeatures");tree(game.parent_path()/"Engine"/"Plugins");
+    for(const auto& folder:pakRoots)if(std::filesystem::is_directory(folder.Path))for(const auto& entry:std::filesystem::directory_iterator(folder.Path))add(entry);
     Snapshot result;result.Authoritative=plan.Authoritative;result.Complete=plan.Complete;result.PlanRevision=plan.Revision;result.ContentRevision=plan.ContentRevision;
-    result.Owners=plan.Owners;result.FilePaths=std::move(filePaths);
+    result.Owners=plan.Owners;result.DisplayNames=plan.DisplayNames;result.FilePaths=std::move(filePaths);
     result.AuthoredAssets=std::move(authored);
     result.AssetOwners=plan.AssetOwners;
     result.DeclaredOwners=plan.DeclaredOwners;
@@ -109,32 +137,50 @@ inline Snapshot Inspect(const std::filesystem::path& root,const HelpyCacheSource
             if(content!=name.npos){const auto owner=name.substr(0,content);plugin=owner.substr(owner.find_last_of('/')+1);}}
         if(!plugin.empty()&&HelpyCacheSources::Source("/"+plugin+"/asset.asset")==plugin)result.NativePlugins.insert(plugin);
     }
-    uint64_t hash=Hash("helpy-cache-v4|"+binary.filename().generic_string());
-    for(const auto& [name,record]:records){result.Files.insert(name);hash=Hash(name+"|"+record+"\n",hash);}result.Key=Hex(hash);
+    auto containers=std::make_shared<HelpyCacheSources::Plan::AssetOwnerMap>(),containerFiles=std::make_shared<HelpyCacheSources::Plan::AssetOwnerMap>();
+    size_t packageReferences=0,containerCount=0;
+    for(const auto& [name,path]:result.FilePaths)if(name.ends_with(".pak")||name.ends_with(".utoc")){
+        if(++containerCount>4096)throw std::runtime_error("Container discovery exceeds its source limit");
+        std::string owner=HelpyCacheSources::FileOwner(name);
+        for(const auto& folder:pakRoots)if(path.parent_path().lexically_normal()==NativePath(folder.Path).lexically_normal()&&!folder.Owner.empty())owner=folder.Owner;
+        auto discovery=PakDiscovery::Read(path,game.filename().string());
+        if(discovery.MetadataOnly&&(!owner.empty()||name!="content/paks/global.utoc")){
+            discovery.Complete=false;discovery.MetadataOnly=false;discovery.Error="Global metadata container is outside the native content path";
+        }
+        result.Containers[name]={{"Owner",owner.empty()?"core":ContentSource::Mod(owner)},{"Status",discovery.MetadataOnly?"MetadataOnly":discovery.Complete?"Indexed":"Unavailable"},
+            {"Packages",discovery.Packages.size()},{"IndexKey",discovery.IndexKey},{"Reason",discovery.Error}};
+        if(!discovery.Complete)continue;
+        records[name]+="|directory-sha256:"+discovery.IndexKey;
+        for(const auto& package:discovery.Packages){
+            if(++packageReferences>1048576)throw std::runtime_error("Container discovery exceeds its package-reference limit");
+            const auto group=HelpyCacheSources::Source(package);
+            const auto provider=!owner.empty()?ContentSource::Mod(owner):result.NativePlugins.contains(group)?"plugins/"+group:"core";
+            if((*containers)[package].size()>=32||(*containerFiles)[package].size()>=32)throw std::runtime_error("Too many containers supply the same package");
+            (*containers)[package].insert(provider);(*containerFiles)[package].insert(name);
+            if(!owner.empty())result.Owners[group].insert(owner);
+        }
+    }
+    result.ContainerAssets=std::move(containers);result.ContainerFiles=std::move(containerFiles);
+    uint64_t hash=Hash("helpy-cache-pak-v1|"+binary.filename().generic_string());
+    for(const auto& [name,record]:records){result.Files.insert(name);hash=Hash(name+"|"+record+"\n",hash);}result.Key=Hex(hash);result.FileKey=result.Key;
     if(plan.Authoritative){
         uint64_t base=Hash("helpy-icons-v4|"+binary.filename().generic_string());
         std::map<std::string,uint64_t> ownerHashes;
         for(const auto& [name,record]:records){const auto owner=HelpyCacheSources::FileOwner(name);
             if(!owner.empty())ownerHashes[owner]=Hash(name+"|"+record+"\n",ownerHashes.contains(owner)?ownerHashes[owner]:Hash(owner));
-            else if(ContentSource::NativeContentFile(name)||name.ends_with(".exe"))base=Hash(name+"|"+record+"\n",base);
+            else if(ContentSource::NativeContentFile(name)||name.ends_with(".exe")||name.ends_with(".pak")||name.ends_with(".utoc")||name.ends_with(".ucas"))base=Hash(name+"|"+record+"\n",base);
         }
         uint64_t catalog=base;for(const auto& [owner,key]:ownerHashes)catalog=Hash(owner+"|"+Hex(key),catalog);
+        result.IconBase=base;result.OwnerHashes=ownerHashes;
         // Retire persisted rows containing the old shared-mount owner list,
         // without invalidating source-local captured icon images.
-        result.CatalogKey=Hex(Hash("exact-item-owners-v1",catalog));
-        auto registered=plan.Registered;if(registered.contains("game"))registered.insert("engine");
-        for(const auto& group:registered){uint64_t key=Hash(group,base);const auto owners=plan.Owners.find(group);
-            if(owners!=plan.Owners.end())for(const auto& owner:owners->second){
-                const auto found=ownerHashes.find(owner);key=Hash(owner+"|"+(found==ownerHashes.end()?"missing":Hex(found->second)),key);
-            }
-            result.SourceKeys.emplace(group,Hex(key));
-        }
-        for(const auto& [group,key]:result.SourceKeys)hash=Hash(group+"|"+key,hash);result.Key=Hex(hash);
+        result.CatalogKey=Hex(Hash("pak-item-owners-v1",catalog));
     }
-    return result;
+    return Replan(std::move(result),plan);
 }
 inline Snapshot Current;
-inline HelpyCacheSources::Plan ItemPlan(){auto plan=HelpyCacheSources::Snapshot();plan.AuthoredAssets=Current.AuthoredAssets;return plan;}
+inline HelpyCacheSources::Plan ItemPlan(){auto plan=HelpyCacheSources::Snapshot();plan.AuthoredAssets=Current.AuthoredAssets;plan.ContainerAssets=Current.ContainerAssets;plan.ContainerFiles=Current.ContainerFiles;
+    for(const auto& [source,owners]:Current.Owners)plan.Owners[source].insert(owners.begin(),owners.end());return plan;}
 inline std::future<Snapshot> Worker;
 inline std::future<nlohmann::json> CachedSourcesWorker;
 inline bool CachedSourcesAttempted=false;
@@ -155,13 +201,15 @@ inline std::function<bool(nlohmann::json&)> RemoteSnapshot;
 inline std::mutex PublishedMutex;
 inline nlohmann::json Published={{"Ready",false}};
 inline std::shared_ptr<const HelpyCacheSources::Plan::AssetOwnerMap> PublishedAuthoredAssets;
+inline std::shared_ptr<const HelpyCacheSources::Plan::AssetOwnerMap> PublishedContainerAssets,PublishedContainerFiles;
 inline Snapshot OwnershipSnapshot(){
     std::lock_guard lock(PublishedMutex);const auto plan=HelpyCacheSources::Snapshot();
     if(!Published.value("Ready",false)||!plan.Complete||Published.value("ContentRevision",uint64_t{})!=plan.ContentRevision)
         throw std::runtime_error("Cache ownership is still being verified");
     Snapshot result;result.Key=Published.at("Key").get<std::string>();result.ContentRevision=plan.ContentRevision;
     result.SourceKeys=Published.at("Sources").get<std::map<std::string,std::string>>();
-    result.AssetOwners=plan.AssetOwners;result.AuthoredAssets=PublishedAuthoredAssets;return result;
+    result.AssetOwners=plan.AssetOwners;result.AuthoredAssets=PublishedAuthoredAssets;
+    result.ContainerAssets=PublishedContainerAssets;result.ContainerFiles=PublishedContainerFiles;return result;
 }
 inline std::set<std::string> NativePluginRoots(){
     std::lock_guard lock(PublishedMutex);std::set<std::string> result;
@@ -171,14 +219,17 @@ inline std::set<std::string> NativePluginRoots(){
 }
 inline std::string PublishedFingerprint(){std::lock_guard lock(PublishedMutex);return Published.value("Key",std::string{})+"|"+std::to_string(Published.value("PlanRevision",uint64_t{}));}
 inline std::atomic<bool> Requested{false};
+inline std::string PublishedCatalogKey(){Requested=true;std::lock_guard lock(PublishedMutex);return Published.value("CatalogKey",std::string{});}
 inline uint64_t InspectingRevision=0;
+inline bool RefreshingFiles=true;
 inline bool HexKey(const std::string& key){return key.size()==16&&key.find_first_not_of("0123456789abcdef")==key.npos;}
 inline nlohmann::json ForClient(){Requested=true;std::lock_guard lock(PublishedMutex);auto result=Published;
     const auto plan=HelpyCacheSources::Snapshot();const bool checking=result.value("PlanRevision",uint64_t{})!=plan.Revision;
     if(!plan.Complete||(checking&&result.value("ContentRevision",uint64_t{})!=plan.ContentRevision))result["Ready"]=false;
     result["CheckingChanges"]=checking;return result;}
 inline nlohmann::json Document(const Snapshot& value){return {{"Version",4},{"Ready",value.Complete&&!value.Key.empty()&&(!value.Authoritative||!value.SourceKeys.empty())},
-    {"Authoritative",value.Authoritative},{"PlanRevision",value.PlanRevision},{"ContentRevision",value.ContentRevision},{"Key",value.Key},{"CatalogKey",value.CatalogKey},{"Sources",value.SourceKeys},{"Owners",value.Owners},{"DeclaredOwners",value.DeclaredOwners},{"NativePlugins",value.NativePlugins}};}
+    {"Authoritative",value.Authoritative},{"PlanRevision",value.PlanRevision},{"ContentRevision",value.ContentRevision},{"Key",value.Key},{"CatalogKey",value.CatalogKey},{"Sources",value.SourceKeys},{"Owners",value.Owners},{"DeclaredOwners",value.DeclaredOwners},{"NativePlugins",value.NativePlugins},
+    {"Discovery","ContainerDirectoryIndex"},{"Containers",value.Containers},{"ModNames",value.DisplayNames}};}
 inline bool AcceptRemote(const nlohmann::json& value){
     if(!value.is_object()||!value.value("Ready",false))return false;
     if(value.value("Version",0)!=4||!value.value("Authoritative",false))throw std::runtime_error("Icon source manifest requires a matching RuneSchema core");
@@ -207,8 +258,30 @@ inline bool AcceptRemote(const nlohmann::json& value){
             next.NativePlugins.insert(name);
         }
     }
-    if(next.Key==Current.Key&&next.NativePlugins==Current.NativePlugins&&next.DeclaredOwners==Current.DeclaredOwners){
-        Current.PlanRevision=next.PlanRevision;Current.ContentRevision=next.ContentRevision;return false;
+    if(value.contains("ModNames")){
+        if(!value["ModNames"].is_object()||value["ModNames"].size()>512)throw std::runtime_error("Invalid source display names");
+        for(const auto& [owner,label]:value["ModNames"].items()){
+            if(!ContentSource::Valid(ContentSource::Mod(owner))||!label.is_string()||label.get_ref<const std::string&>().empty()||label.get_ref<const std::string&>().size()>256
+                ||std::any_of(label.get_ref<const std::string&>().begin(),label.get_ref<const std::string&>().end(),[](unsigned char c){return c<32||c==127;}))throw std::runtime_error("Invalid source display name");
+            next.DisplayNames.emplace(HelpyCacheSources::Lower(owner),label.get<std::string>());
+        }
+    }
+    if(value.contains("Containers")){
+        const auto& containers=value.at("Containers");
+        if(!containers.is_object()||containers.size()>4096)throw std::runtime_error("Invalid container discovery manifest");
+        for(const auto& [file,entry]:containers.items()){
+            if(file.empty()||file.size()>2048||file.find_first_of("\\:\r\n\t")!=file.npos||(!file.ends_with(".pak")&&!file.ends_with(".utoc"))
+                ||!entry.is_object()||entry.dump().size()>4096||!ContentSource::Valid(entry.value("Owner",std::string{}))
+                ||(entry.value("Status",std::string{})!="Indexed"&&entry.value("Status",std::string{})!="Unavailable"&&entry.value("Status",std::string{})!="MetadataOnly")
+                ||!entry.at("Packages").is_number_unsigned()||entry.at("Packages").get<uint64_t>()>PakDiscovery::MaxEntries)
+                throw std::runtime_error("Invalid container discovery source");
+            if(entry.value("Status",std::string{})=="MetadataOnly"&&(file!="content/paks/global.utoc"||entry.at("Owner")!="core"||entry.at("Packages")!=0))
+                throw std::runtime_error("Invalid native metadata-only container");
+        }
+        next.Containers=containers;
+    }
+    if(next.Key==Current.Key&&next.NativePlugins==Current.NativePlugins&&next.DeclaredOwners==Current.DeclaredOwners&&next.DisplayNames==Current.DisplayNames){
+        Current.PlanRevision=next.PlanRevision;Current.ContentRevision=next.ContentRevision;Current.Containers=std::move(next.Containers);return false;
     }
     bool removed=false;for(const auto& [group,key]:Current.SourceKeys)if(!next.SourceKeys.contains(group)){removed=true;break;}
     const bool invalidate=InvalidatesCatalog(Current,next);
@@ -239,16 +312,23 @@ inline bool Poll(const std::filesystem::path& root){
     }catch(const std::exception& error){Error=error.what();return false;}}
     const auto plan=HelpyCacheSources::Snapshot();
     if(Worker.valid()&&Worker.wait_for(std::chrono::seconds(0))==std::future_status::ready){try{
-        auto result=Worker.get();if(result.PlanRevision!=plan.Revision){Next={};return false;}
+        auto result=Worker.get();if(result.PlanRevision!=plan.Revision){
+            if(result.ContentRevision!=plan.ContentRevision||result.FileKey.empty()){Next={};return false;}
+            result=Replan(std::move(result),plan);
+        }
         if(result.Key!=Current.Key){bool removed=false;for(const auto& path:Current.Files)if(!result.Files.contains(path)){removed=true;break;}
             const bool invalidate=InvalidatesCatalog(Current,result);
             Current=std::move(result);++Revision;if(removed)RemovalRevision=Revision;if(invalidate)CatalogInvalidationRevision=Revision;changed=true;}
         else Current=std::move(result); // A metadata-only revision still completes live source verification.
         Error.clear();
-        {std::lock_guard lock(PublishedMutex);Published=Document(Current);PublishedAuthoredAssets=Current.AuthoredAssets;}
-    }catch(const std::exception& error){Error=error.what();}Next=now+std::chrono::seconds(Error.empty()?60:5);}
-    if(!Worker.valid()&&(now>=Next||InspectingRevision!=plan.Revision)){InspectingRevision=plan.Revision;
-        Worker=std::async(std::launch::async,[root,plan]{auto value=Inspect(root,plan);Persist(value);return value;});}return changed;
+        {std::lock_guard lock(PublishedMutex);Published=Document(Current);PublishedAuthoredAssets=Current.AuthoredAssets;PublishedContainerAssets=Current.ContainerAssets;PublishedContainerFiles=Current.ContainerFiles;}
+    }catch(const std::exception& error){Error=error.what();}if(RefreshingFiles||!Error.empty())Next=now+std::chrono::seconds(Error.empty()?60:5);}
+    if(!Worker.valid()&&(now>=Next||InspectingRevision!=plan.Revision)){
+        const bool reuse=Error.empty()&&now<Next&&!Current.FileKey.empty()&&Current.ContentRevision==plan.ContentRevision&&Current.Authoritative==plan.Authoritative;
+        RefreshingFiles=!reuse;
+        InspectingRevision=plan.Revision;
+        if(reuse)Worker=std::async(std::launch::async,[snapshot=Current,plan]{auto value=Replan(std::move(snapshot),plan);Persist(value);return value;});
+        else Worker=std::async(std::launch::async,[root,plan]{auto value=Inspect(root,plan);Persist(value);return value;});}return changed;
 }
 inline bool Ready(){return Current.Complete&&!Current.Key.empty()&&Error.empty()&&(!Current.Authoritative||!Current.SourceKeys.empty());}
 // Call after the UI thread stops, before unloading the DLL. A std::async
@@ -263,8 +343,7 @@ inline std::string Fingerprint(const std::string& icon){if(!Current.Authoritativ
     const auto found=Current.SourceKeys.find(HelpyCacheSources::Source(icon));return found==Current.SourceKeys.end()?std::string{}:found->second;}
 inline std::string Key(const std::string& icon){return Hex(Hash(Fingerprint(icon)+"|"+icon));}
 inline std::filesystem::path Directory(bool liveOnly){
-    wchar_t appdata[32768];const auto size=GetEnvironmentVariableW(L"LOCALAPPDATA",appdata,32768);if(!size||size>=32768)throw std::runtime_error("LOCALAPPDATA is unavailable");
-    return std::filesystem::path(appdata)/"RuneSchema"/"HELPY"/"runtime"/"saved"/"cache"/(liveOnly?"item-icons-live":"item-icons");
+    return RuneSchemaData::SharedDirectory("HELPY")/"runtime"/"saved"/"cache"/(liveOnly?"item-icons-live":"item-icons");
 }
 inline std::filesystem::path IconDirectory(const std::string& icon,bool liveOnly){
     const auto fingerprint=Fingerprint(icon);if(fingerprint.empty())return {};

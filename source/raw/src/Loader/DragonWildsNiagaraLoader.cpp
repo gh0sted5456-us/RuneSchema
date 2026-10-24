@@ -4,6 +4,7 @@
 #include "Loader/Spawn/RuntimeSupport.h"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnosticB3C.h"
 #include "Helpers/String.hpp"
 namespace DragonWilds {
 DragonWildsNiagaraLoader::DragonWildsNiagaraLoader():DragonWildsModLoaderBase("niagara") {
@@ -13,11 +14,14 @@ DragonWildsNiagaraLoader::~DragonWildsNiagaraLoader() { DefinitionRegistry::Niag
 bool DragonWildsNiagaraLoader::CanInitialize(const EEngineLifecyclePhase& phase) { return phase==EEngineLifecyclePhase::PostEngineInit; }
 bool DragonWildsNiagaraLoader::OnInitialize() { return true; }
 void DragonWildsNiagaraLoader::OnAutoReload(const RC::StringType& owner,const std::filesystem::path&) {
-    PS::Log<RC::LogLevel::Warning>(TEXT("{}: Niagara definitions require a game restart.\n"),owner);
+    if (!PS::StructuredDiagnosticB3C::Report("RS-NIA-004","Warning","Deferred","NiagaraLoader",
+        "Niagara reload requires restart","Niagara definition changes require a game restart.",RC::to_string(owner),{}, {},"Reload"))
+        PS::Log<RC::LogLevel::Warning>(TEXT("{}: Niagara definitions require a game restart.\n"),owner);
 }
 void DragonWildsNiagaraLoader::OnLoad(const std::filesystem::path& path,const RC::StringType& owner,const EEngineLifecyclePhase& phase) {
     if(phase!=EEngineLifecyclePhase::PostEngineInit)return;
-    PS::JsonHelpers::ParseJsonFilesInPath(path,[&](const nlohmann::json& data) {
+    PS::JsonHelpers::ParseJsonFilesInPathWithSource(path,[&](const nlohmann::json& data,const std::filesystem::path& relative) {
+        try {
         if(!data.is_object())throw std::runtime_error("Niagara document must map IDs to definitions");
         auto pending=DefinitionRegistry::Niagara;
         for(const auto& [key,body]:data.items()) {
@@ -33,6 +37,15 @@ void DragonWildsNiagaraLoader::OnLoad(const std::filesystem::path& path,const RC
             pending.emplace(id,std::move(value));
         }
         DefinitionRegistry::Niagara.swap(pending);
+        } catch(const std::exception& e) {
+            const std::string_view reason(e.what());
+            const auto code=reason=="Niagara document must map IDs to definitions"?"RS-NIA-001":
+                reason.starts_with("Duplicate Niagara ID:")?"RS-NIA-002":"RS-NIA-003";
+            PS::StructuredDiagnosticB3C::Report(code,"Error","Skipped","NiagaraLoader",
+                "Niagara definition rejected",e.what(),RC::to_string(owner),
+                PS::StructuredDiagnosticB2::Utf8Path(relative),{},"Validation");
+            throw;
+        }
     });
 }
 }

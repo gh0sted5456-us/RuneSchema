@@ -4,6 +4,7 @@
 #include "Runtime/HostServices.h"
 #include "Runtime/Storefront.h"
 #include "Core/ModHealthLedger.h"
+#include "Core/RuneSchemaDataRoot.h"
 #include <process.h>
 #include <condition_variable>
 namespace PS::ModHealthService {
@@ -24,7 +25,7 @@ void Run()noexcept{
         const auto root=RuntimeModPath::Resolve(HostServices::ModDirectory());
         wchar_t local[32768]{};const auto length=GetEnvironmentVariableW(L"LOCALAPPDATA",local,32768);
         if(!length||length>=32768)throw std::runtime_error("Local AppData is unavailable for mod-health statistics");
-        const auto folder=std::filesystem::path(local)/"RuneSchema"/"health";
+        const auto folder=RuneSchemaData::SharedDirectory("health");
         const auto file=folder/(Storefront::IsDedicatedServer()?"mods-server.json":Storefront::Current()==Storefront::Kind::GamePass?"mods-gamepass.json":"mods-steam.json");
         ModManager::Safe(file);ModHealth::Ledger ledger;bool dirty=false;
         if(std::filesystem::exists(file))try{ledger.Load(nlohmann::json::parse(ConfigFiles::Read(file,8*1024*1024)));}

@@ -1,5 +1,6 @@
 #pragma once
 #include "Core/ConfigFiles.h"
+#include "Core/HelpyNavigation.h"
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <vector>
@@ -20,6 +21,15 @@ inline std::vector<int> Ordered(const std::string& surface,const std::vector<int
     std::vector<int> result;std::set<int> seen;const auto found=Orders.find(surface);if(found!=Orders.end())for(const auto& id:*found){const auto value=id.get<int>();if(std::find(defaults.begin(),defaults.end(),value)!=defaults.end()&&seen.insert(value).second)result.push_back(value);}
     for(int value:defaults)if(seen.insert(value).second)result.push_back(value);return result;
 }
+inline constexpr char SidebarSurface[]="sidebar-layout";
+inline constexpr int SidebarDivider=65535;
+inline std::vector<int> SidebarDefaults(){
+    using HelpyNavigation::Page;
+    // Honor existing primary-route ordering without treating the formerly fixed rows as movable history.
+    auto result=Ordered("sidebar",{int(Page::Items),int(Page::Map),int(Page::Mods),int(Page::Tools),int(Page::Settings),int(Page::LiveLog),int(Page::DedicatedServer)});
+    result.insert(result.end(),{SidebarDivider,int(Page::Home),int(Page::Profile),int(Page::BugReport)});return result;
+}
+inline std::vector<int> Sidebar(){return Ordered(SidebarSurface,SidebarDefaults());}
 inline void Safe(const std::filesystem::path& file){for(auto current=std::filesystem::absolute(file).lexically_normal();!current.empty();){const auto attr=GetFileAttributesW(current.c_str());if(attr!=INVALID_FILE_ATTRIBUTES&&(attr&FILE_ATTRIBUTE_REPARSE_POINT))throw std::runtime_error("Navigation preferences cannot contain links.");const auto parent=current.parent_path();if(parent==current)break;current=parent;}}
 inline bool Load(const std::filesystem::path& file){File=file;Initialized=true;Ready=false;try{Safe(file);Existed=std::filesystem::exists(file);Baseline=Existed?ConfigFiles::Read(file,128*1024):std::string{};Orders=Existed?Validate(Json::parse(Baseline)):Json::object();Ready=true;Status.clear();return true;}catch(const std::exception& error){Status=error.what();return false;}}
 inline bool Save(Json next){try{

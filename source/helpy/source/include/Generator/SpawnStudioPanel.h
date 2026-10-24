@@ -35,19 +35,24 @@ inline std::string Icon(const nlohmann::json& row){
     return {};
 }
 inline void Details(const nlohmann::json& row,bool compact=false){
-    const auto& t=HelpyImGuiTheme::Current;const auto label=SpawnNames::Display(row);const auto a=ImGui::GetCursorScreenPos();const float side=t.Y(compact?40:48);
+    const auto text=compact?HelpyImGuiTheme::DetailsText:ImGui::TextWrapped;
+    const auto disabled=compact?HelpyImGuiTheme::DetailsTextDisabled:ImGui::TextDisabled;
+    const auto colored=compact?HelpyImGuiTheme::DetailsTextColored:ImGui::TextColored;
+    const auto& t=HelpyImGuiTheme::Current;const auto label=SpawnNames::Display(row);const float side=t.Y(compact?40:48),startX=ImGui::GetCursorPosX();
+    if(compact)ImGui::SetCursorPosX(startX+std::max(0.f,(ImGui::GetContentRegionAvail().x-side)*.5f));
+    const auto a=ImGui::GetCursorScreenPos();
     ImGui::Dummy({side,side});if(!ItemIconCache::Draw(Icon(row),a,{a.x+side,a.y+side},true)&&!HelpyWikiIcons::Draw(label.Art,a,{a.x+side,a.y+side})){
         const auto type=SpawnCatalogSearch::Text(row,"Type");MapLayerIcons::Draw(type=="NPC"?"npcs":type=="AI"?"creatures":SpawnPresentation::ResourceTab(row)==0?"trees":"ore",{a.x+side*.5f,a.y+side*.5f},side);
     }
-    ImGui::SameLine();ImGui::BeginGroup();ImGui::TextWrapped("%s",label.Name.c_str());
+    if(compact)ImGui::SetCursorPosX(startX);else ImGui::SameLine();ImGui::BeginGroup();text("%s",label.Name.c_str());
     const auto type=SpawnCatalogSearch::Text(row,"Type"),family=SpawnCatalogSearch::Text(row,"ResourceFamily");
-    ImGui::TextDisabled("%s%s%s",type=="AI"?"Enemy / AI":type.c_str(),family.empty()?"":" · ",family.c_str());ImGui::EndGroup();
+    disabled("%s%s%s",type=="AI"?"Enemy / AI":type.c_str(),family.empty()?"":" · ",family.c_str());ImGui::EndGroup();
     auto source=SpawnCatalogSearch::Text(row,"SourceName");if(source.empty())source=SpawnCatalogSearch::Text(row,"ModId");
-    if(!source.empty())ImGui::TextWrapped("Source: %s",source.c_str());
-    if(SpawnBrowserSettings::Choices.Contains(row))ImGui::TextColored(t.accentHover,"Hidden from normal results");
-    const auto description=SpawnCatalogSearch::Text(row,"Description");if(!description.empty())ImGui::TextWrapped("%s",description.c_str());
-    ImGui::TextWrapped("%s",row.value("NeedsInspection",false)?"Mounted candidate · inspection required before spawning.":row.value("Available",false)?"Native definition available. Placement safety checks still apply.":"Not currently available for spawning.");
-    const auto reason=SpawnCatalogSearch::Text(row,"Reason");if(!reason.empty())ImGui::TextWrapped("%s",reason.c_str());
+    if(!source.empty())text("Source: %s",source.c_str());
+    if(SpawnBrowserSettings::Choices.Contains(row))colored(t.accentHover,"Hidden from normal results");
+    const auto description=SpawnCatalogSearch::Text(row,"Description");if(!description.empty())text("%s",description.c_str());
+    text("%s",row.value("NeedsInspection",false)?"Mounted candidate · inspection required before spawning.":row.value("Available",false)?"Native definition available. Placement safety checks still apply.":"Not currently available for spawning.");
+    const auto reason=SpawnCatalogSearch::Text(row,"Reason");if(!reason.empty())text("%s",reason.c_str());
     if(!compact&&ImGui::CollapsingHeader("Technical details")){
         for(const auto* key:{"Class","Key","SourceRoot","Origin","TemporaryReason","PermanentReason"}){const auto value=SpawnCatalogSearch::Text(row,key);if(!value.empty())ImGui::TextWrapped("%s: %s",key,value.c_str());}
     }

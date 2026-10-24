@@ -11,6 +11,7 @@
 #include "SDK/Helper/PropertyHelper.h"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnosticB3C.h"
 #include "Loader/DragonWildsCourseLoader.h"
 
 using namespace RC;
@@ -105,9 +106,12 @@ namespace DragonWilds {
 
     void DragonWildsCourseLoader::OnAutoReload(const RC::StringType& modName, const fs::path& modFilePath)
     {
-        PS::Log<LogLevel::Warning>(
-            STR("Ignored course changes for {}. Courses are built into the world on load; "
-                "restart the game to apply them.\n"), modName);
+        if (!PS::StructuredDiagnosticB3C::Report("RS-CRS-005","Warning","Deferred","CourseLoader",
+            "Course reload requires restart","Courses are built into the world on load; restart the game to apply changes.",
+            RC::to_string(modName),PS::StructuredDiagnosticB2::Utf8Path(modFilePath),{},"Reload"))
+            PS::Log<LogLevel::Warning>(
+                STR("Ignored course changes for {}. Courses are built into the world on load; "
+                    "restart the game to apply them.\n"), modName);
     }
 
     bool DragonWildsCourseLoader::CanInitialize(const EEngineLifecyclePhase& engineLifecyclePhase)
@@ -147,7 +151,9 @@ namespace DragonWilds {
         if (!patch.at("$Patch").is_string()
             || !patch.contains("$Target") || !patch.at("$Target").is_object())
         {
-            PS::Log<LogLevel::Error>(STR("{}: Course '$Patch' requires a string identity and object '$Target'.\n"), modName);
+            if (!PS::StructuredDiagnosticB3C::Report("RS-CRS-002","Error","Blocked","CourseLoader",
+                "Invalid course patch","$Patch needs a string identity and object $Target.",RC::to_string(modName),{}, {},"Validation"))
+                PS::Log<LogLevel::Error>(STR("{}: Course '$Patch' requires a string identity and object '$Target'.\n"), modName);
             return;
         }
 
@@ -162,19 +168,28 @@ namespace DragonWilds {
             return course.Id == targetId && (targetMod.empty() || course.ModName == targetMod);
         };
         if (targetId.empty() || (separator != RC::StringType::npos && targetMod.empty())) {
-            PS::Log<LogLevel::Error>(STR("{}: Course target '{}' is invalid; use Id or ModName:Id.\n"), modName, target);
+            PS::LogStructuredFallback<LogLevel::Error>(
+                PS::StructuredDiagnosticB3C::Report("RS-CRS-007","Error","Skipped","CourseLoader",
+                "Course patch target malformed","Use Id or ModName:Id.",RC::to_string(modName),{},RC::to_string(target),"Validation"),
+                STR("{}: Course target '{}' is invalid; use Id or ModName:Id.\n"), modName, target);
             return;
         }
         auto found = m_courses.end();
         try {
             found = FindUniqueTarget(m_courses.begin(), m_courses.end(), matches);
         } catch (const std::runtime_error&) {
-            PS::Log<LogLevel::Error>(STR("{}: Course target '{}' is ambiguous; use a unique ModName:Id.\n"), modName, target);
+            PS::LogStructuredFallback<LogLevel::Error>(
+                PS::StructuredDiagnosticB3C::Report("RS-CRS-008","Error","Skipped","CourseLoader",
+                "Course patch target ambiguous","More than one course matches the requested identifier.",RC::to_string(modName),{},RC::to_string(target),"Resolution"),
+                STR("{}: Course target '{}' is ambiguous; use a unique ModName:Id.\n"), modName, target);
             return;
         }
         if (found == m_courses.end())
         {
-            PS::Log<LogLevel::Error>(STR("{}: Course patch target '{}' was not found.\n"), modName, target);
+            if (!PS::StructuredDiagnosticB3C::Report("RS-CRS-003","Error","Blocked","CourseLoader",
+                "Course patch target unavailable","No matching course identity was found.",
+                RC::to_string(modName),{},RC::to_string(target),"Resolution"))
+                PS::Log<LogLevel::Error>(STR("{}: Course patch target '{}' was not found.\n"), modName, target);
             return;
         }
 
@@ -508,7 +523,9 @@ namespace DragonWilds {
         }
         catch (const std::exception& e)
         {
-            PS::Log<LogLevel::Error>(STR("Invalid course in {}: {}\n"), modName, PS::ToWideSafe(e.what()));
+            if (!PS::StructuredDiagnosticB3C::Report("RS-CRS-001","Error","Skipped","CourseLoader",
+                "Course definition rejected",e.what(),RC::to_string(modName),{}, {},"Validation"))
+                PS::Log<LogLevel::Error>(STR("Invalid course in {}: {}\n"), modName, PS::ToWideSafe(e.what()));
         }
     }
 
@@ -541,7 +558,9 @@ namespace DragonWilds {
 
         if (m_initGameStateCallbackId == Hook::ERROR_ID)
         {
-            PS::Log<LogLevel::Error>(STR("Unable to hook InitGameState; courses will not be built.\n"));
+            if (!PS::StructuredDiagnosticB3C::Report("RS-CRS-004","Error","Failed","CourseLoader",
+                "Course lifecycle hook unavailable","Unable to hook InitGameState; courses will not be built.",{}, {},{},"Finalization"))
+                PS::Log<LogLevel::Error>(STR("Unable to hook InitGameState; courses will not be built.\n"));
             return false;
         }
 
@@ -579,7 +598,10 @@ namespace DragonWilds {
 
         if (m_propTickCallbackId == Hook::ERROR_ID)
         {
-            PS::Log<LogLevel::Error>(STR("Unable to register the course prop lifecycle tick.\n"));
+            PS::LogStructuredFallback<LogLevel::Error>(
+                PS::StructuredDiagnosticB3C::Report("RS-CRS-009","Error","Blocked","CourseLoader",
+                "Course prop lifecycle observer unavailable","Native prop update tick could not be registered.",{}, {},"CoursePropTick","Validation"),
+                STR("Unable to register the course prop lifecycle tick.\n"));
         }
     }
 
@@ -677,7 +699,10 @@ namespace DragonWilds {
 
         if (m_buildTickCallbackId == Hook::ERROR_ID)
         {
-            PS::Log<LogLevel::Error>(STR("Unable to register the course build tick.\n"));
+            PS::LogStructuredFallback<LogLevel::Error>(
+                PS::StructuredDiagnosticB3C::Report("RS-CRS-010","Error","Blocked","CourseLoader",
+                "Course build observer unavailable","Native course construction tick could not be registered.",{}, {},"CourseBuildTick","Validation"),
+                STR("Unable to register the course build tick.\n"));
         }
     }
 
@@ -714,7 +739,10 @@ namespace DragonWilds {
         {
             if (!ActorHelper::ResolveObject(path))
             {
-                PS::Log<LogLevel::Error>(STR("Agility content is unavailable ('{}'); no courses will be built.\n"), path);
+                PS::LogStructuredFallback<LogLevel::Error>(
+                    PS::StructuredDiagnosticB3C::Report("RS-CRS-011","Error","Blocked","CourseLoader",
+                    "Required agility content unavailable","A required native agility asset or class could not be resolved.",{}, {},RC::to_string(path),"Resolution"),
+                    STR("Agility content is unavailable ('{}'); no courses will be built.\n"), path);
                 return false;
             }
         }
@@ -722,7 +750,10 @@ namespace DragonWilds {
         auto warm = [](const RC::StringType& path, const TCHAR* kind) {
             if (!ActorHelper::ResolveObject(path))
             {
-                PS::Log<LogLevel::Warning>(STR("Could not resolve the {} '{}'; it will be granted as nothing.\n"), kind, path);
+                PS::LogStructuredFallback<LogLevel::Warning>(
+                    PS::StructuredDiagnosticB3C::Report("RS-CRS-012","Warning","Skipped","CourseLoader",
+                    "Course reward target unavailable","This reward target could not be resolved and would grant nothing.",{}, {},RC::to_string(path),"Resolution"),
+                    STR("Could not resolve the {} '{}'; it will be granted as nothing.\n"), kind, path);
             }
         };
 
@@ -1005,7 +1036,10 @@ namespace DragonWilds {
                 auto* propClass = ActorHelper::ResolveClass(prop.ClassPath);
                 if (!propClass || !ActorHelper::IsActorClass(propClass) || ActorHelper::IsAbstract(propClass))
                 {
-                    PS::Log<LogLevel::Warning>(STR("Course '{}': skipping unusable prop '{}'\n"), course.Id, prop.ClassPath);
+                    PS::LogStructuredFallback<LogLevel::Warning>(
+                        PS::StructuredDiagnosticB3C::Report("RS-CRS-013","Warning","Skipped","CourseLoader",
+                        "Course prop class unusable","A course prop was missing, non-actor or abstract.",{}, {},RC::to_string(prop.ClassPath),"Validation"),
+                        STR("Course '{}': skipping unusable prop '{}'\n"), course.Id, prop.ClassPath);
                     continue;
                 }
 
@@ -1042,8 +1076,10 @@ namespace DragonWilds {
         }
         catch (const std::exception& e)
         {
-            PS::Log<LogLevel::Error>(STR("Course '{}' from {} failed to build: {}\n"),
-                course.Id, course.ModName, PS::ToWideSafe(e.what()));
+            if (!PS::StructuredDiagnosticB3C::Report("RS-CRS-006","Error","Failed","CourseLoader",
+                "Course construction failed",e.what(),RC::to_string(course.ModName),{},RC::to_string(course.Id),"Application"))
+                PS::Log<LogLevel::Error>(STR("Course '{}' from {} failed to build: {}\n"),
+                    course.Id, course.ModName, PS::ToWideSafe(e.what()));
             return false;
         }
     }

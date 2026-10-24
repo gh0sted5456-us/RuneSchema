@@ -415,7 +415,11 @@ void DragonWildsNpcLoader::OnDialogueRequirement(UnrealScriptFunctionCallableCon
             allowed=DialogueGateAllows(found->second,ActorHelper::GetObjectRef(lease.PlayerToken,TEXT("Controller")));
             break;
         }
-    }catch(const std::exception& error){ErrorOnce("dialogue-gate:"+(found->second.GateQuest.empty()?"time:"+found->second.GateTime:found->second.GateQuest),PS::ToWideSafe(error.what()));}
+    }catch(const std::exception& error){
+        const auto gate=found->second.GateQuest.empty()?"time:"+found->second.GateTime:found->second.GateQuest;
+        ErrorOnceDiagnostic("dialogue-gate:"+gate,PS::ToWideSafe(error.what()),
+            "RS-NPC-020","Dialogue gate evaluation failed","Warning","Blocked",{},gate,"Validation");
+    }
     if(!allowed)std::memcpy(context.RESULT_DECL,&m_dialogueHiddenResult,1);
 }
 
@@ -450,7 +454,9 @@ UObject* DragonWildsNpcLoader::BuildDialogueGraph(const VendorDefinition& defini
             bool allowed=true;
             if(!gate.GateQuest.empty() || !gate.GateTime.empty())try {allowed=DialogueGateAllows(gate,controller);}
             catch(const std::exception& error) {
-                allowed=false;ErrorOnce("dialogue-unlock:"+definition.DialogueKey+":"+nodeId+":"+choice.at("Id").get<std::string>(),PS::ToWideSafe(error.what()));
+                allowed=false;ErrorOnceDiagnostic("dialogue-unlock:"+definition.DialogueKey+":"+nodeId+":"+choice.at("Id").get<std::string>(),PS::ToWideSafe(error.what()),
+                    "RS-NPC-021","Dialogue choice unlock evaluation failed","Warning","Skipped",
+                    definition.ModName,definition.DialogueKey+":"+nodeId,"Validation");
             }
             if(allowed)available.push_back(choice);
         }
@@ -870,24 +876,30 @@ void DragonWildsNpcLoader::OnDialogueTask(UObject* source,UFunction* function,vo
         DialogueField(action.Response,TEXT("Message"),text);
         if(result==DialogueProgress::Result::Granted)applyVisual();
         if(result==DialogueProgress::Result::Uncertain)
-            ErrorOnce("dialogue-pending:"+character+":"+action.Flag,TEXT("Dialogue reward has an unresolved pending receipt; inspect runtime/saved/progress/dialogue before retrying."));
+            ErrorOnceDiagnostic("dialogue-pending:"+character+":"+action.Flag,
+                TEXT("Dialogue reward has an unresolved pending receipt; inspect runtime/saved/progress/dialogue before retrying."),
+                "RS-NPC-027","Dialogue reward receipt remains pending","Error","Deferred",{},action.Flag,"Finalization",true);
     } catch(const std::exception& error) {
         if(generation!=m_worldGeneration)return;
         if(!action.EventKey.empty()) {
             if(action.Response)DialogueField(action.Response,TEXT("Message"),"The encounter could not be updated safely. Please check the RuneSchema error before retrying.");
-            ErrorOnce("event-action:"+action.EventKey,RC::to_generic_string(std::string("Event action failed: ")+error.what()));return;
+            ErrorOnceDiagnostic("event-action:"+action.EventKey,RC::to_generic_string(std::string("Event action failed: ")+error.what()),
+                "RS-NPC-022","Dialogue event action encountered an exception","Error","Partial",{},action.EventKey,"Application",true);return;
         }
         if(!action.QuestKey.empty()) {
             if(action.Response)DialogueField(action.Response,TEXT("Message"),"The quest update failed. Check the RuneSchema log before trying again.");
-            ErrorOnce("quest-action:"+action.QuestKey,RC::to_generic_string(std::string("Quest action failed: ")+error.what()));return;
+            ErrorOnceDiagnostic("quest-action:"+action.QuestKey,RC::to_generic_string(std::string("Quest action failed: ")+error.what()),
+                "RS-NPC-023","Dialogue quest action encountered an exception","Error","Partial",{},action.QuestKey,"Application",true);return;
         }
         if(!action.Store.empty()) {
             session->ShopPending=false;
-            ErrorOnce("dialogue-shop:"+action.Store,RC::to_generic_string(std::string("Dialogue shop failed: ")+error.what()));
+            ErrorOnceDiagnostic("dialogue-shop:"+action.Store,RC::to_generic_string(std::string("Dialogue shop failed: ")+error.what()),
+                "RS-NPC-024","Dialogue shop opening failed","Error","Failed",{},action.Store,"Application");
             return;
         }
         if(action.Response)DialogueField(action.Response,TEXT("Message"),DialogueCompletionPresentation::Message(DialogueCompletionPresentation::Outcome::Failed));
-        ErrorOnce("dialogue-reward:"+action.Flag,RC::to_generic_string(std::string("Dialogue reward failed: ")+error.what()));
+        ErrorOnceDiagnostic("dialogue-reward:"+action.Flag,RC::to_generic_string(std::string("Dialogue reward failed: ")+error.what()),
+            "RS-NPC-025","Dialogue reward operation encountered an exception","Error","Partial",{},action.Flag,"Application",true);
     }
 }
 
@@ -1071,7 +1083,8 @@ void DragonWildsNpcLoader::PumpDialogueShop() {
         if(generation!=m_worldGeneration)return;
         const auto failed=m_dialogueSessions.find(session->Instance);
         if(failed!=m_dialogueSessions.end() && failed->second==session)m_dialogueSessions.erase(failed);
-        ErrorOnce("dialogue-shop-transition",RC::to_generic_string(std::string("Dialogue shop transition failed: ")+error.what()));
+        ErrorOnceDiagnostic("dialogue-shop-transition",RC::to_generic_string(std::string("Dialogue shop transition failed: ")+error.what()),
+            "RS-NPC-028","Dialogue shop transition failed","Error","Failed",{},"ShopTransition","Application");
     }
     }
 }

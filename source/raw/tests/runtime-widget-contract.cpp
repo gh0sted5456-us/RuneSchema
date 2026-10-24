@@ -80,8 +80,26 @@ int main(int argc, char** argv) {
     Require(source, "RemoveFromParent");
     Require(source, "m_runtimeUiActiveRules.emplace(key)");
     Require(source, "RemoveRuntimeUiInstancesForOwner");
-    Require(source, "eventName == \"Destruct\"");
-    Require(source, "eventName == \"OnDeactivated\"");
+    Require(source, "eventName = function->GetFName()");
+    Require(source, "destruct(TEXT(\"Destruct\"),FNAME_Add)");
+    Require(source, "deactivated(TEXT(\"OnDeactivated\"),FNAME_Add)");
+    Require(source, "eventName == destruct");
+    Require(source, "eventName == deactivated");
+    Require(header,"m_runtimeWidgetOwnerClasses");
+    Require(header,"m_runtimeOwnerClassPaths");
+    Require(source,"found->second.Type.Get()==type");
+    Require(source,"m_runtimeOwnerClassPaths.size()>=512");
+    Require(source,"m_runtimeWidgetPathOwners.contains(ownerClass)");
+    Require(source,"for (const auto& ownerClass : m_runtimeWidgetOwnerClasses)");
+    Require(source,"return RuntimeWidgetRuleMatchesEvent(rule.Data, function)");
+    const auto initialize=source.find("bool DragonWildsBlueprintModLoader::OnInitialize()");
+    const auto observer=source.find("void DragonWildsBlueprintModLoader::EnsureRuntimeWidgetObserver()");
+    if(source.substr(initialize,observer-initialize).find("RegisterProcessEventPostCallback")!=std::string::npos)
+        throw std::runtime_error("Runtime widget observer is installed even when no rules exist");
+    const auto ownerLookup=source.find("UObject* DragonWildsBlueprintModLoader::FindRuntimeWidgetOwner");
+    const auto ownerLookupEnd=source.find("bool DragonWildsBlueprintModLoader::RuntimeWidgetSelectorMatches",ownerLookup);
+    if(source.substr(ownerLookup,ownerLookupEnd-ownerLookup).find("GetPathName()")!=std::string::npos)
+        throw std::runtime_error("Widget owner walk still allocates class paths for every unrelated event");
     Require(source, "A native widget can be collapsed before it emits any useful");
     Require(source, "propertyName == \"$RuntimeWidget\" || propertyName == \"$RuntimeUI\"");
 

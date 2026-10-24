@@ -5,7 +5,7 @@
 namespace PS::HelpyInventoryService {
 using Json=nlohmann::json;
 inline constexpr uint32_t MutationReplyBytes=4096;
-inline bool Mutating(const std::string& action){return action=="Mark"||action=="CycleMark"||action=="ReceiveMarks"||action=="ReceivePublicProfile"||action=="ClearPublicProfiles";}
+inline bool Mutating(const std::string& action){return action=="Mark"||action=="CycleMark"||action=="ImportLegacyFavorites"||action=="ReceiveMarks"||action=="ReceivePublicProfile"||action=="ClearPublicProfiles";}
 inline Json Run(const std::filesystem::path& directory,const Json& request){
     const auto action=request.at("Action").get<std::string>();
     if(action=="Capabilities")return {{"GameFavorites",HelpySettings::ExtendFavoritesToGame()},{"MarksRevision",HelpyPersonalization::Revision.load()}};
@@ -15,6 +15,22 @@ inline Json Run(const std::filesystem::path& directory,const Json& request){
     if(action=="ClearPublicProfiles"){RuneSchemaProfile::ClearShared();return {{"Accepted",true}};}
     if(action=="ExportMarks")return HelpyMarkSync::Export(request);
     if(action=="ReceiveMarks")return HelpyMarkSync::Receive(request.at("Batch"));
+    if(action=="ImportLegacyFavorites"){
+        const auto& items=request.at("Items");if(!items.is_array()||items.empty()||items.size()>16)throw std::runtime_error("Legacy favorite import exceeds its batch bound");
+        const auto revision=HelpyPersonalization::Revision.load();Json patches=Json::object();unsigned imported=0;
+        for(const auto& item:items){
+            const auto key=HelpyPersonalization::StackKey(item);
+            if(key.empty()||item.value("MarksReadOnly",false)||patches.contains(key))throw std::runtime_error("Legacy favorite needs an unambiguous local character/item identity");
+            const auto existing=HelpyPersonalization::Get(key);if(existing.value("LegacyFavoriteImported",false))continue;
+            Json patch={{"LegacyFavoriteImported",true}};
+            const auto type=HelpyPersonalization::Get(HelpyPersonalization::TypeKey(item));
+            if(!existing.contains("Favorite")&&!existing.contains("Tags")&&!type.contains("Favorite")&&!type.contains("Tags")){patch["Favorite"]=true;++imported;}
+            patches[key]=std::move(patch);
+        }
+        // Import receipt and mark share the same atomic write, so cleared marks cannot reappear after restart.
+        if(!patches.empty()&&!HelpyPersonalization::SetMany(patches,revision))throw std::runtime_error(HelpyPersonalization::Status);
+        return {{"Imported",imported},{"Revision",HelpyPersonalization::Revision.load()}};
+    }
     if(action=="Marks"||action=="TypeMarks"||action=="Mark"||action=="CycleMark"){
         const auto& item=request.at("Item");const auto stack=HelpyPersonalization::StackKey(item),type=HelpyPersonalization::TypeKey(item);
         if(stack.empty()||type.empty()||item.value("MarksReadOnly",false))throw std::runtime_error("Stable character/item identity required");

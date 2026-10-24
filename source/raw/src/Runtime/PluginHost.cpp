@@ -181,7 +181,7 @@ int32_t RS_PLUGIN_CALL CoreMapping(void*,const char* requestJson,char* response,
         const auto request=nlohmann::json::parse(requestJson);
         const auto& mapping=MappingBackbone::Current(std::filesystem::path(HostServices::WorkingDirectory()));
         const auto result=Usmap::Index::Shared().Handle(mapping.Path,mapping.Fingerprint,
-            HostServices::CacheDirectory()/"mappings",request);
+            HostServices::MappingCacheDirectory()/"index",request);
         return JsonResponse(result,response,capacity,size);
     } catch(const std::exception& error) {
         return JsonResponse({{"Ok",false},{"Error",error.what()}},response,capacity,size);
@@ -282,8 +282,8 @@ void PluginHost::Load(const std::filesystem::path& root) {
         Capabilities.insert_or_assign("binding.resolve","RuneSchema.Core");}
     std::vector<PluginCatalog::Plugin> manifests;
     try{manifests=PluginCatalog::Discover(root,&m_state->Messages);}
-    catch(const std::exception& error){m_state->Messages.push_back(std::string("plugin catalog rejected; RuneSchema core continues: ")+error.what());return;}
-    catch(...){m_state->Messages.push_back("plugin catalog rejected by an unknown error; RuneSchema core continues");return;}
+    catch(const std::exception& error){m_state->Messages.push_back(std::string("plugin catalog rejected; RuneSchema core continues: ")+error.what());PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginCatalogRejected,TEXT("Plugin catalog rejected; RuneSchema core continues: {}\n"),PS::ToWideSafe(error.what()));return;}
+    catch(...){m_state->Messages.push_back("plugin catalog rejected by an unknown error; RuneSchema core continues");PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginCatalogRejected,TEXT("Plugin catalog rejected by an unknown error; RuneSchema core continues.\n"));return;}
     for(const auto& manifest:manifests) {
         if(!manifest.Enabled)continue;
         // The desktop Helpy frontend has no Unreal imports or viewport hook.
@@ -315,18 +315,20 @@ void PluginHost::Load(const std::filesystem::path& root) {
         if(pathError)absolute=manifest.EntryPoint;
         if(!std::filesystem::is_regular_file(absolute)){
             m_state->Messages.push_back(manifest.Id+": native DLL not found; PAK content is still available");
+            PS::CodedLog<RC::LogLevel::Warning>(PS::Diagnostics::Id::PluginDllMissing,TEXT("Plugin {}: native DLL not found at '{}'; PAK content is still available.\n"),PS::ToWideSafe(manifest.Id),absolute.wstring());
             continue;
         }
         auto module=LoadLibraryExW(absolute.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if(!module){m_state->Messages.push_back(manifest.Id+": LoadLibraryExW failed ("+std::to_string(GetLastError())+")");continue;}
+        if(!module){const auto error=GetLastError();m_state->Messages.push_back(manifest.Id+": LoadLibraryExW failed ("+std::to_string(error)+")");PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginLoadFailed,TEXT("Plugin {}: LoadLibraryExW failed ({}) for '{}'.\n"),PS::ToWideSafe(manifest.Id),error,absolute.wstring());continue;}
         const auto query=reinterpret_cast<RuneSchemaPluginQueryFn>(GetProcAddress(module,"RuneSchemaPlugin_Query"));
         const auto initialize=reinterpret_cast<RuneSchemaPluginInitializeFn>(GetProcAddress(module,"RuneSchemaPlugin_Initialize"));
         const auto shutdown=reinterpret_cast<RuneSchemaPluginShutdownFn>(GetProcAddress(module,"RuneSchemaPlugin_Shutdown"));
-        if(!query||!initialize||!shutdown){m_state->Messages.push_back(manifest.Id+": mandatory API exports are missing");FreeLibrary(module);continue;}
+        if(!query||!initialize||!shutdown){m_state->Messages.push_back(manifest.Id+": mandatory API exports are missing");PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginExportsMissing,TEXT("Plugin {}: mandatory API exports are missing.\n"),PS::ToWideSafe(manifest.Id));FreeLibrary(module);continue;}
         const RuneSchemaPluginDescriptor* descriptor=nullptr;try{descriptor=query();}catch(...){descriptor=nullptr;}
         if(!descriptor||descriptor->StructSize<sizeof(RuneSchemaPluginDescriptor)||descriptor->ApiVersion!=RUNESCHEMA_PLUGIN_API_VERSION
             ||!descriptor->Id||manifest.Id!=descriptor->Id||!descriptor->Version) {
-            m_state->Messages.push_back(manifest.Id+": native DLL identity/API is incompatible and was isolated; core, other plugins, and its PAK mounting continue");FreeLibrary(module);continue;
+            m_state->Messages.push_back(manifest.Id+": native DLL identity/API is incompatible and was isolated; core, other plugins, and its PAK mounting continue");
+            PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginIdentityRejected,TEXT("Plugin {}: native DLL identity/API is incompatible and was isolated; core, other plugins and PAK mounting continue.\n"),PS::ToWideSafe(manifest.Id));FreeLibrary(module);continue;
         }
         if(manifest.Version!=descriptor->Version)
             CompatibilityNotice(manifest.Id+": manifest version "+manifest.Version+", DLL version "+descriptor->Version+"; trying load");
@@ -339,6 +341,7 @@ void PluginHost::Load(const std::filesystem::path& root) {
             const auto found=Capabilities.find(capability);if(found==Capabilities.end()||found->second!=manifest.Id){complete=false;break;}
         }}
         if(!complete){m_state->Messages.push_back(manifest.Id+": initialization/capability contract failed ("+std::to_string(result)+")");
+            PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginInitFailed,TEXT("Plugin {}: initialization/capability contract failed ({}).\n"),PS::ToWideSafe(manifest.Id),result);
             {std::scoped_lock lock(Gate);std::erase_if(Services,[&](const auto& value){return value.second.Owner==manifest.Id;});std::erase_if(Capabilities,[&](const auto& value){return value.second==manifest.Id;});}
             FreeLibrary(module);continue;}
         {std::scoped_lock lock(Gate);for(const auto& connection:manifest.Connections) {
@@ -354,7 +357,11 @@ void PluginHost::Load(const std::filesystem::path& root) {
         m_state->Messages.push_back(manifest.Id+": loaded API 1");
     }
 }
-void PluginHost::OnUiInit(){for(auto& plugin:m_state->LoadedPlugins)if(plugin.UiInit)try{if(plugin.UiInit(plugin.Instance)!=RS_PLUGIN_OK)m_state->Messages.push_back(plugin.Manifest.Id+": UI initialization rejected");}catch(...){m_state->Messages.push_back(plugin.Manifest.Id+": UI initialization threw an exception");}}
+void PluginHost::OnUiInit(){for(auto& plugin:m_state->LoadedPlugins)if(plugin.UiInit)try{
+    if(plugin.UiInit(plugin.Instance)!=RS_PLUGIN_OK){m_state->Messages.push_back(plugin.Manifest.Id+": UI initialization rejected");
+        PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginUiFailed,TEXT("Plugin {}: UI initialization rejected.\n"),PS::ToWideSafe(plugin.Manifest.Id));}
+}catch(...){m_state->Messages.push_back(plugin.Manifest.Id+": UI initialization threw an exception");
+    PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginUiFailed,TEXT("Plugin {}: UI initialization threw an exception.\n"),PS::ToWideSafe(plugin.Manifest.Id));}}
 void PluginHost::OnUnrealInit(){for(auto& plugin:m_state->LoadedPlugins){
     size_t packs=0;
     try{packs=PluginCatalog::PakDirectories(plugin.Manifest).size();}
@@ -368,8 +375,8 @@ void PluginHost::OnUnrealInit(){for(auto& plugin:m_state->LoadedPlugins){
     // This wording is sourced from plugin.json. Updating a plugin version or
     // announcement does not require rebuilding RuneSchema core.
     if(!plugin.UnrealInit){HostLog(RS_LOG_INFO,plugin.Manifest.Id.c_str(),announcement.c_str());continue;}
-    try{const auto result=plugin.UnrealInit(plugin.Instance);if(result!=RS_PLUGIN_OK){m_state->Messages.push_back(plugin.Manifest.Id+": Unreal initialization rejected");HostLog(RS_LOG_ERROR,plugin.Manifest.Id.c_str(),"Unreal initialization rejected");}else HostLog(RS_LOG_INFO,plugin.Manifest.Id.c_str(),announcement.c_str());}
-    catch(...){m_state->Messages.push_back(plugin.Manifest.Id+": Unreal initialization threw an exception");HostLog(RS_LOG_ERROR,plugin.Manifest.Id.c_str(),"Unreal initialization threw an exception");}
+    try{const auto result=plugin.UnrealInit(plugin.Instance);if(result!=RS_PLUGIN_OK){m_state->Messages.push_back(plugin.Manifest.Id+": Unreal initialization rejected");PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginUnrealFailed,TEXT("Plugin {}: Unreal initialization rejected ({}).\n"),PS::ToWideSafe(plugin.Manifest.Id),result);}else HostLog(RS_LOG_INFO,plugin.Manifest.Id.c_str(),announcement.c_str());}
+    catch(...){m_state->Messages.push_back(plugin.Manifest.Id+": Unreal initialization threw an exception");PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginUnrealFailed,TEXT("Plugin {}: Unreal initialization threw an exception.\n"),PS::ToWideSafe(plugin.Manifest.Id));}
 }
     SpawnToolRequests::PushUpdate=[](const char* kind,const nlohmann::json& payload,uint64_t revision){
         const auto message=nlohmann::json{{"Kind",kind},{"Revision",revision},{"Payload",payload},

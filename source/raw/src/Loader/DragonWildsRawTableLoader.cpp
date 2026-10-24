@@ -13,6 +13,7 @@
 #include "SDK/Structs/Custom/FScriptMapHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnosticB3.h"
 #include "Utility/Config.h"
 #include "Core/ConfigFiles.h"
 #include "Runtime/HostServices.h"
@@ -59,37 +60,49 @@ namespace DragonWilds {
 
     void DragonWildsRawTableLoader::Apply(const RC::StringType& tableName, RC::Unreal::UDataTable* datatable)
     {
+        if(!m_rawTargetsReady||!datatable)return;
         auto it = m_tableDataMap.find(tableName);
         if (it != m_tableDataMap.end())
         {
+            for(auto* destination:RawDestinations(datatable)){
+            auto& applied=m_rawApplications[{tableName,destination->GetPathName()}];
+            if(applied.Table.Get()!=destination){applied.Table=PS::WeakObjectHandle(destination);applied.Cursor={};}
             LoadResult result{};
-
-            for (auto& data : it->second)
-            {
-                Apply(data, datatable, result);
-            }
+            const auto before=applied.Cursor.Applied;
+            applied.Cursor.Consume(it->second.size(),[&](size_t index){
+                const auto& definition=it->second[index];ApplyDefinition(&definition,definition.Data,destination,result);
+            });
+            if(before==applied.Cursor.Applied)continue;
 
             PS::RoutineLog("raw", STR("{}: {} rows updated, {} rows added, {} rows deleted, {} error{}.\n"),
                 datatable->GetName(), result.SuccessfulModifications, result.SuccessfulAdditions,
                 result.SuccessfulDeletions, result.ErrorCount, result.ErrorCount > 1 || result.ErrorCount == 0 ? STR("s") : STR(""));
             if (result.Patched) PS::RoutineLog("patches", STR("{} $Patch: {} updated.\n"), datatable->GetName(), result.Patched);
-        }
-    }
-
-    void DragonWildsRawTableLoader::Apply(UECustom::UCompositeDataTable* compositeDatatable)
-    {
-        auto parentTables = compositeDatatable->GetParentTables();
-        for (auto& parentTable : parentTables)
-        {
-            auto parentTableName = parentTable->GetName();
-            if (parentTableName.ends_with(STR("_Common")))
-            {
-                Apply(compositeDatatable->GetName(), parentTable.Get());
             }
         }
     }
 
+    std::vector<UDataTable*> DragonWildsRawTableLoader::RawDestinations(UDataTable* table){
+        if(!table->IsA(UECustom::UCompositeDataTable::StaticClass()))return {table};
+        auto parents=static_cast<UECustom::UCompositeDataTable*>(table)->GetParentTables();
+        std::vector<std::string> names;for(auto& parent:parents)names.push_back(parent.Get()?RC::to_string(parent->GetName()):std::string{});
+        std::vector<UDataTable*> result;std::set<UDataTable*> seen;
+        for(const auto index:PS::RawTableTarget::CommonParents(names))if(seen.insert(parents[index].Get()).second)result.push_back(parents[index].Get());
+        return result;
+    }
+
+    void DragonWildsRawTableLoader::Apply(UECustom::UCompositeDataTable* compositeDatatable)
+    {
+        Apply(compositeDatatable->GetName(),compositeDatatable);
+    }
+
     void DragonWildsRawTableLoader::Apply(const nlohmann::json& data, RC::Unreal::UDataTable* datatable, LoadResult& outResult)
+    {
+        ApplyDefinition(nullptr,data,datatable,outResult);
+    }
+
+    void DragonWildsRawTableLoader::ApplyDefinition(const RawDefinition* definition,
+        const nlohmann::json& data, RC::Unreal::UDataTable* datatable, LoadResult& outResult)
     {
         for (auto& [dataKey, dataRow] : data.items())
         {
@@ -120,7 +133,16 @@ namespace DragonWilds {
                 if (patchOnly)
                 {
                     outResult.ErrorCount++;
-                    PS::Log<LogLevel::Error>(STR("Raw $Patch target '{}:{}' was not found; no row was created.\n"),
+                    const PS::StructuredDiagnosticB2::Provenance provenance{
+                        definition?definition->ModId:std::string{},
+                        definition?definition->Source:std::string{},
+                        RC::to_string(datatable->GetPathName())+":"+dataKey,
+                        definition?definition->OperationId:std::string{}};
+                    const bool structured=PS::StructuredDiagnosticB3::Report("RS-RAW-001","Error","Failed",
+                        "RawTableLoader","Raw patch target row not found",
+                        "The requested existing DataTable row does not exist; no new row was created.",
+                        provenance,"Application");
+                    if(!structured)PS::Log<LogLevel::Error>(STR("Raw $Patch target '{}:{}' was not found; no row was created.\n"),
                         datatable->GetName(), rowKeyName.ToString());
                     continue;
                 }
@@ -153,6 +175,7 @@ namespace DragonWilds {
         if(m_traceJobCallbackId!=Hook::ERROR_ID)
             Hook::UnregisterCallback(m_traceJobCallbackId);
         for(auto& job:m_traceJobs)FlushTraceJob(job,true);
+        m_traceExports.reset(); // Drain owned snapshots before the loader is destroyed.
     }
 
     void DragonWildsRawTableLoader::LoadDocument(const nlohmann::json& data,
@@ -190,8 +213,14 @@ namespace DragonWilds {
                     const auto colon = patch->Reference.find(':');
                     if (colon == std::string::npos || colon == 0 || colon + 1 == patch->Reference.size())
                         throw std::runtime_error("raw $Patch identity must be DataTable:RowName");
-                    m_pendingPatches.push_back({patch->Reference.substr(0, colon),
-                        patch->Reference.substr(colon + 1), patch->Changes, modName});
+                    PendingPatch pending;
+                    pending.Table=patch->Reference.substr(0,colon);
+                    pending.Row=patch->Reference.substr(colon+1);
+                    pending.Changes=patch->Changes;
+                    pending.ModName=modName;
+                    pending.Source=source;
+                    pending.OperationId=PS::StructuredDiagnosticB2::NewOperationId("raw");
+                    m_pendingPatches.push_back(std::move(pending));
                     return;
                 }
             }
@@ -208,7 +237,8 @@ namespace DragonWilds {
                     continue;
                 }
 
-                AddToTableDataMap(Key, Value);
+                AddToTableDataMap(Key,Value,RC::to_string(modName),source,
+                    PS::StructuredDiagnosticB2::NewOperationId("raw"));
             }
     }
 
@@ -221,32 +251,49 @@ namespace DragonWilds {
                 patch.Changes, RC::to_string(patch.ModName), false);
             patch.Changes["$PatchOnly"] = true;
             AddToTableDataMap(patch.Table,
-                nlohmann::json{{patch.Row, std::move(patch.Changes)}});
+                nlohmann::json{{patch.Row, std::move(patch.Changes)}},
+                RC::to_string(patch.ModName),patch.Source,patch.OperationId);
             PS::Log<LogLevel::Verbose>(STR("{} queued raw patch '{}:{}'.\n"),
                 patch.ModName, RC::to_generic_string(patch.Table),
                 RC::to_generic_string(patch.Row));
         }
         m_pendingPatches.clear();
+        m_rawTargetsReady=true;
         LoadAndApplyRawTargets();
+        bool registryPlanBuilt=false;
         try {
             m_registryPlan=RegistryPatch::BuildPlan(m_registryDocuments);
+            registryPlanBuilt=true;
             if(!m_registryPlan.empty())PS::Log<LogLevel::Normal>(STR("[REGISTRY-PATCH][READY] {} operation{} planned with ownership, dependency, and capability validation.\n"),
                 m_registryPlan.size(),m_registryPlan.size()==1?STR(""):STR("s"));
             LoadAndApplyRegistryTargets();
         } catch(const std::exception& error) {
             m_registryPlan.clear();
-            PS::Log<LogLevel::Error>(STR("[REGISTRY-PATCH][DISABLED] Plan rejected before mutation: {}. Legacy /raw records continue.\n"),PS::ToWideSafe(error.what()));
+            // A failure after BuildPlan must not be misreported as a plan rejection:
+            // target application may already have performed some changes.
+            bool structured=false;
+            if(!registryPlanBuilt){
+                const PS::StructuredDiagnosticB2::Provenance context{{},{},{},
+                    PS::StructuredDiagnosticB2::NewOperationId("registry-plan")};
+                structured=PS::StructuredDiagnosticB3::Report("RS-RAW-003","Error","Blocked",
+                    "RawTableLoader","Registry patch plan rejected",
+                    std::string("Registry planning was rejected before mutation: ")+error.what(),
+                    context,"Planning");
+            }
+            if(!structured)PS::Log<LogLevel::Error>(STR("[REGISTRY-PATCH][DISABLED] Registry operation stopped: {}. Legacy /raw records continue.\n"),PS::ToWideSafe(error.what()));
         }
     }
 
     void DragonWildsRawTableLoader::OnAutoReload(const RC::StringType& modName, const std::filesystem::path& modFilePath)
     {
         PS::JsonHelpers::ParseJsonFileInPath(modFilePath, [&](const nlohmann::json& data) {
-            ReloadDocument(data, modName);
+            ReloadDocument(data,modName,
+                PS::StructuredDiagnosticB2::SourceWithinSection(modFilePath,"raw"));
         });
     }
 
-    void DragonWildsRawTableLoader::ReloadDocument(const nlohmann::json& data, const RC::StringType& modName)
+    void DragonWildsRawTableLoader::ReloadDocument(const nlohmann::json& data,
+        const RC::StringType& modName,const std::string& source)
     {
         if (data.is_array()) { for (const auto& entry : data) ReloadDocument(entry, modName); return; }
         static constexpr std::array<std::string_view, 0> noProtected{};
@@ -281,20 +328,31 @@ namespace DragonWilds {
                             UECustom::FSoftObjectPath(RC::to_generic_string(key))};
                         object=UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
                     }
-                    if(object&&object->IsA(UDataTable::StaticClass()))
+                    if(object&&object->IsA(UDataTable::StaticClass())&&RC::to_string(object->GetPathName())==key)
                         datatable=static_cast<UDataTable*>(object);
                 }
                 else datatable = TryGetDatatableByName(key);
                 if (!datatable)
                 {
-                    PS::Log<LogLevel::Error>(STR("Failed to auto-reload {}, data table {} doesn't exist.\n"),
+                    const PS::StructuredDiagnosticB2::Provenance context{
+                        RC::to_string(modName),source,key,
+                        PS::StructuredDiagnosticB2::NewOperationId("raw-reload")};
+                    const bool structured=PS::StructuredDiagnosticB3::Report("RS-RAW-002","Error","Failed",
+                        "RawTableLoader","Raw reload target DataTable unavailable",
+                        "The requested DataTable was not found during live reload; its changes were not applied.",
+                        context,"Reload");
+                    if(!structured)PS::Log<LogLevel::Error>(STR("Failed to auto-reload {}, data table {} doesn't exist.\n"),
                         modName, RC::to_generic_string(key));
                     return;
                 }
 
                 auto name = datatable->GetNamePrivate().ToString();
                 LoadResult result;
-                Apply(value, datatable, result);
+                RawDefinition definition;
+                definition.ModId=RC::to_string(modName);
+                definition.Source=source;
+                definition.OperationId=PS::StructuredDiagnosticB2::NewOperationId("raw-reload");
+                ApplyDefinition(&definition,value,datatable,result);
 
                 PS::RoutineLog("raw", STR("{}: {} rows updated, {} rows added, {} rows deleted, {} error{}.\n"),
                     name, result.SuccessfulModifications, result.SuccessfulAdditions,
@@ -372,11 +430,17 @@ namespace DragonWilds {
     void DragonWildsRawTableLoader::RegisterTraceJobs()
     {
         if(m_traceJobCallbackId!=Hook::ERROR_ID||m_traceJobs.empty())return;
+        const auto directory=PS::HostServices::ExportsDirectory();
+        m_traceExports=std::make_unique<PS::DeferredTraceExport>(
+            [directory](const std::string& id,const nlohmann::json& snapshot){PS::ConfigFiles::Write(directory/("TraceJob-"+id+".json"),snapshot.dump(2));},
+            [](const std::string& id,const std::string& error){PS::Log<LogLevel::Error>(STR("[TRACE-JOB][{}][EXPORT-FAILED] {}; repeated failures are suppressed. Check export storage; no game data was modified.\n"),PS::ToWideSafe(id),PS::ToWideSafe(error));});
+        m_traceJobsRemaining.store(m_traceJobs.size(),std::memory_order_relaxed);
         Hook::FCallbackOptions options{};
         options.OwnerModName=TEXT("RuneSchema");
         options.HookName=TEXT("JsonTraceJobRunner");
         m_traceJobCallbackId=Hook::RegisterProcessEventPostCallback(
-            [this](Hook::TCallbackIterationData<void>&,UObject* source,UFunction* function,void*) {
+            [this](Hook::TCallbackIterationData<void>& iteration,UObject* source,UFunction* function,void*) {
+                if(!m_traceJobsRemaining.load(std::memory_order_relaxed)){iteration.RemoveSelf();return;}
                 try { TraceJobEvent(source,function); }
                 catch(const std::exception& error) {
                     std::lock_guard lock(m_traceJobMutex);
@@ -400,7 +464,8 @@ namespace DragonWilds {
             const nlohmann::json result={{"schema","RuneSchema.TraceJobResult.v1"},{"id",job.Id},
                 {"complete",complete||job.Events.size()>=job.MaxEvents},{"eventCount",job.Events.size()},
                 {"maxEvents",job.MaxEvents},{"events",job.Events}};
-            PS::ConfigFiles::Write(PS::HostServices::ExportsDirectory()/("TraceJob-"+job.Id+".json"),result.dump(2));
+            if(!m_traceExports)throw std::runtime_error("Trace export worker unavailable");
+            m_traceExports->Submit(job.Id,result);
             job.Dirty=false;
         } catch(const std::exception& error) {
             PS::Log<LogLevel::Error>(STR("[TRACE-JOB][{}][EXPORT-FAILED] {}.\n"),
@@ -410,11 +475,12 @@ namespace DragonWilds {
 
     void DragonWildsRawTableLoader::TraceJobEvent(UObject* source,UFunction* function)
     {
-        if(!source||!function||!source->GetClassPrivate())return;
+        if(!m_traceJobsRemaining.load(std::memory_order_relaxed)||!source||!function||!source->GetClassPrivate())return;
         const auto classPath=RC::to_string(source->GetClassPrivate()->GetPathName());
         const auto functionPath=RC::to_string(function->GetPathName());
         std::lock_guard lock(m_traceJobMutex);
         for(auto& job:m_traceJobs) {
+            if(job.Seen.size()>=job.MaxEvents)continue;
             const auto matches=[](const std::string& haystack,const std::vector<std::string>& needles) {
                 return needles.empty()||std::ranges::any_of(needles,[&](const auto& needle){return haystack.find(needle)!=std::string::npos;});
             };
@@ -424,6 +490,7 @@ namespace DragonWilds {
             job.Events.push_back({{"object",RC::to_string(source->GetPathName())},
                 {"class",classPath},{"function",functionPath}});
             job.Dirty=true;
+            if(job.Seen.size()>=job.MaxEvents)m_traceJobsRemaining.fetch_sub(1,std::memory_order_relaxed);
             if(job.ConsoleEvents)PS::Log<LogLevel::Normal>(STR("[TRACE-JOB][{}][EVENT] object='{}' class='{}' function='{}'.\n"),
                 PS::ToWideSafe(job.Id.c_str()),source->GetPathName(),source->GetClassPrivate()->GetPathName(),function->GetPathName());
             if(job.Events.size()==1||job.Events.size()%64==0||job.Events.size()>=job.MaxEvents)
@@ -445,8 +512,7 @@ namespace DragonWilds {
             Apply(datatable->GetName(), datatable);
         }
         const auto path=RC::to_string(datatable->GetPathName());
-        if(m_tableDataMap.contains(RC::to_generic_string(path))
-            && m_appliedExactTargets.insert(path).second)
+        if(m_tableDataMap.contains(RC::to_generic_string(path)))
             Apply(RC::to_generic_string(path),datatable);
         ApplyRegistryPatches(datatable);
     }
@@ -459,12 +525,12 @@ namespace DragonWilds {
             const auto path=RC::to_string(target);
             if(path.starts_with('/') && path.find('.')!=std::string::npos)
                 paths.push_back(path);
+            else for(auto* table:GetDatatablesByName(path))Apply(target,table);
         }
         std::ranges::sort(paths);
         paths.erase(std::unique(paths.begin(),paths.end()),paths.end());
         for(const auto& path:paths)try
         {
-            if(m_appliedExactTargets.contains(path))continue;
             auto* object=UECustom::UObjectGlobals::StaticFindObject(
                 nullptr,nullptr,RC::to_generic_string(path).c_str(),false);
             if(!object)
@@ -473,18 +539,31 @@ namespace DragonWilds {
                     UECustom::FSoftObjectPath(RC::to_generic_string(path))};
                 object=UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);
             }
-            if(!object||!object->IsA(UDataTable::StaticClass()))
+            if(!object||!object->IsA(UDataTable::StaticClass())||RC::to_string(object->GetPathName())!=path)
                 throw std::runtime_error("target did not resolve to UDataTable");
-            // LoadAsset_Blocking may synchronously invoke OnDatatableSerialized,
-            // which applies and records this exact target before returning.
-            if(m_appliedExactTargets.contains(path))continue;
+            // The per-object cursor also covers synchronous Serialize callbacks.
             auto* table=static_cast<UDataTable*>(object);
             Apply(RC::to_generic_string(path),table);
-            m_appliedExactTargets.insert(path);
         }
         catch(const std::exception& error)
         {
-            PS::Log<LogLevel::Error>(STR("Raw DataTable target '{}' was not applied: {}. Other tables continue.\n"),
+            // The same unresolved target may have several distinct requesting mods.
+            // Preserve each known origin rather than attributing it to one arbitrarily.
+            std::set<std::pair<std::string,std::string>> origins;
+            const auto found=m_tableDataMap.find(RC::to_generic_string(path));
+            if(found!=m_tableDataMap.end())
+                for(const auto& item:found->second)origins.emplace(item.ModId,item.Source);
+            if(origins.empty())origins.emplace(std::string{},std::string{});
+            bool anyStructured=false;
+            for(const auto& [owner,file]:origins){
+                const PS::StructuredDiagnosticB2::Provenance provenance{
+                    owner,file,path,PS::StructuredDiagnosticB2::NewOperationId("raw-target")};
+                anyStructured=PS::StructuredDiagnosticB3::Report("RS-RAW-002","Error","Failed",
+                    "RawTableLoader","Raw patch target is not an available DataTable",
+                    std::string("The specified DataTable target could not be prepared: ")+error.what(),
+                    provenance,"Resolution")||anyStructured;
+            }
+            if(!anyStructured)PS::Log<LogLevel::Error>(STR("Raw DataTable target '{}' was not applied: {}. Other tables continue.\n"),
                 RC::to_generic_string(path),PS::ToWideSafe(error.what()));
         }
     }
@@ -839,20 +918,10 @@ namespace DragonWilds {
         return wasRowModified;
     }
 
-    void DragonWildsRawTableLoader::AddToTableDataMap(const std::string& datatableName, const nlohmann::json& data)
+    void DragonWildsRawTableLoader::AddToTableDataMap(const std::string& datatableName,
+        const nlohmann::json& data,const std::string& modId,const std::string& source,
+        const std::string& operationId)
     {
-        auto datatableNameWide = RC::to_generic_string(datatableName);
-        auto it = m_tableDataMap.find(datatableNameWide);
-        if (it != m_tableDataMap.end())
-        {
-            it->second.push_back(data);
-        }
-        else
-        {
-            std::vector<nlohmann::json> newDataArray{
-                data
-            };
-            m_tableDataMap.emplace(datatableNameWide, newDataArray);
-        }
+        m_tableDataMap[RC::to_generic_string(datatableName)].push_back({data,modId,source,operationId});
     }
 }

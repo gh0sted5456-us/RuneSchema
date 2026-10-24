@@ -12,6 +12,16 @@ Json Example(){return {{"Id","trial"},{"TimeoutSeconds",60},{"Scope","Party"},{"
     {"Messages",{{"Started","The trial begins."},{"WaveStarted","Wave {wave} of {waves}."},{"BossStarted","The boss arrives."},{"Completed","Victory."},{"Failed","Failed."},{"Cancelled","Cancelled."}}},
     {"Waves",Json::array({Json::array({{{"SpawnID","wolf"},{"Location",{1,2,3}}},{{"SpawnID","Other:wolf"},{"Location",{4,5,6}}}}),Json::array({{{"SpawnID","boss"},{"Location",{7,8,9}}}})})}};}
 int main(){
+    using namespace DragonWilds::SpawnFields;
+    assert(BuildingPieceRadius(Json::object())==100);
+    assert(BuildingPieceRadius({{"DuplicateRadius",250},{"QuestCompleted","furnace"}})==250);
+    for(const auto& invalid:{Json{{"DuplicateRadius",0}},Json{{"DuplicateRadius",10001}},Json{{"DuplicateRadius","100"}},Json{{"AllowDeconstruction",false}},Json{{"PersistAfterCondition",false}},Json{{"UseNativeRespawn",true}},Json{{"TimeOfDay","Night"}},Json{{"QuestActive","test"}},Json{{"EventActive","test"}}})
+        assert(Rejects([&]{BuildingPieceRadius(invalid);}));
+    assert(BuildingPieceOccupied(60,80,500,100,true));
+    assert(!BuildingPieceOccupied(60,81,0,100,true));
+    assert(!BuildingPieceOccupied(60,80,1,100,false));
+    assert(BuildingPieceOccupied(0,0,100,100,false));
+    assert(!BuildingPieceOccupied(std::numeric_limits<double>::quiet_NaN(),0,0,100,true));
     const auto arrayGround=DragonWilds::SpawnFields::ParseLocation(Json::array({17850,186650,"$"}));
     assert(arrayGround.Ground && arrayGround.GroundOffset==0 && arrayGround.Vector["X"]==17850 && arrayGround.Vector["Z"]==0);
     const auto arrayOffset=DragonWilds::SpawnFields::ParseLocation(Json::array({1,2,"$+250"}));

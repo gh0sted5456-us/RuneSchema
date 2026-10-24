@@ -76,7 +76,9 @@ int main(int argc,char** argv){
     Require(sdk.find("LandscapeHeightfieldCollisionComponent")!=std::string::npos&&sdk.find("attempt<16")!=std::string::npos,"Bare $ does not use a bounded terrain baseline");
     Require(sdk.find("!penetrating")!=std::string::npos&&sdk.find("normal.Z()>=0.5")!=std::string::npos,"Ground query accepts walls or initial overlap as a floor");
     Require(npc.find("impact,error,definition.GroundReferenceZ")!=std::string::npos&&spawn.find("impact, traceError,spawn.GroundReferenceZ")!=std::string::npos,"Configured loaders lost their floor reference");
-    Require(event.find("member.RelativeGround?std::nullopt:std::optional<double>{member.Position[2]}")!=std::string::npos&&event.find("impact,error,reference")!=std::string::npos&&tools.find("ground,error,origin.Z()")!=std::string::npos,"Bare-dollar events must discover destination terrain; explicit floors and nearby player-relative tools must retain their floor references");
+    Require(event.find("member.RelativeGround?std::nullopt:std::optional<double>{member.Position[2]}")!=std::string::npos
+        &&event.find("PS::Grounding::QueryWithFloorHint(")!=std::string::npos&&event.find("impact,error,floor")!=std::string::npos
+        &&tools.find("ground,error,origin.Z()")!=std::string::npos,"Bare-dollar events must try destination terrain and a verified contract floor hint; explicit floors and player-relative tools retain their references");
     Require(journal.find("JournalSave::RemoveCurrent")==std::string::npos
         &&journal.find("JournalSave::Record(payload,RegisteredOwners())")!=std::string::npos,"Journal save hook strips active learned progress");
 }

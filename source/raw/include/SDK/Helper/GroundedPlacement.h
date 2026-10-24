@@ -50,7 +50,7 @@ inline RC::Unreal::FVector CapsuleSite(RC::Unreal::UWorld* world,
     };
     bool originalObstructed=false;
     const auto originalGround=ground(foot.X(),foot.Y(),&originalObstructed);
-    if(!originalGround)throw SurfacePending();
+    if(!originalGround)throw SurfacePending("Spawn footprint has no verified floor at its requested XY");
     originalFloor=*originalGround;referenceZ=*originalGround;
     const double clearance=clearanceHint.value_or(foot.Z()-*originalGround);
     if(!std::isfinite(clearance)||clearance<0)
@@ -77,7 +77,7 @@ inline RC::Unreal::FVector CapsuleSite(RC::Unreal::UWorld* world,
         if(!error.empty())throw std::runtime_error("Spawn clearance contract failed: "+error);
         return {blocked?SiteState::Blocked:SiteState::Safe,{x,y,originZ}};
     });
-    if(!selected)throw SurfacePending();
+    if(!selected)throw SurfacePending("No collision-clear capsule site on the verified floor within GroundMigrationRadius="+std::to_string(policy.Radius)+" cm");
     return FVector(selected->Position[0],selected->Position[1],selected->Position[2]);
 }
 }

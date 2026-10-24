@@ -158,5 +158,6 @@ void DragonWildsNpcLoader::ReconcileNpcEquipment(float deltaSeconds) {
                 if(PS::Network::Detect(actor).Mode!=PS::Network::Role::DedicatedServer)RefreshNpcEquipment(actor,definition);
             }
         }
-    }catch(const std::exception& error){ErrorOnce("npc-equipment-world",PS::ToWideSafe(error.what()));}
+    }catch(const std::exception& error){ErrorOnceDiagnostic("npc-equipment-world",PS::ToWideSafe(error.what()),
+        "RS-NPC-026","NPC equipment world state could not be refreshed","Error","Partial",{},"EquipmentWorld","Application",true);}
 }

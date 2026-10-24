@@ -1,3 +1,5 @@
+#include "Utility/StructuredDiagnostics.h"
+#include "Utility/StructuredDiagnosticB3D.h"
 #include <atomic>
 #include <algorithm>
 #include <cctype>
@@ -41,8 +43,10 @@
 #include "Runtime/UE4SSPackageIntegration.h"
 #include "Runtime/MappingBackbone.h"
 #include "Runtime/AutoMapping.h"
+#include "Core/NativeInventoryMarkInput.h"
 #include "Runtime/ConsoleCommands.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnostics.h"
 #include "Utility/StartupTrace.h"
 #include "SDK/DragonWildsSignatures.h"
 #include "SDK/UnrealOffsets.h"
@@ -244,10 +248,28 @@ public:
         config->Load();
         PS::QuickLoad::InitializeEarly();
         PS::AutoMapping::Prepare();
+        if(!PS::Storefront::IsDedicatedServer()){
+            for(int key=0;key<256;++key)if(PS::NativeInventoryMarkInput::Bindable(key)||key==VK_ESCAPE){
+                for(int modifiers=0;modifiers<4;++modifiers){
+                    Input::Handler::ModifierKeyArray keys{};
+                    if(modifiers&1)keys[0]=Input::ModifierKey::CONTROL;
+                    if(modifiers&2)keys[1]=Input::ModifierKey::SHIFT;
+                    register_keydown_event(static_cast<Input::Key>(key),keys,[key,modifiers]{
+                        DWORD process=0;GetWindowThreadProcessId(GetForegroundWindow(),&process);
+                        if(process==GetCurrentProcessId())PS::InventoryMarkInput.Push(key,modifiers);
+                    });
+                }
+            }
+        }
         try {
             for(const auto& diagnostic:PS::UE4SSPackageIntegration::Prepare(std::filesystem::path(PS::HostServices::WorkingDirectory())))
                 PS::Log<LogLevel::Warning>(STR("[UE4SS-PACKAGES] {}\n"),PS::ToWideSafe(diagnostic.c_str()));
-        }catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[UE4SS-PACKAGES][PARTIAL] {}\n"),PS::ToWideSafe(error.what()));}
+        }catch(const std::exception& error){
+            (void)PS::LogStructuredFallback<LogLevel::Warning>(
+                PS::StructuredDiagnosticB3D::Report("RS-CORE-030","Warning","Partial",
+                "UE4SS package preparation interrupted",error.what(),"UE4SSPackageIntegration","Application"),
+                STR("[UE4SS-PACKAGES][PARTIAL] {}\n"),PS::ToWideSafe(error.what()));
+        }
         const auto& storefront=PS::Storefront::CurrentDetection();
         if (!storefront.DedicatedServer) {
             try {
@@ -281,7 +303,10 @@ public:
                         "[LOGIC-PAK][BP-LOADER][PARTIAL] {}. Native ModActor fallback remains available.\n"),
                         PS::ToWideSafe(result.Detail.c_str()));
             } catch (const std::exception& error) {
-                PS::Log<LogLevel::Warning>(TEXT(
+                (void)PS::LogStructuredFallback<LogLevel::Warning>(
+                    PS::StructuredDiagnosticB3D::Report("RS-CORE-031","Warning","Skipped",
+                    "BP Mod Loader integration skipped",error.what(),"BPModLoaderIntegration","Application"),
+                    TEXT(
                     "[LOGIC-PAK][BP-LOADER][PARTIAL] Integration skipped: {}. Native ModActor fallback remains available.\n"),
                     PS::ToWideSafe(error.what()));
             }
@@ -307,7 +332,10 @@ public:
                 const auto about=m_pluginHost.Call("RuneSchema.Core","helpy.about","{}");
                 PS::Log<LogLevel::Normal>(TEXT("Helpy plugin service: {}\n"),PS::ToWideSafe(about.c_str()));
             } catch(const std::exception& error) {
-                PS::Log<LogLevel::Warning>(TEXT("Helpy plugin service validation failed: {}\n"),PS::ToWideSafe(error.what()));
+                (void)PS::LogStructuredFallback<LogLevel::Warning>(
+                    PS::StructuredDiagnosticB3D::Report("RS-CORE-032","Warning","Skipped",
+                    "HELPY service validation failed",error.what(),"HelpyPluginService","Validation"),
+                    TEXT("Helpy plugin service validation failed: {}\n"),PS::ToWideSafe(error.what()));
             }
         }
         if (storefront.DedicatedServer) {
@@ -330,7 +358,7 @@ public:
             PS::ConsolidatedLog<RC::LogLevel::Normal>(TEXT("[RuneSchema] Mapping backbone: {} | bytes={} | fingerprint={}.\n"),
                 mapping.Path.wstring(),mapping.Size,PS::ToWideSafe(mapping.Fingerprint.c_str()));
         else
-            PS::ConsolidatedLog<RC::LogLevel::Normal>(TEXT("[RuneSchema] Mapping backbone: no Mappings.usmap found; live reflection remains authoritative.\n"));
+            PS::ConsolidatedLog<RC::LogLevel::Normal>(TEXT("[RuneSchema] Mapping backbone: no validated runtime mapping available yet; live reflection remains authoritative.\n"));
         PS::StartupTrace::Mark("signature scan begin");
 
         DragonWilds::SignatureManager::Initialize();
@@ -347,6 +375,7 @@ public:
 
     ~RuneSchema() override
     {
+        PS::InventoryMarkInput.Reset();
         m_consoleCommands.Shutdown();
         PS::ModHealthService::Shutdown();
         PS::QuickLoad::Shutdown();
@@ -361,6 +390,7 @@ public:
         PS::PlayerTrace::Cancel();
         PS::AppearanceTrace::Cancel();
         PS::NiagaraTest::Unbind();
+        PS::StructuredDiagnostics::Shutdown();
         PS::DiagnosticLog::Shutdown();
     }
 
@@ -792,6 +822,7 @@ public:
         if (m_startupFailed.load(std::memory_order_acquire)) return;
         try {
             PS::StartupTrace::Mark("UE4SS on_unreal_init begin");
+            PS::UE4SSCompatibility::PrepareLuaPropertySizes();
             MainLoader.SetFatalStartupHandler([this](std::string) {
                 m_consoleCommands.Shutdown();
                 PS::ModHealthService::Shutdown();

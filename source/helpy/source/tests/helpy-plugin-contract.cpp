@@ -1,6 +1,7 @@
 #include "Runtime/RuneSchemaPluginApi.h"
 #include "Core/HelpyBranding.h"
 #include "Core/RsmkResources.h"
+#include "Core/HelpyNativeFrame.h"
 #include <windows.h>
 #include <map>
 #include <string>
@@ -42,9 +43,9 @@ int Run(int argc,char** argv){
     Check(std::string(descriptor->Name)=="RSMK (RuneSchema Modding Kit)");
     Check(std::string(descriptor->Version)==PS::HelpyBranding::Version);
     Check(FindResourceW(dll,MAKEINTRESOURCEW(IDI_RSMK),RT_GROUP_ICON)!=nullptr);
-    const auto small=static_cast<HICON>(LoadImageW(dll,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,16,16,LR_SHARED));
-    const auto large=static_cast<HICON>(LoadImageW(dll,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,32,32,LR_SHARED));
-    Check(small&&large);
+    const auto smallIcon=static_cast<HICON>(LoadImageW(dll,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,16,16,LR_SHARED));
+    const auto largeIcon=static_cast<HICON>(LoadImageW(dll,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,32,32,LR_SHARED));
+    Check(smallIcon&&largeIcon);
     RuneSchemaHostApi host{};host.StructSize=sizeof(host);host.ApiVersion=1;
     void* instance=nullptr;
     Check(initialize(nullptr,&instance)==RS_PLUGIN_INCOMPATIBLE_API);
@@ -103,6 +104,17 @@ int Run(int argc,char** argv){
             Check(own&&IsWindowVisible(own));
             wchar_t title[128]{};GetWindowTextW(own,title,128);Check(std::wstring(title)==PS::HelpyBranding::WindowTitle);
             Check(SendMessageW(own,WM_GETICON,ICON_SMALL,0)!=0&&SendMessageW(own,WM_GETICON,ICON_BIG,0)!=0);
+            POINT origin{};ClientToScreen(own,&origin);
+            const auto dpi=GetDpiForWindow(own);const int caption=GetSystemMetricsForDpi(SM_CYCAPTION,dpi)+GetSystemMetricsForDpi(SM_CYSIZEFRAME,dpi)+GetSystemMetricsForDpi(SM_CXPADDEDBORDER,dpi);
+            Check(SendMessageW(own,WM_NCHITTEST,0,MAKELPARAM(origin.x+100,origin.y+caption/2))==HTCAPTION);
+            Check(SendMessageW(own,WM_NCHITTEST,0,MAKELPARAM(origin.x+10,origin.y+caption/2))==HTSYSMENU);
+            PS::HelpyNativeFrame::Metrics frame;frame.Update(own,dpi);
+            constexpr int hits[]{HTMINBUTTON,HTMAXBUTTON,HTCLOSE};
+            for(int column=0;column<3;++column){const auto rect=frame.ControlRect(column);
+                Check(SendMessageW(own,WM_NCHITTEST,0,MAKELPARAM(origin.x+(rect.left+rect.right)/2,origin.y+(rect.top+rect.bottom)/2))==hits[column]);}
+            SendMessageW(own,WM_SYSCOMMAND,SC_MINIMIZE,0);Check(IsIconic(own));
+            SendMessageW(own,WM_SYSCOMMAND,SC_RESTORE,0);Check(!IsIconic(own));
+            ShowWindow(own,SW_MAXIMIZE);Check(IsZoomed(own));ShowWindow(own,SW_RESTORE);Check(!IsZoomed(own));
             SendMessageW(own,WM_CLOSE,0,0);Check(IsWindowVisible(own)&&IsIconic(own));
             ShowWindow(own,SW_SHOWNOACTIVATE);Check(IsWindowVisible(own));
         }

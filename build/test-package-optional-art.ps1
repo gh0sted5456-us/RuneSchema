@@ -12,16 +12,14 @@ try{
     . ([scriptblock]::Create($helpers[0].Extent.Text))
     $compiled=Join-Path $fixture 'compiled';[IO.Directory]::CreateDirectory($compiled)|Out-Null
     $ui=Join-Path $compiled 'RuneSchema.Helpy.dll';[IO.File]::WriteAllText($ui,'tested UI')
-    $destination=Join-Path $fixture 'packaged/dll';$missing=$false
-    try{Copy-HelpyDlls $ui $destination}catch{$missing=$true}
-    if(-not $missing -or (Test-Path -LiteralPath $destination)){throw 'Missing native companion allowed a partial Helpy package'}
-    [IO.File]::WriteAllText((Join-Path $compiled 'RuneSchema.Helpy.Native.dll'),'tested native companion')
+    $destination=Join-Path $fixture 'packaged/dll'
     Copy-HelpyDlls $ui $destination
-    foreach($name in @('RuneSchema.Helpy.dll','RuneSchema.Helpy.Native.dll')){if((Get-FileHash -LiteralPath (Join-Path $compiled $name)).Hash -ne (Get-FileHash -LiteralPath (Join-Path $destination $name)).Hash){throw 'Helpy package DLL differs from build'}}
+    if((Get-FileHash -LiteralPath $ui).Hash -ne (Get-FileHash -LiteralPath (Join-Path $destination 'RuneSchema.Helpy.dll')).Hash){throw 'Helpy package DLL differs from build'}
+    if(@(Get-ChildItem -LiteralPath $destination -File).Count -ne 1){throw 'Unexpected Helpy companion DLL shipped'}
     $manifest=Get-Content -LiteralPath (Join-Path $repo 'resources/helpy-ui/v1/manifest.json') -Raw|ConvertFrom-Json
     $optional=@($manifest.Files|ForEach-Object {'assets/'+$_.Name})+@('assets/portraits/portrait-player.svg','assets/portraits/portrait-tree.svg','assets/portraits/portrait-stone.svg','assets/portraits/portrait-enemy.svg','assets/backgrounds/Dragonwilds.png','assets/backgrounds/RuneSchema.png')
     foreach($file in $optional){FixtureFile $file|Out-Null}
-    $kept=@('dll/RuneSchema.Helpy.dll','dll/RuneSchema.Helpy.Native.dll','plugin.json','assets/Apply-DedicatedServerSettings.ps1','assets/RuneSchema.ico','settings/ui.jsonc')
+    $kept=@('dll/RuneSchema.Helpy.dll','plugin.json','assets/Apply-DedicatedServerSettings.ps1','assets/RuneSchema.ico','settings/ui.jsonc')
     foreach($file in $kept){FixtureFile $file|Out-Null}
     & (Join-Path $PSScriptRoot 'package-optional-art.ps1') -PayloadRoot $plugin -StagingRoot $stage -RepositoryRoot $repo
     foreach($file in $optional){if(Test-Path -LiteralPath (Join-Path $plugin $file)){throw 'Optional artwork remained in payload'}}

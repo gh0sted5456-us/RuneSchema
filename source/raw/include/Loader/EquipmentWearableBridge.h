@@ -99,10 +99,8 @@ inline bool ContainsMesh(UObject* component,UObject* mesh) {
     auto* map=static_cast<FScriptMap*>(data);
     if(map->Num()<0 || map->Num()>8192 || map->GetMaxIndex()>16384)
         throw std::runtime_error("wearable hide-map exceeds diagnostic bounds");
-    bool found=false;
     UECustom::FScriptMapHelper helper(property,data);
-    helper.ForEachPair([&](void* k,void*) { if(key->GetObjectPropertyValue(k)==mesh) found=true; });
-    return found;
+    return helper.FindValue(&mesh)!=nullptr;
 }
 
 inline void BeforeEvaluation(safetyhook::Context& context) noexcept {
@@ -199,13 +197,11 @@ inline void Register(UObject* subsystem,UObject* item) {
     auto* map=static_cast<FScriptMap*>(data);
     if(map->Num()<0 || map->Num()>65535 || map->GetMaxIndex()>131072) throw std::runtime_error("wearable enumeration registry exceeds bounds");
     UECustom::FScriptMapHelper helper(property,data);
-    bool found=false;
-    helper.ForEachPair([&](void* k,void* v){
-        if(property->GetKeyProp()->Identical(k,const_cast<FString*>(&name))) {
-            if(found || value->GetObjectPropertyValue(v)!=item) throw std::runtime_error("wearable asset name collides with another registry entry");
-            found=true;
-        }
-    });
+    // A full name-map scan per wearable makes large cooked catalogues quadratic.
+    const auto* existing=helper.FindValue(&name);
+    const bool found=existing!=nullptr;
+    if(found && value->GetObjectPropertyValue(existing)!=item)
+        throw std::runtime_error("wearable asset name collides with another registry entry");
     if(!found) {
         UECustom::FManagedValue pair;
         helper.InitializePair(pair);

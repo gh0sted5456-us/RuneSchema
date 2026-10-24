@@ -425,7 +425,7 @@ std::pair<bool,std::string> DragonWildsSpawnLoader::VerifyToolBuildingCandidate(
     return {true,"Verified cooked building defaults and deferred native data-binding contract"};
 }
 
-void DragonWildsSpawnLoader::PumpSpawnTools() {
+void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
     // A coalesced read-only hint from Helpy's existing Read service. Never owns
     // or completes the mutation mailbox, even during a grant or travel action.
     if(m_readyWorld&&IsWorldStillLoaded(m_readyWorld)&&PS::SpawnToolRequests::TakePlayerRoles())try {
@@ -506,7 +506,6 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
     if(becameAvailable&&PS::SpawnToolRequests::PushUpdate){static uint64_t readinessRevision=1;PS::SpawnToolRequests::PushUpdate("readiness",{{"Status","Spawn tools ready."}},++readinessRevision);}
     if(g_quickCatalogIndex.active) {
         if(auto query=PS::SpawnToolRequests::TakeSearchHint())g_quickCatalogIndex.Prioritize(*query);
-        g_quickCatalogIndex.Tick();
     }
     const auto runCatalogWindow=[&](const nlohmann::json& queryRequest)->nlohmann::json {
         const int category=queryRequest.value("Category",-1);const auto mode=queryRequest.value("Mode",std::string("Search"));
@@ -577,8 +576,12 @@ void DragonWildsSpawnLoader::PumpSpawnTools() {
     // loader can miss the initial world callback; never strand accepted reads
     // behind m_readyWorld, a local player or GPU readiness. Mutations below
     // retain their independent world, player and authority checks.
-    const bool catalogRead=PS::HelpyQueryService::PumpOne(PS::SpawnToolRequests::Waiting.load(),runCatalogWindow);
-    if(!catalogRead&&!PS::SpawnToolRequests::Waiting.load())PS::AssetSearch::PumpItemCatalog();
+    if(work.MayStart()&&!PS::SpawnToolRequests::Waiting.load()) {
+        if(PS::HelpyQueryService::HasPending()) {
+            work.Started();PS::HelpyQueryService::PumpOne(false,runCatalogWindow);
+        }else if(g_quickCatalogIndex.active)g_quickCatalogIndex.Tick(work);
+        else {work.Started();PS::AssetSearch::PumpItemCatalog();}
+    }
     auto request=PS::SpawnToolRequests::Take();if(!request)return;
     const bool f2Spawn=request->value("_Source",std::string{}).starts_with("Helpy")&&request->value("Action",std::string{})=="Spawn";
     const auto requestId=request->value("_RequestId",uint64_t{});

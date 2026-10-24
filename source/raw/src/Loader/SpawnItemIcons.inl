@@ -1,6 +1,17 @@
-void DragonWildsSpawnLoader::PumpItemIcons() {
-    if(PS::HelpySourceCache::Requested.load())PS::HelpySourceCache::Poll(PS::HostServices::ModDirectory());
+void DragonWildsSpawnLoader::PumpItemIcons(PS::WorkSlice& work) {
+    if(PS::HelpySourceCache::Requested.load()&&PS::HelpySourceCache::Poll(PS::HostServices::ModDirectory())){
+        const auto& sources=PS::HelpySourceCache::Current;size_t indexed=0,metadata=0,unavailable=0;
+        for(const auto& [file,entry]:sources.Containers.items()){
+            if(entry.value("Status",std::string{})=="Indexed")++indexed;
+            else if(entry.value("Status",std::string{})=="MetadataOnly")++metadata;
+            else {++unavailable;PS::Log<LogLevel::Verbose>(STR("[CACHE][PAK-DISCOVERY][UNAVAILABLE] {}: {}\n"),PS::ToWideSafe(file),PS::ToWideSafe(entry.value("Reason",std::string{})));}
+        }
+        PS::Log<LogLevel::Normal>(STR("[CACHE][PAK-DISCOVERY] {} containers indexed, {} native metadata-only, {} unavailable; {} exact package associations. Live item checks remain required; conflicting mount precedence stays unverified.\n"),
+            indexed,metadata,unavailable,sources.ContainerAssets?sources.ContainerAssets->size():0);
+    }
     if(!BulkIconJob.Active&&!PS::IconCacheBuild::HasWork()&&m_activeItemIcon.empty()&&!PS::ItemIconRequests::HasPending())return;
+    if(!work.MayStart()||PS::SpawnToolRequests::Waiting.load())return;
+    work.Started();
     auto* iconWorld=MenuIconWorld(m_readyWorld&&IsWorldStillLoaded(m_readyWorld)?m_readyWorld:nullptr);
     BulkIconJob.Tick(iconWorld,m_activeItemIcon.empty()&&!PS::ItemIconRequests::HasPending());
     if(BulkIconJob.Capturing)return;

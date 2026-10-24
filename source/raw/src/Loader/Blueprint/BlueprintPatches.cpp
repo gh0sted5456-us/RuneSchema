@@ -5,6 +5,7 @@
 #include "Core/JsonLoadOrderMerge.h"
 #include "Loader/Spawn/RuntimeSupport.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnosticB2.h"
 #include "Unreal/AActor.hpp"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 
@@ -16,12 +17,13 @@ namespace DragonWilds {
         if (phase == EEngineLifecyclePhase::PostEngineInit) {
             for (const auto& document : m_pendingBlueprintPatches) {
                 try {
-                    for (const auto& [identity, changes] : document.items()) {
+                    for (const auto& [identity, changes] : document.Document.items()) {
                         if (!identity.starts_with("/Game/")) {
                             if (identity.contains('/') || identity.contains('.') || !identity.ends_with("_C"))
                                 throw std::runtime_error("Blueprint $Patch requires a class name ending _C or a /Game/ class path");
                             const auto key = FName(to_generic_string(identity), FNAME_Add);
-                            m_blueprintPatches.emplace_back(key, changes);
+                            m_blueprintPatches.emplace_back(key, changes, document.ModName, document.Source,
+                                PS::StructuredDiagnosticB2::NewOperationId("blueprint"));
                         } else {
                             auto path = identity;
                             if (path.find('.') == std::string::npos) {
@@ -31,8 +33,9 @@ namespace DragonWilds {
                             if (!path.ends_with("_C"))
                                 throw std::runtime_error("Blueprint $Patch path must identify a generated class ending _C");
                             const auto key = FName(to_generic_string(path), FNAME_Add);
-                            m_blueprintPatches.emplace_back(key, changes);
-                            m_pathBlueprintPatches.push_back({{path, nlohmann::json::object()}});
+                            m_blueprintPatches.emplace_back(key, changes, document.ModName, document.Source,
+                                PS::StructuredDiagnosticB2::NewOperationId("blueprint"));
+                            m_pathBlueprintPatches.push_back({{{path, nlohmann::json::object()}},document.ModName,document.Source});
                         }
                     }
                 } catch (const std::exception& error) {
@@ -46,7 +49,7 @@ namespace DragonWilds {
             if (!m_blueprintPatches.empty()) PS::RoutineLog("patches", STR("Blueprint $Patch: {} rules registered.\n"), m_blueprintPatches.size());
         } else if (phase == EEngineLifecyclePhase::GameInstanceInit) {
             for (const auto& document : m_pathBlueprintPatches) {
-                try { LoadUnsafe(document); }
+                try { LoadUnsafe(document.Document,document.ModName,document.Source); }
                 catch (const std::exception& error) {
                     PS::Log<LogLevel::Error>(STR("Blueprint path patch failed: {}\n"), PS::ToWideSafe(error.what()));
                 }

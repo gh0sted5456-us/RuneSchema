@@ -3,12 +3,12 @@
 #include <string_view>
 
 namespace PS::HelpyNavigation {
-enum class Page { Items, Creation, Recipes, Spawns, Map, Tools, Authoring, Settings, LiveLog, DedicatedServer, SaveEditor, Home, Journal, Mods, Profile };
+enum class Page { Items, Creation, Recipes, Spawns, Map, Tools, Authoring, Settings, LiveLog, DedicatedServer, SaveEditor, Home, Journal, Mods, Profile, BugReport };
 enum class SpawnSection { Resources, Npcs, Ai };
 enum class ToolSection { Settings, Maintenance, Cleanup, Buildings, ItemCache };
-inline constexpr std::array Pages{Page::Home, Page::Items, Page::Creation, Page::Recipes, Page::Spawns, Page::Map, Page::Journal, Page::Authoring, Page::Tools, Page::Settings, Page::LiveLog, Page::SaveEditor, Page::DedicatedServer,Page::Mods,Page::Profile};
+inline constexpr std::array Pages{Page::Home, Page::Items, Page::Creation, Page::Recipes, Page::Spawns, Page::Map, Page::Journal, Page::Authoring, Page::Tools, Page::Settings, Page::LiveLog, Page::SaveEditor, Page::DedicatedServer,Page::Mods,Page::Profile,Page::BugReport};
 // Keep route identities stable: regrouping must not reset editors or drafts.
-inline constexpr std::array SidebarPages{Page::Home,Page::Items,Page::Map,Page::Mods,Page::Tools,Page::Settings,Page::LiveLog,Page::DedicatedServer};
+inline constexpr std::array SidebarPages{Page::Home,Page::Items,Page::Map,Page::Mods,Page::Tools,Page::Settings,Page::LiveLog,Page::BugReport,Page::DedicatedServer};
 inline constexpr std::array PlayerTabs{Page::Items,Page::Creation,Page::Recipes};
 inline constexpr std::array ProfileTabs{Page::Profile,Page::SaveEditor};
 inline constexpr std::array WorldTabs{Page::Map,Page::Spawns,Page::Journal};
@@ -22,6 +22,7 @@ inline constexpr const char* Title(Page page) {
     switch(page) {
     case Page::Home:return "Home";
     case Page::Profile:return "Profile";
+    case Page::BugReport:return "Report a bug";
     case Page::Mods:return "Mods";
     case Page::Items:return "Players";
     case Page::Creation:return "Clone";
@@ -31,7 +32,7 @@ inline constexpr const char* Title(Page page) {
     case Page::Tools:return "Tools";
     case Page::Settings:return "Settings";
     case Page::Authoring:return "Authoring";
-    case Page::LiveLog:return "Live Log";
+    case Page::LiveLog:return "Diagnostics";
     case Page::DedicatedServer:return "Server / Co-op";
     case Page::SaveEditor:return "Character";
     case Page::Journal:return "Journal";
@@ -42,6 +43,7 @@ inline constexpr const char* TabTitle(Page page){return page==Page::Items?"Items
 inline constexpr const char* Description(Page page) {
     switch(page) {
     case Page::Profile:return "Your account profile, linked characters, portraits and shared details.";
+    case Page::BugReport:return "Prepare a categorized bug report and review it on GitHub before submitting.";
     case Page::Home:return "Welcome to RuneSchema. Your tools, cached content and common settings in one place.";
     case Page::Mods:return "Manage next-launch mod order, imports and source artwork. Mounted content stays unchanged.";
     case Page::Items:return "Right-click an item for actions, or drag it into your cart.";
@@ -52,7 +54,7 @@ inline constexpr const char* Description(Page page) {
     case Page::Tools:return "Maintain catalogs and manage session tools.";
     case Page::Settings:return "Configure RuneSchema for the next launch, or adjust RSMK appearance.";
     case Page::Authoring:return "Create content, inspect contracts, and export reviewed drafts and reports.";
-    case Page::LiveLog:return "Read Game, UE4SS, RuneSchema and EOS logs, with clear events and linked diagnostic references.";
+    case Page::LiveLog:return "Live logs and advanced diagnostics: grouped issues, retained evidence, session history and reviewed reports.";
     case Page::DedicatedServer:return "Open co-op session tools or review configuration on the dedicated server itself.";
     case Page::SaveEditor:return "Linked characters and copy-only save editing.";
     case Page::Journal:return "Browse native vanilla/modded journal and lore pages, view artwork, and author new RuneSchema entries. Wiki articles remain optional references.";

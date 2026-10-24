@@ -9,7 +9,9 @@
 int RunLoaderSchemas(int argc,char** argv) {
     const auto schemas=PS::JsonSchemaGenerator::LoaderSchemas();
     assert(schemas.size()==22);
-    assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"].size()==11);
+    assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"].size()==23);
+    for(const auto& family:PS::NativeDataFamilies::Families)assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"][family.Lane]["items"]["type"]=="string");
+    for(const auto* lane:{"Skills","SkillPerks","Enums"})assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"][lane]["$ref"]=="#/definitions/modOwnedCookedPaths");
     assert(schemas["registry"]["properties"]["LoaderDefinitions"]["properties"].size()==3);
     assert(schemas["assets"]["patternProperties"]["^(?!(?:RuneSchema|Modded)$)[^$]"]["properties"]["$WearableBridge"]["type"]=="boolean");
     const auto& humanEquipment=schemas.at("npc").at("anyOf").at(0).at("anyOf").at(0).at("properties").at("Equipment");
@@ -42,7 +44,7 @@ int RunLoaderSchemas(int argc,char** argv) {
     const auto check=[&](auto&& self,const nlohmann::json& node)->void {
         if(node.is_object()) {
             for(const auto* key:{"anyOf","allOf","oneOf"})if(node.contains(key)) {
-                assert(node[key].is_array());
+                if(!node[key].is_array())throw std::runtime_error(std::string("Schema composition is not an array: ")+key+" "+node.dump());
                 for(const auto& branch:node[key])assert(branch.is_object() || branch.is_boolean());
             }
             if(node.contains("properties"))for(const auto& value:node["properties"])
@@ -86,6 +88,9 @@ int RunLoaderSchemas(int argc,char** argv) {
     assert(npcProperties.at("Rotation").at("type")=="object");
     assert(npcProperties.at("Rotation").at("required")==nlohmann::json::array({"Pitch","Yaw","Roll"}));
     const auto& spawnProperties=schemas.at("spawns").at("items").at("properties");
+    assert(spawnProperties.at("Building").at("type")=="string");
+    assert(schemas["spawns"]["items"]["allOf"][1]["then"]["properties"]["DuplicateRadius"]["exclusiveMinimum"]==0);
+    assert(schemas["spawns"]["items"]["allOf"][1]["then"]["properties"]["AllowDeconstruction"]["const"]==true);
     assert(spawnProperties.at("Rotation")==npcProperties.at("Rotation"));
     assert(spawnProperties.at("Location")==npcProperties.at("Location"));
     assert(npcProperties.at("HideMesh").at("type")=="boolean");

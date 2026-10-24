@@ -121,6 +121,9 @@ bool DragonWildsNpcLoader::OnQuestScrollUse(Hook::TCallbackIterationData<void>& 
         // scroll. Uncertain receipts are not replayed, refunded or rewarded.
         if(result&&ReflectedContract::Output(result,function))result->SetPropertyValue(result->ContainerPtrToValuePtr<void>(parameters),succeeded());
         WarnOnce("quest-scroll:"+contract->QuestKey,PS::ToWideSafe(error.what()));
-    }catch(...) {ErrorOnce("quest-scroll-internal",TEXT("Quest-scroll activation failed; no automatic retry or refund was attempted."));}
+    }catch(...) {ErrorOnceDiagnostic("quest-scroll-internal",
+        TEXT("Quest-scroll activation failed; no automatic retry or refund was attempted."),
+        "RS-NPC-029","Quest-scroll activation encountered an unknown exception",
+        "Error","Partial",{},"QuestScroll","Application",true);}
     return true;
 }

@@ -14,14 +14,14 @@ public:
     ~Scope() noexcept {
         try {
             const auto now=std::chrono::steady_clock::now();
-            const auto elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(now-Began).count();
+            const auto elapsed=std::chrono::duration_cast<std::chrono::microseconds>(now-Began).count();
             const auto stamp=std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-            if(const auto report=Stats.Observe(static_cast<uint64_t>(elapsed),static_cast<uint64_t>(stamp))){
+            if(const auto report=Stats.ObserveUs(static_cast<uint64_t>(elapsed),static_cast<uint64_t>(stamp))){
                 if(report->PeakMs>=1000)
                     PS::CodedLog<RC::LogLevel::Warning>(PS::Diagnostics::Id::SlowWork,STR("[PERFORMANCE][SLOW-WORK] phase={} elapsed_ms={} peak_ms={} slow_calls={}; attribution only, not a network rejection.\n"),
                         PS::ToWideSafe(Phase),report->ElapsedMs,report->PeakMs,report->SlowCalls);
-                else PS::Log<RC::LogLevel::Verbose>(STR("[PERFORMANCE][SLOW-WORK] phase={} elapsed_ms={} peak_ms={} slow_calls={}; detailed timing, no gameplay/network rejection.\n"),
-                        PS::ToWideSafe(Phase),report->ElapsedMs,report->PeakMs,report->SlowCalls);
+                else PS::DiagnosticLog::Formatted(STR("[RuneSchema] [PERFORMANCE][SUMMARY] phase={} calls={} total_us={} avg_us={} peak_us={} calls_over_2ms={}; aggregated timing, 10s reporting cadence.\n"),false,
+                        PS::ToWideSafe(Phase),report->Calls,report->TotalUs,report->TotalUs/report->Calls,report->PeakUs,report->SlowCalls);
             }
         }catch(...){} // Diagnostics must not turn a slow callback into a crash.
     }

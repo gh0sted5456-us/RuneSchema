@@ -3,7 +3,7 @@
 #include <cmath>
 #include <stdexcept>
 namespace PS::Grounding {
-struct SurfacePending final:std::runtime_error {SurfacePending():std::runtime_error("Ground surface is not available yet") {}};
+struct SurfacePending final:std::runtime_error {explicit SurfacePending(const std::string& reason="Ground surface is not available yet"):std::runtime_error(reason) {}};
 // A missed collision trace is not permission to guess Z. Encounters retain a
 // bounded burst; eligible persistent placements keep their slow retry alive
 // even when collision becomes ready after the cell's sole shown notification.

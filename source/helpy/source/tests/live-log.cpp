@@ -1,4 +1,5 @@
 #include "Core/LiveLog.h"
+namespace Diagnostics=PS::Diagnostics;
 #include <cassert>
 #include <fstream>
 using namespace PS::LiveLog;
@@ -36,7 +37,7 @@ int main(){
     assert(Grouped(repeats,{},true).size()==1&&Grouped(repeats,{},true)[0].Count==2&&Grouped(repeats,{},false).size()==2);
     repeats.Append("[RuneSchema] [warning] [RS-CACHE-003] Different owner");assert(Grouped(repeats,{},true).size()==2);
     const auto row=Parse("[2026-10-16T12:00:00Z thread=12] [RuneSchema] [error] [PERSISTENCE-PRUNER] Duplicate quest owner marker.");
-    assert(row.Severity==Level::Error&&row.Scope=="PERSISTENCE-PRUNER"&&row.Help==0);
+    assert(row.Severity==Level::Error&&row.Scope=="PERSISTENCE-PRUNER"&&Guides[row.Help].Value==Diagnostics::Id::QuestOwnerConflict);
     assert(row.Source=="RuneSchema");
     assert(Parse("[2026-10-17 12:00:00] [Lua] [RuneUI] compass ready").Source=="RuneUI");
     assert(Parse("[12:00:00] [lua] [MyMod] Warning: delayed").Severity==Level::Warning);
@@ -61,13 +62,14 @@ int main(){
     auto invalid=colorDoc;invalid[0]["color"][0]=2.0;invalid[1]["match"]="";assert(ReadColors(invalid).empty());
     invalid=colorDoc;invalid[0]["kind"]="regex";assert(ReadColors(invalid).size()==1);
     invalid=nlohmann::json::array();for(int i=0;i<100;++i)invalid.push_back(colorDoc[0]);assert(ReadColors(invalid).size()==32);
-    assert(Parse("[RuneSchema] [warning] [NETWORK-REGISTRY] fingerprint mismatch").Help==2);
-    assert(Parse("[RuneSchema] [warning] [REGISTRY][PERSISTENCE-PRUNER][DEFERRED] not certified").Help==1);
-    assert(Parse("[RuneSchema] [warning] [WEARABLE-BRIDGE][NOT-ENROLLED]").Help==3);
-    assert(Parse("[RuneSchema] [warning] [PERFORMANCE][SLOW-WORK] phase=npcs.scan").Help==4);
-    assert(Parse("[RuneSchema] Alphabetical catalogue expired; refresh the list").Help==5);
-    assert(Parse("[RuneSchema] [diagnostic] NPC spawn waiting for collision").Help==6);
-    assert(Parse("[RuneSchema] [error] unrecognized error").Help==7);
+    const auto reference=[](const char* text,Diagnostics::Id id){const auto row=Parse(text);assert(row.Help>=0&&Guides[row.Help].Value==id&&row.Suggested);};
+    reference("[RuneSchema] [warning] [NETWORK-REGISTRY] fingerprint mismatch",Diagnostics::Id::RegistryMismatch);
+    reference("[RuneSchema] [warning] [REGISTRY][PERSISTENCE-PRUNER][DEFERRED] not certified",Diagnostics::Id::RegistryDeferred);
+    reference("[RuneSchema] [warning] [WEARABLE-BRIDGE][NOT-ENROLLED]",Diagnostics::Id::WearableUnenrolled);
+    reference("[RuneSchema] [warning] [PERFORMANCE][SLOW-WORK] phase=npcs.scan",Diagnostics::Id::SlowWork);
+    reference("[RuneSchema] Alphabetical catalogue expired; refresh the list",Diagnostics::Id::CatalogUnavailable);
+    reference("[RuneSchema] [diagnostic] NPC spawn waiting for collision",Diagnostics::Id::PlacementPending);
+    reference("[RuneSchema] [error] unrecognized error",Diagnostics::Id::Unclassified);
     assert(Parse("[RuneSchema] session started").Help==-1);
     Filter filter;filter.Query="rs-qst-001";assert(filter.Matches(row));filter.Levels[3]=false;assert(!filter.Matches(row));
     History history;history.Append(row.Text);filter={};assert(history.Export(filter).starts_with("[Suggested reference RS-QST-001] "));

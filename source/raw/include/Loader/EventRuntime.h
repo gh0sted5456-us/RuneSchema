@@ -1,10 +1,12 @@
 #pragma once
+#include "SDK/Helper/PlayerVitals.h"
 #include "Loader/EventDefinition.h"
 #include "Loader/TimeOfDayRuntime.h"
 #include "Loader/EventIdentity.h"
 #include "Loader/EventQuestContract.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
+#include "SDK/Helper/GroundedPlacement.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Classes/KismetSystemLibrary.h"
 #include "Loader/Spawn/RuntimeSupport.h"
@@ -93,20 +95,10 @@ class Runtime {
         }catch(...) {}
         if(!health)return std::nullopt;
         try {
-            ActorHelper::FunctionCall maximum(health,TEXT("/Script/Dominion.HealthComponent:GetMaxHealth"));maximum.Invoke();
-            const double limit=maximum.NumericResult();
-            double value=std::numeric_limits<double>::quiet_NaN();
-            if(auto* current=CastField<RC::Unreal::FNumericProperty>(PropertyHelper::GetPropertyByName(health->GetClassPrivate(),TEXT("CurrentHealth")))) {
-                auto* address=current->ContainerPtrToValuePtr<void>(health);
-                value=current->IsFloatingPoint()?current->GetFloatingPointPropertyValue(address)
-                    :static_cast<double>(current->GetSignedIntPropertyValue(address));
-            } else {
-                for(const auto* path:{TEXT("/Script/Dominion.HealthComponent:GetCurrentHealth"),TEXT("/Script/Dominion.HealthComponent:GetHealth")})try {
-                    ActorHelper::FunctionCall call(health,path);call.Invoke();value=call.NumericResult();break;
-                }catch(...) {}
-            }
-            if(!std::isfinite(value) || !std::isfinite(limit) || limit<=0)return std::nullopt;
-            return std::clamp(value/limit*100.0,0.0,100.0);
+            const auto limit=PS::PlayerVitals::Number(health,TEXT("/Script/Dominion.HealthComponent:GetMaxHealth"));
+            const auto value=PS::PlayerVitals::Number(health,TEXT("/Script/Dominion.HealthComponent:GetAuthoritativeHealth"));
+            if(!value || !limit || *limit<=0)return std::nullopt;
+            return std::clamp(*value / *limit * 100.0,0.0,100.0);
         }catch(...) {return std::nullopt;}
     }
     void PresentHealthStages() noexcept {
@@ -205,6 +197,9 @@ class Runtime {
         // streamed-ground miss must never retry an already half-created wave.
         std::vector<RC::Unreal::FVector> positions;
         std::vector<PS::SpawnFootprint::Reservation> reservations;
+        const auto participantAt=ActorHelper::GetActorLocation(static_cast<AActor*>(player));
+        double participantFloor=participantAt.Z();
+        if(definition.Contract)if(const auto capsule=GroundedPlacement::NativeCapsule(player))participantFloor-=capsule->HalfHeight;
         positions.reserve(definition.Waves.at(run.Wave()).size());
         std::set<std::string> validated;
         for(const auto& member:definition.Waves.at(run.Wave())) {
@@ -221,17 +216,23 @@ class Runtime {
                 const std::optional<double> reference=member.RelativeGround?std::nullopt:std::optional<double>{member.Position[2]};
                 const RC::Unreal::FVector start(member.Position[0],member.Position[1],search.Top);
                 const RC::Unreal::FVector end(member.Position[0],member.Position[1],search.Bottom);
-                if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,start,end,{static_cast<AActor*>(player)},impact,error,reference,&groundState)){
+                // Mesh-only encounter floors may have no Landscape collision. Player feet are a search hint, never a placement result.
+                const bool found=PS::Grounding::QueryWithFloorHint([&](std::optional<double> floor){
+                    return UECustom::UKismetSystemLibrary::FindGroundSurface(world,start,end,{static_cast<AActor*>(player)},impact,error,floor,&groundState);
+                },reference,member.RelativeGround&&definition.Contract?std::optional<double>{participantFloor}:std::nullopt,error,groundState);
+                if(!found){
                     if(!error.empty())throw std::runtime_error("Event ground query failed: "+error);
                     if(groundState.Obstructed&&groundState.FloorReference)
                         impact=RC::Unreal::FVector(member.Position[0],member.Position[1],*groundState.FloorReference);
-                    else throw PS::Grounding::SurfacePending();
+                    else throw PS::Grounding::SurfacePending("No ground hit for "+member.Spawn+" at XY="+std::to_string(member.Position[0])+","+std::to_string(member.Position[1])+"; player_floor_hint="+std::to_string(participantFloor));
                 }
                 // Match /spawns: keep grounded actors 10 cm clear of the
                 // blocking surface, with GroundOffset as an author delta.
                 location=RC::Unreal::FVector(member.Position[0],member.Position[1],impact.Z()+member.GroundOffset+10.0);
             }
-            if(member.Ground){if(!PrepareGrounded)throw std::runtime_error("Event footprint provider unavailable");location=PrepareGrounded(member.Spawn,world,location,static_cast<AActor*>(player),reservations,member.GroundOffset+10.0);}
+            if(member.Ground){if(!PrepareGrounded)throw std::runtime_error("Event footprint provider unavailable");
+                try{location=PrepareGrounded(member.Spawn,world,location,static_cast<AActor*>(player),reservations,member.GroundOffset+10.0);}
+                catch(const PS::Grounding::SurfacePending& failure){throw PS::Grounding::SurfacePending(member.Spawn+" at XY="+std::to_string(member.Position[0])+","+std::to_string(member.Position[1])+": "+failure.what());}}
             positions.push_back(location);
         }
         owned.reserve(definition.Waves.at(run.Wave()).size());
@@ -260,9 +261,9 @@ class Runtime {
         if(announce)Present(BossWave() && !definition.Text.BossStarted.empty()?definition.Text.BossStarted:definition.Text.WaveStarted);
     }
     bool TrySpawnWave(bool initial) {
-        try{SpawnWave(false);}catch(const PS::Grounding::SurfacePending&){
+        try{SpawnWave(false);}catch(const PS::Grounding::SurfacePending& pending){
             wavePending=true;initialWavePending=initial;
-            if(groundRetry.Missed())Report(definition.Key+": waiting for valid ground and collision-clear spawn space; no wave actors created; retry scheduled");
+            if(groundRetry.Missed())Report(definition.Key+": waiting for valid ground and collision-clear spawn space; no wave actors created; retry scheduled; "+pending.what());
             return false;
         }
         wavePending=false;initialWavePending=false;groundRetry.Resolved();

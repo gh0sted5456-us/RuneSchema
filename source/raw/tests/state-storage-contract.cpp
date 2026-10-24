@@ -43,6 +43,13 @@ int main(int argc, char** argv)
         "Game Pass state is package-local and Xbox WGS is never treated as a normal save directory");
     Check(host.find("OwnedContentLedger.json") == std::string::npos,
         "runtime state migration does not create or move an ownership ledger");
+    Check(host.find("MappingCacheDirectory()") != std::string::npos
+        && host.find("RuneSchemaData::MappingDirectory(Storefront::MappingCachePlatform") != std::string::npos,
+        "reflection mapping cache lives in platform-separated RuneSchema AppData");
+    Check(host.find("RelocateDirectory") == std::string::npos
+        && host.find("RuntimeLayout::Initialize(RuntimeDirectory())") != std::string::npos
+        && host.find("MigrateLegacyLayout") == std::string::npos,
+        "startup must initialize fresh AppData state without touching legacy install-local data");
     Check(mainLoader.find("OwnedContent::BeginSnapshot") == std::string::npos,
         "automatic cleanup does not create an ownership ledger");
     Check(buildingLoader.find("CustomBuildingData.json") == std::string::npos
@@ -98,14 +105,14 @@ int main(int argc, char** argv)
     Check(registrar.find("fingerprint != m_registryCandidateFingerprint") != std::string::npos
         && pruner.find("m_checkedCharacters") == std::string::npos
         && pruner.find("Every incoming gameplay payload is checked") != std::string::npos
-        && pruner.find("if (!registry || !registry->Ready())") < pruner.find("SaveCleanup::Plan(")
+        && pruner.find("if (!registry || !registry->AnyCleanable())") < pruner.find("SaveCleanup::PlanAvailable(")
         && pruner.find("if (characterId.empty()) return 0;") != std::string::npos
         && pruner.find("if (cleaned.Removed.empty() && restored.empty())") != std::string::npos
         && pruner.find("verified != serialized") < pruner.find("characterJson=std::move(replacement)"),
         "each character payload must use a certified registry, stable identity, verified writeback and a nonempty removal plan");
     Check(registrar.find("for (auto* subsystem : subsystems)") != std::string::npos
         && registrar.find("const auto registered = RegisterMissing") != std::string::npos
-        && registrar.find("registrationsComplete = registered && registrationsComplete") != std::string::npos
+        && registrar.find("itemsReady=itemsReady&&cleanBinding") != std::string::npos
         && registrar.find("reverseVerified") != std::string::npos
         && registrar.find("roundTrip == dataAsset") != std::string::npos,
         "startup can leave a live native registry unpopulated");

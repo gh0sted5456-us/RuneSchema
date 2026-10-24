@@ -98,11 +98,11 @@ inline void PollPackaged(){
     if(Busy()||Building()||!PendingBuildExport.empty()||!HelpySourceCache::Ready()||!HelpySourceCache::Current.Authoritative||HelpySourceCache::Current.Provisional||std::chrono::steady_clock::now()<NextPackaged)return;
     const auto limit=HelpyRuntimePreferences::IconCacheLimitMB.load();if(limit<=0)return;
     const auto snapshot=HelpySourceCache::Current;if(PackagedKey==snapshot.Key)return;PackagedKey=snapshot.Key;
-    const auto root=HostServices::ModDirectory(),cache=HelpySourceCache::Directory(false);
+    const auto root=HostServices::ModDirectory(),cache=HelpySourceCache::Directory(false),shared=RuneSchemaData::Directory()/"core"/"cache";
     Progress.Cancel=false;Progress.Begin(HelpyIconPack::Phase::Discover);Importing=true;Packaged=true;CompletionNotify=false;
     const auto ownership=RemoteBuild;
-    Worker=std::async(std::launch::async,[root,cache,snapshot,limit,ownership]{
-        return HelpyModIconPacks::ImportAll(root,cache,HelpyCacheOwnership::Fetch(snapshot,{},ownership),uint64_t(limit)*1024*1024,Progress);
+    Worker=std::async(std::launch::async,[root,cache,shared,snapshot,limit,ownership]{
+        return HelpyModIconPacks::ImportAll(root,cache,HelpyCacheOwnership::Fetch(snapshot,{},ownership),uint64_t(limit)*1024*1024,Progress,shared);
     });
 }
 inline void Shutdown() noexcept {PendingBuildExport.clear();Progress.Cancel=true;if(RemoteBuild)try{nlohmann::json ignored;RemoteBuild({{"Action","IconCacheBuildCancel"}},ignored);}catch(...){}if(Worker.valid())try{(void)Worker.get();}catch(...){};}
@@ -138,7 +138,14 @@ inline void Render(bool catalogueBusy=false){
     ImGui::SameLine();
     ImGui::BeginDisabled(Busy()||Building()||SourceBanners::Busy()||!HelpySourceCache::Ready());
     if(ImGui::Button("Export cached bundle..."))Choose(false);
-    ImGui::EndDisabled();ImGui::SameLine();
+    ImGui::EndDisabled();
+    ImGui::BeginDisabled(Busy()||Building()||SourceBanners::Busy()||!HelpySourceCache::Ready()||!SelectedSource.starts_with("mods/"));
+    if(ImGui::Button("Share selected mod cache in core")){
+        try{Start(HelpyModIconPacks::SharedFile(RuneSchemaData::Directory()/"core"/"cache",SelectedSource),false);}
+        catch(const std::exception& error){Status=error.what();}
+    }
+    ImGui::EndDisabled();
+    if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))PS::HelpyImGuiTheme::Tooltip("Saves this mod's current bundle under core/cache/mods. Other runtimes import it at their next source scan only when live ownership and content hashes match. Sharing does not load mods or grant permissions.");
     ImGui::BeginDisabled(Busy()||Building()||catalogueBusy||!RemoteBuild||!BuildState.value("Available",false)||!HelpySourceCache::Ready()||HelpyEnvironment::Server());
     if(ImGui::Button("Build / update")){
         nlohmann::json result;if(RemoteBuild({{"Action","IconCacheBuildStart"},{"Source",SelectedSource}},result)&&result.value("Accepted",false)){BuildState={{"Active",true},{"Stage","Queued"}};NextBuildRead={};}
@@ -161,6 +168,19 @@ inline void Render(bool catalogueBusy=false){
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::CacheAdvanced=HelpyPreviewHooks::LastRect();
 #endif
+    if(Advanced&&ImGui::CollapsingHeader("PAK / container discovery")){
+        ImGui::TextWrapped("Directory indexes associate packages with their supplying containers. Indexed does not certify a successful mount or live item availability.");
+        if(ImGui::BeginChild("##pak-discovery",ImVec2(0,180),ImGuiChildFlags_Borders)){
+            for(const auto& [file,entry]:HelpySourceCache::Current.Containers.items()){
+                const auto owner=entry.value("Owner",std::string{});
+                if(!SelectedSource.empty()&&SelectedSource!=owner)continue;
+                ImGui::TextWrapped("%s · %s · %zu packages",owner.c_str(),entry.value("Status",std::string{}).c_str(),entry.value("Packages",size_t{}));
+                ImGui::TextWrapped("%s",file.c_str());
+                const auto reason=entry.value("Reason",std::string{});if(!reason.empty())ImGui::TextWrapped("%s",reason.c_str());
+                ImGui::Separator();
+            }
+        }ImGui::EndChild();
+    }
     if(Building()){
         const auto stage=BuildState.value("Stage",std::string("Queued"));const bool verifying=stage=="Verifying complete cache";const bool capture=verifying||stage=="Caching registered icons"||stage=="Checking cached icons";
         const auto done=BuildState.value(verifying?"VerifyDone":capture?"Done":"ScanDone",size_t{}),total=BuildState.value(capture?"Total":"ScanTotal",size_t{});

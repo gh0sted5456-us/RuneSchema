@@ -1,5 +1,6 @@
 #include "Core/PersistencePruner.h"
 #include "Core/CharacterLoadAudit.h"
+#include "Core/LoadProtectionNotice.h"
 
 #include <map>
 #include <optional>
@@ -12,6 +13,7 @@
 #include "Core/ConfigFiles.h"
 #include "Core/SaveCleanup.h"
 #include "Core/SaveRegistrySnapshot.h"
+#include "Core/SavePruneBackup.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Classes/KismetSystemLibrary.h"
 #include "SDK/Classes/TSoftObjectPtr.h"
@@ -62,7 +64,7 @@ void ReportValidatedSavedItems(const nlohmann::json& source,
         if (!game.contains(section) || !game.at(section).is_object()) continue;
         for (const auto& entry : game.at(section).items()) {
             const auto& row = entry.value();
-            if (!row.is_object()) continue;
+            if (!row.is_object() || (row.contains("ItemData")&&!row.at("ItemData").is_string())) continue;
             const auto id = row.value("ItemData", std::string{});
             if (id.empty() || !registry.Items.contains(id)
                 || !reported.emplace(section, id).second) continue;
@@ -110,7 +112,7 @@ bool PersistencePruner::PruneBeforeCharacterLoad(
     // Optional cleanup must not inspect/copy a character payload while its
     // authority is unavailable. Leave the original native event untouched.
     const auto registry = SaveCleanup::ReadRegistry();
-    if (!registry || !registry->Ready()) {
+    if (!registry || !registry->AnyCleanable()) {
         if(!m_cleanupDeferredReported){m_cleanupDeferredReported=true;
             CodedLog<LogLevel::Warning>(Diagnostics::Id::PersistenceUncertified,STR(
                 "[PERSISTENCE-PRUNER][DEFERRED] Awaiting certified registration; pending={} healthy={}. Non-blocking: native character loading continues; save unchanged.\n"),
@@ -169,7 +171,7 @@ std::size_t PersistencePruner::PruneCharacterJson(FString& characterJson,bool* p
     if (characterJson.GetCharArray().Num() <= 1) return 0;
 
     const auto registry = SaveCleanup::ReadRegistry();
-    if (!registry || !registry->Ready()) {
+    if (!registry || !registry->AnyCleanable()) {
         if (!m_cleanupDeferredReported) {
             m_cleanupDeferredReported = true;
             CodedLog<LogLevel::Warning>(Diagnostics::Id::PersistenceUncertified,STR(
@@ -191,6 +193,7 @@ std::size_t PersistencePruner::PruneCharacterJson(FString& characterJson,bool* p
             ? source.at("meta_data").value("char_guid", std::string{})
             : std::string{};
         if (characterId.empty()) return 0;
+        CharacterLoadAudit::BindCharacter(characterId);
 
         ReportValidatedSavedItems(source, *registry);
         // Every incoming gameplay payload is checked. One failed attempt or
@@ -199,8 +202,10 @@ std::size_t PersistencePruner::PruneCharacterJson(FString& characterJson,bool* p
         // this does not rescan assets or mutate registries on world transitions.
 
         SaveCleanup::Preview cleaned{source};
-        cleaned = SaveCleanup::Plan(
-            cleaned.Save, {}, false, registry.get(), false, true, true);
+        cleaned = SaveCleanup::PlanAvailable(cleaned.Save, *registry);
+        for(const auto& skipped:cleaned.Skipped)Log<LogLevel::Normal>(STR("[PERSISTENCE-PRUNER][SECTION-SKIPPED] {}: {}. Other verified sections continue; native loading is not blocked.\n"),
+            ToWideSafe(skipped.at("Section").get<std::string>()),ToWideSafe(skipped.at("Reason").get<std::string>()));
+        if(!cleaned.Skipped.empty())LoadProtectionNotice::Record(characterId,0,cleaned.Skipped.size(),false);
         nlohmann::json restored = nlohmann::json::array();
         const auto recovery = PSConfig::Get()->GetSettings().defaultRecovery;
         std::optional<nlohmann::json> external;
@@ -208,6 +213,7 @@ std::size_t PersistencePruner::PruneCharacterJson(FString& characterJson,bool* p
             external = ReadExternalBaseline();
 
         if (recovery.enabled && recovery.appearance) {
+          try {
             const auto repair = [&](const nlohmann::json& document) {
                 return SaveCleanup::RepairInvalidAppearance(cleaned.Save,
                     SaveCleanup::AppearanceProfile(document),
@@ -231,6 +237,7 @@ std::size_t PersistencePruner::PruneCharacterJson(FString& characterJson,bool* p
                 cleaned.Removed.push_back(std::move(row));
             }
             cleaned.Save = std::move(appearance.Save);
+          }catch(const std::exception& error){Log<LogLevel::Normal>(STR("[DEFAULT-RECOVERY][APPEARANCE-SKIPPED] {}. Verified orphan cleanup continues.\n"),ToWideSafe(error.what()));}
         }
 
         if (recovery.enabled && external
@@ -267,7 +274,11 @@ std::size_t PersistencePruner::PruneCharacterJson(FString& characterJson,bool* p
         if (verified != serialized) throw std::runtime_error(
             "clean character JSON did not survive native writeback");
         std::size_t removed=0;for(const auto& row:cleaned.Removed)if(row.value("Kind",std::string{})!="Appearance")++removed;
+        const auto runtime=Storefront::MappingCachePlatform(Storefront::CurrentDetection());
+        const auto backup=SavePruneBackup::Write(SavePruneBackup::Directory(runtime),utf8,characterId);
+        Log<LogLevel::Normal>(STR("[PERSISTENCE-BACKUP][VERIFIED] Whole original character load payload saved before pruning: '{}'.\n"),backup.wstring());
         characterJson=std::move(replacement);applied=true;committedRemovals=removed;
+        LoadProtectionNotice::Record(characterId,removed,0,false);
         if(prepared)*prepared=true;
 
         std::map<std::string, std::size_t> counts;

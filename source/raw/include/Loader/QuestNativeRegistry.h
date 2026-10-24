@@ -4,6 +4,8 @@
 #include "Loader/QuestObjectReference.h"
 #include "Loader/ItemIdentity.h"
 #include "Core/SaveRegistrySnapshot.h"
+#include "Core/NativeDataFamilies.h"
+#include "Unreal/UnrealInitializer.hpp"
 #include "SDK/Helper/ActorHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Structs/Custom/FScriptMapHelper.h"
@@ -18,6 +20,15 @@ namespace DragonWilds::QuestRegistry {
 // Call only on the game thread while the selected game instance is stable.
 // This does not create assets, select a global subsystem or modify save files.
 class NativeRegistry {
+public:
+    static std::optional<int64_t> CompletedState(){
+        auto* enumeration=UECustom::UObjectGlobals::StaticFindObject<RC::Unreal::UEnum*>(nullptr,nullptr,TEXT("/Script/Dominion.EQuestState"),false);
+        if(!enumeration)return {};const auto& names=enumeration->GetEnumNames();if(names.Num()<1||names.Num()>64)return {};
+        std::optional<int64_t> result;for(const auto& entry:names){auto name=RC::to_string(entry.Key.ToString());const auto colon=name.rfind("::");if(colon!=name.npos)name=name.substr(colon+2);
+            if(name=="Completed"){if(result||entry.Value<0||entry.Value>255)return {};result=entry.Value;}}
+        return result;
+    }
+private:
     using UObject=RC::Unreal::UObject;
     using FProperty=RC::Unreal::FProperty;
     using FMapProperty=RC::Unreal::FMapProperty;
@@ -139,12 +150,18 @@ public:
     static uint16_t RegisterJournal(UObject* subsystem,UObject* gameInstance,UObject* entry) {
         return RegisterAsset(subsystem,gameInstance,entry,true);
     }
+    static uint16_t RegisterFamily(UObject* subsystem,UObject* gameInstance,UObject* asset,const PS::NativeDataFamilies::Family& family,bool publish=true) {
+        if(!RC::Unreal::IsInGameThread()||PS::NativeDataFamilies::Find(family.Lane)!=&family)throw std::runtime_error("Native family registration requires a known startup game-thread contract");
+        return RegisterAsset(subsystem,gameInstance,asset,false,&family,publish);
+    }
 private:
-    static uint16_t RegisterAsset(UObject* subsystem,UObject* gameInstance,UObject* quest,bool journal) {
+    static uint16_t RegisterAsset(UObject* subsystem,UObject* gameInstance,UObject* quest,bool journal,const PS::NativeDataFamilies::Family* family=nullptr,bool publish=true) {
         using namespace RC::Unreal;
-        auto* type=ActorHelper::ResolveClass(journal?TEXT("/Script/Dominion.JournalSubsystem"):TEXT("/Script/Dominion.QuestDataSubsystem"));
+        const auto subsystemPath=family?PS::ToWideSafe(family->Subsystem):RC::StringType(journal?TEXT("/Script/Dominion.JournalSubsystem"):TEXT("/Script/Dominion.QuestDataSubsystem"));
+        const auto dataPath=family?PS::ToWideSafe(family->DataClass):RC::StringType(journal?TEXT("/Script/Dominion.JournalEntryData"):TEXT("/Script/Dominion.QuestData"));
+        auto* type=ActorHelper::ResolveClass(subsystemPath);
         auto* instanceType=ActorHelper::ResolveClass(TEXT("/Script/Engine.GameInstance"));
-        auto* questType=ActorHelper::ResolveClass(journal?TEXT("/Script/Dominion.JournalEntryData"):TEXT("/Script/Dominion.QuestData"));
+        auto* questType=ActorHelper::ResolveClass(dataPath);
         if(!subsystem || !gameInstance || !quest || !type || !instanceType || !questType
             || !subsystem->IsA(type) || !gameInstance->IsA(instanceType) || !quest->IsA(questType)
             || subsystem->GetOuterPrivate()!=gameInstance)
@@ -163,7 +180,7 @@ private:
         };
         const auto persistenceText=identity(TEXT("PersistenceID")),internalText=identity(TEXT("InternalName"));
         const FString persistence(persistenceText.c_str()),internal(internalText.c_str());
-        if(!journal && !IsCanonicalPersistenceId(RC::to_string(RC::StringType(*persistence))))throw std::runtime_error("Invalid quest persistence ID");
+        if(!journal&&!family&&!IsCanonicalPersistenceId(RC::to_string(RC::StringType(*persistence))))throw std::runtime_error("Invalid quest persistence ID");
         const FString asset(quest->GetName().c_str());
         const auto map=[&](const TCHAR* name) {
             auto* p=CastField<FMapProperty>(PropertyHelper::GetPropertyByName(subsystem->GetClassPrivate(),name));
@@ -221,9 +238,10 @@ private:
         }
         // No allocations or callbacks after publication starts. Stage destructors
         // release the old containers, not the newly published entries.
+        if(!publish)return plan.Id;
         idStage.Publish();nameStage.Publish();assetStage.Publish();reverseStage.Publish();arrayStage.Publish();
         // Non-throwing additive bookkeeping, after the native maps commit.
-        PS::SaveCleanup::IncludeVerifiedIdentity(journal?PS::SaveCleanup::VerifiedKind::Journal:PS::SaveCleanup::VerifiedKind::Quest,RC::to_string(persistenceText));
+        if(!family)PS::SaveCleanup::IncludeVerifiedIdentity(journal?PS::SaveCleanup::VerifiedKind::Journal:PS::SaveCleanup::VerifiedKind::Quest,RC::to_string(persistenceText));
         return plan.Id;
     }
 };

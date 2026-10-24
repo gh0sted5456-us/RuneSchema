@@ -109,10 +109,10 @@ public:
         if(!Ready()||expected!=revision||(container!="Inventory"&&container!="PersonalInventory")||!record.is_object()||!record.contains("ItemData")||!record["ItemData"].is_string()||!record.contains("GUID")||!record["GUID"].is_string())throw std::runtime_error("Verified native item record and current revision required");
         const auto& slots=draft.at("GameProgress").at(container);if(!slots.is_object()||slots.size()>4096||!slots.contains("MaxSlotIndex")||!slots["MaxSlotIndex"].is_number_integer())throw std::runtime_error("Native inventory layout unavailable");
         int64_t index=slots["MaxSlotIndex"].get<int64_t>();if(index< -1||index>=2147483646)throw std::runtime_error("Native inventory index exceeds its bound");
-        for(const auto& [key,item]:slots.items())if(key!="MaxSlotIndex"){const auto [unused,slot]=ItemPointer("/GameProgress/"+container+"/"+key);index=std::max(index,std::stoll(slot));}
+        for(const auto& [key,item]:slots.items())if(key!="MaxSlotIndex"){const auto [unused,slot]=ItemPointer("/GameProgress/"+container+"/"+key);index=(std::max)(index,std::stoll(slot));}
         for(const auto* c:{"Inventory","PersonalInventory"})if(draft["GameProgress"].contains(c))for(const auto& item:draft["GameProgress"][c])if(item.is_object()&&item.value("GUID",std::string{})==record["GUID"].get<std::string>())throw std::runtime_error("Duplicate item instance GUID");
         const int64_t destination=verifiedSlot>=0?verifiedSlot:index+1;if(destination>4096||slots.contains(std::to_string(destination)))throw std::runtime_error("Native target slot is occupied or exceeds the supported bound");
-        auto next=draft;next["GameProgress"][container][std::to_string(destination)]=record;next["GameProgress"][container]["MaxSlotIndex"]=std::max(index,destination);Commit(std::move(next),expected);
+        auto next=draft;next["GameProgress"][container][std::to_string(destination)]=record;next["GameProgress"][container]["MaxSlotIndex"]=(std::max)(index,destination);Commit(std::move(next),expected);
     }
     std::string ItemIdentity(const std::string& pointer)const{(void)ItemPointer(pointer);if(!Ready())throw std::runtime_error("Open a character copy first");return draft.at(Json::json_pointer(pointer)).at("ItemData").get<std::string>();}
     Json Inventory(size_t offset=0)const{

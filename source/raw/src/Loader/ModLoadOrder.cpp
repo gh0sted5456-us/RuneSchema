@@ -4,6 +4,7 @@
 #include <unordered_set>
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnosticB3C.h"
 #include "Utility/ModFolderLayout.h"
 
 namespace fs=std::filesystem;
@@ -24,12 +25,18 @@ bool WriteOrder(const fs::path& path,const std::vector<DragonWilds::ModOrderEntr
         // ConfigFiles creates the parent and replaces a complete staged file.
         // Never truncate runeschema.txt in place or overwrite a newer snapshot.
         if(!DragonWilds::ModOrderState::WriteExpected(path,baseline,contents)) {
-            PS::Log<RC::LogLevel::Warning>(STR("Load order changed on disk; save was not applied. Reload before saving.\n"));
+            PS::LogStructuredFallback<RC::LogLevel::Warning>(
+                PS::StructuredDiagnosticB3C::Report("RS-CORE-040","Warning","Skipped","LoaderCore",
+                "Load-order save refused","The on-disk load order has changed; reload it before saving.",{},path.generic_string(),"ModLoadOrder","Validation"),
+                STR("Load order changed on disk; save was not applied. Reload before saving.\n"));
             return false;
         }
         return true;
     } catch(const std::exception& error) {
-        PS::Log<RC::LogLevel::Warning>(STR("Could not save load order: {}.\n"),PS::ToWideSafe(error.what()));
+        PS::LogStructuredFallback<RC::LogLevel::Warning>(
+            PS::StructuredDiagnosticB3C::Report("RS-CORE-041","Error","Failed","LoaderCore",
+                "Load-order save failed",error.what(),{},path.generic_string(),"ModLoadOrder","Finalization"),
+            STR("Could not save load order: {}.\n"),PS::ToWideSafe(error.what()));
         return false;
     }
 }

@@ -2,6 +2,7 @@
 #include "Runtime/Storefront.h"
 #include "UE4SSProgram.hpp"
 #include "Runtime/Layout.h"
+#include "Core/RuneSchemaDataRoot.h"
 #include <Windows.h>
 #include <stdexcept>
 #include <vector>
@@ -52,11 +53,10 @@ namespace PS::HostServices {
     std::filesystem::path WorkingDirectory() {
         return RC::UE4SSProgram::get_program().get_working_directory();
     }
-    std::filesystem::path ProfileDirectory(){return LocalAppDataDirectory()/L"RuneSchema"/L"runeschema.profile";}
+    std::filesystem::path ProfileDirectory(){return RuneSchemaData::SharedDirectory("runeschema.profile");}
     std::filesystem::path RuntimeDirectory() {
-        const auto path = ModDirectory() / "runtime" / "live";
-        std::error_code error;
-        std::filesystem::create_directories(path, error);
+        const auto path=RuneSchemaData::PlatformDirectory(Storefront::MappingCachePlatform(Storefront::CurrentDetection()))/"runtime";
+        RuneSchemaData::Safe(path);std::filesystem::create_directories(path);
         return path;
     }
     std::filesystem::path ModDirectory() { return WorkingDirectory() / "Mods" / "RuneSchema"; }
@@ -73,6 +73,9 @@ namespace PS::HostServices {
     }
     std::filesystem::path SavedDirectory() { return RuntimeDirectory() / "saved"; }
     std::filesystem::path CacheDirectory() { return SavedDirectory() / "cache"; }
+    std::filesystem::path MappingCacheDirectory() {
+        return RuneSchemaData::MappingDirectory(Storefront::MappingCachePlatform(Storefront::CurrentDetection()));
+    }
     std::filesystem::path ProgressDirectory() { return SavedDirectory() / "progress"; }
     std::filesystem::path ReferencesDirectory() { return SavedDirectory() / "references"; }
     std::filesystem::path ExportsDirectory() { return JobsDirectory() / "exports"; }
@@ -80,8 +83,8 @@ namespace PS::HostServices {
     std::filesystem::path PresetsDirectory() { return SearchesDirectory() / "presets"; }
     std::filesystem::path TraceProfilesDirectory() { return SearchesDirectory() / "trace-profiles"; }
     std::filesystem::path JobsDirectory() { return RuntimeDirectory() / "jobs"; }
-    void MigrateLegacyLayout() {
-        RuntimeLayout::Migrate(ModDirectory());
+    void InitializeRuntimeLayout() {
+        RuntimeLayout::Initialize(RuntimeDirectory());
     }
     bool GuiEnabled() {
         // on_ui_init is the host's GUI capability boundary. Reading the

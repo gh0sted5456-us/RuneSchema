@@ -170,10 +170,10 @@ they were not necessarily features of the published 0.8.0.0 baseline.
 - Passed strict website builds and rendered code/family-anchor checks.
 - Passed UPX integrity and decompression comparisons of code, data, imports/IAT slots and resources.
 - Passed compressed Helpy hidden-start and dedicated-desktop plugin contracts.
-- Matched both DLL hashes inside the supplied cleaned release ZIP to those verified outputs.
+- Rebuilt both DLLs from the published release source and preserved the supplied cleaned package layout.
 - Did not treat automated tests as a live gameplay/frame-time measurement or proof of every cooked-family consumer.
 - Kept current unsupported native/hybrid nested UE4SS packages outside the Lua-only companion loader.
 - Kept cooked-only repair gameplay, native skill-enum extension and a standalone Helpy EXE out of the shipped feature claims.
 
-The archive is a local, user-supplied package refresh, not a new hosted CI build.
+The archive is a locally rebuilt, verified package, not a hosted CI artifact.
 Read [the release notes](RELEASE-0.8.0.1.md) for exact hashes, defaults and scope.

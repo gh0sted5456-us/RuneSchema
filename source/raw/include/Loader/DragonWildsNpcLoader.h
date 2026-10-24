@@ -218,6 +218,9 @@ namespace DragonWilds {
         Events::Runtime m_events;
         double m_questLocationElapsed=0;
         unsigned m_questLocationChecks=0;
+        bool m_pruningQuestProgress=false;
+        std::vector<PS::WeakObjectHandle> m_questPruneAttempts;
+        void PruneLoadedQuestProgress(RC::Unreal::UObject* controller);
         void PumpQuestLocations(float deltaSeconds);
         struct PendingQuestLocationRefresh {
             PS::WeakObjectHandle Controller;
@@ -520,6 +523,10 @@ namespace DragonWilds {
 
         bool WarnOnce(const std::string& key, const RC::StringType& message);
         bool ErrorOnce(const std::string& key, const RC::StringType& message);
+        bool ErrorOnceDiagnostic(const std::string& key, const RC::StringType& message,
+            const char* code, const char* title, const char* severity, const char* outcome,
+            const std::string& mod={}, const std::string& target={},
+            const char* phase="Application", bool preserveLegacy=false);
         static std::string ActorKey(RC::Unreal::AActor* actor,
             const VendorDefinition& definition);
     };

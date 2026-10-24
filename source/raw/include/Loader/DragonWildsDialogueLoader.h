@@ -2,6 +2,7 @@
 #include "Loader/DragonWildsNpcLoader.h"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnosticB3C.h"
 namespace DragonWilds {
 class DragonWildsDialogueLoader final : public DragonWildsModLoaderBase {
 public:
@@ -15,6 +16,8 @@ protected:
             PS::JsonHelpers::ParseJsonFilesInPath(path,[&](const nlohmann::json& data){m_npcs->LoadDialogues(data,mod);});
     }
     void OnAutoReload(const RC::StringType& mod,const std::filesystem::path&) override {
+        PS::StructuredDiagnosticB3C::Report("RS-CORE-037","Warning","Deferred","LoaderCore",
+            "Dialogue reload requires restart","Dialogue changes are not applied through live reload.",RC::to_string(mod),{},"DialogueReload","Reload");
         PS::Log<RC::LogLevel::Warning>(TEXT("Dialogue changes in {} require a restart.\n"),mod);
     }
 private:

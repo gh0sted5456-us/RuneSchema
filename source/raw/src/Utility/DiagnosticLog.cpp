@@ -43,6 +43,10 @@ void Write(std::wstring_view text,bool urgent) noexcept {
         if(!Sink().Write(utf8,urgent)&&Sink().TakeFailure())ReportFailure();
     }catch(...){};
 }
+void WriteUtf8(std::string_view text,bool urgent) noexcept {
+    if(!Ready.load())return;
+    try {if(!Sink().Write(text,urgent)&&Sink().TakeFailure())ReportFailure();}catch(...){}
+}
 void Shutdown() noexcept {
     if(Ready.exchange(false))Sink().Write("[RuneSchema] Session ended.",true);
     Sink().Close();

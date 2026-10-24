@@ -27,7 +27,7 @@ int main(int argc,char** argv) {
         "harvested temporary nodes can respawn repeatedly within one event");
     require(spawn.find("spawn.bTemporaryResourceSpawned=false")!=std::string::npos,
         "temporary nodes cannot reset for a later event");
-    require(spawn.find("spawn.Time!=TimeOfDay::Requirement::Any || questOwnedBuilding || spawn.bTemporaryResource")!=std::string::npos
+    require(spawn.find("spawn.Time!=TimeOfDay::Requirement::Any || spawn.bBuildingProp || spawn.bTemporaryResource")!=std::string::npos
         && spawn.find("Temporary resource save exclusion did not round-trip")!=std::string::npos,
         "temporary nodes can enter native world persistence");
     require(spawn.find("Temporary resource identity collides with an unverified world actor; left unchanged")!=std::string::npos,

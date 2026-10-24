@@ -10,6 +10,7 @@
 #include "Core/CookedRegistryShards.h"
 #include "Core/MountedModRegistryOwners.h"
 #include "Core/RegistryEnrollment.h"
+#include "Core/ModDataRelay.h"
 #include "SDK/Helper/ReflectedContract.h"
 #include "Runtime/HostServices.h"
 #include "Runtime/RegistryBridge.h"
@@ -17,6 +18,8 @@
 #include "Utility/BuildInfo.h"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnosticB3C.h"
+#include "Utility/StructuredDiagnosticOutcomeEvidence.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "Unreal/UAssetRegistryHelpers.hpp"
@@ -63,6 +66,7 @@ json AuthorDocument(const json& source) {
     if(source.is_object()&&source.contains("kind")&&source.value("kind",std::string{})=="RuneSchemaRegistryBridgeManifest"&&source.contains("entries")) {
         json entries=json::array();for(const auto& row:source["entries"]) {
             json entry={{"Id",row.value("id",std::string{})},{"Kind",row.value("kind",std::string{})}};
+            if(row.value("kind",std::string{})=="DataRelay"){entry["Relay"]=row.at("relay");entries.push_back(std::move(entry));continue;}
             if(row.contains("spell"))entry["Spell"]=row["spell"];
             if(row.contains("presentation")){entry["Presentation"]=json::array();for(const auto& p:row["presentation"]){json out={{"Phase",p.value("module",std::string{})},{"Class",p.value("path",std::string{})},{"Classification",p.value("classification",std::string{})}};if(p.contains("socket"))out["Socket"]=p["socket"];if(p.contains("parameters"))out["Parameters"]=p["parameters"];entry["Presentation"].push_back(std::move(out));}}
             if(row.contains("authority")){const auto& a=row["authority"];entry["Authority"]={{"Action",a.value("action",std::string{})},{"GraphClass",a.value("graphClass",std::string{})},{"Function",a.value("function",std::string("Trigger"))},{"Bindings",a.value("bindings",json::object())}};if(a.contains("dataAsset"))entry["Authority"]["DataAsset"]=a["dataAsset"];}
@@ -123,7 +127,7 @@ bool DragonWildsRegistryLoader::OnInitialize() {
 }
 
 nlohmann::json DragonWildsRegistryLoader::NormalizeEntry(const json& entry,const std::string& owner) {
-    Fields(entry,{"Id","Kind","Spell","Presentation","Authority","Consumer","Metadata"},"registry entry");
+    Fields(entry,{"Id","Kind","Spell","Presentation","Authority","Consumer","Metadata","Relay"},"registry entry");
     const auto id=entry.value("Id",std::string{});
     const auto kind=entry.value("Kind",std::string{});
     if(!Identifier(id))throw std::runtime_error("registry Id must use letters, numbers, dot, dash or underscore");
@@ -131,7 +135,7 @@ nlohmann::json DragonWildsRegistryLoader::NormalizeEntry(const json& entry,const
         && kind!="GameplayEffectPresentation" && kind!="EquipmentPresentation"
         && kind!="PersistentEffect" && kind!="WeatherPresentation"
         && kind!="WorldPresentation" && kind!="AudioPresentation" && kind!="CosmeticWrapper"
-        && kind!="GameplayAuthority")
+        && kind!="GameplayAuthority"&&kind!="DataRelay")
         throw std::runtime_error("registry Kind is unsupported");
     const auto key=owner+":"+id;
     if(m_keys.contains(key))throw std::runtime_error("duplicate registry key '"+key+"'");
@@ -141,8 +145,12 @@ nlohmann::json DragonWildsRegistryLoader::NormalizeEntry(const json& entry,const
             throw std::runtime_error("registry Spell must be a supported cooked asset path");
         result["spell"]=entry["Spell"];
     }
-    if(!entry.contains("Presentation") && !entry.contains("Authority") && !entry.contains("Consumer"))
-        throw std::runtime_error("registry entry requires Presentation, Authority or Consumer");
+    if(kind=="DataRelay"){
+        if(!entry.contains("Relay")||entry.size()!=3)throw std::runtime_error("DataRelay requires only Id, Kind and Relay");
+        (void)PS::ModDataRelay::Declaration(owner,entry["Relay"]);result["relay"]=entry["Relay"];
+    }else if(entry.contains("Relay"))throw std::runtime_error("Relay declarations require Kind DataRelay");
+    if(!entry.contains("Presentation") && !entry.contains("Authority") && !entry.contains("Consumer")&&!entry.contains("Relay"))
+        throw std::runtime_error("registry entry requires Presentation, Authority, Consumer or Relay");
     if(entry.contains("Presentation") && (!entry["Presentation"].is_array()
         || entry["Presentation"].size()>MaxPresentationsPerEntry))
         throw std::runtime_error("registry Presentation must contain at most 64 entries");
@@ -263,7 +271,7 @@ void DragonWildsRegistryLoader::LoadDocument(const json& input,const std::string
         try {auto normalized=NormalizeEntry(entry,owner);
             m_audit.push_back({{"Key",normalized["key"]},{"Owner",owner},{"Source",source},{"Status","Accepted"},{"PresentationCount",normalized["presentation"].size()}});
             m_modEntries.push_back(std::move(normalized));
-        }catch(const std::exception& error){rejection=error.what();m_audit.push_back({{"Key",owner+":"+id},{"Owner",owner},{"Source",source},{"Status","Rejected"},{"Reason",error.what()}});PS::Log<RC::LogLevel::Error>(STR("Registry '{}:{}' in '{}' (entry #{}) rejected: {}.\n"),PS::ToWideSafe(owner.c_str()),PS::ToWideSafe(id.c_str()),PS::ToWideSafe(source.c_str()),ordinal,PS::ToWideSafe(error.what()));}
+        }catch(const std::exception& error){rejection=error.what();m_audit.push_back({{"Key",owner+":"+id},{"Owner",owner},{"Source",source},{"Status","Rejected"},{"Reason",error.what()}});if(!PS::StructuredDiagnosticB3C::Report("RS-RGST-001","Error","Skipped","RegistryLoader","Registry entry rejected",error.what(),owner,source,id,"Validation"))PS::Log<RC::LogLevel::Error>(STR("Registry '{}:{}' in '{}' (entry #{}) rejected: {}.\n"),PS::ToWideSafe(owner.c_str()),PS::ToWideSafe(id.c_str()),PS::ToWideSafe(source.c_str()),ordinal,PS::ToWideSafe(error.what()));}
     }
     PS::RegistryEnrollment::RecordDeclaration(owner,source,rejection);
 }
@@ -272,8 +280,11 @@ void DragonWildsRegistryLoader::OnLoad(const std::filesystem::path& path,const R
     const EEngineLifecyclePhase& phase) {
     if(phase!=EEngineLifecyclePhase::PostEngineInit)return;
     const auto owner=RC::to_string(mod);
-    if(!Identifier(owner) || owner=="FModel" || owner=="RuneSchema")
+    if(!Identifier(owner) || owner=="FModel" || owner=="RuneSchema") {
+        PS::StructuredDiagnosticB3C::Report("RS-RGST-003","Error","Blocked","RegistryLoader",
+            "Invalid registry owner","Registry owner is invalid or reserved.",owner,{}, {},"Validation");
         throw std::runtime_error("registry owner is invalid or reserved");
+    }
     PS::JsonHelpers::ParseJsonFilesInPathWithSource(path,
         [&](const json& document,const std::filesystem::path& relative) {
             const auto source=relative.generic_string();
@@ -283,8 +294,10 @@ void DragonWildsRegistryLoader::OnLoad(const std::filesystem::path& path,const R
                 if(document.is_object()&&(document.contains("NativeRegistries")||document.contains("LoaderDefinitions")))
                     PS::RegistryEnrollment::Reject(owner+":"+source,error.what());
                 m_audit.push_back({{"Owner",owner},{"Source",source},{"Status","Rejected"},{"Reason",error.what()}});
-                PS::Log<RC::LogLevel::Error>(STR("Registry file '{}' in mod '{}' rejected: {}.\n"),
-                    PS::ToWideSafe(source.c_str()),mod,PS::ToWideSafe(error.what()));
+                if (!PS::StructuredDiagnosticB3C::Report("RS-RGST-002","Error","Skipped","RegistryLoader",
+                    "Registry document rejected",error.what(),owner,source,{},"Validation"))
+                    PS::Log<RC::LogLevel::Error>(STR("Registry file '{}' in mod '{}' rejected: {}.\n"),
+                        PS::ToWideSafe(source.c_str()),mod,PS::ToWideSafe(error.what()));
             }
         });
 }
@@ -294,7 +307,13 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
     try{auto interface=UAssetRegistryHelpers::GetAssetRegistry();auto* registry=static_cast<UAssetRegistry*>(interface.ObjectPointer);
         metadataReady=registry&&registry->GetAllAssets(assets,true)&&assets.Num()>=0&&assets.Num()<=262144;
     }catch(...){metadataReady=false;}
-    if(!metadataReady)PS::Log<RC::LogLevel::Warning>(STR("Cooked registry Asset Registry metadata is unavailable; conventional enabled-mod declarations will still be checked.\n"));
+    if(!metadataReady) {
+        (void)PS::LogStructuredFallback<RC::LogLevel::Warning>(
+            PS::StructuredDiagnosticB3C::Report("RS-RGST-005","Warning","Partial","RegistryLoader",
+            "Cooked registry discovery limited","Asset Registry metadata was unavailable; conventional enabled-mod registry declarations will still be checked.",
+            {},{},"CookedRegistryAssetRegistry","Discovery"),
+            STR("Cooked registry Asset Registry metadata is unavailable; conventional enabled-mod declarations will still be checked.\n"));
+    }
     std::set<std::string> handled,failedOwners,unindexedOwners;
     const auto owners=PS::MountedModRegistryOwners::Snapshot();
     const std::set<std::string> enabledOwners(owners.begin(),owners.end());
@@ -330,6 +349,8 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
         PS::RegistryEnrollment::RecordDeclaration(owner,"pak:"+path,error.what());
         PS::RegistryEnrollment::Reject("pak:"+path,error.what());
         m_audit.push_back({{"Owner","<cooked>"},{"Source","pak:"+path},{"Status","Rejected"},{"Reason",error.what()}});
+        (void)PS::StructuredDiagnosticB3C::Report("RS-RGST-004","Error","Skipped","RegistryLoader",
+            "Cooked registry asset rejected",error.what(),owner,"pak:"+path,path,"Validation");
         PS::Log<RC::LogLevel::Error>(STR("Cooked registry asset '{}' rejected: {}.\n"),PS::ToWideSafe(path.c_str()),PS::ToWideSafe(error.what()));
     };
     const auto consume=[&](UObject* object,const std::string& path,const std::string& expectedOwner) {
@@ -421,10 +442,24 @@ void DragonWildsRegistryLoader::WriteMerged() {
 }
 
 void DragonWildsRegistryLoader::OnFinalizeLoad(const EEngineLifecyclePhase& phase) {
-    if(phase==EEngineLifecyclePhase::PostEngineInit){try{LoadCookedRegistries();}catch(const std::exception& error){PS::RegistryEnrollment::Reject("cooked registry discovery",error.what());PS::Log<RC::LogLevel::Error>(STR("Cooked registry discovery failed; JSON registries remain active: {}.\n"),PS::ToWideSafe(error.what()));}WriteMerged();}
+    if(phase==EEngineLifecyclePhase::PostEngineInit){
+        try{LoadCookedRegistries();}
+        catch(const std::exception& error){
+            PS::RegistryEnrollment::Reject("cooked registry discovery",error.what());
+            const bool retained=!m_modEntries.empty()||PS::CookedPakRegistryManifest::HasPublishedDeclarations();
+            (void)PS::StructuredDiagnosticB3C::Report("RS-RGST-006","Error",PS::StructuredDiagnosticOutcomeEvidence::InterruptedAfter(retained),"RegistryLoader",
+                "Cooked registry discovery failed",error.what(),{}, {},"CookedRegistryDiscovery","Discovery");
+            PS::Log<RC::LogLevel::Error>(STR("Cooked registry discovery failed; JSON registries remain active: {}.\n"),PS::ToWideSafe(error.what()));
+        }
+        WriteMerged();
+    }
 }
 
 void DragonWildsRegistryLoader::OnAutoReload(const RC::StringType& mod,const std::filesystem::path&) {
-    PS::Log<RC::LogLevel::Warning>(TEXT("Registry changes in {} require a restart.\n"),mod);
+    (void)PS::LogStructuredFallback<RC::LogLevel::Warning>(
+        PS::StructuredDiagnosticB3C::Report("RS-RGST-007","Warning","Deferred","RegistryLoader",
+        "Registry changes require a restart","Live registry changes will not be applied until the game is restarted.",
+        RC::to_string(mod),{},"RegistryReload","Reload"),
+        TEXT("Registry changes in {} require a restart.\n"),mod);
 }
 }

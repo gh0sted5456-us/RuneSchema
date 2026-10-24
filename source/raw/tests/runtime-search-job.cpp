@@ -1,5 +1,7 @@
 #include "Runtime/SearchJob.h"
 #include <cassert>
+#undef assert
+#define assert(value) ((value)?static_cast<void>(0):throw std::runtime_error(#value))
 int main() {
     using nlohmann::json;
     using PS::RuntimeJobs::Validate;
@@ -17,4 +19,9 @@ int main() {
     reject("Enabled", "true"); reject("ClassContains", 5); reject("Output", "C:/arbitrary.json");
     auto comments = json::parse("{/* comment */\"Name\":\"Test\",\"Trigger\":\"game-load\",\"Query\":\"Vendor\"}", nullptr, true, true);
     Validate(comments);
+    PS::RuntimeJobs::SearchCursor cursor(900000);
+    for(size_t index=0;index<500000;++index)assert(cursor.Next(900000)==index);
+    assert(!cursor.Next(900000));
+    PS::RuntimeJobs::SearchCursor shrinking(10);assert(shrinking.Next(10)==0);assert(!shrinking.Next(0));
+    PS::RuntimeJobs::SearchCursor growing(2);assert(growing.Next(20)==0);assert(growing.Next(20)==1);assert(!growing.Next(20));
 }

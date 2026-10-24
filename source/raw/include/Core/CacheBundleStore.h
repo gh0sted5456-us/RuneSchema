@@ -19,6 +19,7 @@ inline Json Index(const fs::path& folder){
 }
 inline HelpyCacheSources::Plan Plan(const HelpySourceCache::Snapshot& snapshot){
     HelpyCacheSources::Plan plan;plan.Authoritative=snapshot.Authoritative;plan.Owners=snapshot.Owners;plan.DeclaredOwners=snapshot.DeclaredOwners;plan.AuthoredAssets=snapshot.AuthoredAssets;plan.AssetOwners=snapshot.AssetOwners;
+    plan.ContainerAssets=snapshot.ContainerAssets;plan.ContainerFiles=snapshot.ContainerFiles;
     for(const auto& [source,key]:snapshot.SourceKeys)plan.Registered.insert(source);return plan;
 }
 inline bool ActiveOwner(const CacheBundle::Record& row,const HelpySourceCache::Snapshot& snapshot){return snapshot.SourceKeys.contains(row.Source)&&CacheBundle::Owned(row,Plan(snapshot),snapshot.NativePlugins);}
@@ -38,6 +39,10 @@ inline Json Read(const fs::path& cache,const fs::path& root,const HelpySourceCac
                 if(row.Kind!=entry.value("Kind",std::string{})||row.Source!=source||row.Owner!=entry.value("Owner",std::string{})||!ActiveOwner(row,snapshot)||(!kind.empty()&&row.Kind!=kind))continue;
                 const auto identity=row.Kind+"|"+row.Path;if(!seen.insert(identity).second)continue;
                 row.Data["CacheSourceVerified"]=current;row.Data["CheckingChanges"]=true;
+                if(snapshot.ContainerAssets&&snapshot.ContainerAssets->contains(HelpyCacheSources::AssetKey(row.Path))&&CacheBundle::OriginalOwnerProven(row,Plan(snapshot),snapshot.NativePlugins)){
+                    const auto fields=ItemSource::Fields(ItemSource::Describe(row.Path,Plan(snapshot),snapshot.NativePlugins));
+                    for(const auto& [field,value]:fields.items())row.Data[field]=value;
+                }
                 if(!CacheBundle::OriginalOwnerProven(row,Plan(snapshot),snapshot.NativePlugins)){
                     row.Data["CachedSourceName"]=row.Data["SourceName"];row.Data["SourceKind"]="unknown";row.Data["SourceName"]="";
                     row.Data["SourceEvidence"]="Shared namespace reference; original provider awaits native exact-path attribution";

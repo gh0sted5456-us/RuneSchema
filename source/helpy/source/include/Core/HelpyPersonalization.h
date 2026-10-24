@@ -57,12 +57,16 @@ inline Json Validate(const Json& document){
     if(!document.is_object()||document.value("Format",0)!=1||!document.contains("Entries")||!document["Entries"].is_object()||document["Entries"].size()>16384)throw std::runtime_error("Invalid Helpy personalization file.");
     auto output=Json::object();for(const auto& [key,row]:document["Entries"].items()){
         const auto identity=key.starts_with("remote:")?key.substr(7):key;const bool stack=StackKeyValid(identity),type=TypeKeyValid(identity);
-        if((!key.starts_with("item:/")&&!key.starts_with("mod:")&&!stack&&!type)||!Text(key,4175)||!row.is_object()||row.size()>4)throw std::runtime_error("Invalid personalization key.");
+        if((!key.starts_with("item:/")&&!key.starts_with("mod:")&&!stack&&!type)||!Text(key,4175)||!row.is_object()||row.size()>(row.contains("LegacyFavoriteImported")?5u:4u))throw std::runtime_error("Invalid personalization key.");
         const auto nickname=row.value("Nickname",std::string{});if(!Text(nickname))throw std::runtime_error("Nickname is too long or contains invalid characters.");
         Json entry={{"Nickname",Trim(nickname)},{"Favorite",row.value("Favorite",false)},{"Locked",row.value("Locked",false)},{"Tags",Json::array()}};
         if(row.contains("Tags")){if(!row["Tags"].is_array()||row["Tags"].size()>12)throw std::runtime_error("Use at most 12 tags per item.");std::set<std::string> seen;
             for(const auto& value:row["Tags"]){const auto tag=Trim(value.get<std::string>());if(tag.empty()||!Text(tag,48))throw std::runtime_error("Tags must contain 1-48 bytes of visible text.");if(seen.insert(Fold(tag)).second)entry["Tags"].push_back(tag);}}
         if(stack||type)for(const char* field:{"Nickname","Favorite","Locked","Tags"})if(!row.contains(field))entry.erase(field);
+        if(row.contains("LegacyFavoriteImported")){
+            if(!stack||key.starts_with("remote:")||row.at("LegacyFavoriteImported")!=true)throw std::runtime_error("Invalid legacy favorite import receipt");
+            entry["LegacyFavoriteImported"]=true;
+        }
         output[Fold(key)]=std::move(entry);
     }return output;
 }

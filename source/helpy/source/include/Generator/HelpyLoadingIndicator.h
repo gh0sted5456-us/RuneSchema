@@ -5,16 +5,19 @@
 namespace PS::HelpyLoadingIndicator {
 // Uploaded once with the other local UI assets. Never requests an engine icon.
 inline ImTextureRef Texture;
-inline void Details(const std::string& stage,const std::string& detail){
-    HelpyImGuiTheme::BeginDetailsTooltip();
-    ImGui::TextUnformatted(stage.c_str());ImGui::Separator();
-    ImGui::TextWrapped("%s",detail.empty()?"Working in the background. A reliable completion percentage is not available yet.":detail.c_str());
+inline void Details(const std::string& stage,const std::string& detail,ImVec2 minimum,ImVec2 maximum){
+    HelpyImGuiTheme::BeginDetailsTooltip(minimum,maximum);
+    HelpyImGuiTheme::DetailsTextUnformatted(stage.c_str());ImGui::Separator();
+    HelpyImGuiTheme::DetailsText("%s",detail.empty()?"Working in the background. A reliable completion percentage is not available yet.":detail.c_str());
+#if defined(HELPY_PREVIEW)
+    const auto at=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();HelpyPreviewHooks::LoadingDetailsRect={at.x,at.y,at.x+size.x,at.y+size.y};
+#endif
     HelpyImGuiTheme::EndDetailsTooltip();
 #if defined(HELPY_PREVIEW)
     ++HelpyPreviewHooks::LoadingDetailsShown;HelpyPreviewHooks::LoadingDetailsText=stage+"\n"+detail;
 #endif
 }
-inline void HoverDetails(const std::string& stage,const std::string& detail){if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))Details(stage,detail);}
+inline void HoverDetails(const std::string& stage,const std::string& detail){if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))Details(stage,detail,ImGui::GetItemRectMin(),ImGui::GetItemRectMax());}
 inline void Draw(ImVec2 center,float radius,const HelpyImGuiTheme::Theme& theme,const std::string& stage="Loading",const std::string& detail={},bool spinning=true){
 #if defined(HELPY_PREVIEW)
     if(spinning)++HelpyPreviewHooks::LoadingRings;HelpyPreviewHooks::LoadingRect={center.x-radius,center.y-radius,center.x+radius,center.y+radius};
@@ -26,7 +29,8 @@ inline void Draw(ImVec2 center,float radius,const HelpyImGuiTheme::Theme& theme,
     }else{
         draw->PathClear();draw->PathArcTo(center,radius,angle,angle+4.65f,28);draw->PathStroke(ImGui::GetColorU32(theme.accent),0,theme.X(theme.loadingSpinnerThickness));
     }
-    if(ImGui::IsMouseHoveringRect({center.x-radius,center.y-radius},{center.x+radius,center.y+radius}))Details(stage,detail);
+    const ImVec2 minimum{center.x-radius,center.y-radius},maximum{center.x+radius,center.y+radius};
+    if(ImGui::IsWindowHovered()&&ImGui::IsMouseHoveringRect(minimum,maximum))Details(stage,detail,minimum,maximum);
 }
 inline bool RefreshButton(const char* label,bool busy,const std::string& detail){
     const auto& theme=HelpyImGuiTheme::Current;const float icon=ImGui::GetFrameHeight()*.7f;

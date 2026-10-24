@@ -10,6 +10,7 @@ int main()
     assert(steam.Value == Kind::SteamEpic);
     assert(steam.SteamLauncher&&!steam.EpicLauncher);
     assert(std::string(PlatformName(steam))=="Steam");
+    assert(std::string(MappingCachePlatform(steam))=="STEAM");
     assert(std::string(Name(steam.Value))=="Steam/Epic");
     assert(!steam.DedicatedServer);
 
@@ -18,12 +19,15 @@ int main()
     assert(dedicated.Value == Kind::SteamEpic);
     assert(dedicated.DedicatedServer);
     assert(std::string(PlatformName(dedicated))=="Dedicated server");
+    assert(std::string(MappingCachePlatform(dedicated))=="SERVER");
 
     const auto epic=DetectFrom(LR"(D:\Epic Games\RSDragonwilds\RSDragonwilds\Binaries\Win64\RSDragonwilds-Win64-Shipping.exe)",false);
     assert(epic.Value==Kind::SteamEpic&&epic.EpicLauncher&&!epic.SteamLauncher);
     assert(std::string(PlatformName(epic))=="Epic Games");
+    assert(std::string(MappingCachePlatform(epic))=="EPIC");
     const auto epicNamedPackage=DetectFrom(LR"(D:\EpicGames\RSDragonwilds\Binaries\WinGDK\RSDragonwilds-WinGDK-Shipping.exe)",false);
     assert(epicNamedPackage.Value==Kind::GamePass&&!epicNamedPackage.EpicLauncher);
+    assert(std::string(MappingCachePlatform(epicNamedPackage))=="GAMEPASS");
 
     const auto fixture=std::filesystem::temp_directory_path()/(L"RuneSchema-epic-marker-"+std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(GetTickCount64()));
     if(!std::filesystem::create_directory(fixture))throw std::runtime_error("Private storefront fixture already exists");
@@ -44,6 +48,8 @@ int main()
     const auto packaged = DetectFrom(
         LR"(D:\Games\RSDragonwilds\Binaries\Win64\RSDragonwilds-Win64-Shipping.exe)", true);
     assert(packaged.Value == Kind::GamePass);
+    assert(std::string(MappingCachePlatform(packaged))=="GAMEPASS");
+    assert(std::string(MappingCachePlatform(Detection{}))=="UNKNOWN");
 
     assert(PlayerPlatform("Unknown",true,gamePass)=="Game Pass");
     assert(PlayerPlatform("Unknown",true,packaged)=="Game Pass");

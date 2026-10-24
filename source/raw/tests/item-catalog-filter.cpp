@@ -33,6 +33,16 @@ int main(int argc,char** argv){
         {"Category","Armor"},{"SourceKind","modded"},{"SourceName","Dye"},{"InternalName","chrome_helm"},{"Tags","Metal Heavy"},{"Class","/Script/Dominion.ItemData"}};
     assert(Query("")(helm));assert(Query("Chrome helm")(helm));assert(Query("metal Heavy")(helm));assert(Query("dominion")(helm));
     assert(Query("__helpysource:modded __helpycat:armor __helpyfamily:fallen_hoplite_dyed_chrome chrome")(helm));
+    const auto ownedQuery=PS::ItemSource::Query(PS::ItemSource::Kind::Modded,"Armor","__helpyfamily:fallen_hoplite_dyed_chrome chrome","mods/dye");
+    assert(Query(ownedQuery)(helm));
+    auto otherOwner=helm;otherOwner["SourceName"]="Other";assert(!Query(ownedQuery)(otherOwner));
+    auto ambiguous=helm;ambiguous["SourceName"]="";assert(!Query(ownedQuery)(ambiguous));
+    std::string spaced=PS::ItemSource::ProviderToken("mods/my mod")+"test";
+    assert(PS::ItemSource::TakeProvider(spaced)=="mods/my mod"&&spaced=="test");
+    std::string longest=PS::ItemSource::ProviderToken("plugins/"+std::string(192,'a'));assert(!PS::ItemSource::TakeProvider(longest).empty()&&longest.empty());
+    Reject([]{PS::ItemSource::ProviderToken("mods/../bad");});
+    Reject([]{std::string query="__helpyowner:zz";PS::ItemSource::TakeProvider(query);});
+    Reject([]{std::string query="__helpyowner:0";PS::ItemSource::TakeProvider(query);});
     auto nativeHelm=helm;nativeHelm["NativeSlotVerified"]=true;nativeHelm["SlotStrategy"]="Head";
     assert(Query("__helpyslot:Head __helpysource:modded __helpycat:armor __helpyfamily:fallen_hoplite_dyed_chrome chrome")(nativeHelm));
     assert(!Query("__helpyslot:Head")(helm));

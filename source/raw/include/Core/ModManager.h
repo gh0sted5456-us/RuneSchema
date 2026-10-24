@@ -68,6 +68,7 @@ inline Json Read(const std::filesystem::path& root,bool orderEnabled){
         const auto folder=mods/item.Name;Safe(folder);const bool exists=std::filesystem::is_directory(folder);
         Json row={{"Name",item.Name},{"Enabled",item.Enabled},{"Present",exists},{"Folder",folder.string()},{"Metadata",Json::object()},{"Loaders",Json::array()}};
         if(exists){try{row["Metadata"]=Metadata(folder);
+                if(!row["Metadata"].contains("banner")&&std::filesystem::is_regular_file(folder/"cache"/"mod.png"))row["Metadata"]["banner"]="cache/mod.png";
                 if(row["Metadata"].contains("banner")){
                     const auto relative=std::filesystem::u8path(row["Metadata"]["banner"].get<std::string>());
                     if(relative.empty()||relative.is_absolute()||relative.has_root_name())throw std::runtime_error("Banner must be a relative mod-owned image path.");

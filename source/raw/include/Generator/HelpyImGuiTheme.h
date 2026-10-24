@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/RuneSchemaDataRoot.h"
 #include "imgui.h"
 #include "Core/ConfigFiles.h"
 #include "Core/ItemBayLayout.h"
@@ -81,9 +82,7 @@ inline std::filesystem::path RootThemePath() {
     return HostServices::WorkingDirectory()/"Mods"/"RuneSchema"/"plugins"/"RuneSchema.Helpy"/"settings"/"ui.jsonc";
 }
 inline std::filesystem::path UserThemePath() {
-    const char* local=std::getenv("LOCALAPPDATA");
-    if(local&&*local)return std::filesystem::path(local)/"RuneSchema"/"HELPY"/"ui.jsonc";
-    return RootThemePath();
+    return RuneSchemaData::SharedDirectory("HELPY")/"ui.jsonc";
 }
 inline std::filesystem::path FilePath(){return UseUserAppData?UserThemePath():RootThemePath();}
 inline void SelectSettingsSource(bool appData){

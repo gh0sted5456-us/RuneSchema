@@ -53,6 +53,7 @@
 #include "Utility/JsonHelpers.h"
 #include "Utility/ConsumeQueue.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnosticB2.h"
 #include "Loader/DragonWildsAssetModLoader.h"
 #include "Loader/RegistryPatchPlan.h"
 #include "Core/JsonPatchDirective.h"
@@ -933,7 +934,7 @@ namespace DragonWilds {
         {
             PS::JsonHelpers::ParseJsonFilesInPathWithSource(loaderPath,
                 [&](const nlohmann::json& data, const std::filesystem::path& relative) {
-                QueueData(data, modName, relative.generic_string());
+                QueueData(data, modName, PS::StructuredDiagnosticB2::Utf8Path(relative));
             });
         }
         else if (engineLifecyclePhase == EEngineLifecyclePhase::GameInstanceInit)
@@ -956,7 +957,7 @@ namespace DragonWilds {
             }
         }
         PS::JsonHelpers::ParseJsonFileInPath(modFilePath, [&](const nlohmann::json& data) {
-            QueueData(data, modName, modFilePath.filename().generic_string());
+            QueueData(data, modName, PS::StructuredDiagnosticB2::SourceWithinSection(modFilePath,"assets"));
         });
 
         TryApplyPending();
@@ -1020,8 +1021,13 @@ namespace DragonWilds {
     {
         if (!data.is_object())
         {
-            PS::Log<LogLevel::Warning>(STR("[LOADER:assets][PARTIAL][MOD:{}][FILE:{}] Root must be an object; this file was skipped.\n"),
-                modName,RC::to_generic_string(source));
+            const PS::StructuredDiagnosticB2::Provenance context{RC::to_string(modName),source,{},
+                PS::StructuredDiagnosticB2::NewOperationId("asset")};
+            if(!PS::StructuredDiagnosticB2::Report("RS-ASSET-002","Warning","Skipped","AssetLoader",
+                "Asset definition has invalid root", "The asset definition root must be a JSON object. This file was skipped.",
+                context,"Validation"))
+                PS::Log<LogLevel::Warning>(STR("[LOADER:assets][PARTIAL][MOD:{}][FILE:{}] Root must be an object; this file was skipped.\n"),
+                    modName,RC::to_generic_string(source));
             return;
         }
 
@@ -1120,7 +1126,7 @@ namespace DragonWilds {
             auto pending = PendingAsset{
                 targetWide,
                 NormalizeObjectPath(targetWide),
-                modName,
+                modName, source, PS::StructuredDiagnosticB2::NewOperationId("asset"),
                 std::move(normalizedProperties), isPatch,metadata,true
             };
             if (isPatch) WarnPatchConflicts(m_patchConflicts, "assets:" + RC::to_string(pending.ObjectPath),
@@ -1232,6 +1238,8 @@ namespace DragonWilds {
             [this](Hook::TCallbackIterationData<void>&, UObject* source, UFunction* function, void*)
             {
                 if (!source || !function || !source->GetClassPrivate() || m_replayingCharacterMenuPatches) return;
+                static const FName construct(TEXT("Construct"),FNAME_Add),open(TEXT("BP_OnOpen"),FNAME_Add);
+                const auto name=function->GetFName();if(name!=construct&&name!=open)return;
                 const auto classPath = RC::to_string(source->GetClassPrivate()->GetPathName());
                 if (classPath.find("WBP_CharacterOptionSelect_C") == std::string::npos) return;
                 const auto functionPath = RC::to_string(function->GetPathName());
@@ -1560,6 +1568,8 @@ namespace DragonWilds {
 
         const auto errorsBefore = outResult.ErrorCount;
         const auto writesBefore = outResult.PropertiesWritten;
+        // Delay individual field reports until the outcome of this edit is known.
+        std::vector<std::pair<std::string,std::string>> rejectedFields;
         bool wearableRefresh=false;
         try {
             wearableRefresh=PS::WearableBridgeDirective::Requested(pendingAsset.Properties);
@@ -1591,7 +1601,7 @@ namespace DragonWilds {
                 }
                 catch(const std::exception& error) {
                     ++outResult.ErrorCount;
-                    PS::Log<LogLevel::Error>(TEXT("[{}] Invalid equipment visual: {}\n"),object->GetName(),PS::ToWideSafe(error.what()));
+                    rejectedFields.emplace_back("$VisualEffect",error.what());
                 }
                 continue;
             }
@@ -1600,8 +1610,7 @@ namespace DragonWilds {
             if (!property)
             {
                 outResult.ErrorCount++;
-                PS::Log<LogLevel::Warning>(STR("[{}] Property '{}' was not found.\n"),
-                    object->GetName(), propertyNameWide);
+                rejectedFields.emplace_back(propertyName,"The requested property was not found on the target object.");
                 continue;
             }
 
@@ -1627,8 +1636,7 @@ namespace DragonWilds {
             catch (const std::exception& e)
             {
                 outResult.ErrorCount++;
-                PS::Log<LogLevel::Error>(STR("[{}] Failed writing '{}': {}\n"),
-                    object->GetName(), propertyNameWide, PS::ToWideSafe(e.what()));
+                rejectedFields.emplace_back(propertyName,std::string("Property write rejected: ")+e.what());
             }
         }
 
@@ -1639,7 +1647,9 @@ namespace DragonWilds {
         // Metadata is recorded only against an object actually handled by this loader.
         // A native field-write failure cannot grant new clone permissions.
         if(outResult.ErrorCount==errorsBefore) {
-            if(wearableRefresh&&!pendingAsset.Properties.contains("$Clone"))
+            // The startup registrar enrolls all wearables after patches settle.
+            if(wearableRefresh&&!pendingAsset.Properties.contains("$Clone")
+                &&!PS::NetworkIdentityState::DeferItemEnrollment())
                 (void)EquipmentWearableBridge::RefreshRegistered(object);
             try {PS::AssetMetadata::Record(object,pendingAsset.Metadata,RC::to_string(pendingAsset.ModName),pendingAsset.InstalledDefinition);}
             catch(const std::exception& e){++outResult.ErrorCount;PS::Log<LogLevel::Error>(STR("Asset metadata: {}\n"),PS::ToWideSafe(e.what()));}
@@ -1654,7 +1664,22 @@ namespace DragonWilds {
                 QuestScrolls::Bind(RC::to_string(object->GetPathName()),scroll);
             }catch(const std::exception& e){++outResult.ErrorCount;PS::Log<LogLevel::Error>(STR("Quest scroll: {}\n"),PS::ToWideSafe(e.what()));}
         }
-        if (outResult.ErrorCount > errorsBefore) {
+        std::size_t structuredFieldReports=0;
+        if(!rejectedFields.empty()) {
+            const PS::StructuredDiagnosticB2::Provenance context{RC::to_string(pendingAsset.ModName),
+                pendingAsset.Source,RC::to_string(pendingAsset.Target),pendingAsset.OperationId};
+            const bool partial=outResult.PropertiesWritten>writesBefore;
+            for(const auto& [field,reason]:rejectedFields) {
+                if(PS::StructuredDiagnosticB2::Report("RS-ASSET-003","Warning",partial?"Partial":"Failed",
+                    "AssetLoader","Asset property modification rejected",reason,context,"Application",field))
+                    ++structuredFieldReports;
+                else
+                    PS::Log<LogLevel::Warning>(STR("[{}] Failed writing '{}': {}\n"),object->GetName(),
+                        RC::to_generic_string(field),PS::ToWideSafe(reason.c_str()));
+            }
+        }
+        if (outResult.ErrorCount > errorsBefore &&
+            structuredFieldReports != static_cast<std::size_t>(outResult.ErrorCount-errorsBefore)) {
             PS::Log<LogLevel::Error>(STR("[{}] Asset edit incomplete: {} successful field writes, {} errors. Changes are not rolled back; inspect field errors and restart after correcting the mod.\n"),
                 object->GetPathName(), outResult.PropertiesWritten - writesBefore,
                 outResult.ErrorCount - errorsBefore);
@@ -1664,18 +1689,33 @@ namespace DragonWilds {
     bool DragonWildsAssetModLoader::ApplyModuleImports(UObject* object,
         const PendingAsset& pendingAsset, LoadResult& outResult)
     {
+        const auto reportImport = [&](const char* code,const char* severity,const char* outcome,
+            const char* title,std::string_view message,const char* phase,std::string_view property={}) noexcept -> bool {
+            try {
+                PS::StructuredDiagnosticB2::Provenance origin{
+                    RC::to_string(pendingAsset.ModName),pendingAsset.Source,
+                    RC::to_string(pendingAsset.Target),pendingAsset.OperationId};
+                return PS::StructuredDiagnosticB2::Report(code,severity,outcome,"ImportPlanner",
+                    title,std::string(message),origin,phase,std::string(property));
+            } catch (...) { return false; }
+        };
         ModuleImportSettings settings;
         try { settings = ParseModuleImportSettings(pendingAsset.Properties); }
         catch (const std::exception& error)
         {
             ++outResult.ErrorCount;
+            reportImport("RS-IMP-001","Error","Skipped","Import directive rejected",
+                error.what(),"Validation");
             PS::Log<LogLevel::Error>(STR("[{}] Module import rejected: {}.\n"),
                 object->GetName(), PS::ToWideSafe(error.what()));
             return false;
         }
         if (settings.Modules.empty()) return true;
-        if (settings.Policy == ImportPolicy::Explicit && !settings.Remap.empty())
+        if (settings.Policy == ImportPolicy::Explicit && !settings.Remap.empty()) {
+            reportImport("RS-IMP-003","Warning","Skipped","Import remap ignored",
+                "$ImpRemap has no effect with Explicit policy.","Planning","$ImpRemap");
             PS::Log<LogLevel::Warning>(STR("[{}] $ImpRemap is ignored when $ImpPolicy is Explicit.\n"), object->GetName());
+        }
         ResolvedMember modulesMember;
         FArrayProperty* arrayProperty = nullptr;
         FStructProperty* entryProperty = nullptr;
@@ -1699,6 +1739,8 @@ namespace DragonWilds {
         catch (const std::exception& error)
         {
             ++outResult.ErrorCount;
+            reportImport("RS-IMP-002","Error","Blocked","Import target incompatible",
+                error.what(),"Resolution","Modules.Modules");
             PS::Log<LogLevel::Error>(STR("[{}] Module import target rejected: {}.\n"),
                 object->GetName(), PS::ToWideSafe(error.what()));
             return false;
@@ -2157,6 +2199,8 @@ namespace DragonWilds {
                 if (!root)
                 {
                     ++dependencyErrors;
+                    reportImport("RS-IMP-004","Error","Skipped","Import source unresolved",
+                        "The requested module object could not be resolved.","Resolution",authoredRoot);
                     PS::Log<LogLevel::Error>(STR("[{}] $ImpModule '{}': source object could not be resolved.\n"),
                         object->GetName(), RC::to_generic_string(authoredRoot));
                     if (settings.Atomic) break;
@@ -2165,6 +2209,8 @@ namespace DragonWilds {
                 if (expectedClass && !root->IsA(expectedClass))
                 {
                     ++dependencyErrors;
+                    reportImport("RS-IMP-005","Error","Skipped","Import source incompatible",
+                        "The source object does not match Modules.Modules.Module.","Validation",authoredRoot);
                     PS::Log<LogLevel::Error>(STR("[{}] $ImpModule '{}': source object is not compatible with Modules.Modules.Module.\n"),
                         object->GetName(), RC::to_generic_string(authoredRoot));
                     if (settings.Atomic) break;
@@ -2229,6 +2275,8 @@ namespace DragonWilds {
                                 catch (const std::exception& error)
                                 {
                                     stagedTrace.push_back({currentDisplay, dependency.Path, dependencyName, {}, true, remapped});
+                                    reportImport("RS-IMP-006","Warning","Skipped","Optional import dependency skipped",
+                                        error.what(),"Resolution",dependency.Path);
                                     PS::Log<LogLevel::Warning>(STR("[{}] $ImpPolicy Closure skipped optional dependency '{}': {}.\n"),
                                         object->GetName(), RC::to_generic_string(dependencyName), PS::ToWideSafe(error.what()));
                                 }
@@ -2253,6 +2301,8 @@ namespace DragonWilds {
                 catch (const std::exception& error)
                 {
                     ++dependencyErrors;
+                    reportImport("RS-IMP-007","Error","Skipped","Module dependency resolution failed",
+                        error.what(),"Resolution",authoredRoot);
                     PS::Log<LogLevel::Error>(STR("[{}] $ImpModule '{}': dependency resolution failed: {}.\n"),
                         object->GetName(), RC::to_generic_string(authoredRoot), PS::ToWideSafe(error.what()));
                     if (settings.Atomic) break;
@@ -2276,6 +2326,8 @@ namespace DragonWilds {
         if (dependencyErrors && settings.Atomic)
         {
             ++outResult.ErrorCount;
+            reportImport("RS-IMP-008","Error","Blocked","Atomic import blocked during resolution",
+                "Dependency resolution failed and the atomic batch did not modify the destination.","Planning");
             PS::Log<LogLevel::Error>(STR("[{}] $ImpAtomic blocked the complete module-import batch during dependency resolution; destination was not changed.\n"),
                 object->GetName());
             return false;
@@ -2386,6 +2438,8 @@ namespace DragonWilds {
             catch (const std::exception& error)
             {
                 ++validationErrors;
+                reportImport("RS-IMP-009","Error","Skipped","Module import plan rejected",
+                    error.what(),"Planning",source);
                 PS::Log<LogLevel::Error>(STR("[{}] $ImpModule '{}': {}.\n"),
                     object->GetName(), RC::to_generic_string(source), PS::ToWideSafe(error.what()));
                 if (settings.Atomic) break;
@@ -2395,6 +2449,8 @@ namespace DragonWilds {
         if (validationErrors && settings.Atomic)
         {
             ++outResult.ErrorCount;
+            reportImport("RS-IMP-010","Error","Blocked","Atomic import plan blocked",
+                "The atomic batch failed validation before destination changes.","Planning");
             PS::Log<LogLevel::Error>(STR("[{}] $ImpAtomic blocked the complete module-import batch; destination was not changed.\n"),
                 object->GetName());
             return false;
@@ -2904,15 +2960,27 @@ namespace DragonWilds {
 
 
 
+            if (totalErrors != 0)
+                reportImport("RS-IMP-011","Warning","Blocked","Dry-run import plan blocked",
+                    "Dry-run only: " + std::to_string(settings.Modules.size()) + " requested, "
+                    + std::to_string(requests.size()) + " resolved, " + std::to_string(plan.size())
+                    + " planned, " + std::to_string(totalErrors) + " errors; no changes applied.","Planning");
             if (totalErrors == 0)
                 PS::Log<LogLevel::Normal>(STR("{}"), RC::to_generic_string(report.str()));
             else
                 PS::Log<LogLevel::Error>(STR("{}"), RC::to_generic_string(report.str()));
         }
-        else
+        else {
+            if (dependencyErrors + validationErrors > 0)
+                reportImport("RS-IMP-012","Warning","Partial","Import batch partially applied",
+                    std::to_string(appendCount) + " appended, " + std::to_string(replaceCount)
+                    + " replaced, " + std::to_string(reuseCount) + " reused, "
+                    + std::to_string(dependencyErrors + validationErrors)
+                    + " errors; successful actions may already have modified the destination.","Application");
             PS::Log<LogLevel::Normal>(STR("[{}] [$ImpModule] APPLIED | requested {} | resolved {} | appended {} | replaced {} | reused {} | errors {}\n"),
                 object->GetName(), settings.Modules.size(), requests.size(), appendCount, replaceCount, reuseCount,
                 dependencyErrors + validationErrors);
+        }
         return !settings.Atomic || (dependencyErrors + validationErrors) == 0;
     }
 
@@ -3206,8 +3274,13 @@ namespace DragonWilds {
         std::scoped_lock lock{m_mutex};
         for (auto& pendingAsset : m_pendingAssets)
         {
-            PS::Log<LogLevel::Error>(STR("Gave up resolving '{}'; the asset never loaded.\n"),
-                pendingAsset.Target);
+            const PS::StructuredDiagnosticB2::Provenance context{RC::to_string(pendingAsset.ModName),
+                pendingAsset.Source,RC::to_string(pendingAsset.Target),pendingAsset.OperationId};
+            if(!PS::StructuredDiagnosticB2::Report("RS-ASSET-001","Error","Failed","AssetLoader",
+                "Asset target remained unresolved",
+                "The asset was not resolved before this loading phase ended. The specific cause is unknown.",
+                context,"Resolution"))
+                PS::Log<LogLevel::Error>(STR("Gave up resolving '{}'; the asset never loaded.\n"),pendingAsset.Target);
         }
 
         m_pendingAssets.clear();

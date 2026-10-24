@@ -49,16 +49,16 @@ inline void DurabilityMeter(const nlohmann::json& item,ImVec2 a,ImVec2 b,int64_t
     if(value){const auto fraction=float(value->Fraction());draw->AddRectFilled({a.x+t.X(2),top},{a.x+t.X(2)+width*fraction,b.y-t.Y(1)},ImGui::GetColorU32(fraction<=.2f?t.error:fraction<=.5f?t.warning:t.success),t.Y(1));}
 }
 inline void EquipmentDetails(const nlohmann::json& item,int64_t now){
-    HelpyImGuiTheme::BeginDetailsTooltip();SourceBanners::DetailsBackground(item);ImGui::TextUnformatted(ItemPresentation::Name(item).c_str());
-    ImGui::TextDisabled("Source: %s",ItemSource::DisplayName(ItemSource::Row(item)).c_str());
-    ImGui::TextDisabled("Native equipped slot %d",item.value("Slot",0));
+    HelpyImGuiTheme::BeginDetailsTooltip();SourceBanners::DetailsBackground(item);PS::HelpyImGuiTheme::DetailsTextUnformatted(ItemPresentation::Name(item).c_str());
+    PS::HelpyImGuiTheme::DetailsTextDisabled("Source: %s",ItemSource::DisplayName(ItemSource::Row(item)).c_str());
+    PS::HelpyImGuiTheme::DetailsTextDisabled("Native equipped slot %d",item.value("Slot",0));
     if(const auto value=PartyStats::Read(item,"Durability",now)){
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::PartyDurabilityDetails=true;
 #endif
-        ImGui::SeparatorText("Durability");ImGui::Text("%.0f / %.0f (%.0f%%)",value->Current,value->Maximum,value->Fraction()*100);
+        ImGui::SeparatorText("Durability");PS::HelpyImGuiTheme::DetailsText("%.0f / %.0f (%.0f%%)",value->Current,value->Maximum,value->Fraction()*100);
         ImGui::ProgressBar(float(value->Fraction()),{HelpyImGuiTheme::Current.X(180),HelpyImGuiTheme::Current.Y(7)},"");
-    }else ImGui::TextWrapped("Durability unavailable. %s",item.value("DurabilityReason",std::string("No fresh native reading")).c_str());
+    }else PS::HelpyImGuiTheme::DetailsText("Durability unavailable. %s",item.value("DurabilityReason",std::string("No fresh native reading")).c_str());
     HelpyImGuiTheme::EndDetailsTooltip();
 }
 inline void Equipment(const nlohmann::json& row,int64_t now){
@@ -140,7 +140,7 @@ inline void Advanced(){
     if(changed)PlayerPortraitPicker::SaveWanted=true;ImGui::TextWrapped("Double-click a portrait or use Change portrait in the member's right-click menu.");ImGui::EndPopup();
 }
 inline void Details(const nlohmann::json& row,int64_t now){
-    HelpyImGuiTheme::BeginDetailsTooltip();ImGui::TextUnformatted(RuneSchemaProfile::Name(row).c_str());ImGui::Separator();
+    HelpyImGuiTheme::BeginDetailsTooltip();PS::HelpyImGuiTheme::DetailsTextUnformatted(RuneSchemaProfile::Name(row).c_str());ImGui::Separator();
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::PartyDetailSections.clear();
 #endif
@@ -149,10 +149,10 @@ inline void Details(const nlohmann::json& row,int64_t now){
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::PartyDetailSections+=std::string(key)+"|";
 #endif
-        if(const auto gauge=PartyStats::Read(row,key,now)){ImGui::Text("%s: %.0f / %.0f",label,gauge->Current,gauge->Maximum);ImGui::ProgressBar(static_cast<float>(gauge->Fraction()),{0,HelpyImGuiTheme::Current.Y(6)},"");}
+        if(const auto gauge=PartyStats::Read(row,key,now)){PS::HelpyImGuiTheme::DetailsText("%s: %.0f / %.0f",label,gauge->Current,gauge->Maximum);ImGui::ProgressBar(static_cast<float>(gauge->Fraction()),{0,HelpyImGuiTheme::Current.Y(6)},"");}
         else{const auto& stat=PartyStats::Find(row,key);const auto state=ItemPresentation::Text(stat,"State");
-            if(!state.empty()&&PartyStats::Fresh(stat,now))ImGui::TextWrapped("%s: %s",label,state.c_str());
-            else ImGui::TextWrapped("%s: %s",label,PartyStats::Reason(row,key,now).c_str());}
+            if(!state.empty()&&PartyStats::Fresh(stat,now))PS::HelpyImGuiTheme::DetailsText("%s: %s",label,state.c_str());
+            else PS::HelpyImGuiTheme::DetailsText("%s: %s",label,PartyStats::Reason(row,key,now).c_str());}
     }
     ImGui::SeparatorText("Skills");Skills(row,now);
 #if defined(HELPY_PREVIEW)
@@ -225,8 +225,8 @@ inline bool Row(const nlohmann::json& row,bool selected,bool keepPopup=false,boo
         }
     }
     const bool gearHovered=gear&&GearRow(row,columns.Beside?ImVec2{start.x+columns.Stats+columns.Gap,start.y}:ImVec2{start.x,start.y+StatsHeight(statsWidth)+t.Y(8)},columns.Equipment,now);
-    if(platformHovered){const auto account=ItemPresentation::Text(row,"PlatformAccountName");const auto text=known?("Platform: "+platform+(account.empty()?"\nAccount name unavailable":"\nGame-reported account: "+account)):std::string("Platform not reported");PS::HelpyImGuiTheme::Tooltip("%s",text.c_str());}
-    else if(!gearHovered&&haveRole&&ImGui::IsWindowHovered()&&ImGui::IsMouseHoveringRect({badge.x-t.X(8),badge.y-t.Y(8)},{badge.x+t.X(8),badge.y+t.Y(8)}))PS::HelpyImGuiTheme::Tooltip("%s",PlayerBadges::Tooltip(*role).c_str());
+    if(platformHovered){const auto account=ItemPresentation::Text(row,"PlatformAccountName");const auto text=known?("Platform: "+platform+(account.empty()?"\nAccount name unavailable":"\nGame-reported account: "+account)):std::string("Platform not reported");HelpyImGuiTheme::TooltipAt(platformMin,platformMax,text.c_str());}
+    else if(!gearHovered&&haveRole&&ImGui::IsWindowHovered()&&ImGui::IsMouseHoveringRect({badge.x-t.X(8),badge.y-t.Y(8)},{badge.x+t.X(8),badge.y+t.Y(8)}))HelpyImGuiTheme::TooltipAt({badge.x-t.X(8),badge.y-t.Y(8)},{badge.x+t.X(8),badge.y+t.Y(8)},PlayerBadges::Tooltip(*role).c_str());
     else if(!gearHovered&&!GearContext&&ImGui::IsItemHovered()&&!ImGui::IsMouseDown(ImGuiMouseButton_Right))Details(row,now);
     return clicked&&!gearHovered;
 }

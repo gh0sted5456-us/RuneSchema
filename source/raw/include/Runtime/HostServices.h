@@ -16,6 +16,7 @@ namespace PS::HostServices {
     std::filesystem::path XboxSaveRoot();
     std::filesystem::path SavedDirectory();
     std::filesystem::path CacheDirectory();
+    std::filesystem::path MappingCacheDirectory();
     std::filesystem::path ProgressDirectory();
     std::filesystem::path ReferencesDirectory();
     std::filesystem::path ExportsDirectory();
@@ -23,7 +24,7 @@ namespace PS::HostServices {
     std::filesystem::path PresetsDirectory();
     std::filesystem::path TraceProfilesDirectory();
     std::filesystem::path JobsDirectory();
-    void MigrateLegacyLayout();
+    void InitializeRuntimeLayout();
     std::filesystem::path RuntimeDirectory();
     bool GuiEnabled();
     void InitializeGui();

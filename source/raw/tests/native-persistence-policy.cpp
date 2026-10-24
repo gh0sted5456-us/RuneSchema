@@ -6,9 +6,9 @@ using namespace PS::NativePersistencePolicy;
 int main(){
     for(bool bypass:{false,true})for(const auto* mode:{"vanilla","lessRestrictive","quickLaunch"}){
         assert(SessionRequested(false,bypass,mode)==(std::string_view(mode)!="vanilla"));
-        assert(SessionRequested(true,bypass,mode)==bypass);
+        assert(SessionRequested(true,bypass,mode));
         assert(BypassRequested(false,bypass,mode)==(bypass||std::string_view(mode)!="vanilla"));
-        assert(BypassRequested(true,bypass,mode)==bypass);
+        assert(BypassRequested(true,bypass,mode));
         // Direct native loads have no reflected preflight token; rejection fallback still applies.
         assert(BypassRequested(false,bypass,mode)==(SessionRequested(false,bypass,mode)||bypass));
     }

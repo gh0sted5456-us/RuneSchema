@@ -36,7 +36,7 @@ bool HelpyStandaloneWindow::SyncWorkspacePanel(size_t index){
         if(!ready){DestroyWorkspacePanel(index);WorkspaceDetached(index)=false;PushToast("Could not detach this workspace; it remains docked.",4);return false;}
         SendMessageW(panel.Window,WM_SETICON,ICON_BIG,reinterpret_cast<LPARAM>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,32,32,LR_SHARED)));
         SendMessageW(panel.Window,WM_SETICON,ICON_SMALL,reinterpret_cast<LPARAM>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,16,16,LR_SHARED)));
-        m_publishedWorkspaces[index]=panel.Window;ApplyCaptionTheme(panel.Window,HelpyImGuiTheme::Current);ShowWindow(panel.Window,SW_SHOWNOACTIVATE);
+        m_publishedWorkspaces[index]=panel.Window;ApplyCaptionTheme(panel.Window,HelpyImGuiTheme::Current,true);ShowWindow(panel.Window,SW_SHOWNOACTIVATE);
     }
     if(index==2&&RuntimeDetailsPanel::FocusWanted){ShowWindow(panel.Window,SW_RESTORE);SetForegroundWindow(panel.Window);SetFocus(panel.Window);RuntimeDetailsPanel::FocusWanted=false;}
     ApplyCaptionTheme(panel.Window,HelpyImGuiTheme::Current);return IsWindowVisible(panel.Window)&&!IsIconic(panel.Window)&&panel.Target;

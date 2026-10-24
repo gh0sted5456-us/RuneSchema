@@ -25,7 +25,8 @@
 #include "Core/GroundingRetry.h"
 #include "Core/GroundSurface.h"
 #include "Core/NearbyPlacement.h"
-namespace PS {class NativeInventoryMarks;class InventoryMarkRelay;}
+#include "Core/BuildingPropOwnership.h"
+namespace PS {class NativeInventoryMarks;class InventoryMarkRelay;class WorkSlice;}
 
 namespace RC::Unreal {
     class AActor;
@@ -97,6 +98,7 @@ namespace DragonWilds {
             PS::WeakObjectHandle LiveActor;
             bool bUseNativeRespawn = false;
             bool bBuildingProp = false;
+            bool bNativeBuilding = false;
             bool bAllowDeconstruction = false;
             bool bCellActivated = false;
             bool bTimeAllowed = false;
@@ -122,6 +124,8 @@ namespace DragonWilds {
         std::function<bool(RC::Unreal::UWorld*,const std::string&)> IsQuestCompleted;
         std::function<bool(RC::Unreal::UWorld*,const std::string&)> IsQuestActive;
         std::function<bool(RC::Unreal::UWorld*,const std::string&)> IsEventActive;
+        std::function<bool()> BuildingOwnershipRegistryReady;
+        void CompleteBuildingOwnershipSnapshot(bool complete);
         void HandleNetworkHelpyMarks(RC::Unreal::UObject* player,const std::string& payload);
         std::string HandleNetworkHelpyAuthority(RC::Unreal::UObject* player,const std::string& action,const std::string& payload);
         void LoadBuildingPlacements(const nlohmann::json& data,const RC::StringType& modName){LoadSpawns(data,modName);}
@@ -132,8 +136,8 @@ namespace DragonWilds {
         RC::Unreal::AActor* SpawnEventAI(const std::string& key,RC::Unreal::UWorld* world,const RC::Unreal::FVector& position,bool tool=false,double yaw=0,const std::string& eventKey={},int toolPowerLevel=-1,std::optional<double> groundOffset={});
         RC::Unreal::FVector PrepareEventGrounded(const std::string& key,RC::Unreal::UWorld* world,const RC::Unreal::FVector& foot,RC::Unreal::AActor* participant,bool rechecking=false,std::vector<PS::SpawnFootprint::Reservation>* reservations=nullptr,std::optional<double> clearance={});
         void ReleaseEventAdditionalDrops(RC::Unreal::UObject* actor);
-        void PumpItemIcons();
-        void PumpSpawnTools();
+        void PumpItemIcons(PS::WorkSlice& work);
+        void PumpSpawnTools(PS::WorkSlice& work);
         std::vector<PS::WeakObjectHandle> m_toolActors;
         std::set<std::filesystem::path> m_toolSpawnFiles;
         std::mutex m_toolSpawnFileMutex;
@@ -421,10 +425,12 @@ namespace DragonWilds {
         // ProcessEvent callback. Names are a cheap first filter; the full
         // path is checked before any parameters are copied.
         std::unordered_set<std::string> m_playerProcessEventActivityPaths;
-        std::unordered_set<RC::StringType> m_playerProcessEventActivityNames;
+        std::vector<RC::Unreal::FName> m_playerProcessEventActivityNames;
         RC::Unreal::Hook::GlobalCallbackId m_spawnTickCallbackId = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::Hook::GlobalCallbackId m_worldTeardownCallbackId = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::Hook::GlobalCallbackId m_protectedBuildingDestroyGuard = RC::Unreal::Hook::ERROR_ID;
+        struct ManagedBuildingSaveToken {PS::WeakObjectHandle Actor,Function;};
+        std::vector<ManagedBuildingSaveToken> m_managedBuildingSaveTokens;
         bool m_allowManagedBuildingDestroy = false;
         bool m_processingSpawns = false;
         std::unordered_set<RC::Unreal::UObject*> m_dropScaledActors;
@@ -470,6 +476,17 @@ namespace DragonWilds {
         double m_nameplateRefreshElapsed = 0.0;
         double m_visualTimerElapsed = 0.0;
         double m_buildingTimeElapsed = 0.0;
+        double m_buildingOwnershipElapsed = 5.0;
+        bool m_buildingOwnershipScanHealthy = true;
+        bool m_buildingOwnershipReady = false;
+        std::uintptr_t m_buildingOwnershipLock = 0;
+        std::filesystem::path m_buildingOwnershipFile;
+        std::vector<PS::BuildingPropOwnership::Record> m_buildingOwnership;
+        std::set<std::string> m_buildingOwnershipNotices;
+        PS::BuildingPropOwnership::Record BuildingOwnershipRecord(const SpawnInfo& spawn) const;
+        void RememberBuildingOwnership();
+        void ReconcileBuildingOwnership(float deltaSeconds);
+        void MarkManagedBuilding(RC::Unreal::AActor* actor,const SpawnInfo& spawn);
         double m_managedScaleElapsed = 0.0;
         double m_playerScaleSummaryElapsed = 0.0;
         std::uint64_t m_playerScaleCorrections = 0;
@@ -496,7 +513,8 @@ namespace DragonWilds {
         std::size_t m_reportedAlteredSpawns = 0;
         std::size_t m_reportedSpawnErrors = 0;
 
-        void LoadSpawns(const nlohmann::json& data, const RC::StringType& modName);
+        void LoadSpawns(const nlohmann::json& data, const RC::StringType& modName,
+            const std::string& sourceFile={});
         void ParsePlayerRulesDocument(const nlohmann::json& data,
             const RC::StringType& modName);
         void RegisterSpawn(const nlohmann::json& value, const RC::StringType& modName);
@@ -543,6 +561,7 @@ namespace DragonWilds {
         int ApplyDropMultiplierToObject(RC::Unreal::UObject* object, double multiplier);
         bool SetupSpawnTick();
         bool SetupProtectedBuildingDestroyGuard();
+        void TrackManagedBuildingSaveExclusion(RC::Unreal::AActor* actor);
         bool IsProtectedBuildingActor(RC::Unreal::AActor* actor) const;
         bool IsWorldStillLoaded(RC::Unreal::UWorld* world);
         void OnCellShown(RC::Unreal::UObject* cellObject);
@@ -565,7 +584,7 @@ namespace DragonWilds {
         bool HasEquivalentActorNear(RC::Unreal::UWorld* world,const SpawnInfo& spawn);
         void ProcessRemoveActorEntry(RC::Unreal::UWorld* world, SpawnInfo& spawn);
         void ResolveGroundedLocation(RC::Unreal::UWorld* world, SpawnInfo& spawn);
-        RC::Unreal::AActor* FindActorByStableId(RC::Unreal::UWorld* world, const RC::Unreal::FGuid& stableId);
+        RC::Unreal::AActor* FindActorByStableId(RC::Unreal::UWorld* world, const RC::Unreal::FGuid& stableId,bool unique=false);
         void CreateSpawn(RC::Unreal::UWorld* world, SpawnInfo& spawn);
         void CreateActor(RC::Unreal::UWorld* world, SpawnInfo& spawn);
         void CreateStaticAssembly(RC::Unreal::UWorld* world, SpawnInfo& spawn);

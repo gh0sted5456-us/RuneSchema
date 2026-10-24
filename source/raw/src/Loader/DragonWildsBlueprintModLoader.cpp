@@ -11,6 +11,9 @@
 #include "SDK/Helper/ActorHelper.h"
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnosticB2.h"
+#include "Utility/StructuredDiagnosticOutcomeEvidence.h"
+#include "Utility/StructuredDiagnosticB3C.h"
 #include "Utility/InlineHook.h"
 #include "Utility/JsonHelpers.h"
 #include "Loader/DragonWildsBlueprintModLoader.h"
@@ -320,6 +323,7 @@ namespace DragonWilds {
         m_reportedRuntimeUiFailures.clear();
         m_runtimeWidgetRules.clear();
         m_runtimeUiRules.clear();
+        m_runtimeWidgetOwnerClasses.clear();m_runtimeWidgetPathOwners.clear();
         m_modsMap.clear();
     }
 
@@ -336,6 +340,7 @@ namespace DragonWilds {
         m_runtimeWidgetActiveRules.clear();
         m_runtimeWidgetCompletedRules.clear();
         m_runtimeWidgetObservedTargets.clear();
+        m_runtimeOwnerClassPaths.clear();
     }
 
     void DragonWildsBlueprintModLoader::ClearRuntimeUiInstances()
@@ -425,14 +430,16 @@ namespace DragonWilds {
     {
         if (engineLifecyclePhase == EEngineLifecyclePhase::PostEngineInit)
         {
-            PS::JsonHelpers::ParseJsonFilesInPath(loaderPath, [&](const nlohmann::json& data) {
-                LoadSafe(data, modName);
+            PS::JsonHelpers::ParseJsonFilesInPathWithSource(loaderPath,
+                [&](const nlohmann::json& data, const std::filesystem::path& source) {
+                LoadSafe(data, modName, PS::StructuredDiagnosticB2::Utf8Path(source));
             });
         }
         else if (engineLifecyclePhase == EEngineLifecyclePhase::GameInstanceInit)
         {
-            PS::JsonHelpers::ParseJsonFilesInPath(loaderPath, [&](const nlohmann::json& data) {
-                LoadUnsafe(data);
+            PS::JsonHelpers::ParseJsonFilesInPathWithSource(loaderPath,
+                [&](const nlohmann::json& data, const std::filesystem::path& source) {
+                LoadUnsafe(data, modName, PS::StructuredDiagnosticB2::Utf8Path(source));
             });
         }
     }
@@ -448,10 +455,17 @@ namespace DragonWilds {
                         || item.contains("$RuntimeUI"));
             };
             if (requiresRestart(data) || std::any_of(data.begin(), data.end(), requiresRestart)) {
-                PS::Log<LogLevel::Warning>(STR("Blueprint runtime/$Patch rules changed in {}. Restart the game to reload rules and existing objects.\n"), modName);
+                const PS::StructuredDiagnosticB2::Provenance context{RC::to_string(modName),
+                    PS::StructuredDiagnosticB2::SourceWithinSection(modFilePath,"blueprints"),{},
+                    PS::StructuredDiagnosticB2::NewOperationId("blueprint")};
+                if(!PS::StructuredDiagnosticB2::Report("RS-BP-003","Warning","Deferred","BlueprintLoader",
+                    "Blueprint changes require restart",
+                    "Runtime or $Patch rules were changed by live reload; existing objects and rules require a restart.",
+                    context,"Reload"))
+                    PS::Log<LogLevel::Warning>(STR("Blueprint runtime/$Patch rules changed in {}. Restart the game to reload rules and existing objects.\n"), modName);
                 return;
             }
-            LoadUnsafe(data);
+            LoadUnsafe(data,modName,PS::StructuredDiagnosticB2::SourceWithinSection(modFilePath,"blueprints"));
         });
     }
 
@@ -469,22 +483,37 @@ namespace DragonWilds {
     {
         // Require both hooks before enabling writes.
         HooksReady.store(false, std::memory_order_release);
+        std::string installingHook="UBlueprintGeneratedClass::PostLoad";
         try
         {
             if (!HookPostLoad())
             {
                 ResetHooks();
-                PS::Log<LogLevel::Error>(TEXT("Cannot hook UBlueprintGeneratedClass::PostLoad which means blueprint mods will not function properly.\n"));
+                const PS::StructuredDiagnosticB2::Provenance context{{},{},"UBlueprintGeneratedClass::PostLoad",
+                    PS::StructuredDiagnosticB2::NewOperationId("blueprint-hook")};
+                if(!PS::StructuredDiagnosticB2::Report("RS-BP-002","Error","Failed","BlueprintLoader",
+                    "Required Blueprint lifecycle hook unavailable",
+                    "The Blueprint PostLoad hook could not be installed; Blueprint modifications are disabled.",
+                    context,"Validation"))
+                    PS::Log<LogLevel::Error>(TEXT("Cannot hook UBlueprintGeneratedClass::PostLoad which means blueprint mods will not function properly.\n"));
                 return false;
             }
 
+            installingHook="AActor::PostInitComponents";
             if (!HookPostInitComponents())
             {
                 ResetHooks();
-                PS::Log<LogLevel::Error>(TEXT("Cannot hook AActor::PostInitComponents which means blueprint mods will not function properly.\n"));
+                const PS::StructuredDiagnosticB2::Provenance context{{},{},"AActor::PostInitComponents",
+                    PS::StructuredDiagnosticB2::NewOperationId("blueprint-hook")};
+                if(!PS::StructuredDiagnosticB2::Report("RS-BP-002","Error","Failed","BlueprintLoader",
+                    "Required Blueprint lifecycle hook unavailable",
+                    "The Actor PostInitComponents hook could not be installed; Blueprint modifications are disabled.",
+                    context,"Validation"))
+                    PS::Log<LogLevel::Error>(TEXT("Cannot hook AActor::PostInitComponents which means blueprint mods will not function properly.\n"));
                 return false;
             }
 
+            installingHook.clear();
             HooksReady.store(true, std::memory_order_release);
             Hook::FCallbackOptions options{};
             options.OwnerModName = TEXT("RuneSchema");
@@ -495,29 +524,25 @@ namespace DragonWilds {
                     ClearRuntimeUiInstances();
                     ClearRuntimeWidgetState();
                 }, options);
-            if (m_worldTeardownCallbackId == Hook::ERROR_ID)
-                PS::Log<LogLevel::Warning>(
+            if (m_worldTeardownCallbackId == Hook::ERROR_ID) {
+                PS::LogStructuredFallback<LogLevel::Warning>(
+                    PS::StructuredDiagnosticB3C::Report("RS-BP-004","Warning","Partial","BlueprintLoader",
+                    "Blueprint world-teardown cleanup hook unavailable","Visual/runtime UI cleanup observer could not be registered.",{}, {},"BlueprintWorldTeardown","Validation"),
                     TEXT("Blueprint ghost world-teardown cleanup could not be registered.\n"));
-
-            Hook::FCallbackOptions runtimeOptions{};
-            runtimeOptions.OwnerModName = TEXT("RuneSchema");
-            runtimeOptions.HookName = TEXT("BlueprintRuntimeWidget");
-            m_runtimeWidgetCallbackId = Hook::RegisterProcessEventPostCallback(
-                [this](Hook::TCallbackIterationData<void>&, UObject* source, UFunction* function, void*) {
-                    try { ObserveRuntimeWidgetEvent(source, function); }
-                    catch (const std::exception& error) {
-                        PS::RoutineLog("blueprints",
-                            STR("Blueprint $RuntimeWidget event failed: {}.\n"),
-                            PS::ToWideSafe(error.what()));
-                    }
-                }, runtimeOptions);
-            if (m_runtimeWidgetCallbackId == Hook::ERROR_ID)
-                throw std::runtime_error("Blueprint $RuntimeWidget ProcessEvent observer registration failed");
+            }
 
             return true;
         }
         catch (...)
         {
+            if(!installingHook.empty()) {
+                const PS::StructuredDiagnosticB2::Provenance context{{},{},installingHook,
+                    PS::StructuredDiagnosticB2::NewOperationId("blueprint-hook")};
+                (void)PS::StructuredDiagnosticB2::Report("RS-BP-002","Error","Failed","BlueprintLoader",
+                    "Required Blueprint lifecycle hook unavailable",
+                    "A Blueprint lifecycle hook could not be installed; Blueprint modifications are disabled.",
+                    context,"Validation");
+            }
             if (m_runtimeWidgetCallbackId != Hook::ERROR_ID) {
                 Hook::UnregisterCallback(m_runtimeWidgetCallbackId);
                 m_runtimeWidgetCallbackId = Hook::ERROR_ID;
@@ -525,6 +550,27 @@ namespace DragonWilds {
             ResetHooks();
             throw;
         }
+    }
+
+    void DragonWildsBlueprintModLoader::EnsureRuntimeWidgetObserver()
+    {
+        if(m_runtimeWidgetCallbackId!=Hook::ERROR_ID||(m_runtimeWidgetRules.empty()&&m_runtimeUiRules.empty()))return;
+        Hook::FCallbackOptions options{};options.OwnerModName=TEXT("RuneSchema");options.HookName=TEXT("BlueprintRuntimeWidget");
+        m_runtimeWidgetCallbackId=Hook::RegisterProcessEventPostCallback(
+            [this](Hook::TCallbackIterationData<void>&,UObject* source,UFunction* function,void*){
+                try{ObserveRuntimeWidgetEvent(source,function);}
+                catch(const std::exception& error){PS::RoutineLog("blueprints",STR("Blueprint $RuntimeWidget event failed: {}.\n"),PS::ToWideSafe(error.what()));}
+            },options);
+        if(m_runtimeWidgetCallbackId==Hook::ERROR_ID)throw std::runtime_error("Blueprint $RuntimeWidget ProcessEvent observer registration failed");
+    }
+
+    FName DragonWildsBlueprintModLoader::RuntimeWidgetOwnerClassPath(UClass* type)
+    {
+        if(!type)return NAME_None;
+        if(const auto found=m_runtimeOwnerClassPaths.find(type);found!=m_runtimeOwnerClassPaths.end()&&found->second.Type.Get()==type)return found->second.Path;
+        if(m_runtimeOwnerClassPaths.size()>=512)m_runtimeOwnerClassPaths.clear();
+        const auto path=FName(type->GetPathName(),FNAME_Find);
+        m_runtimeOwnerClassPaths.insert_or_assign(type,RuntimeOwnerClassPath{PS::WeakObjectHandle(type),path});return path;
     }
 
     void DragonWildsBlueprintModLoader::ResetHooks()
@@ -541,7 +587,10 @@ namespace DragonWilds {
         auto vtable = DragonWilds::GetVTablePtrByClassPath(TEXT("/Script/Engine.BlueprintGeneratedClass"));
         if (!vtable)
         {
-            PS::Log<LogLevel::Error>(STR("Something went wrong with getting VTable pointer for UBlueprintGeneratedClass."));
+            PS::LogStructuredFallback<LogLevel::Error>(
+                PS::StructuredDiagnosticB3C::Report("RS-BP-005","Error","Blocked","BlueprintLoader",
+                "Blueprint PostLoad vtable unavailable","The generated-class vtable pointer could not be resolved.",{}, {},"BlueprintPostLoad","Resolution"),
+                STR("Something went wrong with getting VTable pointer for UBlueprintGeneratedClass."));
             return false;
         }
 
@@ -561,7 +610,10 @@ namespace DragonWilds {
         auto vtable = DragonWilds::GetVTablePtrByClassPath(TEXT("/Script/Engine.Actor"));
         if (!vtable)
         {
-            PS::Log<LogLevel::Error>(TEXT("Something went wrong with getting VTable pointer for AActor.\n"));
+            PS::LogStructuredFallback<LogLevel::Error>(
+                PS::StructuredDiagnosticB3C::Report("RS-BP-006","Error","Blocked","BlueprintLoader",
+                "Actor PostInitComponents vtable unavailable","The Actor vtable pointer could not be resolved.",{}, {},"ActorPostInitComponents","Resolution"),
+                TEXT("Something went wrong with getting VTable pointer for AActor.\n"));
             return false;
         }
 
@@ -626,13 +678,14 @@ namespace DragonWilds {
             reinterpret_cast<void*>(PostInitComponents));
     }
 
-    void DragonWildsBlueprintModLoader::LoadSafe(const nlohmann::json& data, const RC::StringType& modName)
+    void DragonWildsBlueprintModLoader::LoadSafe(const nlohmann::json& data, const RC::StringType& modName,
+        const std::string& source)
     {
-        if (data.is_array()) { for (const auto& entry : data) LoadSafe(entry, modName); return; }
+        if (data.is_array()) { for (const auto& entry : data) LoadSafe(entry, modName, source); return; }
         static constexpr std::array<std::string_view, 0> noProtected{};
         if (const auto patch = JsonPatchDirective::Parse(data, noProtected, "blueprint"))
         {
-            m_pendingBlueprintPatches.push_back({{patch->Reference, patch->Changes}});
+            m_pendingBlueprintPatches.push_back({{{patch->Reference, patch->Changes}},modName,source});
             WarnPatchConflicts(m_patchConflicts, "blueprints:" + patch->Reference, patch->Changes, RC::to_string(modName), false);
             return;
         }
@@ -662,14 +715,15 @@ namespace DragonWilds {
 
             if (const auto patch = JsonPatchDirective::Parse(staticData, noProtected, "blueprint"))
             {
-                m_pendingBlueprintPatches.push_back({{patch->Reference, patch->Changes}});
+                m_pendingBlueprintPatches.push_back({{{patch->Reference, patch->Changes}},modName,source});
                 WarnPatchConflicts(m_patchConflicts, "blueprints:" + patch->Reference, patch->Changes, RC::to_string(modName), false);
                 continue;
             }
             if (!assetNameWide.starts_with(TEXT("/Game/")) && !staticData.empty())
             {
                 auto assetFName = FName(assetNameWide, FNAME_Add);
-                auto newMod = DragonWildsBlueprintMod(assetFName, staticData);
+                auto newMod = DragonWildsBlueprintMod(assetFName, staticData,modName,source,
+                    PS::StructuredDiagnosticB2::NewOperationId("blueprint"));
                 auto it = m_modsMap.find(assetFName);
                 if (it != m_modsMap.end())
                 {
@@ -741,6 +795,9 @@ namespace DragonWilds {
                 ruleData,
                 modName
             });
+            m_runtimeWidgetOwnerClasses.insert(ownerClass);
+            if(classPath.starts_with('/'))m_runtimeWidgetPathOwners.insert(ownerClass);
+            m_runtimeOwnerClassPaths.clear();EnsureRuntimeWidgetObserver();
         }
     }
 
@@ -801,6 +858,9 @@ namespace DragonWilds {
                 ruleData,
                 modName
             });
+            m_runtimeWidgetOwnerClasses.insert(ownerClass);
+            if(classPath.starts_with('/'))m_runtimeWidgetPathOwners.insert(ownerClass);
+            m_runtimeOwnerClassPaths.clear();EnsureRuntimeWidgetObserver();
         }
     }
 
@@ -877,8 +937,7 @@ namespace DragonWilds {
             if (type)
             {
                 const auto typeName = type->GetNamePrivate();
-                const auto typePath = FName(type->GetPathName(), FNAME_Find);
-                if (ownerClass == typeName || ownerClass == typePath)
+                if (ownerClass == typeName || (m_runtimeWidgetPathOwners.contains(ownerClass)&&ownerClass == RuntimeWidgetOwnerClassPath(type)))
                     return current;
             }
             current = current->GetOuterPrivate();
@@ -1091,11 +1150,11 @@ namespace DragonWilds {
     }
 
     bool DragonWildsBlueprintModLoader::RuntimeWidgetRuleMatchesEvent(
-        const RuntimeWidgetRule& rule,
+        const nlohmann::json& data,
         UFunction* function)
     {
-        const auto when = rule.Data.find("$When");
-        if (when == rule.Data.end()) return true;
+        const auto when = data.find("$When");
+        if (when == data.end()) return true;
 
         const auto matchesName = [&](const std::string& expected) {
             std::string lowered = expected;
@@ -1138,13 +1197,7 @@ namespace DragonWilds {
         const RuntimeUiRule& rule,
         UFunction* function)
     {
-        RuntimeWidgetRule proxy{
-            rule.OwnerClass,
-            {},
-            rule.Data,
-            rule.ModName
-        };
-        return RuntimeWidgetRuleMatchesEvent(proxy, function);
+        return RuntimeWidgetRuleMatchesEvent(rule.Data, function);
     }
 
     std::string DragonWildsBlueprintModLoader::RuntimeWidgetRuleKey(
@@ -1715,12 +1768,11 @@ namespace DragonWilds {
         // letting it leak into later menus/gameplay.
         if (function)
         {
-            const auto eventName = RC::to_string(function->GetName());
+            const auto eventName = function->GetFName();
+            static const FName destruct(TEXT("Destruct"),FNAME_Add),nativeDestruct(TEXT("NativeDestruct"),FNAME_Add),deactivated(TEXT("OnDeactivated"),FNAME_Add),bpDeactivated(TEXT("BP_OnDeactivated"),FNAME_Add);
             const bool ownerClosing =
-                eventName == "Destruct"
-                || eventName == "NativeDestruct"
-                || eventName == "OnDeactivated"
-                || eventName == "BP_OnDeactivated";
+                eventName == destruct || eventName == nativeDestruct
+                || eventName == deactivated || eventName == bpDeactivated;
             if (ownerClosing)
             {
                 bool removedOwnerUi = false;
@@ -1751,19 +1803,14 @@ namespace DragonWilds {
                 m_runtimeWidgetObservedTargets.erase(observed);
         }
 
-        for (const auto& triggerRule : m_runtimeWidgetRules)
+        for (const auto& ownerClass : m_runtimeWidgetOwnerClasses)
         {
             // A native widget can be collapsed before it emits any useful
             // ProcessEvent traffic of its own. Once an event originates
             // anywhere inside the matching live owner hierarchy, refresh the
             // owner's runtime rules and let exact path/$Find resolution decide
             // whether the target exists. Re-entry is still guarded per rule.
-            if (auto* owner = FindRuntimeWidgetOwner(source, triggerRule.OwnerClass))
-                ownersToRefresh.emplace(owner);
-        }
-        for (const auto& uiRule : m_runtimeUiRules)
-        {
-            if (auto* owner = FindRuntimeWidgetOwner(source, uiRule.OwnerClass))
+            if (auto* owner = FindRuntimeWidgetOwner(source, ownerClass))
                 ownersToRefresh.emplace(owner);
         }
 
@@ -1772,14 +1819,14 @@ namespace DragonWilds {
             auto* type = owner ? owner->GetClassPrivate() : nullptr;
             if (!type) continue;
             const auto ownerName = type->GetNamePrivate();
-            const auto ownerPath = FName(type->GetPathName(), FNAME_Find);
+            const auto ownerPath = m_runtimeWidgetPathOwners.empty()?NAME_None:RuntimeWidgetOwnerClassPath(type);
 
             for (const auto& rule : m_runtimeWidgetRules)
             {
                 if (rule.OwnerClass != ownerName && rule.OwnerClass != ownerPath)
                     continue;
                 try {
-                    if (!RuntimeWidgetRuleMatchesEvent(rule, function))
+                    if (!RuntimeWidgetRuleMatchesEvent(rule.Data, function))
                         continue;
                     ApplyRuntimeWidgetRule(owner, rule);
                 } catch (const std::exception& error) {
@@ -1788,7 +1835,9 @@ namespace DragonWilds {
                         + ":" + error.what();
                     if (m_reportedRuntimeWidgetFailures.emplace(failureKey).second)
                     {
-                        PS::Log<LogLevel::Warning>(
+                        PS::LogStructuredFallback<LogLevel::Warning>(
+                            PS::StructuredDiagnosticB3C::Report("RS-BP-007","Warning","Partial","BlueprintLoader",
+                            "Runtime widget rule failed",error.what(),RC::to_string(rule.ModName),{},RC::to_string(rule.WidgetPath),"Application"),
                             STR("Blueprint $RuntimeWidget '{}' from '{}' failed: {}. Further identical failures are suppressed.\n"),
                             rule.WidgetPath,
                             rule.ModName,
@@ -1811,7 +1860,9 @@ namespace DragonWilds {
                         + ":" + rule.Name + ":" + error.what();
                     if (m_reportedRuntimeUiFailures.emplace(failureKey).second)
                     {
-                        PS::Log<LogLevel::Warning>(
+                        PS::LogStructuredFallback<LogLevel::Warning>(
+                            PS::StructuredDiagnosticB3C::Report("RS-BP-008","Warning","Partial","BlueprintLoader",
+                            "Runtime UI rule failed",error.what(),RC::to_string(rule.ModName),{},rule.Name,"Application"),
                             STR("Blueprint $RuntimeUI '{}' from '{}' failed: {}. Further identical failures are suppressed.\n"),
                             PS::ToWideSafe(rule.Name.c_str()),
                             rule.ModName,
@@ -1822,9 +1873,10 @@ namespace DragonWilds {
         }
     }
 
-    void DragonWildsBlueprintModLoader::LoadUnsafe(const nlohmann::json& data)
+    void DragonWildsBlueprintModLoader::LoadUnsafe(const nlohmann::json& data,
+        const RC::StringType& modName, const std::string& source)
     {
-        if (data.is_array()) { for (const auto& entry : data) LoadUnsafe(entry); return; }
+        if (data.is_array()) { for (const auto& entry : data) LoadUnsafe(entry,modName,source); return; }
         if (data.contains("$Patch") || data.contains("$Target")) return;
         constexpr size_t detailLimit = 8;
         size_t applied = 0;
@@ -1847,7 +1899,14 @@ namespace DragonWilds {
                 asset->SetRootSet();
 
                 auto& defaultObject = static_cast<UClass*>(asset)->GetClassDefaultObject();
-                ApplyData(assetData, defaultObject.Get(), true);
+                BlueprintApplicationOutcome outcome;
+                outcome.ModId=RC::to_string(modName);
+                outcome.File=source;
+                outcome.Target=assetName;
+                outcome.OperationId=PS::StructuredDiagnosticB2::NewOperationId("blueprint");
+                try { ApplyData(assetData, defaultObject.Get(), true, &outcome); }
+                catch (...) { ReportMissingProperties(outcome); throw; }
+                ReportMissingProperties(outcome);
                 ApplyDeferredPatches(defaultObject.Get());
 
                 if (applied < detailLimit)
@@ -1880,26 +1939,59 @@ namespace DragonWilds {
           const auto found = m_modsMap.find(key);
           if (found == m_modsMap.end()) continue;
           for (auto& mod : found->second) {
+            BlueprintApplicationOutcome progress;
             try
             {
-                ApplyMod(mod, object);
+                ApplyMod(mod, object, &progress);
             }
             catch (const std::exception& e)
             {
-                PS::Log<RC::LogLevel::Error>(TEXT("Failed modifying blueprint '{}', {}\n"), objectName.ToString(), PS::ToWideSafe(e.what()));
+                const PS::StructuredDiagnosticB2::Provenance origin{progress.ModId,progress.File,
+                    progress.Target,progress.OperationId};
+                (void)PS::LogStructuredFallback<RC::LogLevel::Error>(
+                    PS::StructuredDiagnosticB2::Report("RS-BP-009","Error",
+                    PS::StructuredDiagnosticOutcomeEvidence::InterruptedAfter(progress.Completed>0),"BlueprintLoader",
+                    "Blueprint modification failed",e.what(),origin,
+                    progress.CurrentProperty.empty()?"Validation":"Application",progress.CurrentProperty),
+                    TEXT("Failed modifying blueprint '{}', {}\n"), objectName.ToString(), PS::ToWideSafe(e.what()));
             }
           }
         }
         ApplyDeferredPatches(object);
     }
 
-    void DragonWildsBlueprintModLoader::ApplyMod(const DragonWildsBlueprintMod& mod, UObject* object)
+    void DragonWildsBlueprintModLoader::ApplyMod(const DragonWildsBlueprintMod& mod, UObject* object,
+        BlueprintApplicationOutcome* observed)
     {
-        auto& data = mod.GetData();
-        ApplyData(data, object);
+        BlueprintApplicationOutcome local;
+        auto& outcome=observed?*observed:local;
+        outcome.ModId=RC::to_string(mod.GetModName());
+        outcome.File=mod.GetSource();
+        outcome.Target=RC::to_string(mod.GetBlueprintName().ToString());
+        outcome.OperationId=mod.GetOperationId();
+        try { ApplyData(mod.GetData(), object, false, &outcome); }
+        catch (...) { ReportMissingProperties(outcome); throw; }
+        ReportMissingProperties(outcome);
     }
 
-    void DragonWildsBlueprintModLoader::ApplyData(const nlohmann::json& data, RC::Unreal::UObject* object, bool resolveWidgetTemplates)
+    void DragonWildsBlueprintModLoader::ReportMissingProperties(const BlueprintApplicationOutcome& outcome)
+    {
+        if(outcome.MissingProperties.empty()) return;
+        const PS::StructuredDiagnosticB2::Provenance context{outcome.ModId,outcome.File,
+            outcome.Target,outcome.OperationId};
+        for(const auto& property:outcome.MissingProperties) {
+            if(!PS::StructuredDiagnosticB2::Report("RS-BP-001","Warning",
+                outcome.Completed>0?"Partial":"Skipped","BlueprintLoader",
+                "Blueprint property not found",
+                "The requested property was not found on the target class; this property modification was skipped.",
+                context,"Application",property))
+                PS::Log<LogLevel::Warning>(STR("Blueprint '{}' property '{}' was not found.\n"),
+                    RC::to_generic_string(outcome.Target),RC::to_generic_string(property));
+        }
+    }
+
+    void DragonWildsBlueprintModLoader::ApplyData(const nlohmann::json& data, RC::Unreal::UObject* object,
+        bool resolveWidgetTemplates, BlueprintApplicationOutcome* outcome, const std::string& prefix)
     {
         auto objectClass = object->GetClassPrivate();
         if (!objectClass)
@@ -1924,6 +2016,8 @@ namespace DragonWilds {
             }
 
             auto propertyNameWide = RC::to_generic_string(propertyName);
+            const auto fieldPath=prefix.empty()?propertyName:prefix+"."+propertyName;
+            if(outcome)outcome->CurrentProperty=fieldPath;
             auto property = DragonWilds::PropertyHelper::GetPropertyByName(objectClass, propertyNameWide);
 
             if (!property)
@@ -1932,12 +2026,15 @@ namespace DragonWilds {
                 {
                     if (auto widgetTemplate = FindWidgetTemplate(objectClass, propertyNameWide))
                     {
-                        ApplyData(propertyValue, widgetTemplate, resolveWidgetTemplates);
+                        ApplyData(propertyValue, widgetTemplate, resolveWidgetTemplates,outcome,fieldPath);
                         continue;
                     }
                 }
 
-                PS::Log<RC::LogLevel::Warning>(TEXT("Property '{}' does not exist in {}\n"), propertyNameWide, objectName.ToString());
+                if(outcome && outcome->MissingProperties.size()<64)
+                    outcome->MissingProperties.push_back(fieldPath);
+                else
+                    PS::Log<RC::LogLevel::Warning>(TEXT("Property '{}' does not exist in {}\n"), propertyNameWide, objectName.ToString());
                 continue;
             }
 
@@ -1946,6 +2043,7 @@ namespace DragonWilds {
                 if (propertyValue.is_null())
                 {
                     PropertyHelper::CopyJsonValueToContainer(object, property, propertyValue);
+                    if(outcome) ++outcome->Completed;
                     continue;
                 }
 
@@ -1956,18 +2054,26 @@ namespace DragonWilds {
                     {
                         if (auto widgetTemplate = FindWidgetTemplate(objectClass, propertyNameWide))
                         {
-                            ApplyData(propertyValue, widgetTemplate, resolveWidgetTemplates);
+                            ApplyData(propertyValue, widgetTemplate, resolveWidgetTemplates,outcome,fieldPath);
                             continue;
                         }
                     }
 
                     if (blueprintClass)
                     {
-                        HandleInheritableComponent(blueprintClass, propertyNameWide, propertyValue);
+                        HandleInheritableComponent(blueprintClass, propertyNameWide, propertyValue,outcome,fieldPath);
                     }
                     else
                     {
-                        PS::Log<LogLevel::Warning>(TEXT("Property '{}' in {} was null and couldn't be resolved as a blueprint component template.\n"),
+                        const PS::StructuredDiagnosticB2::Provenance origin{
+                            outcome?outcome->ModId:std::string{},outcome?outcome->File:std::string{},
+                            outcome?outcome->Target:RC::to_string(objectName.ToString()),
+                            outcome?outcome->OperationId:std::string{}};
+                        (void)PS::LogStructuredFallback<LogLevel::Warning>(
+                            PS::StructuredDiagnosticB2::Report("RS-BP-010","Warning","Skipped","BlueprintLoader",
+                            "Blueprint component template unavailable","A null component could not be resolved as a Blueprint template.",
+                            origin,"Resolution",fieldPath),
+                            TEXT("Property '{}' in {} was null and couldn't be resolved as a blueprint component template.\n"),
                             propertyNameWide, objectName.ToString());
                     }
                 }
@@ -1975,22 +2081,25 @@ namespace DragonWilds {
                     && !propertyValue.contains("ObjectPath")
                     && !propertyValue.contains("ObjectName"))
                 {
-                    ApplyData(propertyValue, objectValue, resolveWidgetTemplates);
+                    ApplyData(propertyValue, objectValue, resolveWidgetTemplates,outcome,fieldPath);
                 }
                 else
                 {
                     PropertyHelper::CopyJsonValueToContainer(object, property, propertyValue);
+                    if(outcome) ++outcome->Completed;
                 }
             }
             else
             {
                 PropertyHelper::CopyJsonValueToContainer(object, property, propertyValue);
+                if(outcome) ++outcome->Completed;
             }
         }
 
         auto append = data.find("$Append");
         if (append != data.end())
         {
+            if(outcome)outcome->CurrentProperty=prefix.empty()?"$Append":prefix+".$Append";
             PropertyHelper::AppendJsonValuesToContainer(object, objectClass, *append);
         }
     }
@@ -2022,13 +2131,21 @@ namespace DragonWilds {
     }
 
     void DragonWildsBlueprintModLoader::HandleInheritableComponent(UECustom::UBlueprintGeneratedClass* bpClass, const RC::StringType& componentName,
-                                                         const nlohmann::json& componentData)
+        const nlohmann::json& componentData,BlueprintApplicationOutcome* outcome,const std::string& fieldPath)
     {
         auto& bpClassName = bpClass->GetNamePrivate();
 
         if (!componentData.is_object())
         {
-            PS::Log<LogLevel::Warning>(TEXT("{} failed to apply, provided JSON value wasn't an object\n"), bpClassName.ToString());
+            const PS::StructuredDiagnosticB2::Provenance origin{
+                outcome?outcome->ModId:std::string{},outcome?outcome->File:std::string{},
+                outcome?outcome->Target:RC::to_string(bpClassName.ToString()),
+                outcome?outcome->OperationId:std::string{}};
+            (void)PS::LogStructuredFallback<LogLevel::Warning>(
+                PS::StructuredDiagnosticB2::Report("RS-BP-011","Warning","Skipped","BlueprintLoader",
+                "Blueprint component definition invalid","The authored component value must be an object.",
+                origin,"Validation",fieldPath),
+                TEXT("{} failed to apply, provided JSON value wasn't an object\n"), bpClassName.ToString());
             return;
         }
 
@@ -2054,14 +2171,15 @@ namespace DragonWilds {
 
         if (inheritableComponent)
         {
-            ModifyComponent(inheritableComponent, componentData);
+            ModifyComponent(inheritableComponent, componentData,outcome,fieldPath);
             return;
         }
 
-        HandleNodeComponent(bpClass, componentFullName, componentData);
+        HandleNodeComponent(bpClass, componentFullName, componentData,outcome,fieldPath);
     }
 
-    void DragonWildsBlueprintModLoader::HandleNodeComponent(UECustom::UBlueprintGeneratedClass* bpClass, const RC::StringType& componentName, const nlohmann::json& componentData)
+    void DragonWildsBlueprintModLoader::HandleNodeComponent(UECustom::UBlueprintGeneratedClass* bpClass, const RC::StringType& componentName,
+        const nlohmann::json& componentData,BlueprintApplicationOutcome* outcome,const std::string& fieldPath)
     {
         auto simpleConstructionScript = bpClass->GetSimpleConstructionScript();
         if (!simpleConstructionScript)
@@ -2093,13 +2211,15 @@ namespace DragonWilds {
             return;
         }
 
-        ModifyComponent(nodeComponent, componentData);
+        ModifyComponent(nodeComponent, componentData,outcome,fieldPath);
     }
 
-    void DragonWildsBlueprintModLoader::ModifyComponent(RC::Unreal::UObject* component, const nlohmann::json& componentData)
+    void DragonWildsBlueprintModLoader::ModifyComponent(RC::Unreal::UObject* component, const nlohmann::json& componentData,
+        BlueprintApplicationOutcome* outcome,const std::string& fieldPath)
     {
         for (auto& [innerKey, innerValue] : componentData.items())
         {
+            if(outcome)outcome->CurrentProperty=fieldPath.empty()?innerKey:fieldPath+"."+innerKey;
             auto componentPropertyName = RC::to_generic_string(innerKey);
             auto componentProperty = PropertyHelper::GetPropertyByName(component->GetClassPrivate(), componentPropertyName.c_str());
             if (!componentProperty)
@@ -2109,6 +2229,7 @@ namespace DragonWilds {
             }
 
             PropertyHelper::CopyJsonValueToContainer(component, componentProperty, innerValue);
+            if(outcome)++outcome->Completed;
         }
     }
 

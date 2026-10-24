@@ -40,6 +40,15 @@ int main(){
     calls.clear();assert(QuerySurface([&](bool complex){calls.push_back(complex);return complex;}));assert(calls==std::vector<bool>({false,true}));
     calls.clear();assert(!QuerySurface([&](bool complex){calls.push_back(complex);return false;}));assert(calls.size()==2);
     calls.clear();assert(Rejects([&]{QuerySurface([&](bool complex)->bool{calls.push_back(complex);throw std::runtime_error("layout changed");});}));assert(calls.size()==1);
+    std::vector<std::optional<double>> references;std::string queryError;QueryState queryState;
+    const auto meshFloor=[&](std::optional<double> reference){references.push_back(reference);return reference==std::optional<double>{5550};};
+    assert(QueryWithFloorHint(meshFloor,{},5550,queryError,queryState));
+    assert(references==std::vector<std::optional<double>>({{},5550}));
+    references.clear();assert(!QueryWithFloorHint(meshFloor,5400,5550,queryError,queryState));assert(references.size()==1&&references[0]==5400);
+    references.clear();queryError="reflection layout changed";assert(!QueryWithFloorHint(meshFloor,{},5550,queryError,queryState));assert(references.size()==1);
+    references.clear();queryError.clear();queryState.Obstructed=true;assert(!QueryWithFloorHint(meshFloor,{},5550,queryError,queryState));assert(references.size()==1);
+    references.clear();queryState={};assert(!QueryWithFloorHint(meshFloor,{},{},queryError,queryState));assert(references.size()==1);
+    references.clear();assert(!QueryWithFloorHint([&](std::optional<double> reference){references.push_back(reference);return false;},{},5550,queryError,queryState));assert(references.size()==2);
     // The NPC one-shot gate is independent of reversible collision readiness.
     DragonWilds::VendorSpawnGate gate;Retry retry;int rows=0,actors=0;
     const auto attempt=[&](bool hit){if(!hit){retry.Missed();return;}retry.Resolved();if(gate.Begin()){++rows;++actors;}};

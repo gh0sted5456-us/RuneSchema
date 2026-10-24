@@ -12,6 +12,12 @@ int main(int argc,char** argv){
     const auto cleanup=Read(root/"src/Loader/NpcCleanup.inl");
     const auto event=Read(root/"src/Loader/DragonWildsSpawnLoader.cpp");
     const auto catalog=Read(root/"src/Generator/AssetSearch.cpp");
+    const auto searches=Read(root/"src/Runtime/SearchJobs.cpp");
+    Check(searches.find("ForEachUObject")==std::string::npos&&searches.find("scanned<512")!=std::string::npos&&searches.find("microseconds(500)")!=std::string::npos,"Optional runtime searches no longer yield between bounded object slices");
+    const auto exportJob=searches.find("writer=std::async");const auto exportEnd=searches.find("});",exportJob);
+    const auto exportBody=searches.substr(exportJob,exportEnd-exportJob);
+    Check(exportJob!=std::string::npos&&exportBody.find("report.dump(2)")!=std::string::npos&&exportBody.find("UObject")==std::string::npos&&exportBody.find("HostServices")==std::string::npos,"Search report serialization is not an owned worker operation");
+    Check(searches.find("writer.wait_for(std::chrono::seconds(0))")!=std::string::npos&&searches.find("Search cancelled on world transition")!=std::string::npos,"Search export backpressure or world reset is missing");
     const auto bulk=Read(root/"src/Loader/IconCacheBuild.inl");
     for(const auto* point:{"FinishSpawningActor","component preflight","ActorComponent class resolution"})
         Check(npc.find(std::string("RequireNpcActor(")+ (std::string(point)=="FinishSpawningActor"?"constructionIdentity,world,\"":"identity,expectedWorld,\"")+point+"\")")!=std::string::npos,"NPC native actor identity is not rechecked after a construction/class boundary");
@@ -24,7 +30,7 @@ int main(int argc,char** argv){
         Check(spawn.find(proof)!=std::string::npos,"Event reconciliation bypasses ground/collision/capsule/lifetime verification");
     Check(spawn.find("SetActorLocation(")==std::string::npos,"Event reconciliation uses an unchecked positional write");
     const auto metadata=catalog.find("static std::string mountedScope");
-    const auto scope=catalog.find("const auto metadataScope=json::array({generation,HelpySourceCache::ForClient().value(\"CatalogKey\",std::string{})}).dump()",metadata);
+    const auto scope=catalog.find("const auto metadataScope=json::array({generation,HelpySourceCache::PublishedCatalogKey()}).dump()",metadata);
     const auto refresh=catalog.find("if(!mountedReady||mountedScope!=metadataScope)",scope);
     const auto reset=catalog.find("if(mountedScope!=metadataScope){mountedReady=false;mountedItems.clear();}",refresh);
     const auto ensure=catalog.find("if(!classMetadataReady&&CookedAssets::TryEnsure())",reset);
@@ -50,6 +56,23 @@ int main(int argc,char** argv){
     Check(bulk.find("std::chrono::milliseconds(2)",disk)!=std::string::npos||bulk.find("cacheDeadline")!=std::string::npos,"Disk reuse must remain frame-budgeted");
     Check(bulk.find("if(old!=next)PS::ConfigFiles::Write")!=std::string::npos,"Difference scans rewrite unchanged icon mappings");
     const auto thumbnail=Read(root/"src/Generator/ItemIconThumbnail.cpp");
+    const auto buildingRuntime=Read(root/"src/Loader/BuildingPropRuntime.inl");
+    for(const auto* proof:{"ManagedBuildingSkipFunction","/Script/Dominion.BaseBuildingActor","ReflectedContract::Count(function)!=1","TrackManagedBuildingSaveExclusion(actor)","token.Actor.Get()!=actor||token.Function.Get()!=function","m_managedBuildingSaveTokens.size()>=4096"})
+        Check(buildingRuntime.contains(proof),"Managed buildings require a verified SPUD contract and bounded serial-valid actor/function identities");
+    const auto guard=event.substr(event.find("bool DragonWildsSpawnLoader::SetupProtectedBuildingDestroyGuard()"),event.find("void DragonWildsSpawnLoader::LoadSpawns(")-event.find("bool DragonWildsSpawnLoader::SetupProtectedBuildingDestroyGuard()"));
+    Check(guard.contains("token.Actor.Get()==source&&token.Function.Get()==function")&&guard.contains("!source->HasAnyFlags(RF_Transient)"),"SPUD save-exclusion override must affect only tracked transient RuneSchema instances");
+    Check(guard.find("functionName!=canDestroy")<guard.find("IsProtectedBuildingActor(actor)"),"Unrelated global calls must not scan building ownership");
+    Check(thumbnail.contains("PendingWrite=std::async(std::launch::async,[file=cachedFile,pixels=std::move(pixels)]")&&thumbnail.contains("PendingWrite.wait_for(std::chrono::seconds(0))")&&thumbnail.contains("PendingWrite.get()"),"Thumbnail writes must copy owned pixels to a bounded worker and confirm completion without blocking the game tick");
+    const auto writeJob=thumbnail.substr(thumbnail.find("PendingWrite=std::async"),thumbnail.find("ActiveCapture.reset();return {{\"Icon\",iconPath}")-thumbnail.find("PendingWrite=std::async"));
+    Check(!writeJob.contains("HelpySourceCache::")&&!writeJob.contains("world")&&!writeJob.contains("capture."),"Thumbnail worker must not access mutable engine or source-cache objects");
+    const auto tools=Read(root/"src/Loader/SpawnTools.inl"),icons=Read(root/"src/Loader/SpawnItemIcons.inl");
+    Check(event.contains("PS::WorkSlice helpyWork")&&tools.contains("work.MayStart()")&&icons.contains("work.MayStart()")&&event.contains("iconsFirst=!iconsFirst"),"Catalogue and icons require a shared optional frame budget without starvation");
+    const auto journal=Read(root/"src/Loader/DragonWildsJournalModLoader.cpp"),assets=Read(root/"src/Loader/DragonWildsAssetModLoader.cpp");
+    const auto journalStart=journal.find("void DragonWildsJournalModLoader::ObserveAcquisition(");
+    Check(journal.find("const auto name=function->GetFName()",journalStart)<journal.find("const auto path=function->GetPathName()",journalStart),"Journal must reject unrelated event names before allocating paths");
+    const auto assetStart=assets.find("m_characterMenuPatchHook = Hook::RegisterProcessEventPreCallback");
+    Check(assets.find("const auto name=function->GetFName()",assetStart)<assets.find("const auto classPath =",assetStart),"Character-menu observer must filter event names before class paths");
+    Check(event.contains("const auto name = function->GetFName();")&&!event.contains("const auto name = function->GetName();"),"Player activity observer must use cached names");
     const auto cached=thumbnail.substr(thumbnail.find("std::optional<nlohmann::json> Cached("),thumbnail.find("nlohmann::json Render(")-thumbnail.find("std::optional<nlohmann::json> Cached("));
     Check(cached.find("last_write_time")==std::string::npos&&cached.find("ActiveCapture")==std::string::npos&&cached.find("MaintainCache")==std::string::npos,"Read-only cache checks must not reset captures or rewrite cache timestamps");
     Check(thumbnail.find("recursive_directory_iterator")==std::string::npos&&thumbnail.find("remove_all")==std::string::npos,"Native icon rendering must not walk or clear the cache on the game thread");

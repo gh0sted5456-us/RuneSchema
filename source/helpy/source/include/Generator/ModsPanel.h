@@ -43,32 +43,32 @@ inline void Poll(){
 inline void Shutdown(){if(Worker.valid())try{(void)Worker.get();}catch(...){};}
 inline void Metadata(const Json& row){
     const auto& metadata=row.at("Metadata");
-    ImGui::TextUnformatted(row.at("Name").get_ref<const std::string&>().c_str());
-    for(const char* key:{"modId","name","version","build","author","description","nexusModId","nexusFileId"})if(metadata.contains(key)&&metadata[key].is_string()&&!metadata[key].get_ref<const std::string&>().empty())ImGui::TextWrapped("%s: %s",key,metadata[key].get_ref<const std::string&>().c_str());
-    if(metadata.empty())ImGui::TextDisabled("No author metadata");
-    if(row.contains("Issue"))ImGui::TextWrapped("%s",row.at("Issue").get_ref<const std::string&>().c_str());
-    ImGui::TextWrapped("Loaders: %s",row.at("Loaders").dump().c_str());
-    ImGui::TextDisabled("Cache: %s",row.value("HasCache",false)?"included":"not supplied");
+    PS::HelpyImGuiTheme::DetailsTextUnformatted(row.at("Name").get_ref<const std::string&>().c_str());
+    for(const char* key:{"modId","name","version","build","author","description","nexusModId","nexusFileId"})if(metadata.contains(key)&&metadata[key].is_string()&&!metadata[key].get_ref<const std::string&>().empty())PS::HelpyImGuiTheme::DetailsText("%s: %s",key,metadata[key].get_ref<const std::string&>().c_str());
+    if(metadata.empty())PS::HelpyImGuiTheme::DetailsTextDisabled("No author metadata");
+    if(row.contains("Issue"))PS::HelpyImGuiTheme::DetailsText("%s",row.at("Issue").get_ref<const std::string&>().c_str());
+    PS::HelpyImGuiTheme::DetailsText("Loaders: %s",row.at("Loaders").dump().c_str());
+    PS::HelpyImGuiTheme::DetailsTextDisabled("Cache: %s",row.value("HasCache",false)?"included":"not supplied");
     if(metadata.contains("history")&&metadata["history"].is_array()){
         ImGui::SeparatorText("Version history (author supplied)");size_t count=0;
-        for(const auto& change:metadata["history"]){if(++count>12)break;ImGui::TextWrapped("%s",change.dump().c_str());}
+        for(const auto& change:metadata["history"]){if(++count>12)break;PS::HelpyImGuiTheme::DetailsText("%s",change.dump().c_str());}
     }
 }
 inline void HealthDetails(const Json& row,const ModHealth::State& state,bool checked){
     HelpyImGuiTheme::BeginDetailsTooltip(560);
-    ImGui::TextUnformatted(row.at("Name").get_ref<const std::string&>().c_str());ImGui::Separator();
-    ImGui::TextWrapped("%s · observed issues, not a compatibility check.",ModHealth::Label(state,checked));
-    if(row.contains("Health")){const auto& lifetime=row["Health"].value("Lifetime",Json::object());ImGui::Text("This session: %zu errors, %zu warnings",state.Errors,state.Warnings);ImGui::Text("All sessions: %llu errors, %llu warnings",lifetime.value("Errors",uint64_t{}),lifetime.value("Warnings",uint64_t{}));}
+    PS::HelpyImGuiTheme::DetailsTextUnformatted(row.at("Name").get_ref<const std::string&>().c_str());ImGui::Separator();
+    PS::HelpyImGuiTheme::DetailsText("%s · observed issues, not a compatibility check.",ModHealth::Label(state,checked));
+    if(row.contains("Health")){const auto& lifetime=row["Health"].value("Lifetime",Json::object());PS::HelpyImGuiTheme::DetailsText("This session: %zu errors, %zu warnings",state.Errors,state.Warnings);PS::HelpyImGuiTheme::DetailsText("All sessions: %llu errors, %llu warnings",lifetime.value("Errors",uint64_t{}),lifetime.value("Warnings",uint64_t{}));}
     if(row.contains("RegistryDeclarations")){
-        ImGui::Text("Declarations: %zu accepted, %zu rejected",state.AcceptedDeclarations,state.RejectedDeclarations);
-        ImGui::TextDisabled("Enrollment is not a full native-reference check.");
-        for(const auto& declaration:row["RegistryDeclarations"])ImGui::TextWrapped("%s: %s%s%s",declaration.value("Accepted",false)?"Accepted":"Rejected",declaration.value("Source",std::string{}).c_str(),declaration.value("Accepted",false)?"":" — ",declaration.value("Reason",std::string{}).c_str());
-    }else ImGui::TextDisabled("Declaration audit unavailable; refresh with the updated core.");
-    if(state.OptionalProbes)ImGui::TextWrapped("%zu optional conventional-path lookups found no asset. Other declaration paths remain valid; original messages are in Live Log.",state.OptionalProbes);
-    for(const auto& detail:state.Details)ImGui::TextWrapped("%s",detail.c_str());
-    if(state.Details.empty()&&row.contains("Health"))for(const auto& detail:row["Health"].value("Lifetime",Json::object()).value("LastIssues",std::vector<std::string>{}))ImGui::TextWrapped("Previous session: %s",detail.c_str());
-    const auto storage=Snapshot.value("HealthLedger",Json::object()).value("StorageError",std::string{});if(!storage.empty())ImGui::TextWrapped("History not saved: %s",storage.c_str());
-    if(!checked)ImGui::TextDisabled("Logs not checked yet");HelpyImGuiTheme::EndDetailsTooltip();
+        PS::HelpyImGuiTheme::DetailsText("Declarations: %zu accepted, %zu rejected",state.AcceptedDeclarations,state.RejectedDeclarations);
+        PS::HelpyImGuiTheme::DetailsTextDisabled("Enrollment is not a full native-reference check.");
+        for(const auto& declaration:row["RegistryDeclarations"])PS::HelpyImGuiTheme::DetailsText("%s: %s%s%s",declaration.value("Accepted",false)?"Accepted":"Rejected",declaration.value("Source",std::string{}).c_str(),declaration.value("Accepted",false)?"":" — ",declaration.value("Reason",std::string{}).c_str());
+    }else PS::HelpyImGuiTheme::DetailsTextDisabled("Declaration audit unavailable; refresh with the updated core.");
+    if(state.OptionalProbes)PS::HelpyImGuiTheme::DetailsText("%zu optional conventional-path lookups found no asset. Other declaration paths remain valid; original messages are in Live Log.",state.OptionalProbes);
+    for(const auto& detail:state.Details)PS::HelpyImGuiTheme::DetailsText("%s",detail.c_str());
+    if(state.Details.empty()&&row.contains("Health"))for(const auto& detail:row["Health"].value("Lifetime",Json::object()).value("LastIssues",std::vector<std::string>{}))PS::HelpyImGuiTheme::DetailsText("Previous session: %s",detail.c_str());
+    const auto storage=Snapshot.value("HealthLedger",Json::object()).value("StorageError",std::string{});if(!storage.empty())PS::HelpyImGuiTheme::DetailsText("History not saved: %s",storage.c_str());
+    if(!checked)PS::HelpyImGuiTheme::DetailsTextDisabled("Logs not checked yet");HelpyImGuiTheme::EndDetailsTooltip();
 }
 inline void OrderBadge(size_t order,const ModHealth::State& state,bool checked,ImVec2 a,float size){
     const ImVec4 color=!order?ImVec4(0,0,0,1):state.Errors||state.RejectedDeclarations?ImVec4(.95f,.28f,.25f,1):state.Warnings||!checked?ImVec4(.95f,.75f,.25f,1):ImVec4(.25f,.8f,.45f,1);
@@ -102,7 +102,7 @@ inline void Render(){
     if(Worker.valid()&&Snapshot.is_null())ImGui::TextDisabled("Reading mods…");
     if(Snapshot.is_null())return;
     ImGui::TextDisabled("%s",Snapshot.value("Runtime",std::string("Connected runtime")).c_str());
-    if(Snapshot.contains("ModsDirectory")){ImGui::SameLine();ImGui::TextDisabled("Mod directory");if(ImGui::IsItemHovered()){HelpyImGuiTheme::BeginDetailsTooltip();ImGui::TextWrapped("%s",Snapshot.at("ModsDirectory").get_ref<const std::string&>().c_str());HelpyImGuiTheme::EndDetailsTooltip();}}
+    if(Snapshot.contains("ModsDirectory")){ImGui::SameLine();ImGui::TextDisabled("Mod directory");if(ImGui::IsItemHovered()){HelpyImGuiTheme::BeginDetailsTooltip();PS::HelpyImGuiTheme::DetailsText("%s",Snapshot.at("ModsDirectory").get_ref<const std::string&>().c_str());HelpyImGuiTheme::EndDetailsTooltip();}}
     if(!Snapshot.value("OrderEnabled",false))ImGui::TextWrapped("Load order is disabled in RuneSchema Settings. Enable it before applying changes or importing.");
     ImGui::SetNextItemWidth(std::min(theme.X(420),ImGui::GetContentRegionAvail().x));ImGui::InputTextWithHint("##mods-search","Search mods...",Search,sizeof(Search));
     // Reuse the bounded asynchronous log readers, including when Live Log is
@@ -160,7 +160,7 @@ inline void Render(){
                     if(ImGui::MenuItem("Export source cache…",nullptr,false,!source.empty()&&!HelpyIconPacks::Busy()&&!HelpyIconPacks::Building())){HelpyIconPacks::SelectedSource=source;HelpyIconPacks::Open=true;HelpyIconPacks::Choose(false);}
                     if(ImGui::MenuItem("Change banner...",nullptr,false,!source.empty()))SourceBanners::Choose(source);
                     ImGui::Separator();if(ImGui::BeginMenu("Mod details")){Metadata(row);ImGui::EndMenu();}ImGui::EndPopup();}
-                if(hovered&&!ImGui::IsPopupOpen("mod-actions")){HelpyImGuiTheme::BeginDetailsTooltip(480);Metadata(row);HelpyImGuiTheme::EndDetailsTooltip();}
+                if(hovered&&!ImGui::IsPopupOpen("mod-actions")){HelpyImGuiTheme::BeginDetailsTooltip(titleAt,{titleAt.x+titleWidth,titleAt.y+theme.Y(60)},480);Metadata(row);HelpyImGuiTheme::EndDetailsTooltip();}
                 auto* draw=ImGui::GetWindowDrawList();draw->PushClipRect(titleAt,{titleAt.x+titleWidth,b.y-theme.Y(6)},true);
                 draw->AddText(ImGui::GetFont(),theme.Y(17),titleAt,ImGui::GetColorU32(theme.text),nickname.c_str());
                 PersonalizationPanel::Italic(draw,ImGui::GetFont(),theme.Y(12),{titleAt.x,titleAt.y+theme.Y(25)},ImGui::GetColorU32(theme.textDisabled),"{"+owner+"}");

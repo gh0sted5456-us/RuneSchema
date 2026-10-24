@@ -63,7 +63,7 @@ inline void QuickToggle(const char* label,const char* path,bool risky=false){
 }
 inline void QuickSettings(){
     const auto hint=[](const std::string& text){if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)){
-        PS::HelpyImGuiTheme::BeginDetailsTooltip();ImGui::PushTextWrapPos(ImGui::GetFontSize()*28);ImGui::TextUnformatted(text.c_str());ImGui::PopTextWrapPos();PS::HelpyImGuiTheme::EndDetailsTooltip();}};
+        PS::HelpyImGuiTheme::Tooltip("%s",text.c_str());}};
     if(!Loaded&&Status.empty())Load();
     {
         static json quick=json::object();static char character[257]{},world[257]{};static int mode=1;static bool dirty=false,unconfirmed=false;static std::string message;
@@ -110,8 +110,13 @@ inline void QuickSettings(){
         if(unconfirmed||quick.empty()){ImGui::TextColored(HelpyImGuiTheme::Current.error,"Launch settings need attention. Hover for details.");hint(message);}
         else if(saved){ImGui::TextDisabled("Saved for next launch");hint(message);}
         ImGui::Separator();
+        bool autoOpen=HelpySettings::OpenOnGameStart();
+        if(ImGui::Checkbox("Open Helpy at startup",&autoOpen))HelpySettings::SetOpenOnGameStart(autoOpen);
+        hint("Checked: open Helpy automatically next game launch. Unchecked: keep it closed until F2. This does not disable RuneSchema or load a world.\n"+HelpySettings::Message());
         if(Loaded){QuickToggle("Save Bypass","/persistence/allowCorruptCharacterEntry",true);
-            hint("Checked: use bypass by default. Unchecked: Normal and Quick Launch use it only after native rejection, including direct native loads. Native loading still runs once. On dedicated servers this is the only loading toggle. Does not repair unreadable data; keep backups and disable any standalone bypass. Next launch only.\n\nCurrent session: "+Snapshot.value("BypassStatus",std::string("Not reported")));}
+            hint("Checked: use bypass by default. Unchecked: Normal, Quick Launch and dedicated servers use relaxed native loading first, then fallback only after native rejection. Native loading runs once. Does not repair unreadable data; keep backups and disable any standalone bypass. Next launch only.\n\nCurrent session: "+Snapshot.value("BypassStatus",std::string("Not reported")));}
+        ImGui::TextDisabled("Backup-first save pruning");
+        hint("RuneSchema verifies a whole-save backup before removing orphaned mod data. Active quests from disabled mods are removed when their IDs no longer resolve in the certified quest registry. Backups are restored manually; old Recovery archives are not loaded or deleted.");
         if(QuickToggleError||!Loaded){ImGui::TextColored(HelpyImGuiTheme::Current.error,"RuneSchema settings need attention. Hover for details.");hint(Status);}
         if(ImGui::TreeNode("Advanced")){
             ImGui::BeginDisabled(quick.empty()||quick.value("DedicatedServer",false));
@@ -125,9 +130,6 @@ inline void QuickSettings(){
             if(HelpyImGuiTheme::SoftButton("Reload launch options"))load(true);hint("Discard this launch draft and reread settings.ini. Required after an unconfirmed save.");
             }
             ImGui::EndDisabled();
-            bool autoOpen=HelpySettings::OpenOnGameStart();
-            if(ImGui::Checkbox("Open Helpy at startup",&autoOpen))HelpySettings::SetOpenOnGameStart(autoOpen);
-            hint("Opens Helpy once per launch. F2 closes/reopens it; this never loads a world.\n"+HelpySettings::Message());
             if(Loaded){QuickToggle("Automatic reflection mapping updates","/autoUpdateMappings");hint("Refreshes stale .usmap reflection mappings at startup. Does not reset content caches.");
                 QuickToggle("Detailed RuneSchema logging","/advancedLogging");hint("Adds detailed RuneSchema diagnostics on the next launch.");
                 QuickToggle("Archive RuneSchema logs","/archiveLogs");hint("Preserves previous sessions in logs/. Archives are not automatically deleted.");}
@@ -157,7 +159,7 @@ inline void Field(const std::string& key,json& value,const std::string& path){
     if(changed)Dirty=true;
     if(path=="/persistence/allowCorruptCharacterEntry"){
         ImGui::TextWrapped("Use Save Bypass by default. When off, Normal and Quick Launch use failure-only fallback after native rejection. Native loading runs once; no automatic reload. Restart required. Disable the standalone bypass first.");
-        ImGui::TextWrapped("On dedicated servers this is the only loading toggle and also enables Less Restrictive loading; native world startup is unchanged.");
+        ImGui::TextWrapped("Dedicated servers use Less Restrictive loading and failure-only fallback by default; native world startup is unchanged.");
         ImGui::TextWrapped("This does not repair unreadable data. Back up the character; later game saves can persist incomplete progress.");
         ImGui::TextWrapped("Current session: %s",Snapshot.value("BypassStatus",std::string("Not reported")).c_str());
     }

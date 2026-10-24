@@ -106,6 +106,8 @@ namespace PS {
         // Dedicated servers keep this as their only loading toggle.
         // Never stack it over the standalone CorruptCharacterBypass mod.
         bool allowCorruptCharacterEntry = false;
+        // Legacy compatibility field; companion recovery is retired. Pruning always backs up first.
+        bool recovery = false;
         // Native quest progress is inherently save-backed. When false,
         // RuneSchema quest definitions remain loaded but player quest actions
         // are disabled so they cannot mutate the save.
@@ -114,7 +116,7 @@ namespace PS {
 
     struct WorldSaveCleanupSettings {
         // Preserve the original world before removing unresolved building IDs.
-        // Disabling this is an explicit opt-out, not a validation bypass.
+        // Legacy compatibility field; backups are now mandatory before pruning.
         bool backupBeforePrune = true;
     };
 

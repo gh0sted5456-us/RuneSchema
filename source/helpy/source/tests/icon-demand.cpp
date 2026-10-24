@@ -3,6 +3,7 @@
 #include "Generator/RuneSchemaSettingsPanel.h"
 #include "Generator/RuntimeConnectionPanel.h"
 #include "Generator/DragFeedback.h"
+#include "Generator/HelpyLoadingIndicator.h"
 #include <cassert>
 #include <deque>
 #include <fstream>
@@ -45,7 +46,7 @@ int main() {
     unsigned submissions=0;std::deque<nlohmann::json> replies;
     icons::ConfigureRemote([&](const std::string&){++submissions;return true;},[&](nlohmann::json& result){if(replies.empty())return false;result=std::move(replies.front());replies.pop_front();return true;});
     const auto begin=[] {ImGui::NewFrame();ImGui::SetNextWindowPos({0,0});ImGui::SetNextWindowSize({640,480});ImGui::Begin("test");};
-    const auto end=[] {ImGui::End();ImGui::EndFrame();};
+    const auto end=[] {ImGui::End();ImGui::EndFrame();assert(GImGui->ErrorCountCurrentFrame==0);};
     begin();ImGui::Dummy({50,40});const auto sourceRect=ImGui::GetItemRectMin();const auto vertices=ImGui::GetForegroundDrawList()->VtxBuffer.Size;
     ImGui::GetIO().MousePos={639,479};DragFeedback::Held("Item","A very long held item name that wraps without changing its source layout");
     assert(ImGui::GetForegroundDrawList()->VtxBuffer.Size>vertices&&ImGui::GetMouseCursor()==ImGuiMouseCursor_Hand);
@@ -58,11 +59,45 @@ int main() {
     for(const ImVec2 viewport:std::array{ImVec2{640,480},ImVec2{760,560},ImVec2{1280,800}}){
         io.DisplaySize=viewport;float previous=0;
         for(int frame=0;frame<160;++frame){begin();ImGui::BeginChild("tiny-cell",{18,90});
-            HelpyImGuiTheme::BeginDetailsTooltip();ImGui::TextWrapped("%s",std::string(4096,'W').c_str());
+            HelpyImGuiTheme::BeginDetailsTooltip();
+            const auto textLeft=ImGui::GetCursorScreenPos().x,textRight=textLeft+ImGui::GetContentRegionAvail().x;
+            auto* draw=ImGui::GetWindowDrawList();const auto firstVertex=draw->VtxBuffer.Size;
+            HelpyImGuiTheme::DetailsTextUnformatted(std::string(4096,'W').c_str());
+            for(int i=firstVertex;i<draw->VtxBuffer.Size;++i)assert(draw->VtxBuffer[i].pos.x>=textLeft-2&&draw->VtxBuffer[i].pos.x<=textRight+2);
             const auto size=ImGui::GetWindowSize();if(frame>3){assert(size.x>=300&&size.x<=viewport.x&&size.y<=viewport.y);if(previous)assert(std::abs(size.x-previous)<1);previous=size.x;}
             HelpyImGuiTheme::EndDetailsTooltip();ImGui::EndChild();end();
         }
     }io.DisplaySize={640,480};
+    for(const ImVec2 anchor:std::array{ImVec2{300,120},ImVec2{0,420},ImVec2{580,420}}){
+        for(int frame=0;frame<6;++frame){begin();ImGui::SetCursorScreenPos(anchor);ImGui::Dummy({60,24});
+            const auto minimum=ImGui::GetItemRectMin(),maximum=ImGui::GetItemRectMax();
+            HelpyImGuiTheme::BeginDetailsTooltip();
+            const float textCenter=ImGui::GetCursorScreenPos().x+ImGui::GetContentRegionAvail().x*.5f,startX=ImGui::GetCursorPosX();
+            HelpyImGuiTheme::DetailsTextUnformatted("Common RuneSchema switches without leaving Home.\nHome.");
+            const auto textMin=ImGui::GetItemRectMin(),textMax=ImGui::GetItemRectMax();
+            assert(std::abs((textMin.x+textMax.x)*.5f-textCenter)<1&&ImGui::GetCursorPosX()==startX);
+            HelpyImGuiTheme::DetailsTextDisabled("%s","Centered secondary details");
+            HelpyImGuiTheme::DetailsTextColored({1,1,0,1},"%s","Centered warning details");
+            const auto position=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();
+            if(frame>2){assert(position.x>=0&&position.x+size.x<=640&&position.y>=0&&position.y+size.y<=480);
+                if(anchor.x==300)assert(std::abs(position.x+size.x*.5f-(minimum.x+maximum.x)*.5f)<1);
+                if(anchor.y==420)assert(position.y+size.y<=minimum.y);}
+            HelpyImGuiTheme::EndDetailsTooltip();end();
+        }
+    }
+    // Draw-list controls must anchor to their own bounds, never the last widget.
+    for(const bool covered:{false,true})for(int frame=0;frame<8;++frame){
+        io.MousePos={420,180};begin();ImGui::SetCursorScreenPos({16,50});ImGui::Dummy({40,20});
+        const auto previous=ImGui::GetItemRectMin();
+        HelpyLoadingIndicator::Draw({420,180},12,HelpyImGuiTheme::Current,"Checking cache and mounted sources","Stage: checking-cache\nCatalogue records checked: 0 (unknown total)");
+        assert(ImGui::GetItemRectMin().x==previous.x&&ImGui::GetItemRectMin().y==previous.y);
+        ImGuiWindow* tooltip=nullptr;for(auto* window:GImGui->Windows)if(window->Active&&(window->Flags&ImGuiWindowFlags_Tooltip))tooltip=window;
+        if(frame>3){if(covered)assert(!tooltip);else{assert(tooltip);assert(std::abs(tooltip->Pos.x+tooltip->Size.x*.5f-420)<1);assert(tooltip->Pos.y>192&&tooltip->Pos.x>=0&&tooltip->Pos.x+tooltip->Size.x<=640);}}
+        ImGui::End();
+        if(covered){ImGui::SetNextWindowPos({350,130});ImGui::SetNextWindowSize({140,100});ImGui::Begin("hover blocker",nullptr,ImGuiWindowFlags_NoSavedSettings);ImGui::TextUnformatted("Covers the loading ring");ImGui::End();}
+        ImGui::EndFrame();assert(GImGui->ErrorCountCurrentFrame==0);
+    }
+    io.MousePos={-100,-100};
     begin();
     assert(!icons::Draw("clipped",{900,900},{950,950},true));
     assert(state.Queued.empty());

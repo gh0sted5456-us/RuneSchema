@@ -162,7 +162,8 @@ namespace DragonWilds {
         nlohmann::json RouteRecipeItemReferences(std::string_view propertyName,
             const nlohmann::json& authored);
 
-        void QueueData(const nlohmann::json& data, const RC::StringType& modName);
+        void QueueData(const nlohmann::json& data, const RC::StringType& modName,
+            const std::string& source={});
         void ApplyPendingPatches();
         void ApplyAll();
         void GenerateQuestCancellations();

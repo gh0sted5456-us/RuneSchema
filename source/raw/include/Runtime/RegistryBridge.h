@@ -10,6 +10,7 @@
 #include <vector>
 #include "SDK/WeakObjectHandle.h"
 #include "Runtime/BridgeDiagnostics.h"
+#include "Core/ModDataRelay.h"
 #include "Unreal/Hooks.hpp"
 
 namespace RC::Unreal {
@@ -68,6 +69,7 @@ public:
     GenericAuthorityHandler AuthorityChannel;
     ClientNotificationHandler ClientNotification;
     ClientNotificationHandler PersistentState;
+    std::function<void(const PS::ModDataRelay::Message&)> ModDataReceived;
 
 private:
     struct Contract {
@@ -113,6 +115,10 @@ private:
     uint32_t m_seenActivationRevision = 0;
     uint32_t m_seenPersistentRevision = 0;
     bool m_started = false;
+    PS::ModDataRelay::Server m_modDataRelay;
+    std::unordered_map<std::string,PS::WeakObjectHandle> m_relayPeers;
+    float m_relayElapsed=0;
+    void TickModDataRelay(float deltaSeconds);
     struct AuthorityAction {
         std::string Action;
         std::string DataAsset;
@@ -120,8 +126,15 @@ private:
         std::string GraphClass;
         std::string EntryFunction = "Trigger";
         std::unordered_map<std::string,std::string> Bindings;
+        RC::Unreal::FName EntryName;
+        PS::WeakObjectHandle GraphType;
     };
     std::unordered_map<std::string,AuthorityAction> m_authorityActions;
+    std::vector<RC::Unreal::FName> m_authorityEntryNames;
+    bool AuthorityEntry(RC::Unreal::FName name) const;
+    struct GraphRoutes {PS::WeakObjectHandle Type;std::vector<std::string> Keys;};
+    std::unordered_map<RC::Unreal::UClass*,GraphRoutes> m_authorityGraphRoutes;
+    AuthorityAction* MatchAuthorityGraph(RC::Unreal::UObject* source,RC::Unreal::FName name);
     // Exact cooked asset identities which select an authoritative registry
     // action.  The client resolves these from its live player components at
     // the attack notify boundary; paths are never accepted from the wire.

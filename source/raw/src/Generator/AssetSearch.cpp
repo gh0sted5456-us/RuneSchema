@@ -431,7 +431,7 @@ json LoadoutWindow(const std::string& slot,const std::string& query,std::size_t 
     if(!LoadoutEligibility::Valid(slot)||query.size()>256)throw std::runtime_error("Invalid native slot search");
     static std::vector<std::string> candidates;static std::string activeSlot,activeQuery,scope,coverage;
     const auto current=SpawnToolRequests::Generation.load();
-    const auto currentScope=json::array({current,HelpySourceCache::ForClient().value("CatalogKey",std::string{})}).dump();
+    const auto currentScope=json::array({current,HelpySourceCache::PublishedCatalogKey()}).dump();
     if(offset==0||scope!=currentScope||activeSlot!=slot||activeQuery!=query){
         auto* itemType=Class("assets");if(!itemType)throw std::runtime_error("Native ItemData is not ready");
         TArray<UObject*> items;UECustom::UObjectGlobals::GetObjectsOfClass(itemType,items,true);
@@ -521,6 +521,7 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
     scanBudget=std::clamp<std::size_t>(scanBudget,128,8192);timeBudgetMicros=std::clamp<std::uint64_t>(timeBudgetMicros,100,5000);
     json rows=json::array();std::vector<std::string> queryTokens;std::string categoryFilter,searchQuery=query;
     const auto sourceFilter=ItemSource::TakeFilter(searchQuery);
+    const auto providerFilter=ItemSource::TakeProvider(searchQuery);
     const auto sourcePlan=HelpySourceCache::ItemPlan();const auto nativePlugins=HelpySourceCache::NativePluginRoots();
     constexpr std::string_view categoryPrefix="__helpycat:";
     if(searchQuery.starts_with(categoryPrefix)){const auto split=searchQuery.find(' ');categoryFilter=AssetTemplate::Fold(searchQuery.substr(categoryPrefix.size(),split==std::string::npos?std::string::npos:split-categoryPrefix.size()));searchQuery=split==std::string::npos?std::string{}:searchQuery.substr(split+1);}
@@ -536,7 +537,7 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
     // A verified content census change may reflect a newly mounted package.
     // Re-query live ItemData metadata once for that scope, not on every poll or
     // thumbnail update. This observes mounts; it does not mount/re-register them.
-    const auto metadataScope=json::array({generation,HelpySourceCache::ForClient().value("CatalogKey",std::string{})}).dump();
+    const auto metadataScope=json::array({generation,HelpySourceCache::PublishedCatalogKey()}).dump();
     if(!mountedReady||mountedScope!=metadataScope) {
         if(mountedScope!=metadataScope){mountedReady=false;mountedItems.clear();}
         bool classMetadataReady=false;
@@ -599,7 +600,7 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
             const auto name=QuickDecorations::ReadableAssetName(record.path),category=HelpyBroadItemCategory(nullptr,record.path,name,{},record.type);
             if(!categoryFilter.empty()&&AssetTemplate::Fold(category)!=categoryFilter)continue;
             const auto source=ItemSource::Describe(record.path,sourcePlan,nativePlugins);
-            if(!ItemSource::Matches(sourceFilter,source)||!ItemFamily::Matches(familyFilter,name))continue;
+            if(!ItemSource::Matches(sourceFilter,source,providerFilter)||!ItemFamily::Matches(familyFilter,name))continue;
             if(!matchesTokens(record.path+" "+name+" "+record.type+" "+category))continue;
             auto entry=json{{"StableId",HelpyStableId(record.path)},{"Path",record.path},{"Name",name},{"Class",record.type},{"Category",category},
                 {"Cooked",true},{"Mounted",true},{"Loaded",false},{"Available",true},{"Reason","Mounted ItemData candidate; native fields and inventory compatibility are checked when loaded"}};
@@ -621,7 +622,7 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
             runtimeClone?provenance.value("CreatingMod",std::string{}):std::string{},
             declared.modded.value_or(false)||runtimeClone,!runtimeClone&&AssetMetadata::IsManaged(object),AssetMetadata::Owner(object));
         if((source.Group==ItemSource::Kind::Vanilla||source.Group==ItemSource::Kind::Expansion)&&!object->HasAnyFlags(RF_WasLoaded))source.Group=ItemSource::Kind::Unknown;
-        if(!ItemSource::Matches(sourceFilter,source)||!ItemFamily::Matches(familyFilter,name))continue;
+        if(!ItemSource::Matches(sourceFilter,source,providerFilter)||!ItemFamily::Matches(familyFilter,name))continue;
         if(!queryTokens.empty()&&!matchesTokens(path+" "+internal+" "+name+" "+tags+" "+broadCategory+" "+to_string(object->GetClassPrivate()->GetName())))continue;
         // Reuse this slice's source decision: copying the full mount/owner
         // census again for every schema clone made large mod lists expensive.

@@ -46,13 +46,12 @@ inline void Tree(std::string& result,const fs::path& root,const std::string& lab
     std::sort(files.begin(),files.end());Append(result,std::to_string(files.size()));
     for(const auto& file:files)File(result,file,file.lexically_relative(root).generic_string());
 }
-inline std::string Identity(const fs::path& binary,const fs::path& host,const fs::path& mod,const std::string& version){
-    std::string result;Append(result,"RuneSchemaMappingCompatibility.v2");Append(result,version);
-    File(result,binary,"game executable");File(result,host/"UE4SS.dll","UE4SS");File(result,mod/"dlls/main.dll","RuneSchema");
-    File(result,mod/"mods/runeschema.txt","mod order");File(result,mod/"plugins/plugins.txt","plugin order");
+inline std::string Identity(const fs::path& binary,const fs::path& host,const fs::path&,const std::string& version){
+    std::string result;Append(result,"RuneSchemaMappingCompatibility.v3");Append(result,version);
+    // Runtime/mod updates do not change the game's native save/reflection contract.
+    File(result,binary,"game executable");
     const auto game=host.parent_path().parent_path().parent_path();
     Tree(result,game/"Content/Paks","game containers",false);Tree(result,game/"Plugins","game plugin containers",false);
-    Tree(result,mod/"mods","mod declarations and containers",true);Tree(result,mod/"plugins","plugin declarations and containers",true);
     return result;
 }
 }

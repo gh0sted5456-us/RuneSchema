@@ -47,6 +47,7 @@ inline void DrawItemBadges(const json& row,const ImVec2& min,const ImVec2& max,c
 struct State {
     std::string Query,SelectedPath,ActiveCategory{"All"};
     ItemSource::Kind SourceFilter=ItemSource::Kind::All;
+    std::string SourceProvider;
     std::string FamilyKey,PendingFamilyKey;
     bool FavoritesOnly=false;std::string PersonalTag;
     uint64_t PersonalRevision=~uint64_t{};
@@ -149,7 +150,26 @@ struct Result {
 };
 inline std::string Lower(std::string value){for(auto& c:value)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));return value;}
 inline std::string BackendQuery(const State& state){const auto query=HelpyPersonalization::QueryUsesLabels(state.Query)?std::string{}:state.Query;return ItemSource::Query(state.SourceFilter,state.ActiveCategory,
-    state.FamilyKey.empty()?query:"__helpyfamily:"+state.FamilyKey+(query.empty()?std::string{}:" "+query));}
+    state.FamilyKey.empty()?query:"__helpyfamily:"+state.FamilyKey+(query.empty()?std::string{}:" "+query),state.SourceProvider);}
+inline std::string ProviderLabel(const std::string& provider){
+    const auto kind=ItemSource::Decode(provider);const auto name=provider.substr(provider.find('/')+1);
+    if(kind==ItemSource::Kind::Modded){
+        const auto nickname=HelpyPersonalization::Nickname(HelpyPersonalization::ModKey(name));if(!nickname.empty())return nickname;
+        const auto found=HelpySourceCache::Current.DisplayNames.find(name);if(found!=HelpySourceCache::Current.DisplayNames.end())return found->second;
+    }
+    return ItemSource::DisplayName({kind,name});
+}
+inline std::vector<std::pair<std::string,std::string>> ProviderChoices(const json& catalog){
+    std::set<std::string> providers;
+    const auto add=[&](const std::string& value){if(providers.size()<1024&&value!="core"&&ContentSource::Valid(value))providers.insert(HelpyCacheSources::Lower(value));};
+    const auto& snapshot=HelpySourceCache::Current;
+    for(const auto& [owner,label]:snapshot.DisplayNames)add(ContentSource::Mod(owner));
+    for(const auto& plugin:snapshot.NativePlugins)add("plugins/"+plugin);
+    for(const auto& [file,container]:snapshot.Containers.items())if(container.value("Status",std::string{})=="Indexed")add(container.value("Owner",std::string{}));
+    if(const auto rows=catalog.find("Items");rows!=catalog.end()&&rows->is_array())for(const auto& row:*rows)add(ItemSource::Provider(ItemSource::Row(row)));
+    std::vector<std::pair<std::string,std::string>> choices;for(const auto& provider:providers)choices.emplace_back(provider,ProviderLabel(provider));
+    std::sort(choices.begin(),choices.end(),[](const auto& a,const auto& b){return ItemNameOrder::Key(a.second,a.first)<ItemNameOrder::Key(b.second,b.first);});return choices;
+}
 inline int MaxStack(const json& row){try{const auto it=row.find("MaxStackSize");if(it!=row.end()){if(it->is_number_integer())return std::clamp(it->get<int>(),1,10000);if(it->is_number_unsigned())return std::clamp(static_cast<int>(it->get<unsigned>()),1,10000);if(it->is_number_float())return std::clamp(static_cast<int>(it->get<double>()),1,10000);}}catch(...){}return 1;}
 inline const json* Find(const json& catalog,const char* selected) {
     if(!selected||!*selected||!catalog.contains("Items")||!catalog["Items"].is_array())return nullptr;
@@ -174,7 +194,7 @@ inline void Rebuild(const json& catalog,State& state,uint64_t revision) {
         const auto& row=items[i];
         if(!row.is_object())continue;
         if(!HelpyImGuiTheme::Current.itemShowPlaceholders&&ItemPresentation::Placeholder(row))continue;
-        if(!ItemSource::Matches(state.SourceFilter,ItemSource::Row(row))||!ItemFamily::Matches(state.FamilyKey,ItemPresentation::OriginalName(row))||!PersonalizationPanel::Matches(row,state.FavoritesOnly,state.PersonalTag))continue;
+        if(!ItemSource::Matches(state.SourceFilter,ItemSource::Row(row),state.SourceProvider)||!ItemFamily::Matches(state.FamilyKey,ItemPresentation::OriginalName(row))||!PersonalizationPanel::Matches(row,state.FavoritesOnly,state.PersonalTag))continue;
         if(state.ActiveCategory!="All"&&ItemCategory::Resolve(row)!=state.ActiveCategory)continue;
         const auto labels=HelpyPersonalization::SearchText(row);if(labels.empty()){if(query(row))state.Matches.push_back(i);}else{auto searchable=row;searchable["Tags"]=ItemPresentation::Text(row,"Tags")+" "+labels;if(query(searchable))state.Matches.push_back(i);}
     }
@@ -315,20 +335,22 @@ inline void RenderDetailsPopup() {
         if(ImGui::GetIO().MouseWheel!=0)ImGui::SetScrollY(std::clamp(ImGui::GetScrollY()-ImGui::GetIO().MouseWheel*ImGui::GetTextLineHeight()*3,0.0f,ImGui::GetScrollMaxY()));
         popup.Min=ImGui::GetWindowPos();const auto size=ImGui::GetWindowSize();popup.Max={popup.Min.x+size.x,popup.Min.y+size.y};
         SourceBanners::Draw(popup.Row,popup.Min,popup.Max);
-        ImGui::PushTextWrapPos(ImGui::GetCursorPosX()+content);ImGui::TextWrapped("%s",title.c_str());
-        if(!HelpyPersonalization::Nickname(HelpyPersonalization::ItemKey(row)).empty())ImGui::TextDisabled("{%s}",ItemPresentation::OriginalName(row).c_str());
-        ImGui::TextDisabled("Source: %s",ItemSource::DisplayName(itemSource).c_str());
-        if(!category.empty())ImGui::TextDisabled("%s",category.c_str());
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX()+content);HelpyImGuiTheme::DetailsTextUnformatted(title.c_str());
+        if(!HelpyPersonalization::Nickname(HelpyPersonalization::ItemKey(row)).empty())HelpyImGuiTheme::DetailsTextDisabled("{%s}",ItemPresentation::OriginalName(row).c_str());
+        HelpyImGuiTheme::DetailsTextDisabled("Source: %s",ItemSource::DisplayName(itemSource).c_str());
+        for(const auto& container:itemSource.Containers)HelpyImGuiTheme::DetailsText("PAK: %s",std::filesystem::path(container).filename().string().c_str());
+        if(itemSource.Containers.size()>1)HelpyImGuiTheme::DetailsTextDisabled("Multiple suppliers; mount precedence unverified.");
+        if(!category.empty())HelpyImGuiTheme::DetailsTextDisabled("%s",category.c_str());
         if(power){const auto pos=ImGui::GetCursorScreenPos();const float size=theme.Y(28);auto badge=row;badge["PowerLevel"]=*power;badge["Masterwork"]=false;DrawItemBadges(badge,pos,{pos.x+size,pos.y+size},theme);ImGui::Dummy({size,size});ImGui::SameLine();ImGui::Text("Power level %.0f",*power);}
-        if(ItemBadges::Masterwork(row))ImGui::TextColored(theme.accentHover,"Masterwork");
-        if(!description.empty()){ImGui::Separator();ImGui::TextWrapped("%s",description.c_str());}
+        if(ItemBadges::Masterwork(row))HelpyImGuiTheme::DetailsTextColored(theme.accentHover,"Masterwork");
+        if(!description.empty()){ImGui::Separator();HelpyImGuiTheme::DetailsTextUnformatted(description.c_str());}
         if(!facts.empty()){ImGui::Separator();if(ImGui::BeginTable("##native-item-facts",2,ImGuiTableFlags_SizingFixedFit,ImVec2(content,0))){
             ImGui::TableSetupColumn("Property",ImGuiTableColumnFlags_WidthFixed,labelColumn);ImGui::TableSetupColumn("Value",ImGuiTableColumnFlags_WidthFixed,valueColumn);
             for(const auto& fact:facts){ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::PushStyleColor(ImGuiCol_Text,theme.textDisabled);ImGui::PushTextWrapPos(0);ImGui::TextWrapped("%s",fact.Label.c_str());ImGui::PopTextWrapPos();ImGui::PopStyleColor();ImGui::TableNextColumn();ImGui::PushTextWrapPos(0);ImGui::TextWrapped("%s",fact.Value.c_str());ImGui::PopTextWrapPos();}ImGui::EndTable();}}
-        if(popup.Path.empty())ImGui::TextWrapped("Saved identity is unresolved. Load its source content to retrieve native stats; no item path is guessed.");
-        else if(!entry)ImGui::TextWrapped("%s",SpawnToolRequests::IsAvailable()?"Loading native details...":"Load a world for native details.");else if(!entry->Error.empty())ImGui::TextWrapped("%s",entry->Error.c_str());
-        if(theme.verboseTooltips){ImGui::Separator();ImGui::TextWrapped("%s",popup.Path.c_str());}
-        if(!popup.Fits)ImGui::TextWrapped("Item path exceeds the supported field size.");ImGui::PopTextWrapPos();
+        if(popup.Path.empty())HelpyImGuiTheme::DetailsTextUnformatted("Saved identity is unresolved. Load its source content to retrieve native stats; no item path is guessed.");
+        else if(!entry)HelpyImGuiTheme::DetailsText("%s",SpawnToolRequests::IsAvailable()?"Loading native details...":"Load a world for native details.");else if(!entry->Error.empty())HelpyImGuiTheme::DetailsTextUnformatted(entry->Error.c_str());
+        if(theme.verboseTooltips){ImGui::Separator();HelpyImGuiTheme::DetailsTextUnformatted(popup.Path.c_str());}
+        if(!popup.Fits)HelpyImGuiTheme::DetailsTextUnformatted("Item path exceeds the supported field size.");ImGui::PopTextWrapPos();
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::TooltipScroll=ImGui::GetScrollY();HelpyPreviewHooks::TooltipScrollMax=ImGui::GetScrollMaxY();HelpyPreviewHooks::TooltipPath=popup.Path;HelpyPreviewHooks::TooltipFacts=facts.size();HelpyPreviewHooks::Tooltip={popup.Min.x,popup.Min.y,popup.Max.x,popup.Max.y};
 #endif
@@ -521,7 +543,8 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
         if(!localCatalog)LazyCatalog::Search(0,BackendQuery(state));
     }
     const auto sourcePreference=ItemSource::Decode(HelpyImGuiTheme::Current.itemSource);
-    if(!localCatalog&&state.SourceFilter!=sourcePreference){state.SourceFilter=sourcePreference;state.CatalogRevision=0;state.Matches.clear();state.PageIndex=0;state.ResetScroll=true;LazyCatalog::Search(0,BackendQuery(state));}
+    const auto providerPreference=ContentSource::Valid(HelpyImGuiTheme::Current.itemSource)?HelpyImGuiTheme::Current.itemSource:std::string{};
+    if(!localCatalog&&(state.SourceFilter!=sourcePreference||state.SourceProvider!=providerPreference)){state.SourceFilter=sourcePreference;state.SourceProvider=providerPreference;state.CatalogRevision=0;state.Matches.clear();state.PageIndex=0;state.ResetScroll=true;LazyCatalog::Search(0,BackendQuery(state));}
     const auto& theme=HelpyImGuiTheme::Current;if(!localCatalog&&state.ActiveCategory!=theme.itemCategory){state.ActiveCategory=theme.itemCategory;state.Matches.clear();state.CatalogRevision=0;state.PageIndex=0;state.ResetScroll=true;}
     if(state.ShowPlaceholders!=theme.itemShowPlaceholders){state.ShowPlaceholders=theme.itemShowPlaceholders;state.PageIndex=0;state.ResetScroll=true;Rebuild(catalog,state,revision);}
     if(state.PageSize!=theme.itemPageSize){state.PageIndex=ItemPaging::Resize(state.PageIndex,state.PageSize,theme.itemPageSize);state.PageSize=ItemPaging::Size(theme.itemPageSize);state.ResetScroll=true;}
@@ -549,15 +572,29 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
         }ImGui::EndCombo();
     }
     inlineControl(sourceWidth);ImGui::SetNextItemWidth(sourceWidth);
-    if(ImGui::BeginCombo("##item-source",ItemSource::Label(state.SourceFilter))){
+    const auto sourceLabel=state.SourceProvider.empty()?std::string(ItemSource::Label(state.SourceFilter)):ProviderLabel(state.SourceProvider);
+    if(ImGui::BeginCombo("##item-source",sourceLabel.c_str())){
         for(const auto kind:{ItemSource::Kind::All,ItemSource::Kind::Vanilla,ItemSource::Kind::Expansion,ItemSource::Kind::Modded,ItemSource::Kind::Unknown}){
-            if(ImGui::Selectable(ItemSource::Label(kind),state.SourceFilter==kind)){
-                state.SourceFilter=kind;HelpyImGuiTheme::Current.itemSource=ItemSource::Token(kind);HelpyImGuiTheme::SaveCurrent();
+            if(ImGui::Selectable(ItemSource::Label(kind),state.SourceProvider.empty()&&state.SourceFilter==kind)){
+                state.SourceFilter=kind;state.SourceProvider.clear();HelpyImGuiTheme::Current.itemSource=ItemSource::Token(kind);HelpyImGuiTheme::SaveCurrent();
                 state.PageIndex=0;state.ResetScroll=true;LazyCatalog::Search(0,BackendQuery(state));state.Matches.clear();state.CatalogRevision=0;
             }
 #if defined(HELPY_PREVIEW)
             HelpyPreviewHooks::SourceOptions[ItemSource::Token(kind)]=HelpyPreviewHooks::LastRect();
 #endif
+        }
+        ImGui::Separator();
+        for(const auto& [provider,label]:ProviderChoices(catalog)){
+            ImGui::PushID(provider.c_str());
+            if(ImGui::Selectable(label.c_str(),state.SourceProvider==provider)){
+                state.SourceProvider=provider;state.SourceFilter=ItemSource::Decode(provider);HelpyImGuiTheme::Current.itemSource=provider;HelpyImGuiTheme::SaveCurrent();
+                state.PageIndex=0;state.ResetScroll=true;LazyCatalog::Search(0,BackendQuery(state));state.Matches.clear();state.CatalogRevision=0;
+            }
+            if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip(provider.c_str());
+#if defined(HELPY_PREVIEW)
+            HelpyPreviewHooks::SourceOptions[provider]=HelpyPreviewHooks::LastRect();
+#endif
+            ImGui::PopID();
         }
         ImGui::EndCombo();
     }

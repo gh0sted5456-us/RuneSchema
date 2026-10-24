@@ -12,7 +12,7 @@ int main()
     registry.Journals.insert("known-journal");
     registry.JournalsComplete = true;
     registry.Quests.insert("baseline-quest");
-    registry.QuestsComplete = true;
+    registry.QuestsComplete = true; registry.QuestCompletedState=2;
 
     const Json source = {{"GameProgress", {
         {"Inventory", {
@@ -47,6 +47,26 @@ int main()
         throw std::runtime_error("Identity-only cleanup is not idempotent");
     if (!Plan(cleaned.Save, {}, false, &registry, false, true, true).Removed.empty())
         throw std::runtime_error("Cleanup scheduled writes without orphaned IDs");
+    {
+        const std::string ashhide="yeS5-wOLGnik8eiTrnEodA";
+        for(int phase:{1,2,3}){
+            auto counters=DragonWilds::Quests::OwnershipVariables("JobBoardStarterQuests",ashhide);
+            counters.push_back({{"QuestVariableName","RuneSchema.Phase"},{"QuestVariableValue",phase}});
+            counters.push_back({{"QuestVariableName","RuneSchema.Location:ashhide-arena"},{"QuestVariableValue",7001}});
+            auto active=source;active["GameProgress"]["QuestProgress"]={{"QuestTracked",ashhide},
+                {"Quests",Json::array({{{"QuestId",ashhide},{"QuestState",1},{"QuestInts",counters}},{{"QuestId","baseline-quest"},{"QuestInts",Json::array()}}})},
+                {"QuestLocations",Json::array({{{"QuestLocationId","ashhide-arena"}},{{"QuestLocationId","native-location"}}})}};
+            const auto pruned=Plan(active,{},false,&registry,false,true,true);const auto& progress=pruned.Save["GameProgress"]["QuestProgress"];
+            if(progress["Quests"].size()!=1||progress["Quests"][0]["QuestId"]!="baseline-quest"||progress["QuestTracked"]!=""||progress["QuestLocations"].size()!=1)
+                throw std::runtime_error("Disabled Ashhide quest remained active or unrelated progress was removed");
+            auto enabled=registry;enabled.Quests.insert(ashhide);
+            if(Plan(active,{},false,&enabled,false,true,true).Save["GameProgress"]["QuestProgress"]!=active["GameProgress"]["QuestProgress"])
+                throw std::runtime_error("Enabled active Ashhide quest was pruned");
+            PS::RegistryEnrollment::Await("quest:JobBoardStarterQuests:bounty_ashhide",PS::RegistryEnrollment::IdentityKind::Quest,ashhide);
+            if(IsOrphanQuest(ashhide,registry))throw std::runtime_error("Pending enabled quest treated as orphan");
+            PS::RegistryEnrollment::Complete("quest:JobBoardStarterQuests:bounty_ashhide");
+        }
+    }
 
     // A failure discovered after a snapshot was published invalidates that
     // snapshot too. Missing registrations must never look like removed mods.
@@ -65,6 +85,35 @@ int main()
     if(ReadRegistry())throw std::runtime_error("Unhealthy enrollment published a cleanup authority");
     PS::RegistryEnrollment::Reset();
     if(!registry.Ready())throw std::runtime_error("Fresh initialization did not reset the failure veto");
+
+    {
+        auto mixed=source;
+        auto& quests=mixed["GameProgress"]["QuestProgress"];
+        quests["QuestTracked"]="completed";
+        const auto completed=Json{{"QuestId","completed"},{"QuestState",2},{"QuestInts",Json::array()}};
+        quests["Quests"]=Json::array({completed,"opaque row",{{"QuestId","orphan"},{"QuestState",1},{"QuestInts",Json::array()}},
+            {{"QuestId","finished-phase"},{"QuestInts",Json::array({{{"QuestVariableName","RuneSchema.Phase"},{"QuestVariableValue",4}}})}}});
+        const auto result=PlanAvailable(mixed,registry);
+        const auto& progress=result.Save["GameProgress"]["QuestProgress"];
+        if(progress["Quests"].size()!=3||progress["Quests"][0]!=completed||progress["QuestTracked"]!="completed")
+            throw std::runtime_error("Completed or uncertain rows stalled incomplete quest pruning or were erased");
+        if(PlanAvailable(result.Save,registry).Save!=result.Save)throw std::runtime_error("Partial cleanup is not idempotent");
+
+        PS::RegistryEnrollment::Reject("recipe","unavailable recipe registry",PS::RegistryEnrollment::IdentityKind::Recipe);
+        const auto partial=PlanAvailable(source,registry);
+        if(partial.Save["GameProgress"]["Inventory"].contains("1")||partial.Save["GameProgress"]["Progress"]!=source["GameProgress"]["Progress"]||partial.Skipped.empty())
+            throw std::runtime_error("Unrelated recipe failure stopped item cleanup or authorized recipe deletion");
+        PS::RegistryEnrollment::Reset();
+        auto malformed=source;malformed["GameProgress"]["QuestProgress"]="unsupported";
+        malformed["GameProgress"]["Progress"]["RecipesNew"]="unsupported";
+        const auto independent=PlanAvailable(malformed,registry);
+        if(independent.Save["GameProgress"]["Inventory"].contains("1")||independent.Save["GameProgress"]["QuestProgress"]!="unsupported"
+            ||independent.Save["GameProgress"]["Progress"]["RecipesNew"]!="unsupported"||independent.Save["GameProgress"]["Progress"]["RecipesUnlocked"]!=Json::array({"recipe0"}))
+            throw std::runtime_error("Malformed section rolled back another verified cleanup");
+        auto itemOnly=registry;itemOnly.RecipesComplete=false;itemOnly.QuestsComplete=false;
+        if(!itemOnly.AnyCleanable()||PlanAvailable(source,itemOnly).Save["GameProgress"]["Inventory"].contains("1"))
+            throw std::runtime_error("Incomplete unrelated registry remained a global cleanup barrier");
+    }
 
     auto earlyRegistry = registry;
     earlyRegistry.QuestsComplete = false;

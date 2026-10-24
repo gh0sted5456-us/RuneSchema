@@ -22,12 +22,13 @@ int main(int argc,char** argv){
     const auto key=[&]{return Identity(binary,host,mod,"game-version");};const auto original=key();assert(key()==original);
     write(mod/"mods/Dye/cache/item.json","cached metadata");write(mod/"mods/Dye/art.png","art");assert(key()==original);
     write(mod/"runtime/live/saved/cache/mappings/automatic/generated.usmap","mapping");assert(key()==original);
-    write(mod/"mods/Dye/paks/Dye.PAK","pak");const auto pak=key();assert(pak!=original);
-    write(mod/"mods/Dye/registry/dependencies.jsonc","declarations");const auto declarations=key();assert(declarations!=pak);
-    write(mod/"mods/runeschema.txt","Dye : 0");const auto order=key();assert(order!=declarations);
-    write(root/"Game/Content/Paks/patch.utoc","game update");const auto game=key();assert(game!=order);
-    write(host/"UE4SS.dll","ue4ss update");const auto framework=key();assert(framework!=game);
-    write(mod/"dlls/main.dll","runeschema update");assert(key()!=framework);
+    write(mod/"mods/Dye/paks/Dye.PAK","pak");assert(key()==original);
+    write(mod/"mods/Dye/registry/dependencies.jsonc","declarations");assert(key()==original);
+    write(mod/"mods/runeschema.txt","Dye : 0");write(mod/"plugins/plugins.txt","Helpy : 1");assert(key()==original);
+    write(host/"UE4SS.dll","ue4ss update");write(mod/"dlls/main.dll","runeschema update");assert(key()==original);
+    write(root/"Game/Content/Paks/patch.utoc","game update");const auto game=key();assert(game!=original);
+    write(root/"Game/Plugins/NativeFeature/Content/Paks/Native.utoc","native game plugin update");const auto feature=key();assert(feature!=game);
+    write(binary,"updated game executable");assert(key()!=feature);
     assert(Identity(binary,host,mod,"another-game-version")!=key());
     assert(Input("Content.UCAS",false)&&!Input("art.png",true)&&!Input("data.json",false)&&Input("data.JSONC",true));
 }

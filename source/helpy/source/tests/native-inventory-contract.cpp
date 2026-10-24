@@ -14,11 +14,15 @@ int main(int argc,char**argv){
     const auto markers=Read(root/"raw/include/SDK/Helper/NativeInventoryMarks.h");
     for(const auto* proof:{"CycleMark","NativeInventoryMarkClick","IsPressed","IsHovered","GetCurrentThreadId()!=Thread","Item(hovered->Slot.Get(),controller,character)",
         "copies!=1","owner.Object()!=controller","if(copies!=1)","created>=8","budget=16","milliseconds(100)","ClearRootSet",
-        "VK_MBUTTON","MiddleClick.Step(middleDown,middleKey)","itemHover(marker.Slot.Get()","if(down&&middleDown)","CancelClicks()"})
+        "InventoryMarkInput.Take(now)","Poll.Due(now,down,!inputEvents.empty(),Discover||!WasActive)","InventoryMarkInput.Publish(itemKey,now)","bIsMousedOver","event.Target==itemKey","CancelClicks()","inventory-controls.json","SaveControls()","NoDrawType","HAlign_Right"})
         Check((markers+widgets).find(proof)!=std::string::npos,"Inventory marks must consume only their own button clicks, revalidate stack ownership and bound UI work");
     for(const auto* forbidden:{"OnItemUsed","PreventOriginalFunctionCall","DestroyItemFromInventory","UseItem","AddToViewport","ForEachUObject"})
         Check(markers.find(forbidden)==markers.npos,"Inventory marking must not intercept item actions, delete items or create an extra menu");
     Check(!markers.contains("PlayerInventoryScrap"),"Favorites must not depend on Scrap");
+    Check(!markers.contains("StackSizeText")&&!markers.contains("MiddleClick.Step"),"Marker glyphs must not use the game stack-count font or double-handle MMB");
+    const auto input=Read(root/"raw/src/dllmain.cpp");
+    Check(input.contains("register_keydown_event")&&input.contains("PS::InventoryMarkInput.Push(key,modifiers)")&&input.contains("process==GetCurrentProcessId()"),"Input must use owned UE4SS registrations and queue copied events only while the game is foreground");
+    Check(!markers.contains("clearStoredFavorites")&&!markers.contains("ClearStoredFavorites"),"Marks must survive storage moves");
     const auto quick=Read(root/"helpy/source/include/Generator/RuneSchemaSettingsPanel.h");
     Check(quick.find("Extend Helpy Favorites to Game")==quick.npos,"Favorites are a built-in feature, not a Quick Settings toggle");
     const auto saves=Read(root/"raw/src/Generator/CharacterSaveEditor.inl");

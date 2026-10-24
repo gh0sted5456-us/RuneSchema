@@ -12,6 +12,7 @@ json LastQuery,LastSubmission,HostSnapshot={{"Players",json::array({{{"Path","/P
 uint64_t HostGeneration=41,HostRevision=8;
 bool ThrowHost=false;
 unsigned SettingsWrites=0;
+unsigned IconManifestReads=0;
 std::map<std::string,unsigned> GuardedCalls;
 json SettingsDoc={{"advancedLogging",false},{"persistence",{{"allowCorruptCharacterEntry",false}}},{"future",std::string(10000,'x')}};
 PS::HelpyAuthoring::Session AuthoringHost;
@@ -33,6 +34,11 @@ int32_t RS_PLUGIN_CALL HostCall(const char*,const char* service,const char* inpu
         reply={{"Ok",true},{"Document",SettingsDoc},{"Editable",{{"/advancedLogging",false},{"/persistence/allowCorruptCharacterEntry",false}}},
             {"ExpectedContents","fixture-contents"},{"Status","Saved for next launch"}};
     }
+    else if(action=="IconCacheSources"){
+        ++IconManifestReads;
+        reply={{"Version",4},{"Ready",true},{"Authoritative",true},{"PlanRevision",1},{"ContentRevision",1},
+            {"Key","0123456789abcdef"},{"Sources",{{"game","abcdef0123456789"}}},{"Padding",std::string(20000,'x')}};
+    }
     else if(request["Action"]=="AuthoringSnapshot")reply=AuthoringHost.Snapshot(request.value("Revision",uint64_t{}));
     else if(request["Action"]=="AuthoringSubmit")reply=AuthoringHost.Submit(request.at("Request"));
     else if(request["Action"]=="AuthoringActivate")reply=AuthoringHost.Activate();
@@ -52,12 +58,20 @@ int32_t RS_PLUGIN_CALL HostCall(const char*,const char* service,const char* inpu
 int main(){
     {
         auto preferences=PS::HelpyImGuiTheme::Theme{};preferences.runtimeTimeUnit=3;preferences.backgroundFile="Scene.png";preferences.backgroundStrength=.2f;
+        preferences.diagnosticToastsEnabled=false;preferences.diagnosticToastLimit=2;preferences.diagnosticHistoryDays=7;preferences.diagnosticSplitRatio=.6f;preferences.diagnosticDeveloperMode=true;
         const auto document=PS::HelpyImGuiTheme::DocumentFrom(preferences,200);
         assert(document["runtime"]["timeUnit"]==3&&document["background"]["file"]=="Scene.png"&&document["background"]["strength"].get<float>()==.2f);
+        assert(!document["notifications"]["enabled"].get<bool>()&&document["notifications"]["visibleLimit"]==2&&document["diagnosticHistory"]["ageDays"]==7);
+        assert(document["diagnosticPresentation"]["splitRatio"].get<float>()==.6f&&document["diagnosticPresentation"]["developerMode"].get<bool>());
         assert(PS::HelpyImGuiTheme::DefaultDocument()["runtime"]["timeUnit"]==0&&PS::HelpyImGuiTheme::DefaultDocument()["background"]["file"]=="");
     }
     PS::HelpyEnvironment::Configure({{"DedicatedServer",true}});
     RuneSchemaHostApi host{};host.CallService=HostCall;State state{&host};ConfigureTransport(&state);
+    {json manifest;assert(PS::HelpySourceCache::RemoteSnapshot(manifest)&&manifest.at("Padding").get<std::string>().size()==20000&&IconManifestReads==2);
+        PS::HelpySourceCache::Current.Provisional=true;PS::HelpySourceCache::CachedSourcesAttempted=true;PS::HelpySourceCache::Next={};
+        assert(PS::HelpySourceCache::Poll({})&&PS::HelpySourceCache::Ready()&&!PS::HelpySourceCache::Current.Provisional);
+        assert(PS::HelpySourceCache::Fingerprint("/Game/UI/T_Power.T_Power")=="abcdef0123456789");
+        PS::HelpySourceCache::Current={};}
     for(const auto* action:{"ModsRead","ModsSave","ModsImport","QuickLoadSave","AdditionalLoggingSave"}){
         json reply;assert(CallCore(&state,{{"Action",action}},reply)&&reply.at("Ok")==true&&reply.at("Root")=="D:/XboxGames/Active/RuneSchema");assert(GuardedCalls[action]==1);
     }
@@ -94,6 +108,19 @@ int main(){
     auto sourceSnapshot=push(json::array({{{"Path","/Dye/Helm.Helm"},{"Name","Fallen Hoplite's Helm (Dyed Chrome)"},{"Category","Armor"},{"SourceKind","modded"},{"SourceName","Dye"}}}),false,"done");
     PS::ItemGridPicker::Rebuild(sourceSnapshot,filterState,1);
     assert(filterState.Matches.size()==1&&PS::ItemSource::Row(sourceSnapshot["Items"][0]).Name=="Dye");
+    {
+        const auto savedSources=PS::HelpySourceCache::Current;
+        PS::HelpySourceCache::Current.DisplayNames={{"dye","Colorful Dye"},{"not-on-this-page","Unloaded Mod"}};
+        PS::HelpySourceCache::Current.Containers={{"mods/dye/paks/Colors_P.utoc",{{"Owner","mods/dye"},{"Status","Indexed"}}}};
+        const auto choices=PS::ItemGridPicker::ProviderChoices(sourceSnapshot);
+        assert(std::find(choices.begin(),choices.end(),std::pair<std::string,std::string>{"mods/dye","Colorful Dye"})!=choices.end());
+        assert(std::find(choices.begin(),choices.end(),std::pair<std::string,std::string>{"mods/not-on-this-page","Unloaded Mod"})!=choices.end());
+        filterState.SourceProvider="mods/dye";
+        assert(PS::ItemCatalogFilter::Query(PS::ItemGridPicker::BackendQuery(filterState))(sourceSnapshot["Items"][0]));
+        PS::ItemGridPicker::Rebuild(sourceSnapshot,filterState,2);assert(filterState.Matches.size()==1);
+        filterState.SourceProvider="mods/other";PS::ItemGridPicker::Rebuild(sourceSnapshot,filterState,3);assert(filterState.Matches.empty());
+        filterState.SourceProvider.clear();PS::HelpySourceCache::Current=savedSources;
+    }
     PS::ItemGridPicker::State orderedState;
     json unordered={{"Items",json::array({{{"Path","/Game/Z"},{"Name","Zinc"}},{{"Path","/Mod/B"},{"Name","apple"}},{{"Path","/Game/A"},{"Name","Apple"}},{{"Path","/Game/B"},{"Name","Bronze"}}})}};
     PS::ItemGridPicker::Rebuild(unordered,orderedState,2);

@@ -2,11 +2,12 @@
 #include <iterator>
 #include <stdexcept>
 #include <string>
+#include <cstdio>
 static std::string Read(const char* path){std::ifstream f(path);if(!f)throw std::runtime_error("source unavailable");return {std::istreambuf_iterator<char>(f),{}};}
 int main(int argc,char** argv){
     if(argc!=7)throw std::runtime_error("registrar, provenance, quest service, main loader, pruner, and asset loader sources required");
     const auto registrar=Read(argv[1]),provenance=Read(argv[2]),quests=Read(argv[3]),mainLoader=Read(argv[4]),pruner=Read(argv[5]),assetLoader=Read(argv[6]);
-    const auto need=[](bool ok,const char* text){if(!ok)throw std::runtime_error(text);};
+    const auto need=[](bool ok,const char* text){if(!ok){std::fprintf(stderr,"FAIL: %s\n",text);throw std::runtime_error(text);}};
     need(registrar.find("RegisterProcessEventPostCallback")!=registrar.npos
         &&registrar.find("if(!gameplayPayload)")!=registrar.npos
         &&registrar.find("parameters!=m_nativePolicyParameters")!=registrar.npos
@@ -49,8 +50,8 @@ int main(int argc,char** argv){
         && registrar.find("PruneCharacterBackups(path)")!=registrar.npos
         && registrar.find("[PERSISTENCE-BACKUP][PRUNED]")!=registrar.npos,
         "RuneSchema character backups are not deduplicated and retention bounded");
-    need(pruner.find("SaveCleanup::Plan(")!=pruner.npos
-        && pruner.find("registry.get(), false, true, true")!=pruner.npos,
+    need(pruner.find("SaveCleanup::PlanAvailable(")!=pruner.npos
+        && pruner.find("cleaned.Save, *registry")!=pruner.npos,
         "pruning is not driven by the completed native registry");
     need(registrar.find("snapshot.Items")!=registrar.npos
         && registrar.find("snapshot.Recipes")!=registrar.npos
@@ -103,8 +104,8 @@ int main(int argc,char** argv){
         && registrar.find("EnsureCharacterJsonPreflightHook")==registrar.npos
         && registrar.find("ForEachUObject")==registrar.npos,
         "registry refresh still performs repeated global native-hook discovery");
-    const auto readyGate=pruner.find("if (!registry || !registry->Ready())");
-    const auto plan=pruner.find("SaveCleanup::Plan(",readyGate);
+    const auto readyGate=pruner.find("if (!registry || !registry->AnyCleanable())");
+    const auto plan=pruner.find("SaveCleanup::PlanAvailable(",readyGate);
     need(readyGate!=pruner.npos && plan!=pruner.npos && readyGate<plan
         && pruner.find("Every incoming gameplay payload is checked")!=pruner.npos,
         "every character load must be checked after certified registry readiness, without a process-wide one-shot");
@@ -134,9 +135,9 @@ int main(int argc,char** argv){
         && registrar.find("PublishRegistry({});\n                return;")!=registrar.npos,
         "character cleanup can consume an unsettled registry snapshot");
     need(registrar.find("const auto registered = RegisterMissing")!=registrar.npos
-        && registrar.find("if (binding.CleanupAuthority)")!=registrar.npos
-        && registrar.find("registrationsComplete = registered && registrationsComplete")!=registrar.npos
-        && registrar.find("itemsReady && recipesReady && registrationsComplete")!=registrar.npos
+        && registrar.find("const bool cleanBinding=foundSubsystem&&foundIdentityMap&&bindingVerified")!=registrar.npos
+        && registrar.find("itemsReady=itemsReady&&cleanBinding")!=registrar.npos
+        && registrar.find("snapshot.AnyCleanable()")!=registrar.npos
         && registrar.find("primary persistence registry rejected the asset")!=registrar.npos
         && registrar.find("network registry rejected the asset")!=registrar.npos
         && registrar.find("does not round-trip to one live data asset")!=registrar.npos
@@ -193,7 +194,7 @@ int main(int argc,char** argv){
         && registrar.find("mounted_records={}")!=registrar.npos
         && registrar.find("FailureDetailLimit = 12")!=registrar.npos
         && registrar.find("m_pakDiscoveryComplete")==registrar.npos
-        && registrar.find("registrationsComplete = true")!=registrar.npos,
+        && registrar.find("snapshot.ItemsComplete=itemsReady")!=registrar.npos,
         "mounted persistence assets are not bounded, condensed, and loaded before registry sealing");
     need(registrar.find("[LIFECYCLE][COMBAT-COMPONENT][READY]")!=registrar.npos
         && registrar.find("Hook::RegisterProcessEventPostCallback")!=registrar.npos
@@ -222,17 +223,21 @@ int main(int argc,char** argv){
         "baseline recovery is missing or old snapshot replacement machinery returned");
     need(registrar.find("m_pruner.PruneBeforeCharacterLoad")!=registrar.npos
         && pruner.find("PruneCharacterJson(value,&prepared)")!=pruner.npos
-        && registrar.find("SaveCleanup::Plan(source")!=registrar.npos
+        && registrar.find("SaveCleanup::PlanAvailable(source")!=registrar.npos
         && registrar.find("startupRegistry.QuestsComplete = false")!=registrar.npos
         && registrar.find("startupRegistry.JournalsComplete = false")!=registrar.npos
-        && registrar.find("&startupRegistry, false, true, true")!=registrar.npos,
+        && registrar.find("source,startupRegistry")!=registrar.npos,
         "startup and provider-boundary pruning do not share the unresolved-only plan");
     const auto reflectedPreflight=pruner.find("bool PersistencePruner::PruneBeforeCharacterLoad");
+    const auto characterFilter=registrar.substr(registrar.find("static bool IsCharacterJsonLoadFunction"),registrar.find("static bool IsCombatComponentReadyFunction")-registrar.find("static bool IsCharacterJsonLoadFunction"));
+    need(characterFilter.find("static const FName playerState")!=characterFilter.npos&&characterFilter.find("return name==playerState")!=characterFilter.npos,"global character hook must cache its name keys");
+    const auto combatFilter=registrar.substr(registrar.find("static bool IsCombatComponentReadyFunction"),registrar.find("static void RememberRecoveryBinding")-registrar.find("static bool IsCombatComponentReadyFunction"));
+    need(combatFilter.find("if(name!=restart&&name!=inventory&&name!=personal)return false")<combatFilter.find("GetPathName()"),"unrelated Lua/UI events must not allocate a full function path in the combat hook");
     const auto directPreflight=pruner.find("std::size_t PersistencePruner::PruneCharacterJson");
-    const auto registryGuard=pruner.find("if (!registry || !registry->Ready())",reflectedPreflight);
+    const auto registryGuard=pruner.find("if (!registry || !registry->AnyCleanable())",reflectedPreflight);
     need(registryGuard!=pruner.npos&&registryGuard<pruner.find("ReflectedContract::Frame(function)",reflectedPreflight),
         "uncertified cleanup walks native parameters before allowing the original load through");
-    need(pruner.find("if (!registry || !registry->Ready())",directPreflight)<pruner.find("json::parse(utf8",directPreflight),
+    need(pruner.find("if (!registry || !registry->AnyCleanable())",directPreflight)<pruner.find("json::parse(utf8",directPreflight),
         "uncertified cleanup parses a character payload even though it cannot modify it");
     need(registrar.find("Non-blocking: native loading continues")!=registrar.npos
         &&pruner.find("Non-blocking: native character loading continues")!=pruner.npos,

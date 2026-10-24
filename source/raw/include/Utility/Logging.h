@@ -83,6 +83,15 @@ namespace PS {
         }
     }
 
+    template <RC::Unreal::int32 level, typename... Args>
+    void LogStructuredFallback(bool accepted,RC::File::StringViewType content,Args&&... args) {
+        if(!accepted){Log<level>(content,std::forward<Args>(args)...);return;}
+        if constexpr(level==RC::LogLevel::Error||level==RC::LogLevel::Warning){
+            const auto decorated=std::format(level==RC::LogLevel::Error?STR("[RuneSchema] [error] {}"):STR("[RuneSchema] [warning] {}"),content);
+            RC::Output::send<level>(decorated,std::forward<Args>(args)...);
+        }
+    }
+
     template <typename... FmtArgs>
     auto RoutineLog(std::string_view channel, RC::File::StringViewType content,
         FmtArgs&&... fmt_args) -> void

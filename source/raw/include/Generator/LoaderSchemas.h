@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/NativeDataFamilies.h"
 #include <nlohmann/json.hpp>
 #include "Generator/LoaderCapabilities.h"
 #include "Loader/HumanNpc.h"
@@ -223,9 +224,10 @@ inline nlohmann::json LoaderSchemas() {
     result["spawns"]["items"]["properties"]["QuestActive"]={{"type","string"},{"minLength",1},{"maxLength",512},{"description","Temporary Actor resource exists only while a RuneSchema quest is Given to a connected participant. A local Id is qualified with the mod name. Requires a cooked subclass of the game's ore-node or fellable-tree base with SpudGuid and bSkipSpudStore. The actor is excluded from world saves and removed when the quest is no longer active."}};
     result["spawns"]["items"]["properties"]["EventActive"]={{"type","string"},{"minLength",1},{"maxLength",512},{"description","Temporary Actor resource exists only while the named RuneSchema event runs in this world. A local Id is qualified with the mod name. It is excluded from world saves and removed when the event ends or is cancelled."}};
     result["spawns"]["items"]["properties"]["PersistAfterCondition"]={{"type","boolean"},{"default",true},{"description","Latch a completed quest condition so an activated placement remains available. Set false for a placement that should exist only while the completion state is observable."}};
-    result["spawns"]["items"]["properties"]["DuplicateRadius"]={{"type","number"},{"minimum",0},{"maximum",10000},{"default",100},{"description","For quest-activated Actor and BuildingProp entries, treat the same actor class within this many centimetres as already satisfied. Zero disables the coordinate safeguard."}};
+    result["spawns"]["items"]["properties"]["Building"]={{"type","string"},{"pattern","^/"},{"description","BuildingPieceData asset path for transient BuildingProp or permanent native BuildingPiece placements."}};
+    result["spawns"]["items"]["properties"]["DuplicateRadius"]={{"type","number"},{"minimum",0},{"maximum",10000},{"default",100},{"description","BuildingPiece skips creation when any native building occupies this radius in centimetres (grounded: XY column; ungrounded: XYZ). Must be positive for BuildingPiece. Quest-activated Actor/BuildingProp retain same-class checks; zero disables those checks."}};
     result["spawns"]["items"]["dependencies"]["PersistAfterCondition"]={{"required",{"QuestCompleted"}}};
-    result["spawns"]["items"]["dependencies"]["DuplicateRadius"]={{"required",{"QuestCompleted"}}};
+    result["spawns"]["items"]["dependencies"]["DuplicateRadius"]={{"anyOf",{json{{"required",{"QuestCompleted"}}},json{{"required",{"Type"}},{"properties",{{"Type",{{"const","BuildingPiece"}}}}}}}}};
     result["spawns"]["items"]["dependencies"]["SpawnRadiusMeters"]={{"required",{"Type"}},{"properties",{{"Type",{{"const","AISpawnPoint"}}},{"RequiresActivation",{{"const",false}}}}},{"not",{{"anyOf",{json{{"required",{"MinSpawnDistance"}}},json{{"required",{"MaxSpawnDistance"}}},json{{"required",{"EventOnly"}}}}}}}};
     json vendor=record;
     vendor["required"]={"Location"};
@@ -505,6 +507,10 @@ inline nlohmann::json LoaderSchemas() {
         {"properties",{{"Id",text},{"Type",{{"const","AISpawnPoint"}}},{"EventOnly",{{"const",true}}},
             {"AIClass",{{"type","string"},{"pattern","^/"}}},{"DisplayName",{{"type","string"},{"minLength",1},{"maxLength",128}}},{"BossName",{{"type","string"},{"minLength",1},{"maxLength",128}}},{"Scale",{{"type","number"},{"minimum",0.01},{"maximum",100}}}}}};
     result["spawns"]["items"]["allOf"]=json::array({{{"if",{{"required",{"EventOnly"}}}},{"then",eventSpawn}}});
+    result["spawns"]["items"]["allOf"].push_back({{"if",{{"required",{"Type"}},{"properties",{{"Type",{{"const","BuildingPiece"}}}}}}},
+        {"then",{{"required",{"Id","Type","Building","Location"}},
+            {"properties",{{"AllowDeconstruction",{{"const",true}}},{"TimeOfDay",{{"const","Any"}}},{"UseNativeRespawn",{{"const",false}}},{"PersistAfterCondition",{{"const",true}}},{"DuplicateRadius",{{"exclusiveMinimum",0}}}}},
+            {"not",{{"anyOf",{json{{"required",{"QuestActive"}}},json{{"required",{"EventActive"}}}}}}}}}});
     result["spawns"]["items"]["allOf"][0]["then"]["properties"]["GroundMigrationRadius"]=migrationRadius;
     result["spawns"]["items"]["allOf"][0]["then"]["properties"]["VisualEffect"]=ghostVisual;
     result["spawns"]["items"]["allOf"][0]["then"]["properties"]["PowerLevel"]={{"type","integer"},{"minimum",1},{"maximum",100}};
@@ -822,32 +828,49 @@ inline nlohmann::json LoaderSchemas() {
     };
     json registryEntry={{"type","object"},{"additionalProperties",false}};
     registryEntry["required"]={"Id","Kind"};
-    const json registryAuthority={{"type","object"},{"additionalProperties",false},
+    json registryAuthority={{"type","object"},{"additionalProperties",false},
         {"required",{"Action","GraphClass"}},
-        {"properties",{{"Action",{{"enum",{"SpawnFollower","ExecuteGraph"}}}},
+        {"properties",{{"Action",{{"enum",{"SpawnFollower","ExecuteGraph","ConsumedItemAuthority"}}}},
             {"GraphClass",{{"type","string"},{"pattern","^/[A-Za-z0-9_.-]+/.+_C$"}}},
             {"Function",{{"type","string"},{"pattern","^[A-Za-z0-9_.-]+$"},{"default","Trigger"}}},
-            {"DataAsset",{{"type","string"},{"pattern","^/(?:Game|DowdunReach|FutureMajorVersion)/"}}},
+            {"DataAsset",{{"type","string"},{"maxLength",1024},{"pattern","^/[A-Za-z0-9_.-]+/[^\\r\\n\\t]+$"}}},
             {"Bindings",{{"type","object"},{"maxProperties",32},{"additionalProperties",{{"type","string"},{"pattern","^/(?:Game|DowdunReach|FutureMajorVersion)/"}}}}}}}};
-    registryEntry["anyOf"]={json{{"required",{"Presentation"}}},json{{"required",{"Authority"}}}};
+    registryEntry["anyOf"]={json{{"required",{"Presentation"}}},json{{"required",{"Authority"}}},json{{"required",{"Relay"}}}};
     registryEntry["properties"]={
         {"Id",{{"type","string"},{"pattern","^[A-Za-z0-9_.-]+$"},{"maxLength",96}}},
-        {"Kind",{{"enum",{"SpellPresentation","PersistentEffect","WeatherPresentation","AudioPresentation","CosmeticWrapper"}}}},
+        {"Kind",{{"enum",{"SpellPresentation","PersistentEffect","WeatherPresentation","AudioPresentation","CosmeticWrapper","DataRelay","GameplayAuthority"}}}},
         {"Spell",{{"type","string"},{"pattern","^/(?:Game|DowdunReach|FutureMajorVersion)/"}}},
         {"Presentation",{{"type","array"},{"minItems",1},{"maxItems",64},{"items",registryPresentation}}},
         {"Authority",registryAuthority},
         {"Metadata",{{"type","object"},{"maxProperties",32}}}
     };
+    registryEntry["properties"]["Relay"]={{"type","object"},{"additionalProperties",false},{"required",{"Channel"}},
+        {"properties",{{"Channel",{{"type","string"},{"minLength",1},{"maxLength",96},{"pattern","^[A-Za-z0-9_.-]+$"}}},
+            {"Version",{{"type","integer"},{"minimum",1},{"maximum",65535},{"default",1}}},
+            {"MaxBytes",{{"type","integer"},{"minimum",1},{"maximum",65536},{"default",65536}}},
+            {"ClientPublish",{{"type","boolean"},{"default",false}}},{"Broadcast",{{"type","boolean"},{"default",false}}},{"Snapshot",{{"type","boolean"},{"default",false}}}}}};
+    registryEntry["allOf"]={{{"if",{{"properties",{{"Kind",{{"const","DataRelay"}}}}}}},
+        {"then",{{"required",{"Relay"}},{"maxProperties",3}}},{"else",{{"not",{{"required",{"Relay"}}}}}}}};
     result["registry"]={{"type","object"},{"additionalProperties",false},{"required",{"SchemaVersion","Entries"}},
         {"properties",{{"SchemaVersion",{{"const",1}}},
             {"Entries",{{"type","array"},{"maxItems",256},{"items",registryEntry}}}}},
         {"description","Enabled loose schema mods and cooked declarations share native-registry enrollment and client/server declarations. Every asset still requires a correct live type and verified native identity; a declaration does not construct an asset or authorize cleanup."}};
     json nativeRegistries={{"type","object"},{"additionalProperties",false},{"properties",json::object()}};
     const json nativePath={{"type","string"},{"minLength",1},{"maxLength",1024},{"pattern","^/[^\\r\\n\\t]+\\.[^/]+$"}};
+    for(const auto& family:PS::NativeDataFamilies::Families)
+        nativeRegistries["properties"][family.Lane]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},{"items",{{"type","string"},{"maxLength",1024},{"pattern","^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"},{"not",{{"pattern","\\.\\."}}}}},
+            {"description","Exact existing cooked objects only. Startup identity enrollment does not synthesize assets, activate hooks or certify gameplay/save lifecycle."}};
+    nativeRegistries["properties"]["CacheAssets"]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},{"items",nativePath},{"description","Original artwork references; not gameplay registry identities."}};
     const json schemaPath={{"type","object"},{"additionalProperties",false},{"required",{"Path","Source"}},{"properties",{{"Path",nativePath},{"Source",{{"const","Schema"}}}}}};
     for(const auto* lane:{"Items","Recipes","Quests","CombatSpells","UtilitySpells","EquipmentEffects","Journals","Lore","WearableMeshData","MeleeAttackClasses","RangedAttackClasses"})
         nativeRegistries["properties"][lane]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},{"items",{{"anyOf",{nativePath,schemaPath}}}}};
     for(const auto* lane:{"MeleeAttackClasses","RangedAttackClasses"})nativeRegistries["properties"][lane]["items"]=nativePath;
+    result["registry"]["definitions"]["modOwnedCookedPaths"]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},
+        {"items",{{"type","string"},{"maxLength",1024},{"pattern","^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"},{"not",{{"pattern","\\.\\."}}}}},
+        {"description","Runtime requires the owning /Owner/ or /Game/Mods/Owner/ namespace and rejects case-insensitive duplicates. Strings only; no Source:Schema or arbitrary property writes."}};
+    nativeRegistries["properties"]["Skills"]={{"$ref","#/definitions/modOwnedCookedPaths"},{"description","Staged declaration only. Native enrollment remains blocked pending verified ESkill consumers and lifecycle."}};
+    nativeRegistries["properties"]["SkillPerks"]={{"$ref","#/definitions/modOwnedCookedPaths"},{"description","Staged declaration only. Native enrollment remains blocked pending verified perk startup/cache and unlock lifecycle."}};
+    nativeRegistries["properties"]["Enums"]={{"$ref","#/definitions/modOwnedCookedPaths"},{"description","Read-only verification of exact mod-owned cooked UserDefinedEnum symbol tables; never extends a native enum."}};
     result["registry"]["properties"]["NativeRegistries"]=nativeRegistries;
     result["registry"]["properties"]["LoaderDefinitions"]={{"type","object"},{"additionalProperties",false},{"properties",json::object()}};
     for(const auto* lane:{"Recipes","Journals","Lore"})result["registry"]["properties"]["LoaderDefinitions"]["properties"][lane]=

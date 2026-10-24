@@ -53,7 +53,7 @@ int Run() {
     RegistrySnapshot registry;
     for(int i=0;i<500;++i)registry.Items.insert("item"+std::to_string(i));
     for(int i=0;i<300;++i)registry.Recipes.insert("recipe"+std::to_string(i));
-    registry.Quests={id,"vanilla"};registry.QuestsComplete=true;
+    registry.Quests={id,"vanilla"};registry.QuestsComplete=true; registry.QuestCompletedState=2;
     auto movedOwners=source;
     movedOwners["GameProgress"]["QuestProgress"]["Quests"][0]["QuestInts"].push_back({{"QuestVariableName","RuneSchema.Owner:OldMod"},{"QuestVariableValue",DragonWilds::Quests::OwnershipVersion}});
     auto earlyRegistry=registry;earlyRegistry.QuestsComplete=false;

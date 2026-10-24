@@ -19,6 +19,8 @@ namespace DragonWilds {
             RC::StringType Target;
             RC::StringType ObjectPath;
             RC::StringType ModName;
+            std::string Source;
+            std::string OperationId;
             nlohmann::json Properties;
             bool IsPatch = false;
             PS::AssetMetadata::Declaration Metadata;

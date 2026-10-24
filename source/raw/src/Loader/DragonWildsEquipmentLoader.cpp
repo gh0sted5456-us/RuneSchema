@@ -12,6 +12,7 @@
 #include "Helpers/Casting.hpp"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnosticB3C.h"
 #include "Runtime/Storefront.h"
 #include <Windows.h>
 #include <safetyhook.hpp>
@@ -176,9 +177,17 @@ DragonWildsEquipmentLoader::~DragonWildsEquipmentLoader() { ShutdownEquipmentSha
 bool DragonWildsEquipmentLoader::CanInitialize(const EEngineLifecyclePhase& phase) {
     return phase == EEngineLifecyclePhase::PostEngineInit;
 }
-void DragonWildsEquipmentLoader::OnLoad(const std::filesystem::path& path, const RC::StringType&, const EEngineLifecyclePhase& phase) {
+void DragonWildsEquipmentLoader::OnLoad(const std::filesystem::path& path, const RC::StringType& owner, const EEngineLifecyclePhase& phase) {
     if (phase != EEngineLifecyclePhase::PostEngineInit || m_finalized) return;
-    PS::JsonHelpers::ParseJsonFilesInPath(path, [&](const nlohmann::json& data) { EquipmentRules::Merge(m_rules, data); });
+    PS::JsonHelpers::ParseJsonFilesInPathWithSource(path, [&](const nlohmann::json& data,const std::filesystem::path& relative) {
+        try { EquipmentRules::Merge(m_rules, data); }
+        catch(const std::exception& e) {
+            PS::StructuredDiagnosticB3C::Report("RS-EQP-006","Error","Skipped","EquipmentLoader",
+                "Equipment definition rejected",e.what(),RC::to_string(owner),
+                PS::StructuredDiagnosticB2::Utf8Path(relative),{},"Validation");
+            throw;
+        }
+    });
 }
 void DragonWildsEquipmentLoader::OnFinalizeLoad(const EEngineLifecyclePhase& phase) {
     if (phase != EEngineLifecyclePhase::PostEngineInit || m_finalized) return;
@@ -191,7 +200,10 @@ void DragonWildsEquipmentLoader::OnFinalizeLoad(const EEngineLifecyclePhase& pha
         ++effectItems;
     }catch(const std::exception& error) {
         ++errors;
-        PS::Log<LogLevel::Error>(TEXT("Equipment effects '{}': {}.\n"),RC::to_generic_string(path),PS::ToWideSafe(error.what()));
+        const bool missing=std::string_view(error.what())=="item asset did not resolve";
+        if (!PS::StructuredDiagnosticB3C::Report(missing?"RS-EQP-001":"RS-EQP-002","Error","Failed","EquipmentLoader",
+            missing?"Equipment target unavailable":"Equipment effect rule rejected",error.what(),{},{},path,"Application"))
+            PS::Log<LogLevel::Error>(TEXT("Equipment effects '{}': {}.\n"),RC::to_generic_string(path),PS::ToWideSafe(error.what()));
     }
     m_rules.effects.clear();
     size_t configuredItems=0;
@@ -206,7 +218,10 @@ void DragonWildsEquipmentLoader::OnFinalizeLoad(const EEngineLifecyclePhase& pha
         ++configuredItems;
     }catch(const std::exception& error) {
         ++errors;
-        PS::Log<LogLevel::Error>(TEXT("Equipment item '{}': {}. Other item rules continue.\n"),RC::to_generic_string(path),PS::ToWideSafe(error.what()));
+        const bool missing=std::string_view(error.what())=="item asset did not resolve";
+        if (!PS::StructuredDiagnosticB3C::Report(missing?"RS-EQP-001":"RS-EQP-003","Error","Failed","EquipmentLoader",
+            missing?"Equipment target unavailable":"Equipment field rule rejected",error.what(),{},{},path,"Application"))
+            PS::Log<LogLevel::Error>(TEXT("Equipment item '{}': {}. Other item rules continue.\n"),RC::to_generic_string(path),PS::ToWideSafe(error.what()));
     }
     m_rules.items.clear();
     const auto shadowveil=InitializeEquipmentShadowveil(m_rules.shadowveil);
@@ -223,9 +238,14 @@ void DragonWildsEquipmentLoader::OnFinalizeLoad(const EEngineLifecyclePhase& pha
             surgeServer=SelectedProfile->timestamp == SurgeNative::ServerTimestamp;
             PS::Log<LogLevel::Verbose>(TEXT("Equipment Surge ({}): {} leg items; 8 native sites validated.\n"),
                 surgeServer ? TEXT("server") : TEXT("client"), LegPaths.size());
-        } else if(ExecutableTimestamp && ExecutableImageSize)
+        } else {
+            PS::StructuredDiagnosticB3C::Report("RS-EQP-004","Warning","Blocked","EquipmentLoader",
+                "Native equipment capability unavailable","Surge/Dash native hook contract was unavailable; other equipment rules remain active.",
+                {},{}, {},"Finalization");
+            if(ExecutableTimestamp && ExecutableImageSize)
             PS::Log<LogLevel::Normal>(TEXT("[CAPABILITY][equipment.surge-native][inactive] {} (exe 0x{:08X}/0x{:X}); other equipment capabilities remain available.\n"),failure,ExecutableTimestamp,ExecutableImageSize);
         else PS::Log<LogLevel::Normal>(TEXT("[CAPABILITY][equipment.surge-native][inactive] {}; other equipment capabilities remain available.\n"), failure);
+        }
     }
     if (shadowveil.enabled || surgeEnabled)
         PS::Log<LogLevel::Verbose>(TEXT("[loader=equipment] lane={} shadowveil={} surge={}.\n"),
@@ -237,7 +257,9 @@ void DragonWildsEquipmentLoader::OnFinalizeLoad(const EEngineLifecyclePhase& pha
             0,effectItems+configuredItems+behaviorItems,0,errors);
     PS::Log<LogLevel::Verbose>(TEXT("[CAPABILITY][equipment] reflected item fields, GrantedEffects, cooked visuals, NPC equipment and native replication remain independent of optional native behavior bindings.\n"));
 }
-void DragonWildsEquipmentLoader::OnAutoReload(const RC::StringType&, const std::filesystem::path&) {
-    PS::Log<LogLevel::Warning>(TEXT("Equipment behavior rule changes require restarting the game.\n"));
+void DragonWildsEquipmentLoader::OnAutoReload(const RC::StringType& owner, const std::filesystem::path&) {
+    if (!PS::StructuredDiagnosticB3C::Report("RS-EQP-005","Warning","Deferred","EquipmentLoader",
+        "Equipment behavior reload deferred","Equipment behavior rule changes require restarting the game.",RC::to_string(owner), {},{},"Reload"))
+        PS::Log<LogLevel::Warning>(TEXT("Equipment behavior rule changes require restarting the game.\n"));
 }
 }

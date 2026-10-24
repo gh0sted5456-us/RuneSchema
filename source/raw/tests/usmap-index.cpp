@@ -87,7 +87,7 @@ int main(int argc,char** argv)
     PS::MappingBackbone::Activate({mapping,bytes.size(),freshFingerprint,true});
     const auto generated=PS::MappingBackbone::Current(root);
     Check(generated.Available&&generated.Path==mapping&&generated.Fingerprint==freshFingerprint,"validated mapping snapshot activated");
-    Check(fallback.Fingerprint==freshFingerprint,"previous mapping value snapshot remains valid");
+    Check(!fallback.Available&&fallback.Path.empty(),"no installed-directory mapping is selected before validated cache activation");
     PS::MappingBackbone::Generated.store(nullptr);
 
     auto& index = PS::Usmap::Index::Shared();

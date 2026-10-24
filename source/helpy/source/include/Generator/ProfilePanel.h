@@ -89,7 +89,7 @@ inline bool Render(const nlohmann::json& catalog){
         if(PlatformFilter==platform)draw->AddRect(a,{a.x+width,a.y+height},ImGui::GetColorU32(t.accent),t.X(4));
         if(ImGui::IsItemHovered()){const auto liveName=local&&PlatformKey(local->value("Platform",std::string{}))==platform?ItemPresentation::Text(*local,"PlatformAccountName"):std::string{};
             const auto nativeName=liveName.empty()?doc.value("PlatformAccounts",nlohmann::json::object()).value(platform,std::string{}):liveName;
-            HelpyImGuiTheme::BeginDetailsTooltip(220);ImGui::TextUnformatted(platform.c_str());ImGui::Separator();ImGui::TextWrapped("%s",nativeName.empty()?"Observed platform · account name unavailable":((liveName.empty()?"Last observed account: ":"Platform account: ")+nativeName).c_str());ImGui::TextDisabled("Click to filter characters");HelpyImGuiTheme::EndDetailsTooltip();}
+            HelpyImGuiTheme::BeginDetailsTooltip(220);PS::HelpyImGuiTheme::DetailsTextUnformatted(platform.c_str());ImGui::Separator();PS::HelpyImGuiTheme::DetailsText("%s",nativeName.empty()?"Observed platform · account name unavailable":((liveName.empty()?"Last observed account: ":"Platform account: ")+nativeName).c_str());PS::HelpyImGuiTheme::DetailsTextDisabled("Click to filter characters");HelpyImGuiTheme::EndDetailsTooltip();}
         used+=width;ImGui::PopID();
     }
     if(platforms.empty())ImGui::TextDisabled("Play a character to link a platform.");
@@ -109,7 +109,7 @@ inline bool Render(const nlohmann::json& catalog){
             float right=a.x+width-t.X(8);for(auto it=row.at("Platforms").rbegin();it!=row.at("Platforms").rend();++it){const auto icon=PartyMemberView::PlatformIcon(it->get<std::string>());if(!icon.GetTexID())continue;const float side=t.Y(18);draw->AddImage(icon,{right-side,a.y+(height-side)*.5f},{right,a.y+(height+side)*.5f});right-=side+t.X(6);}
             if(current){const char* text="Live";right-=ImGui::CalcTextSize(text).x+t.X(8);draw->AddText({right,a.y+(height-ImGui::GetTextLineHeight())*.5f},ImGui::GetColorU32(t.accent),text);}
             const ImVec4 clip{a.x,a.y,right-t.X(6),a.y+height};draw->AddText(ImGui::GetFont(),ImGui::GetFontSize(),{a.x+t.X(6),a.y+(height-ImGui::GetTextLineHeight())*.5f},ImGui::GetColorU32(t.text),row.at("Name").get_ref<const std::string&>().c_str(),nullptr,0,&clip);
-            if(ImGui::IsItemHovered()){HelpyImGuiTheme::BeginDetailsTooltip(220);ImGui::TextUnformatted(row.at("Name").get_ref<const std::string&>().c_str());for(const auto& value:row.at("Platforms"))ImGui::TextDisabled("%s",value.get_ref<const std::string&>().c_str());ImGui::Separator();ImGui::TextWrapped("Open an editable copy. Native saves stay unchanged.");HelpyImGuiTheme::EndDetailsTooltip();}
+            if(ImGui::IsItemHovered()){HelpyImGuiTheme::BeginDetailsTooltip(220);PS::HelpyImGuiTheme::DetailsTextUnformatted(row.at("Name").get_ref<const std::string&>().c_str());for(const auto& value:row.at("Platforms"))PS::HelpyImGuiTheme::DetailsTextDisabled("%s",value.get_ref<const std::string&>().c_str());ImGui::Separator();PS::HelpyImGuiTheme::DetailsText("Open an editable copy. Native saves stay unchanged.");HelpyImGuiTheme::EndDetailsTooltip();}
             if(clicked){const auto platform=!PlatformFilter.empty()?PlatformFilter:current&&local?PlatformKey(local->value("Platform",std::string{})):row.at("Platforms").size()==1?PlatformKey(row.at("Platforms")[0].get<std::string>()):std::string{};openCharacter=SaveEditorPanel::RequestProfileCharacter(guid,platform);}
             ImGui::PopID();
         }

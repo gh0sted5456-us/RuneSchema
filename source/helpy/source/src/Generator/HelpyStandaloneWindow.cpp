@@ -6,6 +6,7 @@
 #include "Generator/AuthoringPanel.h"
 #include "Generator/SaveEditorPanel.h"
 #include "Generator/ProfilePanel.h"
+#include "Generator/BugReportPanel.h"
 #include "Generator/ItemPreviewPanel.h"
 #include "Generator/RuneSchemaSettingsPanel.h"
 #include "Generator/RuntimeDetailsPanel.h"
@@ -16,9 +17,13 @@
 #include "Generator/ItemGridPicker.h"
 #include "Generator/ToolRequest.h"
 #include "Core/HelpyPopupInput.h"
+#include "Core/HelpyFramePacing.h"
+#include "Core/HelpyNativeFrame.h"
+#include "Generator/HelpySurfaceDraw.h"
 #include "Core/HelpyNavigation.h"
 #include "Generator/NavigationOrder.h"
 #include "Core/HelpyEnvironment.h"
+#include "Core/RuneSchemaDataRoot.h"
 #include "Core/HelpyBranding.h"
 #include "Core/HelpySplash.h"
 #include "Runtime/HelpyDownloads.h"
@@ -32,6 +37,9 @@
 #include "Generator/JournalPanel.h"
 #include "Generator/HelpyIconPacks.h"
 #include "Generator/LiveLogPanel.h"
+#include "Generator/DiagnosticsPanel.h"
+#include "Generator/StructuredLogFeed.h"
+#include "Generator/HelpyDiagnosticOverlay.h"
 #include "Generator/ModsPanel.h"
 #include "Generator/DedicatedServerPanel.h"
 #include "Runtime/HelpyPaths.h"
@@ -82,6 +90,7 @@ const wchar_t* WorkspaceCaption(size_t index){return std::array{L"RSMK - Map",L"
 DesktopBayLayout::Rect WorkspaceRect(size_t index,const DesktopBayLayout::Canvas& canvas){return index==0?canvas.Map:index==1?canvas.Recipes:index==2?canvas.Runtime:index==3?canvas.Party:canvas.Inventory;}
 bool SharedCartVisible=false;
 ImVec2 MainSurfacePosition{},MainSurfaceSize{};
+HelpyNativeFrame::Metrics NativeCaption;
 HelpyNavigation::SpawnSection CurrentSpawn=HelpyNavigation::SpawnSection::Resources;
 HelpyNavigation::ToolSection CurrentTool=HelpyNavigation::ToolSection::ItemCache;
 std::array<std::string,HelpyNavigation::Pages.size()> PageErrors;
@@ -209,6 +218,12 @@ void LoadUiFontFamilies(ImGuiIO& io){
 std::atomic<bool> FontRescanRequested{false};
 struct Toast {std::string Text;std::chrono::steady_clock::time_point Until;};
 std::vector<Toast> Toasts;
+DiagnosticToastFeed::Feed DiagnosticFeed;
+DiagnosticCenterModel::Store DiagnosticStore;
+DiagnosticCenterHistory::Service DiagnosticHistory;
+DiagnosticCenterMutes::Manager DiagnosticMutes;
+HelpyDiagnosticOverlay DiagnosticOverlay;
+DiagnosticToastFeed::Options DiagnosticOptions(){const auto& t=HelpyImGuiTheme::Current;return {t.diagnosticToastsEnabled,t.diagnosticToastLimit,t.diagnosticToastDuration};}
 std::chrono::steady_clock::time_point NextPlayerRefresh{};
 void PushToast(std::string text,double seconds=3.0){Toasts.push_back({std::move(text),std::chrono::steady_clock::now()+std::chrono::milliseconds(static_cast<int>(seconds*1000.0))});if(Toasts.size()>4)Toasts.erase(Toasts.begin());}
 bool QueuePlayerRefresh(bool automatic){
@@ -227,6 +242,111 @@ void RenderToasts(const HelpyImGuiTheme::Theme& t){
         ImGui::End();ImGui::PopStyleColor();ImGui::PopStyleVar();
     }
 }
+void RenderDiagnosticIcon(ImDrawList* dl,ImVec2 p,float size,ImU32 color,
+    DiagnosticToastPresentation::Display::Icon type){
+    const ImVec2 c{p.x+size*0.5f,p.y+size*0.5f};
+    const float r=size*0.44f,stroke=std::max(1.0f,size*0.105f);
+    using Icon=DiagnosticToastPresentation::Display::Icon;
+    if(type==Icon::Warning){
+        dl->AddTriangle({c.x,p.y+size*.06f},{p.x+size*.94f,p.y+size*.92f},
+            {p.x+size*.06f,p.y+size*.92f},color,stroke);
+        dl->AddLine({c.x,c.y-.17f*size},{c.x,c.y+.13f*size},color,stroke);
+        dl->AddCircleFilled({c.x,c.y+.30f*size},stroke*.55f,color);
+    }else if(type==Icon::Activity){
+        for(int i=0;i<3;++i){const float n=i*size*.095f;
+            dl->AddRect({p.x+size*.10f+n,p.y+size*.10f+n},
+                {p.x+size*.76f+n,p.y+size*.76f+n},color,1.0f,0,stroke*.75f);}
+    }else{
+        dl->AddCircle(c,r,color,16,stroke);
+        if(type==Icon::Error){
+            dl->AddLine({c.x-r*.40f,c.y-r*.40f},{c.x+r*.40f,c.y+r*.40f},color,stroke);
+            dl->AddLine({c.x+r*.40f,c.y-r*.40f},{c.x-r*.40f,c.y+r*.40f},color,stroke);
+        }else if(type==Icon::Debug){
+            dl->AddLine({c.x-r*.30f,c.y-r*.45f},{c.x-r*.78f,c.y},color,stroke);
+            dl->AddLine({c.x-r*.78f,c.y},{c.x-r*.30f,c.y+r*.45f},color,stroke);
+            dl->AddLine({c.x+r*.30f,c.y-r*.45f},{c.x+r*.78f,c.y},color,stroke);
+            dl->AddLine({c.x+r*.78f,c.y},{c.x+r*.30f,c.y+r*.45f},color,stroke);
+        }else if(type==Icon::Diagnostic){
+            const ImVec2 wave[]={{c.x-r*.78f,c.y},{c.x-r*.36f,c.y},
+                {c.x-r*.12f,c.y-r*.55f},{c.x+r*.12f,c.y+r*.55f},
+                {c.x+r*.35f,c.y},{c.x+r*.78f,c.y}};
+            dl->AddPolyline(wave,6,color,ImDrawFlags_None,stroke);
+        }else{
+            dl->AddCircleFilled({c.x,c.y-r*.48f},stroke*.52f,color);
+            dl->AddLine({c.x,c.y-r*.12f},{c.x,c.y+r*.53f},color,stroke);
+        }
+    }
+}
+void RenderDiagnosticToasts(const HelpyImGuiTheme::Theme& t){
+    if(!t.diagnosticToastsEnabled||DiagnosticFeed.Empty())return;
+    float y=MainSurfacePosition.y+t.Y(12.0f);
+    const float right=MainSurfacePosition.x+MainSurfaceSize.x-t.X(12.0f);
+    const float width=std::min(t.X(390.0f),std::max(t.X(220.0f),MainSurfaceSize.x-t.X(24.0f)));
+    const float wrapWidth=std::max(t.X(110.0f),width-t.X(38.0f));
+    const float gap=t.Y(7.0f);
+    size_t index=0;
+    for(const auto& notice:DiagnosticFeed.Visible()){
+        const auto display=DiagnosticToastPresentation::Format(notice);
+        const auto color=notice.Summary?t.accent:notice.Severity==LiveLog::Level::Error?t.error:
+            notice.Severity==LiveLog::Level::Warning?t.warning:
+            notice.Severity==LiveLog::Level::Diagnostic?t.accent:t.info;
+        const float iconSize=t.Y(15.0f),padY=t.Y(10.0f),padX=t.X(16.0f);
+        const float headerHeight=std::max(iconSize,ImGui::GetTextLineHeight());
+        const float titleHeight=[&](){if(UiBoldFont)ImGui::PushFont(UiBoldFont);
+            const float h=ImGui::CalcTextSize(display.Title.c_str()).y;
+            if(UiBoldFont)ImGui::PopFont();return h;}();
+        const float detailHeight=ImGui::CalcTextSize(display.Detail.c_str(),nullptr,false,wrapWidth).y;
+        const float footerHeight=display.Subtitle.empty()?0.0f:ImGui::CalcTextSize(display.Subtitle.c_str(),nullptr,false,wrapWidth).y;
+        const float height=padY+headerHeight+t.Y(6.0f)+titleHeight+t.Y(6.0f)+detailHeight+
+            (footerHeight?t.Y(5.0f)+footerHeight:0.0f)+t.Y(14.0f);
+        // The F2-open panel must not put a partial toast under the taskbar.
+        if(y+height>MainSurfacePosition.y+MainSurfaceSize.y-t.Y(10.0f))break;
+        ImGui::SetNextWindowPos({right,y},ImGuiCond_Always,{1,0});
+        ImGui::SetNextWindowSize({width,height},ImGuiCond_Always);
+        ImGui::SetNextWindowBgAlpha(0.96f);
+        ImGui::PushStyleColor(ImGuiCol_WindowBg,t.panelAlt);
+        ImGui::PushStyleColor(ImGuiCol_Border,t.border);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,t.X(t.childRounding));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,t.X(1.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{padX,padY});
+        const std::string id="##runeschema-log-toast-"+std::to_string(index++);
+        if(ImGui::Begin(id.c_str(),nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoInputs|
+            ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoFocusOnAppearing|ImGuiWindowFlags_NoScrollbar)){
+            const auto min=ImGui::GetWindowPos();
+            const auto max=ImVec2(min.x+width,min.y+height);
+            auto* dl=ImGui::GetWindowDrawList();
+            dl->AddRectFilled({min.x+t.X(3),min.y+t.Y(8)},
+                {min.x+t.X(7),max.y-t.Y(8)},ImGui::GetColorU32(color),t.X(2));
+            const ImVec2 anchor{min.x+padX+t.X(5.0f),min.y+padY};
+            RenderDiagnosticIcon(dl,anchor,iconSize,ImGui::GetColorU32(color),display.Type);
+            dl->AddText({anchor.x+iconSize+t.X(8.0f),anchor.y},ImGui::GetColorU32(t.textDisabled),"RuneSchema");
+            std::string level=notice.Summary?"ACTIVITY":display.Level;
+            if(notice.Repetitions>1&&!notice.Summary&&!(notice.BlueprintBatch&&notice.BatchCount>1))
+                level+="  x"+std::to_string(notice.Repetitions);
+            const auto labelSize=ImGui::CalcTextSize(level.c_str());
+            dl->AddText({max.x-padX-labelSize.x,min.y+padY},ImGui::GetColorU32(color),level.c_str());
+            ImGui::SetCursorScreenPos({anchor.x,anchor.y+headerHeight+t.Y(6.0f)});
+            if(UiBoldFont)ImGui::PushFont(UiBoldFont);
+            ImGui::TextUnformatted(display.Title.c_str());
+            if(UiBoldFont)ImGui::PopFont();
+            ImGui::SetCursorScreenPos({anchor.x,anchor.y+headerHeight+t.Y(6.0f)+titleHeight+t.Y(6.0f)});
+            ImGui::PushStyleColor(ImGuiCol_Text,t.textDisabled);
+            ImGui::PushTextWrapPos(anchor.x+wrapWidth);
+            ImGui::TextUnformatted(display.Detail.c_str());
+            ImGui::PopTextWrapPos();
+            if(footerHeight){
+                ImGui::SetCursorScreenPos({anchor.x,anchor.y+headerHeight+t.Y(6.0f)+titleHeight+
+                    t.Y(6.0f)+detailHeight+t.Y(5.0f)});
+                ImGui::PushTextWrapPos(anchor.x+wrapWidth);
+                ImGui::TextUnformatted(display.Subtitle.c_str());
+                ImGui::PopTextWrapPos();
+            }
+            ImGui::PopStyleColor();
+        }
+        ImGui::End();ImGui::PopStyleVar(3);ImGui::PopStyleColor(2);
+        y+=height+gap;
+    }
+}
 const char* PageTitle(Page page) {
     return HelpyNavigation::Title(HelpyNavigation::Parent(page));
 }
@@ -235,27 +355,26 @@ HelpyImGuiTheme::Icon PageIcon(Page page) {
     case Page::Creation:case Page::Recipes:return I::Lab;case Page::Map:return I::Map;case Page::Mods:return I::Tools;
     case Page::Profile:return I::Appearance;case Page::Authoring:case Page::SaveEditor:return I::Authoring;case Page::Tools:return I::Tools;case Page::Settings:return I::Settings;case Page::LiveLog:return I::LiveLog;case Page::DedicatedServer:return I::Server;default:return I::Info;}
 }
-bool NavItem(Page page,const HelpyImGuiTheme::Theme& t,float footerWidth=0) {
+bool NavItem(Page page,const HelpyImGuiTheme::Theme& t,const std::vector<int>& sidebarDefaults) {
     const bool active=HelpyNavigation::Parent(CurrentPage)==page;ImGui::PushID(static_cast<int>(page));
     ImGui::PushStyleColor(ImGuiCol_Header,active?t.navigationActive:t.navigation);
     ImGui::PushStyleColor(ImGuiCol_HeaderHovered,t.navigationHover);ImGui::PushStyleColor(ImGuiCol_HeaderActive,t.navigationActive);
-    const bool home=page==Page::Home||page==Page::Profile;const float available=ImGui::GetContentRegionAvail().x,w=footerWidth>0?footerWidth:home?std::min(available,t.X(84)):available;const bool compact=home||w<t.X(120.0f);
-    if(home&&footerWidth<=0)ImGui::SetCursorPosX(ImGui::GetCursorPosX()+(available-w)*.5f);
+    const float w=ImGui::GetContentRegionAvail().x;const bool compact=w<t.X(120.0f);
     const float textWidth=std::max(1.0f,w-t.X(46.0f));
     const auto textSize=ImGui::CalcTextSize(PageTitle(page),nullptr,false,textWidth);
-    const float h=home?t.Y(84):std::max(t.Y(t.navigationItemHeight),textSize.y+t.Y(18.0f));
-    const bool clicked=ImGui::Selectable("##nav",active,home?ImGuiSelectableFlags_NoPadWithHalfSpacing:ImGuiSelectableFlags_None,ImVec2(w,h));
+    const float h=std::max(t.Y(t.navigationItemHeight),textSize.y+t.Y(18.0f));
+    const bool clicked=ImGui::Selectable("##nav",active,ImGuiSelectableFlags_None,ImVec2(w,h));
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::Navigation[PageTitle(page)]=HelpyPreviewHooks::LastRect();
 #endif
-    const auto a=ImGui::GetItemRectMin(),b=ImGui::GetItemRectMax();const float icon=home?std::min(t.Y(56),w-t.X(8)):t.Y(t.navigationIconSize);
-    bool portrait=false;if(page==Page::Profile){const auto id=RuneSchemaProfile::Id();portrait=PlayerPortraitPicker::DrawCached(PlayerPortraitPicker::Choices.Get(id),{(a.x+b.x-icon)*.5f,a.y+t.Y(4)},{(a.x+b.x+icon)*.5f,a.y+t.Y(4)+icon});}
-    if(!portrait&&page==Page::Profile){const ImVec2 center{(a.x+b.x)*.5f,a.y+t.Y(4)+icon*.5f};ImGui::GetWindowDrawList()->AddCircle(center,icon*.48f,ImGui::GetColorU32(t.accent),0,t.X(1));PortraitArt::Draw(0,{center.x-icon*.32f,center.y-icon*.32f},{center.x+icon*.32f,center.y+icon*.32f},ImGui::GetColorU32(t.accent));portrait=true;}
-    if(!portrait)HelpyImGuiTheme::DrawIcon(PageIcon(page),ImVec2(compact?(a.x+b.x)*0.5f:a.x+t.X(18.0f),home?a.y+t.Y(31):(a.y+b.y)*0.5f),icon,active?t.accentHover:t.icon);
-    if(home&&w>=ImGui::CalcTextSize(PageTitle(page)).x){const auto label=ImGui::CalcTextSize(PageTitle(page));ImGui::GetWindowDrawList()->AddText({(a.x+b.x-label.x)*.5f,b.y-label.y-t.Y(6)},ImGui::GetColorU32(active?t.text:t.textDisabled),PageTitle(page));}
-    else if(!compact)ImGui::GetWindowDrawList()->AddText(ImGui::GetFont(),ImGui::GetFontSize(),ImVec2(a.x+t.X(36.0f),a.y+(h-textSize.y)*.5f),ImGui::GetColorU32(active?t.text:t.textDisabled),PageTitle(page),nullptr,textWidth);
+    const auto a=ImGui::GetItemRectMin(),b=ImGui::GetItemRectMax();const float icon=t.Y(t.navigationIconSize);
+    const ImVec2 iconAt{compact?(a.x+b.x)*.5f:a.x+t.X(18),(a.y+b.y)*.5f};
+    bool portrait=false;if(page==Page::Profile){const auto id=RuneSchemaProfile::Id();portrait=PlayerPortraitPicker::DrawCached(PlayerPortraitPicker::Choices.Get(id),{iconAt.x-icon*.5f,iconAt.y-icon*.5f},{iconAt.x+icon*.5f,iconAt.y+icon*.5f});}
+    if(!portrait&&page==Page::Profile){ImGui::GetWindowDrawList()->AddCircle(iconAt,icon*.48f,ImGui::GetColorU32(t.accent),0,t.X(1));PortraitArt::Draw(0,{iconAt.x-icon*.32f,iconAt.y-icon*.32f},{iconAt.x+icon*.32f,iconAt.y+icon*.32f},ImGui::GetColorU32(t.accent));portrait=true;}
+    if(!portrait)HelpyImGuiTheme::DrawIcon(PageIcon(page),iconAt,icon,active?t.accentHover:t.icon);
+    if(!compact)ImGui::GetWindowDrawList()->AddText(ImGui::GetFont(),ImGui::GetFontSize(),ImVec2(a.x+t.X(36.0f),a.y+(h-textSize.y)*.5f),ImGui::GetColorU32(active?t.text:t.textDisabled),PageTitle(page),nullptr,textWidth);
     else if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("%s",PageTitle(page));
-    if(page!=Page::Home&&page!=Page::Profile)NavigationOrder::Drag("sidebar",page,HelpyNavigation::SidebarPages,PageTitle(page));
+    NavigationOrder::Drag(HelpyNavigationOrder::SidebarSurface,page,sidebarDefaults,PageTitle(page));
     ImGui::PopStyleColor(3);ImGui::PopID();
     if(clicked){
         const auto target=page==Page::Items?LastPlayersPage:page==Page::Map?LastWorldPage:page==Page::Tools?LastToolsPage:page;
@@ -430,7 +549,8 @@ constexpr std::array HomeDestinations{
     HomeDestination{Page::Map,"World",HelpyImGuiTheme::Icon::Map,"Ashenfall map, party, spawning and journal."},
     HomeDestination{Page::Settings,"Settings",HelpyImGuiTheme::Icon::Settings,"Appearance, item caches and RuneSchema settings."},
     HomeDestination{Page::Tools,"Tools",HelpyImGuiTheme::Icon::Tools,HelpyNavigation::Description(Page::Tools)},
-    HomeDestination{Page::LiveLog,"Live Log",HelpyImGuiTheme::Icon::LiveLog,HelpyNavigation::Description(Page::LiveLog)},
+    HomeDestination{Page::LiveLog,"Diagnostics",HelpyImGuiTheme::Icon::LiveLog,HelpyNavigation::Description(Page::LiveLog)},
+    HomeDestination{Page::BugReport,"Report a bug",HelpyImGuiTheme::Icon::Info,HelpyNavigation::Description(Page::BugReport)},
     HomeDestination{Page::DedicatedServer,"Server / Co-op",HelpyImGuiTheme::Icon::Server,HelpyNavigation::Description(Page::DedicatedServer)}
 };
 static_assert(HomeDestinations.size()+1==HelpyNavigation::SidebarPages.size(),"Every top-level workspace needs a Home tile");
@@ -441,6 +561,7 @@ ImVec2 HomeLinkAnchor{};
 std::array<ImVec4,HomeDestinations.size()> PreviewHomeTiles{};
 ImVec4 PreviewHomeQuick{};
 ImVec4 PreviewHomeQuickPopup{};
+ImVec4 PreviewHomeQuickTooltip{};
 ImVec4 PreviewHomeTooltip{};
 float PreviewHomeCenter=0;
 std::array<ImVec4,HomeLinks.size()> PreviewHomeLinks{};
@@ -453,16 +574,12 @@ std::array<ImVec4,HomeLinks.size()> PreviewHomeCards{};
 bool PreviewHomeCardImage=false;
 #endif
 void CenterHomeLines(const char* text){
-    const float startX=ImGui::GetCursorPosX(),width=std::max(1.f,ImGui::GetContentRegionAvail().x);
-    const char* current=text;const char* end=text+std::strlen(text);
-    while(current<end){
-        auto* next=ImGui::GetFont()->CalcWordWrapPosition(ImGui::GetFontSize(),current,end,width);
-        if(next<=current)next=current+1;
-        auto* lineEnd=next;while(lineEnd>current&&(lineEnd[-1]==' '||lineEnd[-1]=='\t'||lineEnd[-1]=='\n'))--lineEnd;
-        const float measured=ImGui::CalcTextSize(current,lineEnd).x;
-        ImGui::SetCursorPosX(startX+std::max(0.f,(width-measured)*.5f));ImGui::TextUnformatted(current,lineEnd);
-        current=next;while(current<end&&(*current==' '||*current=='\t'||*current=='\n'))++current;
-    }ImGui::SetCursorPosX(startX);
+    HelpyImGuiTheme::DetailsTextUnformatted(text);
+}
+void RenderRuntimeBadge(const HelpyImGuiTheme::Theme& t,float logicalSize=HelpyBranding::RuntimeIconSize);
+ImVec2 RuntimeBadgeSize(const HelpyImGuiTheme::Theme& t,float logicalSize=HelpyBranding::RuntimeIconSize) {
+    const float size=std::min(t.Y(logicalSize),t.X(logicalSize));
+    return { (HelpyEnvironment::SharedStoreBadge()?size*1.8f+t.X(3):size)+(RuntimeConnectionPanel::Read().Host?t.X(16):0),size };
 }
 void RenderHome(const HelpyImGuiTheme::Theme& theme){
     BOOL animate=TRUE;SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION,0,&animate,0);
@@ -493,7 +610,8 @@ void RenderHome(const HelpyImGuiTheme::Theme& theme){
     const float gap=theme.X(12),minimum=theme.X(84);
     const int columns=std::min(int(enabled.size()),std::clamp(int((width+gap)/(minimum+gap)),1,6));
     const int rows=(int(enabled.size())+columns-1)/columns;
-    const float heightBudget=std::max(theme.X(70),(ImGui::GetContentRegionAvail().y-theme.Y(156)-gap*(rows-1))/rows);
+    const auto runtimeSize=RuntimeBadgeSize(theme);const float runtimeGap=theme.Y(12);
+    const float heightBudget=std::max(theme.X(70),(ImGui::GetContentRegionAvail().y-theme.Y(156)-runtimeSize.y-runtimeGap-gap*(rows-1))/rows);
     const float tile=std::min({theme.X(138),(width-gap*(columns-1))/columns,heightBudget});
     for(size_t first=0;first<enabled.size();first+=columns){
         const int count=std::min(size_t(columns),enabled.size()-first);
@@ -508,13 +626,6 @@ void RenderHome(const HelpyImGuiTheme::Theme& theme){
             if(!HomeExit.Active)NavigationOrder::Drag("home",destination.Target,homePages,destination.Label);
             if(homeHover){
                 HomeFocused=index;
-                const auto* viewport=ImGui::GetMainViewport();const float margin=theme.X(8);
-                const float tipWidth=std::max(1.f,std::min(theme.X(200),viewport->WorkSize.x-theme.X(24)));
-                const float tipHeight=ImGui::CalcTextSize(destination.Description,nullptr,false,std::max(1.f,tipWidth-ImGui::GetStyle().WindowPadding.x*2)).y+theme.Y(88);
-                const float tipX=std::clamp((homeRectMin.x+homeRectMax.x)*.5f,viewport->WorkPos.x+margin+tipWidth*.5f,viewport->WorkPos.x+viewport->WorkSize.x-margin-tipWidth*.5f);
-                float tipY=homeRectMax.y+theme.Y(8);
-                if(tipY+tipHeight>viewport->WorkPos.y+viewport->WorkSize.y-theme.Y(8))tipY=std::max(viewport->WorkPos.y+theme.Y(8),homeRectMin.y-tipHeight-theme.Y(8));
-                ImGui::SetNextWindowPos({tipX,tipY},ImGuiCond_Always,{.5f,0});
                 PS::HelpyImGuiTheme::BeginDetailsTooltip(200);ImGui::PushTextWrapPos(-1);
                 const auto iconAt=ImGui::GetCursorScreenPos();const float iconWidth=ImGui::GetContentRegionAvail().x;
                 HelpyImGuiTheme::DrawIcon(destination.Icon,{iconAt.x+iconWidth*.5f,iconAt.y+theme.Y(16)},theme.Y(26),theme.accent);ImGui::Dummy({iconWidth,theme.Y(32)});
@@ -553,7 +664,13 @@ void RenderHome(const HelpyImGuiTheme::Theme& theme){
 #if defined(HELPY_PREVIEW)
     PreviewHomeQuick=HelpyPreviewHooks::LastRect();
 #endif
-    if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("Common RuneSchema switches without leaving Home.");
+    if(ImGui::IsItemHovered()){
+        HelpyImGuiTheme::BeginDetailsTooltip();HelpyImGuiTheme::DetailsTextUnformatted("Common RuneSchema switches without leaving Home.");
+#if defined(HELPY_PREVIEW)
+        PreviewHomeQuickTooltip=HelpyPreviewHooks::WindowRect();
+#endif
+        HelpyImGuiTheme::EndDetailsTooltip();
+    }
     ImGui::SameLine(0,gap);
     if(HelpyImGuiTheme::SoftButton("Profile",{profileWidth,theme.Y(28)}))CurrentPage=Page::Profile;
 #if defined(HELPY_PREVIEW)
@@ -573,7 +690,10 @@ void RenderHome(const HelpyImGuiTheme::Theme& theme){
     ItemGridPicker::PopulationProgress(LazyCatalog::For(0),{},false,true);
     ImGui::Spacing();
     const float linkSize=theme.Y(40),linkGap=theme.X(16),linkWidth=linkSize*HomeLinks.size()+linkGap*(HomeLinks.size()-1);
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY()+std::max(0.f,ImGui::GetContentRegionAvail().y-linkSize-theme.Y(8)));
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY()+std::max(0.f,ImGui::GetContentRegionAvail().y-linkSize-runtimeSize.y-runtimeGap-theme.Y(8)));
+    const float footerX=ImGui::GetCursorPosX();
+    ImGui::SetCursorPosX(footerX+std::max(0.f,(width-runtimeSize.x)*.5f));RenderRuntimeBadge(theme);
+    ImGui::SetCursorPosY(ImGui::GetItemRectMax().y-ImGui::GetWindowPos().y+runtimeGap);ImGui::SetCursorPosX(footerX);
     ImGui::SetCursorPosX(ImGui::GetCursorPosX()+std::max(0.f,(width-linkWidth)*.5f));
     for(size_t i=0;i<HomeLinks.size();++i){
         if(i)ImGui::SameLine(0,linkGap);ImGui::PushID(static_cast<int>(i)+900);
@@ -629,16 +749,13 @@ void RenderHome(const HelpyImGuiTheme::Theme& theme){
         }ImGui::End();
     }
 #if defined(HELPY_PREVIEW)
-    PreviewHomeFits=footerBottom<=ImGui::GetWindowPos().y+ImGui::GetWindowSize().y-ImGui::GetStyle().WindowPadding.y;
+    const auto homeBadge=HelpyPreviewHooks::RuntimeBadge;
+    PreviewHomeFits=footerBottom<=ImGui::GetWindowPos().y+ImGui::GetWindowSize().y-ImGui::GetStyle().WindowPadding.y&&
+        std::abs((homeBadge.x+homeBadge.z)*.5f-PreviewHomeCenter)<1&&homeBadge.w+theme.Y(6)<=PreviewHomeLinks[0].y&&HelpyPreviewHooks::RuntimeBadgeDraws==1;
 #endif
 }
-void RenderRuntimeBadge(const HelpyImGuiTheme::Theme& t);
-ImVec2 RuntimeBadgeSize(const HelpyImGuiTheme::Theme& t) {
-    const float size=std::min(t.Y(HelpyBranding::RuntimeIconSize),t.X(HelpyBranding::RuntimeIconSize)),padding=t.X(4);
-    return { (HelpyEnvironment::SharedStoreBadge()?size*1.8f+t.X(3):size)+padding*2+(RuntimeConnectionPanel::Read().Host?t.X(16):0),size+padding*2 };
-}
-void RenderInformationBar(const HelpyImGuiTheme::Theme& t) {
-    // Keep the title and status action in one layout row.
+void RenderInformationBar(const HelpyImGuiTheme::Theme& t,bool runtimeBadge=true) {
+    // Header badges are optional; Home keeps its status action above the social links.
     ImGui::BeginGroup();
     const auto start=ImGui::GetCursorScreenPos();
     const float width=ImGui::GetContentRegionAvail().x;
@@ -655,10 +772,10 @@ void RenderInformationBar(const HelpyImGuiTheme::Theme& t) {
 #endif
     }
     ImGui::PopFont();
-    ImGui::SetCursorScreenPos({start.x+std::max(0.0f,width-badge.x),start.y+(height-badge.y)*.5f});
-    ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0,0,0,0));
-    RenderRuntimeBadge(t);
-    ImGui::PopStyleColor();
+    if(runtimeBadge){
+        ImGui::SetCursorScreenPos({start.x+std::max(0.0f,width-badge.x),start.y+(height-badge.y)*.5f});
+        RenderRuntimeBadge(t);
+    }
     ImGui::SetCursorScreenPos({start.x,start.y+height});ImGui::Dummy({0,0});
     ImGui::EndGroup();
 #if defined(HELPY_PREVIEW)
@@ -668,16 +785,17 @@ void RenderInformationBar(const HelpyImGuiTheme::Theme& t) {
 bool RuneSchemaUpdateAvailable(){const auto& state=HelpyUpdates::Current();return
     RuneSchemaUpdateInfo::Compare(HelpyEnvironment::RuneSchemaVersion,state.MainVersion)==RuneSchemaUpdateInfo::Comparison::Newer
     ||RuneSchemaUpdateInfo::Compare(HelpyEnvironment::RuneSchemaVersion,state.ReleaseVersion)==RuneSchemaUpdateInfo::Comparison::Newer;}
-void RenderRuntimeBadge(const HelpyImGuiTheme::Theme& t) {
-    const float size=std::min(t.Y(HelpyBranding::RuntimeIconSize),t.X(HelpyBranding::RuntimeIconSize)),padding=t.X(4);
+void RenderRuntimeBadge(const HelpyImGuiTheme::Theme& t,float logicalSize) {
+    const float size=std::min(t.Y(logicalSize),t.X(logicalSize));
     const bool shared=HelpyEnvironment::SharedStoreBadge();
     const float marksWidth=shared?size*1.8f+t.X(3):size;
     const auto base=ImGui::GetCursorScreenPos();
-    if(HelpyImGuiTheme::SoftButton("##runtime-status",RuntimeBadgeSize(t)))RuntimeDetailsPanel::Request();
+    if(ImGui::InvisibleButton("##runtime-status",RuntimeBadgeSize(t,logicalSize),ImGuiButtonFlags_EnableNav))RuntimeDetailsPanel::Request();
+    if(ImGui::IsItemFocused()&&ImGui::GetIO().NavVisible)ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(),ImGui::GetItemRectMax(),ImGui::GetColorU32(t.accent));
     const bool showDetails=!RuntimeDetailsPanel::Open&&(ImGui::IsItemHovered()||(ImGui::IsItemFocused()&&ImGui::GetIO().NavVisible));
-    const ImVec2 start(base.x+padding,base.y+padding);
+    const ImVec2 start=base;
 #if defined(HELPY_PREVIEW)
-    HelpyPreviewHooks::RuntimeBadge=HelpyPreviewHooks::LastRect();HelpyPreviewHooks::RuntimeDetailsVisible=showDetails;
+    ++HelpyPreviewHooks::RuntimeBadgeDraws;HelpyPreviewHooks::RuntimeBadge=HelpyPreviewHooks::LastRect();HelpyPreviewHooks::RuntimeDetailsVisible=showDetails;
 #endif
     auto* texture=HelpyEnvironment::Current==HelpyEnvironment::Kind::Steam?SteamTexture:
         HelpyEnvironment::Current==HelpyEnvironment::Kind::Epic?EpicTexture:
@@ -705,9 +823,9 @@ void RenderRuntimeBadge(const HelpyImGuiTheme::Theme& t) {
     ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(start.x+marksWidth-t.X(3),start.y+size-t.Y(3)),t.X(4),ImGui::GetColorU32(status));
     if(showDetails){
         PS::HelpyImGuiTheme::BeginDetailsTooltip();ImGui::PushTextWrapPos(ImGui::GetCursorPosX()+t.X(360));
-        ImGui::TextUnformatted(HelpyEnvironment::Label());ImGui::TextColored(status,"%s",ready?"Runtime connected":"Runtime unavailable");ImGui::Separator();
-        ImGui::Text("Session: %s",network.Session.c_str());ImGui::TextWrapped("%s",network.Health.c_str());
-        ImGui::TextUnformatted("Click for Runtime, Attributions and Legal");ImGui::TextDisabled("F2  close / reopen");
+        HelpyImGuiTheme::DetailsTextUnformatted(HelpyEnvironment::Label());ImGui::PushStyleColor(ImGuiCol_Text,status);HelpyImGuiTheme::DetailsText("%s",ready?"Runtime connected":"Runtime unavailable");ImGui::PopStyleColor();ImGui::Separator();
+        HelpyImGuiTheme::DetailsText("Session: %s",network.Session.c_str());HelpyImGuiTheme::DetailsTextUnformatted(network.Health.c_str());
+        HelpyImGuiTheme::DetailsTextUnformatted("Click for Runtime, Attributions and Legal");HelpyImGuiTheme::DetailsTextDisabled("F2  close / reopen");
         ImGui::PopTextWrapPos();PS::HelpyImGuiTheme::EndDetailsTooltip();
     }
 }
@@ -722,7 +840,7 @@ void DownloadInitialAssets(){
     PendingWikiInitialAssets=true;
 }
 void RenderSplash(const HelpyImGuiTheme::Theme& theme){
-    RenderInformationBar(theme);
+    RenderInformationBar(theme,false);
     const auto origin=ImGui::GetCursorScreenPos(),available=ImGui::GetContentRegionAvail();
     if(!std::isfinite(SplashStarted))SplashStarted=ImGui::GetTime();BOOL animate=TRUE;SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION,0,&animate,0);
     const double now=ImGui::GetTime();double elapsed=now-SplashStarted;
@@ -822,21 +940,30 @@ void RenderSplash(const HelpyImGuiTheme::Theme& theme){
         else if(!downloads.Status.empty())centeredText(downloads.Status.c_str());
         if(HelpyMapCache::Busy())centeredText(HelpyMapCache::Current().Status.c_str());
     }
+    const auto tipBottom=ImGui::GetCursorScreenPos().y;
+    const float remaining=origin.y+available.y-tipBottom;
+    if(remaining>=theme.Y(48)){
+        const float logicalSize=std::min(64.f,(remaining-theme.Y(16))/std::max(.01f,theme.Scale()*theme.density));
+        const auto badge=RuntimeBadgeSize(theme,logicalSize);
+        ImGui::SetCursorScreenPos({center.x-badge.x*.5f,tipBottom+(remaining-badge.y)*.5f});RenderRuntimeBadge(theme,logicalSize);
+    }
     ImGui::PopStyleVar();
     if(!SplashExit.Active&&(entered||(!RuntimeDetailsPanel::Open&&ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)&&ImGui::IsKeyPressed(ImGuiKey_Enter,false))))SplashExit.Begin(now,blend);
     if(SplashExit.Active&&SplashExit.At(now,animate!=FALSE).Finished){SplashEntered=true;CurrentPage=Page::Home;HomeRevealStarted=animate?now:now-HelpySplash::RevealSeconds;}
 }
 
-void ApplyCaptionTheme(HWND window,const HelpyImGuiTheme::Theme& theme) {
+void ApplyCaptionTheme(HWND window,const HelpyImGuiTheme::Theme& theme,bool force=false) {
     const auto rgb=[](const ImVec4& color){return RGB(static_cast<BYTE>(color.x*255),static_cast<BYTE>(color.y*255),static_cast<BYTE>(color.z*255));};
     const BOOL dark=(theme.window.x+theme.window.y+theme.window.z)<1.5f;
-    const COLORREF caption=rgb(theme.navigation),text=rgb(theme.text),border=rgb(theme.border);
-    static HWND previousWindow=nullptr;static COLORREF previousCaption=0,previousText=0,previousBorder=0;static BYTE previousOpacity=0;
+    const COLORREF caption=rgb(theme.window),text=rgb(theme.text),border=rgb(theme.border);
+    struct Caption {COLORREF Color,Text,Border;BYTE Opacity;BOOL Dark;bool operator==(const Caption&)const=default;};
+    static std::unordered_map<HWND,Caption> captions;
     const auto opacity=static_cast<BYTE>((HelpyBackgrounds::Opaque()?1.0f:std::clamp(theme.windowOpacity,0.60f,1.0f))*255);
-    if(previousWindow==window&&previousCaption==caption&&previousText==text&&previousBorder==border&&previousOpacity==opacity)return;
+    const Caption next{caption,text,border,opacity,dark};
+    if(const auto found=captions.find(window);!force&&found!=captions.end()&&found->second==next)return;
+    std::erase_if(captions,[](const auto& value){return !IsWindow(value.first);});captions.insert_or_assign(window,next);
     SetWindowLongPtrW(window,GWL_EXSTYLE,GetWindowLongPtrW(window,GWL_EXSTYLE)|WS_EX_LAYERED);
-    SetLayeredWindowAttributes(window,0,opacity,LWA_ALPHA);previousOpacity=opacity;
-    previousWindow=window;previousCaption=caption;previousText=text;previousBorder=border;
+    SetLayeredWindowAttributes(window,0,opacity,LWA_ALPHA);
     DwmSetWindowAttribute(window,20,&dark,sizeof(dark));
     DwmSetWindowAttribute(window,35,&caption,sizeof(caption));
     DwmSetWindowAttribute(window,36,&text,sizeof(text));
@@ -1049,6 +1176,71 @@ void RenderUpdatesAndRuntime(const HelpyImGuiTheme::Theme& t) {
     ImGui::TextWrapped("Detection: %s",HelpyEnvironment::UE4SS.value("Source",std::string("Unavailable")).c_str());
     ImGui::TextWrapped("Capabilities: %s",HelpyEnvironment::UE4SS.value("Capabilities",std::string("Unavailable")).c_str());
     ImGui::TextWrapped("No build-number ceiling: newer hosts are not rejected by version. They must retain RuneSchema's required C++ exports and ABI. Missing optional capabilities use fallbacks; future breaking ABI changes may require a new RuneSchema build. UE4SS.dll is never replaced by this updater.");
+}
+void RenderDiagnosticsSettings(const HelpyImGuiTheme::Theme& t) {
+    auto& theme=HelpyImGuiTheme::Current;
+    ImGui::SeparatorText("Diagnostic notifications");
+    bool changed=false;
+    changed|=ImGui::Checkbox("Enable on-screen log toasts",&theme.diagnosticToastsEnabled);
+    ImGui::TextDisabled("Includes emitted debug/diagnostic lines; does not enable advancedLogging.");
+    ImGui::SetNextItemWidth(t.X(250));
+    changed|=ImGui::SliderInt("Maximum visible toasts",&theme.diagnosticToastLimit,1,10);
+    ImGui::SetNextItemWidth(t.X(250));
+    changed|=ImGui::SliderInt("Toast duration (seconds)",&theme.diagnosticToastDuration,2,15);
+    ImGui::TextWrapped("Repeated messages are grouped and overflowing notifications are summarized. F2-closed notifications remain click-through and do not steal game focus.");
+    if(ImGui::SmallButton("Reset notification defaults")){
+        const HelpyImGuiTheme::Theme defaults{};
+        theme.diagnosticToastsEnabled=defaults.diagnosticToastsEnabled;
+        theme.diagnosticToastLimit=defaults.diagnosticToastLimit;
+        theme.diagnosticToastDuration=defaults.diagnosticToastDuration;
+        changed=true;
+    }
+    ImGui::SeparatorText("Diagnostic presentation");
+    changed|=ImGui::Checkbox("Open raw / DMP-style technical details by default",&theme.diagnosticDeveloperMode);
+    ImGui::TextWrapped("Diagnostics panels use the shared Appearance spacing, colors and window/background opacity controls. Adjust padding or opacity in Settings > Appearance.");
+    if(ImGui::SmallButton("Reset presentation defaults")){
+        const HelpyImGuiTheme::Theme defaults{};
+        theme.diagnosticDeveloperMode=defaults.diagnosticDeveloperMode;
+        changed=true;
+    }
+    // Same keys in the same ui.jsonc file as M4. This is a relocation of the
+    // controls, not a settings migration or a separate configuration source.
+    static bool pendingSave=false;
+    pendingSave|=changed;
+    ImGui::SeparatorText("Diagnostic history");
+    int days=theme.diagnosticHistoryDays,sessions=theme.diagnosticHistorySessions,mb=theme.diagnosticHistoryMB;
+    ImGui::SetNextItemWidth(t.X(250));changed|=ImGui::SliderInt("Retain history (days)",&days,1,365);
+    ImGui::SetNextItemWidth(t.X(250));changed|=ImGui::SliderInt("Saved sessions",&sessions,1,100);
+    ImGui::SetNextItemWidth(t.X(250));changed|=ImGui::SliderInt("Maximum history storage (MB)",&mb,5,500);
+    if(days!=theme.diagnosticHistoryDays||sessions!=theme.diagnosticHistorySessions||mb!=theme.diagnosticHistoryMB){
+        theme.diagnosticHistoryDays=days;theme.diagnosticHistorySessions=sessions;theme.diagnosticHistoryMB=mb;
+        DiagnosticHistory.SetRetention({days,sessions,mb});
+        pendingSave=true;
+    }
+    ImGui::TextWrapped("The oldest saved sessions are pruned when any limit is reached. Original RuneSchema logs and mute rules are not deleted.");
+    if(!DiagnosticHistory.Error().empty())ImGui::TextColored(t.warning,"%s",DiagnosticHistory.Error().c_str());
+    if(ImGui::SmallButton("Clear saved sessions"))ImGui::OpenPopup("Delete diagnostic history?");
+    if(ImGui::BeginPopupModal("Delete diagnostic history?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
+        ImGui::TextWrapped("Delete previously saved diagnostic sessions? This does not delete RuneSchema.log or persistent mute rules.");
+        if(ImGui::Button("Delete saved history")){DiagnosticHistory.ClearHistory();ImGui::CloseCurrentPopup();}
+        ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+    ImGui::SeparatorText("Muted notifications");
+    const auto& rules=DiagnosticMutes.Rules();
+    if(rules.empty())ImGui::TextDisabled("No muted diagnostic notifications.");
+    for(std::size_t i=0;i<rules.size();++i){
+        const auto& rule=rules[i];ImGui::PushID(static_cast<int>(i));
+        ImGui::TextWrapped("%s - %s - %s | %llu suppressed",DiagnosticCenterMutes::Name(rule.Kind),
+            LiveLog::Label(rule.Severity),DiagnosticCenterMutes::Name(rule.Lifetime),
+            static_cast<unsigned long long>(rule.Suppressed));
+        if(!rule.Label.empty())ImGui::TextWrapped("Matching: %s",rule.Label.c_str());
+        if(ImGui::IsItemHovered())ImGui::SetTooltip("Exact/category match and severity are preserved; logging is never silenced.");
+        if(ImGui::SmallButton("Unmute")){DiagnosticMutes.Remove(i);ImGui::PopID();break;}
+        ImGui::PopID();
+    }
+    if(!DiagnosticMutes.Error().empty())ImGui::TextColored(t.warning,"Mute settings: %s",DiagnosticMutes.Error().c_str());
+    if(pendingSave&&!ImGui::IsAnyItemActive()){HelpyImGuiTheme::SaveCurrent();pendingSave=false;}
 }
 void RenderSettings(const HelpyImGuiTheme::Theme& t) {
     bool advanced=t.advancedMode;if(ImGui::Checkbox("Show advanced controls",&advanced)){HelpyImGuiTheme::Current.advancedMode=advanced;HelpyImGuiTheme::SaveCurrent();}
@@ -1320,6 +1512,9 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
 
     ImGui::PushStyleColor(ImGuiCol_ChildBg,t.navigation);
     ImGui::BeginChild("##helpy-nav",ImVec2(t.X(SidebarWidthLogical),0),false);
+#if defined(HELPY_PREVIEW)
+    const auto railAt=ImGui::GetWindowPos(),railSize=ImGui::GetWindowSize();HelpyPreviewHooks::NavigationRail={railAt.x,railAt.y,railAt.x+railSize.x,railAt.y+railSize.y};
+#endif
     ImGui::Dummy(ImVec2(1,t.Y(10.0f)));
     if(BrandTexture){
         const float size=std::min(t.X(62.0f),ImGui::GetContentRegionAvail().x);ImGui::SetCursorPosX((ImGui::GetWindowWidth()-size)*0.5f);
@@ -1328,13 +1523,35 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
     const auto centered=[](const char* text){ImGui::SetCursorPosX(std::max(0.0f,(ImGui::GetWindowWidth()-ImGui::CalcTextSize(text).x)*0.5f));ImGui::TextUnformatted(text);};
     centered("RuneSchema");
     ImGui::Dummy(ImVec2(1,t.Y(8.0f)));ImGui::Separator();ImGui::Dummy(ImVec2(1,t.Y(5.0f)));
-    const float homeHeight=t.Y(84);
-    if(ImGui::BeginChild("##helpy-destinations",ImVec2(0,std::max(1.f,ImGui::GetContentRegionAvail().y-homeHeight-ImGui::GetStyle().ItemSpacing.y)),false))
-        for(auto page:NavigationOrder::Pages("sidebar",HelpyNavigation::SidebarPages))if(page!=Page::Home&&HelpyNavigation::Available(page,t.workspaces,HelpyEnvironment::Server()))NavItem(page,t);
+    const auto sidebarDefaults=HelpyNavigationOrder::SidebarDefaults();
+    std::vector<Page> routes,lowerRoutes;bool lower=false;
+    for(int id:HelpyNavigationOrder::Ordered(HelpyNavigationOrder::SidebarSurface,sidebarDefaults)){
+        if(id==HelpyNavigationOrder::SidebarDivider){lower=true;continue;}
+        const auto page=static_cast<Page>(id);
+        if(HelpyNavigation::Available(page,t.workspaces,HelpyEnvironment::Server()))(lower?lowerRoutes:routes).push_back(page);
+    }
+    const float spacing=ImGui::GetStyle().ItemSpacing.y;
+    const auto rowHeight=[&](Page page){
+        const auto text=ImGui::CalcTextSize(PageTitle(page),nullptr,false,std::max(1.f,ImGui::GetContentRegionAvail().x-t.X(46)));
+        return std::max(t.Y(t.navigationItemHeight),text.y+t.Y(18))+spacing;
+    };
+    float routeHeight=0,lowerHeight=0;for(auto page:routes)routeHeight+=rowHeight(page);for(auto page:lowerRoutes)lowerHeight+=rowHeight(page);
+    const float budget=std::max(1.f,ImGui::GetContentRegionAvail().y-t.Y(84)-t.Y(8)-spacing*3);
+    lowerHeight=std::min(lowerHeight,budget*(routes.empty()?1.f:.5f));
+    const float routeLimit=std::max(1.f,budget-lowerHeight);
+    if(ImGui::BeginChild("##helpy-destinations",ImVec2(0,std::max(1.f,std::min(routeHeight,routeLimit))),false))
+        for(auto page:routes)NavItem(page,t,sidebarDefaults);
     ImGui::EndChild();
-    const float footerAvailable=ImGui::GetContentRegionAvail().x,footerGap=t.X(8),footerSide=std::min(t.X(84),std::max(1.f,(footerAvailable-footerGap)*.5f));
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX()+std::max(0.f,(footerAvailable-footerSide*2-footerGap)*.5f));
-    NavItem(Page::Home,t,footerSide);ImGui::SameLine(0,footerGap);NavItem(Page::Profile,t,footerSide);
+    const auto divider=ImGui::GetCursorScreenPos();const float dividerWidth=std::max(1.f,ImGui::GetContentRegionAvail().x),dividerHeight=t.Y(8);
+    ImGui::InvisibleButton("##sidebar-divider",{dividerWidth,dividerHeight});
+    ImGui::GetWindowDrawList()->AddLine({divider.x,divider.y+dividerHeight*.5f},{divider.x+dividerWidth,divider.y+dividerHeight*.5f},ImGui::GetColorU32(t.separator));
+    NavigationOrder::Drag(HelpyNavigationOrder::SidebarSurface,static_cast<Page>(HelpyNavigationOrder::SidebarDivider),sidebarDefaults,"Navigation divider");
+    if(ImGui::BeginChild("##helpy-lower-destinations",{0,std::max(1.f,lowerHeight)},false))for(auto page:lowerRoutes)NavItem(page,t,sidebarDefaults);
+    ImGui::EndChild();
+    const auto runtimeSize=RuntimeBadgeSize(t);
+    const float runtimeY=ImGui::GetCursorPosY()+std::max(0.f,ImGui::GetContentRegionAvail().y-t.Y(84))+(t.Y(84)-runtimeSize.y)*.5f;
+    ImGui::SetCursorPos({std::max(0.f,(ImGui::GetWindowWidth()-runtimeSize.x)*.5f),runtimeY});
+    RenderRuntimeBadge(t);
     ImGui::EndChild();ImGui::PopStyleColor();
 
     ImGui::SameLine(0,0);ImGui::PushID("helpy-nav-splitter");
@@ -1352,7 +1569,7 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
     ImGui::SameLine(0,t.X(t.contentGutter));
     }
     ImGui::BeginChild("##helpy-content",ImVec2(0,0),false,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
-    RenderInformationBar(t);
+    RenderInformationBar(t,false);
     RenderWorkspaceTabs(t);
     if(CurrentPage==Page::Map||CurrentPage==Page::Recipes){
         const size_t index=CurrentPage==Page::Map?0:1;
@@ -1388,8 +1605,10 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
                 case Page::Creation:SpawnToolsPanel::Render(SpawnToolsPanel::View::ItemLab);break;
                 case Page::Recipes:if(!DetachedWorkspaces[1])SpawnToolsPanel::Render(SpawnToolsPanel::View::Recipes);else ImGui::TextWrapped("Recipes is open in a separate window. The shared Item Bay remains available below or detached.");break;
                 case Page::Map:if(!DetachedWorkspaces[0])MapPanel::Render();else ImGui::TextWrapped("Map is open in a separate window. Minimized windows can be restored from Helpy's taskbar.");break;
-                case Page::LiveLog:LiveLogPanel::Render();break;
+                case Page::LiveLog:
+                    DiagnosticsPanel::Render(DiagnosticStore,&DiagnosticHistory,&DiagnosticMutes);break;
                 case Page::Mods:ModsPanel::Render();break;
+                case Page::BugReport:BugReportPanel::Render();break;
                 case Page::SaveEditor:SpawnToolsPanel::RefreshSnapshot(0);SaveEditorPanel::Render(SpawnToolsPanel::UiSnapshot,SpawnToolsPanel::UiRevision);break;
                 case Page::Journal:JournalPanel::Render();break;
                 case Page::DedicatedServer:
@@ -1408,13 +1627,14 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
                             auto& options=HelpyImGuiTheme::Current.workspaces;bool changed=false;
                             ImGui::TextWrapped("Character lives in Players, Journal in World, and Authoring in Tools. Hidden tabs keep their drafts.");
                             changed|=ImGui::Checkbox("Authoring (inside Tools)",&options.Authoring);changed|=ImGui::Checkbox("Session tools (inside Tools)",&options.Tools);
-                            changed|=ImGui::Checkbox("Live Log",&options.LiveLog);
+                            changed|=ImGui::Checkbox("Diagnostics",&options.LiveLog);
                             changed|=ImGui::Checkbox("Server / Co-op",&options.ServerTools);
                             changed|=ImGui::Checkbox("Journal",&options.Journal);
                             if(changed)HelpyImGuiTheme::SaveCurrent();ImGui::EndTabItem();
                         }
                         if(ImGui::BeginTabItem("RuneSchema")){RuneSchemaSettingsPanel::Render();ImGui::EndTabItem();}
                         if(ImGui::BeginTabItem("Appearance")){RenderSettings(t);ImGui::EndTabItem();}
+                        if(ImGui::BeginTabItem("Diagnostics")){RenderDiagnosticsSettings(t);ImGui::EndTabItem();}
                         ImGuiTabItemFlags backgroundFlags=0;
 #if defined(HELPY_PREVIEW)
                         if(PreviewBackgroundsTab)backgroundFlags|=ImGuiTabItemFlags_SetSelected;
@@ -1544,6 +1764,10 @@ void HelpyStandaloneWindow::ThreadMain() {
     wc.hIconSm=static_cast<HICON>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,16,16,LR_SHARED));
     const auto cleanup=[&](void*){
         m_publishedWindow=nullptr;ClosePopup();
+        LiveLogPanel::DrainPending();StructuredLogFeed::DrainPending();
+        DiagnosticHistory.Queue(DiagnosticStore,true);DiagnosticHistory.Close();
+        DiagnosticOverlay.Close();StructuredLogFeed::Shutdown();DiagnosticsPanel::Shutdown();
+        LiveLogPanel::OnEntry={};LiveLogPanel::OnBackfillEntry={};
         if(ImGui::GetCurrentContext()){
             CharacterPreviewPanel::Shutdown();
             if(ImGui::GetIO().BackendRendererUserData)ImGui_ImplDX11_Shutdown();
@@ -1560,10 +1784,11 @@ void HelpyStandaloneWindow::ThreadMain() {
     RegisterClassExW(&wc);
     m_hwnd=CreateWindowExW(WS_EX_APPWINDOW,wc.lpszClassName,HelpyBranding::WindowTitle,WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,1280,900,nullptr,nullptr,m_module,this);
     if(!m_hwnd){SetError("CreateWindowExW failed");m_started=true;return;}
+    const UINT initialDpi=GetDpiForWindow(m_hwnd);HelpyImGuiTheme::SetRuntimeDpi(initialDpi?float(initialDpi)/96.f:1.f);
     DragAcceptFiles(m_hwnd,TRUE);
     SendMessageW(m_hwnd,WM_SETICON,ICON_BIG,reinterpret_cast<LPARAM>(wc.hIcon));
     SendMessageW(m_hwnd,WM_SETICON,ICON_SMALL,reinterpret_cast<LPARAM>(wc.hIconSm));
-    ApplyCaptionTheme(m_hwnd,HelpyImGuiTheme::Current);
+    ApplyCaptionTheme(m_hwnd,HelpyImGuiTheme::Current,true);
     if(!CreateDevice()){SetError("Direct3D 11 initialization failed");m_started=true;return;}
     IMGUI_CHECKVERSION();ImGui::CreateContext();auto& io=ImGui::GetIO();io.ConfigFlags|=ImGuiConfigFlags_NavEnableKeyboard;io.IniFilename=nullptr;
     HelpyImGuiTheme::Poll();
@@ -1578,6 +1803,22 @@ void HelpyStandaloneWindow::ThreadMain() {
         ShowWindow(m_hwnd,SW_SHOWNOACTIVATE);m_visible=true;
         LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());QueuePlayerRefresh(true);
     }
+    const auto kind=HelpyEnvironment::Current;
+    const auto lane=kind==HelpyEnvironment::Kind::Steam?"steam":kind==HelpyEnvironment::Kind::Epic?"epic":kind==HelpyEnvironment::Kind::GamePass?"gamepass":HelpyEnvironment::Server()?"server":"unknown";
+    const auto diagnosticRoot=RuneSchemaData::PlatformDirectory(lane)/"diagnostics";
+    const auto& diagnosticTheme=HelpyImGuiTheme::Current;
+    DiagnosticHistory.Open(diagnosticRoot,{diagnosticTheme.diagnosticHistoryDays,diagnosticTheme.diagnosticHistorySessions,diagnosticTheme.diagnosticHistoryMB});
+    DiagnosticMutes.Open(diagnosticRoot);
+    StructuredLogFeed::OnRecord=[](const StructuredDiagnostic::Record& record){
+        const auto id=DiagnosticStore.AcceptStructured(record);if(!id)return;
+        const auto* group=DiagnosticStore.FindGroup(id);if(!group||DiagnosticMutes.SuppressStructured(*group))return;
+        auto toast=LiveLog::Parse(std::string("[RuneSchema] [")+(record.Severity=="Error"?"error":record.Severity=="Warning"?"warning":"info")+"] ["+record.Code+"] "+record.Title+": "+record.Message);
+        toast.Scope=record.Source;DiagnosticFeed.Accept(toast,DiagnosticOptions());
+    };
+    LiveLogPanel::OnBackfillEntry=[](const LiveLog::Entry& entry){DiagnosticStore.Accept(entry);};
+    LiveLogPanel::OnEntry=[](const LiveLog::Entry& entry){
+        DiagnosticStore.Accept(entry);if(DiagnosticLegacyIntake::Eligible(entry)&&DiagnosticLegacyIntake::MirrorReference(entry).empty()&&!DiagnosticMutes.Suppress(entry))DiagnosticFeed.Accept(entry,DiagnosticOptions());
+    };
     m_ready=true;m_started=true;
     // Opt-in only, once after the renderer is ready. No recurring reopen or
     // game-thread polling; dedicated servers retain their existing entry page.
@@ -1585,7 +1826,7 @@ void HelpyStandaloneWindow::ThreadMain() {
         ShowWindow(m_hwnd,SW_SHOWNOACTIVATE);m_visible=true;
         LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());
     }
-    MSG msg{};bool done=false,themeKeyDown=false;
+    MSG msg{};bool done=false,themeKeyDown=false;HelpyFramePacing pacing;
     while(!done&&!m_stop.load()) {
         // Hotkeys belong to Helpy's window thread. No engine tick callback,
         // viewport input hook, or UE4SS C++ ABI is needed by this plugin.
@@ -1609,7 +1850,14 @@ void HelpyStandaloneWindow::ThreadMain() {
             TranslateMessage(&msg);DispatchMessageW(&msg);
         }
         if(done)break;
-        if(m_visible.load()&&std::chrono::steady_clock::now()>=NextPlayerRefresh)QueuePlayerRefresh(true);if(m_visible.load()&&!IsIconic(m_hwnd))RenderFrame();else Sleep(16);
+        const bool diagnosticBackground=!m_visible.load()||IsIconic(m_hwnd)||CurrentPage!=Page::LiveLog;
+        if(!m_visible.load())HelpyImGuiTheme::Poll();
+        LiveLogPanel::Poll(0,diagnosticBackground);StructuredLogFeed::Poll(diagnosticBackground);
+        DiagnosticFeed.Tick(DiagnosticOptions());DiagnosticHistory.Queue(DiagnosticStore);
+        DiagnosticOverlay.Update(m_module,GameWindow(foreground)?foreground:nullptr,DiagnosticFeed,HelpyImGuiTheme::Current,!m_visible.load()&&!HelpyEnvironment::Server());
+        if(m_visible.load()&&std::chrono::steady_clock::now()>=NextPlayerRefresh)QueuePlayerRefresh(true);
+        if(pacing.Due(std::chrono::steady_clock::now(),m_visible.load()&&!IsIconic(m_hwnd),OwnsWindow(GetForegroundWindow())))RenderFrame();
+        MsgWaitForMultipleObjectsEx(0,nullptr,8,QS_ALLINPUT,MWMO_INPUTAVAILABLE);
     }
 }
 
@@ -1795,11 +2043,27 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
             {
                 SplashEntered=false;SplashExit={};SplashStarted=ImGui::GetTime();
                 for(int i=0;i<3;++i)RenderFrame();
+                RECT clientBounds{};GetClientRect(m_hwnd,&clientBounds);width=clientBounds.right;height=clientBounds.bottom;
+                constexpr const char* controls[]{"main/minimize","main/maximize","main/close"};
+                constexpr int hits[]{HTMINBUTTON,HTMAXBUTTON,HTCLOSE};
+                float previousRight=0;
+                for(int column=0;column<3;++column){const auto rect=HelpyPreviewHooks::WindowControls.at(controls[column]);
+                    if(rect.x<previousRight||rect.z>width||rect.y<0||rect.w>NativeCaption.Height||rect.z<=rect.x||rect.w<=rect.y||
+                        NativeCaption.HitTest(int((rect.x+rect.z)*.5f),int((rect.y+rect.w)*.5f),width,false)!=hits[column])throw std::runtime_error("Visible caption controls must match native hit targets in the top-right caption");
+                    previousRight=rect.z;
+                }
+                PreviewCapture=output/"native-window-controls.png";RenderFrame();PreviewCapture.clear();
                 if(!HelpyPreviewHooks::SplashVisible||PreviewSidebarVisible||LazyCatalog::For(0).Rows.empty())throw std::runtime_error("Splash must hide navigation without blocking cache-first catalogue loading");
                 for(const auto& [time,name]:std::array{std::pair{.5,"splash-dragonwilds"},std::pair{6.0,"splash-blend"},std::pair{10.0,"splash-runeschema"},std::pair{14.0,"splash-blend-back"}}){
                     HelpyPreviewHooks::SplashElapsed=time;
                     SplashStarted=ImGui::GetTime()-time;RenderFrame();PreviewCapture=output/(std::string(name)+".png");RenderFrame();PreviewCapture.clear();
                     if(std::abs(HelpyPreviewHooks::SplashBlend-HelpySplash::Blend(time,HelpyPreviewHooks::SplashAnimated))>.12f)throw std::runtime_error("Splash rendered the wrong hold/blend phase");
+                    const auto badge=HelpyPreviewHooks::RuntimeBadge;
+                    if(badge.z>badge.x&&badge.w>badge.y){
+                        if(std::abs((badge.x+badge.z)*.5f-HelpyPreviewHooks::SplashCenterX)>1.f||badge.w>height||
+                            (!HelpyPreviewHooks::SplashTipLines.empty()&&badge.y<HelpyPreviewHooks::SplashTipLines.back().w))
+                            throw std::runtime_error("Splash platform badge must be centered below the tips inside the viewport: "+nlohmann::json{{"Width",width},{"Height",height},{"Badge",{badge.x,badge.y,badge.z,badge.w}},{"Center",HelpyPreviewHooks::SplashCenterX}}.dump());
+                    }
                 }
                 const auto accent=HelpyImGuiTheme::Current.accent;HelpyImGuiTheme::Current.accent={.12f,.5f,1.f,.3f};SplashStarted=ImGui::GetTime()-6.0;
                 HelpyPreviewHooks::SplashElapsed=6.0;
@@ -1862,6 +2126,10 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 const auto profile=HelpyPreviewHooks::Navigation.at("Profile"),orb=HelpyPreviewHooks::LoadingRect;
                 if(std::abs(profile.y-PreviewHomeQuick.y)>1||profile.x<PreviewHomeQuick.z||std::abs((PreviewHomeQuick.x+profile.z)*.5f-PreviewHomeCenter)>2)throw std::runtime_error("Home Profile and Quick settings must share a centered row");
                 if(orb.y<std::max(profile.w,PreviewHomeQuick.w)+HelpyImGuiTheme::Current.Y(24))throw std::runtime_error("Home loading orb must sit below the action row with breathing room");
+                HelpyPreviewHooks::MouseEnabled=true;HelpyPreviewHooks::Mouse={(orb.x+orb.z)*.5f,(orb.y+orb.w)*.5f};for(int i=0;i<4;++i)RenderFrame();
+                const auto homeDetails=HelpyPreviewHooks::LoadingDetailsRect;
+                if(std::abs((homeDetails.x+homeDetails.z-orb.x-orb.z)*.5f)>2)throw std::runtime_error("Home loading tooltip must be anchored to its ring, not previous navigation");
+                PreviewCapture=output/"home-loading-hover.png";RenderFrame();PreviewCapture.clear();HelpyPreviewHooks::MouseEnabled=false;
                 const auto bayRings=HelpyPreviewHooks::LoadingRings;
                 CurrentPage=Page::Items;RenderFrame();PreviewCapture=output/"item-service-loading.png";RenderFrame();PreviewCapture.clear();
                 if(HelpyPreviewHooks::LoadingRings==bayRings)throw std::runtime_error("Empty Item Bay failed to draw its centered loading ring");
@@ -1869,6 +2137,9 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 const auto ring=HelpyPreviewHooks::LoadingRect;const auto detailCount=HelpyPreviewHooks::LoadingDetailsShown;
                 HelpyPreviewHooks::MouseEnabled=true;HelpyPreviewHooks::Mouse={(ring.x+ring.z)*.5f,(ring.y+ring.w)*.5f};RenderFrame();RenderFrame();
                 if(HelpyPreviewHooks::LoadingDetailsShown==detailCount||HelpyPreviewHooks::LoadingDetailsText.find("Stage:")==std::string::npos)throw std::runtime_error("Loading wheel hover must expose stage and work details");
+                RenderFrame();RenderFrame();const auto details=HelpyPreviewHooks::LoadingDetailsRect;
+                if(std::abs((details.x+details.z-ring.x-ring.z)*.5f)>2)throw std::runtime_error("Item loading tooltip must be anchored to its own ring");
+                PreviewCapture=output/"item-service-loading-hover.png";RenderFrame();PreviewCapture.clear();
                 HelpyPreviewHooks::MouseEnabled=false;HelpyPreviewHooks::Mouse={-100,-100};
                 loading=saved;previewLoading=false;
             }
@@ -1894,6 +2165,38 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 if(!GetLayeredWindowAttributes(m_hwnd,&glassKey,&glassOpacity,&glassFlags)||glassOpacity!=static_cast<BYTE>(std::clamp(HelpyImGuiTheme::Current.windowOpacity,.6f,1.f)*255)||HelpyBackgrounds::Opaque())throw std::runtime_error("Clear glass must restore configured native transparency");
             }
             for(const auto& [page,name]:pairs){CurrentPage=page;for(int i=0;i<4;++i)RenderFrame();PreviewCapture=output/(std::string(name)+".png");RenderFrame();PreviewCapture.clear();}
+            {
+                StructuredDiagnostic::Record record;
+                record.EventId="preview-e1";record.SessionId="preview";record.Timestamp="2026-10-23T12:30:00.000Z";
+                record.Code="RS-ASSET-001";record.Source="AssetLoader";record.Severity="Error";record.Outcome="Failed";
+                record.Title="Fixture asset unavailable";record.Message="Synthetic diagnostic; no game action was attempted.";
+                record.Context={{"ModId","ExampleMod"},{"File","assets/example.jsonc"},{"Target","/Game/Mods/Example/Item"},{"Phase","Resolution"}};
+                record.Cause={{"Status","Unknown"}};
+                const auto id=DiagnosticStore.AcceptStructured(record);
+                if(!id)throw std::runtime_error("Structured preview diagnostic was rejected");
+                DiagnosticStore.Accept(LiveLog::Parse("[RuneSchema] [warning] [WEARABLE-BRIDGE][NOT-ENROLLED] Example cape"));
+                CurrentPage=Page::LiveLog;
+                DiagnosticsPanel::Current=DiagnosticsPanel::View::Overview;DiagnosticsPanel::RequestedTab=0;
+                for(int i=0;i<4;++i)RenderFrame();PreviewCapture=output/"diagnostics-overview.png";RenderFrame();PreviewCapture.clear();
+                {
+                    ImGuiWindow* metric=nullptr;
+                    for(auto* window:ImGui::GetCurrentContext()->Windows)if(window->Active&&std::string_view(window->Name).find("##metric")!=std::string_view::npos){metric=window;break;}
+                    if(!metric)throw std::runtime_error("Diagnostics metric card missing");
+                    const auto oldMouse=HelpyPreviewHooks::Mouse;const bool oldEnabled=HelpyPreviewHooks::MouseEnabled;
+                    HelpyPreviewHooks::MouseEnabled=true;HelpyPreviewHooks::Mouse={metric->Pos.x+metric->Size.x*.5f,metric->Pos.y+metric->Size.y*.5f};
+                    for(int i=0;i<3;++i)RenderFrame();
+                    ImGuiWindow* tooltip=nullptr;for(auto* window:ImGui::GetCurrentContext()->Windows)if(window->Active&&(window->Flags&ImGuiWindowFlags_Tooltip))tooltip=window;
+                    if(!tooltip||tooltip->Pos.y<metric->Pos.y+metric->Size.y+HelpyImGuiTheme::Current.Y(4.0f)-1.f)throw std::runtime_error("Metric tooltip must sit below the complete card with a gap");
+                    PreviewCapture=output/"diagnostics-metric-hover.png";RenderFrame();PreviewCapture.clear();
+                    HelpyPreviewHooks::Mouse=oldMouse;HelpyPreviewHooks::MouseEnabled=oldEnabled;
+                }
+                DiagnosticsPanel::Current=DiagnosticsPanel::View::Issues;DiagnosticsPanel::RequestedTab=1;DiagnosticsPanel::SelectedGroup=id;
+                for(int i=0;i<4;++i)RenderFrame();PreviewCapture=output/"diagnostics-issue.png";RenderFrame();PreviewCapture.clear();
+                DiagnosticsPanel::RequestReport(DiagnosticStore,DiagnosticsPanel::ExportKind::Issue,id);
+                for(int i=0;i<3;++i)RenderFrame();PreviewCapture=output/"diagnostics-report-review.png";RenderFrame();PreviewCapture.clear();
+                ImGui::ClosePopupsOverWindow(nullptr,false);DiagnosticsPanel::Current=DiagnosticsPanel::View::LiveLog;DiagnosticsPanel::RequestedTab=2;
+                for(int i=0;i<3;++i)RenderFrame();
+            }
             {
                 using namespace ModsPanel;const auto oldSnapshot=Snapshot,oldRows=Rows;const auto oldStatus=Status;const auto oldHealth=Health;const auto oldRevision=HealthRevision;
                 Rows=nlohmann::json::array();for(const auto* owner:{"Dye_Quests","Flintlocks","RSDWSpears"})Rows.push_back({{"Name",owner},{"Enabled",true},{"Present",true},{"Metadata",{{"version","1.0"},{"description","Synthetic mod-manager layout fixture"}}},{"Loaders",nlohmann::json::array({"RuneSchema","Unreal PAK"})},{"HasCache",true}});
@@ -1954,10 +2257,11 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 for(int i=0;i<3;++i)RenderFrame();
                 const auto badge=HelpyPreviewHooks::RuntimeBadge;
                 const auto bar=HelpyPreviewHooks::InformationBar,heading=HelpyPreviewHooks::PageHeading;
-                if(badge.x<bar.x||badge.y<bar.y-1||std::abs(badge.z-bar.z)>1||badge.w>bar.w+1||badge.z-badge.x>HelpyImGuiTheme::Current.X(80)
-                    ||badge.w-badge.y<HelpyImGuiTheme::Current.Y(40)
-                    ||heading.z>badge.x-HelpyImGuiTheme::Current.X(8)||std::abs((heading.y+heading.w)-(badge.y+badge.w))>2)
-                    throw std::runtime_error("Runtime icon must align with the page heading at the far right: badge="+std::to_string(badge.x)+","+std::to_string(badge.y)+","+std::to_string(badge.z)+","+std::to_string(badge.w)
+                if(badge.x<MainSurfacePosition.x||badge.y<HelpyPreviewHooks::Navigation.at("Home").w||badge.z>bar.x||badge.w>MainSurfacePosition.y+MainSurfaceSize.y
+                    ||badge.z-badge.x>HelpyImGuiTheme::Current.X(80)||badge.w-badge.y<HelpyImGuiTheme::Current.Y(32)
+                    ||std::abs((badge.x+badge.z-HelpyPreviewHooks::NavigationRail.x-HelpyPreviewHooks::NavigationRail.z)*.5f)>HelpyImGuiTheme::Current.X(2)
+                    ||MainSurfacePosition.y+MainSurfaceSize.y-badge.w>HelpyImGuiTheme::Current.Y(48))
+                    throw std::runtime_error("Runtime icon must be centered at the bottom of the navigation rail: badge="+std::to_string(badge.x)+","+std::to_string(badge.y)+","+std::to_string(badge.z)+","+std::to_string(badge.w)
                         +" header="+std::to_string(bar.x)+","+std::to_string(bar.y)+","+std::to_string(bar.z)+","+std::to_string(bar.w)
                         +" title="+std::to_string(heading.x)+","+std::to_string(heading.y)+","+std::to_string(heading.z)+","+std::to_string(heading.w));
                 const auto source=HelpyPreviewHooks::SourceFilter;
@@ -1974,6 +2278,17 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                     RuntimeDetailsPanel::Open=false;RenderFrame();RenderFrame();
                 }
                 HelpyPreviewHooks::MouseEnabled=false;HelpyPreviewHooks::Mouse={20,20};for(int i=0;i<2;++i)RenderFrame();
+                CurrentPage=Page::Home;for(int i=0;i<3;++i)RenderFrame();
+                if(!PreviewHomeFits)throw std::runtime_error("Home runtime badge must appear once, centered above social links for each platform");
+                PreviewCapture=output/(std::string("home-")+name+".png");RenderFrame();PreviewCapture.clear();
+                if(kind==HelpyEnvironment::Kind::Steam){
+                    const auto homeBadge=HelpyPreviewHooks::RuntimeBadge;
+                    HelpyPreviewHooks::MouseEnabled=true;HelpyPreviewHooks::Mouse={(homeBadge.x+homeBadge.z)*.5f,(homeBadge.y+homeBadge.w)*.5f};
+                    HelpyPreviewHooks::MouseDown=false;RenderFrame();HelpyPreviewHooks::MouseDown=true;RenderFrame();HelpyPreviewHooks::MouseDown=false;for(int i=0;i<3;++i)RenderFrame();
+                    if(!RuntimeDetailsPanel::Open)throw std::runtime_error("Home runtime badge must still open runtime details");
+                    RuntimeDetailsPanel::Open=false;HelpyPreviewHooks::MouseEnabled=false;
+                }
+                CurrentPage=Page::Items;for(int i=0;i<2;++i)RenderFrame();
             }
             for(const auto kind:{HelpyEnvironment::Kind::Steam,HelpyEnvironment::Kind::GamePass}){
                 HelpyEnvironment::Current=kind;RuntimeConnectionPanel::PreviewRole="listen-server";RuntimeConnectionPanel::Next={};for(int i=0;i<3;++i)RenderFrame();
@@ -1990,6 +2305,27 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 if(tab==RuntimeDetailsPanel::Tab::Runtime&&HelpyPreviewHooks::RuntimeGameLogo.z<=HelpyPreviewHooks::RuntimeGameLogo.x)throw std::runtime_error("Runtime tab did not render its shared Dragonwilds logo");
                 PreviewCapture=output/(tab==RuntimeDetailsPanel::Tab::Attributions?"attributions.png":tab==RuntimeDetailsPanel::Tab::Legal?"legal.png":"info.png");RenderFrame();PreviewCapture.clear();
                 RuntimeDetailsPanel::Open=false;RenderFrame();RenderFrame();
+            }
+            {
+                namespace Hooks=HelpyPreviewHooks;
+                CurrentPage=Page::BugReport;for(int frame=0;frame<3;++frame)RenderFrame();
+                if(!Hooks::Navigation.contains("Report a bug")||!PageErrors[static_cast<size_t>(Page::BugReport)].empty())throw std::runtime_error("Bug-report form is not reachable by default");
+                std::snprintf(BugReportPanel::Title,sizeof(BugReportPanel::Title),"Item icons disappear after menu return");
+                std::snprintf(BugReportPanel::Details,sizeof(BugReportPanel::Details),"Pictures stop appearing in the item browser after returning to the menu.");
+                std::snprintf(BugReportPanel::Steps,sizeof(BugReportPanel::Steps),"Open Players / Items, return to the game menu, then reopen Helpy.");
+                std::snprintf(BugReportPanel::Expected,sizeof(BugReportPanel::Expected),"Pictures and power badges remain visible.");
+                BugReportPanel::Category=6;for(int frame=0;frame<3;++frame)RenderFrame();
+                PreviewCapture=output/"bug-report-form.png";RenderFrame();PreviewCapture.clear();
+                const auto titleRect=Hooks::BugFields.at("Title");if(titleRect.x<0||titleRect.z>width||titleRect.y<0||titleRect.w>height)throw std::runtime_error("Bug-report title field escaped the viewport");
+                BugReportPanel::ScrollToSubmit=true;for(int frame=0;frame<4;++frame)RenderFrame();BugReportPanel::ScrollToSubmit=false;
+                const auto submit=Hooks::BugSubmit;if(submit.y<0||submit.w>height||submit.z<=submit.x)throw std::runtime_error("Bug-report submit control is not scroll-reachable");
+                Hooks::MouseEnabled=true;Hooks::Mouse={(submit.x+submit.z)*.5f,(submit.y+submit.w)*.5f};Hooks::MouseDown=true;RenderFrame();Hooks::MouseDown=false;RenderFrame();RenderFrame();
+                if(!BugReportPanel::OpenedUrl.starts_with(std::string(BugReport::NewIssue)+"?title=")||BugReportPanel::OpenedUrl.find("Cache%20%2F%20icons")==std::string::npos||BugReportPanel::Status.find("has not submitted")==std::string::npos)throw std::runtime_error("Bug-report action must prepare a categorized GitHub draft, not claim submission");
+                PreviewCapture=output/"bug-report-github-review.png";RenderFrame();PreviewCapture.clear();
+                Hooks::MouseEnabled=false;CurrentPage=Page::Items;RenderFrame();CurrentPage=Page::BugReport;RenderFrame();
+                if(std::string(BugReportPanel::Title)!="Item icons disappear after menu return")throw std::runtime_error("Navigation discarded the report draft");
+                BugReportPanel::Title[0]=BugReportPanel::Details[0]=BugReportPanel::Steps[0]=BugReportPanel::Expected[0]=BugReportPanel::Additional[0]=0;BugReportPanel::Status.clear();BugReportPanel::OpenedUrl.clear();BugReportPanel::CopiedBody.clear();BugReportPanel::Category=0;
+                CurrentPage=Page::Home;
             }
             // The expanded browser must remain usable at the minimum desktop
             // size, not just in the full-size interactive fixture below.
@@ -2063,7 +2399,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 for(int frame=0;frame<3;++frame)RenderFrame();
                 if(!Hooks::AuthoringButtons.contains("Profile portrait"))throw std::runtime_error("Profile route did not render its account controls");
                 const auto homeFooter=Hooks::Navigation.at("Home"),profileFooter=Hooks::Navigation.at("Profile");
-                if(profileFooter.x<homeFooter.z||std::abs(profileFooter.y-homeFooter.y)>2)throw std::runtime_error("Profile must sit beside Home in the footer");
+                if(std::abs(profileFooter.x-homeFooter.x)>2||std::abs(profileFooter.z-homeFooter.z)>2||profileFooter.y<homeFooter.w)throw std::runtime_error("Profile must be a matching navigation row below Home");
                 {
                     const auto originalProfile=RuneSchemaProfile::Read();auto sample=originalProfile;
                     {
@@ -2127,7 +2463,10 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 if(HomeExit.Active){HomeExit.Started=ImGui::GetTime()-HelpySplash::ExitSeconds;for(int i=0;i<3;++i)RenderFrame();}
                 if(CurrentPage!=Page::DedicatedServer||!PreviewSidebarVisible)throw std::runtime_error("Dedicated Home tile did not open with navigation");
                 HelpyEnvironment::Current=homeEnvironment;
-                CurrentPage=Page::Home;for(int i=0;i<3;++i)RenderFrame();click(PreviewHomeQuick);
+                CurrentPage=Page::Home;for(int i=0;i<3;++i)RenderFrame();
+                Hooks::MouseEnabled=true;Hooks::Mouse=center(PreviewHomeQuick);Hooks::MouseDown=false;for(int i=0;i<4;++i)RenderFrame();
+                if(std::abs((PreviewHomeQuickTooltip.x+PreviewHomeQuickTooltip.z-PreviewHomeQuick.x-PreviewHomeQuick.z)*.5f)>2)throw std::runtime_error("Quick settings details must be centered on their control");
+                PreviewCapture=output/"home-quick-tooltip.png";RenderFrame();PreviewCapture.clear();click(PreviewHomeQuick);
                 if(PreviewHomeQuick.z-PreviewHomeQuick.x>HelpyImGuiTheme::Current.X(160)||std::abs((PreviewHomeQuick.x+Hooks::Navigation.at("Profile").z)*.5f-PreviewHomeCenter)>2)throw std::runtime_error("Quick settings and Profile must be compact and centered together");
                 if(!ImGui::IsPopupOpen("Home quick settings",ImGuiPopupFlags_AnyPopupId))throw std::runtime_error("Home quick settings did not open");
                 if(PreviewHomeQuickPopup.x<0||PreviewHomeQuickPopup.y<0||PreviewHomeQuickPopup.z>ImGui::GetIO().DisplaySize.x||PreviewHomeQuickPopup.w>ImGui::GetIO().DisplaySize.y)throw std::runtime_error("Quick settings escaped the viewport");
@@ -2155,7 +2494,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 std::strcpy(MapPanel::Data.MarkerSearch,"iron");for(int i=0;i<2;++i)RenderFrame();
                 if(Hooks::MapReferenceMatches!=2)throw std::runtime_error("Responsive map search did not apply cached references");
                 Hooks::MapForceGroupsOpen=true;click(Hooks::MapFiltersButton);
-                if(!Hooks::MapCategoryControls.contains("mining:Iron")||Hooks::MapFiltersClose.w>height||Hooks::MapFiltersClose.z>width)throw std::runtime_error("Responsive map filter controls are missing or clipped");
+                if(!Hooks::MapCategoryControls.contains("mining:Iron")||Hooks::MapFiltersClose.w>height||Hooks::MapFiltersClose.z>width)throw std::runtime_error("Responsive map filter controls are missing or clipped: "+nlohmann::json{{"Width",width},{"Height",height},{"Category",Hooks::MapCategoryControls.contains("mining:Iron")},{"Close",{Hooks::MapFiltersClose.x,Hooks::MapFiltersClose.y,Hooks::MapFiltersClose.z,Hooks::MapFiltersClose.w}}}.dump());
                 PreviewCapture=output/"map-filters-responsive.png";RenderFrame();PreviewCapture.clear();
                 click(Hooks::MapCategoryControls.at("mining:Iron"));if(Hooks::MapReferenceMatches)throw std::runtime_error("Responsive map category hiding failed");
                 click(Hooks::MapFiltersClose);Hooks::MapForceGroupsOpen=false;MapPanel::Data.MarkerSearch[0]=0;
@@ -2366,15 +2705,24 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                     if(capture){PreviewCapture=output/capture;RenderFrame();PreviewCapture.clear();}mouse(to,false,3);};
                 check(HelpyNavigationOrder::Load(output/("navigation-drag-"+std::to_string(GetCurrentProcessId())+".json")),"Navigation fixture preferences unavailable");
                 CurrentPage=Page::Items;for(int i=0;i<3;++i)RenderFrame();
-                check(Hooks::Navigation.at("Home").y>Hooks::Navigation.at("Server / Co-op").w,"Home must stay below the reorderable workspace routes");
-                const auto homeAtBottom=Hooks::Navigation.at("Home");check(homeAtBottom.w<=MainSurfacePosition.y+MainSurfaceSize.y&&MainSurfacePosition.y+MainSurfaceSize.y-homeAtBottom.w<HelpyImGuiTheme::Current.Y(36),"Home must be bottom-anchored and visible");
-                check(homeAtBottom.z-homeAtBottom.x>=HelpyImGuiTheme::Current.X(32)&&homeAtBottom.w-homeAtBottom.y>=HelpyImGuiTheme::Current.Y(80)&&PageIcon(Page::Home)==HelpyImGuiTheme::Icon::Building,"Home must retain its house icon and bottom label beside Profile");
+                float lastRouteBottom=0;for(auto page:HelpyNavigation::SidebarPages)if(page!=Page::Home&&page!=Page::Profile&&page!=Page::BugReport&&HelpyNavigation::Available(page,HelpyImGuiTheme::Current.workspaces,HelpyEnvironment::Server()))lastRouteBottom=std::max(lastRouteBottom,Hooks::Navigation.at(PageTitle(page)).w);
+                check(Hooks::Navigation.at("Home").y>lastRouteBottom,"Home must stay below the visible reorderable workspace routes");
+                const auto homeAtBottom=Hooks::Navigation.at("Home");check(homeAtBottom.y-lastRouteBottom<HelpyImGuiTheme::Current.Y(32),"Home must follow the draggable primary navigation divider without a bottom spacer");
+                const auto primaryRow=Hooks::Navigation.at("Players");
+                check(std::abs(homeAtBottom.x-primaryRow.x)<2&&std::abs(homeAtBottom.z-primaryRow.z)<2&&std::abs((homeAtBottom.w-homeAtBottom.y)-(primaryRow.w-primaryRow.y))<2&&PageIcon(Page::Home)==HelpyImGuiTheme::Icon::Building,"Home must match the primary navigation row width, height and icon alignment");
                 const auto profileAtBottom=Hooks::Navigation.at("Profile");
-                check(profileAtBottom.x>=homeAtBottom.z&&std::abs(profileAtBottom.y-homeAtBottom.y)<2&&profileAtBottom.w<=MainSurfacePosition.y+MainSurfaceSize.y,"Home and Profile must be adjacent and visible");
-                check(std::abs((homeAtBottom.x+profileAtBottom.z)*.5f-(MainSurfacePosition.x+HelpyImGuiTheme::Current.X(SidebarWidthLogical)*.5f))<HelpyImGuiTheme::Current.X(20),"Home/Profile group must be centered in the sidebar");
+                check(std::abs(profileAtBottom.x-homeAtBottom.x)<2&&std::abs(profileAtBottom.z-homeAtBottom.z)<2&&profileAtBottom.y>=homeAtBottom.w&&profileAtBottom.w<=MainSurfacePosition.y+MainSurfaceSize.y,"Profile must be a matching full-width row below Home");
+                const auto bugBelow=Hooks::Navigation.at("Report a bug");
+                check(std::abs(bugBelow.x-homeAtBottom.x)<2&&std::abs(bugBelow.z-homeAtBottom.z)<2&&bugBelow.y>=profileAtBottom.w,"Report a bug must be a matching full-width row below Profile");
+                check(Hooks::Navigation.at("Settings").w<homeAtBottom.y,"Settings must default to the primary navigation");
+                check(std::abs((homeAtBottom.x+bugBelow.z-Hooks::NavigationRail.x-Hooks::NavigationRail.z)*.5f)<HelpyImGuiTheme::Current.X(2),"Home/Profile/Report group must be centered in the sidebar");
                 drag(center(Hooks::Navigation.at("Mods")),center(Hooks::Navigation.at("World")),"Navigation","drag-navigation.png");
-                {const auto order=NavigationOrder::Pages("sidebar",HelpyNavigation::SidebarPages);check(std::find(order.begin(),order.end(),Page::Mods)<std::find(order.begin(),order.end(),Page::Map),"Sidebar drag did not save reordered route IDs");}
-                check(HelpyNavigationOrder::Reset("sidebar"),"Sidebar reset failed");
+                {const auto order=HelpyNavigationOrder::Sidebar();check(std::find(order.begin(),order.end(),int(Page::Mods))<std::find(order.begin(),order.end(),int(Page::Map)),"Sidebar drag did not save reordered route IDs");}
+                check(HelpyNavigationOrder::Reset(HelpyNavigationOrder::SidebarSurface),"Sidebar reset failed");
+                for(int i=0;i<3;++i)RenderFrame();
+                drag(center(Hooks::Navigation.at("Report a bug")),center(Hooks::Navigation.at("World")),"Navigation","drag-navigation-across-divider.png");
+                {const auto order=HelpyNavigationOrder::Sidebar();check(std::find(order.begin(),order.end(),int(Page::BugReport))<std::find(order.begin(),order.end(),HelpyNavigationOrder::SidebarDivider),"Footer route did not move across the divider");}
+                check(HelpyNavigationOrder::Reset(HelpyNavigationOrder::SidebarSurface),"Sidebar reset failed");
                 CurrentPage=Page::Items;for(int i=0;i<3;++i)RenderFrame();
                 drag(center(Hooks::WorkspaceTabs.at("Recipes")),center(Hooks::WorkspaceTabs.at("Items")),"Tab","drag-tab.png");
                 check(NavigationOrder::Pages("players-tabs",HelpyNavigation::PlayerTabs).front()==Page::Recipes,"Workspace tab drag did not save its route order");
@@ -2535,6 +2883,8 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 check(MapPanel::Data.Popup,"Right-click did not open map placement");
                 const auto popupBefore=Hooks::MapPopupWindow;for(int i=0;i<120;++i)RenderFrame();
                 check(std::abs((Hooks::MapPopupWindow.z-Hooks::MapPopupWindow.x)-(popupBefore.z-popupBefore.x))<1&&std::abs((Hooks::MapPopupWindow.w-Hooks::MapPopupWindow.y)-(popupBefore.w-popupBefore.y))<1,"Map options popup shrank over repeated frames");
+                const auto mapPopupCenter=ImGui::GetMainViewport()->GetWorkCenter();
+                check(std::abs((Hooks::MapPopupWindow.x+Hooks::MapPopupWindow.z)*.5f-mapPopupCenter.x)<1&&std::abs((Hooks::MapPopupWindow.y+Hooks::MapPopupWindow.w)*.5f-mapPopupCenter.y)<1,"Map action details must be centered in Helpy's viewport");
                 MapPanel::Data.Definition=definitions[16];MapPanel::Data.Kind=2;MapPanel::Data.Permanent=false;for(int i=0;i<3;++i)RenderFrame();
                 for(int i=0;i<20&&(MapPanel::Data.ProbePending||MapPanel::Data.ProbeWanted||!MapPanel::Data.Ground.value("GroundAvailable",false));++i)RenderFrame();
                 PreviewCapture=output/"map-spawn-ready.png";RenderFrame();PreviewCapture.clear();
@@ -2900,7 +3250,6 @@ void HelpyStandaloneWindow::RenderFrame() {
     }
 #endif
     RuntimeConnectionPanel::Poll();
-    const UINT dpi=GetDpiForWindow(m_hwnd);HelpyImGuiTheme::SetRuntimeDpi(dpi?static_cast<float>(dpi)/96.0f:1.0f);
     if(FontRescanRequested.exchange(false)) {
         auto& io=ImGui::GetIO();ImGui_ImplDX11_InvalidateDeviceObjects();io.Fonts->Clear();LoadUiFontFamilies(io);SelectUiFontFamily(HelpyImGuiTheme::Current.fontFamily);io.FontDefault=UiRegularFont;
     }
@@ -2942,22 +3291,34 @@ void HelpyStandaloneWindow::RenderFrame() {
     if(!HelpyPersonalization::Initialized)HelpyPersonalization::Load(RuneSchemaProfile::Ready?RuneSchemaProfile::Data("labels.json"):HostServices::StateDirectory()/"personalization.json");
     if(!HelpyNavigationOrder::Initialized)HelpyNavigationOrder::Load(HostServices::StateDirectory()/"navigation-order.json");
 #if defined(HELPY_PREVIEW)
-    HelpyPreviewHooks::BackgroundDraws=0;
+    HelpyPreviewHooks::BackgroundDraws=0;HelpyPreviewHooks::RuntimeBadgeDraws=0;
 #endif
+    const auto framePosition=MainSurfacePosition,frameSize=MainSurfaceSize;
+    MainSurfacePosition.y+=NativeCaption.Height;MainSurfaceSize.y=std::max(1.f,MainSurfaceSize.y-NativeCaption.Height);
     ItemGridPicker::DetailsSurfaceMin=MainSurfacePosition;ItemGridPicker::DetailsSurfaceSize=MainSurfaceSize;
     LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());
     HelpyWindowChrome::Bounds(MainSurfacePosition,MainSurfaceSize);
-    ImGui::SetNextWindowPos(MainSurfacePosition);ImGui::SetNextWindowSize(MainSurfaceSize);
+    ImGui::SetNextWindowPos(framePosition);ImGui::SetNextWindowSize(frameSize);
     ImGui::PushStyleColor(ImGuiCol_WindowBg,t.window);ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,0.0f);ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,0.0f);
     if(ImGui::Begin("##RuneSchemaHelpyStandalone",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoFocusOnAppearing|ImGuiWindowFlags_NoBringToFrontOnFocus)) {
         HelpyBackgrounds::DrawWindow();
+        if(NativeCaption.Height){
+            const float icon=float(NativeCaption.Icon),inset=8.f*NativeCaption.Dpi/96.f;
+            const ImVec2 at{framePosition.x+inset,framePosition.y+(NativeCaption.Height-icon)*.5f};
+            DrawThemedLogo(ImGui::GetWindowDrawList(),at,{at.x+icon,at.y+icon},t);
+            HelpyWindowChrome::RenderNativeCaption(NativeCaption,framePosition,t);
+        }
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY()+float(NativeCaption.Height));
         HelpyImGuiTheme::Scope skin(t);ImFont* workspaceFont=(t.textBold&&UiBoldFont)?UiBoldFont:UiRegularFont;
         if(workspaceFont)ImGui::PushFont(workspaceFont);
         const bool taskbar=HelpyTaskbar::Current.Count()!=0;
         if(taskbar)ImGui::BeginChild("##helpy-workspace-above-taskbar",{0,std::max(1.0f,ImGui::GetContentRegionAvail().y-ImGui::GetFrameHeightWithSpacing()*(HelpyTaskbar::Current.Count()>2?2:1)-t.Y(12))},false);
         RenderWorkspace(t);
         if(taskbar){
-            ImGui::EndChild();ImGui::Separator();ImGui::TextDisabled("Helpy taskbar");
+            ImGui::EndChild();ImGui::Separator();
+            const float logoSize=ImGui::GetFrameHeight();const auto logo=ImGui::GetCursorScreenPos();
+            ImGui::Dummy({logoSize,logoSize});DrawThemedLogo(ImGui::GetWindowDrawList(),logo,{logo.x+logoSize,logo.y+logoSize},t);
+            if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("RuneSchema · minimized windows");
             const auto restore=[&](const char* label,HelpyTaskbar::Window task,HWND window){
                 if(HelpyTaskbar::Current.Contains(task)){if(ImGui::GetContentRegionAvail().x>ImGui::CalcTextSize(label).x+t.X(24))ImGui::SameLine();if(HelpyImGuiTheme::SoftButton(label)){
                     HelpyTaskbar::Current.Restore(task);if(window){ShowWindow(window,SW_RESTORE);SetForegroundWindow(window);SetFocus(window);}
@@ -2977,7 +3338,7 @@ void HelpyStandaloneWindow::RenderFrame() {
         }
         if(workspaceFont)ImGui::PopFont();
     }
-    ImGui::End();ImGui::PopStyleVar(2);ImGui::PopStyleColor();if(UiRegularFont)ImGui::PushFont(UiRegularFont);RenderToasts(t);if(UiRegularFont)ImGui::PopFont();
+    ImGui::End();ImGui::PopStyleVar(2);ImGui::PopStyleColor();if(UiRegularFont)ImGui::PushFont(UiRegularFont);RenderToasts(t);RenderDiagnosticToasts(t);if(UiRegularFont)ImGui::PopFont();
     RuntimeDetailsPanel::RenderDocked(t,MainSurfacePosition,MainSurfaceSize);
     ItemPreviewPanel::Render();
     PartyMemberView::RenderInspector();
@@ -3039,22 +3400,26 @@ void HelpyStandaloneWindow::RenderFrame() {
     // Submit once, after every visible panel has declared this frame's demand.
     ItemIconCache::Update();
     ImGui::Render();const float clear[4]{t.window.x,t.window.y,t.window.z,t.window.w};m_context->OMSetRenderTargets(1,&m_target,nullptr);m_context->ClearRenderTargetView(m_target,clear);
-    auto mainDraw=*ImGui::GetDrawData();mainDraw.DisplayPos=MainSurfacePosition;mainDraw.DisplaySize=MainSurfaceSize;
+    auto mainDraw=*ImGui::GetDrawData();mainDraw.DisplayPos=framePosition;mainDraw.DisplaySize=frameSize;
+    HelpySurfaceDraw::Filter(mainDraw);
     ImGui_ImplDX11_RenderDrawData(&mainDraw);
     if(bayVisible){
         m_context->OMSetRenderTargets(1,&m_bayTarget,nullptr);m_context->ClearRenderTargetView(m_bayTarget,clear);
         auto bayDraw=*ImGui::GetDrawData();bayDraw.DisplayPos={bayCanvas.Bay.X,bayCanvas.Bay.Y};bayDraw.DisplaySize={bayCanvas.Bay.Width,bayCanvas.Bay.Height};
+        HelpySurfaceDraw::Filter(bayDraw);
         ImGui_ImplDX11_RenderDrawData(&bayDraw);m_baySwapChain->Present(0,0);
     }
     if(cacheVisible){
         m_context->OMSetRenderTargets(1,&m_cacheTarget,nullptr);m_context->ClearRenderTargetView(m_cacheTarget,clear);
         auto cacheDraw=*ImGui::GetDrawData();cacheDraw.DisplayPos={bayCanvas.Cache.X,bayCanvas.Cache.Y};cacheDraw.DisplaySize={bayCanvas.Cache.Width,bayCanvas.Cache.Height};
+        HelpySurfaceDraw::Filter(cacheDraw);
         ImGui_ImplDX11_RenderDrawData(&cacheDraw);m_cacheSwapChain->Present(0,0);
     }
     for(size_t i=0;i<m_workspaces.size();++i)if(workspaceVisible[i]){
         auto& panel=m_workspaces[i];const auto rect=WorkspaceRect(i,bayCanvas);
         m_context->OMSetRenderTargets(1,&panel.Target,nullptr);m_context->ClearRenderTargetView(panel.Target,clear);
         auto draw=*ImGui::GetDrawData();draw.DisplayPos={rect.X,rect.Y};draw.DisplaySize={rect.Width,rect.Height};
+        HelpySurfaceDraw::Filter(draw);
         ImGui_ImplDX11_RenderDrawData(&draw);panel.Swap->Present(0,0);
     }
 #if defined(HELPY_PREVIEW)
@@ -3084,7 +3449,7 @@ bool HelpyStandaloneWindow::SyncItemBay(){
         SendMessageW(m_bayWindow,WM_SETICON,ICON_BIG,reinterpret_cast<LPARAM>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,32,32,LR_SHARED)));
         SendMessageW(m_bayWindow,WM_SETICON,ICON_SMALL,reinterpret_cast<LPARAM>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,16,16,LR_SHARED)));
         m_publishedBayWindow=m_bayWindow;
-        ApplyCaptionTheme(m_bayWindow,HelpyImGuiTheme::Current);ShowWindow(m_bayWindow,SW_SHOWNOACTIVATE);
+        ApplyCaptionTheme(m_bayWindow,HelpyImGuiTheme::Current,true);ShowWindow(m_bayWindow,SW_SHOWNOACTIVATE);
     }
     ApplyCaptionTheme(m_bayWindow,HelpyImGuiTheme::Current);
     return IsWindowVisible(m_bayWindow)&&!IsIconic(m_bayWindow)&&m_bayTarget;
@@ -3120,6 +3485,7 @@ bool HelpyStandaloneWindow::SyncIconCache(){
         if(!ready){DestroyIconCache();HelpyIconPacks::Detached=false;PushToast("Could not detach the cache window; it remains in Helpy.",4);return false;}
         SendMessageW(m_cacheWindow,WM_SETICON,ICON_BIG,reinterpret_cast<LPARAM>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,32,32,LR_SHARED)));
         SendMessageW(m_cacheWindow,WM_SETICON,ICON_SMALL,reinterpret_cast<LPARAM>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,16,16,LR_SHARED)));
+        ApplyCaptionTheme(m_cacheWindow,HelpyImGuiTheme::Current,true);
         m_publishedCacheWindow=m_cacheWindow;ShowWindow(m_cacheWindow,SW_SHOWNOACTIVATE);
     }
     ApplyCaptionTheme(m_cacheWindow,HelpyImGuiTheme::Current);
@@ -3153,6 +3519,32 @@ void HelpyStandaloneWindow::DestroyTarget(){if(m_target){m_target->Release();m_t
 LRESULT CALLBACK HelpyStandaloneWindow::WndProc(HWND hwnd,UINT msg,WPARAM wParam,LPARAM lParam) {
     auto* self=reinterpret_cast<HelpyStandaloneWindow*>(GetWindowLongPtrW(hwnd,GWLP_USERDATA));
     if(msg==WM_NCCREATE){const auto* cs=reinterpret_cast<CREATESTRUCTW*>(lParam);self=static_cast<HelpyStandaloneWindow*>(cs->lpCreateParams);SetWindowLongPtrW(hwnd,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(self));}
+    // Detached workspaces retain their native, individually named captions.
+    const bool main=self&&(!self->m_hwnd||hwnd==self->m_hwnd);
+    if(main){
+        if(msg==WM_WINDOWPOSCHANGED||msg==WM_ACTIVATE)NativeCaption.RefreshControls(hwnd);
+        if(msg==WM_CREATE){
+            NativeCaption.Update(hwnd,GetDpiForWindow(hwnd));
+            if(NativeCaption.Height)SetWindowPos(hwnd,nullptr,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE|SWP_FRAMECHANGED);
+        }
+        if(NativeCaption.Height){
+            LRESULT result{};
+            if(DwmDefWindowProc(hwnd,msg,wParam,lParam,&result))return result;
+            if(msg==WM_ACTIVATE||msg==WM_DWMCOMPOSITIONCHANGED)NativeCaption.Extend(hwnd);
+            if(msg==WM_NCCALCSIZE&&wParam){
+                auto* rect=reinterpret_cast<NCCALCSIZE_PARAMS*>(lParam);const LONG top=rect->rgrc[0].top;
+                DefWindowProcW(hwnd,msg,wParam,lParam);
+                rect->rgrc[0].top=top+(IsZoomed(hwnd)?NativeCaption.Border:0);return 0;
+            }
+            if(msg==WM_NCHITTEST){
+                result=DefWindowProcW(hwnd,msg,wParam,lParam);
+                if(result!=HTCLIENT&&result!=HTCAPTION)return result;
+                POINT point{static_cast<short>(LOWORD(lParam)),static_cast<short>(HIWORD(lParam))};ScreenToClient(hwnd,&point);
+                RECT rect{};GetClientRect(hwnd,&rect);
+                return NativeCaption.HitTest(point.x,point.y,rect.right,IsZoomed(hwnd));
+            }
+        }
+    }
     if(msg==ToggleMessage){if(self&&self->m_visible.load())self->ClosePopup();return 0;}
     if(ImGui::GetCurrentContext()&&ImGui_ImplWin32_WndProcHandler(hwnd,msg,wParam,lParam))return true;
     switch(msg) {
@@ -3191,10 +3583,12 @@ LRESULT CALLBACK HelpyStandaloneWindow::WndProc(HWND hwnd,UINT msg,WPARAM wParam
         }
         if(self&&HelpyEnvironment::Server())self->m_visible=wParam!=SIZE_MINIMIZED;
         if(self&&self->m_device&&wParam!=SIZE_MINIMIZED){self->DestroyTarget();self->m_swapChain->ResizeBuffers(0,LOWORD(lParam),HIWORD(lParam),DXGI_FORMAT_UNKNOWN,0);self->CreateTarget();}return 0;
-    case WM_DPICHANGED:if(const auto* rect=reinterpret_cast<RECT*>(lParam))SetWindowPos(hwnd,nullptr,rect->left,rect->top,rect->right-rect->left,rect->bottom-rect->top,SWP_NOZORDER|SWP_NOACTIVATE);return 0;
+    case WM_DPICHANGED:
+        if(main){HelpyImGuiTheme::SetRuntimeDpi(static_cast<float>(HIWORD(wParam))/96.f);NativeCaption.Update(hwnd,HIWORD(wParam));}
+        if(const auto* rect=reinterpret_cast<RECT*>(lParam))SetWindowPos(hwnd,nullptr,rect->left,rect->top,rect->right-rect->left,rect->bottom-rect->top,SWP_NOZORDER|SWP_NOACTIVATE);return 0;
     case WM_CLOSE:if(self){if(hwnd==self->m_bayWindow){ItemGridPicker::DetachedBay=false;ShowWindow(hwnd,SW_HIDE);}else if(hwnd==self->m_cacheWindow){HelpyIconPacks::Detached=false;ShowWindow(hwnd,SW_HIDE);}else if(hwnd==self->m_hwnd)self->ClosePopup();else for(size_t i=0;i<self->m_workspaces.size();++i)if(hwnd==self->m_workspaces[i].Window){WorkspaceDetached(i)=false;if(i==2)RuntimeDetailsPanel::Open=false;if(i==3)MapPanel::Data.ShowParty=false;if(i==4)PlayerInventoryPanel::Open=false;ShowWindow(hwnd,SW_HIDE);break;}}return 0;
     case WM_SYSCOMMAND:
-        if((wParam&0xfff0)==SC_KEYMENU)return 0;
+        if((wParam&0xfff0)==SC_KEYMENU&&lParam!=VK_SPACE)return 0;
         if(self&&(wParam&0xfff0)==SC_MINIMIZE&&(hwnd==self->m_bayWindow||hwnd==self->m_cacheWindow)){
             HelpyTaskbar::Current.Minimize(hwnd==self->m_bayWindow?HelpyTaskbar::Window::ItemBay:HelpyTaskbar::Window::IconCache);
             if(GetCapture()==hwnd)ReleaseCapture();ShowWindow(hwnd,SW_HIDE);return 0;

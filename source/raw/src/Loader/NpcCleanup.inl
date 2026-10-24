@@ -69,7 +69,9 @@ void DragonWildsNpcLoader::PumpNpcCleanup(double deltaSeconds) {
             retired();
             it=m_pendingNpcCleanup.erase(it);
         }catch(const std::exception& error) {
-            ErrorOnce("npc-cleanup-retry:"+std::to_string(it->Index),PS::ToWideSafe(error.what()));
+            ErrorOnceDiagnostic("npc-cleanup-retry:"+std::to_string(it->Index),PS::ToWideSafe(error.what()),
+                "RS-NPC-019","Pending NPC cleanup retry failed","Error","Deferred",{},
+                std::to_string(it->Index),"Finalization",true);
             ++it;
         }catch(...) {++it;}
     }
