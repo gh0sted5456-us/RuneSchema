@@ -1,11 +1,51 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
+  "definitions": {
+    "modOwnedCookedPaths": {
+      "description": "Runtime requires the owning /Owner/ or /Game/Mods/Owner/ namespace and rejects case-insensitive duplicates. Strings only; no Source:Schema or arbitrary property writes.",
+      "items": {
+        "maxLength": 1024,
+        "not": {
+          "pattern": "\\.\\."
+        },
+        "pattern": "^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+        "type": "string"
+      },
+      "maxItems": 4096,
+      "type": "array",
+      "uniqueItems": true
+    }
+  },
   "description": "Enabled loose schema mods and cooked declarations share native-registry enrollment and client/server declarations. Every asset still requires a correct live type and verified native identity; a declaration does not construct an asset or authorize cleanup.",
   "properties": {
     "Entries": {
       "items": {
         "additionalProperties": false,
+        "allOf": [
+          {
+            "else": {
+              "not": {
+                "required": [
+                  "Relay"
+                ]
+              }
+            },
+            "if": {
+              "properties": {
+                "Kind": {
+                  "const": "DataRelay"
+                }
+              }
+            },
+            "then": {
+              "maxProperties": 3,
+              "required": [
+                "Relay"
+              ]
+            }
+          }
+        ],
         "anyOf": [
           {
             "required": [
@@ -16,6 +56,11 @@
             "required": [
               "Authority"
             ]
+          },
+          {
+            "required": [
+              "Relay"
+            ]
           }
         ],
         "properties": {
@@ -25,7 +70,8 @@
               "Action": {
                 "enum": [
                   "SpawnFollower",
-                  "ExecuteGraph"
+                  "ExecuteGraph",
+                  "ConsumedItemAuthority"
                 ]
               },
               "Bindings": {
@@ -37,7 +83,8 @@
                 "type": "object"
               },
               "DataAsset": {
-                "pattern": "^/(?:Game|DowdunReach|FutureMajorVersion)/",
+                "maxLength": 1024,
+                "pattern": "^/[A-Za-z0-9_.-]+/[^\\r\\n\\t]+$",
                 "type": "string"
               },
               "Function": {
@@ -67,7 +114,9 @@
               "PersistentEffect",
               "WeatherPresentation",
               "AudioPresentation",
-              "CosmeticWrapper"
+              "CosmeticWrapper",
+              "DataRelay",
+              "GameplayAuthority"
             ]
           },
           "Metadata": {
@@ -115,6 +164,45 @@
             "minItems": 1,
             "type": "array"
           },
+          "Relay": {
+            "additionalProperties": false,
+            "properties": {
+              "Broadcast": {
+                "default": false,
+                "type": "boolean"
+              },
+              "Channel": {
+                "maxLength": 96,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_.-]+$",
+                "type": "string"
+              },
+              "ClientPublish": {
+                "default": false,
+                "type": "boolean"
+              },
+              "MaxBytes": {
+                "default": 65536,
+                "maximum": 65536,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "Snapshot": {
+                "default": false,
+                "type": "boolean"
+              },
+              "Version": {
+                "default": 1,
+                "maximum": 65535,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "Channel"
+            ],
+            "type": "object"
+          },
           "Spell": {
             "pattern": "^/(?:Game|DowdunReach|FutureMajorVersion)/",
             "type": "string"
@@ -159,6 +247,18 @@
     "NativeRegistries": {
       "additionalProperties": false,
       "properties": {
+        "CacheAssets": {
+          "description": "Original artwork references; not gameplay registry identities.",
+          "items": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
         "CombatSpells": {
           "items": {
             "anyOf": [
@@ -193,6 +293,24 @@
           "type": "array",
           "uniqueItems": true
         },
+        "ContainerContents": {
+          "description": "Exact existing cooked objects only. Startup identity enrollment does not synthesize assets, activate hooks or certify gameplay/save lifecycle.",
+          "items": {
+            "maxLength": 1024,
+            "not": {
+              "pattern": "\\.\\."
+            },
+            "pattern": "^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "Enums": {
+          "$ref": "#/definitions/modOwnedCookedPaths",
+          "description": "Read-only verification of exact mod-owned cooked UserDefinedEnum symbol tables; never extends a native enum."
+        },
         "EquipmentEffects": {
           "items": {
             "anyOf": [
@@ -222,6 +340,48 @@
                 "type": "object"
               }
             ]
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "FTUENotifications": {
+          "description": "Exact existing cooked objects only. Startup identity enrollment does not synthesize assets, activate hooks or certify gameplay/save lifecycle.",
+          "items": {
+            "maxLength": 1024,
+            "not": {
+              "pattern": "\\.\\."
+            },
+            "pattern": "^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "FarmPlants": {
+          "description": "Exact existing cooked objects only. Startup identity enrollment does not synthesize assets, activate hooks or certify gameplay/save lifecycle.",
+          "items": {
+            "maxLength": 1024,
+            "not": {
+              "pattern": "\\.\\."
+            },
+            "pattern": "^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "FixedTextNotifications": {
+          "description": "Exact existing cooked objects only. Startup identity enrollment does not synthesize assets, activate hooks or certify gameplay/save lifecycle.",
+          "items": {
+            "maxLength": 1024,
+            "not": {
+              "pattern": "\\.\\."
+            },
+            "pattern": "^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+            "type": "string"
           },
           "maxItems": 4096,
           "type": "array",
@@ -340,6 +500,20 @@
           "type": "array",
           "uniqueItems": true
         },
+        "PlayerHooks": {
+          "description": "Exact existing cooked objects only. Startup identity enrollment does not synthesize assets, activate hooks or certify gameplay/save lifecycle.",
+          "items": {
+            "maxLength": 1024,
+            "not": {
+              "pattern": "\\.\\."
+            },
+            "pattern": "^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
         "Quests": {
           "items": {
             "anyOf": [
@@ -419,6 +593,42 @@
           "type": "array",
           "uniqueItems": true
         },
+        "SkillPerks": {
+          "$ref": "#/definitions/modOwnedCookedPaths",
+          "description": "Staged declaration only. Native enrollment remains blocked pending verified perk startup/cache and unlock lifecycle."
+        },
+        "Skills": {
+          "$ref": "#/definitions/modOwnedCookedPaths",
+          "description": "Staged declaration only. Native enrollment remains blocked pending verified ESkill consumers and lifecycle."
+        },
+        "TreeGrowth": {
+          "description": "Exact existing cooked objects only. Startup identity enrollment does not synthesize assets, activate hooks or certify gameplay/save lifecycle.",
+          "items": {
+            "maxLength": 1024,
+            "not": {
+              "pattern": "\\.\\."
+            },
+            "pattern": "^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "Trees": {
+          "description": "Exact existing cooked objects only. Startup identity enrollment does not synthesize assets, activate hooks or certify gameplay/save lifecycle.",
+          "items": {
+            "maxLength": 1024,
+            "not": {
+              "pattern": "\\.\\."
+            },
+            "pattern": "^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
         "UtilitySpells": {
           "items": {
             "anyOf": [
@@ -482,6 +692,20 @@
                 "type": "object"
               }
             ]
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "WorldHooks": {
+          "description": "Exact existing cooked objects only. Startup identity enrollment does not synthesize assets, activate hooks or certify gameplay/save lifecycle.",
+          "items": {
+            "maxLength": 1024,
+            "not": {
+              "pattern": "\\.\\."
+            },
+            "pattern": "^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+            "type": "string"
           },
           "maxItems": 4096,
           "type": "array",

@@ -50,6 +50,14 @@ placement height; installed entries retry within a bounded window and can
 retry again when their cell streams in. Event waves resolve every member's
 ground position before constructing any actors.
 
+For participant-anchored contract encounters, a bare `$` first tries the remote
+terrain query. If terrain is missing (not a binding error or obstruction), it
+can retry at that spawn's XY using the participant's native capsule-foot height
+as a bounded floor reference. A mesh floor still needs a real upward-facing hit;
+the player height is never used as the spawn Z. Explicit heights are not replaced.
+Pending encounter logs include the member and XY and distinguish missing floor
+from an exhausted collision-clear footprint search.
+
 For stacked surfaces, the floor query starts at the reference height plus a
 45 cm stair allowance, not above the highest roof. Numeric spawn Z is the
 reference; a bare `$` first finds landscape beneath overhead actors. An optional
@@ -61,6 +69,59 @@ and live placement tools use their participant/player height. Terrain probing
 is bounded to 16 overlapping actors; unsupported or ambiguous collision never
 permits a guessed placement. Ground offsets and the standard 10 cm spawn
 clearance are applied after the hit.
+
+## Native BuildingPiece placement
+
+Use `Type: "BuildingPiece"` for a normal saveable, player-deconstructible station
+or building piece. `Building` is its registered BuildingPieceData asset, not an
+actor class. Unlike transient `BuildingProp`, this type does not require a
+save-exclusion hook and does not enter RuneSchema's transient ownership cleanup.
+
+```jsonc
+[
+  {
+    "Id": "null_silver_furnace",
+    "Type": "BuildingPiece",
+    "Building": "/Game/Gameplay/BaseBuilding/Data/BuildingPieces/Structures/Crafting/BUILDPIECE_ProcessingStation_Smelter.BUILDPIECE_ProcessingStation_Smelter",
+    "Location": [16897, 171907, "$"],
+    "Rotation": { "Pitch": 0, "Yaw": -4.6, "Roll": 0 },
+    "DuplicateRadius": 100,
+    "AllowDeconstruction": true
+  }
+]
+```
+
+Before tracing or creating, the authority checks for any existing building at
+that site and leaves it unchanged. The radius defaults to 100 cm and cannot be
+zero. Grounded entries compare the XY column so a saved station's roof does not
+cause a second station above it; intentional stacked placements should use
+explicit heights and `GroundToSurface:false`. Native placement does not move an
+existing building or bypass collision. It is attempted once per loaded placement,
+not continuously respawned after demolition. A later cell/session can place it
+again while its JSON remains enabled; delete/disable that definition and demolish
+the piece to remove it permanently. Removing the JSON alone does not delete a
+saved vanilla piece. Missing mod-owned building identities still use normal
+world pruning; this is not owner-based deletion of vanilla pieces.
+
+`QuestCompleted` may gate initial placement. Temporary quest/event conditions,
+day/night switching, native respawn, `PersistAfterCondition:false`, and demolition
+protection are rejected for this permanent type. Existing `BuildingProp`
+definitions are not silently converted.
+
+## Managed BuildingProp ownership
+
+RuneSchema-managed BuildingProps are transient and excluded from SPUD storage.
+Their exact mod/placement identity, canonical GUID, actor class and native
+building binding are retained in runtime-local `ownership/building-props.json`.
+Removed definitions remain in this ownership history so an exact legacy actor
+can be retired after the complete, healthy native registration is available.
+
+Cleanup requires all ownership proofs and world authority; a class, proximity,
+numeric building index or persistence ID alone never authorizes destruction.
+Unverified actors and player-built custom stations are preserved. A replacement
+is not created until retirement of the proven old actor has been confirmed.
+Verify a live save/reload before relying on legacy SPUD cleanup for a released
+mod; this does not change unrelated permanent resource placements.
 
 ## Temporary ore and tree nodes
 

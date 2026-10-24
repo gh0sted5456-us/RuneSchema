@@ -5,7 +5,7 @@ For typed item/journal metadata, exported paths and persistence IDs, use
 `.rsmk-cache`; the legacy format below remains supported for pictures only.
 
 Helpy stores captured item icons under
-`%LOCALAPPDATA%\RuneSchema\HELPY\runtime\saved\cache\item-icons`.
+`%LOCALAPPDATA%\RSDragonwilds\RuneSchema\core\HELPY\runtime\saved\cache\item-icons`.
 Settings > Item Cache provides **Clean Icon Cache** and **Open cache folder**
 in both simple and advanced modes. The link opens Windows File Explorer for
 manual management. Close Helpy/the game before manually removing files; visible

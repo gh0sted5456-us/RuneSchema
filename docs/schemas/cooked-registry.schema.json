@@ -26,6 +26,9 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "Skills": {"$ref": "registry.schema.json#/definitions/modOwnedCookedPaths", "description": "Declared but blocked: custom skill consumers and native lifecycle are not verified."},
+        "SkillPerks": {"$ref": "registry.schema.json#/definitions/modOwnedCookedPaths", "description": "Declared but blocked: perk startup/cache and unlock lifecycle are not verified."},
+        "Enums": {"$ref": "registry.schema.json#/definitions/modOwnedCookedPaths", "description": "Verify a mod-owned cooked UserDefinedEnum without changing its symbols or native consumers."},
         "Items": {"$ref": "#/definitions/paths"},
         "Recipes": {"$ref": "#/definitions/paths"},
         "Quests": {"$ref": "#/definitions/paths"},

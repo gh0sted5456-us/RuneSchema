@@ -147,17 +147,33 @@ recipe coverage. Install and perform a world acceptance test separately.
 ## Game-update reflection mappings
 
 `[RuneSchema] autoUpdateMappings = true` enables a native UE4SS `DumpUSMAP`
-request when the running executable differs from the last verified build.
+request when the running game/mod setup differs from the last verified build.
 The first request is delayed 15 seconds; subsequent launches reuse the validated
 mapping without another dump. Changing this setting requires a game restart.
 `RUNESCHEMA_DISABLE_AUTO_MAPPING` is also available as a process-level opt-out.
 
 RuneSchema validates the generated file, required native types, unchanged bytes
 and the copied fingerprint before activating an immutable per-build snapshot.
-These files live under `RuneSchema/runtime/live/saved/cache/mappings/automatic`;
-the previous receipt is backed up before replacement. Missing dumper support,
-ambiguous output, invalid data or timeouts retain the shipped fallback and log
-`[MAPPINGS][DEFERRED]`. UE4SS itself is not modified.
+Mappings and indexes live under
+`%LOCALAPPDATA%/RSDragonwilds/RuneSchema/<platform>/cache/mappings`, with separate
+`steam`, `gamepass`, `epic` and `server` directories (unknown runtimes remain isolated).
+New packages do not contain `dlls/mappings` or download a pinned mapping during
+the build. The first start logs that capture is queued and that a successful
+capture will be reused on the next launch; success and deferred capture have
+separate log entries. Mapping-dependent queries remain unavailable until a
+validated mapping is active. Live reflection and native hook guards remain in
+force; UE4SS itself is not modified.
+
+Legacy mapping locations are not migrated, scanned or cleaned. Missing current
+cache data is generated afresh. Matching current mappings are reused even when
+automatic generation is disabled. Another process already owning the same
+platform cache causes mapping setup to defer without altering that cache.
+Cleanup follows successful activation: old hash-addressed generated maps,
+superseded indexes, receipt backups and request files older than 24 hours are
+removed without recursive deletion. Completed requests are removed immediately.
+Unknown/custom files, other platform caches and standalone UE4SS dumps are not
+deleted. Broken receipts, interrupted copies or failed captures retain the
+original files; manually missing old files do not prevent cleanup.
 
 The dump covers native and currently loaded Blueprint reflection, not every
 unloaded asset. It does not refresh native code signatures, waive supported-build

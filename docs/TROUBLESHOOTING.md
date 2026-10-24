@@ -4,6 +4,56 @@ Work from the first failed step instead of changing several files at once. A
 PAK can mount while an item inside it still fails to load, and an item can load
 while its recipe still points to the wrong station.
 
+## Heavy Blueprint/Lua editors and building registry compatibility
+
+The RSHC author reported editor slowdown alongside RuneSchema and supplied a
+source-level explanation. Bridge ProcessEvent callbacks now reject unrelated
+calls by cached function names before reflection, path allocation or route
+searches. Relevant bridge/graph classes are matched through serial-validated
+weak class caches after exact path verification. RPC and authority validation
+are unchanged. This removes identified overhead; a live RSHC before/after timing
+comparison is still required to establish the actual speedup.
+
+This overhead does not depend on where the other mod is installed. Moving an
+unmanaged mod under RuneSchema may improve its loading/ownership diagnostics,
+but is not a fix for editor hook overhead. Never move or duplicate a live mod
+automatically; back up, close the game/server, and follow its author's supported
+packaging instructions if a diagnosed loading conflict warrants migration.
+
+Building network indexes must agree on server and clients. Do not change
+persistence IDs, re-sort/renumber indexes after world load, or adopt an ID-prefix
+workaround without a separately verified offline save migration. Cached package
+ownership cannot prove building-index parity or authorize a save conversion.
+The supplied RSHC migration scripts and process-start proxy were not adopted.
+Large client/server appearance exchange is separate from RuneSchema's bounded,
+allow-listed presentation cues; this change adds no unrestricted data relay.
+
+## Helpy frame-time refinement (pre-EXE)
+
+Helpy remains a plugin DLL with its own UI thread/device. Its desktop redraw is
+capped at roughly 30 Hz while focused and 10 Hz while unfocused; hidden and
+minimized windows do not render. Detached surfaces omit unrelated draw lists.
+Favorites/Junk idle polling is capped at roughly 30 Hz; button edges, queued
+marking input and inventory hover notifications force a fresh check. Stack
+ownership and item identity are still revalidated before changing a mark.
+
+Catalogue queries, full-scan work and icons share one optional work slot per
+engine tick, with a 2 ms start deadline. Icons and catalogue alternate priority;
+mutations retain their own mailbox and take precedence. This is a soft budget:
+a native asset load or GPU readback cannot be interrupted after it starts.
+Thumbnail file writes run on a single bounded filesystem task; the game polls
+completion without waiting and publishes success only after the file commits.
+The existing same-call GPU draw/readback is retained for Game Pass compatibility.
+
+`[PERFORMANCE][SUMMARY]` in RuneSchema.log reports aggregate calls, total/average/peak microseconds
+and calls at or above 2 ms, at most once per ten seconds per measured call site.
+Cheap phases stay silent; summaries bypass debug-only logging but do not flood
+the in-game console. A first measured stall of a second or more still warns
+immediately. These are RuneSchema phase timings, not game FPS or
+proof that a particular feature caused a frame drop. Compare the same scene,
+game focus and settings with Helpy hidden, Home visible, uncached icons visible,
+and inventory open; separate cold-cache work from steady-state measurements.
+
 ## RuneSchema console commands
 
 In the game console, run `rs help` (or `runeschema help`). The console must

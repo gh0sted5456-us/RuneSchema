@@ -52,6 +52,13 @@ and all-or-nothing row operations. See
 [`schemas/registry-patch-v1.schema.json`](../../schemas/registry-patch-v1.schema.json)
 and `examples/RegistryPatch`.
 
+Qualified targets are resolved by their exact cooked object path and the live
+object must report that same path. Composite parents are expanded only when
+their `_Common` parent is unambiguous. Applying a target reserves its row range
+before callbacks, preventing a serialization/reentry callback from applying
+the same range twice. Short names retain legacy behavior; qualify custom or
+conflicting tables instead of depending on traversal order.
+
 Do not guess nested layouts from a USMAP alone. RuneSchema compares the target
 against live reflection before committing a row.
 

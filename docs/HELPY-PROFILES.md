@@ -28,8 +28,18 @@ draft discard and the profile folder are tucked under More.
 
 ## Local files
 
-`%LOCALAPPDATA%/RuneSchema/runeschema.profile/` is shared by the desktop client
-and both game lanes:
+`%LOCALAPPDATA%/RSDragonwilds/RuneSchema/core/runeschema.profile/` is shared by
+the desktop client and game/server runtimes under the same Windows account:
+
+Startup no longer migrates file layouts or imports older AppData roots.
+Existing `runeschema.profile` and `HELPY` folders directly inside the current
+`RSDragonwilds/RuneSchema` AppData root are used in place when their core
+counterpart is absent. An established core folder takes priority; neither
+location is moved, merged or overwritten.
+Native character/world saves and Xbox WGS stay in their game-managed locations.
+The shared core folder also holds Helpy settings, caches and health history.
+Profiles, portraits, loadouts and Recovery archives are durable user data, not
+disposable caches. Deleting them is not required to rebuild generated caches.
 
 - `profile.json`: established profile name, public links, observed platforms and
   linked native character GUIDs.

@@ -30,6 +30,24 @@ ordinary numbers, quoted strings and JSON arrays. Plain words are also accepted
 for string settings. Semicolon and hash introduce comments outside quoted
 strings. Missing keys keep their built-in defaults; unknown keys are preserved.
 
+## Backup-first pruning
+
+RuneSchema keeps native saves and verifies a complete pre-prune backup before
+changing supported character or world data. No companion Recovery mode or
+automatic restoration is used. The former `persistence.recovery` setting is
+retained for old configuration compatibility but is ignored and hidden; the
+former world `backupBeforePrune` switch cannot disable required backups.
+
+Character-load and hydrated-quest backups are stored under
+`%LOCALAPPDATA%/RSDragonwilds/RuneSchema/core/backups/<runtime>/characters/<GUID>`.
+Identical bytes share a SHA-256-named `.json.bak`; different versions are kept.
+Startup loose-file cleanup and world cleanup retain their existing verified
+pre-cleanup backup paths. Backup failure prevents that cleanup attempt.
+
+Restoration is manual and rolls progress back to the selected whole save.
+Existing companion archives are neither replayed nor deleted. Save Bypass and
+the separate default-appearance repair settings do not enable companion Recovery.
+
 ## Loading modes and Save Bypass
 
 Home > Quick settings offers Normal and Quick Launch. Vanilla Load is under
@@ -43,8 +61,8 @@ Advanced. **Save Bypass** remains a separate, confirmed toggle:
 
 Dedicated servers expose only **Save Bypass** as a loading control, not these
 client modes or character/world selectors. The server still auto-starts its
-configured world. With bypass enabled it also requests session-long native
-tolerant loading; with bypass disabled RuneSchema leaves native strictness alone.
+configured world. It requests session-long native tolerant loading by default
+and uses acceptance fallback only after native rejection.
 Pruning runs in either case. Client `quickLaunch.mode` is ignored on servers.
 
 Vanilla Load does not disable RuneSchema's registry-based orphan pruning.
@@ -89,8 +107,8 @@ after those functions execute normally. This includes direct native calls that
 do not pass through the reflected character preflight callback. A preflight
 receipt is diagnostic evidence, not permission to use the fallback. Successful
 native results remain untouched; no native load is replayed or skipped.
-Vanilla Load and dedicated servers require the explicit Save Bypass checkbox
-for acceptance overrides; servers also tie tolerant mode to that sole toggle.
+Vanilla Load clients require the explicit Save Bypass checkbox for acceptance
+overrides. Dedicated servers use tolerant loading and failure-only fallback by default.
 Relaxed modes verify the
 native tolerant policy at menu/world and character-load boundaries, retain it
 after the load handler returns, and reapply it if a native transition resets it.

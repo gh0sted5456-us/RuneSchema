@@ -8,11 +8,34 @@ remain in artifacts. Native chest and personal-inventory inspection remain.
 ## Favorite / Junk
 
 Favorites are built in and enabled by default. Clicking Helpy's native inventory
-marker or middle-clicking a hovered bag item cycles Unmarked → Favorite → Junk →
-Unmarked for that exact character/item instance. Press/release must stay on the
-same item; focus, selection or character changes cancel the click. No vanilla
-item action is intercepted. The old InventoryFavorites Lua mod should be
+marker, pressing F6 or middle-clicking a hovered bag item cycles Unmarked →
+Favorite → Junk → Unmarked for that exact character/item instance. Marks survive
+manual moves into storage and back; they are not cleared when leaving the bag.
+Marker clicks must press/release on the same item. MMB/key events are queued by
+the owned UE4SS input registration, then checked on the game thread against the
+same recently hovered item, current character, foreground window and mark
+revision. Stale input is discarded. No vanilla item action is intercepted.
+Ctrl+F6 cycles middle/right/off mouse marking; right-click still performs the
+game's normal use/equip action. Ctrl+Shift+F6 opens an eight-second key capture;
+Escape cancels it. Controls are saved in the shared profile's
+`inventory-controls.json`, with bounded parsing and conflict-checked atomic
+writes. The old InventoryFavorites Lua mod should be
 disabled on the next approved installation, retaining its files and saved data.
+
+The marker uses UMG's default font and a transparent top-right overlay rather
+than the game's stack-count font/style. Existing InventoryFavorites GUID lists
+are read without modifying them, with bounded validation and backup fallback.
+Only matches in the currently verified character's loaded bag are imported.
+Existing RuneSchema marks take priority. The import receipt is committed in the
+same atomic personalization write, so cycling or clearing an imported favorite
+cannot cause it to reappear next launch. This imports personal data; it does not
+load or rename the old mod's native bridge. Behavior reference: InventoryFavorites
+by FistOfTheNoob.
+
+Live visibility/input checks remain required on Steam and Game Pass. Pinned
+sorting and native bulk-deposit protection are not implemented in this
+candidate; a star does not yet guarantee the native game will exclude that
+stack from bulk moves.
 
 Helpy and the in-game markers use the same personalization store. Live item-type
 marks are character-scoped; stack overrides inherit that character's type marks.

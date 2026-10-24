@@ -1,9 +1,12 @@
 # RuneSchema 0.8.0.0
 
-Experimental source is versioned **0.8.0.1**, with a matching release tag.
-See the [experimental changelog](CHANGELOG-0.8.0.1.md). The stable `main`
-release described below remains 0.8.0.0; tagged assets require a successful
-release build.
+The current experimental package is **0.8.0.1**, refreshed October 23, 2026.
+[Download 0.8.0.1](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.1/RuneSchema-0.8.0.1.zip)
+· [Package, defaults and verification](RELEASE-0.8.0.1.md)
+· [Implemented and removed changes, line by line](CHANGELOG-0.8.0.1.md).
+Its existing prerelease status/tag is unchanged. The stable release below
+remains **0.8.0.0**; updated main documentation is not a runtime promotion.
+The refreshed ZIP is locally supplied, not a new hosted CI artifact.
 
 RuneSchema loads enabled mod folders, mounts their cooked content, and connects
 supported definitions to Dragonwilds' live systems. The main release now uses

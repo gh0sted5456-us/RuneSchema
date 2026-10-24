@@ -160,6 +160,8 @@ nav:
       - Ask RuneSchema: ASK-RUNESCHEMA.md
       - Licensing: LICENSING.md
   - Updates:
+      - Experimental 0.8.0.1: RELEASE-0.8.0.1.md
+      - Implemented / removed since 0.8.0.0: CHANGELOG-0.8.0.1.md
       - Release 0.8.0.0: RELEASE-0.8.0.0.md
       - Full 0.8.0.0 changelog: CHANGELOG-0.8.0.0.md
       - Development history: ALPHA-CHANGELOG.md

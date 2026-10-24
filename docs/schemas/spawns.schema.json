@@ -153,12 +153,77 @@
           ],
           "type": "object"
         }
+      },
+      {
+        "if": {
+          "properties": {
+            "Type": {
+              "const": "BuildingPiece"
+            }
+          },
+          "required": [
+            "Type"
+          ]
+        },
+        "then": {
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "QuestActive"
+                ]
+              },
+              {
+                "required": [
+                  "EventActive"
+                ]
+              }
+            ]
+          },
+          "properties": {
+            "AllowDeconstruction": {
+              "const": true
+            },
+            "DuplicateRadius": {
+              "exclusiveMinimum": 0
+            },
+            "PersistAfterCondition": {
+              "const": true
+            },
+            "TimeOfDay": {
+              "const": "Any"
+            },
+            "UseNativeRespawn": {
+              "const": false
+            }
+          },
+          "required": [
+            "Id",
+            "Type",
+            "Building",
+            "Location"
+          ]
+        }
       }
     ],
     "dependencies": {
       "DuplicateRadius": {
-        "required": [
-          "QuestCompleted"
+        "anyOf": [
+          {
+            "required": [
+              "QuestCompleted"
+            ]
+          },
+          {
+            "properties": {
+              "Type": {
+                "const": "BuildingPiece"
+              }
+            },
+            "required": [
+              "Type"
+            ]
+          }
         ]
       },
       "PersistAfterCondition": {
@@ -235,9 +300,14 @@
         "maxItems": 16,
         "type": "array"
       },
+      "Building": {
+        "description": "BuildingPieceData asset path for transient BuildingProp or permanent native BuildingPiece placements.",
+        "pattern": "^/",
+        "type": "string"
+      },
       "DuplicateRadius": {
         "default": 100,
-        "description": "For quest-activated Actor and BuildingProp entries, treat the same actor class within this many centimetres as already satisfied. Zero disables the coordinate safeguard.",
+        "description": "BuildingPiece skips creation when any native building occupies this radius in centimetres (grounded: XY column; ungrounded: XYZ). Must be positive for BuildingPiece. Quest-activated Actor/BuildingProp retain same-class checks; zero disables those checks.",
         "maximum": 10000,
         "minimum": 0,
         "type": "number"

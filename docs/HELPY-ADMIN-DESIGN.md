@@ -190,21 +190,20 @@ WindowsApps package junction is therefore supported without allowing redirects
 inside the mapping cache. Generated replacements must pass the existing native
 type and fingerprint checks before activation and retirement of old generated
 files. Shipped/custom mappings and the last working fallback remain protected.
-Compatibility is rechecked at launch using the game executable/version, UE4SS
-and RuneSchema binaries, load-order files, game containers, and installed mod/
-plugin containers and JSON declarations. Changed file names, sizes or write
-times invalidate the generated mapping identity. This conservatively includes
-disabled installed content, so changing it may cause an extra generation.
-Generated runtime/cache files and standalone artwork are excluded to avoid a
-regeneration loop. This is a bounded file-identity check, not a claim to detect
-an external binary patch that preserves all file metadata or to reflect every
-unloaded Blueprint. Native dump capability, permissions and validation failures
+Mapping compatibility v3 is rechecked using the game executable/version and
+native game/feature containers. RuneSchema/UE4SS DLL updates, managed mod
+definitions and load order do not trigger a new capture. A valid matching
+mapping is reused; missing/invalid mappings or changed native game inputs
+request replacement. Runtime caches and artwork are not mapping identity inputs.
+This is a bounded identity check, not a claim to detect every external patch or
+reflect every unloaded Blueprint. Native dump capability, permissions and validation failures
 retain the fallback and report the specific reason instead of accepting an
 invalid replacement.
 
-Home is a single larger house icon at the bottom-left of the navigation rail,
-with a hover label; other routes remain
-reorderable. Party placards show three compact critical meters above interactive
+Home and Profile default below the navigation divider, with Report a bug;
+Settings defaults above it. All rows and the divider retain one drag order and
+matching column geometry. Home centers the runtime badge above its social links.
+Party placards show three compact critical meters above interactive
 equipped items; advanced display settings retain the wider row layout. Food,
 hydration, rest, and skill levels are the only member-hover details. Equipped
 items retain their own hover details and right-click actions on the placard.

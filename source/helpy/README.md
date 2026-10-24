@@ -1,5 +1,15 @@
 # RSMK 0.8.0.1 integration
 
+Home > Quick settings exposes **Open Helpy at startup** directly, outside
+Advanced. Turning it off keeps the desktop closed until F2 on the next launch;
+it does not disable RuneSchema. The existing per-installation preference and
+conflict-safe settings writer are unchanged.
+
+Diagnostics uses registered code areas before text hints. New configuration,
+plugin-startup and world-cleanup codes share the generated runtime/Helpy
+catalogue and family-grouped website reference. Adding or reordering codes no
+longer shifts the suggested references for older uncoded messages.
+
 ## Grouped navigation candidate
 
 - **Players** contains Items, Clone, Recipes, and the optional Character Editor.
@@ -16,7 +26,9 @@
   checks, and explicit delivery/export confirmations remain independent of
   navigation. Detached Map, Recipes, Item Bay and inventory surfaces still work.
 
-These changes are a local build candidate, not an installed or published release.
+The matching DLL is included in the October 23, 2026 experimental 0.8.0.1
+package refresh. See the repository's release notes for the exact archive and
+test scope; publication is not live gameplay/performance certification.
 
 ## Runtime and content integration
 

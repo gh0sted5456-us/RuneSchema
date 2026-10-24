@@ -103,7 +103,25 @@ own.
 | `RangedAttackClasses` | Accepted by the schema but **not installed** as a global ranged class list. | Use an item-owned ranged collection instead. |
 | `CacheAssets` | Declares exact original artwork ownership for source-targeted Helpy caches. Never enrolls a texture as an item or makes gameplay content available. | Full object paths of original artwork belonging to this mod; omit borrowed base-game/plugin artwork. |
 
-These are the only `NativeRegistries` fields. Each field accepts at most 4,096
+Three additional fields are staged in the development source: `Skills`,
+`SkillPerks` and `Enums`. `Skills` and `SkillPerks` accept owned cooked object
+references but are **not enabled native adapters**: startup reports
+`[NATIVE-REGISTRY][UNVERIFIED]` without loading or mutating those registries or
+progress. Do not release a custom skill on the strength of declaration acceptance.
+`Enums` verifies a mod-owned cooked `UserDefinedEnum`, preserves its cooked
+symbol/value pairs and publishes their owner-scoped network fingerprint. It
+does not add native enum members, allocate values, convert `ESkill`, or bind a
+foreign enum to a native property. Use directly cooked, correctly typed mod
+properties for bindings; Blueprint enum labels must be stable across releases.
+
+Eight additional cooked-only lanes are implemented in development:
+`ContainerContents`, `FarmPlants`, `Trees`, `TreeGrowth`,
+`FixedTextNotifications`, `FTUENotifications`, `PlayerHooks` and `WorldHooks`.
+See [native data-family enrollment](COOKED-NATIVE-DATA-FAMILIES.md) for exact
+classes, startup guards and unverified consumer-lifecycle limits. These enroll
+identities; behavior stays cooked. They do not grant pruning authority.
+
+These are the supported `NativeRegistries` fields. Each field accepts at most 4,096
 unique paths; a declaration accepts at most 16,384 references in total,
 including `LoaderDefinitions` entries. The cooked JSON string is bounded to
 512 KiB in 0.8.0.0 (older builds: 256 KiB). For larger catalogues, use a conventional root with explicit

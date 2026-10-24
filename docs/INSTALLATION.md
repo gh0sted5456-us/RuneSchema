@@ -18,10 +18,17 @@ You need:
 
 Close the game before replacing RuneSchema, UE4SS, or any PAK files.
 
-Download the [current 0.8.0.0 package](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.0/RuneSchema-0.8.0.0.zip).
+Choose the [stable 0.8.0.0 package](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.0/RuneSchema-0.8.0.0.zip)
+or the [experimental 0.8.0.1 refresh](RELEASE-0.8.0.1.md).
 There is one `RuneSchema-<version>.zip` per release, with the registry and
 networking bridges and Helpy included. No separate Core or Universal choice is
-needed. The `e` suffix identifies an experimental build; `m` identifies main.
+needed. Older `e`/`m` suffixes are historical; current tags use plain versions
+and GitHub marks experimental packages as prereleases.
+
+The cleaned 0.8.0.1 ZIP contains no generated mapping or loose UI artwork.
+Mappings build/reuse the platform AppData cache; optional pictures can be
+downloaded from Helpy. Preserve existing settings when updating. The supplied
+defaults enable automatic Helpy opening and detailed logging; both are adjustable.
 
 ## RuneSchema folder location
 
@@ -113,7 +120,7 @@ Disable automatic checks there if you prefer an offline setup.
 
 Only public version metadata is requested. Helpy sends no character or world
 data, downloads no update files and never installs an update automatically.
-Results are cached under `%LOCALAPPDATA%\RuneSchema\HELPY\updates.json`.
+Results are cached under `%LOCALAPPDATA%\RSDragonwilds\RuneSchema\core\HELPY\updates.json`.
 Network failures and rate limits appear as unavailable checks, not as proof that
 your installation is current. An alpha version newer than main is shown as ahead;
 different legacy build labels are not treated as ordered version numbers.

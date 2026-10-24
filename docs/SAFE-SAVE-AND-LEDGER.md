@@ -10,11 +10,31 @@ changed, and it does not depend on a separate history file.
 2. RuneSchema adds valid items, recipes, quests, and journal entries to the
    matching live game lists.
 3. RuneSchema checks the character information just before the game uses it.
-4. A saved identity is removed only when it is absent from the matching live list.
-5. If nothing is missing, RuneSchema makes no change.
+4. A saved identity is removed only when it is absent from the matching complete live list.
+   RuneSchema verifies a whole-save backup before committing a cleanup.
+5. Each section is independent. An incomplete recipe registry or unsupported
+   quest section does not prevent verified cleanup of other sections. Unknown
+   identities are retained wherever the applicable list is not certified.
+6. If nothing is missing, RuneSchema makes no change.
 
-This check occurs at the first character-load point for that game launch. It is
-not repeated every time the player moves between a world and the main menu.
+The JSON check occurs at the first character-load point for that game launch.
+A separate post-hydration check handles RuneSchema-owned orphan quests whose
+native state becomes available later. Active or unfinished status does not
+protect an incomplete quest whose identity is absent from a complete registry.
+Completed native quest history and RuneSchema completion-phase records are
+retained automatically; explicit manual progress resets remain separate. Pending
+registrations and unrelated quests remain protected. Native client notification
+receives the retained list before authority rows are replaced, so removed quests
+can disappear from the UI; the game persists this at its next normal save.
+
+Normal/Quick Launch clients and dedicated servers first request relaxed native
+loading, then use the verified acceptance fallback only if native code rejects
+the load. A character-specific game notification reports cleanup, skipped
+uncertain sections, or an attributed fallback once the player is ready. Details
+remain in RuneSchema.log. Unattributed native calls produce only a generic
+session notice on the local client, never a remote player's character receipt.
+This cannot guarantee recovery of truncated or genuinely
+corrupt saves, and fallback acceptance is not proof that every record loaded.
 
 ## What the check protects
 
@@ -34,12 +54,17 @@ character, then Dragonwilds and the active store handle normal saving.
 
 ## Limits
 
-- RuneSchema cannot restore content that was already removed from a save.
+- RuneSchema does not automatically restore removed content; a verified backup
+  can be restored manually, rolling back progress since that backup.
 - Reinstalling a removed mod does not recreate lost possessions or progress.
 - A PAK that failed to mount can make otherwise valid content appear missing.
   Fix mount and registration errors before testing cleanup.
 - Placed buildings belong to the world save. Removing a building mod needs more
   care than removing an inventory item.
+- Post-hydration quest pruning requires an exact-GUID local character backup.
+  If a dedicated server has no matching character provider file, this fallback
+  defers instead of mutating live state without a backup. Xbox provider files
+  are read/copied only; native saving remains owned by the game.
 
 ## Recommended removal process
 

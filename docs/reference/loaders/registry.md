@@ -141,6 +141,15 @@ WearableMeshData, MeleeAttackClasses and RangedAttackClasses. The metadata-only
 ownership. It does not register textures as gameplay items. The PAK container
 is not a prerequisite for announcing these references.
 
+Development-only additions: `Skills` and `SkillPerks` are declaration-only,
+explicitly blocked native adapters, not working custom progression support.
+`Enums` read-only verifies exact mod-owned cooked `UserDefinedEnum` assets and
+includes stable symbol/value fingerprints in owner/network agreement. All
+three require full `/Owner/.../Asset.Asset` or `/Game/Mods/Owner/.../Asset.Asset`
+paths matching the declaration owner; `Source: Schema` is not supported.
+Ownership/type errors are reported, never interpreted as permission to modify
+native entries. A cooked mod enum cannot substitute for native `ESkill`.
+
 ```jsonc
 {
   "SchemaVersion": 1,

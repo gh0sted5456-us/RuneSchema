@@ -140,7 +140,7 @@ a PAK is not permission to relabel old records as freshly captured content.
 
 Helpy separates this session's attributed errors/warnings from lifetime counts.
 The core maintains local plaintext statistics in
-`%LOCALAPPDATA%/RuneSchema/health/mods-steam.json`, `mods-gamepass.json` or
+`%LOCALAPPDATA%/RSDragonwilds/RuneSchema/core/health/mods-steam.json`, `mods-gamepass.json` or
 `mods-server.json`. This contains short issue excerpts and can include local
 paths from logs. It is not uploaded. Rows disappear when their mod folder is
 removed; disabling a mod retains its history.

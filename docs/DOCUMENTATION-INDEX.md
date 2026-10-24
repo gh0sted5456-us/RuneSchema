@@ -12,6 +12,7 @@ loader reference only when you need exact folder fields.
 5. [Safe removal and character saves](SAFE-SAVE-AND-LEDGER.md)
 6. [Steam, Epic, Game Pass, and co-op](COMPATIBILITY.md)
 7. [Troubleshooting](TROUBLESHOOTING.md)
+8. [Report a bug from Helpy](HELPY-BUG-REPORTS.md)
 
 ## Modders: create content
 
@@ -24,6 +25,8 @@ loader reference only when you need exact folder fields.
 7. [Stations and recipes](STATIONS-AND-RECIPES.md)
 8. [Custom armor](CUSTOM-ARMOR.md)
 9. [Cooked registry declarations](COOKED-PAK-REGISTRY-MANIFEST.md)
+   - [Cooked native data-family enrollment (experimental)](COOKED-NATIVE-DATA-FAMILIES.md)
+   - [Cooked-only repair items: boundary and native evidence](COOKED-REPAIR-KIT.md)
 10. [Blueprint and Lua companions](PSEUDO-LOADERS.md)
 11. [Guided authoring tools](ADVANCED-AUTHORING-TOOLS.md)
 12. [Examples](EXAMPLES.md), [all loader pages](LOADER-WALKTHROUGHS.md#open-the-detailed-loader-reference), and [JSON schemas](SCHEMAS.md)
@@ -41,6 +44,8 @@ loader reference only when you need exact folder fields.
 ## Reference and distribution
 
 - [Every loader folder and its purpose](LOADER-WALKTHROUGHS.md)
+- [0.8.0.1 implemented and removed changes, line by line](CHANGELOG-0.8.0.1.md)
+- [0.8.0.1 package and verification](RELEASE-0.8.0.1.md)
 - [Field schemas](SCHEMAS.md)
 - [File types for CurseForge and Nexus](MOD-HOSTS-AND-GETTING-STARTED.md)
 - [Licensing and ownership](LICENSING.md)

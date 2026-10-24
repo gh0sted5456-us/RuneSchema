@@ -70,7 +70,7 @@ results belong to Helpy's own writable AppData cache.
 | Location | Role |
 | --- | --- |
 | `RuneSchema/mods/<owner>/cache/*.rsmk-cache` | Author-distributed input bundle; never rewritten |
-| `%LOCALAPPDATA%/RuneSchema/HELPY/runtime/saved/cache/item-icons` | Imported/captured thumbnail files and source snapshot |
+| `%LOCALAPPDATA%/RSDragonwilds/RuneSchema/core/HELPY/runtime/saved/cache/item-icons` | Imported/captured thumbnail files and source snapshot |
 | `…/cache/content-bundles/<install-key>` | Typed owner/category metadata and atomically committed local index |
 | `…/cache/item-catalogues` | Verified/saved native item catalogue used alongside imported references |
 | `…/cache/journal` | Local native journal references and observed text/artwork |
