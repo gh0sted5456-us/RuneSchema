@@ -2,6 +2,214 @@
   "version": 1,
   "codes": [
     {
+      "id": "ConfigLoadFailed",
+      "code": "RS-CFG-001",
+      "title": "Configuration could not be loaded",
+      "severity": "error",
+      "subsystem": "Configuration",
+      "summary": "Configuration loading failed; session defaults are being used.",
+      "impact": "Existing configuration files are retained. The session may not use the requested settings.",
+      "action": "Read the original exception and named configuration path. Correct the file or access problem before restarting.",
+      "causes": "Reading, validating or initializing the runtime configuration failed. The original exception distinguishes syntax, type and access failures.",
+      "troubleshooting": "Inspect the named settings file and original exception. The runtime is using session defaults; preserve the original instead of deleting unrelated caches or saves.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-cfg-001"
+    },
+    {
+      "id": "ConfigRecovered",
+      "code": "RS-CFG-002",
+      "title": "Configuration saved with original backup",
+      "severity": "warning",
+      "subsystem": "Configuration",
+      "summary": "An explicit save replaced preserved configuration with current settings after backing up the original.",
+      "impact": "The original file is retained at the reported backup path; startup settings require restart.",
+      "action": "Review the saved settings and retain the backup if an original value needs to be recovered.",
+      "causes": "Current settings were explicitly saved after configuration recovery, and an original-file backup was created.",
+      "troubleshooting": "Review the reported backup path and resulting settings. Restart to apply startup-only preferences; restore individual original values only after checking their validity.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-cfg-002"
+    },
+    {
+      "id": "ConfigSaveFailed",
+      "code": "RS-CFG-003",
+      "title": "Configuration save failed",
+      "severity": "error",
+      "subsystem": "Configuration",
+      "summary": "The settings save was not completed.",
+      "impact": "Changes remain session-only. Any backup path in the original message should be retained.",
+      "action": "Check the exact write/validation error and path; do not assume preferences persisted.",
+      "causes": "Settings serialization, validation, backup or writing reported a failure.",
+      "troubleshooting": "Read the exact exception and any backup path. Check permissions and free space, then reload before retrying; session values are not proof of a successful disk save.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-cfg-003"
+    },
+    {
+      "id": "PluginCatalogRejected",
+      "code": "RS-PLUG-001",
+      "title": "Plugin catalogue discovery failed",
+      "severity": "error",
+      "subsystem": "Plugins",
+      "summary": "Plugin catalogue discovery threw an exception before loading could proceed.",
+      "impact": "This plugin load pass stops; RuneSchema core continues.",
+      "action": "Inspect the original discovery exception, plugin manifests and directory access.",
+      "causes": "The plugin discovery pass threw an exception. This is different from one plugin failing its native initialization.",
+      "troubleshooting": "Keep the original exception and inspect plugin manifests and directory access. RuneSchema core continues; do not infer a game crash from this report.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-plug-001"
+    },
+    {
+      "id": "PluginDllMissing",
+      "code": "RS-PLUG-002",
+      "title": "Declared plugin DLL is missing",
+      "severity": "warning",
+      "subsystem": "Plugins",
+      "summary": "A plugin declares a native entry point that is not a regular file at the resolved path.",
+      "impact": "The native plugin is skipped; its PAK content remains independently available.",
+      "action": "Check the named plugin's entry point and installation layout; restore the matching DLL.",
+      "causes": "The manifest's resolved native entry point is absent or is not a regular file.",
+      "troubleshooting": "Compare plugin.json with the installed DLL path. Restore the correct package without changing unrelated PAKs or UE4SS host files.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-plug-002"
+    },
+    {
+      "id": "PluginLoadFailed",
+      "code": "RS-PLUG-003",
+      "title": "Windows could not load a plugin DLL",
+      "severity": "error",
+      "subsystem": "Plugins",
+      "summary": "LoadLibraryExW returned failure for the named native plugin.",
+      "impact": "The native plugin is skipped; other plugins continue.",
+      "action": "Keep the reported Windows error number and DLL path. Check architecture, dependencies and access before replacing files.",
+      "causes": "Windows rejected LoadLibraryExW. The retained Windows number may indicate missing dependencies, invalid architecture or access restrictions; the RS code does not select one cause.",
+      "troubleshooting": "Keep the exact Windows number, plugin ID and DLL path. Verify a matching x64 plugin build and its dependencies before reinstalling. Do not disable security software as a generic fix.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-plug-003"
+    },
+    {
+      "id": "PluginExportsMissing",
+      "code": "RS-PLUG-004",
+      "title": "Plugin API exports are missing",
+      "severity": "error",
+      "subsystem": "Plugins",
+      "summary": "A loaded DLL lacks a mandatory Query, Initialize or Shutdown export.",
+      "impact": "The native plugin is unloaded before initialization.",
+      "action": "Install a RuneSchema plugin build with the required exports, not an arbitrary UE4SS DLL.",
+      "causes": "The DLL loaded but did not export all mandatory RuneSchema plugin API functions.",
+      "troubleshooting": "Check for RuneSchemaPlugin_Query, RuneSchemaPlugin_Initialize and RuneSchemaPlugin_Shutdown in the intended plugin build. A generic UE4SS main.dll is not interchangeable.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-plug-004"
+    },
+    {
+      "id": "PluginIdentityRejected",
+      "code": "RS-PLUG-005",
+      "title": "Plugin identity or API contract rejected",
+      "severity": "error",
+      "subsystem": "Plugins",
+      "summary": "The queried native descriptor does not satisfy the host's identity/API contract.",
+      "impact": "The incompatible native plugin is isolated; core, other plugins and PAK mounting continue.",
+      "action": "Align the manifest ID and DLL descriptor/API build. A version label alone does not repair the descriptor.",
+      "causes": "The queried descriptor was absent, too small, had a different API version/ID or lacked required identity fields.",
+      "troubleshooting": "Align the manifest and DLL descriptor with the running host. A manifest version mismatch alone is not this rejection; preserve the actual descriptor evidence.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-plug-005"
+    },
+    {
+      "id": "PluginInitFailed",
+      "code": "RS-PLUG-006",
+      "title": "Plugin initialization contract failed",
+      "severity": "error",
+      "subsystem": "Plugins",
+      "summary": "Initialization failed or the plugin did not register its declared capabilities.",
+      "impact": "Its registered services/capabilities are removed and the DLL is unloaded.",
+      "action": "Read earlier plugin errors and the native result; verify that all declared capabilities are registered.",
+      "causes": "Initialize returned failure, threw, or did not register all capabilities declared by the manifest.",
+      "troubleshooting": "Check preceding plugin errors and the result value. A successful return value can still fail capability verification; compare declared and registered capabilities.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-plug-006"
+    },
+    {
+      "id": "PluginUiFailed",
+      "code": "RS-PLUG-007",
+      "title": "Plugin UI initialization failed",
+      "severity": "error",
+      "subsystem": "Plugins",
+      "summary": "A plugin UI callback rejected initialization or threw an exception.",
+      "impact": "That UI phase did not complete; the message does not establish that all plugin services stopped.",
+      "action": "Keep the named plugin and rejection/exception message. Check matching frontend/core builds and earlier UI errors.",
+      "causes": "The UI initialization callback returned failure or threw. This does not imply every plugin service has been unloaded.",
+      "troubleshooting": "Keep the plugin name and callback outcome. Inspect earlier frontend/device/configuration errors and use a matching plugin build.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-plug-007"
+    },
+    {
+      "id": "PluginUnrealFailed",
+      "code": "RS-PLUG-008",
+      "title": "Plugin Unreal initialization failed",
+      "severity": "error",
+      "subsystem": "Plugins",
+      "summary": "A plugin Unreal initialization callback returned failure or threw an exception.",
+      "impact": "The plugin did not confirm Unreal initialization; core and other plugin phases continue.",
+      "action": "Inspect the named plugin's preceding error and reported result, rather than treating this phase failure as a complete diagnosis.",
+      "causes": "The Unreal initialization callback did not confirm success. An earlier plugin-specific error may explain why.",
+      "troubleshooting": "Read the earlier plugin messages and returned result. Do not treat this wrapper failure as a missing-asset or migration diagnosis without that evidence.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-plug-008"
+    },
+    {
+      "id": "WorldCleanupBufferChanged",
+      "code": "RS-WORLD-001",
+      "title": "World cleanup buffer changed during validation",
+      "severity": "warning",
+      "subsystem": "World save cleanup",
+      "summary": "The native world buffer no longer matched the validated cleanup input.",
+      "impact": "Cleanup skips the buffer; the world is unchanged by this attempt.",
+      "action": "Keep the original world and backup. Check lifecycle/overlapping work before retrying; do not force stale bytes into the save.",
+      "causes": "The native buffer pointer/length/content no longer matched the prevalidated cleanup input at commit time.",
+      "troubleshooting": "Keep the original save and backup. Investigate overlapping native loading or lifecycle changes. Never bypass the comparison to force a stale cleanup result.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-world-001"
+    },
+    {
+      "id": "WorldCleanupContractUnsafe",
+      "code": "RS-WORLD-002",
+      "title": "World cleanup contract is not safe",
+      "severity": "warning",
+      "subsystem": "World save cleanup",
+      "summary": "Missing building IDs were observed but the native load contract was not safe to repair.",
+      "impact": "The cleanup attempt leaves the world unchanged.",
+      "action": "Check the preceding contract and registry evidence. Missing IDs alone do not authorize writing an unverified save format.",
+      "causes": "Orphan IDs were detected but the verified native world-load repair contract was not satisfied.",
+      "troubleshooting": "Review the preceding contract/binding and registry evidence for this exact game build. Do not disable save validation merely to silence this warning.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-world-002"
+    },
+    {
+      "id": "WorldCleanupRepairFailed",
+      "code": "RS-WORLD-003",
+      "title": "World cleanup repair did not complete",
+      "severity": "warning",
+      "subsystem": "World save cleanup",
+      "summary": "The native world-buffer repair attempt reported an exception.",
+      "impact": "The cleanup attempt reports the world unchanged; the original exception remains authoritative.",
+      "action": "Retain the original world, backups and full error. Resolve the reported validation/repair cause before retrying.",
+      "causes": "A world-buffer repair stage reported an exception before its cleanup could be accepted.",
+      "troubleshooting": "Keep the original exception and backup path. Resolve the named validation or repair condition; this code does not claim the native game save is corrupt.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-world-003"
+    },
+    {
+      "id": "WorldCleanupValidationFailed",
+      "code": "RS-WORLD-004",
+      "title": "World cleanup input could not be validated",
+      "severity": "warning",
+      "subsystem": "World save cleanup",
+      "summary": "World data parsing or validation failed before a cleanup result could be accepted.",
+      "impact": "This cleanup path does not write a guessed repair.",
+      "action": "Keep the exact parser/validation exception and game build. A cleanup rejection alone does not prove the native game cannot load the world.",
+      "causes": "Native world data could not be parsed or validated by this cleanup adapter.",
+      "troubleshooting": "Preserve the original data and exact exception. Compare the adapter with the game build; native loading can still proceed without an invented repair.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-world-004"
+    },
+    {
+      "id": "WorldCleanupHookUnavailable",
+      "code": "RS-WORLD-005",
+      "title": "Game Pass world cleanup hooks unavailable",
+      "severity": "warning",
+      "subsystem": "World save cleanup",
+      "summary": "Required Game Pass world-loading hooks could not be installed.",
+      "impact": "That world cleanup path stays unavailable and does not change saves.",
+      "action": "Check the current Game Pass executable/build and matching RuneSchema bindings; preserve existing saves and use supported native loading.",
+      "causes": "One or more required Game Pass world-loading hooks were unavailable for the current executable.",
+      "troubleshooting": "Use a matching RuneSchema build/binding and keep the original save. Do not install a different UE4SS host just to suppress this framework cleanup warning.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-world-005"
+    },
+    {
       "id": "QuestOwnerConflict",
       "code": "RS-QST-001",
       "title": "Conflicting quest ownership",
@@ -647,6 +855,7 @@
       "producer": "src/Loader/DragonWildsAssetModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Assets",
       "anchor": "rs-asset-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-asset-001",
       "troubleshooting": "Check the exact named target and whether its content is mounted or loaded. An unresolved lookup does not, by itself, prove a misspelled path."
@@ -658,6 +867,7 @@
       "producer": "src/Loader/DragonWildsAssetModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Assets",
       "anchor": "rs-asset-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-asset-002",
       "troubleshooting": "The asset definition root was rejected. Review the file\u2019s top-level JSONC type and structure."
@@ -669,6 +879,7 @@
       "producer": "src/Loader/DragonWildsAssetModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Assets",
       "anchor": "rs-asset-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-asset-003",
       "troubleshooting": "The requested asset field could not be applied. Inspect the exact field path and original rejection; other fields may have succeeded."
@@ -680,6 +891,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-001",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -691,6 +903,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-002",
       "troubleshooting": "The named building entry must be an object. Review that entry in the identified building definition file."
@@ -702,6 +915,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-003",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -713,6 +927,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-004",
       "troubleshooting": "The building Properties value must be an object. Check the named definition rather than changing unrelated building files."
@@ -724,6 +939,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-005",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-005",
       "troubleshooting": "A building patch could not find its target. Confirm the exact existing building identity and whether that definition is loaded."
@@ -735,6 +951,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-006",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-006",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -746,6 +963,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-007",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-007",
       "troubleshooting": "Building Requirements must be an array. Check the failing field in the named definition."
@@ -757,6 +975,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-008",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-008",
       "troubleshooting": "The building patch attempted a protected managed identity change. Leave the managed identity unchanged."
@@ -768,6 +987,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-009",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-009",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -779,6 +999,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-010",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-010",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -790,6 +1011,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-011",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-011",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -801,6 +1023,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-012",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-012",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -812,6 +1035,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-013",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-013",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -823,6 +1047,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-014",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-014",
       "troubleshooting": "The Base Builder import must contain a pieces array. Check the reported import source and shape."
@@ -834,6 +1059,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-015",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-015",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -845,6 +1071,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-016",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-016",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -856,6 +1083,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-017",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-017",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -867,6 +1095,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-018",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-018",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -878,6 +1107,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-019",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-019",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -889,6 +1119,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-020",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-020",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -900,6 +1131,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-021",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-021",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -911,6 +1143,7 @@
       "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Buildings",
       "anchor": "rs-bld-022",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-022",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -922,6 +1155,7 @@
       "producer": "src/Loader/DragonWildsBlueprintModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Blueprints",
       "anchor": "rs-bp-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-001",
       "troubleshooting": "Compare the complete property path with the target Blueprint's current reflected properties and nested structure."
@@ -933,6 +1167,7 @@
       "producer": "src/Loader/DragonWildsBlueprintModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Blueprints",
       "anchor": "rs-bp-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-002",
       "troubleshooting": "A required Blueprint lifecycle hook was unavailable. Review the reported hook and native build compatibility rather than assuming a property typo."
@@ -944,6 +1179,7 @@
       "producer": "src/Loader/DragonWildsBlueprintModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Blueprints",
       "anchor": "rs-bp-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-003",
       "troubleshooting": "This Blueprint change was deferred by the live-reload path. Restart the game to check whether it can apply during startup."
@@ -955,6 +1191,7 @@
       "producer": "src/Loader/DragonWildsBlueprintModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Blueprints",
       "anchor": "rs-bp-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-004",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -966,6 +1203,7 @@
       "producer": "src/Loader/DragonWildsBlueprintModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Blueprints",
       "anchor": "rs-bp-005",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-005",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -977,6 +1215,7 @@
       "producer": "src/Loader/DragonWildsBlueprintModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Blueprints",
       "anchor": "rs-bp-006",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-006",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -988,6 +1227,7 @@
       "producer": "src/Loader/DragonWildsBlueprintModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Blueprints",
       "anchor": "rs-bp-007",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-007",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -999,6 +1239,7 @@
       "producer": "src/Loader/DragonWildsBlueprintModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Blueprints",
       "anchor": "rs-bp-008",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-008",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1010,6 +1251,7 @@
       "producer": "src/Loader/DragonWildsBlueprintModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Blueprints",
       "anchor": "rs-bp-009",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-009",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1021,6 +1263,7 @@
       "producer": "src/Loader/DragonWildsBlueprintModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Blueprints",
       "anchor": "rs-bp-010",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-010",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1032,6 +1275,7 @@
       "producer": "src/Loader/DragonWildsBlueprintModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Blueprints",
       "anchor": "rs-bp-011",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-011",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1043,6 +1287,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-001",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1054,6 +1299,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-002",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1065,6 +1311,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-003",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1076,6 +1323,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-004",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1087,6 +1335,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-005",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-005",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1098,6 +1347,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-006",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-006",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1109,6 +1359,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-007",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-007",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1120,6 +1371,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-008",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-008",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1131,6 +1383,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-009",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-009",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1142,6 +1395,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-010",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-010",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1153,6 +1407,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-011",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-011",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1164,6 +1419,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-012",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-012",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1175,6 +1431,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-013",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-013",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1186,6 +1443,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-014",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-014",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1197,6 +1455,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-015",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-015",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1208,6 +1467,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-016",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-016",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1219,6 +1479,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-017",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-017",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1230,6 +1491,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-018",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-018",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1241,6 +1503,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-019",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-019",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1252,6 +1515,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-020",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-020",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1263,6 +1527,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-021",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-021",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1274,6 +1539,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-022",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-022",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1285,6 +1551,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-023",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-023",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1296,6 +1563,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-024",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-024",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1307,6 +1575,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-025",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-025",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1318,6 +1587,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-026",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-026",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1329,6 +1599,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-027",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-027",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1340,6 +1611,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-028",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-028",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1351,6 +1623,7 @@
       "producer": "src/Loader/DragonWildsMainLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-029",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-029",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1362,6 +1635,7 @@
       "producer": "src/dllmain.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-030",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-030",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1373,6 +1647,7 @@
       "producer": "src/dllmain.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-031",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-031",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1384,6 +1659,7 @@
       "producer": "src/dllmain.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-032",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-032",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1395,6 +1671,7 @@
       "producer": "include/Loader/DragonWildsQuestLoader.h",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-033",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-033",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1406,6 +1683,7 @@
       "producer": "include/Loader/DragonWildsQuestLoader.h",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-034",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-034",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1417,6 +1695,7 @@
       "producer": "include/Loader/DragonWildsQuestLoader.h",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-035",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-035",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1428,6 +1707,7 @@
       "producer": "include/Loader/DragonWildsQuestLoader.h",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-036",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-036",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1439,6 +1719,7 @@
       "producer": "include/Loader/DragonWildsDialogueLoader.h",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-037",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-037",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1450,6 +1731,7 @@
       "producer": "include/Loader/DragonWildsEventLoader.h",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-038",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-038",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1461,6 +1743,7 @@
       "producer": "include/Loader/DragonWildsEventLoader.h",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-039",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-039",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1472,6 +1755,7 @@
       "producer": "src/Loader/ModLoadOrder.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-040",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-040",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1483,6 +1767,7 @@
       "producer": "src/Loader/ModLoadOrder.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-041",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-041",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1494,6 +1779,7 @@
       "producer": "src/Loader/Spawn/PlayerRules.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-042",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-042",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1505,6 +1791,7 @@
       "producer": "src/Loader/Spawn/PlayerRules.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-043",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-043",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1516,6 +1803,7 @@
       "producer": "src/Loader/Spawn/PlayerRules.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-044",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-044",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1527,6 +1815,7 @@
       "producer": "src/Loader/Spawn/PlayerRules.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-045",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-045",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1538,6 +1827,7 @@
       "producer": "src/Loader/Spawn/PlayerRules.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-046",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-046",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1549,6 +1839,7 @@
       "producer": "src/Loader/Spawn/PlayerRules.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-047",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-047",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1560,6 +1851,7 @@
       "producer": "src/Loader/Spawn/PlayerRules.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-048",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-048",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1571,6 +1863,7 @@
       "producer": "src/Loader/Spawn/PlayerRules.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-049",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-049",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1582,6 +1875,7 @@
       "producer": "src/Runtime/RegistryBridge.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-050",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-050",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1593,6 +1887,7 @@
       "producer": "src/Runtime/RegistryBridge.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-051",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-051",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1604,6 +1899,7 @@
       "producer": "src/Runtime/RegistryBridge.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-052",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-052",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1615,6 +1911,7 @@
       "producer": "src/Runtime/RegistryBridge.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-053",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-053",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1626,6 +1923,7 @@
       "producer": "src/Runtime/RegistryBridge.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-054",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-054",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1637,6 +1935,7 @@
       "producer": "src/Runtime/RegistryBridge.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Runtime",
       "anchor": "rs-core-055",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-055",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1648,6 +1947,7 @@
       "producer": "src/Loader/DragonWildsCourseLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Courses",
       "anchor": "rs-crs-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-001",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1659,6 +1959,7 @@
       "producer": "src/Loader/DragonWildsCourseLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Courses",
       "anchor": "rs-crs-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-002",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1670,6 +1971,7 @@
       "producer": "src/Loader/DragonWildsCourseLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Courses",
       "anchor": "rs-crs-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-003",
       "troubleshooting": "The course patch declaration was missing or malformed. Inspect the named patch identity and source structure."
@@ -1681,6 +1983,7 @@
       "producer": "src/Loader/DragonWildsCourseLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Courses",
       "anchor": "rs-crs-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-004",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1692,6 +1995,7 @@
       "producer": "src/Loader/DragonWildsCourseLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Courses",
       "anchor": "rs-crs-005",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-005",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1703,6 +2007,7 @@
       "producer": "src/Loader/DragonWildsCourseLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Courses",
       "anchor": "rs-crs-006",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-006",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1714,6 +2019,7 @@
       "producer": "src/Loader/DragonWildsCourseLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Courses",
       "anchor": "rs-crs-007",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-007",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1725,6 +2031,7 @@
       "producer": "src/Loader/DragonWildsCourseLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Courses",
       "anchor": "rs-crs-008",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-008",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1736,6 +2043,7 @@
       "producer": "src/Loader/DragonWildsCourseLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Courses",
       "anchor": "rs-crs-009",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-009",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1747,6 +2055,7 @@
       "producer": "src/Loader/DragonWildsCourseLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Courses",
       "anchor": "rs-crs-010",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-010",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1758,6 +2067,7 @@
       "producer": "src/Loader/DragonWildsCourseLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Courses",
       "anchor": "rs-crs-011",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-011",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1769,6 +2079,7 @@
       "producer": "src/Loader/DragonWildsCourseLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Courses",
       "anchor": "rs-crs-012",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-012",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1780,6 +2091,7 @@
       "producer": "src/Loader/DragonWildsCourseLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Courses",
       "anchor": "rs-crs-013",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-013",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1791,6 +2103,7 @@
       "producer": "src/Loader/DragonWildsEnumLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Enums",
       "anchor": "rs-enum-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-enum-001",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1802,6 +2115,7 @@
       "producer": "src/Loader/DragonWildsEnumLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Enums",
       "anchor": "rs-enum-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-enum-002",
       "troubleshooting": "The enum namespace or value is invalid for this loader. Check the exact namespace and enum entry in the source definition."
@@ -1813,6 +2127,7 @@
       "producer": "src/Loader/DragonWildsEquipmentLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Equipment",
       "anchor": "rs-eqp-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-eqp-001",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1824,6 +2139,7 @@
       "producer": "src/Loader/DragonWildsEquipmentLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Equipment",
       "anchor": "rs-eqp-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-eqp-002",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1835,6 +2151,7 @@
       "producer": "src/Loader/DragonWildsEquipmentLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Equipment",
       "anchor": "rs-eqp-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-eqp-003",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1846,6 +2163,7 @@
       "producer": "src/Loader/DragonWildsEquipmentLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Equipment",
       "anchor": "rs-eqp-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-eqp-004",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1857,6 +2175,7 @@
       "producer": "src/Loader/DragonWildsEquipmentLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Equipment",
       "anchor": "rs-eqp-005",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-eqp-005",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1868,6 +2187,7 @@
       "producer": "src/Loader/DragonWildsEquipmentLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Equipment",
       "anchor": "rs-eqp-006",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-eqp-006",
       "troubleshooting": "Review the identified equipment definition and the original validation error; this entry was rejected."
@@ -1879,6 +2199,7 @@
       "producer": "src/Loader/DragonWildsGameplayEffectLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Gameplay effects",
       "anchor": "rs-ge-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ge-001",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1890,6 +2211,7 @@
       "producer": "src/Loader/DragonWildsGameplayEffectLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Gameplay effects",
       "anchor": "rs-ge-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ge-002",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1901,6 +2223,7 @@
       "producer": "src/Loader/DragonWildsGameplayEffectLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Gameplay effects",
       "anchor": "rs-ge-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ge-003",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1912,6 +2235,7 @@
       "producer": "src/Loader/DragonWildsGameplayEffectLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Gameplay effects",
       "anchor": "rs-ge-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ge-004",
       "troubleshooting": "The Gameplay Effect definition was deferred until restart. The record does not mean the effect was applied live."
@@ -1923,6 +2247,7 @@
       "producer": "src/Loader/DragonWildsAssetModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Imports",
       "anchor": "rs-imp-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-001",
       "troubleshooting": "Review the rejected $Imp* directives and the exact parser error. No import was executed by the rejected request."
@@ -1934,6 +2259,7 @@
       "producer": "src/Loader/DragonWildsAssetModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Imports",
       "anchor": "rs-imp-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-002",
       "troubleshooting": "Inspect the destination's Modules.Modules array and Module object-reference layout before retrying the import."
@@ -1945,6 +2271,7 @@
       "producer": "src/Loader/DragonWildsAssetModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Imports",
       "anchor": "rs-imp-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-003",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1956,6 +2283,7 @@
       "producer": "src/Loader/DragonWildsAssetModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Imports",
       "anchor": "rs-imp-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-004",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1967,6 +2295,7 @@
       "producer": "src/Loader/DragonWildsAssetModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Imports",
       "anchor": "rs-imp-005",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-005",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1978,6 +2307,7 @@
       "producer": "src/Loader/DragonWildsAssetModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Imports",
       "anchor": "rs-imp-006",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-006",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -1989,6 +2319,7 @@
       "producer": "src/Loader/DragonWildsAssetModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Imports",
       "anchor": "rs-imp-007",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-007",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2000,6 +2331,7 @@
       "producer": "src/Loader/DragonWildsAssetModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Imports",
       "anchor": "rs-imp-008",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-008",
       "troubleshooting": "An atomic import was blocked during dependency resolution. Review the preceding dependency errors; the destination was not changed by this batch."
@@ -2011,6 +2343,7 @@
       "producer": "src/Loader/DragonWildsAssetModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Imports",
       "anchor": "rs-imp-009",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-009",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2022,6 +2355,7 @@
       "producer": "src/Loader/DragonWildsAssetModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Imports",
       "anchor": "rs-imp-010",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-010",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2033,6 +2367,7 @@
       "producer": "src/Loader/DragonWildsAssetModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Imports",
       "anchor": "rs-imp-011",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-011",
       "troubleshooting": "This was a blocked dry-run plan, not attempted execution. Inspect the dependency and validation errors before running without $ImpDry."
@@ -2044,6 +2379,7 @@
       "producer": "src/Loader/DragonWildsAssetModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Imports",
       "anchor": "rs-imp-012",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-012",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2055,6 +2391,7 @@
       "producer": "src/Loader/DragonWildsJournalModLoader.cpp",
       "legacyCollision": true,
       "namespace": "structured",
+      "category": "Journal",
       "anchor": "structured-rs-jrn-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#structured-rs-jrn-001",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2066,6 +2403,7 @@
       "producer": "src/Loader/DragonWildsJournalModLoader.cpp",
       "legacyCollision": true,
       "namespace": "structured",
+      "category": "Journal",
       "anchor": "structured-rs-jrn-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#structured-rs-jrn-002",
       "troubleshooting": "The journal definition root is invalid. Review the expected top-level structure of the source file."
@@ -2077,6 +2415,7 @@
       "producer": "src/Loader/DragonWildsJournalModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Journal",
       "anchor": "rs-jrn-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-003",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2088,6 +2427,7 @@
       "producer": "src/Loader/DragonWildsJournalModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Journal",
       "anchor": "rs-jrn-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-004",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2099,6 +2439,7 @@
       "producer": "src/Loader/DragonWildsJournalModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Journal",
       "anchor": "rs-jrn-005",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-005",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2110,6 +2451,7 @@
       "producer": "src/Loader/DragonWildsJournalModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Journal",
       "anchor": "rs-jrn-006",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-006",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2121,6 +2463,7 @@
       "producer": "src/Loader/DragonWildsJournalModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Journal",
       "anchor": "rs-jrn-007",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-007",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2132,6 +2475,7 @@
       "producer": "src/Loader/DragonWildsJournalModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Journal",
       "anchor": "rs-jrn-008",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-008",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2143,6 +2487,7 @@
       "producer": "src/Loader/DragonWildsJournalModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Journal",
       "anchor": "rs-jrn-009",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-009",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2154,6 +2499,7 @@
       "producer": "src/Loader/DragonWildsJournalModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Journal",
       "anchor": "rs-jrn-010",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-010",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2165,6 +2511,7 @@
       "producer": "src/Loader/DragonWildsJournalModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Journal",
       "anchor": "rs-jrn-011",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-011",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2176,6 +2523,7 @@
       "producer": "src/Loader/DragonWildsJournalModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Journal",
       "anchor": "rs-jrn-012",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-012",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2187,6 +2535,7 @@
       "producer": "src/Loader/DragonWildsJournalModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Journal",
       "anchor": "rs-jrn-013",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-013",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2198,6 +2547,7 @@
       "producer": "src/Loader/DragonWildsJournalModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Journal",
       "anchor": "rs-jrn-014",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-014",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2209,6 +2559,7 @@
       "producer": "src/Core/JsonDocument.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Configuration and definitions",
       "anchor": "rs-json-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-json-001",
       "troubleshooting": "Review the reported source file for JSON/JSONC syntax problems. Use line and column evidence only when the parser actually supplied them."
@@ -2220,6 +2571,7 @@
       "producer": "src/Utility/Config.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Configuration and definitions",
       "anchor": "rs-json-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-json-002",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2231,6 +2583,7 @@
       "producer": "src/Utility/Config.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Configuration and definitions",
       "anchor": "rs-json-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-json-003",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2242,6 +2595,7 @@
       "producer": "src/Core/JsonDocument.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Configuration and definitions",
       "anchor": "rs-json-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-json-004",
       "troubleshooting": "The JSONC input exceeded the supported document-size limit. Split definitions into smaller independent files."
@@ -2253,6 +2607,7 @@
       "producer": "src/Utility/Config.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Configuration and definitions",
       "anchor": "rs-json-005",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-json-005",
       "troubleshooting": "The section exceeded its supported file-count limit. Reduce the number of files in that section."
@@ -2264,6 +2619,7 @@
       "producer": "src/Loader/DragonWildsModLoaderBase.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Loaders",
       "anchor": "rs-load-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-load-001",
       "troubleshooting": "Review the affected loader directory and the original discovery failure before editing mod definitions."
@@ -2275,6 +2631,7 @@
       "producer": "src/Loader/DragonWildsModLoaderBase.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Loaders",
       "anchor": "rs-load-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-load-002",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2286,6 +2643,7 @@
       "producer": "src/Loader/DragonWildsModLoaderBase.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Loaders",
       "anchor": "rs-load-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-load-003",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2297,6 +2655,7 @@
       "producer": "src/Loader/DragonWildsModLoaderBase.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Loaders",
       "anchor": "rs-load-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-load-004",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2308,6 +2667,7 @@
       "producer": "src/Loader/DragonWildsNiagaraLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Niagara",
       "anchor": "rs-nia-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-nia-001",
       "troubleshooting": "The Niagara definition root was rejected. Review the specified source file and expected root structure."
@@ -2319,6 +2679,7 @@
       "producer": "src/Loader/DragonWildsNiagaraLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Niagara",
       "anchor": "rs-nia-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-nia-002",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2330,6 +2691,7 @@
       "producer": "src/Loader/DragonWildsNiagaraLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Niagara",
       "anchor": "rs-nia-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-nia-003",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2341,6 +2703,7 @@
       "producer": "src/Loader/DragonWildsNiagaraLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Niagara",
       "anchor": "rs-nia-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-nia-004",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2352,6 +2715,7 @@
       "producer": "src/Loader/DragonWildsNpcLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-001",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2363,6 +2727,7 @@
       "producer": "src/Loader/DragonWildsNpcLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-002",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2374,6 +2739,7 @@
       "producer": "src/Loader/DragonWildsNpcLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-003",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2385,6 +2751,7 @@
       "producer": "src/Loader/DragonWildsNpcLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-004",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2396,6 +2763,7 @@
       "producer": "src/Loader/DragonWildsNpcLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-005",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-005",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2407,6 +2775,7 @@
       "producer": "src/Loader/DragonWildsNpcLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-006",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-006",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2418,6 +2787,7 @@
       "producer": "src/Loader/DragonWildsNpcLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-007",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-007",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2429,6 +2799,7 @@
       "producer": "src/Loader/DragonWildsNpcLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-008",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-008",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2440,6 +2811,7 @@
       "producer": "src/Loader/DragonWildsNpcLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-009",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-009",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2451,6 +2823,7 @@
       "producer": "src/Loader/DragonWildsNpcLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-010",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-010",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2462,6 +2835,7 @@
       "producer": "src/Loader/DragonWildsNpcLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-011",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-011",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2473,6 +2847,7 @@
       "producer": "src/Loader/DragonWildsNpcLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-012",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-012",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2484,6 +2859,7 @@
       "producer": "src/Loader/NpcQuestAcquisition.inl",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-013",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-013",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2495,6 +2871,7 @@
       "producer": "src/Loader/NpcQuestAcquisition.inl",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-014",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-014",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2506,6 +2883,7 @@
       "producer": "src/Loader/NpcQuestAcquisition.inl",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-015",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-015",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2517,6 +2895,7 @@
       "producer": "src/Loader/NpcQuestAcquisition.inl",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-016",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-016",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2528,6 +2907,7 @@
       "producer": "src/Loader/NpcQuestCompletion.inl",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-017",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-017",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2539,6 +2919,7 @@
       "producer": "src/Loader/NpcQuestPresentation.inl",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-018",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-018",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2550,6 +2931,7 @@
       "producer": "src/Loader/NpcCleanup.inl",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-019",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-019",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2561,6 +2943,7 @@
       "producer": "src/Loader/NpcDialogue.inl",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-020",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-020",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2572,6 +2955,7 @@
       "producer": "src/Loader/NpcDialogue.inl",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-021",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-021",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2583,6 +2967,7 @@
       "producer": "src/Loader/NpcDialogue.inl",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-022",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-022",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2594,6 +2979,7 @@
       "producer": "src/Loader/NpcDialogue.inl",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-023",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-023",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2605,6 +2991,7 @@
       "producer": "src/Loader/NpcDialogue.inl",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-024",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-024",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2616,6 +3003,7 @@
       "producer": "src/Loader/NpcDialogue.inl",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-025",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-025",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2627,6 +3015,7 @@
       "producer": "src/Loader/NpcEquipment.inl",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-026",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-026",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2638,6 +3027,7 @@
       "producer": "src/Loader/NpcDialogue.inl",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-027",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-027",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2649,6 +3039,7 @@
       "producer": "src/Loader/NpcDialogue.inl",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-028",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-028",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2660,6 +3051,7 @@
       "producer": "src/Loader/NpcQuestScroll.inl",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "NPCs",
       "anchor": "rs-npc-029",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-029",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2671,6 +3063,7 @@
       "producer": "src/Loader/DragonWildsRawTableLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Data tables",
       "anchor": "rs-raw-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-raw-001",
       "troubleshooting": "Check the requested raw DataTable target and confirm that it exists in the current game content."
@@ -2682,6 +3075,7 @@
       "producer": "src/Loader/DragonWildsRawTableLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Data tables",
       "anchor": "rs-raw-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-raw-002",
       "troubleshooting": "The resolved raw target was not a usable DataTable object. Confirm the current game class and expected target type."
@@ -2693,6 +3087,7 @@
       "producer": "src/Loader/DragonWildsRawTableLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Data tables",
       "anchor": "rs-raw-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-raw-003",
       "troubleshooting": "A raw registry plan was rejected. Inspect the planner evidence and the exact requested row or target before retrying."
@@ -2704,6 +3099,7 @@
       "producer": "src/Loader/DragonWildsRecipeModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Recipes",
       "anchor": "rs-rec-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rec-001",
       "troubleshooting": "The recipe document root was rejected. Check the expected top-level recipe format."
@@ -2715,6 +3111,7 @@
       "producer": "src/Loader/DragonWildsRecipeModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Recipes",
       "anchor": "rs-rec-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rec-002",
       "troubleshooting": "A recipe entry or its identity/body was invalid. Inspect the named recipe object and required fields."
@@ -2726,6 +3123,7 @@
       "producer": "src/Loader/DragonWildsRegistryLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Registry",
       "anchor": "rs-rgst-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-001",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2737,6 +3135,7 @@
       "producer": "src/Loader/DragonWildsRegistryLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Registry",
       "anchor": "rs-rgst-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-002",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2748,6 +3147,7 @@
       "producer": "src/Loader/DragonWildsRegistryLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Registry",
       "anchor": "rs-rgst-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-003",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2759,6 +3159,7 @@
       "producer": "src/Loader/DragonWildsRegistryLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Registry",
       "anchor": "rs-rgst-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-004",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2770,6 +3171,7 @@
       "producer": "src/Loader/DragonWildsRegistryLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Registry",
       "anchor": "rs-rgst-005",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-005",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2781,6 +3183,7 @@
       "producer": "src/Loader/DragonWildsRegistryLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Registry",
       "anchor": "rs-rgst-006",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-006",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2792,6 +3195,7 @@
       "producer": "src/Loader/DragonWildsRegistryLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Registry",
       "anchor": "rs-rgst-007",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-007",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2803,6 +3207,7 @@
       "producer": "src/Misc/DragonWildsDataRegistrar.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Registry",
       "anchor": "rs-rgst-008",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-008",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2814,6 +3219,7 @@
       "producer": "src/Misc/DragonWildsDataRegistrar.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Registry",
       "anchor": "rs-rgst-009",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-009",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2825,6 +3231,7 @@
       "producer": "src/Misc/DragonWildsDataRegistrar.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Registry",
       "anchor": "rs-rgst-010",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-010",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2836,6 +3243,7 @@
       "producer": "src/Misc/DragonWildsDataRegistrar.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Registry",
       "anchor": "rs-rgst-011",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-011",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2847,6 +3255,7 @@
       "producer": "src/Misc/DragonWildsDataRegistrar.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Registry",
       "anchor": "rs-rgst-012",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-012",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2858,6 +3267,7 @@
       "producer": "src/Misc/DragonWildsDataRegistrar.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Registry",
       "anchor": "rs-rgst-013",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-013",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2869,6 +3279,7 @@
       "producer": "src/Misc/DragonWildsDataRegistrar.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Registry",
       "anchor": "rs-rgst-014",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-014",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2880,6 +3291,7 @@
       "producer": "src/Misc/DragonWildsDataRegistrar.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Registry",
       "anchor": "rs-rgst-015",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-015",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2891,6 +3303,7 @@
       "producer": "src/Loader/DragonWildsSpawnLoader.cpp",
       "legacyCollision": true,
       "namespace": "structured",
+      "category": "Spawns",
       "anchor": "structured-rs-spawn-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#structured-rs-spawn-001",
       "troubleshooting": "The spawn document root must be an array. Check the named file before retrying."
@@ -2902,6 +3315,7 @@
       "producer": "src/Loader/DragonWildsSpawnLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Spawns",
       "anchor": "rs-spawn-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-002",
       "troubleshooting": "The spawn entry or patch declaration was rejected. Inspect the named entry and its allowed fields."
@@ -2913,6 +3327,7 @@
       "producer": "src/Loader/DragonWildsSpawnLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Spawns",
       "anchor": "rs-spawn-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-003",
       "troubleshooting": "The spawn patch identity was not found in the loaded spawn registry. Confirm the identity of the existing spawn record."
@@ -2924,6 +3339,7 @@
       "producer": "src/Loader/DragonWildsSpawnLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Spawns",
       "anchor": "rs-spawn-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-004",
       "troubleshooting": "Spawn registration failed validation or reported an exception. Review the exact evidence and required fields, including Location when applicable."
@@ -2935,6 +3351,7 @@
       "producer": "src/Loader/DragonWildsSpawnLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Spawns",
       "anchor": "rs-spawn-005",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-005",
       "troubleshooting": "This spawn change requires restart rather than live reload. Do not interpret Deferred as a failed startup registration."
@@ -2946,6 +3363,7 @@
       "producer": "src/Loader/DragonWildsSpawnLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Spawns",
       "anchor": "rs-spawn-006",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-006",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2957,6 +3375,7 @@
       "producer": "src/Loader/DragonWildsSpawnLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Spawns",
       "anchor": "rs-spawn-007",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-007",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2968,6 +3387,7 @@
       "producer": "src/Loader/DragonWildsSpawnLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Spawns",
       "anchor": "rs-spawn-008",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-008",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2979,6 +3399,7 @@
       "producer": "src/Loader/DragonWildsSpawnLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Spawns",
       "anchor": "rs-spawn-009",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-009",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -2990,6 +3411,7 @@
       "producer": "src/Loader/DragonWildsSpawnLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Spawns",
       "anchor": "rs-spawn-010",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-010",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -3001,6 +3423,7 @@
       "producer": "src/Loader/DragonWildsSpawnLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Spawns",
       "anchor": "rs-spawn-011",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-011",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -3012,6 +3435,7 @@
       "producer": "src/Loader/DragonWildsSpawnLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Spawns",
       "anchor": "rs-spawn-012",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-012",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -3023,6 +3447,7 @@
       "producer": "src/Loader/DragonWildsSpawnLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Spawns",
       "anchor": "rs-spawn-013",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-013",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -3034,6 +3459,7 @@
       "producer": "src/Loader/DragonWildsStringModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Strings",
       "anchor": "rs-str-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-str-001",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -3045,6 +3471,7 @@
       "producer": "src/Loader/DragonWildsStringModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Strings",
       "anchor": "rs-str-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-str-002",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
@@ -3056,6 +3483,7 @@
       "producer": "src/Loader/DragonWildsStringModLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Strings",
       "anchor": "rs-str-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-str-003",
       "troubleshooting": "The string override document was rejected. Check the file structure before making string-level changes."
@@ -3067,6 +3495,7 @@
       "producer": "src/Loader/DragonWildsVendorLoader.cpp",
       "legacyCollision": false,
       "namespace": "structured",
+      "category": "Vendors",
       "anchor": "rs-vnd-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-vnd-001",
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."

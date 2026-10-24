@@ -4,7 +4,7 @@ RuneSchema's stable diagnostic catalogue. A code identifies a condition, not a c
 
 Helpy's **Diagnostics** workspace combines overview, grouped issues and Live Log. Raw entries remain copyable; the viewer never changes source logs. Recent activity includes normal and diagnostic messages; notifications remain limited to warnings/errors.
 
-This page contains **49 legacy reference entries**, **221 structured diagnostic entries** and **19 bridge reason codes**. Three labels exist in both legacy and structured namespaces: RS-JRN-001, RS-JRN-002 and RS-SPAWN-001. Read the namespace and source rather than inferring meaning from the label alone. Existing links are preserved, with links between both meanings.
+This page contains **65 legacy reference entries**, **221 structured diagnostic entries** and **19 bridge reason codes**. Three labels exist in both legacy and structured namespaces: RS-JRN-001, RS-JRN-002 and RS-SPAWN-001. Read the namespace and source rather than inferring meaning from the label alone. Existing links are preserved, with links between both meanings.
 
 Structured reports in `RSDiagLog.jsonl` carry their own source, context and outcome. A catalogue entry does not imply that every operation emits it. `Unknown` cause means unknown; the actual emitted severity is authoritative. `Partial` can mean some changes occurred, `Deferred` means later/restart handling, and `Skipped`/`Blocked` do not establish that the entire mod failed.
 
@@ -23,389 +23,55 @@ Structured reports in `RSDiagLog.jsonl` carry their own source, context and outc
 
 | Family | Area |
 | --- | --- |
-| RS-QST | Quests |
-| RS-REG | Registry |
-| RS-NET | Multiplayer |
-| RS-WEAR | Equipment |
-| RS-PERF | Performance |
-| RS-CAT | Items |
-| RS-SPAWN | Spawns |
-| RS-LOG | Console |
-| RS-RT | Runtime |
-| RS-CACHE | Cache |
-| RS-DL | Downloads |
-| RS-JRN | Journal |
-| RS-SAVE | Save safety |
-| RS-EQUIP | Equipment |
-| RS-PARTY | Party |
-| RS-MAP | Map |
-| RS-CHEST | Storage |
-| RS-ITEM | Items |
-| RS-SRC | Content |
-| RS-GAME | Game items |
-| RS-ASSET | Structured ASSET diagnostics |
-| RS-BLD | Structured BLD diagnostics |
-| RS-BP | Structured BP diagnostics |
-| RS-CORE | Structured CORE diagnostics |
-| RS-CRS | Structured CRS diagnostics |
-| RS-ENUM | Structured ENUM diagnostics |
-| RS-EQP | Structured EQP diagnostics |
-| RS-GE | Structured GE diagnostics |
-| RS-IMP | Structured IMP diagnostics |
-| RS-JSON | Structured JSON diagnostics |
-| RS-LOAD | Structured LOAD diagnostics |
-| RS-NIA | Structured NIA diagnostics |
-| RS-NPC | Structured NPC diagnostics |
-| RS-RAW | Structured RAW diagnostics |
-| RS-REC | Structured REC diagnostics |
-| RS-RGST | Structured RGST diagnostics |
-| RS-STR | Structured STR diagnostics |
-| RS-VND | Structured VND diagnostics |
+| [RS-ASSET](#structured-family-rs-asset) | Assets |
+| [RS-BLD](#structured-family-rs-bld) | Buildings |
+| [RS-BP](#structured-family-rs-bp) | Blueprints |
+| [RS-CACHE](#legacy-family-rs-cache) | Cache |
+| [RS-CAT](#legacy-family-rs-cat) | Items |
+| [RS-CFG](#legacy-family-rs-cfg) | Configuration |
+| [RS-CHEST](#legacy-family-rs-chest) | Storage |
+| [RS-CORE](#structured-family-rs-core) | Runtime |
+| [RS-CRS](#structured-family-rs-crs) | Courses |
+| [RS-DL](#legacy-family-rs-dl) | Downloads |
+| [RS-ENUM](#structured-family-rs-enum) | Enums |
+| [RS-EQP](#structured-family-rs-eqp) | Equipment |
+| [RS-EQUIP](#legacy-family-rs-equip) | Equipment |
+| [RS-GAME](#legacy-family-rs-game) | Game items |
+| [RS-GE](#structured-family-rs-ge) | Gameplay effects |
+| [RS-IMP](#structured-family-rs-imp) | Imports |
+| [RS-ITEM](#legacy-family-rs-item) | Items |
+| [RS-JRN](#legacy-family-rs-jrn) | Journal |
+| [RS-JSON](#structured-family-rs-json) | Configuration and definitions |
+| [RS-LOAD](#structured-family-rs-load) | Loaders |
+| [RS-LOG](#legacy-family-rs-log) | Console |
+| [RS-MAP](#legacy-family-rs-map) | Map |
+| [RS-NET](#legacy-family-rs-net) | Multiplayer |
+| [RS-NIA](#structured-family-rs-nia) | Niagara |
+| [RS-NPC](#structured-family-rs-npc) | NPCs |
+| [RS-PARTY](#legacy-family-rs-party) | Party |
+| [RS-PERF](#legacy-family-rs-perf) | Performance |
+| [RS-PLUG](#legacy-family-rs-plug) | Plugins |
+| [RS-QST](#legacy-family-rs-qst) | Quests |
+| [RS-RAW](#structured-family-rs-raw) | Data tables |
+| [RS-REC](#structured-family-rs-rec) | Recipes |
+| [RS-REG](#legacy-family-rs-reg) | Registry |
+| [RS-RGST](#structured-family-rs-rgst) | Registry |
+| [RS-RT](#legacy-family-rs-rt) | Runtime |
+| [RS-SAVE](#legacy-family-rs-save) | Save safety |
+| [RS-SPAWN](#legacy-family-rs-spawn) | Spawns |
+| [RS-SRC](#legacy-family-rs-src) | Content |
+| [RS-STR](#structured-family-rs-str) | Strings |
+| [RS-VND](#structured-family-rs-vnd) | Vendors |
+| [RS-WEAR](#legacy-family-rs-wear) | Equipment |
+| [RS-WORLD](#legacy-family-rs-world) | World save cleanup |
 
 <div class="rs-code-catalogue" markdown="1">
 
-<section class="rs-code-card" data-rs-code="RS-QST-001" data-rs-severity="error" markdown="1">
-
-## RS-QST-001: Conflicting quest ownership {#rs-qst-001}
-
-**Quests · Typical level: error**
-
-Multiple definitions claim one quest identity.
-
-**Common reasons**
-
-Two mods or duplicate files declare the same quest identity; an old and new release may both be enabled.
-
-**What RuneSchema does**
-
-The conflicting definition cannot be safely enrolled.
-
-**What to do next**
-
-Keep one owner for that ID; review the named mod files.
-
-**Troubleshooting checks**
-
-Find the named owners and declaration files in the original event. Disable only the duplicate release or ask the authors to resolve ownership; do not rename persistence IDs in an existing save.
-
-[Direct link to RS-QST-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-qst-001)
-
-</section>
-
-<section class="rs-code-card" data-rs-code="RS-REG-001" data-rs-severity="warning" markdown="1">
-
-## RS-REG-001: Registry enrollment is not ready {#rs-reg-001}
-
-**Registry · Typical level: warning**
-
-The complete mounted registry is not certified yet.
-
-**Common reasons**
-
-Startup enrollment is still running, a content module has not registered, or a declaration was rejected earlier.
-
-**What RuneSchema does**
-
-Automatic cleanup stays disabled; verified content can still run.
-
-**What to do next**
-
-Wait for registration, then check framework and content versions.
-
-**Troubleshooting checks**
-
-Wait for startup to finish, then locate the first registry rejection before this message. Check the matching mod, framework and game versions. Do not enable pruning to force readiness.
-
-[Direct link to RS-REG-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-reg-001)
-
-</section>
-
-<section class="rs-code-card" data-rs-code="RS-NET-001" data-rs-severity="error" markdown="1">
-
-## RS-NET-001: Client and server content differ {#rs-net-001}
-
-**Multiplayer · Typical level: error**
-
-Verified registry fingerprints do not match.
-
-**Common reasons**
-
-The compared client/server registry identities differ. This reference does not mean every content difference rejects the entire session; the original message identifies the affected operation.
-
-**What RuneSchema does**
-
-Session policy determines the affected owner or operation; a content difference alone does not prove the whole session was rejected. This is not a latency measurement.
-
-**What to do next**
-
-Compare the named owner and protocol/build details; align required content before retrying the affected operation.
-
-**Troubleshooting checks**
-
-Compare the named owner and protocol/build information on host and client. Update that content on both sides and reconnect normally; do not treat latency tuning as a registry fix.
-
-[Direct link to RS-NET-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-net-001)
-
-</section>
-
-<section class="rs-code-card" data-rs-code="RS-WEAR-001" data-rs-severity="warning" markdown="1">
-
-## RS-WEAR-001: Wearable contract is not enrolled {#rs-wear-001}
-
-**Equipment · Typical level: warning**
-
-The native wearable contract is not certified.
-
-**Common reasons**
-
-A wearable declaration is missing its supported native slot contract, or its enrollment was rejected.
-
-**What RuneSchema does**
-
-Unsupported wearable work is skipped rather than guessed.
-
-**What to do next**
-
-Check the equipment definition and native slot contract.
-
-**Troubleshooting checks**
-
-Check the named equipment definition and earlier enrollment errors. Verify its slot and cooked class against the current game version; leave unsupported equipment unequipped.
-
-[Direct link to RS-WEAR-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-wear-001)
-
-</section>
-
-<section class="rs-code-card" data-rs-code="RS-PERF-001" data-rs-severity="warning" markdown="1">
-
-## RS-PERF-001: A runtime task took too long {#rs-perf-001}
-
-**Performance · Typical level: warning**
-
-A measured work slice exceeded its reporting threshold.
-
-**Common reasons**
-
-A measured game-thread work slice exceeded its threshold, often during discovery, refresh or a large content pass.
-
-**What RuneSchema does**
-
-This attributes slow work; it does not prove network rejection or save corruption.
-
-**What to do next**
-
-Inspect the phase and elapsed time; prefer compatible caches and incremental refresh.
-
-**Troubleshooting checks**
-
-Compare the named phase, elapsed_ms, peak_ms and slow_calls. Use a compatible bundle and incremental refresh first. Report repeatable slow phases with game/storefront versions; do not erase the entire cache as a first step.
-
-[Direct link to RS-PERF-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-perf-001)
-
-</section>
-
-<section class="rs-code-card" data-rs-code="RS-CAT-001" data-rs-severity="warning" markdown="1">
-
-## RS-CAT-001: Item catalogue is not ready {#rs-cat-001}
-
-**Items · Typical level: warning**
-
-A catalogue or cursor is unavailable, changed or expired.
-
-**Common reasons**
-
-The item catalogue is not ready, or a query cursor belongs to an older content generation.
-
-**What RuneSchema does**
-
-Last-good cached presentation remains usable while the query is rechecked.
-
-**What to do next**
-
-Refresh once; inspect mounted-content changes if it persists.
-
-**Troubleshooting checks**
-
-Keep the last-good results visible. Refresh the affected query once after source changes settle. If it repeats, include the search text, category/source filters and first catalogue error in a report.
-
-[Direct link to RS-CAT-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-cat-001)
-
-</section>
-
-<section class="rs-code-card" data-rs-code="RS-SPAWN-001" data-rs-severity="warning" markdown="1">
-
-## RS-SPAWN-001: Placement needs loaded ground {#rs-spawn-001}
-
-!!! note "Shared label: choose the namespace"
-    This is the **legacy reference**. A structured report uses a different meaning: [structured RS-SPAWN-001](#structured-rs-spawn-001). Check the original source and format.
-
-**Spawns · Typical level: warning**
-
-Ground or collision is not confirmed at the target.
-
-**Common reasons**
-
-The destination is outside loaded collision, or the placement footprint cannot be confirmed.
-
-**What RuneSchema does**
-
-Placement is deferred or refused, not placed at a guessed height.
-
-**What to do next**
-
-Move closer to load the area or choose another point.
-
-**Troubleshooting checks**
-
-Move closer to load the target area and retry at a visible ground point. Review slope/footprint details. Do not bypass collision validation or assume the cached map provides ground height.
-
-[Direct link to RS-SPAWN-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-001)
-
-</section>
-
-<section class="rs-code-card" data-rs-code="RS-LOG-000" data-rs-severity="info" markdown="1">
-
-## RS-LOG-000: Unclassified diagnostic {#rs-log-000}
-
-**Console · Typical level: info**
-
-This message has no registered exact diagnostic code.
-
-**Common reasons**
-
-An older or uncoded warning/error has no exact registered diagnosis. A symptom-based suggestion may accompany it.
-
-**What RuneSchema does**
-
-Original severity and raw text remain authoritative.
-
-**What to do next**
-
-Read the original subsystem message; a suggested reference is guidance, not a diagnosed cause.
-
-**Troubleshooting checks**
-
-Read and copy the original event and the preceding failures. Record the subsystem and versions. A suggested code is a troubleshooting lead, not proof of that cause; preserve unfamiliar code text exactly.
-
-[Direct link to RS-LOG-000](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-log-000)
-
-</section>
-
-<section class="rs-code-card" data-rs-code="RS-LOG-001" data-rs-severity="warning" markdown="1">
-
-## RS-LOG-001: File logging is unavailable {#rs-log-001}
-
-**Console · Typical level: warning**
-
-RuneSchema cannot open or safely archive its log.
-
-**Common reasons**
-
-The mod's log or archive directory cannot be opened, storage is full, or a previous log cannot be archived safely.
-
-**What RuneSchema does**
-
-File logging is disabled; UE4SS warnings and summaries remain available.
-
-**What to do next**
-
-Check folder permissions and free space; keep the previous log.
-
-**Troubleshooting checks**
-
-Check free space and write access to the active RuneSchema mod folder and logs directory. Preserve the previous log. Check the UE4SS warning for the original failure and retry on the next normal launch.
-
-[Direct link to RS-LOG-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-log-001)
-
-</section>
-
-<section class="rs-code-card" data-rs-code="RS-LOG-002" data-rs-severity="warning" markdown="1">
-
-## RS-LOG-002: Export destination is protected {#rs-log-002}
-
-**Console · Typical level: warning**
-
-An export would overwrite a live log or archive.
-
-**Common reasons**
-
-The selected export path resolves to a live source log or a protected RuneSchema archive.
-
-**What RuneSchema does**
-
-No export is written to that path.
-
-**What to do next**
-
-Choose another filename outside the active log and archive paths.
-
-**Troubleshooting checks**
-
-Export to a new filename in a separate directory. Check aliases/junctions if the displayed path looks different. Do not delete the live log to make the export succeed.
-
-[Direct link to RS-LOG-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-log-002)
-
-</section>
-
-<section class="rs-code-card" data-rs-code="RS-RT-001" data-rs-severity="error" markdown="1">
-
-## RS-RT-001: Native API contract changed {#rs-rt-001}
-
-**Runtime · Typical level: error**
-
-A reflected function, field or parameter layout is unsupported.
-
-**Common reasons**
-
-The game/storefront build exposes a reflected function or field layout that this operation does not support.
-
-**What RuneSchema does**
-
-That operation stops; arbitrary memory offsets are not substituted.
-
-**What to do next**
-
-Record the game build, storefront and framework version and update compatible components.
-
-**Troubleshooting checks**
-
-Record the exact function/field, game build, Steam or Game Pass, UE4SS and RuneSchema versions. Install compatible components. Do not substitute guessed memory offsets.
-
-[Direct link to RS-RT-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rt-001)
-
-</section>
-
-<section class="rs-code-card" data-rs-code="RS-RT-002" data-rs-severity="info" markdown="1">
-
-## RS-RT-002: Runtime is becoming ready {#rs-rt-002}
-
-**Runtime · Typical level: info**
-
-The service is not ready in this world generation.
-
-**Common reasons**
-
-The world, player or service is still starting, changing worlds or becoming available.
-
-**What RuneSchema does**
-
-Work waits or returns unavailable, not a fabricated zero.
-
-**What to do next**
-
-Wait for the world to become ready, then retry the specific operation.
-
-**Troubleshooting checks**
-
-Wait for the current world to become ready and retry only the affected action. If it persists after loading, capture the first readiness/contract failure. An unavailable meter is not a zero reading.
-
-[Direct link to RS-RT-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rt-002)
-
-</section>
+## Cache — RS-CACHE {#legacy-family-rs-cache}
 
 <section class="rs-code-card" data-rs-code="RS-CACHE-001" data-rs-severity="info" markdown="1">
 
-## RS-CACHE-001: Mounted content changed {#rs-cache-001}
+### RS-CACHE-001: Mounted content changed {#rs-cache-001}
 
 **Cache · Typical level: info**
 
@@ -433,7 +99,7 @@ Let the source list settle, retain the last-good cache and retry the affected ow
 
 <section class="rs-code-card" data-rs-code="RS-CACHE-002" data-rs-severity="error" markdown="1">
 
-## RS-CACHE-002: Cache bundle format is invalid {#rs-cache-002}
+### RS-CACHE-002: Cache bundle format is invalid {#rs-cache-002}
 
 **Cache · Typical level: error**
 
@@ -461,7 +127,7 @@ Check that the selected file is an original .rsmk-cache or supported legacy .rsm
 
 <section class="rs-code-card" data-rs-code="RS-CACHE-003" data-rs-severity="warning" markdown="1">
 
-## RS-CACHE-003: Cache does not match installed content {#rs-cache-003}
+### RS-CACHE-003: Cache does not match installed content {#rs-cache-003}
 
 **Cache · Typical level: warning**
 
@@ -489,7 +155,7 @@ Inspect the affected owner and locale. Download a matching pack or use local Bui
 
 <section class="rs-code-card" data-rs-code="RS-CACHE-004" data-rs-severity="error" markdown="1">
 
-## RS-CACHE-004: Cache integrity check failed {#rs-cache-004}
+### RS-CACHE-004: Cache integrity check failed {#rs-cache-004}
 
 **Cache · Typical level: error**
 
@@ -517,7 +183,7 @@ Retry the original publication and check available disk space. If the same publi
 
 <section class="rs-code-card" data-rs-code="RS-CACHE-005" data-rs-severity="warning" markdown="1">
 
-## RS-CACHE-005: Cache storage limit reached {#rs-cache-005}
+### RS-CACHE-005: Cache storage limit reached {#rs-cache-005}
 
 **Cache · Typical level: warning**
 
@@ -545,7 +211,7 @@ Read which limit was exceeded. Increase an exposed cache budget if appropriate, 
 
 <section class="rs-code-card" data-rs-code="RS-CACHE-006" data-rs-severity="info" markdown="1">
 
-## RS-CACHE-006: Cache operation cancelled {#rs-cache-006}
+### RS-CACHE-006: Cache operation cancelled {#rs-cache-006}
 
 **Cache · Typical level: info**
 
@@ -573,7 +239,7 @@ No repair is needed for cancellation alone. Keep committed cache content and ret
 
 <section class="rs-code-card" data-rs-code="RS-CACHE-007" data-rs-severity="warning" markdown="1">
 
-## RS-CACHE-007: Bundle has partial coverage {#rs-cache-007}
+### RS-CACHE-007: Bundle has partial coverage {#rs-cache-007}
 
 **Cache · Typical level: warning**
 
@@ -601,7 +267,7 @@ Read the coverage report and original event. Observe or build the missing catego
 
 <section class="rs-code-card" data-rs-code="RS-CACHE-008" data-rs-severity="warning" markdown="1">
 
-## RS-CACHE-008: Content owner cannot be verified {#rs-cache-008}
+### RS-CACHE-008: Content owner cannot be verified {#rs-cache-008}
 
 **Cache · Typical level: warning**
 
@@ -629,7 +295,7 @@ Inspect the owner manifest and declared asset paths. Ask the publisher to correc
 
 <section class="rs-code-card" data-rs-code="RS-CACHE-009" data-rs-severity="error" markdown="1">
 
-## RS-CACHE-009: Cache update could not be committed {#rs-cache-009}
+### RS-CACHE-009: Cache update could not be committed {#rs-cache-009}
 
 **Cache · Typical level: error**
 
@@ -657,7 +323,7 @@ Check the destination's permissions and free space and preserve the last committ
 
 <section class="rs-code-card" data-rs-code="RS-CACHE-010" data-rs-severity="info" markdown="1">
 
-## RS-CACHE-010: Legacy icon pack loaded {#rs-cache-010}
+### RS-CACHE-010: Legacy icon pack loaded {#rs-cache-010}
 
 **Cache · Typical level: info**
 
@@ -683,9 +349,185 @@ Pictures may still be useful; this is not an integrity failure. Import a compati
 
 </section>
 
+## Items — RS-CAT {#legacy-family-rs-cat}
+
+<section class="rs-code-card" data-rs-code="RS-CAT-001" data-rs-severity="warning" markdown="1">
+
+### RS-CAT-001: Item catalogue is not ready {#rs-cat-001}
+
+**Items · Typical level: warning**
+
+A catalogue or cursor is unavailable, changed or expired.
+
+**Common reasons**
+
+The item catalogue is not ready, or a query cursor belongs to an older content generation.
+
+**What RuneSchema does**
+
+Last-good cached presentation remains usable while the query is rechecked.
+
+**What to do next**
+
+Refresh once; inspect mounted-content changes if it persists.
+
+**Troubleshooting checks**
+
+Keep the last-good results visible. Refresh the affected query once after source changes settle. If it repeats, include the search text, category/source filters and first catalogue error in a report.
+
+[Direct link to RS-CAT-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-cat-001)
+
+</section>
+
+## Configuration — RS-CFG {#legacy-family-rs-cfg}
+
+<section class="rs-code-card" data-rs-code="RS-CFG-001" data-rs-severity="error" markdown="1">
+
+### RS-CFG-001: Configuration could not be loaded {#rs-cfg-001}
+
+**Configuration · Typical level: error**
+
+Configuration loading failed; session defaults are being used.
+
+**Common reasons**
+
+Reading, validating or initializing the runtime configuration failed. The original exception distinguishes syntax, type and access failures.
+
+**What RuneSchema does**
+
+Existing configuration files are retained. The session may not use the requested settings.
+
+**What to do next**
+
+Read the original exception and named configuration path. Correct the file or access problem before restarting.
+
+**Troubleshooting checks**
+
+Inspect the named settings file and original exception. The runtime is using session defaults; preserve the original instead of deleting unrelated caches or saves.
+
+[Direct link to RS-CFG-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-cfg-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CFG-002" data-rs-severity="warning" markdown="1">
+
+### RS-CFG-002: Configuration saved with original backup {#rs-cfg-002}
+
+**Configuration · Typical level: warning**
+
+An explicit save replaced preserved configuration with current settings after backing up the original.
+
+**Common reasons**
+
+Current settings were explicitly saved after configuration recovery, and an original-file backup was created.
+
+**What RuneSchema does**
+
+The original file is retained at the reported backup path; startup settings require restart.
+
+**What to do next**
+
+Review the saved settings and retain the backup if an original value needs to be recovered.
+
+**Troubleshooting checks**
+
+Review the reported backup path and resulting settings. Restart to apply startup-only preferences; restore individual original values only after checking their validity.
+
+[Direct link to RS-CFG-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-cfg-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CFG-003" data-rs-severity="error" markdown="1">
+
+### RS-CFG-003: Configuration save failed {#rs-cfg-003}
+
+**Configuration · Typical level: error**
+
+The settings save was not completed.
+
+**Common reasons**
+
+Settings serialization, validation, backup or writing reported a failure.
+
+**What RuneSchema does**
+
+Changes remain session-only. Any backup path in the original message should be retained.
+
+**What to do next**
+
+Check the exact write/validation error and path; do not assume preferences persisted.
+
+**Troubleshooting checks**
+
+Read the exact exception and any backup path. Check permissions and free space, then reload before retrying; session values are not proof of a successful disk save.
+
+[Direct link to RS-CFG-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-cfg-003)
+
+</section>
+
+## Storage — RS-CHEST {#legacy-family-rs-chest}
+
+<section class="rs-code-card" data-rs-code="RS-CHEST-001" data-rs-severity="warning" markdown="1">
+
+### RS-CHEST-001: Chest access contract is unverified {#rs-chest-001}
+
+**Storage · Typical level: warning**
+
+Lock ownership, deposit permissions or persistence semantics are unverified.
+
+**Common reasons**
+
+The native lock, owner, deposit permission or persistence contract is not verified for this storage type.
+
+**What RuneSchema does**
+
+Direct deposits and unlock overrides stay disabled.
+
+**What to do next**
+
+Use the game interaction until its current native access path is verified.
+
+**Troubleshooting checks**
+
+Use normal game interaction. Keep direct deposits and unlock overrides disabled until this build's access contract is supported; do not infer permission from map visibility.
+
+[Direct link to RS-CHEST-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-chest-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CHEST-002" data-rs-severity="warning" markdown="1">
+
+### RS-CHEST-002: Storage inventory is ambiguous {#rs-chest-002}
+
+**Storage · Typical level: warning**
+
+The building has no unique owned native inventory.
+
+**Common reasons**
+
+The selected building has no unique owned native inventory, or multiple components could be mistaken for it.
+
+**What RuneSchema does**
+
+Contents are unavailable, not read from an unrelated component.
+
+**What to do next**
+
+Refresh the target and inspect its native component contract.
+
+**Troubleshooting checks**
+
+Refresh and inspect the selected building's component contract. Keep contents unavailable rather than selecting an unrelated inventory. Do not deposit until the inventory is uniquely identified.
+
+[Direct link to RS-CHEST-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-chest-002)
+
+</section>
+
+## Downloads — RS-DL {#legacy-family-rs-dl}
+
 <section class="rs-code-card" data-rs-code="RS-DL-001" data-rs-severity="warning" markdown="1">
 
-## RS-DL-001: Download is unavailable {#rs-dl-001}
+### RS-DL-001: Download is unavailable {#rs-dl-001}
 
 **Downloads · Typical level: warning**
 
@@ -713,7 +555,7 @@ Check the original download result and supported-build list. Retry later if offl
 
 <section class="rs-code-card" data-rs-code="RS-DL-002" data-rs-severity="error" markdown="1">
 
-## RS-DL-002: Download manifest was rejected {#rs-dl-002}
+### RS-DL-002: Download manifest was rejected {#rs-dl-002}
 
 **Downloads · Typical level: error**
 
@@ -739,9 +581,381 @@ Use the project's supported publication index. Report the rejected index/pack id
 
 </section>
 
+## Equipment — RS-EQUIP {#legacy-family-rs-equip}
+
+<section class="rs-code-card" data-rs-code="RS-EQUIP-001" data-rs-severity="warning" markdown="1">
+
+### RS-EQUIP-001: Auto-equip is unsupported or ambiguous {#rs-equip-001}
+
+**Equipment · Typical level: warning**
+
+An instance, slot or native contract cannot be confirmed.
+
+**Common reasons**
+
+The exact delivered item instance, supported equipment slot or native equip contract is ambiguous.
+
+**What RuneSchema does**
+
+Delivery and equip status stay separate; no duplicate grant is made.
+
+**What to do next**
+
+Equip manually or inspect the named instance and slot.
+
+**Troubleshooting checks**
+
+Check delivery results separately, then equip the existing item manually if needed. Do not deliver it again merely because automatic equipping was unavailable.
+
+[Direct link to RS-EQUIP-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-equip-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-EQUIP-002" data-rs-severity="warning" markdown="1">
+
+### RS-EQUIP-002: Equip result is not confirmed {#rs-equip-002}
+
+**Equipment · Typical level: warning**
+
+Exact-instance readback does not prove the expected result.
+
+**Common reasons**
+
+The native call returned but exact-instance equipment readback did not confirm the intended slot/item.
+
+**What RuneSchema does**
+
+A native acceptance flag alone is not reported as successful equipping.
+
+**What to do next**
+
+Check inventory and loadout before retrying.
+
+**Troubleshooting checks**
+
+Inspect inventory and loadout before retrying. Record the item and slot. A native acceptance flag is not proof of equipping and should not trigger another grant.
+
+[Direct link to RS-EQUIP-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-equip-002)
+
+</section>
+
+## Game items — RS-GAME {#legacy-family-rs-game}
+
+<section class="rs-code-card" data-rs-code="RS-GAME-000" data-rs-severity="warning" markdown="1">
+
+### RS-GAME-000: Native game warning or error {#rs-game-000}
+
+**Game · Typical level: warning**
+
+A native game warning or error has no more specific RuneSchema reference yet.
+
+**Common reasons**
+
+No specific classifier matched this native category and message. The original error may include an engine, EOS, HTTP or platform-owned code.
+
+**What RuneSchema does**
+
+The original message and severity remain authoritative. This reference is not a diagnosis or a game-issued error code.
+
+**What to do next**
+
+Keep the original category, message, provider code and surrounding events. Report the first failure and when it occurred.
+
+**Troubleshooting checks**
+
+Read the original message and first preceding failure. Keep provider codes unchanged. Record game build, storefront and whether the event occurred during startup, play or shutdown; this generic reference does not claim a root cause.
+
+[Direct link to RS-GAME-000](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-000)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GAME-001" data-rs-severity="error" markdown="1">
+
+### RS-GAME-001: Item power-level row name is invalid {#rs-game-001}
+
+**Game items · Typical level: error**
+
+The game cannot interpret the power-level digits in an item's data-table row name.
+
+**Common reasons**
+
+ChangePowerLevelInRowName rejected a row whose expected numeric positions contain non-digits. This often indicates authored or cloned row naming, not an obsolete USMAP.
+
+**What RuneSchema does**
+
+The native power-level update for that item failed; a mapping refresh does not rename cooked rows.
+
+**What to do next**
+
+Report the named item and its row name to the content author. Correct the native row naming scheme and recook the asset.
+
+**Troubleshooting checks**
+
+Keep the exact item and row name. Compare it with a working native item of the same type and power-level family. Repair the authoring definition and recook; do not delete unrelated save content or suppress the error.
+
+[Direct link to RS-GAME-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GAME-002" data-rs-severity="warning" markdown="1">
+
+### RS-GAME-002: Cooked animation skeleton GUID is stale {#rs-game-002}
+
+**Game animation · Typical level: warning**
+
+A cooked animation refers to an older skeleton identity.
+
+**Common reasons**
+
+The engine found an animation/skeleton identity mismatch left in cooked content. Registry enrollment does not repair that cooked relationship.
+
+**What RuneSchema does**
+
+The engine reports an asset consistency warning; this alone is not proof of a corrupt save.
+
+**What to do next**
+
+The author should resave the affected source animation against its current skeleton and recook it.
+
+**Troubleshooting checks**
+
+Check the exact montage or sequence in the message. Resave it in the matching Unreal project against the intended skeleton, recook and verify that the warning disappears on the target platform.
+
+[Direct link to RS-GAME-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GAME-003" data-rs-severity="warning" markdown="1">
+
+### RS-GAME-003: Native package or object was not found {#rs-game-003}
+
+**Game packages · Typical level: warning**
+
+An engine package or object lookup did not resolve at the reported path.
+
+**Common reasons**
+
+A package may be unmounted, incorrectly named or unavailable; alternatively an optional conventional registry lookup may legitimately be absent while another declaration works.
+
+**What RuneSchema does**
+
+A required asset may be missing, or an optional conventional-path probe may have found no asset. Read the surrounding declaration result.
+
+**What to do next**
+
+Check the exact cooked package path and mount. Do not mark a mod broken solely because an optional guessed registry path is absent.
+
+**Troubleshooting checks**
+
+Read the owning registrar's accepted/rejected result and exact path. Verify archive contents and mounts before changing declarations. Do not invent a native asset or treat cache artwork as package registration.
+
+[Direct link to RS-GAME-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GAME-004" data-rs-severity="error" markdown="1">
+
+### RS-GAME-004: Material shader data is invalid {#rs-game-004}
+
+**Game materials · Typical level: error**
+
+The engine could not use a material's cooked shader map.
+
+**Common reasons**
+
+The named material lacks a usable shader map for this game/platform/cook, or the engine reports an unnamed invalid material resource.
+
+**What RuneSchema does**
+
+The affected material may render incorrectly; the warning is not a persistence-ID diagnosis.
+
+**What to do next**
+
+Check the named material, target platform and cooking settings. Use a matching cooked build; preserve the original error.
+
+**Troubleshooting checks**
+
+Keep surrounding asset-loading errors and game/storefront versions. Compare the package with the correct cooked target. A USMAP rebuild cannot manufacture missing shader data.
+
+[Direct link to RS-GAME-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-004)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GAME-005" data-rs-severity="error" markdown="1">
+
+### RS-GAME-005: Blueprint accessed a missing object {#rs-game-005}
+
+**Game scripts · Typical level: error**
+
+A native Blueprint message reports an Accessed None object reference.
+
+**Common reasons**
+
+A Blueprint attempted to access an object that is absent, destroyed or not initialized at the point of use.
+
+**What RuneSchema does**
+
+The reported Blueprint operation may not have completed. This reference does not identify who caused the missing object.
+
+**What to do next**
+
+Capture the Blueprint/function and first preceding error. The content author should validate that object before using it.
+
+**Troubleshooting checks**
+
+Retain the native Blueprint, function and call-site text. Inspect initialization order and earlier load failures. A suggested reference is guidance, not proof of mod ownership or a completed action.
+
+[Direct link to RS-GAME-005](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-005)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GAME-006" data-rs-severity="warning" markdown="1">
+
+### RS-GAME-006: Vitals UI callback cleanup failed {#rs-game-006}
+
+**Game UI · Typical level: warning**
+
+The native vitals widget could not remove a registered callback.
+
+**Common reasons**
+
+A native vitals-widget callback could not be removed. This can occur while widgets or their owners are being destroyed.
+
+**What RuneSchema does**
+
+The widget may be tearing down. This message alone does not establish save corruption or mod failure.
+
+**What to do next**
+
+Check whether this occurs only during exit or also during play. Preserve the callback name and earlier UI errors.
+
+**Troubleshooting checks**
+
+Record the exact callback and whether the UI malfunctions while playing. Compare the timestamp with world exit and shutdown. Do not mark a mod unhealthy solely because of an unattributed teardown warning.
+
+[Direct link to RS-GAME-006](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-006)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GAME-007" data-rs-severity="warning" markdown="1">
+
+### RS-GAME-007: Native user settings unavailable {#rs-game-007}
+
+**Game settings · Typical level: warning**
+
+The game could not find its expected native user settings object.
+
+**Common reasons**
+
+A native settings access occurred before initialization, after teardown, or while its expected settings object was unavailable.
+
+**What RuneSchema does**
+
+Settings access may fail. During shutdown the object may already be unavailable; this is not evidence of a corrupt character save.
+
+**What to do next**
+
+Check the timing and whether settings still work while playing. Capture preceding initialization errors; do not delete saves to silence this warning.
+
+**Troubleshooting checks**
+
+Check whether settings work during normal play. Preserve the earliest settings initialization failure. A shutdown-only message does not justify deleting configuration or character/world saves.
+
+[Direct link to RS-GAME-007](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-007)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GAME-008" data-rs-severity="warning" markdown="1">
+
+### RS-GAME-008: Native crowd navigation unavailable {#rs-game-008}
+
+**Game navigation · Typical level: warning**
+
+The native crowd manager could not find a RecastNavMesh instance.
+
+**Common reasons**
+
+The crowd manager did not find a RecastNavMesh in its current world. The world may be loading or already tearing down.
+
+**What RuneSchema does**
+
+Crowd navigation may be unavailable in the current world lifecycle stage. A teardown-only warning does not prove broken map content.
+
+**What to do next**
+
+Record the world and whether AI is affected during play. Compare with world initialization or teardown events.
+
+**Troubleshooting checks**
+
+Record the world and any AI navigation symptoms during play. Keep surrounding load/teardown events. Do not generate replacement navigation data or blame a mod without asset evidence.
+
+[Direct link to RS-GAME-008](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-008)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GAME-009" data-rs-severity="warning" markdown="1">
+
+### RS-GAME-009: Native tagged-object cleanup mismatch {#rs-game-009}
+
+**Game object lifecycle · Typical level: warning**
+
+The native registry-tag subsystem could not unregister a tagged object as expected.
+
+**Common reasons**
+
+Native tagged-object registration and cleanup did not agree about an object's lifecycle.
+
+**What RuneSchema does**
+
+This concerns native gameplay-object tags, not RuneSchema persistence-ID declarations. It does not authorize save pruning.
+
+**What to do next**
+
+Preserve the exact object and lifecycle stage. Investigate repeated failures during play separately from shutdown-only messages.
+
+**Troubleshooting checks**
+
+Capture the full object path and preceding lifecycle messages. This is not the RuneSchema persistence-ID registry, and neither automatic pruning nor invented declarations will repair it.
+
+[Direct link to RS-GAME-009](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-009)
+
+</section>
+
+## Items — RS-ITEM {#legacy-family-rs-item}
+
+<section class="rs-code-card" data-rs-code="RS-ITEM-001" data-rs-severity="warning" markdown="1">
+
+### RS-ITEM-001: Some items were not delivered {#rs-item-001}
+
+**Items · Typical level: warning**
+
+One or more items failed independent delivery validation.
+
+**Common reasons**
+
+Individual cart entries failed native validation or delivery while other entries may have succeeded.
+
+**What RuneSchema does**
+
+Successful deliveries are not repeated to compensate.
+
+**What to do next**
+
+Review cart results and retry only failed items after resolving their cause.
+
+**Troubleshooting checks**
+
+Read each placard's result and resolve only failed entries. Verify the intended recipient and availability. Never resend the entire cart to compensate for a partial failure.
+
+[Direct link to RS-ITEM-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-item-001)
+
+</section>
+
+## Journal — RS-JRN {#legacy-family-rs-jrn}
+
 <section class="rs-code-card" data-rs-code="RS-JRN-001" data-rs-severity="info" markdown="1">
 
-## RS-JRN-001: Journal cache is an observed subset {#rs-jrn-001}
+### RS-JRN-001: Journal cache is an observed subset {#rs-jrn-001}
 
 !!! note "Shared label: choose the namespace"
     This is the **legacy reference**. A structured report uses a different meaning: [structured RS-JRN-001](#structured-rs-jrn-001). Check the original source and format.
@@ -772,7 +986,7 @@ Check category coverage for World, Recipes and Knowledge. Import a compatible jo
 
 <section class="rs-code-card" data-rs-code="RS-JRN-002" data-rs-severity="warning" markdown="1">
 
-## RS-JRN-002: Journal cache could not be read {#rs-jrn-002}
+### RS-JRN-002: Journal cache could not be read {#rs-jrn-002}
 
 !!! note "Shared label: choose the namespace"
     This is the **legacy reference**. A structured report uses a different meaning: [structured RS-JRN-002](#structured-rs-jrn-002). Check the original source and format.
@@ -801,205 +1015,97 @@ Keep the original save intact. Import a supported bundle or refresh the native j
 
 </section>
 
-<section class="rs-code-card" data-rs-code="RS-SAVE-001" data-rs-severity="warning" markdown="1">
+## Console — RS-LOG {#legacy-family-rs-log}
 
-## RS-SAVE-001: Original save is protected {#rs-save-001}
+<section class="rs-code-card" data-rs-code="RS-LOG-000" data-rs-severity="info" markdown="1">
 
-**Save safety · Typical level: warning**
+### RS-LOG-000: Unclassified diagnostic {#rs-log-000}
 
-The operation targets a protected original or active save.
+**Console · Typical level: info**
 
-**Common reasons**
-
-The operation targets a protected original save or a character/world that is still active.
-
-**What RuneSchema does**
-
-No unreviewed original-save change is performed.
-
-**What to do next**
-
-Use the copy-only editor and review its export, or close the relevant world normally.
-
-**Troubleshooting checks**
-
-Use an editable copy, close the relevant world normally when required, and review the export diff. Export to a new path; never force an active-save overwrite.
-
-[Direct link to RS-SAVE-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-save-001)
-
-</section>
-
-<section class="rs-code-card" data-rs-code="RS-SAVE-002" data-rs-severity="warning" markdown="1">
-
-## RS-SAVE-002: Persistence cleanup is not certified {#rs-save-002}
-
-**Save safety · Typical level: warning**
-
-Complete stable registry evidence is unavailable.
+This message has no registered exact diagnostic code.
 
 **Common reasons**
 
-The applicable stable registry evidence is unavailable for one or more sections; incomplete loading must not be mistaken for removed content.
+An older or uncoded warning/error has no exact registered diagnosis. A symptom-based suggestion may accompany it.
 
 **What RuneSchema does**
 
-Uncertified sections stay unchanged. Other independently certified sections may still be cleaned; native loading continues.
+Original severity and raw text remain authoritative.
 
 **What to do next**
 
-Resolve readiness first; a missing lookup is not proof of removed content.
+Read the original subsystem message; a suggested reference is guidance, not a diagnosed cause.
 
 **Troubleshooting checks**
 
-Review the SECTION-SKIPPED entries. Certified sections continue independently; unresolved sections are retained. Native loading still runs, using relaxed mode and rejection fallback where enabled.
+Read and copy the original event and the preceding failures. Record the subsystem and versions. A suggested code is a troubleshooting lead, not proof of that cause; preserve unfamiliar code text exactly.
 
-[Direct link to RS-SAVE-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-save-002)
+[Direct link to RS-LOG-000](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-log-000)
 
 </section>
 
-<section class="rs-code-card" data-rs-code="RS-EQUIP-001" data-rs-severity="warning" markdown="1">
+<section class="rs-code-card" data-rs-code="RS-LOG-001" data-rs-severity="warning" markdown="1">
 
-## RS-EQUIP-001: Auto-equip is unsupported or ambiguous {#rs-equip-001}
+### RS-LOG-001: File logging is unavailable {#rs-log-001}
 
-**Equipment · Typical level: warning**
+**Console · Typical level: warning**
 
-An instance, slot or native contract cannot be confirmed.
+RuneSchema cannot open or safely archive its log.
 
 **Common reasons**
 
-The exact delivered item instance, supported equipment slot or native equip contract is ambiguous.
+The mod's log or archive directory cannot be opened, storage is full, or a previous log cannot be archived safely.
 
 **What RuneSchema does**
 
-Delivery and equip status stay separate; no duplicate grant is made.
+File logging is disabled; UE4SS warnings and summaries remain available.
 
 **What to do next**
 
-Equip manually or inspect the named instance and slot.
+Check folder permissions and free space; keep the previous log.
 
 **Troubleshooting checks**
 
-Check delivery results separately, then equip the existing item manually if needed. Do not deliver it again merely because automatic equipping was unavailable.
+Check free space and write access to the active RuneSchema mod folder and logs directory. Preserve the previous log. Check the UE4SS warning for the original failure and retry on the next normal launch.
 
-[Direct link to RS-EQUIP-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-equip-001)
+[Direct link to RS-LOG-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-log-001)
 
 </section>
 
-<section class="rs-code-card" data-rs-code="RS-EQUIP-002" data-rs-severity="warning" markdown="1">
+<section class="rs-code-card" data-rs-code="RS-LOG-002" data-rs-severity="warning" markdown="1">
 
-## RS-EQUIP-002: Equip result is not confirmed {#rs-equip-002}
+### RS-LOG-002: Export destination is protected {#rs-log-002}
 
-**Equipment · Typical level: warning**
+**Console · Typical level: warning**
 
-Exact-instance readback does not prove the expected result.
+An export would overwrite a live log or archive.
 
 **Common reasons**
 
-The native call returned but exact-instance equipment readback did not confirm the intended slot/item.
+The selected export path resolves to a live source log or a protected RuneSchema archive.
 
 **What RuneSchema does**
 
-A native acceptance flag alone is not reported as successful equipping.
+No export is written to that path.
 
 **What to do next**
 
-Check inventory and loadout before retrying.
+Choose another filename outside the active log and archive paths.
 
 **Troubleshooting checks**
 
-Inspect inventory and loadout before retrying. Record the item and slot. A native acceptance flag is not proof of equipping and should not trigger another grant.
+Export to a new filename in a separate directory. Check aliases/junctions if the displayed path looks different. Do not delete the live log to make the export succeed.
 
-[Direct link to RS-EQUIP-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-equip-002)
-
-</section>
-
-<section class="rs-code-card" data-rs-code="RS-PARTY-001" data-rs-severity="info" markdown="1">
-
-## RS-PARTY-001: Player reading is unavailable {#rs-party-001}
-
-**Party · Typical level: info**
-
-A reading is missing, stale or unsupported.
-
-**Common reasons**
-
-A player meter, skill or equipment reading is stale, missing, out of scope or unsupported by the native contract.
-
-**What RuneSchema does**
-
-It is not displayed as zero or claimed to be authoritative.
-
-**What to do next**
-
-Wait for fresh data and check support for that field.
-
-**Troubleshooting checks**
-
-Wait for fresh host/server data and reselect the player. Check which field is unavailable. Do not interpret missing data as dead, empty or zero.
-
-[Direct link to RS-PARTY-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-party-001)
+[Direct link to RS-LOG-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-log-002)
 
 </section>
 
-<section class="rs-code-card" data-rs-code="RS-PARTY-002" data-rs-severity="warning" markdown="1">
-
-## RS-PARTY-002: Host authority is required {#rs-party-002}
-
-**Party · Typical level: warning**
-
-The caller is not authorized for the action.
-
-**Common reasons**
-
-The requester lacks current host/server authority for the selected action.
-
-**What RuneSchema does**
-
-The action is refused; a host badge grants no privilege by itself.
-
-**What to do next**
-
-Use the authorized host/server flow and current selected character.
-
-**Troubleshooting checks**
-
-Use the authorized host/server workflow. Confirm the selected player and permission settings; a visual host badge does not itself confer authority.
-
-[Direct link to RS-PARTY-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-party-002)
-
-</section>
-
-<section class="rs-code-card" data-rs-code="RS-PARTY-003" data-rs-severity="warning" markdown="1">
-
-## RS-PARTY-003: Player or world identity changed {#rs-party-003}
-
-**Party · Typical level: warning**
-
-The selected character, serial or world generation is stale.
-
-**Common reasons**
-
-The selected player/chest serial or world generation no longer identifies the original target.
-
-**What RuneSchema does**
-
-The action is not redirected to a different player or reused object.
-
-**What to do next**
-
-Refresh and select the current player or chest again.
-
-**Troubleshooting checks**
-
-Refresh and explicitly reselect the current target after reconnecting or changing worlds. Do not replay a stale action against a player with the same display name.
-
-[Direct link to RS-PARTY-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-party-003)
-
-</section>
+## Map — RS-MAP {#legacy-family-rs-map}
 
 <section class="rs-code-card" data-rs-code="RS-MAP-001" data-rs-severity="warning" markdown="1">
 
-## RS-MAP-001: Map target is not loaded {#rs-map-001}
+### RS-MAP-001: Map target is not loaded {#rs-map-001}
 
 **Map · Typical level: warning**
 
@@ -1027,7 +1133,7 @@ Move within live observation range and refresh the target. A marker is a locatio
 
 <section class="rs-code-card" data-rs-code="RS-MAP-002" data-rs-severity="info" markdown="1">
 
-## RS-MAP-002: Resource respawn time is unverified {#rs-map-002}
+### RS-MAP-002: Resource respawn time is unverified {#rs-map-002}
 
 **Map · Typical level: info**
 
@@ -1053,93 +1159,592 @@ Observe the nearby node after harvesting and wait for fresh supported timer data
 
 </section>
 
-<section class="rs-code-card" data-rs-code="RS-CHEST-001" data-rs-severity="warning" markdown="1">
+## Multiplayer — RS-NET {#legacy-family-rs-net}
 
-## RS-CHEST-001: Chest access contract is unverified {#rs-chest-001}
+<section class="rs-code-card" data-rs-code="RS-NET-001" data-rs-severity="error" markdown="1">
 
-**Storage · Typical level: warning**
+### RS-NET-001: Client and server content differ {#rs-net-001}
 
-Lock ownership, deposit permissions or persistence semantics are unverified.
+**Multiplayer · Typical level: error**
 
-**Common reasons**
-
-The native lock, owner, deposit permission or persistence contract is not verified for this storage type.
-
-**What RuneSchema does**
-
-Direct deposits and unlock overrides stay disabled.
-
-**What to do next**
-
-Use the game interaction until its current native access path is verified.
-
-**Troubleshooting checks**
-
-Use normal game interaction. Keep direct deposits and unlock overrides disabled until this build's access contract is supported; do not infer permission from map visibility.
-
-[Direct link to RS-CHEST-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-chest-001)
-
-</section>
-
-<section class="rs-code-card" data-rs-code="RS-CHEST-002" data-rs-severity="warning" markdown="1">
-
-## RS-CHEST-002: Storage inventory is ambiguous {#rs-chest-002}
-
-**Storage · Typical level: warning**
-
-The building has no unique owned native inventory.
+Verified registry fingerprints do not match.
 
 **Common reasons**
 
-The selected building has no unique owned native inventory, or multiple components could be mistaken for it.
+The compared client/server registry identities differ. This reference does not mean every content difference rejects the entire session; the original message identifies the affected operation.
 
 **What RuneSchema does**
 
-Contents are unavailable, not read from an unrelated component.
+Session policy determines the affected owner or operation; a content difference alone does not prove the whole session was rejected. This is not a latency measurement.
 
 **What to do next**
 
-Refresh the target and inspect its native component contract.
+Compare the named owner and protocol/build details; align required content before retrying the affected operation.
 
 **Troubleshooting checks**
 
-Refresh and inspect the selected building's component contract. Keep contents unavailable rather than selecting an unrelated inventory. Do not deposit until the inventory is uniquely identified.
+Compare the named owner and protocol/build information on host and client. Update that content on both sides and reconnect normally; do not treat latency tuning as a registry fix.
 
-[Direct link to RS-CHEST-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-chest-002)
+[Direct link to RS-NET-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-net-001)
 
 </section>
 
-<section class="rs-code-card" data-rs-code="RS-ITEM-001" data-rs-severity="warning" markdown="1">
+## Party — RS-PARTY {#legacy-family-rs-party}
 
-## RS-ITEM-001: Some items were not delivered {#rs-item-001}
+<section class="rs-code-card" data-rs-code="RS-PARTY-001" data-rs-severity="info" markdown="1">
 
-**Items · Typical level: warning**
+### RS-PARTY-001: Player reading is unavailable {#rs-party-001}
 
-One or more items failed independent delivery validation.
+**Party · Typical level: info**
+
+A reading is missing, stale or unsupported.
 
 **Common reasons**
 
-Individual cart entries failed native validation or delivery while other entries may have succeeded.
+A player meter, skill or equipment reading is stale, missing, out of scope or unsupported by the native contract.
 
 **What RuneSchema does**
 
-Successful deliveries are not repeated to compensate.
+It is not displayed as zero or claimed to be authoritative.
 
 **What to do next**
 
-Review cart results and retry only failed items after resolving their cause.
+Wait for fresh data and check support for that field.
 
 **Troubleshooting checks**
 
-Read each placard's result and resolve only failed entries. Verify the intended recipient and availability. Never resend the entire cart to compensate for a partial failure.
+Wait for fresh host/server data and reselect the player. Check which field is unavailable. Do not interpret missing data as dead, empty or zero.
 
-[Direct link to RS-ITEM-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-item-001)
+[Direct link to RS-PARTY-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-party-001)
 
 </section>
+
+<section class="rs-code-card" data-rs-code="RS-PARTY-002" data-rs-severity="warning" markdown="1">
+
+### RS-PARTY-002: Host authority is required {#rs-party-002}
+
+**Party · Typical level: warning**
+
+The caller is not authorized for the action.
+
+**Common reasons**
+
+The requester lacks current host/server authority for the selected action.
+
+**What RuneSchema does**
+
+The action is refused; a host badge grants no privilege by itself.
+
+**What to do next**
+
+Use the authorized host/server flow and current selected character.
+
+**Troubleshooting checks**
+
+Use the authorized host/server workflow. Confirm the selected player and permission settings; a visual host badge does not itself confer authority.
+
+[Direct link to RS-PARTY-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-party-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-PARTY-003" data-rs-severity="warning" markdown="1">
+
+### RS-PARTY-003: Player or world identity changed {#rs-party-003}
+
+**Party · Typical level: warning**
+
+The selected character, serial or world generation is stale.
+
+**Common reasons**
+
+The selected player/chest serial or world generation no longer identifies the original target.
+
+**What RuneSchema does**
+
+The action is not redirected to a different player or reused object.
+
+**What to do next**
+
+Refresh and select the current player or chest again.
+
+**Troubleshooting checks**
+
+Refresh and explicitly reselect the current target after reconnecting or changing worlds. Do not replay a stale action against a player with the same display name.
+
+[Direct link to RS-PARTY-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-party-003)
+
+</section>
+
+## Performance — RS-PERF {#legacy-family-rs-perf}
+
+<section class="rs-code-card" data-rs-code="RS-PERF-001" data-rs-severity="warning" markdown="1">
+
+### RS-PERF-001: A runtime task took too long {#rs-perf-001}
+
+**Performance · Typical level: warning**
+
+A measured work slice exceeded its reporting threshold.
+
+**Common reasons**
+
+A measured game-thread work slice exceeded its threshold, often during discovery, refresh or a large content pass.
+
+**What RuneSchema does**
+
+This attributes slow work; it does not prove network rejection or save corruption.
+
+**What to do next**
+
+Inspect the phase and elapsed time; prefer compatible caches and incremental refresh.
+
+**Troubleshooting checks**
+
+Compare the named phase, elapsed_ms, peak_ms and slow_calls. Use a compatible bundle and incremental refresh first. Report repeatable slow phases with game/storefront versions; do not erase the entire cache as a first step.
+
+[Direct link to RS-PERF-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-perf-001)
+
+</section>
+
+## Plugins — RS-PLUG {#legacy-family-rs-plug}
+
+<section class="rs-code-card" data-rs-code="RS-PLUG-001" data-rs-severity="error" markdown="1">
+
+### RS-PLUG-001: Plugin catalogue discovery failed {#rs-plug-001}
+
+**Plugins · Typical level: error**
+
+Plugin catalogue discovery threw an exception before loading could proceed.
+
+**Common reasons**
+
+The plugin discovery pass threw an exception. This is different from one plugin failing its native initialization.
+
+**What RuneSchema does**
+
+This plugin load pass stops; RuneSchema core continues.
+
+**What to do next**
+
+Inspect the original discovery exception, plugin manifests and directory access.
+
+**Troubleshooting checks**
+
+Keep the original exception and inspect plugin manifests and directory access. RuneSchema core continues; do not infer a game crash from this report.
+
+[Direct link to RS-PLUG-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-plug-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-PLUG-002" data-rs-severity="warning" markdown="1">
+
+### RS-PLUG-002: Declared plugin DLL is missing {#rs-plug-002}
+
+**Plugins · Typical level: warning**
+
+A plugin declares a native entry point that is not a regular file at the resolved path.
+
+**Common reasons**
+
+The manifest's resolved native entry point is absent or is not a regular file.
+
+**What RuneSchema does**
+
+The native plugin is skipped; its PAK content remains independently available.
+
+**What to do next**
+
+Check the named plugin's entry point and installation layout; restore the matching DLL.
+
+**Troubleshooting checks**
+
+Compare plugin.json with the installed DLL path. Restore the correct package without changing unrelated PAKs or UE4SS host files.
+
+[Direct link to RS-PLUG-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-plug-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-PLUG-003" data-rs-severity="error" markdown="1">
+
+### RS-PLUG-003: Windows could not load a plugin DLL {#rs-plug-003}
+
+**Plugins · Typical level: error**
+
+LoadLibraryExW returned failure for the named native plugin.
+
+**Common reasons**
+
+Windows rejected LoadLibraryExW. The retained Windows number may indicate missing dependencies, invalid architecture or access restrictions; the RS code does not select one cause.
+
+**What RuneSchema does**
+
+The native plugin is skipped; other plugins continue.
+
+**What to do next**
+
+Keep the reported Windows error number and DLL path. Check architecture, dependencies and access before replacing files.
+
+**Troubleshooting checks**
+
+Keep the exact Windows number, plugin ID and DLL path. Verify a matching x64 plugin build and its dependencies before reinstalling. Do not disable security software as a generic fix.
+
+[Direct link to RS-PLUG-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-plug-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-PLUG-004" data-rs-severity="error" markdown="1">
+
+### RS-PLUG-004: Plugin API exports are missing {#rs-plug-004}
+
+**Plugins · Typical level: error**
+
+A loaded DLL lacks a mandatory Query, Initialize or Shutdown export.
+
+**Common reasons**
+
+The DLL loaded but did not export all mandatory RuneSchema plugin API functions.
+
+**What RuneSchema does**
+
+The native plugin is unloaded before initialization.
+
+**What to do next**
+
+Install a RuneSchema plugin build with the required exports, not an arbitrary UE4SS DLL.
+
+**Troubleshooting checks**
+
+Check for RuneSchemaPlugin_Query, RuneSchemaPlugin_Initialize and RuneSchemaPlugin_Shutdown in the intended plugin build. A generic UE4SS main.dll is not interchangeable.
+
+[Direct link to RS-PLUG-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-plug-004)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-PLUG-005" data-rs-severity="error" markdown="1">
+
+### RS-PLUG-005: Plugin identity or API contract rejected {#rs-plug-005}
+
+**Plugins · Typical level: error**
+
+The queried native descriptor does not satisfy the host's identity/API contract.
+
+**Common reasons**
+
+The queried descriptor was absent, too small, had a different API version/ID or lacked required identity fields.
+
+**What RuneSchema does**
+
+The incompatible native plugin is isolated; core, other plugins and PAK mounting continue.
+
+**What to do next**
+
+Align the manifest ID and DLL descriptor/API build. A version label alone does not repair the descriptor.
+
+**Troubleshooting checks**
+
+Align the manifest and DLL descriptor with the running host. A manifest version mismatch alone is not this rejection; preserve the actual descriptor evidence.
+
+[Direct link to RS-PLUG-005](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-plug-005)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-PLUG-006" data-rs-severity="error" markdown="1">
+
+### RS-PLUG-006: Plugin initialization contract failed {#rs-plug-006}
+
+**Plugins · Typical level: error**
+
+Initialization failed or the plugin did not register its declared capabilities.
+
+**Common reasons**
+
+Initialize returned failure, threw, or did not register all capabilities declared by the manifest.
+
+**What RuneSchema does**
+
+Its registered services/capabilities are removed and the DLL is unloaded.
+
+**What to do next**
+
+Read earlier plugin errors and the native result; verify that all declared capabilities are registered.
+
+**Troubleshooting checks**
+
+Check preceding plugin errors and the result value. A successful return value can still fail capability verification; compare declared and registered capabilities.
+
+[Direct link to RS-PLUG-006](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-plug-006)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-PLUG-007" data-rs-severity="error" markdown="1">
+
+### RS-PLUG-007: Plugin UI initialization failed {#rs-plug-007}
+
+**Plugins · Typical level: error**
+
+A plugin UI callback rejected initialization or threw an exception.
+
+**Common reasons**
+
+The UI initialization callback returned failure or threw. This does not imply every plugin service has been unloaded.
+
+**What RuneSchema does**
+
+That UI phase did not complete; the message does not establish that all plugin services stopped.
+
+**What to do next**
+
+Keep the named plugin and rejection/exception message. Check matching frontend/core builds and earlier UI errors.
+
+**Troubleshooting checks**
+
+Keep the plugin name and callback outcome. Inspect earlier frontend/device/configuration errors and use a matching plugin build.
+
+[Direct link to RS-PLUG-007](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-plug-007)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-PLUG-008" data-rs-severity="error" markdown="1">
+
+### RS-PLUG-008: Plugin Unreal initialization failed {#rs-plug-008}
+
+**Plugins · Typical level: error**
+
+A plugin Unreal initialization callback returned failure or threw an exception.
+
+**Common reasons**
+
+The Unreal initialization callback did not confirm success. An earlier plugin-specific error may explain why.
+
+**What RuneSchema does**
+
+The plugin did not confirm Unreal initialization; core and other plugin phases continue.
+
+**What to do next**
+
+Inspect the named plugin's preceding error and reported result, rather than treating this phase failure as a complete diagnosis.
+
+**Troubleshooting checks**
+
+Read the earlier plugin messages and returned result. Do not treat this wrapper failure as a missing-asset or migration diagnosis without that evidence.
+
+[Direct link to RS-PLUG-008](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-plug-008)
+
+</section>
+
+## Quests — RS-QST {#legacy-family-rs-qst}
+
+<section class="rs-code-card" data-rs-code="RS-QST-001" data-rs-severity="error" markdown="1">
+
+### RS-QST-001: Conflicting quest ownership {#rs-qst-001}
+
+**Quests · Typical level: error**
+
+Multiple definitions claim one quest identity.
+
+**Common reasons**
+
+Two mods or duplicate files declare the same quest identity; an old and new release may both be enabled.
+
+**What RuneSchema does**
+
+The conflicting definition cannot be safely enrolled.
+
+**What to do next**
+
+Keep one owner for that ID; review the named mod files.
+
+**Troubleshooting checks**
+
+Find the named owners and declaration files in the original event. Disable only the duplicate release or ask the authors to resolve ownership; do not rename persistence IDs in an existing save.
+
+[Direct link to RS-QST-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-qst-001)
+
+</section>
+
+## Registry — RS-REG {#legacy-family-rs-reg}
+
+<section class="rs-code-card" data-rs-code="RS-REG-001" data-rs-severity="warning" markdown="1">
+
+### RS-REG-001: Registry enrollment is not ready {#rs-reg-001}
+
+**Registry · Typical level: warning**
+
+The complete mounted registry is not certified yet.
+
+**Common reasons**
+
+Startup enrollment is still running, a content module has not registered, or a declaration was rejected earlier.
+
+**What RuneSchema does**
+
+Automatic cleanup stays disabled; verified content can still run.
+
+**What to do next**
+
+Wait for registration, then check framework and content versions.
+
+**Troubleshooting checks**
+
+Wait for startup to finish, then locate the first registry rejection before this message. Check the matching mod, framework and game versions. Do not enable pruning to force readiness.
+
+[Direct link to RS-REG-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-reg-001)
+
+</section>
+
+## Runtime — RS-RT {#legacy-family-rs-rt}
+
+<section class="rs-code-card" data-rs-code="RS-RT-001" data-rs-severity="error" markdown="1">
+
+### RS-RT-001: Native API contract changed {#rs-rt-001}
+
+**Runtime · Typical level: error**
+
+A reflected function, field or parameter layout is unsupported.
+
+**Common reasons**
+
+The game/storefront build exposes a reflected function or field layout that this operation does not support.
+
+**What RuneSchema does**
+
+That operation stops; arbitrary memory offsets are not substituted.
+
+**What to do next**
+
+Record the game build, storefront and framework version and update compatible components.
+
+**Troubleshooting checks**
+
+Record the exact function/field, game build, Steam or Game Pass, UE4SS and RuneSchema versions. Install compatible components. Do not substitute guessed memory offsets.
+
+[Direct link to RS-RT-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rt-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-RT-002" data-rs-severity="info" markdown="1">
+
+### RS-RT-002: Runtime is becoming ready {#rs-rt-002}
+
+**Runtime · Typical level: info**
+
+The service is not ready in this world generation.
+
+**Common reasons**
+
+The world, player or service is still starting, changing worlds or becoming available.
+
+**What RuneSchema does**
+
+Work waits or returns unavailable, not a fabricated zero.
+
+**What to do next**
+
+Wait for the world to become ready, then retry the specific operation.
+
+**Troubleshooting checks**
+
+Wait for the current world to become ready and retry only the affected action. If it persists after loading, capture the first readiness/contract failure. An unavailable meter is not a zero reading.
+
+[Direct link to RS-RT-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rt-002)
+
+</section>
+
+## Save safety — RS-SAVE {#legacy-family-rs-save}
+
+<section class="rs-code-card" data-rs-code="RS-SAVE-001" data-rs-severity="warning" markdown="1">
+
+### RS-SAVE-001: Original save is protected {#rs-save-001}
+
+**Save safety · Typical level: warning**
+
+The operation targets a protected original or active save.
+
+**Common reasons**
+
+The operation targets a protected original save or a character/world that is still active.
+
+**What RuneSchema does**
+
+No unreviewed original-save change is performed.
+
+**What to do next**
+
+Use the copy-only editor and review its export, or close the relevant world normally.
+
+**Troubleshooting checks**
+
+Use an editable copy, close the relevant world normally when required, and review the export diff. Export to a new path; never force an active-save overwrite.
+
+[Direct link to RS-SAVE-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-save-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-SAVE-002" data-rs-severity="warning" markdown="1">
+
+### RS-SAVE-002: Persistence cleanup is not certified {#rs-save-002}
+
+**Save safety · Typical level: warning**
+
+Complete stable registry evidence is unavailable.
+
+**Common reasons**
+
+The applicable stable registry evidence is unavailable for one or more sections; incomplete loading must not be mistaken for removed content.
+
+**What RuneSchema does**
+
+Uncertified sections stay unchanged. Other independently certified sections may still be cleaned; native loading continues.
+
+**What to do next**
+
+Resolve readiness first; a missing lookup is not proof of removed content.
+
+**Troubleshooting checks**
+
+Review the SECTION-SKIPPED entries. Certified sections continue independently; unresolved sections are retained. Native loading still runs, using relaxed mode and rejection fallback where enabled.
+
+[Direct link to RS-SAVE-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-save-002)
+
+</section>
+
+## Spawns — RS-SPAWN {#legacy-family-rs-spawn}
+
+<section class="rs-code-card" data-rs-code="RS-SPAWN-001" data-rs-severity="warning" markdown="1">
+
+### RS-SPAWN-001: Placement needs loaded ground {#rs-spawn-001}
+
+!!! note "Shared label: choose the namespace"
+    This is the **legacy reference**. A structured report uses a different meaning: [structured RS-SPAWN-001](#structured-rs-spawn-001). Check the original source and format.
+
+**Spawns · Typical level: warning**
+
+Ground or collision is not confirmed at the target.
+
+**Common reasons**
+
+The destination is outside loaded collision, or the placement footprint cannot be confirmed.
+
+**What RuneSchema does**
+
+Placement is deferred or refused, not placed at a guessed height.
+
+**What to do next**
+
+Move closer to load the area or choose another point.
+
+**Troubleshooting checks**
+
+Move closer to load the target area and retry at a visible ground point. Review slope/footprint details. Do not bypass collision validation or assume the cached map provides ground height.
+
+[Direct link to RS-SPAWN-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-001)
+
+</section>
+
+## Content — RS-SRC {#legacy-family-rs-src}
 
 <section class="rs-code-card" data-rs-code="RS-SRC-001" data-rs-severity="warning" markdown="1">
 
-## RS-SRC-001: Content source is not mounted {#rs-src-001}
+### RS-SRC-001: Content source is not mounted {#rs-src-001}
 
 **Content · Typical level: warning**
 
@@ -1165,283 +1770,175 @@ Enable/install the matching content and let registration finish, or leave its re
 
 </section>
 
-<section class="rs-code-card" data-rs-code="RS-GAME-001" data-rs-severity="error" markdown="1">
+## Equipment — RS-WEAR {#legacy-family-rs-wear}
 
-## RS-GAME-001: Item power-level row name is invalid {#rs-game-001}
+<section class="rs-code-card" data-rs-code="RS-WEAR-001" data-rs-severity="warning" markdown="1">
 
-**Game items · Typical level: error**
+### RS-WEAR-001: Wearable contract is not enrolled {#rs-wear-001}
 
-The game cannot interpret the power-level digits in an item's data-table row name.
+**Equipment · Typical level: warning**
+
+The native wearable contract is not certified.
 
 **Common reasons**
 
-ChangePowerLevelInRowName rejected a row whose expected numeric positions contain non-digits. This often indicates authored or cloned row naming, not an obsolete USMAP.
+A wearable declaration is missing its supported native slot contract, or its enrollment was rejected.
 
 **What RuneSchema does**
 
-The native power-level update for that item failed; a mapping refresh does not rename cooked rows.
+Unsupported wearable work is skipped rather than guessed.
 
 **What to do next**
 
-Report the named item and its row name to the content author. Correct the native row naming scheme and recook the asset.
+Check the equipment definition and native slot contract.
 
 **Troubleshooting checks**
 
-Keep the exact item and row name. Compare it with a working native item of the same type and power-level family. Repair the authoring definition and recook; do not delete unrelated save content or suppress the error.
+Check the named equipment definition and earlier enrollment errors. Verify its slot and cooked class against the current game version; leave unsupported equipment unequipped.
 
-[Direct link to RS-GAME-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-001)
+[Direct link to RS-WEAR-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-wear-001)
 
 </section>
 
-<section class="rs-code-card" data-rs-code="RS-GAME-002" data-rs-severity="warning" markdown="1">
+## World save cleanup — RS-WORLD {#legacy-family-rs-world}
 
-## RS-GAME-002: Cooked animation skeleton GUID is stale {#rs-game-002}
+<section class="rs-code-card" data-rs-code="RS-WORLD-001" data-rs-severity="warning" markdown="1">
 
-**Game animation · Typical level: warning**
+### RS-WORLD-001: World cleanup buffer changed during validation {#rs-world-001}
 
-A cooked animation refers to an older skeleton identity.
+**World save cleanup · Typical level: warning**
+
+The native world buffer no longer matched the validated cleanup input.
 
 **Common reasons**
 
-The engine found an animation/skeleton identity mismatch left in cooked content. Registry enrollment does not repair that cooked relationship.
+The native buffer pointer/length/content no longer matched the prevalidated cleanup input at commit time.
 
 **What RuneSchema does**
 
-The engine reports an asset consistency warning; this alone is not proof of a corrupt save.
+Cleanup skips the buffer; the world is unchanged by this attempt.
 
 **What to do next**
 
-The author should resave the affected source animation against its current skeleton and recook it.
+Keep the original world and backup. Check lifecycle/overlapping work before retrying; do not force stale bytes into the save.
 
 **Troubleshooting checks**
 
-Check the exact montage or sequence in the message. Resave it in the matching Unreal project against the intended skeleton, recook and verify that the warning disappears on the target platform.
+Keep the original save and backup. Investigate overlapping native loading or lifecycle changes. Never bypass the comparison to force a stale cleanup result.
 
-[Direct link to RS-GAME-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-002)
+[Direct link to RS-WORLD-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-world-001)
 
 </section>
 
-<section class="rs-code-card" data-rs-code="RS-GAME-003" data-rs-severity="warning" markdown="1">
+<section class="rs-code-card" data-rs-code="RS-WORLD-002" data-rs-severity="warning" markdown="1">
 
-## RS-GAME-003: Native package or object was not found {#rs-game-003}
+### RS-WORLD-002: World cleanup contract is not safe {#rs-world-002}
 
-**Game packages · Typical level: warning**
+**World save cleanup · Typical level: warning**
 
-An engine package or object lookup did not resolve at the reported path.
+Missing building IDs were observed but the native load contract was not safe to repair.
 
 **Common reasons**
 
-A package may be unmounted, incorrectly named or unavailable; alternatively an optional conventional registry lookup may legitimately be absent while another declaration works.
+Orphan IDs were detected but the verified native world-load repair contract was not satisfied.
 
 **What RuneSchema does**
 
-A required asset may be missing, or an optional conventional-path probe may have found no asset. Read the surrounding declaration result.
+The cleanup attempt leaves the world unchanged.
 
 **What to do next**
 
-Check the exact cooked package path and mount. Do not mark a mod broken solely because an optional guessed registry path is absent.
+Check the preceding contract and registry evidence. Missing IDs alone do not authorize writing an unverified save format.
 
 **Troubleshooting checks**
 
-Read the owning registrar's accepted/rejected result and exact path. Verify archive contents and mounts before changing declarations. Do not invent a native asset or treat cache artwork as package registration.
+Review the preceding contract/binding and registry evidence for this exact game build. Do not disable save validation merely to silence this warning.
 
-[Direct link to RS-GAME-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-003)
+[Direct link to RS-WORLD-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-world-002)
 
 </section>
 
-<section class="rs-code-card" data-rs-code="RS-GAME-004" data-rs-severity="error" markdown="1">
+<section class="rs-code-card" data-rs-code="RS-WORLD-003" data-rs-severity="warning" markdown="1">
 
-## RS-GAME-004: Material shader data is invalid {#rs-game-004}
+### RS-WORLD-003: World cleanup repair did not complete {#rs-world-003}
 
-**Game materials · Typical level: error**
+**World save cleanup · Typical level: warning**
 
-The engine could not use a material's cooked shader map.
+The native world-buffer repair attempt reported an exception.
 
 **Common reasons**
 
-The named material lacks a usable shader map for this game/platform/cook, or the engine reports an unnamed invalid material resource.
+A world-buffer repair stage reported an exception before its cleanup could be accepted.
 
 **What RuneSchema does**
 
-The affected material may render incorrectly; the warning is not a persistence-ID diagnosis.
+The cleanup attempt reports the world unchanged; the original exception remains authoritative.
 
 **What to do next**
 
-Check the named material, target platform and cooking settings. Use a matching cooked build; preserve the original error.
+Retain the original world, backups and full error. Resolve the reported validation/repair cause before retrying.
 
 **Troubleshooting checks**
 
-Keep surrounding asset-loading errors and game/storefront versions. Compare the package with the correct cooked target. A USMAP rebuild cannot manufacture missing shader data.
+Keep the original exception and backup path. Resolve the named validation or repair condition; this code does not claim the native game save is corrupt.
 
-[Direct link to RS-GAME-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-004)
+[Direct link to RS-WORLD-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-world-003)
 
 </section>
 
-<section class="rs-code-card" data-rs-code="RS-GAME-005" data-rs-severity="error" markdown="1">
+<section class="rs-code-card" data-rs-code="RS-WORLD-004" data-rs-severity="warning" markdown="1">
 
-## RS-GAME-005: Blueprint accessed a missing object {#rs-game-005}
+### RS-WORLD-004: World cleanup input could not be validated {#rs-world-004}
 
-**Game scripts · Typical level: error**
+**World save cleanup · Typical level: warning**
 
-A native Blueprint message reports an Accessed None object reference.
+World data parsing or validation failed before a cleanup result could be accepted.
 
 **Common reasons**
 
-A Blueprint attempted to access an object that is absent, destroyed or not initialized at the point of use.
+Native world data could not be parsed or validated by this cleanup adapter.
 
 **What RuneSchema does**
 
-The reported Blueprint operation may not have completed. This reference does not identify who caused the missing object.
+This cleanup path does not write a guessed repair.
 
 **What to do next**
 
-Capture the Blueprint/function and first preceding error. The content author should validate that object before using it.
+Keep the exact parser/validation exception and game build. A cleanup rejection alone does not prove the native game cannot load the world.
 
 **Troubleshooting checks**
 
-Retain the native Blueprint, function and call-site text. Inspect initialization order and earlier load failures. A suggested reference is guidance, not proof of mod ownership or a completed action.
+Preserve the original data and exact exception. Compare the adapter with the game build; native loading can still proceed without an invented repair.
 
-[Direct link to RS-GAME-005](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-005)
+[Direct link to RS-WORLD-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-world-004)
 
 </section>
 
-<section class="rs-code-card" data-rs-code="RS-GAME-000" data-rs-severity="warning" markdown="1">
+<section class="rs-code-card" data-rs-code="RS-WORLD-005" data-rs-severity="warning" markdown="1">
 
-## RS-GAME-000: Native game warning or error {#rs-game-000}
+### RS-WORLD-005: Game Pass world cleanup hooks unavailable {#rs-world-005}
 
-**Game · Typical level: warning**
+**World save cleanup · Typical level: warning**
 
-A native game warning or error has no more specific RuneSchema reference yet.
-
-**Common reasons**
-
-No specific classifier matched this native category and message. The original error may include an engine, EOS, HTTP or platform-owned code.
-
-**What RuneSchema does**
-
-The original message and severity remain authoritative. This reference is not a diagnosis or a game-issued error code.
-
-**What to do next**
-
-Keep the original category, message, provider code and surrounding events. Report the first failure and when it occurred.
-
-**Troubleshooting checks**
-
-Read the original message and first preceding failure. Keep provider codes unchanged. Record game build, storefront and whether the event occurred during startup, play or shutdown; this generic reference does not claim a root cause.
-
-[Direct link to RS-GAME-000](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-000)
-
-</section>
-
-<section class="rs-code-card" data-rs-code="RS-GAME-006" data-rs-severity="warning" markdown="1">
-
-## RS-GAME-006: Vitals UI callback cleanup failed {#rs-game-006}
-
-**Game UI · Typical level: warning**
-
-The native vitals widget could not remove a registered callback.
+Required Game Pass world-loading hooks could not be installed.
 
 **Common reasons**
 
-A native vitals-widget callback could not be removed. This can occur while widgets or their owners are being destroyed.
+One or more required Game Pass world-loading hooks were unavailable for the current executable.
 
 **What RuneSchema does**
 
-The widget may be tearing down. This message alone does not establish save corruption or mod failure.
+That world cleanup path stays unavailable and does not change saves.
 
 **What to do next**
 
-Check whether this occurs only during exit or also during play. Preserve the callback name and earlier UI errors.
+Check the current Game Pass executable/build and matching RuneSchema bindings; preserve existing saves and use supported native loading.
 
 **Troubleshooting checks**
 
-Record the exact callback and whether the UI malfunctions while playing. Compare the timestamp with world exit and shutdown. Do not mark a mod unhealthy solely because of an unattributed teardown warning.
+Use a matching RuneSchema build/binding and keep the original save. Do not install a different UE4SS host just to suppress this framework cleanup warning.
 
-[Direct link to RS-GAME-006](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-006)
-
-</section>
-
-<section class="rs-code-card" data-rs-code="RS-GAME-007" data-rs-severity="warning" markdown="1">
-
-## RS-GAME-007: Native user settings unavailable {#rs-game-007}
-
-**Game settings · Typical level: warning**
-
-The game could not find its expected native user settings object.
-
-**Common reasons**
-
-A native settings access occurred before initialization, after teardown, or while its expected settings object was unavailable.
-
-**What RuneSchema does**
-
-Settings access may fail. During shutdown the object may already be unavailable; this is not evidence of a corrupt character save.
-
-**What to do next**
-
-Check the timing and whether settings still work while playing. Capture preceding initialization errors; do not delete saves to silence this warning.
-
-**Troubleshooting checks**
-
-Check whether settings work during normal play. Preserve the earliest settings initialization failure. A shutdown-only message does not justify deleting configuration or character/world saves.
-
-[Direct link to RS-GAME-007](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-007)
-
-</section>
-
-<section class="rs-code-card" data-rs-code="RS-GAME-008" data-rs-severity="warning" markdown="1">
-
-## RS-GAME-008: Native crowd navigation unavailable {#rs-game-008}
-
-**Game navigation · Typical level: warning**
-
-The native crowd manager could not find a RecastNavMesh instance.
-
-**Common reasons**
-
-The crowd manager did not find a RecastNavMesh in its current world. The world may be loading or already tearing down.
-
-**What RuneSchema does**
-
-Crowd navigation may be unavailable in the current world lifecycle stage. A teardown-only warning does not prove broken map content.
-
-**What to do next**
-
-Record the world and whether AI is affected during play. Compare with world initialization or teardown events.
-
-**Troubleshooting checks**
-
-Record the world and any AI navigation symptoms during play. Keep surrounding load/teardown events. Do not generate replacement navigation data or blame a mod without asset evidence.
-
-[Direct link to RS-GAME-008](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-008)
-
-</section>
-
-<section class="rs-code-card" data-rs-code="RS-GAME-009" data-rs-severity="warning" markdown="1">
-
-## RS-GAME-009: Native tagged-object cleanup mismatch {#rs-game-009}
-
-**Game object lifecycle · Typical level: warning**
-
-The native registry-tag subsystem could not unregister a tagged object as expected.
-
-**Common reasons**
-
-Native tagged-object registration and cleanup did not agree about an object's lifecycle.
-
-**What RuneSchema does**
-
-This concerns native gameplay-object tags, not RuneSchema persistence-ID declarations. It does not authorize save pruning.
-
-**What to do next**
-
-Preserve the exact object and lifecycle stage. Investigate repeated failures during play separately from shutdown-only messages.
-
-**Troubleshooting checks**
-
-Capture the full object path and preceding lifecycle messages. This is not the RuneSchema persistence-ID registry, and neither automatic pruning nor invented declarations will repair it.
-
-[Direct link to RS-GAME-009](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-game-009)
+[Direct link to RS-WORLD-005](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-world-005)
 
 </section>
 
@@ -1449,15 +1946,17 @@ Capture the full object path and preceding lifecycle messages. This is not the R
 
 These entries come from the producer registry used by the current diagnostics build. They are distinct from older symptom/reference codes above. Producer paths identify the reporting subsystem, not a guarantee that the user's file has that path.
 
+## Assets — structured RS-ASSET {#structured-family-rs-asset}
+
 <section class="rs-code-card" data-rs-code="RS-ASSET-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-ASSET-001: Asset target remained unresolved {#rs-asset-001}
+### RS-ASSET-001: Asset target remained unresolved {#rs-asset-001}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Asset target remained unresolved. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+**Area:** Assets · **Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
 
 **What to check**
 
@@ -1471,13 +1970,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-ASSET-002" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-ASSET-002: Asset definition has invalid root {#rs-asset-002}
+### RS-ASSET-002: Asset definition has invalid root {#rs-asset-002}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Asset definition has invalid root. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+**Area:** Assets · **Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
 
 **What to check**
 
@@ -1491,13 +1990,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-ASSET-003" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-ASSET-003: Asset property modification rejected {#rs-asset-003}
+### RS-ASSET-003: Asset property modification rejected {#rs-asset-003}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Asset property modification rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+**Area:** Assets · **Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
 
 **What to check**
 
@@ -1509,15 +2008,17 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 </section>
 
+## Buildings — structured RS-BLD {#structured-family-rs-bld}
+
 <section class="rs-code-card" data-rs-code="RS-BLD-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BLD-001: Invalid building document root {#rs-bld-001}
+### RS-BLD-001: Invalid building document root {#rs-bld-001}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Invalid building document root. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1531,13 +2032,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BLD-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BLD-002: Invalid building definition {#rs-bld-002}
+### RS-BLD-002: Invalid building definition {#rs-bld-002}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Invalid building definition. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1551,13 +2052,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BLD-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BLD-003: Invalid building asset reference {#rs-bld-003}
+### RS-BLD-003: Invalid building asset reference {#rs-bld-003}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Invalid building asset reference. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1571,13 +2072,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BLD-004" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BLD-004: Invalid building properties {#rs-bld-004}
+### RS-BLD-004: Invalid building properties {#rs-bld-004}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Invalid building properties. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1591,13 +2092,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BLD-005" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BLD-005: Building patch target missing {#rs-bld-005}
+### RS-BLD-005: Building patch target missing {#rs-bld-005}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Building patch target missing. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1611,13 +2112,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BLD-006" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BLD-006: Invalid building patch declaration {#rs-bld-006}
+### RS-BLD-006: Invalid building patch declaration {#rs-bld-006}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Invalid building patch declaration. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1631,13 +2132,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BLD-007" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BLD-007: Invalid building requirements {#rs-bld-007}
+### RS-BLD-007: Invalid building requirements {#rs-bld-007}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Invalid building requirements. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1651,13 +2152,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BLD-008" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BLD-008: Protected building property {#rs-bld-008}
+### RS-BLD-008: Protected building property {#rs-bld-008}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Protected building property. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1671,13 +2172,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BLD-009" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BLD-009: Invalid BuildableActor reference {#rs-bld-009}
+### RS-BLD-009: Invalid BuildableActor reference {#rs-bld-009}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Invalid BuildableActor reference. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1691,13 +2192,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BLD-010" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BLD-010: Invalid requirement entry {#rs-bld-010}
+### RS-BLD-010: Invalid requirement entry {#rs-bld-010}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Invalid requirement entry. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1711,13 +2212,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BLD-011" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BLD-011: Unsupported building override {#rs-bld-011}
+### RS-BLD-011: Unsupported building override {#rs-bld-011}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Unsupported building override. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1731,13 +2232,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BLD-012" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BLD-012: Invalid building unlock {#rs-bld-012}
+### RS-BLD-012: Invalid building unlock {#rs-bld-012}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Invalid building unlock. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1751,13 +2252,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BLD-013" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BLD-013: Invalid building collection placement {#rs-bld-013}
+### RS-BLD-013: Invalid building collection placement {#rs-bld-013}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Invalid building collection placement. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1771,13 +2272,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BLD-014" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BLD-014: Missing building pieces array {#rs-bld-014}
+### RS-BLD-014: Missing building pieces array {#rs-bld-014}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Missing building pieces array. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1791,13 +2292,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BLD-015" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BLD-015: Building piece limit exceeded {#rs-bld-015}
+### RS-BLD-015: Building piece limit exceeded {#rs-bld-015}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Building piece limit exceeded. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1811,13 +2312,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BLD-016" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BLD-016: Building world assets not ready {#rs-bld-016}
+### RS-BLD-016: Building world assets not ready {#rs-bld-016}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Building world assets not ready. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1831,13 +2332,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BLD-017" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BLD-017: Native building registry unavailable {#rs-bld-017}
+### RS-BLD-017: Native building registry unavailable {#rs-bld-017}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Native building registry unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1851,13 +2352,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BLD-018" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BLD-018: Building baseline restoration failed {#rs-bld-018}
+### RS-BLD-018: Building baseline restoration failed {#rs-bld-018}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Building baseline restoration failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1871,13 +2372,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BLD-019" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BLD-019: Native building registry incomplete {#rs-bld-019}
+### RS-BLD-019: Native building registry incomplete {#rs-bld-019}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Native building registry incomplete. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1891,13 +2392,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BLD-020" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BLD-020: Building world registration aborted {#rs-bld-020}
+### RS-BLD-020: Building world registration aborted {#rs-bld-020}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Building world registration aborted. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1911,13 +2412,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BLD-021" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BLD-021: Building registry rollback failed {#rs-bld-021}
+### RS-BLD-021: Building registry rollback failed {#rs-bld-021}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Building registry rollback failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1931,13 +2432,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BLD-022" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-BLD-022: Building world recovery timed out {#rs-bld-022}
+### RS-BLD-022: Building world recovery timed out {#rs-bld-022}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Building world recovery timed out. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
 
 **What to check**
 
@@ -1949,15 +2450,17 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 </section>
 
+## Blueprints — structured RS-BP {#structured-family-rs-bp}
+
 <section class="rs-code-card" data-rs-code="RS-BP-001" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-BP-001: Blueprint property not found {#rs-bp-001}
+### RS-BP-001: Blueprint property not found {#rs-bp-001}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Blueprint property not found. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+**Area:** Blueprints · **Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
 
 **What to check**
 
@@ -1971,13 +2474,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BP-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BP-002: Required Blueprint lifecycle hook unavailable {#rs-bp-002}
+### RS-BP-002: Required Blueprint lifecycle hook unavailable {#rs-bp-002}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Required Blueprint lifecycle hook unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+**Area:** Blueprints · **Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
 
 **What to check**
 
@@ -1991,13 +2494,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BP-003" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-BP-003: Blueprint changes require restart {#rs-bp-003}
+### RS-BP-003: Blueprint changes require restart {#rs-bp-003}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Blueprint changes require restart. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+**Area:** Blueprints · **Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
 
 **What to check**
 
@@ -2011,13 +2514,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BP-004" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-BP-004: Blueprint world-teardown cleanup hook unavailable {#rs-bp-004}
+### RS-BP-004: Blueprint world-teardown cleanup hook unavailable {#rs-bp-004}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Blueprint world-teardown cleanup hook unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+**Area:** Blueprints · **Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
 
 **What to check**
 
@@ -2031,13 +2534,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BP-005" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BP-005: Blueprint PostLoad vtable unavailable {#rs-bp-005}
+### RS-BP-005: Blueprint PostLoad vtable unavailable {#rs-bp-005}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Blueprint PostLoad vtable unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+**Area:** Blueprints · **Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
 
 **What to check**
 
@@ -2051,13 +2554,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BP-006" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BP-006: Actor PostInitComponents vtable unavailable {#rs-bp-006}
+### RS-BP-006: Actor PostInitComponents vtable unavailable {#rs-bp-006}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Actor PostInitComponents vtable unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+**Area:** Blueprints · **Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
 
 **What to check**
 
@@ -2071,13 +2574,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BP-007" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-BP-007: Runtime widget rule failed {#rs-bp-007}
+### RS-BP-007: Runtime widget rule failed {#rs-bp-007}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Runtime widget rule failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+**Area:** Blueprints · **Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
 
 **What to check**
 
@@ -2091,13 +2594,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BP-008" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-BP-008: Runtime UI rule failed {#rs-bp-008}
+### RS-BP-008: Runtime UI rule failed {#rs-bp-008}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Runtime UI rule failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+**Area:** Blueprints · **Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
 
 **What to check**
 
@@ -2111,13 +2614,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BP-009" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-BP-009: Blueprint modification failed {#rs-bp-009}
+### RS-BP-009: Blueprint modification failed {#rs-bp-009}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Blueprint modification failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+**Area:** Blueprints · **Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
 
 **What to check**
 
@@ -2131,13 +2634,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BP-010" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-BP-010: Blueprint component template unavailable {#rs-bp-010}
+### RS-BP-010: Blueprint component template unavailable {#rs-bp-010}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Blueprint component template unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+**Area:** Blueprints · **Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
 
 **What to check**
 
@@ -2151,13 +2654,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-BP-011" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-BP-011: Blueprint component definition invalid {#rs-bp-011}
+### RS-BP-011: Blueprint component definition invalid {#rs-bp-011}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Blueprint component definition invalid. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+**Area:** Blueprints · **Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
 
 **What to check**
 
@@ -2169,15 +2672,17 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 </section>
 
+## Runtime — structured RS-CORE {#structured-family-rs-core}
+
 <section class="rs-code-card" data-rs-code="RS-CORE-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-001: RuneSchema startup aborted {#rs-core-001}
+### RS-CORE-001: RuneSchema startup aborted {#rs-core-001}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** RuneSchema startup aborted. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2191,13 +2696,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-002: GameInstance vtable unavailable {#rs-core-002}
+### RS-CORE-002: GameInstance vtable unavailable {#rs-core-002}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** GameInstance vtable unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2211,13 +2716,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-003: GameInstance initialization hook unavailable {#rs-core-003}
+### RS-CORE-003: GameInstance initialization hook unavailable {#rs-core-003}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** GameInstance initialization hook unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2231,13 +2736,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-004" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-004: Early DataTable observation unavailable {#rs-core-004}
+### RS-CORE-004: Early DataTable observation unavailable {#rs-core-004}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Early DataTable observation unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2251,13 +2756,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-005" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-005: Early DataTable hook unavailable {#rs-core-005}
+### RS-CORE-005: Early DataTable hook unavailable {#rs-core-005}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Early DataTable hook unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2271,13 +2776,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-006" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-006: Dedicated-server registry boundary unavailable {#rs-core-006}
+### RS-CORE-006: Dedicated-server registry boundary unavailable {#rs-core-006}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Dedicated-server registry boundary unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2291,13 +2796,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-007" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-007: Core startup fallback unavailable {#rs-core-007}
+### RS-CORE-007: Core startup fallback unavailable {#rs-core-007}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Core startup fallback unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2311,13 +2816,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-008" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-008: Additional PAK directory hook unavailable {#rs-core-008}
+### RS-CORE-008: Additional PAK directory hook unavailable {#rs-core-008}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Additional PAK directory hook unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2331,13 +2836,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-009" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-009: Additional PAK directory binding unavailable {#rs-core-009}
+### RS-CORE-009: Additional PAK directory binding unavailable {#rs-core-009}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Additional PAK directory binding unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2351,13 +2856,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-010" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-010: Automatic reload callback unavailable {#rs-core-010}
+### RS-CORE-010: Automatic reload callback unavailable {#rs-core-010}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Automatic reload callback unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2371,13 +2876,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-011" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-011: Mod auto-reload failed {#rs-core-011}
+### RS-CORE-011: Mod auto-reload failed {#rs-core-011}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Mod auto-reload failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2391,13 +2896,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-012" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-012: Building world registration disabled {#rs-core-012}
+### RS-CORE-012: Building world registration disabled {#rs-core-012}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Building world registration disabled. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2411,13 +2916,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-013" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-013: Pending string application failed {#rs-core-013}
+### RS-CORE-013: Pending string application failed {#rs-core-013}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Pending string application failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2431,13 +2936,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-014" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-014: Data registrar unavailable {#rs-core-014}
+### RS-CORE-014: Data registrar unavailable {#rs-core-014}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Data registrar unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2451,13 +2956,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-015" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-015: Networking registry bridge unavailable {#rs-core-015}
+### RS-CORE-015: Networking registry bridge unavailable {#rs-core-015}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Networking registry bridge unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2471,13 +2976,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-016" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-016: Additional PAK mounting unavailable {#rs-core-016}
+### RS-CORE-016: Additional PAK mounting unavailable {#rs-core-016}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Additional PAK mounting unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2491,13 +2996,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-017" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-017: Plugin PAK order rejected {#rs-core-017}
+### RS-CORE-017: Plugin PAK order rejected {#rs-core-017}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Plugin PAK order rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2511,13 +3016,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-018" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-018: Mod PAK order rejected {#rs-core-018}
+### RS-CORE-018: Mod PAK order rejected {#rs-core-018}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Mod PAK order rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2531,13 +3036,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-019" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-019: Loader initialization exception {#rs-core-019}
+### RS-CORE-019: Loader initialization exception {#rs-core-019}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Loader initialization exception. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2551,13 +3056,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-020" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-020: Loader finalization exception {#rs-core-020}
+### RS-CORE-020: Loader finalization exception {#rs-core-020}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Loader finalization exception. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2571,13 +3076,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-021" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-021: Recipe reference preparation failed {#rs-core-021}
+### RS-CORE-021: Recipe reference preparation failed {#rs-core-021}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Recipe reference preparation failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2591,13 +3096,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-022" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-022: Definition finalization exception {#rs-core-022}
+### RS-CORE-022: Definition finalization exception {#rs-core-022}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Definition finalization exception. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2611,13 +3116,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-023" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-023: Player appearance source skipped {#rs-core-023}
+### RS-CORE-023: Player appearance source skipped {#rs-core-023}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Player appearance source skipped. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2631,13 +3136,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-024" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-024: Mod metadata or discovery failed {#rs-core-024}
+### RS-CORE-024: Mod metadata or discovery failed {#rs-core-024}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Mod metadata or discovery failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2651,13 +3156,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-025" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-025: Nameplate section skipped {#rs-core-025}
+### RS-CORE-025: Nameplate section skipped {#rs-core-025}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Nameplate section skipped. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2671,13 +3176,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-026" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-026: Nameplate finalization exception {#rs-core-026}
+### RS-CORE-026: Nameplate finalization exception {#rs-core-026}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Nameplate finalization exception. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2691,13 +3196,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-027" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-027: Player rules section skipped {#rs-core-027}
+### RS-CORE-027: Player rules section skipped {#rs-core-027}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Player rules section skipped. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2711,13 +3216,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-028" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-028: Player rules finalization exception {#rs-core-028}
+### RS-CORE-028: Player rules finalization exception {#rs-core-028}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Player rules finalization exception. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2731,13 +3236,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-029" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-029: Optional persistence ledger unavailable {#rs-core-029}
+### RS-CORE-029: Optional persistence ledger unavailable {#rs-core-029}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Optional persistence ledger unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/DragonWildsMainLoader.cpp`
 
 **What to check**
 
@@ -2751,13 +3256,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-030" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-030: UE4SS package preparation interrupted {#rs-core-030}
+### RS-CORE-030: UE4SS package preparation interrupted {#rs-core-030}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** UE4SS package preparation interrupted. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/dllmain.cpp`
+**Area:** Runtime · **Producer:** `src/dllmain.cpp`
 
 **What to check**
 
@@ -2771,13 +3276,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-031" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-031: BP Mod Loader integration skipped {#rs-core-031}
+### RS-CORE-031: BP Mod Loader integration skipped {#rs-core-031}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** BP Mod Loader integration skipped. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/dllmain.cpp`
+**Area:** Runtime · **Producer:** `src/dllmain.cpp`
 
 **What to check**
 
@@ -2791,13 +3296,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-032" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-032: HELPY service validation failed {#rs-core-032}
+### RS-CORE-032: HELPY service validation failed {#rs-core-032}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** HELPY service validation failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/dllmain.cpp`
+**Area:** Runtime · **Producer:** `src/dllmain.cpp`
 
 **What to check**
 
@@ -2811,13 +3316,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-033" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-033: Quest registry preparation failed {#rs-core-033}
+### RS-CORE-033: Quest registry preparation failed {#rs-core-033}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Quest registry preparation failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `include/Loader/DragonWildsQuestLoader.h`
+**Area:** Runtime · **Producer:** `include/Loader/DragonWildsQuestLoader.h`
 
 **What to check**
 
@@ -2831,13 +3336,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-034" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-034: World quest registry preparation failed {#rs-core-034}
+### RS-CORE-034: World quest registry preparation failed {#rs-core-034}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** World quest registry preparation failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `include/Loader/DragonWildsQuestLoader.h`
+**Area:** Runtime · **Producer:** `include/Loader/DragonWildsQuestLoader.h`
 
 **What to check**
 
@@ -2851,13 +3356,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-035" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-035: Quest reload requires restart {#rs-core-035}
+### RS-CORE-035: Quest reload requires restart {#rs-core-035}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Quest reload requires restart. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `include/Loader/DragonWildsQuestLoader.h`
+**Area:** Runtime · **Producer:** `include/Loader/DragonWildsQuestLoader.h`
 
 **What to check**
 
@@ -2871,13 +3376,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-036" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-036: Quest initialization hook unavailable {#rs-core-036}
+### RS-CORE-036: Quest initialization hook unavailable {#rs-core-036}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Quest initialization hook unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `include/Loader/DragonWildsQuestLoader.h`
+**Area:** Runtime · **Producer:** `include/Loader/DragonWildsQuestLoader.h`
 
 **What to check**
 
@@ -2891,13 +3396,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-037" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-037: Dialogue reload requires restart {#rs-core-037}
+### RS-CORE-037: Dialogue reload requires restart {#rs-core-037}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Dialogue reload requires restart. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `include/Loader/DragonWildsDialogueLoader.h`
+**Area:** Runtime · **Producer:** `include/Loader/DragonWildsDialogueLoader.h`
 
 **What to check**
 
@@ -2911,13 +3416,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-038" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-038: Native event hooks unavailable {#rs-core-038}
+### RS-CORE-038: Native event hooks unavailable {#rs-core-038}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Native event hooks unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `include/Loader/DragonWildsEventLoader.h`
+**Area:** Runtime · **Producer:** `include/Loader/DragonWildsEventLoader.h`
 
 **What to check**
 
@@ -2931,13 +3436,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-039" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-039: Event reload requires restart {#rs-core-039}
+### RS-CORE-039: Event reload requires restart {#rs-core-039}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Event reload requires restart. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `include/Loader/DragonWildsEventLoader.h`
+**Area:** Runtime · **Producer:** `include/Loader/DragonWildsEventLoader.h`
 
 **What to check**
 
@@ -2951,13 +3456,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-040" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-040: Load-order save refused {#rs-core-040}
+### RS-CORE-040: Load-order save refused {#rs-core-040}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Load-order save refused. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/ModLoadOrder.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/ModLoadOrder.cpp`
 
 **What to check**
 
@@ -2971,13 +3476,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-041" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-041: Load-order save failed {#rs-core-041}
+### RS-CORE-041: Load-order save failed {#rs-core-041}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Load-order save failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/ModLoadOrder.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/ModLoadOrder.cpp`
 
 **What to check**
 
@@ -2991,13 +3496,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-042" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-042: Player definition file rejected {#rs-core-042}
+### RS-CORE-042: Player definition file rejected {#rs-core-042}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Player definition file rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/Spawn/PlayerRules.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/Spawn/PlayerRules.cpp`
 
 **What to check**
 
@@ -3011,13 +3516,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-043" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-043: Nameplate definition file rejected {#rs-core-043}
+### RS-CORE-043: Nameplate definition file rejected {#rs-core-043}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Nameplate definition file rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/Spawn/PlayerRules.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/Spawn/PlayerRules.cpp`
 
 **What to check**
 
@@ -3031,13 +3536,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-044" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-044: Nameplate root invalid {#rs-core-044}
+### RS-CORE-044: Nameplate root invalid {#rs-core-044}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Nameplate root invalid. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/Spawn/PlayerRules.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/Spawn/PlayerRules.cpp`
 
 **What to check**
 
@@ -3051,13 +3556,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-045" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-045: Nameplate entry rejected {#rs-core-045}
+### RS-CORE-045: Nameplate entry rejected {#rs-core-045}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Nameplate entry rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/Spawn/PlayerRules.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/Spawn/PlayerRules.cpp`
 
 **What to check**
 
@@ -3071,13 +3576,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-046" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-046: Player definitions root invalid {#rs-core-046}
+### RS-CORE-046: Player definitions root invalid {#rs-core-046}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Player definitions root invalid. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/Spawn/PlayerRules.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/Spawn/PlayerRules.cpp`
 
 **What to check**
 
@@ -3091,13 +3596,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-047" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-047: Player rule entry rejected {#rs-core-047}
+### RS-CORE-047: Player rule entry rejected {#rs-core-047}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Player rule entry rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/Spawn/PlayerRules.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/Spawn/PlayerRules.cpp`
 
 **What to check**
 
@@ -3111,13 +3616,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-048" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-048: Player patch target missing {#rs-core-048}
+### RS-CORE-048: Player patch target missing {#rs-core-048}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Player patch target missing. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/Spawn/PlayerRules.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/Spawn/PlayerRules.cpp`
 
 **What to check**
 
@@ -3131,13 +3636,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-049" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CORE-049: Player rule registration failed {#rs-core-049}
+### RS-CORE-049: Player rule registration failed {#rs-core-049}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Player rule registration failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/Spawn/PlayerRules.cpp`
+**Area:** Runtime · **Producer:** `src/Loader/Spawn/PlayerRules.cpp`
 
 **What to check**
 
@@ -3151,13 +3656,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-050" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-050: Registry bridge attachment expired {#rs-core-050}
+### RS-CORE-050: Registry bridge attachment expired {#rs-core-050}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Registry bridge attachment expired. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Runtime/RegistryBridge.cpp`
+**Area:** Runtime · **Producer:** `src/Runtime/RegistryBridge.cpp`
 
 **What to check**
 
@@ -3171,13 +3676,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-051" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-051: Registry bridge attachment failed {#rs-core-051}
+### RS-CORE-051: Registry bridge attachment failed {#rs-core-051}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Registry bridge attachment failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Runtime/RegistryBridge.cpp`
+**Area:** Runtime · **Producer:** `src/Runtime/RegistryBridge.cpp`
 
 **What to check**
 
@@ -3191,13 +3696,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-052" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-052: Registry transport request rejected {#rs-core-052}
+### RS-CORE-052: Registry transport request rejected {#rs-core-052}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Registry transport request rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Runtime/RegistryBridge.cpp`
+**Area:** Runtime · **Producer:** `src/Runtime/RegistryBridge.cpp`
 
 **What to check**
 
@@ -3211,13 +3716,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-053" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-053: Registry bridge update failed {#rs-core-053}
+### RS-CORE-053: Registry bridge update failed {#rs-core-053}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Registry bridge update failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Runtime/RegistryBridge.cpp`
+**Area:** Runtime · **Producer:** `src/Runtime/RegistryBridge.cpp`
 
 **What to check**
 
@@ -3231,13 +3736,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-054" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-054: Registry bridge hooks unavailable {#rs-core-054}
+### RS-CORE-054: Registry bridge hooks unavailable {#rs-core-054}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Registry bridge hooks unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Runtime/RegistryBridge.cpp`
+**Area:** Runtime · **Producer:** `src/Runtime/RegistryBridge.cpp`
 
 **What to check**
 
@@ -3251,13 +3756,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CORE-055" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CORE-055: Registry bridge startup catch-up failed {#rs-core-055}
+### RS-CORE-055: Registry bridge startup catch-up failed {#rs-core-055}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Registry bridge startup catch-up failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Runtime/RegistryBridge.cpp`
+**Area:** Runtime · **Producer:** `src/Runtime/RegistryBridge.cpp`
 
 **What to check**
 
@@ -3269,15 +3774,17 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 </section>
 
+## Courses — structured RS-CRS {#structured-family-rs-crs}
+
 <section class="rs-code-card" data-rs-code="RS-CRS-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CRS-001: Course definition rejected {#rs-crs-001}
+### RS-CRS-001: Course definition rejected {#rs-crs-001}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Course definition rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+**Area:** Courses · **Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
 
 **What to check**
 
@@ -3291,13 +3798,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CRS-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CRS-002: Invalid course patch {#rs-crs-002}
+### RS-CRS-002: Invalid course patch {#rs-crs-002}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Invalid course patch. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+**Area:** Courses · **Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
 
 **What to check**
 
@@ -3311,13 +3818,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CRS-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CRS-003: Course patch target unavailable {#rs-crs-003}
+### RS-CRS-003: Course patch target unavailable {#rs-crs-003}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Course patch target unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+**Area:** Courses · **Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
 
 **What to check**
 
@@ -3331,13 +3838,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CRS-004" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CRS-004: Course lifecycle hook unavailable {#rs-crs-004}
+### RS-CRS-004: Course lifecycle hook unavailable {#rs-crs-004}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Course lifecycle hook unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+**Area:** Courses · **Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
 
 **What to check**
 
@@ -3351,13 +3858,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CRS-005" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CRS-005: Course reload requires restart {#rs-crs-005}
+### RS-CRS-005: Course reload requires restart {#rs-crs-005}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Course reload requires restart. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+**Area:** Courses · **Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
 
 **What to check**
 
@@ -3371,13 +3878,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CRS-006" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CRS-006: Course construction failed {#rs-crs-006}
+### RS-CRS-006: Course construction failed {#rs-crs-006}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Course construction failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+**Area:** Courses · **Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
 
 **What to check**
 
@@ -3391,13 +3898,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CRS-007" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CRS-007: Course patch target malformed {#rs-crs-007}
+### RS-CRS-007: Course patch target malformed {#rs-crs-007}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Course patch target malformed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+**Area:** Courses · **Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
 
 **What to check**
 
@@ -3411,13 +3918,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CRS-008" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CRS-008: Course patch target ambiguous {#rs-crs-008}
+### RS-CRS-008: Course patch target ambiguous {#rs-crs-008}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Course patch target ambiguous. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+**Area:** Courses · **Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
 
 **What to check**
 
@@ -3431,13 +3938,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CRS-009" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CRS-009: Course prop lifecycle observer unavailable {#rs-crs-009}
+### RS-CRS-009: Course prop lifecycle observer unavailable {#rs-crs-009}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Course prop lifecycle observer unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+**Area:** Courses · **Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
 
 **What to check**
 
@@ -3451,13 +3958,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CRS-010" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CRS-010: Course build observer unavailable {#rs-crs-010}
+### RS-CRS-010: Course build observer unavailable {#rs-crs-010}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Course build observer unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+**Area:** Courses · **Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
 
 **What to check**
 
@@ -3471,13 +3978,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CRS-011" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-CRS-011: Required agility content unavailable {#rs-crs-011}
+### RS-CRS-011: Required agility content unavailable {#rs-crs-011}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Required agility content unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+**Area:** Courses · **Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
 
 **What to check**
 
@@ -3491,13 +3998,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CRS-012" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CRS-012: Course reward target unavailable {#rs-crs-012}
+### RS-CRS-012: Course reward target unavailable {#rs-crs-012}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Course reward target unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+**Area:** Courses · **Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
 
 **What to check**
 
@@ -3511,13 +4018,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-CRS-013" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-CRS-013: Course prop class unusable {#rs-crs-013}
+### RS-CRS-013: Course prop class unusable {#rs-crs-013}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Course prop class unusable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+**Area:** Courses · **Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
 
 **What to check**
 
@@ -3529,15 +4036,17 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 </section>
 
+## Enums — structured RS-ENUM {#structured-family-rs-enum}
+
 <section class="rs-code-card" data-rs-code="RS-ENUM-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-ENUM-001: Enum class unavailable {#rs-enum-001}
+### RS-ENUM-001: Enum class unavailable {#rs-enum-001}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Enum class unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsEnumLoader.cpp`
+**Area:** Enums · **Producer:** `src/Loader/DragonWildsEnumLoader.cpp`
 
 **What to check**
 
@@ -3551,13 +4060,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-ENUM-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-ENUM-002: Enum declaration rejected {#rs-enum-002}
+### RS-ENUM-002: Enum declaration rejected {#rs-enum-002}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Enum declaration rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsEnumLoader.cpp`
+**Area:** Enums · **Producer:** `src/Loader/DragonWildsEnumLoader.cpp`
 
 **What to check**
 
@@ -3569,15 +4078,17 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 </section>
 
+## Equipment — structured RS-EQP {#structured-family-rs-eqp}
+
 <section class="rs-code-card" data-rs-code="RS-EQP-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-EQP-001: Equipment target unavailable {#rs-eqp-001}
+### RS-EQP-001: Equipment target unavailable {#rs-eqp-001}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Equipment target unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsEquipmentLoader.cpp`
+**Area:** Equipment · **Producer:** `src/Loader/DragonWildsEquipmentLoader.cpp`
 
 **What to check**
 
@@ -3591,13 +4102,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-EQP-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-EQP-002: Equipment effect rule rejected {#rs-eqp-002}
+### RS-EQP-002: Equipment effect rule rejected {#rs-eqp-002}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Equipment effect rule rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsEquipmentLoader.cpp`
+**Area:** Equipment · **Producer:** `src/Loader/DragonWildsEquipmentLoader.cpp`
 
 **What to check**
 
@@ -3611,13 +4122,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-EQP-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-EQP-003: Equipment field rule rejected {#rs-eqp-003}
+### RS-EQP-003: Equipment field rule rejected {#rs-eqp-003}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Equipment field rule rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsEquipmentLoader.cpp`
+**Area:** Equipment · **Producer:** `src/Loader/DragonWildsEquipmentLoader.cpp`
 
 **What to check**
 
@@ -3631,13 +4142,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-EQP-004" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-EQP-004: Native equipment capability unavailable {#rs-eqp-004}
+### RS-EQP-004: Native equipment capability unavailable {#rs-eqp-004}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Native equipment capability unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsEquipmentLoader.cpp`
+**Area:** Equipment · **Producer:** `src/Loader/DragonWildsEquipmentLoader.cpp`
 
 **What to check**
 
@@ -3651,13 +4162,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-EQP-005" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-EQP-005: Equipment behavior reload deferred {#rs-eqp-005}
+### RS-EQP-005: Equipment behavior reload deferred {#rs-eqp-005}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Equipment behavior reload deferred. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsEquipmentLoader.cpp`
+**Area:** Equipment · **Producer:** `src/Loader/DragonWildsEquipmentLoader.cpp`
 
 **What to check**
 
@@ -3671,13 +4182,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-EQP-006" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-EQP-006: Equipment definition rejected {#rs-eqp-006}
+### RS-EQP-006: Equipment definition rejected {#rs-eqp-006}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Equipment definition rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsEquipmentLoader.cpp`
+**Area:** Equipment · **Producer:** `src/Loader/DragonWildsEquipmentLoader.cpp`
 
 **What to check**
 
@@ -3689,15 +4200,17 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 </section>
 
+## Gameplay effects — structured RS-GE {#structured-family-rs-ge}
+
 <section class="rs-code-card" data-rs-code="RS-GE-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-GE-001: Duplicate effect alias {#rs-ge-001}
+### RS-GE-001: Duplicate effect alias {#rs-ge-001}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Duplicate effect alias. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsGameplayEffectLoader.cpp`
+**Area:** Gameplay effects · **Producer:** `src/Loader/DragonWildsGameplayEffectLoader.cpp`
 
 **What to check**
 
@@ -3711,13 +4224,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-GE-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-GE-002: Effect class could not be registered {#rs-ge-002}
+### RS-GE-002: Effect class could not be registered {#rs-ge-002}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Effect class could not be registered. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsGameplayEffectLoader.cpp`
+**Area:** Gameplay effects · **Producer:** `src/Loader/DragonWildsGameplayEffectLoader.cpp`
 
 **What to check**
 
@@ -3731,13 +4244,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-GE-003" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-GE-003: Effect alias reload deferred {#rs-ge-003}
+### RS-GE-003: Effect alias reload deferred {#rs-ge-003}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Effect alias reload deferred. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsGameplayEffectLoader.cpp`
+**Area:** Gameplay effects · **Producer:** `src/Loader/DragonWildsGameplayEffectLoader.cpp`
 
 **What to check**
 
@@ -3751,13 +4264,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-GE-004" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-GE-004: Effect definition rejected {#rs-ge-004}
+### RS-GE-004: Effect definition rejected {#rs-ge-004}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Effect definition rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsGameplayEffectLoader.cpp`
+**Area:** Gameplay effects · **Producer:** `src/Loader/DragonWildsGameplayEffectLoader.cpp`
 
 **What to check**
 
@@ -3769,15 +4282,17 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 </section>
 
+## Imports — structured RS-IMP {#structured-family-rs-imp}
+
 <section class="rs-code-card" data-rs-code="RS-IMP-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-IMP-001: Import directive rejected {#rs-imp-001}
+### RS-IMP-001: Import directive rejected {#rs-imp-001}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Import directive rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+**Area:** Imports · **Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
 
 **What to check**
 
@@ -3791,13 +4306,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-IMP-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-IMP-002: Import target incompatible {#rs-imp-002}
+### RS-IMP-002: Import target incompatible {#rs-imp-002}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Import target incompatible. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+**Area:** Imports · **Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
 
 **What to check**
 
@@ -3811,13 +4326,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-IMP-003" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-IMP-003: Import remap ignored {#rs-imp-003}
+### RS-IMP-003: Import remap ignored {#rs-imp-003}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Import remap ignored. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+**Area:** Imports · **Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
 
 **What to check**
 
@@ -3831,13 +4346,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-IMP-004" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-IMP-004: Import source unresolved {#rs-imp-004}
+### RS-IMP-004: Import source unresolved {#rs-imp-004}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Import source unresolved. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+**Area:** Imports · **Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
 
 **What to check**
 
@@ -3851,13 +4366,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-IMP-005" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-IMP-005: Import source incompatible {#rs-imp-005}
+### RS-IMP-005: Import source incompatible {#rs-imp-005}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Import source incompatible. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+**Area:** Imports · **Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
 
 **What to check**
 
@@ -3871,13 +4386,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-IMP-006" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-IMP-006: Optional import dependency skipped {#rs-imp-006}
+### RS-IMP-006: Optional import dependency skipped {#rs-imp-006}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Optional import dependency skipped. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+**Area:** Imports · **Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
 
 **What to check**
 
@@ -3891,13 +4406,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-IMP-007" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-IMP-007: Module dependency resolution failed {#rs-imp-007}
+### RS-IMP-007: Module dependency resolution failed {#rs-imp-007}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Module dependency resolution failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+**Area:** Imports · **Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
 
 **What to check**
 
@@ -3911,13 +4426,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-IMP-008" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-IMP-008: Atomic import blocked during resolution {#rs-imp-008}
+### RS-IMP-008: Atomic import blocked during resolution {#rs-imp-008}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Atomic import blocked during resolution. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+**Area:** Imports · **Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
 
 **What to check**
 
@@ -3931,13 +4446,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-IMP-009" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-IMP-009: Module import plan rejected {#rs-imp-009}
+### RS-IMP-009: Module import plan rejected {#rs-imp-009}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Module import plan rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+**Area:** Imports · **Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
 
 **What to check**
 
@@ -3951,13 +4466,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-IMP-010" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-IMP-010: Atomic import plan blocked {#rs-imp-010}
+### RS-IMP-010: Atomic import plan blocked {#rs-imp-010}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Atomic import plan blocked. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+**Area:** Imports · **Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
 
 **What to check**
 
@@ -3971,13 +4486,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-IMP-011" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-IMP-011: Dry-run import plan blocked {#rs-imp-011}
+### RS-IMP-011: Dry-run import plan blocked {#rs-imp-011}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Dry-run import plan blocked. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+**Area:** Imports · **Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
 
 **What to check**
 
@@ -3991,13 +4506,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-IMP-012" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-IMP-012: Import batch partially applied {#rs-imp-012}
+### RS-IMP-012: Import batch partially applied {#rs-imp-012}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Import batch partially applied. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+**Area:** Imports · **Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
 
 **What to check**
 
@@ -4009,9 +4524,11 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 </section>
 
+## Journal — structured RS-JRN {#structured-family-rs-jrn}
+
 <section class="rs-code-card" data-rs-code="RS-JRN-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-JRN-001: Journal runtime classes unavailable {#structured-rs-jrn-001}
+### RS-JRN-001: Journal runtime classes unavailable {#structured-rs-jrn-001}
 
 **Structured namespace · Typical level: error**
 
@@ -4019,7 +4536,7 @@ This label also has a [legacy reference meaning](#rs-jrn-001); do not combine th
 
 **Condition:** Journal runtime classes unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+**Area:** Journal · **Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
 
 **What to check**
 
@@ -4033,7 +4550,7 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-JRN-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-JRN-002: Invalid journal document root {#structured-rs-jrn-002}
+### RS-JRN-002: Invalid journal document root {#structured-rs-jrn-002}
 
 **Structured namespace · Typical level: error**
 
@@ -4041,7 +4558,7 @@ This label also has a [legacy reference meaning](#rs-jrn-002); do not combine th
 
 **Condition:** Invalid journal document root. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+**Area:** Journal · **Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
 
 **What to check**
 
@@ -4055,13 +4572,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-JRN-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-JRN-003: Invalid journal entry {#rs-jrn-003}
+### RS-JRN-003: Invalid journal entry {#rs-jrn-003}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Invalid journal entry. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+**Area:** Journal · **Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
 
 **What to check**
 
@@ -4075,13 +4592,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-JRN-004" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-JRN-004: Journal patch target unavailable {#rs-jrn-004}
+### RS-JRN-004: Journal patch target unavailable {#rs-jrn-004}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Journal patch target unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+**Area:** Journal · **Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
 
 **What to check**
 
@@ -4095,13 +4612,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-JRN-005" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-JRN-005: Journal patch rejected {#rs-jrn-005}
+### RS-JRN-005: Journal patch rejected {#rs-jrn-005}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Journal patch rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+**Area:** Journal · **Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
 
 **What to check**
 
@@ -4115,13 +4632,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-JRN-006" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-JRN-006: Journal ownership conflict {#rs-jrn-006}
+### RS-JRN-006: Journal ownership conflict {#rs-jrn-006}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Journal ownership conflict. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+**Area:** Journal · **Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
 
 **What to check**
 
@@ -4135,13 +4652,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-JRN-007" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-JRN-007: Cooked journal declarations rejected {#rs-jrn-007}
+### RS-JRN-007: Cooked journal declarations rejected {#rs-jrn-007}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Cooked journal declarations rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+**Area:** Journal · **Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
 
 **What to check**
 
@@ -4155,13 +4672,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-JRN-008" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-JRN-008: Journal persistence event unavailable {#rs-jrn-008}
+### RS-JRN-008: Journal persistence event unavailable {#rs-jrn-008}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Journal persistence event unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+**Area:** Journal · **Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
 
 **What to check**
 
@@ -4175,13 +4692,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-JRN-009" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-JRN-009: Journal persistence event layout incompatible {#rs-jrn-009}
+### RS-JRN-009: Journal persistence event layout incompatible {#rs-jrn-009}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Journal persistence event layout incompatible. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+**Area:** Journal · **Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
 
 **What to check**
 
@@ -4195,13 +4712,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-JRN-010" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-JRN-010: Journal unlock callback failed {#rs-jrn-010}
+### RS-JRN-010: Journal unlock callback failed {#rs-jrn-010}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Journal unlock callback failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+**Area:** Journal · **Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
 
 **What to check**
 
@@ -4215,13 +4732,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-JRN-011" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-JRN-011: Journal persistence hook unavailable {#rs-jrn-011}
+### RS-JRN-011: Journal persistence hook unavailable {#rs-jrn-011}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Journal persistence hook unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+**Area:** Journal · **Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
 
 **What to check**
 
@@ -4235,13 +4752,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-JRN-012" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-JRN-012: Journal event component invalid {#rs-jrn-012}
+### RS-JRN-012: Journal event component invalid {#rs-jrn-012}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Journal event component invalid. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+**Area:** Journal · **Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
 
 **What to check**
 
@@ -4255,13 +4772,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-JRN-013" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-JRN-013: Journal unlock unavailable {#rs-jrn-013}
+### RS-JRN-013: Journal unlock unavailable {#rs-jrn-013}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Journal unlock unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+**Area:** Journal · **Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
 
 **What to check**
 
@@ -4275,13 +4792,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-JRN-014" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-JRN-014: Journal acquisition observer unavailable {#rs-jrn-014}
+### RS-JRN-014: Journal acquisition observer unavailable {#rs-jrn-014}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Journal acquisition observer unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+**Area:** Journal · **Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
 
 **What to check**
 
@@ -4293,15 +4810,17 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 </section>
 
+## Configuration and definitions — structured RS-JSON {#structured-family-rs-json}
+
 <section class="rs-code-card" data-rs-code="RS-JSON-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-JSON-001: JSON definition could not be opened / parsed {#rs-json-001}
+### RS-JSON-001: JSON definition could not be opened / parsed {#rs-json-001}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** JSON definition could not be opened / parsed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Core/JsonDocument.cpp`
+**Area:** Configuration and definitions · **Producer:** `src/Core/JsonDocument.cpp`
 
 **What to check**
 
@@ -4315,13 +4834,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-JSON-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-JSON-002: Required JSON field missing {#rs-json-002}
+### RS-JSON-002: Required JSON field missing {#rs-json-002}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Required JSON field missing. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Utility/Config.cpp`
+**Area:** Configuration and definitions · **Producer:** `src/Utility/Config.cpp`
 
 **What to check**
 
@@ -4335,13 +4854,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-JSON-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-JSON-003: JSON field has wrong type {#rs-json-003}
+### RS-JSON-003: JSON field has wrong type {#rs-json-003}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** JSON field has wrong type. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Utility/Config.cpp`
+**Area:** Configuration and definitions · **Producer:** `src/Utility/Config.cpp`
 
 **What to check**
 
@@ -4355,13 +4874,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-JSON-004" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-JSON-004: JSON safety limit exceeded {#rs-json-004}
+### RS-JSON-004: JSON safety limit exceeded {#rs-json-004}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** JSON safety limit exceeded. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Core/JsonDocument.cpp`
+**Area:** Configuration and definitions · **Producer:** `src/Core/JsonDocument.cpp`
 
 **What to check**
 
@@ -4375,13 +4894,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-JSON-005" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-JSON-005: JSON file-discovery safety limit exceeded {#rs-json-005}
+### RS-JSON-005: JSON file-discovery safety limit exceeded {#rs-json-005}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** JSON file-discovery safety limit exceeded. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Utility/Config.cpp`
+**Area:** Configuration and definitions · **Producer:** `src/Utility/Config.cpp`
 
 **What to check**
 
@@ -4393,15 +4912,17 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 </section>
 
+## Loaders — structured RS-LOAD {#structured-family-rs-load}
+
 <section class="rs-code-card" data-rs-code="RS-LOAD-001" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-LOAD-001: Loader folder discovery failed {#rs-load-001}
+### RS-LOAD-001: Loader folder discovery failed {#rs-load-001}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Loader folder discovery failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsModLoaderBase.cpp`
+**Area:** Loaders · **Producer:** `src/Loader/DragonWildsModLoaderBase.cpp`
 
 **What to check**
 
@@ -4415,13 +4936,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-LOAD-002" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-LOAD-002: Loader capability unavailable {#rs-load-002}
+### RS-LOAD-002: Loader capability unavailable {#rs-load-002}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Loader capability unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsModLoaderBase.cpp`
+**Area:** Loaders · **Producer:** `src/Loader/DragonWildsModLoaderBase.cpp`
 
 **What to check**
 
@@ -4435,13 +4956,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-LOAD-003" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-LOAD-003: Loader section raised an exception {#rs-load-003}
+### RS-LOAD-003: Loader section raised an exception {#rs-load-003}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Loader section raised an exception. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsModLoaderBase.cpp`
+**Area:** Loaders · **Producer:** `src/Loader/DragonWildsModLoaderBase.cpp`
 
 **What to check**
 
@@ -4455,13 +4976,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-LOAD-004" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-LOAD-004: Loader section raised an unknown exception {#rs-load-004}
+### RS-LOAD-004: Loader section raised an unknown exception {#rs-load-004}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Loader section raised an unknown exception. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsModLoaderBase.cpp`
+**Area:** Loaders · **Producer:** `src/Loader/DragonWildsModLoaderBase.cpp`
 
 **What to check**
 
@@ -4473,15 +4994,17 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 </section>
 
+## Niagara — structured RS-NIA {#structured-family-rs-nia}
+
 <section class="rs-code-card" data-rs-code="RS-NIA-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NIA-001: Invalid Niagara document root {#rs-nia-001}
+### RS-NIA-001: Invalid Niagara document root {#rs-nia-001}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Invalid Niagara document root. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsNiagaraLoader.cpp`
+**Area:** Niagara · **Producer:** `src/Loader/DragonWildsNiagaraLoader.cpp`
 
 **What to check**
 
@@ -4495,13 +5018,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NIA-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NIA-002: Duplicate Niagara ID {#rs-nia-002}
+### RS-NIA-002: Duplicate Niagara ID {#rs-nia-002}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Duplicate Niagara ID. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsNiagaraLoader.cpp`
+**Area:** Niagara · **Producer:** `src/Loader/DragonWildsNiagaraLoader.cpp`
 
 **What to check**
 
@@ -4515,13 +5038,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NIA-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NIA-003: Niagara definition rejected {#rs-nia-003}
+### RS-NIA-003: Niagara definition rejected {#rs-nia-003}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Niagara definition rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsNiagaraLoader.cpp`
+**Area:** Niagara · **Producer:** `src/Loader/DragonWildsNiagaraLoader.cpp`
 
 **What to check**
 
@@ -4535,13 +5058,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NIA-004" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-NIA-004: Niagara reload requires restart {#rs-nia-004}
+### RS-NIA-004: Niagara reload requires restart {#rs-nia-004}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Niagara reload requires restart. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsNiagaraLoader.cpp`
+**Area:** Niagara · **Producer:** `src/Loader/DragonWildsNiagaraLoader.cpp`
 
 **What to check**
 
@@ -4553,15 +5076,17 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 </section>
 
+## NPCs — structured RS-NPC {#structured-family-rs-npc}
+
 <section class="rs-code-card" data-rs-code="RS-NPC-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-001: Merchant interaction hook unavailable {#rs-npc-001}
+### RS-NPC-001: Merchant interaction hook unavailable {#rs-npc-001}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Merchant interaction hook unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+**Area:** NPCs · **Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
 
 **What to check**
 
@@ -4575,13 +5100,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-002" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-NPC-002: NPC client world-state presentation ignored {#rs-npc-002}
+### RS-NPC-002: NPC client world-state presentation ignored {#rs-npc-002}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** NPC client world-state presentation ignored. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+**Area:** NPCs · **Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
 
 **What to check**
 
@@ -4595,13 +5120,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-003" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-NPC-003: NPC client replica preparation skipped {#rs-npc-003}
+### RS-NPC-003: NPC client replica preparation skipped {#rs-npc-003}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** NPC client replica preparation skipped. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+**Area:** NPCs · **Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
 
 **What to check**
 
@@ -4615,13 +5140,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-004" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-004: NPC lifecycle construction exhausted {#rs-npc-004}
+### RS-NPC-004: NPC lifecycle construction exhausted {#rs-npc-004}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** NPC lifecycle construction exhausted. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+**Area:** NPCs · **Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
 
 **What to check**
 
@@ -4635,13 +5160,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-005" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-005: NPC construction or attachment blocked {#rs-npc-005}
+### RS-NPC-005: NPC construction or attachment blocked {#rs-npc-005}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** NPC construction or attachment blocked. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+**Area:** NPCs · **Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
 
 **What to check**
 
@@ -4655,13 +5180,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-006" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-006: NPC cleanup queue failed {#rs-npc-006}
+### RS-NPC-006: NPC cleanup queue failed {#rs-npc-006}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** NPC cleanup queue failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+**Area:** NPCs · **Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
 
 **What to check**
 
@@ -4675,13 +5200,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-007" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-007: NPC quarantine failed {#rs-npc-007}
+### RS-NPC-007: NPC quarantine failed {#rs-npc-007}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** NPC quarantine failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+**Area:** NPCs · **Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
 
 **What to check**
 
@@ -4695,13 +5220,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-008" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-008: NPC retirement not confirmed {#rs-npc-008}
+### RS-NPC-008: NPC retirement not confirmed {#rs-npc-008}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** NPC retirement not confirmed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+**Area:** NPCs · **Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
 
 **What to check**
 
@@ -4715,13 +5240,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-009" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-009: NPC interaction attachment failed {#rs-npc-009}
+### RS-NPC-009: NPC interaction attachment failed {#rs-npc-009}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** NPC interaction attachment failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+**Area:** NPCs · **Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
 
 **What to check**
 
@@ -4735,13 +5260,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-010" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-010: NPC interaction could not open {#rs-npc-010}
+### RS-NPC-010: NPC interaction could not open {#rs-npc-010}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** NPC interaction could not open. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+**Area:** NPCs · **Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
 
 **What to check**
 
@@ -4755,13 +5280,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-011" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-011: Saved quest receipt import failed {#rs-npc-011}
+### RS-NPC-011: Saved quest receipt import failed {#rs-npc-011}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Saved quest receipt import failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+**Area:** NPCs · **Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
 
 **What to check**
 
@@ -4775,13 +5300,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-012" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-012: Saved dialogue state import failed {#rs-npc-012}
+### RS-NPC-012: Saved dialogue state import failed {#rs-npc-012}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Saved dialogue state import failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+**Area:** NPCs · **Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
 
 **What to check**
 
@@ -4795,13 +5320,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-013" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-013: Quest acquisition callback encountered an exception {#rs-npc-013}
+### RS-NPC-013: Quest acquisition callback encountered an exception {#rs-npc-013}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Quest acquisition callback encountered an exception. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/NpcQuestAcquisition.inl`
+**Area:** NPCs · **Producer:** `src/Loader/NpcQuestAcquisition.inl`
 
 **What to check**
 
@@ -4815,13 +5340,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-014" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-NPC-014: Quest acquisition item resolution failed {#rs-npc-014}
+### RS-NPC-014: Quest acquisition item resolution failed {#rs-npc-014}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Quest acquisition item resolution failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/NpcQuestAcquisition.inl`
+**Area:** NPCs · **Producer:** `src/Loader/NpcQuestAcquisition.inl`
 
 **What to check**
 
@@ -4835,13 +5360,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-015" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-NPC-015: Quest progress notification failed {#rs-npc-015}
+### RS-NPC-015: Quest progress notification failed {#rs-npc-015}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Quest progress notification failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/NpcQuestAcquisition.inl`
+**Area:** NPCs · **Producer:** `src/Loader/NpcQuestAcquisition.inl`
 
 **What to check**
 
@@ -4855,13 +5380,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-016" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-016: Quest acquisition credit could not be completed {#rs-npc-016}
+### RS-NPC-016: Quest acquisition credit could not be completed {#rs-npc-016}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Quest acquisition credit could not be completed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/NpcQuestAcquisition.inl`
+**Area:** NPCs · **Producer:** `src/Loader/NpcQuestAcquisition.inl`
 
 **What to check**
 
@@ -4875,13 +5400,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-017" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-017: Automatic quest hand-in encountered an exception {#rs-npc-017}
+### RS-NPC-017: Automatic quest hand-in encountered an exception {#rs-npc-017}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Automatic quest hand-in encountered an exception. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/NpcQuestCompletion.inl`
+**Area:** NPCs · **Producer:** `src/Loader/NpcQuestCompletion.inl`
 
 **What to check**
 
@@ -4895,13 +5420,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-018" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-NPC-018: Quest objective text presentation failed {#rs-npc-018}
+### RS-NPC-018: Quest objective text presentation failed {#rs-npc-018}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Quest objective text presentation failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/NpcQuestPresentation.inl`
+**Area:** NPCs · **Producer:** `src/Loader/NpcQuestPresentation.inl`
 
 **What to check**
 
@@ -4915,13 +5440,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-019" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-019: Pending NPC cleanup retry failed {#rs-npc-019}
+### RS-NPC-019: Pending NPC cleanup retry failed {#rs-npc-019}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Pending NPC cleanup retry failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/NpcCleanup.inl`
+**Area:** NPCs · **Producer:** `src/Loader/NpcCleanup.inl`
 
 **What to check**
 
@@ -4935,13 +5460,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-020" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-NPC-020: Dialogue gate evaluation failed {#rs-npc-020}
+### RS-NPC-020: Dialogue gate evaluation failed {#rs-npc-020}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Dialogue gate evaluation failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/NpcDialogue.inl`
+**Area:** NPCs · **Producer:** `src/Loader/NpcDialogue.inl`
 
 **What to check**
 
@@ -4955,13 +5480,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-021" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-NPC-021: Dialogue choice unlock evaluation failed {#rs-npc-021}
+### RS-NPC-021: Dialogue choice unlock evaluation failed {#rs-npc-021}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Dialogue choice unlock evaluation failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/NpcDialogue.inl`
+**Area:** NPCs · **Producer:** `src/Loader/NpcDialogue.inl`
 
 **What to check**
 
@@ -4975,13 +5500,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-022" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-022: Dialogue event action encountered an exception {#rs-npc-022}
+### RS-NPC-022: Dialogue event action encountered an exception {#rs-npc-022}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Dialogue event action encountered an exception. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/NpcDialogue.inl`
+**Area:** NPCs · **Producer:** `src/Loader/NpcDialogue.inl`
 
 **What to check**
 
@@ -4995,13 +5520,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-023" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-023: Dialogue quest action encountered an exception {#rs-npc-023}
+### RS-NPC-023: Dialogue quest action encountered an exception {#rs-npc-023}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Dialogue quest action encountered an exception. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/NpcDialogue.inl`
+**Area:** NPCs · **Producer:** `src/Loader/NpcDialogue.inl`
 
 **What to check**
 
@@ -5015,13 +5540,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-024" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-024: Dialogue shop opening failed {#rs-npc-024}
+### RS-NPC-024: Dialogue shop opening failed {#rs-npc-024}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Dialogue shop opening failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/NpcDialogue.inl`
+**Area:** NPCs · **Producer:** `src/Loader/NpcDialogue.inl`
 
 **What to check**
 
@@ -5035,13 +5560,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-025" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-025: Dialogue reward operation encountered an exception {#rs-npc-025}
+### RS-NPC-025: Dialogue reward operation encountered an exception {#rs-npc-025}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Dialogue reward operation encountered an exception. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/NpcDialogue.inl`
+**Area:** NPCs · **Producer:** `src/Loader/NpcDialogue.inl`
 
 **What to check**
 
@@ -5055,13 +5580,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-026" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-026: NPC equipment world state could not be refreshed {#rs-npc-026}
+### RS-NPC-026: NPC equipment world state could not be refreshed {#rs-npc-026}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** NPC equipment world state could not be refreshed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/NpcEquipment.inl`
+**Area:** NPCs · **Producer:** `src/Loader/NpcEquipment.inl`
 
 **What to check**
 
@@ -5075,13 +5600,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-027" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-027: Dialogue reward receipt remains pending {#rs-npc-027}
+### RS-NPC-027: Dialogue reward receipt remains pending {#rs-npc-027}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Dialogue reward receipt remains pending. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/NpcDialogue.inl`
+**Area:** NPCs · **Producer:** `src/Loader/NpcDialogue.inl`
 
 **What to check**
 
@@ -5095,13 +5620,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-028" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-028: Dialogue shop transition failed {#rs-npc-028}
+### RS-NPC-028: Dialogue shop transition failed {#rs-npc-028}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Dialogue shop transition failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/NpcDialogue.inl`
+**Area:** NPCs · **Producer:** `src/Loader/NpcDialogue.inl`
 
 **What to check**
 
@@ -5115,13 +5640,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-NPC-029" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-NPC-029: Quest-scroll activation encountered an unknown exception {#rs-npc-029}
+### RS-NPC-029: Quest-scroll activation encountered an unknown exception {#rs-npc-029}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Quest-scroll activation encountered an unknown exception. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/NpcQuestScroll.inl`
+**Area:** NPCs · **Producer:** `src/Loader/NpcQuestScroll.inl`
 
 **What to check**
 
@@ -5133,15 +5658,17 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 </section>
 
+## Data tables — structured RS-RAW {#structured-family-rs-raw}
+
 <section class="rs-code-card" data-rs-code="RS-RAW-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-RAW-001: Raw patch target row not found {#rs-raw-001}
+### RS-RAW-001: Raw patch target row not found {#rs-raw-001}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Raw patch target row not found. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsRawTableLoader.cpp`
+**Area:** Data tables · **Producer:** `src/Loader/DragonWildsRawTableLoader.cpp`
 
 **What to check**
 
@@ -5155,13 +5682,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-RAW-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-RAW-002: Raw reload target DataTable unavailable {#rs-raw-002}
+### RS-RAW-002: Raw reload target DataTable unavailable {#rs-raw-002}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Raw reload target DataTable unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsRawTableLoader.cpp`
+**Area:** Data tables · **Producer:** `src/Loader/DragonWildsRawTableLoader.cpp`
 
 **What to check**
 
@@ -5175,13 +5702,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-RAW-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-RAW-003: Registry patch plan rejected {#rs-raw-003}
+### RS-RAW-003: Registry patch plan rejected {#rs-raw-003}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Registry patch plan rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsRawTableLoader.cpp`
+**Area:** Data tables · **Producer:** `src/Loader/DragonWildsRawTableLoader.cpp`
 
 **What to check**
 
@@ -5193,15 +5720,17 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 </section>
 
+## Recipes — structured RS-REC {#structured-family-rs-rec}
+
 <section class="rs-code-card" data-rs-code="RS-REC-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-REC-001: Recipe definition root is invalid {#rs-rec-001}
+### RS-REC-001: Recipe definition root is invalid {#rs-rec-001}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Recipe definition root is invalid. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsRecipeModLoader.cpp`
+**Area:** Recipes · **Producer:** `src/Loader/DragonWildsRecipeModLoader.cpp`
 
 **What to check**
 
@@ -5215,13 +5744,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-REC-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-REC-002: Recipe identity is reserved {#rs-rec-002}
+### RS-REC-002: Recipe identity is reserved {#rs-rec-002}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Recipe identity is reserved. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsRecipeModLoader.cpp`
+**Area:** Recipes · **Producer:** `src/Loader/DragonWildsRecipeModLoader.cpp`
 
 **What to check**
 
@@ -5233,15 +5762,17 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 </section>
 
+## Registry — structured RS-RGST {#structured-family-rs-rgst}
+
 <section class="rs-code-card" data-rs-code="RS-RGST-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-RGST-001: Registry entry rejected {#rs-rgst-001}
+### RS-RGST-001: Registry entry rejected {#rs-rgst-001}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Registry entry rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
+**Area:** Registry · **Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
 
 **What to check**
 
@@ -5255,13 +5786,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-RGST-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-RGST-002: Registry document rejected {#rs-rgst-002}
+### RS-RGST-002: Registry document rejected {#rs-rgst-002}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Registry document rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
+**Area:** Registry · **Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
 
 **What to check**
 
@@ -5275,13 +5806,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-RGST-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-RGST-003: Invalid registry owner {#rs-rgst-003}
+### RS-RGST-003: Invalid registry owner {#rs-rgst-003}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Invalid registry owner. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
+**Area:** Registry · **Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
 
 **What to check**
 
@@ -5295,13 +5826,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-RGST-004" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-RGST-004: Cooked registry asset rejected {#rs-rgst-004}
+### RS-RGST-004: Cooked registry asset rejected {#rs-rgst-004}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Cooked registry asset rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
+**Area:** Registry · **Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
 
 **What to check**
 
@@ -5315,13 +5846,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-RGST-005" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-RGST-005: Cooked registry discovery limited {#rs-rgst-005}
+### RS-RGST-005: Cooked registry discovery limited {#rs-rgst-005}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Cooked registry discovery limited. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
+**Area:** Registry · **Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
 
 **What to check**
 
@@ -5335,13 +5866,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-RGST-006" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-RGST-006: Cooked registry discovery failed {#rs-rgst-006}
+### RS-RGST-006: Cooked registry discovery failed {#rs-rgst-006}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Cooked registry discovery failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
+**Area:** Registry · **Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
 
 **What to check**
 
@@ -5355,13 +5886,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-RGST-007" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-RGST-007: Registry changes require a restart {#rs-rgst-007}
+### RS-RGST-007: Registry changes require a restart {#rs-rgst-007}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Registry changes require a restart. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
+**Area:** Registry · **Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
 
 **What to check**
 
@@ -5375,13 +5906,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-RGST-008" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-RGST-008: Native registry binding unavailable {#rs-rgst-008}
+### RS-RGST-008: Native registry binding unavailable {#rs-rgst-008}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Native registry binding unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
+**Area:** Registry · **Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
 
 **What to check**
 
@@ -5395,13 +5926,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-RGST-009" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-RGST-009: Native registry exclusion unavailable {#rs-rgst-009}
+### RS-RGST-009: Native registry exclusion unavailable {#rs-rgst-009}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Native registry exclusion unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
+**Area:** Registry · **Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
 
 **What to check**
 
@@ -5415,13 +5946,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-RGST-010" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-RGST-010: Native registrar unavailable {#rs-rgst-010}
+### RS-RGST-010: Native registrar unavailable {#rs-rgst-010}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Native registrar unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
+**Area:** Registry · **Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
 
 **What to check**
 
@@ -5435,13 +5966,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-RGST-011" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-RGST-011: Journal native identity unverified {#rs-rgst-011}
+### RS-RGST-011: Journal native identity unverified {#rs-rgst-011}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Journal native identity unverified. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
+**Area:** Registry · **Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
 
 **What to check**
 
@@ -5455,13 +5986,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-RGST-012" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-RGST-012: Cooked registry lane unavailable {#rs-rgst-012}
+### RS-RGST-012: Cooked registry lane unavailable {#rs-rgst-012}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Cooked registry lane unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
+**Area:** Registry · **Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
 
 **What to check**
 
@@ -5475,13 +6006,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-RGST-013" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-RGST-013: Cooked registry lane rejected {#rs-rgst-013}
+### RS-RGST-013: Cooked registry lane rejected {#rs-rgst-013}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Cooked registry lane rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
+**Area:** Registry · **Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
 
 **What to check**
 
@@ -5495,13 +6026,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-RGST-014" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-RGST-014: Cooked asset discovery unavailable {#rs-rgst-014}
+### RS-RGST-014: Cooked asset discovery unavailable {#rs-rgst-014}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Cooked asset discovery unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
+**Area:** Registry · **Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
 
 **What to check**
 
@@ -5515,13 +6046,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-RGST-015" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-RGST-015: Cooked discovery safety cap exceeded {#rs-rgst-015}
+### RS-RGST-015: Cooked discovery safety cap exceeded {#rs-rgst-015}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Cooked discovery safety cap exceeded. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
+**Area:** Registry · **Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
 
 **What to check**
 
@@ -5533,9 +6064,11 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 </section>
 
+## Spawns — structured RS-SPAWN {#structured-family-rs-spawn}
+
 <section class="rs-code-card" data-rs-code="RS-SPAWN-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-SPAWN-001: Spawn document root is invalid {#structured-rs-spawn-001}
+### RS-SPAWN-001: Spawn document root is invalid {#structured-rs-spawn-001}
 
 **Structured namespace · Typical level: error**
 
@@ -5543,7 +6076,7 @@ This label also has a [legacy reference meaning](#rs-spawn-001); do not combine 
 
 **Condition:** Spawn document root is invalid. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+**Area:** Spawns · **Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
 
 **What to check**
 
@@ -5557,13 +6090,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-SPAWN-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-SPAWN-002: Spawn definition was rejected {#rs-spawn-002}
+### RS-SPAWN-002: Spawn definition was rejected {#rs-spawn-002}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Spawn definition was rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+**Area:** Spawns · **Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
 
 **What to check**
 
@@ -5577,13 +6110,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-SPAWN-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-SPAWN-003: Spawn patch target not loaded {#rs-spawn-003}
+### RS-SPAWN-003: Spawn patch target not loaded {#rs-spawn-003}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Spawn patch target not loaded. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+**Area:** Spawns · **Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
 
 **What to check**
 
@@ -5597,13 +6130,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-SPAWN-004" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-SPAWN-004: Spawn registration rejected {#rs-spawn-004}
+### RS-SPAWN-004: Spawn registration rejected {#rs-spawn-004}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Spawn registration rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+**Area:** Spawns · **Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
 
 **What to check**
 
@@ -5617,13 +6150,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-SPAWN-005" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-SPAWN-005: Spawn authoring requires restart {#rs-spawn-005}
+### RS-SPAWN-005: Spawn authoring requires restart {#rs-spawn-005}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Spawn authoring requires restart. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+**Area:** Spawns · **Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
 
 **What to check**
 
@@ -5637,13 +6170,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-SPAWN-006" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-SPAWN-006: Spawn lifecycle hook unavailable {#rs-spawn-006}
+### RS-SPAWN-006: Spawn lifecycle hook unavailable {#rs-spawn-006}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Spawn lifecycle hook unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+**Area:** Spawns · **Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
 
 **What to check**
 
@@ -5657,13 +6190,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-SPAWN-007" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-SPAWN-007: Spawn tick unavailable {#rs-spawn-007}
+### RS-SPAWN-007: Spawn tick unavailable {#rs-spawn-007}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Spawn tick unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+**Area:** Spawns · **Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
 
 **What to check**
 
@@ -5677,13 +6210,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-SPAWN-008" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-SPAWN-008: Spawn actor property missing {#rs-spawn-008}
+### RS-SPAWN-008: Spawn actor property missing {#rs-spawn-008}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Spawn actor property missing. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+**Area:** Spawns · **Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
 
 **What to check**
 
@@ -5697,13 +6230,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-SPAWN-009" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-SPAWN-009: Spawn actor property write failed {#rs-spawn-009}
+### RS-SPAWN-009: Spawn actor property write failed {#rs-spawn-009}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Spawn actor property write failed. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+**Area:** Spawns · **Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
 
 **What to check**
 
@@ -5717,13 +6250,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-SPAWN-010" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-SPAWN-010: Native AI base class unavailable {#rs-spawn-010}
+### RS-SPAWN-010: Native AI base class unavailable {#rs-spawn-010}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** Native AI base class unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+**Area:** Spawns · **Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
 
 **What to check**
 
@@ -5737,13 +6270,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-SPAWN-011" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-SPAWN-011: Activity observer unavailable {#rs-spawn-011}
+### RS-SPAWN-011: Activity observer unavailable {#rs-spawn-011}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Activity observer unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+**Area:** Spawns · **Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
 
 **What to check**
 
@@ -5757,13 +6290,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-SPAWN-012" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-SPAWN-012: Activity hook limit reached {#rs-spawn-012}
+### RS-SPAWN-012: Activity hook limit reached {#rs-spawn-012}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Activity hook limit reached. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+**Area:** Spawns · **Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
 
 **What to check**
 
@@ -5777,13 +6310,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-SPAWN-013" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-SPAWN-013: Native activity event unavailable {#rs-spawn-013}
+### RS-SPAWN-013: Native activity event unavailable {#rs-spawn-013}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Native activity event unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+**Area:** Spawns · **Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
 
 **What to check**
 
@@ -5795,15 +6328,17 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 </section>
 
+## Strings — structured RS-STR {#structured-family-rs-str}
+
 <section class="rs-code-card" data-rs-code="RS-STR-001" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-STR-001: String override conflict {#rs-str-001}
+### RS-STR-001: String override conflict {#rs-str-001}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** String override conflict. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsStringModLoader.cpp`
+**Area:** Strings · **Producer:** `src/Loader/DragonWildsStringModLoader.cpp`
 
 **What to check**
 
@@ -5817,13 +6352,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-STR-002" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-STR-002: String replacements unmatched {#rs-str-002}
+### RS-STR-002: String replacements unmatched {#rs-str-002}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** String replacements unmatched. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsStringModLoader.cpp`
+**Area:** Strings · **Producer:** `src/Loader/DragonWildsStringModLoader.cpp`
 
 **What to check**
 
@@ -5837,13 +6372,13 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 <section class="rs-code-card" data-rs-code="RS-STR-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
 
-## RS-STR-003: String definition rejected {#rs-str-003}
+### RS-STR-003: String definition rejected {#rs-str-003}
 
 **Structured namespace · Typical level: error**
 
 **Condition:** String definition rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsStringModLoader.cpp`
+**Area:** Strings · **Producer:** `src/Loader/DragonWildsStringModLoader.cpp`
 
 **What to check**
 
@@ -5855,15 +6390,17 @@ Keep the exact source, mod, file, target/property, phase and outcome when suppli
 
 </section>
 
+## Vendors — structured RS-VND {#structured-family-rs-vnd}
+
 <section class="rs-code-card" data-rs-code="RS-VND-001" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
 
-## RS-VND-001: Vendor reload requires restart {#rs-vnd-001}
+### RS-VND-001: Vendor reload requires restart {#rs-vnd-001}
 
 **Structured namespace · Typical level: warning**
 
 **Condition:** Vendor reload requires restart. Read the actual message and context for the precise rejected, deferred or partial operation.
 
-**Producer:** `src/Loader/DragonWildsVendorLoader.cpp`
+**Area:** Vendors · **Producer:** `src/Loader/DragonWildsVendorLoader.cpp`
 
 **What to check**
 
