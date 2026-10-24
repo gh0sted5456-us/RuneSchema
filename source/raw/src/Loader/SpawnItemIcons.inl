@@ -1,6 +1,17 @@
-void DragonWildsSpawnLoader::PumpItemIcons() {
-    if(PS::HelpySourceCache::Requested.load())PS::HelpySourceCache::Poll(PS::HostServices::ModDirectory());
+void DragonWildsSpawnLoader::PumpItemIcons(PS::WorkSlice& work) {
+    if(PS::HelpySourceCache::Requested.load()&&PS::HelpySourceCache::Poll(PS::HostServices::ModDirectory())){
+        const auto& sources=PS::HelpySourceCache::Current;size_t indexed=0,metadata=0,unavailable=0;
+        for(const auto& [file,entry]:sources.Containers.items()){
+            if(entry.value("Status",std::string{})=="Indexed")++indexed;
+            else if(entry.value("Status",std::string{})=="MetadataOnly")++metadata;
+            else {++unavailable;PS::Log<LogLevel::Verbose>(STR("[CACHE][PAK-DISCOVERY][UNAVAILABLE] {}: {}\n"),PS::ToWideSafe(file),PS::ToWideSafe(entry.value("Reason",std::string{})));}
+        }
+        PS::Log<LogLevel::Normal>(STR("[CACHE][PAK-DISCOVERY] {} containers indexed, {} native metadata-only, {} unavailable; {} exact package associations. Live item checks remain required; conflicting mount precedence stays unverified.\n"),
+            indexed,metadata,unavailable,sources.ContainerAssets?sources.ContainerAssets->size():0);
+    }
     if(!BulkIconJob.Active&&!PS::IconCacheBuild::HasWork()&&m_activeItemIcon.empty()&&!PS::ItemIconRequests::HasPending())return;
+    if(!work.MayStart()||PS::SpawnToolRequests::Waiting.load())return;
+    work.Started();
     auto* iconWorld=MenuIconWorld(m_readyWorld&&IsWorldStillLoaded(m_readyWorld)?m_readyWorld:nullptr);
     BulkIconJob.Tick(iconWorld,m_activeItemIcon.empty()&&!PS::ItemIconRequests::HasPending());
     if(BulkIconJob.Capturing)return;
@@ -8,6 +19,7 @@ void DragonWildsSpawnLoader::PumpItemIcons() {
     const bool worldReady=iconWorld!=nullptr;PS::ItemIconRequests::SetAvailable(worldReady);
     if(!worldReady){m_activeItemIcon.clear();PS::ItemIconThumbnail::Reset();return;}
     static uint64_t iconRevision=1;
+    const auto frameDeadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(2);
     for(int job=0;job<4;++job) {
         if(m_activeItemIcon.empty()) {
             auto iconRequest=PS::ItemIconRequests::Take();if(!iconRequest)break;
@@ -25,7 +37,7 @@ void DragonWildsSpawnLoader::PumpItemIcons() {
             PS::ItemIconThumbnail::Reset();
             const auto message=std::string(error.what());
             result={{"Icon",icon},{"Status","Error"},{"Error",message},
-                {"Retryable",message.find("blank item icon")!=std::string::npos||message.find("warm-up timed out")!=std::string::npos}};
+                {"Retryable",PS::IconCapture::Retryable(message)}};
             PS::HelpyIconTrace::Event("core-render-error",icon,"error='"+std::string(error.what())+"'");
             static std::set<std::string> diagnosed;
             if(diagnosed.insert(icon).second)
@@ -34,6 +46,6 @@ void DragonWildsSpawnLoader::PumpItemIcons() {
         m_activeItemIcon.clear();
         PS::ItemIconRequests::Publish(result);
         if(PS::SpawnToolRequests::PushUpdate)PS::SpawnToolRequests::PushUpdate("icon",result,++iconRevision);
-        if(!cacheHit)break;
+        if(!cacheHit||std::chrono::steady_clock::now()>=frameDeadline)break;
     }
 }

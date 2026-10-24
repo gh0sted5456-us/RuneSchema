@@ -87,6 +87,7 @@ void DragonWildsNpcLoader::TryAutomaticQuests(UObject* controller) {
                 return current();
             },tier);
             if(completed==QuestProgress::Result::Completed)LogQuestStage(controller,key,quest.Stages.empty()?1:quest.Stages.size()+1);
-        }catch(const std::exception& error){ErrorOnce("quest-auto-completion:"+key,PS::ToWideSafe(error.what()));}
+        }catch(const std::exception& error){ErrorOnceDiagnostic("quest-auto-completion:"+key,PS::ToWideSafe(error.what()),
+            "RS-NPC-017","Automatic quest hand-in encountered an exception","Error","Partial",{},key,"Application",true);}
     });
 }

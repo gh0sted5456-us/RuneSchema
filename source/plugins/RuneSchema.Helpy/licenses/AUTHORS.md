@@ -9,8 +9,11 @@ maintained as a community project.
 - NuLLZz
 - Snorkles
 - CHP
+- Abyss (RSDW Modding Community)
 
 Snorkles is credited for the original RuneSchema work within the community.
+Abyss (RSDW Modding Community) is credited for the initial corrupt-character
+bypass work on which RuneSchema's corrupt-save bypass was based.
 This roster recognizes project history and contributions; it does not imply
 that every listed member is currently active or contributed to every release.
 

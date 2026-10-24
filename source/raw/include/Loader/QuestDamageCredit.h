@@ -38,9 +38,9 @@ inline AttributedDeath ReadFatalDamage(RC::Unreal::UObject* source,RC::Unreal::U
     if(!fatal->GetPropertyValue(fatal->ContainerPtrToValuePtr<void>(value)))return {};
     auto* victim=target->GetObjectPropertyValue(target->ContainerPtrToValuePtr<void>(parameters));
     auto* player=Summons::CreditedPlayer(instigator->GetObjectPropertyValue(instigator->ContainerPtrToValuePtr<void>(value)));
-    if(!player || !victim || source->GetOuterPrivate()!=victim
-        || ActorHelper::GetObjectRef(victim,TEXT("AiDamageComponent"))!=source)return {};
-    if(!Summons::DeadVictim(victim,player))return {};
+    // Destructible scenery also receives fatal damage but has no AI component.
+    if(!player || !victim || source->GetOuterPrivate()!=victim || !Summons::DeadVictim(victim,player))return {};
+    if(ActorHelper::GetObjectRef(victim,TEXT("AiDamageComponent"))!=source)return {};
     return {victim,player};
 }
 }

@@ -1,4 +1,20 @@
 Helpy 2.0 component provenance
+Native power-level textures (AboveZone, AtZone, BelowZone,
+SeverelyBelowZone, NeutralZone) are unmodified decoded game artwork from the
+owner's installed RuneScape: Dragonwilds. Copyright remains with Jagex;
+not MIT-licensed. Helpy overlays mod load-order numbers for diagnostics only.
+
+Scale-reference character art: NuLL, Lonestar, iGhrazi and Hauler, supplied by
+the project owner from the Dye project's journal documentation (October 2026).
+Original artwork/character rights remain with their respective owners. These
+illustrations are presentation references, not measurements of the characters.
+
+Source banners supplied by the project owner (October 2026): base game,
+Scorned/Scorched Wilderness, Umbral Sands, The Bastion, Flintlock Pistols,
+Spears & Scythes, Colorful Dye and Shadowmancer. Game screenshots and game
+artwork remain the property of their respective rights holders, including
+Jagex. User mod promotional artwork is retained under its original ownership;
+including it in an owner-scoped cache does not relicense it as MIT.
 
 RuneSchema-derived UI, models, data-only plugin API, and configuration helpers:
   https://github.com/gh0sted5456-us/RuneSchema

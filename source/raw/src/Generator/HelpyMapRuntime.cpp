@@ -5,6 +5,7 @@
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Helper/ReflectedContract.h"
 #include "SDK/Helper/PlayerStatus.h"
+#include "SDK/Helper/PlayerVitals.h"
 #include "SDK/Structs/FSoftObjectPtr.h"
 #include <Unreal/Property/FSoftObjectProperty.hpp>
 #include <Unreal/Property/FTextProperty.hpp>
@@ -75,8 +76,12 @@ nlohmann::json PlayerLocations(UWorld* world){
             const auto value=getName.Result<FString>();const auto& chars=value.GetCharArray();std::string name="Player";
             if(chars.Num()>1&&chars.Num()<256&&chars.GetData()&&chars.GetData()[chars.Num()-1]==0)name=RC::to_string(RC::StringType(chars.GetData(),chars.Num()-1));
             const auto point=AH::GetActorLocation(static_cast<AActor*>(player));if(!std::isfinite(point.X())||!std::isfinite(point.Y())||!std::isfinite(point.Z()))continue;
+            bool isLocal=false;try{AH::FunctionCall local(player,TEXT("/Script/Engine.Pawn:IsLocallyControlled"));local.Invoke();isLocal=local.Result<bool>();}catch(...){}
+            const auto stats=isLocal?PS::PlayerVitals::Details(player,false):nlohmann::json{{"Source","Waiting for authenticated server stats"}};
             rows.push_back({{"Path",RC::to_string(player->GetPathName())},{"Name",std::move(name)},
-                {"PlayerId",PS::PlayerStatusRuntime::PlayerId(state)},{"Guid",PS::PlayerStatusRuntime::CharacterGuid(state)},{"Location",{point.X(),point.Y(),point.Z()}}});
+                {"Platform",PS::PlayerStatusRuntime::Platform(state,isLocal)},{"PlatformAccountName",PS::PlayerStatusRuntime::AccountName(state,isLocal)},
+                {"PlayerId",PS::PlayerStatusRuntime::PlayerId(state)},{"Guid",PS::PlayerStatusRuntime::CharacterGuid(state)},{"IsLocal",isLocal},{"Health",stats["Health"]},{"Stats",stats},{"Location",{point.X(),point.Y(),point.Z()}}});
+            PS::PlayerStatusRuntime::Color(state,rows.back());
         }catch(const std::exception&){} // One despawning pawn must not hide the map.
     }return rows;
 }
@@ -99,7 +104,9 @@ nlohmann::json Snapshot(UWorld* world,const nlohmann::json& players){
     const auto alignment=Projection(world);static nlohmann::json readyImage;
     if(!readyImage.is_object()||readyImage.value("Status",std::string{})!="Ready"||!std::filesystem::is_regular_file(readyImage.value("File",std::string{})))readyImage=HelpyMapTexture::Render(world,WorldTexture);
     auto image=readyImage;
-    auto locations=PlayerLocations(world);if(locations.empty())locations=players;
+    // Host actions address controller identities. Clients still see replicated
+    // pawn locations without pretending those pawn paths are authority handles.
+    auto locations=players.empty()?PlayerLocations(world):players;
     return {{"BridgeVersion",1},{"World",RC::to_string(world->GetPathName())},{"Projection",alignment.ToJson()},{"Players",std::move(locations)},{"Image",std::move(image)}};
 }
 nlohmann::json Buildings(const std::string& query,std::size_t offset){

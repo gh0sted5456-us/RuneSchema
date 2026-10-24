@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include "nlohmann/json.hpp"
+#include "Core/BridgeReasonCodes.h"
 
 namespace PS::Network {
 
@@ -105,7 +106,8 @@ public:
             {"worldEpoch",e.worldEpoch},{"networkRole",e.networkRole},{"side",e.side},{"channel",e.channel},
             {"owner",e.owner},{"entity",e.entity},{"action",e.action},{"requestRevision",e.requestRevision},
             {"correlationId",e.correlationId},{"stage",e.stage},{"outcome",e.outcome},{"reasonCode",e.reasonCode},
-            {"retryCount",e.retryCount},{"elapsedMs",e.elapsedMs},{"suppressedCount",e.suppressedCount}});
+            {"retryCount",e.retryCount},{"elapsedMs",e.elapsedMs},{"suppressedCount",e.suppressedCount},
+            {"referenceUrl",PS::Diagnostics::BridgeReasonUrl(e.reasonCode)}});
         return {{"schemaVersion",SchemaVersion},{"worldEpoch",m_epoch},{"worldRole",m_role},{"build",m_build},
             {"protocolVersion",m_protocol},{"registryFingerprint",m_registry},{"mappingState",m_mapping},
             {"verbose",m_verbose},{"events",std::move(events)},{"counters",m_counters},{"counterOverflow",m_counterOverflow},{"activePending",m_pending.size()},

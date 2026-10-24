@@ -46,6 +46,7 @@ struct Definition {
     bool HideInQuestList=false,ShowInCompletedQuestList=true;
     std::string Region;
     std::set<std::string> AnyStages;
+    std::string Icon; // Optional presentation metadata; not a persistence identity.
     bool AnyStage(size_t index) const {return AnyStages.contains(Stages.at(index).first);}
 };
 inline ItemAmount ParseItem(const Json& data) {
@@ -59,7 +60,7 @@ inline ItemAmount ParseItem(const Json& data) {
     return {item,count.get<int>(),time};
 }
 inline Definition ParseDefinition(const std::string& mod,const Json& data,bool stageObjective) {
-    Dialogue::Fields(data,{"Id","PersistenceID","Title","Description","CompletedDescription","Region","HideInQuestList","ShowInCompletedQuestList","Objective","Stages","Category","Prerequisites","Reward","RepeatReward","Repeatable","Repeat","StartCost","EntryOptions","ResultTiers","Completion","TimeOfDay"});
+    Dialogue::Fields(data,{"Id","PersistenceID","Title","Description","Icon","CompletedDescription","Region","HideInQuestList","ShowInCompletedQuestList","Objective","Stages","Category","Prerequisites","Reward","RepeatReward","Repeatable","Repeat","StartCost","EntryOptions","ResultTiers","Completion","TimeOfDay"});
     if(data.contains("Stages")) {
         if(data.contains("Objective"))throw std::runtime_error("Quest cannot combine Objective and Stages");
         const auto& stages=data.at("Stages");
@@ -149,6 +150,14 @@ inline Definition ParseDefinition(const std::string& mod,const Json& data,bool s
         Dialogue::Id(objective.at("Id")),Dialogue::Text(objective.at("Text"),1024),
         required,ParseItem(data.at("Reward"))};
     result.Kill=std::move(kill);
+    if(data.contains("Icon")){
+        if(!data.at("Icon").is_string())throw std::runtime_error("Quest Icon must be an Unreal texture object path or an empty string");
+        result.Icon=data.at("Icon").get<std::string>();const auto& icon=result.Icon;
+        const auto dot=icon.rfind('.'),slash=icon.rfind('/');
+        if(icon.size()>2048||(!icon.empty()&&(icon.front()!='/'||slash==0||dot==icon.npos||dot<=slash+1||dot+1==icon.size()||icon.find('.')!=dot||icon.find("//")!=icon.npos
+            ||icon.find_first_of("\\:\r\n\t")!=icon.npos||std::any_of(icon.begin(),icon.end(),[](unsigned char c){return c<32||c==127;}))))
+            throw std::runtime_error("Quest Icon requires an Unreal texture object path such as /Game/UI/T_Icon.T_Icon; URLs and filesystem paths are unsupported");
+    }
     result.Acquire=kind=="Acquire";
     const auto completion=data.value("Completion",std::string("ReturnToNPC"));
     if(completion!="ReturnToNPC" && completion!="Automatic")throw std::runtime_error("Quest Completion must be ReturnToNPC or Automatic");

@@ -35,16 +35,21 @@ registered. Vanilla and unrelated third-party identities are outside that rule.
 
 ## Mappings
 
-`Mappings.usmap` is optional. RuneSchema uses live reflection as the final
+Reflection mappings are optional. RuneSchema uses live reflection as the final
 authority and uses mappings for better names, diagnostics and tooling.
 
-The canonical location is:
+Generated mappings and indexes live in platform-separated AppData caches:
 
 ```text
-Mods/RuneSchema/dlls/mappings/Mappings.usmap
+%LOCALAPPDATA%/RSDragonwilds/RuneSchema/steam/cache/mappings
+%LOCALAPPDATA%/RSDragonwilds/RuneSchema/gamepass/cache/mappings
+%LOCALAPPDATA%/RSDragonwilds/RuneSchema/epic/cache/mappings
 ```
 
-Compatibility locations are still read for existing installs.
+New runtime packages do not ship `dlls/mappings` or migrate legacy caches.
+If the current platform cache is missing, the first launch queues a UE4SS
+capture and logs that the next launch can reuse it once capture succeeds.
+Mapping-dependent tooling remains unavailable until validation completes.
 
 ## Plugins
 

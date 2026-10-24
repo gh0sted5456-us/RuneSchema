@@ -11,6 +11,7 @@
 #include "Loader/NpcEquipmentConditions.h"
 #include "Loader/NpcMarkers.h"
 #include "Loader/NpcVisualEffect.h"
+#include "Loader/LoreBookPresentation.h"
 #include "Core/GroundSurface.h"
 #include "Core/NearbyPlacement.h"
 #include "Loader/NpcPlacement.h"
@@ -58,7 +59,8 @@ public:
         // behavior. One NPC definition now serves standalone and multiplayer.
         normalized.erase("Multiplayer");
         Require(normalized, {"Id","DisplayName","VisualSource","Mesh","Materials","IdleAnimation","HideMesh","NoInteract","HideName",
-            "Location","GroundReferenceZ","GroundMigrationRadius","GroundClearance","Rotation","Scale","Enabled","EnableCollision","MeshCollision","Type","Appearance","Equipment","EquipmentWhen","HideWeapon","Pose","DialoguePose","Ghost","VisualEffect","Map","OverheadIcon","VendorID","DialogueID","LoreID","LoreEntry","JournalEntries","QuestID","TimeOfDay"});
+            "Location","GroundReferenceZ","GroundMigrationRadius","GroundClearance","Rotation","Scale","Enabled","EnableCollision","MeshCollision","Type","Appearance","Equipment","EquipmentWhen","HideWeapon","Pose","DialoguePose","Ghost","VisualEffect","Map","OverheadIcon","VendorID","DialogueID","LoreID","LoreEntry","LorePresentation","JournalEntries","QuestID","TimeOfDay"});
+        (void)LoreBookPresentation::Parse(normalized);
         PS::Grounding::NearbyPolicy::Parse(data);
         PS::Grounding::Clearance(data);
         const auto& source=normalized;

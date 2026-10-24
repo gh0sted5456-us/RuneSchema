@@ -39,6 +39,7 @@
 #include "SDK/Structs/FSoftObjectPtr.h"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnosticB3B.h"
 #include "Runtime/Storefront.h"
 #include "Loader/DragonWildsBuildingModLoader.h"
 #include "Runtime/SlowWork.h"
@@ -162,9 +163,10 @@ namespace DragonWilds {
         if (engineLifecyclePhase == EEngineLifecyclePhase::PostEngineInit)
         {
             try {
-                PS::JsonHelpers::ParseJsonFilesInPath(loaderPath, [&](const nlohmann::json& data) {
-                    ReadDefinitions(data, modName);
-                });
+                PS::JsonHelpers::ParseJsonFilesInPathWithSource(loaderPath,
+                    [&](const nlohmann::json& data, const std::filesystem::path& source) {
+                        ReadDefinitions(data, modName, PS::StructuredDiagnosticB2::Utf8Path(source));
+                    });
             } catch (const std::exception& error) {
                 RejectCleanup("building discovery failed for '" + RC::to_string(modName)
                     + "': " + error.what());
@@ -183,7 +185,7 @@ namespace DragonWilds {
         const std::filesystem::path& modFilePath)
     {
         PS::JsonHelpers::ParseJsonFileInPath(modFilePath, [&](const nlohmann::json& data) {
-            ReadDefinitions(data, modName);
+            ReadDefinitions(data, modName, PS::StructuredDiagnosticB2::Utf8Path(modFilePath.filename()));
         });
         ApplyDefinitions();
     }
@@ -270,16 +272,28 @@ namespace DragonWilds {
             Hook::UnregisterCallback(m_recoveryTickCallbackId);
     }
 
+    nlohmann::json DragonWildsBuildingModLoader::PlanToolImport(const nlohmann::json& data){
+        if(!data.is_object()||data.value("schema",std::string{})!="rsdwtools.buildings.v1"||!data.contains("pieces")||!data["pieces"].is_array()||data["pieces"].empty()||data["pieces"].size()>4096)
+            throw std::runtime_error("Choose an rsdwtools.buildings.v1 export with 1-4096 pieces");
+        std::unordered_set<int64_t> ids;for(const auto& piece:data["pieces"]){
+            if(!piece.is_object()||!piece.contains("piece_id")||!piece["piece_id"].is_number_integer()||!ids.insert(piece["piece_id"].get<int64_t>()).second)throw std::runtime_error("Prefab has missing or duplicate piece IDs; nothing saved");
+        }
+        nlohmann::json plan=nlohmann::json::array();ReadDefinitions(data,TEXT("runeschema"),{},&plan);
+        if(plan.empty())throw std::runtime_error("Prefab could not be prepared; no placements were saved. Check RuneSchema's buildings log.");
+        return plan;
+    }
     void DragonWildsBuildingModLoader::ReadDefinitions(
-        const nlohmann::json& data, const RC::StringType& modName)
+        const nlohmann::json& data, const RC::StringType& modName, const std::string& sourceFile, nlohmann::json* plan)
     {
         if(data.is_object() && data.value("schema",std::string{})=="rsdwtools.buildings.v1") {
             if(!data.contains("pieces") || !data.at("pieces").is_array()) {
-                PS::Log<LogLevel::Error>(STR("{}: RSDW Base Builder import requires a pieces array.\n"),modName);
+                if (!PS::StructuredDiagnosticB3B::Report("RS-BLD-014","Error","Blocked","BuildingLoader","Missing building pieces array","The Base Builder import requires a pieces array.",RC::to_string(modName),sourceFile,{},"Validation","pieces"))
+                    PS::Log<LogLevel::Error>(STR("{}: RSDW Base Builder import requires a pieces array.\n"),modName);
                 return;
             }
             if(data.at("pieces").size()>4096) {
-                PS::Log<LogLevel::Error>(STR("{}: RSDW Base Builder import exceeds the 4096-piece safety limit.\n"),modName);
+                if (!PS::StructuredDiagnosticB3B::Report("RS-BLD-015","Error","Blocked","BuildingLoader","Building piece limit exceeded","The Base Builder import exceeds the 4096-piece safety limit.",RC::to_string(modName),sourceFile,{},"Validation","pieces"))
+                    PS::Log<LogLevel::Error>(STR("{}: RSDW Base Builder import exceeds the 4096-piece safety limit.\n"),modName);
                 return;
             }
             double destinationX=0,destinationY=0,destinationZ=0,layoutYaw=0;
@@ -412,6 +426,7 @@ namespace DragonWilds {
                         {"Scale",{{"X",number("scale_x",1)},{"Y",number("scale_y",1)},{"Z",number("scale_z",1)}}}});
                 }
             } catch(const std::exception& error) {
+                if(plan)throw;
                 ++rejected;PS::Log<LogLevel::Error>(STR("{}: RSDW Base Builder piece rejected: {}.\n"),modName,PS::ToWideSafe(error.what()));
             }
             if(!staticPieces.empty()) {
@@ -427,6 +442,7 @@ namespace DragonWilds {
                     {"Scale",{{"X",1},{"Y",1},{"Z",1}}},{"GroundToSurface",false},
                     {"CollisionProfile","BlockAll"},{"Pieces",std::move(staticPieces)}});
             }
+            if(plan){*plan=std::move(placements);return;}
             if(ImportPlacements && !placements.empty())ImportPlacements(placements,modName);
             else if(!placements.empty())PS::Log<LogLevel::Error>(STR("{}: RSDW Base Builder placement service is unavailable; definitions and other loaders continue.\n"),modName);
             const auto extras=(data.contains("items")&&data.at("items").is_array()?data.at("items").size():0)
@@ -437,19 +453,20 @@ namespace DragonWilds {
         }
         if (data.is_array())
         {
-            for (const auto& entry : data) ReadDefinitions(entry, modName);
+            for (const auto& entry : data) ReadDefinitions(entry, modName,sourceFile);
             return;
         }
         if (!data.is_object())
         {
             RejectCleanup("invalid building document for enabled mod '" + RC::to_string(modName) + "'");
-            PS::Log<LogLevel::Error>(
+            if (!PS::StructuredDiagnosticB3B::Report("RS-BLD-001","Error","Skipped","BuildingLoader","Invalid building document root","A building document must contain an object or array of objects.",RC::to_string(modName),sourceFile))
+                PS::Log<LogLevel::Error>(
                 STR("{}: building file must contain a JSON object.\n"), modName);
             return;
         }
 
         if (data.contains("$Patch")) {
-            ApplyPatch(data, modName);
+            ApplyPatch(data, modName,sourceFile);
             return;
         }
         for (const auto& [key, body] : data.items())
@@ -462,7 +479,8 @@ namespace DragonWilds {
             if (!body.is_object())
             {
                 RejectCleanup("invalid enabled building definition '" + RC::to_string(modName) + ":" + key + "'");
-                PS::Log<LogLevel::Error>(
+                if (!PS::StructuredDiagnosticB3B::Report("RS-BLD-002","Error","Skipped","BuildingLoader","Invalid building definition","Each named building definition must be a JSON object.",RC::to_string(modName),sourceFile,key))
+                    PS::Log<LogLevel::Error>(
                     STR("{}: Building '{}' must be a JSON object.\n"),
                     modName, RC::to_generic_string(key));
                 continue;
@@ -473,7 +491,8 @@ namespace DragonWilds {
             if (hasAsset == hasClone)
             {
                 RejectCleanup("invalid enabled building asset declaration '" + RC::to_string(modName) + ":" + key + "'");
-                PS::Log<LogLevel::Error>(
+                if (!PS::StructuredDiagnosticB3B::Report("RS-BLD-003","Error","Skipped","BuildingLoader","Invalid building asset reference","A building requires exactly one string Asset or $Clone reference.",RC::to_string(modName),sourceFile,key))
+                    PS::Log<LogLevel::Error>(
                     STR("{}: Building '{}' requires exactly one string 'Asset' or '$Clone' path.\n"),
                     modName, RC::to_generic_string(key));
                 continue;
@@ -482,6 +501,7 @@ namespace DragonWilds {
             BuildingDefinition definition{};
             definition.Owner = modName;
             definition.Key = RC::to_generic_string(key);
+            definition.SourceFile = sourceFile;
             definition.Clone = hasClone;
             definition.AssetPath = RC::to_generic_string(
                 body.at(hasClone ? "$Clone" : "Asset").get<std::string>());
@@ -491,7 +511,8 @@ namespace DragonWilds {
                 if (!body.at("Properties").is_object())
                 {
                     RejectCleanup("invalid building Properties for enabled mod '" + RC::to_string(modName) + "'");
-                    PS::Log<LogLevel::Error>(
+                    if (!PS::StructuredDiagnosticB3B::Report("RS-BLD-004","Error","Skipped","BuildingLoader","Invalid building properties","Properties must contain a JSON object.",RC::to_string(modName),sourceFile,key,"Validation","Properties"))
+                        PS::Log<LogLevel::Error>(
                         STR("{}: Building '{}.Properties' must be a JSON object.\n"),
                         modName, definition.Key);
                     continue;
@@ -505,7 +526,8 @@ namespace DragonWilds {
                     if (definition.Properties.contains(protectedField))
                     {
                         RejectCleanup("protected building identity property in enabled mod '" + RC::to_string(modName) + "'");
-                        PS::Log<LogLevel::Error>(
+                        if (!PS::StructuredDiagnosticB3B::Report("RS-BLD-008","Error","Skipped","BuildingLoader","Protected building property","This property is managed by RuneSchema and cannot be authored directly.",RC::to_string(modName),sourceFile,key,"Validation",std::string("Properties.")+protectedField))
+                            PS::Log<LogLevel::Error>(
                             STR("{}: Building '{}.Properties.{}' is RuneSchema-managed; use Requirements for cost and let RuneSchema assign identity/index fields.\n"),
                             modName, definition.Key,
                             RC::to_generic_string(protectedField));
@@ -516,7 +538,8 @@ namespace DragonWilds {
                     && !definition.Properties.at("BuildableActor").is_string())
                 {
                     RejectCleanup("invalid BuildableActor for enabled mod '" + RC::to_string(modName) + "'");
-                    PS::Log<LogLevel::Error>(
+                    if (!PS::StructuredDiagnosticB3B::Report("RS-BLD-009","Error","Skipped","BuildingLoader","Invalid BuildableActor reference","BuildableActor must be specified as a string class path.",RC::to_string(modName),sourceFile,key,"Validation","Properties.BuildableActor"))
+                        PS::Log<LogLevel::Error>(
                         STR("{}: Building '{}.Properties.BuildableActor' must be a cooked Blueprint generated-class path ending in '_C'.\n"),
                         modName, definition.Key);
                     safe = false;
@@ -530,7 +553,8 @@ namespace DragonWilds {
                 if (!requirements.is_array())
                 {
                     RejectCleanup("invalid building Requirements for enabled mod '" + RC::to_string(modName) + "'");
-                    PS::Log<LogLevel::Error>(
+                    if (!PS::StructuredDiagnosticB3B::Report("RS-BLD-007","Error","Skipped","BuildingLoader","Invalid building requirements","Requirements must be an array.",RC::to_string(modName),sourceFile,key,"Validation","Requirements"))
+                        PS::Log<LogLevel::Error>(
                         STR("{}: Building '{}.Requirements' must be an array.\n"),
                         modName, definition.Key);
                     continue;
@@ -554,7 +578,8 @@ namespace DragonWilds {
                 if (!valid)
                 {
                     RejectCleanup("invalid building Requirements entries for enabled mod '" + RC::to_string(modName) + "'");
-                    PS::Log<LogLevel::Error>(
+                    if (!PS::StructuredDiagnosticB3B::Report("RS-BLD-010","Error","Skipped","BuildingLoader","Invalid requirement entry","Each requirement needs an ItemData string and a positive Amount.",RC::to_string(modName),sourceFile,key,"Validation","Requirements"))
+                        PS::Log<LogLevel::Error>(
                         STR("{}: Building '{}.Requirements' entries require an ItemData string and positive Amount.\n"),
                         modName, definition.Key);
                     continue;
@@ -654,7 +679,8 @@ namespace DragonWilds {
                 }
                 if(!valid) {
                     RejectCleanup("invalid building Overrides for enabled mod '" + RC::to_string(modName) + "'");
-                    PS::Log<LogLevel::Error>(STR("{}: Building '{}.Overrides' contains an unsupported field or value.\n"),modName,definition.Key);
+                    if (!PS::StructuredDiagnosticB3B::Report("RS-BLD-011","Error","Skipped","BuildingLoader","Unsupported building override","An Overrides field or its value does not meet the supported contract.",RC::to_string(modName),sourceFile,key,"Validation","Overrides"))
+                        PS::Log<LogLevel::Error>(STR("{}: Building '{}.Overrides' contains an unsupported field or value.\n"),modName,definition.Key);
                     continue;
                 }
                 definition.Overrides=overrides;
@@ -665,7 +691,8 @@ namespace DragonWilds {
                 if (!body.at("Unlock").is_boolean())
                 {
                     RejectCleanup("invalid building Unlock for enabled mod '" + RC::to_string(modName) + "'");
-                    PS::Log<LogLevel::Error>(
+                    if (!PS::StructuredDiagnosticB3B::Report("RS-BLD-012","Error","Skipped","BuildingLoader","Invalid building unlock","Unlock must be a JSON boolean.",RC::to_string(modName),sourceFile,key,"Validation","Unlock"))
+                        PS::Log<LogLevel::Error>(
                         STR("{}: Building '{}.Unlock' must be true or false.\n"),
                         modName, definition.Key);
                     continue;
@@ -699,7 +726,8 @@ namespace DragonWilds {
                 if (!valid)
                 {
                     RejectCleanup("invalid building AddTo for enabled mod '" + RC::to_string(modName) + "'");
-                    PS::Log<LogLevel::Error>(
+                    if (!PS::StructuredDiagnosticB3B::Report("RS-BLD-013","Error","Skipped","BuildingLoader","Invalid building collection placement","AddTo requires Collection and an optional integer PageIndex.",RC::to_string(modName),sourceFile,key,"Validation","AddTo"))
+                        PS::Log<LogLevel::Error>(
                         STR("{}: Building '{}.AddTo' requires an object (or array of objects) with a Collection string and optional integer PageIndex.\n"),
                         modName, definition.Key);
                     continue;
@@ -728,12 +756,14 @@ namespace DragonWilds {
     }
 
     void DragonWildsBuildingModLoader::ApplyPatch(
-        const nlohmann::json& patch, const RC::StringType& modName)
+        const nlohmann::json& patch, const RC::StringType& modName,
+        const std::string& sourceFile)
     {
         if (!patch.contains("$Patch") || !patch.at("$Patch").is_string()
             || !patch.contains("$Target") || !patch.at("$Target").is_object())
         {
-            PS::Log<LogLevel::Error>(STR("{}: Building '$Patch' requires a string identity and object '$Target'.\n"), modName);
+            if (!PS::StructuredDiagnosticB3B::Report("RS-BLD-006","Error","Blocked","BuildingLoader","Invalid building patch declaration","$Patch must identify a string target and $Target must contain an object.",RC::to_string(modName),sourceFile,"$Patch","Validation","$Target"))
+                PS::Log<LogLevel::Error>(STR("{}: Building '$Patch' requires a string identity and object '$Target'.\n"), modName);
             return;
         }
 
@@ -751,7 +781,8 @@ namespace DragonWilds {
             });
         if (registered == m_definitions.end())
         {
-            PS::Log<LogLevel::Error>(STR("{}: Building patch target '{}' was not found.\n"), modName, displayTarget);
+            if (!PS::StructuredDiagnosticB3B::Report("RS-BLD-005","Error","Blocked","BuildingLoader","Building patch target missing","The target building identity was not available when the patch was applied.",RC::to_string(modName),sourceFile,RC::to_string(displayTarget),"Resolution"))
+                PS::Log<LogLevel::Error>(STR("{}: Building patch target '{}' was not found.\n"), modName, displayTarget);
             return;
         }
 
@@ -2354,7 +2385,11 @@ namespace DragonWilds {
         m_catalogue=LoadObject(CataloguePath);
         if(!m_catalogue||!RefreshBuildingReferencesForWorld()||!RefreshBuildingCatalogueForWorld())
         {
-            PS::Log<LogLevel::Error>(STR("Buildings cannot be registered because one or more retained assets failed world-boundary validation.\n"));
+            (void)PS::LogStructuredFallback<LogLevel::Error>(
+                PS::StructuredDiagnosticB3B::Report("RS-BLD-016","Error","Blocked","BuildingLoader",
+                "Building world assets not ready","At least one retained building asset failed world-boundary validation.",
+                {},{},"BuildingWorldBoundary","Resolution"),
+                STR("Buildings cannot be registered because one or more retained assets failed world-boundary validation.\n"));
             return false;
         }
 
@@ -2367,7 +2402,10 @@ namespace DragonWilds {
                 m_catalogue->GetClassPrivate(), TEXT("AllPiecesInCatalogue"))) : nullptr;
         if (!subsystem || !arrayProperty || !setProperty)
         {
-            PS::Log<LogLevel::Error>(
+            (void)PS::LogStructuredFallback<LogLevel::Error>(
+                PS::StructuredDiagnosticB3B::Report("RS-BLD-017","Error","Blocked","BuildingLoader",
+                "Native building registry unavailable","The building subsystem, native registry array, or catalogue set could not be resolved.",
+                {},{},"BuildingNativeRegistry","Resolution"),
                 STR("Buildings cannot be registered because the native registry is unavailable.\n"));
             return false;
         }
@@ -2380,7 +2418,10 @@ namespace DragonWilds {
         {
             if (!RestoreNativeRegistry())
             {
-                PS::Log<LogLevel::Error>(
+                (void)PS::LogStructuredFallback<LogLevel::Error>(
+                    PS::StructuredDiagnosticB3B::Report("RS-BLD-018","Error","Blocked","BuildingLoader",
+                    "Building baseline restoration failed","The persistent native building registry baseline could not be restored for refresh.",
+                    {},{},"BuildingRegistryBaseline","Finalization"),
                     STR("Building registry refresh could not restore its prior native baseline.\n"));
                 return false;
             }
@@ -2396,7 +2437,10 @@ namespace DragonWilds {
         auto* catalogueIds = setProperty->ContainerPtrToValuePtr<FScriptSet>(m_catalogue);
         if (array->Num() < 700 || catalogueIds->Num() < 700)
         {
-            PS::Log<LogLevel::Error>(
+            (void)PS::LogStructuredFallback<LogLevel::Error>(
+                PS::StructuredDiagnosticB3B::Report("RS-BLD-019","Error","Blocked","BuildingLoader",
+                "Native building registry incomplete","The native registry array or catalogue set contained fewer than the required baseline entries.",
+                {},{},"BuildingNativeRegistry","Validation"),
                 STR("Buildings were not registered because the native registry is incomplete.\n"));
             return false;
         }
@@ -2418,7 +2462,10 @@ namespace DragonWilds {
             {
                 if (!RestoreNativeRegistry())
                 {
-                    PS::Log<LogLevel::Error>(
+                    (void)PS::LogStructuredFallback<LogLevel::Error>(
+                        PS::StructuredDiagnosticB3B::Report("RS-BLD-021","Error","Partial","BuildingLoader",
+                        "Building registry rollback failed","After the registration attempt failed, restoration of the prior native registry baseline also failed; transient state was retained.",
+                        {},{},"BuildingRegistryRollback","Finalization"),
                         STR("Custom Building registry rollback failed; transient state was retained.\n"));
                 }
             }
@@ -2427,7 +2474,10 @@ namespace DragonWilds {
                 ClearWorldRegistryState();
             }
 
-            PS::Log<LogLevel::Error>(
+            (void)PS::LogStructuredFallback<LogLevel::Error>(
+                PS::StructuredDiagnosticB3B::Report("RS-BLD-020","Error","Blocked","BuildingLoader",
+                "Building world registration aborted","Protection of the deterministic native building registry did not succeed; registration was aborted.",
+                {},{},"BuildingRegistryProtection","Application"),
                 STR("Deterministic Building registry registration failed; Building registration was aborted.\n"));
             return false;
         }
@@ -2585,7 +2635,13 @@ namespace DragonWilds {
         if (TryWorldRecovery(worldContext, "bounded-retry")) return;
         if (m_recoveryElapsed < BuildingRecoveryTimeoutSeconds) return;
 
-        PS::Log<LogLevel::Warning>(STR(
+        (void)PS::LogStructuredFallback<LogLevel::Warning>(
+            PS::StructuredDiagnosticB3B::Report("RS-BLD-022","Warning","Blocked","BuildingLoader",
+            "Building world recovery timed out",m_lastRecoveryFailure.empty()
+                ? "World readiness could not be verified before bounded recovery stopped."
+                : m_lastRecoveryFailure,
+            {},{},"BuildingWorldRecovery","Finalization"),
+            STR(
             "[BUILDING-RECOVERY][TIMEOUT] Recovery stopped after {} seconds: {}. Buildings remain isolated; other RuneSchema systems continue.\n"),
             BuildingRecoveryTimeoutSeconds,
             PS::ToWideSafe(m_lastRecoveryFailure.empty()

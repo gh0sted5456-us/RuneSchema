@@ -8,6 +8,7 @@
 #include "Helpers/String.hpp"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnosticB3C.h"
 #include <stdexcept>
 
 using namespace RC;
@@ -25,10 +26,20 @@ bool DragonWildsGameplayEffectLoader::OnInitialize() { return true; }
 void DragonWildsGameplayEffectLoader::OnLoad(const fs::path& path,const RC::StringType& owner,
     const EEngineLifecyclePhase& phase) {
     if(phase!=EEngineLifecyclePhase::PostEngineInit)return;
-    PS::JsonHelpers::ParseJsonFilesInPath(path,[&](const nlohmann::json& data){Queue(data,owner);});
+    PS::JsonHelpers::ParseJsonFilesInPathWithSource(path,[&](const nlohmann::json& data,const fs::path& relative){
+        try {Queue(data,owner);}
+        catch(const std::exception& e) {
+            PS::StructuredDiagnosticB3C::Report("RS-GE-004","Error","Skipped","GameplayEffectLoader",
+                "Effect definition rejected",e.what(),RC::to_string(owner),
+                PS::StructuredDiagnosticB2::Utf8Path(relative),{},"Validation");
+            throw;
+        }
+    });
 }
 void DragonWildsGameplayEffectLoader::OnAutoReload(const RC::StringType& owner,const fs::path&) {
-    PS::Log<LogLevel::Warning>(TEXT("{}: effect class aliases require a game restart.\n"),owner);
+    if (!PS::StructuredDiagnosticB3C::Report("RS-GE-003","Warning","Deferred","GameplayEffectLoader",
+        "Effect alias reload deferred","Effect aliases require a game restart.",RC::to_string(owner),{}, {},"Reload"))
+        PS::Log<LogLevel::Warning>(TEXT("{}: effect class aliases require a game restart.\n"),owner);
 }
 void DragonWildsGameplayEffectLoader::Queue(const nlohmann::json& data,const RC::StringType& owner) {
     for(auto& d:GameplayEffectDocument::Parse(data,to_string(owner)))
@@ -53,7 +64,14 @@ void DragonWildsGameplayEffectLoader::OnFinalizeLoad(const EEngineLifecyclePhase
     if(phase!=EEngineLifecyclePhase::PostEngineInit)return;
     std::size_t applied=0,errors=0;
     for(const auto& definition:m_definitions)try { Apply(definition);++applied; }
-    catch(const std::exception& error) { ++errors;PS::Log<LogLevel::Error>(TEXT("Gameplay effect '{}' rejected: {}\n"),to_generic_string(definition.Key),PS::ToWideSafe(error.what())); }
+    catch(const std::exception& error) {
+        ++errors;
+        const bool duplicate=std::string_view(error.what())=="duplicate effect definition ID";
+        if (!PS::StructuredDiagnosticB3C::Report(duplicate?"RS-GE-001":"RS-GE-002","Error","Skipped","GameplayEffectLoader",
+            duplicate?"Duplicate effect alias":"Effect class could not be registered",error.what(),
+            RC::to_string(definition.Owner),{},definition.ClassPath,"Application"))
+            PS::Log<LogLevel::Error>(TEXT("Gameplay effect '{}' rejected: {}\n"),to_generic_string(definition.Key),PS::ToWideSafe(error.what()));
+    }
     if(!m_definitions.empty())PS::LoaderSummary("effects",m_definitions.size(),0,applied,0,errors);
     m_definitions.clear();
 }

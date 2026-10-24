@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/RuneSchemaProfile.h"
 #include "Core/PlayerStatus.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Generator/ToolRequest.h"
@@ -39,10 +40,11 @@ inline bool Draw(ImDrawList* draw,ImVec2 center,float size,const nlohmann::json*
 inline void Inline(const nlohmann::json& row) {
     const auto* role=Find(row);if(!role||role->value("Role",std::string{})=="unknown")return;
     const auto a=ImGui::GetItemRectMin(),b=ImGui::GetItemRectMax();const float size=ImGui::GetTextLineHeight();
-    const auto name=row.value("Name",std::string{});const float right=ImGui::GetWindowPos().x+ImGui::GetWindowContentRegionMax().x;
+    const auto name=RuneSchemaProfile::Name(row);const float right=ImGui::GetWindowPos().x+ImGui::GetWindowContentRegionMax().x;
     const bool fullWidth=b.x>=right-ImGui::GetStyle().ItemSpacing.x;
     const ImVec2 center{fullWidth?std::min(b.x-size*.6f,a.x+ImGui::CalcTextSize(name.c_str()).x+size):std::min(right-size*.6f,b.x+size*.8f),(a.y+b.y)*.5f};
     Draw(ImGui::GetWindowDrawList(),center,size,role);
-    if(ImGui::IsWindowHovered()&&ImGui::IsMouseHoveringRect({center.x-size*.5f,center.y-size*.5f},{center.x+size*.5f,center.y+size*.5f}))ImGui::SetTooltip("%s",Tooltip(*role).c_str());
+    const ImVec2 minimum{center.x-size*.5f,center.y-size*.5f},maximum{center.x+size*.5f,center.y+size*.5f};
+    if(ImGui::IsWindowHovered()&&ImGui::IsMouseHoveringRect(minimum,maximum))HelpyImGuiTheme::TooltipAt(minimum,maximum,Tooltip(*role).c_str());
 }
 }

@@ -47,6 +47,10 @@ vendored or future version.
 
 ## Community credits
 
+Abyss (RSDW Modding Community) is credited for the initial corrupt-character
+bypass work on which RuneSchema's corrupt-save bypass was based. This credit
+records the implementation's origin; it does not replace applicable licenses.
+
 RuneSchema's community member credits, including the original work by
 Snorkles, are consolidated in `AUTHORS.md`. That roster is separate from
 this dependency inventory. See `LICENSING.md` for the scope of the project's
@@ -72,3 +76,8 @@ Game mappings, cooked containers, art, and other third-party game or engine
 material retain their separate rights and terms. This document is an
 inventory and notice-preservation policy, not a certification that every
 historical archive or transitive component has been audited.
+
+The RuneScape: Dragonwilds wordmark used for game identification on RSMK's Home
+transition is third-party game artwork, not RuneSchema MIT-licensed artwork.
+RuneScape and Dragonwilds names and marks remain with their respective owners;
+this presentation does not imply affiliation or endorsement.

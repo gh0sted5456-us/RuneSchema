@@ -1,4 +1,5 @@
 #include "Core/HelpyIconPack.h"
+#include "Core/HelpyModIconPacks.h"
 #include <cassert>
 #include <iostream>
 #undef assert
@@ -27,21 +28,83 @@ int Run(){
     const auto pack=fixture/"Shared.rsmk-icons";assert(Export(pack,root,cache,first,progress).Exported==2);
     assert(progress.Stage==Phase::Complete&&progress.Done==2&&progress.Total==2);
     assert(progress.BytesTotal==2*pixels.size()&&progress.BytesDone==progress.BytesTotal);
+    // Packaged caches never influence the content fingerprint. Automatic
+    // loading is restricted to the containing mod's accepted active roots.
+    first.DeclaredOwners=plan.Owners;
+    fs::create_directories(root/"mods"/"First"/"cache");
+    fs::copy_file(pack,root/"mods"/"First"/"cache"/"First.rsmk-icons");
+    assert(HelpySourceCache::Inspect(root,plan).Key==first.Key);
+    auto bundled=HelpyModIconPacks::Discover(root,first);assert(bundled.size()==1&&bundled[0].Owner=="first"&&bundled[0].Groups==std::set<std::string>{"firstmount"});
+    const auto bundledCache=fixture/"bundled-cache";auto importedBundle=HelpyModIconPacks::Import(bundled[0],root,bundledCache,first,1024*1024,progress);
+    assert(importedBundle.Imported==1&&importedBundle.Skipped==1&&fs::exists(Target(bundledCache,first,icon))&&!fs::exists(Target(bundledCache,first,icon2)));
+    auto inactive=first;inactive.SourceKeys.erase("firstmount");assert(HelpyModIconPacks::Discover(root,inactive).empty());
+    auto badBundle=bundled[0];badBundle.Groups.insert("secondmount");Reject([&]{HelpyModIconPacks::Import(badBundle,root,bundledCache,first,1024*1024,progress);});
+    write(root/"mods"/"First"/"cache"/"Bad.rsmk-icons","invalid");
+    auto automatic=HelpyModIconPacks::ImportAll(root,bundledCache,first,1024*1024,progress);
+    assert(automatic.Unchanged==1&&automatic.Message.find("warning")!=std::string::npos);
+    assert(automatic.Packs==2&&automatic.Warnings>0&&HelpyModIconPacks::NotifyAutomatic(automatic));
+    HelpyIconPack::Result quiet;assert(!HelpyModIconPacks::NotifyAutomatic(quiet));quiet.Packs=1;quiet.Unchanged=100;assert(!HelpyModIconPacks::NotifyAutomatic(quiet));
+    quiet.Imported=1;assert(HelpyModIconPacks::NotifyAutomatic(quiet));
+    nlohmann::json coverage={{"Stage","Complete"},{"Active",false},{"Source",""},{"SourceKeys",first.SourceKeys},
+        {"Expected",{icon,icon2}},{"Total",2},{"Verified",2},{"Failed",0},{"DiscoveryFailed",0}};
+    const auto fullPack=fixture/"Full.rsmk-icons";
+    assert(Export(fullPack,root,cache,first,progress,"",coverage).Exported==2);
+    {std::ifstream file(fullPack,std::ios::binary);uint64_t begin=0;const auto full=Header(file,begin,fs::file_size(fullPack));assert(full.Coverage["Complete"]==true&&full.Coverage["Missing"].empty());}
+    // Requested export CONTINUES with warnings when capture/discovery fails.
+    const auto missingIcon="/FirstMount/Art/T_Missing.T_Missing";coverage["Expected"].push_back(missingIcon);coverage["Total"]=3;
+    coverage["Stage"]="Completed with failures";coverage["Failed"]=1;coverage["DiscoveryFailed"]=1;
+    const auto warnedPack=fixture/"With-warnings.rsmk-icons";auto warned=Export(warnedPack,root,cache,first,progress,"",coverage);
+    assert(warned.Exported==2&&warned.Message.find("warnings")!=std::string::npos);
+    {std::ifstream file(warnedPack,std::ios::binary);uint64_t begin=0;const auto partial=Header(file,begin,fs::file_size(warnedPack));assert(partial.Coverage["Complete"]==false&&partial.Coverage["Missing"]==nlohmann::json::array({missingIcon}));}
+    auto wrong=coverage;wrong["SourceKeys"]=nlohmann::json::object();Reject([&]{Export(fullPack,root,cache,first,progress,"",wrong);});
+    wrong=coverage;wrong["Expected"].push_back(icon);Reject([&]{Export(fullPack,root,cache,first,progress,"",wrong);});
+    // A corrupt entry is omitted, not allowed to abort the good entries.
+    Publish(Target(cache,first,icon2),{'b','a','d'});
+    warned=Export(warnedPack,root,cache,first,progress,"",coverage);assert(warned.Exported==1);
+    {std::ifstream file(warnedPack,std::ios::binary);uint64_t begin=0;const auto partial=Header(file,begin,fs::file_size(warnedPack));assert(partial.Coverage["Missing"].size()==2&&partial.Coverage["ExportIssues"].size()==1);}
+    Publish(Target(cache,first,icon2),pixels);
     Index(Target(cache,first,icon),icon,{"mods/colorsofmoney"});Index(Target(cache,first,icon),icon); // browsing must retain origin metadata
     const auto originIndex=Json(Read(Target(cache,first,icon).wstring()+L".json",8192));assert(originIndex["Origins"][0]=="mods/colorsofmoney");
-    const auto sourcePack=fixture/"ColorsOfMoney.rsmk-icons";
-    assert(Export(sourcePack,root,cache,first,progress,"mods/colorsofmoney").Exported==1);
-    {std::ifstream file(sourcePack,std::ios::binary);uint64_t begin=0;const auto filtered=Header(file,begin,fs::file_size(sourcePack));assert(filtered.Icons.size()==1&&filtered.Icons[0].Icon==icon&&filtered.Icons[0].Origins.contains("mods/colorsofmoney"));}
+    Reject([&]{Export(fixture/"False-owner.rsmk-icons",root,cache,first,progress,"mods/colorsofmoney");});
+    const auto sourcePack=fixture/"First.rsmk-icons";
+    assert(Export(sourcePack,root,cache,first,progress,"mods/first").Exported==1);
+    const auto filteredCache=fixture/"source-filtered-import";
+    auto filteredImport=Import(sourcePack,root2,filteredCache,second,1024*1024,progress,ImportPolicy::VerifiedContent,"mods/first");
+    assert(filteredImport.Imported==1&&fs::exists(Target(filteredCache,second,icon))&&!fs::exists(Target(filteredCache,second,icon2)));
+    assert(Import(sourcePack,root2,fixture/"source-absent",second,1024*1024,progress,ImportPolicy::VerifiedContent,"mods/absent").Imported==0);
+    const auto shared=fixture/"core"/"cache",sharedFile=HelpyModIconPacks::SharedFile(shared,"mods/first");
+    assert(sharedFile==shared/"mods"/"first"/"shared.rsmk-cache");
+    Reject([&]{HelpyModIconPacks::SharedFile(shared,"mods/../escape");});
+    Reject([&]{HelpyModIconPacks::SharedFile(shared,"core");});
+    assert(Export(sharedFile,root,cache,first,progress,"mods/first").Exported==1);
+    const auto sharedBundles=HelpyModIconPacks::Discover(root2,second,shared);assert(sharedBundles.size()==1&&sharedBundles[0].Owner=="first");
+    auto sharedImport=HelpyModIconPacks::ImportAll(root2,fixture/"shared-target",second,1024*1024,progress,shared);assert(sharedImport.Imported==1&&sharedImport.Warnings==0);
+    assert(HelpyModIconPacks::Discover(root2,inactive,shared).empty());
+    {std::ifstream file(sourcePack,std::ios::binary);uint64_t begin=0;const auto filtered=Header(file,begin,fs::file_size(sourcePack));assert(filtered.Icons.size()==1&&filtered.Icons[0].Icon==icon&&filtered.Icons[0].Origins==std::set<std::string>{"mods/first"});}
     Reject([&]{Export(fixture/"empty.rsmk-icons",root,cache,first,progress,"mods/absent");});assert(!fs::exists(fixture/"empty.rsmk-icons"));
     Reject([&]{Export(fixture/"invalid.rsmk-icons",root,cache,first,progress,"../outside");});
     auto result=Import(pack,root2,cache2,second,1024*1024,progress);assert(result.Imported==2&&result.Skipped==0);assert(Read(Target(cache2,second,icon),100000)==pixels);
-    assert(Import(sourcePack,root2,cache2,second,1024*1024,progress).Imported==1);
+    assert(result.ChangedIcons.size()==2&&result.Unchanged==0);
+    result=Import(warnedPack,root2,cache2,second,1024*1024,progress);assert(result.Message.find("partial coverage")!=std::string::npos);
+    const auto unchangedFile=Target(cache2,second,icon),unchangedIndex=fs::path(unchangedFile.wstring()+L".json");
+    const auto marker=fs::file_time_type::clock::now()-std::chrono::hours(48);
+    fs::last_write_time(unchangedFile,marker);fs::last_write_time(unchangedIndex,marker);
+    result=Import(pack,root2,cache2,second,1024*1024,progress);
+    assert(result.Imported==0&&result.Unchanged==2&&result.ChangedIcons.empty());
+    assert(fs::last_write_time(unchangedFile)==marker&&fs::last_write_time(unchangedIndex)==marker);
+    assert(result.Message.find("kept 2 unchanged")!=std::string::npos);
+    // A changed/corrupt local image is repaired without touching its neighbour.
+    auto altered=pixels;altered.back()^=1;Publish(Target(cache2,second,icon2),altered);
+    result=Import(pack,root2,cache2,second,1024*1024,progress);
+    assert(result.Imported==1&&result.Unchanged==1&&result.ChangedIcons==std::vector<std::string>{icon2});
+    assert(Read(Target(cache2,second,icon2),100000)==pixels&&fs::last_write_time(unchangedFile)==marker);
+    result=Import(sourcePack,root2,cache2,second,1024*1024,progress);assert(result.Imported==0&&result.Unchanged==1);
     Index(Target(cache2,second,icon),icon);
-    assert(Json(Read(Target(cache2,second,icon).wstring()+L".json",8192))["Origins"][0]=="mods/colorsofmoney");
+    assert(Json(Read(Target(cache2,second,icon).wstring()+L".json",8192))["Origins"][0]=="mods/first");
     // Editing one mod must neither import its stale icons nor exclude others.
     write(root2/"mods"/"Second"/"paks"/"Second.pak","new texture data");second=HelpySourceCache::Inspect(root2,plan);
-    result=Import(pack,root2,cache2,second,1024*1024,progress);assert(result.Imported==1&&result.Skipped==1);assert(!fs::exists(Target(cache2,second,icon2)));
-    auto missing=plan;missing.Registered.erase("secondmount");second=HelpySourceCache::Inspect(root2,missing);result=Import(pack,root2,cache2,second,1024*1024,progress);assert(result.Imported==1&&result.Skipped==1);
+    result=Import(pack,root2,cache2,second,1024*1024,progress);assert(result.Imported==0&&result.Unchanged==1&&result.Skipped==1);assert(!fs::exists(Target(cache2,second,icon2)));
+    auto missing=plan;missing.Registered.erase("secondmount");second=HelpySourceCache::Inspect(root2,missing);result=Import(pack,root2,cache2,second,1024*1024,progress);assert(result.Imported==0&&result.Unchanged==1&&result.Skipped==1);
     Reject([&]{Import(pack,root2,cache2,second,1,progress);});
     auto corrupted=Read(pack,MaxPack);corrupted.back()^=1;const auto bad=fixture/"Bad.rsmk-icons";Publish(bad,corrupted);Reject([&]{Import(bad,root2,cache2,second,1024*1024,progress);});
     const auto cleanCache=fixture/"nothing-published";Reject([&]{Import(bad,root2,cleanCache,second,1024*1024,progress);});assert(!fs::exists(Target(cleanCache,second,icon)));

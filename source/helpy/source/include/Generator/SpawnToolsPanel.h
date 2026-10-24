@@ -1,9 +1,11 @@
 #pragma once
+#include "Core/RuneSchemaProfile.h"
 #include "Generator/ToolRequest.h"
 #include "Runtime/HelpySettings.h"
 #include "Generator/ItemCloneRequest.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include <cstdio>
+#include <cmath>
 #include <cstdint>
 #include <chrono>
 #include "Generator/ItemGridPicker.h"
@@ -13,8 +15,10 @@
 #include "Core/HelpyKitFiles.h"
 #include "Core/CartDeliveryBatch.h"
 #include "Generator/PlayerBadges.h"
+#include "Generator/PartyMemberView.h"
 #include "Generator/CatalogProgressView.h"
 #include "Generator/ItemAuthoringPanel.h"
+#include "Generator/SpawnStudioPanel.h"
 #include <algorithm>
 #include <cctype>
 #include <random>
@@ -69,6 +73,9 @@ inline std::map<std::string,nlohmann::json> InspectedDefinitions;
 inline std::string DefinitionStatus;
 inline uint64_t CartSequence=(uint64_t{1}<<62),CartGeneration=0;
 inline uint64_t KitSequence=(uint64_t{1}<<61),KitPending=0;
+inline uint64_t CartCheckPending=0;
+inline std::chrono::steady_clock::time_point CartCheckNext{},CartCheckRequested{};
+inline void InvalidateCartChecks(){CartCheckPending=0;CartCheckNext={};ItemGridPicker::SharedCart.ClearValidation();}
 inline CartDeliveryBatch::Plan CartBatch;
 inline std::vector<CartDeliveryBatch::Recipient> CartRecipients;
 inline bool CartRecipientsChosen=false,CartNeedsReview=false,CartReviewAcknowledged=false;
@@ -84,7 +91,7 @@ inline void SyncCartWorld(){
         ItemGridPicker::CartStatus="World changed during delivery. Cart retained; check recipient inventories before retrying.";
         CartNeedsReview=true;CartReviewAcknowledged=false;
     }
-    ItemGridPicker::SharedCart.CancelDelivery();CartBatch=CartDeliveryBatch::Plan{};KitPending=0;CartGeneration=generation;
+    ItemGridPicker::SharedCart.CancelDelivery();CartBatch=CartDeliveryBatch::Plan{};KitPending=0;CartGeneration=generation;InvalidateCartChecks();
     CartRecipients.clear();CartRecipientsChosen=false;SelectedPlayer.clear();
     UiSnapshot.erase("Players");UiSnapshot.erase("PlayerRoles");UiRevision=0;
 }
@@ -93,7 +100,7 @@ inline void ReconcileCartRecipients(const nlohmann::json& snapshot){
     // player to a new player who happens to have the same name.
     std::erase_if(CartRecipients,[&](const auto& recipient){return !CurrentCartPlayer(snapshot,recipient.Path);});
     for(auto& recipient:CartRecipients){
-        const auto* row=CurrentCartPlayer(snapshot,recipient.Path);recipient.Name=ItemPresentation::Text(*row,"Name");
+        const auto* row=CurrentCartPlayer(snapshot,recipient.Path);recipient.Name=RuneSchemaProfile::Name(*row);
         if(recipient.Name.empty())recipient.Name=recipient.Path;
     }
     if(!CurrentCartPlayer(snapshot,SelectedPlayer))SelectedPlayer.clear();
@@ -130,7 +137,7 @@ inline void RefreshKitMetadata() {
 inline void RenderKitLibrary() {
     static std::vector<std::string> files;static std::string selected,error;
     static nlohmann::json preview;static char exportName[81]{};static bool asJsonc=true,replace=false;
-    const auto directory=HostServices::RuntimeDirectory()/"Helpy"/"kits";
+    const auto directory=RuneSchemaProfile::Ready?RuneSchemaProfile::Data("loadouts"):HostServices::RuntimeDirectory()/"Helpy"/"kits";
     const auto refresh=[&]{try{files=HelpyKitFiles::List(directory);error.clear();}catch(const std::exception& e){files.clear();error=e.what();}};
     ImGui::BeginDisabled(ItemGridPicker::SharedCart.Delivery()!=0);
     if(ImGui::SmallButton("Import kit")){selected.clear();preview=nullptr;refresh();ImGui::OpenPopup("Import RSMK kit");}
@@ -182,6 +189,22 @@ inline void PollCartDelivery() {
     SyncCartWorld();ReconcileCartRecipients(UiSnapshot);
     nlohmann::json receipt;const auto request=ItemGridPicker::SharedCart.Delivery();
     if(KitPending&&SpawnToolRequests::TakeCompleted(KitPending,receipt)){KitPending=0;if(receipt.contains("KitMetadata"))ItemGridPicker::SharedCart.RefreshMetadata(receipt["KitMetadata"]);}
+    if(CartCheckPending&&SpawnToolRequests::TakeCompleted(CartCheckPending,receipt)){
+        CartCheckPending=0;if(receipt.contains("CartValidation"))ItemGridPicker::SharedCart.ApplyValidation(receipt["CartValidation"]);
+    }
+    const auto checkNow=std::chrono::steady_clock::now();
+    if(CartCheckPending&&checkNow-CartCheckRequested>std::chrono::seconds(15)&&!SpawnToolRequests::IsWaiting())CartCheckPending=0;
+#if !defined(HELPY_PREVIEW)
+    if(!request&&!CartCheckPending&&!KitPending&&!SpawnToolRequests::IsWaiting()&&checkNow>=CartCheckNext){
+        CartCheckNext=checkNow+std::chrono::milliseconds(500);auto paths=nlohmann::json::array();
+        for(const auto& entry:ItemGridPicker::SharedCart.Entries())if(!ItemGridPicker::SharedCart.Validation(entry.Path)){
+            paths.push_back(entry.Path);if(paths.size()==4)break;
+        }
+        if(!paths.empty()){const auto id=++KitSequence;
+            if(SpawnToolRequests::TrySubmit({{"Action","ValidateCartItems"},{"_RequestId",id},{"Items",std::move(paths)},{"_Source","HelpyStandalone"}})){CartCheckPending=id;CartCheckRequested=checkNow;}
+        }
+    }
+#endif
     if(request){
         if(CartBatch.Pending()&&SpawnToolRequests::TakeCompleted(CartBatch.PendingId(),receipt))CartBatch.Accept(CartBatch.PendingId(),receipt);
         if(CartBatch.Pending()&&std::chrono::steady_clock::now()-CartRequestedAt>std::chrono::seconds(30)){
@@ -195,7 +218,7 @@ inline void PollCartDelivery() {
             ItemGridPicker::SharedCart.CompleteDelivery(request,CartBatch.Aggregate());
             CartNeedsReview=CartBatch.Stopped()&&!ItemGridPicker::SharedCart.Entries().empty();CartReviewAcknowledged=false;
             ItemGridPicker::CartStatus=CartNeedsReview?"Delivery stopped or unconfirmed. Remaining cart retained. Check Delivery results for the exact reason; inspect inventories before retrying.":
-                "Cart delivered to "+std::to_string(CartBatch.Total())+" player(s); every inventory delta confirmed.";
+                "Delivery finished for "+std::to_string(CartBatch.Total())+" player(s). Confirmed and rejected entries cleared; see Delivery results.";
         }else if(!CartBatch.Pending()&&!SpawnToolRequests::IsWaiting()&&SpawnToolRequests::IsAvailable()){
             if(!SubmitNextCartRecipient(++CartSequence)){ItemGridPicker::SharedCart.CancelDelivery();CartNeedsReview=true;CartReviewAcknowledged=false;ItemGridPicker::CartStatus="Next recipient was not submitted. Check completed recipients before retrying.";}
         }
@@ -212,11 +235,11 @@ inline bool RenderCartRecipient(const nlohmann::json& result) {
     if(ImGui::BeginCombo("##item-recipient",label.c_str())){
         if(players)for(const auto& row:*players){const auto path=ItemPresentation::Text(row,"Path");if(path.empty())continue;
             bool checked=std::any_of(selected.begin(),selected.end(),[&](const auto& item){return item.Path==path;});
-            ImGui::PushID(path.c_str());if(ImGui::Checkbox(ItemPresentation::Text(row,"Name").c_str(),&checked)){
+            ImGui::PushID(path.c_str());if(ImGui::Selectable(RuneSchemaProfile::Name(row).c_str(),checked,ImGuiSelectableFlags_DontClosePopups)){checked=!checked;
                 if(!CartRecipientsChosen){CartRecipients=selected;CartRecipientsChosen=true;}
-                if(checked){if(CartRecipients.size()<CartDeliveryBatch::Plan::MaxPlayers){CartRecipients.push_back({path,ItemPresentation::Text(row,"Name")});SelectedPlayer=path;changed=true;}}
+                if(checked){if(CartRecipients.size()<CartDeliveryBatch::Plan::MaxPlayers){CartRecipients.push_back({path,RuneSchemaProfile::Name(row)});SelectedPlayer=path;changed=true;}}
                 else changed=RemoveCartRecipient(path)||changed;
-            }PlayerBadges::Inline(row);ImGui::PopID();}
+            }ImGui::PopID();}
         if(ImGui::Selectable("Refresh players"))SpawnToolRequests::Submit({{"Action","QuickPlayers"}});ImGui::EndCombo();
     }
 #if defined(HELPY_PREVIEW)
@@ -224,7 +247,7 @@ inline bool RenderCartRecipient(const nlohmann::json& result) {
 #endif
     if(!editableBefore.empty()){
         ImGui::SameLine();if(ImGui::Button("Clear##recipients"))changed=ClearCartRecipients()||changed;
-        if(ImGui::IsItemHovered())ImGui::SetTooltip("Clear recipients (keep cart items)");
+        if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("Clear recipients (keep cart items)");
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::RecipientsClear=HelpyPreviewHooks::LastRect();
 #endif
@@ -239,23 +262,45 @@ inline bool RenderCartRecipient(const nlohmann::json& result) {
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::RecipientRemove[player.Path]=HelpyPreviewHooks::LastRect();
 #endif
-        if(ImGui::IsItemHovered())ImGui::SetTooltip("Remove recipient");
+        if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("Remove recipient");
         ImGui::SameLine();ImGui::TextWrapped("%s",player.Name.c_str());ImGui::PopID();
     }ImGui::EndChild();}
     if(!remove.empty())changed=RemoveCartRecipient(remove)||changed;
     if(EffectiveCartRecipients().size()>1)ImGui::TextDisabled("Same quantities for each player.");
     ImGui::EndDisabled();return changed;
 }
+inline bool DrawCartCheck(const ImVec2& bottomLeft,const std::string& state,const std::string& message){
+#if defined(HELPY_PREVIEW)
+    if(state=="Confirmed")++HelpyPreviewHooks::CartVerifiedBadges;else if(state=="Rejected")++HelpyPreviewHooks::CartRejectedBadges;else ++HelpyPreviewHooks::CartUncertainBadges;
+#endif
+    const auto& theme=HelpyImGuiTheme::Current;const float r=theme.Y(8);const ImVec2 c{bottomLeft.x+theme.X(12),bottomLeft.y-theme.Y(12)};
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::DeliveryBadge={c.x-r,c.y-r,c.x+r,c.y+r};HelpyPreviewHooks::DeliveryBadgeBottomLeft=bottomLeft;
+#endif
+    auto* draw=ImGui::GetWindowDrawList();const auto color=ImGui::GetColorU32(state=="Confirmed"?theme.success:state=="Rejected"?theme.error:theme.warning);
+    draw->AddCircleFilled(c,r,ImGui::GetColorU32(theme.panelAlt));
+    if(state=="Confirmed"){
+        draw->AddLine({c.x-r*.55f,c.y},{c.x-r*.12f,c.y+r*.45f},color,theme.X(2));
+        draw->AddLine({c.x-r*.12f,c.y+r*.45f},{c.x+r*.6f,c.y-r*.5f},color,theme.X(2));
+    }else if(state=="Rejected"){
+        draw->AddLine({c.x-r*.45f,c.y-r*.45f},{c.x+r*.45f,c.y+r*.45f},color,theme.X(2));
+        draw->AddLine({c.x-r*.45f,c.y+r*.45f},{c.x+r*.45f,c.y-r*.45f},color,theme.X(2));
+    }else{draw->AddLine({c.x,c.y-r*.5f},{c.x,c.y+r*.1f},color,theme.X(2));draw->AddCircleFilled({c.x,c.y+r*.5f},theme.X(1.5f),color);}
+    const bool hover=ImGui::IsWindowHovered()&&ImGui::IsMouseHoveringRect({c.x-r,c.y-r},{c.x+r,c.y+r});
+    if(hover)HelpyImGuiTheme::TooltipAt({c.x-r,c.y-r},{c.x+r,c.y+r},message.c_str());return hover;
+}
 inline void RenderCartDock(ImVec2 size,const std::function<void()>& recipient) {
+    static bool equipOnReceipt=false;
     const auto& theme=HelpyImGuiTheme::Current;
     auto& cart=ItemGridPicker::SharedCart;
     const bool empty=cart.Entries().empty(),delivering=cart.Delivery()!=0;
     const auto deliver=[&](int mode){
-        const auto recipients=EffectiveCartRecipients();if(recipients.empty()||SpawnToolRequests::IsWaiting()||delivering||empty||CartNeedsReview)return;
+        const auto recipients=EffectiveCartRecipients();if(recipients.empty()||!SpawnToolRequests::IsAvailable()||delivering||empty||CartNeedsReview)return;
         auto items=cart.Payload(mode);if(items.empty())return;
         const auto request=++CartSequence;
-        try{CartBatch.Begin(items,recipients);if(!cart.BeginDelivery(request,mode))return;
-            if(!SubmitNextCartRecipient(request)){cart.CancelDelivery();ItemGridPicker::CartStatus="Delivery was not submitted; cart retained.";}
+        try{CartBatch.Begin(items,recipients,equipOnReceipt);if(!cart.BeginDelivery(request,mode))return;
+            if(SpawnToolRequests::IsWaiting())ItemGridPicker::CartStatus="Delivery queued. Waiting for the current operation; no second click is needed.";
+            else if(!SubmitNextCartRecipient(request)){cart.CancelDelivery();ItemGridPicker::CartStatus="Delivery was not submitted; cart retained.";}
         }catch(const std::exception& error){cart.CancelDelivery();ItemGridPicker::CartStatus=error.what();}
     };
     ImGui::PushStyleColor(ImGuiCol_ChildBg,theme.panelAlt);
@@ -282,7 +327,7 @@ inline void RenderCartDock(ImVec2 size,const std::function<void()>& recipient) {
             if(ImGui::BeginMenu("Saved loadouts")){RenderKitLibrary();ImGui::EndMenu();}
             if(ImGui::MenuItem("Clear cart",nullptr,false,!empty&&!delivering))ItemGridPicker::ClearSharedCart();
             ImGui::Separator();
-            const bool ready=!EffectiveCartRecipients().empty()&&!SpawnToolRequests::IsWaiting()&&!delivering&&!empty&&!CartNeedsReview;
+            const bool ready=!EffectiveCartRecipients().empty()&&SpawnToolRequests::IsAvailable()&&!delivering&&!empty&&!CartNeedsReview;
             if(ImGui::MenuItem("Give one of each",nullptr,false,ready))deliver(1);
             if(ImGui::MenuItem("Give half stacks",nullptr,false,ready))deliver(2);
             if(ImGui::MenuItem("Give full stacks",nullptr,false,ready))deliver(3);
@@ -292,36 +337,66 @@ inline void RenderCartDock(ImVec2 size,const std::function<void()>& recipient) {
         std::string removePath;
         const auto recipientCount=EffectiveCartRecipients().size();
         const float recipientHeight=recipientCount?ImGui::GetTextLineHeightWithSpacing()*float(std::min<size_t>(recipientCount,3)+(recipientCount>1?1:0)):0.0f;
-        const float footer=theme.Y((ItemGridPicker::CartStatus.empty()?120.0f:164.0f)+(CartNeedsReview?90.0f:0.0f))+recipientHeight;
+        const float footer=theme.Y((ItemGridPicker::CartStatus.empty()?146.0f:190.0f)+(CartNeedsReview?90.0f:0.0f))+recipientHeight;
         const float listHeight=std::max(theme.Y(12.0f),ImGui::GetContentRegionAvail().y-footer);
         if(ImGui::BeginChild("##cart-items",ImVec2(0,listHeight),false)){
-            if(empty){ImGui::Spacing();ImGui::TextWrapped("Drag items here");ImGui::TextDisabled("or right-click an item.");}
+            if(empty&&cart.Outcomes().empty()){ImGui::Spacing();ImGui::TextWrapped("Drag items here");ImGui::TextDisabled("or right-click an item.");}
             const auto entries=cart.Entries();
+            const float gap=ImGui::GetStyle().ItemSpacing.x;
+            const float available=std::max(1.f,ImGui::GetContentRegionAvail().x);
+            const int columns=ItemBayLayout::Columns(available,std::max(theme.X(130),theme.X(theme.gridMinCardWidth)),gap,ItemBayLayout::DefaultColumns);
+            const float cardWidth=std::max(1.f,(available-gap*(columns-1))/columns);
+            const float cardHeight=theme.Y(std::max(96.f,theme.gridCardHeight));
+            const float buttonWidth=std::max(1.f,std::min(theme.X(22),(cardWidth-gap*2)/3));
+            const bool wrapControls=cardWidth<theme.X(108);
+            const float controlsHeight=ImGui::GetFrameHeight()*(wrapControls?2.f:1.f)+ImGui::GetStyle().ItemSpacing.y*(wrapControls?2.f:1.f);
+            const float rowHeight=cardHeight+controlsHeight+ImGui::GetStyle().ItemSpacing.y;
             ImGui::BeginDisabled(delivering);
-            for(const auto& entry:entries){
-                const auto name=entry.Row.value("Name",entry.Path),icon=entry.Row.value("Icon",std::string{});
-                ImGui::PushID(entry.Path.c_str());
-                const auto cardMin=ImGui::GetCursorScreenPos();const ImVec2 cardSize(ImGui::GetContentRegionAvail().x,theme.Y(58));
-                ImGui::InvisibleButton("##cart-slot",cardSize);
-                ItemGridPicker::DrawPlacard(entry.Row,cardMin,ImVec2(cardMin.x+cardSize.x,cardMin.y+cardSize.y),false,ImGui::IsItemHovered());
+            ImGuiListClipper cartClip;cartClip.Begin(static_cast<int>((entries.size()+columns-1)/columns),rowHeight);
+            while(cartClip.Step())for(int line=cartClip.DisplayStart;line<cartClip.DisplayEnd;++line)for(int column=0;column<columns;++column){
+                const auto index=static_cast<size_t>(line)*columns+column;if(index>=entries.size())break;
+                const auto& entry=entries[index];const auto name=ItemPresentation::Name(entry.Row);
+                if(column)ImGui::SameLine();ImGui::BeginGroup();ImGui::PushID(entry.Path.c_str());
+                const auto cardMin=ImGui::GetCursorScreenPos();const ImVec2 cardMax(cardMin.x+cardWidth,cardMin.y+cardHeight);
+                ImGui::InvisibleButton("##cart-slot",{cardWidth,cardHeight});
 #if defined(HELPY_PREVIEW)
                 HelpyPreviewHooks::CartRects[entry.Path]=HelpyPreviewHooks::LastRect();
 #endif
-                if(ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)){
-                    ImGui::SetDragDropPayload("RS_CART_PATH",entry.Path.c_str(),entry.Path.size()+1);ImGui::TextUnformatted(name.c_str());ImGui::EndDragDropSource();
+                ItemGridPicker::DrawPlacard(entry.Row,cardMin,cardMax,false,ImGui::IsItemHovered(),theme.X(20));
+                const auto* check=cart.Validation(entry.Path);
+                const bool checkHovered=check&&DrawCartCheck({cardMin.x,cardMax.y},check->Valid?"Confirmed":"Rejected",check->Message);
+                if(ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID|ImGuiDragDropFlags_SourceNoPreviewTooltip)){
+                    ImGui::SetDragDropPayload("RS_CART_PATH",entry.Path.c_str(),entry.Path.size()+1);ItemGridPicker::HeldItem(entry.Row,"Cart item");ImGui::EndDragDropSource();
                 }
                 if(ImGui::BeginPopupContextItem("##cart-actions")){if(ImGui::MenuItem("Remove from cart"))removePath=entry.Path;ImGui::EndPopup();}
-                if(HelpyImGuiTheme::TooltipReady("cart:"+entry.Path,ImGui::IsItemHovered()))ItemGridPicker::VerboseTooltip(entry.Row,name,entry.Path,false,true);
-                int quantity=entry.Quantity;ImGui::SetNextItemWidth(std::max(theme.X(75),ImGui::GetContentRegionAvail().x-theme.X(31)));
-                if(ImGui::InputInt("##quantity",&quantity,1,10))cart.SetQuantity(entry.Path,quantity);
-                ImGui::SameLine();if(ImGui::SmallButton("X"))removePath=entry.Path;
-                ImGui::Separator();ImGui::PopID();
+                if(!checkHovered&&HelpyImGuiTheme::TooltipReady("cart:"+entry.Path,ImGui::IsItemHovered()))ItemGridPicker::VerboseTooltip(entry.Row,name,entry.Path,false,true);
+                int quantity=entry.Quantity;ImGui::SetNextItemWidth(wrapControls?cardWidth:std::max(1.f,cardWidth-buttonWidth*3-gap*3));
+                if(ImGui::InputInt("##quantity",&quantity,0,0))cart.SetQuantity(entry.Path,quantity);
+                if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("Quantity per selected player");
+                if(!wrapControls)ImGui::SameLine();
+                if(ImGui::Button("-",{buttonWidth,0}))cart.SetQuantity(entry.Path,quantity-1);
+                ImGui::SameLine();if(ImGui::Button("+",{buttonWidth,0}))cart.SetQuantity(entry.Path,quantity+1);
+                ImGui::SameLine();if(ImGui::Button("X",{buttonWidth,0}))removePath=entry.Path;
+                if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("Remove from cart");
+                ImGui::PopID();ImGui::EndGroup();
             }
             ImGui::EndDisabled();
+            if(!cart.Outcomes().empty()){
+                ImGui::SeparatorText("Last delivery");
+                size_t outcomeIndex=0;for(const auto& outcome:cart.Outcomes()){
+                    if(outcomeIndex++%columns)ImGui::SameLine();ImGui::BeginGroup();
+                    const auto start=ImGui::GetCursorScreenPos();
+                    ImGui::Dummy({cardWidth,cardHeight});ItemGridPicker::DrawPlacard(outcome.Item.Row,start,{start.x+cardWidth,start.y+cardHeight},false,false,theme.X(20));
+                    DrawCartCheck({start.x,start.y+cardHeight},outcome.State,outcome.Message);
+                    ImGui::EndGroup();
+                }
+            }
         }ImGui::EndChild();
         if(!removePath.empty())ItemGridPicker::RemoveFromCart(removePath);
         ImGui::Separator();ImGui::TextDisabled("Give to");recipient();
-        ImGui::BeginDisabled(EffectiveCartRecipients().empty()||SpawnToolRequests::IsWaiting()||delivering||empty||CartNeedsReview);
+        ImGui::BeginDisabled(delivering);ImGui::Checkbox("Equip on receipt",&equipOnReceipt);ImGui::EndDisabled();
+        if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("Opt-in native equipment transfer. One new equipment instance per item type; empty slots only. Non-equipment stays in inventory. Equip errors never repeat delivery.");
+        ImGui::BeginDisabled(EffectiveCartRecipients().empty()||!SpawnToolRequests::IsAvailable()||delivering||empty||CartNeedsReview);
         ImGui::PushStyleColor(ImGuiCol_Button,theme.accent);ImGui::PushStyleColor(ImGuiCol_ButtonHovered,theme.accentHover);ImGui::PushStyleColor(ImGuiCol_ButtonActive,theme.accentActive);ImGui::PushStyleColor(ImGuiCol_Text,theme.onAccent);
         if(HelpyImGuiTheme::SoftButton(delivering?"Giving items...":"Give items",ImVec2(-1,0)))deliver(0);
 #if defined(HELPY_PREVIEW)
@@ -329,7 +404,14 @@ inline void RenderCartDock(ImVec2 size,const std::function<void()>& recipient) {
 #endif
         ImGui::PopStyleColor(4);ImGui::EndDisabled();
         if(!ItemGridPicker::CartStatus.empty())ImGui::TextWrapped("%s",ItemGridPicker::CartStatus.c_str());
-        if(!CartBatch.Receipts().empty()&&ImGui::TreeNode("Delivery results")){for(const auto& result:CartBatch.Receipts())ImGui::TextWrapped("%s: %s",result.value("Name",std::string{}).c_str(),result["Receipt"].value("Status",std::string("Native confirmation received")).c_str());ImGui::TreePop();}
+        if(!CartBatch.Receipts().empty()&&ImGui::TreeNode("Delivery results")){
+            for(const auto& result:CartBatch.Receipts()){
+                ImGui::TextWrapped("%s: %s",result.value("Name",std::string{}).c_str(),result["Receipt"].value("Status",std::string("Native confirmation received")).c_str());
+                const auto rows=result["Receipt"].find("GrantResults");if(rows!=result["Receipt"].end()&&rows->is_array())for(const auto& row:*rows)if(row.is_object()){
+                    ImGui::TextWrapped("%s: %s — %s",row.value("Item",std::string{}).c_str(),row.value("State",std::string{}).c_str(),row.value("Message",std::string{}).c_str());
+                    if(row.contains("Equip")&&row["Equip"].is_object())ImGui::TextWrapped("Equip: %s — %s",row["Equip"].value("State",std::string{}).c_str(),row["Equip"].value("Message",std::string{}).c_str());}
+            }ImGui::TreePop();
+        }
         if(CartNeedsReview){ImGui::Checkbox("I checked affected inventories",&CartReviewAcknowledged);ImGui::BeginDisabled(!CartReviewAcknowledged);if(ImGui::SmallButton("Allow a new delivery")){CartNeedsReview=false;CartReviewAcknowledged=false;ItemGridPicker::CartStatus="Cart unlocked after inventory review. Quantities are per selected player.";}ImGui::EndDisabled();}
     }ImGui::EndChild();ImGui::PopStyleColor();
 }
@@ -364,11 +446,12 @@ inline void Render(View view) {
     auto& player=SelectedPlayer;
     static char itemFilter[257]{},dropItemFilter[257]{},buildingFilter[257]{},selectedBuilding[1024]{};
     static std::string buildingQuery;static MatchCache buildingMatches;static ActorUiState actors[2];
-    static int count=1;static float distance=5,scale=1,yaw=0,height=0,radius=500,gridX=0,gridY=0,gridSize=100;static bool buildingConfirmed=false;
+    static int count=1;static float distance=5,scale=1,yaw=0,height=0,radius=500,gridX=0,gridY=0,gridSize=100;static bool buildingConfirmed=false,buildingPermanent=true;
     static bool grid=false,overrideGhost=false,ghost=false,overrideDrops=false;
     static int dropMin=1,dropMax=1,npcDuration=HelpyNodes::DefaultDuration;static float chance=100;
     static char item[1024]{};
     static int buildingTime=0;static bool rebuildCatalogs=false,allowDeconstruction=false;
+    static bool buildingAtCoordinates=false;static double buildingX=0,buildingY=0;
     static ItemGridPicker::State itemPickerState{};
     static ItemGridPicker::State cloneItemPickerState{};
     static ItemGridPicker::State dropItemPickerState{};
@@ -410,6 +493,13 @@ inline void Render(View view) {
         }
     };
     if(!itemPage)recipient();
+    if(view==View::Ai||view==View::Resources){SpawnStudioPanel::Render(result,resultRevision,view==View::Resources,ForcedActorMode<0?1:ForcedActorMode,player,[](const nlohmann::json& row){
+        if(DefinitionPending)return;const auto id=++DefinitionSequence;
+        if(SpawnToolRequests::TrySubmit({{"Action","InspectSpawnDefinition"},{"_Source","HelpyStandalone"},{"_RequestId",id},{"Class",row.at("Class")},{"Key",row.at("Key")},{"ExpectedType",row.at("Type")}}))DefinitionPending=id;
+    });
+    if(!DefinitionStatus.empty())ImGui::TextWrapped("%s",DefinitionStatus.c_str());
+        if(!ui.advancedMode||!ImGui::CollapsingHeader("Legacy advanced spawn authoring"))return;
+    }
     const auto invalidateSharedPlacement=[&]{actors[0].Confirmed=false;actors[1].Confirmed=false;buildingConfirmed=false;};
     const auto renderActorSection=[&](int kind,const char* title,ImGuiTreeNodeFlags flags=0) {
         if(!HelpyImGuiTheme::SectionHeader(title,kind==0?HelpyImGuiTheme::Icon::Ai:HelpyImGuiTheme::Icon::Resource,flags))return;
@@ -461,14 +551,14 @@ inline void Render(View view) {
             const auto& definitionRows=result["Definitions"];const auto& theme=HelpyImGuiTheme::Current;if(state.ResultPaneHeightLogical<0.0f)state.ResultPaneHeightLogical=theme.aiResultHeight;
             const float availableLogical=ImGui::GetContentRegionAvail().y/std::max(0.01f,theme.Scale()*theme.density);const float maxPane=std::max(180.0f,availableLogical-theme.Y(120.0f)/std::max(0.01f,theme.Scale()*theme.density));state.ResultPaneHeightLogical=std::clamp(state.ResultPaneHeightLogical,180.0f,std::max(180.0f,maxPane));
             HelpyImGuiTheme::BeginScroll("AIResults",ImVec2(0,theme.Y(state.ResultPaneHeightLogical)),true);const int total=static_cast<int>(definitionMatches.Rows.size());
-            const auto tooltip=[&](const nlohmann::json& row,const std::string& title,const std::string& path){ImGui::BeginTooltip();ImGui::TextUnformatted(title.c_str());if(!path.empty()){ImGui::Separator();ImGui::TextUnformatted(path.c_str());}if(theme.verboseTooltips){const auto field=[&](const char* label,const char* key){const auto v=row.value(key,std::string{});if(!v.empty())ImGui::Text("%s: %s",label,v.c_str());};field("Key","Key");field("Type","Type");field("Class","Class");field("Mod ID","ModId");field("Resource family","ResourceFamily");if(row.contains("Available"))ImGui::Text("Available: %s",row.value("Available",true)?"true":"false");const auto reason=row.value("Reason",std::string{});if(!reason.empty())ImGui::TextWrapped("Reason: %s",reason.c_str());}ImGui::EndTooltip();};
+            const auto tooltip=[&](const nlohmann::json& row,const std::string& title,const std::string& path){HelpyImGuiTheme::BeginDetailsTooltip();PS::HelpyImGuiTheme::DetailsTextUnformatted(title.c_str());if(!path.empty()){ImGui::Separator();PS::HelpyImGuiTheme::DetailsTextUnformatted(path.c_str());}if(theme.verboseTooltips){const auto field=[&](const char* label,const char* key){const auto v=row.value(key,std::string{});if(!v.empty())PS::HelpyImGuiTheme::DetailsText("%s: %s",label,v.c_str());};field("Key","Key");field("Type","Type");field("Class","Class");field("Mod ID","ModId");field("Resource family","ResourceFamily");if(row.contains("Available"))PS::HelpyImGuiTheme::DetailsText("Available: %s",row.value("Available",true)?"true":"false");const auto reason=row.value("Reason",std::string{});if(!reason.empty())PS::HelpyImGuiTheme::DetailsText("Reason: %s",reason.c_str());}HelpyImGuiTheme::EndDetailsTooltip();};
             if(!state.GridView){const float iconSize=theme.Y(theme.listIconSize),itemHeight=std::max(ImGui::GetTextLineHeight()+theme.Y(4.0f),iconSize),rowHeight=itemHeight+ImGui::GetStyle().ItemSpacing.y;ImGuiListClipper clipper;clipper.Begin(total,rowHeight);while(clipper.Step()){if(clipper.DisplayEnd>=total-4)LazyCatalog::More(1);for(int visible=clipper.DisplayStart;visible<clipper.DisplayEnd;++visible){const auto index=definitionMatches.Rows[static_cast<size_t>(visible)];if(index>=definitionRows.size())continue;const auto& row=definitionRows[index];const auto key=row.value("Key",std::string{}),type=row.value("Type",std::string("AI")),title=row.value("Name",key),path=row.value("Class",std::string{});const auto label="["+type+"] "+title;const float rowWidth=ImGui::GetContentRegionAvail().x;ImGui::PushID(visible);ImGui::PushID(key.c_str());const auto pos=ImGui::GetCursorScreenPos();if(ImGui::Selectable("##airow",key==definition,0,ImVec2(rowWidth,itemHeight))){definition=key;confirmed=false;}const auto c=ImVec2(pos.x+theme.X(8.0f)+iconSize*.5f,pos.y+itemHeight*.5f);HelpyImGuiTheme::DrawIcon(HelpyImGuiTheme::Icon::Ai,c,iconSize*.72f,key==definition?theme.accentHover:theme.icon);ImGui::GetWindowDrawList()->AddText(ImVec2(pos.x+theme.X(16.0f)+iconSize,pos.y+(itemHeight-ImGui::GetTextLineHeight())*.5f),ImGui::GetColorU32(theme.text),label.c_str());if(HelpyImGuiTheme::TooltipReady(std::string("ai:")+key+":"+std::to_string(visible),ImGui::IsItemHovered()))tooltip(row,title,path);ImGui::PopID();ImGui::PopID();}}}
             else {const float spacing=ImGui::GetStyle().ItemSpacing.x,minCard=theme.X(theme.gridMinCardWidth),avail=std::max(minCard,ImGui::GetContentRegionAvail().x-theme.X(2.0f));const int cols=std::max(1,static_cast<int>((avail+spacing)/(minCard+spacing)));const float cardW=(avail-spacing*(cols-1))/cols,cardH=theme.Y(theme.gridCardHeight),icon=theme.Y(theme.gridIconSize),gridRowH=cardH+ImGui::GetStyle().ItemSpacing.y;const int rows=(total+cols-1)/cols;ImGuiListClipper clipper;clipper.Begin(rows,gridRowH);while(clipper.Step()){if(clipper.DisplayEnd*cols>=total-4)LazyCatalog::More(1);for(int gr=clipper.DisplayStart;gr<clipper.DisplayEnd;++gr){for(int col=0;col<cols;++col){const int visible=gr*cols+col;if(visible>=total)break;const auto index=definitionMatches.Rows[static_cast<size_t>(visible)];if(index>=definitionRows.size())continue;const auto& row=definitionRows[index];const auto key=row.value("Key",std::string{}),title=row.value("Name",key),path=row.value("Class",std::string{});ImGui::PushID(visible);ImGui::PushID(key.c_str());const auto a=ImGui::GetCursorScreenPos();const bool clicked=ImGui::InvisibleButton("##aicard",ImVec2(cardW,cardH));const auto b=ImVec2(a.x+cardW,a.y+cardH);auto* draw=ImGui::GetWindowDrawList();draw->AddRectFilled(a,b,ImGui::GetColorU32(key==definition?theme.selection:theme.panelAlt),theme.X(theme.childRounding));draw->AddRect(a,b,ImGui::GetColorU32(key==definition?theme.accentHover:theme.border),theme.X(theme.childRounding),0,key==definition?theme.X(2.0f):theme.X(1.0f));HelpyImGuiTheme::DrawIcon(HelpyImGuiTheme::Icon::Ai,ImVec2((a.x+b.x)*.5f,a.y+theme.Y(12.0f)+icon*.5f),icon,key==definition?theme.accentHover:theme.icon);const auto text=title.size()>40?title.substr(0,37)+"...":title;const auto ts=ImGui::CalcTextSize(text.c_str());draw->AddText(ImVec2(a.x+(cardW-ts.x)*.5f,b.y-theme.Y(29.0f)),ImGui::GetColorU32(theme.text),text.c_str());if(clicked){definition=key;confirmed=false;}if(HelpyImGuiTheme::TooltipReady(std::string("ai:")+key+":"+std::to_string(visible),ImGui::IsItemHovered()))tooltip(row,title,path);ImGui::PopID();ImGui::PopID();if(col<cols-1&&visible+1<total)ImGui::SameLine();}}}}
             HelpyImGuiTheme::EndScroll(theme);ImGui::PushID("ai-results-splitter");const float sh=std::max(theme.Y(theme.splitterWidth),theme.Y(5.0f));ImGui::InvisibleButton("##split",ImVec2(ImGui::GetContentRegionAvail().x,sh));const bool active=ImGui::IsItemActive(),hover=ImGui::IsItemHovered();if(active||hover)ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);if(active&&ImGui::GetIO().MouseDelta.y!=0.0f){state.ResultPaneHeightLogical+=ImGui::GetIO().MouseDelta.y/std::max(0.01f,theme.Scale()*theme.density);state.ResultPaneHeightLogical=std::clamp(state.ResultPaneHeightLogical,180.0f,std::max(180.0f,maxPane));HelpyImGuiTheme::Current.aiResultHeight=state.ResultPaneHeightLogical;}static bool aiPaneDirty=false;if(active)aiPaneDirty=true;if(aiPaneDirty&&!ImGui::IsMouseDown(ImGuiMouseButton_Left)){HelpyImGuiTheme::SaveCurrent();aiPaneDirty=false;}ImGui::PopID();
             if(definitionMatches.Rows.empty()){const auto& lazy=LazyCatalog::For(1);if(lazy.Pending)ImGui::TextDisabled("Loading runtime definitions...");else if(!lazy.LastError.empty())ImGui::TextWrapped("Definition query failed: %s",lazy.LastError.c_str());else ImGui::TextDisabled("No loaded AI matches this search.");}
             if(!definition.empty())ImGui::TextDisabled("Selected: %s",state.SelectedLabel.c_str());
         } else {
-            if(ImGui::BeginCombo("Loaded spawn",state.SelectedLabel.c_str())) {if(result.contains("Definitions")&&result["Definitions"].is_array()){const auto& definitionRows=result["Definitions"];ImGuiListClipper clipper;clipper.Begin(static_cast<int>(definitionMatches.Rows.size()));while(clipper.Step()){if(clipper.DisplayEnd>=static_cast<int>(definitionMatches.Rows.size())-4)LazyCatalog::More(kind==0?1:2);for(int visible=clipper.DisplayStart;visible<clipper.DisplayEnd;++visible){const auto index=definitionMatches.Rows[static_cast<size_t>(visible)];if(index>=definitionRows.size())continue;const auto& row=definitionRows[index];const auto key=row.value("Key",std::string{}),type=row.value("Type",std::string("AI")),title=row.value("Name",key),path=row.value("Class",std::string{});const auto display="["+type+"] "+title+" — "+key;ImGui::PushID(key.c_str());if(ImGui::Selectable(display.c_str(),key==definition)){definition=key;confirmed=false;}if(HelpyImGuiTheme::TooltipReady(std::string("spawn:")+key,ImGui::IsItemHovered()))ImGui::SetTooltip("%s",path.c_str());ImGui::PopID();}}}if(definitionMatches.Rows.empty()){const auto& lazy=LazyCatalog::For(kind==0?1:2);if(lazy.Pending)ImGui::TextDisabled("Loading runtime definitions...");else if(!lazy.LastError.empty())ImGui::TextWrapped("Definition query failed: %s",lazy.LastError.c_str());else ImGui::TextDisabled("No loaded AI or resource matches this search.");}ImGui::EndCombo();}
+            if(ImGui::BeginCombo("Loaded spawn",state.SelectedLabel.c_str())) {if(result.contains("Definitions")&&result["Definitions"].is_array()){const auto& definitionRows=result["Definitions"];ImGuiListClipper clipper;clipper.Begin(static_cast<int>(definitionMatches.Rows.size()));while(clipper.Step()){if(clipper.DisplayEnd>=static_cast<int>(definitionMatches.Rows.size())-4)LazyCatalog::More(kind==0?1:2);for(int visible=clipper.DisplayStart;visible<clipper.DisplayEnd;++visible){const auto index=definitionMatches.Rows[static_cast<size_t>(visible)];if(index>=definitionRows.size())continue;const auto& row=definitionRows[index];const auto key=row.value("Key",std::string{}),type=row.value("Type",std::string("AI")),title=row.value("Name",key),path=row.value("Class",std::string{});const auto display="["+type+"] "+title+" — "+key;ImGui::PushID(key.c_str());if(ImGui::Selectable(display.c_str(),key==definition)){definition=key;confirmed=false;}if(HelpyImGuiTheme::TooltipReady(std::string("spawn:")+key,ImGui::IsItemHovered()))PS::HelpyImGuiTheme::Tooltip("%s",path.c_str());ImGui::PopID();}}}if(definitionMatches.Rows.empty()){const auto& lazy=LazyCatalog::For(kind==0?1:2);if(lazy.Pending)ImGui::TextDisabled("Loading runtime definitions...");else if(!lazy.LastError.empty())ImGui::TextWrapped("Definition query failed: %s",lazy.LastError.c_str());else ImGui::TextDisabled("No loaded AI or resource matches this search.");}ImGui::EndCombo();}
         }
         if(ImGui::InputText("Spawn name override (optional)",name,sizeof(name)))confirmed=false;
         if(kind==0&&!npc && ImGui::Checkbox("Use name for boss title too",&boss))confirmed=false;
@@ -542,7 +632,7 @@ inline void Render(View view) {
                 const auto& title=i<dropTitles.size()?dropTitles[i]:path;
                 ImGui::PushID(static_cast<int>(i));ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);ImGui::TextUnformatted(title.c_str());
-                if(HelpyImGuiTheme::TooltipReady(std::string("drop:")+path+":"+std::to_string(i),ImGui::IsItemHovered()))ImGui::SetTooltip("%s",path.c_str());
+                if(HelpyImGuiTheme::TooltipReady(std::string("drop:")+path+":"+std::to_string(i),ImGui::IsItemHovered()))PS::HelpyImGuiTheme::Tooltip("%s",path.c_str());
                 ImGui::TableSetColumnIndex(1);ImGui::Text("%d-%d",drops[i].value("Min",1),drops[i].value("Max",1));
                 ImGui::TableSetColumnIndex(2);ImGui::Text("%.1f%%",drops[i].value("ChancePercent",100.0f));
                 ImGui::TableSetColumnIndex(3);
@@ -582,12 +672,16 @@ inline void Render(View view) {
     if(view==View::All||view==View::Items||view==View::ItemLab) {
         if(view==View::All||view==View::Items) {
             const float width=ImGui::GetContentRegionAvail().x;
-            const bool sideBySide=width>=ui.X(790.0f);
+            // One placard column plus the narrow cart fits small desktop
+            // windows; stacking both fixed-height panes hides delivery.
+            const bool sideBySide=width>=ui.X(480.0f);
             const float height=std::max(ui.Y(350.0f),ImGui::GetContentRegionAvail().y-ImGui::GetStyle().ItemSpacing.y);
             auto& cartWidthLogical=HelpyImGuiTheme::Current.itemCartWidth;
             const float cartWidth=std::clamp(ui.X(cartWidthLogical),ui.X(210),std::max(ui.X(210),width*.5f)),gap=ui.Y(8);
             const float cartHeight=ui.Y(210.0f);
-            const float browserHeight=sideBySide?height:std::max(ui.Y(140.0f),height-cartHeight-ImGui::GetStyle().ItemSpacing.y);
+            // On short/narrow windows, let the workspace scroll instead of
+            // shrinking the browser below one usable placard row.
+            const float browserHeight=sideBySide?height:std::max(ui.Y(320.0f),height-cartHeight-ImGui::GetStyle().ItemSpacing.y);
             ItemGridPicker::Result inventoryPicker;
             if(ImGui::BeginChild("##item-browser-pane",ImVec2(sideBySide?width-cartWidth-gap:0,browserHeight),false)){
                 inventoryPicker=ItemGridPicker::RenderShared(result,resultRevision,true);
@@ -603,11 +697,11 @@ inline void Render(View view) {
         SameLineIfRoom(230.0f);if(HelpyImGuiTheme::SoftButton("Rebuild building safety catalog"))SpawnToolRequests::Submit({{"Action","RebuildCatalogs"}});
         SearchOnEnter("Search loaded buildings","name or BuildingPieceData path",buildingFilter,sizeof(buildingFilter),buildingQuery);
         CacheBuildings(result,resultRevision,buildingQuery,buildingMatches);
-        static uint64_t buildingMetaRevision=0,buildingCountsRevision=0;static std::string buildingMetaPath,buildingLabel,selectedBuildingReason;static bool selectedBuildingSafe=false;static size_t verifiedBuildings=0,blockedBuildings=0;
+        static uint64_t buildingMetaRevision=0,buildingCountsRevision=0;static std::string buildingMetaPath,buildingLabel,selectedBuildingReason,selectedTemporaryReason;static bool selectedBuildingSafe=false,selectedTemporarySafe=false;static size_t verifiedBuildings=0,blockedBuildings=0;
         if(buildingCountsRevision!=resultRevision) {buildingCountsRevision=resultRevision;verifiedBuildings=blockedBuildings=0;if(result.contains("Buildings"))for(const auto& row:result["Buildings"])row.value("Safe",false)?++verifiedBuildings:++blockedBuildings;}
         if(buildingMetaRevision!=resultRevision||buildingMetaPath!=selectedBuilding) {
-            buildingMetaRevision=resultRevision;buildingMetaPath=selectedBuilding;buildingLabel=selectedBuilding;selectedBuildingSafe=false;selectedBuildingReason.clear();
-            if(result.contains("Buildings"))for(const auto& row:result["Buildings"])if(row.value("Path",std::string{})==selectedBuilding){buildingLabel=row.value("Name",buildingLabel);selectedBuildingSafe=row.value("Safe",false);selectedBuildingReason=row.value("SafetyReason",std::string{});break;}
+            buildingMetaRevision=resultRevision;buildingMetaPath=selectedBuilding;buildingLabel=selectedBuilding;selectedBuildingSafe=selectedTemporarySafe=false;selectedBuildingReason.clear();selectedTemporaryReason.clear();
+            if(result.contains("Buildings"))for(const auto& row:result["Buildings"])if(row.value("Path",std::string{})==selectedBuilding){buildingLabel=row.value("Name",buildingLabel);selectedBuildingSafe=row.value("Safe",false);selectedBuildingReason=row.value("SafetyReason",std::string{});selectedTemporarySafe=row.value("TemporarySafe",false);selectedTemporaryReason=row.value("TemporarySafetyReason",std::string("Rebuild the building catalogue to check temporary previews."));break;}
         }
         auto label=buildingLabel;if(verifiedBuildings+blockedBuildings)ImGui::TextDisabled("Safety scope: %zu verified / %zu blocked",verifiedBuildings,blockedBuildings);
         if(ImGui::BeginCombo("Loaded building",label.empty()?"Select building":label.c_str())) {
@@ -617,15 +711,20 @@ inline void Render(View view) {
                     const auto index=buildingMatches.Rows[static_cast<size_t>(visible)];if(index>=buildingRows.size())continue;const auto& row=buildingRows[index];
                     const auto path=row.value("Path",std::string{}),title=row.value("Name",path);const bool safe=row.value("Safe",false);ImGui::PushID(path.c_str());ImGui::BeginDisabled(!safe);
                     if(ImGui::Selectable(title.c_str(),path==selectedBuilding)){std::snprintf(selectedBuilding,sizeof(selectedBuilding),"%s",path.c_str());buildingConfirmed=false;}
-                    ImGui::EndDisabled();if(HelpyImGuiTheme::TooltipReady(std::string("building:")+path,ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)))ImGui::SetTooltip("%s\nSafety: %s",path.c_str(),row.value("SafetyReason",safe?std::string("Verified"):std::string("Blocked")).c_str());ImGui::PopID();
+                    ImGui::EndDisabled();if(HelpyImGuiTheme::TooltipReady(std::string("building:")+path,ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)))PS::HelpyImGuiTheme::Tooltip("%s\nSafety: %s",path.c_str(),row.value("SafetyReason",safe?std::string("Verified"):std::string("Blocked")).c_str());ImGui::PopID();
                 }
             }
             if(buildingMatches.Rows.empty())ImGui::TextDisabled("No loaded BuildingPieceData matches this search.");
             ImGui::EndCombo();
         }
         if(ImGui::SliderFloat("Instance scale",&scale,0.1f,10.0f,"%.2fx")){buildingConfirmed=false;actors[0].Confirmed=actors[1].Confirmed=false;}
-        ImGui::TextDisabled("Safety mode: one building preview per spawn; grid/batch placement is disabled.");
-        if(ImGui::SliderFloat("Distance from player (metres)",&distance,3,50)){buildingConfirmed=false;actors[0].Confirmed=actors[1].Confirmed=false;}
+        if(ImGui::Checkbox("Save placement",&buildingPermanent))buildingConfirmed=false;
+        if(ImGui::Checkbox("Place at world coordinates",&buildingAtCoordinates))buildingConfirmed=false;
+        if(buildingAtCoordinates){
+            if(ImGui::InputDouble("World X (cm)",&buildingX,0,0,"%.1f"))buildingConfirmed=false;
+            if(ImGui::InputDouble("World Y (cm)",&buildingY,0,0,"%.1f"))buildingConfirmed=false;
+            ImGui::TextDisabled("Ground-snapped at X/Y; use Height offset for vertical placement. Area must be loaded.");
+        }else if(ImGui::SliderFloat("Distance from player (metres)",&distance,3,50)){buildingConfirmed=false;actors[0].Confirmed=actors[1].Confirmed=false;}
         if(ImGui::InputFloat("Placement yaw (degrees)",&yaw)){buildingConfirmed=false;actors[0].Confirmed=actors[1].Confirmed=false;}
         if(ImGui::InputFloat("Height offset above ground (cm)",&height)){buildingConfirmed=false;actors[0].Confirmed=actors[1].Confirmed=false;}
         if(ImGui::Checkbox("Allow deconstruction",&allowDeconstruction))buildingConfirmed=false;
@@ -633,19 +732,21 @@ inline void Render(View view) {
         if(ImGui::RadioButton("Any##building-time",&buildingTime,0))buildingConfirmed=false;ImGui::SameLine();
         if(ImGui::RadioButton("Day##building-time",&buildingTime,1))buildingConfirmed=false;ImGui::SameLine();
         if(ImGui::RadioButton("Night##building-time",&buildingTime,2))buildingConfirmed=false;
-        ImGui::TextWrapped("Temporary previews use the selected BuildingPieceData's native buildable actor only after a matching native in-world instance proves the exact data binding. The spawned actor is transient, excluded from the native save store, and re-verified after construction before RuneSchema keeps it.");
-        if(selectedBuilding[0]=='/' && !selectedBuildingSafe)ImGui::TextWrapped("Blocked by safety preflight: %s",selectedBuildingReason.c_str());
-        ImGui::Checkbox("I want to spawn one verified temporary building preview",&buildingConfirmed);
-        ImGui::BeginDisabled(!buildingConfirmed || player.empty() || selectedBuilding[0]!='/' || !selectedBuildingSafe);
-        if(HelpyImGuiTheme::SoftButton("Spawn building near selected player")) {
+        const bool placementSafe=selectedBuildingSafe&&(buildingPermanent||selectedTemporarySafe);
+        if(!buildingPermanent)ImGui::TextDisabled("Temporary previews require native save exclusion.");
+        if(selectedBuilding[0]=='/'&&!placementSafe)ImGui::TextWrapped("%s",!selectedBuildingSafe?selectedBuildingReason.c_str():selectedTemporaryReason.c_str());
+        ImGui::Checkbox(buildingPermanent?"Confirm saved building placement":"Confirm temporary preview",&buildingConfirmed);
+        ImGui::BeginDisabled(!buildingConfirmed || player.empty() || selectedBuilding[0]!='/' || !placementSafe || (buildingAtCoordinates&&(!std::isfinite(buildingX)||!std::isfinite(buildingY))));
+        if(HelpyImGuiTheme::SoftButton(buildingPermanent?"Place & save building":buildingAtCoordinates?"Preview at coordinates":"Preview near player")) {
             nlohmann::json request={{"Action","SpawnBuilding"},{"Player",player},{"Building",selectedBuilding},
                 {"Yaw",yaw},{"Height",height},{"Scale",scale},{"Count",1},{"Distance",distance},
-                {"AllowDeconstruction",allowDeconstruction},{"TimeOfDay",buildingTime==1?"Day":buildingTime==2?"Night":"Any"}};
+                {"AllowDeconstruction",allowDeconstruction},{"Permanent",buildingPermanent},{"TimeOfDay",buildingTime==1?"Day":buildingTime==2?"Night":"Any"}};
+            if(buildingAtCoordinates)request["TargetLocation"]={{"X",buildingX},{"Y",buildingY}};
             SpawnToolRequests::Submit(std::move(request));buildingConfirmed=false;
         }
         ImGui::EndDisabled();
         if(HelpyImGuiTheme::SoftButton("Export authored placements as /spawns JSON"))SpawnToolRequests::Submit({{"Action","Export"}});
-        ImGui::TextWrapped("The catalog keeps all loaded BuildingPieceData for inspection. Saved safety results are never trusted across worlds: rebuild in the current authoritative world to enable only pieces that match a live native instance, exact BuildingPieceData binding, and save-exclusion contract.");
+        ImGui::TextWrapped("The catalog keeps loaded BuildingPieceData for inspection. Placement rechecks native data binding and actor defaults in the current authoritative world. Use World map placement and Permanent for pieces that cannot be excluded from native saves.");
         ImGui::TextWrapped("%s",result.value("Status",std::string{}).c_str());
     }
 
@@ -658,11 +759,11 @@ inline void RenderSessionCleanup() {
     ImGui::TextWrapped("Clean only actors and staged placements created by the current Mod Authoring session. Installed /spawns content and saves are not changed.");
     if(HelpyImGuiTheme::SoftButton("Refresh authoritative players"))SpawnToolRequests::Submit({{"Action","QuickPlayers"}});
     auto label=std::string("Select player");
-    if(result.contains("Players"))for(const auto& row:result["Players"])if(row.value("Path",std::string{})==player)label=row.value("Name",label);
+    if(result.contains("Players"))for(const auto& row:result["Players"])if(row.value("Path",std::string{})==player)label=RuneSchemaProfile::Name(row);
     if(ImGui::BeginCombo("Player##cleanup",label.c_str())) {
         if(result.contains("Players"))for(const auto& row:result["Players"]) {
             const auto path=row.value("Path",std::string{});ImGui::PushID(path.c_str());
-            if(ImGui::Selectable(row.value("Name",std::string("Player")).c_str(),player==path))player=path;
+            if(ImGui::Selectable(RuneSchemaProfile::Name(row).c_str(),player==path))player=path;
             ImGui::PopID();
         }
         ImGui::EndCombo();

@@ -2,6 +2,7 @@
 #include "Generator/AuthoringPanel.h"
 #include "Generator/LoaderTemplate.h"
 #include "Generator/LoaderCapabilities.h"
+#include "Core/CharacterSaveEditor.h"
 namespace PS {
 // Isolated render fixture: real admission/client/build code with explicitly
 // synthetic loaded records. It cannot inspect or mutate a running game.
@@ -9,6 +10,10 @@ struct AuthoringPreviewFixture {
     HelpyAuthoring::Session Host;
     using Json=nlohmann::json;
     nlohmann::json Last;
+    bool CharacterSaveAvailable=true;
+    size_t CharacterSaveLists=0;
+    CharacterSaveEditor::Session Editor;
+    Json Character={{"GameProgress",{{"Health",100},{"Version",86},{"Inventory",{{"MaxSlotIndex",8},{"0",{{"ItemData","example-modded-id"},{"GUID","fixture-instance-1"},{"Count",5}}},{"8",{{"ItemData","example-vanilla-id"},{"GUID","fixture-instance-2"}}}}}}},{"UnknownModSection",{{"Keep",true}}}};
     static Json Event(){return {{"function","/Preview/Player:OnGatheredResource"},{"parameters",{{"Amount",3},{"IsRare",false}}}};}
     static Json Profile(){return {{"Version",1},{"Name","Gathering"},{"Trace",{{"Seconds",20},{"MaxEvents",128},{"Categories",4},{"Filter","OnGatheredResource"},{"CaptureParameters",true},{"TraceSelectedObject",true}}},{"Target",{{"Mode","ClassAndName"},{"Class","/Preview/Player"},{"Name","Player_1"}}},{"Export",{{"Name","GatheringTrace"},{"Jsonc",true}}}};}
     static Json Report(bool world){return {{"Coverage",world?"Sample live buildings":"Sample saved item identities"},{"Warnings",Json::array({"Synthetic preview data only."})},{"Rows",Json::array({{{"DisplayName","Iron ore"},{"InternalName","IronOre"},{"PersistenceID","preview-ore"},{"Owner","Preview player"},{"State",{{"Active",true}}},{"Location","Backpack"},{"Origin","Saved inventory"}}})}};}
@@ -27,6 +32,8 @@ struct AuthoringPreviewFixture {
         AuthoringPanel::ResultSelection="SavedWorld";
     }
     AuthoringPreviewFixture(){
+        Character["meta_data"]={{"char_name","Example character"},{"char_guid","1234567890abcdef1234567890abcdef"}};
+        for(const auto& field:CharacterWorkbench::Fields)Character["Customization"]["CustomizationData"][field.Key]={{"dataTable","/Script/Engine.DataTable'"+CharacterWorkbench::Table(field)+"'"},{"rowName","ExampleRow"}};
         Host.Configure(true,true);
         AuthoringClient::Remote=[this](const nlohmann::json& request,nlohmann::json& reply){
             const auto action=request.at("Action");
@@ -55,6 +62,34 @@ struct AuthoringPreviewFixture {
                     else if(op=="CleanupInspect")data={{"Owners",Json::array({{{"Owner","RemovedExampleMod"},{"Count",2},{"Installed",false}}})},{"RegistryReady",false}};
                     else if(op=="CleanupPreview")data={{"Token","preview-only"},{"Removed",Json::array({{{"Owner","RemovedExampleMod"},{"Path","Inventory[0]"}}})}};
                     else if(op=="NiagaraPresets")data={{"Documents",Json::array({{{"Name","Sample fire effect"},{"Attachments",Json::array()}}})}};
+                    else if(op=="SaveEditorList"){
+                        ++CharacterSaveLists;
+                        data={{"Runtime","Game Pass/WinGDK"},{"AttachAvailable",false},{"Files",Json::array({{{"Name","Example character"},{"Path","preview-character.json"},{"Storage","Xbox / Game Pass · read-only source"},{"Provider","GamePass"},{"CharacterGuid","1234567890abcdef1234567890abcdef"}}})},
+                            {"Mods",Json::array({{{"Mod","ExampleMod"},{"Source","examplemount"},{"Root","Example RuneSchema/mods/ExampleMod"},{"Registered",true}}})}};
+                        if(!CharacterSaveAvailable)data["Files"]=Json::array();
+                    }
+                    else if(op=="SaveEditorOpen"){Editor.Open(Character);data=Editor.Browse();}
+                    else if(op=="SaveEditorAppearance"||op=="SaveEditorAppearanceSet"||op=="SaveEditorRename"){
+                        if(op=="SaveEditorAppearanceSet")Editor.SetAppearance(args.at("Field"),args.at("Row"),args.at("Revision"),{"ExampleRow","AnotherRow"});
+                        if(op=="SaveEditorRename")Editor.Rename(args.at("Name"),args.at("Revision"));
+                        data=Editor.Appearance();data["Choices"]["Fields"]=Json::array();for(const auto& field:CharacterWorkbench::Fields)data["Choices"]["Fields"].push_back({{"Key",field.Key},{"Label",field.Label},{"Rows",{"ExampleRow","AnotherRow"}}});
+                    }
+                    else if(op=="SaveEditorSlotItems"){
+                        const auto slot=args.at("Slot").get<std::string>();data={{"Slot",slot},{"HasMore",false},{"NextOffset",1},
+                            {"Rows",Json::array({{{"Name","Compatible native fixture"},{"Path","/Preview/Fit.Item"},{"SlotStrategy",slot},{"NativeSlotVerified",true}}})}};
+                    }
+                    else if(op=="SaveEditorRender")throw std::runtime_error("Synthetic UI fixture: native game rendering is tested separately in the private game copy.");
+                    else if(op=="SaveEditorBrowse")data=Editor.Browse(args.value("Pointer",std::string{}),args.value("Offset",size_t{}));
+                    else if(op=="SaveEditorSet"){Editor.Set(args.at("Pointer"),args.at("Value"),args.at("Revision"));data=Editor.Browse("/GameProgress");}
+                    else if(op=="SaveEditorInventory"||op=="SaveEditorStack"||op=="SaveEditorRemoveItems"){
+                        if(op=="SaveEditorStack")Editor.SetCount(args.at("Pointer"),args.at("Count"),args.at("Revision"),100);
+                        if(op=="SaveEditorRemoveItems")Editor.RemoveItems(args.at("Pointers"),args.at("Revision"),args.at("Confirm"));
+                        data=Editor.Inventory(args.value("Offset",size_t{}));for(auto& row:data["Items"]){const bool mod=row.at("PersistenceID")=="example-modded-id";
+                            row["DisplayName"]=mod?"Enchanted rune bars":"Iron helm";row["SourceName"]=mod?"ExampleMod":"Base game";row["MaxStackSize"]=mod?100:1;row["Category"]=mod?"Materials":"Armour";}
+                    }
+                    else if(op=="SaveEditorPreview")data=Editor.Preview(Character);
+                    else if(op=="SaveEditorExport"){auto copy=Editor.Consume(Character,args.at("Token"),args.at("Confirm"));data={{"File","Preview-only edited copy (no file written)"},{"Document",copy}};}
+                    else if(op=="SaveEditorClose"){Editor.Reset();data=Json::object();}
                     else throw std::runtime_error("Preview fixture has no native operation; game actions disabled.");
                     Host.Complete(work->at("RequestId"),data,"Sample data only; game actions disabled.");
                 }catch(const std::exception& error){Host.Complete(work->at("RequestId"),{{"Error",error.what()}},error.what(),false);}

@@ -2,6 +2,7 @@
 #include "Loader/QuestInspectorModel.h"
 #include "Loader/QuestProgressText.h"
 #include "Loader/QuestObjectiveSchema.h"
+#include "Core/QuestPresentationCatalog.h"
 #include <cassert>
 #include <fstream>
 using namespace DragonWilds::Quests;
@@ -13,6 +14,34 @@ int main(int argc,char** argv){
     auto data=Example();auto quest=Parse("Test",data);
     assert(quest.Key=="Test:supper" && quest.Required.Count==3 && quest.Reward.Count==1);
     assert(!quest.Marker);
+    assert(quest.Icon.empty());
+    auto illustrated=data;illustrated["Icon"]="/Game/Art/UI/Icons/Journal/T_Icon_Journal_Lore_Scraps.T_Icon_Journal_Lore_Scraps";
+    const auto illustratedQuest=Parse("Test",illustrated);
+    assert(illustratedQuest.Icon==illustrated.at("Icon").get<std::string>());
+    assert(InspectorModel(illustratedQuest).at("Icon")==illustrated.at("Icon"));
+    const auto metadata=BoardMetadata(illustratedQuest);
+    assert(metadata.at("Mod")=="Test"&&metadata.at("Key")==quest.Key&&metadata.at("Icon")==illustrated.at("Icon"));
+    auto noIcon=illustrated;noIcon["Icon"]="";assert(Parse("Test",noIcon).Icon.empty());
+    for(const auto& invalidIcon:std::vector<Json>{true,nullptr,12,"https://example.com/icon.png","C:\\icons\\quest.png","/Game/Icon","/Game/Icon.","/Game/.Icon","/Game//Icon.Icon","/Game/../Icon.Icon","/Game.Icon/Icon","/Game/Icon.Icon\n",std::string(2049,'x')}){
+        auto invalid=illustrated;invalid["Icon"]=invalidIcon;assert(Rejects([&]{Parse("Test",invalid);}));
+    }
+    namespace Board=PS::QuestPresentationCatalog;
+    assert(!Board::Read(Json::object()).at("Ready").get<bool>());
+    auto another=metadata;another["Mod"]="Other";another["Key"]="Other:supper";
+    Board::Publish(Json::array({metadata,another}));
+    auto page=Board::Read({{"Limit",1}});const auto revision=page.at("Revision");
+    assert(page.at("Ready")==true&&page.at("Total")==2&&page.at("HasMore")==true&&page.at("NextOffset")==1);
+    assert(page.at("Quests")[0].at("Icon")==illustrated.at("Icon"));
+    page=Board::Read({{"Offset",1},{"Limit",1}});
+    assert(page.at("HasMore")==false&&page.at("Quests")[0].at("Mod")=="Other");
+    page=Board::Read({{"Mod","Test"},{"Key",quest.Key}});assert(page.at("Total")==1&&page.at("Quests")[0]==metadata);
+    assert(Board::Read({{"Key","Missing:q"}}).at("Quests").empty());
+    for(const auto& invalid:std::vector<Json>{Json::array(),{{"Limit",0}},{{"Limit",129}},{{"Offset",-1}},{{"Limit",1.5}},{{"Offset",uint64_t(-1)}},{{"Mod",false}},{{"Key",std::string(257,'x')}}})
+        assert(Rejects([&]{Board::Read(invalid);}));
+    assert(Rejects([&]{Board::Publish(Json::object());}));
+    auto tooMany=Json::array();for(int i=0;i<129;++i)tooMany.push_back(metadata);
+    assert(Rejects([&]{Board::Publish(tooMany);}));
+    assert(Board::Read(Json::object()).at("Revision")==revision);
     assert(quest.CompletedDescription==quest.Description&&quest.ShowInCompletedQuestList&&!quest.HideInQuestList);
     auto rich=data;rich["CompletedDescription"]="The village has enough food.";
     rich["HideInQuestList"]=true;rich["ShowInCompletedQuestList"]=false;
@@ -48,6 +77,8 @@ int main(int argc,char** argv){
     staged["Stages"]=Json::array({{{"Id","supplies"},{"Objectives",Json::array({data["Objective"]})}},
         {{"Id","patrol"},{"Objectives",Json::array({{{"Id","goblins"},{"Text","Defeat goblins"},{"Type","Kill"},{"AIClasses",{"/Game/Test/Goblin.Goblin_C"}},{"Count",2},{"Location",{0,0,0}},{"RadiusMeters",100}}})}}});
     const auto stages=Parse("Test",staged);
+    auto illustratedStages=staged;illustratedStages["Icon"]=illustrated.at("Icon");
+    assert(Parse("Test",illustratedStages).Icon==illustrated.at("Icon").get<std::string>());
     assert(stages.Stages.size()==2 && stages.Story && stages.Prerequisites==std::vector<std::string>{"Test:intro"});
     assert(stages.Stages[1].second[0].ObjectiveId=="patrol:goblins");
     assert(stages.Stages[1].second[0].Marker->Name=="RuneSchema_Quest_AAAAAAAAAAAAAAAAAAAAAA_patrol_goblins");

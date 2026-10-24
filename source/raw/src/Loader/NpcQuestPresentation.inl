@@ -61,5 +61,6 @@ void DragonWildsNpcLoader::OnQuestTextQuery(UnrealScriptFunctionCallableContext&
             if(out->Property==output){if(++matches>1 || !out->PropAddr)throw std::runtime_error("Quest text output is ambiguous");destination=out->PropAddr;}
         }
         PropertyHelper::SetTextPropertyValueFromJsonValue(destination,output,*text);
-    }catch(const std::exception& error){ErrorOnce("quest-progress-text",PS::ToWideSafe(error.what()));}
+    }catch(const std::exception& error){ErrorOnceDiagnostic("quest-progress-text",PS::ToWideSafe(error.what()),
+        "RS-NPC-018","Quest objective text presentation failed","Warning","Skipped",{},"QuestProgressComponent","Application");}
 }

@@ -5,6 +5,17 @@
 namespace DragonWilds::SpawnFields {
 using Json=nlohmann::json;
 struct ParsedLocation {Json Vector;bool Ground=false;double GroundOffset=0;};
+inline double BuildingPieceRadius(const Json& entry) {
+    if(entry.contains("QuestActive")||entry.contains("EventActive")||entry.value("TimeOfDay",std::string("Any"))!="Any"
+        ||entry.value("UseNativeRespawn",false)||!entry.value("PersistAfterCondition",true)||!entry.value("AllowDeconstruction",true))
+        throw std::runtime_error("BuildingPiece is a permanent, deconstructible native placement; temporary lifecycle and respawn controls are not supported");
+    const auto radius=entry.value("DuplicateRadius",100.0);
+    if(!std::isfinite(radius)||radius<=0||radius>10000)throw std::runtime_error("BuildingPiece DuplicateRadius must be greater than zero and at most 10000 centimetres");
+    return radius;
+}
+inline bool BuildingPieceOccupied(double dx,double dy,double dz,double radius,bool grounded) {
+    return std::isfinite(dx)&&std::isfinite(dy)&&std::isfinite(dz)&&dx*dx+dy*dy+(grounded?0:dz*dz)<=radius*radius;
+}
 inline ParsedLocation ParseLocation(const Json& field) {
     Json vector;
     if(field.is_array()&&field.size()==3)vector={{"X",field[0]},{"Y",field[1]},{"Z",field[2]}};

@@ -393,7 +393,7 @@ json Index::Handle(const fs::path& mappingPath, const std::string& fingerprint,
     if (!request.is_object()) throw std::runtime_error("Mapping request must be an object");
     SelectSource(mappingPath, fingerprint, cacheDirectory);
     if (m_mappingPath.empty() || m_fingerprint.empty())
-        return {{"Ok", false}, {"Available", false}, {"Error", "Mappings.usmap was not found"}};
+        return {{"Ok", false}, {"Available", false}, {"Error", "No validated platform mapping is available yet; check the mapping-capture log"}};
     const auto action = request.value("Action", std::string("Status"));
     if (action == "Status") {
         LoadCache();

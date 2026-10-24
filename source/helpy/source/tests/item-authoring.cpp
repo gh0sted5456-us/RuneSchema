@@ -1,9 +1,33 @@
 #include "Core/ItemAuthoringDraft.h"
 #include <cassert>
 #include <memory>
+#include <set>
 using namespace PS::ItemAuthoring;
 template<class F> void rejects(F&& f){bool failed=false;try{f();}catch(...){failed=true;}assert(failed);}
+// Independent three-byte-group codec: check all 128 payload bits, not merely
+// whether generated text resembles a PersistenceID.
+static std::array<unsigned char,16> DecodeIdentity(const std::string& text){
+    constexpr std::string_view alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    assert(text.size()==22);std::array<unsigned char,16> bytes{};size_t at=0;unsigned value=0;int bits=0;
+    for(char c:text){const auto index=alphabet.find(c);assert(index!=alphabet.npos);value=(value<<6)|unsigned(index);bits+=6;
+        if(bits>=8){bits-=8;assert(at<bytes.size());bytes[at++]=static_cast<unsigned char>(value>>bits);}}
+    assert(at==16&&bits==4&&(value&15)==0);return bytes;
+}
+static std::string EncodeIdentity(const std::array<unsigned char,16>& bytes){
+    constexpr std::string_view alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";std::string text;
+    for(size_t at=0;at<bytes.size();at+=3){const auto remaining=bytes.size()-at;const unsigned word=(unsigned(bytes[at])<<16)|(remaining>1?unsigned(bytes[at+1])<<8:0)|(remaining>2?unsigned(bytes[at+2]):0);
+        text+=alphabet[(word>>18)&63];text+=alphabet[(word>>12)&63];if(remaining>1)text+=alphabet[(word>>6)&63];if(remaining>2)text+=alphabet[word&63];}return text;
+}
 int main(){
+    const auto sequence=DecodeIdentity("AAECAwQFBgcICQoLDA0ODw");for(size_t i=0;i<sequence.size();++i)assert(sequence[i]==i);
+    assert(EncodeIdentity(sequence)=="AAECAwQFBgcICQoLDA0ODw");
+    const auto allBits=DecodeIdentity("_____________________w");for(auto byte:allBits)assert(byte==255);
+    std::set<std::string> generated;
+    for(int i=0;i<2048;++i){const auto id=PS::ClonePresentation::NewId("Mod");assert(PS::ClonePresentation::ValidId(id,"DifferentMod"));assert(EncodeIdentity(DecodeIdentity(id))==id);assert(generated.insert(id).second);const auto name=PS::ClonePresentation::InternalName(id);assert(name.find('-')==name.npos);}
+    assert(PS::ClonePresentation::ValidId("xBicTfzWYkeOCtOLKtSRFQ","AnyMod"));
+    assert(!PS::ClonePresentation::ValidId("xBicTfzWYkeOCtOLKtSRF1","AnyMod"));
+    assert(!PS::ClonePresentation::ValidId("xBicTfzWYkeOCtOLKtSRF!","AnyMod"));
+    assert(PS::ClonePresentation::InternalName("a-b_c")!=PS::ClonePresentation::InternalName("a_b-c"));
     auto owner=std::make_unique<Draft>();auto& d=*owner;
     d.SetSource({{"Path","/Game/Items/Sword.Sword"},{"Name","Sword"}});assert(d.InspectWanted&&!d.Ready);
     d.Inspection={{"Fields",Json::array({{{"Name","PowerLevel"},{"Editable",true}},{{"Name","@row/WeaponStats/DamageMultiplier"},{"Editable",true}},{{"Name","PersistenceID"},{"Editable",false}}})}};d.Ready=true;
@@ -27,7 +51,7 @@ int main(){
     const auto id=d.Id;d.Created=true;d.Changed();assert(d.Id.empty()&&!d.Created&&!d.Acknowledged);
     auto other=std::make_unique<Draft>();other->SetSource({{"Path","/Game/Items/Ore.Ore"}});assert(d.Source["Path"]=="/Game/Items/Sword.Sword"&&d.Appearance["Path"]=="/Game/Items/Axe.Axe");
     const auto root=std::filesystem::temp_directory_path()/("helpy-authoring-"+std::to_string(GetCurrentProcessId()));
-    const auto internal="RS_v5_"+id;const auto target="/Game/Items/"+internal+"."+internal;
+    const auto internal=PS::ClonePresentation::InternalName(id);const auto target="/Game/Items/"+internal+"."+internal;
     Json prepared={{"State","Prepared"},{"InternalName",internal}};
     prepared["Documents"]["assets"][target]={{"$Clone","/Game/Items/Sword.Sword"},{"PersistenceID",id}};
     prepared["Documents"]["raw"]["/Game/Stats.Table"][id]={{"DamageMultiplier",3.5}};

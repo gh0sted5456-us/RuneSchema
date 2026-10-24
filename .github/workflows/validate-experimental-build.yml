@@ -15,10 +15,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
-        with:
-          ref: 5296408424841794c8df1958a108db8567037e82
 
       - name: Build RuneSchema
+        env:
+          UEPSEUDO_READ_TOKEN: ${{ secrets.UEPSEUDO_READ_TOKEN }}
         shell: pwsh
         run: |
           & ".\build\build.ps1"

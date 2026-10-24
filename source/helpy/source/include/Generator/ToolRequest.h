@@ -90,7 +90,11 @@ template<> struct ToolRequest<SpawnToolTag> {
         Result.erase("GrantResults");Result.erase("SpawnResult");
         Result.erase("CloneResult");Result.erase("CloneSource");Result.erase("CloneAppearance");Result.erase("ItemDetails");
         Result.erase("RecipeExportResult");Result.erase("ItemOverrideExportResult");Result.erase("KitMetadata");Result.erase("NativeContracts");
+        Result.erase("CartValidation");
         Result.erase("RecipeWorkspaceCatalog");Result.erase("RecipeWorkspaceSource");
+        Result.erase("JournalCatalog");
+        Result.erase("InventorySnapshot");
+        Result.erase("InventoryAction");Result.erase("EquipmentAction");Result.erase("StorageResult");
         Result.erase("SpawnDefinition");Result.erase("MapSnapshot");Result.erase("MapBuildings");Result.erase("MapPoint");Result.erase("MapTravel");
         Result["Status"]="Queued for the game thread.";return true;
     }
@@ -144,6 +148,11 @@ template<> struct ToolRequest<SpawnToolTag> {
             if(result.contains("MapPoint"))receipt["MapPoint"]=result["MapPoint"];
             if(result.contains("RecipeExportResult"))receipt["RecipeExportResult"]=result["RecipeExportResult"];
             if(result.contains("RecipeWorkspaceCatalog"))receipt["RecipeWorkspaceCatalog"]=result["RecipeWorkspaceCatalog"];
+            if(result.contains("JournalCatalog"))receipt["JournalCatalog"]=result["JournalCatalog"];
+            if(result.contains("InventorySnapshot"))receipt["InventorySnapshot"]=result["InventorySnapshot"];
+            if(result.contains("EquipmentAction"))receipt["EquipmentAction"]=result["EquipmentAction"];
+            if(result.contains("InventoryAction"))receipt["InventoryAction"]=result["InventoryAction"];
+            if(result.contains("StorageResult"))receipt["StorageResult"]=result["StorageResult"];
             if(result.contains("RecipeWorkspaceSource"))receipt["RecipeWorkspaceSource"]=result["RecipeWorkspaceSource"];
             if(result.contains("SpawnDefinition"))receipt["SpawnDefinition"]=result["SpawnDefinition"];
             if(result.contains("ItemOverrideExportResult"))receipt["ItemOverrideExportResult"]=result["ItemOverrideExportResult"];

@@ -1,8 +1,18 @@
 #include "Core/CartDeliveryBatch.h"
+#include "Core/EquipmentTransfer.h"
 #include <cassert>
 using namespace PS::CartDeliveryBatch;
 template<class F> void Reject(F fn){bool failed=false;try{fn();}catch(...){failed=true;}assert(failed);}
 int main(){
+    const PS::EquipmentTransfer::Guid old{1,0,0,0},fresh{2,0,0,0},other{3,0,0,0};
+    using Instance=PS::EquipmentTransfer::Instance;
+    auto newItem=PS::EquipmentTransfer::NewlyDelivered({old},{Instance{old,0},Instance{fresh,4}});assert(newItem&&newItem->Slot==4&&newItem->Id==fresh);
+    assert(!PS::EquipmentTransfer::NewlyDelivered({old},{Instance{old,0}}));
+    Reject([&]{PS::EquipmentTransfer::NewlyDelivered({old},{Instance{fresh,1},Instance{other,2}});});
+    Reject([&]{PS::EquipmentTransfer::NewlyDelivered({old},{Instance{fresh,1},Instance{fresh,2}});});
+    Reject([&]{PS::EquipmentTransfer::NewlyDelivered({},{Instance{{},1}});});
+    assert(PS::EquipmentTransfer::Confirmed(true,fresh,fresh,false));
+    assert(!PS::EquipmentTransfer::Confirmed(false,fresh,fresh,false)&&!PS::EquipmentTransfer::Confirmed(true,fresh,old,false)&&!PS::EquipmentTransfer::Confirmed(true,fresh,fresh,true));
     assert(!MissingReceiptExpired(31,true)&&!MissingReceiptExpired(300,true)&&!MissingReceiptExpired(30,false)&&MissingReceiptExpired(31,false));
     const Json items=Json::array({{{"Item","/Game/Items/A.A"},{"Count",3}},{{"Item","/Game/Items/B.B"},{"Count",1}}});
     const std::vector<Recipient> players={{"/Game/Players/A.A","Alice"},{"/Game/Players/B.B","Bob"}};
@@ -20,7 +30,16 @@ int main(){
     batch.Begin(items,players);batch.Request(7);batch.Stop();assert(batch.Stopped()&&!batch.Pending());assert(!batch.Accept(7,receipt(true)));
     auto duplicate=receipt(true);duplicate["GrantResults"].push_back(duplicate["GrantResults"][0]);assert(!Plan::Confirmed(duplicate,items[0]));
     assert(!Plan::Confirmed({{"Status","Accepted by server"}},items[0]));
+    batch.Begin(items,players);batch.Request(20);auto rejected=receipt(true);rejected["GrantResults"][0]["State"]="Rejected";
+    assert(batch.Accept(20,rejected)&&!batch.Stopped()&&!batch.Finished());
+    batch.Request(21);assert(batch.Accept(21,receipt(true))&&batch.Finished()&&!batch.Stopped());
+    assert(batch.Aggregate()["GrantResults"][0]["State"]=="Rejected"&&batch.Aggregate()["GrantResults"][1]["State"]=="Confirmed");
     Reject([&]{batch.Begin(items,{});});Reject([&]{batch.Begin(items,{{"guid1","A"},{"guid2","B"}});});Reject([&]{batch.Begin(items,{players[0],players[0]});});
     batch.Begin(items,{{"guid1","Self-only remote"}});assert(batch.Request(8)["Player"]=="guid1");batch.Stop();
     auto excess=players;for(size_t i=0;i<Plan::MaxPlayers;++i)excess.push_back({"/Game/Players/Extra"+std::to_string(i),"Extra"});Reject([&]{batch.Begin(items,excess);});
+    batch.Begin(items,players,true);assert(batch.Request(30)["EquipOnReceipt"]==true);
+    auto equipFailure=receipt(true);for(auto& row:equipFailure["GrantResults"])row["Equip"]={{"State","Unconfirmed"},{"Message","Delivery confirmed, equip not confirmed"}};
+    assert(batch.Accept(30,equipFailure)&&!batch.Stopped());assert(batch.Request(31)["EquipOnReceipt"]==true);
+    assert(batch.Accept(31,equipFailure)&&batch.Finished()&&!batch.Stopped());assert(batch.Aggregate()["GrantResults"][0]["State"]=="Confirmed");
+    batch.Begin(items,players);assert(batch.Request(32)["EquipOnReceipt"]==false);batch.Stop();
 }

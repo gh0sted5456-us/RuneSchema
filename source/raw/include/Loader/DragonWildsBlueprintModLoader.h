@@ -69,10 +69,18 @@ namespace DragonWilds {
     private:
         std::unordered_map<RC::Unreal::FName, std::vector<DragonWildsBlueprintMod>> m_modsMap;
         std::vector<DragonWildsBlueprintMod> m_blueprintPatches;
-        std::vector<nlohmann::json> m_pendingBlueprintPatches;
-        std::vector<nlohmann::json> m_pathBlueprintPatches;
+        struct PendingPatchDocument {
+            nlohmann::json Document;
+            RC::StringType ModName;
+            std::string Source;
+        };
+        std::vector<PendingPatchDocument> m_pendingBlueprintPatches;
+        std::vector<PendingPatchDocument> m_pathBlueprintPatches;
         std::vector<RuntimeWidgetRule> m_runtimeWidgetRules;
         std::vector<RuntimeUiRule> m_runtimeUiRules;
+        std::unordered_set<RC::Unreal::FName> m_runtimeWidgetOwnerClasses,m_runtimeWidgetPathOwners;
+        struct RuntimeOwnerClassPath {PS::WeakObjectHandle Type;RC::Unreal::FName Path;};
+        std::unordered_map<RC::Unreal::UClass*,RuntimeOwnerClassPath> m_runtimeOwnerClassPaths;
         std::unordered_set<std::string> m_reportedRuntimeWidgetFailures;
         std::unordered_set<std::string> m_reportedRuntimeUiFailures;
         std::unordered_set<std::string> m_runtimeWidgetActiveRules;
@@ -86,6 +94,8 @@ namespace DragonWilds {
         std::unordered_map<std::string, GhostMaterials::Set> m_ghostMaterials;
         RC::Unreal::Hook::GlobalCallbackId m_worldTeardownCallbackId = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::Hook::GlobalCallbackId m_runtimeWidgetCallbackId = RC::Unreal::Hook::ERROR_ID;
+        void EnsureRuntimeWidgetObserver();
+        RC::Unreal::FName RuntimeWidgetOwnerClassPath(RC::Unreal::UClass* type);
         void ApplyBlueprintVisualEffect(RC::Unreal::AActor* actor);
         void ClearWorldVisualEffects();
         void ClearRuntimeWidgetState();
@@ -127,7 +137,7 @@ namespace DragonWilds {
             RC::Unreal::UObject* widget,
             const std::string& targetPath);
         bool RuntimeWidgetRuleMatchesEvent(
-            const RuntimeWidgetRule& rule,
+            const nlohmann::json& data,
             RC::Unreal::UFunction* function);
         bool RuntimeUiRuleMatchesEvent(
             const RuntimeUiRule& rule,
@@ -170,23 +180,38 @@ namespace DragonWilds {
         bool HookPostInitComponents();
         void ResetHooks();
 
-        void LoadSafe(const nlohmann::json& data, const RC::StringType& modName);
+        void LoadSafe(const nlohmann::json& data, const RC::StringType& modName,
+            const std::string& source={});
 
-        void LoadUnsafe(const nlohmann::json& data);
+        void LoadUnsafe(const nlohmann::json& data, const RC::StringType& modName={},
+            const std::string& source={});
 
         void ModifyObject(RC::Unreal::UObject* object);
 
-        void ApplyMod(const DragonWildsBlueprintMod& mod, RC::Unreal::UObject* object);
+        struct BlueprintApplicationOutcome {
+            std::string ModId, File, Target, OperationId;
+            std::string CurrentProperty;
+            int Completed=0;
+            std::vector<std::string> MissingProperties;
+        };
+        void ApplyMod(const DragonWildsBlueprintMod& mod, RC::Unreal::UObject* object,
+            BlueprintApplicationOutcome* observed=nullptr);
 
-        void ApplyData(const nlohmann::json& data, RC::Unreal::UObject* object, bool resolveWidgetTemplates = false);
+        void ReportMissingProperties(const BlueprintApplicationOutcome& outcome);
+        void ApplyData(const nlohmann::json& data, RC::Unreal::UObject* object,
+            bool resolveWidgetTemplates = false, BlueprintApplicationOutcome* outcome = nullptr,
+            const std::string& prefix = {});
 
         RC::Unreal::UObject* FindWidgetTemplate(RC::Unreal::UClass* objectClass, const RC::StringType& widgetName);
 
-        void HandleInheritableComponent(UECustom::UBlueprintGeneratedClass* bpClass, const RC::StringType& componentName, const nlohmann::json& componentData);
+        void HandleInheritableComponent(UECustom::UBlueprintGeneratedClass* bpClass, const RC::StringType& componentName,
+            const nlohmann::json& componentData,BlueprintApplicationOutcome* outcome=nullptr,const std::string& fieldPath={});
 
-        void HandleNodeComponent(UECustom::UBlueprintGeneratedClass* bpClass, const RC::StringType& componentName, const nlohmann::json& componentData);
+        void HandleNodeComponent(UECustom::UBlueprintGeneratedClass* bpClass, const RC::StringType& componentName,
+            const nlohmann::json& componentData,BlueprintApplicationOutcome* outcome=nullptr,const std::string& fieldPath={});
 
-        void ModifyComponent(RC::Unreal::UObject* component, const nlohmann::json& componentData);
+        void ModifyComponent(RC::Unreal::UObject* component, const nlohmann::json& componentData,
+            BlueprintApplicationOutcome* outcome=nullptr,const std::string& fieldPath={});
     private:
         static inline SafetyHookInline PostLoadHook;
         static inline std::atomic<bool> HooksReady{false};

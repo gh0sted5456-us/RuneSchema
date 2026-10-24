@@ -162,9 +162,12 @@ namespace DragonWilds {
         nlohmann::json RouteRecipeItemReferences(std::string_view propertyName,
             const nlohmann::json& authored);
 
-        void QueueData(const nlohmann::json& data, const RC::StringType& modName);
+        void QueueData(const nlohmann::json& data, const RC::StringType& modName,
+            const std::string& source={});
         void ApplyPendingPatches();
         void ApplyAll();
+        void GenerateQuestCancellations();
+        std::set<std::string> m_generatedQuestCancellations;
         void PlaceForTable(RC::Unreal::UDataTable* datatable);
         RC::Unreal::UDataTable* ResolvePlacementTable(const Placement& placement);
         static std::string PlacementTableLabel(const Placement& placement);

@@ -102,9 +102,12 @@ namespace PS {
         // Automatic /players appearance assignments stay read-only while
         // false. Character option/table loaders remain active.
         bool characterCustomization = false;
-        // Emergency compatibility path; disabled unless explicitly requested.
+        // Prefer bypass by default; false uses failure-only fallback on clients.
+        // Dedicated servers keep this as their only loading toggle.
         // Never stack it over the standalone CorruptCharacterBypass mod.
         bool allowCorruptCharacterEntry = false;
+        // Legacy compatibility field; companion recovery is retired. Pruning always backs up first.
+        bool recovery = false;
         // Native quest progress is inherently save-backed. When false,
         // RuneSchema quest definitions remain loaded but player quest actions
         // are disabled so they cannot mutate the save.
@@ -113,8 +116,27 @@ namespace PS {
 
     struct WorldSaveCleanupSettings {
         // Preserve the original world before removing unresolved building IDs.
-        // Disabling this is an explicit opt-out, not a validation bypass.
+        // Legacy compatibility field; backups are now mandatory before pruning.
         bool backupBeforePrune = true;
+    };
+
+    struct QuickLaunchSettings {
+        // mode is authoritative; enabled/softLoading remain legacy aliases.
+        std::string mode = "lessRestrictive";
+        bool enabled = false;
+        std::string characterName;
+        std::string worldName;
+        bool softLoading = true;
+    };
+
+    struct AdditionalLoggingSettings {
+        // Privacy-sensitive context is opt-in; no address lookup or speed test.
+        bool enabled = false;
+        bool filePaths = false;
+        bool region = false;
+        bool networkRates = false;
+        bool savePaths = false;
+        bool averageLatency = false;
     };
 
     struct DefaultRecoverySettings {
@@ -146,9 +168,13 @@ namespace PS {
 
     struct PSConfigSettings {
         bool enableAutoReload = false;
+        // One native UE4SS reflection dump per changed executable; restart required.
+        bool autoUpdateMappings = true;
         // Logging detail and advanced authoring/diagnostic facilities are
         // independent. Core loaders and network bridges are never gated here.
         bool advancedLogging = false;
+        // Keep previous RuneSchema sessions in logs/ using UTC date-time names.
+        bool archiveLogs = false;
         bool authoringTools = true;
         // Retained JSON name for compatibility. This now means heavyweight
         // diagnostics/full catalog work, never ordinary mod authoring.
@@ -166,6 +192,8 @@ namespace PS {
         BPModLoaderSettings bpModLoader{};
         PluginSettings plugins{};
         PersistenceSettings persistence{};
+        QuickLaunchSettings quickLaunch{};
+        AdditionalLoggingSettings additionalLogging{};
         WorldSaveCleanupSettings worldSaveCleanup{};
         DefaultRecoverySettings defaultRecovery{};
         HelpyAuthoritySettings helpyAuthority{};

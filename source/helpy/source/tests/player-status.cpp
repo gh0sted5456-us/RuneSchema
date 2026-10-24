@@ -13,6 +13,11 @@ int main(){
     auto role=Describe(14,flags,false);assert(Valid(role));auto bad=role;bad["Role"]="admin";bad["NativeKnown"]=false;assert(!Valid(bad));
     bad=role;bad["Privileges"].push_back("GiveItems");assert(!Valid(bad));
     const std::string alice(32,'A'),bob(32,'B');
+    Json live={{"Players",Json::array({{{"Guid",alice},{"IsLocal",true}},{{"Guid",bob},{"IsLocal",false}}})}};
+    assert(LocalCharacter(live)&&LocalCharacter(live)->at("Guid")==alice);
+    live["Players"][1]["IsLocal"]=true;assert(!LocalCharacter(live));
+    live["Players"].erase(1);live["Players"][0]["Guid"]="invalid";assert(!LocalCharacter(live));
+    live["Players"]=Json::array();assert(!LocalCharacter(live));assert(!LocalCharacter(Json::object()));
     const Json rows=Json::array({{{"Path","/host/alice"},{"Name","Same"},{"PlayerId",3},{"Guid",alice},{"RoleStatus",Describe(1,flags,false)}},
         {{"Path","/host/bob"},{"Name","Same"},{"PlayerId",4},{"Guid",bob},{"RoleStatus",role}}});
     Cache cache;const auto now=Cache::Clock::now();auto snapshot=Snapshot(rows,7);

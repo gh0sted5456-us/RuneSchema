@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(RuneSchema VERSION 0.8.0.0 LANGUAGES CXX RC)
+project(RuneSchema VERSION 0.8.0.1 LANGUAGES CXX RC)
 
 # Reject leftover source files from the postponed RSDK Workspace/Inspector branch.
 file(GLOB_RECURSE RUNESCHEMA_DEFERRED_FILES
@@ -107,7 +107,6 @@ file(GLOB_RECURSE SRC_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 list(FILTER SRC_FILES EXCLUDE REGEX "/src/Core/")
-list(FILTER SRC_FILES EXCLUDE REGEX "/src/Generator/InGameQuickMenu\\.cpp$")
 list(FILTER SRC_FILES EXCLUDE REGEX "/src/Generator/HelpyStandaloneWindow\\.cpp$")
 
 add_library(${TARGET} SHARED

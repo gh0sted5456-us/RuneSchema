@@ -1,11 +1,26 @@
 #include "Core/HelpyPopupInput.h"
+#include "Core/HelpyFramePacing.h"
 #include <fstream>
 #include <iterator>
 #include <stdexcept>
 #include <string>
+#include <filesystem>
 static void Require(bool value){if(!value)throw std::runtime_error("Helpy popup input regression");}
 static std::string Read(const char* path){std::ifstream input(path);Require(input.good());return {std::istreambuf_iterator<char>(input),{}};}
 int main(int argc,char** argv){
+    using namespace std::chrono_literals;
+    const auto now=PS::HelpyFramePacing::Clock::time_point{};PS::HelpyFramePacing pacing;
+    Require(!pacing.Due(now,false,false));Require(pacing.Due(now,true,false));
+    Require(!pacing.Due(now+1ms,true,false));Require(pacing.Due(now+2ms,true,true));
+    Require(!pacing.Due(now+35ms,true,true));Require(pacing.Due(now+36ms,true,true));
+    Require(pacing.Due(now+70ms,true,false));Require(!pacing.Due(now+169ms,true,false));
+    Require(!pacing.Due(now+170ms,false,false));Require(pacing.Due(now+171ms,true,true));
+    PS::HelpyFramePacing highRefresh;unsigned frames=0;
+    for(int tick=0;tick<240;++tick)frames+=highRefresh.Due(now+std::chrono::microseconds(tick*4167),true,true);
+    Require(frames>=25&&frames<=30);
+    PS::HelpyFramePacing inactive;frames=0;
+    for(int tick=0;tick<240;++tick)frames+=inactive.Due(now+std::chrono::microseconds(tick*4167),true,false);
+    Require(frames<=10);
     using namespace PS::HelpyPopupInput;
     for(unsigned flags=0;flags<4;++flags){
         Require(CanToggle(flags&1,flags&2)==(flags!=0));
@@ -26,7 +41,8 @@ int main(int argc,char** argv){
     Require(source.find("WH_KEYBOARD_LL")==std::string::npos);
     Require(source.find("ClipCursor(")==std::string::npos&&source.find("SetKeyboardState(")==std::string::npos);
     Require(source.find("if(Hotkey.Press())ClosePopup()")!=std::string::npos);
-    Require(source.find("CanToggle(GameWindow(foreground),foreground==m_publishedWindow.load()")!=std::string::npos);
-    Require(source.find("foreground==m_publishedBayWindow.load()")!=std::string::npos);
+    Require(source.find("CanToggle(GameWindow(foreground),OwnsWindow(foreground))")!=std::string::npos);
+    const auto detached=Read((std::filesystem::path(argv[1]).parent_path()/"DetachedWorkspaces.inl").string().c_str());
+    for(const auto* owned:{"m_publishedWindow.load()","m_publishedBayWindow.load()","m_publishedCacheWindow.load()","m_publishedWorkspaces"})Require(detached.find(owned)!=std::string::npos);
     Require(source.find("if(m_visible.load()&&GetForegroundWindow()!=m_gameWindow)ClosePopup()")==std::string::npos);
 }

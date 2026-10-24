@@ -8,15 +8,19 @@
 namespace DragonWilds::QuestScrolls {
 struct Contract {
     std::string QuestKey,PersistenceId,EntryId;
+    std::string Action="Accept";
     bool operator==(const Contract&) const = default;
 };
 inline Contract Parse(const std::string& mod,const nlohmann::json& value) {
-    Dialogue::Fields(value,{"QuestID","PersistenceID","EntryID"});
+    Dialogue::Fields(value,{"QuestID","PersistenceID","EntryID","Action"});
     const auto reference=Dialogue::Text(value.at("QuestID"),257);
     if(reference.find_first_of("/\\\r\n\t ")!=reference.npos)throw std::runtime_error("$QuestScroll QuestID must name a declared local quest or Mod:Id, not an asset/function path");
     Contract result{Dialogue::Reference(mod,value.at("QuestID")),Dialogue::Text(value.at("PersistenceID"),22),{}};
     if(!IsCanonicalPersistenceId(result.PersistenceId))throw std::runtime_error("$QuestScroll requires the item's canonical PersistenceID, distinct from the quest identity");
     if(value.contains("EntryID"))result.EntryId=Dialogue::Id(value.at("EntryID"));
+    if(value.contains("Action"))result.Action=Dialogue::Text(value.at("Action"),16);
+    if(result.Action!="Accept" && result.Action!="Abandon")throw std::runtime_error("$QuestScroll Action must be Accept or Abandon");
+    if(result.Action=="Abandon" && !result.EntryId.empty())throw std::runtime_error("Cancellation scrolls cannot select a quest entry option");
     return result;
 }
 class Catalog {

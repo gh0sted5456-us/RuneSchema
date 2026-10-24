@@ -1,11 +1,12 @@
 #include "Core/AlphabeticalItemCatalog.h"
+#include "Core/PersistentItemCatalog.h"
 #include <cassert>
 #include <fstream>
 #include <iterator>
 #include <iostream>
 using namespace PS::AlphabeticalItemCatalog;
 template<class F> void Reject(F fn){bool rejected=false;try{fn();}catch(...){rejected=true;}assert(rejected);}
-int main(int argc,char** argv){
+int main(int argc,char** argv){try{
     assert(PS::ItemNameOrder::Key("  aPPLe \t","path")==PS::ItemNameOrder::Key("Apple","path"));
     Cache cache;cache.Scope("world/source/clone-1");unsigned scans=0;
     const auto source=[&](size_t offset){
@@ -24,6 +25,107 @@ int main(int argc,char** argv){
     assert(scans==2&&second["Rows"][0]["Name"]=="Bronze"&&second["Rows"][1]["Name"]=="Zinc"&&!second.value("HasMore",true));
     auto replay=cache.Read("all",cursor,2,source);assert(replay==second&&scans==2);
     assert(cache.Read("all","",2,source)["Rows"]==first["Rows"]&&scans==2);
+    // A saved presentation index restores the complete sorted roster without
+    // any UObject scan, and remains isolated to its verified source scope.
+    const auto folder=std::filesystem::temp_directory_path()/("rsmk-item-manifest-"+std::to_string(GetCurrentProcessId()));
+    std::filesystem::create_directories(folder);const auto file=folder/"items.json";
+    const Json oldStone={{"Path","/Game/Gameplay/Items/Resources/Mineral/ITEM_Resources_Stone.ITEM_Resources_Stone"},
+        {"Name","Stone"},{"Category","Building"},{"Tags","Item.BuildingResource ItemFilter.Material.Mineral"}};
+    const auto stoneFile=folder/"stone.json";
+    PS::PagedItemCatalog::Save(stoneFile,"old-category-policy",{std::make_shared<const Json>(oldStone)});
+    const auto stonePage=PS::PagedItemCatalog::Read(PS::PagedItemCatalog::File(stoneFile),"old-category-policy","__helpycat:resources Stone","",24);
+    assert(stonePage["Rows"].size()==1&&stonePage["Rows"][0]["Category"]=="Resources");
+    Cache oldCache;oldCache.Restore(Json::array({oldStone}));
+    assert(oldCache.Snapshot()[0]->at("Category")=="Resources");
+    std::filesystem::remove(PS::PagedItemCatalog::File(stoneFile));
+    PS::PersistentItemCatalog::Save(file,"mounted-content-1",cache.Snapshot());
+    auto restored=PS::PersistentItemCatalog::Load(file,"mounted-content-1");assert(restored&&restored->Ready());
+    auto saved=restored->Read("all","",2,[&](size_t){assert(false);return Json{};});
+    assert(saved["Rows"]==first["Rows"]&&scans==2);
+    const auto pages=PS::PagedItemCatalog::File(file);
+    auto diskPage=PS::PagedItemCatalog::Read(pages,"mounted-content-1","","",2);
+    assert(diskPage["Rows"]==first["Rows"]&&diskPage["ReadRecords"]==2&&diskPage["HasMore"]==true);
+    auto page2=PS::PagedItemCatalog::Read(pages,"mounted-content-1","",diskPage["NextCursor"],2);
+    assert(page2["Rows"]==second["Rows"]&&page2["HasMore"]==false);
+    assert(PS::PagedItemCatalog::Read(pages,"mounted-content-1","bronze","",2)["Rows"].size()==1);
+    assert(PS::PagedItemCatalog::Read(pages,"mounted-content-1","none","",2)["Rows"].empty());
+    assert(PS::PagedItemCatalog::Read(pages,"mounted-content-1","","A:old",2)["Reset"]==true);
+    Reject([&]{PS::PagedItemCatalog::Read(pages,"different-content","","",2);});
+    Reject([&]{PS::PagedItemCatalog::Read(pages,"mounted-content-1","","",129);});
+    {PS::PagedItemCatalog::Store paged;auto loading=paged.Lookup(file,"mounted-content-1","","",2);assert(loading&&loading->at("PopulationStage")=="reading-catalogue");
+        for(int i=0;i<2000&&loading&&loading->at("PopulationStage")=="reading-catalogue";++i){Sleep(1);loading=paged.Lookup(file,"mounted-content-1","","",2);}
+        assert(loading&&loading->at("Rows")==first["Rows"]);assert(paged.Lookup(file,"mounted-content-1","","",2)->at("Rows")==first["Rows"]);
+        auto stale=paged.Lookup(file,"different-content","","",2);for(int i=0;i<2000&&stale;++i){Sleep(1);stale=paged.Lookup(file,"different-content","","",2);}assert(!stale);paged.Shutdown();}
+    auto filteredSaved=restored->Read("bronze","",2,[&](size_t){assert(false);return Json{};},[](const Json& row){return row.at("Name")=="Bronze";});
+    assert(filteredSaved["Rows"].size()==1&&filteredSaved["Rows"][0]["Name"]=="Bronze");
+    // Sparse matches several disk slices away return through one worker job,
+    // rather than repeated empty host/UI round trips.
+    const auto sparseFile=folder/"sparse.json";std::vector<std::shared_ptr<const Json>> diskRows;
+    for(int i=0;i<6000;++i)diskRows.push_back(std::make_shared<const Json>(Json{{"Path","/Game/Item"+std::to_string(i)},{"Name",i==5000?"Health Tincture":"Other item"}}));
+    PS::PagedItemCatalog::Save(sparseFile,"sparse-content",diskRows);
+    {PS::PagedItemCatalog::Store paged;auto result=paged.Lookup(sparseFile,"sparse-content","Health","",24);
+        assert(result&&result->at("PopulationStage")=="filtering-cache");
+        for(int i=0;i<5000&&result&&!result->value("AlphabeticalReady",false);++i){Sleep(1);result=paged.Lookup(sparseFile,"sparse-content","Health","",24);}
+        assert(result&&result->at("Rows").size()==1&&result->at("Rows")[0]["Name"]=="Health Tincture");
+        assert(result->at("PopulationDone")==6000&&result->at("CacheHit")==true);paged.Shutdown();}
+    std::filesystem::remove(PS::PagedItemCatalog::File(sparseFile));
+    const auto previewFile=folder/"preview.json";
+    const auto teaFile=folder/"native-tea.json";const std::string teaPath="/UmbralSands/Gameplay/Items/Resources/Processed/ITEM_Resources_Tea_Dried.ITEM_Resources_Tea_Dried";
+    PS::PagedItemCatalog::Save(teaFile,"tea-scope",std::vector<std::shared_ptr<const Json>>{std::make_shared<const Json>(Json{{"Path",teaPath},{"Name","Dried Tea Leaves"},{"SourceKind","modded"},{"SourceName","maxcape"}})});
+    const auto officialTea=PS::PagedItemCatalog::Read(PS::PagedItemCatalog::File(teaFile),"tea-scope","__helpysource:expansion Dried Tea","",4,false,{},std::set<std::string>{"umbralsands"});
+    assert(officialTea["Rows"].size()==1&&officialTea["Rows"][0]["SourceKind"]=="expansion");
+    const auto notModded=PS::PagedItemCatalog::Read(PS::PagedItemCatalog::File(teaFile),"tea-scope","__helpysource:modded Dried Tea","",4,false,{},std::set<std::string>{"umbralsands"});
+    assert(notModded["Rows"].empty());std::filesystem::remove(PS::PagedItemCatalog::File(teaFile));
+    const auto previewScope=PS::PersistentItemCatalog::DiskScope({{"CatalogKey","content-A"}},Json::array(),"en-US");
+    PS::PersistentItemCatalog::Save(previewFile,previewScope,cache.Snapshot());
+    const auto preview=PS::PagedItemCatalog::Read(PS::PagedItemCatalog::File(previewFile),"unverified","bronze","",2,true,"en-US");
+    assert(preview["Rows"].size()==1&&preview["Rows"][0]["Name"]=="Bronze");
+    Reject([&]{PS::PagedItemCatalog::Read(PS::PagedItemCatalog::File(previewFile),"wrong-current-scope","bronze","",2);});
+    Reject([&]{PS::PagedItemCatalog::Read(PS::PagedItemCatalog::File(previewFile),"unverified","bronze","",2,true,"de-DE");});
+    {PS::PagedItemCatalog::Store worker;auto result=worker.Preview(previewFile,"en-US","bronze","",2);
+        for(int i=0;i<2000&&result&&!result->value("AlphabeticalReady",false);++i){Sleep(1);result=worker.Preview(previewFile,"en-US","bronze","",2);}
+        assert(result&&result->at("Rows").size()==1&&result->at("CachePreview")==true&&result->at("CheckingChanges")==true);worker.Shutdown();}
+    {PS::PagedItemCatalog::Store strict,presentation;
+        auto verified=strict.Lookup(previewFile,"changed-mount-scope","bronze","",2);
+        auto cached=presentation.Preview(previewFile,"en-US","bronze","",2);
+        for(int i=0;i<2000&&(verified||!cached||!cached->value("CachePreview",false));++i){
+            Sleep(1);verified=strict.Lookup(previewFile,"changed-mount-scope","bronze","",2);cached=presentation.Preview(previewFile,"en-US","bronze","",2);
+        }
+        assert(!verified&&!strict.Failure.empty()&&cached&&cached->at("CachePreview")==true&&cached->at("Rows").size()==1);
+        // Alternating requests must not erase the strict failure and restart
+        // its scope probe forever, nor discard the still-usable presentation.
+        for(int i=0;i<8;++i){assert(!strict.Lookup(previewFile,"changed-mount-scope","bronze","",2));assert(presentation.Preview(previewFile,"en-US","bronze","",2)->at("Rows").size()==1);}
+        strict.Shutdown();presentation.Shutdown();}
+    {PS::PersistentItemCatalog::Store worker;worker.Repair(previewFile,previewScope,[](Json& row){row["SourceName"]="exact-mod";row["SourceEvidence"]="Exact RuneSchema asset definition";return true;});worker.Shutdown();}
+    auto repaired=PS::PersistentItemCatalog::Load(previewFile,previewScope);assert(repaired&&repaired->Snapshot()[0]->at("SourceName")=="exact-mod");
+    std::filesystem::remove(PS::PagedItemCatalog::File(previewFile));std::filesystem::remove(previewFile);
+    assert(!PS::PersistentItemCatalog::DurableRow({{"Path","/Engine/Transient/Preview.Preview"},{"Name","Ephemeral preview"}}));
+    assert(!PS::PersistentItemCatalog::DurableRow({{"Path","/Mod/Incomplete.Incomplete"},{"Name","Incomplete"},{"Available",false}}));
+    assert(PS::PersistentItemCatalog::DurableRow({{"Path","/Game/RuneSchema/Clone.Clone"},{"Name","Registered clone"},{"Available",true}}));
+    assert(!PS::PersistentItemCatalog::Load(file,"changed-mods"));
+    const Json sources={{"CatalogKey","content-1"},{"Key","icon-plan-1"},{"PlanRevision",1}};
+    const auto diskScope=PS::PersistentItemCatalog::DiskScope(sources,Json::array(),"en-US");
+    auto refined=sources;refined["Key"]="icon-plan-2";refined["PlanRevision"]=2;
+    assert(diskScope==PS::PersistentItemCatalog::DiskScope(refined,Json::array(),"en-US"));
+    refined["CatalogKey"]="content-2";assert(diskScope!=PS::PersistentItemCatalog::DiskScope(refined,Json::array(),"en-US"));
+    assert(diskScope!=PS::PersistentItemCatalog::DiskScope(sources,Json::array({"/Game/New.New"}),"en-US"));
+    assert(diskScope!=PS::PersistentItemCatalog::DiskScope(sources,Json::array(),"de-DE"));
+    bool migrated=false;auto legacy=PS::PersistentItemCatalog::Load(file,diskScope,"mounted-content-1",&migrated);
+    assert(legacy&&legacy->Ready()&&migrated);
+    assert(!PS::PersistentItemCatalog::Load(file,diskScope,"different-old-content"));
+    // Worker results from an old scope must not replace the current roster.
+    PS::PersistentItemCatalog::Store disk;auto fresh=std::make_unique<Cache>();fresh->Scope("new");
+    assert(!disk.Restore(file,"mounted-content-1",fresh));
+    for(int i=0;i<2000&&!disk.Restore(file,"changed-mods",fresh);++i)Sleep(1);
+    assert(!fresh->Ready());disk.Shutdown();
+    {std::ofstream broken(file);broken<<"{broken";}
+    assert(!PS::PersistentItemCatalog::Load(file,"mounted-content-1"));
+    Cache malformed;Reject([&]{malformed.Restore(Json::array({{{"Path","../bad"},{"Name","Bad"}}}));});
+    Cache partial;partial.Read("all","",2,[](size_t){return Json{{"Rows",Json::array()},{"NextOffset",1},{"HasMore",false},{"MountedMetadataReady",false}};});
+    assert(partial.Ready()&&!partial.Persistable()); // A live-only fallback must not become tomorrow's full manifest.
+    {std::ofstream corrupt(pages,std::ios::binary|std::ios::trunc);corrupt<<"broken";}
+    Reject([&]{PS::PagedItemCatalog::Read(pages,"mounted-content-1","","",2);});
+    std::filesystem::remove(pages);std::filesystem::remove(file);std::filesystem::remove(folder);
     for(int i=0;i<8;++i){auto filtered=cache.Read("search"+std::to_string(i),"",2,source,[](const Json& row){return row.at("Name")=="Bronze";});
         assert(filtered["Rows"].size()==1&&filtered["Rows"][0]["Name"]=="Bronze"&&!filtered.value("HasMore",true));}
     assert(scans==2);std::cout<<"Shared index: 2 native slices for 9 queries; former per-query index required 18.\n";
@@ -60,4 +162,4 @@ int main(int argc,char** argv){
         assert(read(argv[1])==read(argv[2]));
         if(argc==4){const auto native=read(argv[3]);assert(native.find("PS::AssetSearch::AlphabeticalItemWindow(query,cursor,limit,fieldSet)")!=std::string::npos);}
     }
-}
+}catch(const std::exception& error){std::cerr<<error.what()<<"\n";return 1;}}

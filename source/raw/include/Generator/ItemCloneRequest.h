@@ -29,7 +29,7 @@ inline nlohmann::json CloneRequest(const std::string& source,const std::string& 
         if(value.dump().size()>MaxCloneValueBytes)throw std::runtime_error("Override field exceeds 16 KiB: "+key);
     }
     if(modTag.size()>64)throw std::runtime_error("Mod tag exceeds 64 bytes.");
-    if(!persistenceId.empty()&&!ClonePresentation::ValidId(persistenceId,modTag))throw std::runtime_error("Regenerate the clone PersistenceID for this mod tag.");
+    if(!persistenceId.empty()&&!ClonePresentation::ValidId(persistenceId,modTag))throw std::runtime_error("PersistenceID must be a canonical 22-character URL-safe ID ending in A, Q, g or w.");
     if(!appearance.empty())ValidateObjectPath(appearance);
     if(!mesh.empty()){ValidateObjectPath(mesh);if(!ClonePresentation::VisualField(meshField))throw std::runtime_error("Choose a supported visual slot.");}
     if(!appearance.empty()&&!mesh.empty())throw std::runtime_error("Choose copy appearance or a cooked mesh, not both.");

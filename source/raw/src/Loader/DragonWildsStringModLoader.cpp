@@ -10,6 +10,8 @@
 #include "SDK/Helper/StringTableHelper.h"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnosticB3C.h"
+#include "Utility/StructuredDiagnosticOutcomeEvidence.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -66,12 +68,20 @@ namespace DragonWilds {
             return;
         }
 
-        PS::JsonHelpers::ParseJsonFilesInPath(loaderPath, [&](const nlohmann::json& data) {
-            LoadStrings(data, modName);
+        PS::JsonHelpers::ParseJsonFilesInPathWithSource(loaderPath, [&](const nlohmann::json& data,const fs::path& relative) {
+            PS::StructuredDiagnosticOutcomeEvidence::AppliedProgress applied;
+            try {LoadStrings(data, modName, applied);}
+            catch(const std::exception& e) {
+                PS::StructuredDiagnosticB3C::Report("RS-STR-003","Error",applied.Interrupted(),"StringLoader",
+                    "String definition rejected",e.what(),RC::to_string(modName),
+                    PS::StructuredDiagnosticB2::Utf8Path(relative),{},applied.InterruptedPhase());
+                throw;
+            }
         });
     }
 
-    void DragonWildsStringModLoader::LoadStrings(const nlohmann::json& data, const RC::StringType& modName)
+    void DragonWildsStringModLoader::LoadStrings(const nlohmann::json& data, const RC::StringType& modName,
+        PS::StructuredDiagnosticOutcomeEvidence::AppliedProgress& applied)
     {
         StringReplacementRules::Validate(data);
 
@@ -103,8 +113,11 @@ namespace DragonWilds {
         auto Existing = target.find(source);
         if (Existing != target.end() && Existing->second.To != replacement)
         {
-            PS::Log<LogLevel::Warning>(STR("Strings [{}/{}]: '{}' overrides '{}'; last loaded wins.\n"),
-                scope, source, modName, Existing->second.Owner);
+            if (!PS::StructuredDiagnosticB3C::Report("RS-STR-001","Warning","Partial","StringLoader",
+                "String override conflict","Different mods define a replacement for the same string; last loaded wins.",
+                RC::to_string(modName),{},RC::to_string(source),"Application",RC::to_string(scope)))
+                PS::Log<LogLevel::Warning>(STR("Strings [{}/{}]: '{}' overrides '{}'; last loaded wins.\n"),
+                    scope, source, modName, Existing->second.Owner);
         }
 
         StringReplacementRules::Replace(target[source], replacement, modName);
@@ -227,7 +240,11 @@ namespace DragonWilds {
 
         m_reportedMissing = true;
 
-        PS::Log<LogLevel::Warning>(STR("{} string(s) were never found, check for typos or stray spaces:\n"), missing.size());
+        PS::LogStructuredFallback<LogLevel::Warning>(
+            PS::StructuredDiagnosticB3C::Report("RS-STR-002","Warning","Partial","StringLoader",
+            "String replacements unmatched","Some requested replacement strings were not found after two passes; check their exact spelling and scope.",
+            {},{}, {},"Finalization"),
+            STR("{} string(s) were never found, check for typos or stray spaces:\n"), missing.size());
 
         for (const auto& Entry : missing)
         {

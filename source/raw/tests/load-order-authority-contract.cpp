@@ -34,13 +34,15 @@ static bool HasOrderedPakRootLoop(const std::string& source) {
     // resolved owner. A recursive mod-root append could bypass enablement.
     return body.find("constautomodRoot=modsRoot/name;")==0
         && body.find("autoreadDirectories=PS::ModFolderLayout::PakReadDirectories(modRoot);")!=std::string::npos
-        && body.find("for(constauto&directory:readDirectories)pakRoots.push_back(directory);")!=std::string::npos;
+        && (body.find("for(constauto&directory:readDirectories)pakRoots.push_back(directory);")!=std::string::npos
+            ||body.find("for(constauto&directory:readDirectories){pakRoots.push_back(directory);pakOwners[directory]=RC::to_string(name);}")!=std::string::npos);
 }
 
 static void VerifyOrderedPakRootMatcher() {
     const char* valid[] = {
         "for(const auto& name:ModLoadOrder::Resolve(modsRoot,discovered)){const auto modRoot=modsRoot/name;auto readDirectories=PS::ModFolderLayout::PakReadDirectories(modRoot);for(const auto& directory:readDirectories)pakRoots.push_back(directory);}",
-        "for (const auto & name : ModLoadOrder::Resolve( modsRoot, discovered )) { const auto modRoot = modsRoot / name; auto readDirectories = PS::ModFolderLayout::PakReadDirectories(modRoot); for (const auto & directory : readDirectories) pakRoots.push_back(directory); Remember(name); }"
+        "for (const auto & name : ModLoadOrder::Resolve( modsRoot, discovered )) { const auto modRoot = modsRoot / name; auto readDirectories = PS::ModFolderLayout::PakReadDirectories(modRoot); for (const auto & directory : readDirectories) pakRoots.push_back(directory); Remember(name); }",
+        "for(const auto& name:ModLoadOrder::Resolve(modsRoot,discovered)){const auto modRoot=modsRoot/name;auto readDirectories=PS::ModFolderLayout::PakReadDirectories(modRoot);for(const auto& directory:readDirectories){pakRoots.push_back(directory);pakOwners[directory]=RC::to_string(name);}}"
     };
     const char* invalid[] = {
         "for(const auto& name:discovered){const auto modRoot=modsRoot/name;auto readDirectories=PS::ModFolderLayout::PakReadDirectories(modRoot);for(const auto& directory:readDirectories)pakRoots.push_back(directory);}",

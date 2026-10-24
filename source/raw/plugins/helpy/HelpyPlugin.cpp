@@ -21,7 +21,7 @@
 namespace {
 HMODULE Module{};
 constexpr RuneSchemaPluginDescriptor Descriptor{sizeof(RuneSchemaPluginDescriptor),RUNESCHEMA_PLUGIN_API_VERSION,
-    "RuneSchema.Helpy","RuneSchema Helpy","0.8.0.0"};
+    "RuneSchema.Helpy","RuneSchema Helpy","0.8.0.1"};
 struct State {const RuneSchemaHostApi* Host{};std::unique_ptr<PS::HelpyStandaloneWindow> Window;
     RC::Unreal::Hook::GlobalCallbackId Tick=RC::Unreal::Hook::ERROR_ID;bool ThemeKeyDown=false;
     std::atomic<bool> ToolsAvailable=false,ToolsWaiting=false;std::atomic<uint64_t> ToolsGeneration=1;
@@ -48,14 +48,14 @@ bool CallCore(State* state,const nlohmann::json& request,nlohmann::json& respons
     try{response=nlohmann::json::parse(output);return true;}catch(...){return false;}
 }
 int32_t RS_PLUGIN_CALL About(void*,const char*,char* response,uint32_t capacity,uint32_t* size) {
-    constexpr char value[]=R"({"plugin":"RuneSchema.Helpy","version":"0.8.0.0","ui":"plugin-dll","umg":false})";
+    constexpr char value[]=R"({"plugin":"RuneSchema.Helpy","version":"0.8.0.1","ui":"plugin-dll","umg":false})";
     if(!size)return RS_PLUGIN_INVALID_ARGUMENT;*size=static_cast<uint32_t>(sizeof(value));
     if(capacity<sizeof(value))return RS_PLUGIN_BUFFER_TOO_SMALL;std::memcpy(response,value,sizeof(value));return RS_PLUGIN_OK;
 }
 void StoreReceipt(State* state,const nlohmann::json& result) {
     const auto id=result.value("_RequestId",uint64_t{});if(!id)return;
     nlohmann::json receipt={{"Status",result.value("Status",std::string("Completed."))}};
-    for(const auto* key:{"GrantResults","SpawnResult","SpawnDefinition","CloneResult","CloneSource","CloneAppearance","ItemDetails","RecipeExportResult","RecipeWorkspaceCatalog","RecipeWorkspaceSource","ItemOverrideExportResult","KitMetadata","NativeContracts"})
+    for(const auto* key:{"InventorySnapshot","JournalCatalog","GrantResults","SpawnResult","SpawnDefinition","CloneResult","CloneSource","CloneAppearance","ItemDetails","RecipeExportResult","RecipeWorkspaceCatalog","RecipeWorkspaceSource","ItemOverrideExportResult","KitMetadata","NativeContracts"})
         if(result.contains(key))receipt[key]=result[key];
     state->Completed[id]=std::move(receipt);while(state->Completed.size()>16)state->Completed.erase(state->Completed.begin());
 }

@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyImGuiTheme.h"
 #include "Core/RecipeWorkspace.h"
 #include "Generator/ItemGridPicker.h"
 #include "Generator/ToolRequest.h"
@@ -66,6 +67,14 @@ inline bool AcceptItem(Json& side,std::optional<std::size_t> replace={}) {
         catch(const std::exception& error){State().Error=error.what();}
     }return false;
 }
+inline void CenterText(const std::string& text,bool disabled=false){
+    const auto x=ImGui::GetCursorPosX(),width=ImGui::GetContentRegionAvail().x;
+    const float measured=ImGui::CalcTextSize(text.c_str(),nullptr,false,width).x;
+    ImGui::SetCursorPosX(x+std::max(0.f,(width-measured)*.5f));
+    if(disabled)ImGui::PushStyleColor(ImGuiCol_Text,HelpyImGuiTheme::Current.textDisabled);
+    ImGui::PushTextWrapPos(x+width);ImGui::TextUnformatted(text.c_str());ImGui::PopTextWrapPos();
+    if(disabled)ImGui::PopStyleColor();ImGui::SetCursorPosX(x);
+}
 inline ImRect ItemNode(const char* id,const char* title,Json& side,bool& grid,float height) {
     const auto& t=HelpyImGuiTheme::Current;ImRect bounds;
     ImGui::PushStyleColor(ImGuiCol_ChildBg,t.panelAlt);
@@ -75,9 +84,12 @@ inline ImRect ItemNode(const char* id,const char* title,Json& side,bool& grid,fl
         if(std::string_view(title)=="Inputs")HelpyPreviewHooks::Inputs=HelpyPreviewHooks::WindowRect();
         else if(std::string_view(title)=="Outputs")HelpyPreviewHooks::Outputs=HelpyPreviewHooks::WindowRect();
 #endif
-        ImGui::TextUnformatted(title);ImGui::SameLine();ImGui::TextDisabled("%zu / 32",side.size());ImGui::Separator();
-        ImGui::PushID(id);if(ImGui::RadioButton("Grid",grid))grid=true;ImGui::SameLine();if(ImGui::RadioButton("Rows",!grid))grid=false;
-        if(side.empty())ImGui::TextDisabled("Drag items here from the bay below.");
+        CenterText(std::string(title)+"  "+std::to_string(side.size())+" / 32");ImGui::Separator();
+        ImGui::PushID(id);const float left=ImGui::GetCursorPosX();
+        const float controls=ImGui::CalcTextSize("Grid").x+ImGui::CalcTextSize("Rows").x+ImGui::GetFrameHeight()*2+ImGui::GetStyle().ItemInnerSpacing.x*2+ImGui::GetStyle().ItemSpacing.x;
+        ImGui::SetCursorPosX(left+std::max(0.f,(ImGui::GetContentRegionAvail().x-controls)*.5f));
+        if(ImGui::RadioButton("Grid",grid))grid=true;ImGui::SameLine();if(ImGui::RadioButton("Rows",!grid))grid=false;ImGui::SetCursorPosX(left);
+        if(side.empty()){ImGui::Dummy({0,std::max(0.f,(ImGui::GetContentRegionAvail().y-ImGui::GetTextLineHeight())*.5f)});CenterText("Drag items here from the bay below.",true);}
         const auto width=ImGui::GetContentRegionAvail().x;
         const int columns=grid?std::max(1,static_cast<int>(width/std::max(t.X(124),ImGui::GetFontSize()*6.5f))):1;
         std::optional<std::size_t> remove;
@@ -122,16 +134,18 @@ inline ImRect StationNode(float height) {
     ImGui::PushStyleColor(ImGuiCol_ChildBg,t.panelAlt);
     if(ImGui::BeginChild("recipe-station",ImVec2(0,height),true)) {
         const auto p=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();bounds=ImRect(p,ImVec2(p.x+size.x,p.y+size.y));
-        ImGui::TextUnformatted("Station & timing");ImGui::Separator();
+        CenterText("Station & timing");ImGui::Separator();
         if(s.Override){ImGui::Checkbox("Also add this station",&s.AddStation);ImGui::TextDisabled("%zu original placement(s) retained",s.Placements.size());}
         const auto icon=s.StationIcon[0]?std::string(s.StationIcon):ItemPresentation::StationIcon(s.Station);
+        const auto left=ImGui::GetCursorPosX();ImGui::SetCursorPosX(left+std::max(0.f,(ImGui::GetContentRegionAvail().x-t.Y(42))*.5f));
         const auto at=ImGui::GetCursorScreenPos();const ImVec2 end(at.x+t.Y(42),at.y+t.Y(42));
         if(icon.empty()||!ItemIconCache::Draw(icon,at,end,true))ItemIconCache::Draw(QuickDecorations::CraftingStationIcon,at,end,true);
         ImGui::Dummy(ImVec2(t.Y(42),t.Y(42)));
+        ImGui::SetCursorPosX(left);
         if(!s.Station.empty()){
-            ImGui::TextWrapped("%s",s.Station.value("DisplayName",s.Station.value("Name",std::string{})).c_str());
-            if(!s.Station.value("PhysicalStation",true))ImGui::TextDisabled("Native recipe menu; no station building is linked.");
-            else ImGui::TextDisabled("%s",s.Station.value("Array",std::string{}).empty()?"Crafting station":"Processing station");
+            CenterText(s.Station.value("DisplayName",s.Station.value("Name",std::string{})));
+            if(!s.Station.value("PhysicalStation",true))CenterText("Native recipe menu; no station building is linked.",true);
+            else CenterText(s.Station.value("Array",std::string{}).empty()?"Crafting station":"Processing station",true);
         }
         ImGui::SetNextItemWidth(-1);
         if(ImGui::BeginCombo("##station",s.Station.value("DisplayName",s.Station.value("Name",std::string("Choose a native station"))).c_str())) {
@@ -153,8 +167,8 @@ inline ImRect StationNode(float height) {
                     if(s.Override&&!original)s.AddStation=true;
                     if(s.Station.contains("Category"))std::snprintf(s.Category,sizeof(s.Category),"%s",s.Station.value("Category",std::string{}).c_str());
                 }
-                if(ImGui::IsItemHovered()){ImGui::BeginTooltip();ImGui::TextUnformatted(station.value("DisplayName",name).c_str());
-                    if(t.verboseTooltips)ImGui::TextWrapped("%s",ItemPresentation::Text(station,"Path").c_str());ImGui::EndTooltip();}
+                if(ImGui::IsItemHovered()){HelpyImGuiTheme::BeginDetailsTooltip();PS::HelpyImGuiTheme::DetailsTextUnformatted(station.value("DisplayName",name).c_str());
+                    if(t.verboseTooltips)PS::HelpyImGuiTheme::DetailsText("%s",ItemPresentation::Text(station,"Path").c_str());HelpyImGuiTheme::EndDetailsTooltip();}
                 ImGui::PopID();
             }
             if(!matches)ImGui::TextDisabled("No loaded compatible stations match.");ImGui::EndCombo();
@@ -190,7 +204,7 @@ inline void Render(const Json& catalog,uint64_t revision) {
         for(const auto& row:s.Catalog.value("Recipes",Json::array())){const auto path=row.value("Path",std::string{}),reference=row.value("Reference",path),owner=row.value("Owner",std::string{});
             ImGui::PushID((path+reference).c_str());ImGui::BeginDisabled(path.empty()||!row.value("Available",true));
             const auto label=row.value("Name",path)+(owner.empty()?"":"  ["+owner+"]");if(ImGui::Selectable(label.c_str()))Submit({{"Action","InspectRecipe"},{"SourceRecipe",path}});
-            ImGui::EndDisabled();if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("%s\n%s",path.empty()?reference.c_str():path.c_str(),row.value("Available",true)?row.value("Source",std::string{}).c_str():"Definition is present but its native recipe is not ready; inspect loader errors.");ImGui::PopID();}ImGui::EndCombo();
+            ImGui::EndDisabled();if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))PS::HelpyImGuiTheme::Tooltip("%s\n%s",path.empty()?reference.c_str():path.c_str(),row.value("Available",true)?row.value("Source",std::string{}).c_str():"Definition is present but its native recipe is not ready; inspect loader errors.");ImGui::PopID();}ImGui::EndCombo();
     }
     if(s.Catalog.contains("Total"))ImGui::TextDisabled("%zu matching recipes",s.Catalog.value("Total",std::size_t{}));
     if(s.Catalog.contains("MountedCatalogReady")&&!s.Catalog.value("MountedCatalogReady",false))ImGui::TextWrapped("Mounted content metadata is unavailable; showing loaded recipes and declared definitions only. Browse again when ready.");

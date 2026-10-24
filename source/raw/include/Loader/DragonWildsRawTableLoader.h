@@ -8,6 +8,12 @@
 #include <set>
 #include <mutex>
 #include <vector>
+#include "SDK/WeakObjectHandle.h"
+#include "Core/RawTableTarget.h"
+#include "Core/DeferredTraceExport.h"
+#include <atomic>
+#include <memory>
+#include <map>
 
 namespace RC::Unreal {
     class UDataTable;
@@ -46,9 +52,24 @@ namespace DragonWilds {
         virtual bool OnInitialize() override final;
         virtual void OnDatatableSerialized(RC::Unreal::UDataTable* datatable) override final;
     private:
-        std::unordered_map<RC::StringType, std::vector<nlohmann::json>> m_tableDataMap;
+        struct RawDefinition {
+            nlohmann::json Data;
+            std::string ModId, Source, OperationId;
+        };
+        std::unordered_map<RC::StringType, std::vector<RawDefinition>> m_tableDataMap;
+        struct RawApplication { PS::WeakObjectHandle Table; PS::RawTableTarget::Cursor Cursor; };
+        std::map<std::pair<RC::StringType,RC::StringType>,RawApplication> m_rawApplications;
+        bool m_rawTargetsReady=false;
+        std::vector<RC::Unreal::UDataTable*> RawDestinations(RC::Unreal::UDataTable* table);
+        void ApplyDefinition(const RawDefinition* definition, const nlohmann::json& data,
+            RC::Unreal::UDataTable* table, LoadResult& outResult);
         std::set<std::string> m_appliedExactTargets;
-        struct PendingPatch { std::string Table; std::string Row; nlohmann::json Changes; RC::StringType ModName; };
+        struct PendingPatch {
+            std::string Table, Row;
+            nlohmann::json Changes;
+            RC::StringType ModName;
+            std::string Source, OperationId;
+        };
         std::vector<PendingPatch> m_pendingPatches;
         std::vector<RegistryPatch::Document> m_registryDocuments;
         std::vector<RegistryPatch::Patch> m_registryPlan;
@@ -67,6 +88,8 @@ namespace DragonWilds {
         };
         std::vector<TraceJob> m_traceJobs;
         std::mutex m_traceJobMutex;
+        std::atomic_size_t m_traceJobsRemaining{0};
+        std::unique_ptr<PS::DeferredTraceExport> m_traceExports;
         bool m_traceJobFailureReported = false;
         void LoadTraceJobs();
         void RegisterTraceJobs();
@@ -74,7 +97,8 @@ namespace DragonWilds {
         void FlushTraceJob(TraceJob& job, bool complete = false) noexcept;
         void LoadDocument(const nlohmann::json& data, const RC::StringType& modName,
             const std::string& source = "raw");
-        void ReloadDocument(const nlohmann::json& data, const RC::StringType& modName);
+        void ReloadDocument(const nlohmann::json& data, const RC::StringType& modName,
+            const std::string& source={});
         void LoadAndApplyRegistryTargets();
         void LoadAndApplyRawTargets();
         void ApplyRegistryPatches(RC::Unreal::UDataTable* datatable);
@@ -92,6 +116,7 @@ namespace DragonWilds {
 
         bool ModifyRowProperties(RC::Unreal::UDataTable* datatable, const RC::Unreal::FName& rowName, void* rowPtr, const nlohmann::json& data, LoadResult& outResult);
 
-        void AddToTableDataMap(const std::string& datatableName, const nlohmann::json& data);
+        void AddToTableDataMap(const std::string& datatableName, const nlohmann::json& data,
+            const std::string& modId={}, const std::string& source={}, const std::string& operationId={});
 	};
 }

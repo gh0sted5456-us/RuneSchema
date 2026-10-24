@@ -1,5 +1,21 @@
 # RSDW Base Builder import
 
+Helpy also supports direct placement from **World → Map → Build…**. Click a
+loaded map position, choose a game/mod building piece or **Import prefab…**,
+set its rotation, then explicitly choose **Place & save**. Prefabs are centered
+in X/Y with their lowest piece at ground height, keeping relative transforms.
+
+This uses RuneSchema's own placement service. Neither the RSDW Dev Kit nor
+RSDWTools needs to be installed or enabled. The JSON format is documented by
+the [Builder exporter](https://github.com/RSDWArchive/RSDWBaseBuilder/blob/main/addon/__init__.py).
+Asset paths are resolved against the current game's registry; exported runtime
+indexes and saved actor GUIDs are not reused. Helpy accepts up to 4096 pieces
+and 1 MiB per export, excludes ghosted pieces, and imports buildings only—not
+loose actors, items, or chest contents. Host authority, current-world identity,
+loaded ground, asset binding, world bounds, and an explicit save action are
+required. An incomplete activation is reported separately from a saved file;
+do not repeat placement to retry it.
+
 Place an exported `rsdwtools.buildings.v1` JSON file in a mod's `buildings`
 directory. RuneSchema consumes the export directly. Add this optional top-level
 block to translate and rotate the entire local layout into the game world:

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <filesystem>
+#include <functional>
 #include <set>
 #include <utility>
 #include <vector>
@@ -23,6 +24,8 @@ namespace DragonWilds {
     public:
         void Initialize();
         bool IsInitialized() const { return m_initialized; }
+        void SetCharacterRegistryPreparation(std::function<void(RC::Unreal::UObject*)> prepare)
+        { m_prepareCharacterRegistries=std::move(prepare); }
         void Shutdown();
         ~DragonWildsDataRegistrar() { Shutdown(); }
 
@@ -56,6 +59,12 @@ namespace DragonWilds {
         };
         std::vector<RegistryBinding> m_bindings;
         RC::Unreal::Hook::GlobalCallbackId m_characterJsonHook = RC::Unreal::Hook::ERROR_ID;
+        RC::Unreal::Hook::GlobalCallbackId m_characterJsonPostHook = RC::Unreal::Hook::ERROR_ID;
+        RC::Unreal::UObject* m_nativePolicyContext=nullptr;
+        RC::Unreal::UFunction* m_nativePolicyFunction=nullptr;
+        void* m_nativePolicyParameters=nullptr;
+        std::uint32_t m_registrationThread=0;
+        std::uint64_t m_nativePolicyAttempt=0;
         RC::Unreal::Hook::GlobalCallbackId m_combatLifecycleHook = RC::Unreal::Hook::ERROR_ID;
         bool m_initialized = false;
         bool m_preflightingCharacterJson = false;
@@ -69,6 +78,7 @@ namespace DragonWilds {
         std::set<std::string> m_registryStatusReported;
         std::set<std::string> m_registryWaitingReported;
         PS::PersistencePruner m_pruner;
+        std::function<void(RC::Unreal::UObject*)> m_prepareCharacterRegistries;
         std::string m_registryCandidateFingerprint;
         unsigned m_registryCandidatePasses = 0;
         std::vector<RC::Unreal::UClass*> m_additionalWeaponAttackClasses;
@@ -80,6 +90,7 @@ namespace DragonWilds {
 
         bool ResolveBindings();
         void PreloadMountedPersistenceAssets();
+        void RegisterDeclaredNativeFamilies();
         void ScrubCharacterJsonBeforeLoad(RC::Unreal::UObject* context,
             RC::Unreal::UFunction* function, void* parameters);
         void InstallHooks();

@@ -1,30 +1,29 @@
-# RuneSchema 0.8.0.0
+# RuneSchema 0.8.0.1
 
-The current experimental package is **0.8.0.1**, refreshed October 23, 2026.
+The current release is **0.8.0.1**, published October 24, 2026.
 [Download 0.8.0.1](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.1/RuneSchema-0.8.0.1.zip)
 · [Package, defaults and verification](RELEASE-0.8.0.1.md)
 · [Implemented and removed changes, line by line](CHANGELOG-0.8.0.1.md).
-Its existing prerelease status/tag is unchanged. The stable release below
-remains **0.8.0.0**; updated main documentation is not a runtime promotion.
-The refreshed ZIP is locally supplied, not a new hosted CI artifact.
+The release source is published on `main` and `experimental`, and the
+`0.8.0.1` tag identifies the source used for the rebuilt DLLs. The cleaned ZIP
+is locally built and verified, not a hosted CI artifact.
 
 RuneSchema loads enabled mod folders, mounts their cooked content, and connects
 supported definitions to Dragonwilds' live systems. The main release now uses
-the plain version/tag `0.8.0.0`; `m`/`e` suffixes describe historical releases.
-The package uses one core DLL for Steam/Epic and Game Pass, plus the RSMK plugin.
+the plain version/tag `0.8.0.1`; `m`/`e` suffixes describe historical releases.
+The package uses one core DLL for Steam/Epic, Game Pass and servers, plus Helpy.
 
-[Download 0.8.0.0](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.0/RuneSchema-0.8.0.0.zip)
-· [Release notes and verification](RELEASE-0.8.0.0.md)
-· [Line-by-line changelog](CHANGELOG-0.8.0.0.md)
+[Previous release: 0.8.0.0](RELEASE-0.8.0.0.md)
+· [Historical changelog](CHANGELOG-0.8.0.0.md)
 · [Installation guide](INSTALLATION.md)
 
 ## What changed
 
-This release consolidates the [October 13–16 changelog](ALPHA-CHANGELOG.md):
-the revamped Helpy desktop workspace, source-aware item/icon catalogues,
-Live Log, offline server-setting staging, registry counting/enrollment fixes,
-recipe/journal/quest authoring, streamed placement hardening, bounded loading
-and INI migration. Both DLLs are compressed. The stock UE4SS host is not replaced.
+This release consolidates the [implemented and retired changes](CHANGELOG-0.8.0.1.md):
+the themed Helpy desktop workspace, source-aware item/icon caches,
+Diagnostics and bug reporting, platform-separated AppData, mapping reuse,
+native registration, backup-first cleanup and reduced observer/startup/UI work.
+Both DLLs are compressed. The stock UE4SS host is not replaced.
 The release notes distinguish automated verification from outstanding live
 placement, progression and multiplayer acceptance tests.
 

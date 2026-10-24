@@ -25,4 +25,8 @@ int main(){
     DiagnosticLog::Formatted(L"malformed {",false);assert(DiagnosticLog::Rows.size()==8);
     ConsolidatedLog<L::Normal>(L"phase={} source={}",std::wstring(L"npcs.scan"),std::wstring(L"Mod/quests/test.jsonc"));
     assert(RC::Output::Rows.back()==DiagnosticLog::Rows.back()&&DiagnosticLog::Rows.back().contains(L"npcs.scan"));
+    PSConfig::Get()->Advanced=false;
+    CodedLog<L::Warning>(Diagnostics::Id::CacheMismatch,STR("Reference mismatch {}"),48);
+    assert(RC::Output::Rows.back()==DiagnosticLog::Rows.back());
+    assert(DiagnosticLog::Rows.back().contains(L"[RS-CACHE-003] Reference mismatch 48"));
 }

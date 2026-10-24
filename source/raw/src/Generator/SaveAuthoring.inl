@@ -15,7 +15,7 @@ fs::path SaveInput(const json& args) {
     return path;
 }
 fs::path WriteSaveCopy(const fs::path& folder,const std::string& prefix,const json& value,const fs::path& original={}) {
-    fs::create_directories(folder);auto text=value.dump(2);
+    HelpyKitFiles::NoRedirect(folder);fs::create_directories(folder);auto text=value.dump(2);
     if(!original.empty()){
         std::ifstream encoding(original,std::ios::binary);char bom[2]{};encoding.read(bom,2);
         if(static_cast<unsigned char>(bom[0])==0xff&&static_cast<unsigned char>(bom[1])==0xfe){
@@ -35,7 +35,8 @@ fs::path WriteSaveCopy(const fs::path& folder,const std::string& prefix,const js
     return output;
 }
 }
-void ResetAuthoring(){desktopSave.Source=nullptr;desktopSave.Npc=nullptr;desktopSave.Registry.reset();desktopSave.Preview.Reset();}
+void ResetCharacterEditor();
+void ResetAuthoring(){desktopSave.Source=nullptr;desktopSave.Npc=nullptr;desktopSave.Registry.reset();desktopSave.Preview.Reset();ResetCharacterEditor();}
 json Authoring(const std::string& operation,const json& args) {
     if(operation=="Imports") {json files=json::array();for(const auto& file:ImportedSaves())files.push_back({{"Name",file.filename().string()},{"Path",SavePathText(file)}});return {{"Files",files},{"Folder",SavePathText(ImportFolder())}};}
     if(operation=="NpcPreview") {desktopSave.Npc=nullptr;desktopSave.Npc=ResolveNpcPreview(NpcSaveExport::Preview(Read(SaveInput(args))));return desktopSave.Npc;}

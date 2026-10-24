@@ -43,4 +43,9 @@ int main(int argc,char** argv) {
     Require(!registry.contains("accepted only from a cooked RSREG_")
         && registry.contains("PS::RegistryEnrollment::Reject(owner+\":\"+source,error.what())"),
         "Loose native declarations must use the same parser and fail-closed cleanup enrollment");
+    Require(registrar.contains("if(lane.Name==\"Skills\"||lane.Name==\"SkillPerks\"){")
+        &&registrar.contains("no skill/perk registry or progress was modified")
+        &&registrar.contains("/Script/Engine.UserDefinedEnum")&&registrar.contains("CookedEnumContract::Fingerprint")
+        &&registrar.contains("NetworkIdentityState::PublishOwner(key,manifest.Owner,fingerprint)"),
+        "Unverified skills/perks must stay blocked; cooked enum verification must preserve owned client/server symbols");
 }

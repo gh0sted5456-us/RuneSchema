@@ -10,6 +10,9 @@ int main(){
     assert(Name({{"Name",Json::object()},{"InternalName","IronBar"}})=="Iron Bar");
     assert(Name({{"Name","Épée"}})=="Épée");
     assert(Name(nullptr)=="Unnamed item");
+    assert(Placeholder({{"Name"," [PH] Unfinished helm"}}));
+    assert(Placeholder({{"DisplayName","[ph] Test"}}));
+    assert(!Placeholder({{"Name","A [PH] souvenir"}})&&!Placeholder({{"Name","Phantom helm"}}));
     Json cloned={{"Path","/Game/RuneSchema/MyClones/HeavySteelHelm.HeavySteelHelm"},{"Icon","/Game/UI/Source.Source"}};
     Json nativeIcon={{"Source",cloned["Path"]},{"Icon","/CustomMod/UI/ClonedHelm.ClonedHelm"}};
     assert(Icon(cloned,&nativeIcon)=="/CustomMod/UI/ClonedHelm.ClonedHelm");

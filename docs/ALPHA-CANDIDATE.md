@@ -174,10 +174,13 @@ diagnostics to RuneSchema.log only. No global UE4SS/Lua print hook is installed;
 unrelated mods' logs are not captured or suppressed. Existing dedicated startup
 and authoring trace exports retain their separate formats and locations.
 
-The UTF-8 log uses UTC timestamps and thread identifiers, appends across sessions,
-flushes an idle tail within roughly 100 ms, and flushes warnings/errors immediately.
-It rotates at 8 MiB (between records) into `RuneSchema.log.previous`, retaining
-one prior segment. The flush worker never calls the engine or UE4SS. An unwritable
+The UTF-8 log uses UTC timestamps and thread identifiers, continuously records
+the current run, flushes an idle tail within roughly 100 ms, and flushes warnings/errors immediately.
+There is no mid-run size rollover. Optional `archiveLogs=true` retains the previous
+nonempty session at the next launch under `logs/RuneSchema-<UTC datetime>.log`;
+archives are not automatically deleted. With archiving off, launches start fresh.
+Invalid configuration appends instead of discarding the earlier log, and archive
+failure leaves the previous active file untouched. The flush worker never calls the engine or UE4SS. An unwritable
 mod root disables the file sink with one UE4SS warning, not a loader failure or
 a flood of warnings. Normal teardown joins the worker and flushes remaining text.
 

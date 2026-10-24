@@ -563,9 +563,9 @@ namespace DragonWilds {
         auto id=request.value("PersistenceID",std::string{});
         if(id.empty())id=PS::ClonePresentation::NewId(modTag);
         if(!PS::ClonePresentation::ValidId(id,modTag)||!IsCanonicalPersistenceId(id))
-            throw std::runtime_error("Clone PersistenceID is not a canonical RS7 identifier for this mod tag");
+            throw std::runtime_error("Clone PersistenceID must be a canonical 22-character URL-safe identifier");
         // Shared v5 file naming is retained so existing reload and save ownership work unchanged.
-        const auto name="RS_v5_"+id;
+        const auto name=PS::ClonePresentation::InternalName(id);
         const auto target="/Game/RuneSchema/runeschema/Items/"+name+"."+name;
         const auto statChanges=request.value("StatOverrides",nlohmann::json::object());
         if(!statChanges.is_object()||statChanges.size()>32||statChanges.dump().size()>PS::Authoring::MaxCloneDocumentBytes)throw std::runtime_error("Invalid stat overrides");
@@ -601,7 +601,18 @@ namespace DragonWilds {
         fields["$InheritEquipmentStats"]=true;
         if(soft)fields[RC::to_string(soft->GetName())]=!permanent;
         PS::AssetMetadata::Declaration declaration;declaration.modded=true;declaration.runeSchema=true;declaration.cooked=false;declaration.safeToClone=true;
-        PendingAsset pending{RC::to_generic_string(target),RC::to_generic_string(target),RC::to_generic_string(folder),fields,false,declaration,permanent};
+        // Keep clone-authoring provenance explicit: PendingAsset also serves deferred
+        // asset loader rules, and added fields must not shift aggregate arguments.
+        PendingAsset pending{};
+        pending.Target=RC::to_generic_string(target);
+        pending.ObjectPath=RC::to_generic_string(target);
+        pending.ModName=RC::to_generic_string(folder);
+        pending.Source=permanent ? name+".json" : "HELPY/CreateToolClone (temporary)";
+        pending.OperationId=PS::StructuredDiagnosticB2::NewOperationId("asset");
+        pending.Properties=fields;
+        pending.IsPatch=false;
+        pending.Metadata=declaration;
+        pending.InstalledDefinition=permanent;
         auto savedFields=fields;savedFields["Modded"]={{"RuneSchema",true},{"Cooked",false},{"SafeToClone",true}};
         const auto document=nlohmann::json{{target,savedFields}};
         // Resolve the exact loader documents without constructing an item,

@@ -134,6 +134,7 @@ json DesktopOperation(const std::string& op,const json& args) {
         const auto stamp=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();const auto path=HostServices::TraceProfilesDirectory()/DiagnosticExportName(profile.at("Name"),"Trace",std::to_string(stamp),true);
         if(std::filesystem::exists(path))throw std::runtime_error("Profile export exists; retry");ConfigFiles::Write(path,"// Loads controls only.\n"+profile.dump(2));return {{"File",path.string()}};
     }
+    if(op.starts_with("SaveEditor"))return SaveViewer::SaveEditorOperation(op,args);
     if(op=="Imports"||op.starts_with("Npc")||op.starts_with("Cleanup"))return SaveViewer::Authoring(op,args);
     throw std::runtime_error("Authoring operation has no handler");
 }

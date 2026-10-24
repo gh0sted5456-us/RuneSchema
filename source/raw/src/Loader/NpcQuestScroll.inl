@@ -10,6 +10,7 @@ bool DragonWildsNpcLoader::OnQuestScrollUse(Hook::TCallbackIterationData<void>& 
     dispatch.PreventOriginalFunctionCall();
     FBoolProperty* result=nullptr;
     QuestProgress::Result accepted=QuestProgress::Result::NotReady;
+    const auto succeeded=[&]{return accepted==QuestProgress::Result::Accepted || accepted==QuestProgress::Result::Abandoned;};
     UObject* controller=nullptr;
     try {
         ReflectedContract::Frame(function);
@@ -110,16 +111,19 @@ bool DragonWildsNpcLoader::OnQuestScrollUse(Hook::TCallbackIterationData<void>& 
             &&ActorHelper::GetObjectRef(controller,TEXT("InventoryComponent"))==inventory;};
         const auto character=DialogueCharacter(controller);
         const QuestProgress::OperationGuard guard(PS::HostServices::ProgressDirectory()/"quests"/(character+".json"));
-        DialogueCompletionBinding binding;binding.QuestKey=contract->QuestKey;binding.QuestAction="Accept";binding.QuestEntry=contract->EntryId;
-        binding.SuccessText="Quest accepted.";
+        DialogueCompletionBinding binding;binding.QuestKey=contract->QuestKey;binding.QuestAction=contract->Action;binding.QuestEntry=contract->EntryId;
+        binding.SuccessText=contract->Action=="Abandon"?"Quest cancelled.":"Quest accepted.";
         const auto message=RunQuestAction(binding,controller,current,source,&accepted);
-        result->SetPropertyValue(result->ContainerPtrToValuePtr<void>(parameters),accepted==QuestProgress::Result::Accepted);
-        if(accepted!=QuestProgress::Result::Accepted&&!message.empty())try{m_events.Notify(controller,message,Events::Scope::Participant);}catch(...){}
+        result->SetPropertyValue(result->ContainerPtrToValuePtr<void>(parameters),succeeded());
+        if((!succeeded() || contract->Action=="Abandon")&&!message.empty())try{m_events.Notify(controller,message,Events::Scope::Participant);}catch(...){}
     }catch(const std::exception& error) {
         // A post-commit presentation error must not report a second usable
         // scroll. Uncertain receipts are not replayed, refunded or rewarded.
-        if(result&&ReflectedContract::Output(result,function))result->SetPropertyValue(result->ContainerPtrToValuePtr<void>(parameters),accepted==QuestProgress::Result::Accepted);
+        if(result&&ReflectedContract::Output(result,function))result->SetPropertyValue(result->ContainerPtrToValuePtr<void>(parameters),succeeded());
         WarnOnce("quest-scroll:"+contract->QuestKey,PS::ToWideSafe(error.what()));
-    }catch(...) {ErrorOnce("quest-scroll-internal",TEXT("Quest-scroll activation failed; no automatic retry or refund was attempted."));}
+    }catch(...) {ErrorOnceDiagnostic("quest-scroll-internal",
+        TEXT("Quest-scroll activation failed; no automatic retry or refund was attempted."),
+        "RS-NPC-029","Quest-scroll activation encountered an unknown exception",
+        "Error","Partial",{},"QuestScroll","Application",true);}
     return true;
 }

@@ -1,0 +1,577 @@
+{
+  "version": 1,
+  "codes": [
+    {
+      "id": "QuestOwnerConflict",
+      "code": "RS-QST-001",
+      "title": "Conflicting quest ownership",
+      "severity": "error",
+      "subsystem": "Quests",
+      "summary": "Multiple definitions claim one quest identity.",
+      "impact": "The conflicting definition cannot be safely enrolled.",
+      "action": "Keep one owner for that ID; review the named mod files."
+    },
+    {
+      "id": "RegistryDeferred",
+      "code": "RS-REG-001",
+      "title": "Registry enrollment is not ready",
+      "severity": "warning",
+      "subsystem": "Registry",
+      "summary": "The complete mounted registry is not certified yet.",
+      "impact": "Automatic cleanup stays disabled; verified content can still run.",
+      "action": "Wait for registration, then check framework and content versions."
+    },
+    {
+      "id": "RegistryMismatch",
+      "code": "RS-NET-001",
+      "title": "Client and server content differ",
+      "severity": "error",
+      "subsystem": "Multiplayer",
+      "summary": "Verified registry fingerprints do not match.",
+      "impact": "Session policy determines the affected owner or operation; a content difference alone does not prove the whole session was rejected. This is not a latency measurement.",
+      "action": "Compare the named owner and protocol/build details; align required content before retrying the affected operation."
+    },
+    {
+      "id": "WearableUnenrolled",
+      "code": "RS-WEAR-001",
+      "title": "Wearable contract is not enrolled",
+      "severity": "warning",
+      "subsystem": "Equipment",
+      "summary": "The native wearable contract is not certified.",
+      "impact": "Unsupported wearable work is skipped rather than guessed.",
+      "action": "Check the equipment definition and native slot contract."
+    },
+    {
+      "id": "SlowWork",
+      "code": "RS-PERF-001",
+      "title": "A runtime task took too long",
+      "severity": "warning",
+      "subsystem": "Performance",
+      "summary": "A measured work slice exceeded its reporting threshold.",
+      "impact": "This attributes slow work; it does not prove network rejection or save corruption.",
+      "action": "Inspect the phase and elapsed time; prefer compatible caches and incremental refresh."
+    },
+    {
+      "id": "CatalogUnavailable",
+      "code": "RS-CAT-001",
+      "title": "Item catalogue is not ready",
+      "severity": "warning",
+      "subsystem": "Items",
+      "summary": "A catalogue or cursor is unavailable, changed or expired.",
+      "impact": "Last-good cached presentation remains usable while the query is rechecked.",
+      "action": "Refresh once; inspect mounted-content changes if it persists."
+    },
+    {
+      "id": "PlacementPending",
+      "code": "RS-SPAWN-001",
+      "title": "Placement needs loaded ground",
+      "severity": "warning",
+      "subsystem": "Spawns",
+      "summary": "Ground or collision is not confirmed at the target.",
+      "impact": "Placement is deferred or refused, not placed at a guessed height.",
+      "action": "Move closer to load the area or choose another point."
+    },
+    {
+      "id": "Unclassified",
+      "code": "RS-LOG-000",
+      "title": "Unclassified diagnostic",
+      "severity": "info",
+      "subsystem": "Console",
+      "summary": "This message has no registered exact diagnostic code.",
+      "impact": "Original severity and raw text remain authoritative.",
+      "action": "Read the original subsystem message; a suggested reference is guidance, not a diagnosed cause."
+    },
+    {
+      "id": "LogUnavailable",
+      "code": "RS-LOG-001",
+      "title": "File logging is unavailable",
+      "severity": "warning",
+      "subsystem": "Console",
+      "summary": "RuneSchema cannot open or safely archive its log.",
+      "impact": "File logging is disabled; UE4SS warnings and summaries remain available.",
+      "action": "Check folder permissions and free space; keep the previous log."
+    },
+    {
+      "id": "LogExportProtected",
+      "code": "RS-LOG-002",
+      "title": "Export destination is protected",
+      "severity": "warning",
+      "subsystem": "Console",
+      "summary": "An export would overwrite a live log or archive.",
+      "impact": "No export is written to that path.",
+      "action": "Choose another filename outside the active log and archive paths."
+    },
+    {
+      "id": "RuntimeContract",
+      "code": "RS-RT-001",
+      "title": "Native API contract changed",
+      "severity": "error",
+      "subsystem": "Runtime",
+      "summary": "A reflected function, field or parameter layout is unsupported.",
+      "impact": "That operation stops; arbitrary memory offsets are not substituted.",
+      "action": "Record the game build, storefront and framework version and update compatible components."
+    },
+    {
+      "id": "RuntimeNotReady",
+      "code": "RS-RT-002",
+      "title": "Runtime is becoming ready",
+      "severity": "info",
+      "subsystem": "Runtime",
+      "summary": "The service is not ready in this world generation.",
+      "impact": "Work waits or returns unavailable, not a fabricated zero.",
+      "action": "Wait for the world to become ready, then retry the specific operation."
+    },
+    {
+      "id": "SourceChanged",
+      "code": "RS-CACHE-001",
+      "title": "Mounted content changed",
+      "severity": "info",
+      "subsystem": "Cache",
+      "summary": "Content identity changed during cache work.",
+      "impact": "The stale result is not committed under the new identity.",
+      "action": "Keep last-good results while the affected owner is rechecked."
+    },
+    {
+      "id": "BundleInvalid",
+      "code": "RS-CACHE-002",
+      "title": "Cache bundle format is invalid",
+      "severity": "error",
+      "subsystem": "Cache",
+      "summary": "The header, version, manifest or record bounds failed validation.",
+      "impact": "The invalid bundle is not activated.",
+      "action": "Download the original bundle again or ask its publisher for a supported export."
+    },
+    {
+      "id": "CacheMismatch",
+      "code": "RS-CACHE-003",
+      "title": "Cache does not match installed content",
+      "severity": "warning",
+      "subsystem": "Cache",
+      "summary": "The portable identity differs or a required source is inactive.",
+      "impact": "Only matching source groups are used; unrelated owners remain intact.",
+      "action": "Use the matching build/mod or local Build / update for the affected source."
+    },
+    {
+      "id": "CacheChecksum",
+      "code": "RS-CACHE-004",
+      "title": "Cache integrity check failed",
+      "severity": "error",
+      "subsystem": "Cache",
+      "summary": "Bytes do not match their declared SHA-256 or pixel layout.",
+      "impact": "Unverified bytes are not accepted as valid cache data.",
+      "action": "Retry the original download; never bypass checksums or rename an unrelated pack."
+    },
+    {
+      "id": "CacheBudget",
+      "code": "RS-CACHE-005",
+      "title": "Cache storage limit reached",
+      "severity": "warning",
+      "subsystem": "Cache",
+      "summary": "The operation exceeds the configured size or record limit.",
+      "impact": "The operation is refused without removing unrelated owners.",
+      "action": "Increase the limit or use explicit old-cache cleanup."
+    },
+    {
+      "id": "CacheCancelled",
+      "code": "RS-CACHE-006",
+      "title": "Cache operation cancelled",
+      "severity": "info",
+      "subsystem": "Cache",
+      "summary": "A user request or changed source generation cancelled work.",
+      "impact": "Valid cached content remains usable; incomplete metadata is not activated.",
+      "action": "Retry when convenient; cancellation alone is not corruption."
+    },
+    {
+      "id": "CachePartial",
+      "code": "RS-CACHE-007",
+      "title": "Bundle has partial coverage",
+      "severity": "warning",
+      "subsystem": "Cache",
+      "summary": "Only the declared observed subset was captured.",
+      "impact": "Missing categories and art can still use local discovery.",
+      "action": "Check coverage by category; a full sweep is optional."
+    },
+    {
+      "id": "CacheOwner",
+      "code": "RS-CACHE-008",
+      "title": "Content owner cannot be verified",
+      "severity": "warning",
+      "subsystem": "Cache",
+      "summary": "A record claims ownership unsupported by active source evidence.",
+      "impact": "The record is skipped; borrowed artwork never reassigns content ownership.",
+      "action": "Correct the publisher manifest or exact asset declarations."
+    },
+    {
+      "id": "CachePublish",
+      "code": "RS-CACHE-009",
+      "title": "Cache update could not be committed",
+      "severity": "error",
+      "subsystem": "Cache",
+      "summary": "A staged cache update could not be safely activated.",
+      "impact": "The previous committed metadata remains usable.",
+      "action": "Check permissions and free space, then retry; keep the last-good cache."
+    },
+    {
+      "id": "CacheLegacy",
+      "code": "RS-CACHE-010",
+      "title": "Legacy icon pack loaded",
+      "severity": "info",
+      "subsystem": "Cache",
+      "summary": "This is an older pixel-only .rsmk-icons pack.",
+      "impact": "Verified pictures can be reused, but it supplies no item or journal records.",
+      "action": "Use a newer .rsmk-cache bundle when published; a sweep is optional."
+    },
+    {
+      "id": "DownloadUnavailable",
+      "code": "RS-DL-001",
+      "title": "Download is unavailable",
+      "severity": "warning",
+      "subsystem": "Downloads",
+      "summary": "A download failed or no compatible publication exists.",
+      "impact": "Cached content and local Build / update remain available.",
+      "action": "Check connectivity and the supported build list, then retry later."
+    },
+    {
+      "id": "DownloadBounds",
+      "code": "RS-DL-002",
+      "title": "Download manifest was rejected",
+      "severity": "error",
+      "subsystem": "Downloads",
+      "summary": "Remote filename, index, size or integrity metadata is unsupported.",
+      "impact": "The download is not imported.",
+      "action": "Use a supported publisher index and keep the previous cache."
+    },
+    {
+      "id": "JournalPartial",
+      "code": "RS-JRN-001",
+      "title": "Journal cache is an observed subset",
+      "severity": "info",
+      "subsystem": "Journal",
+      "summary": "Full-game journal coverage is not certified.",
+      "impact": "Unseen entries are not assumed absent or unlocked.",
+      "action": "Import a compatible journal bundle or observe additional native entries."
+    },
+    {
+      "id": "JournalInvalid",
+      "code": "RS-JRN-002",
+      "title": "Journal cache could not be read",
+      "severity": "warning",
+      "subsystem": "Journal",
+      "summary": "The journal record format or text bounds failed validation.",
+      "impact": "The invalid record set is not used.",
+      "action": "Import a supported bundle or refresh the native journal cache."
+    },
+    {
+      "id": "SaveProtected",
+      "code": "RS-SAVE-001",
+      "title": "Original save is protected",
+      "severity": "warning",
+      "subsystem": "Save safety",
+      "summary": "The operation targets a protected original or active save.",
+      "impact": "No unreviewed original-save change is performed.",
+      "action": "Use the copy-only editor and review its export, or close the relevant world normally."
+    },
+    {
+      "id": "PersistenceUncertified",
+      "code": "RS-SAVE-002",
+      "title": "Persistence cleanup is not certified",
+      "severity": "warning",
+      "subsystem": "Save safety",
+      "summary": "Complete stable registry evidence is unavailable.",
+      "impact": "Uncertified sections stay unchanged. Other independently certified sections may still be cleaned; native loading continues.",
+      "action": "Resolve readiness first; a missing lookup is not proof of removed content."
+    },
+    {
+      "id": "EquipUnverified",
+      "code": "RS-EQUIP-001",
+      "title": "Auto-equip is unsupported or ambiguous",
+      "severity": "warning",
+      "subsystem": "Equipment",
+      "summary": "An instance, slot or native contract cannot be confirmed.",
+      "impact": "Delivery and equip status stay separate; no duplicate grant is made.",
+      "action": "Equip manually or inspect the named instance and slot."
+    },
+    {
+      "id": "EquipReadback",
+      "code": "RS-EQUIP-002",
+      "title": "Equip result is not confirmed",
+      "severity": "warning",
+      "subsystem": "Equipment",
+      "summary": "Exact-instance readback does not prove the expected result.",
+      "impact": "A native acceptance flag alone is not reported as successful equipping.",
+      "action": "Check inventory and loadout before retrying."
+    },
+    {
+      "id": "PartyStatUnavailable",
+      "code": "RS-PARTY-001",
+      "title": "Player reading is unavailable",
+      "severity": "info",
+      "subsystem": "Party",
+      "summary": "A reading is missing, stale or unsupported.",
+      "impact": "It is not displayed as zero or claimed to be authoritative.",
+      "action": "Wait for fresh data and check support for that field."
+    },
+    {
+      "id": "PartyAuthority",
+      "code": "RS-PARTY-002",
+      "title": "Host authority is required",
+      "severity": "warning",
+      "subsystem": "Party",
+      "summary": "The caller is not authorized for the action.",
+      "impact": "The action is refused; a host badge grants no privilege by itself.",
+      "action": "Use the authorized host/server flow and current selected character."
+    },
+    {
+      "id": "PartyStale",
+      "code": "RS-PARTY-003",
+      "title": "Player or world identity changed",
+      "severity": "warning",
+      "subsystem": "Party",
+      "summary": "The selected character, serial or world generation is stale.",
+      "impact": "The action is not redirected to a different player or reused object.",
+      "action": "Refresh and select the current player or chest again."
+    },
+    {
+      "id": "MapUnloaded",
+      "code": "RS-MAP-001",
+      "title": "Map target is not loaded",
+      "severity": "warning",
+      "subsystem": "Map",
+      "summary": "The selected ground, node or storage actor is unavailable.",
+      "impact": "Unavailable contents are not an empty chest or harvested node.",
+      "action": "Move closer and refresh that target."
+    },
+    {
+      "id": "MapTimerUnknown",
+      "code": "RS-MAP-002",
+      "title": "Resource respawn time is unverified",
+      "severity": "info",
+      "subsystem": "Map",
+      "summary": "The observation does not establish an exact countdown.",
+      "impact": "A cached map marker never invents a timer.",
+      "action": "Observe a nearby live node; cached references only establish locations."
+    },
+    {
+      "id": "ChestAccessUnknown",
+      "code": "RS-CHEST-001",
+      "title": "Chest access contract is unverified",
+      "severity": "warning",
+      "subsystem": "Storage",
+      "summary": "Lock ownership, deposit permissions or persistence semantics are unverified.",
+      "impact": "Direct deposits and unlock overrides stay disabled.",
+      "action": "Use the game interaction until its current native access path is verified."
+    },
+    {
+      "id": "ChestAmbiguous",
+      "code": "RS-CHEST-002",
+      "title": "Storage inventory is ambiguous",
+      "severity": "warning",
+      "subsystem": "Storage",
+      "summary": "The building has no unique owned native inventory.",
+      "impact": "Contents are unavailable, not read from an unrelated component.",
+      "action": "Refresh the target and inspect its native component contract."
+    },
+    {
+      "id": "ItemDeliveryPartial",
+      "code": "RS-ITEM-001",
+      "title": "Some items were not delivered",
+      "severity": "warning",
+      "subsystem": "Items",
+      "summary": "One or more items failed independent delivery validation.",
+      "impact": "Successful deliveries are not repeated to compensate.",
+      "action": "Review cart results and retry only failed items after resolving their cause."
+    },
+    {
+      "id": "SourceUnavailable",
+      "code": "RS-SRC-001",
+      "title": "Content source is not mounted",
+      "severity": "warning",
+      "subsystem": "Content",
+      "summary": "A required content source is absent or unregistered.",
+      "impact": "Its cache cannot create gameplay definitions or prove availability.",
+      "action": "Mount matching content or keep its references marked unavailable."
+    },
+    {
+      "id": "NativePowerRow", "code": "RS-GAME-001", "title": "Item power-level row name is invalid",
+      "severity": "error", "subsystem": "Game items",
+      "summary": "The game cannot interpret the power-level digits in an item's data-table row name.",
+      "impact": "The native power-level update for that item failed; a mapping refresh does not rename cooked rows.",
+      "action": "Report the named item and its row name to the content author. Correct the native row naming scheme and recook the asset."
+    },
+    {
+      "id": "NativeSkeleton", "code": "RS-GAME-002", "title": "Cooked animation skeleton GUID is stale",
+      "severity": "warning", "subsystem": "Game animation",
+      "summary": "A cooked animation refers to an older skeleton identity.",
+      "impact": "The engine reports an asset consistency warning; this alone is not proof of a corrupt save.",
+      "action": "The author should resave the affected source animation against its current skeleton and recook it."
+    },
+    {
+      "id": "NativePackage", "code": "RS-GAME-003", "title": "Native package or object was not found",
+      "severity": "warning", "subsystem": "Game packages",
+      "summary": "An engine package or object lookup did not resolve at the reported path.",
+      "impact": "A required asset may be missing, or an optional conventional-path probe may have found no asset. Read the surrounding declaration result.",
+      "action": "Check the exact cooked package path and mount. Do not mark a mod broken solely because an optional guessed registry path is absent."
+    },
+    {
+      "id": "NativeShader", "code": "RS-GAME-004", "title": "Material shader data is invalid",
+      "severity": "error", "subsystem": "Game materials",
+      "summary": "The engine could not use a material's cooked shader map.",
+      "impact": "The affected material may render incorrectly; the warning is not a persistence-ID diagnosis.",
+      "action": "Check the named material, target platform and cooking settings. Use a matching cooked build; preserve the original error."
+    },
+    {
+      "id": "NativeScript", "code": "RS-GAME-005", "title": "Blueprint accessed a missing object",
+      "severity": "error", "subsystem": "Game scripts",
+      "summary": "A native Blueprint message reports an Accessed None object reference.",
+      "impact": "The reported Blueprint operation may not have completed. This reference does not identify who caused the missing object.",
+      "action": "Capture the Blueprint/function and first preceding error. The content author should validate that object before using it."
+    },
+    {
+      "id":"NativeUnclassified", "code":"RS-GAME-000", "title":"Native game warning or error",
+      "severity":"warning", "subsystem":"Game",
+      "summary":"A native game warning or error has no more specific RuneSchema reference yet.",
+      "impact":"The original message and severity remain authoritative. This reference is not a diagnosis or a game-issued error code.",
+      "action":"Keep the original category, message, provider code and surrounding events. Report the first failure and when it occurred."
+    },
+    {
+      "id":"NativeUiCallback", "code":"RS-GAME-006", "title":"Vitals UI callback cleanup failed",
+      "severity":"warning", "subsystem":"Game UI",
+      "summary":"The native vitals widget could not remove a registered callback.",
+      "impact":"The widget may be tearing down. This message alone does not establish save corruption or mod failure.",
+      "action":"Check whether this occurs only during exit or also during play. Preserve the callback name and earlier UI errors."
+    },
+    {
+      "id":"NativeUserSettings", "code":"RS-GAME-007", "title":"Native user settings unavailable",
+      "severity":"warning", "subsystem":"Game settings",
+      "summary":"The game could not find its expected native user settings object.",
+      "impact":"Settings access may fail. During shutdown the object may already be unavailable; this is not evidence of a corrupt character save.",
+      "action":"Check the timing and whether settings still work while playing. Capture preceding initialization errors; do not delete saves to silence this warning."
+    },
+    {
+      "id":"NativeNavigation", "code":"RS-GAME-008", "title":"Native crowd navigation unavailable",
+      "severity":"warning", "subsystem":"Game navigation",
+      "summary":"The native crowd manager could not find a RecastNavMesh instance.",
+      "impact":"Crowd navigation may be unavailable in the current world lifecycle stage. A teardown-only warning does not prove broken map content.",
+      "action":"Record the world and whether AI is affected during play. Compare with world initialization or teardown events."
+    },
+    {
+      "id":"NativeTagLifecycle", "code":"RS-GAME-009", "title":"Native tagged-object cleanup mismatch",
+      "severity":"warning", "subsystem":"Game object lifecycle",
+      "summary":"The native registry-tag subsystem could not unregister a tagged object as expected.",
+      "impact":"This concerns native gameplay-object tags, not RuneSchema persistence-ID declarations. It does not authorize save pruning.",
+      "action":"Preserve the exact object and lifecycle stage. Investigate repeated failures during play separately from shutdown-only messages."
+    },
+    {
+      "id":"ConfigLoadFailed", "code":"RS-CFG-001", "title":"Configuration could not be loaded",
+      "severity":"error", "subsystem":"Configuration",
+      "summary":"Configuration loading failed; session defaults are being used.",
+      "impact":"Existing configuration files are retained. The session may not use the requested settings.",
+      "action":"Read the original exception and named configuration path. Correct the file or access problem before restarting."
+    },
+    {
+      "id":"ConfigRecovered", "code":"RS-CFG-002", "title":"Configuration saved with original backup",
+      "severity":"warning", "subsystem":"Configuration",
+      "summary":"An explicit save replaced preserved configuration with current settings after backing up the original.",
+      "impact":"The original file is retained at the reported backup path; startup settings require restart.",
+      "action":"Review the saved settings and retain the backup if an original value needs to be recovered."
+    },
+    {
+      "id":"ConfigSaveFailed", "code":"RS-CFG-003", "title":"Configuration save failed",
+      "severity":"error", "subsystem":"Configuration",
+      "summary":"The settings save was not completed.",
+      "impact":"Changes remain session-only. Any backup path in the original message should be retained.",
+      "action":"Check the exact write/validation error and path; do not assume preferences persisted."
+    },
+    {
+      "id":"PluginCatalogRejected", "code":"RS-PLUG-001", "title":"Plugin catalogue discovery failed",
+      "severity":"error", "subsystem":"Plugins",
+      "summary":"Plugin catalogue discovery threw an exception before loading could proceed.",
+      "impact":"This plugin load pass stops; RuneSchema core continues.",
+      "action":"Inspect the original discovery exception, plugin manifests and directory access."
+    },
+    {
+      "id":"PluginDllMissing", "code":"RS-PLUG-002", "title":"Declared plugin DLL is missing",
+      "severity":"warning", "subsystem":"Plugins",
+      "summary":"A plugin declares a native entry point that is not a regular file at the resolved path.",
+      "impact":"The native plugin is skipped; its PAK content remains independently available.",
+      "action":"Check the named plugin's entry point and installation layout; restore the matching DLL."
+    },
+    {
+      "id":"PluginLoadFailed", "code":"RS-PLUG-003", "title":"Windows could not load a plugin DLL",
+      "severity":"error", "subsystem":"Plugins",
+      "summary":"LoadLibraryExW returned failure for the named native plugin.",
+      "impact":"The native plugin is skipped; other plugins continue.",
+      "action":"Keep the reported Windows error number and DLL path. Check architecture, dependencies and access before replacing files."
+    },
+    {
+      "id":"PluginExportsMissing", "code":"RS-PLUG-004", "title":"Plugin API exports are missing",
+      "severity":"error", "subsystem":"Plugins",
+      "summary":"A loaded DLL lacks a mandatory Query, Initialize or Shutdown export.",
+      "impact":"The native plugin is unloaded before initialization.",
+      "action":"Install a RuneSchema plugin build with the required exports, not an arbitrary UE4SS DLL."
+    },
+    {
+      "id":"PluginIdentityRejected", "code":"RS-PLUG-005", "title":"Plugin identity or API contract rejected",
+      "severity":"error", "subsystem":"Plugins",
+      "summary":"The queried native descriptor does not satisfy the host's identity/API contract.",
+      "impact":"The incompatible native plugin is isolated; core, other plugins and PAK mounting continue.",
+      "action":"Align the manifest ID and DLL descriptor/API build. A version label alone does not repair the descriptor."
+    },
+    {
+      "id":"PluginInitFailed", "code":"RS-PLUG-006", "title":"Plugin initialization contract failed",
+      "severity":"error", "subsystem":"Plugins",
+      "summary":"Initialization failed or the plugin did not register its declared capabilities.",
+      "impact":"Its registered services/capabilities are removed and the DLL is unloaded.",
+      "action":"Read earlier plugin errors and the native result; verify that all declared capabilities are registered."
+    },
+    {
+      "id":"PluginUiFailed", "code":"RS-PLUG-007", "title":"Plugin UI initialization failed",
+      "severity":"error", "subsystem":"Plugins",
+      "summary":"A plugin UI callback rejected initialization or threw an exception.",
+      "impact":"That UI phase did not complete; the message does not establish that all plugin services stopped.",
+      "action":"Keep the named plugin and rejection/exception message. Check matching frontend/core builds and earlier UI errors."
+    },
+    {
+      "id":"PluginUnrealFailed", "code":"RS-PLUG-008", "title":"Plugin Unreal initialization failed",
+      "severity":"error", "subsystem":"Plugins",
+      "summary":"A plugin Unreal initialization callback returned failure or threw an exception.",
+      "impact":"The plugin did not confirm Unreal initialization; core and other plugin phases continue.",
+      "action":"Inspect the named plugin's preceding error and reported result, rather than treating this phase failure as a complete diagnosis."
+    },
+    {
+      "id":"WorldCleanupBufferChanged", "code":"RS-WORLD-001", "title":"World cleanup buffer changed during validation",
+      "severity":"warning", "subsystem":"World save cleanup",
+      "summary":"The native world buffer no longer matched the validated cleanup input.",
+      "impact":"Cleanup skips the buffer; the world is unchanged by this attempt.",
+      "action":"Keep the original world and backup. Check lifecycle/overlapping work before retrying; do not force stale bytes into the save."
+    },
+    {
+      "id":"WorldCleanupContractUnsafe", "code":"RS-WORLD-002", "title":"World cleanup contract is not safe",
+      "severity":"warning", "subsystem":"World save cleanup",
+      "summary":"Missing building IDs were observed but the native load contract was not safe to repair.",
+      "impact":"The cleanup attempt leaves the world unchanged.",
+      "action":"Check the preceding contract and registry evidence. Missing IDs alone do not authorize writing an unverified save format."
+    },
+    {
+      "id":"WorldCleanupRepairFailed", "code":"RS-WORLD-003", "title":"World cleanup repair did not complete",
+      "severity":"warning", "subsystem":"World save cleanup",
+      "summary":"The native world-buffer repair attempt reported an exception.",
+      "impact":"The cleanup attempt reports the world unchanged; the original exception remains authoritative.",
+      "action":"Retain the original world, backups and full error. Resolve the reported validation/repair cause before retrying."
+    },
+    {
+      "id":"WorldCleanupValidationFailed", "code":"RS-WORLD-004", "title":"World cleanup input could not be validated",
+      "severity":"warning", "subsystem":"World save cleanup",
+      "summary":"World data parsing or validation failed before a cleanup result could be accepted.",
+      "impact":"This cleanup path does not write a guessed repair.",
+      "action":"Keep the exact parser/validation exception and game build. A cleanup rejection alone does not prove the native game cannot load the world."
+    },
+    {
+      "id":"WorldCleanupHookUnavailable", "code":"RS-WORLD-005", "title":"Game Pass world cleanup hooks unavailable",
+      "severity":"warning", "subsystem":"World save cleanup",
+      "summary":"Required Game Pass world-loading hooks could not be installed.",
+      "impact":"That world cleanup path stays unavailable and does not change saves.",
+      "action":"Check the current Game Pass executable/build and matching RuneSchema bindings; preserve existing saves and use supported native loading."
+    }
+  ]
+}

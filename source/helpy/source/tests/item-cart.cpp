@@ -38,6 +38,12 @@ int main(){
     assert(cart.BeginDelivery(16));cart.CancelDelivery();assert(!cart.Delivery()&&cart.Entries().size()==1);
     assert(cart.BeginDelivery(17));const nlohmann::json complete={{"GrantResults",nlohmann::json::array({{{"Item","/Game/Items/B.B"},{"Count",1},{"State","Confirmed"}}})}};
     assert(cart.CompleteDelivery(17,complete)==1&&cart.Entries().empty());assert(cart.CompleteDelivery(17,complete)==0);
+    assert(cart.Add(row));cart.ApplyValidation(nlohmann::json::array({{{"Item","/Game/Items/A.A"},{"Valid",true},{"Message","Runtime ItemData"}}}));
+    assert(cart.Validation("/Game/Items/A.A")&&cart.Validation("/Game/Items/A.A")->Valid);
+    cart.ClearValidation();assert(!cart.Validation("/Game/Items/A.A"));
+    assert(cart.BeginDelivery(18));assert(cart.CompleteDelivery(18,{{"GrantResults",nlohmann::json::array({{{"Item","/Game/Items/A.A"},{"Count",1},{"State","Rejected"},{"Message","Missing ItemData"}}})}})==0);
+    assert(cart.Entries().empty()&&cart.Outcomes().size()==1&&cart.Outcomes()[0].State=="Rejected"&&cart.Outcomes()[0].Message=="Missing ItemData");
+    cart.ApplyValidation(nlohmann::json::array({{{"Item","/Game/Items/A.A"},{"Valid",true}}}));assert(!cart.Validation("/Game/Items/A.A"));
     assert(cart.Add(row));auto kit=PS::ItemCart::KitDocument(cart,"starter kit");
     assert(PS::ItemCart::KitItems(kit)==cart.Payload());
     // JSONC comments are data-only: parsing does not stage or deliver anything.

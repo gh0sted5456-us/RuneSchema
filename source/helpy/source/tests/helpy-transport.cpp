@@ -2,6 +2,7 @@
 // The fixture renderer alone cannot catch a lost host/plugin message.
 #include "../plugins/helpy/HelpyPlugin.cpp"
 #include "Generator/SpawnToolsPanel.h"
+#include "Generator/PlayerInventoryPanel.h"
 #include "Core/MapProjection.h"
 #include "Core/MapSpawnRequest.h"
 #include <cassert>
@@ -11,13 +12,20 @@ json LastQuery,LastSubmission,HostSnapshot={{"Players",json::array({{{"Path","/P
 uint64_t HostGeneration=41,HostRevision=8;
 bool ThrowHost=false;
 unsigned SettingsWrites=0;
+unsigned IconManifestReads=0;
+std::map<std::string,unsigned> GuardedCalls;
 json SettingsDoc={{"advancedLogging",false},{"persistence",{{"allowCorruptCharacterEntry",false}}},{"future",std::string(10000,'x')}};
 PS::HelpyAuthoring::Session AuthoringHost;
 int32_t RS_PLUGIN_CALL HostCall(const char*,const char* service,const char* input,char* output,uint32_t capacity,uint32_t* size){
     if(ThrowHost)throw std::runtime_error("host read failed");
     assert(std::string(service)=="runeschema.tools");
     const auto request=json::parse(input);json reply;
-    if(request["Action"]=="SettingsRead"||request["Action"]=="SettingsSave"){
+    const auto action=request.value("Action",std::string{});
+    if(action=="ModsRead"||action=="ModsSave"||action=="ModsImport"||action=="QuickLoadSave"||action=="AdditionalLoggingSave"){
+        if(!output||capacity<RUNESCHEMA_PLUGIN_MAX_MESSAGE){*size=RUNESCHEMA_PLUGIN_MAX_MESSAGE;return RS_PLUGIN_BUFFER_TOO_SMALL;}
+        ++GuardedCalls[action];reply={{"Ok",true},{"Root","D:/XboxGames/Active/RuneSchema"},{"Rows",json::array()},{"Padding",std::string(10000,'x')}};
+    }
+    else if(request["Action"]=="SettingsRead"||request["Action"]=="SettingsSave"){
         if(request["Action"]=="SettingsSave"){
             ++SettingsWrites;assert(output&&capacity==RUNESCHEMA_PLUGIN_MAX_MESSAGE);
             assert(request["ExpectedContents"]=="fixture-contents");
@@ -25,6 +33,11 @@ int32_t RS_PLUGIN_CALL HostCall(const char*,const char* service,const char* inpu
         }
         reply={{"Ok",true},{"Document",SettingsDoc},{"Editable",{{"/advancedLogging",false},{"/persistence/allowCorruptCharacterEntry",false}}},
             {"ExpectedContents","fixture-contents"},{"Status","Saved for next launch"}};
+    }
+    else if(action=="IconCacheSources"){
+        ++IconManifestReads;
+        reply={{"Version",4},{"Ready",true},{"Authoritative",true},{"PlanRevision",1},{"ContentRevision",1},
+            {"Key","0123456789abcdef"},{"Sources",{{"game","abcdef0123456789"}}},{"Padding",std::string(20000,'x')}};
     }
     else if(request["Action"]=="AuthoringSnapshot")reply=AuthoringHost.Snapshot(request.value("Revision",uint64_t{}));
     else if(request["Action"]=="AuthoringSubmit")reply=AuthoringHost.Submit(request.at("Request"));
@@ -43,13 +56,34 @@ int32_t RS_PLUGIN_CALL HostCall(const char*,const char* service,const char* inpu
 }
 }
 int main(){
+    {
+        auto preferences=PS::HelpyImGuiTheme::Theme{};preferences.runtimeTimeUnit=3;preferences.backgroundFile="Scene.png";preferences.backgroundStrength=.2f;
+        preferences.diagnosticToastsEnabled=false;preferences.diagnosticToastLimit=2;preferences.diagnosticHistoryDays=7;preferences.diagnosticSplitRatio=.6f;preferences.diagnosticDeveloperMode=true;
+        const auto document=PS::HelpyImGuiTheme::DocumentFrom(preferences,200);
+        assert(document["runtime"]["timeUnit"]==3&&document["background"]["file"]=="Scene.png"&&document["background"]["strength"].get<float>()==.2f);
+        assert(!document["notifications"]["enabled"].get<bool>()&&document["notifications"]["visibleLimit"]==2&&document["diagnosticHistory"]["ageDays"]==7);
+        assert(document["diagnosticPresentation"]["splitRatio"].get<float>()==.6f&&document["diagnosticPresentation"]["developerMode"].get<bool>());
+        assert(PS::HelpyImGuiTheme::DefaultDocument()["runtime"]["timeUnit"]==0&&PS::HelpyImGuiTheme::DefaultDocument()["background"]["file"]=="");
+    }
     PS::HelpyEnvironment::Configure({{"DedicatedServer",true}});
     RuneSchemaHostApi host{};host.CallService=HostCall;State state{&host};ConfigureTransport(&state);
+    {json manifest;assert(PS::HelpySourceCache::RemoteSnapshot(manifest)&&manifest.at("Padding").get<std::string>().size()==20000&&IconManifestReads==2);
+        PS::HelpySourceCache::Current.Provisional=true;PS::HelpySourceCache::CachedSourcesAttempted=true;PS::HelpySourceCache::Next={};
+        assert(PS::HelpySourceCache::Poll({})&&PS::HelpySourceCache::Ready()&&!PS::HelpySourceCache::Current.Provisional);
+        assert(PS::HelpySourceCache::Fingerprint("/Game/UI/T_Power.T_Power")=="abcdef0123456789");
+        PS::HelpySourceCache::Current={};}
+    for(const auto* action:{"ModsRead","ModsSave","ModsImport","QuickLoadSave","AdditionalLoggingSave"}){
+        json reply;assert(CallCore(&state,{{"Action",action}},reply)&&reply.at("Ok")==true&&reply.at("Root")=="D:/XboxGames/Active/RuneSchema");assert(GuardedCalls[action]==1);
+    }
     assert(state.ToolsGeneration==41&&state.ToolsAvailable&&state.Players.size()==1); // No bootstrap push required.
     const auto unchangedRevision=state.ToolsRevision;SyncHost(&state,true);SyncHost(&state,true);
     assert(state.ToolsRevision==unchangedRevision); // Heartbeats do not invalidate row/order caches.
     const auto serverGrant=json{{"Action","GiveItems"},{"Player","/Server/Player/Remote"},{"Items",json::array({{{"Item","/Game/Items/Log.Log"},{"Quantity",1}}})}};
     assert(PS::SpawnToolRequests::TrySubmit(serverGrant)&&LastSubmission==serverGrant);
+    StoreReceipt(&state,{{"_RequestId",uint64_t(556)},{"JournalCatalog",{{"Entries",json::array({{{"Path","/Game/Journal/Native.Native"},{"Native",true},{"Pages",json::array({"native text"})}}})},{"HasMore",false}}}});
+    json journalReceipt;assert(PS::SpawnToolRequests::TakeCompleted(556,journalReceipt)&&journalReceipt["JournalCatalog"]["Entries"][0]["Pages"][0]=="native text");
+    StoreReceipt(&state,{{"_RequestId",uint64_t(557)},{"InventorySnapshot",{{"PlayerGuid","fixture"},{"Items",json::array({{{"Name","Ash Logs"},{"Count",12}}})}}}});
+    json inventoryReceipt;assert(PS::SpawnToolRequests::TakeCompleted(557,inventoryReceipt)&&inventoryReceipt["InventorySnapshot"]["Items"][0]["Count"]==12);
     PS::RuneSchemaSettingsPanel::Load();assert(PS::RuneSchemaSettingsPanel::Loaded&&SettingsWrites==0);
     PS::RuneSchemaSettingsPanel::Draft["advancedLogging"]=true;PS::RuneSchemaSettingsPanel::Dirty=true;
     assert(PS::RuneSchemaSettingsPanel::Patch()==json({{"/advancedLogging",true}}));
@@ -74,6 +108,19 @@ int main(){
     auto sourceSnapshot=push(json::array({{{"Path","/Dye/Helm.Helm"},{"Name","Fallen Hoplite's Helm (Dyed Chrome)"},{"Category","Armor"},{"SourceKind","modded"},{"SourceName","Dye"}}}),false,"done");
     PS::ItemGridPicker::Rebuild(sourceSnapshot,filterState,1);
     assert(filterState.Matches.size()==1&&PS::ItemSource::Row(sourceSnapshot["Items"][0]).Name=="Dye");
+    {
+        const auto savedSources=PS::HelpySourceCache::Current;
+        PS::HelpySourceCache::Current.DisplayNames={{"dye","Colorful Dye"},{"not-on-this-page","Unloaded Mod"}};
+        PS::HelpySourceCache::Current.Containers={{"mods/dye/paks/Colors_P.utoc",{{"Owner","mods/dye"},{"Status","Indexed"}}}};
+        const auto choices=PS::ItemGridPicker::ProviderChoices(sourceSnapshot);
+        assert(std::find(choices.begin(),choices.end(),std::pair<std::string,std::string>{"mods/dye","Colorful Dye"})!=choices.end());
+        assert(std::find(choices.begin(),choices.end(),std::pair<std::string,std::string>{"mods/not-on-this-page","Unloaded Mod"})!=choices.end());
+        filterState.SourceProvider="mods/dye";
+        assert(PS::ItemCatalogFilter::Query(PS::ItemGridPicker::BackendQuery(filterState))(sourceSnapshot["Items"][0]));
+        PS::ItemGridPicker::Rebuild(sourceSnapshot,filterState,2);assert(filterState.Matches.size()==1);
+        filterState.SourceProvider="mods/other";PS::ItemGridPicker::Rebuild(sourceSnapshot,filterState,3);assert(filterState.Matches.empty());
+        filterState.SourceProvider.clear();PS::HelpySourceCache::Current=savedSources;
+    }
     PS::ItemGridPicker::State orderedState;
     json unordered={{"Items",json::array({{{"Path","/Game/Z"},{"Name","Zinc"}},{{"Path","/Mod/B"},{"Name","apple"}},{{"Path","/Game/A"},{"Name","Apple"}},{{"Path","/Game/B"},{"Name","Bronze"}}})}};
     PS::ItemGridPicker::Rebuild(unordered,orderedState,2);
@@ -246,7 +293,47 @@ int main(){
     assert(Cart::EffectiveCartRecipients()[0].Path=="/Player/Single"&&PS::ItemGridPicker::SharedCart.Payload()==staged);
     json lateReceipt;assert(!PS::SpawnToolRequests::TakeCompleted(interrupted,lateReceipt));
     Cart::CartNeedsReview=false;assert(Cart::ClearCartRecipients());PS::ItemGridPicker::ClearSharedCart();
+    // A busy read/validation does not require another click or submit a grant twice.
+    Cart::SelectedPlayer="/Player/Single";Cart::CartRecipientsChosen=false;Cart::CartNeedsReview=false;
+    assert(PS::ItemGridPicker::SharedCart.Add({{"Path","/Game/Items/Queued.Queued"}}));
+    Cart::CartBatch.Begin(PS::ItemGridPicker::SharedCart.Payload(),Cart::EffectiveCartRecipients());
+    const auto queued=++Cart::CartSequence;assert(PS::ItemGridPicker::SharedCart.BeginDelivery(queued));
+    LastSubmission=json::object();state.ToolsWaiting=true;Cart::PollCartDelivery();Cart::PollCartDelivery();assert(LastSubmission.empty());
+    state.ToolsWaiting=false;Cart::PollCartDelivery();const auto once=LastSubmission;
+    assert(once["Action"]=="GiveItems"&&once["Player"]=="/Player/Single"&&Cart::CartBatch.Pending());
+    Cart::PollCartDelivery();assert(LastSubmission==once);Cart::CartBatch.Stop();Cart::PollCartDelivery();PS::ItemGridPicker::ClearSharedCart();Cart::CartNeedsReview=false;
     ThrowHost=true;json ignored;assert(!CallCore(&state,{{"Action","Read"}},ignored));
+    {namespace A=PS::AuthoringClient;A::Clear();bool busy=true;
+        A::Remote=[&](const json&,json& reply){reply={{"Generation",77},{"Revision",busy?1:2},{"RequestId",uint64_t(778)},{"Operation","SaveEditorSlotItems"},{"Busy",busy},{"Result",{{"Rows",json::array({{{"Name","Cape"}}})}}}};return true;};
+        A::Poll(true);assert(A::LastReceipt==0&&A::Result("SaveEditorSlotItems").empty());busy=false;A::Poll(true);assert(A::LastReceipt==778&&A::Result("SaveEditorSlotItems")["Rows"].size()==1);A::Clear();}
+    {namespace A=PS::AuthoringClient;namespace P=PS::PlayerInventoryPanel;uint64_t requestId=0;bool complete=false;
+        A::Snapshot={{"Generation",uint64_t(81)},{"Active",true},{"Enabled",true},{"Ready",true},{"Busy",false}};
+        A::Remote=[&](const json& request,json& reply){if(request["Action"]=="AuthoringSubmit"){assert(request["Request"]["Operation"]=="SaveEditorSlotItems"&&request["Request"]["Arguments"]["Slot"]=="Cape"&&request["Request"]["Arguments"]["CacheFirst"]==true);requestId=request["Request"]["RequestId"].get<uint64_t>();reply={{"Accepted",true}};return true;}
+            reply={{"Generation",uint64_t(81)},{"Revision",uint64_t(complete?3:2)},{"Active",true},{"Enabled",true},{"Ready",true},{"Busy",requestId&&!complete},{"RequestId",requestId},{"Operation","SaveEditorSlotItems"},{"Result",complete?json{{"Slot","Cape"},{"Rows",json::array({{{"Name","Cape"},{"NativeSlotVerified",true},{"SlotStrategy","Cape"}}})},{"NextOffset",1},{"HasMore",false}}:json::object()}};return true;};
+        P::Open=true;P::Generation=PS::SpawnToolRequests::CurrentGeneration();P::ChangingGear=true;P::GearLocation="Cape";P::GearRows=json::array();P::GearCatalogRequest=0;P::GearMore=true;P::GearOffset=0;P::GearPending=0;P::Pending=0;P::Refresh=false;P::Bay.Query.clear();P::GearQuery.clear();
+        P::Poll();assert(requestId&&P::GearCatalogRequest==requestId&&P::GearRows.empty());A::Poll(true);assert(P::GearCatalogRequest&&A::LastReceipt==0);
+        complete=true;A::Poll(true);P::Poll();assert(P::GearRows.size()==1&&!P::GearMore&&P::GearCatalogRequest==0);P::Open=false;P::ChangingGear=false;A::Clear();}
+    {namespace P=PS::PlayerInventoryPanel;auto& cache=PS::LazyCatalog::For(0);const auto saved=cache;
+        cache={};cache.RuntimeGeneration=PS::SpawnToolRequests::CurrentGeneration();cache.Query="unrelated-global-filter";
+        const json cape={{"Name","Native cape"},{"Path","/Game/Cape.Cape"},{"SlotStrategy","Cape"},{"NativeSlotVerified",true}};
+        auto head=cape;head["Path"]="/Game/Head.Head";head["SlotStrategy"]="Head";
+        auto unverified=cape;unverified["Path"]="/Game/Unknown.Unknown";unverified.erase("NativeSlotVerified");
+        cache.Rows=json::array({cape,head,unverified});cache.Cache["duplicate"]={json::array({cape}),"",false,cache.RuntimeGeneration};
+        auto stale=cape;stale["Path"]="/Game/Stale.Stale";cache.Cache["stale"]={json::array({stale}),"",false,cache.RuntimeGeneration+1};
+        P::ChangeGear({{"Name","Player"}},{{"Location","Cape"}});
+        assert(P::GearRows==json::array({cape})&&cache.Query=="unrelated-global-filter"&&P::Bay.ActiveCategory=="All");
+        P::Open=false;P::ChangingGear=false;P::Refresh=false;cache=saved;}
+    {namespace P=PS::PlayerInventoryPanel;
+        ThrowHost=false;state.ToolsAvailable=true;state.ToolsWaiting=false;P::Open=false;P::Detached=false;P::Refresh=false;P::Target={{"Name","Keep inspector target"}};
+        const json player={{"Path","/Player/Repair"},{"Guid","0123456789abcdef0123456789abcdef"}},item={{"Path","/Game/Gear.Gear"},{"Instance",{1,2,3,4}},{"Slot",2}};
+        P::RestoreGear(player,item);const auto repair=P::RepairPending;
+        assert(repair&&LastSubmission["Action"]=="RestorePlayerGear"&&LastSubmission["Player"]==player["Path"]&&LastSubmission["PlayerGuid"]==player["Guid"]&&LastSubmission["Instance"]==item["Instance"]&&LastSubmission["Slot"]==2);
+        assert(!P::Open&&!P::Detached&&!P::Refresh&&P::Target["Name"]=="Keep inspector target");
+        P::RestoreGear(player,item);assert(P::RepairPending==repair&&LastSubmission["_RequestId"]==repair);
+        state.Completed[repair]={{"EquipmentAction",{{"Confirmed",true}}}};state.ToolsWaiting=false;P::Poll();assert(!P::RepairPending&&P::RepairStatus=="Durability restored."&&!P::Open);
+        P::RestoreGear(player,item);assert(P::RepairPending);P::RepairStarted-=std::chrono::seconds(16);P::Poll();assert(!P::RepairPending&&P::RepairStatus.find("unconfirmed")!=std::string::npos&&!P::Open);
+        state.ToolsWaiting=false;P::RestoreGear(player,item);assert(P::RepairPending);P::RepairGeneration=PS::SpawnToolRequests::CurrentGeneration()+1;P::Poll();assert(!P::RepairPending&&P::RepairStatus.find("World changed")!=std::string::npos&&!P::Open);state.ToolsWaiting=false;
+    }
     PS::ItemIconCache::ClearRemote();ClearRemote();PS::SpawnToolRequests::ClearRemote();
     PS::RuneSchemaSettingsPanel::Remote={};
 }

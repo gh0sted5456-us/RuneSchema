@@ -1,7 +1,18 @@
 #include "Core/MapLanding.h"
+#include "Core/CatalogWindowProgress.h"
+#include "Core/IconCaptureSchedule.h"
 #include "Runtime/SlowWork.h"
+#include "Core/WorkSlice.h"
 #include "Core/SpawnFootprint.h"
 #include "Core/MapTravel.h"
+#include "SDK/Helper/PlayerVitals.h"
+#include "Core/PartyStatWire.h"
+#include "SDK/Helper/EquipmentDelivery.h"
+#include "SDK/Helper/PlayerGearActions.h"
+#include "SDK/Helper/NativeInventoryMarks.h"
+#include "SDK/Helper/InventoryMarkRelay.h"
+#include "SDK/Helper/PlayerLoadoutPresentation.h"
+#include "SDK/Helper/ResourceObservation.h"
 #include "SDK/Helper/ReflectedContract.h"
 #include "SDK/Helper/PlayerStatus.h"
 #include "Core/SpawnCatalogSearch.h"
@@ -24,6 +35,7 @@
 #include "Generator/HelpyRuntimePreferences.h"
 #include "Utility/NativeFunctionHook.h"
 #include "Runtime/NetworkContext.h"
+#include "Runtime/NetworkStatus.h"
 #include "Loader/PlayerActivityEvents.h"
 #include "Loader/NiagaraAttachment.h"
 #include "Loader/Spawn/RuntimeSupport.h"
@@ -74,14 +86,19 @@ using namespace DragonWilds::SpawnRuntime;
 #include "Utility/JsonHelpers.h"
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnosticB3B.h"
+#include "Utility/StructuredDiagnosticB3C.h"
 #include "Loader/DragonWildsSpawnLoader.h"
+#include "SDK/Helper/JournalPresentation.h"
+#include "SDK/Helper/PlayerInventoryPresentation.h"
 #include "Loader/NativeUnlockEquipContracts.h"
 #include "Core/ItemCart.h"
 #include "Loader/EventIdentity.h"
 #include "Loader/PlayerGhost.h"
 #include "Generator/EventParameters.h"
 #include "Generator/ToolRequest.h"
-#include "Generator/QuickMenuUI.h"
+#include "Generator/HelpyGrantBatch.h"
+#include "Generator/QuickMenuDecorations.h"
 #include "Generator/QuickMenuCatalogRules.h"
 #include "Generator/SpawnAuthoring.h"
 #include "Generator/AssetSearch.h"
@@ -102,6 +119,10 @@ using namespace DragonWilds::SpawnRuntime;
 #include "Core/JsonPatchDirective.h"
 #include "Core/JsonLoadOrderMerge.h"
 #include "Runtime/HostServices.h"
+#include "Core/RuneSchemaDataRoot.h"
+#include "Core/CacheBundleIO.h"
+#include "Core/RegistryEnrollment.h"
+#include "Runtime/Storefront.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -235,7 +256,11 @@ namespace {
             auto* property = DragonWilds::PropertyHelper::GetPropertyByName(actorClass, propertyNameWide);
             if (!property)
             {
-                PS::Log<LogLevel::Warning>(STR("Property '{}' does not exist in {}\n"), propertyNameWide, actorClass->GetName());
+                PS::LogStructuredFallback<LogLevel::Warning>(
+                    PS::StructuredDiagnosticB3C::Report("RS-SPAWN-008","Warning","Skipped","SpawnLoader",
+                    "Spawn actor property missing","The requested actor property was not found.",{}, {},
+                    RC::to_string(actorClass->GetPathName()),"Resolution",propertyName),
+                    STR("Property '{}' does not exist in {}\n"), propertyNameWide, actorClass->GetName());
                 continue;
             }
 
@@ -245,7 +270,10 @@ namespace {
             }
             catch (const std::exception& e)
             {
-                PS::Log<LogLevel::Error>(STR("Failed writing '{}': {}\n"), propertyNameWide, PS::ToWideSafe(e.what()));
+                PS::LogStructuredFallback<LogLevel::Error>(
+                    PS::StructuredDiagnosticB3C::Report("RS-SPAWN-009","Error","Partial","SpawnLoader",
+                    "Spawn actor property write failed",e.what(),{}, {},RC::to_string(actor->GetPathName()),"Application",propertyName),
+                    STR("Failed writing '{}': {}\n"), propertyNameWide, PS::ToWideSafe(e.what()));
             }
         }
     }
@@ -379,6 +407,7 @@ namespace {
 }
 
 namespace DragonWilds {
+#include "BuildingPropRuntime.inl"
 #include "IconCacheBuild.inl"
 #include "SpawnItemIcons.inl"
 #include "MapTravel.inl"
@@ -392,6 +421,7 @@ namespace DragonWilds {
 
     DragonWildsSpawnLoader::~DragonWildsSpawnLoader()
     {
+        if(m_buildingOwnershipLock)CloseHandle(reinterpret_cast<HANDLE>(m_buildingOwnershipLock));
         ToolMapTravelReset(false); // no engine calls during DLL shutdown
         g_f2ReferenceJob.Shutdown(); // join copied-string worker before unloading this DLL
         ClearBonusRows();
@@ -453,6 +483,7 @@ namespace DragonWilds {
         PlayerGhost::Clear();
         PS::IconCacheBuild::PumpAvailable=false;
         BulkIconJob.Stop("Icon cache builder shut down.");
+        PS::ItemIconThumbnail::ShutdownDiskCache();
         PS::ItemIconThumbnail::Reset();PS::HelpyMapTexture::Reset();
         for (const auto& ref : m_rootedVisualEffectMaterials)
             if (auto* material=ref.Get()) if (material->IsRootSet()) material->ClearRootSet();
@@ -465,9 +496,11 @@ namespace DragonWilds {
             return;
         }
 
-        PS::JsonHelpers::ParseJsonFilesInPath(loaderPath, [&](const nlohmann::json& data) {
-            m_spawnDocuments.push_back({modName, data});
-        });
+        PS::JsonHelpers::ParseJsonFilesInPathWithSource(loaderPath,
+            [&](const nlohmann::json& data,const fs::path& source) {
+                m_spawnDocuments.push_back({modName, data,
+                    PS::StructuredDiagnosticB2::Utf8Path(source)});
+            });
     }
 
     void DragonWildsSpawnLoader::OnFinalizeLoad(const EEngineLifecyclePhase& phase)
@@ -478,8 +511,8 @@ namespace DragonWilds {
         m_reportedAlteredSpawns = 0;
         m_reportedSpawnErrors = 0;
 
-        struct Definition { RC::StringType Owner; std::string Reference; nlohmann::json Body; };
-        struct Patch { RC::StringType Owner; JsonPatchDirective::Directive Directive; };
+        struct Definition { RC::StringType Owner; std::string Reference; nlohmann::json Body; std::string SourceFile; };
+        struct Patch { RC::StringType Owner; JsonPatchDirective::Directive Directive; std::string SourceFile; };
         std::vector<Definition> definitions;
         std::vector<Patch> patches;
         std::unordered_map<std::string, std::size_t> byReference;
@@ -488,7 +521,12 @@ namespace DragonWilds {
         {
             if (!owned.Document.is_array())
             {
-                PS::Log<LogLevel::Error>(STR("Spawn file for {} must be an array of spawn entries.\n"), owned.ModName);
+                m_buildingOwnershipScanHealthy=false;
+                if (!PS::StructuredDiagnosticB3B::Report("RS-SPAWN-001","Error","Skipped",
+                    "SpawnLoader","Spawn document root is invalid",
+                    "Spawn definitions must be an array of entries.",
+                    RC::to_string(owned.ModName),owned.SourceFile))
+                    PS::Log<LogLevel::Error>(STR("Spawn file for {} must be an array of spawn entries.\n"), owned.ModName);
                 continue;
             }
             std::size_t ordinal = 0;
@@ -500,7 +538,7 @@ namespace DragonWilds {
                     static constexpr std::array<std::string_view, 3> protectedIdentity{"Id", "$Id", "Type"};
                     if (const auto patch = JsonPatchDirective::Parse(incoming, protectedIdentity, "spawn"))
                     {
-                        patches.push_back({owned.ModName, *patch});
+                        patches.push_back({owned.ModName, *patch,owned.SourceFile});
                         continue;
                     }
                     if (!incoming.is_object()) throw std::runtime_error("spawn entry must be an object");
@@ -512,20 +550,27 @@ namespace DragonWilds {
                         : RC::to_string(owned.ModName) + ":" + identity;
                     if (identity.empty())
                     {
-                        definitions.push_back({owned.ModName, reference, incoming});
+                        definitions.push_back({owned.ModName, reference, incoming,owned.SourceFile});
                         continue;
                     }
                     if (const auto found = byReference.find(reference); found != byReference.end())
+                    {
                         JsonLoadOrderMerge::Apply(definitions.at(found->second).Body, incoming, true);
+                        definitions.at(found->second).SourceFile.clear();
+                    }
                     else
                     {
                         byReference.emplace(reference, definitions.size());
-                        definitions.push_back({owned.ModName, reference, incoming});
+                        definitions.push_back({owned.ModName, reference, incoming,owned.SourceFile});
                     }
                 }
                 catch (const std::exception& error)
                 {
-                    PS::Log<LogLevel::Error>(STR("Spawn definition from {} was rejected: {}.\n"),
+                    m_buildingOwnershipScanHealthy=false;
+                    if (!PS::StructuredDiagnosticB3B::Report("RS-SPAWN-002","Error","Skipped",
+                        "SpawnLoader","Spawn definition was rejected",error.what(),
+                        RC::to_string(owned.ModName),owned.SourceFile,"entry#"+std::to_string(ordinal)))
+                        PS::Log<LogLevel::Error>(STR("Spawn definition from {} was rejected: {}.\n"),
                         owned.ModName, PS::ToWideSafe(error.what()));
                 }
             }
@@ -541,7 +586,11 @@ namespace DragonWilds {
             const auto found = byReference.find(reference);
             if (found == byReference.end())
             {
-                PS::Log<LogLevel::Error>(STR("{}: spawn $Patch target '{}' was not loaded; no spawn was created.\n"),
+                if (!PS::StructuredDiagnosticB3B::Report("RS-SPAWN-003","Error","Blocked",
+                    "SpawnLoader","Spawn patch target not loaded",
+                    "No spawn definition matched the requested patch identity.",
+                    RC::to_string(patch.Owner),patch.SourceFile,reference,"Resolution"))
+                    PS::Log<LogLevel::Error>(STR("{}: spawn $Patch target '{}' was not loaded; no spawn was created.\n"),
                     patch.Owner, RC::to_generic_string(reference));
                 ++patchErrors;
                 continue;
@@ -556,11 +605,12 @@ namespace DragonWilds {
         }
 
         m_reportedSpawnErrors += patchErrors;
+        if(patchErrors)m_buildingOwnershipScanHealthy=false;
 
         for (auto& definition : definitions)
         {
             definition.Body.erase("$Id");
-            LoadSpawns(nlohmann::json::array({definition.Body}), definition.Owner);
+            LoadSpawns(nlohmann::json::array({definition.Body}), definition.Owner,definition.SourceFile);
         }
         m_spawnDocuments.clear();
         if (m_reportedNewSpawns || m_reportedAlteredSpawns || m_reportedSpawnErrors)
@@ -598,22 +648,37 @@ namespace DragonWilds {
 
     void DragonWildsSpawnLoader::OnAutoReload(const RC::StringType& modName, const fs::path& modFilePath)
     {
+        if(std::any_of(m_spawns.begin(),m_spawns.end(),[&](const auto& spawn){return spawn.ModName==modName&&spawn.bBuildingProp;})){
+            PS::Log<LogLevel::Warning>(STR("Managed building placement changes in {} require a restart; ownership snapshot retained.\n"),modName);return;
+        }
         {
             std::scoped_lock lock{m_toolSpawnFileMutex};
             if(m_toolSpawnFiles.contains(modFilePath.lexically_normal())) {
-                PS::Log<LogLevel::Warning>(STR("Authored spawn file already installed live; edits require restart: {}\n"),modFilePath.wstring());return;
+                if (!PS::StructuredDiagnosticB3B::Report("RS-SPAWN-005","Warning","Deferred",
+                    "SpawnLoader","Spawn authoring requires restart",
+                    "The authored spawn was already installed live and cannot be reloaded safely.",
+                    RC::to_string(modName),PS::StructuredDiagnosticB2::Utf8Path(modFilePath.filename()),{},"Reload"))
+                    PS::Log<LogLevel::Warning>(STR("Authored spawn file already installed live; edits require restart: {}\n"),modFilePath.wstring());return;
             }
         }
         const auto prefix=RC::to_string(modName)+":";
         if(std::any_of(m_eventTemplates.begin(),m_eventTemplates.end(),[&](const auto& entry){return entry.first.starts_with(prefix);})) {
-            PS::Log<LogLevel::Warning>(TEXT("Event spawn template changes in {} require a restart.\n"),modName);return;
+            if (!PS::StructuredDiagnosticB3B::Report("RS-SPAWN-005","Warning","Deferred",
+                "SpawnLoader","Event spawn template requires restart",
+                "Event spawn template changes cannot be applied in the current session.",
+                RC::to_string(modName),PS::StructuredDiagnosticB2::Utf8Path(modFilePath.filename()),{},"Reload"))
+                PS::Log<LogLevel::Warning>(TEXT("Event spawn template changes in {} require a restart.\n"),modName);return;
         }
         const bool hasLiveSpawn = std::any_of(m_spawns.begin(), m_spawns.end(), [&](const SpawnInfo& spawn) {
             return spawn.ModName == modName && spawn.bExistsInWorld;
         });
         if (hasLiveSpawn)
         {
-            PS::Log<LogLevel::Warning>(
+            if (!PS::StructuredDiagnosticB3B::Report("RS-SPAWN-005","Warning","Deferred",
+                "SpawnLoader","Live spawn update requires restart",
+                "A live spawn exists; replacement rules take effect after restart.",
+                RC::to_string(modName),PS::StructuredDiagnosticB2::Utf8Path(modFilePath.filename()),{},"Reload"))
+                PS::Log<LogLevel::Warning>(
                 STR("Ignored live spawn changes for {}. Restart the game to load the new settings. "
                     "A respawn countdown already underway keeps its original deadline; "
                     "the new RespawnDuration applies after the AI next spawns and dies.\n"), modName);
@@ -623,7 +688,7 @@ namespace DragonWilds {
         std::erase_if(m_spawns, [&](const SpawnInfo& spawn) { return spawn.ModName == modName; });
 
         PS::JsonHelpers::ParseJsonFileInPath(modFilePath, [&](const nlohmann::json& data) {
-            LoadSpawns(data, modName);
+            LoadSpawns(data, modName, PS::StructuredDiagnosticB2::Utf8Path(modFilePath.filename()));
         });
 
         if (IsWorldStillLoaded(m_readyWorld))
@@ -643,6 +708,11 @@ namespace DragonWilds {
 
     bool DragonWildsSpawnLoader::OnInitialize()
     {
+        if(!m_markRelay)m_markRelay=std::make_unique<PS::InventoryMarkRelay>();
+        if(!m_inventoryMarks){m_inventoryMarks=std::make_unique<PS::NativeInventoryMarks>([this](UObject* controller){
+            if(!controller||!controller->GetWorld()||controller->GetWorld()!=m_readyWorld)return std::string{};
+            return GetPlayerCharacterGuid(controller);
+        });m_inventoryMarks->Install();}
         SetupAIScaleHook();
         SetupAIBindingHooks();
         SetupPlayerJoinHooks();
@@ -679,13 +749,27 @@ namespace DragonWilds {
             [this, ownerThread](Hook::TCallbackIterationData<void>& iteration,
                 UObject* source, UFunction* function, void* parameters)
             {
-                if (std::this_thread::get_id() != ownerThread
-                    || m_allowManagedBuildingDestroy || !source || !function
-                    || !source->IsA<AActor>()) return;
+                if (std::this_thread::get_id() != ownerThread || !source || !function) return;
+                static const FName canDestroy(TEXT("CanBeDestroyedByPlayer"),FNAME_Add),destroy(TEXT("K2_DestroyActor"),FNAME_Add),shouldSkip(TEXT("ShouldSkip"),FNAME_Add);
+                const auto functionName=function->GetFName();
+                if(functionName!=canDestroy&&functionName!=destroy&&functionName!=shouldSkip)return;
+                if(!source->IsA<AActor>())return;
+                if(functionName==shouldSkip){
+                    // Native buildings need not expose an ore/tree-specific bSkipSpudStore flag.
+                    if(!parameters||!source->HasAnyFlags(RF_Transient))return;
+                    for(const auto& token:m_managedBuildingSaveTokens)if(token.Actor.Get()==source&&token.Function.Get()==function){
+                        if(auto* result=ManagedBuildingSkipResult(function)){
+                            result->SetPropertyValue(result->ContainerPtrToValuePtr<void>(parameters),true);
+                            iteration.PreventOriginalFunctionCall();
+                        }
+                        return;
+                    }
+                    return;
+                }
+                if(m_allowManagedBuildingDestroy)return;
                 auto* actor = static_cast<AActor*>(source);
                 if (!IsProtectedBuildingActor(actor)) return;
-                const auto functionName = function->GetFName();
-                if (functionName == FName(TEXT("CanBeDestroyedByPlayer"), FNAME_Add)) {
+                if (functionName == canDestroy) {
                     // Use the game's own demolition authorization contract so
                     // build-mode clients receive the ordinary protected result
                     // before any destroy request is attempted.
@@ -703,7 +787,7 @@ namespace DragonWilds {
                     }
                     return;
                 }
-                if (functionName != FName(TEXT("K2_DestroyActor"), FNAME_Add)) return;
+                if (functionName != destroy) return;
                 iteration.PreventOriginalFunctionCall();
                 PS::Log<LogLevel::Warning>(
                     STR("Protected BuildingProp '{}' ignored a player deconstruction request.\n"),
@@ -718,7 +802,8 @@ namespace DragonWilds {
         return true;
     }
 
-    void DragonWildsSpawnLoader::LoadSpawns(const nlohmann::json& data, const RC::StringType& modName)
+    void DragonWildsSpawnLoader::LoadSpawns(const nlohmann::json& data, const RC::StringType& modName,
+        const std::string& sourceFile)
     {
         if (data.is_object() && data.value("$dumpAIClasses", false))
         {
@@ -728,12 +813,19 @@ namespace DragonWilds {
 
         if (!data.is_array())
         {
-            PS::Log<LogLevel::Error>(STR("Spawn file for {} must be an array of spawn entries.\n"), modName);
+            m_buildingOwnershipScanHealthy=false;
+            if (!PS::StructuredDiagnosticB3B::Report("RS-SPAWN-001","Error","Skipped",
+                "SpawnLoader","Spawn document root is invalid",
+                "Spawn definitions must be an array of entries.",
+                RC::to_string(modName),sourceFile))
+                PS::Log<LogLevel::Error>(STR("Spawn file for {} must be an array of spawn entries.\n"), modName);
             return;
         }
 
+        std::size_t entryOrdinal=0;
         for (const auto& value : data)
         {
+            ++entryOrdinal;
             try
             {
                 for(const auto& point:SpawnFields::Expand(value))RegisterSpawn(point, modName);
@@ -741,7 +833,11 @@ namespace DragonWilds {
             catch (const std::exception& e)
             {
                 ++m_reportedSpawnErrors;
-                PS::Log<LogLevel::Error>(STR("Failed to register spawn in {}: {}\n"), modName, PS::ToWideSafe(e.what()));
+                m_buildingOwnershipScanHealthy=false;
+                if (!PS::StructuredDiagnosticB3B::Report("RS-SPAWN-004","Error","Skipped",
+                    "SpawnLoader","Spawn registration rejected",e.what(),
+                    RC::to_string(modName),sourceFile,"entry#"+std::to_string(entryOrdinal)))
+                    PS::Log<LogLevel::Error>(STR("Failed to register spawn in {}: {}\n"), modName, PS::ToWideSafe(e.what()));
             }
         }
     }
@@ -768,6 +864,8 @@ namespace DragonWilds {
         }
         spawn.EntryId=RC::to_generic_string(value.value("Id",value.value("$Id",std::string("entry_")+std::to_string(m_spawns.size()+1))));
         spawn.ModName = modName;
+        spawn.bNativeBuilding=value.value("Type",std::string{})=="BuildingPiece";
+        if(spawn.bNativeBuilding)spawn.DuplicateRadius=SpawnFields::BuildingPieceRadius(value);
         if(value.contains("QuestCompleted")) {
             if(!value.at("QuestCompleted").is_string())throw std::runtime_error("QuestCompleted must be a quest ID");
             auto quest=value.at("QuestCompleted").get<std::string>();
@@ -783,7 +881,7 @@ namespace DragonWilds {
                 if(!std::isfinite(spawn.DuplicateRadius) || spawn.DuplicateRadius<0 || spawn.DuplicateRadius>10000)
                     throw std::runtime_error("DuplicateRadius must be finite and between 0 and 10000 centimetres");
             }
-        } else if(value.contains("PersistAfterCondition") || value.contains("DuplicateRadius"))
+        } else if(value.contains("PersistAfterCondition") || (value.contains("DuplicateRadius")&&!spawn.bNativeBuilding))
             throw std::runtime_error("PersistAfterCondition and DuplicateRadius require QuestCompleted");
         if(value.contains("QuestActive") || value.contains("EventActive")) {
             if(value.contains("QuestActive") && value.contains("EventActive"))
@@ -921,7 +1019,7 @@ namespace DragonWilds {
         {
             RegisterActor(spawn, value);
         }
-        else if (type == "BuildingProp")
+        else if (type == "BuildingProp" || type == "BuildingPiece")
         {
             RegisterBuildingProp(spawn, value);
         }
@@ -936,7 +1034,7 @@ namespace DragonWilds {
         }
         else
         {
-            throw std::runtime_error("Type must be 'AISpawnPoint', 'Actor', 'BuildingProp', 'StaticAssembly' or 'RemoveActor'");
+            throw std::runtime_error("Type must be 'AISpawnPoint', 'Actor', 'BuildingProp', 'BuildingPiece', 'StaticAssembly' or 'RemoveActor'");
         }
 
         m_spawns.push_back(std::move(spawn));
@@ -1268,8 +1366,8 @@ namespace DragonWilds {
             }
             for (const auto& [name, propertyValue] : properties.items())
             {
-                if(spawn.bTemporaryResource && (name=="SpudGuid" || name=="bSkipSpudStore"))
-                    throw std::runtime_error("Temporary resource identity and save-exclusion properties are managed by RuneSchema");
+                if((spawn.bTemporaryResource||spawn.bBuildingProp||spawn.bNativeBuilding) && (name=="SpudGuid" || name=="bSkipSpudStore"))
+                    throw std::runtime_error("Managed placement identity and save-exclusion properties are owned by RuneSchema");
                 spawn.Properties[name] = propertyValue;
             }
         }
@@ -1317,9 +1415,30 @@ namespace DragonWilds {
 
         auto actorValue=value;
         actorValue["Class"]=RC::to_string(actorClass->GetPathName());
+        spawn.bBuildingProp=!spawn.bNativeBuilding;
         RegisterActor(spawn,actorValue);
-        spawn.bBuildingProp=true;
-        spawn.BuildingDataPath=buildingPath;
+        if(spawn.bNativeBuilding){
+            auto* base=ResolveClass(TEXT("/Script/Dominion.BaseBuildingActor"));
+            if(!base||!actorClass->IsChildOf(base))throw std::runtime_error("BuildingPiece requires a native BaseBuildingActor");
+            auto* defaults=actorClass->GetClassDefaultObject().Get();
+            if(!defaults||defaults->HasAnyFlags(static_cast<EObjectFlags>(RF_NeedLoad|RF_NeedPostLoad|RF_NeedInitialization|RF_BeginDestroyed|RF_FinishDestroyed)))
+                throw std::runtime_error("BuildingPiece native defaults are not ready");
+            ManagedBuildingGuid(defaults);
+            const auto identity=RC::to_string(spawn.ModName)+"|building-piece|"+RC::to_string(spawn.EntryId);
+            spawn.StableId=StableActorGuid(identity);spawn.LegacyId=spawn.StableId;spawn.PersistentPlacementKey=identity;
+            spawn.bAllowDeconstruction=true;
+        }
+        if(spawn.bUseNativeRespawn)throw std::runtime_error("Managed BuildingProp cannot use native respawn persistence");
+        auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(actorClass,TEXT("bSkipSpudStore")));
+        if(skip){
+            if(skip->GetArrayDim()!=1||skip->GetElementSize()!=1||!ReflectedContract::Fits(skip,actorClass->GetPropertiesSize()))
+                throw std::runtime_error("Managed BuildingProp native save-exclusion flag layout is invalid");
+        }else if(!spawn.bNativeBuilding&&m_protectedBuildingDestroyGuard==Hook::ERROR_ID)
+            throw std::runtime_error("Managed BuildingProp SPUD save-exclusion hook is unavailable; registration refused");
+        else if(!spawn.bNativeBuilding&&!ManagedBuildingSkipFunction(actorClass))
+            throw std::runtime_error("Managed BuildingProp class '"+RC::to_string(actorClass->GetPathName())
+                +"' has no verified bSkipSpudStore or reflected SPUD ShouldSkip contract; use a buildable class implementing SPUD ShouldSkip. Registration refused to protect world saves");
+        spawn.BuildingDataPath=RC::to_string(building->GetPathName());
 
         for(const auto* name:{TEXT("BuildingPieceData"),TEXT("BuildingData"),TEXT("BuildingPiece")}) {
             auto* property=PropertyHelper::GetPropertyByName(actorClass,name);
@@ -1392,7 +1511,7 @@ namespace DragonWilds {
 
     void DragonWildsSpawnLoader::ApplyBuildingData(AActor* actor,const SpawnInfo& spawn)
     {
-        if(!spawn.bBuildingProp)return;
+        if(!spawn.bBuildingProp&&!spawn.bNativeBuilding)return;
         auto* building=ActorHelper::ResolveObject(RC::to_generic_string(spawn.BuildingDataPath));
         if(!actor || !building)throw std::runtime_error("BuildingProp data binding is unavailable");
         bool applied=false;
@@ -1462,7 +1581,10 @@ namespace DragonWilds {
             nullptr, nullptr, TEXT("/Script/Dominion.DominionAICharacter"));
         if (!baseClass)
         {
-            PS::Log<LogLevel::Error>(STR("Unable to find DominionAICharacter.\n"));
+            PS::LogStructuredFallback<LogLevel::Error>(
+                PS::StructuredDiagnosticB3C::Report("RS-SPAWN-010","Error","Blocked","SpawnLoader",
+                "Native AI base class unavailable","DominionAICharacter could not be resolved.",{}, {},"DominionAICharacter","Resolution"),
+                STR("Unable to find DominionAICharacter.\n"));
             return;
         }
 
@@ -1493,7 +1615,8 @@ namespace DragonWilds {
             nullptr, nullptr, TEXT("/Script/Engine.WorldPartitionRuntimeLevelStreamingCell:OnLevelShown"));
         if (!m_onLevelShownFunction)
         {
-            PS::Log<LogLevel::Error>(STR("Unable to hook OnLevelShown; spawns will not be created.\n"));
+            if (!PS::StructuredDiagnosticB3B::Report("RS-SPAWN-006","Error","Failed","SpawnLoader","Spawn lifecycle hook unavailable","The engine level-shown callback could not be installed; configured spawns cannot be processed.",{}, {},{},"Finalization"))
+                PS::Log<LogLevel::Error>(STR("Unable to hook OnLevelShown; spawns will not be created.\n"));
             return false;
         }
 
@@ -1729,8 +1852,8 @@ namespace DragonWilds {
             // that the game presents through ProcessEvent at runtime.
             if (ActivityFunctionPath(path)) {
                 m_playerProcessEventActivityPaths.insert(path);
-                m_playerProcessEventActivityNames.insert(
-                    RC::to_generic_string(ActivityFunctionName(path)));
+                m_playerProcessEventActivityNames.emplace_back(
+                    RC::to_generic_string(ActivityFunctionName(path)),FNAME_Add);
             }
         };
         for (const auto* path : {SkillXPEvent, ToolAttackEvent, PlayerDamageEvent,
@@ -1756,7 +1879,8 @@ namespace DragonWilds {
                 [this,ownerThread](Hook::TCallbackIterationData<void>&,UObject* source,UFunction* function,void*) {
                     if(std::this_thread::get_id()!=ownerThread || !m_readyWorld || !source || !function) return;
                     try {
-                        if(function->GetFName()!=FName(TEXT("Multicast_Respawn"),FNAME_Add)
+                        static const FName respawn(TEXT("Multicast_Respawn"),FNAME_Add);
+                        if(function->GetFName()!=respawn
                             || to_string(function->GetPathName())!="/Script/Dominion.PlayerRespawnComponent:Multicast_Respawn") return;
                         auto* pawn=ResolvePlayerPawnFromActivity(source);
                         if(!pawn || pawn->GetWorld()!=m_readyWorld || !PlayerGhost::IsDead(pawn)) return;
@@ -1793,18 +1917,18 @@ namespace DragonWilds {
                 [this, ownerThread](Hook::TCallbackIterationData<void>&, UObject* source, UFunction* function, void* parameters) {
                     if (std::this_thread::get_id() != ownerThread || !m_readyWorld || !source || !function) return;
                     try {
-                        const auto name = function->GetName();
+                        const auto name = function->GetFName();
+                        static const FName enter(TEXT("OnEnterTimeFrameDynamic_Event"),FNAME_Add),exit(TEXT("OnExitTimeFrameDynamic_Event"),FNAME_Add);
                         // Native time-sensitive campfires and roadside torches
                         // bind an InGameTimeSensorComponent to these Blueprint
                         // events.  Force the next lifecycle reconciliation now;
                         // the authoritative replicated clock is still read by
                         // ReconcileTimedBuildingProps before changing actors.
-                        if(name==TEXT("OnEnterTimeFrameDynamic_Event")
-                            || name==TEXT("OnExitTimeFrameDynamic_Event")) {
+                        if(name==enter || name==exit) {
                             m_buildingTimeElapsed=1.0;
                             return;
                         }
-                        if (!m_playerProcessEventActivityNames.contains(name)) return;
+                        if (std::find(m_playerProcessEventActivityNames.begin(),m_playerProcessEventActivityNames.end(),name)==m_playerProcessEventActivityNames.end()) return;
                         const auto path = to_string(function->GetPathName());
                         if (!m_playerProcessEventActivityPaths.contains(path)
                             && path != SkillXPEvent && path != ToolAttackEvent
@@ -1866,8 +1990,12 @@ namespace DragonWilds {
                             ClassifyPlayerAttackActivity(source), nlohmann::json::object()});
                     } catch (...) {}
                 }, options);
-            if (m_activityObserver == Hook::ERROR_ID)
-                PS::Log<LogLevel::Warning>(TEXT("Player activity observer unavailable; XP and tool-swing icons are disabled.\n"));
+            if (m_activityObserver == Hook::ERROR_ID) {
+                PS::LogStructuredFallback<LogLevel::Warning>(
+                    PS::StructuredDiagnosticB3C::Report("RS-SPAWN-011","Warning","Partial","SpawnLoader",
+                    "Activity observer unavailable","XP and tool-swing icon observations are disabled.",{}, {},"PlayerActivityObserver","Validation"),
+                    TEXT("Player activity observer unavailable; XP and tool-swing icons are disabled.\n"));
+            }
         }
         const auto registerActivityHook = [this](const TCHAR* functionPath,
             const std::function<std::string(UObject*)>& classify) {
@@ -1929,7 +2057,10 @@ namespace DragonWilds {
                 if (!customEvents.insert(path).second) continue;
                 if (!m_playerActivityAttemptedFunctions.insert(path).second) continue;
                 if (customEvents.size()>64) {
-                    PS::Log<LogLevel::Warning>(TEXT("Activity event hook limit (64) reached.\n"));
+                    PS::LogStructuredFallback<LogLevel::Warning>(
+                        PS::StructuredDiagnosticB3C::Report("RS-SPAWN-012","Warning","Partial","SpawnLoader",
+                        "Activity hook limit reached","No more than 64 custom native activity hooks are installed.",{}, {},"ActivityHooks","Validation"),
+                        TEXT("Activity event hook limit (64) reached.\n"));
                     break;
                 }
                 if (!registerActivityHook(PS::ToWideSafe(path.c_str()).c_str(),{})) {
@@ -1937,9 +2068,13 @@ namespace DragonWilds {
                     // base alias in this game build. Its concrete BP event is
                     // still observed through ProcessEvent, so do not report a
                     // misleading native-hook warning for this one path.
-                    if (path != PlayerHealBlueprintNativeAlias)
-                    PS::Log<LogLevel::Warning>(TEXT("Native activity event unavailable: {}\n"),
-                        PS::ToWideSafe(path.c_str()));
+                    if (path != PlayerHealBlueprintNativeAlias) {
+                        PS::LogStructuredFallback<LogLevel::Warning>(
+                            PS::StructuredDiagnosticB3C::Report("RS-SPAWN-013","Warning","Skipped","SpawnLoader",
+                            "Native activity event unavailable","The requested native event could not be hooked.",{}, {},path,"Validation"),
+                            TEXT("Native activity event unavailable: {}\n"),
+                            PS::ToWideSafe(path.c_str()));
+                    }
                 }
             }
         // Install direct hooks for every native emote route. ProcessEvent stays
@@ -2563,6 +2698,8 @@ namespace DragonWilds {
                 PlayerGhost::ClearWorld();
                 ToolMapTravelReset();
                 m_readyWorld = nullptr;
+                if(m_inventoryMarks)m_inventoryMarks->Reset();
+                if(m_markRelay)m_markRelay->Reset();
                 MenuIconWorldCache.Reset();NextMenuIconWorldScan={};
                 m_pendingWorld = nullptr;
                 m_pendingCellBounds.clear();
@@ -2599,12 +2736,19 @@ namespace DragonWilds {
 
         m_spawnTickCallbackId = Hook::RegisterEngineTickPostCallback(
             [this](Hook::TCallbackIterationData<void>&, UEngine*, float deltaSeconds, bool) {
+                PS::WorkSlice helpyWork;
+                if(m_inventoryMarks)PS::SlowWork::Measure("helpy.marks",[&]{m_inventoryMarks->Tick();});
+                if(m_markRelay)m_markRelay->Tick(m_readyWorld,PS::SpawnToolRequests::Generation.load(),[this](UObject* controller){return GetPlayerCharacterGuid(controller);},ForwardHelpyAuthority);
                 PlayerGhost::Flush();
-                PS::SlowWork::Measure("helpy.tools",[&]{PumpSpawnTools();});
-                PS::SlowWork::Measure("helpy.icons",[&]{PumpItemIcons();});
+                // Alternate optional work so a continuous catalogue cannot starve icons.
+                static bool iconsFirst=false;iconsFirst=!iconsFirst;
+                if(iconsFirst)PS::SlowWork::Measure("helpy.icons",[&]{PumpItemIcons(helpyWork);});
+                PS::SlowWork::Measure("helpy.tools",[&]{PumpSpawnTools(helpyWork);});
+                if(!iconsFirst)PS::SlowWork::Measure("helpy.icons",[&]{PumpItemIcons(helpyWork);});
                 PS::SlowWork::Measure("spawns.scale",[&]{ReconcileManagedActorScales(deltaSeconds);});
                 PS::SlowWork::Measure("spawns.ground",[&]{ReconcileGroundingRetries(deltaSeconds);});
                 PS::SlowWork::Measure("spawns.conditions",[&]{ReconcileTimedBuildingProps(deltaSeconds);});
+                PS::SlowWork::Measure("spawns.ownership",[&]{ReconcileBuildingOwnership(deltaSeconds);});
                 RetryPendingAINames(deltaSeconds);
                 PumpClientSpawnVisuals(deltaSeconds);
                 PS::SlowWork::Measure("players.presentation",[&]{RefreshPlayerNameplates(deltaSeconds);});
@@ -2628,7 +2772,8 @@ namespace DragonWilds {
 
         if (m_spawnTickCallbackId == Hook::ERROR_ID)
         {
-            PS::Log<LogLevel::Error>(STR("Unable to register the spawn tick; spawns will not be created.\n"));
+            if (!PS::StructuredDiagnosticB3B::Report("RS-SPAWN-007","Error","Failed","SpawnLoader","Spawn tick unavailable","The engine spawn-tick callback could not be registered.",{}, {},{},"Finalization"))
+                PS::Log<LogLevel::Error>(STR("Unable to register the spawn tick; spawns will not be created.\n"));
             return false;
         }
         PS::IconCacheBuild::PumpAvailable=true;
@@ -2770,7 +2915,7 @@ namespace DragonWilds {
         }
     }
 
-    AActor* DragonWildsSpawnLoader::FindActorByStableId(UWorld* world, const FGuid& stableId)
+    AActor* DragonWildsSpawnLoader::FindActorByStableId(UWorld* world, const FGuid& stableId,bool unique)
     {
         auto* actorClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
             nullptr, nullptr, TEXT("/Script/Engine.Actor"));
@@ -2781,6 +2926,8 @@ namespace DragonWilds {
 
         TArray<UObject*> instances;
         UECustom::UObjectGlobals::GetObjectsOfClass(actorClass, instances, true, static_cast<EObjectFlags>(0));
+        if(unique&&(instances.Num()<0||instances.Num()>262144))throw std::runtime_error("Managed building identity roster exceeds its bound");
+        AActor* matched=nullptr;
         for (auto* object : instances)
         {
             if (!object || object->GetWorld() != world)
@@ -2797,11 +2944,14 @@ namespace DragonWilds {
             const auto guid = ReadGuidProperty(object, property);
             if (std::memcmp(&guid, &stableId, sizeof(guid)) == 0)
             {
-                return static_cast<AActor*>(object);
+                if(!unique)return static_cast<AActor*>(object);
+                if(ManagedBuildingDestroying(object))continue;
+                if(matched)throw std::runtime_error("Multiple actors claim one managed building identity; adoption refused");
+                matched=static_cast<AActor*>(object);
             }
         }
 
-        return nullptr;
+        return matched;
     }
 
     bool DragonWildsSpawnLoader::IsWorldStillLoaded(UWorld* world)
@@ -2993,7 +3143,7 @@ namespace DragonWilds {
                         if(complete && spawn.bPersistAfterCondition)spawn.bConditionLatched=true;
                         if(!complete)continue;
                     }
-                    if(spawn.Type==ESpawnEntryType::Actor && HasEquivalentActorNear(world,spawn)) {
+                    if(spawn.Type==ESpawnEntryType::Actor && !spawn.bBuildingProp && HasEquivalentActorNear(world,spawn)) {
                         spawn.bSatisfiedByExisting=true;spawn.bExistsInWorld=true;continue;
                     }
                 }
@@ -3004,6 +3154,12 @@ namespace DragonWilds {
                     if(!allowed)continue;
                 }
                 if(groundRetriesOnly){if(!groundBudget)return;--groundBudget;}
+                // Check native saved buildings before a ground trace can hit their roof.
+                if(spawn.bNativeBuilding&&HasEquivalentActorNear(world,spawn)){
+                    spawn.bSatisfiedByExisting=true;spawn.bExistsInWorld=true;
+                    PS::Log<LogLevel::Normal>(STR("[BUILDING-PIECE][OCCUPIED] '{}' from '{}': an existing building occupies the spawn site; left unchanged.\n"),spawn.EntryId,spawn.ModName);
+                    continue;
+                }
                 ResolveGroundedLocation(world, spawn);
                 switch (spawn.Type)
                 {
@@ -3050,34 +3206,44 @@ namespace DragonWilds {
     bool DragonWildsSpawnLoader::HasEquivalentActorNear(UWorld* world,const SpawnInfo& spawn)
     {
         if(!world || spawn.DuplicateRadius<=0 || spawn.ClassPath.empty())return false;
-        auto* actorClass=ResolveClass(spawn.ClassPath);
+        auto* actorClass=ResolveClass(spawn.bNativeBuilding?TEXT("/Script/Dominion.BaseBuildingActor"):spawn.ClassPath);
         if(!actorClass || !ActorHelper::IsActorClass(actorClass))return false;
         TArray<UObject*> objects;UECustom::UObjectGlobals::GetObjectsOfClass(actorClass,objects,true);
-        if(objects.Num()<0 || objects.Num()>4096)throw std::runtime_error("Duplicate placement actor roster exceeds the safe bound");
+        if(objects.Num()<0 || objects.Num()>(spawn.bNativeBuilding?262144:4096))throw std::runtime_error("Duplicate placement actor roster exceeds the safe bound");
         const double limit=spawn.DuplicateRadius*spawn.DuplicateRadius;
         for(auto* object:objects) {
             auto* actor=object && object->IsA<AActor>()?static_cast<AActor*>(object):nullptr;
             if(!actor || actor->GetWorld()!=world || actor->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed)))continue;
             const auto at=ActorHelper::GetActorLocation(actor);
             const auto dx=at.X()-spawn.Location.X(),dy=at.Y()-spawn.Location.Y(),dz=at.Z()-spawn.Location.Z();
-            if(dx*dx+dy*dy+dz*dz<=limit)return true;
+            if(spawn.bNativeBuilding?SpawnFields::BuildingPieceOccupied(dx,dy,dz,spawn.DuplicateRadius,spawn.bGroundToSurface):dx*dx+dy*dy+dz*dz<=limit)return true;
         }
         return false;
     }
 
     void DragonWildsSpawnLoader::ProcessActorEntry(UWorld* world, SpawnInfo& spawn)
     {
+        if(spawn.bBuildingProp&&(!m_buildingOwnershipReady||!PS::RegistryEnrollment::Healthy()
+            ||PS::RegistryEnrollment::PendingCount()!=0||!BuildingOwnershipRegistryReady||!BuildingOwnershipRegistryReady()))return;
         auto* actorClass = ResolveClass(spawn.ClassPath);
         if (!actorClass)
         {
             throw std::runtime_error(std::format("Class '{}' is no longer available", RC::to_string(spawn.ClassPath)));
         }
 
-        auto* existing = FindActorByStableId(world, spawn.StableId);
+        if(spawn.bNativeBuilding){
+            // Never rewrite or demolish an existing native/player-owned building.
+            if(!PS::RegistryEnrollment::Healthy()||PS::RegistryEnrollment::PendingCount()!=0||!BuildingOwnershipRegistryReady||!BuildingOwnershipRegistryReady())return;
+            if(FindActorByStableId(world,spawn.StableId)||HasEquivalentActorNear(world,spawn)){
+                spawn.bSatisfiedByExisting=true;spawn.bExistsInWorld=true;return;
+            }
+            CreateActor(world,spawn);return;
+        }
+        auto* existing = FindActorByStableId(world, spawn.StableId,spawn.bBuildingProp);
         bool needsRecreate = false;
         if (!existing)
         {
-            existing = FindActorByStableId(world, spawn.LegacyId);
+            existing = FindActorByStableId(world, spawn.LegacyId,spawn.bBuildingProp);
             needsRecreate = existing != nullptr;
         }
         if(existing && spawn.bTemporaryResource) {
@@ -3105,19 +3271,16 @@ namespace DragonWilds {
             needsRecreate = true;
         }
 
-        // Quest-owned building props must never become durable anonymous world
-        // state. Older builds saved these actors, leaving collision behind when
-        // the quest/mod disappeared. Recreate any legacy persistent instance as
-        // a transient, deterministically-owned placement.
-        if (existing && spawn.bBuildingProp && !spawn.QuestCompleted.empty()
-            && !existing->HasAnyFlags(RF_Transient))
-        {
-            needsRecreate = true;
+        if(existing&&spawn.bBuildingProp){
+            const auto record=BuildingOwnershipRecord(spawn);
+            if(existing->GetClassPrivate()!=actorClass||!ManagedBuildingBinding(existing,record))
+                throw std::runtime_error("Managed building identity collides with an unverified world actor; left unchanged");
+            needsRecreate=needsRecreate||!existing->HasAnyFlags(RF_Transient)||!ManagedBuildingExcluded(existing);
         }
 
         if (existing && !needsRecreate)
         {
-            if(spawn.bBuildingProp)ApplyBuildingData(existing,spawn);
+            if(spawn.bBuildingProp){ApplyBuildingData(existing,spawn);MarkManagedBuilding(existing,spawn);}
             const auto current = ActorHelper::GetActorLocation(existing);
             const auto dx = current.X() - spawn.Location.X();
             const auto dy = current.Y() - spawn.Location.Y();
@@ -3141,7 +3304,7 @@ namespace DragonWilds {
 
         if (existing)
         {
-            if (spawn.bBuildingProp) RetireTimedActor(existing);
+            if (spawn.bBuildingProp){RetireTimedActor(existing);if(!ManagedBuildingDestroying(existing))return;}
             else ActorHelper::DestroyActor(existing);
         }
 
@@ -3765,10 +3928,10 @@ namespace DragonWilds {
             throw std::runtime_error(std::format("Class '{}' is no longer available", RC::to_string(spawn.ClassPath)));
         }
 
-        const bool questOwnedBuilding = spawn.bBuildingProp && !spawn.QuestCompleted.empty();
+        if(spawn.bBuildingProp)RememberBuildingOwnership();
         auto* actor = ActorHelper::SpawnActor(world, actorClass, spawn.Location, spawn.Rotation,
             [&](AActor* spawned) {
-                if(spawn.Time!=TimeOfDay::Requirement::Any || questOwnedBuilding || spawn.bTemporaryResource) {
+                if(spawn.Time!=TimeOfDay::Requirement::Any || spawn.bBuildingProp || spawn.bTemporaryResource) {
                     spawned->SetFlags(RF_Transient);
                     if(auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(
                         spawned->GetClassPrivate(),TEXT("bSkipSpudStore"))))
@@ -3777,6 +3940,7 @@ namespace DragonWilds {
                 SetGuidProperty(spawned, TEXT("SpudGuid"), spawn.StableId);
                 ApplyBuildingData(spawned,spawn);
                 ApplyEntryProperties(spawned, spawn.Properties);
+                MarkManagedBuilding(spawned,spawn);
                 if(spawn.bTemporaryResource) {
                     auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(
                         spawned->GetClassPrivate(),TEXT("bSkipSpudStore")));
@@ -3784,8 +3948,21 @@ namespace DragonWilds {
                         throw std::runtime_error("Temporary resource save exclusion did not round-trip");
                 }
             }, ESpawnActorScaleMethod::OverrideRootScale,
-            spawn.bBuildingProp?ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding:ESpawnActorCollisionHandlingMethod::AlwaysSpawn,
-            spawn.bBuildingProp?spawn.Scale:FVector(1.0,1.0,1.0));
+            spawn.bNativeBuilding?ESpawnActorCollisionHandlingMethod::DontSpawnIfColliding:spawn.bBuildingProp?ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding:ESpawnActorCollisionHandlingMethod::AlwaysSpawn,
+            (spawn.bBuildingProp||spawn.bNativeBuilding)?spawn.Scale:FVector(1.0,1.0,1.0));
+        const auto rollbackNative=[&](AActor* value)noexcept{
+            if(value&&spawn.bNativeBuilding)try{ActorHelper::DestroyActor(value);}
+            catch(...){PS::Log<LogLevel::Error>(TEXT("[BUILDING-PIECE][ROLLBACK-FAILED] Native demolition failed after placement validation; inspect the affected site before saving.\n"));}
+        };
+        std::unique_ptr<AActor,decltype(rollbackNative)> nativeGuard(actor,rollbackNative);
+        if(spawn.bNativeBuilding){
+            auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(actor->GetClassPrivate(),TEXT("bSkipSpudStore")));
+            if(actor->HasAnyFlags(RF_Transient)||ManagedBuildingGuid(actor)!=BuildingOwnership::ActorGuid(spawn.PersistentPlacementKey)
+                ||(skip&&skip->GetPropertyValue(skip->ContainerPtrToValuePtr<void>(actor))))
+                throw std::runtime_error("Native BuildingPiece persistence identity or save eligibility did not round-trip");
+        }
+        if(spawn.bBuildingProp)try{MarkManagedBuilding(actor,spawn);}
+        catch(...){RetireTimedActor(actor);throw;}
         if(spawn.bTemporaryResource) {
             auto* skip=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(
                 actor->GetClassPrivate(),TEXT("bSkipSpudStore")));
@@ -3828,6 +4005,7 @@ namespace DragonWilds {
         if(spawn.bTemporaryResource)spawn.bTemporaryResourceSpawned=true;
         PS::Log<LogLevel::Verbose>(STR("Spawned actor '{}' ({}) at {} {} {}\n"), spawn.EntryId,
             actor->GetClassPrivate()->GetName(), spawn.Location.X(), spawn.Location.Y(), spawn.Location.Z());
+        nativeGuard.release();
     }
 
     void DragonWildsSpawnLoader::ReconcileGroundingRetries(float deltaSeconds)
@@ -3851,7 +4029,7 @@ namespace DragonWilds {
     {
         if(!m_readyWorld || !GetGameMode(m_readyWorld))return;
         if(std::none_of(m_spawns.begin(),m_spawns.end(),[](const auto& spawn){
-            return spawn.Type!=ESpawnEntryType::RemoveActor && (spawn.Time!=TimeOfDay::Requirement::Any || !spawn.QuestCompleted.empty() || spawn.bTemporaryResource);
+            return !spawn.bNativeBuilding&&spawn.Type!=ESpawnEntryType::RemoveActor && (spawn.Time!=TimeOfDay::Requirement::Any || !spawn.QuestCompleted.empty() || spawn.bTemporaryResource);
         }))return;
         m_buildingTimeElapsed+=deltaSeconds;
         if(m_buildingTimeElapsed<1.0)return;
@@ -3860,7 +4038,7 @@ namespace DragonWilds {
         const bool needsTime=std::any_of(m_spawns.begin(),m_spawns.end(),[](const auto& spawn){return spawn.Time!=TimeOfDay::Requirement::Any;});
         if(needsTime)try {current=TimeOfDay::Current(m_readyWorld);} catch(...) {return;}
         for(auto& spawn:m_spawns) {
-            if(spawn.Type==ESpawnEntryType::RemoveActor || (spawn.Time==TimeOfDay::Requirement::Any && spawn.QuestCompleted.empty() && !spawn.bTemporaryResource) || !spawn.bCellActivated)continue;
+            if(spawn.bNativeBuilding||spawn.Type==ESpawnEntryType::RemoveActor || (spawn.Time==TimeOfDay::Requirement::Any && spawn.QuestCompleted.empty() && !spawn.bTemporaryResource) || !spawn.bCellActivated)continue;
             auto* actor=spawn.LiveActor.Get();
             if(!actor)actor=FindActorByStableId(m_readyWorld,spawn.StableId);
             if(actor && (actor->GetWorld()!=m_readyWorld
@@ -4010,7 +4188,7 @@ namespace DragonWilds {
 
         for (auto& spawn : m_spawns)
         {
-            if (spawn.Type == ESpawnEntryType::RemoveActor || !spawn.bCellActivated)
+            if (spawn.bNativeBuilding || spawn.Type == ESpawnEntryType::RemoveActor || !spawn.bCellActivated)
                 continue;
             // Conditional actors are retired by ReconcileTimedBuildingProps.
             // Do not rediscover the actor during its deferred destruction and

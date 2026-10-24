@@ -1,5 +1,7 @@
 #pragma once
 #include "Loader/QuestSaveOwnership.h"
+#include "Core/SaveCleanup.h"
+#include "SDK/WeakObjectHandle.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "SDK/Helper/ReflectedContract.h"
 #include "SDK/Structs/Custom/FScriptMapHelper.h"
@@ -10,6 +12,7 @@
 #include "Unreal/Core/HAL/UnrealMemory.hpp"
 #include <cstring>
 #include <map>
+#include <functional>
 
 namespace DragonWilds::Quests {
 using namespace RC::Unreal;
@@ -48,7 +51,7 @@ class NativeQuestCleanup {
     static FArrayProperty* ArrayProperty(UObject* owner,const TCHAR* name,const TCHAR* innerName,int /*legacySize*/) {
         auto* p=CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(owner->GetClassPrivate(),name));
         auto* inner=p?CastField<FStructProperty>(p->GetInner()):nullptr;
-        if(!p || p->GetElementSize()!=sizeof(FScriptArray) || p->GetArrayDim()!=1 || !inner || !inner->GetStruct()
+        if(!p || !ReflectedContract::Fits(p,owner->GetClassPrivate()->GetPropertiesSize()) || p->GetElementSize()!=sizeof(FScriptArray) || p->GetArrayDim()!=1 || !inner || !inner->GetStruct()
             || inner->GetStruct()->GetFName()!=FName(innerName,FNAME_Add) || inner->GetElementSize()<=0 || inner->GetElementSize()>65535
             || inner->GetElementSize()!=inner->GetStruct()->GetStructureSize())throw std::runtime_error("Quest cleanup array layout changed");
         return p;
@@ -58,15 +61,28 @@ class NativeQuestCleanup {
     }
 public:
     struct Result { bool Ready=false; size_t Removed=0; };
-    static Result Run(UObject* controller,const std::map<std::string,std::string>& retired) {
+    static Result Run(UObject* controller,const PS::SaveCleanup::RegistrySnapshot& registry,const std::function<void()>& beforePrune) {
+        if(!registry.CanClean(PS::RegistryEnrollment::IdentityKind::Quest))return {};
         if(!controller || !controller->GetWorld())return {};
         ActorHelper::FunctionCall authority(controller,TEXT("/Script/Engine.Actor:HasAuthority"));authority.Invoke();
         if(!authority.Result<bool>())return {};
         auto* component=ActorHelper::GetObjectRef(controller,TEXT("QuestProgressComponent"));
         if(!component || component->GetOuterPrivate()!=controller)return {};
+        const PS::WeakObjectHandle ownerToken(controller),componentToken(component),worldToken(controller->GetWorld());
+        const auto liveOwner=[&]{return ownerToken.Get()==controller&&componentToken.Get()==component&&worldToken.Get()
+            &&!controller->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed))
+            &&!component->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed))
+            &&controller->GetWorld()==worldToken.Get()&&component->GetOuterPrivate()==controller;};
+        if(!liveOwner())return {};
         auto* property=ArrayProperty(component,TEXT("Quests"),TEXT("QuestProgress"),56);
         auto* inner=CastField<FStructProperty>(property->GetInner());auto* type=inner->GetStruct().Get();
         auto* dataField=Required<FObjectPropertyBase>(type,TEXT("Data"),0,8);
+        auto* state=PropertyHelper::GetPropertyByName(type,TEXT("State"));
+        UEnum* stateEnum=nullptr;
+        if(auto* value=CastField<FEnumProperty>(state))stateEnum=value->GetEnum();
+        else if(auto* value=CastField<FByteProperty>(state))stateEnum=value->GetEnum().Get();
+        if(!ReflectedContract::Fits(state,type->GetStructureSize())||state->GetElementSize()!=1||state->GetArrayDim()!=1
+            ||!stateEnum||stateEnum->GetPathName()!=TEXT("/Script/Dominion.EQuestState"))throw std::runtime_error("Quest state layout changed");
         auto* integers=Required<FArrayProperty>(type,TEXT("QuestInts"),24,16);
         auto* integerInner=CastField<FStructProperty>(integers->GetInner());
         if(!integerInner || !integerInner->GetStruct() || integerInner->GetStruct()->GetFName()!=FName(TEXT("QuestInt"),FNAME_Add) || integerInner->GetElementSize()<12 || integerInner->GetElementSize()>64
@@ -74,11 +90,14 @@ public:
             throw std::runtime_error("Quest integer layout changed");
         auto* integerName=Required<FNameProperty>(integerInner->GetStruct().Get(),TEXT("QuestIntName"),0,8);
         auto* integerValue=Required<FIntProperty>(integerInner->GetStruct().Get(),TEXT("QuestIntValue"),8,4);
-        auto& live=*property->ContainerPtrToValuePtr<FScriptArray>(component);CheckArray(live);
+        auto& live=*property->ContainerPtrToValuePtr<FScriptArray>(component);CheckArray(live);if(!live.Num())return {};
         ArrayBuffer retained(property),original(property);property->CopyCompleteValue(original.Data,&live);
-        std::set<UObject*> removedAssets;std::set<std::string> removedIds,locations,allIds;
+        std::set<UObject*> removedAssets;std::set<std::string> removedIds,locations,protectedLocations;
+        bool preserveLocations=false;
         for(int i=0;i<live.Num();++i) {
             auto* row=static_cast<uint8_t*>(live.GetData())+i*inner->GetElementSize();
+            const bool completed=*state->ContainerPtrToValuePtr<uint8_t>(row)==*registry.QuestCompletedState;
+            if(completed){preserveLocations=true;retained.Add(row);continue;}
             auto& ints=*integers->ContainerPtrToValuePtr<FScriptArray>(row);CheckArray(ints);
             SaveJson savedInts=SaveJson::array();std::string id;std::set<std::string> rowLocations;
             for(int j=0;j<ints.Num();++j) {
@@ -89,40 +108,26 @@ public:
                 if(name.starts_with("RuneSchema.Identity:"))id=name.substr(20);
                 if(name.starts_with("RuneSchema.Location:") && number==OwnershipVersion)rowLocations.insert(name.substr(20));
             }
-            auto owner=OwnedBy({{"QuestId",id},{"QuestInts",savedInts}});
-            UObject* asset=nullptr;std::memcpy(&asset,dataField->ContainerPtrToValuePtr<void>(row),sizeof(asset));
-            if(owner.empty() && asset) {
-                auto* identity=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(asset->GetClassPrivate(),TEXT("PersistenceID")));
-                if(identity) {
-                    const auto& text=identity->GetPropertyValue(identity->ContainerPtrToValuePtr<void>(asset));
-                    const auto& chars=text.GetCharArray();
-                    const auto assetId=chars.Num()>1 && chars.GetData()?RC::to_string(RC::StringType(chars.GetData(),chars.Num()-1)):std::string{};
-                    if(const auto declared=retired.find(assetId);declared!=retired.end()) {
-                        id=assetId;owner=declared->second;
-                    }
-                }
+            if(PS::SaveCleanup::CompletedQuest({{"QuestInts",savedInts}},registry)||!PS::SaveCleanup::IsOrphanQuest(id,registry)){
+                protectedLocations.insert(rowLocations.begin(),rowLocations.end());retained.Add(row);continue;
             }
-            const auto retiredQuest=retired.find(id);
-            if(owner.empty() || retiredQuest==retired.end()
-                || retiredQuest->second!=owner){retained.Add(row);continue;}
-            if(!allIds.insert(id).second)throw std::runtime_error("Duplicate owned quest identity; cleanup refused");
-            for(const auto& variable:savedInts)if(variable.at("QuestVariableName")=="RuneSchema.Phase"
-                && (variable.at("QuestVariableValue")==2 || variable.at("QuestVariableValue")==3))
-                throw std::runtime_error("Removed mod has an unresolved quest exchange; records retained for recovery");
-            for(const auto& variable:savedInts)if(variable.at("QuestVariableName").get<std::string>().starts_with("RuneSchema.Flag:") && variable.at("QuestVariableValue")==1)
-                throw std::runtime_error("Removed mod has an unresolved dialogue reward; records retained for recovery");
+            OwnershipInfo ownership;try{ownership=InspectOwnership({{"QuestId",id},{"QuestInts",savedInts}});}catch(...){protectedLocations.insert(rowLocations.begin(),rowLocations.end());retained.Add(row);continue;}
+            if(!ownership.Identity||ownership.Owners.empty()){protectedLocations.insert(rowLocations.begin(),rowLocations.end());retained.Add(row);continue;}
+            auto* asset=dataField->GetObjectPropertyValue(dataField->ContainerPtrToValuePtr<void>(row));
             if(asset) {
                 auto* identity=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(asset->GetClassPrivate(),TEXT("PersistenceID")));
-                if(!identity || identity->GetArrayDim()!=1)throw std::runtime_error("Owned quest asset identity unavailable");
+                if(!identity || identity->GetArrayDim()!=1){protectedLocations.insert(rowLocations.begin(),rowLocations.end());retained.Add(row);continue;}
                 const auto& text=identity->GetPropertyValue(identity->ContainerPtrToValuePtr<void>(asset));
                 const auto& chars=text.GetCharArray();
                 if(chars.Num()<2 || chars.Num()>1025 || !chars.GetData() || chars.GetData()[chars.Num()-1]!=0
-                    || RC::to_string(RC::StringType(chars.GetData(),chars.Num()-1))!=id)throw std::runtime_error("Owned quest asset identity mismatch; cleanup refused");
+                    || RC::to_string(RC::StringType(chars.GetData(),chars.Num()-1))!=id){protectedLocations.insert(rowLocations.begin(),rowLocations.end());retained.Add(row);continue;}
             }
             if(asset)removedAssets.insert(asset);
             removedIds.insert(id);locations.insert(rowLocations.begin(),rowLocations.end());
         }
         if(removedIds.empty())return {true,0};
+        for(const auto& location:protectedLocations)locations.erase(location);
+        if(preserveLocations)locations.clear(); // Completed rows stay opaque; do not erase visibility they might share.
         auto* visibility=ArrayProperty(component,TEXT("VisibilityTrackers"),TEXT("LocationVisibilityTracker"),0);
         auto* visibilityType=CastField<FStructProperty>(visibility->GetInner())->GetStruct().Get();
         const auto visibilityStride=visibility->GetInner()->GetElementSize();
@@ -137,7 +142,7 @@ public:
         }
         FProperty* tracked=PropertyHelper::GetPropertyByName(component->GetClassPrivate(),TEXT("TrackedSecondaryQuest"));
         if(!tracked)tracked=PropertyHelper::GetPropertyByName(component->GetClassPrivate(),TEXT("TrackedQuestMap"));
-        if(!tracked||tracked->GetArrayDim()!=1||tracked->GetSize()<=0||tracked->GetSize()>256)
+        if(!tracked||!ReflectedContract::Fits(tracked,component->GetClassPrivate()->GetPropertiesSize())||tracked->GetArrayDim()!=1||tracked->GetSize()<=0||tracked->GetSize()>256)
             throw std::runtime_error("Tracked quest layout changed");
         auto* trackedPtr=tracked->ContainerPtrToValuePtr<void>(component);
         ValueBuffer oldTracked(tracked,trackedPtr),nextTracked(tracked,trackedPtr);
@@ -163,7 +168,7 @@ public:
             UECustom::FScriptMapHelper view(map,nextTracked.Data);
             view.ForEachPair([&](void*,void* value){clearRetired(objectValue,value);});
         } else throw std::runtime_error("Tracked quest property has unsupported type");
-        auto* notify=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,TEXT("/Script/Dominion.QuestProgressComponent:OnQuestsUpdated"),false);
+        auto* notify=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,TEXT("/Script/Dominion.QuestProgressComponent:Client_OnQuestsUpdated"),false);
         ReflectedContract::Frame(notify);
         size_t parameters=0;FArrayProperty* updated=nullptr;FBoolProperty* loaded=nullptr;
         for(auto* p:TFieldRange<FProperty>(notify,EFieldIterationFlags::Default))if(p->HasAnyPropertyFlags(CPF_Parm)) {
@@ -171,16 +176,18 @@ public:
             if(p->GetFName()==FName(TEXT("bFromLoadedState"),FNAME_Add))loaded=CastField<FBoolProperty>(p);
         }
         auto* updatedInner=updated?CastField<FStructProperty>(updated->GetInner()):nullptr;
-        if(parameters!=2 || !ReflectedContract::Input(updated,notify) || updated->GetElementSize()!=sizeof(FScriptArray) || !updatedInner || updatedInner->GetStruct()!=inner->GetStruct()
+        if(parameters!=2 || !notify->HasAnyFunctionFlags(FUNC_Net)||!notify->HasAnyFunctionFlags(FUNC_NetClient)|| !ReflectedContract::Input(updated,notify) || updated->GetElementSize()!=sizeof(FScriptArray) || !updatedInner || updatedInner->GetStruct()!=inner->GetStruct()
             || !ReflectedContract::Input(loaded,notify) || loaded->GetElementSize()!=1 || !loaded->IsNativeBool())throw std::runtime_error("Quest cleanup notification layout changed");
+        beforePrune();
+        if(!liveOwner())throw std::runtime_error("Quest cleanup participant changed during backup; no native write performed");
         try {
-            property->CopyCompleteValue(&live,retained.Data);
-            visibility->CopyCompleteValue(&liveVisibility,retainedVisibility.Data);
-            tracked->CopyCompleteValue(trackedPtr,nextTracked.Data);
+            // Native full replacement diffs old/new rows. A listen host must still have its old rows here.
             ActorHelper::FunctionCall(component,notify->GetPathName()).ArrayArg(TEXT("UpdatedQuests"),property,&retained.Array()).Arg(TEXT("bFromLoadedState"),false).Invoke();
+            if(!liveOwner())throw std::runtime_error("Quest cleanup participant changed during native notification");
+            property->CopyCompleteValue(&live,retained.Data);visibility->CopyCompleteValue(&liveVisibility,retainedVisibility.Data);tracked->CopyCompleteValue(trackedPtr,nextTracked.Data);
         }catch(...) {
-            property->CopyCompleteValue(&live,original.Data);visibility->CopyCompleteValue(&liveVisibility,oldVisibility.Data);
-            tracked->CopyCompleteValue(trackedPtr,oldTracked.Data);throw;
+            if(liveOwner()){property->CopyCompleteValue(&live,original.Data);visibility->CopyCompleteValue(&liveVisibility,oldVisibility.Data);
+                tracked->CopyCompleteValue(trackedPtr,oldTracked.Data);}throw;
         }
         return {true,removedIds.size()};
     }

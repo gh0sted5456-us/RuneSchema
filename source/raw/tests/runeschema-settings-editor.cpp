@@ -10,19 +10,23 @@ int main()try{
     auto document=SettingsDocument(PSConfigSettings{});document["futureSection"]={{"keep","unchanged"}};
     ConfigFiles::Write(file,EncodeIniDocument(document));
     auto initial=RuneSchemaSettingsEditor::Read(root);Need(initial.at("Ok").get<bool>());
+    Need(initial["Editable"]["/archiveLogs"]==false&&initial["Document"]["archiveLogs"]==false);
     Need(!initial["Editable"].contains("/futureSection/keep"));
+    Need(!initial["Editable"].contains("/persistence/recovery")&&!initial["Editable"].contains("/worldSaveCleanup/backupBeforePrune"));
     const auto original=ConfigFiles::Read(file);
     const auto save=[&](const json& patch,const json& expected){return RuneSchemaSettingsEditor::Save(root,{{"Patch",patch},{"ExpectedContents",expected}});};
-    for(const auto patch:{json{{"/futureSection/keep","overwrite"}},json{{"/advancedLogging","true"}},json{{"/loaders/recipes",nullptr}},json{{"/helpyAuthority/maximumItemCount",-1}}}){
+    for(const auto patch:{json{{"/futureSection/keep","overwrite"}},json{{"/advancedLogging","true"}},json{{"/archiveLogs","true"}},json{{"/loaders/recipes",nullptr}},json{{"/helpyAuthority/maximumItemCount",-1}},json{{"/persistence/recovery",true}},json{{"/worldSaveCleanup/backupBeforePrune",false}}}){
         Need(!save(patch,original).at("Ok").get<bool>());Need(ConfigFiles::Read(file)==original);
     }
     Need(!save(json{{"/advancedLogging",true}},"stale").at("Ok").get<bool>());
-    const auto saved=save(json{{"/advancedLogging",true},{"/persistence/allowCorruptCharacterEntry",true}},original);
+    const auto saved=save(json{{"/advancedLogging",true},{"/archiveLogs",true},{"/persistence/allowCorruptCharacterEntry",true}},original);
     Need(saved.at("Ok").get<bool>()&&saved.at("RestartRequired").get<bool>());
     Need(ConfigFiles::Read(saved.at("Backup").get<std::string>())==original);
     Need(saved["Document"]["futureSection"]["keep"]=="unchanged");
     Need(saved["Document"]["advancedLogging"]==true&&saved["Document"]["persistence"]["allowCorruptCharacterEntry"]==true);
     Need(saved["Document"]["defaultRecovery"]["enabled"]==false&&saved["Document"]["defaultRecovery"]["progress"]==false);
+    Need(saved["Document"]["archiveLogs"]==true);
+    Need(saved["Document"]["persistence"]["recovery"]==false);
     const auto current=ConfigFiles::Read(file);Need(!save(json{{"/advancedLogging",false}},original).at("Ok").get<bool>());Need(ConfigFiles::Read(file)==current);
     ConfigFiles::Write(file,"broken settings");Need(!RuneSchemaSettingsEditor::Read(root).at("Ok").get<bool>());
     Need(!save(json{{"/advancedLogging",false}},"broken settings").at("Ok").get<bool>());Need(ConfigFiles::Read(file)=="broken settings");

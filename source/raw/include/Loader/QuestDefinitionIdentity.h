@@ -7,7 +7,7 @@ namespace DragonWilds::Quests::DefinitionIdentity {
 using Json=nlohmann::json;
 inline uint64_t Hash(const Json& value){uint64_t hash=14695981039346656037ULL;for(unsigned char b:value.dump()){hash^=b;hash*=1099511628211ULL;}return hash;}
 inline Json Progress(Json value){
-    for(const char* key:{"Title","Description","CompletedDescription","Region","HideInQuestList","ShowInCompletedQuestList"})value.erase(key);
+    for(const char* key:{"Title","Description","Icon","CompletedDescription","Region","HideInQuestList","ShowInCompletedQuestList"})value.erase(key);
     const auto objective=[](Json& entry){if(entry.is_object())for(const char* key:{"Text","SubobjectiveDescription","Hint","QuestDescriptionOverride","ProgressText","CompleteText","AnnounceProgress"})entry.erase(key);};
     if(value.contains("Objective"))objective(value["Objective"]);
     if(value.contains("Stages")&&value["Stages"].is_array())for(auto& stage:value["Stages"])
@@ -29,7 +29,7 @@ template<class Read> Match Compare(const Json& value,Read&& read){
     // Old receipts store only the full document hash. We can prove additions
     // of these optional fields by reconstructing the old document exactly;
     // arbitrary old display text cannot safely be guessed from a hash.
-    for(unsigned mask=1;mask<4;++mask){auto prior=value;if(mask&1)prior.erase("Region");if(mask&2)prior.erase("CompletedDescription");
+    for(unsigned mask=1;mask<8;++mask){auto prior=value;if(mask&1)prior.erase("Region");if(mask&2)prior.erase("CompletedDescription");if(mask&4)prior.erase("Icon");
         if(PairMatches(Hash(prior),"RuneSchema.DefLo","RuneSchema.DefHi",read))return Match::Presentation;
     }
     return Match::Changed;

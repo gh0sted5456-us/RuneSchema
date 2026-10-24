@@ -422,6 +422,32 @@ namespace DragonWilds::ActorHelper {
         return *this;
     }
 
+    FunctionCall& FunctionCall::StructArg(const CharType* Name,FProperty* SourceProperty,const void* SourceValue)
+    {
+        auto* destination=CastField<FStructProperty>(m_function->FindProperty(FName(Name,FNAME_Find)));
+        auto* source=CastField<FStructProperty>(SourceProperty);
+        if(!ReflectedContract::Input(destination,m_function)||!source||!SourceValue||source->GetArrayDim()!=1
+            ||source->GetStruct()!=destination->GetStruct()||source->GetSize()!=destination->GetSize())
+            throw std::runtime_error("Struct parameter did not match the live source layout");
+        destination->InitializeValue_InContainer(m_params.data());m_initialized.push_back(destination);
+        destination->CopyCompleteValue(destination->ContainerPtrToValuePtr<void>(m_params.data()),SourceValue);return *this;
+    }
+
+    FunctionCall& FunctionCall::StructArg(const CharType* Name,FProperty* SourceProperty,const void* SourceValue,const nlohmann::json& Patch)
+    {
+        StructArg(Name,SourceProperty,SourceValue);
+        PropertyHelper::CopyJsonValueToContainer(m_params.data(),m_function->FindProperty(FName(Name,FNAME_Find)),Patch);return *this;
+    }
+
+    void FunctionCall::ReadOutput(const CharType* Name,void* Out,size_t Size)
+    {
+        auto* property=m_function->FindProperty(FName(Name,FNAME_Find));
+        if(!ReflectedContract::Fits(property,m_function->GetParmsSize())||!property->HasAnyPropertyFlags(CPF_Parm)
+            ||!property->HasAnyPropertyFlags(CPF_OutParm)||Size!=static_cast<size_t>(property->GetSize()))
+            throw std::runtime_error("Output parameter did not match the live function layout");
+        std::memcpy(Out,property->ContainerPtrToValuePtr<void>(m_params.data()),Size);
+    }
+
     FunctionCall& FunctionCall::FirstNumericArg(double Value)
     {
         for (auto* property = m_function->GetPropertyLink(); property;

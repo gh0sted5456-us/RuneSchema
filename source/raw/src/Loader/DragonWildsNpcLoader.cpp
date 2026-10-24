@@ -28,6 +28,10 @@
 #include "Loader/NativeDialogueSave.h"
 #include "Loader/DialogueCompletionPresentation.h"
 #include "Loader/NativeQuestCleanup.h"
+#include "Core/SavePruneBackup.h"
+#include "Core/LoadProtectionNotice.h"
+#include "Core/XboxCharacterSaves.h"
+#include "Runtime/Storefront.h"
 #include "Loader/Spawn/GhostMaterials.h"
 #include "Unreal/Engine/UDataTable.hpp"
 #include "Unreal/Hooks.hpp"
@@ -48,6 +52,7 @@
 #include "Loader/QuestProgressText.h"
 #include "Loader/QuestHandIns.h"
 #include "Loader/QuestScrollIdentity.h"
+#include "Loader/QuestBoardCancellation.h"
 #include "Loader/NativeShopContract.h"
 #include "Generator/AppearanceResolver.h"
 #include "Generator/SaveViewer.h"
@@ -61,6 +66,8 @@
 #include "SDK/Helper/PropertyHelper.h"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnosticB3C.h"
+#include "Utility/StructuredDiagnosticNpcOnce.h"
 #include "Utility/Config.h"
 #include "Utility/BuildInfo.h"
 #include "Loader/VendorAcknowledgement.h"
@@ -137,6 +144,7 @@ namespace DragonWilds {
 #include "NpcMeshSetter.inl"
 #include "HumanNpc.inl"
 #include "ResourceNpc.inl"
+#include "LoreBookNpc.inl"
 #include "NpcMarkers.inl"
 #include "NpcInteraction.inl"
 #include "NpcDialogue.inl"
@@ -410,6 +418,7 @@ namespace DragonWilds {
     bool DragonWildsNpcLoader::OnInitialize()
     {
         m_summonNativeCredit=std::make_unique<Quests::Summons::NativeKillCredit>();
+        #include "NpcEventContracts.inl"
         m_events.Report=[](const std::string& message){PS::Log<LogLevel::Normal>(STR("Events: {}.\n"),PS::ToWideSafe(message.c_str()));};
         m_events.ReportFailure=[this](const std::string& message){ErrorOnce("event-failure:"+message,PS::ToWideSafe("Events: "+message));};
         m_events.ApplyActorCue=[this](AActor* actor,const nlohmann::json& cue){PlayDialogueCue(actor,cue);};
@@ -422,7 +431,7 @@ namespace DragonWilds {
             auto* tag=function?CastField<FStructProperty>(function->FindProperty(FName(TEXT("NotificationTag"),FNAME_Find))):nullptr;
             auto* text=function?CastField<FTextProperty>(function->FindProperty(FName(TEXT("Text"),FNAME_Find))):nullptr;
             const auto count=ReflectedContract::Count(function);
-            if(function->GetReturnProperty() || count!=2
+            if(!function || function->GetReturnProperty() || count!=2
                 || !ReflectedContract::Input(tag,function) || tag->GetArrayDim()!=1
                 || !tag->GetStruct().Get() || tag->GetStruct().Get()->GetPathName()!=TEXT("/Script/GameplayTags.GameplayTag")
                 || tag->GetElementSize()!=tag->GetStruct()->GetStructureSize()
@@ -474,6 +483,13 @@ namespace DragonWilds {
                     static const FName receiveBeginPlay(TEXT("ReceiveBeginPlay"),FNAME_Add);
                     static const FName receiveEndPlay(TEXT("ReceiveEndPlay"),FNAME_Add);
                     static const FName questsUpdated(TEXT("OnQuestsUpdated"),FNAME_Add);
+                    static const FName stateLoaded(TEXT("BP_OnPlayerControllerStateLoaded"),FNAME_Add),playerReady(TEXT("BP_OnPlayerControllerReady"),FNAME_Add);
+                    if(source&&function&&(function->GetFName()==stateLoaded||function->GetFName()==playerReady)
+                        &&m_gameThreadId.load(std::memory_order_relaxed)==GetCurrentThreadId()&&IsGameplayQuestController(source)){
+                        if(function->GetFName()==stateLoaded)std::erase_if(m_questPruneAttempts,[&](const auto& player){return !player.Get()||player.Get()==source;});
+                        try{PrepareQuests(source);PruneLoadedQuestProgress(source);}
+                        catch(const std::exception& error){ErrorOnce("quest-hydration-prune",PS::ToWideSafe(error.what()));}
+                    }
                     if(function && m_gameThreadId.load(std::memory_order_relaxed)==GetCurrentThreadId()) {
                         // FModel/RSDW 1.0.0.2 shows that the actual roadside
                         // torch/campfire path is InGameTimeSensorComponent,
@@ -485,9 +501,9 @@ namespace DragonWilds {
                         if(function==m_timeStateFunction || function->GetFName()==enterTimeFrame
                             || function->GetFName()==exitTimeFrame)m_npcTimeDirty=true;
                     }
-                    if(source && function && source->GetClassPrivate()->GetPathName()==NpcIdentity::ClassPath
-                        && (function->GetFName()==onRepIdentity || function->GetFName()==receiveBeginPlay)
-                        && m_gameThreadId.load(std::memory_order_relaxed)==GetCurrentThreadId()) {
+                    if(source && function && (function->GetFName()==onRepIdentity || function->GetFName()==receiveBeginPlay)
+                        && m_gameThreadId.load(std::memory_order_relaxed)==GetCurrentThreadId()
+                        && source->GetClassPrivate()->GetPathName()==NpcIdentity::ClassPath) {
                         auto* owner=source->GetOuterPrivate();
                         if(owner && owner->IsA<AActor>())QueueClientReplica(static_cast<AActor*>(owner));
                     }
@@ -509,6 +525,7 @@ namespace DragonWilds {
                             auto* owner=source->GetOuterPrivate();
                             if(!IsGameplayQuestController(owner))return;
                             if(static_cast<const uint8_t*>(parameters)[16]==1) {
+                            std::erase_if(m_questPruneAttempts,[&](const auto& player){return !player.Get()||player.Get()==owner;});
                             MigrateSavedProgress(owner);
                             }
                             if(m_quests.NetworkManifest().empty())PrepareQuests(owner);
@@ -526,16 +543,20 @@ namespace DragonWilds {
         {
             m_vendorReport["Phase"] = "Interaction.HookFailed";
             WriteVendorStatus();
-            PS::Log<LogLevel::Error>(
-                STR("Unable to register the merchant interaction callback; vendors will not spawn.\n"));
+            if (!PS::StructuredDiagnosticB3C::Report("RS-NPC-001","Error","Failed","NpcLoader",
+                "Merchant interaction hook unavailable","The merchant interaction callback could not be registered; vendors will not spawn.",
+                {},{},{},"Finalization"))
+                PS::Log<LogLevel::Error>(
+                    STR("Unable to register the merchant interaction callback; vendors will not spawn.\n"));
             return false;
         }
 
         options.HookName=TEXT("RuneSchemaSummonKillCredit");
         m_summonCreditCallbackId=Hook::RegisterProcessEventPreCallback(
             [this](Hook::TCallbackIterationData<void>& dispatch,UObject* source,UFunction* function,void* parameters) {
+                static const FName killed(TEXT("OnAIKilled"),FNAME_Add);
                 if(m_gameThreadId.load(std::memory_order_relaxed)!=GetCurrentThreadId() || !function
-                    || function->GetFName()!=FName(TEXT("OnAIKilled"),FNAME_Add))return;
+                    || function->GetFName()!=killed)return;
                 try {m_summonNativeCredit->Before(dispatch,source,function,parameters,m_worldGeneration+1);}
                 catch(const std::exception& error){ErrorOnce("summon-kill-credit",PS::ToWideSafe(error.what()));}
                 catch(...) {}
@@ -736,6 +757,7 @@ namespace DragonWilds {
                 PumpDialogueShop();
                 PumpDialoguePoseRestores();
                 PumpLoreRequests(deltaSeconds);
+                PumpLoreVisuals(deltaSeconds);
                 PS::SlowWork::Measure("quests.refresh",[&]{PumpQuestRefreshes();});
                 PS::SlowWork::Measure("quests.status",[&]{PumpQuestStatus();});
                 PumpQuestLocationRefreshes(deltaSeconds);
@@ -830,6 +852,7 @@ namespace DragonWilds {
                     ErrorOnce("quest-marker-cleanup:"+key,RC::to_generic_string(std::string("Quest marker cleanup: ")+error));
                 });
                 m_questLocationElapsed=0;m_questLocationChecks=0;
+                m_questPruneAttempts.clear();
                 m_pendingQuestLocationRefreshes.clear();
                 m_joinQuestPresented.clear();
                 m_acquisitionBaselines.clear();
@@ -1087,6 +1110,7 @@ namespace DragonWilds {
             for(const auto& key:m_dialogues.at(definition.DialogueKey).Events)m_events.Require(key);
         }
         definition.LoreEntry=data.value("LoreEntry",std::string{});
+        definition.LorePresentation=LoreBookPresentation::Parse(data);
         definition.JournalEntries=data.value("JournalEntries",std::vector<std::string>{});
         if(data.contains("QuestID")) {
             definition.QuestKey=data.at("QuestID").get<std::string>();
@@ -1392,6 +1416,9 @@ namespace DragonWilds {
             const auto progress=PS::HostServices::ProgressDirectory()/"quests"/(character+".json");
             m_quests.ForEachKill([&](const std::string& key,const Quests::Definition& quest,const nlohmann::json& document){
                 try {
+                    // Quest-bound encounters credit their participant only after
+                    // the entire run succeeds; individual fatal hits cannot pay them.
+                    if(m_events.IsContractQuest(key))return;
                     const QuestNative::Adapter native(controller,m_quests.Asset(key));
                     if(!native.IsInitialized())return;
                     const Quests::NativeReceipt receipt(native,quest,document,progress,character);
@@ -1515,7 +1542,7 @@ namespace DragonWilds {
                 }catch(...) {}
                 nlohmann::json quests=nlohmann::json::array();
                 m_quests.ForEachVisible([&](const std::string& key,const Quests::Definition& quest,const nlohmann::json&){
-                    nlohmann::json row={{"Key",key},{"Title",quest.Title},{"Objectives",nlohmann::json::array()},{"Run",0},{"Repeatable",quest.Repeat.Enabled},{"RepeatReady",false}};
+                    nlohmann::json row={{"Key",key},{"Title",quest.Title},{"Icon",quest.Icon},{"Objectives",nlohmann::json::array()},{"Run",0},{"Repeatable",quest.Repeat.Enabled},{"RepeatReady",false}};
                     try {
                         const QuestNative::Adapter native(controller,m_quests.Asset(key));
                         if(!native.IsInitialized())row["State"]="Uninitialized";
@@ -1650,6 +1677,47 @@ namespace DragonWilds {
         }
     }
 
+    void DragonWildsNpcLoader::PruneLoadedQuestProgress(UObject* controller){
+        if(m_pruningQuestProgress||!IsGameplayQuestController(controller))return;
+        auto* ready=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,TEXT("/Script/Dominion.DominionPlayerController:IsPlayerReady"),false);
+        auto* result=ready?CastField<FBoolProperty>(ready->GetReturnProperty()):nullptr;
+        if(!ready||ready->HasAnyFunctionFlags(FUNC_Net)||!ReflectedContract::Output(result,ready)||ReflectedContract::Count(ready)!=1||result->GetElementSize()!=1||!result->IsNativeBool())
+            throw std::runtime_error("Post-load quest cleanup player-ready contract changed");
+        ActorHelper::FunctionCall readinessCall(controller,ready);readinessCall.Invoke();if(!readinessCall.Result<bool>())return;
+        if(auto pending=PS::LoadProtectionNotice::SessionBypasses.load(std::memory_order_relaxed);pending&&!PS::Storefront::IsDedicatedServer())try{
+            ActorHelper::FunctionCall local(controller,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();
+            if(local.Result<bool>()){m_events.Notify(controller,"RuneSchema: fallback entry was used during this game session. Details: RuneSchema.log.",Events::Scope::Participant);
+                PS::LoadProtectionNotice::SessionBypasses.compare_exchange_strong(pending,0,std::memory_order_relaxed);}
+        }catch(const std::exception& error){ErrorOnce("save-fallback-notification",PS::ToWideSafe(error.what()));}
+        const auto character=DialogueCharacter(controller);
+        if(const auto notice=PS::LoadProtectionNotice::Peek(character)){
+            try{m_events.Notify(controller,PS::LoadProtectionNotice::Message(*notice),Events::Scope::Participant);PS::LoadProtectionNotice::Acknowledge(character,notice->Version);}
+            catch(const std::exception& error){ErrorOnce("save-cleanup-notification",PS::ToWideSafe(error.what()));}
+        }
+        std::erase_if(m_questPruneAttempts,[](const auto& player){return !player.Get();});
+        if(std::any_of(m_questPruneAttempts.begin(),m_questPruneAttempts.end(),[&](const auto& player){return player.Get()==controller;}))return;
+        const auto registry=PS::SaveCleanup::ReadRegistry();if(!registry||!registry->CanClean(PS::RegistryEnrollment::IdentityKind::Quest))return;
+        ActorHelper::FunctionCall authority(controller,TEXT("/Script/Engine.Actor:HasAuthority"));authority.Invoke();if(!authority.Result<bool>())return;
+        if(m_questPruneAttempts.size()>=256)throw std::runtime_error("Post-load quest cleanup player bound exceeded");
+        m_pruningQuestProgress=true;struct Reset{bool& Flag;~Reset(){Flag=false;}}reset{m_pruningQuestProgress};
+        // A backup/contract failure retries on the next hydration, not every poll of the same live character.
+        m_questPruneAttempts.emplace_back(controller);
+        const auto cleaned=Quests::NativeQuestCleanup::Run(controller,*registry,[&]{
+            const auto character=DialogueCharacter(controller),runtime=std::string(PS::Storefront::MappingCachePlatform(PS::Storefront::CurrentDetection()));
+            std::vector<std::filesystem::path> candidates;
+            if(PS::Storefront::CurrentNativeLane()==PS::Storefront::NativeLane::GamePassNative)candidates=PS::XboxCharacterSaves::Candidates(PS::HostServices::XboxSaveRoot());
+            else {const auto root=PS::RuneSchemaData::GameSavedDirectory()/"SaveCharacters";
+                if(std::filesystem::is_directory(root))for(const auto& entry:std::filesystem::directory_iterator(root))if(entry.is_regular_file()&&entry.path().extension()==".json"){
+                    if(candidates.size()>=64)throw std::runtime_error("Character backup directory exceeds its bounds");candidates.push_back(entry.path());}}
+            const auto backups=PS::SavePruneBackup::Provider(PS::SavePruneBackup::Directory(runtime),candidates,character);
+            PS::Log<LogLevel::Normal>(STR("[PERSISTENCE-BACKUP][QUEST-PRUNE][VERIFIED] character='{}' whole_save_copies={}; provider files were read only.\n"),PS::ToWideSafe(character),backups);
+        });
+        if(!cleaned.Ready){std::erase_if(m_questPruneAttempts,[&](const auto& player){return player.Get()==controller;});return;}
+        if(cleaned.Removed){PS::LoadProtectionNotice::Record(character,cleaned.Removed,0,false);
+            if(const auto notice=PS::LoadProtectionNotice::Peek(character))try{m_events.Notify(controller,PS::LoadProtectionNotice::Message(*notice),Events::Scope::Participant);PS::LoadProtectionNotice::Acknowledge(character,notice->Version);}catch(const std::exception& error){ErrorOnce("save-cleanup-notification",PS::ToWideSafe(error.what()));}}
+        if(cleaned.Removed)PS::Log<LogLevel::Normal>(STR("[PERSISTENCE-PRUNER][QUESTS][HYDRATED-PRUNED] owned_orphan_quests={} native quest rows, tracking and owning-client refresh updated. Active/unfinished state does not veto certified orphan removal; persisted save waits for the game's next save.\n"),cleaned.Removed);
+    }
+
     void DragonWildsNpcLoader::MigrateSavedProgress(UObject* controller) {
         if(!IsGameplayQuestController(controller))return;
         ActorHelper::FunctionCall authority(controller,TEXT("/Script/Engine.Actor:HasAuthority"));authority.Invoke();
@@ -1657,16 +1725,23 @@ namespace DragonWilds {
         const auto character=DialogueCharacter(controller);
         const auto legacy=PS::HostServices::ProgressDirectory()/"quests"/(character+".json");
         PrepareQuests(controller);
+        PruneLoadedQuestProgress(controller);
         ObserveQuestInventory(controller,false);
         m_quests.ForEachVisible([&](const std::string& key,const Quests::Definition& quest,const nlohmann::json& document){
             try {
                 const QuestNative::Adapter native(controller,m_quests.Asset(key));
                 if(native.IsInitialized()){const Quests::NativeReceipt receipt(native,quest,document,legacy,character);}
-            }catch(const std::exception& error){ErrorOnce("quest-save-import:"+key,PS::ToWideSafe(error.what()));}
+            }catch(const std::exception& error){
+                ErrorOnceDiagnostic("quest-save-import:"+key,PS::ToWideSafe(error.what()),
+                    "RS-NPC-011","Saved quest receipt import failed", "Error","Failed",{},key,"Application",true);
+            }
         });
         m_quests.ForEachDialogueMod([&](const std::string& mod,const std::string& key){
             try {const DialogueSave::State state(controller,m_quests.Asset(key),mod,DialogueProgressPath(character),character);}
-            catch(const std::exception& error){ErrorOnce("dialogue-save-import:"+key,PS::ToWideSafe(error.what()));}
+            catch(const std::exception& error){
+                ErrorOnceDiagnostic("dialogue-save-import:"+key,PS::ToWideSafe(error.what()),
+                    "RS-NPC-012","Saved dialogue state import failed", "Error","Failed",mod,key,"Application",true);
+            }
         });
     }
 
@@ -1689,6 +1764,7 @@ namespace DragonWilds {
                 MigrateSavedProgress(controller);
             }
             PrepareQuests(controller);
+            PruneLoadedQuestProgress(controller);
             ReconcileQuestLocations(controller);
             ActorHelper::FunctionCall authority(controller,TEXT("/Script/Engine.Actor:HasAuthority"));authority.Invoke();
             if(!authority.Result<bool>())m_quests.ForEachVisible([&](const std::string& key,const Quests::Definition&,const nlohmann::json&){
@@ -1740,7 +1816,9 @@ namespace DragonWilds {
             }
         } catch(const std::exception& error) {
             const auto detail=std::string("NPC world-state presentation ignored: ")+error.what();
-            ErrorOnce("world-state-npc",PS::ToWideSafe(detail.c_str()));
+            ErrorOnceDiagnostic("world-state-npc",PS::ToWideSafe(detail.c_str()),
+                "RS-NPC-002","NPC client world-state presentation ignored",
+                "Warning","Skipped",{},"RuneSchemaWorldSnapshot");
         }
     }
 
@@ -1769,7 +1847,12 @@ namespace DragonWilds {
                     if(components.Num()!=1)throw std::runtime_error("Event actor needs exactly one identity component");
                     if(PresentEventIdentity(actor,ReadIdentity(components[0])))continue;
                 } else if(PrepareClientReplica(actor))continue;
-            }catch(const std::exception& error){ErrorOnce("client-npc:"+RC::to_string(entry.Path),PS::ToWideSafe(error.what()));continue;}
+            }catch(const std::exception& error){
+                ErrorOnceDiagnostic("client-npc:"+RC::to_string(entry.Path),PS::ToWideSafe(error.what()),
+                    "RS-NPC-003","NPC client replica preparation skipped",
+                    "Warning","Skipped",{},RC::to_string(entry.Path));
+                continue;
+            }
             catch(...) {continue;}
             if(++entry.Attempts<NpcNetwork::ClientArrivalAttempts)m_pendingClientReplicas.push_back(entry);
             // Unmarked vanilla NPCs also pass the class filter; leave them untouched.
@@ -2095,8 +2178,10 @@ namespace DragonWilds {
                 }
                 else
                 {
-                    ErrorOnce("spawn:" + key, RC::to_generic_string(std::format(
-                        "Vendor '{}' stopped after a failed proxy/attachment attempt; no retry until next map or restart.", definition.Id)));
+                    ErrorOnceDiagnostic("spawn:" + key, RC::to_generic_string(std::format(
+                        "Vendor '{}' stopped after a failed proxy/attachment attempt; no retry until next map or restart.", definition.Id)),
+                        "RS-NPC-005","NPC construction or attachment blocked", "Error","Blocked",
+                        definition.ModName,definition.Id);
                 }
             }
             catch (const PS::Grounding::SurfacePending&)
@@ -2116,22 +2201,29 @@ namespace DragonWilds {
                     {{"LifecycleFailure",error.what()},{"LifecycleAttempts",definition.LifecycleFailures},
                      {"RetrySeconds",definition.GroundRetry.Wait}});
                 if(definition.LifecycleFailures>=3)
-                    ErrorOnce("npc-lifecycle:"+key,PS::ToWideSafe(std::string(error.what())+"; three construction attempts failed, stopped for this map"));
+                    ErrorOnceDiagnostic("npc-lifecycle:"+key,
+                        PS::ToWideSafe(std::string(error.what())+"; three construction attempts failed, stopped for this map"),
+                        "RS-NPC-004","NPC lifecycle construction exhausted", "Error","Blocked",
+                        definition.ModName,definition.Id);
                 else PS::Log<LogLevel::Verbose>(STR("NPC '{}': {}; retry requires owned-proxy cleanup acknowledgement.\n"),PS::ToWideSafe(key),PS::ToWideSafe(error.what()));
             }
             catch (const std::exception& error)
             {
-                ErrorOnce("spawn:" + key,
+                ErrorOnceDiagnostic("spawn:" + key,
                     RC::to_generic_string(std::format(
                         "Vendor '{}' stopped for this map before completing its proxy: {}",
-                        definition.Id, error.what())));
+                        definition.Id, error.what())),
+                    "RS-NPC-005","NPC construction or attachment blocked", "Error","Blocked",
+                    definition.ModName,definition.Id);
                 definition.SpawnGate.Begin();
             }
             catch (...)
             {
                 definition.SpawnGate.Begin();
-                ErrorOnce("spawn:" + key, RC::to_generic_string(std::format(
-                    "Vendor '{}' stopped for this map after an unknown failure.", definition.Id)));
+                ErrorOnceDiagnostic("spawn:" + key, RC::to_generic_string(std::format(
+                    "Vendor '{}' stopped for this map after an unknown failure.", definition.Id)),
+                    "RS-NPC-005","NPC construction or attachment blocked", "Error","Blocked",
+                    definition.ModName,definition.Id);
             }
         }
         m_npcWorkCursor=0;m_npcWorkPending=false;
@@ -2440,18 +2532,24 @@ namespace DragonWilds {
             if(!actor&&retry)definition.SpawnGate.ResetForMap();
             try { QueueNpcCleanup(actor,retry?definition.ModName+":"+definition.Id:std::string{}); }
             catch(const std::exception& error) {
-                ErrorOnce("npc-queue-cleanup:"+definition.ModName+":"+definition.Id,PS::ToWideSafe(error.what()));
+                ErrorOnceDiagnostic("npc-queue-cleanup:"+definition.ModName+":"+definition.Id,
+                    PS::ToWideSafe(error.what()),"RS-NPC-006","NPC cleanup queue failed",
+                    "Error","Failed",definition.ModName,definition.Id,"Application",true);
             }
             // Cleanup stages are independent. A queue or component failure must
             // not prevent quarantine and native destruction from being tried.
             try { quarantine(); }
             catch(const std::exception& error) {
-                ErrorOnce("npc-quarantine-final:"+definition.ModName+":"+definition.Id,PS::ToWideSafe(error.what()));
+                ErrorOnceDiagnostic("npc-quarantine-final:"+definition.ModName+":"+definition.Id,
+                    PS::ToWideSafe(error.what()),"RS-NPC-007","NPC quarantine failed",
+                    "Error","Failed",definition.ModName,definition.Id,"Application",true);
             }
             try { retire(); }
             catch(const std::exception& error) {
-                ErrorOnce("npc-retire:"+definition.ModName+":"+definition.Id,
-                    RC::to_generic_string(std::string("Failed to retire NPC proxy after cleanup: ")+error.what()));
+                ErrorOnceDiagnostic("npc-retire:"+definition.ModName+":"+definition.Id,
+                    RC::to_generic_string(std::string("Failed to retire NPC proxy after cleanup: ")+error.what()),
+                    "RS-NPC-008","NPC retirement not confirmed",
+                    "Error","Failed",definition.ModName,definition.Id,"Application",true);
             }
             std::rethrow_exception(failure);
         }
@@ -3015,6 +3113,7 @@ namespace DragonWilds {
 
     void DragonWildsNpcLoader::ReleaseVendorTracking()
     {
+        m_loreVisuals.clear();m_loreVisualFailed.clear();m_loreVisualElapsed=0;m_loreVisualCursor=0;
         m_pendingClientReplicas.clear();
         m_pendingLoreRequests.clear();
         m_clientReplicaElapsed=0;
@@ -3331,10 +3430,12 @@ namespace DragonWilds {
                 return binding.DefinitionKey == definition.ModName + ":" + definition.Id
                     && binding.Actor.Get() == actor;
             });
-            ErrorOnce("apply:" + definition.ModName + ":" + definition.Id,
+            ErrorOnceDiagnostic("apply:" + definition.ModName + ":" + definition.Id,
                 RC::to_generic_string(std::format(
                     "Vendor '{}' could not be attached to actor '{}': {}",
-                    definition.Id, RC::to_string(actor->GetName()), error.what())));
+                    definition.Id, RC::to_string(actor->GetName()), error.what())),
+                "RS-NPC-009","NPC interaction attachment failed", "Error","Failed",
+                definition.ModName,definition.Id);
             return false;
         }
     }
@@ -3742,10 +3843,12 @@ namespace DragonWilds {
             try {
                 RecordPhase(*definition, "Shop.OpenFailed",
                     nullptr, diagnostics);
-                ErrorOnce("shop:" + binding->DefinitionKey,
+                ErrorOnceDiagnostic("shop:" + binding->DefinitionKey,
                     RC::to_generic_string(std::format(
                         "NPC '{}' could not open its interaction: {}",
-                        definition->Id, error.what())));
+                        definition->Id, error.what())),
+                    "RS-NPC-010","NPC interaction could not open", "Error","Failed",
+                    definition->ModName,definition->Id);
             } catch (...) {}
         }
         catch (...)
@@ -4423,6 +4526,19 @@ namespace DragonWilds {
         }
         PS::Log<LogLevel::Error>(STR("{}\n"), message);
         return true;
+    }
+
+    bool DragonWildsNpcLoader::ErrorOnceDiagnostic(
+        const std::string& key, const RC::StringType& message,
+        const char* code, const char* title, const char* severity, const char* outcome,
+        const std::string& mod, const std::string& target,
+        const char* phase, bool preserveLegacy)
+    {
+        return PS::StructuredDiagnosticNpcOnce::ReportOnce(m_errors, key, preserveLegacy,
+            [&] {return PS::StructuredDiagnosticB3C::Report(
+                code, severity, outcome, "NpcLoader", title, RC::to_string(message),
+                mod, {}, target, phase);},
+            [&] {PS::Log<LogLevel::Error>(STR("{}\n"), message);}, true);
     }
 
     std::string DragonWildsNpcLoader::ActorKey(

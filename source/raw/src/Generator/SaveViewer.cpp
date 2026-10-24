@@ -1,11 +1,18 @@
 #include "Generator/SaveViewer.h"
+#include "Core/HelpyKitFiles.h"
+#include "Generator/AssetSearch.h"
 #include "Generator/SaveReport.h"
+#include "Generator/ItemCatalogMetadata.h"
 #include "Generator/NpcSaveExport.h"
 #include "Generator/ToolRequest.h"
 #include "Unreal/Property/FEnumProperty.hpp"
 #include "Unreal/UEnum.hpp"
 #include "Core/SaveCleanup.h"
 #include "Core/AuthoringCleanupPreview.h"
+#include "Core/CharacterSaveEditor.h"
+#include "Core/XboxCharacterSaves.h"
+#include "Generator/CharacterPreview.h"
+#include "Core/HelpyCacheSources.h"
 #include "Runtime/HostServices.h"
 #include "Runtime/Storefront.h"
 #include <imgui.h>
@@ -131,17 +138,17 @@ namespace {
         }
         return {};
     }
-    void Resolve(json& rows,const TCHAR* classPath) {
+    void Resolve(json& rows,const TCHAR* classPath,bool details=false) {
         auto* cls=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,classPath);
         if(!cls)throw std::runtime_error("Item/building class unavailable; enter a world first.");
         std::unordered_map<std::string,std::vector<size_t>> wanted;
         for(size_t i=0;i<rows.size();++i)if(rows[i].contains("PersistenceID") && rows[i]["PersistenceID"].is_string())wanted[rows[i]["PersistenceID"].get<std::string>()].push_back(i);
         TArray<UObject*> objects;
         UECustom::UObjectGlobals::GetObjectsOfClass(cls,objects,true);
-        if(objects.Num()>32768)throw std::runtime_error("Loaded asset inventory exceeds viewer limit.");
+        if(objects.Num()<0||objects.Num()>65536)throw std::runtime_error("Loaded asset inventory exceeds viewer limit.");
         std::unordered_map<std::string,bool> seen;
         for(auto* object:objects) {
-            if(!object || object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_NeedLoad|RF_NeedPostLoad|RF_NeedInitialization)))continue;
+            if(!object || object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_NeedLoad|RF_NeedPostLoad|RF_NeedInitialization|RF_BeginDestroyed|RF_FinishDestroyed)))continue;
             const auto id=StringField(object,TEXT("PersistenceID"));
             const auto found=wanted.find(id);if(found==wanted.end())continue;
             const auto path=to_string(object->GetPathName());
@@ -149,9 +156,13 @@ namespace {
                 auto& row=rows[index];
                 if(seen.contains(id)) {
                     row["DisplayName"]=nullptr;row["InternalName"]=nullptr;row["AssetPath"]=nullptr;row["Origin"]="Ambiguous PersistenceID";
+                    if(details){row.erase("Icon");row.erase("SourceName");row.erase("SourceKind");row.erase("Category");row.erase("NativeCategory");row.erase("MaxStackSize");}
                 }else {
                     row["DisplayName"]=DisplayName(object);row["InternalName"]=StringField(object,TEXT("InternalName"));row["AssetPath"]=path;
                     row["Origin"]=SaveReport::Origin(path);
+                    if(details){const auto info=PS::AssetSearch::DescribeItem(object);for(const auto* key:{"Icon","SourceName","SourceRoot","SourceKind","Category","Description"})if(info.contains(key))row[key]=info.at(key);
+                        if(info.contains("Tags")&&info["Tags"].is_string())row["NativeCategory"]=info["Tags"];
+                        if(auto* maximum=CastField<FNumericProperty>(TextField(object,TEXT("MaxStackSize")));maximum&&maximum->IsInteger()&&maximum->GetElementSize()==4){const auto limit=maximum->GetSignedIntPropertyValue(maximum->ContainerPtrToValuePtr<void>(object));if(limit>=1&&limit<=10000)row["MaxStackSize"]=limit;}}
                 }
             }
             seen[id]=true;
@@ -232,6 +243,7 @@ namespace {
 #include "SaveCleanupPanel.inl"
 #include "NpcExportPanel.inl"
 #include "SaveAuthoring.inl"
+#include "CharacterSaveEditor.inl"
 json Capture(UObject* controller,bool world) {
     if(!controller || !controller->GetWorld())throw std::runtime_error("Enter a world first.");
     auto report=world?World(controller):Character(controller);

@@ -74,9 +74,12 @@ template<class Lookup> Json BuildNetworkManifest(const Definition& event,Lookup 
         {"failed",event.Text.Failed},{"cancelled",event.Text.Cancelled}};
     Json health=Json::array();for(const auto& stage:event.HealthStages)health.push_back({{"percent",stage.Percent},{"message",stage.Message},{"spawn",stage.Spawn}});
     Json actions=Json::array();for(const auto& action:event.Actions)actions.push_back({{"afterSeconds",action.AfterSeconds},{"spawn",action.Spawn},{"cue",action.Cue}});
-    return {{"key",event.Key},{"timeout",event.Timeout},{"scope",ScopeName(event.Audience)},{"timeOfDay",TimeOfDay::Name(event.Time)},
+    Json result={{"key",event.Key},{"timeout",event.Timeout},{"scope",ScopeName(event.Audience)},{"timeOfDay",TimeOfDay::Name(event.Time)},
         {"despawnTimeOfDay",TimeOfDay::Name(event.DespawnTime)},
         {"weather",event.Weather?Json(*event.Weather):Json(nullptr)},
         {"area",area},{"messages",messages},{"healthStages",health},{"actions",actions},{"waves",waves},{"spawns",spawns}};
+    if(event.Contract)result["contract"]={{"quest",event.Contract->Quest},{"participantOrigin",event.Contract->ParticipantOrigin},
+        {"activationRadius",event.Contract->ActivationRadius},{"exitGrace",event.Contract->ExitGrace}};
+    return result;
 }
 }

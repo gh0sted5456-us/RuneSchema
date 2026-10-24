@@ -2,6 +2,7 @@
 
 #include "Unreal/NameTypes.hpp"
 #include "Loader/DragonWildsModLoaderBase.h"
+#include "Utility/StructuredDiagnosticOutcomeEvidence.h"
 #include "nlohmann/json.hpp"
 
 namespace UECustom {
@@ -25,7 +26,7 @@ namespace DragonWilds {
     private:
         std::unordered_map<RC::StringType, RC::Unreal::UEnum*> m_enumNameToObjectMap;
 
-        void LoadEnums(const nlohmann::json& data);
+        void LoadEnums(const nlohmann::json& data, PS::StructuredDiagnosticOutcomeEvidence::AppliedProgress& applied);
 
         RC::Unreal::UEnum* GetEnumByName(const RC::StringType& Name);
     };

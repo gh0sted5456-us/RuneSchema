@@ -1,6 +1,5 @@
 #pragma once
 #include "Core/ConfigFiles.h"
-#include "Generator/HelpyHotkeys.h"
 #include <filesystem>
 #include <mutex>
 #include <nlohmann/json.hpp>
@@ -29,17 +28,5 @@ inline void EnsureLoaded() {
     }catch(const std::exception& e){Writable=false;Status=e.what();}
 }
 inline bool IsEnabled(){EnsureLoaded();std::lock_guard lock(Mutex);return Enabled;}
-inline bool SetKey(const std::string& name) {
-    EnsureLoaded();std::lock_guard lock(Mutex);
-    try {
-        if(name=="F2")throw std::runtime_error("F2 is reserved for standalone Helpy");
-        const auto key=HelpyHotkeys::Find(name);if(!key)throw std::runtime_error("Unsupported legacy hotkey");
-        if(!Writable)throw std::runtime_error("Helpy settings are protected after a read/write error; repair the plugin settings.jsonc with the game closed");
-        Document["enabled"]=Enabled;Document["canvasToggleKey"]=name;Document.erase("toggleKey");
-        ConfigFiles::Write(File,"// RuneSchema.Helpy settings. F2 is standalone Helpy; canvasToggleKey controls the legacy Canvas fallback.\n"+Document.dump(2)+"\n");
-        HelpyHotkeys::Active=key->code;HelpyHotkeys::SuppressedUntilRelease=key->code;
-        Status="Legacy Canvas hotkey saved: "+name;return true;
-    }catch(const std::exception& e){Status=e.what();return false;}
-}
 inline std::string Message(){std::lock_guard lock(Mutex);return Status;}
 }

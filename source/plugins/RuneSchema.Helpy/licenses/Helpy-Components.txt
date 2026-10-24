@@ -26,8 +26,45 @@ these marks remain the property of Valve and Microsoft respectively, are not
 relicensed under MIT, and are used only to identify the detected runtime.
 Gold tint and transparency are applied by the renderer, not to the originals.
 Helpy's own code shares RuneSchema's MIT License; third-party notices remain.
-No Jagex artwork, game binaries, Unreal SDK, or game
-catalog dump is included. Sample preview records are synthetic developer data.
+The Dragonwilds identification wordmark and loading-ring artwork remain
+third-party game artwork, not MIT-licensed RuneSchema artwork. No game binaries,
+Unreal SDK, or game catalog dump is included. Preview records are synthetic.
+The wordmark uses the unmodified 1920x1080 Resources/SplashScreen.png supplied
+from the Game Pass installation; only display UVs crop its transparent margins.
+RuneScape: Dragonwilds artwork belongs to Jagex; no endorsement is implied.
+The optional bundled background pictures reuse that same Dragonwilds splash
+and existing RuneSchema branding.
+
+Home banner and community destinations:
+  home-banner.png is user-supplied Dragonwilds community banner artwork.
+  RuneScape: Dragonwilds characters and game artwork belong to Jagex; any
+  community layout remains its respective creator's work. No MIT relicensing
+  or endorsement is claimed. The original image is retained unchanged and shown
+  in Discord's destination preview only, not as a Home banner.
+  github-details.png is the unchanged user-supplied RuneSchema repository view.
+  nexus-details.png and curseforge-details.png are built-in image-tool edits of
+  supplied page screenshots, requested to remove Manage/Manage Project controls.
+  They are local presentation previews, not live page status. Screenshot layout
+  and host branding remain the property of their respective owners; no MIT
+  relicensing or host endorsement is implied.
+  github.png, nexus.png, curseforge.png and discord.png were supplied by the user.
+  GitHub, Nexus Mods, CurseForge and Discord marks belong to their respective
+  owners and identify external destinations only; they are not MIT artwork.
+  The Discord invitation identifies the RSDW Modding Community, not official
+  game support. Links open only on an explicit user click, not during startup.
 
 Microsoft Windows APIs and the compiler's static runtime are platform/build
 dependencies; no Windows system DLL is redistributed in this package.
+
+Optional map reference data (not MIT-licensed code):
+  Marker positions/categories originate from the RuneScape: Dragonwilds Wiki,
+  supplied via Wildsforge at https://wildsforge.org/map/markers.json .
+  Source and attribution: https://wildsforge.org/map/
+  Dataset licence: CC BY-NC-SA 3.0
+  https://creativecommons.org/licenses/by-nc-sa/3.0/
+  Downloads remain separate from RuneSchema's MIT source/runtime. Any adaptation
+  of this dataset retains its attribution, non-commercial and share-alike terms.
+  Helpy reads coordinates/categories and groups visible markers for display; it
+  does not bundle Wildsforge's icons, scripts or wiki map tiles. The background
+  remains the installed game's native map. Reference locations are not proof
+  of live resources, a supported teleport destination or a loaded native actor.

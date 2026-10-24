@@ -32,6 +32,19 @@ int main()
     assert(published.MeleeAttackClasses.size() == 2);
     assert(published.RangedAttackClasses.size() == 1);
     assert(published.Fingerprint != 0);
+    auto artwork=document;artwork["NativeRegistries"]["CacheAssets"]={"/Example/Icons/T_Original.T_Original"};
+    const auto loose=Parse(artwork,"ExampleMod","registry/example.jsonc");
+    const auto cooked=Parse(artwork,"ExampleMod","pak:/Example.RSREG_Test");
+    assert(loose&&cooked&&loose->Fingerprint==cooked->Fingerprint);
+    assert(loose->CacheAssets==cooked->CacheAssets&&loose->CacheAssets.size()==1);
+    assert(loose->AssetLanes.size()==published.AssetLanes.size());
+    assert(loose->Fingerprint!=published.Fingerprint);
+    auto badArt=artwork;badArt["NativeRegistries"]["CacheAssets"]={"../bad"};
+    bool invalidArt=false;try{Parse(badArt,"ExampleMod","registry/bad.jsonc");}catch(const std::runtime_error&){invalidArt=true;}assert(invalidArt);
+    for(const auto* bad:{"/Example/Icons/NoObject","/Example/Icons/Empty.","/Example/Icons/T.T:Subobject"}){
+        badArt=artwork;badArt["NativeRegistries"]["CacheAssets"]={bad};invalidArt=false;
+        try{Parse(badArt,"ExampleMod","registry/bad.jsonc");}catch(const std::runtime_error&){invalidArt=true;}assert(invalidArt);
+    }
     assert(Snapshot().size() == 1);
 
     auto differentMesh = document;
@@ -95,11 +108,11 @@ int main()
     auto conflict=metadata;
     conflict["LoaderDefinitions"]["Journals"][journal]["Unlock"]=false;
     Manifest conflictMetadata;
-    assert(Publish(conflict,"Example","pak:/Example.RSREG_Duplicate",&conflictMetadata));
+    conflictMetadata=*Parse(conflict,"Example","pak:/Example.RSREG_Duplicate");
     assert(firstMetadata.Fingerprint!=conflictMetadata.Fingerprint);
     rejected=false;
-    try{Definitions("Journals");}catch(const std::runtime_error&){rejected=true;}
-    assert(rejected);
+    try{Publish(conflict,"Example","pak:/Example.RSREG_Duplicate");}catch(const std::runtime_error&){rejected=true;}
+    assert(rejected&&Definitions("Journals")[0].Body==journalBody);
 
     const auto rejectDocument=[&](const nlohmann::json& value){
         const auto before=Snapshot().size();bool failed=false;
@@ -120,10 +133,9 @@ int main()
     rejectDocument(oversized);
     Reset();
     assert(Publish(enrolled,"Example","pak:/Example.RSREG_Base"));
-    assert(Publish({{"NativeRegistries",{{"Lore",{journal}}}}},"Other","pak:/Other.RSREG_Test"));
     rejected=false;
-    try{Definitions("Journals");}catch(const std::runtime_error&){rejected=true;}
-    assert(rejected);
+    try{Publish({{"NativeRegistries",{{"Lore",{journal}}}}},"Other","pak:/Other.RSREG_Test");}catch(const std::runtime_error&){rejected=true;}
+    assert(rejected&&Snapshot().size()==1);
     // Loose /registry files share lane validation but must not synthesize a
     // cooked definition for an asset constructed by a schema loader.
     Reset();const std::string runtime="/Game/RuneSchema/Example/Recipes/R_One.R_One";
@@ -138,4 +150,28 @@ int main()
     assert(runtimeBodyRejected);
     assert(Publish({{"NativeRegistries",{{"Recipes",{runtime}}}}},"Example","cooked-runeschema-namespace.jsonc"));
     assert(Definitions("Recipes").size()==2); // Namespace alone is not provenance.
+    Reset();
+    for(const auto& family:PS::NativeDataFamilies::Families){
+        const nlohmann::json declared={{"NativeRegistries",{{family.Lane,{"/SharedPlugin/Content/A.A"}}}}};
+        const auto parsed=Parse(declared,"DifferentFolderOwner","family.json");
+        assert(parsed&&parsed->AssetLanes.size()==1&&parsed->AssetLanes[0].Name==family.Lane);
+        for(const auto& bad:nlohmann::json::array({"/SharedPlugin/NoObject","/SharedPlugin/A.","/SharedPlugin/A.A:Child","/Script/Dominion.ItemData",{{"Path","/SharedPlugin/A.A"},{"Source","Schema"}}})){
+            auto invalid=declared;invalid["NativeRegistries"][family.Lane]=nlohmann::json::array({bad});bool failed=false;
+            try{Parse(invalid,"DifferentFolderOwner","bad.json");}catch(const std::exception&){failed=true;}assert(failed);
+        }
+        auto duplicate=declared;duplicate["NativeRegistries"][family.Lane].push_back("/sharedplugin/content/a.a");bool failed=false;
+        try{Parse(duplicate,"DifferentFolderOwner","duplicate.json");}catch(const std::exception&){failed=true;}assert(failed);
+    }
+    assert(!PS::NativeDataFamilies::Find("Skills")&&!PS::NativeDataFamilies::Find("Difficulty")&&!PS::NativeDataFamilies::Find("Entitlements"));
+    using Identity=PS::NativeDataFamilies::Identity;
+    const std::vector<Identity> rows{{"b","second","AssetB","/Plugin/B.B",1},{"a","first","AssetA","/Plugin/A.A",0}};
+    const auto ordered=PS::NativeDataFamilies::Order(rows);assert(ordered.size()==2&&ordered[0].SourceIndex==0&&ordered[1].SourceIndex==1);
+    for(int field=0;field<3;++field){auto collision=rows;if(field==0)collision[1].Persistence="b";if(field==1)collision[1].Internal="second";if(field==2)collision[1].Asset="AssetB";bool failed=false;
+        try{PS::NativeDataFamilies::Order(collision);}catch(const std::exception&){failed=true;}assert(failed);
+    }
+    auto crossAlias=rows;crossAlias[1].Internal="b";bool failed=false;try{PS::NativeDataFamilies::Order(crossAlias);}catch(const std::exception&){failed=true;}assert(failed);
+    for(const auto& bad:std::vector<std::string>{"",std::string("a\0b",3),"a\nb",std::string(1025,'x')}){
+        auto malformed=rows;malformed[0].Internal=bad;failed=false;try{PS::NativeDataFamilies::Order(malformed);}catch(const std::exception&){failed=true;}assert(failed);
+    }
+    failed=false;try{PS::NativeDataFamilies::Order(std::vector<Identity>(4097,rows[0]));}catch(const std::exception&){failed=true;}assert(failed);
 }

@@ -2,8 +2,11 @@
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Helpers/String.hpp"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnosticB3C.h"
+#include "Utility/StructuredDiagnosticOutcomeEvidence.h"
 #include "Utility/JsonHelpers.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
+#include "Core/CookedEnumContract.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -22,8 +25,15 @@ namespace DragonWilds {
             return;
         }
 
-        PS::JsonHelpers::ParseJsonFilesInPath(loaderPath, [&](const nlohmann::json& data) {
-            LoadEnums(data);
+        PS::JsonHelpers::ParseJsonFilesInPathWithSource(loaderPath, [&](const nlohmann::json& data,const std::filesystem::path& relative) {
+            PS::StructuredDiagnosticOutcomeEvidence::AppliedProgress applied;
+            try { LoadEnums(data, applied); }
+            catch(const std::exception& e) {
+                PS::StructuredDiagnosticB3C::Report("RS-ENUM-002","Error",applied.Interrupted(),"EnumLoader",
+                    "Enum declaration rejected",e.what(),RC::to_string(modName),
+                    PS::StructuredDiagnosticB2::Utf8Path(relative),{},applied.InterruptedPhase());
+                throw;
+            }
         });
     }
 
@@ -43,7 +53,9 @@ namespace DragonWilds {
 
         if (!enumClass)
         {
-            PS::Log<LogLevel::Error>(STR("[enums] Unable to initialize {}, failed to get /Script/CoreUObject.Enum.\n"), GetDisplayName());
+            if (!PS::StructuredDiagnosticB3C::Report("RS-ENUM-001","Error","Failed","EnumLoader",
+                "Enum class unavailable","Required /Script/CoreUObject.Enum could not be resolved.",{}, {},"/Script/CoreUObject.Enum","Resolution"))
+                PS::Log<LogLevel::Error>(STR("[enums] Unable to initialize {}, failed to get /Script/CoreUObject.Enum.\n"), GetDisplayName());
             return false;
         }
 
@@ -63,7 +75,8 @@ namespace DragonWilds {
         return true;
     }
 
-    void DragonWildsEnumLoader::LoadEnums(const nlohmann::json& data)
+    void DragonWildsEnumLoader::LoadEnums(const nlohmann::json& data,
+        PS::StructuredDiagnosticOutcomeEvidence::AppliedProgress& applied)
     {
         for (auto& [enumNamespace, enumValues] : data.items())
         {
@@ -82,6 +95,7 @@ namespace DragonWilds {
             if (!enumObject) {
                 throw std::runtime_error(std::format("Enum object {} was invalid.", enumNamespace));
             }
+            PS::CookedEnumContract::RequireLegacyAppendSafe(RC::to_string(enumObject->GetPathName()));
 
             for (auto& enumValue : enumValues)
             {

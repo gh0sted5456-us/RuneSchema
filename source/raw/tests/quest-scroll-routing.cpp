@@ -21,6 +21,11 @@ int main(int argc,char** argv){
     Check(use.find("Server_UseItemFromInventory")!=use.npos&&use.find("QuestProgress::OperationGuard")!=use.npos);
     Check(use.find(".Arg(TEXT(\"QuestID\")")==use.npos&&use.find(".Arg(TEXT(\"Reward\")")==use.npos);
     Check(use.find("RunQuestAction(binding,controller,current,source,&accepted)")!=use.npos);
+    Check(use.find("binding.QuestAction=contract->Action")!=use.npos);
+    Check(use.find("accepted==QuestProgress::Result::Abandoned")!=use.npos);
+    Check(actions.find("m_events.CancelQuestContract(quest.Key,player)")!=actions.npos);
+    Check(actions.find("write(\"RuneSchema.Run\",completedRuns)")!=actions.npos);
+    Check(actions.find("write(\"RuneSchema.StageRun\",completedRuns)")!=actions.npos);
     Check(use.find("accepted==QuestProgress::Result::Accepted")!=use.npos);
     Check(actions.find("std::map<UObject*,int> charges")<actions.find("result=receipt.Accept("));
     Check(actions.find("if(scrollItem)++charges[scrollItem]")!=actions.npos);

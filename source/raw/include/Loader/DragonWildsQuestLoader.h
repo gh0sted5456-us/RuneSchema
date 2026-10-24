@@ -2,6 +2,7 @@
 #include "Loader/DragonWildsNpcLoader.h"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnosticB3C.h"
 #include "Unreal/Hooks.hpp"
 #include "Runtime/NetworkContext.h"
 #include "Runtime/NetworkRoleNotice.h"
@@ -23,7 +24,9 @@ protected:
         RC::Unreal::Hook::FCallbackOptions options{};options.OwnerModName=TEXT("RuneSchema");options.HookName=TEXT("QuestRegistryBeforeGameState");
         hook=RC::Unreal::Hook::RegisterInitGameStatePreCallback([this](auto&,auto* mode) {
             try {npcs->PrepareQuests(reinterpret_cast<RC::Unreal::UObject*>(mode));}
-            catch(const std::exception& error){PS::Log<RC::LogLevel::Error>(STR("Quest registry preparation failed: {}\n"),PS::ToWideSafe(error.what()));}
+            catch(const std::exception& error){PS::StructuredDiagnosticB3C::Report("RS-CORE-033","Error","Partial","LoaderCore",
+                "Quest registry preparation failed",error.what(),{}, {},"QuestRegistry","Application");
+            PS::Log<RC::LogLevel::Error>(STR("Quest registry preparation failed: {}\n"),PS::ToWideSafe(error.what()));}
         },options);
         options.HookName=TEXT("QuestRegistryGameStateReady");
         readyHook=RC::Unreal::Hook::RegisterInitGameStatePostCallback([this](auto&,auto* mode) {
@@ -32,8 +35,13 @@ protected:
                 if(!network.World || network.Mode==PS::Network::Role::Unknown
                     || !PS::Network::IsGameplayRoleWorld(RC::to_string(network.World->GetPathName())))return;
                 npcs->PrepareQuests(reinterpret_cast<RC::Unreal::UObject*>(mode));
-            }catch(const std::exception& error){PS::Log<RC::LogLevel::Error>(STR("World quest registry preparation failed: {}\n"),PS::ToWideSafe(error.what()));}
+            }catch(const std::exception& error){PS::StructuredDiagnosticB3C::Report("RS-CORE-034","Error","Partial","LoaderCore",
+                "World quest registry preparation failed",error.what(),{}, {},"WorldQuestRegistry","Application");
+            PS::Log<RC::LogLevel::Error>(STR("World quest registry preparation failed: {}\n"),PS::ToWideSafe(error.what()));}
         },options);
+        if (hook==RC::Unreal::Hook::ERROR_ID || readyHook==RC::Unreal::Hook::ERROR_ID)
+            PS::StructuredDiagnosticB3C::Report("RS-CORE-036","Error","Blocked","LoaderCore",
+                "Quest initialization hook unavailable","One or more required world quest hooks could not be registered.",{}, {},"QuestLifecycleHooks","Validation");
         return hook!=RC::Unreal::Hook::ERROR_ID && readyHook!=RC::Unreal::Hook::ERROR_ID;
     }
     void OnLoad(const std::filesystem::path& path,const RC::StringType& mod,const EEngineLifecyclePhase& phase) override {
@@ -41,6 +49,8 @@ protected:
             PS::JsonHelpers::ParseJsonFilesInPathWithSource(path,[&](const nlohmann::json& data,const std::filesystem::path& source){npcs->LoadQuests(data,mod,source.string());});
     }
     void OnAutoReload(const RC::StringType& mod,const std::filesystem::path&) override {
+        PS::StructuredDiagnosticB3C::Report("RS-CORE-035","Warning","Deferred","LoaderCore",
+            "Quest reload requires restart","Quest changes are not applied through live reload.",RC::to_string(mod),{},"QuestReload","Reload");
         PS::Log<RC::LogLevel::Warning>(TEXT("Quest changes in {} require a restart.\n"),mod);
     }
 };

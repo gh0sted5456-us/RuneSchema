@@ -2,16 +2,15 @@
 
 Runtime schema and data-editing framework for **RuneScape: Dragonwilds**.
 
-**Experimental: RuneSchema and Helpy 0.8.0.1**, package refreshed October 23, 2026.
+**RuneSchema and Helpy 0.8.0.1**, released October 24, 2026.
 Read the [implemented/removed changes, line by line](docs/CHANGELOG-0.8.0.1.md)
 and [exact package/defaults/verification](docs/RELEASE-0.8.0.1.md).
-The existing tag remains a prerelease. This is a locally supplied binary refresh,
-not a hosted CI build or a promotion of main's runtime source.
+The release publishes the current runtime source on `main` and `experimental`,
+with the `0.8.0.1` tag aligned to the source used for the rebuilt DLL pair.
+The cleaned package is locally built and verified, not a hosted CI artifact.
 
-**RuneSchema and RSMK 0.8.0.0** are published from `main` under the matching
-`0.8.0.0` release tag. This release consolidates the October 13–16 alpha work.
-[Download the full runtime](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.0.0)
-and read the [release notes](docs/RELEASE-0.8.0.0.md), including live-test limits.
+[Download the full runtime](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.0.1).
+The [0.8.0.0 release notes](docs/RELEASE-0.8.0.0.md) and historical tag remain available.
 
 Helpy opens in its own window with F2; the old Canvas experiment is retired.
 The item browser is above a staging cart: drag an item down, or right-click

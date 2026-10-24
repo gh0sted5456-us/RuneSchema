@@ -59,7 +59,8 @@ int main(int argc,char** argv) {
         "adjustable item grid loses responsive sizing, layout controls, or catalog scrolling");
     Require(thumbnail.find("CaptureLease RendererTarget;")!=std::string::npos
         &&thumbnail.find("ReusableTarget(library,world)")!=std::string::npos
-        &&thumbnail.find("ActiveCapture.reset();return result;")!=std::string::npos
+        &&thumbnail.find("ActiveCapture.reset();return {{\"Icon\",iconPath},{\"Status\",\"Pending\"}};")!=std::string::npos
+        &&thumbnail.find("if(matching){QueueCacheMaintenance(cachedFile);return reply;}")!=std::string::npos
         &&thumbnail.find("ReleaseRenderTarget(library,target);capture.Target.Release();")==std::string::npos,
         "icon capture returns to per-item render-target churn instead of retaining the world-owned target");
     Require(picker.find("if(quickActions && fits)DragItem(row)")==std::string::npos

@@ -4,6 +4,7 @@
 #include <string>
 #include <thread>
 #include <filesystem>
+#include <array>
 #include <windows.h>
 
 struct ID3D11Device;
@@ -39,12 +40,22 @@ private:
     void ClosePopup();
     bool SyncItemBay();
     void DestroyItemBay();
+    bool SyncIconCache();
+    void DestroyIconCache();
+    bool OwnsWindow(HWND window)const;
+    bool SyncWorkspacePanel(size_t index);
+    void DestroyWorkspacePanel(size_t index);
 
     HINSTANCE m_module{};HWND m_hwnd{},m_gameWindow{};std::atomic<DWORD> m_threadId{0};
     std::atomic<HWND> m_publishedWindow=nullptr;
     std::atomic<HWND> m_publishedBayWindow=nullptr;
+    std::atomic<HWND> m_publishedCacheWindow=nullptr;
     ID3D11Device* m_device{};ID3D11DeviceContext* m_context{};IDXGISwapChain* m_swapChain{};ID3D11RenderTargetView* m_target{};
     HWND m_bayWindow{};IDXGISwapChain* m_baySwapChain{};ID3D11RenderTargetView* m_bayTarget{};
+    HWND m_cacheWindow{};IDXGISwapChain* m_cacheSwapChain{};ID3D11RenderTargetView* m_cacheTarget{};
+    struct WorkspaceSurface {HWND Window{};IDXGISwapChain* Swap{};ID3D11RenderTargetView* Target{};};
+    std::array<WorkspaceSurface,5> m_workspaces{};
+    std::array<std::atomic<HWND>,5> m_publishedWorkspaces{};
     std::thread m_thread;std::atomic<bool> m_ready=false,m_visible=false,m_stop=false,m_started=false;
     mutable std::mutex m_errorMutex;std::string m_error;
 };

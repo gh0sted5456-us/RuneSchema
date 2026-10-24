@@ -1,14 +1,13 @@
 # RuneSchema and Helpy 0.8.0.1
 
-Experimental release, refreshed **October 23, 2026**. This is the cumulative
-update from 0.8.0.0. The existing tag/prerelease
-status is retained. Updating documentation on `main` is not a stable promotion
-or a change to that branch's runtime source.
+Released **October 24, 2026**. This is the cumulative update from 0.8.0.0.
+Current runtime source is published on `main` and `experimental`, with the
+`0.8.0.1` tag aligned to the source used for the rebuilt DLL pair.
 
 [Download the full ZIP](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.1/RuneSchema-0.8.0.1.zip)
 · [Implemented/removed changes, line by line](CHANGELOG-0.8.0.1.md)
 · [Installation](INSTALLATION.md)
-· [Previous stable release](RELEASE-0.8.0.0.md)
+· [Previous release](RELEASE-0.8.0.0.md)
 
 ## Highlights
 
@@ -39,9 +38,9 @@ validated in platform-specific AppData caches, not bundled in `dlls/mappings`.
 
 | File | Bytes | SHA-256 |
 | --- | ---: | --- |
-| RuneSchema-0.8.0.1.zip | 5,022,231 | `EB91524934383D646D3C73787A2053C06C9118D6211F59170F2DEF2A6291E96A` |
-| RuneSchema/dlls/main.dll | 3,250,688 | `4CFB31438CE1B83853C23741063A9223B880DC2B820091689B992EB278F11A3C` |
-| RuneSchema/plugins/RuneSchema.Helpy/dll/RuneSchema.Helpy.dll | 1,538,560 | `6A60FF867315C255E263A70F30D588DC30A6E19DCAB825E3E3F76C301022DB4B` |
+| RuneSchema-0.8.0.1.zip | 5,017,099 | `528FD93A21B7B15C0405E636EF9FE12C01642FAC65CBE6AB2AB73B0D145368B6` |
+| RuneSchema/dlls/main.dll | 3,249,664 | `BC630311681519583C09BCF485E0EC50CB71CD9EE42E19CBC0877FBC6D8B3F8D` |
+| RuneSchema/plugins/RuneSchema.Helpy/dll/RuneSchema.Helpy.dll | 1,538,560 | `7E4B795B93516EC576D1CEDF3F972A7A26DF22987248B83638AA838C8D9BDEC0` |
 
 Current downloads are the full ZIP, `SHA256SUMS.txt` and
 `RuneSchema-0.8.0.1-verification.json`. Superseded assets are retired rather than
@@ -72,11 +71,13 @@ UPX 5.2.1 integrity and decompression comparisons of executable code, other data
 imports/IAT slots and resources. Relocations/resources/icons were retained.
 Compressed Helpy passed hidden-start and dedicated-desktop contracts.
 
-The supplied ZIP was audited separately for structure and exact DLL identity.
-This is a **local package refresh**, not a GitHub Actions build artifact.
-Documentation commits do not publish outstanding runtime working-tree changes,
-move the existing tag, or prove the tag's older source reproduces these binaries.
-Do not cite a documentation commit as the DLL build commit.
+Both DLLs were rebuilt with the corrected diagnostic catalogue from the release
+source and copied into the supplied 31-file cleaned layout. All other package
+files were retained byte-for-byte. This is a **locally built package**, not a
+GitHub Actions build artifact. The tag publishes the matching authored source;
+bit-for-bit reproduction across compiler timestamps and dependency environments
+has not been established. The previous tag target and replaced assets were
+recorded and backed up locally; other historical tags/releases were preserved.
 
 Automated checks are not live gameplay or frame-time measurements. New cooked
 families still need their native consumers validated. A custom repair runtime

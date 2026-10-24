@@ -1,3 +1,5 @@
+#include "Utility/StructuredDiagnostics.h"
+#include "Utility/StructuredDiagnosticB3D.h"
 #include <atomic>
 #include <algorithm>
 #include <cctype>
@@ -29,6 +31,9 @@
 #include "Generator/PlayerTrace.h"
 #include "Loader/DragonWildsMainLoader.h"
 #include "Runtime/PluginHost.h"
+#include "Runtime/QuickLoad.h"
+#include "Runtime/AdditionalLogging.h"
+#include "Runtime/ModHealthService.h"
 #include "Loader/ModLoadOrder.h"
 #include "Loader/ModOrderPolicy.h"
 #include "Utility/Config.h"
@@ -37,7 +42,11 @@
 #include "Runtime/BPModLoaderIntegration.h"
 #include "Runtime/UE4SSPackageIntegration.h"
 #include "Runtime/MappingBackbone.h"
+#include "Runtime/AutoMapping.h"
+#include "Core/NativeInventoryMarkInput.h"
+#include "Runtime/ConsoleCommands.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnostics.h"
 #include "Utility/StartupTrace.h"
 #include "SDK/DragonWildsSignatures.h"
 #include "SDK/UnrealOffsets.h"
@@ -237,10 +246,30 @@ public:
         auto config = PS::PSConfig::Get();
         PS::StartupTrace::Mark("config load begin");
         config->Load();
+        PS::QuickLoad::InitializeEarly();
+        PS::AutoMapping::Prepare();
+        if(!PS::Storefront::IsDedicatedServer()){
+            for(int key=0;key<256;++key)if(PS::NativeInventoryMarkInput::Bindable(key)||key==VK_ESCAPE){
+                for(int modifiers=0;modifiers<4;++modifiers){
+                    Input::Handler::ModifierKeyArray keys{};
+                    if(modifiers&1)keys[0]=Input::ModifierKey::CONTROL;
+                    if(modifiers&2)keys[1]=Input::ModifierKey::SHIFT;
+                    register_keydown_event(static_cast<Input::Key>(key),keys,[key,modifiers]{
+                        DWORD process=0;GetWindowThreadProcessId(GetForegroundWindow(),&process);
+                        if(process==GetCurrentProcessId())PS::InventoryMarkInput.Push(key,modifiers);
+                    });
+                }
+            }
+        }
         try {
             for(const auto& diagnostic:PS::UE4SSPackageIntegration::Prepare(std::filesystem::path(PS::HostServices::WorkingDirectory())))
                 PS::Log<LogLevel::Warning>(STR("[UE4SS-PACKAGES] {}\n"),PS::ToWideSafe(diagnostic.c_str()));
-        }catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[UE4SS-PACKAGES][PARTIAL] {}\n"),PS::ToWideSafe(error.what()));}
+        }catch(const std::exception& error){
+            (void)PS::LogStructuredFallback<LogLevel::Warning>(
+                PS::StructuredDiagnosticB3D::Report("RS-CORE-030","Warning","Partial",
+                "UE4SS package preparation interrupted",error.what(),"UE4SSPackageIntegration","Application"),
+                STR("[UE4SS-PACKAGES][PARTIAL] {}\n"),PS::ToWideSafe(error.what()));
+        }
         const auto& storefront=PS::Storefront::CurrentDetection();
         if (!storefront.DedicatedServer) {
             try {
@@ -274,7 +303,10 @@ public:
                         "[LOGIC-PAK][BP-LOADER][PARTIAL] {}. Native ModActor fallback remains available.\n"),
                         PS::ToWideSafe(result.Detail.c_str()));
             } catch (const std::exception& error) {
-                PS::Log<LogLevel::Warning>(TEXT(
+                (void)PS::LogStructuredFallback<LogLevel::Warning>(
+                    PS::StructuredDiagnosticB3D::Report("RS-CORE-031","Warning","Skipped",
+                    "BP Mod Loader integration skipped",error.what(),"BPModLoaderIntegration","Application"),
+                    TEXT(
                     "[LOGIC-PAK][BP-LOADER][PARTIAL] Integration skipped: {}. Native ModActor fallback remains available.\n"),
                     PS::ToWideSafe(error.what()));
             }
@@ -300,7 +332,10 @@ public:
                 const auto about=m_pluginHost.Call("RuneSchema.Core","helpy.about","{}");
                 PS::Log<LogLevel::Normal>(TEXT("Helpy plugin service: {}\n"),PS::ToWideSafe(about.c_str()));
             } catch(const std::exception& error) {
-                PS::Log<LogLevel::Warning>(TEXT("Helpy plugin service validation failed: {}\n"),PS::ToWideSafe(error.what()));
+                (void)PS::LogStructuredFallback<LogLevel::Warning>(
+                    PS::StructuredDiagnosticB3D::Report("RS-CORE-032","Warning","Skipped",
+                    "HELPY service validation failed",error.what(),"HelpyPluginService","Validation"),
+                    TEXT("Helpy plugin service validation failed: {}\n"),PS::ToWideSafe(error.what()));
             }
         }
         if (storefront.DedicatedServer) {
@@ -323,7 +358,7 @@ public:
             PS::ConsolidatedLog<RC::LogLevel::Normal>(TEXT("[RuneSchema] Mapping backbone: {} | bytes={} | fingerprint={}.\n"),
                 mapping.Path.wstring(),mapping.Size,PS::ToWideSafe(mapping.Fingerprint.c_str()));
         else
-            PS::ConsolidatedLog<RC::LogLevel::Normal>(TEXT("[RuneSchema] Mapping backbone: no Mappings.usmap found; live reflection remains authoritative.\n"));
+            PS::ConsolidatedLog<RC::LogLevel::Normal>(TEXT("[RuneSchema] Mapping backbone: no validated runtime mapping available yet; live reflection remains authoritative.\n"));
         PS::StartupTrace::Mark("signature scan begin");
 
         DragonWilds::SignatureManager::Initialize();
@@ -340,6 +375,11 @@ public:
 
     ~RuneSchema() override
     {
+        PS::InventoryMarkInput.Reset();
+        m_consoleCommands.Shutdown();
+        PS::ModHealthService::Shutdown();
+        PS::QuickLoad::Shutdown();
+        PS::AdditionalLogging::Shutdown();
         m_pluginHost.Shutdown();
         m_networkRoleMonitor.Stop();
         PS::RuntimeJobs::Shutdown();
@@ -350,6 +390,7 @@ public:
         PS::PlayerTrace::Cancel();
         PS::AppearanceTrace::Cancel();
         PS::NiagaraTest::Unbind();
+        PS::StructuredDiagnostics::Shutdown();
         PS::DiagnosticLog::Shutdown();
     }
 
@@ -423,6 +464,8 @@ public:
             ImGui::SeparatorText("Messages");
             ImGui::Checkbox("Advanced logging", &settings.advancedLogging);
             ImGui::TextWrapped("RuneSchema.log always mirrors normal RuneSchema messages in the mod root. Advanced logging adds detailed loader and bridge traces to that file only; UE4SS keeps concise output.");
+            ImGui::Checkbox("Archive RuneSchema logs (restart required)", &settings.archiveLogs);
+            ImGui::TextWrapped("Each launch starts a fresh continuous RuneSchema.log. Archiving keeps the previous run in logs/ with a UTC date-time filename. No mid-run size rotation or automatic archive deletion. UE4SS.log is unchanged.");
             ImGui::Checkbox("Color-code loader annotations", &settings.colorCodeLoaderAnnotations);
             ImGui::TextWrapped("When enabled, /loader annotations in Server & Loaders > Installed Mods use the matching loader color.");
         } else if(settingsPage==1) {
@@ -457,8 +500,8 @@ public:
             ImGui::SeparatorText("Progress persistence");
             ImGui::Checkbox("Save RuneSchema character customization", &settings.persistence.characterCustomization);
             ImGui::TextWrapped("Off by default. Character option and data-table loaders remain active, but automatic /players appearance assignments do not rewrite CustomizationSaveData.");
-            ImGui::Checkbox("Bypass rejected character loads (restart required)", &settings.persistence.allowCorruptCharacterEntry);
-            ImGui::TextWrapped("Off by default. Native character validation and player-state loading both run, then rejected return results are accepted at verified native return gates. This does not repair damaged data or guarantee a complete load. Back up your character before enabling; later game saves can persist incomplete state. Disable the standalone CorruptCharacterBypass first. Restart also applies turning this off.");
+            ImGui::Checkbox("Save Bypass by default (restart required)", &settings.persistence.allowCorruptCharacterEntry);
+            ImGui::TextWrapped("Unchecked: Normal and Quick Launch use bypass only after native rejection, including direct native loads. Checked: prefer bypass by default. Native loading runs once. Dedicated servers use only this toggle. This does not repair damaged data or guarantee a complete load. Keep backups and disable any standalone bypass. Restart required.");
             ImGui::TextWrapped("Normal RuneSchema recipe unlocks may persist once their live RecipeData has a valid PersistenceID. Generated vendor recipes remain transient. Safe Clean removes orphaned RuneSchema progress after content registration.");
             ImGui::Checkbox("Save RuneSchema quest progress", &settings.persistence.quests);
             ImGui::TextWrapped("On by default. Off leaves quest definitions available to other loaders but blocks RuneSchema quest actions because native quest progress is save-backed.");
@@ -507,6 +550,7 @@ public:
             ImGui::SeparatorText("Attribution");
             ImGui::TextWrapped("Based on the original RuneSchema 0.6.0 from Snorkles. This version is maintained by members of the RSDW Modding Community.");
             ImGui::TextWrapped("PalSchema foundation — Okaetsu");
+            ImGui::TextWrapped("Corrupt-save bypass based on initial work by Abyss (RSDW Modding Community).");
             ImGui::TextDisabled("Release history and detailed credits are included in the documentation.");
         }
         ImGui::PopID(); ImGui::EndChild(); EndRuneSchemaTab(); }
@@ -778,15 +822,25 @@ public:
         if (m_startupFailed.load(std::memory_order_acquire)) return;
         try {
             PS::StartupTrace::Mark("UE4SS on_unreal_init begin");
+            PS::UE4SSCompatibility::PrepareLuaPropertySizes();
             MainLoader.SetFatalStartupHandler([this](std::string) {
+                m_consoleCommands.Shutdown();
+                PS::ModHealthService::Shutdown();
                 m_startupFailed.store(true,std::memory_order_release);
+                PS::QuickLoad::Shutdown();
+                PS::AdditionalLogging::Shutdown();
                 m_networkRoleMonitor.Stop();
                 PS::RuntimeJobs::Shutdown();
                 m_pluginHost.Shutdown();
             });
             MainLoader.Initialize();
+            PS::ModHealthService::Initialize();
+            PS::QuickLoad::Initialize();
+            PS::AdditionalLogging::Initialize();
             PrepareAuthoringBridge();
             m_pluginHost.OnUnrealInit();
+            PS::AutoMapping::Start();
+            m_consoleCommands.Start(m_pluginHost);
             PS::StartupTrace::Mark("UE4SS on_unreal_init complete");
             m_unrealReady = true;
             if (!PS::Storefront::IsDedicatedServer()) {
@@ -795,9 +849,17 @@ public:
             }
         } catch (const std::exception& error) {
             m_startupFailed.store(true,std::memory_order_release);
+            m_consoleCommands.Shutdown();
+            PS::ModHealthService::Shutdown();
+            PS::QuickLoad::Shutdown();
+            PS::AdditionalLogging::Shutdown();
             MainLoader.AbortStartup("unreal-init",error.what());
         } catch (...) {
             m_startupFailed.store(true,std::memory_order_release);
+            m_consoleCommands.Shutdown();
+            PS::ModHealthService::Shutdown();
+            PS::QuickLoad::Shutdown();
+            PS::AdditionalLogging::Shutdown();
             MainLoader.AbortStartup("unreal-init","unknown exception");
         }
     }
@@ -843,6 +905,7 @@ private:
     PS::Network::RoleMonitor m_networkRoleMonitor;
     DragonWilds::DragonWildsMainLoader MainLoader;
     PS::PluginHost m_pluginHost;
+    PS::Console::Commands m_consoleCommands;
     std::atomic<bool> m_generateSchemas = false;
     std::atomic<bool> m_schemaBusy = false;
     std::atomic<bool> m_includeLoadedTables = false;

@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/NativeDataFamilies.h"
 #include <nlohmann/json.hpp>
 #include "Generator/LoaderCapabilities.h"
 #include "Loader/HumanNpc.h"
@@ -223,9 +224,10 @@ inline nlohmann::json LoaderSchemas() {
     result["spawns"]["items"]["properties"]["QuestActive"]={{"type","string"},{"minLength",1},{"maxLength",512},{"description","Temporary Actor resource exists only while a RuneSchema quest is Given to a connected participant. A local Id is qualified with the mod name. Requires a cooked subclass of the game's ore-node or fellable-tree base with SpudGuid and bSkipSpudStore. The actor is excluded from world saves and removed when the quest is no longer active."}};
     result["spawns"]["items"]["properties"]["EventActive"]={{"type","string"},{"minLength",1},{"maxLength",512},{"description","Temporary Actor resource exists only while the named RuneSchema event runs in this world. A local Id is qualified with the mod name. It is excluded from world saves and removed when the event ends or is cancelled."}};
     result["spawns"]["items"]["properties"]["PersistAfterCondition"]={{"type","boolean"},{"default",true},{"description","Latch a completed quest condition so an activated placement remains available. Set false for a placement that should exist only while the completion state is observable."}};
-    result["spawns"]["items"]["properties"]["DuplicateRadius"]={{"type","number"},{"minimum",0},{"maximum",10000},{"default",100},{"description","For quest-activated Actor and BuildingProp entries, treat the same actor class within this many centimetres as already satisfied. Zero disables the coordinate safeguard."}};
+    result["spawns"]["items"]["properties"]["Building"]={{"type","string"},{"pattern","^/"},{"description","BuildingPieceData asset path for transient BuildingProp or permanent native BuildingPiece placements."}};
+    result["spawns"]["items"]["properties"]["DuplicateRadius"]={{"type","number"},{"minimum",0},{"maximum",10000},{"default",100},{"description","BuildingPiece skips creation when any native building occupies this radius in centimetres (grounded: XY column; ungrounded: XYZ). Must be positive for BuildingPiece. Quest-activated Actor/BuildingProp retain same-class checks; zero disables those checks."}};
     result["spawns"]["items"]["dependencies"]["PersistAfterCondition"]={{"required",{"QuestCompleted"}}};
-    result["spawns"]["items"]["dependencies"]["DuplicateRadius"]={{"required",{"QuestCompleted"}}};
+    result["spawns"]["items"]["dependencies"]["DuplicateRadius"]={{"anyOf",{json{{"required",{"QuestCompleted"}}},json{{"required",{"Type"}},{"properties",{{"Type",{{"const","BuildingPiece"}}}}}}}}};
     result["spawns"]["items"]["dependencies"]["SpawnRadiusMeters"]={{"required",{"Type"}},{"properties",{{"Type",{{"const","AISpawnPoint"}}},{"RequiresActivation",{{"const",false}}}}},{"not",{{"anyOf",{json{{"required",{"MinSpawnDistance"}}},json{{"required",{"MaxSpawnDistance"}}},json{{"required",{"EventOnly"}}}}}}}};
     json vendor=record;
     vendor["required"]={"Location"};
@@ -482,20 +484,33 @@ inline nlohmann::json LoaderSchemas() {
         {"properties",{{"AfterSeconds",{{"type","number"},{"minimum",0},{"maximum",900}}},{"SpawnID",text},
             {"Pose",npc["properties"]["Pose"]},{"Emote",npc["properties"]["Pose"]}}}};
     eventAction["properties"]["Emote"]["description"]="One-shot human NPC animation applied after the event delay.";
+    const json eventContract={{"type","object"},{"additionalProperties",false},{"required",{"QuestID"}},
+        {"properties",{{"QuestID",{{"type","string"},{"minLength",1},{"maxLength",257}}},
+            {"SpawnOrigin",{{"enum",{"World","Participant"}},{"default","World"}}},
+            {"ActivationRadiusMeters",{{"type","number"},{"minimum",1},{"maximum",100},{"default",15}}},
+            {"ExitGraceSeconds",{{"type","number"},{"minimum",0},{"maximum",60},{"default",10}}}}}};
     result["events"]=many({{"type","object"},{"additionalProperties",false},{"required",{"Id","Waves"}},
         {"properties",{{"Id",text},{"TimeoutSeconds",{{"type","number"},{"minimum",10},{"maximum",900},{"default",300}}},
             {"Scope",{{"enum",{"Participant","Party","World"}}}},{"TimeOfDay",{{"enum",{"Any","Day","Night"}}}},
             {"SpawnTimeOfDay",{{"enum",{"Any","Day","Night"}},{"description","Native time state required when event actors appear. Replaces legacy TimeOfDay."}}},
             {"DespawnTimeOfDay",{{"enum",{"Day","Night"}},{"description","Retire event actors and restore event weather when this native time state begins."}}},
             {"Weather",{{"enum",{"Sunny","Cloudy","Fog","Rain_Light","Rain_Heavy","Rain_Storm","Rain_LightningStorm","Sandstorm","Velgar_BossFight"}}}},
-            {"Area",eventArea},{"Messages",eventMessages},{"HealthStages",{{"type","array"},{"minItems",1},{"maxItems",16},{"items",healthStage},{"description","Health-threshold taunts sent through the native text-notification route. Optional SpawnID limits a threshold to one event spawn template."}}},
+            {"Area",eventArea},{"Contract",eventContract},{"Messages",eventMessages},{"HealthStages",{{"type","array"},{"minItems",1},{"maxItems",16},{"items",healthStage},{"description","Health-threshold taunts sent through the native text-notification route. Optional SpawnID limits a threshold to one event spawn template."}}},
             {"Actions",{{"type","array"},{"minItems",1},{"maxItems",32},{"items",eventAction},{"description","Delayed pose or emote actions applied to live event actors matching SpawnID."}}},
             {"Waves",{{"type","array"},{"minItems",1},{"maxItems",8},{"items",{{"type","array"},{"minItems",1},{"maxItems",16},{"items",eventMember}}}}}}}});
     result["events"]["items"]["allOf"]=json::array({{{"not",{{"required",{"TimeOfDay","SpawnTimeOfDay"}}}}}});
+    const json contractCondition={{"if",{{"required",{"Contract"}}}},{"then",{{"required",{"Area"}},
+        {"properties",{{"Scope",{{"const","Participant"}}}}},{"not",{{"required",{"DespawnTimeOfDay"}}}}}}};
+    result["events"]["anyOf"][0]["allOf"].push_back(contractCondition);
+    result["events"]["anyOf"][1]["items"]["allOf"].push_back(contractCondition);
     const json eventSpawn={{"type","object"},{"additionalProperties",false},{"required",{"Id","Type","EventOnly","AIClass"}},
         {"properties",{{"Id",text},{"Type",{{"const","AISpawnPoint"}}},{"EventOnly",{{"const",true}}},
             {"AIClass",{{"type","string"},{"pattern","^/"}}},{"DisplayName",{{"type","string"},{"minLength",1},{"maxLength",128}}},{"BossName",{{"type","string"},{"minLength",1},{"maxLength",128}}},{"Scale",{{"type","number"},{"minimum",0.01},{"maximum",100}}}}}};
     result["spawns"]["items"]["allOf"]=json::array({{{"if",{{"required",{"EventOnly"}}}},{"then",eventSpawn}}});
+    result["spawns"]["items"]["allOf"].push_back({{"if",{{"required",{"Type"}},{"properties",{{"Type",{{"const","BuildingPiece"}}}}}}},
+        {"then",{{"required",{"Id","Type","Building","Location"}},
+            {"properties",{{"AllowDeconstruction",{{"const",true}}},{"TimeOfDay",{{"const","Any"}}},{"UseNativeRespawn",{{"const",false}}},{"PersistAfterCondition",{{"const",true}}},{"DuplicateRadius",{{"exclusiveMinimum",0}}}}},
+            {"not",{{"anyOf",{json{{"required",{"QuestActive"}}},json{{"required",{"EventActive"}}}}}}}}}});
     result["spawns"]["items"]["allOf"][0]["then"]["properties"]["GroundMigrationRadius"]=migrationRadius;
     result["spawns"]["items"]["allOf"][0]["then"]["properties"]["VisualEffect"]=ghostVisual;
     result["spawns"]["items"]["allOf"][0]["then"]["properties"]["PowerLevel"]={{"type","integer"},{"minimum",1},{"maximum",100}};
@@ -556,6 +571,9 @@ inline nlohmann::json LoaderSchemas() {
         stageSchema["if"]={{"required",{"Completion"}},{"properties",{{"Completion",{{"const","Any"}}}}}};
         stageSchema["then"]["properties"]["Objectives"]={{"minItems",2},{"items",{{"properties",{{"Optional",{{"const",false}}},{"Hidden",{{"const",false}}}}}}}};
         (*questSchema)["properties"]["Category"]={{"enum",{"Regular","Story","Task"}},{"default","Regular"},{"description","Task uses the game's green task-quest presentation."}};
+        (*questSchema)["properties"]["Icon"]={{"type","string"},{"maxLength",2048},
+            {"pattern",R"(^(?:$|/(?!.*//)(?!.*[\\:\u0000-\u001f\u007f])[^.]+/[^/.]+\.[^/.]+)$)"},
+            {"description","Optional quest-board texture object path. Empty uses fallback artwork; URLs and filesystem paths are unsupported."}};
         (*questSchema)["properties"]["CompletedDescription"]={{"type","string"},{"minLength",1},{"maxLength",2048},{"description","Native completed quest description; omitted values inherit Description."}};
         (*questSchema)["properties"]["Region"]={{"type","string"},{"minLength",1},{"maxLength",80},{"pattern","^(EQuestRegion::)?[A-Za-z][A-Za-z0-9_]*$"},{"description","Native EQuestRegion name, resolved by reflected enum rather than a numeric ID. Current names: Brynmoor, Ghornfell, Fellhollow, Dowdun_Reach, Umbral_Sands, Scorned_Wilderness. None/MAX are not regions. Omit for legacy behavior; no location is guessed."}};
         (*questSchema)["properties"]["HideInQuestList"]={{"type","boolean"},{"default",false}};
@@ -747,6 +765,9 @@ inline nlohmann::json LoaderSchemas() {
             {"PersistenceID",{{"type","string"},{"pattern","^[A-Za-z0-9_-]{21}[AQgw]$"}}},
             {"EntryID",{{"type","string"},{"minLength",1},{"maxLength",128},{"pattern","^[^:\\r\\n\\t ]+$"}}}}},
         {"description","Replace a cooked Blueprint ConsumableItemData UseItem override with authoritative acceptance of an existing local quest Id or Mod:Id. Requires an inert impure script UseItem override returning false (BlueprintPure=false); native-only C++ consumables are not supported. PersistenceID is the expected item identity (not the quest ID). One scroll plus any normal quest start cost is charged only after native acceptance; active/cooldown/prerequisite/missing-quest rejection leaves the scroll. EntryID selects an existing quest entry option. Original cooked use callbacks are not also executed. Restart required."}};
+    asset["properties"]["$QuestScroll"]["properties"]["Action"]={{"enum",{"Accept","Abandon"}},{"default","Accept"}};
+    asset["properties"]["$QuestScroll"]["dependencies"]["EntryID"]={{"properties",{{"Action",{{"const","Accept"}}}}}};
+    asset["properties"]["$QuestScroll"]["description"]="An authoritative Accept (default) or Abandon action for the bound quest. Requires an inert impure Blueprint UseItem override returning false and the exact stable item identity. EntryID applies only to Accept. Abandon consumes one scroll only after cancelling an active quest; inactive/completed/pending quests consume nothing. Cancelling clears active progress and stops its contract encounter without rewards or refunds. Quest Board acceptance recipes automatically generate a matching cancellation scroll in Quest Cancellations. Original cooked callbacks are not also executed. Restart required.";
     asset["properties"]["$DominionSpheres"]={{"type","object"},{"minProperties",1},{"maxProperties",32},
         {"propertyNames",{{"pattern","^[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*$"}}},
         {"additionalProperties",{{"type","object"},{"additionalProperties",false},{"required",{"Radius"}},
@@ -807,32 +828,49 @@ inline nlohmann::json LoaderSchemas() {
     };
     json registryEntry={{"type","object"},{"additionalProperties",false}};
     registryEntry["required"]={"Id","Kind"};
-    const json registryAuthority={{"type","object"},{"additionalProperties",false},
+    json registryAuthority={{"type","object"},{"additionalProperties",false},
         {"required",{"Action","GraphClass"}},
-        {"properties",{{"Action",{{"enum",{"SpawnFollower","ExecuteGraph"}}}},
+        {"properties",{{"Action",{{"enum",{"SpawnFollower","ExecuteGraph","ConsumedItemAuthority"}}}},
             {"GraphClass",{{"type","string"},{"pattern","^/[A-Za-z0-9_.-]+/.+_C$"}}},
             {"Function",{{"type","string"},{"pattern","^[A-Za-z0-9_.-]+$"},{"default","Trigger"}}},
-            {"DataAsset",{{"type","string"},{"pattern","^/(?:Game|DowdunReach|FutureMajorVersion)/"}}},
+            {"DataAsset",{{"type","string"},{"maxLength",1024},{"pattern","^/[A-Za-z0-9_.-]+/[^\\r\\n\\t]+$"}}},
             {"Bindings",{{"type","object"},{"maxProperties",32},{"additionalProperties",{{"type","string"},{"pattern","^/(?:Game|DowdunReach|FutureMajorVersion)/"}}}}}}}};
-    registryEntry["anyOf"]={json{{"required",{"Presentation"}}},json{{"required",{"Authority"}}}};
+    registryEntry["anyOf"]={json{{"required",{"Presentation"}}},json{{"required",{"Authority"}}},json{{"required",{"Relay"}}}};
     registryEntry["properties"]={
         {"Id",{{"type","string"},{"pattern","^[A-Za-z0-9_.-]+$"},{"maxLength",96}}},
-        {"Kind",{{"enum",{"SpellPresentation","PersistentEffect","WeatherPresentation","AudioPresentation","CosmeticWrapper"}}}},
+        {"Kind",{{"enum",{"SpellPresentation","PersistentEffect","WeatherPresentation","AudioPresentation","CosmeticWrapper","DataRelay","GameplayAuthority"}}}},
         {"Spell",{{"type","string"},{"pattern","^/(?:Game|DowdunReach|FutureMajorVersion)/"}}},
         {"Presentation",{{"type","array"},{"minItems",1},{"maxItems",64},{"items",registryPresentation}}},
         {"Authority",registryAuthority},
         {"Metadata",{{"type","object"},{"maxProperties",32}}}
     };
+    registryEntry["properties"]["Relay"]={{"type","object"},{"additionalProperties",false},{"required",{"Channel"}},
+        {"properties",{{"Channel",{{"type","string"},{"minLength",1},{"maxLength",96},{"pattern","^[A-Za-z0-9_.-]+$"}}},
+            {"Version",{{"type","integer"},{"minimum",1},{"maximum",65535},{"default",1}}},
+            {"MaxBytes",{{"type","integer"},{"minimum",1},{"maximum",65536},{"default",65536}}},
+            {"ClientPublish",{{"type","boolean"},{"default",false}}},{"Broadcast",{{"type","boolean"},{"default",false}}},{"Snapshot",{{"type","boolean"},{"default",false}}}}}};
+    registryEntry["allOf"]={{{"if",{{"properties",{{"Kind",{{"const","DataRelay"}}}}}}},
+        {"then",{{"required",{"Relay"}},{"maxProperties",3}}},{"else",{{"not",{{"required",{"Relay"}}}}}}}};
     result["registry"]={{"type","object"},{"additionalProperties",false},{"required",{"SchemaVersion","Entries"}},
         {"properties",{{"SchemaVersion",{{"const",1}}},
             {"Entries",{{"type","array"},{"maxItems",256},{"items",registryEntry}}}}},
         {"description","Enabled loose schema mods and cooked declarations share native-registry enrollment and client/server declarations. Every asset still requires a correct live type and verified native identity; a declaration does not construct an asset or authorize cleanup."}};
     json nativeRegistries={{"type","object"},{"additionalProperties",false},{"properties",json::object()}};
     const json nativePath={{"type","string"},{"minLength",1},{"maxLength",1024},{"pattern","^/[^\\r\\n\\t]+\\.[^/]+$"}};
+    for(const auto& family:PS::NativeDataFamilies::Families)
+        nativeRegistries["properties"][family.Lane]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},{"items",{{"type","string"},{"maxLength",1024},{"pattern","^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"},{"not",{{"pattern","\\.\\."}}}}},
+            {"description","Exact existing cooked objects only. Startup identity enrollment does not synthesize assets, activate hooks or certify gameplay/save lifecycle."}};
+    nativeRegistries["properties"]["CacheAssets"]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},{"items",nativePath},{"description","Original artwork references; not gameplay registry identities."}};
     const json schemaPath={{"type","object"},{"additionalProperties",false},{"required",{"Path","Source"}},{"properties",{{"Path",nativePath},{"Source",{{"const","Schema"}}}}}};
     for(const auto* lane:{"Items","Recipes","Quests","CombatSpells","UtilitySpells","EquipmentEffects","Journals","Lore","WearableMeshData","MeleeAttackClasses","RangedAttackClasses"})
         nativeRegistries["properties"][lane]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},{"items",{{"anyOf",{nativePath,schemaPath}}}}};
     for(const auto* lane:{"MeleeAttackClasses","RangedAttackClasses"})nativeRegistries["properties"][lane]["items"]=nativePath;
+    result["registry"]["definitions"]["modOwnedCookedPaths"]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},
+        {"items",{{"type","string"},{"maxLength",1024},{"pattern","^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"},{"not",{{"pattern","\\.\\."}}}}},
+        {"description","Runtime requires the owning /Owner/ or /Game/Mods/Owner/ namespace and rejects case-insensitive duplicates. Strings only; no Source:Schema or arbitrary property writes."}};
+    nativeRegistries["properties"]["Skills"]={{"$ref","#/definitions/modOwnedCookedPaths"},{"description","Staged declaration only. Native enrollment remains blocked pending verified ESkill consumers and lifecycle."}};
+    nativeRegistries["properties"]["SkillPerks"]={{"$ref","#/definitions/modOwnedCookedPaths"},{"description","Staged declaration only. Native enrollment remains blocked pending verified perk startup/cache and unlock lifecycle."}};
+    nativeRegistries["properties"]["Enums"]={{"$ref","#/definitions/modOwnedCookedPaths"},{"description","Read-only verification of exact mod-owned cooked UserDefinedEnum symbol tables; never extends a native enum."}};
     result["registry"]["properties"]["NativeRegistries"]=nativeRegistries;
     result["registry"]["properties"]["LoaderDefinitions"]={{"type","object"},{"additionalProperties",false},{"properties",json::object()}};
     for(const auto* lane:{"Recipes","Journals","Lore"})result["registry"]["properties"]["LoaderDefinitions"]["properties"][lane]=

@@ -1,7 +1,7 @@
 #include "Loader/TimeOfDayRuntime.h"
 std::string DragonWildsNpcLoader::RunQuestAction(const DialogueCompletionBinding& action,UObject* controller,const std::function<bool()>& current,UObject* scrollItem,QuestProgress::Result* observed) {
     if(observed)*observed=QuestProgress::Result::NotReady;
-    if(scrollItem&&action.QuestAction!="Accept")throw std::runtime_error("Quest scrolls can only accept quests");
+    if(scrollItem&&action.QuestAction!="Accept"&&action.QuestAction!="Abandon")throw std::runtime_error("Quest scrolls can only accept or abandon their bound quest");
     if(action.QuestAction!="Accept" && action.QuestAction!="TurnIn" && action.QuestAction!="Abandon")throw std::runtime_error("Unsupported quest action");
     if(!PS::PSConfig::Get()->GetSettings().persistence.quests)
         return "RuneSchema quest saving is disabled. Quest actions are unavailable for this session.";
@@ -58,25 +58,38 @@ std::string DragonWildsNpcLoader::RunQuestAction(const DialogueCompletionBinding
         PS::Log<LogLevel::Verbose>(STR("Quest '{}' recovered a confirmed exchange without replaying inventory operations.\n"),RC::to_generic_string(quest.Key));
     if(action.QuestAction=="Abandon") {
         if(receipt.Phase()!=1 || state()!="Given")return "This quest is not active.";
+        const auto completedRuns=QuestCancellations::CompletedRunsBeforeCancellation(receipt.Run());
+        const auto cancelled=QuestCancellations::Apply(
+            [&]{return current() && receipt.Phase()==1 && state()=="Given";},
+            [&]{return !scrollItem || DialogueInventory(controller,scrollItem).Count()>=1;},[&]{
         // Abandon is intentionally destructive only to the active RuneSchema
-        // run. It never removes inventory or grants rewards. Clear every
+        // run. Cancellation scrolls pay only for a confirmed cancellation;
+        // neither route grants rewards or refunds. Clear every
         // authored counter before returning the owned native record to
         // Ungiven so no stage, marker, or hidden objective survives a retry.
         if(quest.Kill || quest.Acquire)
             native.SetInt(FName(RC::to_generic_string(quest.ObjectiveId).c_str(),FNAME_Add),0);
         for(const auto& [stage,objectives]:quest.Stages)for(const auto& objective:objectives)
             native.SetInt(Quests::StageCounter(objective),0);
-        const auto write=[&](const char* key,int value){native.SetInt(FName(RC::to_generic_string(key).c_str(),FNAME_Add),value);};
+        const auto write=[&](const char* key,int value){const FName name(RC::to_generic_string(key).c_str(),FNAME_Add);native.SetInt(name,value);if(native.GetInt(name)!=value)throw std::runtime_error("Quest cancellation counter write was not confirmed");};
         const auto clearTime=[&](const char* key){write((std::string(key)+"Lo").c_str(),0);write((std::string(key)+"Hi").c_str(),0);};
         write("RuneSchema.Entry",0);write("RuneSchema.Tier",0);write("RuneSchema.ExchangeStep",0);write("RuneSchema.ExchangeKind",0);
-        clearTime("RuneSchema.Started");clearTime("RuneSchema.Completed");clearTime("RuneSchema.ObjectiveAt");clearTime("RuneSchema.ExchangeAt");
-        write("RuneSchema.Run",0);
+        clearTime("RuneSchema.Started");clearTime("RuneSchema.ObjectiveAt");clearTime("RuneSchema.ExchangeAt");
+        // Discard the unpaid active run, retaining paid history and its last
+        // completion timestamp so cancellation cannot restore first-run rewards.
+        write("RuneSchema.Run",completedRuns);
+        if(!quest.Stages.empty())write("RuneSchema.StageRun",completedRuns);
         native.SetObjective(FName(TEXT("__abandoned"),FNAME_Add));
         native.CancelForRecovery();
         write("RuneSchema.Phase",0);
+        },[&]{return current() && receipt.Phase()==0 && state()=="Ungiven";},
+            [&]{return !scrollItem || DialogueInventory(controller,scrollItem).Take(1,current);},
+            [&]{if(observed)*observed=QuestProgress::Result::Abandoned;});
+        if(!cancelled)return "This quest cannot be cancelled right now.";
+        try{m_events.CancelQuestContract(quest.Key,player);}catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("Cancelled quest encounter cleanup: {}\n"),PS::ToWideSafe(error.what()));}
         QueueQuestRefresh(controller,quest.Key);
         ReconcileQuestLocations(controller);
-        return "Quest abandoned. Its active progress and locations were reset.";
+        return scrollItem?"Quest cancelled. Its active progress and locations were reset.":"Quest abandoned. Its active progress and locations were reset.";
     }
     QuestProgress::Result result;
     std::string inventoryStatus;
@@ -115,6 +128,14 @@ std::string DragonWildsNpcLoader::RunQuestAction(const DialogueCompletionBinding
             if(!current() || (repeating?state()!="Complete":(state()=="Complete" || state()=="Given")))return false;
             const auto prepare=[&] {
                 if(!current())throw std::runtime_error("World changed before quest preparation");
+                if(m_events.IsContractQuest(quest.Key)) {
+                    const FName attemptKey(TEXT("RuneSchema.ContractAttempt"),FNAME_Add);
+                    const auto attempt=native.GetInt(attemptKey);
+                    if(attempt<0 || attempt==std::numeric_limits<int>::max())throw std::runtime_error("Contract attempt identity exhausted");
+                    // Retained across Abandon: re-accepting run 1 must not revive
+                    // an encounter belonging to an earlier acceptance of run 1.
+                    native.SetInt(attemptKey,attempt+1);
+                }
                 if(quest.Kill || quest.Acquire)native.SetInt(FName(RC::to_generic_string(quest.ObjectiveId).c_str(),FNAME_Add),0);
                 ObserveQuestInventory(controller,false);
                 if(!quest.Stages.empty()) {

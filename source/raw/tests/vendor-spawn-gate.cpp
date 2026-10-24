@@ -32,8 +32,8 @@ int main() {
     assert(trace.Exhausted() && !trace.Admit("overflow"));
     trace.Reset();
     assert(!trace.Exhausted() && trace.Admit("cow:Interaction:First"));
-    assert(std::string(PS::BuildInfo::Version) == "0.8.0.0");
-    assert(std::string(PS::BuildInfo::Name) == "RuneSchema 0.8.0.0");
+    assert(std::string(PS::BuildInfo::Version) == "0.8.0.1");
+    assert(std::string(PS::BuildInfo::Name) == "RuneSchema 0.8.0.1");
     const auto merchantId = DragonWilds::VendorIdentity::ForOwner(
         DragonWilds::VendorOffers::Owner("RuneSchema2VendorTest", "cabbage_trader"));
     assert(merchantId == DragonWilds::VendorIdentity::ForOwner(

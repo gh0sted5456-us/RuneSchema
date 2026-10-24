@@ -52,4 +52,23 @@ inline bool EnsureUnlocked(UObject* component,UObject* entry) {
         : "Native journal unlock rejected the entry and player state was not updated");
     return true;
 }
+inline UFunction* ReadFunction(UObject* entry){
+    // Verified against the native menu reflection: void, one const object
+    // input. Do not call the server RPC or edit the replicated arrays directly.
+    const auto* path=TEXT("/Script/Dominion.JournalComponent:MarkJournalEntryRead");
+    auto* fn=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,path,false);
+    auto* input=fn?CastField<FObjectPropertyBase>(fn->FindProperty(FName(TEXT("InJournalEntry"),FNAME_Find))):nullptr;
+    if(ReflectedContract::Count(fn)!=1||fn->GetReturnProperty()||!ReflectedContract::Input(input,fn)
+        ||input->GetElementSize()!=sizeof(UObject*)||!entry||!input->GetPropertyClass().Get()||!entry->IsA(input->GetPropertyClass().Get()))
+        throw std::runtime_error("Journal mark-read signature changed");
+    return fn;
+}
+inline void MarkRead(UObject* component,UObject* entry,UFunction* function){
+    auto* componentClass=ActorHelper::ResolveClass(TEXT("/Script/Dominion.JournalComponent"));
+    if(!component||!componentClass||!component->IsA(componentClass)||!component->GetWorld()||function!=ReadFunction(entry))
+        throw std::runtime_error("Journal mark-read component or contract is not ready");
+    ActorHelper::FunctionCall(component,function->GetPathName()).Arg(TEXT("InJournalEntry"),entry).Invoke();
+    // The native component owns local/server synchronization and persistence.
+    // LoreReadForPlayer observes its eventual state before switching visuals.
+}
 }

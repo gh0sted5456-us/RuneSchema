@@ -8,6 +8,15 @@ int main(int argc,char** argv) {
     std::ifstream file(argv[1]);
     if(!file)throw std::runtime_error("Event runtime source unavailable");
     const std::string source{std::istreambuf_iterator<char>(file),{}};
+    const auto healthStart=source.find("static std::optional<double> HealthPercent(");
+    const auto healthEnd=source.find("void PresentHealthStages()",healthStart);
+    assert(healthStart!=source.npos && healthEnd!=source.npos);
+    const auto health=source.substr(healthStart,healthEnd-healthStart);
+    assert(health.find("PS::PlayerVitals::Number(health,TEXT(\"/Script/Dominion.HealthComponent:GetAuthoritativeHealth\"))")!=health.npos);
+    assert(health.find("GetCurrentHealth")==health.npos && health.find("HealthComponent:GetHealth\"")==health.npos);
+    assert(source.find("if(!health || *health<=0)")!=source.npos);
+    assert(source.find("!contractController || !health || *health<=0")!=source.npos);
+    assert(source.find("Contract invalidated before victory could be credited")!=source.npos);
     const auto start=source.find("static bool DestroyOwnedActor(");
     const auto end=source.find("bool Cleanup()",start);
     assert(start!=source.npos && end!=source.npos);
@@ -25,6 +34,10 @@ int main(int argc,char** argv) {
     assert(cleanup.find("DisarmDrops(actor)")<cleanup.find("DestroyOwnedActor(item.Controller)"));
     const auto footprint=source.find("location=PrepareGrounded(member.Spawn,world,location,static_cast<AActor*>(player),reservations,member.GroundOffset+10.0)");
     assert(source.find("member.RelativeGround?std::nullopt:std::optional<double>{member.Position[2]}")!=source.npos);
+    assert(source.find("GroundedPlacement::NativeCapsule(player)")!=source.npos);
+    assert(source.find("PS::Grounding::QueryWithFloorHint(")!=source.npos);
+    assert(source.find("member.RelativeGround&&definition.Contract?std::optional<double>{participantFloor}:std::nullopt")!=source.npos);
+    assert(source.find("retry scheduled; \"+pending.what()")!=source.npos);
     assert(source.find("impact,error,anchor)")==source.npos);
     const auto accept=source.substr(source.find("std::string Start("),source.find("std::string Cancel(")-source.find("std::string Start("));
     assert(accept.find("PrefetchCookedAssets(prefetch)")!=accept.npos);

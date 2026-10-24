@@ -3,6 +3,7 @@
 #include <iterator>
 #include <stdexcept>
 #include <iostream>
+#include <filesystem>
 using nlohmann::json;
 static void Require(bool value){if(!value)throw std::runtime_error("NPC journal unlock regression");}
 static std::string Read(const char* path){std::ifstream file(path);Require(file.good());return {std::istreambuf_iterator<char>(file),{}};}
@@ -28,6 +29,14 @@ int Run(int argc,char** argv){
     Require(journal.find("m_rejectedEntries.contains(binding.EntryKey)")!=std::string::npos);
     const auto placed=journal.find("Place(entry, def)"),binding=journal.find("m_acquisitionUnlocks.push_back({EntryHandle(acquisitionItem,false)");
     Require(placed!=std::string::npos&&binding!=std::string::npos&&placed<binding);
+    const auto lore=Read((std::filesystem::path(argv[2]).parent_path()/"JournalLorePresentation.inl").string().c_str());
+    const auto access=Read((std::filesystem::path(argv[2]).parent_path().parent_path().parent_path()/"include/Loader/JournalPlayerAccess.h").string().c_str());
+    const auto popup=lore.find("SoftObjectArg(TEXT(\"Entry\"),entry).Invoke()"),read=lore.find("JournalPlayerAccess::MarkRead(journal,entry,markRead)");
+    Require(popup!=std::string::npos&&read!=std::string::npos&&popup<read);
+    Require(lore.find("JournalPlayerAccess::ReadFunction(entry)")<popup);
+    Require(access.find("/Script/Dominion.JournalComponent:MarkJournalEntryRead")!=std::string::npos);
+    Require(access.find("ReflectedContract::Count(fn)!=1")!=std::string::npos);
+    Require(access.find("JournalComponent:Server_MarkJournalEntryRead")==std::string::npos);
     return 0;
 }
 int main(int argc,char** argv){try{return Run(argc,argv);}catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

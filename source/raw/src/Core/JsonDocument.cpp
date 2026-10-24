@@ -1,6 +1,7 @@
 #include "Core/JsonDocument.h"
 #include "nlohmann/json.hpp"
 #include <algorithm>
+#include <atomic>
 #include <fstream>
 #include <format>
 #include <stdexcept>
@@ -9,6 +10,17 @@
 namespace fs = std::filesystem;
 namespace PS::JsonHelpers {
     namespace {
+        std::atomic<DiagnosticReporter> diagnosticReporter{nullptr};
+        thread_local const fs::path* activeSourceFile=nullptr;
+        struct SourceScope {
+            const fs::path* previous;
+            explicit SourceScope(const fs::path& source):previous(activeSourceFile){activeSourceFile=&source;}
+            ~SourceScope(){activeSourceFile=previous;}
+        };
+        void Publish(const char* code,const fs::path& path,const std::string& field,const std::string& detail) noexcept {
+            if(const auto reporter=diagnosticReporter.load(std::memory_order_acquire))try{reporter(code,path,field,detail);}catch(...){}
+        }
+        void PublishField(const char* code,const std::string& field,const std::string& detail) noexcept {if(activeSourceFile)Publish(code,*activeSourceFile,field,detail);}
         std::vector<fs::path> DiscoverJsonFiles(const fs::path& root)
         {
             if (!fs::is_directory(root)) return {};
@@ -34,8 +46,10 @@ namespace PS::JsonHelpers {
                 const auto relative = resolved.lexically_relative(canonicalRoot);
                 if (relative.empty() || relative.native().starts_with(fs::path("..").native())) continue;
                 files.push_back(resolved);
-                if (files.size() > 4096)
+                if (files.size() > 4096) {
+                    Publish("RS-JSON-005",root,{},"Loader directory exceeds the 4096 JSON-file safety limit");
                     throw std::runtime_error("Loader directory exceeds the 4096 JSON-file safety limit");
+                }
             }
             std::ranges::sort(files, [&](const auto& left, const auto& right) {
                 return left.lexically_relative(canonicalRoot).generic_string()
@@ -45,6 +59,7 @@ namespace PS::JsonHelpers {
             return files;
         }
     }
+    void SetDiagnosticReporter(DiagnosticReporter reporter) noexcept {diagnosticReporter.store(reporter,std::memory_order_release);}
     bool FieldExists(const nlohmann::json& data, const std::string& fieldName)
     {
         return data.contains(fieldName);
@@ -54,6 +69,7 @@ namespace PS::JsonHelpers {
     {
         if (!data.contains(fieldName))
         {
+            PublishField("RS-JSON-002",fieldName,"Required configuration field is missing");
             throw std::runtime_error(std::format("Missing a required field of '{}'.", fieldName));
         }
     }
@@ -64,6 +80,7 @@ namespace PS::JsonHelpers {
 
         if (!field.is_number())
         {
+            PublishField("RS-JSON-003",fieldName,"Configuration field has an incompatible type; expected number");
             throw std::runtime_error(std::format("Value '{}' must be a number.", fieldName));
         }
 
@@ -76,6 +93,7 @@ namespace PS::JsonHelpers {
 
         if (!field.is_number_integer())
         {
+            PublishField("RS-JSON-003",fieldName,"Configuration field has an incompatible type; expected integer");
             throw std::runtime_error(std::format("Value '{}' must be an integer.", fieldName));
         }
 
@@ -88,6 +106,7 @@ namespace PS::JsonHelpers {
 
         if (!field.is_string())
         {
+            PublishField("RS-JSON-003",fieldName,"Configuration field has an incompatible type; expected string");
             throw std::runtime_error(std::format("Value '{}' must be a string.", fieldName));
         }
 
@@ -106,11 +125,22 @@ namespace PS::JsonHelpers {
             return;
         }
 
-        if (fs::file_size(path) > 2 * 1024 * 1024)
+        SourceScope scope(path);
+        if (fs::file_size(path) > 2 * 1024 * 1024) {
+            Publish("RS-JSON-004",path,{},"JSON definition exceeds the 2 MiB safety limit");
             throw std::runtime_error("JSON definition exceeds the 2 MiB safety limit");
+        }
         std::ifstream f(path);
-
-        nlohmann::json data = nlohmann::json::parse(f, nullptr, true, true);
+        if(!f) {
+            Publish("RS-JSON-001",path,{},"JSON definition could not be opened");
+            throw std::runtime_error("JSON definition could not be opened");
+        }
+        nlohmann::json data;
+        try { data=nlohmann::json::parse(f,nullptr,true,true); }
+        catch(const nlohmann::json::parse_error& error) {
+            Publish("RS-JSON-001",path,{},error.what());
+            throw;
+        }
         callback(data);
     }
 

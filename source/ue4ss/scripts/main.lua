@@ -35,6 +35,15 @@ if not root then
     return
 end
 
+local mappingOk, mappingLoader = pcall(dofile, root .. "/scripts/mapping-loader.lua")
+if mappingOk and type(mappingLoader) == "function" then
+    local ran, failure = pcall(mappingLoader)
+    if not ran then log("[MAPPINGS][DEFERRED] " .. tostring(failure)) end
+end
+
+local relayOk, relayApi = pcall(dofile, root .. "/scripts/mod-data-relay.lua")
+if relayOk then RuneSchemaRelay=relayApi else log("[MOD-DATA][UNAVAILABLE] "..tostring(relayApi)) end
+
 local logicOk, logicLoader = pcall(dofile, root .. "/scripts/logicmods-loader.lua")
 if logicOk and type(logicLoader) == "function" then
     local started, failure = xpcall(function() logicLoader(root) end, debug.traceback)

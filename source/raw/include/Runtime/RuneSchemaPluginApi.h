@@ -54,6 +54,9 @@ struct RuneSchemaHostApi {
     // Append-only API 1 extension. Check StructSize before reading this field.
     // Returns an allow-listed, validated core binding or nullptr.
     void* (RS_PLUGIN_CALL *ResolveBinding)(const char* callerId,const char* binding);
+    // Append-only API 1 extension: share one serial allocator across native plugins.
+    int32_t (RS_PLUGIN_CALL *ObjectIdentity)(void* object,int32_t* index,int32_t* serial);
+    void* (RS_PLUGIN_CALL *ResolveObjectIdentity)(int32_t index,int32_t serial);
 };
 // Required exports: Query, Initialize, and Shutdown.
 using RuneSchemaPluginQueryFn = const RuneSchemaPluginDescriptor* (RS_PLUGIN_CALL *)();

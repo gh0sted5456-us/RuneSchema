@@ -53,4 +53,31 @@ int main(int argc,char** argv) {
     require(source.find("client extras remain active, unavailable local content is permitted")!=std::string::npos
         && source.find("m_sessionRegistryOwners.clear();m_sessionNetworkOwners.clear();m_sessionAuthorityFingerprint.clear()")!=std::string::npos,
         "the permissive session is not announced once or cleared on world reset");
+    require(source.find("static const BridgeFunctionNames names;")!=std::string::npos
+        &&source.find("static thread_local PS::WeakObjectHandle cached;")!=std::string::npos
+        &&source.find("actual==cached.Get()")!=std::string::npos,
+        "bridge names must be interned once and class caches must be serial validated");
+    const auto method=[&](const std::string& name){const auto begin=source.find("void RegistryBridge::"+name+"(");require(begin!=std::string::npos,"observer is missing");const auto end=source.find("\nvoid RegistryBridge::",begin+1);return source.substr(begin,end-begin);};
+    for(const auto* name:{"ObservePresentationPre","ObserveClientTransport","ObservePresentationTransport","Observe","ObserveAuthorityPre","ObserveAuthorityPost","ObserveConsumedItemAuthority","ObserveSelectionNotify","ObserveInventoryRemoval"}){
+        const auto body=method(name);
+        require(body.find("FNAME_Add")==std::string::npos,"global observer repeats a name-table lookup");
+        require(body.find("RC::to_string(source->GetClassPrivate()->GetPathName())")==std::string::npos,"global observer allocates a class path before filtering");
+        const auto filter=body.find("GetFName()");
+        const auto expensive=body.find("ExactClass(")!=std::string::npos?body.find("ExactClass("):body.find("BridgeClassMatches<");
+        require(filter!=std::string::npos&&(expensive==std::string::npos||filter<expensive),"name filtering must precede class resolution");
+    }
+    require(source.find("if(!Names().Pre(name)&&!AuthorityEntry(name)&&source!=m_activeAuthorityGraph)return;")!=std::string::npos
+        &&source.find("if(!Names().Post(name)&&!AuthorityEntry(name))return;")!=std::string::npos,
+        "unrelated ProcessEvent calls still reach the bridge observers");
+    require(header.find("FName EntryName;")!=std::string::npos&&header.find("WeakObjectHandle GraphType;")!=std::string::npos
+        &&source.find("if(!source||!AuthorityEntry(name))return nullptr;")<source.find("m_authorityGraphRoutes.find(type)")
+        &&source.find("found->second.Type.Get()!=type")!=std::string::npos&&source.find("m_authorityGraphRoutes.size()>=1024")!=std::string::npos
+        &&source.find("action.GraphClass==path")!=std::string::npos&&source.find("m_authorityGraphRoutes.clear();")!=std::string::npos,
+        "graph routes must filter names first and use bounded, serial-validated class caches invalidated on manifest/world changes");
+    require(source.find("identity.ObjectSerialNumber")!=std::string::npos
+        &&source.find("m_modDataRelay.Receive(peer,payload,local.Result<bool>()")!=std::string::npos
+        &&source.find("channel!=\"mod.data\"&&revision<=window.Revision")!=std::string::npos
+        &&source.find("m_modDataRelay.Drain(4,")!=std::string::npos&&source.find("m_modDataRelay.Remove(at->first)")!=std::string::npos
+        &&source.find("m_modDataRelay.Reset();m_relayPeers.clear();")!=std::string::npos,
+        "relay native sender/authority, independent channel sequences, bounded drain or session cleanup is missing");
 }

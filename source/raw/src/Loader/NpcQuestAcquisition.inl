@@ -11,7 +11,8 @@ void DragonWildsNpcLoader::OnQuestInventoryChanged(UObject* source,UFunction* fu
     else if(path==TEXT("/Script/Dominion.InventoryComponent:OnRep_HasLoadedFromSave")){controller=source->GetOuterPrivate();credit=false;}
     if(!controller)return;
     try {ObserveQuestInventory(controller,credit);ReconcileQuestLocations(controller);}
-    catch(const std::exception& error){ErrorOnce("quest-acquisition-route",PS::ToWideSafe(error.what()));}
+    catch(const std::exception& error){ErrorOnceDiagnostic("quest-acquisition-route",PS::ToWideSafe(error.what()),
+        "RS-NPC-013","Quest acquisition callback encountered an exception","Error","Partial",{},"InventoryChanged","Application");}
 }
 
 void DragonWildsNpcLoader::ObserveQuestInventory(UObject* controller,bool credit) {
@@ -51,7 +52,8 @@ void DragonWildsNpcLoader::ObserveQuestInventory(UObject* controller,bool credit
         if(!item || !itemType || !item->IsA(itemType))throw std::runtime_error("Acquisition item could not be resolved");
         const auto delta=baseline.Observe(path,DialogueInventory(controller,item).Count(),credit);
         if(delta>0)additions.emplace(path,std::min(delta,999));
-    }catch(const std::exception& error){ErrorOnce("quest-acquisition-item:"+path,PS::ToWideSafe(error.what()));}
+    }catch(const std::exception& error){ErrorOnceDiagnostic("quest-acquisition-item:"+path,PS::ToWideSafe(error.what()),
+        "RS-NPC-014","Quest acquisition item resolution failed","Warning","Skipped",{},path,"Resolution");}
     if(additions.empty())return;
     const auto character=DialogueCharacter(controller);
     const auto progressPath=PS::HostServices::ProgressDirectory()/"quests"/(character+".json");
@@ -86,7 +88,8 @@ void DragonWildsNpcLoader::ObserveQuestInventory(UObject* controller,bool credit
                     if(native.GetInt(counter)!=next)throw std::runtime_error("Acquisition credit save was not confirmed");
                     if(objective.AnnounceProgress)try {
                         m_events.Notify(controller,Quests::ObjectiveProgressText(objective,next,receipt.Run()),Events::Scope::Participant);
-                    }catch(const std::exception& error){ErrorOnce("quest-progress-message:"+key+":"+objective.ObjectiveId,PS::ToWideSafe(error.what()));}
+                    }catch(const std::exception& error){ErrorOnceDiagnostic("quest-progress-message:"+key+":"+objective.ObjectiveId,PS::ToWideSafe(error.what()),
+                        "RS-NPC-015","Quest progress notification failed","Warning","Skipped",{},key+":"+objective.ObjectiveId,"Application");}
                     changed=true;
                     if(quest.AnyStage(active) && next==objective.Required.Count)break;
                 }
@@ -108,13 +111,15 @@ void DragonWildsNpcLoader::ObserveQuestInventory(UObject* controller,bool credit
                 if(native.GetInt(counter)!=next)throw std::runtime_error("Acquisition credit save was not confirmed");
                 if(quest.AnnounceProgress)try {
                     m_events.Notify(controller,Quests::ObjectiveProgressText(quest,next,receipt.Run()),Events::Scope::Participant);
-                }catch(const std::exception& error){ErrorOnce("quest-progress-message:"+key,PS::ToWideSafe(error.what()));}
+                }catch(const std::exception& error){ErrorOnceDiagnostic("quest-progress-message:"+key,PS::ToWideSafe(error.what()),
+                    "RS-NPC-015","Quest progress notification failed","Warning","Skipped",{},key,"Application");}
                 if(next==quest.Required.Count) {
                     receipt.MarkObjectiveSatisfied();native.SetObjective(FName(TEXT("__ready"),FNAME_Add));
                     LogQuestStage(controller,key,1);
                 }
                 QueueQuestRefresh(controller,key);
             }
-        }catch(const std::exception& error){ErrorOnce("quest-acquisition:"+key,PS::ToWideSafe(error.what()));}
+        }catch(const std::exception& error){ErrorOnceDiagnostic("quest-acquisition:"+key,PS::ToWideSafe(error.what()),
+            "RS-NPC-016","Quest acquisition credit could not be completed","Error","Partial",{},key,"Application",true);}
     });
 }

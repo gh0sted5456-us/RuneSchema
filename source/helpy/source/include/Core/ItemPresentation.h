@@ -6,6 +6,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include "Core/HelpyPersonalization.h"
 namespace PS::ItemPresentation {
 using Json=nlohmann::json;
 struct Fact {std::string Label,Value;};
@@ -42,7 +43,7 @@ inline std::string CleanName(std::string value) {
     if(folded=="none"||folded.find("missing string")!=folded.npos||folded.find("string table entry")!=folded.npos)return {};
     return value;
 }
-inline std::string Name(const Json& row) {
+inline std::string OriginalName(const Json& row) {
     for(const auto* field:{"Name","DisplayName"})if(auto name=CleanName(Text(row,field));!name.empty())return name;
     // Blank/missing cooked localization must not make a row invisible. This
     // is a presentation fallback only; identity remains the canonical Path.
@@ -52,6 +53,8 @@ inline std::string Name(const Json& row) {
     if(leaf.ends_with("_C"))leaf.resize(leaf.size()-2);
     return leaf.empty()?"Unnamed item":Label(leaf);
 }
+inline std::string Name(const Json& row){const auto nickname=HelpyPersonalization::Nickname(HelpyPersonalization::ItemKey(row));return nickname.empty()?OriginalName(row):nickname;}
+inline bool Placeholder(const Json& row){auto name=OriginalName(row);return name.size()>=4&&name[0]=='['&&(name[1]=='P'||name[1]=='p')&&(name[2]=='H'||name[2]=='h')&&name[3]==']';}
 inline bool DisplayField(const std::string& name) {
     if(name.empty()||name.size()>100)return false;
     for(const auto* token:{"Guid","GUID","ID","Id","Path","Class","Asset","Icon","Mesh","Material","SoftDelete","Flags","Table","Row","Reference","Index","Seed","Socket","Tag","Name","Description","PowerLevel","Persistence"})

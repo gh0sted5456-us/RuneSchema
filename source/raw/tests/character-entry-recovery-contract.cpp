@@ -54,10 +54,22 @@ int main(int argc, char** argv)
     Need(signatures.find("CharacterSave::Validate") != signatures.npos
             && signatures.find("UPersistenceSubsystem::ProcessPlayerStateLoad")==signatures.npos,
         "the return-only bypass must not add a globally callable loader ABI binding");
-    const auto gate = loader.find(
-        "GetSettings().persistence.allowCorruptCharacterEntry");
+    const auto gate = loader.find("NativePersistencePolicy::BypassRequested");
     Need(gate != loader.npos
             && loader.find("m_characterEntryRecovery.Initialize();",gate)!=loader.npos
             && loader.find("[SAVE-ENTRY][QUARANTINED]")==loader.npos,
-        "the verified bypass must remain behind its explicit persistence setting");
+        "paired bypass hooks must arm for client Normal/Quick Launch or the explicit server/default setting");
+    Need(recovery.find("NativePersistencePolicy::BypassRequested")!=recovery.npos&&recovery.find("CharacterLoadAudit::PreparedForFallback()")==recovery.npos,
+        "automatic rejection fallback must cover direct native calls without requiring a reflected preflight token");
+    for(const auto* name:{"void CharacterEntryRecovery::AcceptCharacter(","void CharacterEntryRecovery::AcceptPlayerState("}){
+        const auto start=recovery.find(name),allow=recovery.find("if(!MayBypass())return;",start),change=recovery.find("context.rax=",start);
+        Need(start!=recovery.npos&&allow<change,"every rejection override must check fallback permission before changing its return");
+        const auto body=recovery.substr(start,recovery.find("\n}",start)-start);
+        Need(body.find("ConsolidatedLog<LogLevel::Normal>")!=body.npos&&body.find("[info]")!=body.npos&&body.find("Save Bypass initiated")!=body.npos,
+            "actual bypass must emit a brief, always-visible informational summary");
+        Need(body.find("DiagnosticLog::Formatted")!=body.npos&&body.find("DiagnosticLog::Write")!=body.npos&&body.find("LogLevel::Warning")==body.npos,
+            "attributed and unattributed bypass details belong only in RuneSchema.log, without a yellow warning");
+        Need(body.find("if(!first)return;")!=body.npos&&body.find("subsequent loads should")==body.npos,
+            "preserve bypass throttling and never promise future loads will not need fallback");
+    }
 }

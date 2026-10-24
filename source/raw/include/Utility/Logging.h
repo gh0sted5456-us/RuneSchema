@@ -4,6 +4,7 @@
 #include <DynamicOutput/DynamicOutput.hpp>
 #include "Utility/Config.h"
 #include "Utility/DiagnosticLog.h"
+#include "Core/DiagnosticCodes.h"
 #include <string_view>
 #include <utility>
 #include <cstddef>
@@ -44,6 +45,15 @@ namespace PS {
         return wide;
     }
 
+    // Stable codes are emitted at the decision site, not inferred by the sink.
+    template <RC::Unreal::int32 level,typename... Args>
+    void CodedLog(Diagnostics::Id id,RC::File::StringViewType content,Args&&... args){
+        RC::StringType decorated=STR("[RuneSchema] [");
+        decorated+=level==RC::LogLevel::Error?STR("error"):level==RC::LogLevel::Warning?STR("warning"):STR("info");
+        decorated+=STR("] [");decorated+=ToWideSafe(Diagnostics::Get(id).Code);decorated+=STR("] ");decorated.append(content.data(),content.size());
+        ConsolidatedLog<level>(decorated,std::forward<Args>(args)...);
+    }
+
     template <RC::Unreal::int32 optional_arg, typename... FmtArgs>
     auto Log(RC::File::StringViewType content, FmtArgs&&... fmt_args) -> void
     {
@@ -70,6 +80,15 @@ namespace PS {
             if (!PS::PSConfig::Get()->IsDebugLoggingEnabled()) return;
             auto formatted_log = std::format(STR("[RuneSchema] {}"), content);
             DiagnosticLog::Formatted(formatted_log,false,fmt_args...);
+        }
+    }
+
+    template <RC::Unreal::int32 level, typename... Args>
+    void LogStructuredFallback(bool accepted,RC::File::StringViewType content,Args&&... args) {
+        if(!accepted){Log<level>(content,std::forward<Args>(args)...);return;}
+        if constexpr(level==RC::LogLevel::Error||level==RC::LogLevel::Warning){
+            const auto decorated=std::format(level==RC::LogLevel::Error?STR("[RuneSchema] [error] {}"):STR("[RuneSchema] [warning] {}"),content);
+            RC::Output::send<level>(decorated,std::forward<Args>(args)...);
         }
     }
 

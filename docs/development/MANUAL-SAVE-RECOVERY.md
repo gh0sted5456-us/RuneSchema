@@ -4,6 +4,13 @@ Use this procedure only when RuneSchema's automatic owned-content or appearance
 cleanup cannot load the character far enough to repair it. Manual editing is a
 last-resort recovery path, not the normal uninstall workflow.
 
+RuneSchema now uses [backup-first pruning](../SETTINGS-INI.md#backup-first-pruning),
+not companion Recovery or automatic restoration. Character-load and hydrated
+quest backups live under
+`%LOCALAPPDATA%/RSDragonwilds/RuneSchema/core/backups/<runtime>/characters/<GUID>`.
+Preserve those whole-save copies as well as the existing pre-cleanup backups.
+Old companion archives are left untouched but are not loaded automatically.
+
 ## Rejected/corrupt character entry
 
 `persistence.allowCorruptCharacterEntry` is an emergency compatibility switch,

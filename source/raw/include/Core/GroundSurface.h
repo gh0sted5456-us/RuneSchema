@@ -6,6 +6,11 @@
 #include <nlohmann/json.hpp>
 namespace PS::Grounding {
 struct QueryState {bool Obstructed=false;std::optional<double> FloorReference;};
+template<class Query> bool QueryWithFloorHint(Query&& query,std::optional<double> reference,std::optional<double> hint,const std::string& error,const QueryState& state){
+    if(query(reference))return true;
+    if(reference||!hint||!error.empty()||state.Obstructed)return false;
+    return query(hint);
+}
 // Search limits, never a placement fallback. Cell bounds only widen the query;
 // the returned position must still come from a blocking physics hit.
 struct SearchRange {

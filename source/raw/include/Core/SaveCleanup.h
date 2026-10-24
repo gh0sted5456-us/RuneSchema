@@ -13,6 +13,7 @@ struct Preview {
     Json Removed=Json::array();
     Json Restored=Json::array();
     std::map<std::string,size_t> Owners;
+    Json Skipped=Json::array();
 };
 struct BaselineMergeOptions {
     bool Items=false;
@@ -66,6 +67,17 @@ inline void CheckPending(const Json& row) {
             throw std::runtime_error("Selected mod has an unfinished item/reward exchange; resolve it before cleanup");
     }
 }
+inline bool IsOrphanQuest(const std::string& id,const RegistrySnapshot& registry){
+    return registry.CanClean(RegistryEnrollment::IdentityKind::Quest)&&!id.empty()&&!registry.Quests.contains(id)
+        &&!RegistryEnrollment::IsPending(RegistryEnrollment::IdentityKind::Quest,id);
+}
+inline bool CompletedQuest(const Json& row,const RegistrySnapshot& registry){
+    const auto state=row.find("QuestState");
+    if(state!=row.end()&&registry.QuestCompletedState&&state->is_number_integer()&&*state==*registry.QuestCompletedState)return true;
+    if(row.contains("QuestInts")&&row["QuestInts"].is_array())for(const auto& value:row["QuestInts"])
+        if(value.is_object()&&value.value("QuestVariableName",Json{})=="RuneSchema.Phase"&&value.value("QuestVariableValue",Json{})==4)return true;
+    return false;
+}
 // Pure transformation: never reads/writes a file or queries a partially loaded registry.
 // Installed and absent owners are explicit selections; neither is inferred from an asset prefix.
 inline Preview Plan(const Json& source,const std::set<std::string>& requested,
@@ -78,9 +90,10 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
     Preview result{source};
     auto& game=result.Save.at("GameProgress");
     if(registry) {
-        if(!registry->Ready())throw std::runtime_error("Item/recipe registries are incomplete; unknown-ID cleanup refused");
+        if(!registry->AnyCleanable())throw std::runtime_error("No applicable registry is certified; unknown-ID cleanup refused");
         std::set<std::string> removedSlots;
         for(const auto* section:{"Inventory","PersonalInventory","Loadout"}) {
+            if(!registry->CanClean(RegistryEnrollment::IdentityKind::Item))continue;
             if(!game.contains(section))continue;
             auto& entries=game.at(section);
             if(!entries.is_object())throw std::runtime_error("Unsupported inventory/loadout save layout");
@@ -92,7 +105,8 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
                     it=entries.erase(it);continue;
                 }
                 const auto id=item.value("ItemData",std::string{});
-                bool remove=!id.empty() && !registry->Items.contains(id);
+                bool remove=!id.empty() && !registry->Items.contains(id)
+                    && !RegistryEnrollment::IsPending(RegistryEnrollment::IdentityKind::Item,id);
                 if(std::string_view(section)=="Loadout" && item.contains("PlayerInventoryItemIndex")) {
                     if(!item.at("PlayerInventoryItemIndex").is_number_integer()) {
                         if(unresolvedOnly) {++it;continue;}
@@ -116,9 +130,11 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
                 auto& entries=progress.at(field);
                 if(!entries.is_array())throw std::runtime_error("Unsupported item/recipe unlock list");
                 const auto& known=std::string_view(field).starts_with("Recipes")?registry->Recipes:registry->Items;
+                if(!registry->CanClean(std::string_view(field).starts_with("Recipes")?RegistryEnrollment::IdentityKind::Recipe:RegistryEnrollment::IdentityKind::Item))continue;
                 for(auto it=entries.begin();it!=entries.end();) {
-                    if(!it->is_string())throw std::runtime_error("Malformed item/recipe unlock identity");
-                    if(!known.contains(it->get<std::string>())) {
+                    if(!it->is_string()){if(unresolvedOnly){++it;continue;}throw std::runtime_error("Malformed item/recipe unlock identity");}
+                    const auto kind=std::string_view(field).starts_with("Recipes")?RegistryEnrollment::IdentityKind::Recipe:RegistryEnrollment::IdentityKind::Item;
+                    if(!known.contains(it->get<std::string>())&&!RegistryEnrollment::IsPending(kind,it->get<std::string>())) {
                         result.Removed.push_back({{"Kind",field},{"Id",*it},{"Mod","Registry-unknown (owner unavailable)"}});it=entries.erase(it);
                     }else ++it;
                 }
@@ -129,25 +145,40 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
         auto& progress=game.at("QuestProgress");
         if(!progress.is_object() || !progress.contains("Quests") || !progress.at("Quests").is_array() || progress.at("Quests").size()>4096)
             throw std::runtime_error("Unsupported quest save layout");
-        std::set<std::string> ids,removed,locations;
+        std::set<std::string> ids,removed,locations,completedIds,completedLocations;
         auto retained=Json::array();
             for(const auto& row:progress.at("Quests")) {
             if(!row.is_object() || !row.contains("QuestId") || !row.at("QuestId").is_string()) {
                 retained.push_back(row);continue;
             }
             const auto id=row.at("QuestId").get<std::string>();
+            if(unresolvedOnly&&row.contains("QuestState")&&!row["QuestState"].is_number_integer()){retained.push_back(row);continue;}
+            if(selected.empty()&&registry&&CompletedQuest(row,*registry)){
+                completedIds.insert(id);retained.push_back(row);
+                if(row.contains("QuestInts")&&row["QuestInts"].is_array())for(const auto& value:row["QuestInts"]){
+                    if(!value.is_object()||!value.value("QuestVariableName",Json{}).is_string())continue;
+                    const auto name=value["QuestVariableName"].get<std::string>();
+                    if(name.starts_with("RuneSchema.Location:")&&value.value("QuestVariableValue",Json{})==DragonWilds::Quests::OwnershipVersion)completedLocations.insert(name.substr(20));
+                }
+                continue;
+            }
             const bool duplicate=!ids.insert(id).second;
-            const bool registryOrphan=registry && registry->QuestsComplete && !registry->Quests.contains(id);
+            const bool registryOrphan=registry&&IsOrphanQuest(id,*registry);
             // Startup has not prepared the live quest registry yet. Preserve
             // ownership/progress verbatim; native character hydration performs
             // verified owner handoff later, not this item/recipe-only pass.
-            if(registry&&!registry->QuestsComplete&&selected.empty()){
+            if(registry&&!registry->CanClean(RegistryEnrollment::IdentityKind::Quest)&&selected.empty()){
                 retained.push_back(row);continue;
             }
             if(duplicate && !registryOrphan) {
                 retained.push_back(row);continue;
             }
-            const auto owner=DragonWilds::Quests::OwnedBy(row);
+            // A complete registry miss establishes orphanhood independently
+            // of obsolete/broken ownership markers left by an uninstalled mod.
+            if(unresolvedOnly&&!registryOrphan&&selected.empty()){retained.push_back(row);continue;}
+            std::string owner;
+            if(registryOrphan){try{owner=DragonWilds::Quests::OwnedBy(row);}catch(...){}}
+            else owner=DragonWilds::Quests::OwnedBy(row);
             if(!owner.empty())++result.Owners[owner];
             if(!registryOrphan && (owner.empty() || !selected.contains(owner))){retained.push_back(row);continue;}
             // An identity absent from the complete native registry cannot be
@@ -156,7 +187,8 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
             if(!registryOrphan && !removePendingOwned)CheckPending(row);
             removed.insert(id);
             result.Removed.push_back({{"Kind","Quest/dialogue"},{"Id",id},{"Mod",owner.empty()?"Registry-unknown (owner unavailable)":owner}});
-            for(const auto& variable:row.at("QuestInts")) {
+            if(row.contains("QuestInts")&&row.at("QuestInts").is_array())for(const auto& variable:row.at("QuestInts")) {
+                if(!variable.is_object()||!variable.value("QuestVariableName",Json{}).is_string())continue;
                 const auto name=variable.value("QuestVariableName",std::string{});
                 if(name.starts_with("RuneSchema.Location:") && variable.value("QuestVariableValue",Json{})==DragonWilds::Quests::OwnershipVersion)
                     locations.insert(name.substr(20));
@@ -164,21 +196,23 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
         }
         progress["Quests"]=std::move(retained);
         if(progress.contains("QuestTracked")) {
-            if(!progress.at("QuestTracked").is_string())throw std::runtime_error("Unsupported tracked quest identity");
+            if(!progress.at("QuestTracked").is_string()) {if(!unresolvedOnly)throw std::runtime_error("Unsupported tracked quest identity");}
+            else {
             const auto tracked=progress.at("QuestTracked").get<std::string>();
-            const bool unresolvedTracked=registry && registry->QuestsComplete
-                && !tracked.empty() && !registry->Quests.contains(tracked);
+            const bool unresolvedTracked=registry&&!completedIds.contains(tracked)&&IsOrphanQuest(tracked,*registry);
             if(removed.contains(tracked) || unresolvedTracked) {
                 if(unresolvedTracked && !removed.contains(tracked))
                     result.Removed.push_back({{"Kind","Quest tracked"},{"Id",tracked},{"Mod","Registry-unknown (owner unavailable)"}});
                 progress["QuestTracked"]="";
             }
+            }
         }
-        if(!unresolvedOnly && progress.contains("QuestLocations") && !locations.empty()) {
+        for(const auto& location:completedLocations)locations.erase(location);
+        if(progress.contains("QuestLocations") && !locations.empty() && (!unresolvedOnly||progress.at("QuestLocations").is_array())) {
             if(!progress.at("QuestLocations").is_array())throw std::runtime_error("Unsupported quest location save layout");
             auto kept=Json::array();
             for(const auto& row:progress.at("QuestLocations")) {
-                if(!row.is_object() || !row.contains("QuestLocationId") || !row.at("QuestLocationId").is_string())throw std::runtime_error("Unsupported quest location record");
+                if(!row.is_object() || !row.contains("QuestLocationId") || !row.at("QuestLocationId").is_string()){if(unresolvedOnly){kept.push_back(row);continue;}throw std::runtime_error("Unsupported quest location record");}
                 const auto id=row.at("QuestLocationId").get<std::string>();
                 if(locations.contains(id))result.Removed.push_back({{"Kind","Quest location"},{"Id",id}});
                 else kept.push_back(row);
@@ -191,17 +225,17 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
             JournalPayload(game.at("Journal"));
         if(!payload.is_object())
             throw std::runtime_error("Unsupported journal save layout");
-        if(registry && registry->JournalsComplete) {
+        if(registry && registry->CanClean(RegistryEnrollment::IdentityKind::Journal)) {
             for(const auto* field:{"UnlockedEntries","UnreadEntries"}) {
                 if(!payload.contains(field))continue;
                 auto& entries=payload.at(field);
                 if(!entries.is_array() || entries.size()>65535)
                     throw std::runtime_error("Invalid journal saved entry list");
                 for(auto it=entries.begin();it!=entries.end();) {
-                    if(!it->is_string())throw std::runtime_error("Invalid journal saved entry identity");
+                    if(!it->is_string()){if(unresolvedOnly){++it;continue;}throw std::runtime_error("Invalid journal saved entry identity");}
                     const auto id=it->get<std::string>();
-                    DragonWilds::JournalSave::ValidateId(id);
-                    if(!registry->Journals.contains(id)) {
+                    if(!unresolvedOnly)DragonWilds::JournalSave::ValidateId(id);
+                    if(!registry->Journals.contains(id)&&!RegistryEnrollment::IsPending(RegistryEnrollment::IdentityKind::Journal,id)) {
                         result.Removed.push_back({{"Kind",field},{"Id",id},{"Mod","Registry-unknown (owner unavailable)"}});
                         it=entries.erase(it);
                     } else ++it;
@@ -210,6 +244,31 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
         }
         game["Journal"]=std::move(payload);
     }
+    return result;
+}
+
+// Automatic cleanup isolates dependent sections; a malformed section cannot roll back a different verified repair.
+inline Preview PlanAvailable(const Json& source,const RegistrySnapshot& registry){
+    RequireCharacter(source);Preview result{source};const auto& game=source.at("GameProgress");
+    const auto run=[&](const std::string& section,const Json& fields,const std::string& leaf={}){
+        auto part=source;part["GameProgress"]=fields;
+        try{const auto cleaned=Plan(part,{},false,&registry,false,true,true);
+            if(leaf.empty()){for(const auto& [key,value]:cleaned.Save["GameProgress"].items())result.Save["GameProgress"][key]=value;}
+            else result.Save["GameProgress"][section][leaf]=cleaned.Save["GameProgress"][section][leaf];
+            for(const auto& row:cleaned.Removed)result.Removed.push_back(row);
+            for(const auto& [owner,count]:cleaned.Owners)result.Owners[owner]+=count;
+        }catch(const std::exception& error){result.Skipped.push_back({{"Section",section},{"Reason",error.what()}});}
+    };
+    Json inventory=Json::object();for(const auto* key:{"Inventory","PersonalInventory","Loadout"})if(game.contains(key))inventory[key]=game[key];
+    if(!inventory.empty())run("Inventory / loadout",inventory);
+    for(const auto* section:{"Progress","Journal"})if(game.contains(section)){
+        if(!game[section].is_object()){result.Skipped.push_back({{"Section",section},{"Reason","Unsupported section layout; retained"}});continue;}
+        const auto keys=std::string_view(section)=="Progress"?std::vector<std::string>{"ItemsPickedUp","MilestoneMaterialsPickedUp","RecipesUnlocked","RecipesNew"}:std::vector<std::string>{"UnlockedEntries","UnreadEntries"};
+        for(const auto& key:keys)if(game[section].contains(key))run(section,{{section,{{key,game[section][key]}}}},key);
+    }
+    if(game.contains("QuestProgress"))run("QuestProgress",{{"QuestProgress",game["QuestProgress"]}});
+    for(auto [kind,name]:{std::pair{RegistryEnrollment::IdentityKind::Item,"Items"},std::pair{RegistryEnrollment::IdentityKind::Recipe,"Recipes"},std::pair{RegistryEnrollment::IdentityKind::Quest,"Quests"},std::pair{RegistryEnrollment::IdentityKind::Journal,"Journal"}})
+        if(!registry.CanClean(kind))result.Skipped.push_back({{"Section",name},{"Reason","Applicable registry is incomplete; other sections continue"}});
     return result;
 }
 

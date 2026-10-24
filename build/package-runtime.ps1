@@ -16,7 +16,7 @@ $removed = [Collections.Generic.List[string]]::new()
 function Hash-File([string]$Path) { (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash }
 function Is-Extra([string]$Relative) {
     # Explicit paths, not a wildcard deleting all .txt/.json/.lua files.
-    return $Relative -in @(
+    return $Relative.StartsWith('dlls/mappings/', [StringComparison]::OrdinalIgnoreCase) -or $Relative -in @(
         'dlls/mappings/README.txt', 'settings/defaults/README.md',
         'settings/DLL-COMPRESSION.json', 'settings/MAPPINGS-SOURCE.json',
         'settings/jobs/building-menu.example.json', 'settings/jobs/character-editor.example.json'
@@ -44,7 +44,7 @@ try {
         }
     } finally { $inputZip.Dispose() }
     $payload = Join-Path $staging 'RuneSchema'
-    foreach ($required in @('dlls/main.dll', 'dlls/mappings/Mappings.usmap', 'enabled.txt', 'scripts/main.lua', 'plugins/plugins.txt')) {
+    foreach ($required in @('dlls/main.dll', 'enabled.txt', 'scripts/main.lua', 'plugins/plugins.txt')) {
         if (-not (Test-Path -LiteralPath (Join-Path $payload $required) -PathType Leaf)) { throw "Missing runtime file: $required" }
     }
     if (-not ((Test-Path -LiteralPath (Join-Path $payload 'settings/settings.ini')) -or
@@ -53,6 +53,9 @@ try {
         $relative = $file.FullName.Substring($payload.Length + 1).Replace('\','/')
         if (Is-Extra $relative) { Remove-Item -LiteralPath $file.FullName -Force; $removed.Add('RuneSchema/' + $relative) }
     }
+    $legacyMappings = [IO.Path]::GetFullPath((Join-Path $payload 'dlls/mappings'))
+    if (-not $legacyMappings.StartsWith($staging + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Mapping cleanup escaped package staging' }
+    if (Test-Path -LiteralPath $legacyMappings) { Remove-Item -LiteralPath $legacyMappings -Recurse -Force }
     & (Join-Path $PSScriptRoot 'package-licenses.ps1') -RepositoryRoot $RepositoryRoot -PayloadRoot $payload
     $legalRelative = 'RuneSchema/settings/licenses/RuneSchema-Licenses.txt'
     $retained = @{}

@@ -7,6 +7,7 @@ namespace PS::HostServices {
     std::filesystem::path SettingsDirectory();
     // Helpy-owned writable state. Game save/loader paths remain host-owned.
     std::filesystem::path StateDirectory();
+    std::filesystem::path ProfileDirectory();
     std::filesystem::path SavedDirectory();
     std::filesystem::path CacheDirectory();
     std::filesystem::path ProgressDirectory();

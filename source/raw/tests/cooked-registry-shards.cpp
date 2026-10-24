@@ -23,6 +23,11 @@ int main(){
     const auto load=[&](const std::string& path){visited.push_back(path);return assets.at(path);};
     const auto group=Resolve(rootPath,root,load);
     Check(visited==std::vector<std::string>({a,b})&&group.Paths.size()==3&&group.Manifests.size()==2&&group.References==2);
+    {auto artwork=assets;artwork[a].Document["NativeRegistries"]["CacheAssets"]={"/Example/Icons/T_Original.T_Original"};
+        artwork[a].Bytes=artwork[a].Document.dump().size();
+        const auto artGroup=Resolve(rootPath,root,[&](const std::string& path){return artwork.at(path);});
+        Check(artGroup.References==3&&artGroup.Manifests[0].CacheAssets.size()==1);
+    }
     Check(M::Snapshot().empty()); // Resolution alone never publishes a prefix.
     M::PublishBatch(group.Manifests);Check(M::Definitions("Recipes").size()==2);
     const auto count=M::Snapshot().size();M::PublishBatch(group.Manifests);Check(M::Snapshot().size()==count);

@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include "Core/RegistrationDiagnostics.h"
 #include "Loader/QuestObjectReference.h"
+#include "Loader/WearableHideCacheContract.h"
 #include "SDK/WeakObjectHandle.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
@@ -98,10 +99,8 @@ inline bool ContainsMesh(UObject* component,UObject* mesh) {
     auto* map=static_cast<FScriptMap*>(data);
     if(map->Num()<0 || map->Num()>8192 || map->GetMaxIndex()>16384)
         throw std::runtime_error("wearable hide-map exceeds diagnostic bounds");
-    bool found=false;
     UECustom::FScriptMapHelper helper(property,data);
-    helper.ForEachPair([&](void* k,void*) { if(key->GetObjectPropertyValue(k)==mesh) found=true; });
-    return found;
+    return helper.FindValue(&mesh)!=nullptr;
 }
 
 inline void BeforeEvaluation(safetyhook::Context& context) noexcept {
@@ -115,7 +114,9 @@ inline void BeforeEvaluation(safetyhook::Context& context) noexcept {
         const auto gender=static_cast<uint8_t>(context.rdx);
         if(gender>1 || !Live(item) || !Live(component) || !context.r8) return;
         auto* mesh=ObjectField(item,gender==1?TEXT("FemaleMeshData"):TEXT("MaleMeshData"));
-        if(!Live(mesh) || ContainsMesh(component,mesh)) return;
+        if(!Live(mesh)) return;
+        if(!WearableHideCacheContract::RequiresEntry(mesh)) return;
+        if(ContainsMesh(component,mesh)) return;
         // The game passes a live FScriptInterface pair here. Its second pointer
         // is the same mesh interface used by the normal native cache builder.
         auto** pair=reinterpret_cast<void**>(context.r8);
@@ -196,13 +197,11 @@ inline void Register(UObject* subsystem,UObject* item) {
     auto* map=static_cast<FScriptMap*>(data);
     if(map->Num()<0 || map->Num()>65535 || map->GetMaxIndex()>131072) throw std::runtime_error("wearable enumeration registry exceeds bounds");
     UECustom::FScriptMapHelper helper(property,data);
-    bool found=false;
-    helper.ForEachPair([&](void* k,void* v){
-        if(property->GetKeyProp()->Identical(k,const_cast<FString*>(&name))) {
-            if(found || value->GetObjectPropertyValue(v)!=item) throw std::runtime_error("wearable asset name collides with another registry entry");
-            found=true;
-        }
-    });
+    // A full name-map scan per wearable makes large cooked catalogues quadratic.
+    const auto* existing=helper.FindValue(&name);
+    const bool found=existing!=nullptr;
+    if(found && value->GetObjectPropertyValue(existing)!=item)
+        throw std::runtime_error("wearable asset name collides with another registry entry");
     if(!found) {
         UECustom::FManagedValue pair;
         helper.InitializePair(pair);

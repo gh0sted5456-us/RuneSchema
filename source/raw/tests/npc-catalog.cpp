@@ -15,6 +15,23 @@ using Json=nlohmann::json;
 template<class F> bool Rejects(F fn){try{fn();}catch(const std::exception&){return true;}return false;}
 int main(int argc,char** argv){
     {
+        namespace Lore=DragonWilds::LoreBookPresentation;
+        Json book={{"Id","book"},{"Type","Prop"},{"Mesh",Lore::Closed},{"LoreID","fieldbook"},{"Location",{0,0,0}}};
+        const auto visual=Lore::Parse(book);assert(visual.Enabled&&visual.ReadMesh==Lore::Open&&visual.GlowSystem==Lore::Glow);
+        assert(!Lore::ReadState(false,true,false));
+        assert(!*Lore::ReadState(true,false,false)&&!*Lore::ReadState(true,true,true)&&*Lore::ReadState(true,true,false));
+        auto disabled=book;disabled["LorePresentation"]={{"Enabled",false}};assert(!Lore::Parse(disabled).Enabled);
+        auto custom=book;custom["Mesh"]="/Game/Custom/Book.Book";assert(!Lore::Parse(custom).Enabled);
+        custom["LorePresentation"]={{"Enabled",true},{"ReadMesh","/Game/Custom/Open.Open"},{"GlowSystem",""}};
+        assert(Lore::Parse(custom).Enabled&&Lore::Parse(custom).GlowSystem.empty());
+        for(const Json invalid:std::vector<Json>{true,{{"Enabled","yes"}},{{"Unknown",true}},{{"ReadMesh","../book"}},{{"GlowSystem",false}}}){
+            auto bad=book;bad["LorePresentation"]=invalid;assert(Rejects([&]{Lore::Parse(bad);}));
+        }
+        auto bad=custom;bad.erase("LoreID");assert(Rejects([&]{Lore::Parse(bad);}));
+        NpcCatalog books;books.AddNpc("Mod",book);const auto resolved=books.Resolve();
+        assert(Lore::Parse(resolved[0].Data).Enabled&&resolved[0].Data.at("LoreEntry")=="Mod:fieldbook");
+    }
+    {
         Json prop={{"Id","table"},{"Type","Prop"},{"Mesh","/Engine/BasicShapes/Cube.Cube"},
             {"Location",Json::array({0,0,0})},{"NoInteract",true},{"HideName",true},{"EnableCollision",true},
             {"VendorID","missing_shop"},{"DialogueID","missing_dialogue"}};

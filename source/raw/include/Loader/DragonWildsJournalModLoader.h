@@ -1,4 +1,5 @@
 #pragma once
+#include <optional>
 
 #include <filesystem>
 #include <string>
@@ -36,10 +37,14 @@ namespace DragonWilds {
         };
 
     public:
+        // Game-thread presentation only; never exposes or changes player progress.
+        static nlohmann::json PresentationOwnership(RC::Unreal::UObject* entry);
+        inline static std::vector<DragonWildsJournalModLoader*> PresentationInstances;
         explicit DragonWildsJournalModLoader(bool loreOnly = false);
         ~DragonWildsJournalModLoader();
         void SetRecipeService(DragonWildsRecipeModLoader* service) { m_recipeService = service; }
         bool OpenLoreForPlayer(RC::Unreal::UObject* controller,const std::string& reference);
+        std::optional<bool> LoreReadForPlayer(RC::Unreal::UObject* controller,const std::string& reference);
         bool UnlockForPlayer(RC::Unreal::UObject* controller,const std::string& reference);
         void DeliverAutomaticUnlocks(RC::Unreal::UObject* controller);
         void ImportCookedDefinitions();
@@ -114,6 +119,7 @@ namespace DragonWilds {
         void ObserveAcquisition(RC::Unreal::UObject* source,RC::Unreal::UFunction* function);
         bool UnlockEntries(RC::Unreal::UObject* journalComponent);
         RC::Unreal::UObject* FindJournalComponent(RC::Unreal::UObject* controller=nullptr);
+        RC::Unreal::UObject* ResolveLoreEntry(const std::string& reference);
         RC::Unreal::UObject* FindJournalSubsystem();
         bool RegisteredJournalEntry(RC::Unreal::UObject* entry);
 

@@ -1,10 +1,6 @@
-bool DragonWildsJournalModLoader::OpenLoreForPlayer(UObject* controller,const std::string& reference) {
-    if(!m_loreOnly || !m_initialJournalApplied || !controller || !controller->GetWorld())
-        throw std::runtime_error("Lore loader or player world is not ready");
+UObject* DragonWildsJournalModLoader::ResolveLoreEntry(const std::string& reference) {
     if(reference.empty() || reference.size()>1024 || reference.find_first_of("\r\n\t")!=reference.npos)
         throw std::runtime_error("Invalid lore entry reference");
-    ActorHelper::FunctionCall local(controller,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();
-    if(!local.Result<bool>())throw std::runtime_error("Lore presentation requires the local player's controller");
     auto key=RC::to_generic_string(reference);
     // /npc LoreID is namespace-qualified during catalog resolution while the
     // lore loader retains the authored local key. The lore catalog rejects
@@ -19,6 +15,31 @@ bool DragonWildsJournalModLoader::OpenLoreForPlayer(UObject* controller,const st
     if(!entry || !loreClass || !entry->IsA(loreClass))throw std::runtime_error("Lore entry is missing or is not native lore data");
     const auto invalid=static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_NeedLoad|RF_NeedPostLoad|RF_NeedInitialization|RF_BeginDestroyed|RF_FinishDestroyed);
     if(entry->HasAnyFlags(invalid))throw std::runtime_error("Lore entry is not a live loaded asset");
+    return entry;
+}
+std::optional<bool> DragonWildsJournalModLoader::LoreReadForPlayer(UObject* controller,const std::string& reference) {
+    if(!m_loreOnly||!m_initialJournalApplied||!controller||!controller->GetWorld())return {};
+    ActorHelper::FunctionCall local(controller,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();if(!local.Result<bool>())return {};
+    auto* component=FindJournalComponent(controller);if(!component)return {};
+    auto* entry=ResolveLoreEntry(reference);
+    const auto contains=[&](const TCHAR* name){
+        auto* array=CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(component->GetClassPrivate(),name));
+        auto* inner=array?CastField<FObjectPropertyBase>(array->GetInner()):nullptr;
+        if(!array||array->GetArrayDim()!=1||!inner||inner->GetElementSize()!=sizeof(UObject*)||!inner->GetPropertyClass().Get()||!entry->IsA(inner->GetPropertyClass().Get()))
+            throw std::runtime_error("Lore read-state journal array contract changed");
+        auto* values=array->ContainerPtrToValuePtr<FScriptArray>(component);
+        if(!values||values->Num()<0||values->Num()>65536)throw std::runtime_error("Lore read-state journal array exceeds bound");
+        bool found=false;UECustom::FScriptArrayHelper helper(values,array);helper.ForEachElement([&](void* value){if(inner->GetObjectPropertyValue(value)==entry)found=true;});return found;
+    };
+    const bool unlocked=contains(TEXT("UnlockedJournalEntries")),unread=contains(TEXT("UnreadJournalEntries"));
+    return LoreBookPresentation::ReadState(true,unlocked,unread);
+}
+bool DragonWildsJournalModLoader::OpenLoreForPlayer(UObject* controller,const std::string& reference) {
+    if(!m_loreOnly || !m_initialJournalApplied || !controller || !controller->GetWorld())throw std::runtime_error("Lore loader or player world is not ready");
+    ActorHelper::FunctionCall local(controller,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();
+    if(!local.Result<bool>())throw std::runtime_error("Lore presentation requires the local player's controller");
+    auto* entry=ResolveLoreEntry(reference);
+    const auto invalid=static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_NeedLoad|RF_NeedPostLoad|RF_NeedInitialization|RF_BeginDestroyed|RF_FinishDestroyed);
     auto* apiClass=ActorHelper::ResolveClass(TEXT("/Script/Dominion.LorePopupUIAPI"));
     auto* owner=apiClass?CastField<FObjectPropertyBase>(PropertyHelper::GetPropertyByName(apiClass,TEXT("CharacterController"))):nullptr;
     if(!owner || owner->GetArrayDim()!=1 || owner->GetElementSize()!=sizeof(UObject*)
@@ -60,6 +81,10 @@ bool DragonWildsJournalModLoader::OpenLoreForPlayer(UObject* controller,const st
     if(count!=1 || open->GetReturnProperty() || !ReflectedContract::Input(input,open)
         || !input->GetPropertyClass().Get() || !entry->IsA(input->GetPropertyClass().Get()))
         throw std::runtime_error("Lore popup entry signature changed");
+    auto* journal=FindJournalComponent(controller);if(!journal)return false;
+    auto* markRead=JournalPlayerAccess::ReadFunction(entry);
+    (void)JournalPlayerAccess::EnsureUnlocked(journal,entry);
     ActorHelper::FunctionCall(selected,open->GetPathName()).SoftObjectArg(TEXT("Entry"),entry).Invoke();
+    JournalPlayerAccess::MarkRead(journal,entry,markRead);
     return true;
 }

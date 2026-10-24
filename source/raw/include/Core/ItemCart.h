@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <vector>
 #include <functional>
+#include <map>
 #include <nlohmann/json.hpp>
 
 namespace PS::ItemCart {
@@ -12,14 +13,29 @@ using json=nlohmann::json;
 inline bool KitPath(const std::string& path);
 inline json KitItems(const json& document);
 struct Entry { std::string Path; json Row; int Quantity=1; };
+struct Check {bool Valid=false;std::string Message;};
+struct Outcome {Entry Item;std::string State,Message;};
 class Model {
     std::vector<Entry> m_entries;
     std::uint64_t m_delivery=0;
     json m_submitted=json::array();
+    std::map<std::string,Check> m_checks;
+    std::vector<Outcome> m_outcomes;
 public:
     static constexpr std::size_t Limit=64;
     const std::vector<Entry>& Entries() const {return m_entries;}
     std::uint64_t Delivery() const {return m_delivery;}
+    const std::vector<Outcome>& Outcomes()const{return m_outcomes;}
+    const Check* Validation(const std::string& path)const{const auto i=m_checks.find(path);return i==m_checks.end()?nullptr:&i->second;}
+    void ClearValidation(){m_checks.clear();}
+    void ApplyValidation(const json& rows){
+        if(!rows.is_array()||rows.size()>Limit)return;
+        for(const auto& row:rows){if(!row.is_object()||!row.contains("Item")||!row["Item"].is_string()||!row.contains("Valid")||!row["Valid"].is_boolean())continue;
+            const auto path=row["Item"].get<std::string>();
+            if(std::none_of(m_entries.begin(),m_entries.end(),[&](const auto& entry){return entry.Path==path;}))continue;
+            m_checks[path]={row["Valid"].get<bool>(),row.contains("Message")&&row["Message"].is_string()?row["Message"].get<std::string>():std::string{}};
+        }
+    }
     bool Add(const json& row) {
         if(m_delivery)return false;
         if(!row.is_object())return false;
@@ -31,13 +47,13 @@ public:
             entry.Quantity=std::min(10000,entry.Quantity+1);return true;
         }
         if(m_entries.size()>=Limit)return false;
-        m_entries.push_back({path,row,1});return true;
+        m_checks.erase(path);m_entries.push_back({path,row,1});return true;
     }
     bool Remove(const std::string& path) {
         if(m_delivery)return false;
-        return std::erase_if(m_entries,[&](const auto& entry){return entry.Path==path;})!=0;
+        m_checks.erase(path);return std::erase_if(m_entries,[&](const auto& entry){return entry.Path==path;})!=0;
     }
-    void Clear(){if(!m_delivery)m_entries.clear();}
+    void Clear(){if(!m_delivery){m_entries.clear();m_checks.clear();m_outcomes.clear();}}
     void SetQuantity(const std::string& path,int quantity) {
         if(m_delivery)return;
         for(auto& entry:m_entries)if(entry.Path==path){entry.Quantity=std::clamp(quantity,1,10000);return;}
@@ -59,7 +75,7 @@ public:
             staged.push_back({path,std::move(row),item.at("Count").get<int>()});
         }
         // Commit only after every row validates/resolves. Import never delivers.
-        m_entries=std::move(staged);
+        m_entries=std::move(staged);m_checks.clear();m_outcomes.clear();
     }
     json Payload(int mode=0) const {
         json items=json::array();
@@ -75,11 +91,12 @@ public:
     }
     bool BeginDelivery(std::uint64_t request,int mode=0) {
         if(!request||m_delivery||m_entries.empty()||mode<0||mode>3)return false;
-        m_submitted=Payload(mode);m_delivery=request;return true;
+        m_submitted=Payload(mode);m_delivery=request;m_outcomes.clear();return true;
     }
     void CancelDelivery(){m_delivery=0;m_submitted=json::array();}
     // Only an exact, single native inventory-delta confirmation consumes a slot.
-    // Editing is locked while this one-shot request is pending; failed rows stay staged.
+    // Definite pre-write rejections leave the active cart, but keep a red-X
+    // outcome. Ambiguous results remain staged for explicit inventory review.
     std::size_t CompleteDelivery(std::uint64_t request,const json& receipt) {
         if(!m_delivery||request!=m_delivery)return 0;
         std::size_t confirmed=0;
@@ -87,7 +104,7 @@ public:
         if(results!=receipt.end()&&results->is_array()&&results->size()<=Limit) {
             for(const auto& sent:m_submitted) {
                 const auto& path=sent.at("Item").get_ref<const std::string&>();
-                std::size_t matches=0;bool exact=false;
+                std::size_t matches=0;bool exact=false,rejected=false;std::string message;
                 for(const auto& row:*results) {
                     if(!row.is_object())continue;
                     const auto item=row.find("Item"),count=row.find("Count"),state=row.find("State");
@@ -95,8 +112,16 @@ public:
                     ++matches;
                     exact=count!=row.end()&&count->is_number_integer()&&*count==sent.at("Count")
                         &&state!=row.end()&&state->is_string()&&*state=="Confirmed";
+                    rejected=count!=row.end()&&count->is_number_integer()&&*count==sent.at("Count")
+                        &&state!=row.end()&&state->is_string()&&*state=="Rejected";
+                    message=row.contains("Message")&&row["Message"].is_string()?row["Message"].get<std::string>():std::string{};
                 }
-                if(matches==1&&exact)confirmed+=std::erase_if(m_entries,[&](const auto& entry){return entry.Path==path;});
+                auto entry=std::find_if(m_entries.begin(),m_entries.end(),[&](const auto& item){return item.Path==path;});
+                if(entry!=m_entries.end())m_outcomes.push_back({*entry,matches==1&&exact?"Confirmed":matches==1&&rejected?"Rejected":"Unconfirmed",message});
+                if(matches==1&&(exact||rejected)){
+                    const auto removed=std::erase_if(m_entries,[&](const auto& entry){return entry.Path==path;});
+                    if(exact)confirmed+=removed;m_checks.erase(path);
+                }
             }
         }
         CancelDelivery();return confirmed;
@@ -114,7 +139,7 @@ inline bool KitPath(const std::string& path) {
 inline json KitItems(const json& document) {
     if(!document.is_object()||!document.contains("SchemaVersion")||!document.at("SchemaVersion").is_number_integer()||document.at("SchemaVersion")!=1
         ||!document.contains("Type")||document.at("Type")!="RuneSchemaHelpyKit")
-        throw std::invalid_argument("Unsupported Helpy kit schema");
+        throw std::invalid_argument("Unsupported RSMK kit schema");
     for(const auto& [key,value]:document.items())if(key!="SchemaVersion"&&key!="Type"&&key!="Name"&&key!="Items")
         throw std::invalid_argument("Kit metadata cannot contain actions or delivery instructions");
     if(document.contains("Name")&&(!document.at("Name").is_string()||document.at("Name").get_ref<const std::string&>().size()>128))

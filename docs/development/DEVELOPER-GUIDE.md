@@ -129,23 +129,47 @@ compile, compression/signing checks, and package validation succeed.
 
 ## Helpy
 
-Helpy is a plugin-owned viewport UI. It does not clone a Dragonwilds menu.
+Helpy is a plugin-owned standalone desktop UI. F2 opens or closes it; F5 reloads
+its theme. The legacy F7 Canvas renderer and its input hooks have been removed.
+The first opening presents a repeating Dragonwilds/RuneSchema splash with an
+immediately available Enter action for Home. Catalogue/cache refresh continues
+behind the splash. Returning with F2 preserves the current workspace rather
+than restarting the splash. Reduced-motion mode holds the RuneSchema logo.
+Enter freezes the currently dominant logo for a short exit: RuneSchema brackets
+slide and fade horizontally, or the RuneScape/Dragonwilds lines slide and fade
+up/down. Home
+reveals afterward. Reduced-motion mode skips the exit movement. Cropped logo
+layers are prepared once; no engine capture is involved in their animation.
+The Dragonwilds wordmark uses the original 1920x1080 splash PNG, not a 150-pixel
+icon. Splash and Runtime details share its UV crop and native aspect ratio;
+the Enter split lies in the gap between RuneScape and Dragonwilds.
+Runtime startup statistics share a saved Automatic/ms/seconds/minutes selector.
+Settings > Backgrounds reads local plugin `assets/backgrounds` pictures, with
+an actual thumbnail and temporary preview before Apply. PNG/JPG/JPEG/BMP are
+supported; SVG is not. Pixel dimensions, not DPI metadata, determine detail.
+Backgrounds default to None, decode off-thread, cache at most two textures,
+and share a proportional center crop across main and detached surfaces. Folder
+enumeration is explicit, not a per-frame scan; user pictures are never uploaded.
+Exact per-package registry/provider declarations determine item owner labels.
+A shared content mount alone must never produce a list of purported owners;
+unresolved or conflicting ownership stays unknown. The exact-path table uses
+bounded immutable snapshots and is never transmitted wholesale to Helpy.
 
 Current implementation rules:
 
-- `UGameViewportClient::PostRender` is the viewport lifecycle boundary;
+- the desktop window owns its rendering and hotkey loop, not the game viewport;
 - the model/request layer stays independent of the renderer;
 - layout, rendering, and hit testing share one logical coordinate system;
-- Canvas function lookups are cached;
+- no Canvas drawing, viewport vtable hook, or game input lease is installed;
 - item artwork is requested only for the currently painted page; completed
-  textures remain in a bounded session cache while stale off-page requests are
-  discarded, and missing icons are negatively cached;
+  textures use the persistent source-aware AppData cache and a bounded session
+  cache; optional mod-provided cache packs are imported without modifying them;
 - opening Helpy does not start a full UObject scan;
-- catalog parsing and preference writes stay out of the render callback.
+- catalogue parsing and preference writes stay out of the render callback;
+- native catalogue and inventory delivery helpers do not depend on a UI renderer.
 
-The current Canvas path is intentionally simple. If it cannot meet the
-performance target after profiling, keep the model and replace only the
-presenter with plugin-owned UMG.
+Legacy Canvas hotkey fields in existing settings files are ignored. Loading
+Helpy does not rewrite those files or register an F7 fallback.
 
 ## Performance
 
@@ -183,7 +207,154 @@ RuneSchema ownership is known.
 
 ## Documentation and releases
 
+Cache-first presentation can restore the previous locale-matching paged item
+catalogue while live mounted-content verification is pending. These responses
+carry CachePreview/CheckingChanges; they cannot authorize gameplay operations.
+The UI revalidates in place without erasing usable rows, and cached source keys
+permit disk thumbnails during this provisional stage. Native captures wait for
+verified source keys. Registry reset opens an incomplete startup source census;
+GameInstance loader completion seals it before it can replace last-good source
+metadata. Real content changes still invalidate verified scope normally.
+Strict-scope and provisional pages have separate read stores. A previously saved
+page remains visible during an actual content-scope rebuild even if live sources
+were already ready when Helpy opened. Bounded native refresh advances on idle
+game-thread ticks, yielding to both mutations and foreground catalogue reads.
+Initial source publication keeps preview rows/query; actual removals clear them.
+
+The source filesystem worker indexes exact top-level /assets object paths from
+active managed mods. Distinguish this explicit definition evidence from physical
+PAK ownership and from references in quests/recipes/icons. Registry declarations
+and clone provenance retain precedence. Exact source names/evidence are repaired
+in cached rows and their paged sidecar on a file worker, without a UObject census.
+Unknown or conflicting providers must not become shared-mount guesses.
+Official plugin descriptors may be inside the game's base PAK rather than loose
+files. The source worker reads a bounded uncompressed plugin-manifest candidate
+from the known native base container's final 8 MiB, caches by file size/time, and
+accepts only content-bearing descriptors under this game's Plugins directory.
+Mod/patch containers cannot certify themselves by borrowing the game's filename
+prefix. Changed, compressed/encrypted, malformed or unavailable metadata remains
+unknown; it must not block content registration or trigger a full asset load.
+USMAP remains a native schema decoder input, not a package-ownership database.
+
+Confirmed runtime clone creation takes precedence. Vanilla and official plugin
+items retain their original provider even when RuneSchema patches them. Native
+asset-loader edit records supply a separate ModifiedByRuneSchema/ModifiedBy pair
+(last recorded modifier only). These flags persist with catalogue rows and show
+a small bottom-left edit mark; only genuinely mod-created items use the top-right
+RuneSchema logo. A registry reference or borrowed mount alone does not prove item
+creation. Cached native source corrections happen before source-filter matching
+and the persisted JSON/sidecar is repaired on a file worker, without clearing icons.
+
+Uncertified persistence registries disable optional save cleanup, not native
+character loading. The reflected cleanup preflight returns before inspecting
+parameters/copying strings; direct cleanup returns before JSON parsing. Neither
+path cancels the original game event or waits for certification. Native game
+validation and independently verified content keep their separate checks.
+Deferred warnings explicitly describe this non-blocking/no-save-change outcome.
+
+Loading uses a single wheel by default; stage, counts, cache status and warnings
+live in its hover details. The empty Item Bay wheel has a right-click cancel/retry
+menu. Picture backgrounds draw an opaque base, full image and dark theme overlay;
+native window alpha is 255 while a picture is active, including during decoding.
+Clear glass (empty background filename) restores the configured window opacity.
+Normal, compact and minimum previews check wheel hover and native alpha changes.
+
+Home keeps the larger centered themed RuneSchema logo directly over the chosen
+application background, without a banner or opaque/ash rectangle. Every enabled
+workspace has a tile with hover details. Original GitHub/Nexus/CurseForge/Discord
+icons remain unlabeled. Destination cards are horizontally centered, with centered
+wrapped text and aspect-fit images limited by viewport height. Discord alone uses
+the full community banner. GitHub uses the supplied repository screenshot; Nexus
+and CurseForge use built-in image-tool edits removing their management controls.
+Page screenshots are labeled not-live. Card URLs and icons launch only on explicit
+activation; previews intercept activation rather than opening browsers. Artwork
+notices remain in the consolidated legal file, not relicensed under MIT.
+
+Same-query item revalidation stages new batches separately until they cover the
+old visible prefix, or a definitive shorter result arrives. Keep the previous fill
+target; automatic cache checks must not cancel an already-refreshing replay. Only
+then swap rows in one UI-thread operation, preserving page/scroll during partial
+responses. Query/world changes retain their scope and cancellation fences.
+Disk-source changes (including updater remove/replace sequences) must not latch
+the browser off: mark existing per-query windows stale, keep their last-good rows,
+and revalidate via low-priority requests. Restoring a stale query shows it first,
+then refreshes in place. A definitive shorter native response may remove rows;
+a disk removal alone is not evidence that an already mounted UObject disappeared.
+Never hot-register native content to resolve this; world reload or a full game
+restart can still be required by the existing native loaders and mounts.
+A fixed-size progress slot beside View avoids inserting/removing a grid row;
+an empty bay retains one larger centered wheel. Already-loaded next pages remain
+navigable during pending background reads. Regression tests cover a 120-row replay,
+real deletions and equal busy/idle Item Bay bounds at three window sizes.
+
+Cart checks are session-only evidence, not trusted fields from an imported cache.
+An idle read-only ValidateCartItems request checks at most four canonical paths,
+coalesced to one request per 500ms, without a catalogue scan or inventory write.
+Green means current-runtime ItemData and complete publication, not permission or
+quantity approval. World/source changes invalidate the evidence; actual delivery
+still checks authoritative recipients, reflected command layouts, capacity and
+the exact inventory delta. Only the typed pre-write Rejected error may continue
+past an item. Any other exception remains uncertain and stops the batch without
+retry. Rejected entries leave the active cart but retain red-X result placards;
+uncertain entries stay staged behind inventory-review acknowledgement. Per-player
+receipts remain available and prevent claiming all-recipient success from one
+recipient's delta. No inventory rollback or save cleanup is performed.
+
+RuneSchema and Dragonwilds logos must remain bundled with the runtime ZIP;
+additional optional Helpy UI artwork is separate. The compiled whitelist
+pins fourteen PNG names, sizes and SHA-256 hashes under resources/helpy-ui/v1.
+Download only on an explicit user action, on an owned file/network worker, over
+fixed HTTPS URLs without redirects. Verify before atomic replacement, preserve
+old files on failure, and publish the ready marker only after every file verifies.
+Read the versioned AppData folder only for whitelisted UI PNGs; never resolve
+scripts, fonts, executables or DLLs from downloaded artwork. Offline Enter and a
+code-drawn brand fallback remain usable. Splash tips rotate without network work;
+center every wrapped line and each download/hide control independently. Hiding
+the first-run prompt persists its dismissal and confirms the exact Settings >
+Updates & runtime > Initial assets location; it does not remove Settings access.
+The bundled Dragonwilds/RuneSchema splash alternates four-second holds and
+four-second eased crossfades, a sixteen-second loop. Enter remains available
+throughout and retains the existing selected-logo exit. Windows reduced-motion
+preferences retain a static RuneSchema logo rather than forcing animation.
+
+Base-game icon packs have a separate explicit download action and published
+index. Runtime/build matching only selects a candidate; the existing portable
+content-hash importer is still authoritative. Never compare machine-local source
+keys with portable identities or force-accept mismatches. Preserve source-picker
+selection after the base-only import. Additional native providers/mod archives
+can conservatively invalidate a pack; local build/update remains available.
+The first published pack covers Steam CL-251392 only, not Game Pass. It contains
+4,271 verified small preview images and their path/source relationships, not game
+archives or saves. Publishing assets does not publish the new runtime source.
+
 The public site documents current supported behavior. Historical development checkpoints remain in Git history rather than separate public pages.
+
+Initial Assets combines the fixed GitHub UI PNG download with a separate optional
+Wiki/Wildsforge marker dataset, fetched from https://wildsforge.org/map/markers.json
+without redirects or any submitted game/player data. Marker data retains CC
+BY-NC-SA 3.0 attribution/licence URLs, both on disk and in the map presentation;
+it is not MIT artwork/code and is not bundled with the runtime ZIP. The installed
+native map image/projection remains authoritative; provider game X/Y coordinates
+are passed through that projection, not through web tile/Leaflet screen offsets.
+Reference markers never become managed placements or proof of a native actor.
+
+Map cache and filter choices live beneath the Helpy AppData cache/map/storefront
+folder. Parsing, source/licence validation, bounded coordinate/type checks and
+atomic file commits run on an owned worker. Invalid/empty/oversized downloads do
+not replace the last-good cache. Search uses a retained typed category index;
+screen-space grouping bounds draws for dense layers without deleting locations.
+Loaded native marker flags and individual cached category choices persist locally.
+The fixed map Refresh wheel explains both live reads and reference-cache status.
+
+Only the runtime's installed ++dominion+...CL-... identity can make an existing
+storefront cache update-eligible. Website announcements, dates, RuneSchema/UE4SS
+versions, mod fingerprints and switching storefronts do not prove a game patch.
+No cache means explicit initial download, never automatic opt-in. An existing
+opted-in cache can make one update attempt per confirmed build per session when
+the setting is enabled. Reopening Helpy with the same build cannot fetch again;
+neither can its manual Refresh button. Failed updates retain old data and allow
+explicit retry while that actual build change remains pending. Filter choices
+survive dataset replacement; no game save, world, pak or loader registration writes.
 
 Public docs should describe current behavior. Put implementation history,
 addresses, profiling notes, and build mechanics here instead of in loader or

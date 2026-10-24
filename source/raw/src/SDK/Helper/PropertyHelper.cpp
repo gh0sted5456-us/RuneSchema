@@ -222,7 +222,11 @@ namespace DragonWilds {
         }
         else
         {
+#ifdef RUNESCHEMA_PLUGIN_CLIENT
+            throw std::runtime_error("Unhandled native property '"+RC::to_string(PropertyName)+"' ("+RC::to_string(ClassName)+")");
+#else
             PS::Log<RC::LogLevel::Warning>(STR("Unhandled property '{}' with class of {} and type of {}\n"), PropertyName, ClassName, Type.GetCharArray());
+#endif
         }
     }
 

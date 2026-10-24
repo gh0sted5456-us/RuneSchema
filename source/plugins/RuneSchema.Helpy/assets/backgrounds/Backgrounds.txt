@@ -1,0 +1,21 @@
+Helpy backgrounds
+
+Drop your own PNG, JPG/JPEG or BMP pictures into this folder, then open
+Settings > Backgrounds > Refresh pictures. Select a picture to see its preview.
+Preview in Helpy is temporary. Apply background saves your selection and
+image strength. Pictures use an opaque backing behind Helpy's dark tint, so
+other windows cannot show through. Select Clear glass (RuneSchema default)
+and Apply background to restore the configured transparent window style.
+
+Use 2560x1440 or 3840x2160 for detailed desktop backgrounds. Pixel dimensions
+matter, not the file's DPI metadata. Images are fitted proportionally and
+cropped rather than stretched. PNG preserves sharp edges and transparency;
+JPG is suitable for photographic or painted backgrounds. SVG is not supported.
+
+Limits: 128 pictures, 20 MiB per file, up to 4096 pixels per dimension.
+Files remain local and are not uploaded. Symbolic links are not followed.
+Your own files are not removed by refreshing or changing the selection.
+
+RuneSchema.png is existing project branding. Dragonwilds.png is the original
+Jagex splash artwork, not MIT-licensed RuneSchema artwork. Ownership and
+attribution are retained in RuneSchema's complete legal notice.

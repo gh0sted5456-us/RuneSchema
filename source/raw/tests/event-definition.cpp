@@ -12,6 +12,16 @@ Json Example(){return {{"Id","trial"},{"TimeoutSeconds",60},{"Scope","Party"},{"
     {"Messages",{{"Started","The trial begins."},{"WaveStarted","Wave {wave} of {waves}."},{"BossStarted","The boss arrives."},{"Completed","Victory."},{"Failed","Failed."},{"Cancelled","Cancelled."}}},
     {"Waves",Json::array({Json::array({{{"SpawnID","wolf"},{"Location",{1,2,3}}},{{"SpawnID","Other:wolf"},{"Location",{4,5,6}}}}),Json::array({{{"SpawnID","boss"},{"Location",{7,8,9}}}})})}};}
 int main(){
+    using namespace DragonWilds::SpawnFields;
+    assert(BuildingPieceRadius(Json::object())==100);
+    assert(BuildingPieceRadius({{"DuplicateRadius",250},{"QuestCompleted","furnace"}})==250);
+    for(const auto& invalid:{Json{{"DuplicateRadius",0}},Json{{"DuplicateRadius",10001}},Json{{"DuplicateRadius","100"}},Json{{"AllowDeconstruction",false}},Json{{"PersistAfterCondition",false}},Json{{"UseNativeRespawn",true}},Json{{"TimeOfDay","Night"}},Json{{"QuestActive","test"}},Json{{"EventActive","test"}}})
+        assert(Rejects([&]{BuildingPieceRadius(invalid);}));
+    assert(BuildingPieceOccupied(60,80,500,100,true));
+    assert(!BuildingPieceOccupied(60,81,0,100,true));
+    assert(!BuildingPieceOccupied(60,80,1,100,false));
+    assert(BuildingPieceOccupied(0,0,100,100,false));
+    assert(!BuildingPieceOccupied(std::numeric_limits<double>::quiet_NaN(),0,0,100,true));
     const auto arrayGround=DragonWilds::SpawnFields::ParseLocation(Json::array({17850,186650,"$"}));
     assert(arrayGround.Ground && arrayGround.GroundOffset==0 && arrayGround.Vector["X"]==17850 && arrayGround.Vector["Z"]==0);
     const auto arrayOffset=DragonWilds::SpawnFields::ParseLocation(Json::array({1,2,"$+250"}));
@@ -122,6 +132,19 @@ int main(){
     assert(resolved[0]["Location"]["Z"]==312.5 && !resolved[0].contains("$z"));
     const auto resourceExport=PS::SpawnAuthoring::Placement({{"Type","Actor"},{"Class","/Game/Rock.Rock_C"},{"UseNativeRespawn",true}},"rock_1",{1,2,3},0);
     assert(resourceExport["UseNativeRespawn"]==true && resourceExport["Class"]=="/Game/Rock.Rock_C");
+    const auto buildingExport=PS::SpawnAuthoring::Placement({{"Type","Building"},{"Class","/Game/Wall.Wall_C"}},"wall_1",{1,2,3},45);
+    const auto nativeBuildingExport=PS::SpawnAuthoring::Placement({{"Type","BuildingProp"},{"Building","/Game/Wall.Wall"},{"AllowDeconstruction",true}},"wall_native",{1,2,3},45);
+    assert(nativeBuildingExport.at("Type")=="BuildingProp"&&nativeBuildingExport.at("Building")=="/Game/Wall.Wall"&&nativeBuildingExport.at("AllowDeconstruction")==true);
+    assert(PS::SpawnAuthoring::PositionMatches({0,0,0},{0,0,0}));
+    assert(PS::SpawnAuthoring::PositionMatches({100,200,300},{130,240,300}));
+    assert(!PS::SpawnAuthoring::PositionMatches({19637,181259,-3032},{0,0,0}));
+    assert(!PS::SpawnAuthoring::PositionMatches({100,200,300},{130,240,301}));
+    assert(!PS::SpawnAuthoring::PositionMatches({0,0,0},{NAN,0,0}));
+    assert(!PS::SpawnAuthoring::PositionMatches({0,0,0},{0,INFINITY,0}));
+    assert(buildingExport["Type"]=="Building" && buildingExport["Location"]["Z"]==3 && buildingExport["Rotation"]["Yaw"]==45);
+    assert(Rejects([&]{PS::SpawnAuthoring::Placement({{"Type","Unsupported"}},"bad",{0,0,0},0);}));
+    assert(Rejects([&]{PS::SpawnAuthoring::Placement(spawn,"bad",{NAN,0,0},0);}));
+    assert(Rejects([&]{PS::SpawnAuthoring::Placement(spawn,"bad",{0,0,0},INFINITY);}));
     assert(Rejects([&]{PS::SpawnAuthoring::Placement(spawn,"../bad",{0,0,0},0);}));
     auto badTool=toolPayload;badTool["scale"]=100.01;assert(Rejects([&]{ToolIdentity(badTool);}));
     badTool=toolPayload;badTool["spawn"]="Other:temporary_1";assert(Rejects([&]{ToolIdentity(badTool);}));

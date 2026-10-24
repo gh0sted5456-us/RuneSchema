@@ -10,6 +10,7 @@ inline constexpr size_t MaximumBytes=256*1024;
 inline void Fields(const nlohmann::json& object,const std::string& prefix,nlohmann::json& fields){
     for(const auto& [key,value]:object.items()){
         const auto path=prefix+"/"+key;
+        if(path=="/persistence/recovery"||path=="/worldSaveCleanup/backupBeforePrune")continue;
         if(value.is_object())Fields(value,path,fields);else fields[path]=value;
     }
 }

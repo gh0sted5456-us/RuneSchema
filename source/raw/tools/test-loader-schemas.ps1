@@ -30,6 +30,20 @@ Check-Schema registry '{"SchemaVersion":1,"Entries":[],"NativeRegistries":{"Reci
 Check-Schema registry '{"SchemaVersion":1,"Entries":[],"NativeRegistries":{"Items":[{"Path":"/Game/Items/Example.Example","Source":"Unknown"}]}}' $false
 Check-Schema registry '{"SchemaVersion":1,"Entries":[],"NativeRegistries":{"Unknown":["/Game/Test.Test"]}}' $false
 Check-Schema registry '{"SchemaVersion":1,"Entries":[],"NativeRegistries":{"Recipes":[42]}}' $false
+# Repair behavior belongs to the cooked item, not an intercepting runtime action.
+Check-Schema registry '{"SchemaVersion":1,"Entries":[{"Id":"Kit","Kind":"GameplayAuthority","Authority":{"Action":"RepairPersonalEquipment","GraphClass":"/Example/BP_Kit.BP_Kit_C","DataAsset":"/Example/Kit.Kit","Function":"UseItem"}}]}' $false
+foreach($lane in 'ContainerContents','FarmPlants','Trees','TreeGrowth','FixedTextNotifications','FTUENotifications','PlayerHooks','WorldHooks'){
+    Check-Schema registry ('{"SchemaVersion":1,"Entries":[],"NativeRegistries":{"'+$lane+'":["/SharedPlugin/Data/Asset.Asset"]}}') $true
+    Check-Schema registry ('{"SchemaVersion":1,"Entries":[],"NativeRegistries":{"'+$lane+'":[{"Path":"/SharedPlugin/Data/Asset.Asset","Source":"Schema"}]}}') $false
+    Check-Schema registry ('{"SchemaVersion":1,"Entries":[],"NativeRegistries":{"'+$lane+'":["/Script/Dominion.Type"]}}') $false
+}
+Check-Schema registry '{"SchemaVersion":1,"Entries":[],"NativeRegistries":{"Difficulty":["/Example/Data.Asset"]}}' $false
+Check-Schema registry '{"SchemaVersion":1,"Entries":[],"NativeRegistries":{"Entitlements":["/Example/Data.Asset"]}}' $false
+foreach($lane in 'Skills','SkillPerks','Enums') {
+    Check-Schema registry ('{"SchemaVersion":1,"Entries":[],"NativeRegistries":{"'+$lane+'":["/Game/Mods/Example/Content/Asset.Asset"]}}') $true
+    Check-Schema registry ('{"SchemaVersion":1,"Entries":[],"NativeRegistries":{"'+$lane+'":[{"Path":"/Example/Content/Asset.Asset","Source":"Schema"}]}}') $false
+    Check-Schema registry ('{"SchemaVersion":1,"Entries":[],"NativeRegistries":{"'+$lane+'":["/Script/Dominion.ESkill"]}}') $false
+}
 Check-Schema raw '[{"$Patch":"DT_Test:Row","$Target":{"Amount":2}}]' $true
 Check-Schema players '[{"Archetype":{"Name":"Mage","Icon":"/Game/Test.Test"}}]' $true
 Check-Schema players '[{"Archetype":{"Name":"Mage"}}]' $false
@@ -42,6 +56,9 @@ foreach($pair in @(@('npc','npc/50-QuantumBanker.jsonc'),@('dialogue','dialogue/
     Check-Schema $pair[0] (ConvertTo-Json -InputObject $definition -Depth 100) $true
 }
 Check-Schema spawns '[{"Id":"ghost","Type":"AISpawnPoint","EventOnly":true,"AIClass":"/Game/Test.Test_C","VisualEffect":{"Type":"Ghost Glow"}}]' $true
+Check-Schema spawns '[{"Id":"furnace","Type":"BuildingPiece","Building":"/Game/Test.Test","Location":[1,2,"$"],"DuplicateRadius":100,"AllowDeconstruction":true}]' $true
+Check-Schema spawns '[{"Id":"furnace","Type":"BuildingPiece","Building":"/Game/Test.Test","Location":[1,2,"$"],"DuplicateRadius":0}]' $false
+Check-Schema spawns '[{"Id":"furnace","Type":"BuildingPiece","Building":"/Game/Test.Test","Location":[1,2,"$"],"AllowDeconstruction":false}]' $false
 Check-Schema spawns '[{"Id":"ghost","Type":"AISpawnPoint","EventOnly":true,"AIClass":"/Game/Test.Test_C","VisualEffect":{"Type":"Niagara","System":"/Game/Test.Test"}}]' $false
 Check-Schema spawns '[{"Type":"AISpawnPoint","Grid":{"Rows":2,"Columns":3,"SpacingMeters":5},"AdditionalDrops":[{"Item":"/Game/Test.Test","Min":1,"Max":3,"ChancePercent":50}]}]' $true
 Check-Schema spawns '[{"Grid":{"Rows":0,"Columns":3,"SpacingMeters":5}}]' $false

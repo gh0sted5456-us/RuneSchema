@@ -1,4 +1,5 @@
 #include "Core/UsmapIndex.h"
+#include "Runtime/MappingBackbone.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -81,6 +82,13 @@ int main(int argc,char** argv)
     const auto bytes = MakeMap();
     std::ofstream(mapping, std::ios::binary).write(
         reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    const auto fallback=PS::MappingBackbone::Current(root);
+    const auto freshFingerprint=PS::MappingBackbone::Fingerprint(mapping);
+    PS::MappingBackbone::Activate({mapping,bytes.size(),freshFingerprint,true});
+    const auto generated=PS::MappingBackbone::Current(root);
+    Check(generated.Available&&generated.Path==mapping&&generated.Fingerprint==freshFingerprint,"validated mapping snapshot activated");
+    Check(!fallback.Available&&fallback.Path.empty(),"no installed-directory mapping is selected before validated cache activation");
+    PS::MappingBackbone::Generated.store(nullptr);
 
     auto& index = PS::Usmap::Index::Shared();
     index.ResetForTests();
@@ -129,6 +137,12 @@ int main(int argc,char** argv)
     index.ResetForTests();
     Check(index.Handle(blueprintMap,"blueprint-fingerprint",cache,{{"Action","DescribeType"},{"Type","/Game/Test/BP_Test.TestType"}}).value("Found",false),"Blueprint package path resolves to qualified type");
 
+    if(argc==3) {
+        index.ResetForTests();
+        const std::string query=argv[2];
+        const nlohmann::json request=query.starts_with("?")?nlohmann::json{{"Action","SearchTypes"},{"Query",query.substr(1)},{"Limit",30}}:nlohmann::json{{"Action","DescribeType"},{"Type",query}};
+        std::cout<<index.Handle(fs::path(argv[1]),"external-schema-inspection",root/"native-cache",request).dump(2)<<'\n';
+    }
     if(argc==2) {
         index.ResetForTests();
         const auto capture=index.Handle(fs::path(argv[1]),"external-native-capture",root/"native-cache",

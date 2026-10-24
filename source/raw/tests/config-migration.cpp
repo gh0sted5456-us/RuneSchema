@@ -19,6 +19,10 @@ int main(int argc,char** argv){
         const auto ini=EncodeIniDocument(document);
         Check(DecodeIniDocument(ini)==document);
         Check(DecodeSettings(DecodeIniDocument(ini).dump()).advancedLogging);
+        Check(!DecodeSettings("{}").archiveLogs);
+        auto archiveSettings=PSConfigSettings{};archiveSettings.archiveLogs=true;
+        Check(DecodeSettings(DecodeIniDocument(EncodeIniDocument(SettingsDocument(archiveSettings))).dump()).archiveLogs);
+        Reject([]{DecodeIniDocument("[RuneSchema]\narchiveLogs=yes\n");});
         Check(DecodeIniDocument("\xEF\xBB\xBF[RuneSchema]\nadvancedLogging = true ; note\n[plugins]\ncompatibilityNotices = quiet # note\n").at("plugins").at("compatibilityNotices")=="quiet");
         Reject([]{DecodeIniDocument("[RuneSchema]\nadvancedLogging=true\nadvancedLogging=false");});
         Reject([]{DecodeIniDocument("[RuneSchema]\nadvancedLogging=yes");});

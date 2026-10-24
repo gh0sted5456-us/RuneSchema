@@ -2,6 +2,7 @@
 #include "Loader/DragonWildsNpcLoader.h"
 #include "Utility/JsonHelpers.h"
 #include "Utility/Logging.h"
+#include "Utility/StructuredDiagnosticB3C.h"
 using namespace RC;
 namespace DragonWilds {
 DragonWildsVendorLoader::DragonWildsVendorLoader(DragonWildsNpcLoader* npcs)
@@ -15,6 +16,8 @@ void DragonWildsVendorLoader::OnLoad(const std::filesystem::path& path,const RC:
     PS::JsonHelpers::ParseJsonFilesInPath(path,[&](const nlohmann::json& data){m_npcs->LoadVendors(data,mod);});
 }
 void DragonWildsVendorLoader::OnAutoReload(const RC::StringType& mod,const std::filesystem::path&) {
-    PS::Log<LogLevel::Warning>(TEXT("Store changes in {} require a restart.\n"),mod);
+    if (!PS::StructuredDiagnosticB3C::Report("RS-VND-001","Warning","Deferred","VendorLoader",
+        "Vendor reload requires restart","Store changes cannot be hot-reloaded and require a restart.",RC::to_string(mod),{}, {},"Reload"))
+        PS::Log<LogLevel::Warning>(TEXT("Store changes in {} require a restart.\n"),mod);
 }
 }

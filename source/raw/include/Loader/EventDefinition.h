@@ -49,6 +49,7 @@ struct Area {std::array<double,3> Position{};double RadiusMeters=0;AreaVisibilit
 struct Messages {std::string Started,WaveStarted,BossStarted,Completed,Failed,Cancelled;};
 struct HealthStage {double Percent=0;std::string Message,Spawn;};
 struct ActorAction {double AfterSeconds=0;std::string Spawn;Json Cue=Json::object();};
+struct QuestContract {std::string Quest;bool ParticipantOrigin=false;double ActivationRadius=15,ExitGrace=10;};
 struct Definition {
     std::string Key;
     double Timeout=300;
@@ -61,6 +62,7 @@ struct Definition {
     std::vector<HealthStage> HealthStages;
     std::vector<ActorAction> Actions;
     std::vector<std::vector<Member>> Waves;
+    std::optional<QuestContract> Contract;
 };
 inline std::string ScopeName(Scope value) {
     switch(value){case Scope::Participant:return "Participant";case Scope::Party:return "Party";case Scope::World:return "World";}
@@ -71,7 +73,7 @@ inline std::string VisibilityName(AreaVisibility value) {
     throw std::runtime_error("Invalid event area visibility");
 }
 inline Definition Parse(const std::string& mod,const Json& data) {
-    Dialogue::Fields(data,{"Id","TimeoutSeconds","Scope","TimeOfDay","SpawnTimeOfDay","DespawnTimeOfDay","Weather","Area","Messages","HealthStages","Actions","Waves"});
+    Dialogue::Fields(data,{"Id","TimeoutSeconds","Scope","TimeOfDay","SpawnTimeOfDay","DespawnTimeOfDay","Weather","Area","Messages","HealthStages","Actions","Waves","Contract"});
     Definition value;value.Key=Dialogue::Reference(mod,data.at("Id"));
     if(data.contains("TimeoutSeconds")) {
         if(!data["TimeoutSeconds"].is_number())throw std::runtime_error("Event TimeoutSeconds must be numeric");
@@ -220,6 +222,33 @@ inline Definition Parse(const std::string& mod,const Json& data) {
         total+=members.size();if(total>64)throw std::runtime_error("Event exceeds 64 total enemies");
         value.Waves.push_back(std::move(members));
     }
+    if(data.contains("Contract")) {
+        const auto& contract=data.at("Contract");
+        Dialogue::Fields(contract,{"QuestID","SpawnOrigin","ActivationRadiusMeters","ExitGraceSeconds"});
+        QuestContract parsed;parsed.Quest=Dialogue::Reference(mod,contract.at("QuestID"));
+        const auto origin=contract.value("SpawnOrigin",std::string("World"));
+        if(origin!="World" && origin!="Participant")throw std::runtime_error("Contract SpawnOrigin must be World or Participant");
+        parsed.ParticipantOrigin=origin=="Participant";
+        const auto number=[&](const char* key,double fallback,double low,double high) {
+            if(!contract.contains(key))return fallback;
+            if(!contract.at(key).is_number())throw std::runtime_error("Contract bounds must be numeric");
+            const auto n=contract.at(key).get<double>();
+            if(!std::isfinite(n)||n<low||n>high)throw std::runtime_error("Contract bound outside supported range");
+            return n;
+        };
+        parsed.ActivationRadius=number("ActivationRadiusMeters",15,1,100);
+        parsed.ExitGrace=number("ExitGraceSeconds",10,0,60);
+        if(!value.EventArea || parsed.ActivationRadius>value.EventArea->RadiusMeters)
+            throw std::runtime_error("Contract requires an Area containing its activation radius");
+        if(value.Audience!=Scope::Participant || value.DespawnTime!=TimeOfDay::Requirement::Any)
+            throw std::runtime_error("Quest contracts require Participant scope and cannot complete by scheduled despawn");
+        for(const auto& wave:value.Waves)for(const auto& member:wave)if(parsed.ParticipantOrigin) {
+            if(!member.RelativeGround || !member.Ground)throw std::runtime_error("Participant-origin contract members require grounded $ Z coordinates");
+            const auto distance=std::hypot(member.Position[0],member.Position[1]);
+            if(distance<100 || distance>10000)throw std::runtime_error("Participant-origin contract offsets must be 1..100 meters away");
+        }
+        value.Contract=std::move(parsed);
+    }
     return value;
 }
 class Catalog {
@@ -227,12 +256,18 @@ class Catalog {
 public:
     void Load(const std::string& mod,const Json& data) {
         auto next=entries;
-        const auto add=[&](const Json& item){auto value=Parse(mod,item);if(next.size()>=128 || !next.emplace(value.Key,std::move(value)).second)throw std::runtime_error("Duplicate event ID or event limit exceeded");};
+        const auto add=[&](const Json& item){auto value=Parse(mod,item);
+            if(value.Contract && std::any_of(next.begin(),next.end(),[&](const auto& entry){return entry.second.Contract && entry.second.Contract->Quest==value.Contract->Quest;}))
+                throw std::runtime_error("A quest can belong to only one contract encounter");
+            if(next.size()>=128 || !next.emplace(value.Key,std::move(value)).second)throw std::runtime_error("Duplicate event ID or event limit exceeded");};
         if(data.is_array())for(const auto& item:data)add(item);else add(data);
         entries=std::move(next);
     }
     const Definition& Find(const std::string& key) const {
         const auto it=entries.find(key);if(it==entries.end())throw std::runtime_error("Missing event: "+key);return it->second;
+    }
+    bool IsContractQuest(const std::string& quest) const {
+        return std::any_of(entries.begin(),entries.end(),[&](const auto& entry){return entry.second.Contract && entry.second.Contract->Quest==quest;});
     }
 };
 enum class State { Idle, Active, Complete, Cancelled, Failed };

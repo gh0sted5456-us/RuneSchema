@@ -15,8 +15,8 @@ function Assignment-Value([string]$Name) {
 }
 $version = Assignment-Value 'Version'
 $pattern = Assignment-Value 'releaseVersionPattern'
-Require ($version -eq '0.8.0.0') 'This release must be 0.8.0.0'
-foreach ($valid in @('0.8.0', '0.8.0.0', '1.0.0', '0.7.7.9m', '0.7.7.9e', '0.7.8.0-alpha', '0.7.8.0-alpha.2')) {
+Require ($version -eq '0.8.0.1') 'This release must be 0.8.0.1'
+foreach ($valid in @('0.8.0', '0.8.0.0', '0.8.0.1', '1.0.0', '0.7.7.9m', '0.7.7.9e', '0.7.8.0-alpha', '0.7.8.0-alpha.2')) {
     Require ($valid -cmatch $pattern) "Build rejects supported version $valid"
 }
 foreach ($invalid in @('0.8', '0.8.0garbage', '../0.8.0', '0.8.0.0.0', '0.7.7.9M')) {
@@ -36,11 +36,11 @@ Require ((Read-Source 'source/raw/CMakeLists.txt').Contains('project(RuneSchema 
 Require ((Read-Source 'source/helpy/source/include/Core/HelpyBranding.h').Contains('Version[]="'+$version+'";')) 'RSMK display version differs'
 Require ((Read-Source 'source/helpy/CMakeLists.txt').Contains('project(Helpy VERSION '+$version+' LANGUAGES')) 'RSMK CMake version differs'
 $resources = Read-Source 'source/helpy/source/resources/RSMK.rc'
-Require ($resources.Contains('FILEVERSION 0,8,0,0') -and $resources.Contains('PRODUCTVERSION 0,8,0,0')) 'RSMK numeric Windows version differs'
-Require ($resources.Contains('"FileVersion", "0.8.0.0"') -and $resources.Contains('"ProductVersion", "0.8.0.0"')) 'RSMK Windows display version differs'
+Require ($resources.Contains('FILEVERSION 0,8,0,1') -and $resources.Contains('PRODUCTVERSION 0,8,0,1')) 'RSMK numeric Windows version differs'
+Require ($resources.Contains('"FileVersion", "0.8.0.1"') -and $resources.Contains('"ProductVersion", "0.8.0.1"')) 'RSMK Windows display version differs'
 $coreResources = Read-Source 'source/raw/resources/RuneSchema.rc'
-Require ($coreResources.Contains('FILEVERSION 0,8,0,0') -and $coreResources.Contains('PRODUCTVERSION 0,8,0,0')) 'Core numeric Windows version differs'
-Require ($coreResources.Contains('"FileVersion", "0.8.0.0"') -and $coreResources.Contains('"ProductVersion", "0.8.0.0"')) 'Core Windows display version differs'
+Require ($coreResources.Contains('FILEVERSION 0,8,0,1') -and $coreResources.Contains('PRODUCTVERSION 0,8,0,1')) 'Core numeric Windows version differs'
+Require ($coreResources.Contains('"FileVersion", "0.8.0.1"') -and $coreResources.Contains('"ProductVersion", "0.8.0.1"')) 'Core Windows display version differs'
 foreach ($plugin in @('RuneSchema.Helpy', 'RSNetworking', 'RuneSchema.RegistryBridge', 'RuneSchema.QuestItems')) {
     $manifest = Read-Source "source/plugins/$plugin/plugin.json" | ConvertFrom-Json
     Require ($manifest.Version -eq $version -and $manifest.BuiltForRuneSchema -eq $version) "Plugin $plugin has mismatched release metadata"

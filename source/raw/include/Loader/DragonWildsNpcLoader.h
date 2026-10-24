@@ -60,6 +60,7 @@ namespace DragonWilds {
         std::function<void(const std::string&,const std::string&)> PublishWorldState;
         std::function<bool(RC::Unreal::AActor*,const std::string&)> PresentEventIdentity;
         std::function<bool(RC::Unreal::UObject*,const std::string&)> OpenLore;
+        std::function<std::optional<bool>(RC::Unreal::UObject*,const std::string&)> LoreRead;
         std::function<void(RC::Unreal::UObject*)> DeliverAutomaticJournals;
         std::function<bool(RC::Unreal::UObject*,const std::string&)> UnlockJournal;
         void ObserveEventDespawn(RC::Unreal::UObject* source,RC::Unreal::UFunction* function);
@@ -116,6 +117,7 @@ namespace DragonWilds {
             std::string StoreOwner;
             std::string DialogueKey;
             std::string LoreEntry;
+            LoreBookPresentation::Config LorePresentation;
             std::vector<std::string> JournalEntries;
             std::string QuestKey;
             std::string RequiredFlag;
@@ -216,6 +218,9 @@ namespace DragonWilds {
         Events::Runtime m_events;
         double m_questLocationElapsed=0;
         unsigned m_questLocationChecks=0;
+        bool m_pruningQuestProgress=false;
+        std::vector<PS::WeakObjectHandle> m_questPruneAttempts;
+        void PruneLoadedQuestProgress(RC::Unreal::UObject* controller);
         void PumpQuestLocations(float deltaSeconds);
         struct PendingQuestLocationRefresh {
             PS::WeakObjectHandle Controller;
@@ -336,6 +341,11 @@ namespace DragonWilds {
             int32_t Serial = 0;
         };
         std::vector<SpawnedVendor> m_spawnedVendors;
+        struct LoreVisual {PS::WeakObjectHandle Actor,Glow;std::string Mesh;};
+        std::unordered_map<std::string,LoreVisual> m_loreVisuals;
+        std::unordered_set<std::string> m_loreVisualFailed;
+        double m_loreVisualElapsed=0;size_t m_loreVisualCursor=0;
+        void PumpLoreVisuals(float deltaSeconds);
         struct RetiredVendor {
             const RC::Unreal::UObject* Address=nullptr;
             int32_t Index=-1;
@@ -513,6 +523,10 @@ namespace DragonWilds {
 
         bool WarnOnce(const std::string& key, const RC::StringType& message);
         bool ErrorOnce(const std::string& key, const RC::StringType& message);
+        bool ErrorOnceDiagnostic(const std::string& key, const RC::StringType& message,
+            const char* code, const char* title, const char* severity, const char* outcome,
+            const std::string& mod={}, const std::string& target={},
+            const char* phase="Application", bool preserveLegacy=false);
         static std::string ActorKey(RC::Unreal::AActor* actor,
             const VendorDefinition& definition);
     };

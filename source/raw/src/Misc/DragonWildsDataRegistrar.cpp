@@ -31,10 +31,14 @@
 #include "SDK/Structs/Custom/FScriptSetHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Helper/ActorHelper.h"
+#include "SDK/Helper/ReflectedContract.h"
 #include "Utility/Logging.h"
+#include "Utility/StartupTrace.h"
+#include "Utility/StructuredDiagnosticB3C.h"
 #include "Utility/Config.h"
 #include "Core/ConfigFiles.h"
 #include "Core/CookedPakRegistryManifest.h"
+#include "Core/CookedEnumContract.h"
 #include "Core/HelpyCacheSources.h"
 #include "Core/RegistryEnrollment.h"
 #include "Core/NetworkIdentityPlan.h"
@@ -45,9 +49,14 @@
 #include "Loader/QuestNativeRegistry.h"
 #include "Core/RegistryProvenance.h"
 #include "Core/SaveCleanup.h"
+#include "Core/LoadProtectionNotice.h"
 #include "Core/SaveRegistrySnapshot.h"
+#include "Core/HelpySourceCache.h"
+#include "Core/ItemSource.h"
 #include "Runtime/Storefront.h"
 #include "Runtime/HostServices.h"
+#include "Runtime/NativePersistenceRecovery.h"
+#include "Core/CharacterLoadAudit.h"
 #include "Misc/DragonWildsDataRegistrar.h"
 #include "Loader/EquipmentWearableBridge.h"
 #include "Unreal/UAssetRegistryHelpers.hpp"
@@ -360,6 +369,8 @@ namespace DragonWilds {
             if (!std::filesystem::copy_file(source, backup,
                     std::filesystem::copy_options::none))
                 throw std::runtime_error("Character save backup was not created");
+            if(PS::ConfigFiles::Read(backup,CharacterSaveLimit)!=original)
+                throw std::runtime_error("Character save backup did not verify; original retained");
             return backup;
         }
 
@@ -452,15 +463,17 @@ namespace DragonWilds {
     static bool IsCharacterJsonLoadFunction(UFunction* function)
     {
         if (!function) return false;
+        static const FName playerState(TEXT("ProcessPlayerStateLoad"),FNAME_Add),persistentResult(TEXT("OnPersistentStoreLoadPlayerResult"),FNAME_Add),jsonState(TEXT("LoadStateFromJson"),FNAME_Add);
         const auto name = function->GetFName();
-        return name == FName(TEXT("ProcessPlayerStateLoad"), FNAME_Add)
-            || name == FName(TEXT("OnPersistentStoreLoadPlayerResult"), FNAME_Add)
-            || name == FName(TEXT("LoadStateFromJson"), FNAME_Add);
+        return name==playerState||name==persistentResult||name==jsonState;
     }
 
     static bool IsCombatComponentReadyFunction(UFunction* function)
     {
         if (!function) return false;
+        static const FName restart(TEXT("ClientRestart"),FNAME_Add),inventory(TEXT("OnInventoryLoadedFromSave"),FNAME_Add),personal(TEXT("OnPersonalInventoryLoadedFromSave"),FNAME_Add);
+        const auto name=function->GetFName();
+        if(name!=restart&&name!=inventory&&name!=personal)return false;
         const auto path = function->GetPathName();
         return path == TEXT("/Script/Engine.PlayerController:ClientRestart")
             || path == TEXT("/Script/Dominion.DominionPlayerController:OnInventoryLoadedFromSave")
@@ -470,7 +483,7 @@ namespace DragonWilds {
     static std::string RegistryFingerprint(
         const PS::SaveCleanup::RegistrySnapshot& snapshot)
     {
-        std::string result;
+        std::string result=std::to_string(snapshot.ItemsComplete)+std::to_string(snapshot.RecipesComplete)+std::to_string(snapshot.QuestsComplete)+std::to_string(snapshot.JournalsComplete)+":"+std::to_string(snapshot.QuestCompletedState.value_or(-1));
         const auto append = [&](char label,
             const std::unordered_set<std::string>& values) {
             std::vector<std::string_view> sorted;
@@ -492,6 +505,7 @@ namespace DragonWilds {
         append('R', snapshot.Recipes);
         append('Q', snapshot.Quests);
         append('J', snapshot.Journals);
+        for(const auto& [key,binding]:snapshot.Bindings)result+=key+"="+binding.Asset+"|"+binding.Class+"|"+binding.Owner+";";
         result += snapshot.QuestsComplete ? "Q1" : "Q0";
         result += snapshot.JournalsComplete ? "J1" : "J0";
         return result;
@@ -504,7 +518,9 @@ namespace DragonWilds {
         // stale subsystem maps and destabilize menu -> world re-entry.
         if (m_initialized) return;
 
+        const auto began=std::chrono::steady_clock::now();
         m_pruner.PrepareForStartup();
+        m_registrationThread=GetCurrentThreadId();
         if (!ResolveBindings()) return;
 
         const auto& combat = PS::PSConfig::Get()->GetSettings().combatFallback;
@@ -513,18 +529,31 @@ namespace DragonWilds {
             combat.enabled, combat.additionalWeapons, combat.manifestMelee,
             combat.rangedEquipment, combat.initialWorldMutation);
         PreloadMountedPersistenceAssets();
+        const auto discovered=std::chrono::steady_clock::now();
+        PS::StartupTrace::Mark("data registrar discovery complete");
 
         InstallHooks();
         m_initialized = true;
 
         RegisterAll();
+        const auto registered=std::chrono::steady_clock::now();
+        PS::StartupTrace::Mark("data registrar registration complete");
         // Capture twice during this single startup boundary so only an
         // identical, settled registry can authorize pruning. Nothing refreshes
         // or mutates the registries on later menu/world transitions.
         RegisterAll();
+        const auto confirmed=std::chrono::steady_clock::now();
+        PS::StartupTrace::Mark("data registrar confirmation complete");
         EquipmentWearableBridge::ReportDiagnostics();
         PS::NetworkIdentityState::FinishStartupBatch();
         CleanLocalCharacterSavesOnce();
+        const auto cleaned=std::chrono::steady_clock::now();
+        PS::StartupTrace::Mark("data registrar cleanup complete");
+        const auto milliseconds=[](auto start,auto end){return std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();};
+        PS::Log<LogLevel::Normal>(STR(
+            "[PERF][REGISTRY] discovery_ms={} registration_ms={} confirmation_ms={} cleanup_ms={} total_ms={}; required startup work only, not total game loading.\n"),
+            milliseconds(began,discovered),milliseconds(discovered,registered),
+            milliseconds(registered,confirmed),milliseconds(confirmed,cleaned),milliseconds(began,cleaned));
         PS::Log<LogLevel::Normal>(STR(
             "[REGISTRY][LIFECYCLE][SEALED] Startup registration completed once for this game execution; world transitions are read-only.\n"));
     }
@@ -541,10 +570,10 @@ namespace DragonWilds {
         }
 
         const auto registry = PS::SaveCleanup::ReadRegistry();
-        if (!registry || !registry->Ready())
+        if (!registry || !registry->AnyCleanable())
         {
             PS::Log<LogLevel::Warning>(STR(
-                "[PERSISTENCE-PRUNER][STARTUP][UNCHANGED] Complete stable item and recipe registries were unavailable; no character file was modified.\n"));
+                "[PERSISTENCE-PRUNER][STARTUP][UNCHANGED] Cleanup skipped: complete stable item and recipe registries were unavailable; no character file was modified. Non-blocking: native loading continues.\n"));
             return;
         }
 
@@ -584,11 +613,13 @@ namespace DragonWilds {
                 auto startupRegistry = *registry;
                 startupRegistry.QuestsComplete = false;
                 startupRegistry.JournalsComplete = false;
-                const auto plan = PS::SaveCleanup::Plan(source, {}, false,
-                    &startupRegistry, false, true, true);
+                auto plan = PS::SaveCleanup::PlanAvailable(source,startupRegistry);
+                for(const auto& skipped:plan.Skipped)PS::Log<LogLevel::Verbose>(STR("[PERSISTENCE-PRUNER][STARTUP][SECTION-SKIPPED] {}: {}. Other sections continue.\n"),
+                    PS::ToWideSafe(skipped.at("Section").get<std::string>()),PS::ToWideSafe(skipped.at("Reason").get<std::string>()));
                 if (plan.Removed.empty()) continue;
                 ReplaceCharacterSave(entry.path(), original, plan.Save,
                     decoded.Utf16Le);
+                if(source.contains("meta_data")&&source["meta_data"].is_object())PS::LoadProtectionNotice::Record(source["meta_data"].value("char_guid",std::string{}),plan.Removed.size(),0,false);
                 ++changed;
                 removed += plan.Removed.size();
                 for (const auto& row : plan.Removed)
@@ -628,13 +659,19 @@ namespace DragonWilds {
                 : nullptr;
             if (!dataClass || !subsystemClass)
             {
-                PS::Log<LogLevel::Warning>(STR("Registry pair {} -> {} was not found and won't be handled.\n"),
+                PS::LogStructuredFallback<LogLevel::Warning>(
+                    PS::StructuredDiagnosticB3C::Report("RS-RGST-008","Warning","Skipped","RegistryLoader",
+                    "Native registry binding unavailable","A configured DataClass / Subsystem pair could not be resolved.",{}, {},RC::to_string(binding.DataClassPath),"Resolution"),
+                    STR("Registry pair {} -> {} was not found and won't be handled.\n"),
                     binding.DataClassPath, binding.SubsystemClassPath);
                 continue;
             }
             if (binding.ExcludedClassPath && !excludedClass)
             {
-                PS::Log<LogLevel::Warning>(STR(
+                PS::LogStructuredFallback<LogLevel::Warning>(
+                    PS::StructuredDiagnosticB3C::Report("RS-RGST-009","Warning","Blocked","RegistryLoader",
+                    "Native registry exclusion unavailable","Registration is disabled to avoid cross-registry identities.",{}, {},RC::to_string(binding.DataClassPath),"Validation"),
+                    STR(
                     "Registry exclusion {} was not found; {} registration is disabled to prevent cross-registry IDs.\n"),
                     binding.ExcludedClassPath, binding.DataClassPath);
                 continue;
@@ -646,7 +683,10 @@ namespace DragonWilds {
 
         if (m_bindings.empty())
         {
-            PS::Log<LogLevel::Error>(STR("Unable to initialize the Data Registrar, no registry subsystems were found.\n"));
+            PS::LogStructuredFallback<LogLevel::Error>(
+                PS::StructuredDiagnosticB3C::Report("RS-RGST-010","Error","Blocked","RegistryLoader",
+                "Native registrar unavailable","No supported native registry subsystems could be initialized.",{}, {},"DataRegistrar","Resolution"),
+                STR("Unable to initialize the Data Registrar, no registry subsystems were found.\n"));
             return false;
         }
 
@@ -726,6 +766,39 @@ namespace DragonWilds {
 
             for (const auto& lane : manifest.AssetLanes)
             {
+                // Dedicated cooked-only enrollment runs at the existing startup boundary.
+                if(PS::NativeDataFamilies::Find(lane.Name))continue;
+                // Reflected base maps alone do not verify a subsystem's startup caches or consumers.
+                if(lane.Name=="Skills"||lane.Name=="SkillPerks"){
+                    const std::string reason=lane.Name=="Skills"?"SkillSubsystem enrollment is blocked until native ESkill consumers, UI order and save/network lifecycle are verified"
+                        :"SkillPerkSubsystem enrollment is blocked until native startup/cache and unlock lifecycle are verified";
+                    PS::RegistryEnrollment::RecordDeclaration(manifest.Owner,manifest.Source,reason);
+                    PS::Log<LogLevel::Warning>(STR("[NATIVE-REGISTRY][UNVERIFIED] owner='{}' lane='{}' declared={}: {}; no skill/perk registry or progress was modified.\n"),
+                        PS::ToWideSafe(manifest.Owner),PS::ToWideSafe(lane.Name),lane.Paths.size(),PS::ToWideSafe(reason));
+                    continue;
+                }
+                if(lane.Name=="Enums"){
+                    for(const auto& path:lane.Paths)try{
+                        auto* object=ActorHelper::ResolveObject(PS::ToWideSafe(path));
+                        auto* type=ActorHelper::ResolveClass(TEXT("/Script/Engine.UserDefinedEnum"));
+                        if(!object||!type||!object->IsA(type)||object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed|RF_NeedLoad|RF_NeedPostLoad|RF_NeedInitialization))
+                            ||PS::CookedPakRegistryManifest::Detail::Fold(RC::to_string(object->GetPathName()))!=PS::CookedPakRegistryManifest::Detail::Fold(path))
+                            throw std::runtime_error("Declared enum must resolve to its exact mod-owned, fully loaded UserDefinedEnum asset");
+                        auto* enumeration=static_cast<UEnum*>(object);const auto count=enumeration->NumEnums();
+                        if(count<1||count>256)throw std::runtime_error("Cooked enum symbol count exceeds byte bounds");
+                        PS::CookedEnumContract::Symbols symbols;for(const auto& pair:enumeration->ForEachName())symbols.emplace_back(RC::to_string(pair.Key.ToString()),pair.Value);
+                        if(symbols.size()!=static_cast<size_t>(count))throw std::runtime_error("Cooked enum symbol table changed while reading");
+                        const auto fingerprint=PS::CookedEnumContract::Fingerprint(manifest.Owner,path,symbols);
+                        const auto key="cooked-enum:"+PS::CookedPakRegistryManifest::Detail::Fold(path);
+                        PS::NetworkIdentityState::Publish(key,fingerprint);PS::NetworkIdentityState::PublishOwner(key,manifest.Owner,fingerprint);
+                        PS::Log<LogLevel::Normal>(STR("[COOKED-ENUM][VERIFIED] owner='{}' enum='{}' symbols={} fingerprint={}; cooked values retained without append/reindex or native property writes.\n"),
+                            PS::ToWideSafe(manifest.Owner),PS::ToWideSafe(path),symbols.size(),PS::ToWideSafe(fingerprint));
+                    }catch(const std::exception& error){
+                        PS::RegistryEnrollment::RecordDeclaration(manifest.Owner,manifest.Source,error.what());
+                        PS::Log<LogLevel::Warning>(STR("[COOKED-ENUM][REJECTED] owner='{}' enum='{}': {}; no enum or registry was modified.\n"),PS::ToWideSafe(manifest.Owner),PS::ToWideSafe(path),PS::ToWideSafe(error.what()));
+                    }
+                    continue;
+                }
                 // These lanes use the established journal/lore service for
                 // native registration, placement and unlock triggers.
                 if(lane.Name=="Journals"||lane.Name=="Lore"){
@@ -738,7 +811,11 @@ namespace DragonWilds {
                             verified=entry&&subsystem&&QuestRegistry::NativeRegistry::ResolvesPersistenceIdentity(subsystem,entry,true);
                         }catch(...){}
                         if(!verified){PS::RegistryEnrollment::Reject(manifest.Source,"schema journal/lore identity is not registered: "+path);
-                            PS::Log<LogLevel::Error>(STR("[NATIVE-REGISTRY][REJECTED] owner='{}' lane='{}' asset='{}': schema entry has no verified native journal identity; cleanup deferred.\n"),
+                            PS::LogStructuredFallback<LogLevel::Error>(
+                                PS::StructuredDiagnosticB3C::Report("RS-RGST-011","Error","Blocked","RegistryLoader",
+                                "Journal native identity unverified","The cooked journal entry has no verified native persistence identity; cleanup remains deferred.",
+                                manifest.Owner,manifest.Source,path,"Validation"),
+                                STR("[NATIVE-REGISTRY][REJECTED] owner='{}' lane='{}' asset='{}': schema entry has no verified native journal identity; cleanup deferred.\n"),
                                 PS::ToWideSafe(manifest.Owner),PS::ToWideSafe(lane.Name),PS::ToWideSafe(path));}
                     }
                     continue;
@@ -757,8 +834,12 @@ namespace DragonWilds {
                 if (binding == m_bindings.end())
                 {
                     if(lane.Name=="Items"||lane.Name=="Recipes"||lane.Name=="Quests")
-                        PS::RegistryEnrollment::Reject(manifest.Source,"required native registry binding is unavailable: "+lane.Name);
-                    PS::Log<LogLevel::Error>(STR(
+                        if(const auto kind=PS::RegistryEnrollment::KindForLane(lane.Name))PS::RegistryEnrollment::Reject(manifest.Source,"required native registry binding is unavailable: "+lane.Name,kind);
+                    PS::LogStructuredFallback<LogLevel::Error>(
+                        PS::StructuredDiagnosticB3C::Report("RS-RGST-012","Error","Blocked","RegistryLoader",
+                        "Cooked registry lane unavailable","Authoritative live registry binding is unavailable; nothing in this lane was registered.",
+                        manifest.Owner,manifest.Source,lane.Name,"Validation"),
+                        STR(
                         "[PAK-REGISTRY][REJECTED] owner='{}' lane='{}': authoritative live registry binding is unavailable; no registry was modified.\n"),
                         PS::ToWideSafe(manifest.Owner.c_str()),
                         PS::ToWideSafe(lane.Name.c_str()));
@@ -791,10 +872,14 @@ namespace DragonWilds {
                 if (!valid)
                 {
                     if(lane.Name=="Items"||lane.Name=="Recipes"||lane.Name=="Quests")
-                        PS::RegistryEnrollment::Reject(manifest.Source,"unresolved or wrong-class "+lane.Name+": "+failedPath);
+                        if(const auto kind=PS::RegistryEnrollment::KindForLane(lane.Name))PS::RegistryEnrollment::Reject(manifest.Source,"unresolved or wrong-class "+lane.Name+": "+failedPath,kind);
                     m_rejectedManifestAssets.insert(
                         resolvedObjects.begin(), resolvedObjects.end());
-                    PS::Log<LogLevel::Error>(STR(
+                    PS::LogStructuredFallback<LogLevel::Error>(
+                        PS::StructuredDiagnosticB3C::Report("RS-RGST-013","Error","Blocked","RegistryLoader",
+                        "Cooked registry lane rejected","One or more declared objects are unresolved or of the wrong class; the lane is atomic.",
+                        manifest.Owner,manifest.Source,failedPath,"Validation"),
+                        STR(
                         "[PAK-REGISTRY][REJECTED] owner='{}' lane='{}' unresolved_or_wrong_class='{}': the lane is atomic and no declared object from it will be registered.\n"),
                         PS::ToWideSafe(manifest.Owner.c_str()),
                         PS::ToWideSafe(lane.Name.c_str()),
@@ -824,14 +909,21 @@ namespace DragonWilds {
         }
         catch (const std::exception& error)
         {
-            PS::Log<LogLevel::Warning>(STR(
+            PS::LogStructuredFallback<LogLevel::Warning>(
+                PS::StructuredDiagnosticB3C::Report("RS-RGST-014","Warning","Partial","RegistryLoader",
+                "Cooked asset discovery unavailable",error.what(),{}, {},"MountedAssetRegistry","Discovery"),
+                STR(
                 "[REGISTRY][PAK-DISCOVERY][SKIPPED] Live Asset Registry query failed: {}; already-loaded PAK assets will still be registered.\n"),
                 PS::ToWideSafe(error.what()));
             return;
         }
         catch (...)
         {
-            PS::Log<LogLevel::Warning>(STR(
+            PS::LogStructuredFallback<LogLevel::Warning>(
+                PS::StructuredDiagnosticB3C::Report("RS-RGST-014","Warning","Partial","RegistryLoader",
+                "Cooked asset discovery unavailable","An unknown exception interrupted enumeration; already loaded assets remain available.",
+                {},{},"MountedAssetRegistry","Discovery"),
+                STR(
                 "[REGISTRY][PAK-DISCOVERY][SKIPPED] Live Asset Registry query failed with an unknown error; already-loaded PAK assets will still be registered.\n"));
             return;
         }
@@ -881,7 +973,11 @@ namespace DragonWilds {
             }
             if (candidates.size() > MaxPersistencePreloads)
             {
-                PS::Log<LogLevel::Error>(STR(
+                PS::LogStructuredFallback<LogLevel::Error>(
+                    PS::StructuredDiagnosticB3C::Report("RS-RGST-015","Error","Blocked","RegistryLoader",
+                    "Cooked discovery safety cap exceeded","Candidate persistence assets exceeded the 32768-entry safety limit; no partial catalog was loaded.",
+                    {},{},"MountedAssetRegistry","Validation"),
+                    STR(
                     "[REGISTRY][PAK-DISCOVERY][ABORTED] {} mod persistence assets exceed the safe ceiling of {}; no partial catalog was loaded.\n"),
                     candidates.size(), MaxPersistencePreloads);
                 return;
@@ -978,6 +1074,11 @@ namespace DragonWilds {
 
     void DragonWildsDataRegistrar::Shutdown()
     {
+        (void)PS::CharacterLoadAudit::End(m_nativePolicyAttempt);
+        m_nativePolicyContext=nullptr;m_nativePolicyFunction=nullptr;m_nativePolicyParameters=nullptr;
+        if(m_characterJsonPostHook!=Hook::ERROR_ID)Hook::UnregisterCallback(m_characterJsonPostHook);
+        m_characterJsonPostHook=Hook::ERROR_ID;
+        m_prepareCharacterRegistries={};
         if (m_characterJsonHook != Hook::ERROR_ID)
             Hook::UnregisterCallback(m_characterJsonHook);
         m_characterJsonHook = Hook::ERROR_ID;
@@ -1017,6 +1118,19 @@ namespace DragonWilds {
         Hook::FCallbackOptions preflightOptions{};
         preflightOptions.OwnerModName = TEXT("RuneSchema");
         preflightOptions.HookName = TEXT("CharacterJsonSavePreflight");
+        auto postOptions=preflightOptions;postOptions.HookName=TEXT("CharacterNativePolicyRestore");
+        m_characterJsonPostHook=Hook::RegisterProcessEventPostCallback(
+            [this](Hook::TCallbackIterationData<void>&,UObject* source,UFunction* function,void* parameters){
+                if(!m_nativePolicyContext||source!=m_nativePolicyContext||function!=m_nativePolicyFunction
+                    ||parameters!=m_nativePolicyParameters||GetCurrentThreadId()!=m_registrationThread)return;
+                m_nativePolicyContext=nullptr;m_nativePolicyFunction=nullptr;m_nativePolicyParameters=nullptr;
+                PS::NativePersistenceRecovery::EnsureSessionPolicy(source);
+                if(const auto receipt=PS::CharacterLoadAudit::End(m_nativePolicyAttempt)){
+                    const auto report=[&]<auto Level>(){PS::Log<Level>(STR("[CHARACTER-LOAD][HANDLER-RETURNED] load={} registry_pruned={} validation_bypasses={} player_state_bypasses={} attribution_ambiguous={}; world entry and persisted save are not yet verified.\n"),receipt->Token,receipt->RegistryPruned,receipt->ValidationBypasses,receipt->PlayerStateBypasses,receipt->Ambiguous);};
+                    if(receipt->RegistryPruned||receipt->ValidationBypasses||receipt->PlayerStateBypasses||receipt->Ambiguous)report.template operator()<LogLevel::Normal>();
+                    else report.template operator()<LogLevel::Verbose>();
+                }
+            },postOptions);
         m_characterJsonHook = Hook::RegisterProcessEventPreCallback(
             [this](Hook::TCallbackIterationData<void>&, UObject* source,
                 UFunction* function, void* parameters) {
@@ -1094,7 +1208,78 @@ namespace DragonWilds {
     void DragonWildsDataRegistrar::ScrubCharacterJsonBeforeLoad(
         UObject* context, UFunction* function, void* parameters)
     {
-        m_pruner.PruneBeforeCharacterLoad(context, function, parameters);
+        if(GetCurrentThreadId()==m_registrationThread)PS::NativePersistenceRecovery::EnsureSessionPolicy(context);
+        // This is targeted, idempotent preparation of already-declared quests,
+        // not another RegisterAll()/asset scan. Run it before payload inspection
+        // even if the load event precedes InitGameState's ready notification.
+        if(m_prepareCharacterRegistries)try{m_prepareCharacterRegistries(context);}
+        catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR(
+            "[PERSISTENCE-PRUNER][PENDING-IDENTITIES] Quest preparation is incomplete: {}. Only declared pending identities are retained; general cleanup continues.\n"),PS::ToWideSafe(error.what()));}
+        if(m_nativePolicyContext)PS::CharacterLoadAudit::Ambiguous();
+        const auto auditToken=m_characterJsonPostHook!=Hook::ERROR_ID&&!m_nativePolicyContext&&GetCurrentThreadId()==m_registrationThread?PS::CharacterLoadAudit::Begin():0;
+        bool gameplayPayload=false;
+        try{gameplayPayload=m_pruner.PruneBeforeCharacterLoad(context,function,parameters);}
+        catch(...){if(auditToken)(void)PS::CharacterLoadAudit::End(auditToken);throw;}
+        if(!gameplayPayload){if(auditToken)(void)PS::CharacterLoadAudit::End(auditToken);return;}
+        if(!auditToken)return;
+        m_nativePolicyAttempt=auditToken;
+        m_nativePolicyContext=context;m_nativePolicyFunction=function;m_nativePolicyParameters=parameters;
+    }
+
+    void DragonWildsDataRegistrar::RegisterDeclaredNativeFamilies()
+    {
+        for(const auto& manifest:PS::CookedPakRegistryManifest::Snapshot())for(const auto& lane:manifest.AssetLanes){
+            const auto* family=PS::NativeDataFamilies::Find(lane.Name);if(!family)continue;
+            const auto reportKey="cooked-family:"+manifest.Source+":"+lane.Name;
+            try{
+                auto* dataType=ActorHelper::ResolveClass(PS::ToWideSafe(family->DataClass));
+                auto* subsystemType=ActorHelper::ResolveClass(PS::ToWideSafe(family->Subsystem));
+                if(!dataType||!subsystemType)throw std::runtime_error("Native data family classes are unavailable");
+                const std::set<RC::StringType> fields{TEXT("DataPaths"),TEXT("AssetNameToDataMap"),TEXT("PersistenceIDToDataMap"),TEXT("InternalNameToDataMap"),TEXT("NetIdToData"),TEXT("DataToNetIdMap")};
+                for(auto* field:TFieldRange<FProperty>(subsystemType,EFieldIterationFlags::Default))
+                    if(!fields.contains(field->GetName()))throw std::runtime_error("Native family has additional reflected state; a dedicated lifecycle adapter is required");
+                std::vector<UObject*> objects;std::vector<PS::NativeDataFamilies::Identity> identities;
+                for(const auto& path:lane.Paths){
+                    auto* object=ActorHelper::ResolveObject(PS::ToWideSafe(path));
+                    if(!object||!object->IsA(dataType)||!object->HasAnyFlags(RF_WasLoaded)||PS::AssetMetadata::IsIncomplete(object)
+                        ||PS::CookedPakRegistryManifest::Detail::Fold(RC::to_string(object->GetPathName()))!=PS::CookedPakRegistryManifest::Detail::Fold(path))throw std::runtime_error("Unresolved, incomplete or wrong-class cooked asset: "+path);
+                    auto* deleted=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),TEXT("bSoftDeleted")));
+                    auto* migration=CastField<FObjectPropertyBase>(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),TEXT("MigrationDataAsset")));
+                    const auto objectSize=object->GetClassPrivate()->GetPropertiesSize();
+                    if(!ReflectedContract::Fits(deleted,objectSize)||!ReflectedContract::Fits(migration,objectSize)
+                        ||deleted->GetPropertyValueInContainer(object)||migration->GetObjectPropertyValue(migration->ContainerPtrToValuePtr<void>(object)))throw std::runtime_error("Retired/migrating native assets remain under the game's migration policy");
+                    const auto text=[&](const TCHAR* field){
+                        auto* property=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),field));
+                        if(!property||property->GetArrayDim()!=1)throw std::runtime_error("Native family identity field changed");
+                        const auto value=property->GetPropertyValue(property->ContainerPtrToValuePtr<void>(object));const auto& chars=value.GetCharArray();
+                        if(chars.Num()<2||chars.Num()>1025||!chars.GetData()||chars.GetData()[chars.Num()-1]!=0)throw std::runtime_error("Native family identity is empty or malformed");
+                        return RC::to_string(RC::StringType(chars.GetData(),chars.Num()-1));
+                    };
+                    identities.push_back({text(TEXT("PersistenceID")),text(TEXT("InternalName")),RC::to_string(object->GetName()),path,objects.size()});objects.push_back(object);
+                }
+                const auto ordered=PS::NativeDataFamilies::Order(std::move(identities));
+                TArray<UObject*> subsystems;UECustom::UObjectGlobals::GetObjectsOfClass(subsystemType,subsystems,true);std::size_t enrolled=0;
+                for(auto* subsystem:subsystems){
+                    const auto invalid=static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed|RF_NeedLoad|RF_NeedPostLoad|RF_NeedInitialization);
+                    if(!subsystem||subsystem->HasAnyFlags(invalid))continue;
+                    if(subsystem->GetClassPrivate()!=subsystemType)throw std::runtime_error("Derived native family subsystem needs its own verified lifecycle adapter");
+                    auto* instance=subsystem->GetOuterPrivate();
+                    // Validate all aliases against this instance before the first asset commits.
+                    for(const auto& record:ordered)QuestRegistry::NativeRegistry::RegisterFamily(subsystem,instance,objects[record.SourceIndex],*family,false);
+                    const auto before=AuditNetworkRegistry(subsystem);if(!before.Valid)throw std::runtime_error("Existing native network identities do not round-trip: "+before.Detail);
+                    for(const auto& record:ordered)QuestRegistry::NativeRegistry::RegisterFamily(subsystem,instance,objects[record.SourceIndex],*family);
+                    const auto after=AuditNetworkRegistry(subsystem);if(!after.Valid)throw std::runtime_error("Native family network verification failed: "+after.Detail);
+                    const auto key="network:"+lane.Name+":"+family->Subsystem;
+                    PS::NetworkIdentityState::Publish(key,after.Fingerprint);PS::NetworkIdentityState::PublishOwner(key,manifest.Owner,after.Fingerprint);
+                    enrolled+=ordered.size();
+                }
+                if(!enrolled)throw std::runtime_error("No ready owning GameInstance subsystem at startup; no late-world mutation attempted");
+                if(m_registryStatusReported.insert(reportKey+":ready").second)PS::Log<LogLevel::Normal>(STR("[NATIVE-REGISTRY][ENROLLED] owner='{}' lane='{}' identities={}; cooked behavior retained; consumer lifecycle still requires mod testing.\n"),PS::ToWideSafe(manifest.Owner),PS::ToWideSafe(lane.Name),enrolled);
+            }catch(const std::exception& error){
+                PS::RegistryEnrollment::RecordDeclaration(manifest.Owner,manifest.Source,lane.Name+": "+error.what());
+                if(m_registryStatusReported.insert(reportKey+":rejected").second)PS::Log<LogLevel::Warning>(STR("[NATIVE-REGISTRY][REJECTED] owner='{}' lane='{}': {}; other families and save cleanup continue independently.\n"),PS::ToWideSafe(manifest.Owner),PS::ToWideSafe(lane.Name),PS::ToWideSafe(error.what()));
+            }
+        }
     }
 
     void DragonWildsDataRegistrar::RegisterAll()
@@ -1115,7 +1300,6 @@ namespace DragonWilds {
         std::vector<ManifestAttackCollection> rangedDiscoveredCollections;
         // The settled live registries remain authoritative. PAK discovery is
         // a one-time loading aid, not a second ownership or pruning ledger.
-        bool registrationsComplete = true;
 
         for (const auto& binding : m_bindings)
         {
@@ -1157,8 +1341,6 @@ namespace DragonWilds {
                         "[REGISTRY][{}][ADDED] count={} subsystem='{}' verified={}.\n"),
                         binding.StatusTag, added,
                         subsystem->GetClassPrivate()->GetName(), registered);
-                if (binding.CleanupAuthority)
-                    registrationsComplete = registered && registrationsComplete;
 
                 auto* idMapProperty = CastField<FMapProperty>(
                     PropertyHelper::GetPropertyByName(
@@ -1253,9 +1435,12 @@ namespace DragonWilds {
                     rangedDiscoveredCollections.push_back(std::move(discovered));
                 });
             }
+            const bool cleanBinding=foundSubsystem&&foundIdentityMap&&bindingVerified;
+            if(dataClass->GetPathName()==ItemDataClassPath)itemsReady=itemsReady&&cleanBinding;
+            if(dataClass->GetPathName()==RecipeDataClassPath)recipesReady=recipesReady&&cleanBinding;
+            if(dataClass->GetPathName()==QuestDataClassPath)questsReady=questsReady&&cleanBinding;
             if (!foundSubsystem && binding.CleanupAuthority)
             {
-                registrationsComplete = false;
                 const auto statusKey = RC::to_string(
                     RC::StringType(binding.StatusTag));
                 if (!m_registryWaitingReported.contains(statusKey))
@@ -1304,7 +1489,11 @@ namespace DragonWilds {
             }
         }
 
+        // Enroll dependent cooked families only after the established item/recipe/spell passes.
+        RegisterDeclaredNativeFamilies();
+        snapshot.ItemsComplete=itemsReady;snapshot.RecipesComplete=recipesReady;
         snapshot.QuestsComplete = questsReady && !snapshot.Quests.empty();
+        snapshot.QuestCompletedState=QuestRegistry::NativeRegistry::CompletedState();
         if (auto* journalClass = UECustom::UObjectGlobals::StaticFindObject<UClass*>(
                 nullptr, nullptr, JournalSubsystemClassPath, false))
         {
@@ -1327,7 +1516,7 @@ namespace DragonWilds {
                         journalMapProperty,
                         journalMapProperty->ContainerPtrToValuePtr<void>(
                             journalSubsystem));
-                    journalMap.ForEachPair([&](void* keyPtr, void*) {
+                    journalMap.ForEachPair([&](void* keyPtr, void* valuePtr) {
                         auto* key = static_cast<FString*>(keyPtr);
                         if (key && key->GetCharArray().Num() > 1)
                             snapshot.Journals.insert(RC::to_string(
@@ -1337,7 +1526,7 @@ namespace DragonWilds {
                 }
             }
         }
-        if (itemsReady && recipesReady && registrationsComplete)
+        if (snapshot.AnyCleanable())
         {
             // Never prune from the first apparently complete view. A second
             // identical capture must prove that late native and mod
@@ -1371,11 +1560,11 @@ namespace DragonWilds {
             {
                 m_registrySummaryReported = true;
                 const auto published=PS::SaveCleanup::ReadRegistry();
-                if(published&&published->Ready())PS::Log<LogLevel::Normal>(STR(
-                    "[REGISTRY][PERSISTENCE-PRUNER][READY] base game and loaded paks: items={}, recipes={}, quests={}, journal={}.\n"),
+                if(published&&published->AnyCleanable())PS::Log<LogLevel::Normal>(STR(
+                    "[REGISTRY][PERSISTENCE-PRUNER][READY] base game and loaded paks: items={}, recipes={}, quests={}, journal={}. Each section uses its own certification; unavailable sections do not block other cleanup.\n"),
                     snapshot.Items.size(), snapshot.Recipes.size(),
                     snapshot.Quests.size(), snapshot.Journals.size());
-                else PS::Log<LogLevel::Warning>(STR("[REGISTRY][PERSISTENCE-PRUNER][DEFERRED] Registry enrollment is not certified; automatic character pruning remains disabled. Individually verified content can remain active.\n"));
+                else PS::Log<LogLevel::Warning>(STR("[REGISTRY][PERSISTENCE-PRUNER][DEFERRED] Registry enrollment is not certified; automatic character pruning remains disabled. Non-blocking: native loading continues; individually verified content remains eligible for its own runtime checks.\n"));
             }
         }
         else

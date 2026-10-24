@@ -18,6 +18,19 @@ int main(int argc,char** argv){
     Check(verify!=std::string::npos&&enroll>verify);
     Check(loader.find("propertyName == \"$WearableBridge\"")!=std::string::npos);
     Check(loader.find("RefreshRegistered(object)")!=std::string::npos);
+    const auto refresh=loader.find("if(wearableRefresh&&!pendingAsset.Properties.contains(\"$Clone\")");
+    const auto deferred=loader.find("&&!PS::NetworkIdentityState::DeferItemEnrollment()",refresh);
+    Check(refresh!=std::string::npos&&deferred!=std::string::npos
+        &&deferred<loader.find("RefreshRegistered(object)",refresh));
+    const auto registrationBody=bridge.substr(bridge.find("inline void Register("),
+        bridge.find("inline void TryRegister(")-bridge.find("inline void Register("));
+    Check(registrationBody.find("helper.ForEachPair")==std::string::npos);
+    Check(registrationBody.find("helper.FindValue(&name)")!=std::string::npos);
+    Check(registrationBody.find("value->GetObjectPropertyValue(existing)!=item")!=std::string::npos);
+    Check(registrationBody.find("wearable enumeration insertion did not round-trip")!=std::string::npos);
+    const auto contains=bridge.substr(bridge.find("inline bool ContainsMesh("),
+        bridge.find("inline void BeforeEvaluation(")-bridge.find("inline bool ContainsMesh("));
+    Check(contains.find("ForEachPair")==std::string::npos&&contains.find("helper.FindValue(&mesh)")!=std::string::npos);
     Check(bridge.find("forwardValue->GetObjectPropertyValue(values.GetRawPtr(index))!=item")!=std::string::npos);
     Check(bridge.find("identityValue->GetObjectPropertyValue(stored)!=item")!=std::string::npos);
     Check(clone.find("AssetSearch::ItemMetadata(RC::to_string(iconSource->GetPathName()))")!=std::string::npos);

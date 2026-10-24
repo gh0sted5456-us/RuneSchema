@@ -22,6 +22,9 @@ inline Json Compact(const Json& row) {
     if(row.contains("Masterwork")&&row["Masterwork"].is_boolean())result["Masterwork"]=row["Masterwork"];
     if(row.contains("PowerLevel")&&row["PowerLevel"].is_number()&&std::isfinite(row["PowerLevel"].get<double>())&&row["PowerLevel"].get<double>()>=0)result["PowerLevel"]=row["PowerLevel"];
     if(row.contains("MaxStackSize")&&row["MaxStackSize"].is_number_integer()&&row["MaxStackSize"]>0&&row["MaxStackSize"]<=10000)result["MaxStackSize"]=row["MaxStackSize"];
+    if(row.contains("SlotStrategy")&&row["SlotStrategy"].is_string()&&row["SlotStrategy"].get_ref<const std::string&>().size()<=64)result["SlotStrategy"]=row["SlotStrategy"];
+    if(row.contains("NativeSlotVerified")&&row["NativeSlotVerified"].is_boolean())result["NativeSlotVerified"]=row["NativeSlotVerified"];
+    if(row.contains("NativeMagicAmmo")&&row["NativeMagicAmmo"].is_boolean())result["NativeMagicAmmo"]=row["NativeMagicAmmo"];
     return result;
 }
 inline Json Decode(const void* data,std::size_t bytes) {

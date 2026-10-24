@@ -10,6 +10,8 @@ std::string ToolReadableName(std::string path) {
 }
 bool ToolResourceClass(UClass* type,UClass* actorType,UClass* aiType) {
     if(!type||!type->IsChildOf(actorType)||type->IsChildOf(aiType))return false;
+    const auto path=PS::QuickCatalogRules::Lower(RC::to_string(type->GetPathName()));
+    for(const auto* noise:{"basebuilding","recipedispenser","decorationmaterial","projectile","attackeffect"})if(path.find(noise)!=path.npos)return false;
     // Discovery is not spawn permission. Keep real resource classes visible;
     // the shared spawn backend still validates save exclusion before mutation.
     // Persistence alone is not evidence that an actor is a resource: prefer
@@ -20,7 +22,7 @@ bool ToolResourceClass(UClass* type,UClass* actorType,UClass* aiType) {
     for(auto* property:TFieldRange<FProperty>(type,EFieldIterationFlags::Default)) {
         if(auto* component=CastField<FObjectProperty>(property)) {
             auto* componentType=component->GetPropertyClass().Get();if(!componentType)continue;
-            const auto n=PS::QuickUI::Lower(RC::to_string(componentType->GetName()));
+            const auto n=PS::QuickCatalogRules::Lower(RC::to_string(componentType->GetName()));
             for(const auto* token:{"resourcecomponent","harvestcomponent","harvestablecomponent","miningcomponent","fishingcomponent","gatherablecomponent"})
                 if(n.find(token)!=n.npos)return true;
         }
@@ -29,16 +31,56 @@ bool ToolResourceClass(UClass* type,UClass* actorType,UClass* aiType) {
     if(PropertyHelper::GetPropertyByName(type,TEXT("BuildingPieceDataIndex")))return false;
     size_t depth=0;
     for(UStruct* base=type;base&&depth++<64;base=base->GetSuperStruct()) {
-        const auto name=PS::QuickUI::Lower(RC::to_string(base->GetName()));
+        const auto name=PS::QuickCatalogRules::Lower(RC::to_string(base->GetName()));
         if(PS::QuickCatalogRules::MiningName(name)||PS::QuickCatalogRules::ResourceAncestry(name))return true;
     }
     return false;
+}
+// Read-only CDO measurements. Never spawn a resource just to measure it.
+// Ambiguous multipart/rotated assemblies deliberately remain unmeasured.
+void ToolPreviewHeight(UObject* defaults,nlohmann::json& row){
+    const auto number=[](UObject* object,const TCHAR* name)->std::optional<double>{
+        auto* p=CastField<FNumericProperty>(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),name));
+        if(!p||!p->IsFloatingPoint()||p->GetArrayDim()!=1||p->GetOffset_Internal()<0||p->GetOffset_Internal()+p->GetSize()>object->GetClassPrivate()->GetPropertiesSize())return {};
+        const double value=p->GetFloatingPointPropertyValue(p->ContainerPtrToValuePtr<void>(object));return std::isfinite(value)?std::optional<double>(value):std::nullopt;
+    };
+    try{
+        if(auto* capsule=ActorHelper::GetObjectRef(defaults,TEXT("CapsuleComponent")))if(auto half=number(capsule,TEXT("CapsuleHalfHeight"));half&&*half>0&&*half<50000){row["PreviewHeightCm"]=*half*2;row["PreviewHeightBasis"]="Native collision capsule (not visual mesh)";return;}
+        auto* componentType=ActorHelper::ResolveClass(TEXT("/Script/Engine.StaticMeshComponent"));if(!componentType)return;
+        std::set<UObject*> meshes;
+        for(auto* field:TFieldRange<FProperty>(defaults->GetClassPrivate(),EFieldIterationFlags::Default))if(auto* object=CastField<FObjectProperty>(field);object&&object->GetArrayDim()==1&&object->GetOffset_Internal()>=0&&object->GetOffset_Internal()+object->GetSize()<=defaults->GetClassPrivate()->GetPropertiesSize()){
+            auto* value=object->GetObjectPropertyValue(object->ContainerPtrToValuePtr<void>(defaults));if(value&&value->IsA(componentType))meshes.insert(value);
+        }
+        if(meshes.size()!=1)return;auto* component=*meshes.begin();auto* mesh=ActorHelper::GetObjectRef(component,TEXT("StaticMesh"));if(!mesh)return;
+        const auto axis=[](FStructProperty* structure,void* value,const TCHAR* key)->double{
+            if(!structure||!structure->GetStruct())throw std::runtime_error("Missing measured vector");
+            auto* p=CastField<FNumericProperty>(structure->GetStruct()->FindProperty(FName(key,FNAME_Find)));
+            if(!p||!p->IsFloatingPoint()||p->GetOffset_Internal()<0||p->GetOffset_Internal()+p->GetSize()>structure->GetSize())throw std::runtime_error("Measured vector layout changed");
+            return p->GetFloatingPointPropertyValue(p->ContainerPtrToValuePtr<void>(value));
+        };
+        auto* scale=CastField<FStructProperty>(PropertyHelper::GetPropertyByName(component->GetClassPrivate(),TEXT("RelativeScale3D")));
+        auto* rotation=CastField<FStructProperty>(PropertyHelper::GetPropertyByName(component->GetClassPrivate(),TEXT("RelativeRotation")));
+        const auto fits=[&](FProperty* p){return p&&p->GetOffset_Internal()>=0&&p->GetOffset_Internal()+p->GetSize()<=component->GetClassPrivate()->GetPropertiesSize();};
+        if(!fits(scale)||!fits(rotation))return;
+        const double z=std::abs(axis(scale,scale->ContainerPtrToValuePtr<void>(component),TEXT("Z")));
+        if(std::abs(axis(rotation,rotation->ContainerPtrToValuePtr<void>(component),TEXT("Pitch")))>.01||std::abs(axis(rotation,rotation->ContainerPtrToValuePtr<void>(component),TEXT("Roll")))>.01)return;
+        auto* fn=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,TEXT("/Script/Engine.StaticMesh:GetBoundingBox"));
+        if(!fn||!fn->HasAnyFunctionFlags(FUNC_Native)||fn->HasAnyFunctionFlags(FUNC_Net)||fn->GetParmsSize()>512)return;
+        auto* ret=CastField<FStructProperty>(fn->GetReturnProperty());if(!ret||!ret->GetStruct()||ret->GetStruct()->GetPathName()!=TEXT("/Script/CoreUObject.Box")||ret->GetOffset_Internal()<0||ret->GetOffset_Internal()+ret->GetSize()>fn->GetParmsSize())return;
+        for(auto* p:TFieldRange<FProperty>(fn,EFieldIterationFlags::Default))if(p->HasAnyPropertyFlags(CPF_Parm)&&!p->HasAnyPropertyFlags(CPF_ReturnParm))return;
+        std::vector<uint8_t> bytes(std::max<int>(1,fn->GetParmsSize()));mesh->ProcessEvent(fn,bytes.data());auto* box=ret->ContainerPtrToValuePtr<void>(bytes.data());
+        auto* lo=CastField<FStructProperty>(ret->GetStruct()->FindProperty(FName(TEXT("Min"),FNAME_Find)));auto* hi=CastField<FStructProperty>(ret->GetStruct()->FindProperty(FName(TEXT("Max"),FNAME_Find)));
+        if(!lo||!hi||lo->GetOffset_Internal()<0||hi->GetOffset_Internal()<0||lo->GetOffset_Internal()+lo->GetSize()>ret->GetSize()||hi->GetOffset_Internal()+hi->GetSize()>ret->GetSize())return;
+        const double height=(axis(hi,hi->ContainerPtrToValuePtr<void>(box),TEXT("Z"))-axis(lo,lo->ContainerPtrToValuePtr<void>(box),TEXT("Z")))*z;
+        if(std::isfinite(height)&&height>1&&height<100000){row["PreviewHeightCm"]=height;row["PreviewHeightBasis"]="Native single-mesh local bounds (component Z scale)";}
+    }catch(...){} // Missing measurements are not guessed from names.
 }
 nlohmann::json ToolDefinitionRow(UClass* type,const std::string& key,bool ai,const std::string& kind={}) {
     const auto path=RC::to_string(type->GetPathName());const bool concrete=!ActorHelper::IsAbstract(type);
     nlohmann::json row={{"Key",key},{"Name",ToolReadableName(path)},{"Class",path},{"Type",kind.empty()?(ai?"AI":"Resource"):kind},
         {"Available",concrete},{"Loaded",true},{"Reason",concrete?"":"Abstract base definition; not spawnable"}};
     row["Packaged"]=PS::CookedAssets::VerifiedLoadedObject(type);
+    if(ai){auto* native=ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionAICharacter"));row["SpawnableCharacter"]=native&&type->IsChildOf(native)&&concrete;}
     const auto declared=PS::AssetMetadata::Lookup(type);
     row["RuneSchemaManaged"]=PS::AssetMetadata::IsManaged(type);row["DeclaredModded"]=declared.modded.value_or(false);row["DeclaredCooked"]=declared.cooked.value_or(false);
     if(kind=="NPC") {
@@ -49,7 +91,7 @@ nlohmann::json ToolDefinitionRow(UClass* type,const std::string& key,bool ai,con
         std::string family;
         std::size_t depth=0;
         for(UStruct* base=type;base&&depth++<64;base=base->GetSuperStruct()) {
-            const auto name=PS::QuickUI::Lower(RC::to_string(base->GetName()));
+            const auto name=PS::QuickCatalogRules::Lower(RC::to_string(base->GetName()));
             if(name.find("fellabletree")!=name.npos||name.find("felledtree")!=name.npos||name.find("splittablelog")!=name.npos||name.find("sapling")!=name.npos){family="Tree";break;}
             if(PS::QuickCatalogRules::MiningName(name))family="Mineral";
         }
@@ -57,6 +99,9 @@ nlohmann::json ToolDefinitionRow(UClass* type,const std::string& key,bool ai,con
     }
     // Presentation only: no writes and no fabricated default level.
     if(auto* defaults=type->GetClassDefaultObject().Get();defaults&&!defaults->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed|RF_NeedLoad|RF_NeedPostLoad))) {
+        ToolPreviewHeight(defaults,row);
+        row["Icon"]=PS::AssetSearch::PresentationIcon(defaults);
+        if(const auto display=PS::AssetSearch::PresentationName(defaults);!display.empty()){row["Name"]=display;row["DisplayName"]=display;}
         if(auto* power=CastField<FNumericProperty>(PropertyHelper::GetPropertyByName(type,TEXT("PowerLevel")));power&&power->GetArrayDim()==1) {
             const auto offset=power->GetOffset_Internal(),size=power->GetElementSize();
             if(offset>=0&&size>0&&offset<=type->GetPropertiesSize()&&size<=type->GetPropertiesSize()-offset) {
@@ -211,14 +256,14 @@ struct ToolCatalogIndex {
         for(const auto& row:loaded){const auto key=row.value("Key",std::string{});if(!key.empty())merged[key]=row;}
         auto result=nlohmann::json::array();for(const auto& [key,row]:merged){(void)key;result.push_back(row);}
         std::sort(result.begin(),result.end(),[](const auto& a,const auto& b){
-            const auto an=PS::QuickUI::Lower(a.value("Name",std::string{})),bn=PS::QuickUI::Lower(b.value("Name",std::string{}));
+            const auto an=PS::QuickCatalogRules::Lower(a.value("Name",std::string{})),bn=PS::QuickCatalogRules::Lower(b.value("Name",std::string{}));
             return an==bn?a.value("Key",std::string{})<b.value("Key",std::string{}):an<bn;
         });return result;
     }
     nlohmann::json Items()const {
         auto out=nlohmann::json::array();for(const auto& [path,row]:itemRows){(void)path;out.push_back(row);}
         std::sort(out.begin(),out.end(),[](const auto& a,const auto& b){
-            const auto an=PS::QuickUI::Lower(a.value("Name",std::string{})),bn=PS::QuickUI::Lower(b.value("Name",std::string{}));
+            const auto an=PS::QuickCatalogRules::Lower(a.value("Name",std::string{})),bn=PS::QuickCatalogRules::Lower(b.value("Name",std::string{}));
             return an==bn?a.value("Path",std::string{})<b.value("Path",std::string{}):an<bn;
         });return out;
     }
@@ -348,7 +393,7 @@ struct ToolCatalogIndex {
                 if(!PS::QuickCatalogRules::BlueprintCandidate(name,type))continue;
                 const auto path=PS::QuickCatalogRules::GeneratedClassPath(package,name);
                 const bool resource=PS::F2Catalog::UnderAny(package,sources.resources),enemy=PS::F2Catalog::UnderAny(package,sources.enemies);
-                if(fullScan||resource||enemy)Add({path,name,resource?Kind::Resource:enemy?(PS::QuickUI::Lower(package).find("/gameplay/npcs/")!=std::string::npos?Kind::Npc:Kind::Enemy):Kind::ClassCandidate});
+                if(fullScan||resource||enemy)Add({path,name,resource?Kind::Resource:enemy?(PS::QuickCatalogRules::Lower(package).find("/gameplay/npcs/")!=std::string::npos?Kind::Npc:Kind::Enemy):Kind::ClassCandidate});
             }catch(const std::exception& e){partial=true;++unclassified;Issue("Registry record",e.what());}
         }
         referenceStatus="Using mounted game registry; no online path request required.";
@@ -410,7 +455,7 @@ struct ToolCatalogIndex {
         stopped=true;active=false;finished=false;if(waitingReference)g_f2ReferenceJob.Cancel();waitingReference=false;stage="Index stopped";
         try{SaveCache();PS::SpawnToolRequests::CatalogProgress(Snapshot(reason,true));}catch(...){}
     }
-    bool Tick() {
+    bool Tick(PS::WorkSlice& work) {
         if(generation&&generation!=PS::SpawnToolRequests::Generation.load()){Reset();return false;}
         try {
             if(auto reference=g_f2ReferenceJob.Poll()) {
@@ -436,8 +481,9 @@ struct ToolCatalogIndex {
             if(!current||current->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed))) {Stop("World expired; refresh in the current world");return false;}
             if(PS::SpawnToolRequests::CancelRequested.exchange(false)){Stop("Index stopped; discovered paths retained");return false;}
             const auto start=std::chrono::steady_clock::now();std::size_t attempted=0;
-            while(attempted++<4) {
+            while(attempted++<4&&work.MayStart()) {
                 auto next=plan.Pop();if(!next)break;
+                work.Started();
                 stage=std::string("Caching ")+(next->kind==Kind::Item?"items":next->kind==Kind::Resource?"resources":next->kind==Kind::Npc?"NPCs":next->kind==Kind::Enemy?"AI":"class candidates");
                 try {
                     if(next->kind==Kind::Item) {

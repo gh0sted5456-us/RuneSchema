@@ -1,7 +1,9 @@
 #pragma once
 #include "Utility/Logging.h"
 #include "Core/UE4SSBuildIdentity.h"
+#include "Core/UE4SSLuaPropertySize.h"
 #include "Runtime/NativeExecutableDiscovery.h"
+#include "Unreal/UnrealVersion.hpp"
 #include <Windows.h>
 #include <atomic>
 #include <filesystem>
@@ -11,6 +13,25 @@
 #include <nlohmann/json.hpp>
 
 namespace PS::UE4SSCompatibility {
+    inline void PrepareLuaPropertySizes() {
+        if (!RC::Unreal::Version::IsAtLeast(5, 0)) return;
+        const auto host = GetModuleHandleW(L"UE4SS.dll");
+        if (!host) return;
+        const auto objectSize = reinterpret_cast<const int*>(GetProcAddress(host,
+            "?StaticValueSizeStorage@FObjectProperty@Unreal@RC@@0HA"));
+        const auto objectPtrSize = reinterpret_cast<int*>(GetProcAddress(host,
+            "?StaticValueSizeStorage@FObjectPtrProperty@Unreal@RC@@0HA"));
+        if (!NativeExecutableDiscovery::Readable(objectSize, sizeof(int))
+            || !NativeExecutableDiscovery::Readable(objectPtrSize, sizeof(int))) return;
+        MEMORY_BASIC_INFORMATION page{};
+        if (!VirtualQuery(objectPtrSize, &page, sizeof(page)) || page.AllocationBase != host
+            || page.State != MEM_COMMIT || (page.Protect & (PAGE_GUARD | PAGE_NOACCESS))
+            || !(page.Protect & (PAGE_READWRITE | PAGE_WRITECOPY))) return;
+        // Run before Lua state creation; older hosts without these metadata exports remain untouched.
+        if (UE4SSLuaPropertySize::RepairObjectPtr(*objectPtrSize, *objectSize))
+            PS::ConsolidatedLog<RC::LogLevel::Normal>(STR("[RuneSchema] [UE4SS][LUA] ObjectPtrProperty value size initialized from native ObjectProperty: {} bytes.\n"), *objectPtrSize);
+    }
+
     inline bool HasHashTableApi()
     {
         const auto host = GetModuleHandleW(L"UE4SS.dll");

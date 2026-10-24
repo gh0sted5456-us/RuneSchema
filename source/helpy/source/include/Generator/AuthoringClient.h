@@ -22,10 +22,16 @@ inline void Poll(bool force=false){
     if(!reply.contains("History")&&Snapshot.contains("History"))reply["History"]=Snapshot["History"];
     Snapshot=std::move(reply);Revision=Snapshot.value("Revision",uint64_t{});
     const auto id=Snapshot.value("RequestId",uint64_t{});
-    if(id&&id!=LastReceipt){LastReceipt=id;Results[Snapshot.value("Operation",std::string{})]=Snapshot.value("Result",Json::object());if(Pending==id)Pending=0;}
+    if(id&&!Snapshot.value("Busy",false)&&id!=LastReceipt){LastReceipt=id;Results[Snapshot.value("Operation",std::string{})]=Snapshot.value("Result",Json::object());if(Pending==id)Pending=0;}
     if(!Snapshot.value("Busy",false))Pending=0;
 }
 inline bool Activate(){if(!Remote)return false;Json reply;if(!Remote({{"Action","AuthoringActivate"}},reply)||!reply.value("Accepted",false)){Error=reply.value("Status",std::string("Activation request failed."));return false;}NextPoll={};return true;}
+// Explicit preview/fitting requests may originate outside the editor. Poll and
+// activate the already-enabled session without changing settings or touching a
+// save. Never interpret a queued/busy snapshot as a completed receipt.
+inline bool EnsureActive(){Poll();if(Snapshot.value("Active",false))return true;
+    if(!Snapshot.value("Enabled",false)||!Snapshot.value("Ready",false)){Error="Native preview/fitting tools are unavailable. Enable authoring tools in RuneSchema settings and restart if disabled.";return false;}
+    static auto next=std::chrono::steady_clock::time_point{};const auto now=std::chrono::steady_clock::now();if(now>=next){next=now+std::chrono::seconds(2);Activate();}return false;}
 inline bool Submit(const char* operation,Json arguments=Json::object()){
     if(Busy()&&std::string_view(operation)!="Cancel"){Error="Wait for the current authoring operation.";return false;}
     try{if(!arguments.contains("Export"))arguments["Export"]=ExportOptions;const auto id=++Sequence;Json request={{"RequestId",id},{"Generation",Snapshot.value("Generation",uint64_t{})},{"Operation",operation},{"Arguments",std::move(arguments)}};

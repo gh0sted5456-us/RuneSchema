@@ -118,6 +118,12 @@ inline void RenderDraft(Draft& draft,Mode mode,const Json& catalog,const std::st
         if(ImGui::SmallButton("Format JSONC"))try{const auto text=ParseValues(draft.Editor.data()).dump(2);if(text.size()>=draft.Editor.size())throw std::runtime_error("Formatted values exceed the editor limit.");std::snprintf(draft.Editor.data(),draft.Editor.size(),"%s",text.c_str());}catch(const std::exception& error){draft.Error=error.what();}
     }
     ImGui::SeparatorText("Create or export");
+    ImGui::TextUnformatted("PersistenceID");char identity[65]{};std::snprintf(identity,sizeof(identity),"%s",draft.Id.c_str());ImGui::SetNextItemWidth(std::min(theme.X(300),ImGui::GetContentRegionAvail().x));
+    if(ImGui::InputTextWithHint("##clone-persistence-id","Generate or paste a 22-character ID",identity,sizeof(identity))){draft.Changed();draft.Id=identity;}
+    if(ImGui::SmallButton("Generate ID")){draft.Changed();draft.Id=ClonePresentation::NewId(draft.Mod);}ImGui::SameLine();
+    ImGui::BeginDisabled(draft.Id.empty());if(ImGui::SmallButton("Copy ID"))ImGui::SetClipboardText(draft.Id.c_str());ImGui::EndDisabled();
+    if(!draft.Id.empty()&&!ClonePresentation::ValidId(draft.Id,draft.Mod))ImGui::TextColored(theme.error,"Invalid ID · 22 URL-safe characters, ending A / Q / g / w");
+    ImGui::TextDisabled("Keep the ID stable after release. Native registration rejects collisions.");
     ImGui::TextUnformatted("Mod folder");ImGui::SameLine();ImGui::SetNextItemWidth(theme.X(180));if(ImGui::InputText("##mod",draft.Mod,sizeof(draft.Mod))){draft.Id.clear();draft.Changed();}
     const bool eligible=draft.Ready&&(!transmog||!draft.Appearance.empty())&&!SpawnToolRequests::IsWaiting()&&Authoring::SafeModFolder(draft.Mod);
     ImGui::BeginDisabled(!eligible);
@@ -155,7 +161,7 @@ inline void RenderDraft(Draft& draft,Mode mode,const Json& catalog,const std::st
 }
 inline void Render(const Json& catalog,uint64_t revision,const std::string& player){
     Poll();
-    if(ImGui::BeginTabBar("Item authoring tabs")){
+    if(ImGui::BeginTabBar("Item authoring tabs",ImGuiTabBarFlags_Reorderable)){
         const bool transmog=ImGui::BeginTabItem("Transmog");
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::TransmogTab=HelpyPreviewHooks::LastRect();

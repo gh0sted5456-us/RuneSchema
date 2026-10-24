@@ -1,9 +1,12 @@
 #pragma once
+#include "SDK/Helper/PlayerVitals.h"
 #include "Loader/EventDefinition.h"
 #include "Loader/TimeOfDayRuntime.h"
 #include "Loader/EventIdentity.h"
+#include "Loader/EventQuestContract.h"
 #include "SDK/Helper/ActorHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
+#include "SDK/Helper/GroundedPlacement.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Classes/KismetSystemLibrary.h"
 #include "Loader/Spawn/RuntimeSupport.h"
@@ -59,6 +62,8 @@ class Runtime {
     double interval=0;
     double clientInterval=0;
     bool cleaning=false;
+    int contractRun=0;
+    ContractBoundary contractBoundary;
     bool participantDead=false;
     bool pendingStop=false;
     bool areaShown=false;
@@ -90,20 +95,10 @@ class Runtime {
         }catch(...) {}
         if(!health)return std::nullopt;
         try {
-            ActorHelper::FunctionCall maximum(health,TEXT("/Script/Dominion.HealthComponent:GetMaxHealth"));maximum.Invoke();
-            const double limit=maximum.NumericResult();
-            double value=std::numeric_limits<double>::quiet_NaN();
-            if(auto* current=CastField<RC::Unreal::FNumericProperty>(PropertyHelper::GetPropertyByName(health->GetClassPrivate(),TEXT("CurrentHealth")))) {
-                auto* address=current->ContainerPtrToValuePtr<void>(health);
-                value=current->IsFloatingPoint()?current->GetFloatingPointPropertyValue(address)
-                    :static_cast<double>(current->GetSignedIntPropertyValue(address));
-            } else {
-                for(const auto* path:{TEXT("/Script/Dominion.HealthComponent:GetCurrentHealth"),TEXT("/Script/Dominion.HealthComponent:GetHealth")})try {
-                    ActorHelper::FunctionCall call(health,path);call.Invoke();value=call.NumericResult();break;
-                }catch(...) {}
-            }
-            if(!std::isfinite(value) || !std::isfinite(limit) || limit<=0)return std::nullopt;
-            return std::clamp(value/limit*100.0,0.0,100.0);
+            const auto limit=PS::PlayerVitals::Number(health,TEXT("/Script/Dominion.HealthComponent:GetMaxHealth"));
+            const auto value=PS::PlayerVitals::Number(health,TEXT("/Script/Dominion.HealthComponent:GetAuthoritativeHealth"));
+            if(!value || !limit || *limit<=0)return std::nullopt;
+            return std::clamp(*value / *limit * 100.0,0.0,100.0);
         }catch(...) {return std::nullopt;}
     }
     void PresentHealthStages() noexcept {
@@ -202,6 +197,9 @@ class Runtime {
         // streamed-ground miss must never retry an already half-created wave.
         std::vector<RC::Unreal::FVector> positions;
         std::vector<PS::SpawnFootprint::Reservation> reservations;
+        const auto participantAt=ActorHelper::GetActorLocation(static_cast<AActor*>(player));
+        double participantFloor=participantAt.Z();
+        if(definition.Contract)if(const auto capsule=GroundedPlacement::NativeCapsule(player))participantFloor-=capsule->HalfHeight;
         positions.reserve(definition.Waves.at(run.Wave()).size());
         std::set<std::string> validated;
         for(const auto& member:definition.Waves.at(run.Wave())) {
@@ -218,17 +216,23 @@ class Runtime {
                 const std::optional<double> reference=member.RelativeGround?std::nullopt:std::optional<double>{member.Position[2]};
                 const RC::Unreal::FVector start(member.Position[0],member.Position[1],search.Top);
                 const RC::Unreal::FVector end(member.Position[0],member.Position[1],search.Bottom);
-                if(!UECustom::UKismetSystemLibrary::FindGroundSurface(world,start,end,{static_cast<AActor*>(player)},impact,error,reference,&groundState)){
+                // Mesh-only encounter floors may have no Landscape collision. Player feet are a search hint, never a placement result.
+                const bool found=PS::Grounding::QueryWithFloorHint([&](std::optional<double> floor){
+                    return UECustom::UKismetSystemLibrary::FindGroundSurface(world,start,end,{static_cast<AActor*>(player)},impact,error,floor,&groundState);
+                },reference,member.RelativeGround&&definition.Contract?std::optional<double>{participantFloor}:std::nullopt,error,groundState);
+                if(!found){
                     if(!error.empty())throw std::runtime_error("Event ground query failed: "+error);
                     if(groundState.Obstructed&&groundState.FloorReference)
                         impact=RC::Unreal::FVector(member.Position[0],member.Position[1],*groundState.FloorReference);
-                    else throw PS::Grounding::SurfacePending();
+                    else throw PS::Grounding::SurfacePending("No ground hit for "+member.Spawn+" at XY="+std::to_string(member.Position[0])+","+std::to_string(member.Position[1])+"; player_floor_hint="+std::to_string(participantFloor));
                 }
                 // Match /spawns: keep grounded actors 10 cm clear of the
                 // blocking surface, with GroundOffset as an author delta.
                 location=RC::Unreal::FVector(member.Position[0],member.Position[1],impact.Z()+member.GroundOffset+10.0);
             }
-            if(member.Ground){if(!PrepareGrounded)throw std::runtime_error("Event footprint provider unavailable");location=PrepareGrounded(member.Spawn,world,location,static_cast<AActor*>(player),reservations,member.GroundOffset+10.0);}
+            if(member.Ground){if(!PrepareGrounded)throw std::runtime_error("Event footprint provider unavailable");
+                try{location=PrepareGrounded(member.Spawn,world,location,static_cast<AActor*>(player),reservations,member.GroundOffset+10.0);}
+                catch(const PS::Grounding::SurfacePending& failure){throw PS::Grounding::SurfacePending(member.Spawn+" at XY="+std::to_string(member.Position[0])+","+std::to_string(member.Position[1])+": "+failure.what());}}
             positions.push_back(location);
         }
         owned.reserve(definition.Waves.at(run.Wave()).size());
@@ -257,9 +261,9 @@ class Runtime {
         if(announce)Present(BossWave() && !definition.Text.BossStarted.empty()?definition.Text.BossStarted:definition.Text.WaveStarted);
     }
     bool TrySpawnWave(bool initial) {
-        try{SpawnWave(false);}catch(const PS::Grounding::SurfacePending&){
+        try{SpawnWave(false);}catch(const PS::Grounding::SurfacePending& pending){
             wavePending=true;initialWavePending=initial;
-            if(groundRetry.Missed())Report(definition.Key+": waiting for valid ground and collision-clear spawn space; no wave actors created; retry scheduled");
+            if(groundRetry.Missed())Report(definition.Key+": waiting for valid ground and collision-clear spawn space; no wave actors created; retry scheduled; "+pending.what());
             return false;
         }
         wavePending=false;initialWavePending=false;groundRetry.Resolved();
@@ -314,8 +318,12 @@ public:
     std::function<void(UObject*,const std::string&)> RestoreWeather;
     std::function<void(const std::string&)> Report=[](const std::string&){};
     std::function<void(const std::string&)> ReportFailure;
+    std::function<int(UObject*,const Definition&)> BeginContract;
+    std::function<bool(UObject*,const Definition&,int)> ContractCurrent;
+    std::function<void(UObject*,const Definition&,int)> CompleteContract;
     void Load(const std::string& mod,const Json& data){catalog.Load(mod,data);}
     void Require(const std::string& key)const{catalog.Find(key);}
+    bool IsContractQuest(const std::string& key)const{return catalog.IsContractQuest(key);}
     void ObserveClientReplica(AActor* actor,const std::string& eventKey) {
         using namespace RC::Unreal;
         if(!actor || !actor->GetWorld() || eventKey.empty())return;
@@ -343,10 +351,11 @@ public:
         if(Active())return "An encounter is already running. Finish or cancel it first.";
         if(!owned.empty())Cleanup();
         if(!player || !player->GetWorld() || !SpawnRuntime::GetGameMode(player) || !Validate || !Spawn)throw std::runtime_error("Event requires a local authoritative world and spawn loader");
-        const auto next=catalog.Find(key);
+        auto next=catalog.Find(key);
         if(!TimeOfDay::Allows(player,next.Time))return std::string("This encounter is only available during the ")+(next.Time==TimeOfDay::Requirement::Day?"day.":"night.");
         if(next.Weather && (!BeginWeather || !RestoreWeather))throw std::runtime_error("Event weather runtime is unavailable; capture the Weather-Lifecycle diagnostic before enabling this event");
         const auto center=ActorHelper::GetActorLocation(static_cast<AActor*>(player));
+        next=AnchorContract(next,{center.X(),center.Y(),center.Z()});
         PS::AssetPreload::Plan<RC::StringType> prefetch;
         for(const auto& wave:next.Waves)for(const auto& member:wave) {
             const double x=member.Position[0]-center.X(),y=member.Position[1]-center.Y(),z=(member.RelativeGround?center.Z():member.Position[2])-center.Z();
@@ -362,8 +371,17 @@ public:
         ZeroArgument(TEXT("/Script/Dominion.DominionAICharacter:BP_OnDeath"));
         auto* controller=ActorHelper::GetObjectRef(player,TEXT("Controller"));
         if(!controller || ActorHelper::GetObjectRef(controller,TEXT("Pawn"))!=player)throw std::runtime_error("Event participant controller ownership unavailable");
+        int acceptedRun=0;
+        if(next.Contract) {
+            if(!BeginContract || !ContractCurrent || !CompleteContract)throw std::runtime_error("Quest contract runtime unavailable");
+            const auto health=HealthPercent(player);
+            if(!health || *health<=0)throw std::runtime_error("Quest contract requires a live participant with readable native health");
+            acceptedRun=BeginContract(controller,next);
+            if(acceptedRun<=0)throw std::runtime_error("Accept the contract before starting its encounter");
+        }
         const Handle playerHandle(player),controllerHandle(controller);
         definition=next;participant=playerHandle;participantController=controllerHandle;participantDead=false;pendingStop=false;interval=0;actionElapsed=0;completedActions.clear();areaShown=false;weatherActive=false;weatherToken.clear();wavePending=false;initialWavePending=false;groundRetry={};run.Start(definition);
+        contractRun=acceptedRun;contractBoundary.Reset();
         warmPaths=prefetch.Paths();warmElapsed=0;
         try {
             if(definition.Weather){weatherToken=BeginWeather(controller,*definition.Weather);weatherActive=true;}
@@ -385,6 +403,10 @@ public:
             return "Only the player who started this encounter can cancel it.";
         run.Cancel();pendingStop=false;wavePending=false;groundRetry={};Present(definition.Text.Cancelled);HideOwnedArea();RestoreEventWeather();const bool removed=Cleanup();Report(definition.Key+": cancelled");
         return removed?"Encounter cancelled. Its temporary enemies have been removed.":"Encounter cancelled. Temporary enemy cleanup is finishing.";
+    }
+    void CancelQuestContract(const std::string& quest,UObject* player) {
+        if(definition.Contract && definition.Contract->Quest==quest && participant.Get()==player)
+            (void)Cancel(definition.Key,player);
     }
     void Reset() {
         run.Cancel();pendingStop=false;wavePending=false;initialWavePending=false;groundRetry={};HideOwnedArea();RestoreEventWeather();Cleanup();participant={};participantController={};interval=0;actionElapsed=0;completedActions.clear();
@@ -457,6 +479,19 @@ public:
         run.Tick(delta);interval+=delta;if(!wavePending)actionElapsed+=delta;else {groundRetry.Advance(delta);warmElapsed+=delta;}
         std::string stopReason=run.Active()?"":"timeout or invalid elapsed time";
         if(participantDead){run.Cancel();stopReason="participant death";}
+        if(run.Active() && definition.Contract && interval>=0.25)try {
+            auto* contractPlayer=participant.Get();auto* contractController=participantController.Get();
+            const auto health=HealthPercent(contractPlayer);
+            if(!contractPlayer || !contractController || !health || *health<=0 || !ContractCurrent(contractController,definition,contractRun)) {
+                run.Cancel();stopReason="quest contract run or living participant is no longer current";
+            } else {
+                const auto location=ActorHelper::GetActorLocation(static_cast<AActor*>(contractPlayer));
+                const bool inside=Inside({location.X(),location.Y(),location.Z()},definition.EventArea->Position,definition.EventArea->RadiusMeters);
+                const bool warning=!inside&&contractBoundary.OutsideSeconds()==0;
+                if(!contractBoundary.Tick(inside,interval,definition.Contract->ExitGrace)){run.Cancel();stopReason="participant left the contract arena";}
+                else if(warning)Notify(contractController,"Return to the marked arena or this encounter will fail.",Scope::Participant);
+            }
+        }catch(const std::exception& error){run.Fail();stopReason=error.what();}
         if(run.Active() && definition.DespawnTime!=TimeOfDay::Requirement::Any
             && TimeOfDay::Allows(participantController.Get(),definition.DespawnTime)) {
             run.Cancel();pendingStop=false;Present(definition.Text.Completed);HideOwnedArea();RestoreEventWeather();
@@ -499,7 +534,16 @@ public:
             if(run.WaveComplete()) {
                 if(!Cleanup())return;
                 run.Advance();
-                if(run.Active()){groundRetry={};TrySpawnWave(false);}else {Present(definition.Text.Completed);HideOwnedArea();RestoreEventWeather();Report(definition.Key+": complete");}
+                if(run.Active()){groundRetry={};TrySpawnWave(false);}else {
+                    if(definition.Contract) {
+                        auto* contractPlayer=participant.Get();auto* contractController=participantController.Get();
+                        const auto health=HealthPercent(contractPlayer);
+                        if(participantDead || !contractPlayer || !contractController || !health || *health<=0
+                            || !ContractCurrent(contractController,definition,contractRun))throw std::runtime_error("Contract invalidated before victory could be credited");
+                        CompleteContract(contractController,definition,contractRun);
+                    }
+                    Present(definition.Text.Completed);HideOwnedArea();RestoreEventWeather();Report(definition.Key+": complete");
+                }
             }
         }catch(const std::exception& error){run.Fail();Present(definition.Text.Failed);HideOwnedArea();RestoreEventWeather();try{Cleanup();}catch(const std::exception& cleanup){Failure(cleanup.what());}Failure(definition.Key+": failed: "+error.what());}
     }

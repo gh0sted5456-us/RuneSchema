@@ -1,9 +1,13 @@
 #pragma once
+#include "Core/RuneSchemaDataRoot.h"
 #include "imgui.h"
 #include "Core/ConfigFiles.h"
 #include "Core/ItemBayLayout.h"
 #include "Core/ItemPaging.h"
 #include "Core/ItemSource.h"
+#include "Core/LiveLog.h"
+#include "Core/HelpyNavigation.h"
+#include "Core/BackgroundPolicy.h"
 #include "Runtime/HostServices.h"
 #include "Runtime/HelpyPaths.h"
 #include "Generator/HelpyRuntimePreferences.h"
@@ -19,10 +23,13 @@
 #include <string_view>
 #include <stdexcept>
 #include <unordered_map>
+#include <cstdarg>
+#include <cstdio>
 
 namespace PS::HelpyImGuiTheme {
 
 inline float RuntimeDpi=1.0f;
+inline bool PictureBackingActive=false; // Presentation state, not a saved preference.
 inline void SetRuntimeDpi(float dpi){RuntimeDpi=std::clamp(dpi,0.75f,3.0f);}
 inline ImVec4 Hex(unsigned value){return {((value>>16)&255)/255.0f,((value>>8)&255)/255.0f,(value&255)/255.0f,1.0f};}
 
@@ -53,14 +60,27 @@ struct Theme {
     float navigationItemHeight{36.0f},navigationIconSize{17.0f},loadingSpinnerRadius{13.0f},loadingSpinnerThickness{2.4f},tooltipDelay{0.35f};
     int overscanRows{4};
     int itemGridColumns{ItemBayLayout::DefaultColumns},itemGridRows{ItemBayLayout::DefaultRows};
-    bool itemGridFitRows{true};
+    bool itemGridFitRows{true},itemShowPlaceholders{false};
     int itemPageSize{ItemPaging::DefaultSize};
+    int runtimeTimeUnit{0}; // Automatic, ms, seconds, minutes.
+    std::string backgroundFile;
+    float backgroundStrength{.12f};
     bool dpiAware{true},autoReload{true},textBold{false},verboseTooltips{false},itemGridView{true},aiGridView{false},advancedMode{false};
     bool automaticUpdateChecks{true};
+    int previewQuality{2}; // Economy 256px / Balanced 384px / Detail 512px.
+    bool previewAnimate{false},previewDetails{false},scaleUsePortrait{true};
+    std::string scaleReferenceIcon;
+    HelpyNavigation::Workspaces workspaces;
     float itemResultHeight{320.0f},aiResultHeight{320.0f};
     float itemBayBrowseRatio{0.74f},dockedBayHeight{280.0f},itemCartWidth{270.0f};
     std::string itemCategory{"All"},itemSource{"all"};
     std::string fontFamily{"Segoe UI"};
+    std::vector<LiveLog::ColorRule> logColors;
+    bool diagnosticToastsEnabled{true};
+    int diagnosticToastLimit{4},diagnosticToastDuration{6};
+    int diagnosticHistoryDays{14},diagnosticHistorySessions{10},diagnosticHistoryMB{20};
+    float diagnosticSplitRatio{0.40f};
+    bool diagnosticDeveloperMode{false};
 
     float Dpi() const {
         if(!dpiAware)return 1.0f;float dpi=1.0f;
@@ -76,6 +96,53 @@ struct Theme {
 };
 
 inline Theme Current{};
+inline void DetailsTextUnformatted(const char* text){
+    const float startX=ImGui::GetCursorPosX(),width=std::max(1.f,ImGui::GetContentRegionAvail().x);
+    const char* current=text;const char* end=text+std::char_traits<char>::length(text);
+    ImGui::PushTextWrapPos(-1);
+    while(current<end){
+        if(*current=='\n'){ImGui::NewLine();++current;continue;}
+        const auto* paragraph=std::find(current,end,'\n');
+        const auto* next=ImGui::GetFont()->CalcWordWrapPosition(ImGui::GetFontSize(),current,paragraph,width);
+        if(next<=current){next=current+1;while(next<paragraph&&(static_cast<unsigned char>(*next)&0xc0)==0x80)++next;}
+        auto* lineEnd=next;while(lineEnd>current&&(lineEnd[-1]==' '||lineEnd[-1]=='\t'||lineEnd[-1]=='\r'))--lineEnd;
+        const float measured=ImGui::CalcTextSize(current,lineEnd).x;
+        ImGui::SetCursorPosX(startX+std::max(0.f,(width-measured)*.5f));ImGui::TextUnformatted(current,lineEnd);
+        current=next;while(current<paragraph&&(*current==' '||*current=='\t'))++current;
+        if(current==paragraph&&current<end)++current;
+    }
+    ImGui::PopTextWrapPos();
+}
+inline void DetailsText(const char* format,...){char text[8192]{};va_list arguments;va_start(arguments,format);std::vsnprintf(text,sizeof(text),format,arguments);va_end(arguments);DetailsTextUnformatted(text);}
+inline void DetailsTextDisabled(const char* format,...){char text[8192]{};va_list arguments;va_start(arguments,format);std::vsnprintf(text,sizeof(text),format,arguments);va_end(arguments);ImGui::PushStyleColor(ImGuiCol_Text,ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));DetailsTextUnformatted(text);ImGui::PopStyleColor();}
+inline void DetailsTextColored(const ImVec4& color,const char* format,...){char text[8192]{};va_list arguments;va_start(arguments,format);std::vsnprintf(text,sizeof(text),format,arguments);va_end(arguments);ImGui::PushStyleColor(ImGuiCol_Text,color);DetailsTextUnformatted(text);ImGui::PopStyleColor();}
+// Auto-sized tooltips must not infer their width from wrapped child content.
+// In particular a tooltip opened inside a narrow table cell otherwise feeds
+// its previous width back into the next frame until paths wrap character-wise.
+inline void BeginDetailsTooltip(ImVec2 anchorMin,ImVec2 anchorMax,float logicalWidth=300.0f) {
+    const auto* viewport=ImGui::GetMainViewport();const auto area=viewport->WorkSize;
+    const float margin=Current.X(8),gap=Current.Y(6);
+    const float width=std::max(1.0f,std::min(Current.X(logicalWidth),area.x-Current.X(24)));
+    const float left=viewport->WorkPos.x+margin,right=std::max(left,viewport->WorkPos.x+area.x-margin-width);
+    const float x=std::clamp((anchorMin.x+anchorMax.x-width)*.5f,left,right);
+    const float top=viewport->WorkPos.y+gap,bottom=std::max(top,viewport->WorkPos.y+area.y-gap);
+    const float below=std::max(1.f,bottom-anchorMax.y-gap),above=std::max(1.f,anchorMin.y-gap-top);
+    const bool flip=below<std::min(Current.Y(180),above);
+    const float height=std::min(std::max(1.0f,area.y-Current.Y(24)),flip?above:below);
+    ImGui::SetNextWindowPos({x,std::clamp(flip?anchorMin.y-gap:anchorMax.y+gap,top,bottom)},ImGuiCond_Always,{0,flip?1.f:0.f});
+    ImGui::SetNextWindowSize({width,0},ImGuiCond_Always);
+    ImGui::SetNextWindowSizeConstraints({width,0},{width,height});
+    auto background=Current.panelAlt;background.w=std::max(.94f,background.w);
+    ImGui::PushStyleColor(ImGuiCol_PopupBg,background);ImGui::PushStyleColor(ImGuiCol_Border,Current.border);
+    ImGui::BeginTooltip();
+    ImGui::PushStyleVar(ImGuiStyleVar_SeparatorTextAlign,{.5f,.5f});
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX()+std::max(1.0f,width-ImGui::GetStyle().WindowPadding.x*2-ImGui::GetStyle().ScrollbarSize));
+    if(ImGui::GetIO().MouseWheel!=0)ImGui::SetScrollY(std::clamp(ImGui::GetScrollY()-ImGui::GetIO().MouseWheel*ImGui::GetTextLineHeight()*3,0.0f,ImGui::GetScrollMaxY()));
+}
+inline void BeginDetailsTooltip(float logicalWidth=300.0f){BeginDetailsTooltip(ImGui::GetItemRectMin(),ImGui::GetItemRectMax(),logicalWidth);}
+inline void EndDetailsTooltip(){ImGui::PopTextWrapPos();ImGui::PopStyleVar();ImGui::EndTooltip();ImGui::PopStyleColor(2);}
+inline void Tooltip(const char* format,...){char text[8192]{};va_list arguments;va_start(arguments,format);std::vsnprintf(text,sizeof(text),format,arguments);va_end(arguments);BeginDetailsTooltip();DetailsTextUnformatted(text);EndDetailsTooltip();}
+inline void TooltipAt(ImVec2 minimum,ImVec2 maximum,const char* text){BeginDetailsTooltip(minimum,maximum);DetailsTextUnformatted(text);EndDetailsTooltip();}
 struct HoverState{float Amount=0;int Frame=-1;};
 inline std::unordered_map<ImGuiID,HoverState> HoverStates;
 inline ImVec4 Mix(ImVec4 from,ImVec4 to,float amount){return {from.x+(to.x-from.x)*amount,from.y+(to.y-from.y)*amount,from.z+(to.z-from.z)*amount,from.w+(to.w-from.w)*amount};}
@@ -104,9 +171,7 @@ inline std::filesystem::path RootThemePath() {
     return HelpyPaths::PluginRoot()/"settings"/"ui.jsonc";
 }
 inline std::filesystem::path UserThemePath() {
-    const char* local=std::getenv("LOCALAPPDATA");
-    if(local&&*local)return std::filesystem::path(local)/"RuneSchema"/"HELPY"/"ui.jsonc";
-    return RootThemePath();
+    return RuneSchemaData::SharedDirectory("HELPY")/"ui.jsonc";
 }
 inline std::filesystem::path FilePath(){return UseUserAppData?UserThemePath():RootThemePath();}
 inline void SelectSettingsSource(bool appData){
@@ -160,11 +225,19 @@ inline void ReadPair(const nlohmann::json& obj,const char* name,float& x,float& 
 inline nlohmann::json ColorJson(const ImVec4& v){return nlohmann::json::array({v.x,v.y,v.z,v.w});}
 inline nlohmann::json DocumentFrom(const Theme& t,int iconCacheMB) {
     return {
-        {"version",20},{"autoReload",t.autoReload},{"windowOpacity",t.windowOpacity},
+        {"version",21},{"autoReload",t.autoReload},{"windowOpacity",t.windowOpacity},
+        {"workspaces",{{"authoring",t.workspaces.Authoring},{"tools",t.workspaces.Tools},{"liveLog",t.workspaces.LiveLog},{"saveEditor",t.workspaces.SaveEditor},{"serverTools",t.workspaces.ServerTools},{"journal",t.workspaces.Journal}}},
         {"display",{{"dpiAware",t.dpiAware},{"userScale",t.userScale},{"fontScale",t.fontScale},{"density",t.density},{"fontFamily",t.fontFamily},{"textBold",t.textBold},{"verboseTooltips",t.verboseTooltips},{"tooltipDelay",t.tooltipDelay}}},
-        {"views",{{"advancedMode",t.advancedMode},{"itemGrid",t.itemGridView},{"itemPageSize",t.itemPageSize},{"itemGridColumns",t.itemGridColumns},{"itemGridRows",t.itemGridRows},{"itemGridFitRows",t.itemGridFitRows},{"aiGrid",t.aiGridView},{"itemResultHeight",t.itemResultHeight},{"aiResultHeight",t.aiResultHeight},{"itemCategory",t.itemCategory},{"itemSource",t.itemSource},{"itemBayBrowseRatio",t.itemBayBrowseRatio},{"dockedBayHeight",t.dockedBayHeight},{"itemCartWidth",t.itemCartWidth}}},
+        {"views",{{"advancedMode",t.advancedMode},{"itemGrid",t.itemGridView},{"itemPageSize",t.itemPageSize},{"itemGridColumns",t.itemGridColumns},{"itemGridRows",t.itemGridRows},{"itemGridFitRows",t.itemGridFitRows},{"itemShowPlaceholders",t.itemShowPlaceholders},{"aiGrid",t.aiGridView},{"itemResultHeight",t.itemResultHeight},{"aiResultHeight",t.aiResultHeight},{"itemCategory",t.itemCategory},{"itemSource",t.itemSource},{"itemBayBrowseRatio",t.itemBayBrowseRatio},{"dockedBayHeight",t.dockedBayHeight},{"itemCartWidth",t.itemCartWidth}}},
         {"cache",{{"iconCacheMB",std::clamp(iconCacheMB,0,16384)}}},
         {"updates",{{"automaticChecks",t.automaticUpdateChecks}}},
+        {"preview",{{"quality",t.previewQuality},{"animation",t.previewAnimate},{"details",t.previewDetails},{"scaleUsePortrait",t.scaleUsePortrait},{"scaleReferenceIcon",t.scaleReferenceIcon}}},
+        {"runtime",{{"timeUnit",t.runtimeTimeUnit}}},
+        {"background",{{"file",t.backgroundFile},{"strength",t.backgroundStrength}}},
+        {"liveLog",{{"colorRules",LiveLog::WriteColors(t.logColors)}}},
+        {"notifications",{{"enabled",t.diagnosticToastsEnabled},{"visibleLimit",t.diagnosticToastLimit},{"durationSeconds",t.diagnosticToastDuration}}},
+        {"diagnosticHistory",{{"ageDays",t.diagnosticHistoryDays},{"maxSessions",t.diagnosticHistorySessions},{"maxStorageMB",t.diagnosticHistoryMB}}},
+        {"diagnosticPresentation",{{"splitRatio",t.diagnosticSplitRatio},{"developerMode",t.diagnosticDeveloperMode}}},
         {"colors",{
             {"window",ColorJson(t.window)},{"panel",ColorJson(t.panel)},{"panelAlt",ColorJson(t.panelAlt)},
             {"navigation",ColorJson(t.navigation)},{"navigationHover",ColorJson(t.navigationHover)},{"navigationActive",ColorJson(t.navigationActive)},
@@ -224,10 +297,24 @@ inline void Reload(bool createIfMissing=true) {
         const auto display=doc.value("display",nlohmann::json::object());
         const auto cache=doc.value("cache",nlohmann::json::object());HelpyRuntimePreferences::IconCacheLimitMB.store(ReadInt(cache,"iconCacheMB",200,0,16384));
         next.automaticUpdateChecks=doc.value("updates",nlohmann::json::object()).value("automaticChecks",true);
+        const auto notifications=doc.value("notifications",nlohmann::json::object());
+        next.diagnosticToastsEnabled=notifications.value("enabled",true);
+        next.diagnosticToastLimit=ReadInt(notifications,"visibleLimit",4,1,10);
+        next.diagnosticToastDuration=ReadInt(notifications,"durationSeconds",6,2,15);
+        const auto history=doc.value("diagnosticHistory",nlohmann::json::object());
+        next.diagnosticHistoryDays=ReadInt(history,"ageDays",14,1,365);
+        next.diagnosticHistorySessions=ReadInt(history,"maxSessions",10,1,100);
+        next.diagnosticHistoryMB=ReadInt(history,"maxStorageMB",20,5,500);
+        const auto presentation=doc.value("diagnosticPresentation",nlohmann::json::object());
+        next.diagnosticSplitRatio=ReadFloat(presentation,"splitRatio",.40f,.25f,.75f);
+        next.diagnosticDeveloperMode=presentation.value("developerMode",false);
+        try{next.logColors=LiveLog::ReadColors(doc.value("liveLog",nlohmann::json::object()).value("colorRules",nlohmann::json::array()));}catch(...){next.logColors.clear();}
         next.dpiAware=display.value("dpiAware",true);next.userScale=ReadFloat(display,"userScale",1.18f,0.60f,2.50f);
         next.fontScale=ReadFloat(display,"fontScale",1.34f,0.70f,1.75f);next.density=ReadFloat(display,"density",1.14f,0.65f,1.50f);try{next.fontFamily=display.value("fontFamily",std::string("Segoe UI"));}catch(...){next.fontFamily="Segoe UI";}next.textBold=display.value("textBold",false);next.verboseTooltips=display.value("verboseTooltips",false);next.tooltipDelay=ReadFloat(display,"tooltipDelay",next.tooltipDelay,0.0f,2.0f);
+        const auto workspaces=doc.value("workspaces",nlohmann::json::object());next.workspaces={workspaces.value("authoring",false),workspaces.value("tools",false),workspaces.value("liveLog",false),workspaces.value("saveEditor",false),workspaces.value("serverTools",false),workspaces.value("journal",true)};
+        const auto preview=doc.value("preview",nlohmann::json::object());next.previewQuality=ReadInt(preview,"quality",2,0,2);next.previewAnimate=preview.value("animation",false);next.previewDetails=preview.value("details",false);next.scaleUsePortrait=preview.value("scaleUsePortrait",true);next.scaleReferenceIcon=preview.value("scaleReferenceIcon",std::string{});
         const auto views=doc.value("views",nlohmann::json::object());next.advancedMode=views.value("advancedMode",false);next.itemGridView=views.value("itemGrid",true);next.aiGridView=views.value("aiGrid",false);next.itemResultHeight=ReadFloat(views,"itemResultHeight",320.0f,180.0f,900.0f);next.aiResultHeight=ReadFloat(views,"aiResultHeight",320.0f,180.0f,900.0f);try{const auto value=views.value("itemCategory",std::string("All"));if(value=="All"||value=="Weapons"||value=="Armor"||value=="Consumables"||value=="Ammo"||value=="Resources"||value=="Tools"||value=="Building"||value=="Quest"||value=="Misc")next.itemCategory=value;}catch(...){}
-        try{const auto value=views.value("itemSource",std::string("all"));const auto kind=ItemSource::Decode(value);if(value==ItemSource::Token(kind))next.itemSource=value;}catch(...){}
+        try{const auto value=views.value("itemSource",std::string("all"));const auto kind=ItemSource::Decode(value);if(value==ItemSource::Token(kind)||(ContentSource::Valid(value)&&value==HelpyCacheSources::Lower(value)))next.itemSource=value;}catch(...){}
         next.itemBayBrowseRatio=ReadFloat(views,"itemBayBrowseRatio",0.74f,0.25f,0.90f);
         next.dockedBayHeight=ReadFloat(views,"dockedBayHeight",280.0f,160.0f,900.0f);
         next.itemCartWidth=ReadFloat(views,"itemCartWidth",270.0f,210.0f,500.0f);
@@ -235,6 +322,11 @@ inline void Reload(bool createIfMissing=true) {
         next.itemPageSize=ReadInt(views,"itemPageSize",ItemPaging::DefaultSize,1,ItemPaging::MaximumSize);
         next.itemGridRows=ReadInt(views,"itemGridRows",ItemBayLayout::DefaultRows,1,ItemBayLayout::MaxRows);
         next.itemGridFitRows=views.value("itemGridFitRows",true);
+        next.itemShowPlaceholders=views.value("itemShowPlaceholders",false);
+        next.runtimeTimeUnit=ReadInt(doc.value("runtime",nlohmann::json::object()),"timeUnit",0,0,3);
+        const auto background=doc.value("background",nlohmann::json::object());
+        next.backgroundFile=background.value("file",std::string{});if(!BackgroundPolicy::Filename(next.backgroundFile))next.backgroundFile.clear();
+        next.backgroundStrength=ReadFloat(background,"strength",.12f,0,.3f);
         if(version<4){if(std::abs(next.userScale-1.10f)<0.001f)next.userScale=1.18f;if(std::abs(next.fontScale-1.04f)<0.001f)next.fontScale=1.18f;if(std::abs(next.density-1.06f)<0.001f)next.density=1.14f;}
         if(version<5&&std::abs(next.fontScale-1.14f)<0.001f)next.fontScale=1.18f;
         if(version<6&&std::abs(next.fontScale-1.18f)<0.001f)next.fontScale=1.34f;
@@ -282,13 +374,17 @@ struct Scope {
         const auto pc=[&](ImGuiCol col,const ImVec4& v){ImGui::PushStyleColor(col,v);++colors;};
         const auto pv=[&](ImGuiStyleVar var,float v){ImGui::PushStyleVar(var,v);++vars;};
         const auto pv2=[&](ImGuiStyleVar var,float x,float y){ImGui::PushStyleVar(var,ImVec2(x,y));++vars;};
-        pc(ImGuiCol_Text,t.text);pc(ImGuiCol_TextDisabled,t.textDisabled);pc(ImGuiCol_WindowBg,t.window);pc(ImGuiCol_ChildBg,t.panel);pc(ImGuiCol_PopupBg,t.panelAlt);
+        pc(ImGuiCol_Text,t.text);pc(ImGuiCol_TextDisabled,t.textDisabled);pc(ImGuiCol_WindowBg,t.window);
+        pc(ImGuiCol_ChildBg,ImVec4(t.panel.x,t.panel.y,t.panel.z,PictureBackingActive?0.f:t.panel.w));pc(ImGuiCol_PopupBg,t.panelAlt);
         pc(ImGuiCol_TitleBg,t.navigation);pc(ImGuiCol_TitleBgActive,t.navigationActive);pc(ImGuiCol_TitleBgCollapsed,t.navigation);
         pc(ImGuiCol_ModalWindowDimBg,ImVec4(0,0,0,0.68f));
         pc(ImGuiCol_Border,t.border);pc(ImGuiCol_FrameBg,t.control);pc(ImGuiCol_FrameBgHovered,t.controlHover);pc(ImGuiCol_FrameBgActive,t.controlActive);
         pc(ImGuiCol_Button,t.button);pc(ImGuiCol_ButtonHovered,t.buttonHover);pc(ImGuiCol_ButtonActive,t.buttonActive);
         pc(ImGuiCol_Header,t.control);pc(ImGuiCol_HeaderHovered,t.controlHover);pc(ImGuiCol_HeaderActive,t.controlActive);
         pc(ImGuiCol_CheckMark,t.accentHover);pc(ImGuiCol_SliderGrab,t.accent);pc(ImGuiCol_SliderGrabActive,t.accentHover);
+        pc(ImGuiCol_TextLink,t.accentHover);pc(ImGuiCol_PlotHistogram,t.accent);pc(ImGuiCol_PlotHistogramHovered,t.accentHover);
+        pc(ImGuiCol_ResizeGrip,t.border);pc(ImGuiCol_ResizeGripHovered,t.accent);pc(ImGuiCol_ResizeGripActive,t.accentHover);
+        pc(ImGuiCol_DragDropTarget,t.accentHover);pc(ImGuiCol_NavCursor,t.accent);
         pc(ImGuiCol_ScrollbarBg,t.scrollbarTrack);pc(ImGuiCol_ScrollbarGrab,t.scrollbar);pc(ImGuiCol_ScrollbarGrabHovered,t.scrollbarHover);pc(ImGuiCol_ScrollbarGrabActive,t.scrollbarActive);
         pc(ImGuiCol_Separator,t.separator);pc(ImGuiCol_TextSelectedBg,t.selection);
         pc(ImGuiCol_Tab,t.control);pc(ImGuiCol_TabHovered,t.controlHover);pc(ImGuiCol_TabSelected,t.selection);pc(ImGuiCol_TabSelectedOverline,t.accent);
@@ -335,10 +431,15 @@ inline void EndScroll(const Theme& t) {
     ImGui::EndChild();
     ImGui::PopStyleVar();
 }
-enum class Icon : unsigned char { Ai, Resource, Item, Lab, Building, Cleanup, Appearance, Info, Map, Authoring, Tools, Settings, LiveLog, Server };
+enum class Icon : unsigned char { Ai, Resource, Item, Lab, Building, Cleanup, Appearance, Info, Map, Authoring, Tools, Settings, LiveLog, Server, Acknowledge, Copy, Export, Bell, Code };
 inline void DrawIcon(Icon icon,const ImVec2& c,float size,const ImVec4& tint=Current.icon) {
     auto* d=ImGui::GetWindowDrawList();const ImU32 col=ImGui::GetColorU32(tint);const float r=size*0.5f,w=std::max(1.0f,size*0.09f);
     switch(icon) {
+    case Icon::Acknowledge:d->AddLine({c.x-r*.45f,c.y},{c.x-r*.1f,c.y+r*.35f},col,w);d->AddLine({c.x-r*.1f,c.y+r*.35f},{c.x+r*.45f,c.y-r*.35f},col,w);break;
+    case Icon::Copy:d->AddRect({c.x-r*.4f,c.y-r*.4f},{c.x+r*.2f,c.y+r*.3f},col,0,0,w);d->AddRect({c.x-r*.1f,c.y-r*.2f},{c.x+r*.5f,c.y+r*.5f},col,0,0,w);break;
+    case Icon::Export:d->AddRect({c.x-r*.5f,c.y},{c.x+r*.5f,c.y+r*.5f},col,0,0,w);d->AddLine({c.x,c.y+r*.2f},{c.x,c.y-r*.5f},col,w);d->AddLine({c.x-r*.3f,c.y-r*.2f},{c.x,c.y-r*.5f},col,w);d->AddLine({c.x+r*.3f,c.y-r*.2f},{c.x,c.y-r*.5f},col,w);break;
+    case Icon::Bell:d->AddCircle({c.x,c.y-r*.1f},r*.5f,col,12,w);d->AddLine({c.x-r*.55f,c.y+r*.4f},{c.x+r*.55f,c.y+r*.4f},col,w);d->AddCircleFilled({c.x,c.y+r*.65f},w,col);break;
+    case Icon::Code:d->AddLine({c.x-r*.5f,c.y},{c.x-r*.15f,c.y-r*.35f},col,w);d->AddLine({c.x-r*.5f,c.y},{c.x-r*.15f,c.y+r*.35f},col,w);d->AddLine({c.x+r*.5f,c.y},{c.x+r*.15f,c.y-r*.35f},col,w);d->AddLine({c.x+r*.5f,c.y},{c.x+r*.15f,c.y+r*.35f},col,w);break;
     case Icon::LiveLog:
         d->AddRect(ImVec2(c.x-r*.65f,c.y-r*.6f),ImVec2(c.x+r*.65f,c.y+r*.6f),col,0,0,w);
         d->AddLine(ImVec2(c.x-r*.4f,c.y-r*.25f),ImVec2(c.x-r*.15f,c.y),col,w);d->AddLine(ImVec2(c.x-r*.15f,c.y),ImVec2(c.x-r*.4f,c.y+r*.25f),col,w);

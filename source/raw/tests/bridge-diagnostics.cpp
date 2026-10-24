@@ -26,12 +26,17 @@ int main() {
         E("callback_threw","rejected","callback_contract_mismatch",6),E("world_reset","cancelled","world_changed",7),
         E("player_disconnected","cancelled","player_disconnected",8),E("compatibility_handshake_rejected","rejected","incompatible",9)})d.Record(event,true);
     auto snapshot=d.Snapshot();assert(snapshot["events"].size()==20);assert(snapshot["activePending"].get<uint64_t>()==0);
+    for(const auto& event:snapshot["events"])assert(event["referenceUrl"].get<std::string>().starts_with(std::string(PS::Diagnostics::Reference)+"#bridge-"));
+    for(const auto& reason:PS::Diagnostics::BridgeReasons)
+        assert(PS::Diagnostics::BridgeReasonUrl(reason.Code)==std::string(PS::Diagnostics::Reference)+"#"+std::string(reason.Anchor));
+    assert(PS::Diagnostics::BridgeReasonUrl("unknown future receipt detail").empty());
     const auto encoded=snapshot.dump();assert(encoded.find("/Game/")==std::string::npos&&encoded.find("DataAsset")==std::string::npos);
 
     // Redaction and bounded storage/cardinality.
     auto unsafe=E("callback_threw","rejected","C:/Users/name/mod.uasset",10);unsafe.owner="Display Name";unsafe.entity="/Game/Secret.Asset";d.Record(unsafe,true);
     snapshot=d.Snapshot();const auto& last=snapshot["events"].back();
     assert(last["owner"]=="Display_Name"&&last["entity"]=="_Game_Secret.Asset");
+    assert(last["referenceUrl"]==""); // Never invent a link for arbitrary receipt text.
     for(int i=0;i<400;++i){auto event=E("retry_attempted","pending","bridge_not_ready",11);event.correlationId="same";d.Record(event,true);}
     snapshot=d.Snapshot();assert(snapshot["events"].size()<=BridgeDiagnostics::GlobalCapacity);
     size_t same=0;for(const auto& event:snapshot["events"])if(event["correlationId"]=="same")++same;

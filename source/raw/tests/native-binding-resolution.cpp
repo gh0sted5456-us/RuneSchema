@@ -103,15 +103,16 @@ int main(int argc, char** argv)
     const auto panel=Read(desktopRoot/"include/Generator/AuthoringPanel.h");
     const auto protocol=Read(rawRoot/"include/Core/HelpyAuthoringProtocol.h");
     Check(entrypoint.find("BeginRuneSchemaTab(\"Authoring & Tools\"")==std::string::npos
-        && navigation.find("case Page::Authoring:return \"Authoring Tools\";")!=std::string::npos
+        && navigation.find("case Page::Authoring:return \"Authoring\";")!=std::string::npos
+        && navigation.find("case Page::Authoring:return Page::Tools;")!=std::string::npos
         && desktop.find("case Page::Authoring:")!=std::string::npos
         && desktop.find("AuthoringPanel::Render();")!=std::string::npos,
         "desktop Authoring Tools replaces the duplicate legacy authoring tab");
     const auto serverStart=desktop.find("if(HelpyEnvironment::Server())",desktop.find("void HelpyStandaloneWindow::ThreadMain()"));
     Check(serverStart!=std::string::npos
-        && desktop.find("CurrentPage=Page::Authoring;",serverStart)!=std::string::npos
+        && desktop.find("CurrentPage=Page::DedicatedServer;",serverStart)<desktop.find("ShowWindow(m_hwnd,SW_SHOWNOACTIVATE)",serverStart)
         && desktop.find("ShowWindow(m_hwnd,SW_SHOWNOACTIVATE)",serverStart)!=std::string::npos,
-        "dedicated server opens the desktop authoring route without a local-player dependency");
+        "dedicated server opens its desktop configuration route without a local-player dependency");
     for(const auto* operation:{"AuthoringActivate","AuthoringSubmit","AuthoringSnapshot"})
         Check(host.find(operation)!=std::string::npos,"native host exposes all desktop authoring service routes");
     const auto bridgeStart=entrypoint.find("void PrepareAuthoringBridge()");

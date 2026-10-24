@@ -168,6 +168,22 @@ namespace PS::Storefront {
         return Name(value.Value);
     }
 
+    inline const char* MappingCachePlatform(const Detection& value) noexcept {
+        if(value.DedicatedServer)return "SERVER";
+        if(value.Value==Kind::GamePass)return "GAMEPASS";
+        if(value.EpicLauncher)return "EPIC";
+        if(value.SteamLauncher)return "STEAM";
+        return "UNKNOWN";
+    }
+
+    inline std::string PlayerPlatform(std::string native, bool local, const Detection& runtime) {
+        if(native!="Unknown" || !local || runtime.DedicatedServer)return native;
+        if(runtime.Value==Kind::GamePass)return "Game Pass";
+        if(runtime.EpicLauncher)return "Epic";
+        if(runtime.SteamLauncher)return "Steam";
+        return native;
+    }
+
     inline bool AllowsEmbeddedAobSignatures() noexcept
     {
         const auto lane = CurrentNativeLane();

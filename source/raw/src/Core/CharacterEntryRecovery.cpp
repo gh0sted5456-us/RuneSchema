@@ -1,4 +1,8 @@
 #include "Core/CharacterEntryRecovery.h"
+#include "Core/CharacterLoadAudit.h"
+#include "Core/LoadProtectionNotice.h"
+#include "Core/NativePersistencePolicy.h"
+#include "Runtime/Storefront.h"
 #include "Core/CharacterEntryReturnGate.h"
 #include "SDK/DragonWildsSignatures.h"
 #include "Runtime/NativeExecutableDiscovery.h"
@@ -17,6 +21,11 @@
 using namespace RC;
 namespace {
 std::atomic_bool Reported=false,PlayerStateReported=false;
+bool MayBypass()noexcept{try{
+    const auto& settings=PS::PSConfig::Get()->GetSettings();
+    return PS::NativePersistencePolicy::BypassRequested(PS::Storefront::IsDedicatedServer(),
+        settings.persistence.allowCorruptCharacterEntry,settings.quickLaunch.mode);
+}catch(...){return false;}}
 bool StandaloneBypassEnabledOrLoaded() {
     // enabled.txt starts after mods.txt, regardless of a mods.txt :0 entry.
     const auto mods=PS::HostServices::WorkingDirectory()/"Mods";
@@ -101,19 +110,36 @@ void CharacterEntryRecovery::Initialize() {
         PlayerStateHook={};AcceptanceHook={};State="Unavailable: paired hook activation failed";
         PS::Log<LogLevel::Warning>(STR("[SAVE-ENTRY][UNAVAILABLE] Paired bypass activation failed; both native return hooks were removed.\n"));return;
     }
-    State="Ready: native validation and player-state return bypass active";
-    PS::Log<LogLevel::Normal>(STR("[SAVE-ENTRY][READY] Optional character validation and ProcessPlayerStateLoad bypass active. Both native functions still run; rejected return results are accepted without save repair.\n"));
+    const bool forced=PS::PSConfig::Get()->GetSettings().persistence.allowCorruptCharacterEntry;
+    State=forced?"Ready: Save Bypass by default":"Armed: automatic fallback after native rejection";
+    PS::ConsolidatedLog<LogLevel::Normal>(STR("[RuneSchema] [SAVE-ENTRY][READY] {}. Native work runs first; bypass changes only a rejected return, without replaying a load or repairing data.\n"),forced?STR("Save Bypass by default"):STR("Automatic fallback after native rejection"));
 }
 void CharacterEntryRecovery::Shutdown(){PlayerStateHook={};AcceptanceHook={};Reported=false;PlayerStateReported=false;State="Disabled for this session";}
 bool CharacterEntryRecovery::IsActive() const noexcept{return static_cast<bool>(AcceptanceHook)&&static_cast<bool>(PlayerStateHook);}
 void CharacterEntryRecovery::AcceptCharacter(SafetyHookContext& context) {
     if(context.rax&0xffu)return;
+    if(!MayBypass())return;
     context.rax=PS::CharacterEntryBypassPlan::AcceptRejected(context.rax);
-    if(!Reported.exchange(true))PS::Log<LogLevel::Warning>(STR("[SAVE-ENTRY][BYPASSED] Native character validation rejected this load; the opt-in bypass allowed it to continue. This is not a save-data repair; retain your original backup.\n"));
+    const auto token=PS::CharacterLoadAudit::Token();
+    if(token)PS::LoadProtectionNotice::Record(PS::CharacterLoadAudit::Current.Character,0,0,true);
+    const bool first=token?PS::CharacterLoadAudit::Bypassed(PS::CharacterLoadAudit::Gate::Validation):!Reported.exchange(true);
+    if(!first)return;
+    if(!token)PS::LoadProtectionNotice::SessionBypasses.fetch_add(1,std::memory_order_relaxed);
+    PS::ConsolidatedLog<LogLevel::Normal>(STR("[RuneSchema] [info] [SAVE-ENTRY][BYPASSED] Save Bypass initiated (character validation). Details: RuneSchema.log.\n"));
+    if(token)PS::DiagnosticLog::Formatted(STR("[RuneSchema] [diagnostic] [SAVE-ENTRY][BYPASSED] load={} native character validation rejected; acceptance overridden. This is not a record-rejection, world-entry or persisted-save receipt.\n"),false,token);
+    else PS::DiagnosticLog::Write(STR("[RuneSchema] [diagnostic] [SAVE-ENTRY][BYPASSED][UNATTRIBUTED] Native character validation rejected; the configured policy accepted its return. No reflected gameplay preflight receipt was observed. Pruning, world entry and progress retention are not verified; keep your backup.\n"));
 }
 void CharacterEntryRecovery::AcceptPlayerState(SafetyHookContext& context) {
     if(context.rax&0xffu)return;
+    if(!MayBypass())return;
     context.rax=PS::CharacterEntryBypassPlan::AcceptRejected(context.rax);
-    if(!PlayerStateReported.exchange(true))PS::Log<LogLevel::Warning>(STR("[SAVE-ENTRY][BYPASSED][PLAYER-STATE] Native ProcessPlayerStateLoad returned rejection; the opt-in bypass accepted its return result. Native loading was not skipped.\n"));
+    const auto token=PS::CharacterLoadAudit::Token();
+    if(token)PS::LoadProtectionNotice::Record(PS::CharacterLoadAudit::Current.Character,0,0,true);
+    const bool first=token?PS::CharacterLoadAudit::Bypassed(PS::CharacterLoadAudit::Gate::PlayerState):!PlayerStateReported.exchange(true);
+    if(!first)return;
+    if(!token)PS::LoadProtectionNotice::SessionBypasses.fetch_add(1,std::memory_order_relaxed);
+    PS::ConsolidatedLog<LogLevel::Normal>(STR("[RuneSchema] [info] [SAVE-ENTRY][BYPASSED][PLAYER-STATE] Save Bypass initiated (player state). Details: RuneSchema.log.\n"));
+    if(token)PS::DiagnosticLog::Formatted(STR("[RuneSchema] [diagnostic] [SAVE-ENTRY][BYPASSED][PLAYER-STATE] load={} native player-state rejection overridden after native work. World entry and persisted save remain unverified.\n"),false,token);
+    else PS::DiagnosticLog::Write(STR("[RuneSchema] [diagnostic] [SAVE-ENTRY][BYPASSED][PLAYER-STATE][UNATTRIBUTED] Native ProcessPlayerStateLoad rejected; the configured policy accepted its return. Native loading ran once. No reflected gameplay preflight receipt was observed; world entry and progress retention remain unverified.\n"));
 }
 }

@@ -1,4 +1,10 @@
 #include <algorithm>
+#include "Core/HelpyCacheSources.h"
+#include "Core/PakDiscovery.h"
+#include "Core/NativePersistencePolicy.h"
+#include "Core/ModIdentity.h"
+#include "Core/ModManager.h"
+#include "Core/ConfigFiles.h"
 #include <array>
 #include <atomic>
 #include <cctype>
@@ -34,6 +40,7 @@
 #include "Utility/Config.h"
 #include "Utility/Logging.h"
 #include "Utility/StartupTrace.h"
+#include "Utility/StructuredDiagnosticB3D.h"
 #include "Utility/InlineHook.h"
 #include "Utility/ModFolderLayout.h"
 #include "SDK/Helper/Memory.h"
@@ -281,7 +288,6 @@ namespace {
                 target.filename().wstring());
             return;
         }
-
         // Fail if another writer touched the world after it was read. This
         // startup pass runs before a world is selected or loaded.
         std::ifstream recheck(target, std::ios::binary);
@@ -290,8 +296,7 @@ namespace {
         recheck.close();
         if (current != original) throw std::runtime_error("save changed during preflight");
         const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
-        const auto backupEnabled = PS::PSConfig::Get()->GetSettings()
-            .worldSaveCleanup.backupBeforePrune;
+        const bool backupEnabled = true;
         const fs::path backup = backupEnabled
             ? fs::path(target.wstring() + L".runeschema-" + std::to_wstring(nonce) + L".bak")
             : fs::path{};
@@ -732,11 +737,7 @@ namespace {
                                                 && currentCapacity == capacity
                                                 && std::memcmp(bytes, original.data(),
                                                     original.size()) == 0) {
-                                                fs::path backup;
-                                                if (PS::PSConfig::Get()->GetSettings()
-                                                        .worldSaveCleanup.backupBeforePrune)
-                                                    backup = BackupWorldBuildingPayload(
-                                                        ActiveSpudLoadSlot, original);
+                                                const auto backup=BackupWorldBuildingPayload(ActiveSpudLoadSlot,original);
                                                 std::memcpy(const_cast<std::uint8_t*>(bytes),
                                                     repair.bytes.data(), repair.bytes.size());
                                                 const auto repairedCount = static_cast<std::int32_t>(
@@ -750,12 +751,12 @@ namespace {
                                                     verified.pieces.size(),
                                                     backup.empty() ? L"disabled" : backup.filename().wstring());
                                             } else {
-                                                PS::ConsolidatedLog<RC::LogLevel::Warning>(STR(
-                                                    "[RuneSchema] [SAVE-CLEANUP][BUILDINGS][SKIPPED] Native buffer changed during validation; world unchanged.\n"));
+                                                PS::CodedLog<RC::LogLevel::Warning>(PS::Diagnostics::Id::WorldCleanupBufferChanged,STR(
+                                                    "[SAVE-CLEANUP][BUILDINGS][SKIPPED] Native buffer changed during validation; world unchanged.\n"));
                                             }
                                         } else if (!repair.removedIds.empty()) {
-                                            PS::ConsolidatedLog<RC::LogLevel::Warning>(STR(
-                                                "[RuneSchema] [SAVE-CLEANUP][BUILDINGS][SKIPPED] World load contract was not safe for repair; world unchanged.\n"));
+                                            PS::CodedLog<RC::LogLevel::Warning>(PS::Diagnostics::Id::WorldCleanupContractUnsafe,STR(
+                                                "[SAVE-CLEANUP][BUILDINGS][SKIPPED] World load contract was not safe for repair; world unchanged.\n"));
                                         } else {
                                             // One quiet confirmation per slot, not a line per frame/re-entry.
                                             static std::mutex checkedMutex;
@@ -767,13 +768,13 @@ namespace {
                                                 ActiveSpudLoadSlot,parsed.pieces.size());
                                         }
                                     } catch (const std::exception& error) {
-                                        PS::ConsolidatedLog<RC::LogLevel::Warning>(STR(
-                                            "[RuneSchema] [SAVE-CLEANUP][BUILDINGS][SKIPPED] World unchanged: {}.\n"),
+                                        PS::CodedLog<RC::LogLevel::Warning>(PS::Diagnostics::Id::WorldCleanupRepairFailed,STR(
+                                            "[SAVE-CLEANUP][BUILDINGS][SKIPPED] World unchanged: {}.\n"),
                                             PS::ToWideSafe(error.what()));
                                     }
                                 } catch (const std::exception& error) {
-                                    PS::ConsolidatedLog<RC::LogLevel::Warning>(STR(
-                                        "[RuneSchema] [SAVE-CLEANUP][BUILDINGS][SKIPPED] World data could not be validated: {}.\n"),
+                                    PS::CodedLog<RC::LogLevel::Warning>(PS::Diagnostics::Id::WorldCleanupValidationFailed,STR(
+                                        "[SAVE-CLEANUP][BUILDINGS][SKIPPED] World data could not be validated: {}.\n"),
                                         PS::ToWideSafe(error.what()));
                                 }
                             }
@@ -795,8 +796,8 @@ namespace {
             PS::ConsolidatedLog<RC::LogLevel::Normal>(STR(
                 "[RuneSchema] [SAVE-CLEANUP][BUILDINGS] Game Pass world cleanup is ready.\n"));
         else
-            PS::ConsolidatedLog<RC::LogLevel::Warning>(STR(
-                "[RuneSchema] [SAVE-CLEANUP][BUILDINGS][GAMEPASS-UNAVAILABLE] Required world hooks could not be installed; saves will not be changed.\n"));
+            PS::CodedLog<RC::LogLevel::Warning>(PS::Diagnostics::Id::WorldCleanupHookUnavailable,STR(
+                "[SAVE-CLEANUP][BUILDINGS][GAMEPASS-UNAVAILABLE] Required world hooks could not be installed; saves will not be changed.\n"));
     }
 
     void ProbeGamePassWorldSaveFunctions(DragonWilds::DragonWildsBuildingModLoader* buildingLoader)
@@ -807,7 +808,7 @@ namespace {
         InstallNativeSpudDeserializeProbe();
     }
 
-    struct ModIdentity { std::string Id; std::string Name; std::string Author="Unknown Author"; std::string Website; bool Present=false; };
+    using ModIdentity=PS::ModIdentity::Record;
     std::string TrimIdentity(std::string value) {
         const auto first=value.find_first_not_of(" \t\r\n");
         if(first==std::string::npos)return {};
@@ -817,26 +818,7 @@ namespace {
     ModIdentity ReadModIdentity(const fs::path& root,const RC::StringType& folder) {
         ModIdentity result;result.Id=RC::to_string(folder);result.Name=result.Id;
         const auto file=root/"ID.txt";if(!fs::exists(file))return result;
-        result.Present=true;std::ifstream input(file);if(!input)throw std::runtime_error("ID.txt could not be opened");
-        std::string line;bool structured=false;
-        while(std::getline(input,line)) {
-            line=TrimIdentity(line);if(line.empty()||line.starts_with('#'))continue;
-            const auto split=line.find_first_of(":=");
-            if(split==std::string::npos) {if(!structured){result.Id=line;result.Name=line;}continue;}
-            structured=true;auto key=TrimIdentity(line.substr(0,split));auto value=TrimIdentity(line.substr(split+1));
-            if(key=="ModID"||key=="ModId")result.Id=value;
-            else if(key=="Name"||key=="ModName")result.Name=value;
-            else if(key=="Author"||key=="ModAuthor")result.Author=value;
-            else if(key=="Website"||key=="ModWebsite"||key=="ModSite")result.Website=value;
-        }
-        if(result.Id.empty())throw std::runtime_error("ID.txt requires ModID when the file is present");
-        if(result.Name.empty())result.Name=result.Id;
-        if(result.Author.empty())throw std::runtime_error("ID.txt Author cannot be empty");
-        if(result.Id.size()>128||result.Name.size()>256||result.Author.size()>256||result.Website.size()>2048)
-            throw std::runtime_error("ID.txt metadata exceeds its safe length limit");
-        if(!result.Website.empty()&&!result.Website.starts_with("https://")&&!result.Website.starts_with("http://"))
-            throw std::runtime_error("ID.txt Website must be an http or https link");
-        return result;
+        return PS::ModIdentity::Parse(PS::ConfigFiles::Read(file,64*1024),result.Id);
     }
 }
 
@@ -918,7 +900,9 @@ namespace DragonWilds {
 
     void DragonWildsMainLoader::PreInitialize()
     {
-        if (PS::PSConfig::Get()->GetSettings().persistence.allowCorruptCharacterEntry)
+        const auto& settings=PS::PSConfig::Get()->GetSettings();
+        if (PS::NativePersistencePolicy::BypassRequested(PS::Storefront::IsDedicatedServer(),
+                settings.persistence.allowCorruptCharacterEntry,settings.quickLaunch.mode))
             m_characterEntryRecovery.Initialize();
         HookDatatableSerialize();
         SetupAlternativePakPathReader();
@@ -953,9 +937,14 @@ namespace DragonWilds {
                         iteration.RemoveSelf();
                     }
                 },serverOptions);
-            if (m_dedicatedServerReadyCallbackId==Hook::ERROR_ID)
-                PS::Log<LogLevel::Error>(STR(
-                    "[SERVER][REGISTRY-DEFERRED][UNAVAILABLE] InitGameState boundary could not be installed; authoritative registration will remain inactive rather than mutate an unsettled server subsystem.\n"));
+            if (m_dedicatedServerReadyCallbackId==Hook::ERROR_ID) {
+                if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-006","Error","Blocked",
+                    "Dedicated-server registry boundary unavailable",
+                    "InitGameState callback installation failed; authoritative registration remains inactive to protect unsettled server state.",
+                    "InitGameState","Application"))
+                    PS::Log<LogLevel::Error>(STR(
+                        "[SERVER][REGISTRY-DEFERRED][UNAVAILABLE] InitGameState boundary could not be installed; authoritative registration will remain inactive rather than mutate an unsettled server subsystem.\n"));
+            }
             else
                 PS::Log<LogLevel::Normal>(STR(
                     "[SERVER][REGISTRY-DEFERRED] Runtime cloning and registration will begin after the dedicated server reaches InitGameState.\n"));
@@ -990,7 +979,10 @@ namespace DragonWilds {
                 }
             },startupOptions);
         if(m_coreStartupCallbackId==Hook::ERROR_ID)
-            PS::Log<LogLevel::Error>(STR("[DEGRADED][CORE] Game-thread startup fallback could not be installed.\n"));
+            if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-007","Error","Blocked",
+                "Core startup fallback unavailable","Game-thread startup callback installation failed.",
+                "CoreStartupFallback","Application"))
+                PS::Log<LogLevel::Error>(STR("[DEGRADED][CORE] Game-thread startup fallback could not be installed.\n"));
         PS::StartupTrace::Mark("UE4SS readiness published; awaiting engine lifecycle event");
         SetupAutoReload();
 	}
@@ -1166,13 +1158,21 @@ namespace DragonWilds {
         if (m_buildingLoader)
         {
             try {m_buildingLoader->ActivateWorldRegistration();}
-            catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:buildings] World registration disabled: {}.\n"),PS::ToWideSafe(error.what()));}
+            catch(const std::exception& error){
+                if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-012","Error","Failed",
+                    "Building world registration disabled",error.what(),"BuildingWorldRegistration","Application"))
+                    PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:buildings] World registration disabled: {}.\n"),PS::ToWideSafe(error.what()));
+            }
         }
 
         if (m_stringLoader)
         {
             try {m_stringLoader->ApplyPending();}
-            catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:strings] Pending strings were not applied: {}.\n"),PS::ToWideSafe(error.what()));}
+            catch(const std::exception& error){
+                if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-013","Error","Failed",
+                    "Pending string application failed",error.what(),"PendingStrings","Application"))
+                    PS::Log<LogLevel::Error>(STR("[DEGRADED][LOADER:strings] Pending strings were not applied: {}.\n"),PS::ToWideSafe(error.what()));
+            }
         }
 
         PS::StartupTrace::Mark("data registrar begin");
@@ -1185,7 +1185,11 @@ namespace DragonWilds {
                     "[SERVER][REGISTRIES-READY] Live persistence registries, cooked PAK discovery and configured combat registration completed.\n"));
         }
         catch(const std::exception& error){
-            PS::Log<LogLevel::Error>(STR("[DEGRADED][SERVICE:data-registrar] General registration and character-save cleanup unavailable: {}. Dedicated-server building cleanup will still check its live registries independently.\n"),PS::ToWideSafe(error.what()));
+            if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-014","Error","Failed",
+                "Data registrar unavailable",
+                std::string(error.what())+"; general registration and character-save cleanup unavailable. Dedicated-server building cleanup uses independent live registries.",
+                "DataRegistrar","Application"))
+                PS::Log<LogLevel::Error>(STR("[DEGRADED][SERVICE:data-registrar] General registration and character-save cleanup unavailable: {}. Dedicated-server building cleanup will still check its live registries independently.\n"),PS::ToWideSafe(error.what()));
         }
         // All lanes attempt building cleanup independently of unrelated item,
         // quest or journal service health. Its own live registries must validate.
@@ -1196,7 +1200,12 @@ namespace DragonWilds {
                 PS::ToWideSafe(error.what()));
         }
         try {m_registryBridge.Start();}
-        catch(const std::exception& error){PS::Log<LogLevel::Error>(STR("[DEGRADED][SERVICE:registry-bridge] Networking bridge unavailable: {}.\n"),PS::ToWideSafe(error.what()));}
+        catch(const std::exception& error){
+            if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-015","Error","Failed",
+                "Networking registry bridge unavailable",error.what(),"RegistryBridge","Application"))
+                PS::Log<LogLevel::Error>(STR("[DEGRADED][SERVICE:registry-bridge] Networking bridge unavailable: {}.\n"),PS::ToWideSafe(error.what()));
+        }
+        PS::HelpyCacheSources::Seal();
         PS::StartupTrace::Mark("GameInstanceInit loaders complete (deferred world work may remain)");
     }
 
@@ -1209,7 +1218,10 @@ namespace DragonWilds {
                 {TEXT("Serialize__Ref_FArchive"), TEXT("Serialize")});
         if (!DatatableSerializeFuncPtr)
         {
-            PS::Log<LogLevel::Warning>(STR("[BINDING:UDataTable::Serialize][UNAVAILABLE] Early table observation is disabled; normal GameInstance loading continues.\n"));
+            if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-004","Warning","Skipped",
+                "Early DataTable observation unavailable","UDataTable::Serialize could not be resolved; normal GameInstance loading continues.",
+                "UDataTable::Serialize","Resolution"))
+                PS::Log<LogLevel::Warning>(STR("[BINDING:UDataTable::Serialize][UNAVAILABLE] Early table observation is disabled; normal GameInstance loading continues.\n"));
             return;
         }
 
@@ -1224,7 +1236,10 @@ namespace DragonWilds {
         if (!PS::InstallInlineHook(DatatableSerialize_Hook, reinterpret_cast<void*>(DatatableSerializeFuncPtr), reinterpret_cast<void*>(OnDataTableSerialized))) {
             DatatableSerializeCallbacks.clear();
             PS::StartupTrace::Mark("ERROR DataTable hook installation");
-            PS::Log<LogLevel::Warning>(STR("[BINDING:UDataTable::Serialize][UNAVAILABLE] Early table hook could not be installed; normal GameInstance loading continues.\n"));
+            if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-005","Warning","Skipped",
+                "Early DataTable hook unavailable","UDataTable::Serialize hook installation failed; normal GameInstance loading continues.",
+                "UDataTable::Serialize","Application"))
+                PS::Log<LogLevel::Warning>(STR("[BINDING:UDataTable::Serialize][UNAVAILABLE] Early table hook could not be installed; normal GameInstance loading continues.\n"));
             return;
         }
         PS::Log<LogLevel::Verbose>(STR("Core pre-initialized.\n"));
@@ -1235,7 +1250,10 @@ namespace DragonWilds {
         auto VTable = DragonWilds::GetVTablePtrByClassPath(TEXT("/Script/Engine.GameInstance"));
         if (!VTable)
         {
-            PS::Log<LogLevel::Error>(STR("Something went wrong with getting VTable pointer for GameInstance."));
+            if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-002","Error","Blocked",
+                "GameInstance vtable unavailable","Could not resolve the GameInstance vtable; this initialization hook cannot be installed.",
+                "GameInstance::Init","Resolution"))
+                PS::Log<LogLevel::Error>(STR("Something went wrong with getting VTable pointer for GameInstance."));
             return;
         }
 
@@ -1249,7 +1267,10 @@ namespace DragonWilds {
         if (!PS::InstallInlineHook(GameInstanceInit_Hook, GameInstanceInitPtr, reinterpret_cast<void*>(OnGameInstanceInit))) {
             GameInstanceInitCallbacks.clear();
             PS::StartupTrace::Mark("ERROR GameInstance hook installation");
-            PS::Log<LogLevel::Error>(STR("Unable to install GameInstance initialization hook.\n"));
+            if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-003","Error","Blocked",
+                "GameInstance initialization hook unavailable","GameInstance::Init inline hook installation failed.",
+                "GameInstance::Init","Application"))
+                PS::Log<LogLevel::Error>(STR("Unable to install GameInstance initialization hook.\n"));
         }
     }
 
@@ -1275,12 +1296,14 @@ namespace DragonWilds {
         RegisterLoader(std::move(recipes));
         auto npcs=std::make_unique<DragonWildsNpcLoader>(recipeService);
         auto* npcService=npcs.get();
+        m_dataRegistrar.SetCharacterRegistryPreparation([npcService](RC::Unreal::UObject* context){npcService->PrepareQuests(context);});
         m_registryBridge.QuestControl=[npcService](RC::Unreal::UObject* player,const std::string& quest,
             const std::string& action,const std::string& payload){
             return npcService->HandleNetworkQuestControl(player,quest,action,payload);
         };
-        m_registryBridge.ClientNotification=[npcService](RC::Unreal::UObject* player,const std::string& channel,
+        m_registryBridge.ClientNotification=[this,npcService](RC::Unreal::UObject* player,const std::string& channel,
             const std::string& entity,const std::string& payload){
+            if(channel=="helpy.marks"){if(m_spawnLoader)m_spawnLoader->HandleNetworkHelpyMarks(player,payload);return;}
             npcService->HandleNetworkNotification(player,channel,entity,payload);
         };
         npcService->PublishWorldState=[this](const std::string& instance,const std::string& record){
@@ -1302,6 +1325,7 @@ namespace DragonWilds {
         npcService->DeliverAutomaticJournals=[journalService,loreService](RC::Unreal::UObject* controller){journalService->DeliverAutomaticUnlocks(controller);loreService->DeliverAutomaticUnlocks(controller);};
         npcService->UnlockJournal=[journalService,loreService](RC::Unreal::UObject* controller,const std::string& entry){return journalService->UnlockForPlayer(controller,entry)||loreService->UnlockForPlayer(controller,entry);};
         npcService->OpenLore=[service=loreLoader.get()](RC::Unreal::UObject* controller,const std::string& entry){return service->OpenLoreForPlayer(controller,entry);};
+        npcService->LoreRead=[service=loreLoader.get()](RC::Unreal::UObject* controller,const std::string& entry){return service->LoreReadForPlayer(controller,entry);};
         RegisterLoader(std::move(loreLoader));
 
         auto buildingModLoader = std::make_unique<DragonWildsBuildingModLoader>();
@@ -1310,6 +1334,10 @@ namespace DragonWilds {
 
         auto spawnLoader = std::make_unique<DragonWildsSpawnLoader>();
         m_spawnLoader = spawnLoader.get();
+        m_spawnLoader->BuildingOwnershipRegistryReady=[service=m_buildingLoader]{
+            try{(void)ReadValidatedLiveBuildingIds(service->CleanupExpectations());return true;}catch(...){return false;}
+        };
+        m_spawnLoader->PlanBuildingImport=[service=m_buildingLoader](const nlohmann::json& document){return service->PlanToolImport(document);};
         m_buildingLoader->ImportPlacements=[service=m_spawnLoader](const nlohmann::json& placements,const RC::StringType& mod){
             service->LoadBuildingPlacements(placements,mod);
         };
@@ -1429,8 +1457,12 @@ namespace DragonWilds {
                     }
                     catch (const std::exception& e)
                     {
-                        PS::Log<LogLevel::Error>(STR("Failed to auto-reload mod {} - {}\n"),
-                            pendingAutoReload.ModName, PS::ToWideSafe(e.what()));
+                        if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-011","Error","Failed",
+                            "Mod auto-reload failed",e.what(),pendingAutoReload.FolderType,"Reload",
+                            RC::to_string(pendingAutoReload.ModName),
+                            PS::StructuredDiagnosticB2::SourceWithinSection(pendingAutoReload.FilePath,pendingAutoReload.FolderType)))
+                            PS::Log<LogLevel::Error>(STR("Failed to auto-reload mod {} - {}\n"),
+                                pendingAutoReload.ModName, PS::ToWideSafe(e.what()));
                     }
                 }
 
@@ -1440,7 +1472,10 @@ namespace DragonWilds {
         if (AutoReloadCallbackId == Hook::ERROR_ID)
         {
 
-            PS::Log<LogLevel::Error>(STR("Failed to register auto-reload engine tick callback.\n"));
+            if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-010","Error","Blocked",
+                "Automatic reload callback unavailable","Engine tick callback registration failed; automatic file reload cannot run.",
+                "AutoReload","Application"))
+                PS::Log<LogLevel::Error>(STR("Failed to register auto-reload engine tick callback.\n"));
             return;
         }
 
@@ -1466,12 +1501,18 @@ namespace DragonWilds {
         {
             if (!PS::InstallInlineHook(GetPakFolders_Hook, reinterpret_cast<void*>(GetPakFolders_Address), reinterpret_cast<void*>(GetPakFolders))) {
                 PS::StartupTrace::Mark("ERROR pak hook installation");
-                PS::Log<LogLevel::Error>(STR("Unable to install additional pak-folder hook.\n"));
+                if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-008","Error","Blocked",
+                    "Additional PAK directory hook unavailable","FPakPlatformFile::GetPakFolders inline hook installation failed.",
+                    "FPakPlatformFile::GetPakFolders","Application"))
+                    PS::Log<LogLevel::Error>(STR("Unable to install additional pak-folder hook.\n"));
             }
         }
         else
         {
-            PS::Log<LogLevel::Error>(STR("Unable to setup additional .pak read directory, signature for FPakPlatformFile::GetPakFolders is outdated.\n"));
+            if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-009","Error","Blocked",
+                "Additional PAK directory binding unavailable","FPakPlatformFile::GetPakFolders signature could not be resolved.",
+                "FPakPlatformFile::GetPakFolders","Resolution"))
+                PS::Log<LogLevel::Error>(STR("Unable to setup additional .pak read directory, signature for FPakPlatformFile::GetPakFolders is outdated.\n"));
         }
     }
 
@@ -1559,6 +1600,8 @@ namespace DragonWilds {
         m_buildingLoader = nullptr;
         m_spawnLoader = nullptr;
         PS::StartupTrace::Fatal(stage,reason);
+        (void)PS::StructuredDiagnosticB3D::Report("RS-CORE-001","Error","Failed",
+            "RuneSchema startup aborted",reason,stage,"Finalization");
         if (stage == "core") {
             PS::Log<LogLevel::Error>(STR("[RuneSchema][DID-NOT-START][CORE] {}. All RuneSchema runtime hooks and services were stopped.\n"),
                 PS::ToWideSafe(reason.c_str()));
@@ -1587,17 +1630,23 @@ namespace DragonWilds {
             try { loader->Initialize(engineLifecyclePhase); }
             catch (const std::exception& e) {
                 PS::StartupTrace::Mark("ERROR initialize: " + loader->GetModFolderType());
-                PS::Log<LogLevel::Warning>(STR("[LOADER:{}][DISABLED] Initialization failed: {}. Other loaders continue.\n"), RC::to_generic_string(loader->GetModFolderType()), PS::ToWideSafe(e.what()));
+                if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-019","Warning","Blocked",
+                    "Loader initialization exception",e.what(),loader->GetModFolderType(),"Resolution"))
+                    PS::Log<LogLevel::Warning>(STR("[LOADER:{}][DISABLED] Initialization failed: {}. Other loaders continue.\n"), RC::to_generic_string(loader->GetModFolderType()), PS::ToWideSafe(e.what()));
             }
             catch (...) {
                 PS::StartupTrace::Mark("ERROR initialize: " + loader->GetModFolderType());
-                PS::Log<LogLevel::Warning>(STR("[LOADER:{}][DISABLED] Initialization failed after an unknown error. Other loaders continue.\n"), RC::to_generic_string(loader->GetModFolderType()));
+                if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-019","Warning","Blocked",
+                    "Loader initialization exception","An unknown exception prevented this loader from initializing; other loaders continue.",
+                    loader->GetModFolderType(),"Resolution"))
+                    PS::Log<LogLevel::Warning>(STR("[LOADER:{}][DISABLED] Initialization failed after an unknown error. Other loaders continue.\n"), RC::to_generic_string(loader->GetModFolderType()));
             }
         }
     }
 
     void DragonWildsMainLoader::LoadMods(EEngineLifecyclePhase engineLifecyclePhase)
     {
+        bool buildingOwnershipComplete=true;
         if(engineLifecyclePhase==EEngineLifecyclePhase::GameInstanceInit){
             PS::AssetPreload::Plan<RC::StringType> plan;
             for(auto& loader:m_loaders){
@@ -1606,7 +1655,7 @@ namespace DragonWilds {
                     const std::string lane=kind=="recipes"?"Recipes":kind=="journal"?"Journals":kind=="lore"?"Lore":"";
                     if(!lane.empty())for(const auto& manifest:PS::CookedPakRegistryManifest::Snapshot()){
                         const bool declared=manifest.LoaderDefinitions.contains(lane)||std::any_of(manifest.AssetLanes.begin(),manifest.AssetLanes.end(),[&](const auto& value){return value.Name==lane;});
-                        if(declared)PS::RegistryEnrollment::Reject(manifest.Source,"required loader is disabled: "+kind);
+                        if(declared)PS::RegistryEnrollment::Reject(manifest.Source,"required loader is disabled: "+kind,PS::RegistryEnrollment::KindForLane(lane));
                     }
                     continue;
                 }
@@ -1621,7 +1670,11 @@ namespace DragonWilds {
             && PS::PSConfig::Get()->IsLoaderEnabled("recipes")) {
             for (auto& loader : m_loaders) if (loader->GetModFolderType() == "recipes")
                 try {static_cast<DragonWildsRecipeModLoader*>(loader.get())->PrepareReferences();}
-                catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[LOADER:recipes][PARTIAL] Reference preparation failed: {}. Other loaders continue.\n"),PS::ToWideSafe(error.what()));}
+                catch(const std::exception& error){
+                    if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-021","Warning","Partial",
+                        "Recipe reference preparation failed",error.what(),"recipes","Resolution"))
+                        PS::Log<LogLevel::Warning>(STR("[LOADER:recipes][PARTIAL] Reference preparation failed: {}. Other loaders continue.\n"),PS::ToWideSafe(error.what()));
+                }
         }
         // Definitions must exist before any mod's property or appearance consumers.
         if(engineLifecyclePhase==EEngineLifecyclePhase::PostEngineInit) {
@@ -1632,7 +1685,11 @@ namespace DragonWilds {
                     loader->Load(path,owner,engineLifecyclePhase);
                 });
                 try {loader->FinalizeLoad(engineLifecyclePhase);}
-                catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL] Definition finalization failed: {}. Other loaders continue.\n"),RC::to_generic_string(kind),PS::ToWideSafe(error.what()));}
+                catch(const std::exception& error){
+                    (void)PS::StructuredDiagnosticB3D::Report("RS-CORE-022","Warning","Partial",
+                        "Definition finalization exception",error.what(),kind,"Finalization");
+                    PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL] Definition finalization failed: {}. Other loaders continue.\n"),RC::to_generic_string(kind),PS::ToWideSafe(error.what()));
+                }
             }
         }
         if (engineLifecyclePhase == EEngineLifecyclePhase::PostEngineInit && m_spawnLoader
@@ -1648,9 +1705,12 @@ namespace DragonWilds {
                 }
                 catch (const std::exception& e)
                 {
-                    PS::Log<LogLevel::Warning>(
-                        STR("[LOADER:players][PARTIAL][MOD:{}] Appearance source skipped: {}. Other sections continue.\n"),
-                        modName, PS::ToWideSafe(e.what()));
+                    if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-023","Warning","Skipped",
+                        "Player appearance source skipped",e.what(),"players/appearance","Application",
+                        RC::to_string(modName)))
+                        PS::Log<LogLevel::Warning>(
+                            STR("[LOADER:players][PARTIAL][MOD:{}] Appearance source skipped: {}. Other sections continue.\n"),
+                            modName, PS::ToWideSafe(e.what()));
                 }
             });
         }
@@ -1660,6 +1720,9 @@ namespace DragonWilds {
             try
             {
                 const auto identity=ReadModIdentity(modPath,modName);
+                auto sourceName=identity.Nickname.empty()?identity.Name:identity.Nickname;
+                try{const auto metadata=PS::ModManager::Metadata(modPath);sourceName=metadata.value("nickname",std::string{});if(sourceName.empty())sourceName=metadata.value("name",identity.Name);}catch(...){}
+                PS::HelpyCacheSources::SetDisplayName(RC::to_string(modName),sourceName);
                 bool modSuccessful=true;
                 PS::StartupTrace::Mark("load mod: " + RC::to_string(modName));
 
@@ -1670,6 +1733,7 @@ namespace DragonWilds {
                     PS::StartupTrace::Mark("load loader begin: " + RC::to_string(modName)
                         + "/" + loaderKind);
                     if (!loader->Load(modPath, modName, engineLifecyclePhase)) {
+                        buildingOwnershipComplete=false;
                         modSuccessful=false;
                         if (loaderKind == "buildings" && m_buildingLoader)
                             m_buildingLoader->RejectCleanup("building section failed for enabled mod '"
@@ -1680,15 +1744,18 @@ namespace DragonWilds {
                 }
                 if(engineLifecyclePhase==EEngineLifecyclePhase::PostEngineInit && modSuccessful) {
                     PS::Log<LogLevel::Normal>(STR("[MOD:{}][OK] '{}' by '{}' loaded.\n"), modName,
-                        PS::ToWideSafe(identity.Name.c_str()),PS::ToWideSafe(identity.Author.c_str()));
+                        PS::ToWideSafe(identity.DisplayName().c_str()),PS::ToWideSafe(identity.Author.c_str()));
                 } else if(engineLifecyclePhase==EEngineLifecyclePhase::PostEngineInit) {
                     PS::Log<LogLevel::Warning>(STR("[MOD:{}][PARTIAL] One or more sections were skipped; successfully loaded sections remain active.\n"),modName);
                 }
             }
             catch (const std::exception& e)
             {
-                if(engineLifecyclePhase==EEngineLifecyclePhase::PostEngineInit)
-                PS::Log<LogLevel::Warning>(STR("[MOD:{}][PARTIAL] Metadata or discovery failed: {}. Other mods continue.\n"), modName, PS::ToWideSafe(e.what()));
+                buildingOwnershipComplete=false;
+                if(engineLifecyclePhase==EEngineLifecyclePhase::PostEngineInit &&
+                    !PS::StructuredDiagnosticB3D::Report("RS-CORE-024","Warning","Partial",
+                        "Mod metadata or discovery failed",e.what(),"ModDiscovery","Discovery",RC::to_string(modName)))
+                    PS::Log<LogLevel::Warning>(STR("[MOD:{}][PARTIAL] Metadata or discovery failed: {}. Other mods continue.\n"), modName, PS::ToWideSafe(e.what()));
             }
         });
 
@@ -1696,16 +1763,28 @@ namespace DragonWilds {
             PS::StartupTrace::Mark("finalize loader: " + loader->GetModFolderType());
             try { loader->FinalizeLoad(engineLifecyclePhase); }
             catch (const std::exception& e) {
+                buildingOwnershipComplete=false;
                 if(engineLifecyclePhase==EEngineLifecyclePhase::PostEngineInit)
                 PS::StartupTrace::Mark("ERROR finalize: " + loader->GetModFolderType());
-                PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL] Finalization failed: {}. Other loaders continue.\n"), RC::to_generic_string(loader->GetModFolderType()), PS::ToWideSafe(e.what()));
+                (void)PS::LogStructuredFallback<LogLevel::Warning>(
+                    PS::StructuredDiagnosticB3D::Report("RS-CORE-020","Warning","Partial",
+                    "Loader finalization exception",e.what(),loader->GetModFolderType(),"Finalization"),
+                    STR("[LOADER:{}][PARTIAL] Finalization failed: {}. Other loaders continue.\n"), RC::to_generic_string(loader->GetModFolderType()), PS::ToWideSafe(e.what()));
             }
             catch (...) {
+                buildingOwnershipComplete=false;
                 if(engineLifecyclePhase==EEngineLifecyclePhase::PostEngineInit)
                 PS::StartupTrace::Mark("ERROR finalize: " + loader->GetModFolderType());
-                PS::Log<LogLevel::Warning>(STR("[LOADER:{}][PARTIAL] Finalization failed after an unknown error. Other loaders continue.\n"), RC::to_generic_string(loader->GetModFolderType()));
+                (void)PS::LogStructuredFallback<LogLevel::Warning>(
+                    PS::StructuredDiagnosticB3D::Report("RS-CORE-020","Warning","Partial",
+                    "Loader finalization exception","An unknown exception interrupted loader finalization; other loaders continue.",
+                    loader->GetModFolderType(),"Finalization"),
+                    STR("[LOADER:{}][PARTIAL] Finalization failed after an unknown error. Other loaders continue.\n"), RC::to_generic_string(loader->GetModFolderType()));
             }
         }
+
+        if(engineLifecyclePhase==EEngineLifecyclePhase::GameInstanceInit&&m_spawnLoader)
+            m_spawnLoader->CompleteBuildingOwnershipSnapshot(buildingOwnershipComplete);
 
         if (engineLifecyclePhase == EEngineLifecyclePhase::PostEngineInit && m_spawnLoader
             && PS::PSConfig::Get()->IsLoaderEnabled("players"))
@@ -1715,10 +1794,19 @@ namespace DragonWilds {
                 IterateModsFolder([&](const fs::path& modPath, const fs::path::string_type& modName) {
                     const auto nameplatesPath = PS::ModFolderLayout::ResolveLoaderDirectory(modPath,"nameplates");
                     if (nameplatesPath)try {m_spawnLoader->LoadNameplateDefinitions(*nameplatesPath, modName);}
-                    catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[LOADER:nameplates][PARTIAL][MOD:{}] Section skipped: {}. Other mods continue.\n"),modName,PS::ToWideSafe(error.what()));}
+                    catch(const std::exception& error){
+                        if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-025","Warning","Skipped",
+                            "Nameplate section skipped",error.what(),"nameplates","Application",RC::to_string(modName)))
+                            PS::Log<LogLevel::Warning>(STR("[LOADER:nameplates][PARTIAL][MOD:{}] Section skipped: {}. Other mods continue.\n"),modName,PS::ToWideSafe(error.what()));
+                    }
                 });
                 try {m_spawnLoader->FinalizeNameplateDefinitions();}
-                catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[LOADER:nameplates][PARTIAL] Finalization failed: {}. Other loaders continue.\n"),PS::ToWideSafe(error.what()));}
+                catch(const std::exception& error){
+                    (void)PS::LogStructuredFallback<LogLevel::Warning>(
+                        PS::StructuredDiagnosticB3D::Report("RS-CORE-026","Warning","Partial",
+                        "Nameplate finalization exception",error.what(),"nameplates","Finalization"),
+                        STR("[LOADER:nameplates][PARTIAL] Finalization failed: {}. Other loaders continue.\n"),PS::ToWideSafe(error.what()));
+                }
             }
             IterateModsFolder([&](const fs::path& modPath,
                 const fs::path::string_type& modName)
@@ -1731,13 +1819,20 @@ namespace DragonWilds {
                 }
                 catch (const std::exception& e)
                 {
-                    PS::Log<LogLevel::Warning>(
-                        STR("[LOADER:players][PARTIAL][MOD:{}] Section skipped: {}. Other sections continue.\n"),
-                        modName, PS::ToWideSafe(e.what()));
+                    if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-027","Warning","Skipped",
+                        "Player rules section skipped",e.what(),"players","Application",RC::to_string(modName)))
+                        PS::Log<LogLevel::Warning>(
+                            STR("[LOADER:players][PARTIAL][MOD:{}] Section skipped: {}. Other sections continue.\n"),
+                            modName, PS::ToWideSafe(e.what()));
                 }
             });
             try {m_spawnLoader->FinalizePlayerRules();}
-            catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[LOADER:players][PARTIAL] Finalization failed: {}. Other loaders continue.\n"),PS::ToWideSafe(error.what()));}
+            catch(const std::exception& error){
+                (void)PS::LogStructuredFallback<LogLevel::Warning>(
+                    PS::StructuredDiagnosticB3D::Report("RS-CORE-028","Warning","Partial",
+                    "Player rules finalization exception",error.what(),"players","Finalization"),
+                    STR("[LOADER:players][PARTIAL] Finalization failed: {}. Other loaders continue.\n"),PS::ToWideSafe(error.what()));
+            }
         }
         if (engineLifecyclePhase == EEngineLifecyclePhase::GameInstanceInit
             && PS::PSConfig::Get()->GetSettings().advancedRuntime
@@ -1755,9 +1850,11 @@ namespace DragonWilds {
             }
             catch (const std::exception& error)
             {
-                PS::Log<LogLevel::Warning>(
-                    STR("Persistence diagnostic ledger was not written: {}\n"),
-                    PS::ToWideSafe(error.what()));
+                if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-029","Warning","Skipped",
+                    "Optional persistence ledger unavailable",error.what(),"PersistenceLedger","Finalization"))
+                    PS::Log<LogLevel::Warning>(
+                        STR("Persistence diagnostic ledger was not written: {}\n"),
+                        PS::ToWideSafe(error.what()));
             }
         }
     }
@@ -1771,6 +1868,9 @@ namespace DragonWilds {
     void DragonWildsMainLoader::GetPakFolders(const TCHAR* CmdLine, TArray<FString>* OutPakFolders)
     {
         GetPakFolders_Hook.call(CmdLine, OutPakFolders);
+        PS::PakDiscovery::ResetRoots();
+        if(OutPakFolders&&OutPakFolders->Num()>=0&&OutPakFolders->Num()<=4096)
+            for(const auto& folder:*OutPakFolders)PS::PakDiscovery::RememberRoot(fs::path(folder.GetCharArray().GetData()));
 
         try
         {
@@ -1778,22 +1878,32 @@ namespace DragonWilds {
         }
         catch (const std::exception& e)
         {
-            PS::Log<LogLevel::Error>(STR("Failed to initialize GMalloc early: {}\n"), PS::ToWideSafe(e.what()));
-            PS::Log<LogLevel::Error>(STR("RuneSchema won't be able to load paks from RuneSchema/plugins or RuneSchema/mods.\n"));
+            if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-016","Error","Blocked",
+                "Additional PAK mounting unavailable",
+                std::string(e.what())+"; RuneSchema plugin and mod PAK paths cannot be added.",
+                "GMalloc","Application")) {
+                PS::Log<LogLevel::Error>(STR("Failed to initialize GMalloc early: {}\n"), PS::ToWideSafe(e.what()));
+                PS::Log<LogLevel::Error>(STR("RuneSchema won't be able to load paks from RuneSchema/plugins or RuneSchema/mods.\n"));
+            }
             return;
         }
 
         const auto runeSchemaRoot=fs::path(PS::HostServices::WorkingDirectory())/"Mods"/"RuneSchema";
         std::vector<fs::path> pakRoots;
+        std::map<fs::path,std::string> pakOwners;
+        const auto pluginRootBegin=pakRoots.size();
         try {
             for(const auto& plugin:PS::PluginCatalog::Discover(runeSchemaRoot/"plugins")) {
                 if(!plugin.Enabled)continue;
-                for(const auto& package:PS::PluginCatalog::PakDirectories(plugin))pakRoots.push_back(package);
+                for(const auto& package:PS::PluginCatalog::PakDirectories(plugin)){pakRoots.push_back(package);pakOwners[package]=plugin.Id;}
             }
         } catch(const std::exception& error) {
-            PS::Log<LogLevel::Error>(STR(
-                "Plugin pak order rejected; no plugin PAK directories were added (fail-closed): {}\n"),
-                PS::ToWideSafe(error.what()));
+            pakRoots.resize(pluginRootBegin);
+            if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-017","Error","Blocked",
+                "Plugin PAK order rejected",error.what(),"PluginPakOrder","Planning"))
+                PS::Log<LogLevel::Error>(STR(
+                    "Plugin pak order rejected; no plugin PAK directories were added (fail-closed): {}\n"),
+                    PS::ToWideSafe(error.what()));
         }
         const auto modsRoot=GetModsPath();std::vector<RC::StringType> discovered;
         PS::MountedModRegistryOwners::Reset();
@@ -1805,6 +1915,7 @@ namespace DragonWilds {
             const bool legacy=PS::ModFolderLayout::ContainsLegacyPakContent(entry.path(),scanError);
             if((paks.has_value()||logicMods.has_value()||legacy)&&!scanError)discovered.push_back(entry.path().filename().native());
         }
+        const auto modRootBegin=pakRoots.size();
         try {for(const auto& name:ModLoadOrder::Resolve(modsRoot,discovered)) {
             const auto modRoot=modsRoot/name;
             auto readDirectories=PS::ModFolderLayout::PakReadDirectories(modRoot);
@@ -1813,7 +1924,7 @@ namespace DragonWilds {
                 if(PS::ModFolderLayout::ContainsLegacyPakContent(modRoot,legacyError)&&!legacyError)
                     readDirectories.push_back(modRoot);
             }
-            for(const auto& directory:readDirectories)pakRoots.push_back(directory);
+            for(const auto& directory:readDirectories){pakRoots.push_back(directory);pakOwners[directory]=RC::to_string(name);}
             const auto owner=RC::to_string(name);
             if(!readDirectories.empty())
                 PS::Log<LogLevel::Normal>(STR("[PAK-MOUNT][REGISTERED][MOD:{}] {} concrete container director{} registered for Unreal startup.\n"),
@@ -1822,9 +1933,12 @@ namespace DragonWilds {
                 PS::Log<LogLevel::Verbose>(STR("Mod folder '{}' cannot use conventional cooked-registry fallback; use Asset Registry metadata or an underscore-only folder name.\n"),name);
         }}
         catch(const std::exception& error) {
-            PS::Log<LogLevel::Error>(STR(
-                "Mod pak order rejected; no mod PAK directories were added (fail-closed): {}\n"),
-                PS::ToWideSafe(error.what()));
+            pakRoots.resize(modRootBegin);
+            if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-018","Error","Blocked",
+                "Mod PAK order rejected",error.what(),"ModPakOrder","Planning"))
+                PS::Log<LogLevel::Error>(STR(
+                    "Mod pak order rejected; no mod PAK directories were added (fail-closed): {}\n"),
+                    PS::ToWideSafe(error.what()));
         }
         std::unordered_set<std::wstring> registered;
         size_t addedPakDirectories = 0;
@@ -1834,6 +1948,7 @@ namespace DragonWilds {
             const auto absolute = pakRoot.native();
             const auto withSuffix = std::format(STR("{}/"), RC::to_generic_string(absolute));
             OutPakFolders->Add(FString(withSuffix.c_str()));
+            PS::PakDiscovery::RememberRoot(pakRoot,pakOwners[pakRoot]);
             ++addedPakDirectories;
         }
         if (addedPakDirectories)

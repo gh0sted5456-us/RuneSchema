@@ -39,7 +39,8 @@ int main(int argc, char** argv) {
     Require(build, "ue4ss\\scripts\\main.lua");
     Require(build, "scripts\\main.lua");
     Require(guide, "ue4ss/scripts/main.lua");
-    Require(guide, "complete UE4SS packages");
+    Require(guide, "complete Lua UE4SS packages");
+    Require(guide, "Nested native or hybrid DLL packages");
     Require(guide, "mods.txt");
     Require(lua,"RUNESCHEMA_UE4SS_PACKAGE_SESSION");
     Require(lua,"packages-loader.lua");

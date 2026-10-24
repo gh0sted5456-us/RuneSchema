@@ -32,5 +32,9 @@ int main(){
     IconCacheBuild::Publish({{"Active",false},{"Stage","Cancelled"}});assert(!IconCacheBuild::HasWork());
     assert(IconCacheBuild::Start(""));assert(!IconCacheBuild::Cancelled());assert(IconCacheBuild::Take().value().empty());
     IconCacheBuild::Publish({{"Active",false},{"Stage","Complete"}});
+    IconCacheBuild::SetManifest({{"Expected",{"/Game/UI/I.I"}}});
+    assert(!IconCacheBuild::Read().contains("Expected"));assert(IconCacheBuild::Read(true)["Expected"].size()==1);
+    assert(IconCacheBuild::Start("core"));assert(!IconCacheBuild::Read(true).contains("Expected"));
+    (void)IconCacheBuild::Take();IconCacheBuild::Publish({{"Active",false}});
     std::cout<<"Menu-independent cache control, source boundaries and recipe grouping tests passed\n";
 }

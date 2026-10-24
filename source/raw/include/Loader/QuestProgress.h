@@ -7,7 +7,7 @@
 namespace DragonWilds::QuestProgress {
 using Json=nlohmann::json;
 enum class State { Ungiven, Active, Pending, Complete };
-enum class Result { Accepted, Completed, AlreadyActive, AlreadyComplete, NotReady, Uncertain };
+enum class Result { Accepted, Completed, AlreadyActive, AlreadyComplete, NotReady, Uncertain, Abandoned };
 class OperationGuard {
     inline static std::mutex mutex;
     inline static std::set<std::filesystem::path> active;
