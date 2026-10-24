@@ -4,24 +4,138 @@ Work from the first failed step instead of changing several files at once. A
 PAK can mount while an item inside it still fails to load, and an item can load
 while its recipe still points to the wrong station.
 
+## Heavy Blueprint/Lua editors and building registry compatibility
+
+The RSHC author reported editor slowdown alongside RuneSchema and supplied a
+source-level explanation. Bridge ProcessEvent callbacks now reject unrelated
+calls by cached function names before reflection, path allocation or route
+searches. Relevant bridge/graph classes are matched through serial-validated
+weak class caches after exact path verification. RPC and authority validation
+are unchanged. This removes identified overhead; a live RSHC before/after timing
+comparison is still required to establish the actual speedup.
+
+This overhead does not depend on where the other mod is installed. Moving an
+unmanaged mod under RuneSchema may improve its loading/ownership diagnostics,
+but is not a fix for editor hook overhead. Never move or duplicate a live mod
+automatically; back up, close the game/server, and follow its author's supported
+packaging instructions if a diagnosed loading conflict warrants migration.
+
+Building network indexes must agree on server and clients. Do not change
+persistence IDs, re-sort/renumber indexes after world load, or adopt an ID-prefix
+workaround without a separately verified offline save migration. Cached package
+ownership cannot prove building-index parity or authorize a save conversion.
+The supplied RSHC migration scripts and process-start proxy were not adopted.
+Large client/server appearance exchange is separate from RuneSchema's bounded,
+allow-listed presentation cues; this change adds no unrestricted data relay.
+
+## Helpy frame-time refinement (pre-EXE)
+
+Helpy remains a plugin DLL with its own UI thread/device. Its desktop redraw is
+capped at roughly 30 Hz while focused and 10 Hz while unfocused; hidden and
+minimized windows do not render. Detached surfaces omit unrelated draw lists.
+Favorites/Junk idle polling is capped at roughly 30 Hz; button edges, queued
+marking input and inventory hover notifications force a fresh check. Stack
+ownership and item identity are still revalidated before changing a mark.
+
+Catalogue queries, full-scan work and icons share one optional work slot per
+engine tick, with a 2 ms start deadline. Icons and catalogue alternate priority;
+mutations retain their own mailbox and take precedence. This is a soft budget:
+a native asset load or GPU readback cannot be interrupted after it starts.
+Thumbnail file writes run on a single bounded filesystem task; the game polls
+completion without waiting and publishes success only after the file commits.
+The existing same-call GPU draw/readback is retained for Game Pass compatibility.
+
+`[PERFORMANCE][SUMMARY]` in RuneSchema.log reports aggregate calls, total/average/peak microseconds
+and calls at or above 2 ms, at most once per ten seconds per measured call site.
+Cheap phases stay silent; summaries bypass debug-only logging but do not flood
+the in-game console. A first measured stall of a second or more still warns
+immediately. These are RuneSchema phase timings, not game FPS or
+proof that a particular feature caused a frame drop. Compare the same scene,
+game focus and settings with Helpy hidden, Home visible, uncached icons visible,
+and inventory open; separate cold-cache work from steady-state measurements.
+
+## RuneSchema console commands
+
+In the game console, run `rs help` (or `runeschema help`). The console must
+already be enabled; the stock UE4SS ConsoleEnablerMod normally binds F10 and
+tilde. RuneSchema does not replace the console or install a remote shell.
+Stock UE4SS's `HookLocalPlayerExec` must remain enabled. These commands use
+that hook; `rs help` lists them even if `DumpConsoleCommands` does not.
+
+| Command | Result |
+| --- | --- |
+| `rs status` | Runtime, game/framework versions and host compatibility. |
+| `rs network` | Observed world/network role and freshness, not a multiplayer round-trip test. |
+| `rs mappings` | Active mapping identity/index; does not force regeneration. |
+| `rs services` | Loaded plugin services, capabilities and connections. |
+| `rs vision` | Helpy's cached native styling status and bounded diagnostic samples. |
+| `rs menu` / `rs exitmenu` | Request the local player's native pause/exit menu. Close the console to see it. |
+
+Diagnostics do not change saves, settings, gear or layouts. `rs menu` is the
+only UI action: it does not click Exit, disconnect, travel, or quit. It requires
+a local, possessed world player and matching native menu reflection contracts;
+dedicated servers have no local-player menu. A request or selected Pause screen
+is not proof that the screen is visibly open. Unavailable contracts are reported
+without guessing offsets or invoking an alternate function.
+
+`rs vision` requires Helpy and its native component. `Active=true` is not a
+health certification: check viewport dimensions, Errors, Unsupported, Deferred,
+Scanning and Complete. Its samples prioritize errors and group repeated reasons;
+they are not the full inventory tree. The command never starts a scan or applies
+a layout. Command replies also appear under `[CONSOLE]` in RuneSchema.log.
+
+Automatic styling preserves minimap/world-map image and border brushes,
+including RuneUI's live map artwork. Unclassified controls retain their native
+appearance; the unsafe spell Cost subtree remains deferred rather than traversed.
+
 ## Helpy Live Log and help codes
 
-Open **Live Log** in Helpy's left navigation to read this installation's
-`RuneSchema/RuneSchema.log`. Search text or an `RS-` code, filter by severity
+The [diagnostic code reference](ERROR-CODES.md) explains each stable code,
+its effect and the next step. Older uncoded messages can show a **suggested
+reference**, not a diagnosed cause. Consecutive repeats can be grouped without
+dropping the underlying entries from a filtered export.
+
+Open **Live Log** in Helpy's left navigation. The **RuneSchema** tab reads
+`RuneSchema/RuneSchema.log`; the **UE4SS** tab reads the host's `ue4ss/UE4SS.log`.
+Each tab retains its own search, filters, selection and scroll position.
+The **Game** tab discovers a recent Dragonwilds log under the game's saved-log
+folders. **EOS** shows EOS SDK categories from that game log, not a fabricated
+independent stream. Either tab can choose an existing log through **Actions**.
+The exact file path appears on hover. Shipping builds may not create game logs;
+Helpy reports this rather than enabling logging or altering launch arguments.
+Search text or an `RS-` code, filter by severity
 or subsystem, pause reading, follow the newest entries, and select a row for
 its full message. **Clear view** clears only the viewer, never the log file.
 The recent history is bounded to 4,000 entries / 2 MiB of text; first opening
-reads the recent tail, not an unlimited archive. Log rotation starts a fresh view.
+reads the recent tail, not an unlimited archive. Each tab has its own limit.
+Log rotation starts a fresh view for the affected file only.
 
-**Export filtered log** saves the currently retained matching entries, with
+Expand **Filters & colors > Live Log colors** here, or **Settings > Appearance**, to color entries
+by keyword or source/subsystem. Rules are literal and case-insensitive, not
+regular expressions. Keyword matches override source matches; the first rule
+of each kind wins. Colors persist in `ui.jsonc`; they do not rewrite either log.
+
+**Actions > Export filtered entries** saves the currently retained matching entries, with
 their help codes, to a local UTF-8 file. It is not an export of an entire
-previous session. Open the log folder for the original and `.previous` file.
+previous session or both tabs combined. Open the selected log's folder for
+the original and its rotation backups. Neither live log can be overwritten
+by a filtered export.
 Review player names, IDs and local paths before sharing an export.
 
-Clickable help codes open the matching section below in your browser. No log
-text, player identity or file path is sent in the link. Codes are a Helpy
-interpretation of known diagnostic signatures; the original log is unchanged.
-An unfamiliar warning uses the general guide, not a guessed diagnosis.
+To open Helpy once at game startup, enable **Home > Quick settings > Open
+Helpy when the game starts**. It is opt-in and takes effect next launch.
+F2 still closes/reopens the window. It never enters a world.
+
+For slow item discovery, sharing caches or changed mods, see
+[cache bundles and background verification](CACHE-BUNDLES.md).
+
+Clickable help codes open a per-code header on the shared
+[diagnostic code reference](ERROR-CODES.md), which lists every registered RS
+code and bridge reason with causes and troubleshooting. No log text, player
+identity or file path is sent in the link. An exact emitted code is distinct
+from a **suggested reference** for an older uncoded message; the original log
+and severity remain authoritative. The older sections below remain available
+for existing bookmarks, with additional context rather than a second code catalogue.
 
 ### RS-QST-001 — Conflicting quest ownership {#rs-qst-001}
 

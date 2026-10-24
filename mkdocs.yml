@@ -6,6 +6,10 @@ repo_name: gh0sted5456-us/RuneSchema
 # Internal engineering notes live in source control, not in the public site or search.
 exclude_docs: |
   /development/
+  /examples/RSv16/
+  /examples/GreatTree/
+  /QUEST-SCROLL-IDENTITY-DIAGNOSTIC.md
+  /ALPHA-CANDIDATE.md
 
 theme:
   name: material
@@ -95,10 +99,14 @@ nav:
       - Save safety: SAFE-SAVE-AND-LEDGER.md
       - Platforms and co-op: COMPATIBILITY.md
       - Troubleshooting: TROUBLESHOOTING.md
+      - Diagnostic codes: ERROR-CODES.md
+      - Shared cache bundles: CACHE-BUNDLES.md
   - Creators:
       - Overview: modders/index.md
       - First mod: AUTHORING-GUIDE.md
       - First cooked item: modders/first-cooked-item.md
+      - Quests and Quest Boards: modders/quests-and-questboards.md
+      - Craftable quest scrolls: QUEST-SCROLLS.md
       - Choose a loader: LOADER-WALKTHROUGHS.md
       - Cooked content:
           - PAKs and mounting: PAK-CONTENT-GUIDE.md
@@ -118,7 +126,6 @@ nav:
       - Bridge diagnostics: BRIDGE-DIAGNOSTICS.md
   - Reference:
       - Guide map: DOCUMENTATION-INDEX.md
-      - Error codes: ERROR-CODES.md
       - Find a loader: LOADER-WALKTHROUGHS.md
       - Loaders · Content:
           - Assets: reference/loaders/assets.md
@@ -147,10 +154,14 @@ nav:
           - Niagara: reference/loaders/niagara.md
           - Players: reference/loaders/players.md
       - JSON schemas: SCHEMAS.md
+      - Diagnostic codes: ERROR-CODES.md
+      - Cache bundle format: CACHE-BUNDLES.md
       - About RuneSchema & functions: MOD-HOSTS-AND-GETTING-STARTED.md
       - Ask RuneSchema: ASK-RUNESCHEMA.md
       - Licensing: LICENSING.md
   - Updates:
+      - Experimental 0.8.0.1: RELEASE-0.8.0.1.md
+      - Implemented / removed since 0.8.0.0: CHANGELOG-0.8.0.1.md
       - Release 0.8.0.0: RELEASE-0.8.0.0.md
       - Full 0.8.0.0 changelog: CHANGELOG-0.8.0.0.md
       - Development history: ALPHA-CHANGELOG.md

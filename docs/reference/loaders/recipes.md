@@ -1,5 +1,20 @@
 # Recipes loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/recipes/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Resolve registered input/output ItemData paths and the actual station or vendor row.
+2. Create `recipes/10-camp-supplies.jsonc`; replace the sample key, item paths and quantities.
+3. Choose a Category destination or direct Array layout. Decide unconditional Unlock versus supported conditional Discovery; do not combine both.
+4. Restart and verify placement separately from learning, then craft/process and confirm exact quantities, persistence and multiplayer authority.
+
+**Tie-ins:** [Assets](assets.md), [buildings](buildings.md), [vendors](vendors.md), [journal](journal.md) and [quest contracts](../../modders/quests-and-questboards.md).
+
+
 **Folder:** `RuneSchema/mods/<ModName>/recipes/`
 
 Crafting, processing, station placement, merchants, and vendor contributions.
@@ -79,13 +94,13 @@ The verified vanilla station targets are:
 For example, the older dye definitions target the crafting-side
 `BrewingCauldron` and correctly create a `Dyes` category:
 
-```json
+```jsonc
 {"Table":"DT_CraftingStationsDataTable","Row":"BrewingCauldron","Category":"Dyes"}
 ```
 
 To make the same recipe run through the timed processing cauldron, use:
 
-```json
+```jsonc
 {"Table":"DT_ProcessingStationDataTable","Row":"BrewingCauldron","Array":"Recipes"}
 ```
 

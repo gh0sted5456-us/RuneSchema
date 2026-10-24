@@ -16,6 +16,7 @@ hide:
   <div class="rs-actions">
     <a class="md-button md-button--primary" href="INSTALLATION/">Get started <span aria-hidden="true">→</span></a>
     <a class="rs-text-link" href="CURRENT-RELEASE/">Current release · 0.8.0.0</a>
+    <a class="rs-text-link" href="RELEASE-0.8.0.1/">Experimental · 0.8.0.1 refresh</a>
     <a class="rs-text-link" href="MOD-HOSTS-AND-GETTING-STARTED/">What is RuneSchema? <span aria-hidden="true">↗</span></a>
   </div>
 </section>
@@ -25,6 +26,10 @@ hide:
   <p><strong>0.8.0.0</strong> — the revamped Helpy workspace, content integration, and runtime hardening.</p>
   <a href="RELEASE-0.8.0.0/">Release notes and verification <span aria-hidden="true">→</span></a>
 </aside>
+
+<p>Experimental 0.8.0.1 has a refreshed package and a complete
+<a href="CHANGELOG-0.8.0.1/">line-by-line implemented and removed changelog</a>.
+The stable release above remains unchanged.</p>
 
 <h2 class="rs-section-heading">Choose your path</h2>
 <div class="rs-paths">
@@ -49,8 +54,10 @@ hide:
     <input class="rs-finder__input" id="rs-finder-input" type="search" placeholder="What would you like to do?" autocomplete="off" aria-controls="rs-guide-list" aria-describedby="rs-guide-count">
     <button class="rs-finder__clear" type="button" hidden>Clear</button>
   </div>
-  <p class="rs-finder__count" id="rs-guide-count" role="status" aria-live="polite">8 quick guides · use site search for all documentation</p>
+  <p class="rs-finder__count" id="rs-guide-count" role="status" aria-live="polite">10 quick guides · use site search for all documentation</p>
   <ul class="rs-finder__list" id="rs-guide-list">
+    <li data-rs-keywords="error warning diagnostic code log console troubleshooting"><a href="ERROR-CODES/">Understand a diagnostic code <span aria-hidden="true">→</span></a></li>
+    <li data-rs-keywords="cache bundle github icons artwork persistence ids paths journal download"><a href="CACHE-BUNDLES/">Share or download cached content <span aria-hidden="true">→</span></a></li>
     <li data-rs-keywords="download setup steam gamepass xbox epic upgrade"><a href="INSTALLATION/">Install or update <span aria-hidden="true">→</span></a></li>
     <li data-rs-keywords="enable disable order addons settings"><a href="users/manage-mods/">Manage your mods <span aria-hidden="true">→</span></a></li>
     <li data-rs-keywords="remove uninstall orphan cleanup prune character"><a href="SAFE-SAVE-AND-LEDGER/">Keep saves safe <span aria-hidden="true">→</span></a></li>

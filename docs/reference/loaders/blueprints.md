@@ -1,5 +1,20 @@
 # Blueprints loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/blueprints/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Resolve the existing class/component or widget; inspect its supported reflected fields.
+2. Create `blueprints/10-camp-widget.jsonc` using the matching default-object or live-widget example below.
+3. Replace the class path, property path and value together. `$RuntimeWidget` targets an existing live widget, not a new Blueprint.
+4. Restart and visit the relevant screen; check missing fields/bindings and storefront gates. Keep delegates compatible with the target function.
+
+**Tie-ins:** [PAK content](../../PAK-CONTENT-GUIDE.md) supplies new classes; [strings](strings.md) handles supported source-text replacement.
+
+
 **Folder:** `RuneSchema/mods/<ModName>/blueprints/`
 
 [← Loader reference](../../LOADER-WALKTHROUGHS.md)
@@ -8,7 +23,7 @@ Use `/blueprints` to change supported reflected defaults on a class or component
 that is already loaded. The loader does not create Blueprint classes; cook a new
 class in a PAK and mount it when your mod needs one.
 
-```json
+```jsonc
 [
   {
     "/Game/Path/BP_Target": {
@@ -27,7 +42,7 @@ changing class defaults.
 bind a compatible multicast UI event to a reflected function. It does not
 create new widgets or functions.
 
-```json
+```jsonc
 {
   "/Game/UI/MainMenu/WBP_MainMenu_CharacterSelect": {
     "$RuntimeWidget": {
@@ -53,7 +68,7 @@ Runtime rules are event-driven and deduplicated by target and function.
 
 When a rule applies to only one storefront, gate the whole block:
 
-```json
+```jsonc
 "$RuntimeWidget": {
   "$Storefront": "GamePass",
   "$SkipMessage": "This rule is only needed on Game Pass.",

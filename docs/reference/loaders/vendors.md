@@ -1,5 +1,20 @@
 # Vendors loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/vendors/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Resolve registered sale items and the currency ItemData; select stable store/category IDs.
+2. Create `vendors/10-camp-supplies.jsonc` and replace mock-up paths, prices, stock and order.
+3. Bind the store from a compatible NPC VendorID or supported dialogue vendor action; a store definition places no merchant.
+4. Restart and verify category ordering, costs/quantities, authority, stock behavior and reconnect/reload.
+
+**Tie-ins:** [NPCs](npc.md), [dialogue](dialogue.md), [assets](assets.md) and [recipe contributions](recipes.md).
+
+
 **Folder:** `RuneSchema/mods/<ModName>/vendors/`
 
 Reusable RuneSchema stores, categories, stock, pricing, and gates.
@@ -8,7 +23,7 @@ Reusable RuneSchema stores, categories, stock, pricing, and gates.
 
 Vendors define reusable stores bound from NPCs or dialogue.
 
-```json
+```jsonc
 {
   "Id": "shop",
   "MerchantName": "Supply Shop",
@@ -50,9 +65,6 @@ No. Ordering is within each category.
 Yes. Vendor definitions are reusable and can be bound from supported NPC or
 dialogue flows.
 
-## Working examples
-
-- [Great Tree: Crag's treasury with a night-only category](../../examples/GreatTree/vendors/85-Crag.json)
 
 ---
 

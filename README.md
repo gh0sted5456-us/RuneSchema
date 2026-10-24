@@ -2,12 +2,18 @@
 
 Runtime schema and data-editing framework for **RuneScape: Dragonwilds**.
 
+**Experimental: RuneSchema and Helpy 0.8.0.1**, package refreshed October 23, 2026.
+Read the [implemented/removed changes, line by line](docs/CHANGELOG-0.8.0.1.md)
+and [exact package/defaults/verification](docs/RELEASE-0.8.0.1.md).
+The existing tag remains a prerelease. This is a locally supplied binary refresh,
+not a hosted CI build or a promotion of main's runtime source.
+
 **RuneSchema and RSMK 0.8.0.0** are published from `main` under the matching
 `0.8.0.0` release tag. This release consolidates the October 13–16 alpha work.
 [Download the full runtime](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.0.0)
 and read the [release notes](docs/RELEASE-0.8.0.0.md), including live-test limits.
 
-Helpy opens in its own window with F2; F7 retains the optional Canvas view.
+Helpy opens in its own window with F2; the old Canvas experiment is retired.
 The item browser is above a staging cart: drag an item down, or right-click
 and choose **Add to cart**, then confirm a grant to the selected player.
 Drag a cart item back into the browser or use its context menu to remove it.
@@ -21,7 +27,7 @@ with their own manifests and lifecycle.
 ## Downloads
 
 The repository is source-first. RuneSchema ships one lean compiled package
-containing the core DLL, mapping, Lua runtime, plugin DLLs/assets, default
+containing the core DLL, Lua runtime, plugin DLLs/content, default
 settings and consolidated legal notice. Build reports and authoring examples
 belong in the repository/docs, not in the install ZIP. Storefront UE4SS hosts
 and build dependencies remain separate:
@@ -33,7 +39,26 @@ automatically. UE4SS storefront packages are distributed separately so users
 do not repeatedly download the same runtime with every RuneSchema source
 snapshot.
 
+Generated mappings live in platform-specific AppData caches. The cleaned
+0.8.0.1 ZIP excludes loose UI artwork; optional artwork remains downloadable.
+Its supplied settings enable detailed logging and automatic Helpy opening;
+see the release notes before replacing an established configuration.
+
 ## Building
+
+### Native menu console commands
+
+In a loaded world, use `rs inventory open`, `rs inventory close`, or
+`rs inventory toggle` in the game's console. The same actions work with
+`spellbook`, `map`, `journal`, `skills`, `settings`, `buildmenu`, and `menu`
+(pause). Omitting the action means `open`; `runeschema` aliases `rs`.
+`rs help` lists the commands. These requests use the game's input router,
+retain its pause/interaction guards, and never select Exit or change save data.
+The console closes first using a configured native console key; the menu request
+runs after command return. `rs closeconsole` only closes the console.
+Dedicated servers have no local menus. Queued requests and results appear in RuneSchema.log.
+
+### Compile
 
 Run `Build RuneSchema.bat` from the repository root.
 

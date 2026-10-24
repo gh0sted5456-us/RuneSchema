@@ -1,5 +1,18 @@
 # Declare cooked content for live registries
 
+## Step-by-step workflow
+
+1. Identify cooked content that lacks another reliable enrollment route; avoid duplicating ordinary loader registration.
+2. Choose a loose `registry/*.jsonc` declaration or a mod-owned cooked registry asset containing exact object paths and supported lanes.
+3. Keep identity/construction in the asset or owning loader; declarations do not create missing classes or permission.
+4. Mount the content provider and restart; verify every required lane and its gameplay consumer before relying on cleanup certification. Cook a declaration asset only when choosing the cooked route.
+
+JSONC snippets are authoring mock-ups. Replace example paths, IDs and values with
+inspected content; a valid snippet cannot supply missing cooked dependencies.
+
+**Tie-ins:** [Registry loader](reference/loaders/registry.md), [PAK content](PAK-CONTENT-GUIDE.md), [recipes](reference/loaders/recipes.md) and [journal](reference/loaders/journal.md).
+
+
 A PAK mount makes cooked packages available to Unreal. It does **not** by
 itself promise that an unreferenced item, recipe, spell, or attack is in the
 gameplay list that uses it. RuneSchema supports a mod-owned cooked registry
@@ -15,14 +28,27 @@ accepts recipe, journal and lore loader metadata inside the cooked declaration,
 so a PAK need not duplicate those pointers in loose files. Do not create
 thousands of empty pointer files for a large PAK.
 
-## Put the declaration in the owning PAK
+## Choose loose JSONC or a cooked declaration
+
+If the item assets are already cooked but their PAK has no registry declaration,
+you do not need to recook that PAK just to announce them. Ship a loose
+`RuneSchema/mods/<ModName>/registry/10-native-items.jsonc` document instead.
+The [loose item-registration walkthrough](reference/loaders/registry.md#register-a-cooked-item-without-cooking-a-registry-declaration)
+includes the folder layout, enable line, JSONC example, downloadable starter,
+and verification steps. `NativeRegistries` and `LoaderDefinitions` are accepted
+from enabled loose registry documents as well as cooked declaration assets.
+
+Use one declaration route per reference. Neither route creates missing cooked
+content or substitutes for its stable native identity. Ordinary item clones
+created by `/assets` already use their owning loader's registration route.
+
+## Alternatively, put the declaration in the owning PAK
 
 Create a cooked data asset named `RSREG_*` or `DA_RuneSchemaRegistry*`. It
 must contain a `RegistryOwner` string and a `RuneSchemaRegistryJson` string
 (or `RegistryJson`). Use a stable owner matching the enabled mod folder for
-the conventional path described below. `NativeRegistries` and
-`LoaderDefinitions` are accepted only from a cooked registry asset, not loose
-`registry/*.jsonc` files. Keep `SchemaVersion: 1` and `Entries: []` even when
+the conventional path described below. This cooked route is optional when
+using a loose registry document. Keep `SchemaVersion: 1` and `Entries: []` even when
 the asset declares only native content.
 
 With normal Asset Registry metadata, RuneSchema discovers matching cooked
@@ -43,7 +69,7 @@ author the data asset without replacing the shared base.
 The JSON below is the value of the cooked asset's `RuneSchemaRegistryJson`
 property. These are example paths; replace them with exact cooked object paths.
 
-```json
+```jsonc
 {
   "SchemaVersion": 1,
   "Entries": [],
@@ -75,8 +101,27 @@ own.
 | `WearableMeshData` | Resolves and class-checks named mesh-data dependencies. | An equipped wearable item that references the correct male/female mesh data, meshes, materials, and hide rules. |
 | `MeleeAttackClasses` | Supplies an ordered class plan to the optional melee fallback. | Complete cooked attack classes in intended order; enable the specific fallback setting. |
 | `RangedAttackClasses` | Accepted by the schema but **not installed** as a global ranged class list. | Use an item-owned ranged collection instead. |
+| `CacheAssets` | Declares exact original artwork ownership for source-targeted Helpy caches. Never enrolls a texture as an item or makes gameplay content available. | Full object paths of original artwork belonging to this mod; omit borrowed base-game/plugin artwork. |
 
-These are the only `NativeRegistries` fields. Each field accepts at most 4,096
+Three additional fields are staged in the development source: `Skills`,
+`SkillPerks` and `Enums`. `Skills` and `SkillPerks` accept owned cooked object
+references but are **not enabled native adapters**: startup reports
+`[NATIVE-REGISTRY][UNVERIFIED]` without loading or mutating those registries or
+progress. Do not release a custom skill on the strength of declaration acceptance.
+`Enums` verifies a mod-owned cooked `UserDefinedEnum`, preserves its cooked
+symbol/value pairs and publishes their owner-scoped network fingerprint. It
+does not add native enum members, allocate values, convert `ESkill`, or bind a
+foreign enum to a native property. Use directly cooked, correctly typed mod
+properties for bindings; Blueprint enum labels must be stable across releases.
+
+Eight additional cooked-only lanes are implemented in development:
+`ContainerContents`, `FarmPlants`, `Trees`, `TreeGrowth`,
+`FixedTextNotifications`, `FTUENotifications`, `PlayerHooks` and `WorldHooks`.
+See [native data-family enrollment](COOKED-NATIVE-DATA-FAMILIES.md) for exact
+classes, startup guards and unverified consumer-lifecycle limits. These enroll
+identities; behavior stays cooked. They do not grant pruning authority.
+
+These are the supported `NativeRegistries` fields. Each field accepts at most 4,096
 unique paths; a declaration accepts at most 16,384 references in total,
 including `LoaderDefinitions` entries. The cooked JSON string is bounded to
 512 KiB in 0.8.0.0 (older builds: 256 KiB). For larger catalogues, use a conventional root with explicit
@@ -94,7 +139,7 @@ the **full cooked object path**; its value is the ordinary loader definition
 body. It references an existing cooked asset, not a new runtime clone. A path
 in `LoaderDefinitions` does not also need a `NativeRegistries` pointer.
 
-```json
+```jsonc
 {
   "SchemaVersion": 1,
   "Entries": [],
@@ -158,7 +203,8 @@ Rules:
   directives. Keep those in their ordinary loose authoring loaders. Cooked
   journal identity assertions must match the shipped asset, not replace it.
 - This is an explicit announcement contract, not a wildcard scan of every
-  asset in a PAK. Existing PAKs must be recooked with a declaration to use it.
+  asset in a PAK. Existing PAKs can be accompanied by a loose declaration;
+  recooking is necessary only to embed the declaration inside the PAK.
   No game saves or mod lists are rewritten to adopt the contract.
 
 The authoring shape is available in

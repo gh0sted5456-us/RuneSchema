@@ -1,6 +1,9 @@
 # Craftable quest scrolls
 
-Alpha contract: a real cooked or permanent RuneSchema-cloned consumable ItemData
+For an end-to-end starter with downloadable files, see
+[Build a quest and put it on a Quest Board](modders/quests-and-questboards.md).
+
+A real cooked or permanent RuneSchema-cloned consumable ItemData
 can accept an existing RuneSchema `/quests` definition when used. It is a normal
 item with its own stable PersistenceID, so ordinary station `/recipes` can
 produce it. The station needs no dialogue, and the quest remains a separate
@@ -9,14 +12,14 @@ grant rewards directly from an item.
 
 ## Item-side declaration
 
-In `mods/JobBoard/assets/20-QuestScrolls.jsonc`:
+In `mods/MyQuests/assets/20-ash-contract.jsonc`:
 
 ```jsonc
 {
-  "/Game/Mods/JobBoard/Items/ITEM_RatContract.ITEM_RatContract": {
+  "/Game/RuneSchema/MyQuests/Items/ash_contract.ash_contract": {
     "$QuestScroll": {
-      "QuestID": "Dye:rat_work",
-      "PersistenceID": "VT39acMY4k62LnArwSMkEQ"
+      "QuestID": "MyQuests:gather_ash",
+      "PersistenceID": "m8WyO5c2SsKnv3JX7Dq2AQ"
     }
   }
 }
@@ -57,21 +60,21 @@ The included content plugin is `RuneSchema.QuestItems`,
 with the reusable class
 `/RuneSchemaQuestItems/Blueprints/BP_QuestScroll.BP_QuestScroll_C` and a benign
 `/RuneSchemaQuestItems/Items/ITEM_QuestScroll_Template.ITEM_QuestScroll_Template`
-ItemData instance. It is enabled in the combined candidate's `plugins.txt` and
-requires no extra native DLL or modified UE4SS. The older runtime-only r4 ZIP
-does not contain it. A mod can author a scroll without its own PAK:
+ItemData instance. Confirm that plugin is installed and enabled in `plugins.txt`;
+it requires no extra native DLL or modified UE4SS. A mod can author a scroll
+without its own PAK when the helper content is present:
 
 ```jsonc
 {
-  "/Game/RuneSchema/MyQuests/Items/rat_contract.rat_contract": {
+  "/Game/RuneSchema/MyQuests/Items/ash_contract.ash_contract": {
     "$Clone": "/RuneSchemaQuestItems/Items/ITEM_QuestScroll_Template.ITEM_QuestScroll_Template",
-    "PersistenceID": "VT39acMY4k62LnArwSMkEQ",
-    "InternalName": "rat_contract",
-    "Name": "Rat Contract",
-    "FlavourText": "Read to accept the rat-hunting job.",
+    "PersistenceID": "m8WyO5c2SsKnv3JX7Dq2AQ",
+    "InternalName": "ash_contract",
+    "Name": "Timber Contract",
+    "FlavourText": "Read to accept Timber for the Camp.",
     "$QuestScroll": {
-      "QuestID": "Dye:rat_work",
-      "PersistenceID": "VT39acMY4k62LnArwSMkEQ"
+      "QuestID": "MyQuests:gather_ash",
+      "PersistenceID": "m8WyO5c2SsKnv3JX7Dq2AQ"
     }
   }
 }
@@ -82,11 +85,12 @@ and expected-identity fields above. Keep it stable across updates. Recipes
 reference the resulting `/Game/RuneSchema/MyQuests/Items/...` ItemData path.
 The shared template has no bound quest or reward and its fallback use is inert.
 
-The identity-correction candidate distinguishes an item's live asset identity
+RuneSchema distinguishes an item's live asset identity
 from its nonreplicated serialization cache. New native Items may have an empty
 `ItemDataPersistenceId`; the cache is not rewritten. The bound asset ID and
 owned inventory slot remain mandatory, and any populated cache must agree.
-See [identity diagnostics and remaining live tests](QUEST-SCROLL-IDENTITY-DIAGNOSTIC.md).
+Use the [quest-to-board troubleshooting checklist](modders/quests-and-questboards.md#troubleshooting-and-safe-updates)
+when an acceptance item does not bind or activate.
 
 ## Recipe output
 
@@ -94,13 +98,13 @@ Use the same item path in an ordinary recipe's output:
 
 ```jsonc
 {
-  "RECIPE_RatContract": {
+  "RECIPE_MyQuests_AshContract": {
     "Unlock": true,
     "ItemsConsumed": [
-      { "ItemData": "/Game/YourMod/Items/ITEM_Paper.ITEM_Paper", "Count": 1 }
+      { "ItemData": "/Game/Gameplay/Items/Resources/Wood/ITEM_Resources_Wood_Ash.ITEM_Resources_Wood_Ash", "Count": 1 }
     ],
     "ItemsCreated": [
-      { "ItemData": "/Game/Mods/JobBoard/Items/ITEM_RatContract.ITEM_RatContract", "Count": 1 }
+      { "ItemData": "/Game/RuneSchema/MyQuests/Items/ash_contract.ash_contract", "Count": 1 }
     ],
     "AddTo": [{
       "DataTable": "/ColorsOfMoney/Core/JobBoard/Data/DT_QuestBoard.DT_QuestBoard",
@@ -112,7 +116,7 @@ Use the same item path in an ordinary recipe's output:
 ```
 
 These are authoring placeholders, not an installed working mod. Replace the
-paper asset and use the actual station row's supported category/array layout.
+input asset and use the actual station row's supported category/array layout.
 Recipes use normal registration/unlock rules; the scroll is not a recipe
 unlocker in disguise. Quest Board's cooked content is maintained separately.
 
@@ -141,18 +145,47 @@ cross-item atomic removal, automatically replay charges, invent a refund or
 award a reward. Correct the underlying fault and inspect the native state
 before recovery. Stock UE4SS is not modified.
 
-## Validation boundary
+## Automatic Quest Cancellations
 
-The isolated menu-only reflection probe confirmed current native signatures
-for `UsableItemInterface:UseItem`, `CanUseItem`, the owned inventory use RPC,
-and inventory-slot accessors. It invoked none of those functions and opened no
-world. Pure tests exercise declaration validation, identity conflicts and the
-real acceptance/reward receipt state machine. Full cooked-scroll consumption,
-save/reload, controller input and dedicated/co-op acceptance still require live
-testing. Menu reflection alone is not evidence that these workflows passed.
-The shared plugin's two packages decode with both storefront mappings. Its
-editor fallback returns false with no inventory, and the cooked UseItem is
-const, scripted and nonpure with the expected parameters. Editable sources and
-the portable container receipt are preserved under
-`source/content/RuneSchemaQuestItems`; packaging verifies the container hashes.
-The Quest Board provider's old native-only prototype is not approved for use.
+RuneSchema automatically creates a **Quest Cancellations** crafting category on
+the Quest Board. Each recipe placed in `DT_QuestBoard`, row `QuestBoard`, whose
+output is a registered acceptance `$QuestScroll`, gets a matching **Cancel:
+<quest title>** scroll. It applies to enabled mods using that contract, including
+future quests, without authors writing a second item or recipe. Unrelated
+crafting stations and ordinary items do not create cancellation entries.
+
+There is one cancellation item and recipe per qualified parent quest, even
+when multiple recipes or entry choices accept it. Its stable item/recipe IDs
+derive from the parent quest key and survive title, icon, and recipe changes.
+The scroll inherits its parent's icon and appearance, costs one ash log to
+craft, and consumes one scroll only after a confirmed cancellation. Restart
+after adding or changing board definitions. Generated cancellations never
+generate further cancellations.
+
+Read the cancellation scroll to abandon that character's active parent quest.
+This clears its current objectives and map locations and cancels its running
+contract encounter and temporary enemies. It grants no reward and refunds no
+accepted supplies or entry cost. Ungiven, completed, and pending/uncertain runs
+are left alone and consume no scroll. Other characters' quests and unrelated
+encounters are unchanged. A partial native/write/removal failure is reported;
+inventory operations are not automatically replayed or refunded.
+Paid completion history and its timestamp survive cancellation; retrying does
+not restore first-run rewards or retain the cancelled attempt's staged credit.
+
+For a manually authored cancellation scroll use the same item-side declaration
+with `"Action": "Abandon"`. Omitted `Action` retains the existing `"Accept"`
+behavior. `EntryID` is valid only for acceptance. Cancellation uses the same
+owned inventory slot, identity, authority and native inventory RPC checks as
+acceptance; clients cannot choose another quest or action over that RPC.
+
+The automatic category targets RuneSchema-bound acceptance items on the named
+Quest Board. An unrelated cooked quest item must first expose a supported
+`$QuestScroll` binding; RuneSchema does not infer quests from display names.
+
+## Before distributing
+
+Verify the exact helper/provider versions you ship, item use and consumption,
+quest progress, one-time rewards, save/reload and the host/client combinations
+you support. Parsing a definition or displaying a cached preview is not proof
+of successful gameplay. Keep backups and stable identities when updating an
+existing quest; do not replay uncertain transactions as a recovery shortcut.

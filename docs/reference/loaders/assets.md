@@ -1,5 +1,20 @@
 # Assets loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/assets/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Choose a mounted item of the same native class and behavior; inspect its exact object path.
+2. Create `assets/10-camp-item.jsonc`. For a clone, assign a new destination, canonical persistence ID and InternalName; for a patch, retain the existing identity.
+3. Use the mock-up below and replace every placeholder. Change only reflected fields present on that class.
+4. Restart, inspect registration, then reference the resulting path from recipes, shops or journal discovery. Verify save/reload before distribution.
+
+**Tie-ins:** [Recipes](recipes.md), [raw rows](raw.md), [vendors](vendors.md), [journal](journal.md) and [quest acceptance items](../../modders/quests-and-questboards.md).
+
+
 Craftable consumables may declare [`$QuestScroll`](../../QUEST-SCROLLS.md) to
 accept an existing RuneSchema quest through the pre-consumption native item-use
 route. The expected item PersistenceID is verified; this is not a quest/reward
@@ -14,13 +29,13 @@ Items, icons, stats, unlock links, DataAssets, and reflected object patches.
 Use `/assets` to patch a loaded item or clone a compatible item into a stable
 RuneSchema runtime asset. A JSON clone is not a newly cooked Unreal package.
 
-```json
+```jsonc
 {
-  "/Game/MyMod/Items/ITEM_Test.ITEM_Test": {
+  "/Game/MyMod/Items/ITEM_CampSupplies.ITEM_CampSupplies": {
     "$Clone": "/Game/Gameplay/Items/ITEM_Source.ITEM_Source",
-    "PersistenceID": "RS7Test12345678901234A",
-    "InternalName": "mymod_test",
-    "Name": "Test Item",
+    "PersistenceID": "uxA9m4CWTOyRV2K8e5PHgQ",
+    "InternalName": "mymod_camp_supplies",
+    "Name": "Camp Supplies",
     "PowerLevel": 20
   }
 }
@@ -39,7 +54,7 @@ Walkthrough:
 can attach a supported equip effect. `RecipesToUnlock` and
 `BuildingPieceToUnlock` are inherited by a clone unless explicitly replaced.
 
-Reference: `examples/RSv16/ExampleMods/RuneSchema2VendorTest/assets`.
+For a connected item/quest recipe, use the [Quest Board starter](../../modders/quests-and-questboards.md).
 
 ## Wearables without a PAK
 
@@ -80,7 +95,7 @@ For an existing DataAsset or generated-class default, put the complete `DA_`
 path first and native field paths below it. RuneSchema infers a class default
 object from `_C`; the mod directory supplies ownership.
 
-```json
+```jsonc
 {
   "/Game/UI/MainMenu/CharacterCreate/Data/DA_CharacterOptionData.DA_CharacterOptionData_C": {
     "CharacterOptions[FacialHairPreset].OptionData": {
@@ -134,7 +149,7 @@ the legacy registry-patch envelope remains readable for compatibility.
 
 ## Working examples
 
-- [Great Tree: Sacred Leaf and quest items](../../examples/GreatTree/assets/85-GreatTreeItems.json)
+- [Quest Board acceptance item starter](../../examples/QuestBoardWalkthrough/assets/20-ash-contract.jsonc)
 
 ---
 

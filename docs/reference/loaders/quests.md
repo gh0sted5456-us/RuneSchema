@@ -1,5 +1,20 @@
 # Quests loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/quests/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Choose one stable quest ID and unique canonical PersistenceID; decide objective and completion behavior.
+2. Create `quests/10-camp-contract.jsonc` with either Objective or Stages; replace the mock-up asset references and sample identity.
+3. Connect acceptance through dialogue or a bound scroll. ReturnToNPC quests also need a turn-in route.
+4. Restart; verify acceptance, progress, rewards once, per-character state and reload. Add repeat/cost rules only after the basic flow is sound.
+
+**Tie-ins:** [End-to-end Quest Board walkthrough](../../modders/quests-and-questboards.md), [dialogue](dialogue.md), [events](events.md) and [scrolls](../../QUEST-SCROLLS.md).
+
+
 **Folder:** `RuneSchema/mods/<ModName>/quests/`
 
 Per-character quest definitions, objectives, rewards, and persistence.
@@ -9,16 +24,21 @@ Per-character quest definitions, objectives, rewards, and persistence.
 Quests are per-character definitions with stages, objectives, rewards, and a
 stable persistence ID.
 
+Start with the [quest and Quest Board walkthrough](../../modders/quests-and-questboards.md)
+for a downloadable quest, acceptance item and board recipe, plus dialogue and
+multiplayer verification steps.
+
 Quests can also be accepted through a craftable consumable item using an
 item-side [`$QuestScroll` declaration](../../QUEST-SCROLLS.md) in `/assets`.
 The recipe produces a normal stable-ID item; use activates an existing quest
 through the authoritative acceptance receipt, without requiring station dialogue.
 
-```json
+```jsonc
 {
   "Id": "gather_logs",
   "PersistenceID": "AAAAAAAAAAAAAAAAAAAAAA",
   "Title": "Gather Logs",
+  "Icon": "/Game/Art/UI/Icons/Journal/T_Icon_Journal_Lore_Scraps.T_Icon_Journal_Lore_Scraps",
   "Description": "Bring back five logs.",
   "CompletedDescription": "The village has the timber it needs.",
   "Region": "Brynmoor",
@@ -43,6 +63,35 @@ through the authoritative acceptance receipt, without requiring station dialogue
 Replace the example item paths with your cooked `ItemData` paths and generate a
 unique, canonical 22-character `PersistenceID` for each quest. Keep that identity
 stable when updating the same quest.
+
+## Quest-board icons (no quest PAK required)
+
+`Icon` is optional presentation metadata: an Unreal texture object path, at most
+2,048 characters. Reference existing game or mounted mod artwork; omitting it or
+using an empty string leaves the board's fallback icon. A JSON-only `/quests`
+definition can use existing game artwork without shipping its own PAK. New
+artwork still needs an asset provider; local image filenames and web URLs are
+not texture references. RuneSchema validates the path syntax, not that the
+texture is mounted or loadable. Boards should keep a fallback for missing art.
+
+Native board plugins can query the `runeschema.tools` C ABI service:
+
+```jsonc
+{"Action":"QuestCatalog","Mod":"MyMod","Offset":0,"Limit":64}
+```
+
+`Mod` and qualified `Key` filters are optional. `Limit` is 1–128; `Offset` is
+0–128. The response contains `Ready`, `Revision`, `Quests`, `Total`,
+`NextOffset`, and `HasMore`. Each quest has `Key`, `Mod`, `PersistenceID`,
+`Title`, `Description`, `Icon`, `Category`, `Region`, and `Repeatable`.
+Internal dialogue-state records are excluded. The catalogue is read-only
+presentation data, not a player's eligibility, progress, or permission to accept
+a quest. A board must integrate this query and use the existing authoritative
+quest-acceptance flow; this does not automatically replace a board's UI.
+
+Changing `Icon` is presentation-only and does not reset progress or reward
+receipts. Older receipts can prove the addition of this previously absent field;
+other unprovable legacy edits still use the normal migration checks.
 
 ## Quest lists and completion
 
@@ -84,7 +133,7 @@ UI/world support. Quest category, region and objective search radius are distinc
 
 Presentation-only updates preserve native phase, counters, repeat run and reward
 receipts after the progress fingerprint has been recorded. Old full-document
-receipts can migrate proven additions of `Region` and/or `CompletedDescription`
+receipts can migrate proven additions of `Region`, `CompletedDescription`, and/or `Icon`
 without replaying rewards or resetting progress. Other old presentation edits
 cannot be proven from the old hash alone; migrate to the new receipt before
 changing those fields. Changes to identity, objectives, rewards, costs or repeat
@@ -132,9 +181,6 @@ persistent identity across loads and updates.
 
 Bind them from supported dialogue actions.
 
-## Working examples
-
-- [Great Tree: multi-stage story quest](../../examples/GreatTree/quests/87-GreatTreeStory.json)
 
 ---
 

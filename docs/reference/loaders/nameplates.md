@@ -1,5 +1,20 @@
 # Nameplates loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/nameplates/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Prepare a mounted icon and decide which players should see the badge.
+2. Create `nameplates/10-camp-badge.jsonc` using the reusable definition example.
+3. Replace ID, icon and distance; add only confirmed event/function filters if dynamic states are needed.
+4. Reference the definition from players, restart and verify self/remote visibility, distance, death and respawn.
+
+**Tie-ins:** [Players](players.md) selects recipients; [PAK content](../../PAK-CONTENT-GUIDE.md) supplies new artwork.
+
+
 **Folder:** `RuneSchema/mods/<ModName>/nameplates/`
 
 Reusable player nameplate and activity-badge presentation.
@@ -8,7 +23,7 @@ Reusable player nameplate and activity-badge presentation.
 
 Nameplates are reusable definitions consumed by `/players`.
 
-```json
+```jsonc
 [
   {
     "Id": "ActivityBadge",

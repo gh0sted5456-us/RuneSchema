@@ -1,5 +1,18 @@
 # Create stations and recipes
 
+## Step-by-step workflow
+
+1. Choose crafting versus timed processing and inspect a compatible native station.
+2. Cook the actor/data/dependencies when introducing a new station; keep the station's row handle private to your feature.
+3. Connect BuildingPieceData through buildings, then place recipes in the station's actual Category or Recipes array.
+4. Choose discovery/unlock behavior, restart and verify exact inputs/outputs, fuel lanes, interaction and persistence.
+
+JSONC snippets are authoring mock-ups. Replace example paths, IDs and values with
+inspected content; a valid snippet cannot supply missing cooked dependencies.
+
+**Tie-ins:** [Buildings](reference/loaders/buildings.md), [raw rows](reference/loaders/raw.md), [recipes](reference/loaders/recipes.md) and [Quest Boards](modders/quests-and-questboards.md).
+
+
 A station is more than a world model. A complete station needs a buildable or
 placed actor, an interaction, a recipe list, and a way for the player to unlock
 or find it. RuneSchema can connect those pieces without replacing a native game
@@ -34,7 +47,7 @@ Blueprint and verify every referenced file is included before cooking.
 A RuneSchema `buildings` file may point to the cooked building data and adjust
 supported behavior:
 
-```json
+```jsonc
 {
   "GoldenForge": {
     "Asset": "/GoldenArsenal/Buildings/BUILDPIECE_GoldenForge.BUILDPIECE_GoldenForge",
@@ -64,7 +77,7 @@ into JSON.
 
 ## Add a recipe to a native crafting station
 
-```json
+```jsonc
 {
   "RECIPE_GoldenSpear": {
     "AddTo": [
@@ -104,7 +117,7 @@ and then reads the live row back. The placement is accepted only when the
 recipe appears exactly once. A missing `Replaces` target or a failed readback
 is reported as an error instead of a successful recipe load.
 
-```json
+```jsonc
 {
   "RECIPE_GoldenIngot": {
     "AddTo": [
@@ -141,7 +154,7 @@ need separate building overrides.
 
 Use the full path when the station table lives in your PAK:
 
-```json
+```jsonc
 "AddTo": [
   {
     "DataTable": "/GoldenArsenal/Data/DT_GoldenForge.DT_GoldenForge",

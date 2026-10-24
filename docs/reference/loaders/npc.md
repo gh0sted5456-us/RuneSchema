@@ -1,5 +1,20 @@
 # NPC loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/npc/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Choose the compatible native actor role/visual source and a stable NPC ID.
+2. Create `npc/10-camp-keeper.jsonc`; replace the mock-up class/mesh and location with inspected values.
+3. Bind only the needed DialogueID, VendorID, QuestID or JournalEntries. Use supported grounding rules for the intended floor.
+4. Restart and verify authority-owned placement, interaction, client presentation and reload without duplicates.
+
+**Tie-ins:** [Dialogue](dialogue.md), [vendors](vendors.md), [quests](quests.md), [journal](journal.md) and [lore](lore.md).
+
+
 **Folder:** `RuneSchema/mods/<ModName>/npc/`
 
 Creates persistent interactable AI, human, resource-style actors, and merchants.
@@ -63,9 +78,6 @@ No. Use one definition.
 
 Yes, on supported human NPCs, with `HideWeapon`.
 
-## Example
-
-- [Great Tree](../../examples/GreatTree/npc/85-GreatTree.json)
 
 ---
 

@@ -1,5 +1,18 @@
 # Create weapons and items
 
+## Step-by-step workflow
+
+1. Choose a compatible existing item clone or a cooked ItemData route; new art needs a mounted content provider.
+2. Assign stable object path, InternalName and canonical persistence identity; resolve equipment/attack dependencies.
+3. Use the JSONC mock-ups below to register/patch the item, then add its recipe, vendor or discovery tie-in.
+4. Restart and verify delivery, equip/use, replication and save/reload independently; a visible card is only presentation.
+
+JSONC snippets are authoring mock-ups. Replace example paths, IDs and values with
+inspected content; a valid snippet cannot supply missing cooked dependencies.
+
+**Tie-ins:** [Assets](reference/loaders/assets.md), [equipment](reference/loaders/equipment.md), [recipes](reference/loaders/recipes.md) and [PAK content](PAK-CONTENT-GUIDE.md).
+
+
 There are two practical ways to create an item with RuneSchema. Copy an existing
 item when the game already has the behavior and art you need. Use a PAK when the
 item needs new art, a new Blueprint, or a fully cooked item asset.
@@ -34,7 +47,7 @@ equipment behavior.
 
 A basic item copy looks like this:
 
-```json
+```jsonc
 {
   "/Game/RuneSchema/GoldenArsenal/Items/ITEM_GoldenSpear.ITEM_GoldenSpear": {
     "$Clone": "/Game/Gameplay/Items/Weapons/EXACT_SOURCE.EXACT_SOURCE",
@@ -57,7 +70,7 @@ the item's equip, animation, repair, and interaction behavior working.
 
 If the PAK already contains the item:
 
-```json
+```jsonc
 {
   "/GoldenArsenal/Items/ITEM_GoldenSpear.ITEM_GoldenSpear": {}
 }
@@ -66,6 +79,14 @@ If the PAK already contains the item:
 This tells RuneSchema to load the exact item. You may add supported adjustments
 inside the braces, but the cooked asset should already have its required class,
 type, internal name, and permanent identity.
+
+If the PAK did not cook a registry declaration, you can instead announce its
+exact ItemData paths with a loose `registry/*.jsonc` document containing
+`NativeRegistries.Items`. See the
+[complete loose-registration example](reference/loaders/registry.md#register-a-cooked-item-without-cooking-a-registry-declaration).
+This does not require recooking the registry declaration; the referenced item
+and its dependencies must still exist. Choose either this enrollment route or
+the `assets` pointer above rather than duplicating the same registration.
 
 ## Keep the weapon family consistent
 
@@ -158,7 +179,7 @@ option.
 
 ## Add a crafting recipe
 
-```json
+```jsonc
 {
   "RECIPE_GoldenSpear": {
     "AddTo": [

@@ -1,5 +1,18 @@
 # Create your first RuneSchema mod
 
+## Step-by-step workflow
+
+1. Create and enable one stable mod folder under `RuneSchema/mods`; add only the loader folders your feature uses.
+2. Start with one JSONC mock-up from the matching loader walkthrough and replace IDs, asset paths and reflected fields.
+3. Connect the result to its consumer: an item needs a recipe/vendor, a quest needs acceptance, and a station needs its real actor row handle.
+4. Restart, inspect targeted diagnostics, then verify the feature and saved progress before distributing it.
+
+JSONC snippets are authoring mock-ups. Replace example paths, IDs and values with
+inspected content; a valid snippet cannot supply missing cooked dependencies.
+
+**Tie-ins:** [All loaders](LOADER-WALKTHROUGHS.md), [quests and boards](modders/quests-and-questboards.md), [cache bundles](CACHE-BUNDLES.md) and [diagnostic codes](ERROR-CODES.md).
+
+
 RuneSchema lets a mod connect content to Dragonwilds without replacing large
 parts of the game. A small mod can change an existing value with one file. A
 larger mod can combine new PAK content with items, recipes, stations, quests,
@@ -7,7 +20,8 @@ vendors, and interface changes.
 
 This guide explains the shared foundation. The focused guides cover
 [PAK content](PAK-CONTENT-GUIDE.md), [weapons and items](WEAPONS-AND-ITEMS.md),
-and [stations and recipes](STATIONS-AND-RECIPES.md).
+and [stations and recipes](STATIONS-AND-RECIPES.md). For a complete quest-to-board
+flow, follow [Build a quest and put it on a Quest Board](modders/quests-and-questboards.md).
 
 If you prefer a guided starting point, the in-game
 [Advanced Authoring & Tools workflow](ADVANCED-AUTHORING-TOOLS.md) can search
@@ -194,6 +208,32 @@ For each release candidate:
 7. Restart the game and load the character again.
 8. Test with a second player if the mod changes gameplay.
 9. Disable the mod only on a backup character and confirm safe cleanup.
+
+## Journal/lore workspace (candidate)
+
+Helpy's Journal workspace separates native Journal/Lore, Author, and optional
+Wiki reference articles. Native browsing is read-only: it never grants discovery,
+marks an entry read, or changes a character save. Cached entries not observed in
+the current runtime are explicitly labeled as references.
+
+The Author tab can start with a new entry or copy a native entry's text/art into
+a new draft. Choose a unique mod-prefixed ID, entry type, title, pages, cooked
+image path and native subcategory path. Export writes under Helpy's
+`exports/journal-drafts`; it does not install or overwrite a mod. Review the
+draft against `docs/schemas/journal.schema.json` or `lore.schema.json`, then put
+it in the appropriate folder of your own mod. Lore-loader entries must use the
+Lore type. Discovery defaults to `Unlock: false`; placement and discovery are
+separate contracts. Test references, placement, persistence and unlock conditions
+in a disposable world before sharing.
+
+Helpy maintains `cache/journal/catalog.json` and an observed, unmodified
+`cache/journal/vanilla.json`. An optional supplied baseline may be placed at
+`Mods/RuneSchema/assets/journal/vanilla.json`, using the version-1 native cache
+format. Loading and writing are asynchronous. A completed loaded-object scan is
+not a certified full-game export, and the candidate does not yet ship a verified
+complete vanilla baseline. Game artwork/text remains Jagex content; do not
+relicense it as RuneSchema MIT or mistake Wiki text licensing for game-media
+licensing.
 
 ## Prepare a mod for sharing
 

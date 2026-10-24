@@ -1,0 +1,19 @@
+// Mock-up: requires the separate supported Quest Board provider and registered item.
+{
+  "RECIPE_MyQuests_AshContract": {
+    "Unlock": true,
+    "ItemsConsumed": [{
+      "ItemData": "/Game/Gameplay/Items/Resources/Wood/ITEM_Resources_Wood_Ash.ITEM_Resources_Wood_Ash",
+      "Count": 1
+    }],
+    "ItemsCreated": [{
+      "ItemData": "/Game/RuneSchema/MyQuests/Items/ash_contract.ash_contract",
+      "Count": 1
+    }],
+    "AddTo": [{
+      "DataTable": "/ColorsOfMoney/Core/JobBoard/Data/DT_QuestBoard.DT_QuestBoard",
+      "Row": "QuestBoard",
+      "Category": "Contracts"
+    }]
+  }
+}

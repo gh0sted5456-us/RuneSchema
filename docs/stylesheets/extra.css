@@ -267,7 +267,7 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
-
+/* Diagnostic catalogue: searchable without replacing accessible deep links. */
 .rs-code-tools { padding: 1rem; margin: 1.2rem 0; border: 1px solid var(--md-default-fg-color--lightest); border-radius: .55rem; background: var(--md-code-bg-color); }
 .rs-code-tools label { display: block; font-weight: 650; margin-bottom: .5rem; }
 .rs-code-tools input { width: 100%; border: 1px solid var(--md-default-fg-color--lighter); border-radius: .3rem; padding: .65rem; background: var(--md-default-bg-color); color: var(--md-default-fg-color); font: inherit; }

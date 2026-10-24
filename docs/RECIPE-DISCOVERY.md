@@ -1,5 +1,19 @@
 # Recipe discovery without separate raw patches
 
+## Step-by-step workflow
+
+1. Resolve the registered recipe and exact item/actor/skill prerequisites.
+2. Add a `Discovery` block using the JSONC mock-ups below. Choose AND/OR behavior
+   deliberately and replace example paths with inspected content.
+3. Keep station placement in `AddTo`. Do not combine conditional `Discovery`
+   with unconditional `Unlock: true`; placement is not a learning receipt.
+4. Restart and check unmet/met conditions, an already learned character,
+   reconnect and save/reload without resetting unrelated learned recipes.
+
+**Tie-ins:** [Recipes](reference/loaders/recipes.md),
+[assets](reference/loaders/assets.md), [journal](reference/loaders/journal.md)
+and [stations](STATIONS-AND-RECIPES.md).
+
 RuneSchema 0.8.0.0 accepts a `Discovery` block directly in each `/recipes` body,
 including overrides keyed by a full cooked recipe object path. It compiles the
 condition into the game's native `ProgressionBundleRow.UnlockQuery`; it does

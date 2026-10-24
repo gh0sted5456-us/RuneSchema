@@ -1,5 +1,21 @@
 # Blueprint and Lua companion folders
 
+## Step-by-step workflow
+
+1. Choose ordinary cooked content (`paks`), a client ModActor (`logicmods`) or a
+   supported Lua-only companion (`ue4ss`). Normal item discovery needs no startup actor.
+2. Follow the matching folder layout below inside the owning enabled mod; keep
+   package names and paths consistent with the actual cooked package/add-on.
+3. Enable only the required helper route. Connect gameplay data through its
+   ordinary JSONC loaders; a companion does not replace native registration.
+4. Restart and verify startup, world changes, reconnect and cleanup on the intended
+   roles. Prevent duplicate actors and callbacks.
+
+These directory layouts are mock-ups. Lua/Blueprint startup is not a JSONC
+directive: use [assets](reference/loaders/assets.md),
+[registry](reference/loaders/registry.md), [quests](reference/loaders/quests.md)
+and their JSONC mock-ups for the content those companions consume.
+
 RuneSchema has two optional folders for behavior that an ordinary cooked PAK or
 JSON file cannot start by itself. They look like RuneSchema loaders, but pass
 the work to UE4SS. Keep them inside the mod they belong to so one

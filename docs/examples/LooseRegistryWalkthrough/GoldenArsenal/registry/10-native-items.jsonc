@@ -1,0 +1,11 @@
+{
+  "SchemaVersion": 1,
+  // Keep Entries even when there are no presentation/authority declarations.
+  "Entries": [],
+  "NativeRegistries": {
+    "Items": [
+      // Replace this with the full object path from your installed content.
+      "/GoldenArsenal/Items/ITEM_GoldenSpear.ITEM_GoldenSpear"
+    ]
+  }
+}

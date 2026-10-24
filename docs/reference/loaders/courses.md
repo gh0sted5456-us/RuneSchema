@@ -1,5 +1,20 @@
 # Courses loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/courses/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Plan starter, finish, checkpoints/orbs and the playable area in Unreal centimeters.
+2. Create `courses/10-camp-route.jsonc` from the mock-up below; replace the ID and coordinates.
+3. Populate the actual route and enclosing zone. Use `$Patch`/`$Target` only when deliberately changing an existing authored course.
+4. Restart and run the route from start through completion; inspect missing assets and out-of-zone checkpoints.
+
+**Tie-ins:** [Spawns](spawns.md) places separate world content; [players](players.md) controls player presentation, not course geometry.
+
+
 **Folder:** `RuneSchema/mods/<ModName>/courses/`
 
 Course definitions, patches, checkpoints, orbs, props, and zones.
@@ -9,7 +24,7 @@ Course definitions, patches, checkpoints, orbs, props, and zones.
 Use `/courses` to add course records or patch a course by ID. A course can
 define a starter, finish, orb sets, stamina orbs, props, and a zone.
 
-```json
+```jsonc
 [
   {
     "Id": "mymod_course",

@@ -1,5 +1,20 @@
 # Enums loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/enums/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Identify a supported loaded enum and confirm the consumer already handles the proposed values.
+2. Create `enums/10-camp-values.jsonc` using the mock-up below.
+3. Replace the enum name and supply unqualified value names; do not include EnumName:: in each value.
+4. Restart and inspect enum resolution and the consuming feature. Added names do not implement new game logic.
+
+**Tie-ins:** [Raw](raw.md) and [assets](assets.md) may reference supported enum values; use cooked code/Blueprint content for new behavior.
+
+
 **Folder:** `RuneSchema/mods/<ModName>/enums/`
 
 Extensions to supported loaded enum name sets.
@@ -8,7 +23,7 @@ Extensions to supported loaded enum name sets.
 
 Use `/enums` to add names to a supported loaded enum.
 
-```json
+```jsonc
 {
   "EMyLoadedEnum": ["NewValue", "AnotherValue"]
 }
@@ -22,6 +37,19 @@ name set; it does not add native code or Blueprint logic for a new value.
 - Use `/enums` only for supported loaded enum name sets.
 - Write new values without the `EnumName::` prefix.
 - Adding a name does not add native or Blueprint behavior for that value.
+
+Native `/Script/Dominion.ESkill` extension is now explicitly blocked. Its
+compiled MAX checks, switches, arrays and network encoding are not verified
+for added values; its menu ordering also uses an explicit native enum list.
+Do not reuse Magic, deprecated slots, or a guessed next byte for a custom skill.
+
+For independent mod enums, cook a mod-owned `UserDefinedEnum` and use that
+exact enum type in mod-owned cooked properties. Declare its full path through
+`NativeRegistries.Enums` in a registry document to verify its existing symbols
+and include its owner-scoped fingerprint in network agreement. This is not an
+append operation or an arbitrary property/memory patch. The values are fixed
+by cooking and are not reassigned by mod load order. Keep their mapping stable
+when publishing updates; changed tables produce changed fingerprints.
 
 ## FAQ
 

@@ -1,5 +1,20 @@
 # Journal loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/journal/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Choose the native journal Type and its World, Recipes or Knowledge placement; separate registration from player discovery.
+2. Create `journal/10-camp-notes.jsonc` using a stable mod-specific key, or reference one exact cooked entry.
+3. Replace text, art and AddTo values in the mock-up. Choose Unlock or a supported discovery condition/trigger deliberately.
+4. Restart and confirm placement, unlock, read state and reload independently. A cached preview is not the player's unlock receipt.
+
+**Tie-ins:** [Lore](lore.md), [NPC JournalEntries](npc.md), [recipes](recipes.md) and [cache bundles](../../CACHE-BUNDLES.md).
+
+
 **Folder:** `RuneSchema/mods/<ModName>/journal/` (`/lore/` accepts Lore entries only).
 
 The loader creates a RuneSchema-owned journal asset or registers an existing cooked one, then places it in a native subcategory. Registration, placement, and **player discovery** are separate steps. A successful loader summary does not prove that a player has unlocked an entry.
@@ -8,7 +23,7 @@ The loader creates a RuneSchema-owned journal asset or registers an existing coo
 
 Use a stable, mod-specific key. `Type` selects the native asset class: `Lore`, `People`, `Place`, `Treasure`, `World`, or `Recipe`. `AddTo` selects its journal location.
 
-```json
+```jsonc
 {
   "my_mod:field_notes": {
     "Type": "Lore",
@@ -50,7 +65,7 @@ definitions for the same cooked path still override the in-PAK metadata.
 
 Use its full cooked object path as the JSON key. The asset retains its native class, identity, pages, icon, and `UnlockCondition`. Optional `PersistenceID` and `InternalName` fields assert the cooked identity; RuneSchema will not replace it. Do not create a second runtime entry for the same page.
 
-```json
+```jsonc
 {
   "/MyMod/Journal/JOURNAL_FieldNotes.JOURNAL_FieldNotes": {
     "Type": "Lore",
@@ -82,7 +97,7 @@ on every save.
 
 Use full cooked object paths, including the object name. For example:
 
-```json
+```jsonc
 {
   "/MyMod/Journal/JOURNAL_Pigment.JOURNAL_Pigment": {
     "Type": "World",
@@ -114,7 +129,7 @@ Recipe availability is separate from journal discovery. To make a crafting recip
 
 For a loaded native subcategory outside this list, use `"AddTo": {"SubCategory": "/Game/.../ExactCategory.ExactCategory"}`. `AddTo.Key` optionally chooses the key within an ungrouped category. Grouped categories use the entry asset's native object name consistently in their list, detail lookup, and hierarchy index; an authored `Key` alias does not replace that native key or change the entry's persistence identity. `AddTo.Group` may select a group or create one where the native category supports it:
 
-```json
+```jsonc
 "AddTo": {
   "Section": "Knowledge",
   "Category": "People",

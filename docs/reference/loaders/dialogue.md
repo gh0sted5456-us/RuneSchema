@@ -1,5 +1,20 @@
 # Dialogue loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/dialogue/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Choose a compatible interactable NPC or dialogue prop and a stable conversation ID.
+2. Create `dialogue/10-camp-conversation.jsonc` with an Entry naming an existing node.
+3. Add up to four choices per node; connect Next/End, then add requirements before supported actions.
+4. Bind the ID through the actor's DialogueID. Restart and check every reachable branch, unmet requirement and player-specific result.
+
+**Tie-ins:** [NPCs](npc.md), [vendors](vendors.md), [quests and boards](../../modders/quests-and-questboards.md) and [lore](lore.md).
+
+
 **Folder:** `RuneSchema/mods/<ModName>/dialogue/`
 
 Conversations, choices, requirements, and actions for NPC-driven flows.
@@ -9,7 +24,7 @@ Conversations, choices, requirements, and actions for NPC-driven flows.
 Dialogue files define one conversation with an entry node and up to four
 choices per node.
 
-```json
+```jsonc
 {
   "Id": "hello",
   "Entry": "start",
@@ -35,7 +50,7 @@ Walkthrough:
    Niagara.
 6. Test the initial prompt, every branch, and reconnect behavior.
 
-Example: `examples/RSv16/dialogue/60-GoblinPatrol.json`.
+See [quest and board dialogue tie-ins](../../modders/quests-and-questboards.md#alternative-dialogue-based-boards-and-turn-in).
 
 ## Simple rules
 

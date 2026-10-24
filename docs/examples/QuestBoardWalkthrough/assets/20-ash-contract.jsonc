@@ -1,0 +1,14 @@
+// Mock-up: generate an item identity distinct from the quest; replace it in both fields.
+{
+  "/Game/RuneSchema/MyQuests/Items/ash_contract.ash_contract": {
+    "$Clone": "/RuneSchemaQuestItems/Items/ITEM_QuestScroll_Template.ITEM_QuestScroll_Template",
+    "PersistenceID": "m8WyO5c2SsKnv3JX7Dq2AQ",
+    "InternalName": "myquests_ash_contract",
+    "Name": "Timber Contract",
+    "FlavourText": "Read to accept Timber for the Camp.",
+    "$QuestScroll": {
+      "QuestID": "MyQuests:gather_ash",
+      "PersistenceID": "m8WyO5c2SsKnv3JX7Dq2AQ"
+    }
+  }
+}

@@ -1,5 +1,20 @@
 # Players loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/players/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Choose a name, GUID or wildcard selector; use a GUID where duplicate names matter.
+2. Create `players/10-camp-profile.jsonc` from the mock-up and replace the selector/definition references.
+3. Add only supported attributes/presentation. Choose one carry-capacity mode and inspect competing matching rules.
+4. Restart and verify the selected players only, host/client presentation and recreated pawns after death/reconnect.
+
+**Tie-ins:** [Nameplates](nameplates.md), [effects](effects.md), [Niagara](niagara.md) and [equipment](equipment.md).
+
+
 **Folder:** `RuneSchema/mods/<ModName>/players/`
 
 Player selectors, rules, attributes, appearance, effects, and presentation.
@@ -9,7 +24,7 @@ Player selectors, rules, attributes, appearance, effects, and presentation.
 Player rules select by name, GUID, or wildcard and apply supported attributes,
 appearance, effects, archetypes, map icons, and nameplates.
 
-```json
+```jsonc
 [
   {
     "Id": "all-players",

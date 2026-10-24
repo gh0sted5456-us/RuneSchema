@@ -1,8 +1,12 @@
 # Helpy icon cache
 
+For typed item/journal metadata, exported paths and persistence IDs, use
+[content cache bundles](CACHE-BUNDLES.md). The default export is now
+`.rsmk-cache`; the legacy format below remains supported for pictures only.
+
 Helpy stores captured item icons under
-`%LOCALAPPDATA%\RuneSchema\HELPY\runtime\saved\cache\item-icons`.
-Settings > Icon cache provides **Clean Icon Cache** and **Open cache folder**
+`%LOCALAPPDATA%\RSDragonwilds\RuneSchema\core\HELPY\runtime\saved\cache\item-icons`.
+Settings > Item Cache provides **Clean Icon Cache** and **Open cache folder**
 in both simple and advanced modes. The link opens Windows File Explorer for
 manual management. Close Helpy/the game before manually removing files; visible
 icons can otherwise be captured again while browsing. Cache cleanup does not
@@ -14,6 +18,32 @@ does not capture every texture in the game. Normal browsing tries the compatible
 local disk thumbnail before submitting a native capture request. Missing or
 invalid thumbnails fall back to the game's capture pipeline and are saved for
 later use when persistence is enabled. No all-assets scan runs at startup.
+
+Item Bay, inventory gear changes and Character Editor share the same cached
+catalogue and icon store. Disk thumbnail reads and index updates run off the UI
+thread; at most one completed disk thumbnail is uploaded per UI update. Buttons
+keep their geometry while artwork arrives. A real source change still invalidates
+its entries, and native equipment/use checks remain authoritative.
+
+Helpy owns and maintains this writable AppData cache, not the mod's installation
+folder. A mod can supply optional `cache/*.rsmk-icons` packs inside its RuneSchema
+mod folder. Matching active-source pictures and relationships are copied into
+Helpy's cache; the original packs are never edited and do not register items.
+Keep **Keep icons between launches** enabled for persistent thumbnails. The cache
+window's **Open Helpy cache folder** link shows the actual writable location.
+
+Unrelated source discoveries preserve already loaded icons and their queued or
+in-flight capture requests. Immediately before a new capture, Helpy rechecks for
+an imported thumbnail that arrived after the original disk miss. Real source
+changes still invalidate that source's pictures; cache/export-directory writes
+do not count as content changes, regardless of directory-name capitalization.
+
+The visible item page stays in place during a same-query refresh. Empty,
+non-final cache-read responses are not displayed as zero results; replacement
+rows are applied together when available. A completed empty search can still
+show no matches. Changing the query, world or actual content source invalidates
+old rows normally. `[PH]` placeholder items are hidden by default; authors can
+enable **View > Show [PH] placeholder items** without rebuilding the disk cache.
 
 Both cache operations and **Full scan game catalogue** have live progress and
 cancel controls. Export separates discovery, content verification, pixel
@@ -131,6 +161,36 @@ operations. Normal launch keeps the existing lightweight source comparison;
 it does not hash all large containers. A progress indicator and result show
 imported/skipped counts. Workers are cancelled/joined before DLL unload.
 
+### Bundled mod caches
+
+Authors can ship a source-filtered pack inside
+`RuneSchema/mods/<ModName>/cache/<ModName>.rsmk-icons`. Helpy discovers direct
+`.rsmk-icons` files after the native source manifest is ready and imports them
+on a background worker. Restart after adding a pack to a running session.
+Only active, declared mod roots participate; inactive folders are ignored.
+An unchanged source snapshot is attempted once per session, not every frame.
+Automatic passes with zero new icons and no warnings stay silent; explicit
+Import/Export operations still report their results.
+
+The saved item-name catalogue uses the content catalogue fingerprint rather
+than the broader icon-census revision. Icon-only source refinements therefore
+do not discard the whole sorted item list. Real content changes, runtime clone
+paths and language changes still invalidate it. A matching older manifest can
+migrate without a native rescan. Icon packs contain thumbnails/source mappings,
+not the item-name catalogue, and cannot make unregistered items appear.
+
+Automatic imports use the same content and pixel checks as manual imports,
+restricted to that mod's declared source roots. This includes canonical
+icon-to-source relationships, not item definitions or quest state. A pack cannot
+claim unrelated content merely by changing its source labels. Imported icons
+are reusable disk thumbnails; missing icons still use native capture. Large
+container hashes may be needed on the first bundled import, off the render
+thread. A newly mounted/changed source is rechecked independently.
+
+Discovery is bounded to 1,024 mod folders, 256 direct cache-folder entries per
+mod, and 64 packs per pass. Links/junctions and unsafe paths are refused.
+Malformed or incompatible packs produce warnings without disabling the mod.
+
 The version-1 format is `RSIPACK1`, a bounded JSON manifest and consecutive RSI3
 pixel blobs with per-icon SHA-256. It permits at most 32,768 icons, 256x256 pixels
 per icon, an 8 MiB manifest and a 512 MiB total file. All blobs validate before
@@ -150,4 +210,8 @@ checks are not evidence that every live mod icon renders correctly; an in-game
 browse/restart check remains necessary before making that claim.
 The menu-cache candidate additionally tests path/source grouping, source-filtered
 export/import label retention, plugin-container invalidation and menu-independent
-control state. Its end-to-end main-menu batch capture still needs live acceptance.
+control state. The October 17 Steam test captured all 15,352 icons discovered
+for its mounted content with no final capture/discovery failures. The 247.6 MiB
+full pack passed per-blob checksum validation, an isolated import of all 15,352
+icons, and a second import reporting all 15,352 unchanged. These counts describe
+that installation, not a promise that every possible texture is an item icon.

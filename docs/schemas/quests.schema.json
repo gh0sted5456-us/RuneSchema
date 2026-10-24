@@ -123,6 +123,12 @@
           "default": false,
           "type": "boolean"
         },
+        "Icon": {
+          "description": "Optional quest-board texture object path. Empty uses fallback artwork; URLs and filesystem paths are unsupported.",
+          "maxLength": 2048,
+          "pattern": "^(?:$|/(?!.*//)(?!.*[\\\\:\\u0000-\\u001f\\u007f])[^.]+/[^/.]+\\.[^/.]+)$",
+          "type": "string"
+        },
         "Id": {
           "type": "string"
         },
@@ -1206,6 +1212,12 @@
           "HideInQuestList": {
             "default": false,
             "type": "boolean"
+          },
+          "Icon": {
+            "description": "Optional quest-board texture object path. Empty uses fallback artwork; URLs and filesystem paths are unsupported.",
+            "maxLength": 2048,
+            "pattern": "^(?:$|/(?!.*//)(?!.*[\\\\:\\u0000-\\u001f\\u007f])[^.]+/[^/.]+\\.[^/.]+)$",
+            "type": "string"
           },
           "Id": {
             "type": "string"

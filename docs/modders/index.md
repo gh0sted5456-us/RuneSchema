@@ -22,6 +22,7 @@ Start with the guide closest to what you are making:
 
 - [Items, ranged attacks, and magic](../WEAPONS-AND-ITEMS.md)
 - [Stations and recipes](../STATIONS-AND-RECIPES.md)
+- [Build quests and use Quest Boards](quests-and-questboards.md)
 - [Custom armor](../CUSTOM-ARMOR.md)
 - [Cooked registry declarations](../COOKED-PAK-REGISTRY-MANIFEST.md)
 - [Blueprint and Lua companions](../PSEUDO-LOADERS.md)

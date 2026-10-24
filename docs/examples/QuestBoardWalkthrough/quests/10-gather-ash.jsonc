@@ -1,0 +1,24 @@
+// Mock-up: generate your own stable quest identity before installing.
+{
+  "Id": "gather_ash",
+  "PersistenceID": "h6qYUGm3Qkq7jEC8WHt1xA",
+  "Title": "Timber for the Camp",
+  "Description": "Acquire five ash logs after accepting this contract.",
+  "CompletedDescription": "The camp has its timber.",
+  "Region": "Brynmoor",
+  "Category": "Task",
+  "Completion": "Automatic",
+  "Objective": {
+    "Id": "new_ash_logs",
+    "Type": "Acquire",
+    "Text": "Acquire five ash logs.",
+    "Item": "/Game/Gameplay/Items/Resources/Wood/ITEM_Resources_Wood_Ash.ITEM_Resources_Wood_Ash",
+    "Count": 5,
+    "ProgressText": "Ash logs: {current}/{required}",
+    "CompleteText": "The timber is ready."
+  },
+  "Reward": {
+    "Item": "/Game/Gameplay/Items/Resources/Mineral/ITEM_Resources_Stone.ITEM_Resources_Stone",
+    "Count": 1
+  }
+}

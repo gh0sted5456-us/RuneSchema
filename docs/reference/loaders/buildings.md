@@ -1,5 +1,20 @@
 # Buildings loader
 
+## Step-by-step workflow
+
+Use `RuneSchema/mods/MyMod/buildings/` for this example. JSONC blocks are
+**mock-ups**, not an automatically installed feature: replace placeholder paths,
+IDs, coordinates and reflected fields with values from your content. New art or
+classes must be cooked/mounted separately. Keep published identities stable.
+
+1. Select a registered BuildingPieceData source or a cooked piece supplied by your mod.
+2. Create `buildings/10-camp-piece.jsonc`; choose either `$Clone` or `Asset`, not both.
+3. Replace the mock-up's source/actor paths and full cost list, then set build-menu placement and only supported overrides.
+4. Restart; confirm menu entry, collision, placement, station interaction, save/reload and deconstruction. A menu icon is not proof of a usable actor.
+
+**Tie-ins:** [Recipes](recipes.md) attaches station output; [raw](raw.md) supplies table rows; [stations](../../STATIONS-AND-RECIPES.md) explains actor row handles.
+
+
 **Folder:** `RuneSchema/mods/<ModName>/buildings/`
 
 BuildingPieceData registration, cloning, costs, build-menu placement, placement
